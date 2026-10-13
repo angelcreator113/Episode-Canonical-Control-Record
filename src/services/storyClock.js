@@ -94,6 +94,23 @@ function postOrderSql(alias) {
     FROM episodes e WHERE e.id = "${alias}"."episode_id"))`;
 }
 
+/**
+ * A new comment's story order (Task #3064): the present (presentOrder),
+ * never earlier than its post's story time; the post's alone when the
+ * present cannot be read. `post` needs id and show_id.
+ */
+async function commentOrder(models, post) {
+  const present = await presentOrder(models, post.show_id);
+  let ofPost = Number.isInteger(post.story_order) ? post.story_order : null;
+  if (ofPost === null && models.sequelize) {
+    const [[row]] = await models.sequelize.query(
+      `SELECT ${postOrderSql('FeedPost')} AS o FROM feed_posts AS "FeedPost" WHERE "FeedPost"."id" = :id`, { replacements: { id: post.id } });
+    ofPost = row && row.o !== null && row.o !== undefined ? Number(row.o) : null;
+  }
+  if (!Number.isInteger(present)) return ofPost;
+  return Number.isInteger(ofPost) ? Math.max(present, ofPost) : present;
+}
+
 const ORDER_RE = /^\d{1,6}$/;
 const EP_RE = /^ep:(\d{1,5}):([a-z_]+)$/;
 
@@ -129,4 +146,4 @@ async function resolveAt(models, showId, value) {
   return order;
 }
 
-module.exports = { PHASES, orderOf, beatOrder, postOrder, label, presentOrder, checkAtBeat, parseAt, resolveAt, postOrderSql };
+module.exports = { PHASES, orderOf, beatOrder, postOrder, label, presentOrder, commentOrder, checkAtBeat, parseAt, resolveAt, postOrderSql };

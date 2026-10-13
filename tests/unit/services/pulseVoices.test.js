@@ -5,6 +5,7 @@
  */
 const {
   BANNED_PHRASES, findBanned, voiceSource, sourceHash, normalizeHabits, needsRebuild,
+  addExample, MAX_EXAMPLES, MAX_EDIT_EXAMPLES,
 } = require('../../../src/services/pulseVoices');
 
 describe('findBanned', () => {
@@ -85,5 +86,38 @@ describe('normalizeHabits', () => {
     expect(normalizeHabits({ case: 'shouting', emoji: 'often' })).toEqual({
       case: 'sentence', punctuation: '', emoji: { use: 'often', favorites: [] }, sentence_length: 'short', temperament: 'regular', topics: [], never_says: [], signature_phrases: [],
     });
+  });
+});
+
+describe('addExample caps (Task #3070)', () => {
+  const fakeVoice = (examples) => ({
+    examples_json: examples,
+    async update(fields) { Object.assign(this, fields); },
+  });
+  const pinned = (n) => Array.from({ length: n }, (_, i) => ({ id: `p${i}`, text: `pinned ${i}`, kind: 'pinned' }));
+
+  test('keeps only the newest MAX_EDIT_EXAMPLES edits, pinned untouched', async () => {
+    const voice = fakeVoice(pinned(3));
+    for (let i = 0; i < MAX_EDIT_EXAMPLES + 3; i += 1) await addExample(voice, { text: `edit ${i}`, kind: 'edit', postId: `post-${i}` });
+    const edits = voice.examples_json.filter((e) => e.kind === 'edit');
+    expect(edits).toHaveLength(MAX_EDIT_EXAMPLES);
+    expect(edits[0].text).toBe(`edit ${MAX_EDIT_EXAMPLES + 2}`);
+    expect(edits.map((e) => e.text)).not.toContain('edit 0');
+    expect(voice.examples_json.filter((e) => e.kind === 'pinned')).toHaveLength(3);
+  });
+
+  test('an edit never pushes out a pinned example when the list is full', async () => {
+    const voice = fakeVoice([...pinned(MAX_EXAMPLES - 1), { id: 'e-old', text: 'old edit', kind: 'edit' }]);
+    await addExample(voice, { text: 'new edit', kind: 'edit', commentId: 'c-1' });
+    expect(voice.examples_json).toHaveLength(MAX_EXAMPLES);
+    expect(voice.examples_json.filter((e) => e.kind === 'pinned')).toHaveLength(MAX_EXAMPLES - 1);
+    expect(voice.examples_json[0]).toMatchObject({ text: 'new edit', kind: 'edit', comment_id: 'c-1' });
+    expect(voice.examples_json.map((e) => e.id)).not.toContain('e-old');
+  });
+
+  test('the same comment is refused twice', async () => {
+    const voice = fakeVoice([]);
+    await addExample(voice, { text: 'x', kind: 'edit', commentId: 'c-2' });
+    await expect(addExample(voice, { text: 'y', kind: 'edit', commentId: 'c-2' })).rejects.toMatchObject({ status: 409 });
   });
 });

@@ -721,11 +721,14 @@ if (process.env.PULSE_ENGINE_ENABLED === 'true' && process.env.NODE_ENV !== 'tes
   require('./services/pulseAmbient').registerHandlers();
   require('./services/pulseDms').registerHandlers();
   require('./services/pulseStorylines').registerHandlers();
+  require('./services/pulseVoices').registerHandlers();
   require('./services/pulseQueue').start(db);
   // Ambient posts (Task #2971): planned hourly, only for shows whose ambient switch is on.
   require('./services/pulseAmbient').startScheduler(db);
   // Storyline beats (Task #2989): queued hourly once their story moment has come.
   require('./services/pulseStorylines').startScheduler(db);
+  // Voice Profiles (Task #3070): hourly, a build is queued for each Active character with none.
+  require('./services/pulseVoices').startScheduler(db);
   // The weekly recap (Task #3008): each hour, last week's draft if it has none (never AI; never published by itself).
   require('./services/pulseRecap').startScheduler(db);
 }
