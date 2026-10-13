@@ -20,6 +20,19 @@ describe('privateLeaks', () => {
   });
 });
 
+describe('privateLeaks: what a character privately knows (Task #3088)', () => {
+  const state = {
+    living_state: { mood: 'fine' },
+    what_they_privately_know: [{ about: 'Marcus', knows: 'Marcus is secretly broke. He hides it from the sponsors; nobody else knows' }],
+  };
+
+  test('quoting one sentence or clause of it is a leak, any case; the person\'s name alone is not', () => {
+    expect(privateLeaks('lol marcus is secretly broke and it shows', state)).toEqual(['marcus is secretly broke']);
+    expect(privateLeaks('he hides it from the sponsors, sources say', state)).toEqual(['he hides it from the sponsors']);
+    expect(privateLeaks('marcus looked great at the gala', state)).toEqual([]);
+  });
+});
+
 describe('reviewReasons', () => {
   const pass = { pass: true, flags: [] };
   const post = (over) => ({ social_profile_id: 9, poster_handle: 'marcus', content_text: 'new fit who dis', ...over });

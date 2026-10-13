@@ -53,6 +53,19 @@ describe('wardrobeAddPiece helpers', () => {
     expect(fd.get('image')).toBeTruthy();
   });
 
+  test('the Real world section: filled fields are sent with real_source manual; none sends none (Task 3083)', () => {
+    const base = { ...EMPTY_PIECE, name: 'Gold Slip', clothingCategory: 'dress' };
+    const fd = pieceFormData(base, null, 'show-1', { real_brand: ' Reformation ', real_price_paid: '128.50', real_size: '' });
+    expect(fd.get('real_brand')).toBe('Reformation');
+    expect(fd.get('real_price_paid')).toBe('128.50');
+    expect(fd.has('real_size')).toBe(false);
+    expect(fd.get('real_source')).toBe('manual');
+    const none = pieceFormData(base, null, 'show-1', { real_brand: '  ' });
+    expect(none.has('real_brand')).toBe(false);
+    expect(none.has('real_source')).toBe(false);
+    expect(pieceFormData(base, null, 'show-1').has('real_source')).toBe(false);
+  });
+
   test('errors in plain words: no .env, PM2 or service workers', () => {
     expect(autoFillErrorText({ response: { status: 503, data: { error: 'ANTHROPIC_API_KEY not set' } } })).toBe("Fill-in from photo isn't available right now. Fill the fields yourself.");
     expect(autoFillErrorText({ code: 'ECONNABORTED', message: 'timeout of 120000ms exceeded' })).toMatch(/took too long/);
@@ -84,6 +97,43 @@ describe('AddPieceDialog', () => {
     expect(api.post.mock.calls[0][0]).toBe('/api/v1/wardrobe');
     expect(onAdded.mock.calls[0][0]).toMatchObject({ id: 'w1' });
     expect(onAdded.mock.calls[0][1]).toMatchObject({ photoDropped: false });
+  });
+
+  test('the Real world section opens under More, and what she types goes with the piece; a refused field is said plainly (Task 3083)', async () => {
+    const onAdded = vi.fn();
+    api.post.mockRejectedValueOnce({ response: { status: 400, data: { error: 'Invalid real-world fields', details: ['real_price_paid must be a number of zero or more'] } } });
+    api.post.mockResolvedValueOnce({ data: { success: true, data: { id: 'w3', s3_url: 'https://img/w3.png' } } });
+    render(<AddPieceDialog showId="show-1" onClose={() => {}} onAdded={onAdded} />);
+    pick(); type('Name', 'Gold Slip'); type('Category', 'dress');
+    const section = screen.getByTestId('wardrobe-real-world');
+    expect(section.querySelector('input[name="real_brand"]')).toBeNull();
+    section.open = true;
+    fireEvent(section, new Event('toggle'));
+    const field = (name) => section.querySelector(`input[name="${name}"]`);
+    await waitFor(() => expect(field('real_brand')).toBeTruthy());
+    fireEvent.change(field('real_brand'), { target: { value: 'Reformation' } });
+    fireEvent.change(field('real_price_paid'), { target: { value: '-3' } });
+    fireEvent.click(screen.getByTestId('add-piece-save'));
+    expect((await screen.findByTestId('add-piece-error')).textContent).toBe('Real world: Price paid must be a number of zero or more.');
+    fireEvent.change(field('real_price_paid'), { target: { value: '128' } });
+    fireEvent.click(screen.getByTestId('add-piece-save'));
+    await waitFor(() => expect(onAdded).toHaveBeenCalled());
+    const sent = api.post.mock.calls[1][1];
+    expect(sent.get('real_brand')).toBe('Reformation');
+    expect(sent.get('real_price_paid')).toBe('128');
+    expect(sent.get('real_source')).toBe('manual');
+  });
+
+  test('a Real world field alone counts as a started piece: clicking outside keeps it (Task 3083)', async () => {
+    const onClose = vi.fn();
+    render(<AddPieceDialog showId="show-1" onClose={onClose} onAdded={() => {}} />);
+    const section = screen.getByTestId('wardrobe-real-world');
+    section.open = true;
+    fireEvent(section, new Event('toggle'));
+    await waitFor(() => expect(section.querySelector('input[name="real_brand"]')).toBeTruthy());
+    fireEvent.change(section.querySelector('input[name="real_brand"]'), { target: { value: 'Reformation' } });
+    fireEvent.click(screen.getByTestId('add-piece-backdrop'));
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   test('an upload error stays in the dialog, with the piece kept', async () => {

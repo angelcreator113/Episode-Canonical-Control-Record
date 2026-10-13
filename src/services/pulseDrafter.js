@@ -52,10 +52,26 @@ function getClient() {
   return client;
 }
 
+/**
+ * The PRIVATE block of a prompt, and what the gate checks for leaks: the
+ * Living State, and what the character privately knows about the people in
+ * their relationships (Task #3088; loaded by loadPoster). Never posted.
+ */
+function privateOf(character) {
+  const knows = character?.pulsePrivateKnowledge || [];
+  return {
+    living_state: character?.living_state || {},
+    ...(knows.length ? { what_they_privately_know: knows.map((k) => ({ about: k.person, knows: k.knows })) } : {}),
+  };
+}
+
+const PRIVATE_RULE = 'PRIVATE (shapes the mood only; never state, quote or hint at it directly. What they privately know is not public: they never post it, reveal it or hint at it):';
+
 /** The poster: character, Feed profile and Voice Profile, or a DraftError. */
 async function loadPoster(db, characterId) {
   const character = await db.RegistryCharacter.findByPk(characterId);
   if (!character) throw new DraftError(`Character ${characterId} not found.`);
+  character.pulsePrivateKnowledge = await require('./pulseKnowledge').privateKnowledge(db, character.id);
   if (!character.feed_profile_id) throw new DraftError(`${character.display_name} has no Feed profile to post from.`);
   const [[profile]] = await db.sequelize.query(
     'SELECT id, handle, display_name FROM social_profiles WHERE id = :id AND deleted_at IS NULL',
@@ -80,8 +96,8 @@ When: ${label || 'now'}.
 What happened: ${context.about || 'an ordinary day; post about whatever they would.'}
 ${knowsLine(known)}
 
-PRIVATE (shapes the mood only; never state, quote or hint at it directly):
-${JSON.stringify(character.living_state || {})}
+${PRIVATE_RULE}
+${JSON.stringify(privateOf(character))}
 
 Rules:
 - Stay in the world: nothing about a show, episodes, filming or a studio.
@@ -149,7 +165,7 @@ async function draftPost(db, { showId, characterId, moment, context = {}, reques
     status: 'draft',
     sort_order: 0,
   });
-  return { post, revealsStory: parsed.reveals_story === true, privateState: character.living_state || null, voice };
+  return { post, revealsStory: parsed.reveals_story === true, privateState: privateOf(character), voice };
 }
 
 /** Releases a draft the way PUT /feed-posts/:id does: live, posted now, numbers proposed (#2953). */
@@ -188,8 +204,8 @@ ${examples}
 The post, by @${post.poster_handle}:
 ${post.content_text}
 
-PRIVATE (shapes the mood only; never state, quote or hint at it directly):
-${JSON.stringify(character.living_state || {})}
+${PRIVATE_RULE}
+${JSON.stringify(privateOf(character))}
 
 ${knowsLine(known)}
 
@@ -223,7 +239,7 @@ Answer with JSON only: {"text": "the comment"}`;
     text, status: 'draft', sort_order: existing, ai_generated: true, generation_model: MODELS[0],
     story_order: await require('./storyClock').commentOrder(db, post),   // Task #3064
   });
-  return { comment, post, voice, privateState: character.living_state || null };
+  return { comment, post, voice, privateState: privateOf(character) };
 }
 
 /** Drafts a comment, gates it as a post at its post's story order, then publishes it or leaves it for Review. */
@@ -242,8 +258,8 @@ ${JSON.stringify(voice.habits_json || {}, null, 2)}
 Things they really wrote (match these):
 ${examples}
 ${extra}${knowsLine(known)}
-PRIVATE (shapes their mood only; never state, quote or hint at it directly):
-${JSON.stringify(character.living_state || {})}`;
+${PRIVATE_RULE}
+${JSON.stringify(privateOf(character))}`;
 }
 
 /** The prompt for several posts about one moment, one per poster. */
@@ -373,7 +389,7 @@ async function draftPostBatch(db, { showId, items, moment, context = {}, request
       likes: 0, comments_count: 0, shares: 0, sample_comments: [], story_order: at,
       ai_generated: true, generation_model: MODELS[0], status: 'draft', sort_order: 0,
     });
-    drafted.push({ post, revealsStory: got.reveals_story === true, privateState: e.character.living_state || null, voice: e.voice, characterId: e.item.characterId });
+    drafted.push({ post, revealsStory: got.reveals_story === true, privateState: privateOf(e.character), voice: e.voice, characterId: e.item.characterId });
   }
   return { drafted, failed };
 }
@@ -412,7 +428,7 @@ async function draftCommentBatch(db, { postId, characterIds, jobId = null }) {
       story_order: storyOrder,
     });
     order += 1;
-    drafted.push({ comment, voice: e.voice, privateState: e.character.living_state || null, characterId: e.item.characterId });
+    drafted.push({ comment, voice: e.voice, privateState: privateOf(e.character), characterId: e.item.characterId });
   }
   return { post, drafted, failed };
 }
@@ -472,6 +488,6 @@ async function draftCommentsAndRoute(db, args) {
 }
 
 module.exports = {
-  MODELS, BATCH_MAX, knowsLine, draftPost, draftAndRoute, draftComment, draftCommentAndRoute, release, DraftError,
+  MODELS, BATCH_MAX, knowsLine, privateOf, PRIVATE_RULE, draftPost, draftAndRoute, draftComment, draftCommentAndRoute, release, DraftError,
   buildPostBatchPrompt, buildCommentBatchPrompt, parseBatch, draftBatch, draftPostBatch, draftCommentBatch, draftPostsAndRoute, draftCommentsAndRoute,
 };

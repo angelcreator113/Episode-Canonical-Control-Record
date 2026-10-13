@@ -1,7 +1,8 @@
 /**
  * The episode follower change (Task #2956; The Pulse spec §8; Evoni,
  * 2026-10-12): completing an episode proposes Lala's follower change in
- * the follower ledger, from its result and its posts' numbers; it waits
+ * the follower ledger, from its result (its posts count through their own
+ * rows since Task #3086, so a like counts once); it waits
  * for Evoni. Accepted (or adjusted with a reason) it is in the ledger and,
  * as a character_state_history row ({ followers: N }, source override),
  * in the Decision Log. Completion never fails because of it, and an
@@ -92,16 +93,17 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     if (madeLala) await run('DELETE FROM social_profiles WHERE id = :lala', { lala });
   });
 
-  it('completing an episode proposes Lala\'s change from its result and its posts; it waits for Evoni; once per episode', async () => {
+  it('completing an episode proposes Lala\'s change from its result; it waits for Evoni; once per episode', async () => {
     const { show, ep } = await seed();
     const result = await completeEpisode(ep, show, sequelize);
     const [row] = await proposalOf(show);
     expect(row).toMatchObject({ social_profile_id: Number(lala), cause: 'episode', cause_id: ep, status: 'proposed', story_order: 27 });
     const { tier, score } = result.evaluation;
-    const expected = ledger.episodeChangeFrom({ followers: 100000, tier, score, post_likes: 50000 });
+    const expected = ledger.episodeChangeFrom({ followers: 100000, tier, score });
     expect(row.change).toBe(expected.change);
     expect(row.count_after).toBe(100000 + expected.change);
-    expect(row.factors_json).toMatchObject({ tier, followers: 100000, followers_known: true, post_likes: 50000, from_posts: 1000 });
+    expect(row.factors_json).toMatchObject({ tier, followers: 100000, followers_known: true, from_result: expected.from_result });
+    expect(row.factors_json).not.toHaveProperty('from_posts');
     expect(result.follower_proposal).toMatchObject({ id: row.id, status: 'proposed' });
     expect(await historyOf(show)).toEqual([]);
 
@@ -161,7 +163,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(row.count_after).toBeNull();
     const res = await as(request(app).put(`/api/v1/pulse-followers/${row.id}/accept`));
     expect(res.status).toBe(409);
-    expect(res.body.error).toBe("Accept Lala's starting follower count first.");
+    expect(res.body.error).toBe('Accept the starting follower count first.');
     expect(await historyOf(show)).toEqual([]);
   });
 });

@@ -192,7 +192,7 @@ async function propose(db, post, { lalaProfileId } = {}) {
 
   const accept = flag === null;
   try {
-    return await PulsePostNumber.create({
+    const row = await PulsePostNumber.create({
       post_id: post.id,
       show_id: post.show_id,
       social_profile_id: post.social_profile_id || null,
@@ -209,6 +209,9 @@ async function propose(db, post, { lalaProfileId } = {}) {
       decided_at: accept ? new Date() : null,
       story_order: Number.isInteger(storyOrder) ? storyOrder : null,
     });
+    // Locked at once: the post proposes its follower change (Task #3086).
+    if (accept) require('./pulseFollowers').proposeFromPostLater(row);
+    return row;
   } catch (err) {
     // Two releases at once: the other one made the row.
     if (err.name === 'SequelizeUniqueConstraintError') return PulsePostNumber.findOne({ where: { post_id: post.id } });
@@ -331,6 +334,8 @@ async function decide(row, action, { likes, shares, reason, by = null } = {}) {
   await row.update({
     status, final_likes: final.likes, final_shares: final.shares, reason: why, decided_by: by, decided_at: new Date(),
   });
+  // Locked: the post proposes its follower change for Review (Task #3086).
+  require('./pulseFollowers').proposeFromPostLater(row);
   return row;
 }
 
