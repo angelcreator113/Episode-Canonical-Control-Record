@@ -3,7 +3,8 @@
  * GET /pulse-followers/growth gives Lala's accepted follower line in story
  * order, proposed episode changes as the projection, her best and worst
  * posts by locked likes, and her biggest jumps with their causes. Other
- * characters' rows and undecided numbers are left out.
+ * characters' rows and undecided numbers are left out. Lala's Influence,
+ * read only (Task #3066): the value now and each episode's change.
  */
 jest.unmock('uuid');
 
@@ -70,6 +71,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   afterAll(async () => {
     await run('DELETE FROM pulse_post_numbers WHERE show_id = :show', ids);
     await run('DELETE FROM pulse_followers WHERE show_id = :show', ids);
+    await run('DELETE FROM character_state_history WHERE show_id = :show', ids);
+    await run('DELETE FROM character_state WHERE show_id = :show', ids);
     await run('DELETE FROM feed_posts WHERE show_id = :show', ids);
     await run('DELETE FROM episodes WHERE show_id = :show', ids);
     await run('DELETE FROM social_profiles WHERE id IN (:a)', { a: Object.values(p) });
@@ -123,6 +126,34 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   });
 
   test('no Lala profile: an empty growth', async () => {
-    expect(await growthOf(models, ids.show, { lalaProfileId: null })).toEqual({ profile: null, start: null, line: [], projection: [], best: [], worst: [], jumps: [] });
+    expect(await growthOf(models, ids.show, { lalaProfileId: null })).toEqual({
+      profile: null, start: null, line: [], projection: [], best: [], worst: [], jumps: [],
+      influence: { now: null, scale: 10, by_episode: [] },   // no state yet (Task #3066)
+    });
+  });
+
+  test("Influence, read only (Task #3066): the value now and each episode's change, from state and history", async () => {
+    await run(`INSERT INTO character_state (id, show_id, character_key, coins, reputation, brand_trust, influence, stress, created_at, updated_at)
+               VALUES (:id, :show, 'lala', 0, 3, 3, 5, 0, NOW(), NOW())`, { id: uuid(), show: ids.show });
+    const history = (episode, deltas, after, minutes) => run(
+      `INSERT INTO character_state_history (id, show_id, character_key, episode_id, source, deltas_json, state_after_json, created_at)
+       VALUES (:id, :show, 'lala', :episode, 'computed', CAST(:deltas AS jsonb), CAST(:after AS jsonb), NOW() + make_interval(mins => :minutes))`,
+      { id: uuid(), show: ids.show, episode, deltas: JSON.stringify(deltas), after: after === null ? null : JSON.stringify(after), minutes });
+    await history(ids.ep1, { coins: 100, influence: 1 }, { coins: 100, influence: 5 }, 1);
+    await history(ids.ep2, { influence: 1 }, { influence: 6 }, 2);
+    await history(ids.ep2, { followers: 900 }, null, 3);                 // a follower decision: no Influence, left out
+    await history(ids.ep3, { influence: -1 }, null, 4);                  // no snapshot: no "after"
+    const { influence } = await growthOf(models, ids.show, { lalaProfileId: p.lala });
+    expect(influence).toEqual({
+      now: 5, scale: 10,
+      by_episode: [
+        { episode_id: ids.ep1, episode_number: 1, change: 1, after: 5 },
+        { episode_id: ids.ep2, episode_number: 2, change: 1, after: 6 },
+        { episode_id: ids.ep3, episode_number: 3, change: -1, after: null },
+      ],
+    });
+    // The route sends it too; nothing in The Pulse writes Influence.
+    const res = await request(app).get(`/api/v1/pulse-followers/growth?show_id=${ids.show}`).set('Authorization', `Bearer ${token}`);
+    expect(res.body.influence.now).toBe(5);
   });
 });
