@@ -31,7 +31,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
 (shouldSkip ? describe.skip : describe)('The Pulse closeness ledger (Task #2983)', () => {
   const tag = uuid().slice(0, 8);
-  const ids = { show: uuid() };
+  const ids = { show: uuid(), reg: uuid() };
   const p = {};
   let lala;
   let madeLala = false;
@@ -70,6 +70,12 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
         VALUES (:handle, 'instagram', 'test', :display, 'lalaverse', NOW(), NOW()) RETURNING id`, { handle: `${key}${tag}`, display: `${key}${tag}` });
       p[key] = row.id;
     }
+    // Relationships move only for Alive characters (Task #3030).
+    await run(`INSERT INTO character_registries (id, title, show_id, created_at, updated_at) VALUES (:reg, 'Closeness registry', :show, NOW(), NOW())`, ids);
+    for (const key of ['marcus', 'kim', 'nia']) {
+      await run(`INSERT INTO registry_characters (id, registry_id, character_key, display_name, depth_level, feed_profile_id, created_at, updated_at)
+                 VALUES (:id, :reg, :key, :name, 'alive', :feed, NOW(), NOW())`, { id: uuid(), reg: ids.reg, key: `${key}-${tag}`, name: key, feed: p[key] });
+    }
     // Marcus and Kim collaborate (0.7, close); Nia knows nobody.
     await run(`INSERT INTO social_profile_relationships (source_profile_id, target_profile_id, relationship_type, created_at, updated_at)
                VALUES (:marcus, :kim, 'collab', NOW(), NOW())`, { marcus: p.marcus, kim: p.kim });
@@ -82,6 +88,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await run('DELETE FROM pulse_post_numbers WHERE show_id = :show', ids);
     await run('DELETE FROM feed_posts WHERE show_id = :show', ids);
     await run('DELETE FROM social_profile_relationships WHERE source_profile_id IN (:a) OR target_profile_id IN (:a)', { a: [p.marcus, p.kim, p.nia] });
+    await run('DELETE FROM registry_characters WHERE registry_id = :reg', ids);
+    await run('DELETE FROM character_registries WHERE id = :reg', ids);
     await run('DELETE FROM social_profiles WHERE id IN (:a)', { a: [p.marcus, p.kim, p.nia, ...(madeLala ? [lala] : [])] });
     await run('DELETE FROM shows WHERE id = :show', ids);
   });

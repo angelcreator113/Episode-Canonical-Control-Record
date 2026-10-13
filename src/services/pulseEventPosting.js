@@ -99,7 +99,8 @@ async function whoPosts(db, { showId, episodeId }) {
     const { ledgerDeltas, clamp } = require('./pulseCloseness');
     for (const [other, delta] of await ledgerDeltas(db, showId, lalaId, order)) closeness.set(other, clamp((closeness.get(other) || 0) + delta));
   }
-  const candidates = (await require('./pulseVoices').eligible(db, showId, { at: order })).filter((c) => c.voice);
+  // Event reactions are for Alive characters (Evoni, 2026-10-12).
+  const candidates = (await require('./pulseVoices').eligible(db, showId, { at: order, stage: 'alive' })).filter((c) => c.voice);
   const scored = candidates.map(({ character, profile, voice }) => {
     const profileId = Number(profile.id);
     const isLala = lalaId && profileId === Number(lalaId);
