@@ -13,6 +13,7 @@ const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
 const { growthOf } = require('../../src/services/pulseGrowth');
+const { override } = require('../../src/services/pulseFollowers');
 
 const { sequelize } = models;
 
@@ -85,10 +86,27 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
   test("Lala's line in story order, the projection on top of it, and her start", async () => {
     const g = await growthOf(models, ids.show, { lalaProfileId: p.lala });
-    expect(g.profile).toMatchObject({ id: p.lala, follower_tier: 'mid' });
+    // The tier comes from her latest accepted count (Task #3033), not the stored follower_tier.
+    expect(g.profile).toMatchObject({ id: p.lala, tier: { key: 'mid', label: 'Mid-tier', from: 50000 } });
+    expect(g.profile.follower_tier).toBeUndefined();
     expect(g.start).toMatchObject({ cause: 'start', status: 'accepted', count: 50000, label: 'Start' });
     expect(g.line.map((r) => [r.label, r.count])).toEqual([['Start', 50000], ['After Ep 1', 54000], ['The day after Ep 1', 53500], ['After Ep 2', 62500]]);
     expect(g.projection).toEqual([expect.objectContaining({ label: 'After Ep 3', change: 2500, count: 65000, episode_number: 3, status: 'proposed' })]);
+    expect(g.line.map((r) => r.tier.key)).toEqual(['mid', 'mid', 'mid', 'mid']);
+    expect(g.projection[0].tier.key).toBe('mid');
+  });
+
+  test('the tier follows an accepted follower change, at that moment (Task #3033)', async () => {
+    const row = await override(models, { showId: ids.show, profileId: p.lala, change: 187500, reason: 'The gala went viral.', at: 28 });
+    try {
+      const g = await growthOf(models, ids.show, { lalaProfileId: p.lala });
+      expect(g.line.slice(-2).map((r) => [r.count, r.tier.label])).toEqual([[62500, 'Mid-tier'], [250000, 'Macro']]);
+      expect(g.profile.tier.label).toBe('Macro');
+      expect(g.projection[0]).toMatchObject({ count: 252500, tier: { label: 'Macro' } });
+    } finally {
+      await row.destroy({ force: true });
+    }
+    expect((await growthOf(models, ids.show, { lalaProfileId: p.lala })).profile.tier.label).toBe('Mid-tier');
   });
 
   test('best and worst five posts by locked likes; undecided and other characters\' posts left out', async () => {

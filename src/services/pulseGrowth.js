@@ -6,12 +6,16 @@
  * best and worst posts, biggest jumps and their causes"). Read only, from
  * the follower ledger (services/pulseFollowers.js) and post numbers
  * (services/pulseNumbers.js). Evoni, 2026-10-12: Influence waits for real
- * data, so this is the count and the tier only.
+ * data, so this is the count and the tier only. The tier is worked out from
+ * the count (services/pulseAudience.js, Task #3033), never the stored
+ * follower_tier, and never feeds Influence.
  *
  *   growthOf(db, showId, { lalaProfileId })
- *     profile     Lala's Feed profile (handle, name, tier), or null
+ *     profile     Lala's Feed profile (handle, name) and the tier of her
+ *                 latest accepted count, or null
  *     start       her starting count row (any status), or null
  *     line        her accepted changes in story order, each with its count
+ *                 and the tier at that moment
  *     projection  proposed episode changes, each with the count it would make
  *     best, worst her five posts with the most and fewest locked likes
  *     jumps       her five biggest accepted changes (not the start), with causes
@@ -29,12 +33,13 @@ async function growthOf(db, showId, { lalaProfileId } = {}) {
   const q = (sql, replacements) => sequelize.query(sql, { replacements: { showId, lalaId, ...replacements }, type: sequelize.QueryTypes.SELECT });
 
   const [profile] = await q(
-    `SELECT id, handle, display_name, follower_tier::text AS follower_tier FROM social_profiles WHERE id = :lalaId`);
+    `SELECT id, handle, display_name FROM social_profiles WHERE id = :lalaId`);
   const rows = await q(
     `SELECT pf.id, pf.story_order, pf.change, pf.count_after, pf.cause, pf.cause_id, pf.reason, pf.status, e.episode_number
        FROM pulse_followers pf LEFT JOIN episodes e ON pf.cause = 'episode' AND e.id::text = pf.cause_id
       WHERE pf.show_id = :showId AND pf.social_profile_id = :lalaId AND pf.deleted_at IS NULL
       ORDER BY pf.story_order ASC, pf.decided_at ASC NULLS LAST, pf.created_at ASC`);
+  const { tierFor } = require('./pulseAudience');
   const shape = (r) => ({
     id: r.id,
     story_order: Number(r.story_order),
@@ -46,6 +51,7 @@ async function growthOf(db, showId, { lalaProfileId } = {}) {
     episode_number: r.episode_number == null ? null : Number(r.episode_number),
     reason: r.reason,
     status: r.status,
+    tier: tierFor(r.count_after),
   });
   const startRow = rows.find((r) => r.cause === 'start');
   const accepted = rows.filter((r) => r.status === 'accepted').map(shape);
@@ -53,7 +59,8 @@ async function growthOf(db, showId, { lalaProfileId } = {}) {
   const projection = rows.filter((r) => r.status === 'proposed' && r.cause === 'episode').map((r) => {
     const p = shape(r);
     // The count it would make on top of the latest accepted one.
-    return { ...p, count: latest == null ? null : Math.max(0, latest + p.change) };
+    const count = latest == null ? null : Math.max(0, latest + p.change);
+    return { ...p, count, tier: tierFor(count) };
   });
   const jumps = accepted.filter((r) => r.cause !== 'start')
     .sort((a, b) => Math.abs(b.change) - Math.abs(a.change)).slice(0, LIST);
@@ -70,7 +77,7 @@ async function growthOf(db, showId, { lalaProfileId } = {}) {
   });
 
   return {
-    profile: profile ? { id: Number(profile.id), handle: profile.handle, display_name: profile.display_name, follower_tier: profile.follower_tier } : null,
+    profile: profile ? { id: Number(profile.id), handle: profile.handle, display_name: profile.display_name, tier: tierFor(latest) } : null,
     start: startRow ? shape(startRow) : null,
     line: accepted,
     projection,

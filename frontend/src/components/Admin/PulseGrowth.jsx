@@ -3,7 +3,8 @@
  * follower line across episodes (approved numbers solid, projection dashed),
  * best and worst posts, biggest jumps and their causes"). Evoni, 2026-10-12:
  * Influence waits for real data, so Growth shows the count and the tier
- * only. Reads GET /api/v1/pulse-followers/growth; her starting count, when
+ * only. The tier is worked out from the count at each moment (Task 3033,
+ * lib/pulseAudience), never the stored follower_tier. Reads GET /api/v1/pulse-followers/growth; her starting count, when
  * it is still proposed, is confirmed here (PUT /pulse-followers/:id/accept),
  * and with none yet, starting counts are proposed (POST /pulse-followers/starts).
  * Styles: AdminPanel.css (pulse-growth-*).
@@ -12,6 +13,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import api from '../../services/api';
+import { tierLabel } from '../../lib/pulseAudience';
 
 const fmt = (n) => (Number.isFinite(Number(n)) ? Number(n).toLocaleString('en-US') : '—');
 const signed = (n) => `${Number(n) > 0 ? '+' : Number(n) < 0 ? '−' : ''}${fmt(Math.abs(Number(n)))}`;
@@ -143,14 +145,14 @@ export default function PulseGrowth({ showId, chartWidth }) {
   const projection = data.projection || [];
   const latest = line.length ? line[line.length - 1] : null;
   const points = chartPoints(line, projection);
-  const tier = data.profile.follower_tier;
+  const tier = tierLabel(latest?.count);
 
   return (
     <div className="pulse-growth" data-testid="pulse-growth">
       <p className="pulse-growth-summary" data-testid="pulse-growth-summary">
         {latest
-          ? <>@{data.profile.handle} has <b>{fmt(latest.count)}</b> followers{tier ? ` · ${tier} tier` : ''}{data.start?.status === 'accepted' && line.length > 1 ? `, ${signed(latest.count - data.start.count)} since her start` : ''}.</>
-          : <>No accepted follower count for @{data.profile.handle} yet{tier ? ` · ${tier} tier` : ''}.</>}
+          ? <>@{data.profile.handle} has <b>{fmt(latest.count)}</b> followers{tier ? ` · ${tier}` : ''}{data.start?.status === 'accepted' && line.length > 1 ? `, ${signed(latest.count - data.start.count)} since her start` : ''}.</>
+          : <>No accepted follower count for @{data.profile.handle} yet.</>}
         {projection.length > 0 && <> {projection.length === 1 ? 'One episode change waits' : `${projection.length} episode changes wait`} in <Link to={REVIEW}>Review</Link>.</>}
       </p>
       <StartCard start={data.start} showId={showId} onChange={load} />
@@ -160,8 +162,8 @@ export default function PulseGrowth({ showId, chartWidth }) {
           <GrowthChart points={points} chartWidth={chartWidth} />
           <p className="pulse-growth-key"><span className="pulse-growth-key-solid" aria-hidden="true" /> Accepted <span className="pulse-growth-key-dashed" aria-hidden="true" /> Proposed, waiting in Review</p>
           <ol className="pulse-growth-sr" data-testid="pulse-growth-points">
-            {line.map((r) => <li key={r.id}>{r.label}: {fmt(r.count)} followers</li>)}
-            {projection.map((r) => <li key={r.id}>{r.label}: {fmt(r.count)} followers, proposed</li>)}
+            {line.map((r) => <li key={r.id}>{r.label}: {fmt(r.count)} followers{tierLabel(r.count) ? ` (${tierLabel(r.count)})` : ''}</li>)}
+            {projection.map((r) => <li key={r.id}>{r.label}: {fmt(r.count)} followers{tierLabel(r.count) ? ` (${tierLabel(r.count)})` : ''}, proposed</li>)}
           </ol>
         </section>
       )}

@@ -95,7 +95,8 @@ const ARCHETYPE_EVENT_FIT = {
   community_builder: ['invite', 'guest', 'upgrade'],      // hosts community events
 };
 
-// Maps follower tiers to prestige ranges they can host
+// Maps follower tiers to prestige ranges they can host.
+// Kept as is: the stored 4-tier follower_tier stays for generation and scoring; The Pulse shows six audience tiers worked out from the canon count (services/pulseAudience.js; Evoni, 2026-10-12, Task #3033).
 const TIER_PRESTIGE = {
   mega: { min: 6, max: 10 },
   macro: { min: 4, max: 8 },

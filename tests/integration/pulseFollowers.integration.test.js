@@ -82,7 +82,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(counts[p.est].count).toBe(47000);
     expect(counts[p.est].handle).toBe(`est-${tag}`);
     expect(counts[p.tier].count).toBe(50000);
-    expect(counts[p.tier].follower_tier).toBe('mid');
+    // The tier is worked out from the count (Task #3033): 50,000 is Mid-tier, 47,000 is Micro.
+    expect(counts[p.tier].tier).toEqual({ key: 'mid', label: 'Mid-tier', from: 50000 });
+    expect(counts[p.est].tier.label).toBe('Micro');
+    expect(counts[p.tier].follower_tier).toBeUndefined();
     expect(counts[p.none]).toBeUndefined();
     expect(counts[p.real]).toBeUndefined();
 
