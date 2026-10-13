@@ -21,7 +21,8 @@ const LINE = [
 ];
 const GROWTH = {
   success: true,
-  profile: { id: 7, handle: 'lala', display_name: 'Lala', follower_tier: 'mid' },
+  // A stored follower_tier is ignored: the tier comes from the count (Task 3033).
+  profile: { id: 7, handle: 'lala', display_name: 'Lala', follower_tier: 'mega' },
   start: { ...LINE[0] },
   line: LINE,
   projection: [{ id: 'p', label: 'After Ep 3', story_order: 37, count: 65000, change: 2500, cause: 'episode', episode_number: 3, status: 'proposed' }],
@@ -69,7 +70,7 @@ describe('the Growth tab', () => {
     renderGrowth(GROWTH);
     const summary = await screen.findByTestId('pulse-growth-summary');
     expect(api.get).toHaveBeenCalledWith('/api/v1/pulse-followers/growth?show_id=show-1');
-    expect(summary.textContent).toBe('@lala has 62,500 followers · mid tier, +12,500 since her start. One episode change waits in Review.');
+    expect(summary.textContent).toBe('@lala has 62,500 followers · Mid-tier, +12,500 since her start. One episode change waits in Review.');
     expect(within(summary).getByRole('link', { name: 'Review' }).getAttribute('href')).toBe('/admin?tab=pulse&sub=review');
     expect(screen.queryByText(/influence/i)).toBeNull();
     expect(screen.getByTestId('pulse-growth-start').textContent).toBe('Started at 50,000 followers.');
@@ -85,7 +86,7 @@ describe('the Growth tab', () => {
     expect(dashed.getAttribute('stroke-dasharray')).toBe('6 4');
     expect(chart.getAttribute('aria-hidden')).toBe('true');
     expect(within(screen.getByTestId('pulse-growth-points')).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
-      'Start: 50,000 followers', 'After Ep 1: 54,000 followers', 'After Ep 2: 62,500 followers', 'After Ep 3: 65,000 followers, proposed',
+      'Start: 50,000 followers (Mid-tier)', 'After Ep 1: 54,000 followers (Mid-tier)', 'After Ep 2: 62,500 followers (Mid-tier)', 'After Ep 3: 65,000 followers (Mid-tier), proposed',
     ]);
   });
 
@@ -103,7 +104,7 @@ describe('the Growth tab', () => {
     expect((await screen.findByTestId('pulse-growth-empty')).textContent).toMatch(/no Feed profile/);
     unmount();
     renderGrowth({ ...GROWTH, start: null, line: [], projection: [], best: [], worst: [], jumps: [] });
-    expect((await screen.findByTestId('pulse-growth-summary')).textContent).toBe('No accepted follower count for @lala yet · mid tier.');
+    expect((await screen.findByTestId('pulse-growth-summary')).textContent).toBe('No accepted follower count for @lala yet.');
     expect(screen.queryByTestId('pulse-growth-chart')).toBeNull();
     expect(within(screen.getByTestId('pulse-growth-best')).getByText('No decided numbers yet.')).toBeTruthy();
     expect(within(screen.getByTestId('pulse-growth-jumps')).getByText('No changes since her start yet.')).toBeTruthy();

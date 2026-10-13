@@ -22,7 +22,8 @@
  *                                proposed once (Task #2956)
  */
 
-// The middle of each follower tier (social_profiles.follower_tier).
+// The middle of each follower tier (social_profiles.follower_tier): a starting count only.
+// Kept as is: the stored 4-tier follower_tier stays for generation and scoring; The Pulse shows six audience tiers worked out from the canon count (services/pulseAudience.js; Evoni, 2026-10-12, Task #3033).
 const TIER_MIDDLE = { micro: 5000, mid: 50000, macro: 500000, mega: 5000000 };
 const MULTIPLIER = { k: 1e3, m: 1e6, b: 1e9 };
 const CAUSES = ['start', 'episode', 'post', 'event', 'override'];
