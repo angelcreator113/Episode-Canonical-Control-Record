@@ -188,9 +188,14 @@ router.get('/', optionalAuth, async (req, res) => {
         // The post's episode number, for its story time (services/storyClock.js).
         ...(withWhat === 'comments' && Episode ? [{ model: Episode, as: 'episode', attributes: ['id', 'episode_number'], required: false }] : []),
         // ?with=comments: each post's live comments, as records (the wall).
+        // At a moment, only those at or before it; no story time reads as the
+        // post's, which is already at or before it (Task #3064).
         ...(withWhat === 'comments' && FeedComment ? [{
-          model: FeedComment, as: 'comments', where: { status: 'live' }, required: false,
-          attributes: ['id', 'handle', 'display_name', 'text', 'posted_at', 'sort_order', 'social_profile_id'],
+          model: FeedComment, as: 'comments', required: false,
+          where: Number.isInteger(atOrder)
+            ? { status: 'live', [require('sequelize').Op.or]: [{ story_order: null }, { story_order: { [require('sequelize').Op.lte]: atOrder } }] }
+            : { status: 'live' },
+          attributes: ['id', 'handle', 'display_name', 'text', 'posted_at', 'sort_order', 'social_profile_id', 'story_order'],
         }] : []),
       ],
     });
@@ -464,6 +469,8 @@ router.post('/:postId/comments', requireAuth, async (req, res) => {
       feed_post_id: post.id, show_id: post.show_id, social_profile_id: social_profile_id || null,
       handle: handle.trim().replace(/^@/, ''), display_name: display_name || null, text: text.trim(),
       status: status || 'draft', posted_at: status === 'live' ? new Date() : null, sort_order: existing, ai_generated: false,
+      // Its story time: now, never before the post (Task #3064).
+      story_order: await require('../services/storyClock').commentOrder(models, post),
     });
     if (comment.status === 'live') {
       await recountComments(models, post.id);
