@@ -19,20 +19,25 @@ const { statusWhere, isLive, LOCKED_MESSAGE } = require('../services/feedPostSta
 const { draftReactions, pickReactors, recountComments, DraftError, COMMENT_LOCKED } = require('../services/feedCommentDrafter');
 
 /**
- * Why a post may go live only by an admin's hand (The Pulse spec, "Always to
+ * Why a post goes live only through Review (The Pulse spec, "Always to
  * Review: Lala's posts, posts or comments about Lala"; Task #3047): Lala's
- * own posts and posts about her, by pulseGate.reviewReasons. Evoni, 2026-10-13:
- * an admin (her "Post now" as Lala, her Approve in Review) may still put one
- * live; anyone else's is held for Review. [] means no hold: other posters, or
- * an admin. Reads Lala's profile only when it has to.
+ * own posts and posts about her, by pulseGate.reviewReasons. [] means no
+ * hold. Evoni, 2026-10-13 (Task #3103): Lala's posts ALWAYS go to Review,
+ * even an admin's, so a new one is held whoever writes it (lalaHold); only
+ * releasing a held draft is an admin's, her Approve in Review (releaseHold).
  */
-async function reviewHold(req, post) {
-  const { userInGroup } = require('../middleware/auth');
-  if (userInGroup(req.user, 'admin')) return [];
+async function lalaHold(post) {
   const { sequelize } = require('../models');
   const lalaProfileId = await require('../services/lalaFeedProfile').lalaProfileId(sequelize);
   return require('../services/pulseGate').reviewReasons(post, { pass: true }, { lalaProfileId })
     .filter((r) => r === 'lala' || r === 'about_lala');
+}
+
+/** Releasing a held draft is Review's approval: an admin's. Anyone else's is refused. */
+async function releaseHold(req, post) {
+  const { userInGroup } = require('../middleware/auth');
+  if (userInGroup(req.user, 'admin')) return [];
+  return lalaHold(post);
 }
 
 /**
@@ -239,8 +244,8 @@ router.post('/', requireAuth, async (req, res) => {
       poster_handle: String(poster_handle || 'lala').replace(/^@/, ''),
       content_text: content_text.trim(),
     };
-    // Lala's posts and posts about her wait in Review unless an admin posts them (Task #3047).
-    const held = scoped.status === 'live' ? await reviewHold(req, fields) : [];
+    // Lala's posts and posts about her wait in Review, an admin's too (Task #3047; #3103).
+    const held = scoped.status === 'live' ? await lalaHold(fields) : [];
     if (held.length) scoped.status = 'draft';
     const post = await FeedPost.create({
       ...fields,
@@ -625,7 +630,7 @@ router.put('/:postId', requireAuth, async (req, res) => {
     }
     // Releasing Lala's post, or one about her, is Review's: an admin's (Task #3047).
     if (updates.status === 'live' && post.status !== 'live') {
-      const held = await reviewHold(req, { ...post.get(), ...updates });
+      const held = await releaseHold(req, { ...post.get(), ...updates });
       if (held.length) {
         return res.status(403).json({ error: 'Lala\'s posts and posts about her go live through Review.', code: 'REVIEW_REQUIRED', review_reasons: held });
       }
