@@ -48,10 +48,21 @@ function stringsIn(value, out = []) {
   return out;
 }
 
-/** Living State phrases quoted in the text (private feelings are never stated). */
+/**
+ * Private phrases quoted in the text (private feelings and private
+ * knowledge are never stated). Each private string and each of its
+ * sentences or clauses counts, so quoting part of a long "knows" text is
+ * caught too (Task #3088).
+ */
 function privateLeaks(text, privateState) {
   const body = norm(text);
-  return stringsIn(privateState).map(norm).filter((s) => s.length >= MIN_PRIVATE && body.includes(s));
+  const phrases = new Set();
+  for (const s of stringsIn(privateState)) {
+    const whole = norm(s);
+    phrases.add(whole);
+    for (const part of whole.split(/[.!?;:\n]+/)) phrases.add(part.trim());
+  }
+  return [...phrases].filter((s) => s.length >= MIN_PRIVATE && body.includes(s));
 }
 
 const mentions = (text, name) => {
@@ -69,7 +80,9 @@ async function canonFlags(db, post, { privateState = null, lalaProfileId } = {})
   const banned = findBanned(text);
   if (banned.length) flags.push({ code: 'banned_phrase', detail: banned.join(', ') });
   const leaks = privateLeaks(text, privateState);
-  if (leaks.length) flags.push({ code: 'private_state', detail: 'Quotes the character\'s private Living State.' });
+  // The private block holds the Living State and what they privately know
+  // (Task #3088): quoting either is a disclosure Evoni approves in Review.
+  if (leaks.length) flags.push({ code: 'private_state', detail: 'Quotes something private: the character\'s Living State or what they privately know.' });
 
   const at = Number.isInteger(post.story_order) ? post.story_order : null;
   if (at !== null) {

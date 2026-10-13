@@ -27,7 +27,11 @@ test('the conversation so far, as You and Them, with the topic and the moment', 
 test('Living State appears only as private context, after the conversation', () => {
   const prompt = buildPrompt({ sender, other, history: [], topic: null, label: null });
   expect(prompt).toContain('(nothing yet: you write first)');
-  const privateAt = prompt.indexOf('PRIVATE (shapes the mood only; never state, quote or hint at it directly):');
+  // The private block's rule is shared with the drafter; since Task #3088 it also covers what they privately know.
+  const { PRIVATE_RULE } = require('../../../src/services/pulseDrafter');
+  expect(PRIVATE_RULE).toMatch(/^PRIVATE \(shapes the mood only; never state, quote or hint at it directly\. What they privately know is not public/);
+  const privateAt = prompt.indexOf(PRIVATE_RULE);
+  expect(privateAt).toBeGreaterThan(-1);
   expect(privateAt).toBeGreaterThan(prompt.indexOf('The conversation so far:'));
   expect(prompt.indexOf('the brand deal falling through')).toBeGreaterThan(privateAt);
   expect(prompt.split('the brand deal falling through')).toHaveLength(2);

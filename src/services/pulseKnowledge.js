@@ -34,25 +34,26 @@
 
 const CLOSE_LINE = 0.7;
 
-const parse = (v) => {
-  if (typeof v !== 'string') return v ?? null;
-  try { return JSON.parse(v); } catch (err) { console.error('[PulseKnowledge] bad JSON:', err.message); return null; }
-};
-const guestIds = (list) => (Array.isArray(list) ? list : [])
-  .map((g) => Number(typeof g === 'object' && g ? (g.profile_id ?? g.social_profile_id ?? g.id) : g))
-  .filter(Number.isInteger);
-
-/** The show's events: { id, name, episode_number, guests: Set<profileId> }. */
+/**
+ * The show's events: { id, name, episode_number, guests: Set<profileId> }.
+ * An event's episode is the one made from it, else the one whose brief
+ * names it (as pulseReveals); its guests are its attendees by the shared
+ * rule, the host and the Event Package's Guests (utils/eventAttendees,
+ * Task #3082).
+ */
 async function showEvents(db, showId) {
+  const { eventAttendees } = require('../utils/eventAttendees');
   const [rows] = await db.sequelize.query(
-    `SELECT we.id, we.name, we.canon_consequences, e.episode_number FROM world_events we
-       LEFT JOIN episodes e ON e.id = we.used_in_episode_id
+    `SELECT we.id, we.name, we.canon_consequences, we.source_profile_id, e.episode_number FROM world_events we
+       LEFT JOIN episodes e ON e.deleted_at IS NULL AND e.id = COALESCE(we.used_in_episode_id, (
+         SELECT eb.episode_id FROM episode_briefs eb WHERE eb.event_id = we.id AND eb.deleted_at IS NULL
+          ORDER BY eb.created_at ASC LIMIT 1))
       WHERE we.show_id = :showId AND we.deleted_at IS NULL`, { replacements: { showId } });
   return rows.map((r) => ({
     id: String(r.id),
     name: r.name,
     episode_number: r.episode_number == null ? null : Number(r.episode_number),
-    guests: new Set(guestIds(parse(r.canon_consequences)?.automation?.guest_profiles)),
+    guests: eventAttendees(r),
   }));
 }
 
@@ -146,4 +147,32 @@ async function knowledgeLine(db, showId, profileId, at, opts = {}) {
   return known.length ? known.join('; ') : null;
 }
 
-module.exports = { CLOSE_LINE, showEvents, closeTies, publicEventIds, namedIn, knowsAt, unknownMentions, knowledgeLine };
+const MAX_PRIVATE = 8;          // relationships' knowledge in one prompt
+const MAX_PRIVATE_TEXT = 300;   // characters of each
+
+/**
+ * What a character privately knows about the people in their confirmed
+ * relationships (Task #3088; Evoni, 2026-10-13: "Use 'knows' as private
+ * drafting context"): character_relationships.source_knows when they are
+ * character_id_a, target_knows when they are character_id_b, never
+ * reader_knows (the audience's knowledge). Returns [{ person, knows }].
+ * Knowing it never authorizes posting it: the drafter keeps it PRIVATE and
+ * the gate sends a draft that quotes it to Review.
+ */
+async function privateKnowledge(db, characterId) {
+  if (!characterId) return [];
+  const [rows] = await db.sequelize.query(
+    `SELECT CASE WHEN cr.character_id_a = :id THEN rb.display_name ELSE ra.display_name END AS person,
+            CASE WHEN cr.character_id_a = :id THEN cr.source_knows ELSE cr.target_knows END AS knows
+       FROM character_relationships cr
+       JOIN registry_characters ra ON ra.id = cr.character_id_a AND ra.deleted_at IS NULL
+       JOIN registry_characters rb ON rb.id = cr.character_id_b AND rb.deleted_at IS NULL
+      WHERE cr.confirmed = true AND (cr.character_id_a = :id OR cr.character_id_b = :id)
+      ORDER BY cr.created_at ASC`, { replacements: { id: characterId } });
+  return rows
+    .map((r) => ({ person: r.person || 'someone', knows: String(r.knows || '').replace(/\s+/g, ' ').trim().slice(0, MAX_PRIVATE_TEXT) }))
+    .filter((r) => r.knows)
+    .slice(0, MAX_PRIVATE);
+}
+
+module.exports = { CLOSE_LINE, showEvents, closeTies, publicEventIds, namedIn, knowsAt, unknownMentions, knowledgeLine, privateKnowledge };
