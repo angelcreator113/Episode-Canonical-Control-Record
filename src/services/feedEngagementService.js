@@ -176,6 +176,10 @@ async function generateRippleEffects(postId, models) {
 
   const ripples = [];
   const threadId = post.thread_id || post.id; // Use existing thread or start new one
+  // A reply about Lala goes to Review like any post about her (The Pulse spec, "Always to Review"; Task #3103).
+  const lalaProfileId = await require('./lalaFeedProfile').lalaProfileId(sequelize);
+  const aboutLala = (reply) => require('./pulseGate').reviewReasons(reply, { pass: true }, { lalaProfileId })
+    .some((r) => r === 'lala' || r === 'about_lala');
 
   for (const reactor of reactors) {
     // Determine reaction type based on archetype + career pressure
@@ -213,6 +217,8 @@ async function generateRippleEffects(postId, models) {
     };
 
     try {
+      const content = replyTemplates[reactionType];
+      const held = aboutLala({ poster_handle: reactor.handle, social_profile_id: reactor.id, content_text: content });
       const replyPost = await FeedPost.create({
         show_id: post.show_id,
         episode_id: post.episode_id,
@@ -222,7 +228,7 @@ async function generateRippleEffects(postId, models) {
         poster_display_name: reactor.display_name,
         poster_platform: reactor.platform || 'twitter',
         post_type: reactionType === 'comparison_post' ? 'post' : 'tweet',
-        content_text: replyTemplates[reactionType],
+        content_text: content,
         likes: Math.floor(Math.random() * (post.likes || 100) * 0.3),
         comments_count: Math.floor(Math.random() * 20),
         shares: Math.floor(Math.random() * 10),
@@ -235,8 +241,8 @@ async function generateRippleEffects(postId, models) {
         generation_model: 'ripple_engine',
         thread_id: threadId,
         parent_post_id: post.id,
-        // A ripple follows its parent: a draft's replies go live with it.
-        status: post.status === 'draft' ? 'draft' : 'live',
+        // A ripple follows its parent: a draft's replies go live with it; one about Lala waits in Review.
+        status: post.status === 'draft' || held ? 'draft' : 'live',
         audience_sentiment: SENTIMENT_RULES[narrativeFunction] || 'curious',
         sort_order: (post.sort_order || 0) + ripples.length + 1,
       });

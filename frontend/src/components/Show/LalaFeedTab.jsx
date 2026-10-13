@@ -7,7 +7,9 @@
  * draft now; Edit, Redraft in their voice (with an undo) and Delete work on
  * drafts only (a live post is locked, services/feedPostStatus.js; a live
  * post can still be deleted from the full page). Post as Lala writes a post
- * by hand. Beside it, what Lala sees on her feed right now.
+ * by hand and sends it to Review: Lala's posts always go to Review, an
+ * admin's too (Evoni, 2026-10-13, Task 3103), and Approve posts it. Beside
+ * it, what Lala sees on her feed right now.
  * Props: showId, episodes, onCountChanged(drafts waiting) for the tab pill.
  */
 import React, { useCallback, useEffect, useState } from 'react';
@@ -77,14 +79,14 @@ function Composer({ showId, onPosted, onClose }) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const send = async (status) => {
+  const send = async () => {
     setBusy(true);
     setError(null);
     try {
-      const res = await api.post('/api/v1/feed-posts', { show_id: showId, content_text: text.trim(), poster_handle: 'lala', poster_display_name: 'Lala', status });
+      // A draft in the queue: Lala's posts always go to Review (Task 3103).
+      await api.post('/api/v1/feed-posts', { show_id: showId, content_text: text.trim(), poster_handle: 'lala', poster_display_name: 'Lala', status: 'draft' });
       setText('');
-      // Only an admin may post as Lala live; anyone else's waits in Review (Evoni, 2026-10-13).
-      onPosted(res?.data?.held_for_review ? 'held' : status);
+      onPosted();
     } catch (err) {
       console.error('[LalaFeedTab] post failed:', err);
       setError(err.response?.data?.error || 'The post could not be saved.');
@@ -97,8 +99,7 @@ function Composer({ showId, onPosted, onClose }) {
       <textarea aria-label="What's Lala posting?" placeholder="What's on Lala's mind?" value={text} onChange={(e) => setText(e.target.value)} rows={3} />
       {error && <p className="wa-lf-error" role="alert">{error}</p>}
       <div className="wa-lf-actions">
-        <button type="button" className="wa-lf-primary" disabled={busy || !text.trim()} onClick={() => send('live')}>Post now</button>
-        <button type="button" className="wa-lf-secondary" disabled={busy || !text.trim()} onClick={() => send('draft')}>Save as a draft</button>
+        <button type="button" className="wa-lf-primary" disabled={busy || !text.trim()} onClick={send}>Send to Review</button>
         <button type="button" className="wa-lf-quiet" disabled={busy} onClick={onClose}>Cancel</button>
       </div>
     </section>
@@ -201,7 +202,7 @@ export default function LalaFeedTab({ showId, episodes = [], onCountChanged }) {
       <div className="wa-lf-body">
         <div className="wa-lf-main">
           {composing && <Composer showId={showId} onClose={() => setComposing(false)}
-            onPosted={async (status) => { setComposing(false); setMessage({ ok: true, text: status === 'live' ? 'Posted to her feed.' : status === 'held' ? 'Sent to Review: only an admin can post as Lala right away.' : 'Saved to the queue.' }); await load(); }} />}
+            onPosted={async () => { setComposing(false); setMessage({ ok: true, text: 'Sent to Review. Approve it in the queue to post it.' }); await load(); }} />}
           {message && (
             <p className={`wa-lf-message${message.ok ? '' : ' bad'}`} role="status">
               {message.text}
