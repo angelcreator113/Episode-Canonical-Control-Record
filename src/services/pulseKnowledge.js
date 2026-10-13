@@ -34,25 +34,26 @@
 
 const CLOSE_LINE = 0.7;
 
-const parse = (v) => {
-  if (typeof v !== 'string') return v ?? null;
-  try { return JSON.parse(v); } catch (err) { console.error('[PulseKnowledge] bad JSON:', err.message); return null; }
-};
-const guestIds = (list) => (Array.isArray(list) ? list : [])
-  .map((g) => Number(typeof g === 'object' && g ? (g.profile_id ?? g.social_profile_id ?? g.id) : g))
-  .filter(Number.isInteger);
-
-/** The show's events: { id, name, episode_number, guests: Set<profileId> }. */
+/**
+ * The show's events: { id, name, episode_number, guests: Set<profileId> }.
+ * An event's episode is the one made from it, else the one whose brief
+ * names it (as pulseReveals); its guests are its attendees by the shared
+ * rule, the host and the Event Package's Guests (utils/eventAttendees,
+ * Task #3082).
+ */
 async function showEvents(db, showId) {
+  const { eventAttendees } = require('../utils/eventAttendees');
   const [rows] = await db.sequelize.query(
-    `SELECT we.id, we.name, we.canon_consequences, e.episode_number FROM world_events we
-       LEFT JOIN episodes e ON e.id = we.used_in_episode_id
+    `SELECT we.id, we.name, we.canon_consequences, we.source_profile_id, e.episode_number FROM world_events we
+       LEFT JOIN episodes e ON e.deleted_at IS NULL AND e.id = COALESCE(we.used_in_episode_id, (
+         SELECT eb.episode_id FROM episode_briefs eb WHERE eb.event_id = we.id AND eb.deleted_at IS NULL
+          ORDER BY eb.created_at ASC LIMIT 1))
       WHERE we.show_id = :showId AND we.deleted_at IS NULL`, { replacements: { showId } });
   return rows.map((r) => ({
     id: String(r.id),
     name: r.name,
     episode_number: r.episode_number == null ? null : Number(r.episode_number),
-    guests: new Set(guestIds(parse(r.canon_consequences)?.automation?.guest_profiles)),
+    guests: eventAttendees(r),
   }));
 }
 

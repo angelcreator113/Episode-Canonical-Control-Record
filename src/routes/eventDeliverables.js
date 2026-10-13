@@ -388,6 +388,15 @@ router.post('/world/:showId/events/:eventId/deliverables/:deliverableId/status',
         error: 'The deliverable changed while this was being saved; reload and try again.',
       });
     }
+    // Fulfilled: an approved deliverable proposes Lala's follower change for
+    // Review (Task #3086). After the commit; a failure is logged, never thrown.
+    if (to === 'approved') {
+      try {
+        await require('../services/pulseFollowers').proposeFromDeliverable(models, { showId, deliverable: rows[0] });
+      } catch (err) {
+        console.error('[EventDeliverables] the follower change could not be proposed:', err.message);
+      }
+    }
     return res.json({ success: true, deliverable: rows[0], content_fee: contentFee });
   } catch (error) {
     console.error('Advance event deliverable status error:', error);
