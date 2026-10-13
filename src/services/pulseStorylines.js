@@ -13,7 +13,8 @@
  *   queueDueBeats(db, showId, now?)
  *     every planned beat whose story order has come (at or before the
  *     present) is queued once as a `storyline` job (pulseQueue, under the
- *     daily draft cap). Never calls AI.
+ *     daily draft cap), no more than the automated requests left today; the
+ *     rest wait, planned, for midnight UTC (Task #3050). Never calls AI.
  *   handleStoryline(db, job)
  *     pulseDrafter.draftAndRoute at the beat's story order, with the premise
  *     and the brief as what happened; the gate decides as for any post, and
@@ -73,8 +74,25 @@ async function addBeat(db, storyline, { kind, story_order: order, poster_profile
   });
 }
 
-/** Queues each planned beat whose moment has come, once. Returns the jobs. */
-async function queueDueBeats(db, showId) {
+/**
+ * The automated requests left today (UTC) for the show: the limit, less the
+ * requests taken, less the automated jobs already waiting to run before
+ * midnight UTC (each takes one when it drafts).
+ */
+async function automatedRoom(db, showId, now = new Date()) {
+  const { automated_requests: limit } = await require('./pulseQueue').settingsOf(db, showId);
+  const { automated } = await require('./pulseRequests').usedToday(db, showId, now);
+  const reset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+  const [[waiting]] = await db.sequelize.query(
+    `SELECT COUNT(*)::int AS n FROM pulse_jobs
+      WHERE show_id = :showId AND kind IN ('event', 'ambient', 'comment', 'storyline')
+        AND status IN ('queued', 'running') AND run_after < :reset AND deleted_at IS NULL`,
+    { replacements: { showId, reset } });
+  return Math.max(0, limit - automated - waiting.n);
+}
+
+/** Queues each planned beat whose moment has come, once, within today's automated requests. Returns the jobs. */
+async function queueDueBeats(db, showId, now = new Date()) {
   const { Op } = require('sequelize');
   const present = await require('./storyClock').presentOrder(db, showId);
   const live = await db.PulseStoryline.findAll({ where: { show_id: showId, status: { [Op.in]: ['planned', 'running'] } }, attributes: ['id'], raw: true });
@@ -85,8 +103,14 @@ async function queueDueBeats(db, showId) {
   });
   const queue = require('./pulseQueue');
   const { isApproved } = require('./pulseVoices');
+  // Only as many beats as the automated lane has requests left today: a
+  // beat refused by the cap went back to planned, and queueing it again
+  // every hour until midnight UTC only piled up skipped jobs (Task #3050).
+  // It waits, planned, for the reset.
+  const room = await automatedRoom(db, showId, now);
   const jobs = [];
   for (const beat of beats) {
+    if (jobs.length >= room) break;
     // A beat waits, still planned, until its poster's voice is approved (Task #3029).
     const voice = await db.PulseVoice.findOne({ where: { social_profile_id: beat.poster_profile_id } });
     if (!isApproved(voice)) continue;

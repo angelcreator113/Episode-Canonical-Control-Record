@@ -10,6 +10,8 @@
  *
  * Creates realistic social media posts (Instagram, TikTok, Twitter)
  * with engagement metrics, comments, and Lala's internal reactions.
+ * Each generation takes one manual request from The Pulse's daily cap
+ * (Task #3051).
  */
 
 const Anthropic = require('@anthropic-ai/sdk');
@@ -235,6 +237,10 @@ RULES:
 Return ONLY the JSON array.`;
 
   console.log(`[FeedPosts] Generating for episode ${episodeId} with ${profiles.length} profiles`);
+
+  // One manual request from The Pulse's daily cap, before the call (Task #3051;
+  // services/pulseRequests.js): a RequestCapError (429) means none is made.
+  await require('./pulseRequests').take(models, { showId, lane: 'manual', kind: 'episode_posts' });
 
   const response = await getClient().messages.create({
     model: CLAUDE_MODEL,
