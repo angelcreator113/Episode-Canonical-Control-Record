@@ -183,6 +183,34 @@ describe("Lala's view", () => {
     expect((await screen.findByRole('status')).textContent).toBe('Sent.');
   });
 
+  test('the composer takes up to four photos: alt text, reorder, remove; they upload with the draft, in order (Task 3089)', async () => {
+    globalThis.URL.createObjectURL = vi.fn((f) => `blob:${f.name}`);
+    globalThis.URL.revokeObjectURL = vi.fn();
+    renderAt('/pulse');
+    await screen.findAllByTestId('pl-post');
+    const file = (name) => new File(['x'], name, { type: 'image/jpeg' });
+    fireEvent.change(screen.getByTestId('pl-photo-input'), { target: { files: [file('a.jpg'), file('b.jpg'), file('c.jpg')] } });
+    const list = await screen.findByTestId('pl-cphotos');
+    expect([...list.querySelectorAll('img')].map((i) => i.getAttribute('src'))).toEqual(['blob:a.jpg', 'blob:b.jpg', 'blob:c.jpg']);
+    fireEvent.change(screen.getByLabelText('Alt text for photo 2'), { target: { value: 'the shoes' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Move photo 2 earlier' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove photo 3' }));
+    expect([...list.querySelectorAll('img')].map((i) => i.getAttribute('src'))).toEqual(['blob:b.jpg', 'blob:a.jpg']);
+    // Three more: two fit (four at most); the third and a non-image are left out.
+    fireEvent.change(screen.getByTestId('pl-photo-input'), { target: { files: [file('d.jpg'), file('e.jpg'), file('f.jpg'), new File(['x'], 'n.txt', { type: 'text/plain' })] } });
+    expect(screen.getByRole('alert').textContent).toBe('Up to 4 photos, PNG, JPEG or WebP.');
+    expect(screen.getByTestId('pl-photo-input').disabled).toBe(true);
+
+    fireEvent.change(screen.getByLabelText("What's happening in LaLaVerse?"), { target: { value: 'fit check' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/feed-posts/p3/photos', expect.any(FormData)));
+    const fd = vi.mocked(api.post).mock.calls.find(([u]) => u === '/api/v1/feed-posts/p3/photos')[1];
+    expect(fd.getAll('photos').map((f) => f.name)).toEqual(['b.jpg', 'a.jpg', 'd.jpg', 'e.jpg']);
+    expect(JSON.parse(fd.get('alts'))).toEqual(['the shoes', '', '', '']);
+    expect(api.post.mock.calls[0][0]).toBe('/api/v1/feed-posts');
+    await waitFor(() => expect(screen.queryByTestId('pl-cphotos')).toBeNull());
+  });
+
   test('Events, Characters and Profile views', async () => {
     renderAt('/pulse?tab=events');
     expect((await screen.findByTestId('pl-events')).textContent).toContain('Wearable Experiments Studio Session');

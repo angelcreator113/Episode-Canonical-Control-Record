@@ -7,7 +7,7 @@
 import React from 'react';
 import { describe, test, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import PulsePost, { TaggedText, photosOf, cityName } from './PulsePost';
+import PulsePost, { TaggedText, photosOf, photoItemsOf, cityName } from './PulsePost';
 
 const base = { id: 'p1', poster_handle: 'lala', poster_display_name: 'Lala', likes: 5, shares: 2, posted_at: null, socialProfile: { city: 'echo_park' } };
 const comment = (id, name, text) => ({ id, handle: name.toLowerCase(), display_name: name, text, portrait_url: id === 'c1' ? 'https://cdn/m.jpg' : null });
@@ -23,10 +23,30 @@ describe('PulsePost', () => {
     expect(photosOf({ image_url: 'a' })).toEqual(['a']);
     expect(photosOf({ image_urls: ['a', null, 'b', 'c', 'd', 'e'] })).toEqual(['a', 'b', 'c', 'd']);
     expect(photosOf({})).toEqual([]);
-    const { container, rerender } = render(<PulsePost post={{ ...base, image_urls: ['1', '2', '3'] }} />);
-    expect(container.querySelector('[data-testid="pl-photos"]').className).toBe('pl-photos pl-photos-3');
+    const { container, rerender } = render(<PulsePost post={{ ...base, image_url: '1' }} />);
+    expect(container.querySelector('[data-testid="pl-photos"]').className).toBe('pl-photos pl-photos-1');
     rerender(<PulsePost post={{ ...base, content_text: 'words only' }} />);
     expect(container.querySelector('[data-testid="pl-photos"]')).toBeNull();
+  });
+
+  test('photos with alt text: the photos list (up to four), else the old fields; a first look has no alt (Task 3089)', () => {
+    const photos = [{ url: 'u1', alt: 'the gown' }, { url: 'u2', alt: 'the shoes' }, { url: null, alt: 'x' }, { url: 'u3', alt: '' }, { url: 'u4', alt: '' }, { url: 'u5', alt: '' }];
+    expect(photoItemsOf({ photos })).toEqual([{ src: 'u1', alt: 'the gown' }, { src: 'u2', alt: 'the shoes' }, { src: 'u3', alt: '' }, { src: 'u4', alt: '' }]);
+    expect(photoItemsOf({ image_url: 'a', image_description: 'a fit' })).toEqual([{ src: 'a', alt: 'a fit' }]);
+    expect(photoItemsOf({ photos, photo_teaser: true })[0]).toEqual({ src: 'u1', alt: '' });
+  });
+
+  test('several photos are a swipeable carousel, one at a time, with "1 / 3" and each alt text (Task 3089)', () => {
+    const { container } = render(<PulsePost post={{ ...base, photos: [{ url: 'u1', alt: 'the gown' }, { url: 'u2', alt: 'the shoes' }, { url: 'u3', alt: 'the bag' }] }} />);
+    const carousel = screen.getByRole('group', { name: '3 photos' });
+    expect(carousel.getAttribute('aria-roledescription')).toBe('carousel');
+    expect([...container.querySelectorAll('.pl-carousel-track img')].map((i) => i.getAttribute('alt'))).toEqual(['the gown', 'the shoes', 'the bag']);
+    expect(screen.getByTestId('pl-carousel-count').textContent).toBe('1 / 3');
+    const track = container.querySelector('.pl-carousel-track');
+    Object.defineProperty(track, 'clientWidth', { value: 300, configurable: true });
+    track.scrollLeft = 600;
+    fireEvent.scroll(track);
+    expect(screen.getByTestId('pl-carousel-count').textContent).toBe('3 / 3');
   });
 
   test('counts and the city; the comment count is the real live comments; "View N more" only when they exist', () => {
