@@ -7,6 +7,7 @@
  * plain words. The fields and their wire names are the old modal's.
  */
 import { parseAiPrice, fillPrice, suggestCoinCost } from '../utils/wardrobeAutoFill';
+import { REAL_FIELDS } from './wardrobeRealWorld';
 
 export const EMPTY_PIECE = Object.freeze({
   name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '',
@@ -107,8 +108,11 @@ export function applyAutoFill(prev, answer) {
 /**
  * The upload's FormData. Only what is set is sent, so the server keeps its
  * defaults (acquisition 'purchased', lock 'none', visible) for the rest.
+ * `real` is the Real world section's draft (lib/wardrobeRealWorld; Task
+ * 3083): its filled fields are sent with real_source "manual", as the
+ * piece editor does on a first fill.
  */
-export function pieceFormData(form, file, showId) {
+export function pieceFormData(form, file, showId, real = null) {
   const fd = new FormData();
   if (file) fd.append('image', file);
   fd.append('name', form.name.trim());
@@ -131,6 +135,12 @@ export function pieceFormData(form, file, showId) {
   fd.append('isOwned', form.isOwned ? 'true' : 'false');
   if (form.isVisible === false) fd.append('isVisible', 'false');
   if (showId) fd.append('showId', showId);
+  let realFilled = false;
+  for (const { key } of REAL_FIELDS) {
+    const v = real?.[key] == null ? '' : String(real[key]).trim();
+    if (v) { fd.append(key, v); realFilled = true; }
+  }
+  if (realFilled) fd.append('real_source', 'manual');
   return fd;
 }
 

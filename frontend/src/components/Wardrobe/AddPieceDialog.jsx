@@ -12,6 +12,9 @@
  *   - the photo preview's object URL is released;
  *   - one column at phone width.
  *
+ * Under More, the piece's Real world source (Task 3083): the editor's
+ * RealWorldFields, so what Evoni actually bought can go in when she adds it.
+ *
  * Data: POST /api/v1/wardrobe-library/analyze-image (Fill in from the photo)
  * and POST /api/v1/wardrobe (the piece). Pure helpers: lib/wardrobeAddPiece.
  * onAdded(item, { photoDropped }) lets the closet add it and track its
@@ -25,6 +28,8 @@ import {
   EMPTY_PIECE, SEASONS, TIERS, ACQUISITIONS, LOCKS, ERAS,
   missingForAdd, missingText, applyAutoFill, pieceFormData, autoFillErrorText, uploadErrorText, photoDropped,
 } from '../../lib/wardrobeAddPiece';
+import RealWorldFields from './RealWorldFields';
+import { realDraftFrom, realWorldErrorText } from '../../lib/wardrobeRealWorld';
 import './AddPieceDialog.css';
 
 const AUTO_FILL_TIMEOUT_MS = 120000;
@@ -52,6 +57,7 @@ const storyLine = (f) => [
 export default function AddPieceDialog({ showId, onClose, onAdded }) {
   const titleId = useId();
   const [form, setForm] = useState({ ...EMPTY_PIECE });
+  const [real, setReal] = useState(() => realDraftFrom(null));
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [fictionalBrand, setFictionalBrand] = useState(false);
@@ -62,7 +68,8 @@ export default function AddPieceDialog({ showId, onClose, onAdded }) {
 
   const set = (patch) => setForm((p) => ({ ...p, ...patch }));
   const missing = missingForAdd(form, file);
-  const dirty = useMemo(() => Boolean(file) || Object.keys(EMPTY_PIECE).some((k) => form[k] !== EMPTY_PIECE[k]), [form, file]);
+  const dirty = useMemo(() => Boolean(file) || Object.keys(EMPTY_PIECE).some((k) => form[k] !== EMPTY_PIECE[k])
+    || Object.values(real).some((v) => String(v ?? '').trim() !== ''), [form, file, real]);
   const busy = analyzing || saving;
 
   // The preview's object URL is released when it changes or the dialog closes.
@@ -114,12 +121,12 @@ export default function AddPieceDialog({ showId, onClose, onAdded }) {
     setSaving(true);
     setError(null);
     try {
-      const res = await api.post('/api/v1/wardrobe', pieceFormData(form, file, showId));
+      const res = await api.post('/api/v1/wardrobe', pieceFormData(form, file, showId, real));
       const saved = res.data?.data || null;
       onAdded?.(saved, { photoDropped: photoDropped(file, saved), response: res.data });
     } catch (err) {
       console.error('[AddPiece] upload failed:', err);
-      setError(uploadErrorText(err));
+      setError(realWorldErrorText(err) || uploadErrorText(err));
       setSaving(false);
     }
   };
@@ -298,6 +305,7 @@ export default function AddPieceDialog({ showId, onClose, onAdded }) {
               <label className="apd-check">
                 <input type="checkbox" checked={form.isVisible !== false} onChange={(e) => set({ isVisible: e.target.checked })} /> Shown in the closet
               </label>
+              <RealWorldFields value={real} onChange={setReal} disabled={saving} lazy />
             </details>
           </div>
         </div>
