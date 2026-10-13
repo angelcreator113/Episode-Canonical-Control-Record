@@ -5,7 +5,9 @@
  * ambient posts ship off until she turns them on. Reads and saves
  * /api/v1/pulse-engine: the two daily limits, the ambient switch, today's
  * requests by lane, whether the worker runs on this server, and the last
- * jobs.
+ * jobs. Episodes without posts (Task 3049): a completed episode whose posts
+ * were never queued (the engine was off, or the cap skipped them) can be
+ * queued from here, once.
  * Styles: AdminPanel.css (pulse-engine-*).
  */
 import React, { useCallback, useEffect, useState } from 'react';
@@ -22,6 +24,7 @@ export function todayText(state) {
 }
 
 const validLimit = (text) => /^\d+$/.test(String(text).trim()) && Number(text) <= LIMIT_MAX;
+const episodeName = (e) => `Episode ${e.episode_number ?? '?'}${e.title ? `, ${e.title}` : ''}`;
 const when = (iso) => (iso ? new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
 
 export default function PulseEngine({ showId }) {
@@ -29,6 +32,7 @@ export default function PulseEngine({ showId }) {
   const [limits, setLimits] = useState({ automated: '', manual: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [note, setNote] = useState(null);
 
   const apply = (data) => {
     setState(data);
@@ -53,6 +57,20 @@ export default function PulseEngine({ showId }) {
     } catch (err) {
       console.error(`[PulseEngine] ${label} failed:`, err.response?.status || err.message);
       setError(err.response?.data?.error || `${label} failed.`);
+    } finally { setBusy(false); }
+  };
+
+  const queuePosts = async (episode) => {
+    setBusy(true); setError(null); setNote(null);
+    try {
+      const res = await api.post(`/api/v1/pulse-engine/episodes/${episode.id}/queue`, { show_id: showId });
+      apply(res.data);
+      setNote(res.data.queued
+        ? `Queued ${res.data.posts} post${res.data.posts === 1 ? '' : 's'} for ${episodeName(episode)}.`
+        : res.data.message || 'No one would post about it.');
+    } catch (err) {
+      console.error('[PulseEngine] queueing the posts failed:', err.response?.status || err.message);
+      setError(err.response?.data?.error || 'Queueing the posts failed.');
     } finally { setBusy(false); }
   };
 
@@ -105,6 +123,24 @@ export default function PulseEngine({ showId }) {
         </p>
         {error && <p className="pulse-engine-error" role="alert">{error}</p>}
       </section>
+      {state.episodes_without_posts?.length > 0 && (
+        <section className="pulse-engine-card" aria-label="Episodes without posts" data-testid="pulse-engine-episodes">
+          <h3>Episodes without posts</h3>
+          <p className="pulse-engine-muted">
+            Completed, but their event posts were never queued: the engine was off, or the day's requests were used.
+            Queueing takes no request now; each batch takes one when it drafts.
+          </p>
+          <ul className="pulse-engine-jobs">
+            {state.episodes_without_posts.map((e) => (
+              <li key={e.id}>
+                <span>{episodeName(e)}</span>
+                <button type="button" className="pulse-engine-btn" disabled={busy} onClick={() => queuePosts(e)}>Queue its posts</button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {note && <p className="pulse-engine-muted" role="status" data-testid="pulse-engine-note">{note}</p>}
       <section className="pulse-engine-card" aria-label="Last jobs">
         <h3>Last jobs</h3>
         {state.jobs.length === 0 ? <p className="pulse-engine-muted">No jobs yet.</p> : (

@@ -17,8 +17,9 @@
  *   runOne(db, { now })           claims the next due job (skipLocked, as
  *                                 workers/sceneGenerationWorker.js), runs its
  *                                 handler, retries with a backoff; a job
- *                                 whose lane's requests are used is skipped
- *                                 with the reason; null when idle
+ *                                 whose lane's requests are used waits for
+ *                                 the reset (event, comment; Task #3049) or
+ *                                 is skipped with the reason; null when idle
  *   register(kind, handler)       handler(db, job) → { draftIds, failed? }; the
  *                                 drafting handlers come with #2969-#2971
  *   start() / stop()              the worker loop; app.js starts it only
@@ -35,6 +36,9 @@ const MAX_CAP = 100;   // requests a day, per lane
 const BACKOFF_MS = 60 * 1000;            // 1, 4, 9 minutes …
 const STALE_MS = 15 * 60 * 1000;         // a job running this long was lost
 const POLL_MS = parseInt(process.env.PULSE_ENGINE_POLL_MS, 10) || 15000;
+// Kinds that wait for the lane's reset when its requests are used, not skipped (Task #3049).
+const WAIT_ON_CAP = ['event', 'comment'];
+const CAP_WAIT_MS = 60 * 1000;           // a minute past midnight UTC
 
 const handlers = new Map();
 
@@ -105,13 +109,17 @@ async function draftsToday(db, showId, now = new Date()) {
   return row.n;
 }
 
-/** The engine's state for Admin: settings, today's requests by lane, today's drafts, the last jobs. */
+/**
+ * The engine's state for Admin: settings, completed episodes with no event
+ * posts queued (Task #3049), today's requests by lane, today's drafts, the last jobs.
+ */
 async function stateOf(db, showId, now = new Date()) {
   const settings = await settingsOf(db, showId);
   const requests = await require('./pulseRequests').usedToday(db, showId, now);
   const jobs = await db.PulseJob.findAll({ where: { show_id: showId }, order: [['created_at', 'DESC']], limit: 20 });
   return {
     settings,
+    episodes_without_posts: await require('./pulseEventPosting').episodesWithoutPosts(db, showId),
     requests_today: requests,
     drafts_today: await draftsToday(db, showId, now),
     worker_enabled: process.env.PULSE_ENGINE_ENABLED === 'true',
@@ -172,8 +180,17 @@ async function runOne(db, { now = new Date() } = {}) {
     const failed = Array.isArray(result.failed) ? result.failed.filter(Boolean).map(String) : [];
     await finish({ status: 'done', error: failed.length ? failed.join(' ').slice(0, 1000) : null, draft_ids: draftIds });
   } catch (err) {
-    // The lane's requests for today are used (pulseRequests.take): skipped, not retried.
-    if (err instanceof require('./pulseRequests').RequestCapError) {
+    // The lane's requests for today are used (pulseRequests.take). An event's
+    // posts and their replies wait for the reset, the same job, the wait not
+    // counted as an attempt (Task #3049); any other kind is skipped, not retried.
+    const requests = require('./pulseRequests');
+    if (err instanceof requests.RequestCapError) {
+      if (WAIT_ON_CAP.includes(job.kind)) {
+        const runAfter = new Date(requests.nextReset(now).getTime() + CAP_WAIT_MS);
+        console.error(`[PulseQueue] ${job.kind} job ${job.id} waits until ${runAfter.toISOString()}:`, err.message);
+        await job.update({ status: 'queued', started_at: null, attempts: Math.max(0, job.attempts - 1), run_after: runAfter, error: `Waiting for tomorrow's requests. ${err.message}`.slice(0, 1000) });
+        return job;
+      }
       console.error(`[PulseQueue] ${job.kind} job ${job.id} skipped:`, err.message);
       await finish({ status: 'skipped', error: err.message });
       return job;
@@ -221,6 +238,6 @@ function stop() {
 }
 
 module.exports = {
-  KINDS, DEFAULTS, MAX_CAP, BACKOFF_MS, STALE_MS,
+  KINDS, DEFAULTS, MAX_CAP, BACKOFF_MS, STALE_MS, WAIT_ON_CAP, CAP_WAIT_MS,
   register, unregister, settingsOf, saveSettings, enqueue, draftsToday, stateOf, requeueStale, claimNext, runOne, tick, start, stop, QueueError,
 };

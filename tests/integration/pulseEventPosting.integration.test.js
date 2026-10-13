@@ -6,7 +6,11 @@
  *   engine is on, and never fails completion;
  * - the event job drafts the post through the gate and queues comment jobs;
  * - a comment job drafts in voice; a passing everyday comment on a live
- *   post goes live and is counted, one about Lala waits for Review.
+ *   post goes live and is counted, one about Lala waits for Review;
+ * - Task #3049: a completed episode whose posts were never queued (engine
+ *   off, or skipped by the cap before #3049) is listed in Engine and can be
+ *   queued from there, once, whatever the switch; a job skipped for another
+ *   reason still counts as queued.
  */
 jest.unmock('uuid');
 
@@ -14,6 +18,9 @@ const mockCreate = jest.fn();
 jest.mock('@anthropic-ai/sdk', () => jest.fn().mockImplementation(() => ({ messages: { create: mockCreate } })));
 
 const crypto = require('crypto');
+const request = require('supertest');
+const app = require('../../src/app');
+const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
 const queue = require('../../src/services/pulseQueue');
 const posting = require('../../src/services/pulseEventPosting');
@@ -172,5 +179,45 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] }
     expect(byWho).toEqual({ [p.kim]: 'live', [p.nia]: 'draft' });
     expect((await post.reload()).comments_count).toBe(1);
     expect(await queue.draftsToday(models, ids.show)).toBe(3);
+  });
+
+  test('Engine lists a completed episode with no posts queued and queues them once, whatever the switch (Task #3049)', async () => {
+    const ep = uuid();
+    const ev = uuid();
+    const admin = TokenService.generateTokenPair({ id: 'test-admin-evq', email: 'evoni@evq.dev', name: 'Evoni', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+    const editor = TokenService.generateTokenPair({ id: 'test-editor-evq', email: 'ed@evq.dev', name: 'Ed', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    const queueIt = (token) => request(app).post(`/api/v1/pulse-engine/episodes/${ep}/queue`).set('Authorization', `Bearer ${token}`).send({ show_id: ids.show });
+    const waiting = async () => (await posting.episodesWithoutPosts(models, ids.show)).map((e) => e.id);
+    await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, evaluation_status, created_at, updated_at)
+               VALUES (:ep, :show, 'The After Party', 9, 'published', 'accepted', NOW(), NOW())`, { ep, show: ids.show });
+    await run(`INSERT INTO world_events (id, show_id, name, status, used_in_episode_id, cost_coins, prestige, canon_consequences, created_at, updated_at)
+               VALUES (:ev, :show, :name, 'used', :ep, 0, 5, CAST(:cc AS jsonb), NOW(), NOW())`,
+    { ev, ep, show: ids.show, name: `After party ${tag}`, cc: JSON.stringify({ automation: { guest_profiles: [{ profile_id: p.marcus }] } }) });
+    process.env.PULSE_ENGINE_ENABLED = 'false';
+    try {
+      // Completed while the engine was off: nothing queued, so Engine lists it.
+      expect(await posting.enqueueForEpisode(models, { showId: ids.show, episodeId: ep })).toEqual([]);
+      expect(await waiting()).toContain(ep);
+      // A job the cap skipped before #3049 does not count as queued.
+      await models.PulseJob.create({ show_id: ids.show, kind: 'event', status: 'skipped', payload_json: { episode_id: ep },
+        error: "Today's 5 automated requests are used; they reset at midnight UTC.", max_attempts: 3 });
+      expect(await waiting()).toContain(ep);
+
+      expect((await queueIt(editor)).status).toBe(403);
+      const res = await queueIt(admin);
+      expect(res.status).toBe(201);
+      expect(res.body).toMatchObject({ success: true, queued: 1, posts: 1 });
+      expect(res.body.episodes_without_posts.map((e) => e.id)).not.toContain(ep);
+      const jobs = await models.PulseJob.findAll({ where: { show_id: ids.show, kind: 'event', status: 'queued' } });
+      expect(jobs.filter((j) => j.payload_json.episode_id === ep)).toHaveLength(1);
+      expect((await queueIt(admin)).status).toBe(409);
+      // A job skipped for another reason (a voice not approved) still counts.
+      await models.PulseJob.update({ status: 'skipped', error: 'marcus: voice not approved yet.' }, { where: { show_id: ids.show, kind: 'event', status: 'queued' } });
+      expect(await waiting()).not.toContain(ep);
+    } finally {
+      process.env.PULSE_ENGINE_ENABLED = 'true';
+      await run(`DELETE FROM pulse_jobs WHERE show_id = :show AND payload_json->>'episode_id' = :ep`, { show: ids.show, ep });
+      await run('DELETE FROM world_events WHERE id = :ev', { ev });
+    }
   });
 });

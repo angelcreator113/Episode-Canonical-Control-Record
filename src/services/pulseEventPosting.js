@@ -16,10 +16,13 @@
  *     A small seeded jitter per episode and character keeps a re-run
  *     picking the same people. Lurkers never post; they may comment.
  *     → { posters, commenters, order, about, eventId }
- *   enqueueForEpisode(db, { showId, episodeId })
+ *   enqueueForEpisode(db, { showId, episodeId, manual })
  *     queues one `event` job for the posters (BATCH_MAX a job), at the
- *     episode's After; once per episode; only while PULSE_ENGINE_ENABLED is
- *     on. Never calls AI.
+ *     episode's After; once per episode (a job skipped by the cap does not
+ *     count, Task #3049); at completion only while PULSE_ENGINE_ENABLED is
+ *     on, from Admin › Engine (manual) whatever the switch. Never calls AI.
+ *   episodesWithoutPosts(db, showId)
+ *     completed episodes with no event posts queued, for Admin › Engine.
  *   registerHandlers()
  *     event   → pulseDrafter.draftPostsAndRoute: one request drafts every
  *               poster's post (Task #3032), each gated on its own; then one
@@ -129,12 +132,22 @@ async function whoPosts(db, { showId, episodeId }) {
   };
 }
 
-/** Queues the episode's event posts once; never calls AI. Returns the jobs queued ([] when off or done before). */
-async function enqueueForEpisode(db, { showId, episodeId }) {
-  if (process.env.PULSE_ENGINE_ENABLED !== 'true') return [];
+// An episode's event jobs that count as queued: any, except one skipped
+// because the automated lane was used up (Task #3049), which can be queued again.
+const EVENT_JOBS_SQL = () => `SELECT 1 FROM pulse_jobs j
+  WHERE j.show_id = e.show_id AND j.kind = 'event' AND j.payload_json->>'episode_id' = e.id::text
+    AND j.deleted_at IS NULL AND NOT ${require('./pulseRequests').capSkipSql('j')}`;
+
+/**
+ * Queues the episode's event posts once; never calls AI. Returns the jobs
+ * queued ([] when queued before, or no one would post). At completion it
+ * queues only while PULSE_ENGINE_ENABLED is on; `manual` (Admin › Engine,
+ * Task #3049) queues whatever the switch, and the jobs wait for the worker.
+ */
+async function enqueueForEpisode(db, { showId, episodeId, manual = false }) {
+  if (!manual && process.env.PULSE_ENGINE_ENABLED !== 'true') return [];
   const [[done]] = await db.sequelize.query(
-    `SELECT COUNT(*)::int AS n FROM pulse_jobs
-      WHERE show_id = :showId AND kind = 'event' AND payload_json->>'episode_id' = :episodeId AND deleted_at IS NULL`,
+    `SELECT COUNT(*)::int AS n FROM episodes e WHERE e.id::text = :episodeId AND e.show_id = :showId AND EXISTS (${EVENT_JOBS_SQL()})`,
     { replacements: { showId, episodeId: String(episodeId) } });
   if (done.n > 0) return [];
   const plan = await whoPosts(db, { showId, episodeId });
@@ -152,6 +165,21 @@ async function enqueueForEpisode(db, { showId, episodeId }) {
     }));
   }
   return jobs;
+}
+
+/**
+ * The show's completed episodes (evaluation accepted) with no event posts
+ * queued, newest first: completed while the engine was off, or skipped by
+ * the cap before Task #3049. For Admin › Engine.
+ */
+async function episodesWithoutPosts(db, showId, { limit = 10 } = {}) {
+  const [rows] = await db.sequelize.query(
+    `SELECT e.id, e.episode_number, e.title FROM episodes e
+      WHERE e.show_id = :showId AND e.evaluation_status = 'accepted' AND e.deleted_at IS NULL
+        AND NOT EXISTS (${EVENT_JOBS_SQL()})
+      ORDER BY e.episode_number DESC NULLS LAST, e.updated_at DESC LIMIT :limit`,
+    { replacements: { showId, limit } });
+  return rows.map((r) => ({ id: r.id, episode_number: r.episode_number, title: r.title || null }));
 }
 
 /** The characters a job names: a batch (Task #3032), or the one a job queued before it named. */
@@ -205,5 +233,5 @@ function registerHandlers() {
 
 module.exports = {
   CLOSENESS, TEMPERAMENT, MAX_POSTERS, MAX_COMMENTERS, POST_LINE, COMMENT_LINE,
-  seeded, scoreOf, pick, whoPosts, enqueueForEpisode, handleEvent, handleComment, registerHandlers,
+  seeded, scoreOf, pick, whoPosts, enqueueForEpisode, episodesWithoutPosts, handleEvent, handleComment, registerHandlers,
 };
