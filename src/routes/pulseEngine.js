@@ -10,6 +10,12 @@
  *                    jobs (requireAuth)
  *   PUT /            { show_id, automated_requests?, manual_requests?,
  *                    ambient_enabled? } (requireAuth + ADMIN)
+ *   POST /episodes/:episodeId/queue  { show_id } queues a completed
+ *                    episode's event posts that were never queued (the
+ *                    engine was off, or the cap skipped them; Task #3049),
+ *                    whatever the engine switch; once (requireAuth + ADMIN)
+ *
+ * GET's state lists those episodes as episodes_without_posts.
  */
 const express = require('express');
 const { requireAuth, authorize } = require('../middleware/auth');
@@ -56,6 +62,31 @@ router.put('/', requireAuth, authorize(['ADMIN']), async (req, res) => {
   } catch (err) {
     if (sendKnown(res, err)) return undefined;
     console.error('[PulseEngine] PUT error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/episodes/:episodeId/queue', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const showId = String(req.body?.show_id || '');
+    const episodeId = String(req.params.episodeId || '');
+    if (!UUID_RE.test(showId)) return badShow(res);
+    if (!UUID_RE.test(episodeId)) return res.status(400).json({ success: false, error: 'The episode id must be a UUID.' });
+    const db = getModels();
+    const waiting = await require('../services/pulseEventPosting').episodesWithoutPosts(db, showId, { limit: 1000 });
+    if (!waiting.some((e) => e.id === episodeId)) {
+      return res.status(409).json({ success: false, error: 'That episode is not completed, or its posts were queued already.' });
+    }
+    const jobs = await require('../services/pulseEventPosting').enqueueForEpisode(db, { showId, episodeId, manual: true });
+    const posts = jobs.reduce((n, job) => n + (Array.isArray(job.payload_json?.posters) ? job.payload_json.posters.length : 1), 0);
+    return res.status(jobs.length ? 201 : 200).json({
+      success: true, queued: jobs.length, posts,
+      ...(jobs.length ? {} : { message: 'No one would post about it: no Alive character with an approved voice scored high enough.' }),
+      ...(await require('../services/pulseQueue').stateOf(db, showId)),
+    });
+  } catch (err) {
+    if (sendKnown(res, err)) return undefined;
+    console.error('[PulseEngine] queue episode posts error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

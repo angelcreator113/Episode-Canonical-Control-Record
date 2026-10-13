@@ -40,6 +40,20 @@ class RequestCapError extends Error {
   }
 }
 
+/**
+ * A SQL test, on pulse_jobs (alias optional), true for a job the queue skipped because its
+ * lane was used up: its error is a RequestCapError message above. Since
+ * Task #3049 an event or comment job waits for the reset instead, but jobs
+ * skipped before then stay in the table.
+ */
+const capSkipSql = (alias = '') => {
+  const a = alias ? `${alias}.` : '';
+  return `(${a}status = 'skipped' AND (${a}error LIKE 'Today''s % request% used%' OR ${a}error LIKE '% requests are set to 0 a day%'))`;
+};
+
+/** The next midnight UTC after now: when a lane's requests reset. */
+const nextReset = (now = new Date()) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+
 const startOfUtcDay = (now) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 const limitKey = (lane) => `${lane}_requests`;
 
@@ -82,4 +96,4 @@ async function take(db, { showId, lane, kind, jobId = null, now = new Date() }) 
   });
 }
 
-module.exports = { LANES, RequestCapError, usedToday, assertRoom, take };
+module.exports = { LANES, RequestCapError, capSkipSql, nextReset, usedToday, assertRoom, take };

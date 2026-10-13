@@ -2,13 +2,13 @@
  * Admin › The Pulse › Engine (Task 2968; requests, Task 3031): today's
  * requests against the two daily limits, saving the limits, the ambient
  * switch (off by default), the note when the worker is off on this server,
- * and the last jobs.
+ * the last jobs, and queueing a completed episode's posts (Task 3049).
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 
-vi.mock('../../services/api', () => ({ default: { get: vi.fn(), put: vi.fn() } }));
+vi.mock('../../services/api', () => ({ default: { get: vi.fn(), put: vi.fn(), post: vi.fn() } }));
 
 import api from '../../services/api';
 import PulseEngine, { todayText } from './PulseEngine';
@@ -32,6 +32,31 @@ beforeEach(() => {
 });
 
 describe('the Engine tab', () => {
+  test('a completed episode without posts can be queued from Engine, and then leaves the list (Task 3049)', async () => {
+    const waiting = { id: 'ep-9', episode_number: 9, title: 'The After Party' };
+    vi.mocked(api.get).mockResolvedValue({ data: { ...STATE, episodes_without_posts: [waiting] } });
+    vi.mocked(api.post).mockResolvedValue({ data: { ...STATE, episodes_without_posts: [], queued: 1, posts: 2 } });
+    render(<PulseEngine showId="show-1" />);
+    const card = await screen.findByTestId('pulse-engine-episodes');
+    expect(card.textContent).toContain('Episode 9, The After Party');
+    fireEvent.click(within(card).getByText('Queue its posts'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/pulse-engine/episodes/ep-9/queue', { show_id: 'show-1' }));
+    expect((await screen.findByTestId('pulse-engine-note')).textContent).toBe('Queued 2 posts for Episode 9, The After Party.');
+    expect(screen.queryByTestId('pulse-engine-episodes')).toBeNull();
+  });
+
+  test('no episodes card when every completed episode has its posts; a refusal shows its reason', async () => {
+    render(<PulseEngine showId="show-1" />);
+    await screen.findByTestId('pulse-engine-today');
+    expect(screen.queryByTestId('pulse-engine-episodes')).toBeNull();
+    vi.mocked(api.get).mockResolvedValue({ data: { ...STATE, episodes_without_posts: [{ id: 'ep-3', episode_number: 3, title: null }] } });
+    vi.mocked(api.post).mockRejectedValue({ response: { status: 409, data: { error: 'That episode is not completed, or its posts were queued already.' } } });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(<PulseEngine showId="show-1" />);
+    fireEvent.click(within(await screen.findByTestId('pulse-engine-episodes')).getByText('Queue its posts'));
+    expect((await screen.findByRole('alert')).textContent).toBe('That episode is not completed, or its posts were queued already.');
+  });
+
   test('todayText: each lane against its limit', () => {
     expect(todayText(STATE)).toBe('Today: 2 of 5 automated, 7 of 15 manual.');
     expect(todayText({ settings: STATE.settings })).toBe('Today: 0 of 5 automated, 0 of 15 manual.');
