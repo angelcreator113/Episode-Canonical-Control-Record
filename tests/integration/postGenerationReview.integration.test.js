@@ -58,14 +58,20 @@ const reviewsOf = (storyId) => q(
      FROM post_generation_reviews WHERE CAST(story_id AS text) = :storyId ORDER BY id`,
   { storyId });
 
-async function waitForReview(storyId, text) {
+// Polls the story's rows until `settled(rows)` returns something truthy.
+// The review runs in the background, and it writes twice: the new row, then
+// the soft delete of the older ones. Wait for the state the assertion reads.
+async function waitForReviews(storyId, settled, what) {
   for (let i = 0; i < 100; i += 1) {
-    const found = (await reviewsOf(storyId)).find((r) => r.approved_version_reviewed === text && !r.deleted_at);
+    const found = settled(await reviewsOf(storyId));
     if (found) return found;
     await new Promise((r) => setTimeout(r, 50));
   }
-  throw new Error(`no review of ${storyId} for: ${text}`);
+  throw new Error(`reviews of ${storyId} never settled: ${what}`);
 }
+
+const waitForReview = (storyId, text) => waitForReviews(
+  storyId, (rows) => rows.find((r) => r.approved_version_reviewed === text && !r.deleted_at), `a live review of: ${text}`);
 
 (shouldSkip ? describe.skip : describe)('the post-generation review, wired up', () => {
   let token;
@@ -137,7 +143,9 @@ async function waitForReview(storyId, text) {
     answer({ approved: FINAL_2, review: { ...FAILED_REVIEW, overall_assessment: 'Second pass.' } });
     expect((await evaluate(ids.story)).status).toBe(200);
     const newer = await waitForReview(ids.story, FINAL_2);
-    const rows = await reviewsOf(ids.story);
+    // The superseding soft delete lands after the newer row; wait for it too.
+    const rows = await waitForReviews(
+      ids.story, (all) => all.every((r) => r.id === newer.id || r.deleted_at) && all, 'the older review superseded');
     expect(rows.map((r) => [r.approved_version_reviewed, r.deleted_at !== null])).toEqual([[FINAL, true], [FINAL_2, false]]);
     const listed = (await unacknowledged()).body.reviews.filter((r) => r.story_id === ids.story).map((r) => r.id);
     expect(listed).toEqual([newer.id]);
