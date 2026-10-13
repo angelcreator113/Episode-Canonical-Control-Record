@@ -33,8 +33,8 @@ module.exports = (sequelize, DataTypes) => {
     vibe_sentence:         { type: DataTypes.TEXT, allowNull: false },
     display_name:          { type: DataTypes.STRING(200), allowNull: true },
     creator_name:          { type: DataTypes.STRING(200), allowNull: true },  // Real name behind the handle �� e.g. "Jessica Chen"
-    // Kept as is: the stored 4-tier follower_tier stays for generation and scoring; The Pulse shows six audience tiers worked out from the canon count (services/pulseAudience.js; Evoni, 2026-10-12, Task #3033).
-    follower_tier:         { type: DataTypes.ENUM('micro','mid','macro','mega'), allowNull: true },
+    // The six count tiers (utils/followerTiers, services/pulseAudience; Evoni, 2026-10-13, Task #3106: generation and scoring use them; migration 20261013110000 set each from its count).
+    follower_tier:         { type: DataTypes.ENUM('emerging','nano','micro','mid','macro','mega'), allowNull: true },
     follower_count_approx: { type: DataTypes.STRING(50), allowNull: true },
     content_category:      { type: DataTypes.STRING(100), allowNull: true },
     archetype:             { type: DataTypes.ENUM('polished_curator','messy_transparent','soft_life','explicitly_paid','overnight_rise','cautionary','the_peer','the_watcher','chaos_creator','community_builder'), allowNull: true },

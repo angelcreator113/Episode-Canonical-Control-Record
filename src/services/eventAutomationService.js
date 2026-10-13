@@ -95,13 +95,15 @@ const ARCHETYPE_EVENT_FIT = {
   community_builder: ['invite', 'guest', 'upgrade'],      // hosts community events
 };
 
-// Maps follower tiers to prestige ranges they can host.
-// Kept as is: the stored 4-tier follower_tier stays for generation and scoring; The Pulse shows six audience tiers worked out from the canon count (services/pulseAudience.js; Evoni, 2026-10-12, Task #3033).
+// Maps follower tiers to prestige ranges they can host: the six count tiers (Task #3106).
+// Emerging and Nano are new (Evoni, 2026-10-13); the other four are unchanged.
 const TIER_PRESTIGE = {
   mega: { min: 6, max: 10 },
   macro: { min: 4, max: 8 },
   mid: { min: 2, max: 6 },
   micro: { min: 1, max: 4 },
+  nano: { min: 1, max: 3 },
+  emerging: { min: 1, max: 2 },
 };
 
 /**
@@ -869,6 +871,7 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
 }
 
 module.exports = {
+  TIER_PRESTIGE,
   findHostProfile,
   findVenue,
   ensureVenueLocation,

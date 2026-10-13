@@ -440,6 +440,7 @@ async function _callClaude(prompt, maxTokens = 600) {
 // ══════════════════════════════════════════════════════════════════════
 
 const SYNCABLE_TO_FEED = ['follower_tier', 'current_state'];
+const { FOLLOWER_TIER_KEYS } = require('../utils/followerTiers');
 
 async function syncFeedProfileFromRegistry(characterId, updatedFields, models) {
   try {
@@ -448,6 +449,11 @@ async function syncFeedProfileFromRegistry(characterId, updatedFields, models) {
       if (SYNCABLE_TO_FEED.includes(key)) {
         relevantUpdate[key] = updatedFields[key];
       }
+    }
+    // A Feed profile's tier is one of the six count tiers; the registry's ghost and unknown stay
+    // in the registry (Evoni, 2026-10-13, Task #3106).
+    if ('follower_tier' in relevantUpdate && !FOLLOWER_TIER_KEYS.includes(relevantUpdate.follower_tier)) {
+      delete relevantUpdate.follower_tier;
     }
     if (!Object.keys(relevantUpdate).length) return;
 

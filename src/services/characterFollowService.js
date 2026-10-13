@@ -1,6 +1,7 @@
 'use strict';
 
 const Anthropic = require('@anthropic-ai/sdk');
+const { DEFAULT_TIER_AFFINITY, withSixTiers } = require('../utils/followerTiers');
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // ── Content categories the follow engine recognizes ──────────────────────────
@@ -101,7 +102,7 @@ ${CONTENT_CATEGORIES.map(c => `- ${c}`).join('\n')}
 - adult_penalty: -0.30 to 0.0 (negative = avoids adult content, zero = unbothered)
 - base_follow_threshold: 0.25 to 0.50 (lower = follows more freely, higher = selective)
 - same_platform_bonus: { instagram, tiktok, youtube, twitter } each 0.0 to 0.15
-- follower_tier_affinity: { micro, mid, macro, mega } each 0.0 to 1.0
+- follower_tier_affinity: { emerging, nano, micro, mid, macro, mega } each 0.0 to 1.0 (emerging under 1k followers, nano 1k–10k, micro 10k–50k, mid 50k–250k, macro 250k–1M, mega 1M+)
 
 **Generation Reasoning** — 2-3 sentences explaining WHY this character consumes content this way, rooted in their wound and desire. This is the psychological thesis.
 
@@ -116,7 +117,7 @@ Return ONLY valid JSON with this exact structure:
   "adult_penalty": -0.10,
   "base_follow_threshold": 0.35,
   "same_platform_bonus": { "instagram": 0.0, "tiktok": 0.0, "youtube": 0.0, "twitter": 0.0 },
-  "follower_tier_affinity": { "micro": 0.0, "mid": 0.0, "macro": 0.0, "mega": 0.0 },
+  "follower_tier_affinity": { "emerging": 0.0, "nano": 0.0, "micro": 0.0, "mid": 0.0, "macro": 0.0, "mega": 0.0 },
   "generation_reasoning": "..."
 }`;
 }
@@ -172,7 +173,7 @@ async function createFollowProfileFromDNA(db, characterKey) {
       drama_bonus: generated.drama_bonus ?? 0.05,
       adult_penalty: generated.adult_penalty ?? -0.10,
       same_platform_bonus: generated.same_platform_bonus || {},
-      follower_tier_affinity: generated.follower_tier_affinity || { micro: 0.60, mid: 0.70, macro: 0.75, mega: 0.65 },
+      follower_tier_affinity: generated.follower_tier_affinity ? withSixTiers(generated.follower_tier_affinity) : { ...DEFAULT_TIER_AFFINITY },
       base_follow_threshold: generated.base_follow_threshold ?? 0.35,
       consumption_style: generated.consumption_style || null,
       consumption_context: generated.consumption_context || null,
@@ -194,7 +195,7 @@ async function createFollowProfileFromDNA(db, characterKey) {
         drama_bonus: generated.drama_bonus ?? profile.drama_bonus,
         adult_penalty: generated.adult_penalty ?? profile.adult_penalty,
         same_platform_bonus: generated.same_platform_bonus || profile.same_platform_bonus,
-        follower_tier_affinity: generated.follower_tier_affinity || profile.follower_tier_affinity,
+        follower_tier_affinity: generated.follower_tier_affinity ? withSixTiers(generated.follower_tier_affinity) : profile.follower_tier_affinity,
         base_follow_threshold: generated.base_follow_threshold ?? profile.base_follow_threshold,
         consumption_style: generated.consumption_style || profile.consumption_style,
         consumption_context: generated.consumption_context || profile.consumption_context,
