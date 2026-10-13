@@ -97,7 +97,7 @@ describe('registry demographics', () => {
       },
       sibling_position: { only: 'only_child', eldest: 'oldest' },
       relationship_status: { partnered: 'committed', engaged: 'committed' },
-      follower_tier: { nano: 'micro', 'mid-tier': 'mid' },
+      follower_tier: { nano: 'nano', emerging: 'emerging', 'mid-tier': 'mid' },   // nano and emerging are tiers now (Task #3106)
     };
     for (const [field, words] of Object.entries(read)) {
       for (const [word, value] of Object.entries(words)) expect([field, word, registryValue(field, word)]).toEqual([field, word, value]);

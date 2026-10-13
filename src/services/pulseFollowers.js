@@ -35,12 +35,12 @@
  * accepted change moves followers only, never Influence.
  */
 
-// The middle of each follower tier (social_profiles.follower_tier): a starting count only.
-// Kept as is: the stored 4-tier follower_tier stays for generation and scoring; The Pulse shows six audience tiers worked out from the canon count (services/pulseAudience.js; Evoni, 2026-10-12, Task #3033).
-// Each lands in its matching count tier (Evoni, 2026-10-13, Task #3068): micro starts at 25,000, the
-// middle of Micro (10,000–49,999), not 5,000 (Nano). Only starting counts proposed from then on change;
-// accepted counts stay as they are.
-const TIER_MIDDLE = { micro: 25000, mid: 50000, macro: 500000, mega: 5000000 };
+// A starting count from the stored follower tier (social_profiles.follower_tier), one of the six count
+// tiers (Task #3106). Each lands in its own tier (Evoni, 2026-10-13, Task #3068): micro starts at 25,000,
+// the middle of Micro (10,000–49,999). Emerging and Nano are new (Evoni, 2026-10-13): 500 and 5,000. The
+// four older values are unchanged, so no starting count moved when the labels were rewritten; accepted
+// counts stay as they are.
+const TIER_MIDDLE = { emerging: 500, nano: 5000, micro: 25000, mid: 50000, macro: 500000, mega: 5000000 };
 const MULTIPLIER = { k: 1e3, m: 1e6, b: 1e9 };
 const CAUSES = ['start', 'episode', 'post', 'event', 'override'];
 

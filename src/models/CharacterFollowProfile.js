@@ -28,8 +28,8 @@ module.exports = (sequelize, DataTypes) => {
     drama_bonus:           { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0.05 },
     adult_penalty:         { type: DataTypes.FLOAT, allowNull: false, defaultValue: -0.10 },
     same_platform_bonus:   { type: DataTypes.JSONB, allowNull: false, defaultValue: {} },
-    // Keyed on the stored follower_tier, kept as is: the stored 4-tier follower_tier stays for generation and scoring; The Pulse shows six audience tiers worked out from the canon count (services/pulseAudience.js; Evoni, 2026-10-12, Task #3033).
-    follower_tier_affinity:{ type: DataTypes.JSONB, allowNull: false, defaultValue: { micro: 0.60, mid: 0.70, macro: 0.75, mega: 0.65 } },
+    // Keyed on the stored follower_tier, the six count tiers (Task #3106; utils/followerTiers DEFAULT_TIER_AFFINITY).
+    follower_tier_affinity:{ type: DataTypes.JSONB, allowNull: false, defaultValue: { emerging: 0.60, nano: 0.60, micro: 0.60, mid: 0.70, macro: 0.75, mega: 0.65 } },
     base_follow_threshold: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0.35 },
 
     // Consumption pattern
