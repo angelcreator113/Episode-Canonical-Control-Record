@@ -22,39 +22,36 @@ const STATE_RING = {
   posthumous:    '#d4789a',
 };
 
-const EDGE_STYLES = {
-  beef:             { stroke: '#ef4444', dash: '6,4' },
-  collab:           { stroke: '#22c55e', dash: null },
-  silent_alliance:  { stroke: '#9ca3af', dash: '2,4' },
-  mentor:           { stroke: '#3b82f6', dash: null },
-  orbit:            { stroke: '#9ca3af', dash: null, arrow: true },
-  public_shade:     { stroke: '#f59e0b', dash: '6,4' },
-  copy_cat:         { stroke: '#a855f7', dash: '4,4' },
-  former_friends:   { stroke: '#ef4444', dash: '8,4' },
-  competitors:      { stroke: '#f97316', dash: null },
-};
-
+// The 17 kinds of social_profile_relationships, the table The Pulse reads:
+// since Task #3115 this map edits it, so a change here changes The Pulse.
+// Keep in step with src/utils/relationshipKinds.js and the route's EDGE_STYLES.
 const REL_TYPES = [
-  { value: 'collab',          label: 'Collab' },
-  { value: 'beef',            label: 'Beef' },
-  { value: 'mentor',          label: 'Mentor' },
-  { value: 'competitors',     label: 'Competitors' },
-  { value: 'silent_alliance', label: 'Silent Alliance' },
-  { value: 'orbit',           label: 'Orbit' },
-  { value: 'public_shade',    label: 'Public Shade' },
-  { value: 'copy_cat',        label: 'Copycat' },
-  { value: 'former_friends',  label: 'Former Friends' },
+  { value: 'collab',         label: 'Collab',         stroke: '#22c55e', dash: null },
+  { value: 'bestie',         label: 'Bestie',         stroke: '#16a34a', dash: null },
+  { value: 'mentor',         label: 'Mentor',         stroke: '#3b82f6', dash: null },
+  { value: 'management',     label: 'Management',     stroke: '#0ea5e9', dash: '2,4' },
+  { value: 'family',         label: 'Family',         stroke: '#6366f1', dash: null },
+  { value: 'couple',         label: 'Couple',         stroke: '#ec4899', dash: null },
+  { value: 'situationship',  label: 'Situationship',  stroke: '#f472b6', dash: '4,4' },
+  { value: 'ex',             label: 'Ex',             stroke: '#db2777', dash: '8,4' },
+  { value: 'baby_daddy',     label: 'Baby daddy',     stroke: '#be185d', dash: null },
+  { value: 'baby_mama',      label: 'Baby mama',      stroke: '#be185d', dash: null },
+  { value: 'rival',          label: 'Rival',          stroke: '#f97316', dash: null },
+  { value: 'feud',           label: 'Feud',           stroke: '#ef4444', dash: '6,4' },
+  { value: 'shade',          label: 'Shade',          stroke: '#f59e0b', dash: '6,4' },
+  { value: 'former_friends', label: 'Former friends', stroke: '#ef4444', dash: '8,4' },
+  { value: 'copycat',        label: 'Copycat',        stroke: '#a855f7', dash: '4,4' },
+  { value: 'secret_link',    label: 'Secret link',    stroke: '#9ca3af', dash: '2,4' },
+  { value: 'orbit',          label: 'Orbit',          stroke: '#9ca3af', dash: null, arrow: true },
 ];
+
+const EDGE_STYLES = Object.fromEntries(REL_TYPES.map((t) => [t.value, t]));
+
+// The kinds a character can be caught in the middle of (src/utils/relationshipKinds.js CONFLICT_KINDS).
+const CONFLICT_TYPES = ['feud', 'shade', 'former_friends'];
 
 const NODE_R = 28;
-const LEGEND_ITEMS = [
-  { type: 'beef', label: 'Beef', color: '#ef4444', dash: true },
-  { type: 'collab', label: 'Collab', color: '#22c55e' },
-  { type: 'mentor', label: 'Mentor', color: '#3b82f6' },
-  { type: 'silent_alliance', label: 'Silent Alliance', color: '#9ca3af', dash: true },
-  { type: 'orbit', label: 'Orbit', color: '#9ca3af' },
-  { type: 'former_friends', label: 'Former Friends', color: '#ef4444', dash: true },
-];
+const LEGEND_ITEMS = REL_TYPES.map((t) => ({ type: t.value, label: t.label, color: t.stroke, dash: Boolean(t.dash) }));
 
 function simpleForceLayout(nodes, edges, width, height) {
   // Simple circular layout with force displacement
@@ -125,13 +122,12 @@ export default function FeedRelationshipMap() {
   const [ripplesMsg, setRipplesMsg] = useState(null);
   const [generatingRipples, setGeneratingRipples] = useState(false);
 
-  // Create / auto-generate state
+  // Create state
   const [profiles, setProfiles] = useState([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [formA, setFormA] = useState('');
   const [formB, setFormB] = useState('');
   const [formType, setFormType] = useState('collab');
-  const [generating, setGenerating] = useState(false);
   const [createMsg, setCreateMsg] = useState(null);
 
   // The active show's Pulse closeness for each pair, read only (Task 3072).
@@ -182,7 +178,7 @@ export default function FeedRelationshipMap() {
   const loadProfiles = useCallback(async () => {
     try {
       const res = await api.get('/api/v1/feed-relationships/profiles');
-      setProfiles(res.data || []);
+      setProfiles(res.data?.profiles || []);
     } catch (err) {
       console.warn('[FeedRelMap] profiles load error:', err.message);
     }
@@ -200,25 +196,11 @@ export default function FeedRelationshipMap() {
         relationship_type: formType,
         is_public: true,
       });
-      setCreateMsg('Relationship created');
+      setCreateMsg({ text: 'Relationship created', ok: true });
       setFormA(''); setFormB(''); setFormType('collab');
       loadCanvas();
     } catch (err) {
-      setCreateMsg(err.response?.data?.error || 'Create failed');
-    }
-  };
-
-  const handleAutoGenerate = async () => {
-    setGenerating(true);
-    setCreateMsg(null);
-    try {
-      const res = await api.post('/api/v1/feed-relationships/auto-generate');
-      setCreateMsg(res.data?.message || `${res.data?.created || 0} relationships generated`);
-      loadCanvas();
-    } catch (err) {
-      setCreateMsg(err.response?.data?.error || 'Auto-generate failed');
-    } finally {
-      setGenerating(false);
+      setCreateMsg({ text: err.response?.data?.error || 'Create failed', ok: false });
     }
   };
 
@@ -308,7 +290,7 @@ export default function FeedRelationshipMap() {
           color: '#888',
           marginTop: 4,
         }}>
-          Influencer-to-influencer connections — click a node to see entangled characters
+          Influencer-to-influencer connections, the ones The Pulse reads — click a node to see entangled characters
         </p>
       </div>
 
@@ -399,19 +381,6 @@ export default function FeedRelationshipMap() {
           {createOpen ? '✕ Close' : '+ Add Relationship'}
         </button>
         <button
-          onClick={handleAutoGenerate}
-          disabled={generating}
-          style={{
-            padding: '6px 14px', fontSize: 12, fontWeight: 600,
-            border: '1px solid #d1d5db', borderRadius: 6,
-            background: generating ? '#e5e7eb' : '#fff', color: '#374151',
-            cursor: generating ? 'not-allowed' : 'pointer',
-            fontFamily: "'DM Sans', sans-serif",
-          }}
-        >
-          {generating ? '⏳ Generating…' : '⚡ Auto-Generate'}
-        </button>
-        <button
           onClick={exportMapPNG}
           style={{
             padding: '6px 14px', fontSize: 12, fontWeight: 600,
@@ -423,8 +392,8 @@ export default function FeedRelationshipMap() {
           Export PNG
         </button>
         {createMsg && (
-          <span style={{ fontSize: 11, color: createMsg.includes('fail') ? '#dc2626' : '#16a34a', fontFamily: "'DM Sans', sans-serif" }}>
-            {createMsg}
+          <span style={{ fontSize: 11, color: createMsg.ok ? '#16a34a' : '#dc2626', fontFamily: "'DM Sans', sans-serif" }}>
+            {createMsg.text}
           </span>
         )}
       </div>
@@ -678,7 +647,7 @@ export default function FeedRelationshipMap() {
               .map(e => {
                 const otherId = e.source === selected.id ? e.target : e.source;
                 const other = nodes.find(n => n.id === otherId);
-                const isConflict = ['beef', 'former_friends', 'public_shade'].includes(e.type);
+                const isConflict = e.is_conflict ?? CONFLICT_TYPES.includes(e.type);
                 return (
                   <div key={e.id} style={{
                     display: 'flex',
