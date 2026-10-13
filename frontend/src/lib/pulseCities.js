@@ -57,6 +57,19 @@ export async function loadCities() {
   return Array.isArray(saved) && saved.length ? saved : DREAM_CITIES;
 }
 
+/**
+ * The cities as Lala sees them at a story moment (Task 3041), from the
+ * reveal-aware read: a first look's image and story bubble are their teasers
+ * (teaser_style, bubble_teaser_style), hidden ones none; the full image never
+ * reaches the page before its moment. { cities, states }; the built-in list
+ * when none is saved (it has no images).
+ */
+export async function loadPulseCities(showId, at = 'present') {
+  const res = await api.get(`/api/v1/pulse-reveals/cities?show_id=${encodeURIComponent(showId)}&at=${encodeURIComponent(at)}`);
+  const saved = res.data?.cities;
+  return { cities: (Array.isArray(saved) ? saved : DREAM_CITIES).filter((c) => c?.key), states: res.data?.states || {} };
+}
+
 /** Saves one city's fields onto the latest list; returns the saved list. */
 export async function saveCity(key, patch) {
   const next = mergeCity(await loadCities(), key, patch);

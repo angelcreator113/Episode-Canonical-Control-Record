@@ -17,8 +17,7 @@ import { ChevronLeft, ChevronRight, ExternalLink, Loader2 } from 'lucide-react';
 import api from '../../services/api';
 import { useReveals } from './PulseRevealContext';
 import { storyMoments, presentOrder } from '../../lib/storyClock';
-import { loadCities } from '../../lib/pulseCities';
-import { loadCityReveals, withCityTeasers } from '../../lib/pulseReveals';
+import { loadPulseCities } from '../../lib/pulseCities';
 import PulsePost from '../Pulse/PulsePost';
 import { pulseFeedUrl } from '../../lib/pulsePosts';
 import { CitiesCard, UpcomingCard, LatestFitCard } from '../Pulse/PulseSides';
@@ -28,7 +27,7 @@ import '../../pages/SocialMediaPage.css';
 const PREVIEW_POSTS = 20;
 const list = (r) => (Array.isArray(r?.data?.data) ? r.data.data : []);
 
-/** Lala's view of The Pulse at `at`: posts, events, the latest fit, the cover and the cities' image states. */
+/** Lala's view of The Pulse at `at`: posts, events, the latest fit, the cover, and the cities as she sees them then. */
 function usePulseAt(showId, at) {
   const [view, setView] = useState(null);
   const [error, setError] = useState(null);
@@ -41,12 +40,12 @@ function usePulseAt(showId, at) {
       try { return await p; } catch (err) { console.error(`[StoryClock] ${label} could not be read:`, err.response?.status || err.message); return null; }
     };
     (async () => {
-      const [posts, side, fit, cover, cityStates] = await Promise.all([
+      const [posts, side, fit, cover, cityView] = await Promise.all([
         safe(api.get(pulseFeedUrl(showId, at, PREVIEW_POSTS)), 'posts'),
         safe(api.get(`/api/v1/social-profiles/lala/sidebar?show_id=${id}&at=${at}`), 'events'),
         safe(api.get(`/api/v1/pulse-fits/latest?show_id=${id}&at=${at}`), 'latest fit'),
         safe(api.get(`/api/v1/shows/${id}/pulse-cover?at=${at}`), 'cover'),
-        safe(loadCityReveals(showId, String(at)), 'city states'),
+        safe(loadPulseCities(showId, String(at)), 'cities'),
       ]);
       if (!alive) return;
       if (!posts) setError('The Pulse could not be read at this moment.');
@@ -57,8 +56,8 @@ function usePulseAt(showId, at) {
         events: Array.isArray(side?.data?.data?.upcoming) ? side.data.data.upcoming : [],
         fit: fit?.data?.latest || null,
         cover: cover?.data?.cover || null,
-        cityStates: cityStates?.states || {},
-        cityTeasers: cityStates?.teasers || {},
+        cities: cityView?.cities || [],
+        cityStates: cityView?.states || {},
       });
     })();
     return () => { alive = false; };
@@ -73,7 +72,6 @@ export default function PulseStoryClock() {
   const moments = useMemo(() => storyMoments(episodes), [episodes]);
   const present = useMemo(() => presentOrder(episodes), [episodes]);
   const [index, setIndex] = useState(null);
-  const [cities, setCities] = useState([]);
 
   // Starts at the present (or the nearest moment before it) once the episodes are in.
   const presentIndex = useMemo(() => {
@@ -85,13 +83,6 @@ export default function PulseStoryClock() {
   const at = current?.order;
   const { view, error } = usePulseAt(showId, at);
 
-  useEffect(() => {
-    let alive = true;
-    loadCities()
-      .then((all) => { if (alive) setCities((all || []).filter((c) => c?.key)); })
-      .catch((err) => console.error('[StoryClock] the Dream Cities could not be read:', err.response?.status || err.message));
-    return () => { alive = false; };
-  }, []);
 
   if (!ctx) return null;
   const i = index ?? presentIndex;
@@ -144,7 +135,7 @@ export default function PulseStoryClock() {
             <aside className="pl-preview-side">
               <LatestFitCard fit={view.fit} director={false} />
               <UpcomingCard events={view.events} />
-              <CitiesCard cities={withCityTeasers(cities, { states: view.cityStates, teasers: view.cityTeasers })} director={false} states={view.cityStates} />
+              <CitiesCard cities={view.cities} director={false} states={view.cityStates} />
             </aside>
           </div>
         )}
