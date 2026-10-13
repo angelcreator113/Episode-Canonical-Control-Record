@@ -2,14 +2,15 @@
  * The weekly Pulse recap (Task #3008; The Pulse spec §11), against the test
  * database:
  * - the week's moments: live posts posted that week, shown as The Pulse at
- *   the present (no drafts, no other week, nothing hidden, nothing after the
- *   present), biggest first;
+ *   the present (no drafts, no other week, nothing hidden, no teaser,
+ *   nothing after the present), biggest first;
  * - a draft is built once per week with the top posts (never AI); building
  *   again keeps it; admin-only writes;
  * - edit (title, intro, posts: live posts of the show only), publish (needs
  *   a post), unpublish, drop;
  * - public: published only, posts as The Pulse shows them now (a post taken
- *   down later drops out), no production ids; drafts are a 404;
+ *   down later, or made a teaser, drops out: its words never reach the site,
+ *   Task #3080), no production ids; drafts are a 404;
  * - the weekly tick drafts last week for a show with live posts in it.
  */
 jest.unmock('uuid');
@@ -63,6 +64,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await post('future', { likes: 5000, story_order: 25, posted_at: new Date(inWeek(2)) });
     await post('hidden', { likes: 5000, posted_at: new Date(inWeek(2)) });
     await models.PulseReveal.create({ show_id: ids.show, item_type: 'post', item_id: p.hidden, moment: 'story_time', story_order: 99, mode: 'hidden', source: 'set' });
+    // A teaser until a later moment: The Pulse shows it with no words (Task #3080).
+    await post('teaser', { likes: 5000, posted_at: new Date(inWeek(2)) });
+    await models.PulseReveal.create({ show_id: ids.show, item_type: 'post', item_id: p.teaser, moment: 'story_time', story_order: 99, mode: 'teaser', source: 'set' });
   });
 
   afterAll(async () => {
@@ -133,6 +137,13 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await run("UPDATE feed_posts SET status = 'draft' WHERE id = :id", { id: p.mid });
     expect((await request(app).get(`/api/v1/public/recaps/${recapId}`)).body.recap.posts.map((x) => x.poster_display_name)).toEqual(['big']);
     await run("UPDATE feed_posts SET status = 'live' WHERE id = :id", { id: p.mid });
+
+    // Made a teaser after publishing: its words leave the site until its moment (Task #3080).
+    const later = await models.PulseReveal.create({ show_id: ids.show, item_type: 'post', item_id: p.mid, moment: 'story_time', story_order: 99, mode: 'teaser', source: 'set' });
+    const teased = await request(app).get(`/api/v1/public/recaps/${recapId}`);
+    expect(teased.body.recap.posts.map((x) => x.poster_display_name)).toEqual(['big']);
+    expect(JSON.stringify(teased.body)).not.toContain('mid post');
+    await later.destroy({ force: true });
   });
 
   test('unpublish takes it off the site; a draft can be dropped; a dropped one is not edited', async () => {
