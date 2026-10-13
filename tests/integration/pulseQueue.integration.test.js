@@ -108,8 +108,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       return { draftIds: [uuid()] };
     });
     try {
-      const now = new Date();
       const job = await queue.enqueue(models, { showId: ids.show, kind: 'event', payload: { episode_id: uuid() } });
+      // After the job is made: its run_after defaults to the moment it was created, so a
+      // `now` taken before could fall a millisecond short of it and find nothing due.
+      const now = new Date();
       const ran = await (await queue.runOne(models, { now })).reload();
       const reset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
       expect(ran).toMatchObject({ id: job.id, status: 'queued', attempts: 0, started_at: null });
