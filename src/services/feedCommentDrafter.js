@@ -120,6 +120,8 @@ async function draftReactions(models, postId, { reactorIds = null, limit = DEFAU
   // The comments are canon too: the Show Bible's always-true rules (2026-10-06).
   const brain = await loadBrainContext(models, { showId: post.show_id || null, limit: 15, label: 'FeedComments' });
   const prompt = buildPrompt(post, reactors, brain.block);
+  // One manual request for the whole batch (The Pulse, Task #3031).
+  await require('./pulseRequests').take(models, { showId: post.show_id, lane: 'manual', kind: 'reactions' });
   let message;
   for (const model of MODELS) {
     try {

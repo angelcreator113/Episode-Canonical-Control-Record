@@ -71,6 +71,8 @@ async function redraftPost(models, postId, { note = null } = {}) {
   // A redraft stays canon: the Show Bible's always-true rules (2026-10-06).
   const brain = await loadBrainContext(models, { showId: post.show_id || null, limit: 15, label: 'FeedRedraft' });
   const prompt = buildPrompt(post, profile, note ? note.trim() : null, brain.block);
+  // A regeneration counts: one manual request (The Pulse, Task #3031).
+  await require('./pulseRequests').take(models, { showId: post.show_id, lane: 'manual', kind: 'redraft' });
   let message;
   for (const model of MODELS) {
     try {

@@ -34,11 +34,12 @@ const byOf = (req) => String(req.user?.email || req.user?.id || 'admin').slice(0
 const intOrNull = (v) => (v === undefined || v === null || v === '' ? null : (Number.isInteger(Number(v)) ? Number(v) : NaN));
 const engineOn = () => process.env.PULSE_ENGINE_ENABLED === 'true';
 
-/** A DmError or QueueError as its response; false for anything else. */
+/** A DmError, QueueError or RequestCapError (429) as its response; false for anything else. */
 function sendKnown(res, err) {
   const { DmError } = require('../services/pulseDms');
   const { QueueError } = require('../services/pulseQueue');
-  if (err instanceof DmError || err instanceof QueueError) {
+  const { RequestCapError } = require('../services/pulseRequests');
+  if (err instanceof DmError || err instanceof QueueError || err instanceof RequestCapError) {
     res.status(err.status).json({ success: false, error: err.message });
     return true;
   }

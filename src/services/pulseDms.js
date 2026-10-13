@@ -94,6 +94,8 @@ async function enqueueMessage(db, { threadId, senderProfileId = null, at = null 
     sender = pair.find((id) => id !== Number(last.sender_profile_id));
   }
   await assertMaySend(db, sender);
+  // Refuse now rather than queue a message today's manual requests cannot draft (Task #3031).
+  await require('./pulseRequests').assertRoom(db, thread.show_id, 'manual');
   return require('./pulseQueue').enqueue(db, {
     showId: thread.show_id, kind: 'dm',
     payload: { thread_id: thread.id, sender_profile_id: sender, ...(Number.isInteger(at) ? { at } : {}) },
@@ -140,7 +142,7 @@ Answer with JSON only: {"text": "the message"}`;
 }
 
 /** Drafts the next message in the sender's voice and gates it; it stays a draft. Returns { message, gate, review }. */
-async function draftMessage(db, { threadId, senderProfileId, at = null }) {
+async function draftMessage(db, { threadId, senderProfileId, at = null, jobId = null }) {
   const thread = await db.PulseDmThread.findByPk(threadId);
   if (!thread) throw new DmError(404, 'Conversation not found');
   const pair = [Number(thread.profile_a_id), Number(thread.profile_b_id)];
@@ -155,6 +157,8 @@ async function draftMessage(db, { threadId, senderProfileId, at = null }) {
   const clock = require('./storyClock');
   // What the sender knows by then (Task #2982): the gate flags a DM naming anything else.
   const known = await require('./pulseKnowledge').knowledgeLine(db, thread.show_id, senderId, order);
+  // DMs are started by hand: one manual request per message drafted (Task #3031).
+  await require('./pulseRequests').take(db, { showId: thread.show_id, lane: 'manual', kind: 'dm', jobId });
   let message;
   for (const model of MODELS) {
     try {
@@ -246,7 +250,7 @@ async function threadsOf(db, showId, { at = null, profileId = null } = {}) {
 /** The queue's `dm` handler. */
 async function handleDm(db, job) {
   const p = job.payload_json || {};
-  const { message } = await draftMessage(db, { threadId: p.thread_id, senderProfileId: p.sender_profile_id, at: Number.isInteger(p.at) ? p.at : null });
+  const { message } = await draftMessage(db, { threadId: p.thread_id, senderProfileId: p.sender_profile_id, at: Number.isInteger(p.at) ? p.at : null, jobId: job.id });
   return { draftIds: [message.id] };
 }
 

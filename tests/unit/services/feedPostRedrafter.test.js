@@ -7,6 +7,10 @@
 const mockCreate = jest.fn();
 jest.mock('@anthropic-ai/sdk', () => function Anthropic() { return { messages: { create: mockCreate } }; });
 
+// The Pulse's request ledger (Task #3031) has its own integration test; here it only has to be asked.
+const mockTake = jest.fn(async () => ({}));
+jest.mock('../../../src/services/pulseRequests', () => ({ take: (...args) => mockTake(...args), RequestCapError: class RequestCapError extends Error {} }));
+
 const { redraftPost, buildPrompt, posterProfile } = require('../../../src/services/feedPostRedrafter');
 const { DraftError } = require('../../../src/services/feedCommentDrafter');
 
@@ -22,7 +26,7 @@ function makeModels({ post, profiles = [VOICE] } = {}) {
 }
 const DRAFT = { id: 'p-1', show_id: 's-1', status: 'draft', poster_handle: 'stableofficial', content_text: 'Our pump, her design.', narrative_function: 'brand_moment' };
 
-beforeEach(() => { mockCreate.mockReset(); process.env.ANTHROPIC_API_KEY = 'test'; });
+beforeEach(() => { mockCreate.mockReset(); mockTake.mockClear(); process.env.ANTHROPIC_API_KEY = 'test'; });
 
 describe('redraftPost', () => {
   test('rewrites the draft in the poster\'s profile voice and returns the old text', async () => {
@@ -30,6 +34,8 @@ describe('redraftPost', () => {
     mockCreate.mockResolvedValue({ content: [{ text: '"She drew it. We built it. You\'ll want it."' }] });
     const out = await redraftPost(m, 'p-1', { note: 'shorter' });
     expect(mockCreate).toHaveBeenCalledTimes(1);
+    expect(mockTake).toHaveBeenCalledTimes(1);
+    expect(mockTake.mock.calls[0][1]).toEqual({ showId: 's-1', lane: 'manual', kind: 'redraft' });
     const call = mockCreate.mock.calls[0][0];
     expect(call.model).toBe('claude-sonnet-4-6');
     expect(call.messages[0].content).toContain('voice: crisp, proud, a little smug');

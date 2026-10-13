@@ -51,6 +51,8 @@ const SECRET = 'secretly terrified the brand deal will collapse';
     jest.spyOn(console, 'log').mockImplementation(() => {});
     await run(`INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:show, :name, :slug, NOW(), NOW())`,
       { show: ids.show, name: `Drafts ${tag}`, slug: `drafts-${tag}` });
+    // Room for every draft below (the daily requests are tested in pulseRequests; Task #3031).
+    await require('../../src/services/pulseQueue').saveSettings(models, ids.show, { automated_requests: 100, manual_requests: 100 });
     await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, created_at, updated_at) VALUES
       (:ep1, :show, 'One', 1, 'published', NOW(), NOW()), (:ep3, :show, 'Three', 3, 'draft', NOW(), NOW())`, ids);
     await run(`INSERT INTO world_events (id, show_id, name, status, used_in_episode_id, created_at, updated_at)

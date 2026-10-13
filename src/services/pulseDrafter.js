@@ -89,11 +89,13 @@ const knowsLine = (known) => (known
   : 'They know of no events yet: name none.');
 
 /** Drafts one post in voice; returns { post, revealsStory, privateState }. */
-async function draftPost(db, { showId, characterId, moment, context = {} } = {}) {
+async function draftPost(db, { showId, characterId, moment, context = {}, request = {} } = {}) {
   const { character, profile, voice } = await loadPoster(db, characterId);
   const clock = require('./storyClock');
   const at = Number.isInteger(moment) ? moment : await clock.presentOrder(db, showId);
   const known = await require('./pulseKnowledge').knowledgeLine(db, showId, profile.id, at);
+  // One automated request per drafting call (Task #3031); the caller names the kind and its job.
+  await require('./pulseRequests').take(db, { showId, lane: 'automated', kind: request.kind || 'post', jobId: request.jobId || null });
   let message;
   for (const model of MODELS) {
     try {
@@ -162,7 +164,7 @@ async function draftAndRoute(db, args) {
 }
 
 /** Drafts one comment in voice on a post; returns { comment, post, voice, privateState }. */
-async function draftComment(db, { postId, characterId }) {
+async function draftComment(db, { postId, characterId, jobId = null }) {
   const post = await db.FeedPost.findByPk(postId);
   if (!post) throw new DraftError(`Post ${postId} not found.`);
   const { character, profile, voice } = await loadPoster(db, characterId);
@@ -188,6 +190,7 @@ ${knowsLine(known)}
 
 Rules: stay in the world (nothing about a show or a studio); one short comment; never use: ${BANNED_PHRASES.join(', ')}.
 Answer with JSON only: {"text": "the comment"}`;
+  await require('./pulseRequests').take(db, { showId: post.show_id, lane: 'automated', kind: 'comment', jobId });
   let message;
   for (const model of MODELS) {
     try {

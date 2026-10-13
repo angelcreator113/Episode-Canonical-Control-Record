@@ -3,11 +3,13 @@
  * The Pulse's posting engine settings and queue (Task #2968; The Pulse spec
  * §7 "Cost control"; services/pulseQueue.js). Mounted at /api/v1/pulse-engine.
  *
- *   GET /?show_id=   the daily draft cap and ambient switch, drafts made
- *                    today against the cap, whether the worker runs on
- *                    this server, and the last jobs (requireAuth)
- *   PUT /            { show_id, daily_draft_cap?, ambient_enabled? }
- *                    (requireAuth + ADMIN)
+ *   GET /?show_id=   the daily request limits (automated, manual) and
+ *                    ambient switch, requests taken today by lane
+ *                    (services/pulseRequests.js), drafts made today,
+ *                    whether the worker runs on this server, and the last
+ *                    jobs (requireAuth)
+ *   PUT /            { show_id, automated_requests?, manual_requests?,
+ *                    ambient_enabled? } (requireAuth + ADMIN)
  */
 const express = require('express');
 const { requireAuth, authorize } = require('../middleware/auth');
@@ -47,7 +49,9 @@ router.put('/', requireAuth, authorize(['ADMIN']), async (req, res) => {
     if (!UUID_RE.test(showId)) return badShow(res);
     const queue = require('../services/pulseQueue');
     const db = getModels();
-    await queue.saveSettings(db, showId, { daily_draft_cap: body.daily_draft_cap, ambient_enabled: body.ambient_enabled });
+    await queue.saveSettings(db, showId, {
+      automated_requests: body.automated_requests, manual_requests: body.manual_requests, ambient_enabled: body.ambient_enabled,
+    });
     return res.json({ success: true, ...(await queue.stateOf(db, showId)) });
   } catch (err) {
     if (sendKnown(res, err)) return undefined;
