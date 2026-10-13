@@ -38,7 +38,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
   beforeAll(() => {
     jest.spyOn(console, 'log').mockImplementation(() => {});
-    for (const k of ['S3_PRIMARY_BUCKET', 'AWS_S3_BUCKET']) { savedBuckets[k] = process.env[k]; delete process.env[k]; }
+    for (const k of ['S3_PRIMARY_BUCKET', 'AWS_S3_BUCKET', 'SITE_PUBLIC_BUCKET']) { savedBuckets[k] = process.env[k]; delete process.env[k]; }
     admin = TokenService.generateTokenPair({ id: 'test-admin-shop', email: 'evoni@shop.dev', name: 'Evoni', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
     editor = TokenService.generateTokenPair({ id: 'test-editor-shop', email: 'ed@shop.dev', name: 'Ed', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
   });
@@ -123,7 +123,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
     const listed = (await publicList()).find((l) => l.key === site.key);
     expect(listed).toMatchObject({ key: site.key, title: 'Episode 1: Wearable Experiments' });
-    expect(Object.keys(listed).sort()).toEqual(['key', 'published_at', 'title']);
+    // image is the look strip in the public bucket (Task #3120); none here, without SITE_PUBLIC_BUCKET.
+    expect(Object.keys(listed).sort()).toEqual(['image', 'key', 'published_at', 'title']);
+    expect(listed.image).toBeNull();
 
     const one = await request(app).get(`/api/v1/public/looks/${site.key}`);
     expect(one.status).toBe(200);

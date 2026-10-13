@@ -156,6 +156,24 @@ router.put('/:showId/moments/:momentId/post', requireAuth, async (req, res) => {
   }
 });
 
+// ── PIN A MOMENT TO A STORY MOMENT (Task #3111) ─────────────────────────────
+// PUT /api/v1/feed-enhanced/:showId/moments/:momentId/phase  { story_phase | null }
+// A storyClock phase of the moment's episode; null is During. The Phone tab's
+// preview draws The Pulse as of it.
+router.put('/:showId/moments/:momentId/phase', requireAuth, async (req, res) => {
+  try {
+    const { pinMomentPhase } = require('../services/feedMomentLink');
+    const moment = await pinMomentPhase(require('../models'), {
+      showId: req.params.showId, momentId: req.params.momentId, phase: req.body?.story_phase ?? null,
+    });
+    return res.json({ success: true, data: moment.toJSON() });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('[FeedEnhanced] Pin moment phase error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ── PUT A POST AT A BEAT (picked from the Social Media wall) ────────────────
 // POST /api/v1/feed-enhanced/:showId/moments/:episodeId/beat  { beat_number, feed_post_id }
 router.post('/:showId/moments/:episodeId/beat', requireAuth, async (req, res) => {

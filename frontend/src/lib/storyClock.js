@@ -51,6 +51,16 @@ export function beatOrder(episodeNumber) {
   return Number.isInteger(n) ? n * 10 + PHASES.during_episode : null;
 }
 
+/** A Phone beat's moments (Task 3111): each phase of its episode, During when not pinned. */
+export const BEAT_PHASES = MOMENT_PHASES.map((key) => ({ key, label: PHASE_LABELS[PHASES[key]] }));
+
+/** A pinned beat's story order: its episode at its phase (feed_moments.story_phase), else During (beatOrder). */
+export function pinnedBeatOrder(episodeNumber, phase) {
+  const at = beatOrder(episodeNumber);
+  if (!Number.isInteger(at) || !phase || !PHASES[phase]) return at;
+  return at - PHASES.during_episode + PHASES[phase];
+}
+
 /** The present, as the server reads it: after the latest published episode, else the backstory. */
 export function presentOrder(episodes) {
   const published = (episodes || []).filter((e) => e?.status === 'published' && Number.isInteger(e.episode_number)).map((e) => e.episode_number);

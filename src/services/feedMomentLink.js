@@ -9,6 +9,10 @@
  * Rules: the post belongs to the moment's show; a draft post belongs to
  * the moment's episode (it goes live with it), a live post may be any of
  * the show's. Unlinking (null) always works.
+ *
+ * A moment may be pinned to a story moment of its episode (story_phase;
+ * Task #3111; pinMomentPhase); the story check then reads that moment,
+ * not During.
  */
 
 class LinkError extends Error {
@@ -27,7 +31,7 @@ const POST_ATTRIBUTES = ['id', 'status', 'poster_handle', 'poster_display_name',
  * Without the Episode model, or with an episode or post whose number is
  * unknown, the check passes as 'unknown'.
  */
-async function storyCheck(models, post, targetEpisodeId) {
+async function storyCheck(models, post, targetEpisodeId, phase = null) {
   const { Episode } = models;
   const { postOrder, checkAtBeat } = require('./storyClock');
   if (!Episode) return { ok: true, check: 'unknown' };
@@ -38,7 +42,7 @@ async function storyCheck(models, post, targetEpisodeId) {
       : await Episode.findOne({ where: { id: post.episode_id }, attributes: ['id', 'episode_number'] });
     ownNumber = own?.episode_number ?? null;
   }
-  return checkAtBeat(postOrder(post, ownNumber), target?.episode_number ?? null);
+  return checkAtBeat(postOrder(post, ownNumber), target?.episode_number ?? null, phase);
 }
 
 async function linkMomentToPost(models, { showId, momentId, feedPostId }) {
@@ -59,7 +63,7 @@ async function linkMomentToPost(models, { showId, momentId, feedPostId }) {
   if (post.status === 'draft' && String(post.episode_id) !== String(moment.episode_id)) {
     throw new LinkError(400, 'A draft post can only be shown by a beat of its own episode');
   }
-  const story = await storyCheck(models, post, moment.episode_id);
+  const story = await storyCheck(models, post, moment.episode_id, moment.story_phase);
   if (!story.ok) throw new LinkError(409, story.message);
 
   await moment.update({ feed_post_id: post.id });
@@ -99,4 +103,28 @@ async function createMomentForPost(models, { showId, episodeId, beatNumber, feed
   return { moment, post, created: true, story: story.check };
 }
 
-module.exports = { linkMomentToPost, createMomentForPost, storyCheck, LinkError, POST_ATTRIBUTES };
+/**
+ * Pins a moment to a story moment of its episode (Task #3111; Evoni,
+ * 2026-10-13): a storyClock phase, or null for During. A pin earlier than
+ * the post the moment shows is refused (409), as linking that post would be.
+ */
+async function pinMomentPhase(models, { showId, momentId, phase }) {
+  const { FeedMoment, FeedPost } = models;
+  const { PHASES } = require('./storyClock');
+  if (!FeedMoment) throw new LinkError(500, 'Feed models not available');
+  const value = phase === null || phase === undefined || phase === '' || phase === 'during_episode' ? null : String(phase);
+  if (value && !PHASES[value]) throw new LinkError(400, `story_phase must be one of ${Object.keys(PHASES).join(', ')}`);
+  const moment = await FeedMoment.findOne({ where: { id: momentId, show_id: showId } });
+  if (!moment) throw new LinkError(404, 'Moment not found');
+  if (moment.feed_post_id && FeedPost) {
+    const post = await FeedPost.findOne({ where: { id: moment.feed_post_id }, attributes: POST_ATTRIBUTES });
+    if (post) {
+      const story = await storyCheck(models, post, moment.episode_id, value);
+      if (!story.ok) throw new LinkError(409, story.message);
+    }
+  }
+  await moment.update({ story_phase: value });
+  return moment;
+}
+
+module.exports = { linkMomentToPost, createMomentForPost, pinMomentPhase, storyCheck, LinkError, POST_ATTRIBUTES };

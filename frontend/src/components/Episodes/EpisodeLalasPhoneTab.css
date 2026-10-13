@@ -407,6 +407,28 @@
   color: var(--accent-dark);
 }
 
+/* A moment's story moment (Task 3111): a small picker under it. */
+.lalas-phone-moment-pin {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--lala-ink-muted);
+}
+
+.lalas-phone-moment-pin select {
+  min-height: 32px;
+  max-width: 100%;
+  padding: 0 8px;
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 8px;
+  background: var(--lala-surface);
+  color: var(--lala-ink);
+  font: inherit;
+  font-size: 12px;
+}
+
 /* A moment no screen draws says so, with the way to build one. */
 .lalas-phone-moment.is-unplaced {
   border-style: dashed;

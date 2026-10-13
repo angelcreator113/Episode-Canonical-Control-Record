@@ -109,4 +109,30 @@ describe('the public Shop the Look page', () => {
     fireEvent.click(screen.getByRole('link', { name: 'Every look' }));
     expect(await screen.findByTestId('site-shop-list')).toBeTruthy();
   });
+
+  test('the look strip shows above the caption, and as a thumbnail in the list; none, none shown (Task 3120)', async () => {
+    const image = { url: 'https://site.cdn.test/site-public/looks/Ab3_k9-Zq1Lm/strip.png', alt: 'The look: Episode 2: The Gala' };
+    fetchMock.mockImplementation((url) => (url === PUBLIC_LOOKS_URL
+      ? reply(200, { looks: [{ ...LIST[0], image }, { ...LIST[1], image: null }] })
+      : reply(200, { look: { ...LOOK.look, image } })));
+    const list = renderAt('/shop-the-look');
+    await screen.findByTestId('site-shop-list');
+    const thumbs = screen.getAllByTestId('site-shop-thumb');
+    expect(thumbs.map((t) => t.getAttribute('src'))).toEqual([image.url]);
+    expect(thumbs[0].getAttribute('alt')).toBe('');
+    list.unmount();
+
+    const one = renderAt('/shop-the-look/Ab3_k9-Zq1Lm');
+    const img = await screen.findByTestId('site-shop-image');
+    expect([img.getAttribute('src'), img.getAttribute('alt')]).toEqual([image.url, image.alt]);
+    const look = screen.getByTestId('site-shop-look');
+    const order = [...look.children].map((el) => el.className || el.tagName);
+    expect(order.indexOf('site-shop__image')).toBeLessThan(order.indexOf('site-shop__caption'));
+    one.unmount();
+
+    fetchMock.mockImplementation(() => reply(200, { look: { ...LOOK.look, image: null } }));
+    renderAt('/shop-the-look/Ab3_k9-Zq1Lm');
+    await screen.findByTestId('site-shop-look');
+    expect(screen.queryByTestId('site-shop-image')).toBeNull();
+  });
 });
