@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../services/api';
+import useActiveShow from '../hooks/useActiveShow';
 
 /* ── Feed Relationship Map ──────────────────────────────────────────────────
  * SVG canvas showing influencer-to-influencer relationships.
@@ -133,9 +134,13 @@ export default function FeedRelationshipMap() {
   const [generating, setGenerating] = useState(false);
   const [createMsg, setCreateMsg] = useState(null);
 
+  // The active show's Pulse closeness for each pair, read only (Task 3072).
+  const { showId, loaded: showLoaded } = useActiveShow();
+
   const loadCanvas = useCallback(async () => {
+    if (!showLoaded) return;
     try {
-      const res = await api.get('/api/v1/feed-relationships/canvas');
+      const res = await api.get('/api/v1/feed-relationships/canvas', { params: showId ? { show_id: showId } : {} });
       const { nodes: rawNodes, edges: rawEdges } = res.data || {};
       if (rawNodes?.length) {
         simpleForceLayout(rawNodes, rawEdges || [], dimensions.w, dimensions.h);
@@ -147,7 +152,7 @@ export default function FeedRelationshipMap() {
     } finally {
       setLoading(false);
     }
-  }, [dimensions]);
+  }, [dimensions, showId, showLoaded]);
 
   useEffect(() => { loadCanvas(); }, [loadCanvas]);
 
@@ -696,6 +701,15 @@ export default function FeedRelationshipMap() {
                     }}>
                       {e.type?.replace(/_/g, ' ')}
                     </span>
+                    {e.closeness != null && (
+                      <span
+                        data-testid="frm-closeness"
+                        title="Closeness in The Pulse at the show's present (read only)"
+                        style={{ fontSize: 10, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}
+                      >
+                        {Math.round(e.closeness * 100)}% close
+                      </span>
+                    )}
                     {isConflict && (
                       <button
                         onClick={(ev) => { ev.stopPropagation(); generateRipples(e.id); }}

@@ -5,6 +5,8 @@
  *   event's guests, closeness to Lala, temperament), once, only while the
  *   engine is on, and never fails completion;
  * - the event job drafts the post through the gate and queues comment jobs;
+ * - Task #3072: who comments on a post is shaped by the relationship to its
+ *   poster (and the closeness ledger), not by closeness to Lala;
  * - a comment job drafts in voice; a passing everyday comment on a live
  *   post goes live and is counted, one about Lala waits for Review;
  * - Task #3049: a completed episode whose posts were never queued (engine
@@ -74,19 +76,22 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] }
                  VALUES (:id, :reg, :key, :name, 'alive', :feed, NOW(), NOW())`, { id: c[key], reg: ids.reg, key: `${key}-${tag}`, name: key, feed: p[key] });
       await models.PulseVoice.create({ registry_character_id: c[key], social_profile_id: p[key], habits_json: { case: 'lowercase', temperament: temperaments[key] }, examples_json: [], status: 'built', approved_at: new Date(), approved_by: 'evoni' });  // approved: the worker posts only for approved voices (Task #3029)
     }
-    // Marcus and Kim were guests at the gala; Nia is Lala's bestie; Quiet is neither.
+    // Marcus and Kim were guests at the gala; Nia is Lala's bestie and Marcus's collab; Quiet is neither.
     await run(`INSERT INTO world_events (id, show_id, name, status, used_in_episode_id, cost_coins, prestige, canon_consequences, created_at, updated_at)
                VALUES (:ev, :show, :name, 'used', :ep, 0, 5, CAST(:cc AS jsonb), NOW(), NOW())`,
     { ...ids, name: `Gala ${tag}`, cc: JSON.stringify({ automation: { guest_profiles: [{ profile_id: p.marcus }, { profile_id: p.kim }] } }) });
     await run(`INSERT INTO social_profile_relationships (source_profile_id, target_profile_id, relationship_type, created_at, updated_at)
                VALUES (:lala, :nia, 'bestie', NOW(), NOW())`, { lala, nia: p.nia });
+    await run(`INSERT INTO social_profile_relationships (source_profile_id, target_profile_id, relationship_type, created_at, updated_at)
+               VALUES (:marcus, :nia, 'collab', NOW(), NOW())`, { marcus: p.marcus, nia: p.nia });
   });
 
   afterAll(async () => {
     process.env.PULSE_ENGINE_ENABLED = was;
     for (const kind of queue.KINDS) queue.unregister(kind);
     await new Promise((r) => { setTimeout(r, 300); });
-    await run('DELETE FROM social_profile_relationships WHERE target_profile_id = :nia AND source_profile_id = :lala', { nia: p.nia, lala });
+    await run('DELETE FROM social_profile_relationships WHERE target_profile_id = :nia AND source_profile_id IN (:from)', { nia: p.nia, from: [lala, p.marcus] });
+    await run('DELETE FROM pulse_closeness WHERE show_id = :show', ids);
     await run('DELETE FROM pulse_jobs WHERE show_id = :show', ids);
     await run('DELETE FROM pulse_post_numbers WHERE show_id = :show', ids);
     await run('DELETE FROM feed_comments WHERE show_id = :show', ids);
@@ -102,12 +107,32 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] }
     await run('DELETE FROM shows WHERE id = :show', ids);
   });
 
-  test('who posts: the attending oversharer posts; the lurker guest and Lala\'s bestie comment; nobody else; stable', async () => {
+  test('who posts: the attending oversharer posts; on his post the lurker guest and his collab comment; nobody else; stable', async () => {
     const plan = await posting.whoPosts(models, { showId: ids.show, episodeId: ids.ep });
     expect(plan.posters.map((x) => x.characterId)).toEqual([c.marcus]);
-    expect(plan.commenters.map((x) => x.characterId).sort()).toEqual([c.kim, c.nia].sort());
+    expect(plan.pool.map((x) => x.characterId).sort()).toEqual([c.kim, c.nia, c.quiet].sort());
     expect(plan).toMatchObject({ order: 27, eventId: ids.ev, about: `Gala ${tag}, which just happened` });
     expect(await posting.whoPosts(models, { showId: ids.show, episodeId: ids.ep })).toEqual(plan);
+    const args = { showId: ids.show, episodeId: ids.ep, posterProfileId: p.marcus, exclude: [c.marcus] };
+    const commenters = await posting.commentersFor(models, args);
+    expect(commenters.map((x) => x.characterId).sort()).toEqual([c.kim, c.nia].sort());
+    expect(commenters.find((x) => x.characterId === c.nia)).toMatchObject({ closeness: 0.7 });
+    expect(await posting.commentersFor(models, args)).toEqual(commenters);
+  });
+
+  test('commenters follow the relationship to the poster, not to Lala, and the closeness ledger moves them (Task #3072)', async () => {
+    // On Quiet's post: Kim attended; Nia is Lala's bestie but no one to Quiet; Marcus is posting.
+    const args = { showId: ids.show, episodeId: ids.ep, posterProfileId: p.quiet, exclude: [c.marcus] };
+    expect((await posting.commentersFor(models, args)).map((x) => x.characterId)).toEqual([c.kim]);
+    // An accepted closeness change by the episode's After brings Nia in; a later one does not count.
+    const [a, b] = p.nia < p.quiet ? [p.nia, p.quiet] : [p.quiet, p.nia];
+    const later = await models.PulseCloseness.create({ show_id: ids.show, profile_a_id: a, profile_b_id: b, story_order: 40, delta: 0.4, cause: 'override', status: 'accepted' });
+    expect((await posting.commentersFor(models, args)).map((x) => x.characterId)).toEqual([c.kim]);
+    await later.update({ story_order: 20 });
+    const now = await posting.commentersFor(models, args);
+    expect(now.map((x) => x.characterId).sort()).toEqual([c.kim, c.nia].sort());
+    expect(now.find((x) => x.characterId === c.nia)).toMatchObject({ closeness: 0.4 });
+    await later.destroy({ force: true });
   });
 
   test('event reactions are for Alive characters: an Active guest neither posts nor comments (Task #3030)', async () => {
@@ -115,7 +140,8 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] }
     try {
       const plan = await posting.whoPosts(models, { showId: ids.show, episodeId: ids.ep });
       expect(plan.posters).toEqual([]);
-      expect(plan.commenters.map((x) => x.characterId)).toEqual([c.nia]);
+      expect(plan.pool.map((x) => x.characterId).sort()).toEqual([c.nia, c.quiet].sort());
+      expect(await posting.commentersFor(models, { showId: ids.show, episodeId: ids.ep, posterProfileId: p.nia })).toEqual([]);
     } finally {
       await run(`UPDATE registry_characters SET depth_level = 'alive' WHERE id IN (:a)`, { a: [c.marcus, c.kim] });
     }
