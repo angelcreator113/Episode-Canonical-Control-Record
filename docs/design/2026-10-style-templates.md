@@ -2,7 +2,7 @@
 Source: Evoni's design conversations and her Canva deck "LaLa Canva Style Sheets" (five portrait templates). Companions: docs/design/2026-10-landing-and-stylesheet.md (Style Page), docs/design/2026-10-the-pulse.md, docs/design/2026-10-lalas-phone.md. Items marked [decide] wait for Evoni.
 ## 1. What it is
 
-* The unused Templates page becomes Style Templates: several designs of the same episode style information.
+* The unused Templates page (Template Studio, `/template-studio`) becomes Style Templates: several designs of the same episode style information.
 * The episode's Style Page stays the place data is entered. Style Templates only read that data and present it.
 * Pick one or several templates per episode; each renders already filled.
 
