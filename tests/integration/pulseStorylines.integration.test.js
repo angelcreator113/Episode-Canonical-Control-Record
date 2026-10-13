@@ -8,7 +8,9 @@
  * - the handler drafts the beat's post through the gate; a payoff always
  *   goes to Review; the storyline runs, then is paid off;
  * - a dropped storyline's beat is skipped; Suggest proposes beats and saves
- *   nothing.
+ *   nothing;
+ * - Task #3050: no more beats are queued than the automated requests left
+ *   today; the rest wait, planned, with no job, until the lane resets.
  */
 jest.unmock('uuid');
 
@@ -80,6 +82,7 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] }
     await run('DELETE FROM pulse_storyline_beats WHERE show_id = :show', ids);
     await run('DELETE FROM pulse_storylines WHERE show_id = :show', ids);
     await run('DELETE FROM pulse_jobs WHERE show_id = :show', ids);
+    await run('DELETE FROM pulse_requests WHERE show_id = :show', ids);
     await run('DELETE FROM pulse_closeness WHERE show_id = :show', ids);
     await run('DELETE FROM pulse_post_numbers WHERE show_id = :show', ids);
     await run('DELETE FROM feed_posts WHERE show_id = :show', ids);
@@ -151,6 +154,8 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] }
   });
 
   test("a dropped storyline's queued beat is skipped, drafting nothing", async () => {
+    // Room in today's automated lane for the beat to be queued (Task #3050 counts waiting jobs).
+    await require('../../src/services/pulseQueue').saveSettings(models, ids.show, { automated_requests: 20 });
     const res = await as(admin, request(app).post('/api/v1/pulse-storylines')).send({ show_id: ids.show, title: 'Dropped one' });
     const add = await as(admin, request(app).post(`/api/v1/pulse-storylines/${res.body.storyline.id}/beats`)).send({ kind: 'plant', story_order: 20, poster_profile_id: p.kim, brief: 'something' });
     expect(add.body.beat.status).toBe('queued');
@@ -190,5 +195,44 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] }
     ]);
     expect(line.beats[0].post).toMatchObject({ status: 'live' });
     expect(line.beats[2].post).toMatchObject({ status: 'draft' });
+  });
+
+  test('beats wait, planned and unqueued, while the automated lane is used; no more are queued than requests left (Task #3050)', async () => {
+    const queue = require('../../src/services/pulseQueue');
+    const requests = require('../../src/services/pulseRequests');
+    const res = await as(admin, request(app).post('/api/v1/pulse-storylines')).send({ show_id: ids.show, title: 'Quiet beats' });
+    const line = res.body.storyline.id;
+    const jobsOf = async () => models.PulseJob.count({ where: { show_id: ids.show, kind: 'storyline', status: 'queued' } });
+    await run(`DELETE FROM pulse_jobs WHERE show_id = :show AND status = 'queued'`, ids);
+    try {
+      // The lane is used up: a due beat stays planned with no job, tick after tick.
+      await queue.saveSettings(models, ids.show, { automated_requests: 0 });
+      const add = (story_order, brief) => as(admin, request(app).post(`/api/v1/pulse-storylines/${line}/beats`)).send({ kind: 'plant', story_order, poster_profile_id: p.kim, brief });
+      const a = await add(20, 'a first hint');
+      expect(a.body).toMatchObject({ queued: false, beat: { status: 'planned', job_id: null } });
+      await add(21, 'a second hint');
+      for (let i = 0; i < 3; i += 1) expect(await storylines.queueDueBeats(models, ids.show)).toEqual([]);
+      expect(await jobsOf()).toBe(0);
+
+      // One request left today: one beat is queued, the other waits.
+      const { automated } = await requests.usedToday(models, ids.show);
+      await queue.saveSettings(models, ids.show, { automated_requests: automated + 1 });
+      const first = await storylines.queueDueBeats(models, ids.show);
+      expect(first).toHaveLength(1);
+      // The queued job will take that request: the next tick queues nothing more.
+      expect(await storylines.queueDueBeats(models, ids.show)).toEqual([]);
+      expect(await jobsOf()).toBe(1);
+      let beats = await models.PulseStorylineBeat.findAll({ where: { storyline_id: line }, order: [['story_order', 'ASC']] });
+      expect(beats.map((b) => b.status)).toEqual(['queued', 'planned']);
+
+      // After the reset (here: a larger limit), the waiting beat is queued once.
+      await queue.saveSettings(models, ids.show, { automated_requests: automated + 2 });
+      expect(await storylines.queueDueBeats(models, ids.show)).toHaveLength(1);
+      expect(await storylines.queueDueBeats(models, ids.show)).toEqual([]);
+      beats = await models.PulseStorylineBeat.findAll({ where: { storyline_id: line }, order: [['story_order', 'ASC']] });
+      expect(beats.map((b) => b.status)).toEqual(['queued', 'queued']);
+    } finally {
+      await queue.saveSettings(models, ids.show, { automated_requests: 5 });
+    }
   });
 });
