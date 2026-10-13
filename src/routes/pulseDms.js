@@ -89,8 +89,10 @@ router.post('/', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, r
     const models = getModels();
     const dms = require('../services/pulseDms');
     const opened = Number.isInteger(at) ? at : await require('../services/storyClock').presentOrder(models, showId);
-    const thread = await dms.openThread(models, { showId, a, b, at: opened, topic: body.topic });
-    const job = await dms.enqueueMessage(models, { threadId: thread.id, senderProfileId: sender, at: Number.isInteger(at) ? at : null });
+    // A refused first message opens no thread (Task #3053).
+    const { thread, job } = await dms.startConversation(models, {
+      showId, a, b, at: opened, topic: body.topic, senderProfileId: sender, messageAt: Number.isInteger(at) ? at : null,
+    });
     return res.status(201).json({ success: true, thread_id: thread.id, job_id: job.id, engine_on: engineOn() });
   } catch (err) {
     if (sendKnown(res, err)) return undefined;
