@@ -121,22 +121,34 @@ router.get('/pending', requireAuth, async (req, res) => {
 
 // ════════════════════════════════════════════════════════════════════════
 // GET /api/v1/relationships/character/:charId
-// All relationships (confirmed + pending) for a single character
+// All relationships (confirmed + pending) for a single character;
+// ?confirmed=true for confirmed ones only (the Character Profile, Task #3119).
+// Each row also names the other character: related_id, related_name.
 // ════════════════════════════════════════════════════════════════════════
 router.get('/character/:charId', requireAuth, async (req, res) => {
   try {
     const db = getDb();
     const { charId } = req.params;
+    const confirmedOnly = req.query.confirmed === 'true';
 
     const rows = await db.sequelize.query(
       `SELECT ${REL_SELECT}, ${CHAR_SELECT_A}, ${CHAR_SELECT_B}
        FROM character_relationships cr ${CHAR_JOIN}
-       WHERE cr.character_id_a = :char_id OR cr.character_id_b = :char_id
+       WHERE (cr.character_id_a = :char_id OR cr.character_id_b = :char_id)
+         ${confirmedOnly ? 'AND cr.confirmed = true' : ''}
        ORDER BY cr.confirmed DESC, cr.created_at DESC`,
       { replacements: { char_id: charId }, type: db.sequelize.QueryTypes.SELECT }
     );
+    const withOther = rows.map((r) => {
+      const isA = r.character_id_a === charId;
+      return {
+        ...r,
+        related_id: isA ? r.character_id_b : r.character_id_a,
+        related_name: isA ? (r.character_b_selected || r.character_b_name) : (r.character_a_selected || r.character_a_name),
+      };
+    });
 
-    res.json({ relationships: rows, count: rows.length });
+    res.json({ relationships: withOther, count: withOther.length });
   } catch (err) {
     console.error('GET /relationships/character/:charId error:', err);
     res.status(500).json({ error: err.message });
@@ -621,9 +633,19 @@ router.put('/:relId', requireAuth, async (req, res) => {
       pain_point_category, lala_mirror, career_echo_potential,
     } = req.body;
 
+    // The Inspector also edits these (Task #3119): written when sent, and
+    // an empty value clears the field.
+    const CLEARABLE = ['family_role', 'conflict_summary', 'source_knows', 'target_knows', 'reader_knows'];
+    const sent = CLEARABLE.filter((k) => req.body[k] !== undefined);
+    const clearable = Object.fromEntries(sent.map((k) => {
+      const v = req.body[k];
+      return [k, typeof v === 'string' && v.trim() ? v : null];
+    }));
+
     await db.sequelize.query(
       `UPDATE character_relationships
-       SET relationship_type    = COALESCE(:rel_type,    relationship_type),
+       SET ${sent.map((k) => `${k} = :${k},`).join(' ')}
+           relationship_type    = COALESCE(:rel_type,    relationship_type),
            connection_mode      = COALESCE(:conn_mode,   connection_mode),
            lala_connection      = COALESCE(:lala_conn,   lala_connection),
            status               = COALESCE(:status,      status),
@@ -648,6 +670,7 @@ router.put('/:relId', requireAuth, async (req, res) => {
           pain_cat:  pain_point_category || null,
           lala_m:    lala_mirror       || null,
           career:    career_echo_potential || null,
+          ...clearable,
         },
         type: db.sequelize.QueryTypes.UPDATE,
       }

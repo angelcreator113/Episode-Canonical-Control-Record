@@ -1165,14 +1165,10 @@ export default function WorldStudio() {
                   title="Auto-generate relationship connections between characters in this world"
                   onClick={async () => {
                     try {
-                      const resp = await fetch('/api/world/characters/seed-cross-batch', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ world_tag: worldTag }),
-                      });
-                      const data = await resp.json();
-                      flash(`Created ${data.seeded} new relationships from ${data.total_candidates} candidates`);
-                    } catch (e) { flash(`Seed error: ${e.message}`, 'error'); }
+                      // Through the API client: the /v1 path and the sign-in token (Task #3119).
+                      const { data } = await apiClient.post('/api/v1/world/characters/seed-cross-batch', { world_tag: worldTag });
+                      flash(data.message || `Created ${data.seeded} new relationships from ${data.total_candidates} candidates`);
+                    } catch (e) { flash(`Seed error: ${e.response?.data?.error || e.message}`, 'error'); }
                   }}
                 >
                   🔗 Auto-Link Characters

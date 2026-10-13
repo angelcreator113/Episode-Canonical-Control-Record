@@ -74,10 +74,12 @@ describe('RelationshipEngine — Track 3 helpers', () => {
     expect(apiClient.post).toHaveBeenCalledWith('/api/v1/relationships/confirm/cand-1');
   });
 
-  test('dismissRelationship POST on /relationships/dismiss/:id', async () => {
-    vi.mocked(apiClient.post).mockResolvedValue({ data: {} });
+  // The server has DELETE /dismiss/:id and PUT for both edits (Task #3119).
+  test('dismissRelationship DELETE on /relationships/dismiss/:id', async () => {
+    vi.mocked(apiClient.delete).mockResolvedValue({ data: {} });
     await dismissRelationship('cand-2');
-    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/relationships/dismiss/cand-2');
+    expect(apiClient.delete).toHaveBeenCalledWith('/api/v1/relationships/dismiss/cand-2');
+    expect(apiClient.post).not.toHaveBeenCalled();
   });
 
   test('deleteRelationship DELETE on /relationships/:id', async () => {
@@ -113,19 +115,20 @@ describe('RelationshipEngine — Track 3 helpers', () => {
     );
   });
 
-  test('updateRelationshipFamilyRole PATCH on /relationships/:id/family', async () => {
-    vi.mocked(apiClient.patch).mockResolvedValue({ data: {} });
+  test('updateRelationshipFamilyRole PUT on /relationships/:id/family', async () => {
+    vi.mocked(apiClient.put).mockResolvedValue({ data: {} });
     await updateRelationshipFamilyRole('rel-7', { role: 'mother' });
-    expect(apiClient.patch).toHaveBeenCalledWith(
+    expect(apiClient.put).toHaveBeenCalledWith(
       '/api/v1/relationships/rel-7/family',
       { role: 'mother' }
     );
   });
 
-  test('updateRelationshipFields PATCH on /relationships/:id', async () => {
-    vi.mocked(apiClient.patch).mockResolvedValue({ data: {} });
+  test('updateRelationshipFields PUT on /relationships/:id', async () => {
+    vi.mocked(apiClient.put).mockResolvedValue({ data: {} });
     await updateRelationshipFields('rel-7', { weight: 0.8 });
-    expect(apiClient.patch).toHaveBeenCalledWith(
+    expect(apiClient.patch).not.toHaveBeenCalled();
+    expect(apiClient.put).toHaveBeenCalledWith(
       '/api/v1/relationships/rel-7',
       { weight: 0.8 }
     );

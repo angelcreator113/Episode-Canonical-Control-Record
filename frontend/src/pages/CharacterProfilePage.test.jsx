@@ -51,10 +51,10 @@ describe('CharacterProfilePage — Track 6 CP9 module-scope helpers', () => {
     expect(apiClient.get).toHaveBeenCalledWith('/api/v1/character-registry/characters/c-1');
   });
 
-  test('getCharacterRelationshipsApi GET on /character-registry/characters/:id/relationships', async () => {
+  test('getCharacterRelationshipsApi GET on /relationships/character/:id, confirmed only (Task #3119)', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: { relationships: [] } });
     await getCharacterRelationshipsApi('c-1');
-    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/character-registry/characters/c-1/relationships');
+    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/relationships/character/c-1', { params: { confirmed: true } });
   });
 
   test('getCharacterEntanglementsApi GET on /entanglements/character/:id', async () => {
