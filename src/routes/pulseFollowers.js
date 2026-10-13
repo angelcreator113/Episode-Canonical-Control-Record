@@ -5,8 +5,10 @@
  *
  *   GET  /?show_id=&at=            every profile's count at a story moment
  *                                  (no `at`: the latest), with its handle,
- *                                  name and tier, and the proposed rows
- *                                  waiting for Evoni (requireAuth)
+ *                                  name and the audience tier of that count
+ *                                  (services/pulseAudience, Task #3033), and
+ *                                  the proposed rows waiting for Evoni
+ *                                  (requireAuth)
  *   GET  /history?show_id=&profile_id=  one profile's rows, oldest first
  *                                  (requireAuth)
  *   POST /starts { show_id }       proposes starting counts for profiles
@@ -66,18 +68,22 @@ router.get('/', requireAuth, async (req, res) => {
       where: { show_id: showId, status: 'proposed' }, order: [['story_order', 'ASC'], ['created_at', 'ASC']] });
     const ids = [...new Set([...counts.map((c) => c.social_profile_id), ...proposed.map((p) => Number(p.social_profile_id))])];
     const [profiles] = ids.length ? await db.sequelize.query(
-      `SELECT id, handle, display_name, follower_tier::text AS follower_tier
-         FROM social_profiles WHERE id IN (:ids)`, { replacements: { ids } }) : [[]];
+      `SELECT id, handle, display_name FROM social_profiles WHERE id IN (:ids)`, { replacements: { ids } }) : [[]];
     const profileOf = new Map(profiles.map((p) => [Number(p.id), p]));
     const who = (id) => {
       const p = profileOf.get(id);
-      return { handle: p?.handle || null, display_name: p?.display_name || null, follower_tier: p?.follower_tier || null };
+      return { handle: p?.handle || null, display_name: p?.display_name || null };
     };
+    // The tier is worked out from the count at that moment (Task #3033), not the stored follower_tier.
+    const { tierFor } = require('../services/pulseAudience');
     return res.json({
       success: true,
       at: at ?? null,
-      counts: counts.map((c) => ({ ...c, ...who(c.social_profile_id) })),
-      proposed: proposed.map((p) => ({ ...shape(p), ...who(Number(p.social_profile_id)) })),
+      counts: counts.map((c) => ({ ...c, ...who(c.social_profile_id), tier: tierFor(c.count) })),
+      proposed: proposed.map((p) => {
+        const row = shape(p);
+        return { ...row, ...who(Number(p.social_profile_id)), tier: tierFor(row.count_after) };
+      }),
     });
   } catch (err) {
     if (sendKnown(res, err)) return undefined;
