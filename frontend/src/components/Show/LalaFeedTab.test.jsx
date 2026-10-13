@@ -93,6 +93,17 @@ describe("Lala's Feed tab", () => {
     expect(await screen.findByText('Saved to the queue.')).toBeTruthy();
   });
 
+  test('Post now, when the server holds it for Review, says so (Task #3047)', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { data: { id: 'n1', status: 'draft' }, held_for_review: true, review_reasons: ['lala'] } });
+    wrap();
+    fireEvent.click(await screen.findByTestId('feed-post-as-lala'));
+    const composer = screen.getByTestId('feed-composer');
+    fireEvent.change(within(composer).getByLabelText("What's Lala posting?"), { target: { value: 'Studio day.' } });
+    fireEvent.click(within(composer).getByText('Post now'));
+    expect(await screen.findByText('Sent to Review: only an admin can post as Lala right away.')).toBeTruthy();
+    expect(screen.queryByText('Posted to her feed.')).toBeNull();
+  });
+
   test('a live post has no edit or approve', async () => {
     wrap();
     await screen.findByTestId('feed-post-d1');
