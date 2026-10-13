@@ -74,14 +74,14 @@ describe('WorldStudio — Track 7 mini-CP structural assertions (CP3 regression 
       expect(WS_SOURCE).toMatch(/import\s+apiClient\s+from\s+['"]\.\.\/services\/api['"]/);
     });
 
-    test('exactly 16 apiClient.(post|put|delete) invocations (15 migrations + 1 Track 4 helper)', () => {
+    test('exactly 17 apiClient.(post|put|delete) invocations (15 migrations + 1 Track 4 helper + seed-cross-batch, Task #3119)', () => {
       const matches = WS_SOURCE.match(/apiClient\.(post|put|delete)\(/g) || [];
-      expect(matches.length).toBe(16);
+      expect(matches.length).toBe(17);
     });
 
-    test('exactly 14 fetch() calls remain (7 GET + 4 character-depth + 3 path-bug skipped)', () => {
+    test('exactly 13 fetch() calls remain (7 GET + 4 character-depth + 2 path-bug skipped; seed-cross-batch moved, Task #3119)', () => {
       const matches = WS_SOURCE.match(/\bfetch\(/g) || [];
-      expect(matches.length).toBe(14);
+      expect(matches.length).toBe(13);
     });
 
     test('zero fetch() calls reference /api/v1/world/* mutation paths (all migrated)', () => {
@@ -195,8 +195,9 @@ describe('WorldStudio — Track 7 mini-CP structural assertions (CP3 regression 
       expect(WS_SOURCE).toMatch(/fetch\(['"]\/api\/world\/characters\/bulk-re-sync['"]/);
     });
 
-    test('PE-9 path-bug site: /api/world/characters/seed-cross-batch remains raw fetch (D1 SKIP)', () => {
-      expect(WS_SOURCE).toMatch(/fetch\(['"]\/api\/world\/characters\/seed-cross-batch['"]/);
+    test('seed-cross-batch goes through apiClient on /api/v1 (Task #3119; was a PE-9 path-bug site)', () => {
+      expect(WS_SOURCE).not.toMatch(/fetch\(['"]\/api\/world\/characters\/seed-cross-batch['"]/);
+      expect(WS_SOURCE).toMatch(/apiClient\.post\('\/api\/v1\/world\/characters\/seed-cross-batch', \{ world_tag: worldTag \}\)/);
     });
 
     test('PE-9 path-bug site: /api/world/characters/:id/re-sync remains raw fetch (D1 SKIP)', () => {

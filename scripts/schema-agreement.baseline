@@ -133,7 +133,6 @@ src/services/ThumbnailService.js	Thumbnail.findAll	attributes	url
 src/services/ThumbnailService.js	Thumbnail.findAll	order	created_at
 src/services/ThumbnailService.js	Thumbnail.findAll	where	episode_id
 src/services/objectGenerationService.js	Asset.create	values	original_filename
-src/services/worldTemperatureService.js	CharacterRelationship.findAll	where	deleted_at
 src/services/youtubeService.js	AITrainingData.create	values	episode_id
 src/services/youtubeService.js	AITrainingData.findAll	where(assigned)	episode_id
 src/services/youtubeService.js	AITrainingData.findAll	where(assigned)	processing_status

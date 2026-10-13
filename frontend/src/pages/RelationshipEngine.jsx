@@ -31,8 +31,9 @@ export const fetchFamilyTree = (regId) =>
   apiClient.get(`${API}/relationships/family-tree/${regId}`);
 export const confirmRelationship = (id) =>
   apiClient.post(`${API}/relationships/confirm/${id}`);
+// The server's methods (Task #3119): dismiss is a DELETE, both edits are PUTs.
 export const dismissRelationship = (id) =>
-  apiClient.post(`${API}/relationships/dismiss/${id}`);
+  apiClient.delete(`${API}/relationships/dismiss/${id}`);
 export const deleteRelationship = (id) =>
   apiClient.delete(`${API}/relationships/${id}`);
 export const generateRelationships = (payload) =>
@@ -42,9 +43,9 @@ export const createRelationship = (payload) =>
 export const generateFamilyRelationships = (payload) =>
   apiClient.post(`${API}/relationships/generate-family`, payload);
 export const updateRelationshipFamilyRole = (id, fields) =>
-  apiClient.patch(`${API}/relationships/${id}/family`, fields);
+  apiClient.put(`${API}/relationships/${id}/family`, fields);
 export const updateRelationshipFields = (id, fields) =>
-  apiClient.patch(`${API}/relationships/${id}`, fields);
+  apiClient.put(`${API}/relationships/${id}`, fields);
 
 /* ═══════════════════════════════════════════════════════════════════════
    State management (replaces 16 individual useState hooks)

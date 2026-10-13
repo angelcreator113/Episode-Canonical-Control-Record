@@ -3,7 +3,8 @@
  * Evoni, 2026-10-13): GET /feed-relationships/canvas?show_id= gives each
  * edge its pair's closeness at the show's present, the same value
  * pulseCloseness.closenessAt gives: the pair's social_profile_relationships
- * type, moved by its accepted closeness-ledger changes by then. Without a
+ * type, moved by its accepted closeness-ledger changes by then. Since Task
+ * #3115 the edges are those same rows. Without a
  * show the edges carry none; a show id that is not one is refused.
  */
 jest.unmock('uuid');
@@ -42,12 +43,11 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
         VALUES (:handle, 'instagram', 'test', :display, 'lalaverse', NOW(), NOW()) RETURNING id`, { handle: `${key}${tag}`, display: key });
       p[key] = row.id;
     }
-    // Ana and Bea are besties in The Pulse's table; Bea and Cal have no relationship there.
-    await run(`INSERT INTO social_profile_relationships (source_profile_id, target_profile_id, relationship_type, created_at, updated_at)
-               VALUES (:a, :b, 'bestie', NOW(), NOW())`, { a: p.ana, b: p.bea });
-    // The map's own table has both pairs, with its own types.
-    for (const [a, b, type] of [[p.ana, p.bea, 'collab'], [p.bea, p.cal, 'orbit']]) {
-      await models.FeedProfileRelationship.create({ influencer_a_id: a, influencer_b_id: b, relationship_type: type });
+    // The map draws The Pulse's own table (Task #3115): Ana and Bea are besties
+    // (1.0 to start), Bea and Cal in orbit (0.2).
+    for (const [a, b, type] of [[p.ana, p.bea, 'bestie'], [p.bea, p.cal, 'orbit']]) {
+      await run(`INSERT INTO social_profile_relationships (source_profile_id, target_profile_id, relationship_type, created_at, updated_at)
+                 VALUES (:a, :b, :type, NOW(), NOW())`, { a, b, type });
     }
     const at = await presentOrder(models, ids.show);
     const row = (a, b, delta, order) => {
@@ -64,7 +64,6 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
   afterAll(async () => {
     await run('DELETE FROM pulse_closeness WHERE show_id = :show', ids);
-    await run('DELETE FROM feed_profile_relationships WHERE influencer_a_id IN (:a) OR influencer_b_id IN (:a)', { a: Object.values(p) });
     await run('DELETE FROM social_profile_relationships WHERE source_profile_id IN (:a)', { a: Object.values(p) });
     await run('DELETE FROM social_profiles WHERE id IN (:a)', { a: Object.values(p) });
     await run('DELETE FROM shows WHERE id = :show', ids);
@@ -76,11 +75,11 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   test('each edge carries its pair\'s closeness at the show\'s present, as closenessAt gives it', async () => {
     const res = await canvas(`?show_id=${ids.show}`);
     expect(res.status).toBe(200);
-    expect(edgeOf(res.body, p.ana, p.bea)).toMatchObject({ type: 'collab', closeness: 0.8 });
-    expect(edgeOf(res.body, p.bea, p.cal)).toMatchObject({ type: 'orbit', closeness: 0.1 });
+    expect(edgeOf(res.body, p.ana, p.bea)).toMatchObject({ type: 'bestie', closeness: 0.8 });
+    expect(edgeOf(res.body, p.bea, p.cal)).toMatchObject({ type: 'orbit', closeness: 0.3 });
     const at = await presentOrder(models, ids.show);
     expect(await closeness.closenessAt(models, ids.show, p.ana, p.bea, at)).toBe(0.8);
-    expect(await closeness.closenessAt(models, ids.show, p.bea, p.cal, at)).toBe(0.1);
+    expect(await closeness.closenessAt(models, ids.show, p.bea, p.cal, at)).toBe(0.3);
   });
 
   test('without a show the edges carry no closeness; a show id that is not one is refused', async () => {
@@ -95,7 +94,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const m = await closeness.closenessOfPairs(models, ids.show, [[p.bea, p.ana], [p.cal, p.bea], [p.ana, p.ana]], at);
     expect(Object.fromEntries(m)).toEqual({
       [closeness.pairOf(p.ana, p.bea).join(':')]: 0.8,
-      [closeness.pairOf(p.bea, p.cal).join(':')]: 0.1,
+      [closeness.pairOf(p.bea, p.cal).join(':')]: 0.3,
     });
     expect((await closeness.closenessOfPairs(models, ids.show, [], at)).size).toBe(0);
   });
