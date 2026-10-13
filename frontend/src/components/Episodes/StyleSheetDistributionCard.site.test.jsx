@@ -5,7 +5,7 @@
  * look links to its page, and says it is hidden while the links are off.
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, cleanup } from '@testing-library/react';
 
 vi.mock('../../services/api', () => ({
   default: { get: vi.fn(), put: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() },
@@ -80,5 +80,24 @@ describe('Show on the website', () => {
     const site = await renderCard(entry());
     fireEvent.click(theSwitch(site));
     expect((await screen.findByRole('alert')).textContent).toMatch(/real-world link/);
+  });
+
+  test('the look image: on the site says nothing; failed or none says so and publishing again tries (Task 3120)', async () => {
+    const onSite = await renderCard(entry({ site: { ...PUBLISHED, image: 'on_site' } }));
+    expect(onSite.queryByTestId('ssd-site-image')).toBeNull();
+    cleanup();
+
+    api.post.mockResolvedValue({ data: { data: entry({ site: { ...PUBLISHED, image: 'on_site' } }) } });
+    const failed = await renderCard(entry({ site: { ...PUBLISHED, image: 'failed' } }));
+    expect(failed.getByText('The look image could not be copied to the website.')).toBeTruthy();
+    fireEvent.click(failed.getByRole('button', { name: 'Try the look image again' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(SITE_URL));
+    await waitFor(() => expect(failed.queryByTestId('ssd-site-image')).toBeNull());
+    expect(theSwitch(failed).checked).toBe(true);
+    cleanup();
+
+    const none = await renderCard(entry({ site: { ...PUBLISHED, image: 'none' } }));
+    expect(none.getByText('No look image on the website yet; it needs the website storage set up.')).toBeTruthy();
+    expect(none.getByRole('button', { name: 'Add the look image' })).toBeTruthy();
   });
 });
