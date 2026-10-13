@@ -28,6 +28,9 @@ module.exports = (sequelize) => {
     content_text: { type: DataTypes.TEXT, allowNull: true },
     image_description: { type: DataTypes.TEXT, allowNull: true },
     image_url: { type: DataTypes.TEXT, allowNull: true },
+    // Up to four photos, in order: [{ url, alt }] (migration 20261013060000; Task #3089).
+    // image_url and image_description stay the first one.
+    photos: { type: DataTypes.JSONB, allowNull: true },
 
     likes: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 0 },
     comments_count: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 0 },

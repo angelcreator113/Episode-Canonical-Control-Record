@@ -5,9 +5,11 @@
  *   close; admin-only writes;
  * - public read: drafts never shown; an open poll's labels without counts or
  *   any wardrobe, event or episode id; a closed poll with its counts;
- * - the vote: one per browser cookie and one per IP; the cookie is set
- *   HttpOnly; hashes only, never the raw IP or cookie; a closed or past-due
- *   poll refuses; no salt, no vote (503, nothing stored); the vote limiter.
+ * - the vote: one per browser cookie, or per account when signed in; a
+ *   soft cap per IP on anonymous votes, so a household votes twice (Task
+ *   #3094); the cookie is set HttpOnly; hashes only, never the raw IP,
+ *   cookie or account; a closed or past-due poll refuses; no salt, no vote
+ *   (503, nothing stored); the vote limiter.
  */
 jest.unmock('uuid');
 
@@ -116,7 +118,7 @@ const SALT = 'test-salt-for-polls';
     for (const secret of [ids.w1, ids.w3, ids.gala, ids.ep1, ids.show]) expect(raw).not.toContain(secret);
   });
 
-  test('one vote per browser and per IP, stored only as hashes; the cookie is HttpOnly', async () => {
+  test('one vote per browser; another browser on the same IP counts too; stored only as hashes; the cookie is HttpOnly', async () => {
     const first = await vote(pollId, options[0].id, { ip: '203.0.113.10' });
     expect(first.status).toBe(201);
     const cookie = cookieOf(first);
@@ -124,14 +126,15 @@ const SALT = 'test-salt-for-polls';
     expect(first.headers['set-cookie'][0]).toMatch(/HttpOnly/);
     expect(first.headers['set-cookie'][0]).toMatch(/SameSite=Lax/);
 
-    // The same browser from another IP, and another browser from the same IP: both refused.
-    expect((await vote(pollId, options[1].id, { cookie, ip: '203.0.113.11' })).status).toBe(409);
-    const sameIp = await vote(pollId, options[1].id, { ip: '203.0.113.10' });
-    expect(sameIp.status).toBe(409);
-    expect(sameIp.body.error).toBe("You've voted already.");
+    // The same browser from another IP is refused.
+    const again = await vote(pollId, options[1].id, { cookie, ip: '203.0.113.11' });
+    expect(again.status).toBe(409);
+    expect(again.body.error).toBe("You've voted already.");
 
-    // Another browser on another IP counts; an option of no poll is refused.
-    expect((await vote(pollId, options[1].id, { ip: '203.0.113.12' })).status).toBe(201);
+    // Another browser on the same IP (a household, an office) counts (Task #3094); an option of no poll is refused.
+    const sameIp = await vote(pollId, options[1].id, { ip: '203.0.113.10' });
+    expect(sameIp.status).toBe(201);
+    expect(cookieOf(sameIp)).not.toBe(cookie);
     expect((await vote(pollId, uuid(), { ip: '203.0.113.13' })).status).toBe(400);
 
     const [rows] = await run('SELECT voter_hash, ip_hash FROM pulse_poll_votes WHERE poll_id = :id', { id: pollId });
@@ -157,6 +160,51 @@ const SALT = 'test-salt-for-polls';
     }
     const [[{ n }]] = await run('SELECT COUNT(*)::int AS n FROM pulse_poll_votes WHERE poll_id = :id', { id: pollId });
     expect(n).toBe(2);
+  });
+
+  test('a signed-in voter votes as their account: no cookie, once per account whatever the browser or IP (Task #3094)', async () => {
+    const made = await as(admin, request(app).post('/api/v1/pulse-polls')).send({
+      show_id: ids.show, episode_id: ids.ep1, options: [{ label: 'A', wardrobe_ids: [] }, { label: 'B', wardrobe_ids: [] }],
+    });
+    const poll = made.body.poll;
+    await as(admin, request(app).post(`/api/v1/pulse-polls/${poll.id}/open`));
+    const first = await as(editor, vote(poll.id, poll.options[0].id, { ip: '203.0.113.50' }));
+    expect(first.status).toBe(201);
+    expect(first.headers['set-cookie']).toBeUndefined();
+    const elsewhere = await as(editor, vote(poll.id, poll.options[1].id, { ip: '203.0.113.51', cookie: `pulse_voter=${uuid()}` }));
+    expect(elsewhere.status).toBe(409);
+    // A bad token votes as an anonymous browser, not as an error.
+    expect((await vote(poll.id, poll.options[1].id, { ip: '203.0.113.52' }).set('Authorization', 'Bearer not-a-token')).status).toBe(201);
+
+    const [rows] = await run('SELECT voter_hash, signed_in FROM pulse_poll_votes WHERE poll_id = :id ORDER BY created_at', { id: poll.id });
+    const hash = (kind, value) => crypto.createHash('sha256').update(`${SALT}:${kind}:${value}`).digest('hex');
+    expect(rows.map((r) => r.signed_in)).toEqual([true, false]);
+    expect(rows[0].voter_hash).toBe(hash('account', 'test-editor-polls'));
+    expect(JSON.stringify(rows)).not.toContain('test-editor-polls');
+  });
+
+  test('an IP casts at most IP_SOFT_CAP anonymous votes on a poll; account votes and other IPs are not held back (Task #3094)', async () => {
+    const { castVote, IP_SOFT_CAP, PollError } = require('../../src/services/pulsePolls');
+    const made = await as(admin, request(app).post('/api/v1/pulse-polls')).send({
+      show_id: ids.show, episode_id: ids.ep1, options: [{ label: 'A', wardrobe_ids: [] }, { label: 'B', wardrobe_ids: [] }],
+    });
+    const poll = made.body.poll;
+    await as(admin, request(app).post(`/api/v1/pulse-polls/${poll.id}/open`));
+    const cast = (extra) => castVote(models, { pollId: poll.id, optionId: poll.options[0].id, voterId: uuid(), ip: '192.0.2.9', ...extra });
+    // At once, so the lock is what keeps the count.
+    const results = await Promise.allSettled(Array.from({ length: IP_SOFT_CAP + 3 }, () => cast()));
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(IP_SOFT_CAP);
+    const refused = results.filter((r) => r.status === 'rejected').map((r) => r.reason);
+    expect(refused).toHaveLength(3);
+    for (const err of refused) {
+      expect(err).toBeInstanceOf(PollError);
+      expect(err.status).toBe(429);
+      expect(err.message).toBe('Too many votes from this network on this poll.');
+    }
+    await expect(cast({ voterId: 'account-1', account: true })).resolves.toEqual({ ok: true });
+    await expect(cast({ ip: '192.0.2.10' })).resolves.toEqual({ ok: true });
+    const [[{ n }]] = await run('SELECT COUNT(*)::int AS n FROM pulse_poll_votes WHERE poll_id = :id', { id: poll.id });
+    expect(n).toBe(IP_SOFT_CAP + 2);
   });
 
   test('closing shows the counts publicly and refuses votes; a poll past its closing time reads and votes as closed', async () => {

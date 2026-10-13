@@ -26,6 +26,9 @@ const crypto = require('crypto');
 const MIN_OPTIONS = 2;
 const MAX_OPTIONS = 6;
 const RESULTS_DAYS = 7;   // a closed poll's result stays on the public site this long
+// Anonymous votes one IP may cast on a poll (Task #3094): room for a household,
+// an office or a carrier network, not for a cleared-cookie loop.
+const IP_SOFT_CAP = 10;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 class PollError extends Error {
@@ -217,11 +220,15 @@ async function publicPolls(db, now = new Date()) {
 }
 
 /**
- * One vote. voterId is the browser's cookie id, ip the request's address;
- * both are hashed with POLL_HASH_SALT and never stored raw. A second vote
- * from the same cookie or IP is a 409.
+ * One vote (Task #3094; Evoni, 2026-10-13: "cookie plus a soft cap per IP;
+ * signed-in voters use their account identity"). voterId is the browser's
+ * cookie id, or with account: true the signed-in user's id; ip is the
+ * request's address. Each is hashed with POLL_HASH_SALT and never stored raw.
+ * A second vote from the same voter is a 409. An anonymous vote is a 429 once
+ * its IP has cast IP_SOFT_CAP anonymous votes on the poll; account votes are
+ * not capped by IP.
  */
-async function castVote(db, { pollId, optionId, voterId, ip }) {
+async function castVote(db, { pollId, optionId, voterId, ip, account = false }) {
   const salt = saltOf();
   if (!salt) throw new PollError(503, 'Voting is not set up yet.');
   if (!UUID_RE.test(String(pollId)) || !UUID_RE.test(String(optionId || ''))) throw new PollError(404, 'Poll not found');
@@ -231,10 +238,19 @@ async function castVote(db, { pollId, optionId, voterId, ip }) {
   if (poll.status !== 'open') throw new PollError(409, 'This poll has closed.');
   const option = await db.PulsePollOption.findOne({ where: { id: optionId, poll_id: poll.id } });
   if (!option) throw new PollError(400, 'That is not one of this poll\'s options.');
+  const ipHash = hashWith(salt, 'ip', ip || 'unknown');
   try {
-    await db.PulsePollVote.create({
-      poll_id: poll.id, option_id: option.id,
-      voter_hash: hashWith(salt, 'voter', voterId), ip_hash: hashWith(salt, 'ip', ip || 'unknown'),
+    await db.sequelize.transaction(async (transaction) => {
+      if (!account) {
+        // One network's anonymous votes are counted under a lock, so two at once cannot both pass the cap.
+        await db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))', { replacements: { key: `pulse_poll_ip:${poll.id}:${ipHash}` }, transaction });
+        const fromIp = await db.PulsePollVote.count({ where: { poll_id: poll.id, ip_hash: ipHash, signed_in: false }, transaction });
+        if (fromIp >= IP_SOFT_CAP) throw new PollError(429, 'Too many votes from this network on this poll.');
+      }
+      await db.PulsePollVote.create({
+        poll_id: poll.id, option_id: option.id, signed_in: Boolean(account),
+        voter_hash: hashWith(salt, account ? 'account' : 'voter', voterId), ip_hash: ipHash,
+      }, { transaction });
     });
   } catch (err) {
     if (err.name === 'SequelizeUniqueConstraintError') throw new PollError(409, 'You\'ve voted already.');
@@ -244,6 +260,6 @@ async function castVote(db, { pollId, optionId, voterId, ip }) {
 }
 
 module.exports = {
-  MIN_OPTIONS, MAX_OPTIONS, RESULTS_DAYS, PollError,
+  MIN_OPTIONS, MAX_OPTIONS, RESULTS_DAYS, IP_SOFT_CAP, PollError,
   hashWith, statusAt, createPoll, updatePoll, openPoll, closePoll, listForShow, publicPolls, castVote,
 };
