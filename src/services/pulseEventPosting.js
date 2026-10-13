@@ -54,6 +54,8 @@ const JITTER = 0.1;
 const CLOSENESS = {
   bestie: 1, couple: 1, family: 0.9, situationship: 0.8, feud: 0.8, collab: 0.7, rival: 0.7,
   baby_daddy: 0.7, baby_mama: 0.7, mentor: 0.6, management: 0.6, ex: 0.6, shade: 0.6, copycat: 0.4, secret_link: 0.3,
+  // From the Relationship Map (Evoni, 2026-10-13, Task #3115).
+  former_friends: 0.4, orbit: 0.2,
 };
 const TEMPERAMENT = { oversharer: 1, regular: 0.6, lurker: 0.2 };
 

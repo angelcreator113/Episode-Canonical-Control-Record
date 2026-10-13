@@ -481,8 +481,10 @@ function HotZonesPanel({ events, loading }) {
 function PressureWavePanel({ feedRelationships, loading }) {
   const [ripples, setRipples] = useState({});
 
+  // Feud, shade and former friends: the pairs in conflict, as the Relationship
+  // Map and The Pulse name them since Task #3115 (the server marks them is_conflict).
   const pressureRels = (feedRelationships || []).filter(r =>
-    ['beef', 'former_friends', 'public_shade'].includes(r.relationship_type)
+    r.is_conflict ?? ['feud', 'shade', 'former_friends'].includes(r.relationship_type)
   );
 
   // Load caught-in-middle flags for each conflict relationship

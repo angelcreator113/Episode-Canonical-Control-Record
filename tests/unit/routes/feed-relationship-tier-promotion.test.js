@@ -1,8 +1,10 @@
 // ============================================================================
 // UNIT TESTS — feedRelationshipRoutes.js (Step 3 CP8 — router.use migration)
 // ============================================================================
-// 8 handlers gated by router.use(requireAuth).
-// 2 service-mediated AI POSTs aiRateLimiter inline (auto-generate, generate-ripples).
+// 7 handlers gated by router.use(requireAuth).
+// 1 service-mediated AI POST aiRateLimiter inline (generate-ripples).
+// POST /auto-generate was removed with Task #3115: the map edits The Pulse's
+// own table, so there is nothing left to copy.
 
 const fs = require('fs');
 const path = require('path');
@@ -19,9 +21,9 @@ describe('Step 3 CP8 — feedRelationshipRoutes.js router.use migration', () => 
     expect(SRC).toMatch(/router\.use\(requireAuth\)/);
   });
 
-  describe('Service-mediated AI POSTs (2)', () => {
-    test('POST /auto-generate carries aiRateLimiter inline', () => {
-      expect(SRC).toMatch(/router\.post\('\/auto-generate',\s*aiRateLimiter,\s*async/);
+  describe('Service-mediated AI POSTs (1)', () => {
+    test('POST /auto-generate is gone (Task #3115)', () => {
+      expect(SRC).not.toMatch(/auto-generate/);
     });
     test('POST /:id/generate-ripples carries aiRateLimiter inline', () => {
       expect(SRC).toMatch(/router\.post\('\/:id\/generate-ripples',\s*aiRateLimiter,\s*async/);
