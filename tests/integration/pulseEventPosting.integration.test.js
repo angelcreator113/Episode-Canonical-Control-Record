@@ -125,7 +125,7 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] }
     const jobs = await models.PulseJob.findAll({ where: { show_id: ids.show } });
     expect(jobs).toHaveLength(1);
     expect(jobs[0]).toMatchObject({ kind: 'event', status: 'queued' });
-    expect(jobs[0].payload_json).toMatchObject({ episode_id: ids.ep, character_id: c.marcus, moment: 27, event_id: ids.ev });
+    expect(jobs[0].payload_json).toMatchObject({ episode_id: ids.ep, posters: [c.marcus], moment: 27, event_id: ids.ev });
     expect(await posting.enqueueForEpisode(models, { showId: ids.show, episodeId: ids.ep })).toEqual([]);
   });
 
@@ -140,10 +140,10 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] }
     errors.mockRestore();
   });
 
-  test('the worker drafts the post through the gate, then each comment; a passing comment goes live, one about Lala waits', async () => {
+  test('the worker drafts the posts in one request through the gate, then the comments in one; a passing comment goes live, one about Lala waits', async () => {
     posting.registerHandlers();
     mockCreate.mockReset();
-    mockCreate.mockResolvedValueOnce(say({ text: 'the gala was a whole moment', hashtag: null, reveals_story: false }));
+    mockCreate.mockResolvedValueOnce(say({ items: [{ n: 1, text: 'the gala was a whole moment', hashtag: null, reveals_story: false }] }));
     mockCreate.mockResolvedValueOnce(say({ score: 0.9, why: 'them' }));
     const eventJob = await queue.runOne(models);
     await eventJob.reload();
@@ -152,16 +152,21 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] }
     const post = await models.FeedPost.findByPk(postId);
     expect(post).toMatchObject({ status: 'live', social_profile_id: p.marcus, story_order: 27, episode_id: ids.ep });
 
+    // One comment job for the post: both commenters' replies in one request (Task #3032).
     const commentJobs = await models.PulseJob.findAll({ where: { show_id: ids.show, kind: 'comment' }, order: [['created_at', 'ASC']] });
-    expect(commentJobs.map((j) => j.payload_json.post_id)).toEqual([postId, postId]);
-    const order = commentJobs.map((j) => j.payload_json.character_id);
+    expect(commentJobs.map((j) => j.payload_json.post_id)).toEqual([postId]);
+    const order = commentJobs[0].payload_json.character_ids;
+    expect([...order].sort()).toEqual([c.kim, c.nia].sort());
     const texts = { [c.kim]: 'ok this is cute', [c.nia]: 'lala would have loved this' };
-    for (const characterId of order) {
-      mockCreate.mockResolvedValueOnce(say({ text: texts[characterId] }));
-      mockCreate.mockResolvedValueOnce(say({ score: 0.85, why: 'them' }));
-      const job = await queue.runOne(models);
-      expect((await job.reload()).status).toBe('done');
-    }
+    mockCreate.mockResolvedValueOnce(say({ items: order.map((id, i) => ({ n: i + 1, text: texts[id] })) }));
+    mockCreate.mockResolvedValueOnce(say({ score: 0.85, why: 'them' }));
+    mockCreate.mockResolvedValueOnce(say({ score: 0.85, why: 'them' }));
+    const job = await queue.runOne(models);
+    expect(await job.reload()).toMatchObject({ kind: 'comment', status: 'done', error: null });
+    expect(job.draft_ids).toHaveLength(2);
+    expect(mockCreate).toHaveBeenCalledTimes(5);   // posts batch + its gate, comments batch + two gates
+    const ledger = await models.PulseRequest.findAll({ where: { show_id: ids.show }, order: [['created_at', 'ASC']] });
+    expect(ledger.map((r) => `${r.lane}:${r.kind}`)).toEqual(['automated:event', 'automated:comments']);
     const comments = await models.FeedComment.findAll({ where: { feed_post_id: postId } });
     const byWho = Object.fromEntries(comments.map((x) => [x.social_profile_id, x.status]));
     expect(byWho).toEqual({ [p.kim]: 'live', [p.nia]: 'draft' });
