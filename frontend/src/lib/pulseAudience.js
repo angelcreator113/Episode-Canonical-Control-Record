@@ -29,3 +29,19 @@ export const tierLabel = (count) => {
   if (!tier) return '';
   return /tier$/i.test(tier.label) ? tier.label : `${tier.label} tier`;
 };
+
+/**
+ * The header's follower line (Task 3062) from the Lala profile read's
+ * `followers`: "12,400 followers · Micro tier" from her canon count, or
+ * "About 12K followers (estimate)" before her starting count is accepted;
+ * '' with neither.
+ */
+export function followersText(followers) {
+  if (!followers) return '';
+  if (Number.isFinite(Number(followers.count)) && followers.count !== null) {
+    const n = Number(followers.count);
+    const tier = tierLabel(n);
+    return `${n.toLocaleString('en-US')} follower${n === 1 ? '' : 's'}${tier ? ` · ${tier}` : ''}`;
+  }
+  return followers.estimate ? `About ${followers.estimate} followers (estimate)` : '';
+}

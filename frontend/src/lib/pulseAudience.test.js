@@ -5,7 +5,7 @@
  */
 import { describe, test, expect } from 'vitest';
 import { createRequire } from 'module';
-import { TIERS, tierFor, tierLabel } from './pulseAudience';
+import { TIERS, tierFor, tierLabel, followersText } from './pulseAudience';
 
 const nodeRequire = createRequire(import.meta.url);
 const backend = nodeRequire('../../../src/services/pulseAudience.js');
@@ -30,5 +30,17 @@ describe('tierLabel', () => {
     expect(tierLabel(250000)).toBe('Macro tier');
     expect(tierLabel(1000000)).toBe('Mega tier');
     expect(tierLabel(null)).toBe('');
+  });
+});
+
+describe('followersText (Task 3062)', () => {
+  test('the canon count with its tier; the estimate marked; nothing with neither', () => {
+    expect(followersText({ count: 12400, estimated: false })).toBe('12,400 followers · Micro tier');
+    expect(followersText({ count: 60000 })).toBe('60,000 followers · Mid-tier');
+    expect(followersText({ count: 1 })).toBe('1 follower · Emerging tier');
+    expect(followersText({ count: 0 })).toBe('0 followers · Emerging tier');
+    expect(followersText({ count: null, estimated: true, estimate: '12k' })).toBe('About 12k followers (estimate)');
+    expect(followersText({ count: null, estimated: true })).toBe('');
+    expect(followersText(null)).toBe('');
   });
 });

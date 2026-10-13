@@ -19,6 +19,7 @@ import { revealKey, loadRevealLabels } from '../lib/pulseReveals';
 import { storyLabel } from '../lib/storyClock';
 import { RELATIONSHIP_POST_TYPE, STATUSES, relationshipText, latestStatus } from '../lib/feedRelationship';
 import { posterOf } from '../lib/pulsePosts';
+import { followersText } from '../lib/pulseAudience';
 import './SocialMediaPage.css';
 
 // Moved to lib/pulsePosts and components/Admin/PulseReviewPost (Task 2925);
@@ -116,7 +117,8 @@ function PulseHeader({ cover, lala, search, onSearch, director, showSearch, cove
           )}
           <p className="pl-me">
             <Avatar name={name} url={lala?.portrait_url} size={36} />
-            {owner?.follower_count_approx && <span className="pl-followers" data-testid="pl-followers">{owner.follower_count_approx} followers</span>}
+            {/* Her canon count at the moment, with her tier; the estimate only before it is accepted (Task 3062). */}
+            {followersText(lala?.followers) && <span className="pl-followers" data-testid="pl-followers">{followersText(lala?.followers)}</span>}
           </p>
         </div>
       </div>
