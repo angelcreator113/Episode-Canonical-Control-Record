@@ -56,7 +56,11 @@ module.exports = (sequelize) => {
     tableName: 'character_relationships',
     timestamps: true,
     underscored: true,
-    paranoid: false,
+    // deleted_at is in the table (migration 20260309130000) and raw SQL
+    // filters it; the model now says so too (Task #3119). The routes' own
+    // DELETEs stay hard deletes.
+    paranoid: true,
+    deletedAt: 'deleted_at',
   });
 
   CharacterRelationship.associate = (models) => {

@@ -27,8 +27,9 @@ export const updateCharacterApi = (id, payload) =>
   apiClient.put(`${API_URL}/character-registry/characters/${id}`, payload);
 export const getCharacterApi = (id) =>
   apiClient.get(`${API_URL}/character-registry/characters/${id}`);
+// The character's confirmed relationships, each naming the other character (Task #3119).
 export const getCharacterRelationshipsApi = (id) =>
-  apiClient.get(`${API_URL}/character-registry/characters/${id}/relationships`);
+  apiClient.get(`${API_URL}/relationships/character/${id}`, { params: { confirmed: true } });
 export const getCharacterEntanglementsApi = (id) =>
   apiClient.get(`${API_URL}/entanglements/character/${id}`);
 export const getSocialProfileApi = (profileId) =>
