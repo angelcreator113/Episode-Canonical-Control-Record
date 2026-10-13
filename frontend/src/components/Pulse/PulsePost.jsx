@@ -1,7 +1,8 @@
 /**
  * One post on The Pulse as Lala sees it (Task 2927; spec §3 Centre, §8
  * "Comments count"): the author's photo (else their initial), name, time and
- * city; the words with #tags styled; a photo grid for one to four photos;
+ * place (its tagged city or venue, else the poster's city; Task 3090), which
+ * opens that city's feed when onCity is given; the words with #tags styled; a photo grid for one to four photos;
  * likes, comments and shares; the first live comment with its author's photo,
  * and "View N more" only when N more live comments exist. Nothing behind the
  * curtain. Before its reveal (Task 2939) a teaser post reads "First look" and
@@ -13,6 +14,7 @@ import { Heart, MessageCircle, Repeat2 } from 'lucide-react';
 import { posterOf, whenLabel, initial } from '../../lib/pulsePosts';
 import { DREAM_CITIES } from '../../data/dreamCities';
 import { FirstLook, RevealChip } from './PulseReveal';
+import { placeOfPost } from '../../lib/pulsePlaces';
 
 /** A Dream City's name from its key (social_profiles.city), else null. */
 export const cityName = (key) => DREAM_CITIES.find((c) => c.key === key)?.name || null;
@@ -70,11 +72,14 @@ function PhotoCarousel({ photos }) {
   );
 }
 
-/** revealLabel: Director view's "Reveals: …" chip for the post (or its photos). */
-export default function PulsePost({ post, revealLabel = null }) {
+/**
+ * revealLabel: Director view's "Reveals: …" chip for the post (or its photos).
+ * onCity(key): opens a Dream City's feed from the post's place.
+ */
+export default function PulsePost({ post, revealLabel = null, onCity = null }) {
   const [allComments, setAllComments] = useState(false);
   const who = posterOf(post);
-  const city = cityName(post.socialProfile?.city);
+  const place = placeOfPost(post);
   // With ?with=comments the list holds the post's live comments; their number
   // is the count (spec §8: the count is the real comments).
   const comments = Array.isArray(post.comments) ? post.comments : null;
@@ -89,7 +94,14 @@ export default function PulsePost({ post, revealLabel = null }) {
         <Avatar name={who.name} url={post.author_portrait_url} size={46} />
         <div>
           <p className="pl-post-name">{who.name}</p>
-          {(when || city) && <p className="pl-meta">{[when, city].filter(Boolean).join(' · ')}</p>}
+          {(when || place) && (
+            <p className="pl-meta">
+              {when}{when && place ? ' · ' : ''}
+              {place && (onCity && place.key
+                ? <button type="button" className="pl-place-link" data-testid="pl-post-place" onClick={() => onCity(place.key)}>{place.label}</button>
+                : <span data-testid="pl-post-place">{place.label}</span>)}
+            </p>
+          )}
           <RevealChip label={revealLabel} />
         </div>
       </header>

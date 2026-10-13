@@ -19,6 +19,7 @@ import { CitiesCard, CityStrip, TrendingCard, UpcomingCard, UpcomingRow, LatestF
 import { RevealChip } from '../components/Pulse/PulseReveal';
 import { revealKey, loadRevealLabels } from '../lib/pulseReveals';
 import { storyLabel } from '../lib/storyClock';
+import { placeBody, placeGroups, placeValue } from '../lib/pulsePlaces';
 import { RELATIONSHIP_POST_TYPE, STATUSES, relationshipText, latestStatus } from '../lib/feedRelationship';
 import { posterOf } from '../lib/pulsePosts';
 import { followersText } from '../lib/pulseAudience';
@@ -165,6 +166,16 @@ function Composer({ show, lala, director, onShared }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
   const [error, setError] = useState(null);
+  // Where the post is (Task 3090): a Dream City or a venue; '' is no location.
+  const [place, setPlace] = useState('');
+  const [places, setPlaces] = useState(null);
+
+  useEffect(() => {
+    api.get('/api/v1/feed-posts/places')
+      .then((r) => setPlaces({ cities: r.data?.cities || [], venues: r.data?.venues || [] }))
+      .catch((err) => console.error('[ThePulse] places could not be read:', err.response?.status || err.message));
+  }, []);
+
   // Up to four photos, uploaded with the draft (Task 3089); never AI.
   const [photos, setPhotos] = useState([]);
   const photosRef = useRef(photos);
@@ -201,6 +212,7 @@ function Composer({ show, lala, director, onShared }) {
         poster_display_name: ownerName, social_profile_id: owner?.id || null, poster_platform: 'lalaverse',
         status: 'draft',
         ...(kind === 'update' ? {} : { post_type: RELATIONSHIP_POST_TYPE }),
+        ...placeBody(place),
       });
       const postId = res?.data?.data?.id;
       if (photos.length && postId) {
@@ -213,7 +225,7 @@ function Composer({ show, lala, director, onShared }) {
       }
       photos.forEach((p) => URL.revokeObjectURL?.(p.preview));
       setPhotos([]);
-      setText(''); setFriendId(''); setKind('update');
+      setText(''); setFriendId(''); setKind('update'); setPlace('');
       setNote(director ? 'Saved as a draft in Admin › The Pulse › Review.' : 'Sent.');
       onShared?.();
     } catch (err) {
@@ -247,10 +259,23 @@ function Composer({ show, lala, director, onShared }) {
               <input type="file" accept="image/png,image/jpeg,image/webp" multiple className="pl-sr" data-testid="pl-photo-input"
                 disabled={photos.length >= MAX_PHOTOS || busy} onChange={pickPhotos} />
             </label>
-            <span className="pl-quiet-tools">
-              <span aria-disabled="true" title="Places are coming to The Pulse"><MapPin size={16} aria-hidden="true" /> Location</span>
-            </span>
           </span>
+          <label className="pl-place-pick">
+            <MapPin size={16} aria-hidden="true" />
+            <select aria-label="Location" data-testid="pl-place" value={place} disabled={busy} onChange={(e) => setPlace(e.target.value)}>
+              <option value="">No location</option>
+              {places?.cities?.length > 0 && (
+                <optgroup label="Dream Cities">
+                  {places.cities.map((c) => <option key={c.key} value={placeValue('city', c.key)}>{c.name}</option>)}
+                </optgroup>
+              )}
+              {placeGroups(places).map((g) => (
+                <optgroup key={g.key || 'other'} label={g.key ? `Venues in ${g.name}` : g.name}>
+                  {g.venues.map((v) => <option key={v.id} value={placeValue('venue', v.id)}>{v.name}</option>)}
+                </optgroup>
+              ))}
+            </select>
+          </label>
           <span className="pl-kinds" role="group" aria-label="What to share">
             <label><input type="radio" name="pl-kind" checked={kind === 'update'} onChange={() => setKind('update')} /> Post</label>
             <label><input type="radio" name="pl-kind" checked={kind === 'status'} onChange={() => setKind('status')} /> Relationship</label>
@@ -319,7 +344,7 @@ function Feed({ show, lala, director, search, cities, labels, cityStates, viewAt
         <p className="pl-empty">{q ? `No posts match “${search.trim()}”.` : `Nothing from ${person?.name} yet.`}</p>
       )}
       {visible.map((p) => (
-        <PulsePost key={p.id} post={p}
+        <PulsePost key={p.id} post={p} onCity={onCity}
           revealLabel={director ? (labels?.get(revealKey('post', p.id)) || labels?.get(revealKey('image', p.id, 'post_photo'))) : null} />
       ))}
       {hasMore && !loading && <button type="button" className="pl-button pl-more" onClick={() => load(posts.length)}>Older posts</button>}
