@@ -50,6 +50,12 @@ function getClient() {
 async function posterCharacter(db, profileId) {
   const voice = await db.PulseVoice.findOne({ where: { social_profile_id: profileId } });
   if (!voice) throw new StorylineError(400, `Profile ${profileId} has no Voice Profile yet. Build it in Admin › The Pulse › Voices.`);
+  // Posting is for Active characters and on (Evoni, 2026-10-12).
+  const character = await db.RegistryCharacter.findByPk(voice.registry_character_id, { attributes: ['id', 'display_name', 'depth_level'] });
+  const { ACTIVE_STAGES } = require('./pulseVoices');
+  if (!character || !ACTIVE_STAGES.includes(String(character.depth_level))) {
+    throw new StorylineError(400, `${character?.display_name || `Profile ${profileId}`} is not Active yet, so cannot post.`);
+  }
   return voice.registry_character_id;
 }
 
@@ -133,8 +139,9 @@ async function suggestBeats(db, storylineId) {
   if (!storyline) throw new StorylineError(404, 'Storyline not found');
   const clock = require('./storyClock');
   const present = await clock.presentOrder(db, storyline.show_id);
-  const people = (await require('./pulseVoices').eligible(db, storyline.show_id)).filter((c) => c.voice);
-  if (!people.length) throw new StorylineError(400, 'No character has a Voice Profile yet. Build one in Voices.');
+  // Storylines are ongoing relationships: suggestions use Alive characters (Evoni, 2026-10-12).
+  const people = (await require('./pulseVoices').eligible(db, storyline.show_id, { stage: 'alive' })).filter((c) => c.voice);
+  if (!people.length) throw new StorylineError(400, 'No Alive character has a Voice Profile yet. Build one in Voices.');
   const byHandle = new Map(people.map((c) => [String(c.profile.handle).toLowerCase(), Number(c.profile.id)]));
   const [episodes] = await db.sequelize.query(
     'SELECT episode_number FROM episodes WHERE show_id = :showId AND deleted_at IS NULL AND episode_number IS NOT NULL ORDER BY episode_number',

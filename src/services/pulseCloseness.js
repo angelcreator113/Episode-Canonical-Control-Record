@@ -16,7 +16,8 @@
  *   closenessAt(db, showId, a, b, at)       one pair
  *   ledgerDeltas(db, showId, profileId, at) Map(other → accepted change) for
  *                                           one profile's pairs (event posting)
- *   proposeFromPost(db, postId)             when a post or a comment goes live:
+ *   proposeFromPost(db, postId)             when a post or a comment goes live
+ *     (between Alive characters and Lala only; Task #3030):
  *     comment   a live comment on someone's post        NUDGE.comment
  *     mention   a live post that @mentions someone      NUDGE.mention
  *     ignored   a close tie's live post, IGNORE_AFTER   NUDGE.ignored
@@ -123,7 +124,19 @@ async function proposeFromPost(db, postId) {
   const poster = Number(post.social_profile_id);
   const lalaProfileId = await require('./lalaFeedProfile').lalaProfileId(sequelize);
   const made = [];
-  const add = async (args) => { const row = await propose(db, { showId: post.show_id, lalaProfileId, ...args }); if (row) made.push(row); };
+  // Relationships move only for Alive characters; Lala is exempt (Evoni, 2026-10-12).
+  const aliveCache = new Map();
+  const takesPart = async (id) => {
+    const n = Number(id);
+    if (lalaProfileId != null && n === Number(lalaProfileId)) return true;
+    if (!aliveCache.has(n)) aliveCache.set(n, (await require('./pulseVoices').aliveProfiles(db, [n])).has(n));
+    return aliveCache.get(n);
+  };
+  const add = async (args) => {
+    if (!(await takesPart(args.a)) || !(await takesPart(args.b))) return;
+    const row = await propose(db, { showId: post.show_id, lalaProfileId, ...args });
+    if (row) made.push(row);
+  };
 
   // Mentions: @handle in the post.
   const handles = handlesIn(post.content_text);

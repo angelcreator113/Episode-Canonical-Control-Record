@@ -43,6 +43,16 @@ export function approvalState(voice) {
   return { approved: true, label: `Approved${voice.approved_by ? ` by ${voice.approved_by}` : ''} on ${when}` };
 }
 
+/**
+ * What a character's stage lets them do (Evoni, 2026-10-12): Active posts;
+ * Alive also talks in DMs, moves relationships and reacts to events.
+ */
+export function stageText(depthLevel) {
+  if (depthLevel === 'alive') return 'Alive: posts, and also talks, relates and reacts to events';
+  if (depthLevel === 'active') return 'Active: posts only. Alive also talks, relates and reacts to events';
+  return depthLevel || '';
+}
+
 /** The editable habits as form strings, and back. */
 export const habitsToForm = (h = {}) => ({
   case: h.case || 'sentence',
@@ -186,7 +196,8 @@ export function VoiceCard({ row, onVoice }) {
       <div className="pulse-voices-head">
         {row.portrait_url ? <img className="pulse-voices-photo" src={row.portrait_url} alt="" /> : <span className="pulse-voices-photo pulse-voices-initial" aria-hidden="true">{(row.display_name || '?')[0]}</span>}
         <span className="pulse-voices-who">
-          <b>{row.display_name}</b> <span className="pulse-voices-muted">@{row.handle} · {row.depth_level}</span>
+          <b>{row.display_name}</b> <span className="pulse-voices-muted">@{row.handle}</span>
+          <span className="pulse-voices-muted" data-testid="pulse-voices-stage">{stageText(row.depth_level)}</span>
           <span className={`pulse-voices-state pulse-voices-state-${state.tone}`} data-testid="pulse-voices-state">{state.label}</span>
           {approval && (
             <span className={`pulse-voices-state pulse-voices-state-${approval.approved ? 'ok' : 'stale'}`} data-testid="pulse-voices-approval">{approval.label}</span>
@@ -264,9 +275,9 @@ export default function PulseVoices({ showId }) {
   const rows = data.characters || [];
   return (
     <div className="pulse-voices" data-testid="pulse-voices">
-      <p className="pulse-voices-muted">Characters at the active or alive stage with a Feed profile, whom Lala has met. A voice is built from their public face only; private feelings never go in.</p>
+      <p className="pulse-voices-muted">Characters at the Active or Alive stage with a Feed profile, whom Lala has met. Active characters post; Alive characters also talk in DMs, move relationships and react to events. A voice is built from their public face only; private feelings never go in.</p>
       {rows.length === 0
-        ? <p className="pulse-voices-muted" data-testid="pulse-voices-empty">No posting characters yet. A character posts once they reach the active stage with a Feed profile.</p>
+        ? <p className="pulse-voices-muted" data-testid="pulse-voices-empty">No posting characters yet. A character posts once they reach the Active stage with a Feed profile.</p>
         : <ul className="pulse-voices-list">{rows.map((r) => <VoiceCard key={r.registry_character_id} row={r} onVoice={onVoice} />)}</ul>}
       <details className="pulse-voices-banned" data-testid="pulse-voices-banned">
         <summary>Phrases the gate rejects ({(data.banned_phrases || []).length})</summary>

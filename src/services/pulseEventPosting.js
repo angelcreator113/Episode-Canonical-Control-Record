@@ -99,9 +99,10 @@ async function whoPosts(db, { showId, episodeId }) {
     const { ledgerDeltas, clamp } = require('./pulseCloseness');
     for (const [other, delta] of await ledgerDeltas(db, showId, lalaId, order)) closeness.set(other, clamp((closeness.get(other) || 0) + delta));
   }
-  // Only approved voices post on their own (Task #3029).
+  // Event reactions are for Alive characters (Evoni, 2026-10-12), and only
+  // approved voices post on their own (Task #3029).
   const { eligible, isApproved } = require('./pulseVoices');
-  const candidates = (await eligible(db, showId, { at: order })).filter((c) => isApproved(c.voice));
+  const candidates = (await eligible(db, showId, { at: order, stage: 'alive' })).filter((c) => isApproved(c.voice));
   const scored = candidates.map(({ character, profile, voice }) => {
     const profileId = Number(profile.id);
     const isLala = lalaId && profileId === Number(lalaId);
