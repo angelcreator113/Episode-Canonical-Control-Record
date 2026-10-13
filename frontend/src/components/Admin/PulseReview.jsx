@@ -8,8 +8,9 @@
  *   Numbers waiting      proposed likes and shares that wait for Evoni:
  *                        Accept, Adjust, Make it viral, Make it flop
  *                        (PulseNumbersWaiting, Task 2954)
- *   Episode followers    Lala's follower change for each completed
- *                        episode: Accept, Adjust (PulseEpisodeFollowers,
+ *   Follower changes     each proposed follower change, from an episode's
+ *                        result, a post or an event deliverable (Task
+ *                        3086): Accept, Adjust (PulseEpisodeFollowers,
  *                        Task 2956)
  *   Closeness waiting    closeness changes involving Lala, or large:
  *                        Accept, Adjust, Reject (PulseClosenessWaiting,
@@ -32,15 +33,15 @@ import RevealPicker from './RevealPicker';
 import PulseNumbersWaiting from './PulseNumbersWaiting';
 import PulseClosenessWaiting from './PulseClosenessWaiting';
 import PulseDmsWaiting, { DmThread, StartConversation, draftsIn } from './PulseDmsWaiting';
-import PulseEpisodeFollowers from './PulseEpisodeFollowers';
+import PulseEpisodeFollowers, { FOLLOWER_CAUSES } from './PulseEpisodeFollowers';
 
 const LIMIT = 50;
 const list = (r) => (Array.isArray(r?.data?.data) ? r.data.data : []);
 
 const numbersTotal = (r) => r?.data?.total ?? (Array.isArray(r?.data?.numbers) ? r.data.numbers.length : 0);
 const closenessTotal = (r) => r?.data?.total ?? (Array.isArray(r?.data?.changes) ? r.data.changes.length : 0);
-/** Lala's proposed episode follower changes, from GET /pulse-followers. */
-const episodeChanges = (r) => (Array.isArray(r?.data?.proposed) ? r.data.proposed.filter((p) => p.cause === 'episode') : []);
+/** The proposed follower changes Review decides, from GET /pulse-followers (Task 3086: episodes, posts, events). */
+const episodeChanges = (r) => (Array.isArray(r?.data?.proposed) ? r.data.proposed.filter((p) => FOLLOWER_CAUSES.includes(p.cause)) : []);
 
 /** The count of things waiting for Evoni: drafts, episode posts, comments, numbers, episode follower changes, closeness changes and DM drafts. */
 export async function loadReviewCount(showId) {
@@ -163,8 +164,8 @@ export default function PulseReview({ showId, onCount }) {
         empty="No numbers waiting. Lala's posts, posts about her and unusual numbers wait here when they go live.">
         <PulseNumbersWaiting numbers={data.numbers.rows} total={data.numbers.total} onChange={load} />
       </Section>
-      <Section title="Episode followers" count={data.followers.length} testId="prv-episode-followers"
-        empty="No episode follower changes waiting. Completing an episode proposes Lala's change here.">
+      <Section title="Follower changes" count={data.followers.length} testId="prv-episode-followers"
+        empty="No follower changes waiting. A completed episode, a post's locked numbers or an approved deliverable proposes one here.">
         <PulseEpisodeFollowers rows={data.followers} onChange={load} />
       </Section>
       <Section title="Closeness waiting" count={data.closeness.total} testId="prv-closeness"

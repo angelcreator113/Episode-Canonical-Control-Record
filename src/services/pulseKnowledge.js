@@ -147,4 +147,32 @@ async function knowledgeLine(db, showId, profileId, at, opts = {}) {
   return known.length ? known.join('; ') : null;
 }
 
-module.exports = { CLOSE_LINE, showEvents, closeTies, publicEventIds, namedIn, knowsAt, unknownMentions, knowledgeLine };
+const MAX_PRIVATE = 8;          // relationships' knowledge in one prompt
+const MAX_PRIVATE_TEXT = 300;   // characters of each
+
+/**
+ * What a character privately knows about the people in their confirmed
+ * relationships (Task #3088; Evoni, 2026-10-13: "Use 'knows' as private
+ * drafting context"): character_relationships.source_knows when they are
+ * character_id_a, target_knows when they are character_id_b, never
+ * reader_knows (the audience's knowledge). Returns [{ person, knows }].
+ * Knowing it never authorizes posting it: the drafter keeps it PRIVATE and
+ * the gate sends a draft that quotes it to Review.
+ */
+async function privateKnowledge(db, characterId) {
+  if (!characterId) return [];
+  const [rows] = await db.sequelize.query(
+    `SELECT CASE WHEN cr.character_id_a = :id THEN rb.display_name ELSE ra.display_name END AS person,
+            CASE WHEN cr.character_id_a = :id THEN cr.source_knows ELSE cr.target_knows END AS knows
+       FROM character_relationships cr
+       JOIN registry_characters ra ON ra.id = cr.character_id_a AND ra.deleted_at IS NULL
+       JOIN registry_characters rb ON rb.id = cr.character_id_b AND rb.deleted_at IS NULL
+      WHERE cr.confirmed = true AND (cr.character_id_a = :id OR cr.character_id_b = :id)
+      ORDER BY cr.created_at ASC`, { replacements: { id: characterId } });
+  return rows
+    .map((r) => ({ person: r.person || 'someone', knows: String(r.knows || '').replace(/\s+/g, ' ').trim().slice(0, MAX_PRIVATE_TEXT) }))
+    .filter((r) => r.knows)
+    .slice(0, MAX_PRIVATE);
+}
+
+module.exports = { CLOSE_LINE, showEvents, closeTies, publicEventIds, namedIn, knowsAt, unknownMentions, knowledgeLine, privateKnowledge };

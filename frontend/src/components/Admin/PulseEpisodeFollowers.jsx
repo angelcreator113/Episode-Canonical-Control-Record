@@ -1,14 +1,22 @@
 /**
- * Admin › The Pulse › Review › Episode followers (Task 2956; The Pulse spec
- * §8 "Episode follower change: proposed when an episode is completed, from
- * its result and its posts; approved by Evoni"). Each completed episode's
- * proposed change to Lala's followers, with why, and Accept or Adjust (the
- * change and a one-line reason). Accepted, it goes into the follower ledger
- * and the Decision Log (/api/v1/pulse-followers).
+ * Admin › The Pulse › Review › Follower changes (Task 2956; widened in Task
+ * 3086). Every proposed follower change waits here with its source, its
+ * story time, why and the amount, and Accept or Adjust (the change and a
+ * one-line reason):
+ *   episode  Lala's change from a completed episode's result
+ *   post     a published post's change once its numbers lock (its likes)
+ *   event    Lala's change when an event deliverable is approved
+ * Accepted, it goes into the follower ledger; an episode change also into
+ * the Decision Log (/api/v1/pulse-followers). Followers only, never
+ * Influence (Evoni, 2026-10-13).
  * Styles: PulseReviewPost.css (prv-epf-*).
  */
 import React, { useState } from 'react';
 import api from '../../services/api';
+import { storyLabel } from '../../lib/storyClock';
+
+/** The causes Review decides (a starting count is decided in Growth). */
+export const FOLLOWER_CAUSES = ['episode', 'post', 'event'];
 
 const fmt = (n) => (Number.isFinite(Number(n)) ? Number(n).toLocaleString('en-US') : '—');
 const signed = (n) => `${Number(n) > 0 ? '+' : Number(n) < 0 ? '−' : ''}${fmt(Math.abs(Number(n)))}`;
@@ -22,8 +30,34 @@ export function episodeLines(factors = {}) {
   if (factors.tier) lines.push(`Result: ${String(factors.tier).toUpperCase()}${factors.score != null ? ` (${factors.score}/100)` : ''}`);
   if (factors.followers_known === false) lines.push('Lala has no accepted follower count yet');
   else if (factors.followers != null) lines.push(`${signed(factors.from_result ?? 0)} from the result, on ${fmt(factors.followers)} followers`);
+  // Changes proposed before Task 3086 also counted the episode's posts.
   if (factors.post_likes != null) lines.push(`${signed(factors.from_posts ?? 0)} from the episode's posts (${fmt(factors.post_likes)} likes)`);
   return lines;
+}
+
+const pct = (rate) => `${Math.round(Number(rate) * 1000) / 10}%`;
+
+/** Where the change comes from: { title, detail }. */
+export function sourceOf(row) {
+  const f = row?.factors || {};
+  if (row?.cause === 'post') return { title: `A post by @${f.poster_handle || row.handle || '?'}`, detail: f.post_text ? `“${f.post_text}”` : null };
+  if (row?.cause === 'event') return { title: 'An event deliverable', detail: [f.deliverable, f.event_name && `for ${f.event_name}`].filter(Boolean).join(' ') || null };
+  const ep = episodeOf(row);
+  return { title: ep != null ? `Episode ${ep}` : 'An episode', detail: null };
+}
+
+/** Why the change is what it is, a line each, for any cause. */
+export function changeLines(row) {
+  const f = row?.factors || {};
+  if (row?.cause === 'post') {
+    const line = `${fmt(f.likes ?? 0)} likes × ${pct(f.rate ?? 0.02)}`;
+    return [f.numbers === 'flop' ? `${line}, lost: Evoni made it a flop` : line];
+  }
+  if (row?.cause === 'event') {
+    const pieces = Number(f.pieces) || 1;
+    return [`${pieces} ${pieces === 1 ? 'piece' : 'pieces'} × ${pct(f.rate ?? 0.005)} of ${fmt(f.followers)} followers`];
+  }
+  return episodeLines(f);
 }
 
 function AdjustForm({ change, busy, onSubmit, onCancel }) {
@@ -62,16 +96,19 @@ export function EpisodeFollowersCard({ row, onChange }) {
       setError(err.response?.data?.error || `${label} failed.`);
     } finally { setBusy(false); }
   };
-  const ep = episodeOf(row);
+  const source = sourceOf(row);
+  const when = Number.isInteger(row.story_order) ? storyLabel(row.story_order) : null;
   return (
     <li className="prv-epf" data-testid="prv-epf">
       <div className="prv-epf-head">
-        <b>{ep != null ? `Episode ${ep}` : 'An episode'}</b>
-        <span className="prv-muted">@{row.handle || 'lala'}</span>
+        <b>{source.title}</b>
+        <span className="prv-muted">@{row.handle || 'lala'}{when ? ` · ${when}` : ''}</span>
       </div>
+      {source.detail && <p className="prv-muted" data-testid="prv-epf-source">{source.detail}</p>}
       <p className="prv-epf-change" data-testid="prv-epf-change"><b>{signed(row.change)}</b> followers</p>
       <ul className="prv-epf-why" aria-label="Why this change">
-        {episodeLines(row.factors || {}).map((line) => <li key={line}>{line}</li>)}
+        {changeLines(row).map((line) => <li key={line}>{line}</li>)}
+        {row.reason && row.cause !== 'episode' && <li key="reason">{row.reason}</li>}
       </ul>
       {adjusting ? (
         <AdjustForm change={row.change} busy={busy} onCancel={() => setAdjusting(false)}
@@ -90,7 +127,7 @@ export function EpisodeFollowersCard({ row, onChange }) {
 export default function PulseEpisodeFollowers({ rows, onChange }) {
   return (
     <>
-      <p className="prv-muted">Proposed when an episode is completed, from its result and its posts. Accepted, it goes into Lala's followers and the Decision Log.</p>
+      <p className="prv-muted">Proposed from an episode's result, a published post's likes, or an approved event deliverable. Accepted, it changes followers only; an episode change also goes into the Decision Log.</p>
       <ul className="prv-plain">{rows.map((r) => <EpisodeFollowersCard key={r.id} row={r} onChange={onChange} />)}</ul>
     </>
   );
