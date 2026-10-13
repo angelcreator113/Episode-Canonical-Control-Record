@@ -32,6 +32,9 @@ router.put('/:pageName/:constantKey', requireAuth, async (req, res) => {
   const { data } = req.body;
   if (!data) return res.status(400).json({ error: 'data field required' });
   try {
+    // The Dream Cities list: the cities whose image or story bubble changes get their teasers cut again (Task #3052).
+    const cities = pageName === 'world_infrastructure' && constantKey === 'DREAM_CITIES';
+    const before = cities ? (await PageContent.findOne({ where: { page_name: pageName, constant_key: constantKey } }))?.data : null;
     const [row] = await PageContent.upsert({
       page_name: pageName,
       constant_key: constantKey,
@@ -40,6 +43,14 @@ router.put('/:pageName/:constantKey', requireAuth, async (req, res) => {
       conflictFields: ['page_name', 'constant_key'],
       returning: true,
     });
+    if (cities) {
+      const teasers = require('../services/pulseTeasers');
+      const keys = teasers.changedCityKeys(before, row.data);
+      if (keys.length) {
+        const { Op } = require('sequelize');
+        await teasers.recutFor(getModels(req), { item_type: 'image', image_kind: { [Op.in]: ['city', 'city_bubble'] }, item_id: { [Op.in]: keys } });
+      }
+    }
     res.json({ saved: true, constant_key: constantKey, data: row.data });
   } catch (err) {
     console.error('[PageContent] PUT error:', err);

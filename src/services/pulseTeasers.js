@@ -18,6 +18,10 @@
  *   makeTeaser(db, reveal)  cuts the teaser from the source image, uploads it
  *                        once (as pulseImageService does) and returns its URL,
  *                        or null with no source image
+ *   recutFor(db, where)  cuts again the teasers matching `where` when an
+ *                        item's image changes (Task #3052): a post's photo
+ *                        (postReveals), the cover, a city or its bubble
+ *                        (changedCityKeys); never throws
  *   citiesAt(db, showId, at)  the Dream Cities list as Lala sees it at a
  *                        story moment (Task #3041): a first look's image and
  *                        story bubble are their teasers, hidden ones are
@@ -145,6 +149,54 @@ async function makeTeaser(db, reveal) {
   return uploadPng(cut.data, key, 'image/jpeg');
 }
 
+/**
+ * Cuts again the teaser of every teaser reveal matching `where` (Task #3052):
+ * called when an item's image changes, so a teaser always matches its
+ * item's current image, and a reveal saved before its item had an image
+ * gets one. A failed cut clears that reveal's teaser image (no image shows,
+ * never the full one) and is logged; this never throws, so it never fails
+ * the image save. Returns how many reveals were cut again.
+ */
+async function recutFor(db, where) {
+  let reveals = [];
+  try {
+    reveals = await db.PulseReveal.findAll({ where: { ...where, mode: 'teaser' } });
+  } catch (err) {
+    console.error('[PulseTeasers] the reveals to cut again could not be read:', err.message);
+    return 0;
+  }
+  for (const reveal of reveals) {
+    let url = null;
+    try {
+      url = await makeTeaser(db, reveal);
+    } catch (err) {
+      console.error(`[PulseTeasers] reveal ${reveal.id}: the teaser could not be cut again, so it shows no image:`, err.message);
+    }
+    try {
+      await reveal.update({ teaser_url: url });
+    } catch (err) {
+      console.error(`[PulseTeasers] reveal ${reveal.id}: the new teaser could not be saved:`, err.message);
+    }
+  }
+  return reveals.length;
+}
+
+/** The reveals of a feed post's photo: the post as a whole, and its photo (Task #3052). */
+function postReveals(postId) {
+  const { Op } = require('sequelize');
+  return { item_id: String(postId), [Op.or]: [{ item_type: 'post' }, { item_type: 'image', image_kind: 'post_photo' }] };
+}
+
+/** The city keys whose image or story bubble differs between two saved Dream Cities lists (Task #3052). */
+function changedCityKeys(before, after) {
+  const index = (list) => new Map((Array.isArray(list) ? list : []).filter((c) => c && c.key).map((c) => [c.key, c]));
+  const a = index(before);
+  const b = index(after);
+  const keys = new Set([...a.keys(), ...b.keys()]);
+  return [...keys].filter((k) => (a.get(k)?.image_url || null) !== (b.get(k)?.image_url || null)
+    || (a.get(k)?.bubble_image_url || null) !== (b.get(k)?.bubble_image_url || null));
+}
+
 /** The saved Dream Cities list (page_content world_infrastructure › DREAM_CITIES), or null. */
 async function savedCities(db) {
   const { sequelize } = db;
@@ -181,4 +233,7 @@ async function citiesAt(db, showId, at) {
   return { cities, states };
 }
 
-module.exports = { TEASER_STYLES, DEFAULT_CROP, TeaserError, readCrop, sourceImageUrl, cutTeaser, makeTeaser, savedCities, citiesAt };
+module.exports = {
+  TEASER_STYLES, DEFAULT_CROP, TeaserError, readCrop, sourceImageUrl, cutTeaser, makeTeaser,
+  recutFor, postReveals, changedCityKeys, savedCities, citiesAt,
+};

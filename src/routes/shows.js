@@ -612,6 +612,8 @@ router.post('/:id/pulse-cover', requireAuth, oneCover, async (req, res) => {
     if (alt.error) return res.status(400).json({ success: false, error: alt.error, code: 'BAD_ALT' });
     const cover = await storePulseCover(show.id, req.file, alt.value);
     await show.update({ metadata: { ...(show.metadata || {}), pulse_cover: cover } });
+    // The cover's teaser is cut again from the new cover (Task #3052).
+    await require('../services/pulseTeasers').recutFor(require('../models'), { show_id: show.id, item_type: 'image', image_kind: 'cover', item_id: show.id });
     return res.json({ success: true, cover });
   } catch (err) {
     console.error('POST /shows/:id/pulse-cover error:', err);
