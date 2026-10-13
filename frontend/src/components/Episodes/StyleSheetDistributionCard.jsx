@@ -21,6 +21,8 @@ export function siteBlocker(entry) {
  * Show on the website (Task #3022; the server is #3021): publishes the
  * look's Shop the Look page, or takes it down. Only Evoni's switch makes a
  * look public; while the links are off it stays published but hidden.
+ * The look strip is copied when she publishes (Task #3120); when it is not
+ * on the site, publishing again (same page, same key) tries again.
  */
 function SiteSwitch({ entry, working, onPublish, onTakeDown }) {
   const site = entry.site || { published: false };
@@ -39,6 +41,18 @@ function SiteSwitch({ entry, working, onPublish, onTakeDown }) {
       )}
       {site.published && !site.showing && (
         <p className="ssd-hint" role="status">Hidden on the website while the Shop the Look links are off.</p>
+      )}
+      {site.published && site.image && site.image !== 'on_site' && (
+        <div data-testid="ssd-site-image">
+          <p className="ssd-hint" role="status">
+            {site.image === 'failed'
+              ? 'The look image could not be copied to the website.'
+              : 'No look image on the website yet; it needs the website storage set up.'}
+          </p>
+          <button type="button" className="ssd-btn" disabled={working} onClick={onPublish}>
+            {site.image === 'failed' ? 'Try the look image again' : 'Add the look image'}
+          </button>
+        </div>
       )}
     </div>
   );
