@@ -334,6 +334,11 @@ router.post('/:episodeId/generate', requireAuth, aiRateLimiter, async (req, res)
       data: posts,
     });
   } catch (err) {
+    // Today's manual requests are used (Task #3051): nothing was drafted.
+    if (err instanceof require('../services/pulseRequests').RequestCapError) {
+      console.error('[FeedPosts] Generate refused:', err.message);
+      return res.status(429).json({ error: err.message, code: err.code });
+    }
     console.error('[FeedPosts] Generate error:', err);
     return res.status(500).json({ error: err.message });
   }
