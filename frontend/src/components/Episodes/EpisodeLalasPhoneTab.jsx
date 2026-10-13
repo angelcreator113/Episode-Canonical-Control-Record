@@ -6,7 +6,7 @@ import api from '../../services/api';
 import EpisodePhoneMissionsTab from './EpisodePhoneMissionsTab';
 import PhonePreviewMode from '../PhonePreviewMode';
 import { isIcon, isScreen } from '../../lib/overlayUtils';
-import { beatOrder } from '../../lib/storyClock';
+import { BEAT_PHASES, beatOrder, pinnedBeatOrder, storyLabel } from '../../lib/storyClock';
 import './EpisodeLalasPhoneTab.css';
 
 /**
@@ -36,6 +36,12 @@ import './EpisodeLalasPhoneTab.css';
  * this episode", a row per screen with its state; a row picks the screen
  * the phone shows ("Showing: …"). Screens carry no beat or approval, so the
  * mock's beat and Approved / Draft are not shown.
+ *
+ * Beat pinning (Task 3111; Evoni, 2026-10-13): each feed moment (a Phone
+ * beat) may be pinned to a story moment of the episode, Before to A week
+ * after (During when not pinned), saved with PUT …/moments/:id/phase.
+ * Showing a moment draws The Pulse on the phone as of its pin; a screen row
+ * shows it at During, as before.
  */
 
 // The phone's one rule for screens and icons (lib/overlayUtils isScreen /
@@ -64,6 +70,13 @@ export async function listEpisodeFeedMomentsApi(showId, episodeId) {
 
 // GET /api/v1/ui-overlays/:showId/frame — the show's phone skin, custom frame
 // and image-fit defaults (read-only; the same response usePhonePlayback reads).
+// PUT /api/v1/feed-enhanced/:showId/moments/:momentId/phase — pins a moment
+// to a story moment (Task 3111); null is During.
+export async function pinMomentPhaseApi(showId, momentId, storyPhase) {
+  const { data } = await api.put(`/api/v1/feed-enhanced/${showId}/moments/${momentId}/phase`, { story_phase: storyPhase || null });
+  return data?.data || null;
+}
+
 export async function getPhoneFrameApi(showId) {
   const { data } = await api.get(`/api/v1/ui-overlays/${showId}/frame`);
   return data || {};
@@ -109,6 +122,19 @@ function countBy(items, key) {
     acc[k] = (acc[k] || 0) + 1;
     return acc;
   }, {});
+}
+
+/** A moment's story moment (Task 3111): a phase of its episode; During when not pinned. */
+function MomentPicker({ moment, onPin }) {
+  return (
+    <label className="lalas-phone-moment-pin">
+      <span>Moment</span>
+      <select aria-label="Story moment for this beat" value={moment.story_phase || 'during_episode'}
+        onChange={(e) => onPin(moment, e.target.value === 'during_episode' ? null : e.target.value)}>
+        {BEAT_PHASES.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+      </select>
+    </label>
+  );
 }
 
 function EpisodeLalasPhoneTab({ episode, onPreview, previewError = null }) {
@@ -176,6 +202,22 @@ function EpisodeLalasPhoneTab({ episode, onPreview, previewError = null }) {
   const [shownId, setShownId] = useState(null);
   const shown = playable.find(s => (s.asset_id || s.id) === shownId) || firstScreen;
   const shownKey = shown ? (shown.asset_id || shown.id) : 'none';
+  // The moment being shown, if a moment row picked the screen: The Pulse is drawn at its pin (Task 3111).
+  const [shownMomentId, setShownMomentId] = useState(null);
+  const [pinError, setPinError] = useState(null);
+  const shownMoment = moments.find(m => m.id === shownMomentId) || null;
+  const episodeNumber = episode?.episode_number ?? episode?.episodeNumber;
+  const storyAt = shownMoment ? pinnedBeatOrder(episodeNumber, shownMoment.story_phase) : beatOrder(episodeNumber);
+  const pin = async (moment, phase) => {
+    setPinError(null);
+    try {
+      const saved = await pinMomentPhaseApi(showId, moment.id, phase);
+      setMoments(prev => prev.map(m => (m.id === moment.id ? { ...m, story_phase: saved?.story_phase ?? null } : m)));
+    } catch (err) {
+      console.error('[EpisodeLalasPhoneTab] pin failed:', err);
+      setPinError(err?.response?.data?.error || 'That moment could not be saved.');
+    }
+  };
 
   return (
     <div className="lalas-phone-tab">
@@ -189,7 +231,7 @@ function EpisodeLalasPhoneTab({ episode, onPreview, previewError = null }) {
           {!overlaysLoading && !overlaysError && (
             <>
               <PhonePreviewMode
-                key={`${playable.map(s => s.id).join('|')}#${shownKey}`}
+                key={`${playable.map(s => s.id).join('|')}#${shownKey}@${storyAt}`}
                 embedded
                 screens={playable}
                 initialScreen={shown}
@@ -200,7 +242,7 @@ function EpisodeLalasPhoneTab({ episode, onPreview, previewError = null }) {
                 missions={[]}
                 showId={showId}
                 episodeId={episodeId}
-                storyAt={beatOrder(episode?.episode_number ?? episode?.episodeNumber)}
+                storyAt={storyAt}
               />
               {playable.length === 0 ? (
                 <p className="lalas-phone-device-hint">
@@ -210,7 +252,7 @@ function EpisodeLalasPhoneTab({ episode, onPreview, previewError = null }) {
               ) : (
                 <>
                   <p className="lalas-phone-showing" data-testid="lalas-phone-showing">
-                    Showing: {shown?.name || 'the phone'}
+                    Showing: {shown?.name || 'the phone'}{storyLabel(storyAt) ? ` · ${storyLabel(storyAt)}` : ''}
                   </p>
                   <p className="lalas-phone-device-hint">Tap to try it. Nothing here is saved.</p>
                 </>
@@ -262,7 +304,7 @@ function EpisodeLalasPhoneTab({ episode, onPreview, previewError = null }) {
                           <button
                             type="button"
                             className="lalas-phone-screen-btn"
-                            onClick={() => setShownId(key)}
+                            onClick={() => { setShownId(key); setShownMomentId(null); }}
                             disabled={!canShow}
                             aria-pressed={Boolean(isShown)}
                             title={canShow ? `Show ${s.name} on the phone` : 'No image yet'}
@@ -381,6 +423,7 @@ function EpisodeLalasPhoneTab({ episode, onPreview, previewError = null }) {
                       return (
                         <li key={m.id} className="lalas-phone-moment is-unplaced">
                           {body}
+                          <MomentPicker moment={m} onPin={pin} />
                           <span className="lalas-phone-moment-note">
                             No screen on this phone shows {type} moments yet.{' '}
                             {studioPath && <Link to={studioPath}>Build one in Producer Mode → Lala&apos;s Phone</Link>}
@@ -389,23 +432,25 @@ function EpisodeLalasPhoneTab({ episode, onPreview, previewError = null }) {
                       );
                     }
                     const key = target.asset_id || target.id;
-                    const isShown = Boolean(shown && (shown.asset_id || shown.id) === key);
+                    const isShown = Boolean(shown && (shown.asset_id || shown.id) === key) && (!shownMomentId || shownMomentId === m.id);
                     return (
                       <li key={m.id} className={`lalas-phone-moment-item${isShown ? ' is-shown' : ''}`}>
                         <button
                           type="button"
                           className="lalas-phone-moment lalas-phone-moment-btn"
-                          onClick={() => setShownId(key)}
+                          onClick={() => { setShownId(key); setShownMomentId(m.id); }}
                           aria-pressed={isShown}
                           title={`Show ${target.name} on the phone`}
                         >
                           {body}
                           <span className="lalas-phone-moment-screen">on {target.name}</span>
                         </button>
+                        <MomentPicker moment={m} onPin={pin} />
                       </li>
                     );
                   })}
                 </ul>
+                {pinError && <p className="lalas-phone-error" role="alert" data-testid="lalas-phone-pin-error">{pinError}</p>}
               </>
             )}
           </section>
