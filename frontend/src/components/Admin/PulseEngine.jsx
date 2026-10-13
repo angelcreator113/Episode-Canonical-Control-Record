@@ -14,7 +14,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import api from '../../services/api';
 
 const STATUS_LABELS = { queued: 'Waiting', running: 'Running', done: 'Done', failed: 'Failed', skipped: 'Skipped' };
-const KIND_LABELS = { event: 'Event post', ambient: 'Ambient post', comment: 'Comment', dm: 'DM', storyline: 'Storyline beat' };
+const KIND_LABELS = { event: 'Event post', ambient: 'Ambient post', comment: 'Comment', dm: 'DM', storyline: 'Storyline beat', voice: 'Voice build' };
 const LIMIT_MAX = 100;
 
 /** Today's requests against the limits, in words. */
@@ -93,7 +93,7 @@ export default function PulseEngine({ showId }) {
         <p className="pulse-engine-today" data-testid="pulse-engine-today">{todayText(state)}</p>
         <p className="pulse-engine-muted">
           A request is one drafting call, a regeneration included; the quality check and viewing saved drafts take none.
-          Automated: event, ambient, comment and storyline posts. Manual: DMs, draft reactions, redrafts, building a voice and storyline suggestions.
+          Automated: event, ambient, comment and storyline posts, and building a new Active character's voice. Manual: DMs, draft reactions, redrafts, rebuilding a voice and storyline suggestions.
           The day resets at midnight UTC. Every AI call also stays inside the overall daily AI budget.
         </p>
       </section>
