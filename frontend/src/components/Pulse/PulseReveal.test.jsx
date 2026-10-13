@@ -1,6 +1,6 @@
 /**
- * Reveals on The Pulse's screens (Task 2939; Evoni, 2026-10-11: teasers are
- * blurred): FirstLook blurs and labels before an item's moment; RevealChip
+ * Reveals on The Pulse's screens (Task 2939; teasers are the server's cut
+ * images since Task 3034): FirstLook labels before an item's moment; RevealChip
  * tells Director view when it reveals; the post card, side cards and
  * stories row use them.
  */
@@ -24,6 +24,15 @@ describe('FirstLook and RevealChip', () => {
     rerender(<FirstLook active={false}><img src="x.jpg" alt="" /></FirstLook>);
     expect(screen.queryByTestId('pl-first-look')).toBeNull();
     expect(container.querySelector('img')).toBeTruthy();
+  });
+  test('the image inside is the server\'s teaser: no CSS blur; a detail\'s label sits in a corner, a blurred one\'s in the middle (Task 3034)', () => {
+    const { container, rerender } = render(<FirstLook active style="crop"><img src="teaser.jpg" alt="" /></FirstLook>);
+    expect(screen.getByTestId('pl-first-look').getAttribute('data-style')).toBe('crop');
+    expect(container.querySelector('.pl-first-look-crop')).toBeTruthy();
+    rerender(<FirstLook active style="blur"><img src="teaser.jpg" alt="" /></FirstLook>);
+    expect(screen.getByTestId('pl-first-look').getAttribute('data-style')).toBe('blur');
+    rerender(<FirstLook active><img src="teaser.jpg" alt="" /></FirstLook>);
+    expect(screen.getByTestId('pl-first-look').getAttribute('data-style')).toBe('crop');
   });
   test('the chip says when it reveals, and nothing without a label', () => {
     const { container, rerender } = render(<RevealChip label="During Ep 3" />);
@@ -72,11 +81,12 @@ describe('the side cards and stories row', () => {
     wrap(<CitiesCard cities={cities} director labels={labels} />);
     expect(screen.getByTestId('pl-reveal-chip').textContent).toContain('Announced Ep 2');
   });
-  test('a city bubble: blurred when a teaser, its initial when hidden', () => {
+  test('a city bubble: its teaser image as it is, with no CSS blur (Task 3034); its initial when hidden', () => {
     const { container } = render(<PulseStories lala={{ handle: 'lala', name: 'Lala' }} people={[]} cities={cities} onPerson={() => {}}
       cityStates={{ 'city_bubble:dazzle_district': 'teaser', 'city_bubble:echo_park': 'hidden' }} />);
     const bubbles = container.querySelectorAll('[data-testid="pl-story-city"]');
-    expect(bubbles[0].querySelector('img').className).toBe('pl-blurred');
+    expect(bubbles[0].querySelector('img').className).toBe('');
+    expect(bubbles[0].querySelector('img').getAttribute('data-first-look')).toBe('true');
     expect(bubbles[1].querySelector('img')).toBeNull();
     expect(bubbles[1].querySelector('.pl-story-initial').textContent).toBe('E');
   });

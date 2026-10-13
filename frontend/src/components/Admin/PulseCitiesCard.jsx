@@ -57,8 +57,8 @@ function CityCard({ city, onSaved }) {
         <PulseImageSpot label="Story bubble" url={city.bubble_image_url} alt="" round busy={busy}
           onFile={setImage('bubble_image_url', 'bubble')} onRemove={clear({ bubble_image_url: null })} testId={`city-${city.key}-bubble`} />
       </div>
-      {city.image_url && <RevealPicker type="image" kind="city" id={city.key} label={`${city.name}'s image`} />}
-      {city.bubble_image_url && <RevealPicker type="image" kind="city_bubble" id={city.key} label={`${city.name}'s story bubble`} />}
+      {city.image_url && <RevealPicker type="image" kind="city" id={city.key} label={`${city.name}'s image`} imageUrl={city.image_url} />}
+      {city.bubble_image_url && <RevealPicker type="image" kind="city_bubble" id={city.key} label={`${city.name}'s story bubble`} imageUrl={city.bubble_image_url} />}
       {city.image_url && (
         <div className="pulse-field">
           <label htmlFor={`alt-${city.key}`}>Image alt text</label>

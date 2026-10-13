@@ -75,7 +75,7 @@ export default function PulseStories({ lala, people, cities, active, onPerson, c
             <>
               <Bubble colors={ringVars(first, second)}>
                 {c.bubble_image_url && bubble !== 'hidden'
-                  ? <img src={c.bubble_image_url} alt="" className={bubble === 'teaser' ? 'pl-blurred' : undefined} />
+                  ? <img src={c.bubble_image_url} alt="" data-first-look={bubble === 'teaser' ? 'true' : undefined} />
                   : <span className="pl-story-initial pl-story-city-initial" style={ringVars(first, second)}>{initial(c.name)}</span>}
               </Bubble>
               <b>{c.name}</b>

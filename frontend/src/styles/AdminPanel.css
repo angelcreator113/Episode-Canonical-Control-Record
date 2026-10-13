@@ -821,6 +821,32 @@
   min-height: 44px;
 }
 
+/* The detail a cropped first look shows (Task 3034; TeaserCropBox). */
+.pulse-crop { display: flex; flex-direction: column; gap: 0.375rem; }
+.pulse-crop-hint, .pulse-crop-readout { margin: 0; font-size: 0.8125rem; color: var(--lala-ink); }
+.pulse-crop-area {
+  position: relative;
+  max-width: 100%;
+  width: 320px;
+  touch-action: none;
+  user-select: none;
+  cursor: crosshair;
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: var(--lala-radius);
+  overflow: hidden;
+  background: var(--lala-parchment-2);
+}
+.pulse-crop-area img { display: block; width: 100%; height: auto; pointer-events: none; }
+.pulse-crop-box {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid var(--lala-gold, #B8962E);
+  box-shadow: 0 0 0 9999px rgba(44, 44, 44, 0.45);
+  pointer-events: none;
+}
+.pulse-crop-presets { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+.pulse-crop-presets .pulse-link-btn { min-height: 44px; }
+
 .pulse-reveal-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));

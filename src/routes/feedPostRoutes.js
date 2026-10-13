@@ -53,20 +53,29 @@ async function withAuthorPortraits(models, posts) {
 
 /**
  * A post as Lala sees it at a story moment (Task #2939): a teaser keeps its
- * author and time, loses its words and comments, and flags its photos
- * (teaser: true) so The Pulse blurs them as a "first look"; a post photo's
- * own reveal flags (teaser) or removes (hidden) the photos alone; comments
- * by characters Lala has not met yet are left out.
+ * author and time, loses its words and comments, and shows a "first look"
+ * (teaser: true); a post photo's own reveal makes a first look of (teaser)
+ * or removes (hidden) the photo alone; comments by characters Lala has not
+ * met yet are left out. A first look's photo is its teaser image, cut from
+ * the full one (Task #3034): the full image URL and its description never
+ * go out before the moment; with no teaser image, no photo goes out.
  */
 function applyPostReveal(post, reveals) {
   const out = { ...post };
   if (Array.isArray(out.comments)) out.comments = out.comments.filter((c) => !reveals.hiddenProfiles.has(c.social_profile_id));
   const photo = reveals.stateOf('image', post.id, 'post_photo');
-  if (photo === 'hidden') { out.image_url = null; out.image_urls = []; }
-  if (photo === 'teaser') out.photo_teaser = true;
-  if (reveals.stateOf('post', post.id) === 'teaser') {
-    out.teaser = true;
+  const postTeaser = reveals.stateOf('post', post.id) === 'teaser';
+  if (photo === 'hidden') { out.image_url = null; out.image_urls = []; out.image_description = null; }
+  if (postTeaser || (photo === 'teaser' && out.image_url)) {
+    const teaser = (postTeaser && reveals.teaserOf('post', post.id)) || reveals.teaserOf('image', post.id, 'post_photo');
     out.photo_teaser = true;
+    out.teaser_style = teaser?.style || 'crop';
+    out.image_url = photo === 'hidden' ? null : teaser?.url || null;
+    out.image_urls = out.image_url ? [out.image_url] : [];
+    out.image_description = null;
+  }
+  if (postTeaser) {
+    out.teaser = true;
     out.content_text = null;
     out.trending_topic = null;
     out.comments = [];

@@ -266,8 +266,8 @@ export function PostCard({ post, onChange, showId }) {
         )}
         {open && <Reactions post={post} onChange={onChange} />}
         {beatOpen && showId && <BeatPicker post={post} showId={showId} />}
-        {!isDeleted && <RevealPicker type="post" id={post.id} eventId={post.event_id || null} label={`${who.name}'s post`} />}
-        {!isDeleted && post.image_url && <RevealPicker type="image" kind="post_photo" id={post.id} eventId={post.event_id || null} label={`the photo on ${who.name}'s post`} />}
+        {!isDeleted && <RevealPicker type="post" id={post.id} eventId={post.event_id || null} label={`${who.name}'s post`} imageUrl={post.image_url || null} />}
+        {!isDeleted && post.image_url && <RevealPicker type="image" kind="post_photo" id={post.id} eventId={post.event_id || null} label={`the photo on ${who.name}'s post`} imageUrl={post.image_url} />}
       </div>
     </article>
   );

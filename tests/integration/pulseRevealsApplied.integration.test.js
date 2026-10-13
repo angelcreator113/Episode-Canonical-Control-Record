@@ -84,14 +84,15 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       (:fitHidden, :show, 'https://cdn/fit-b.jpg', 'Gala dress', 17, NOW(), NOW())`, ids);
 
     await reveal({ item_type: 'post', item_id: ids.hiddenPost, event_id: ids.ev2, moment: 'during', mode: 'hidden' });
-    await reveal({ item_type: 'post', item_id: ids.teaserPost, episode_id: ids.ep2, moment: 'after' });
-    await reveal({ item_type: 'image', image_kind: 'post_photo', item_id: ids.photoPost, moment: 'story_time', story_order: 27 });
-    await reveal({ item_type: 'image', image_kind: 'fit', item_id: ids.fitTeaser, moment: 'story_time', story_order: 27 });
+    // A teaser's image is cut once from the full one (Task #3034); here it is set directly.
+    await reveal({ item_type: 'post', item_id: ids.teaserPost, episode_id: ids.ep2, moment: 'after', teaser_url: 'https://cdn/teasers/post.jpg' });
+    await reveal({ item_type: 'image', image_kind: 'post_photo', item_id: ids.photoPost, moment: 'story_time', story_order: 27, teaser_style: 'blur', teaser_url: 'https://cdn/teasers/photo.jpg' });
+    await reveal({ item_type: 'image', image_kind: 'fit', item_id: ids.fitTeaser, moment: 'story_time', story_order: 27, teaser_url: 'https://cdn/teasers/fit.jpg' });
     await reveal({ item_type: 'image', image_kind: 'fit', item_id: ids.fitHidden, moment: 'story_time', story_order: 27, mode: 'hidden' });
     await reveal({ item_type: 'event', item_id: ids.ev2, event_id: ids.ev2, moment: 'announced' });
     await reveal({ item_type: 'event', item_id: ids.ev3, event_id: ids.ev3, moment: 'announced', mode: 'hidden' });
-    await reveal({ item_type: 'image', image_kind: 'cover', item_id: ids.show, moment: 'story_time', story_order: 27 });
-    await reveal({ item_type: 'image', image_kind: 'city', item_id: 'dazzle_district', moment: 'story_time', story_order: 27 });
+    await reveal({ item_type: 'image', image_kind: 'cover', item_id: ids.show, moment: 'story_time', story_order: 27, teaser_url: 'https://cdn/teasers/cover.jpg' });
+    await reveal({ item_type: 'image', image_kind: 'city', item_id: 'dazzle_district', moment: 'story_time', story_order: 27, teaser_url: 'https://cdn/teasers/dazzle.jpg' });
     await reveal({ item_type: 'image', image_kind: 'city_bubble', item_id: 'echo_park', moment: 'story_time', story_order: 27, mode: 'hidden' });
     await reveal({ item_type: 'image', image_kind: 'city', item_id: 'radiance_row', moment: 'story_time', story_order: 7 });
   });
@@ -109,18 +110,21 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
   const byId = (res) => new Map(res.body.data.map((x) => [x.id, x]));
 
-  it('posts: hidden ones and those of characters not met yet never arrive; a teaser has no words, comments or plain photos', async () => {
+  it('posts: hidden ones and those of characters not met yet never arrive; a teaser has no words, comments or full photo', async () => {
     const res = await get(`/api/v1/feed-posts?show_id=${ids.show}&at=present&with=comments`);
     expect(res.status).toBe(200);
     const posts = byId(res);
     expect(posts.has(ids.hiddenPost)).toBe(false);
     expect(posts.has(ids.strangerPost)).toBe(false);
     expect(res.body.total).toBe(3);
-    expect(posts.get(ids.teaserPost)).toMatchObject({ teaser: true, photo_teaser: true, content_text: null, comments: [], image_url: 'https://cdn/teaser.jpg' });
+    expect(posts.get(ids.teaserPost)).toMatchObject({ teaser: true, photo_teaser: true, content_text: null, comments: [], image_url: 'https://cdn/teasers/post.jpg', teaser_style: 'crop' });
     expect(JSON.stringify(res.body)).not.toContain(`words of ${ids.teaserPost}`);
     expect(JSON.stringify(res.body)).not.toContain('spoiler');
-    expect(posts.get(ids.photoPost)).toMatchObject({ photo_teaser: true, content_text: `words of ${ids.photoPost}` });
+    expect(posts.get(ids.photoPost)).toMatchObject({ photo_teaser: true, content_text: `words of ${ids.photoPost}`, image_url: 'https://cdn/teasers/photo.jpg', teaser_style: 'blur' });
     expect(posts.get(ids.photoPost).teaser).toBeUndefined();
+    // No teaser response carries the full image URL (Task #3034).
+    expect(JSON.stringify(res.body)).not.toContain('https://cdn/teaser.jpg');
+    expect(JSON.stringify(res.body)).not.toContain('https://cdn/photo.jpg');
     expect(posts.get(ids.plainPost).comments.map((c) => c.text)).toEqual(['mine']);
   });
 
@@ -134,9 +138,11 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(posts.get(ids.plainPost).comments).toHaveLength(2);
   });
 
-  it('the latest fit passes over a hidden fit and flags a teaser', async () => {
+  it('the latest fit passes over a hidden fit; a teaser sends its teaser image, not the fit or its caption', async () => {
     let res = await get(`/api/v1/pulse-fits/latest?show_id=${ids.show}`);
-    expect(res.body.latest).toMatchObject({ source: 'fit', image_url: 'https://cdn/fit-a.jpg', teaser: true });
+    expect(res.body.latest).toMatchObject({ source: 'fit', image_url: 'https://cdn/teasers/fit.jpg', teaser: true, teaser_style: 'crop', caption: null });
+    expect(JSON.stringify(res.body)).not.toContain('https://cdn/fit-a.jpg');
+    expect(JSON.stringify(res.body)).not.toContain('Coffee run');
     res = await get(`/api/v1/pulse-fits/latest?show_id=${ids.show}&at=27`);
     expect(res.body.latest).toMatchObject({ image_url: 'https://cdn/fit-b.jpg' });
     expect(res.body.latest.teaser).toBeUndefined();
@@ -163,9 +169,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect((await get(`/api/v1/social-profiles/lala?show_id=${ids.show}&at=soon`)).status).toBe(400);
   });
 
-  it('the cover is flagged as a teaser before its moment; the cities report their image states', async () => {
+  it('the cover sends its teaser image before its moment; the cities report their image states and teaser images', async () => {
     let res = await get(`/api/v1/shows/${ids.show}/pulse-cover?at=present`);
-    expect(res.body.cover).toMatchObject({ url: 'https://cdn/cover.jpg', teaser: true });
+    expect(res.body.cover).toMatchObject({ url: 'https://cdn/teasers/cover.jpg', teaser: true, teaser_style: 'crop', alt: '' });
+    expect(JSON.stringify(res.body)).not.toContain('https://cdn/cover.jpg');
     res = await get(`/api/v1/shows/${ids.show}/pulse-cover`);
     expect(res.body.cover.teaser).toBeUndefined();
     await models.PulseReveal.update({ mode: 'hidden' }, { where: { show_id: ids.show, image_kind: 'cover' } });
@@ -174,6 +181,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     res = await get(`/api/v1/pulse-reveals/state?show_id=${ids.show}`);
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ at: 17, cities: { 'city:dazzle_district': 'teaser', 'city_bubble:echo_park': 'hidden' } });
+    expect(res.body.teasers).toEqual({ 'city:dazzle_district': 'https://cdn/teasers/dazzle.jpg' });
     expect(res.body.cities['city:radiance_row']).toBeUndefined();
   });
 });

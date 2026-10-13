@@ -152,7 +152,7 @@ export function CoverCard({ showId }) {
             />
           </label>
           {!cover.alt && <p className="pulse-warning" role="status">Add alt text: the cover has none yet.</p>}
-          <RevealPicker type="image" kind="cover" id={showId} label="the cover" />
+          <RevealPicker type="image" kind="cover" id={showId} label="the cover" imageUrl={cover.url} />
           <div className="pulse-actions">
             <button type="button" className="pulse-btn primary" disabled={busy || !altDirty || !alt.trim()} onClick={saveAlt}>Save alt text</button>
             <button type="button" className="pulse-btn" disabled={busy} onClick={() => fileRef.current?.click()}>

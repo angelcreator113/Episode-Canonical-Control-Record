@@ -1,16 +1,21 @@
 /**
  * When an item on The Pulse is revealed, set where Evoni already works on it
- * (Task 2940; The Pulse spec §5; Evoni, 2026-10-11: teasers are blurred).
- * Closed, it says when the item reveals ("Reveals: During Ep 3") or that it
- * always shows. Open, it picks what the reveal hangs on (an episode, the
- * item's event, or a set story time), the moment (Announced, Invitation
- * sent, Lala arrives, During, After the episode) and what shows before it
- * ("First look", blurred, or hidden). Saves through PulseRevealProvider;
- * outside one it renders nothing. Styles: styles/AdminPanel.css (pulse-reveal-*).
+ * (Task 2940; The Pulse spec §5). Closed, it says when the item reveals
+ * ("Reveals: During Ep 3") or that it always shows. Open, it picks what the
+ * reveal hangs on (an episode, the item's event, or a set story time), the
+ * moment (Announced, Invitation sent, Lala arrives, During, After the
+ * episode) and what shows before it. Evoni, 2026-10-12 (Task 3034): a first
+ * look is a detail cut from the image by default (drag a box on it,
+ * TeaserCropBox), or the image blurred when concealing it matters, or the
+ * item is hidden; the server cuts the teaser from the existing image. An item
+ * with no image (an event) has one first look. Saves through
+ * PulseRevealProvider; outside one it renders nothing.
+ * Styles: styles/AdminPanel.css (pulse-reveal-*, pulse-crop-*).
  */
 import React, { useId, useState } from 'react';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useReveals } from './PulseRevealContext';
+import TeaserCropBox, { DEFAULT_CROP } from './TeaserCropBox';
 
 export const MOMENTS = [
   { key: 'announced', label: 'Announced' },
@@ -31,12 +36,24 @@ export const STORY_PHASES = [
 
 const errorText = (err) => err.response?.data?.error || err.message || 'The reveal could not be saved.';
 
+/** The picker's choice from a saved reveal: crop, blur or hidden. */
+export const choiceOf = (reveal) => (!reveal ? 'crop' : reveal.mode === 'hidden' ? 'hidden' : (reveal.teaser_style === 'blur' ? 'blur' : 'crop'));
+
+/** What shows before the moment, in words, for the closed picker; an item with no image has one first look. */
+export function beforeText(reveal, hasImage = true) {
+  if (reveal.mode === 'hidden') return 'hidden before';
+  if (!hasImage) return 'first look before';
+  return reveal.teaser_style === 'blur' ? 'blurred first look before' : 'first look (a detail) before';
+}
+
 /**
  * type: post | image | event; id: the item's id; kind: an image's kind;
  * eventId: the item's own event (an event's id, or a post's event), offered
- * as what the reveal hangs on; label: what the item is, for screen readers.
+ * as what the reveal hangs on; label: what the item is, for screen readers;
+ * imageUrl: the item's image, to choose the detail a first look shows (none:
+ * the item has no image, and its first look is its name alone).
  */
-export default function RevealPicker({ type, id, kind = null, eventId = null, label = 'this item' }) {
+export default function RevealPicker({ type, id, kind = null, eventId = null, label = 'this item', imageUrl = null }) {
   const ctx = useReveals();
   const formId = useId();
   const current = ctx?.revealOf(type, id, kind) || null;
@@ -48,8 +65,10 @@ export default function RevealPicker({ type, id, kind = null, eventId = null, la
   const [moment, setMoment] = useState('during');
   const [storyEpisode, setStoryEpisode] = useState('');
   const [storyPhase, setStoryPhase] = useState('after_episode');
-  const [mode, setMode] = useState('teaser');
+  const [mode, setMode] = useState('crop');
+  const [crop, setCrop] = useState(DEFAULT_CROP);
   if (!ctx) return null;
+  const hasImage = Boolean(imageUrl);
 
   // The form starts from the saved reveal (it may load after the picker mounts).
   const toggle = () => {
@@ -57,7 +76,8 @@ export default function RevealPicker({ type, id, kind = null, eventId = null, la
       setAnchor(current?.moment === 'story_time' ? 'story_time' : (current?.event_id || (!current && eventId) ? 'event' : 'episode'));
       setEpisodeId(current?.episode_id || '');
       setMoment(current && current.moment !== 'story_time' ? current.moment : 'during');
-      setMode(current?.mode || 'teaser');
+      setMode(choiceOf(current));
+      setCrop(current?.crop || DEFAULT_CROP);
       setNote(null);
     }
     setOpen((v) => !v);
@@ -76,8 +96,12 @@ export default function RevealPicker({ type, id, kind = null, eventId = null, la
     } finally { setBusy(false); }
   };
   const save = () => run(() => {
-    const body = { item_type: type, item_id: String(id), mode };
+    const body = { item_type: type, item_id: String(id), mode: mode === 'hidden' ? 'hidden' : 'teaser' };
     if (kind) body.image_kind = kind;
+    if (mode !== 'hidden' && hasImage) {
+      body.teaser_style = mode === 'blur' ? 'blur' : 'crop';
+      if (mode !== 'blur') body.crop = crop;
+    }
     if (anchor === 'story_time') {
       const ep = episodes.find((e) => e.id === storyEpisode);
       Object.assign(body, { moment: 'story_time', at: `ep:${ep.episode_number}:${storyPhase}` });
@@ -94,7 +118,7 @@ export default function RevealPicker({ type, id, kind = null, eventId = null, la
     <div className="pulse-reveal" data-testid={`reveal-${type}-${id}`}>
       <p className="pulse-reveal-status">
         {current
-          ? <><EyeOff size={14} aria-hidden="true" /> Reveals: {current.label || 'not placed yet'} · {current.mode === 'hidden' ? 'hidden before' : 'first look before'}</>
+          ? <><EyeOff size={14} aria-hidden="true" /> Reveals: {current.label || 'not placed yet'} · {beforeText(current, hasImage)}</>
           : <><Eye size={14} aria-hidden="true" /> Always shown</>}
         {' '}
         <button type="button" className="pulse-link-btn" aria-expanded={open} aria-controls={formId}
@@ -147,9 +171,17 @@ export default function RevealPicker({ type, id, kind = null, eventId = null, la
           )}
           <fieldset>
             <legend>Before then</legend>
-            <label><input type="radio" name={`${formId}-mode`} checked={mode === 'teaser'} onChange={() => setMode('teaser')} /> First look (blurred)</label>
+            {hasImage ? (
+              <>
+                <label><input type="radio" name={`${formId}-mode`} checked={mode === 'crop'} onChange={() => setMode('crop')} /> First look: a detail (cropped)</label>
+                <label><input type="radio" name={`${formId}-mode`} checked={mode === 'blur'} onChange={() => setMode('blur')} /> First look: blurred</label>
+              </>
+            ) : (
+              <label><input type="radio" name={`${formId}-mode`} checked={mode !== 'hidden'} onChange={() => setMode('crop')} /> First look</label>
+            )}
             <label><input type="radio" name={`${formId}-mode`} checked={mode === 'hidden'} onChange={() => setMode('hidden')} /> Hidden</label>
           </fieldset>
+          {hasImage && mode === 'crop' && <TeaserCropBox imageUrl={imageUrl} value={crop} onChange={setCrop} label={label} />}
           <div className="pulse-actions">
             <button type="button" className="pulse-btn primary" disabled={busy || !canSave} onClick={save}>
               {busy && <Loader2 size={14} className="pulse-spin" aria-hidden="true" />} Save reveal

@@ -168,7 +168,9 @@ const keyOf = (type, id, kind) => `${type}:${kind || ''}:${id}`;
 
 /**
  * The Pulse's reveals as of a story moment (Task #2939): stateOf(type, id,
- * kind) gives 'revealed' | 'teaser' | 'hidden'; hiddenIds(type, kind) the ids
+ * kind) gives 'revealed' | 'teaser' | 'hidden'; teaserOf(type, id, kind) a
+ * teaser's { style, url } (its image cut from the full one, Task #3034; url
+ * null when there is none, and then no image is shown); hiddenIds(type, kind) the ids
  * hidden then; hiddenProfiles the Feed profiles Lala has not met by then (a
  * set character reveal, else the derived episode, met during it), never
  * Lala herself. With no moment (Director view) everything is revealed.
@@ -177,8 +179,10 @@ async function revealsAt(db, showId, at, { lalaProfileId = null } = {}) {
   const view = {
     at,
     states: new Map(),
+    teasers: new Map(),
     hiddenProfiles: new Set(),
     stateOf(type, id, kind) { return this.states.get(keyOf(type, id, kind)) || 'revealed'; },
+    teaserOf(type, id, kind) { return this.teasers.get(keyOf(type, id, kind)) || null; },
     hiddenIds(type, kind) {
       const prefix = `${type}:${kind || ''}:`;
       return [...this.states].filter(([k, v]) => v === 'hidden' && k.startsWith(prefix)).map(([k]) => k.slice(prefix.length));
@@ -191,7 +195,10 @@ async function revealsAt(db, showId, at, { lalaProfileId = null } = {}) {
   rows.forEach((r, i) => {
     const state = stateAt({ story_order: orders[i], mode: r.mode }, at);
     if (r.item_type === 'character') setCharacters.set(Number(r.item_id), state);
-    else if (state !== 'revealed') view.states.set(keyOf(r.item_type, r.item_id, r.image_kind), state);
+    else if (state !== 'revealed') {
+      view.states.set(keyOf(r.item_type, r.item_id, r.image_kind), state);
+      if (state === 'teaser') view.teasers.set(keyOf(r.item_type, r.item_id, r.image_kind), { style: r.teaser_style || 'crop', url: r.teaser_url || null });
+    }
   });
   const derived = await metLala(db, showId);
   for (const [profileId, met] of derived) {

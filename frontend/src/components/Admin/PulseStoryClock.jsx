@@ -18,7 +18,7 @@ import api from '../../services/api';
 import { useReveals } from './PulseRevealContext';
 import { storyMoments, presentOrder } from '../../lib/storyClock';
 import { loadCities } from '../../lib/pulseCities';
-import { loadCityStates } from '../../lib/pulseReveals';
+import { loadCityReveals, withCityTeasers } from '../../lib/pulseReveals';
 import PulsePost from '../Pulse/PulsePost';
 import { pulseFeedUrl } from '../../lib/pulsePosts';
 import { CitiesCard, UpcomingCard, LatestFitCard } from '../Pulse/PulseSides';
@@ -46,7 +46,7 @@ function usePulseAt(showId, at) {
         safe(api.get(`/api/v1/social-profiles/lala/sidebar?show_id=${id}&at=${at}`), 'events'),
         safe(api.get(`/api/v1/pulse-fits/latest?show_id=${id}&at=${at}`), 'latest fit'),
         safe(api.get(`/api/v1/shows/${id}/pulse-cover?at=${at}`), 'cover'),
-        safe(loadCityStates(showId, String(at)), 'city states'),
+        safe(loadCityReveals(showId, String(at)), 'city states'),
       ]);
       if (!alive) return;
       if (!posts) setError('The Pulse could not be read at this moment.');
@@ -57,7 +57,8 @@ function usePulseAt(showId, at) {
         events: Array.isArray(side?.data?.data?.upcoming) ? side.data.data.upcoming : [],
         fit: fit?.data?.latest || null,
         cover: cover?.data?.cover || null,
-        cityStates: cityStates || {},
+        cityStates: cityStates?.states || {},
+        cityTeasers: cityStates?.teasers || {},
       });
     })();
     return () => { alive = false; };
@@ -131,7 +132,7 @@ export default function PulseStoryClock() {
           <div className="pl-preview-grid">
             <div className="pl-preview-main">
               {view.cover?.url && (
-                <FirstLook active={Boolean(view.cover.teaser)} className="pl-preview-cover">
+                <FirstLook active={Boolean(view.cover.teaser)} className="pl-preview-cover" style={view.cover.teaser_style}>
                   <img className="pl-cover" src={view.cover.url} alt={view.cover.teaser ? '' : (view.cover.alt || '')} />
                 </FirstLook>
               )}
@@ -143,7 +144,7 @@ export default function PulseStoryClock() {
             <aside className="pl-preview-side">
               <LatestFitCard fit={view.fit} director={false} />
               <UpcomingCard events={view.events} />
-              <CitiesCard cities={cities} director={false} states={view.cityStates} />
+              <CitiesCard cities={withCityTeasers(cities, { states: view.cityStates, teasers: view.cityTeasers })} director={false} states={view.cityStates} />
             </aside>
           </div>
         )}

@@ -297,10 +297,12 @@ describe('The story clock (Task 2937)', () => {
 describe('Reveals (Task 2939)', () => {
   const calls = () => vi.mocked(api.get).mock.calls.map(([u]) => u);
 
-  test("Lala's view: the cover and friends are read as of the present; the cities' states are read; a teaser cover is blurred as a first look", async () => {
-    cover = { url: 'https://cdn/cover.jpg', alt: 'Night', teaser: true };
+  test("Lala's view: the cover and friends are read as of the present; the cities' states are read; a teaser cover is its teaser image, labelled First look, with no CSS blur (Task 3034)", async () => {
+    cover = { url: 'https://cdn/cover-teaser.jpg', alt: '', teaser: true, teaser_style: 'blur' };
     renderAt('/pulse');
-    expect((await screen.findByTestId('pl-cover')).className).toBe('pl-cover pl-blurred');
+    expect((await screen.findByTestId('pl-cover')).className).toBe('pl-cover');
+    expect(screen.getByTestId('pl-cover').getAttribute('src')).toBe('https://cdn/cover-teaser.jpg');
+    expect(screen.getByTestId('pl-cover').getAttribute('data-first-look')).toBe('blur');
     expect(screen.getByTestId('pl-cover').getAttribute('alt')).toBe('');
     expect(screen.getByTestId('pl-cover-first-look').textContent).toBe('First look');
     await waitFor(() => expect(calls().some((u) => u.startsWith('/api/v1/pulse-reveals/state?') && u.endsWith('&at=present'))).toBe(true));
