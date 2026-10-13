@@ -8,6 +8,9 @@
  *   takes none: event, ambient, comment and storyline drafts (automated);
  *   DMs, building a voice, storyline suggestions, draft reactions and
  *   redraft (manual);
+ * - one event's posts take one request, as do one post's replies (Task
+ *   #3032); a garbled batch keeps the drafts it can read and records the
+ *   rest on the job;
  * - a refused automated draft makes no AI call and no post; a refused
  *   manual route answers 429 with the reason; a DM is refused before it is
  *   queued;
@@ -86,6 +89,7 @@ const ANY = say({ text: 'ok but the playlist tho', hashtag: null, reveals_story:
     mockCreate.mockReset();
     mockCreate.mockResolvedValue(ANY);
     await run('DELETE FROM pulse_requests WHERE show_id IN (:show, :other)', ids);
+    await run('DELETE FROM pulse_jobs WHERE show_id IN (:show, :other)', ids);
     await limits(5, 15);
   });
 
@@ -168,6 +172,36 @@ const ANY = say({ text: 'ok but the playlist tho', hashtag: null, reveals_story:
 
     expect(await lanesOf()).toEqual(['manual:voice', 'manual:suggestions', 'manual:reactions', 'manual:redraft', 'manual:redraft']);
     expect(await requests.usedToday(models, ids.show)).toEqual({ automated: 0, manual: 5 });
+  });
+
+  test("one event's posts take one request; a partial answer drafts what it can and records the rest on the job (Task #3032)", async () => {
+    const posting = require('../../src/services/pulseEventPosting');
+    posting.registerHandlers();
+    process.env.PULSE_ENGINE_ENABLED = 'true';
+    await models.PulseVoice.update({ approved_at: new Date(), approved_by: 'evoni' }, { where: { registry_character_id: [c.ama, c.bo] } });
+    try {
+      const job = await queue.enqueue(models, { showId: ids.show, kind: 'event', payload: { posters: [c.ama, c.bo], moment: 5, about: 'the gala', commenters: [c.bo] } });
+      mockCreate.mockResolvedValueOnce(say('{"items": [{"n": 1, "text": "the gala was a whole moment", "hashtag": null, "reveals_story": false}, {"n": 2, "text": "cut o'));
+      const ran = await queue.runOne(models);
+      expect(ran.id).toBe(job.id);
+      await ran.reload();
+      expect(ran).toMatchObject({ status: 'done', error: 'bo: the batch answer had no readable draft.' });
+      expect(ran.draft_ids).toHaveLength(1);
+      expect(mockCreate).toHaveBeenCalledTimes(2);   // the batch, then the one draft's gate
+      expect((await ledger()).map((r) => [r.lane, r.kind, r.job_id])).toEqual([['automated', 'event', job.id]]);
+
+      // Ama's post gets one comment job with bo's reply; it takes one request.
+      const [comments] = await models.PulseJob.findAll({ where: { show_id: ids.show, kind: 'comment' } });
+      expect(comments.payload_json).toMatchObject({ post_id: ran.draft_ids[0], character_ids: [c.bo] });
+      mockCreate.mockClear();
+      expect((await (await queue.runOne(models)).reload()).status).toBe('done');
+      expect(mockCreate).toHaveBeenCalledTimes(2);
+      expect(await lanesOf()).toEqual(['automated:event', 'automated:comments']);
+    } finally {
+      for (const kind of ['event', 'comment']) queue.unregister(kind);
+      await models.PulseVoice.update({ approved_at: null, approved_by: null }, { where: { registry_character_id: [c.ama, c.bo] } });
+      await run('DELETE FROM pulse_jobs WHERE show_id = :show', ids);
+    }
   });
 
   test('a refused manual route answers 429 with the reason and calls no AI', async () => {

@@ -778,7 +778,9 @@ ${narrativeLines.short || ''}`,
   // engine is switched on. It never fails completion.
   let pulsePosts = 0;
   try {
-    pulsePosts = (await require('./pulseEventPosting').enqueueForEpisode(require('../models'), { showId, episodeId })).length;
+    // One job drafts a batch of posts (Task #3032): count the posts, not the jobs.
+    pulsePosts = (await require('./pulseEventPosting').enqueueForEpisode(require('../models'), { showId, episodeId }))
+      .reduce((n, job) => n + (Array.isArray(job.payload_json?.posters) ? job.payload_json.posters.length : 1), 0);
   } catch (postingErr) {
     console.error('[EpisodeCompletion] Queueing event posts failed (non-blocking):', postingErr?.message);
   }

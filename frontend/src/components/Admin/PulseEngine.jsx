@@ -114,7 +114,7 @@ export default function PulseEngine({ showId }) {
                 <span className={`pulse-engine-status pulse-engine-status-${j.status}`}>{STATUS_LABELS[j.status] || j.status}</span>
                 <span>{KIND_LABELS[j.kind] || j.kind}{j.drafts ? ` · ${j.drafts} draft${j.drafts === 1 ? '' : 's'}` : ''}</span>
                 <span className="pulse-engine-muted">{when(j.finished_at || j.created_at)}</span>
-                {j.error && j.status !== 'done' && <span className="pulse-engine-why">{j.error}</span>}
+                {j.error && <span className="pulse-engine-why">{j.error}</span>}
               </li>
             ))}
           </ul>
