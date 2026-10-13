@@ -63,7 +63,7 @@ beforeEach(() => {
     if (url.includes('post_type=relationship')) return { data: { data: [] } };
     if (url.includes('/feed-enhanced/') && /\/trending(\?|$)/.test(url)) return { data: { success: true, data: trending } };
     if (url.startsWith('/api/v1/pulse-fits/latest?')) return { data: { success: true, latest: fit } };
-    if (url.startsWith('/api/v1/pulse-reveals/state?')) return { data: { success: true, at: 17, cities: cityStates } };
+    if (url.startsWith('/api/v1/pulse-reveals/cities?')) return { data: { success: true, at: 17, cities: null, states: cityStates } };
     if (url.startsWith('/api/v1/pulse-reveals?')) return { data: { success: true, reveals: revealRows } };
     if (url.includes('/feed-posts')) return { data: { data: posts, total: posts.length, hasMore: false } };
     return { data: {} };
@@ -305,11 +305,37 @@ describe('Reveals (Task 2939)', () => {
     expect(screen.getByTestId('pl-cover').getAttribute('data-first-look')).toBe('blur');
     expect(screen.getByTestId('pl-cover').getAttribute('alt')).toBe('');
     expect(screen.getByTestId('pl-cover-first-look').textContent).toBe('First look');
-    await waitFor(() => expect(calls().some((u) => u.startsWith('/api/v1/pulse-reveals/state?') && u.endsWith('&at=present'))).toBe(true));
+    await waitFor(() => expect(calls().some((u) => u.startsWith('/api/v1/pulse-reveals/cities?') && u.endsWith('&at=present'))).toBe(true));
+    // The cities come from the reveal-aware read, never the catalog with their full images (Task 3041).
+    expect(calls().some((u) => u.startsWith('/api/v1/page-content/'))).toBe(false);
     expect(calls().filter((u) => u.includes('/pulse-cover')).every((u) => u.endsWith('?at=present'))).toBe(true);
     expect(calls().filter((u) => u.startsWith('/api/v1/social-profiles/lala?show_id=') && !u.includes('sidebar')).every((u) => u.includes('at=present'))).toBe(true);
     expect(calls().some((u) => u.startsWith('/api/v1/pulse-reveals?'))).toBe(false);
     expect(screen.queryByTestId('pl-reveal-chip')).toBeNull();
+  });
+
+  test("Lala's view: a city in its first look shows the teaser image the server sends; Director view reads the saved list (Task 3041)", async () => {
+    const before = vi.mocked(api.get).getMockImplementation();
+    const SAVED = [{ key: 'dazzle_district', name: 'Dazzle District', image_url: 'https://cdn/dazzle-full.jpg', image_alt: 'The runway' }];
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url.startsWith('/api/v1/pulse-reveals/cities?')) {
+        return { data: { success: true, cities: [{ ...SAVED[0], image_url: 'https://cdn/teasers/dazzle.jpg', image_alt: '', teaser_style: 'crop' }], states: { 'city:dazzle_district': 'teaser' } } };
+      }
+      if (url.startsWith('/api/v1/page-content/')) return { data: { DREAM_CITIES: SAVED } };
+      return before(url);
+    });
+    const { unmount } = renderAt('/pulse');
+    const images = await screen.findAllByTestId('pl-city-image');
+    expect(images.map((img) => img.getAttribute('src'))).toContain('https://cdn/teasers/dazzle.jpg');
+    expect(document.body.innerHTML).not.toContain('dazzle-full.jpg');
+    expect(screen.getAllByTestId('pl-first-look').some((el) => el.getAttribute('data-style') === 'crop')).toBe(true);
+    unmount();
+
+    USER = { name: 'Evoni', groups: ['admin'] };
+    vi.mocked(api.get).mockClear();
+    renderAt('/pulse');
+    fireEvent.click(await screen.findByTestId('pl-director-toggle'));
+    await waitFor(() => expect(calls().some((u) => u.startsWith('/api/v1/page-content/world_infrastructure'))).toBe(true));
   });
 
   test("a teaser post in Lala's view reads First look", async () => {

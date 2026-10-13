@@ -14,6 +14,12 @@
  *                          moment, and each teaser's image (teasers), for
  *                          The Pulse to show in place of the city's image or
  *                          leave out (Task #2939, #3034)
+ *   GET    /cities?show_id=&at=  the Dream Cities list as Lala sees it at a
+ *                          story moment: a first look's city image and story
+ *                          bubble are their teasers, hidden ones none, so the
+ *                          full image never reaches The Pulse before its
+ *                          moment; no `at`: everything (Director view);
+ *                          cities null when no list is saved (Task #3041)
  *   PUT    /               upsert one item's reveal (requireAuth + ADMIN)
  *                          { show_id, item_type, item_id, image_kind?,
  *                            event_id?, episode_id?, moment, at?, mode?,
@@ -131,6 +137,26 @@ router.get('/state', requireAuth, async (req, res) => {
     return res.json({ success: true, at, cities, teasers });
   } catch (err) {
     console.error('[PulseReveals] GET state error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/cities', requireAuth, async (req, res) => {
+  try {
+    const showId = String(req.query.show_id || '');
+    if (!UUID_RE.test(showId)) return badShow(res);
+    const db = getModels();
+    let at;
+    if (req.query.at !== undefined) {
+      try { at = await require('../services/storyClock').resolveAt(db, showId, req.query.at); } catch (err) {
+        if (err.status === 400) return res.status(400).json({ success: false, error: err.message });
+        throw err;
+      }
+    }
+    const { cities, states } = await require('../services/pulseTeasers').citiesAt(db, showId, at);
+    return res.json({ success: true, at: at ?? null, cities, states });
+  } catch (err) {
+    console.error('[PulseReveals] GET cities error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

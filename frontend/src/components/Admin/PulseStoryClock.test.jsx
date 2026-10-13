@@ -38,7 +38,7 @@ beforeEach(() => {
     if (url.startsWith('/api/v1/social-profiles/lala/sidebar?')) return { data: { data: { upcoming: [{ id: 'e1', name: 'The Gala', date: '2026-11-12' }], may_know: [] } } };
     if (url.startsWith('/api/v1/pulse-fits/latest?')) return { data: { latest: null } };
     if (url.includes('/pulse-cover')) return { data: { cover: { url: 'https://cdn/c.jpg', alt: 'Night', teaser: true } } };
-    if (url.startsWith('/api/v1/pulse-reveals/state?')) return { data: { cities: {} } };
+    if (url.startsWith('/api/v1/pulse-reveals/cities?')) return { data: { cities: null, states: {} } };
     if (url.startsWith('/api/v1/page-content/')) return { data: {} };
     return { data: {} };
   });
@@ -75,8 +75,10 @@ describe('the Story clock tab', () => {
       `/api/v1/social-profiles/lala/sidebar?show_id=${SHOW}&at=17`,
       `/api/v1/pulse-fits/latest?show_id=${SHOW}&at=17`,
       `/api/v1/shows/${SHOW}/pulse-cover?at=17`,
-      `/api/v1/pulse-reveals/state?show_id=${SHOW}&at=17`,
+      `/api/v1/pulse-reveals/cities?show_id=${SHOW}&at=17`,
     ]));
+    // Lala's view never reads the cities' catalog, which carries their full images (Task 3041).
+    expect(calls().some((u) => u.startsWith('/api/v1/page-content/'))).toBe(false);
     expect(screen.getByTestId('pl-first-look')).toBeTruthy(); // the teaser cover is blurred
     expect(screen.getByTestId('pulse-clock-count').textContent).toBe('1 post by this moment.');
   });

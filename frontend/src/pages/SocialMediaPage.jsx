@@ -8,14 +8,14 @@ import api from '../services/api';
 import useActiveShow from '../hooks/useActiveShow';
 import { useAuth } from '../contexts/AuthContext';
 import { isAdmin } from '../utils/authGroups';
-import { loadCities } from '../lib/pulseCities';
+import { loadCities, loadPulseCities } from '../lib/pulseCities';
 import PulsePost, { Avatar, cityName } from '../components/Pulse/PulsePost';
 import PulseStories, { recentPosters } from '../components/Pulse/PulseStories';
 import PulseCity from '../components/Pulse/PulseCity';
 import PulseMessages from '../components/Pulse/PulseMessages';
 import { CitiesCard, CityStrip, TrendingCard, UpcomingCard, UpcomingRow, LatestFitCard, UPLOADS } from '../components/Pulse/PulseSides';
 import { RevealChip } from '../components/Pulse/PulseReveal';
-import { revealKey, loadRevealLabels, loadCityReveals, withCityTeasers } from '../lib/pulseReveals';
+import { revealKey, loadRevealLabels } from '../lib/pulseReveals';
 import { storyLabel } from '../lib/storyClock';
 import { RELATIONSHIP_POST_TYPE, STATUSES, relationshipText, latestStatus } from '../lib/feedRelationship';
 import { posterOf } from '../lib/pulsePosts';
@@ -441,7 +441,6 @@ export default function SocialMediaPage() {
   const [fit, setFit] = useState(null);
   const [labels, setLabels] = useState(null); // Director view: each item's reveal label
   const [cityStates, setCityStates] = useState({}); // Lala's view: the cities' image states
-  const [cityTeasers, setCityTeasers] = useState({}); // … and their teaser images (Task 3034)
   const [relPosts, setRelPosts] = useState([]);
   const createRequest = useRef(false);
 
@@ -495,28 +494,31 @@ export default function SocialMediaPage() {
     return () => { alive = false; };
   }, [show?.id, viewAt]);
 
+  // The Dream Cities. Lala's view reads them as she sees them at the moment
+  // (Task 3041): a first look's image is its teaser, so the full one never
+  // reaches the page early. Director view reads the saved list as it is.
   useEffect(() => {
+    if (!director && !show?.id) return undefined;   // Lala's view waits for the show
     let alive = true;
-    loadCities()
-      .then((list) => { if (alive) setCities((list || []).filter((c) => c?.key)); })
-      .catch((err) => console.error('[ThePulse] the Dream Cities could not be read:', err.response?.status || err.message));
-    return () => { alive = false; };
-  }, []);
-
-  // Reveals (Task 2939): Director view reads each item's reveal label for its
-  // chip; Lala's view reads the cities' image states (the rest is applied by
-  // the server in each read).
-  useEffect(() => {
-    if (!show?.id) return undefined;
-    let alive = true;
-    setLabels(null);
     setCityStates({});
-    setCityTeasers({});
-    const read = director ? loadRevealLabels(show.id).then((m) => { if (alive) setLabels(m); })
-      : loadCityReveals(show.id, viewAt).then((r) => { if (alive) { setCityStates(r.states); setCityTeasers(r.teasers); } });
-    read.catch((err) => console.error('[ThePulse] reveals could not be read:', err.response?.status || err.message));
+    const read = director
+      ? loadCities().then((list) => { if (alive) setCities((list || []).filter((c) => c?.key)); })
+      : loadPulseCities(show.id, viewAt).then((r) => { if (alive) { setCities(r.cities); setCityStates(r.states); } });
+    read.catch((err) => console.error('[ThePulse] the Dream Cities could not be read:', err.response?.status || err.message));
     return () => { alive = false; };
   }, [show?.id, director, viewAt]);
+
+  // Reveals (Task 2939): Director view reads each item's reveal label for its
+  // chip (Lala's view gets everything applied by the server in each read,
+  // the cities included).
+  useEffect(() => {
+    if (!show?.id || !director) return undefined;
+    let alive = true;
+    setLabels(null);
+    loadRevealLabels(show.id).then((m) => { if (alive) setLabels(m); })
+      .catch((err) => console.error('[ThePulse] reveals could not be read:', err.response?.status || err.message));
+    return () => { alive = false; };
+  }, [show?.id, director]);
 
   useEffect(() => {
     if (tab === 'posts' && createRequest.current) {
@@ -531,9 +533,6 @@ export default function SocialMediaPage() {
 
   const owner = lala?.profile || null;
   const relationship = useMemo(() => latestStatus(relPosts, owner?.handle || 'lala') || owner?.relationship_status || null, [relPosts, owner]);
-  // Lala's view shows a city's first look as its teaser image, never the full one (Task 3034).
-  const shownCities = useMemo(() => (director ? cities : withCityTeasers(cities, { states: cityStates, teasers: cityTeasers })),
-    [director, cities, cityStates, cityTeasers]);
 
   return (
     <div className={director ? 'pl-page pl-director' : 'pl-page'} data-testid="pl-page">
@@ -559,14 +558,14 @@ export default function SocialMediaPage() {
         <div className="pl-grid">
           <aside className="pl-left"><LeftNav tab={tab} onTab={switchTab} /><LatestFitCard fit={fit} director={director} revealLabel={fit?.source === 'fit' && fit.id ? labels?.get(revealKey('image', fit.id, 'fit')) : null} /></aside>
           <main className="pl-center">
-            {tab === 'posts' && <Feed show={show} lala={lala} director={director} search={search} cities={shownCities} labels={labels} cityStates={cityStates} viewAt={viewAt} onCity={openCity} />}
-            {tab === 'cities' && <PulseCity show={show} cities={shownCities} cityKey={params.get('city')} viewAt={viewAt} onCity={openCity} />}
+            {tab === 'posts' && <Feed show={show} lala={lala} director={director} search={search} cities={cities} labels={labels} cityStates={cityStates} viewAt={viewAt} onCity={openCity} />}
+            {tab === 'cities' && <PulseCity show={show} cities={cities} cityKey={params.get('city')} viewAt={viewAt} onCity={openCity} />}
             {tab === 'events' && <EventsView events={events} />}
             {tab === 'people' && <CharactersView show={show} director={director} viewAt={viewAt} />}
             {tab === 'profile' && <ProfileView lala={lala} relationship={relationship} director={director} />}
             {tab === 'messages' && <PulseMessages show={show} lala={lala} viewAt={viewAt} />}
           </main>
-          <aside className="pl-right"><RightColumn cities={shownCities} trending={trending} events={events} mayKnow={mayKnow} director={director} labels={labels} cityStates={cityStates} onCity={openCity} /></aside>
+          <aside className="pl-right"><RightColumn cities={cities} trending={trending} events={events} mayKnow={mayKnow} director={director} labels={labels} cityStates={cityStates} onCity={openCity} /></aside>
         </div>
       )}
       <BottomNav tab={tab} onTab={switchTab} onCreate={onCreate} />

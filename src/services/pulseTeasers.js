@@ -18,6 +18,11 @@
  *   makeTeaser(db, reveal)  cuts the teaser from the source image, uploads it
  *                        once (as pulseImageService does) and returns its URL,
  *                        or null with no source image
+ *   citiesAt(db, showId, at)  the Dream Cities list as Lala sees it at a
+ *                        story moment (Task #3041): a first look's image and
+ *                        story bubble are their teasers, hidden ones are
+ *                        gone; with no moment, everything; null when no list
+ *                        is saved (the built-in one has no images)
  *
  * A teaser response sends teaser_url in place of the full image URL; with no
  * teaser_url it sends no image at all, never the full one.
@@ -140,4 +145,40 @@ async function makeTeaser(db, reveal) {
   return uploadPng(cut.data, key, 'image/jpeg');
 }
 
-module.exports = { TEASER_STYLES, DEFAULT_CROP, TeaserError, readCrop, sourceImageUrl, cutTeaser, makeTeaser };
+/** The saved Dream Cities list (page_content world_infrastructure › DREAM_CITIES), or null. */
+async function savedCities(db) {
+  const { sequelize } = db;
+  const [row] = await sequelize.query(
+    `SELECT data FROM page_content WHERE page_name = 'world_infrastructure' AND constant_key = 'DREAM_CITIES'`,
+    { type: sequelize.QueryTypes.SELECT });
+  return Array.isArray(row?.data) && row.data.length ? row.data : null;
+}
+
+/**
+ * The Dream Cities as Lala sees them at story moment `at`: { cities, states }.
+ * A city's image (or story bubble) in a first look is its teaser image, or
+ * none without one; a hidden one is none; the full image URL never goes out
+ * before its moment. states: { 'city:<key>' | 'city_bubble:<key>': 'teaser' | 'hidden' }.
+ */
+async function citiesAt(db, showId, at) {
+  const list = await savedCities(db);
+  const view = await require('./pulseReveals').revealsAt(db, showId, at);
+  const states = {};
+  const cities = list ? list.filter((c) => c && c.key).map((city) => {
+    const out = { ...city };
+    for (const [kind, field, styleField] of [['city', 'image_url', 'teaser_style'], ['city_bubble', 'bubble_image_url', 'bubble_teaser_style']]) {
+      const state = view.stateOf('image', city.key, kind);
+      if (state === 'revealed') continue;
+      states[`${kind}:${city.key}`] = state;
+      if (state === 'hidden') { out[field] = null; continue; }
+      const teaser = view.teaserOf('image', city.key, kind) || {};
+      out[field] = teaser.url || null;
+      out[styleField] = teaser.style || 'crop';
+      if (kind === 'city') out.image_alt = '';
+    }
+    return out;
+  }) : null;
+  return { cities, states };
+}
+
+module.exports = { TEASER_STYLES, DEFAULT_CROP, TeaserError, readCrop, sourceImageUrl, cutTeaser, makeTeaser, savedCities, citiesAt };
