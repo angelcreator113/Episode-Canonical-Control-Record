@@ -161,6 +161,11 @@ async function runOne(db, { now = new Date() } = {}) {
       return job;
     }
     const result = (await handler(db, job)) || {};
+    // A handler may decline the job with a reason, e.g. a voice not approved (Task #3029).
+    if (result.skipped) {
+      await finish({ status: 'skipped', error: String(result.skipped).slice(0, 1000) });
+      return job;
+    }
     const draftIds = Array.isArray(result.draftIds) ? result.draftIds.map(String) : [];
     await finish({ status: 'done', error: null, draft_ids: draftIds });
   } catch (err) {

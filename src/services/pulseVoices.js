@@ -181,10 +181,47 @@ async function buildVoice(db, characterId) {
     source_hash: sourceHash(source),
     status: 'built',
     built_at: new Date(),
+    // A rebuilt voice is a new voice: it waits for Evoni's approval again (Task #3029).
+    approved_at: null,
+    approved_by: null,
   };
   const existing = await db.PulseVoice.findOne({ where: { registry_character_id: character.id } });
   if (existing) return existing.update(values);
   return db.PulseVoice.create({ registry_character_id: character.id, examples_json: [], ...values });
+}
+
+/**
+ * Evoni's approval (Task #3029; Evoni, 2026-10-12: "Approve their voice
+ * before automated posting starts"). Her edits keep it; a rebuild clears it.
+ * Only the worker's jobs (ambient, event, comment, storyline) need it;
+ * drafting she starts herself does not.
+ */
+const isApproved = (voice) => Boolean(voice && voice.approved_at);
+
+async function approveVoice(voice, by = null) {
+  await voice.update({ approved_at: new Date(), approved_by: by ? String(by).slice(0, 255) : null });
+  return voice;
+}
+
+async function unapproveVoice(voice) {
+  await voice.update({ approved_at: null, approved_by: null });
+  return voice;
+}
+
+/**
+ * Why the worker may not draft for this character now, or null when it may:
+ * no voice, or a voice not approved. Checked again when a job runs, as an
+ * approval can be withdrawn after the job was queued.
+ */
+async function automationBlocker(db, characterId) {
+  const voice = await db.PulseVoice.findOne({ where: { registry_character_id: characterId } });
+  if (!voice) return 'No Voice Profile yet.';
+  if (!isApproved(voice)) {
+    const character = await db.RegistryCharacter.findByPk(characterId, { attributes: ['display_name', 'selected_name'] });
+    const name = character ? (character.selected_name || character.display_name) : 'This character';
+    return `${name}'s voice is waiting for approval in Admin › The Pulse › Voices.`;
+  }
+  return null;
 }
 
 /** Does the voice need a rebuild: none yet, or the public face changed since it was built. */
@@ -249,4 +286,5 @@ async function removeExample(voice, exampleId) {
 module.exports = {
   BANNED_PHRASES, POSTING_STAGES, MAX_EXAMPLES, TEMPERAMENTS,
   findBanned, voiceSource, sourceHash, normalizeHabits, needsRebuild, eligible, buildVoice, addExample, removeExample, VoiceError,
+  isApproved, approveVoice, unapproveVoice, automationBlocker,
 };

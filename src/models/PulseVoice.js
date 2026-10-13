@@ -19,6 +19,9 @@ module.exports = (sequelize, DataTypes) => {
     built_at:              { type: DataTypes.DATE, allowNull: true },
     edited_by:             { type: DataTypes.STRING(255), allowNull: true },
     edited_at:             { type: DataTypes.DATE, allowNull: true },
+    // Evoni's approval (Task #3029): the worker drafts only for an approved voice.
+    approved_at:           { type: DataTypes.DATE, allowNull: true },
+    approved_by:           { type: DataTypes.STRING(255), allowNull: true },
   }, {
     sequelize, modelName: 'PulseVoice',
     tableName: 'pulse_voices', underscored: true,

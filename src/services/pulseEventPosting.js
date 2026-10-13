@@ -99,7 +99,9 @@ async function whoPosts(db, { showId, episodeId }) {
     const { ledgerDeltas, clamp } = require('./pulseCloseness');
     for (const [other, delta] of await ledgerDeltas(db, showId, lalaId, order)) closeness.set(other, clamp((closeness.get(other) || 0) + delta));
   }
-  const candidates = (await require('./pulseVoices').eligible(db, showId, { at: order })).filter((c) => c.voice);
+  // Only approved voices post on their own (Task #3029).
+  const { eligible, isApproved } = require('./pulseVoices');
+  const candidates = (await eligible(db, showId, { at: order })).filter((c) => isApproved(c.voice));
   const scored = candidates.map(({ character, profile, voice }) => {
     const profileId = Number(profile.id);
     const isLala = lalaId && profileId === Number(lalaId);
@@ -147,6 +149,8 @@ async function enqueueForEpisode(db, { showId, episodeId }) {
 /** The queue handlers for event posts and their comments. */
 async function handleEvent(db, job) {
   const p = job.payload_json || {};
+  const blocked = await require('./pulseVoices').automationBlocker(db, p.character_id);
+  if (blocked) return { skipped: blocked };
   const { post } = await require('./pulseDrafter').draftAndRoute(db, {
     showId: job.show_id, characterId: p.character_id, moment: p.moment,
     context: { about: p.about, episode_id: p.episode_id || null, event_id: p.event_id || null },
@@ -161,6 +165,8 @@ async function handleEvent(db, job) {
 
 async function handleComment(db, job) {
   const p = job.payload_json || {};
+  const blocked = await require('./pulseVoices').automationBlocker(db, p.character_id);
+  if (blocked) return { skipped: blocked };
   const { comment } = await require('./pulseDrafter').draftCommentAndRoute(db, { postId: p.post_id, characterId: p.character_id });
   return { draftIds: [comment.id] };
 }

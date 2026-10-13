@@ -78,8 +78,12 @@ async function queueDueBeats(db, showId) {
     order: [['story_order', 'ASC'], ['created_at', 'ASC']],
   });
   const queue = require('./pulseQueue');
+  const { isApproved } = require('./pulseVoices');
   const jobs = [];
   for (const beat of beats) {
+    // A beat waits, still planned, until its poster's voice is approved (Task #3029).
+    const voice = await db.PulseVoice.findOne({ where: { social_profile_id: beat.poster_profile_id } });
+    if (!isApproved(voice)) continue;
     // Claim the beat first so two ticks never queue it twice.
     const [claimed] = await db.PulseStorylineBeat.update({ status: 'queued' }, { where: { id: beat.id, status: 'planned' } });
     if (!claimed) continue;
@@ -101,6 +105,12 @@ async function handleStoryline(db, job) {
     return { draftIds: [] };
   }
   const characterId = await posterCharacter(db, beat.poster_profile_id);
+  // Approval withdrawn since the beat was queued: back to planned, to queue again once approved.
+  const blocked = await require('./pulseVoices').automationBlocker(db, characterId);
+  if (blocked) {
+    await beat.update({ status: 'planned', job_id: null });
+    return { skipped: blocked };
+  }
   const about = `${storyline.premise ? `${storyline.premise} ` : ''}This post should: ${beat.brief}`;
   const { post } = await require('./pulseDrafter').draftAndRoute(db, {
     showId: storyline.show_id, characterId, moment: beat.story_order,

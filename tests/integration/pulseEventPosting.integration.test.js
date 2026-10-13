@@ -65,7 +65,7 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] }
       c[key] = uuid();
       await run(`INSERT INTO registry_characters (id, registry_id, character_key, display_name, depth_level, feed_profile_id, created_at, updated_at)
                  VALUES (:id, :reg, :key, :name, 'alive', :feed, NOW(), NOW())`, { id: c[key], reg: ids.reg, key: `${key}-${tag}`, name: key, feed: p[key] });
-      await models.PulseVoice.create({ registry_character_id: c[key], social_profile_id: p[key], habits_json: { case: 'lowercase', temperament: temperaments[key] }, examples_json: [], status: 'built' });
+      await models.PulseVoice.create({ registry_character_id: c[key], social_profile_id: p[key], habits_json: { case: 'lowercase', temperament: temperaments[key] }, examples_json: [], status: 'built', approved_at: new Date(), approved_by: 'evoni' });  // approved: the worker posts only for approved voices (Task #3029)
     }
     // Marcus and Kim were guests at the gala; Nia is Lala's bestie; Quiet is neither.
     await run(`INSERT INTO world_events (id, show_id, name, status, used_in_episode_id, cost_coins, prestige, canon_consequences, created_at, updated_at)

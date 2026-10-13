@@ -8,7 +8,12 @@
  *                                     banned phrases (requireAuth)
  *   POST   /:characterId/build        builds or rebuilds a voice: one AI
  *                                     call (requireAuth + ADMIN + aiRateLimiter)
- *   PUT    /:id { habits }            Evoni's edit of the habits (ADMIN)
+ *   PUT    /:id { habits }            Evoni's edit of the habits (ADMIN);
+ *                                     keeps an approval
+ *   POST   /:id/approve               Evoni approves the voice: the worker
+ *                                     may now post for the character (ADMIN;
+ *                                     Task #3029). A rebuild clears it.
+ *   POST   /:id/unapprove             withdraws it (ADMIN)
  *   POST   /:id/examples { text, kind?, post_id? }  a pinned post or an
  *                                     edit as an example (ADMIN)
  *   DELETE /:id/examples/:exampleId   (ADMIN)
@@ -35,6 +40,8 @@ const shape = (v) => (v ? {
   built_at: v.built_at,
   edited_by: v.edited_by,
   edited_at: v.edited_at,
+  approved_at: v.approved_at || null,
+  approved_by: v.approved_by || null,
 } : null);
 
 /** A VoiceError as its response; false for anything else. */
@@ -129,6 +136,30 @@ router.put('/:id', requireAuth, authorize(['ADMIN']), async (req, res) => {
     return res.json({ success: true, voice: shape(voice) });
   } catch (err) {
     console.error('[PulseVoices] PUT error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/:id/approve', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const voice = await voiceOr404(req, res);
+    if (!voice) return undefined;
+    await require('../services/pulseVoices').approveVoice(voice, byOf(req));
+    return res.json({ success: true, voice: shape(voice) });
+  } catch (err) {
+    console.error('[PulseVoices] approve error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/:id/unapprove', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const voice = await voiceOr404(req, res);
+    if (!voice) return undefined;
+    await require('../services/pulseVoices').unapproveVoice(voice);
+    return res.json({ success: true, voice: shape(voice) });
+  } catch (err) {
+    console.error('[PulseVoices] unapprove error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
