@@ -9,10 +9,11 @@
  *   TIERS            [{ key, label, from }], smallest first
  *   tierFor(count)   the tier for a count, or null when there is no count
  *
- * The stored 4-tier social_profiles.follower_tier stays as it is for
- * profile generation and scoring (her choice); reconciling the two is
- * later work. frontend/src/lib/pulseAudience.js mirrors this file and is
- * pinned to it by its test.
+ * The stored social_profiles.follower_tier uses these same six keys for
+ * profile generation and scoring (Evoni, 2026-10-13, Task #3106;
+ * utils/followerTiers), set once from each profile's count. The Pulse
+ * still shows a tier from the count at that moment. frontend/src/lib/
+ * pulseAudience.js mirrors this file and is pinned to it by its test.
  */
 
 const TIERS = [

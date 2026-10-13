@@ -25,10 +25,12 @@ describe('estimateStart', () => {
     expect(estimateStart({ follower_count_approx: 'unknown', follower_tier: 'mid' })).toEqual({ count: TIER_MIDDLE.mid, from: 'the middle of the mid tier' });
   });
 
-  test("each stored tier's middle lands in its matching count tier (Task #3068)", () => {
+  test("each stored tier's middle lands in its matching count tier (Task #3068), all six (Task #3106)", () => {
     const { tierFor } = require('../../../src/services/pulseAudience');
     expect(Object.fromEntries(Object.entries(TIER_MIDDLE).map(([stored, count]) => [stored, tierFor(count).key])))
-      .toEqual({ micro: 'micro', mid: 'mid', macro: 'macro', mega: 'mega' });
+      .toEqual({ emerging: 'emerging', nano: 'nano', micro: 'micro', mid: 'mid', macro: 'macro', mega: 'mega' });
+    // The four older middles are unchanged, so no starting count moved with the labels.
+    expect(TIER_MIDDLE).toMatchObject({ micro: 25000, mid: 50000, macro: 500000, mega: 5000000, nano: 5000, emerging: 500 });
     expect(estimateStart({ follower_count_approx: null, follower_tier: 'micro' })).toEqual({ count: 25000, from: 'the middle of the micro tier' });
   });
 

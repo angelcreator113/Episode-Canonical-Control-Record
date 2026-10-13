@@ -181,7 +181,8 @@ const ARCHETYPES = [
   'overnight_rise', 'cautionary', 'the_peer', 'the_watcher',
   'chaos_creator', 'community_builder',
 ];
-const FOLLOWER_TIERS = ['micro', 'mid', 'macro', 'mega'];
+// The six count tiers (utils/followerTiers; Task #3106).
+const FOLLOWER_TIERS = require('../utils/followerTiers').FOLLOWER_TIER_KEYS;
 
 const schedulerConfig = {
   enabled: false,
@@ -394,7 +395,7 @@ EXISTING FEED COMPOSITION (${existing.length} profiles):
 VALID VALUES:
 - platform: instagram, tiktok, youtube, twitter, onlyfans
 - archetype: polished_curator, messy_transparent, soft_life, explicitly_paid, overnight_rise, cautionary, the_peer, the_watcher, chaos_creator, community_builder
-- follower_tier: micro, mid, macro, mega
+- follower_tier: emerging, nano, micro, mid, macro, mega
 
 REQUIREMENTS:
 1. Each creator must feel like a REAL person with a specific story, wound, contradiction, or tension
@@ -649,7 +650,7 @@ IMPORTANT RULES:
 Return ONLY valid JSON with these fields:
 {
   "display_name": "name on platform",
-  "follower_tier": "micro|mid|macro|mega",
+  "follower_tier": "emerging|nano|micro|mid|macro|mega",
   "follower_count_approx": "e.g. 47k",
   "content_category": "primary PUBLIC-FACING category (what audience sees)",
   "archetype": "polished_curator|messy_transparent|soft_life|explicitly_paid|overnight_rise|cautionary|the_peer|the_watcher|chaos_creator|community_builder",

@@ -91,7 +91,8 @@ const REGISTRY_ENUMS = Object.freeze({
   relationship_status: RELATIONSHIP_STATUSES,
   // How the character is present online, not a platform name.
   platform_primary: Object.freeze(['lalaverse_main', 'multi_platform', 'live_first', 'archive_heavy', 'unknown']),
-  follower_tier: Object.freeze(['ghost', 'micro', 'mid', 'macro', 'mega', 'unknown']),
+  // The six count tiers (Task #3106), plus ghost (no public presence) and unknown, which stay in the registry.
+  follower_tier: Object.freeze(['ghost', 'emerging', 'nano', 'micro', 'mid', 'macro', 'mega', 'unknown']),
 });
 
 // The words the character generator's and the section fill-in's prompts
@@ -110,7 +111,7 @@ const REGISTRY_ALIASES = Object.freeze({
   }),
   sibling_position: Object.freeze({ only: 'only_child', eldest: 'oldest' }),
   relationship_status: RELATIONSHIP_STATUS_ALIASES,
-  follower_tier: Object.freeze({ nano: 'micro', mid_tier: 'mid' }),
+  follower_tier: Object.freeze({ mid_tier: 'mid' }),
 });
 
 /** The registry's value for one of its ENUM fields (REGISTRY_ENUMS): the value itself, or the one an old word means; else null. */

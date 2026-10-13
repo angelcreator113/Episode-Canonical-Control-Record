@@ -129,7 +129,7 @@ const links = (h) => q(
     const res = await bulk('real_world', [{ handle: handle('f'), platform: 'instagram', vibe_sentence: 'Skincare at dawn.' }]);
     expect(res.status).toBe(200);
     expect(await row(handle('f'), 'follower_tier, content_category, age_range, geographic_base, platform_metrics, revenue_streams, creator_name, world_exists, generation_model')).toEqual({
-      follower_tier: 'mid', // 'nano' is not a tier
+      follower_tier: 'nano', // one of the six count tiers (Task #3106)
       content_category: 'beauty',
       age_range: '25-34',
       geographic_base: 'Atlanta',
