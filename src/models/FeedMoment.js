@@ -55,6 +55,8 @@ module.exports = (sequelize) => {
     // screens; screen_content is the fallback (migration 20261004160000,
     // services/feedMomentLink.js, docs/FEED_POSTS.md).
     feed_post_id: { type: DataTypes.UUID, allowNull: true },
+    // The beat's story moment, a storyClock phase; null is During (migration 20261013120000; Task #3111).
+    story_phase: { type: DataTypes.STRING(20), allowNull: true },
   }, {
     tableName: 'feed_moments',
     timestamps: true,

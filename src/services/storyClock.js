@@ -73,13 +73,15 @@ async function presentOrder(models, showId) {
 
 /**
  * May this post appear at a beat of an episode numbered `episodeNumber`?
+ * The beat is During its episode unless pinned to another phase (Task #3111).
  * { ok: true, check: 'ok' | 'unknown' } or { ok: false, message }.
  */
-function checkAtBeat(order, episodeNumber) {
-  const at = beatOrder(episodeNumber);
+function checkAtBeat(order, episodeNumber, phase = null) {
+  const at = phase ? orderOf(episodeNumber, phase) : beatOrder(episodeNumber);
   if (!Number.isInteger(order) || !Number.isInteger(at)) return { ok: true, check: 'unknown' };
   if (order <= at) return { ok: true, check: 'ok' };
-  return { ok: false, message: `This post happens ${label(order)}; a beat of Ep ${episodeNumber} is earlier in story time. Lala cannot see a post that has not been written yet.` };
+  const when = phase ? `a beat at ${label(at)}` : `a beat of Ep ${episodeNumber}`;
+  return { ok: false, message: `This post happens ${label(order)}; ${when} is earlier in story time. Lala cannot see a post that has not been written yet.` };
 }
 
 /**
