@@ -187,7 +187,9 @@ const EpisodeDetail = () => {
   }, [checksEpisodeId]);
 
   const [showMoreActions, setShowMoreActions] = useState(false);
-  const [episodeEvents, setEpisodeEvents] = useState([]);
+  // { episodeId, events, failed? } — the Wardrobe's events and the episode
+  // they were read for (Task #3107); null until the first read.
+  const [episodeEvents, setEpisodeEvents] = useState(null);
   // The source event, for the header's link back to its Event Package
   // (Task #2356): the brief's event (episode_briefs.event_id, §8(w) P2),
   // which GET /episodes/:id/events returns first, flagged link.anchor.
@@ -236,6 +238,10 @@ const EpisodeDetail = () => {
     };
   }, [headerEpisodeId]);
   const [selectedEvent, setSelectedEvent] = useState(null);
+  // Only this episode's events, never a list (or a choice) left from the
+  // episode shown before; null while this episode's read is in flight.
+  const wardrobeEvents = episodeEvents?.episodeId === episodeId ? episodeEvents.events : null;
+  const wardrobeEvent = wardrobeEvents?.find((ev) => ev.id === selectedEvent?.id) || null;
   const [characterState, setCharacterState] = useState({});
 
   // Fetch episode data - extracted for reuse
@@ -364,14 +370,26 @@ const EpisodeDetail = () => {
 
     // The episode's own events — anchor from the brief first, then any
     // additional linked events. No scan of the show's event list.
+    // Task #3107: the page stays mounted from one episode to the next, and
+    // the old `!selectedEvent` check kept the previous episode's event. The
+    // list now belongs to one episode id; the choice survives a reload of the
+    // same episode when its event is still linked, else it is the anchor (the
+    // banner's "From event"); a late reply for another episode is dropped.
+    let cancelled = false;
     const fetchEvents = async () => {
       try {
         const data = await getEpisodeEvents(episodeId);
+        if (cancelled) return;
         const linked = data?.events || [];
-        setEpisodeEvents(linked);
-        if (linked.length > 0 && !selectedEvent) setSelectedEvent(linked[0]);
+        setEpisodeEvents({ episodeId, events: linked });
+        setSelectedEvent((prev) => linked.find((ev) => ev.id === prev?.id)
+          || linked.find((ev) => ev.link?.anchor) || linked[0] || null);
       } catch (err) {
         console.error('Failed to load episode events:', err);
+        if (!cancelled) {
+          setEpisodeEvents({ episodeId, events: [], failed: true });
+          setSelectedEvent(null);
+        }
       }
     };
 
@@ -387,11 +405,14 @@ const EpisodeDetail = () => {
 
     fetchEvents();
     fetchCharState();
+    return () => { cancelled = true; };
   }, [episode, tabKey, episodeId]);
 
   useEffect(() => {
     if (!episodeId) return undefined;
     let cancelled = false;
+    // A new episode drops the last one's link until its own arrives (Task #3107).
+    setSourceEvent(null);
     // Optional header detail: any failure, synchronous or not, leaves the
     // link off and never breaks the page.
     const loadSourceEvent = async () => {
@@ -845,18 +866,23 @@ const EpisodeDetail = () => {
         {/* Wardrobe Tab */}
         {tabKey === 'production.wardrobe' && (
           <div>
-            {/* Unified wardrobe — event picker + outfit builder */}
-            {episodeEvents.length > 0 ? (
+            {/* Unified wardrobe — event picker + outfit builder, for this
+                episode's own events only (Task #3107) */}
+            {wardrobeEvents === null ? (
+              <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-secondary)', fontSize: 13 }} data-testid="wardrobe-events-loading">
+                Loading this episode's event…
+              </div>
+            ) : wardrobeEvents.length > 0 ? (
               <div>
-                {episodeEvents.length > 1 && (
+                {wardrobeEvents.length > 1 && (
                   <div style={{ marginBottom: 10 }}>
                     <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>
                       STYLING FOR EVENT
                     </label>
                     <select
-                      value={selectedEvent?.id || ''}
+                      value={wardrobeEvent?.id || ''}
                       onChange={(e) => {
-                        const ev = episodeEvents.find(ev => ev.id === e.target.value);
+                        const ev = wardrobeEvents.find(ev => ev.id === e.target.value);
                         setSelectedEvent(ev || null);
                       }}
                       style={{
@@ -864,7 +890,7 @@ const EpisodeDetail = () => {
                         fontSize: 13, color: 'var(--text-primary)', background: 'var(--surface-card)', width: '100%', maxWidth: 400,
                       }}
                     >
-                      {episodeEvents.map(ev => (
+                      {wardrobeEvents.map(ev => (
                         <option key={ev.id} value={ev.id}>
                           {ev.name} — {ev.dress_code || 'No dress code'} (Prestige {ev.prestige || '?'})
                         </option>
@@ -872,11 +898,13 @@ const EpisodeDetail = () => {
                     </select>
                   </div>
                 )}
-                {selectedEvent && (
+                {wardrobeEvent && (
                   <EpisodeWardrobeGameplay
+                    // A new episode starts the game fresh, with nothing of the last one's.
+                    key={episodeId}
                     episodeId={episodeId}
                     showId={episode?.show_id || episode?.showId}
-                    event={selectedEvent}
+                    event={wardrobeEvent}
                     // The script's closet beat, the beat the look chip names (Task #2880).
                     closetBeat={closetBeat(episode?.script_content)}
                     // One coin balance (Evoni, 2026-10-07): the game reads Lala's
@@ -891,12 +919,24 @@ const EpisodeDetail = () => {
                 )}
               </div>
             ) : (
-              <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-secondary)' }}>
+              // No default event (Task #3107): without its own event, the
+              // episode has no dress code, venue or look to style for.
+              <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-secondary)' }} data-testid="wardrobe-no-event">
                 <div style={{ fontSize: 40, marginBottom: 8 }}>💌</div>
-                <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-secondary)' }}>No events linked to this episode</div>
-                <div style={{ fontSize: 13, marginTop: 4 }}>
-                  Inject an event from the Events Library first, then come back to build your outfit.
-                </div>
+                {episodeEvents.failed ? (
+                  <>
+                    <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-secondary)' }}>Could not load this episode's event</div>
+                    <div style={{ fontSize: 13, marginTop: 4 }}>Reload the page to try again.</div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-secondary)' }}>No events linked to this episode</div>
+                    <div style={{ fontSize: 13, marginTop: 4 }}>
+                      The Wardrobe styles for the episode's own event: its dress code, venue and look.
+                      Inject an event from the Events Library first, then come back to build your outfit.
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>

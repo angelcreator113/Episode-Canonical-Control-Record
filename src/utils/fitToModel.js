@@ -18,7 +18,8 @@ const VALID_ARCHETYPES = new Set([
   'overnight_rise', 'cautionary', 'the_peer', 'the_watcher',
   'chaos_creator', 'community_builder',
 ]);
-const VALID_FOLLOWER_TIERS = new Set(['micro', 'mid', 'macro', 'mega']);
+// The six count tiers (utils/followerTiers; Task #3106).
+const VALID_FOLLOWER_TIERS = new Set(require('./followerTiers').FOLLOWER_TIER_KEYS);
 
 function sanitizeEnum(value, validSet, fallback) {
   if (!value) return fallback;

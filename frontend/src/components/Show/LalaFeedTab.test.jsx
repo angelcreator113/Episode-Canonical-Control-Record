@@ -81,27 +81,17 @@ describe("Lala's Feed tab", () => {
     confirm.mockRestore();
   });
 
-  test('Post as Lala writes a post, live or as a draft', async () => {
+  test('Post as Lala sends a draft to Review; there is no Post now (Task 3103)', async () => {
     wrap();
     fireEvent.click(await screen.findByTestId('feed-post-as-lala'));
     const composer = screen.getByTestId('feed-composer');
+    expect(within(composer).queryByText('Post now')).toBeNull();
     fireEvent.change(within(composer).getByLabelText("What's Lala posting?"), { target: { value: 'Studio day.' } });
-    fireEvent.click(within(composer).getByText('Save as a draft'));
+    fireEvent.click(within(composer).getByText('Send to Review'));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/feed-posts', {
       show_id: 'show-1', content_text: 'Studio day.', poster_handle: 'lala', poster_display_name: 'Lala', status: 'draft',
     }));
-    expect(await screen.findByText('Saved to the queue.')).toBeTruthy();
-  });
-
-  test('Post now, when the server holds it for Review, says so (Task #3047)', async () => {
-    vi.mocked(api.post).mockResolvedValue({ data: { data: { id: 'n1', status: 'draft' }, held_for_review: true, review_reasons: ['lala'] } });
-    wrap();
-    fireEvent.click(await screen.findByTestId('feed-post-as-lala'));
-    const composer = screen.getByTestId('feed-composer');
-    fireEvent.change(within(composer).getByLabelText("What's Lala posting?"), { target: { value: 'Studio day.' } });
-    fireEvent.click(within(composer).getByText('Post now'));
-    expect(await screen.findByText('Sent to Review: only an admin can post as Lala right away.')).toBeTruthy();
-    expect(screen.queryByText('Posted to her feed.')).toBeNull();
+    expect(await screen.findByText('Sent to Review. Approve it in the queue to post it.')).toBeTruthy();
   });
 
   test('a live post has no edit or approve', async () => {

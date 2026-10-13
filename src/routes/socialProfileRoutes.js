@@ -39,6 +39,7 @@ const {
   logValueTooLong,
 } = require('../utils/fitToModel');
 const { DREAM_CITY_CULTURE, DREAM_CITY_KEYS, feedCity } = require('../utils/feedCities');
+const { DEFAULT_TIER_AFFINITY, withSixTiers } = require('../utils/followerTiers');
 const { generatedProfileFields } = require('../utils/generatedProfileFields');
 const { assignHomeLocation } = require('../services/feedHomeLocation');
 
@@ -131,7 +132,7 @@ Respond ONLY in valid JSON:
   "display_name": "How their name appears on the platform",
   "creator_name": "Their real full name — the actual person behind the handle. e.g. 'Jessica Chen', 'Marcus Rivera'. Every creator has a real name.",
 
-  "follower_tier": "micro|mid|macro|mega",
+  "follower_tier": "emerging|nano|micro|mid|macro|mega (under 1k, 1k–10k, 10k–50k, 50k–250k, 250k–1M, 1M+)",
   "follower_count_approx": "e.g. 2.3k or 47k or 1.2M — realistic for this creator type on this platform",
   "influencer_tier_detail": "Nuanced tier analysis — where they sit relative to their niche, trajectory within their tier, why they're at this level. 2-3 sentences.",
 
@@ -738,7 +739,7 @@ const CHARACTER_FOLLOW_PROFILES = {
     drama_bonus:       0.10,  // Drama draws her in more than she'd admit
     adult_penalty:    -0.15,  // Conflicted — watches but wouldn't follow openly
     same_platform_bonus: { instagram: 0.10, tiktok: 0.05, youtube: 0.05 },
-    follower_tier_affinity: { micro: 0.70, mid: 0.85, macro: 0.90, mega: 0.75 },
+    follower_tier_affinity: { emerging: 0.70, nano: 0.70, micro: 0.70, mid: 0.85, macro: 0.90, mega: 0.75 },
     base_follow_threshold: 0.35,  // Minimum score to auto-follow
   },
 
@@ -780,7 +781,7 @@ const CHARACTER_FOLLOW_PROFILES = {
     drama_bonus:       0.15,  // Drama is her #1 engagement driver
     adult_penalty:    -0.05,  // More unfazed than her mother
     same_platform_bonus: { tiktok: 0.15, instagram: 0.08, youtube: 0.05 },
-    follower_tier_affinity: { micro: 0.80, mid: 0.75, macro: 0.70, mega: 0.60 },
+    follower_tier_affinity: { emerging: 0.80, nano: 0.80, micro: 0.80, mid: 0.75, macro: 0.70, mega: 0.60 },
     base_follow_threshold: 0.30,  // Lower threshold — she follows more freely
   },
 };
@@ -848,7 +849,8 @@ function computeFollowScore(characterKey, profileData, dynamicProfile) {
 
   // ── 4. Follower Tier (social proof) ────────────────────────────────────
   const tier = (d.follower_tier || 'mid').toLowerCase();
-  const tierScore = charProfile.follower_tier_affinity[tier] || 0.60;
+  // A stored map without Emerging or Nano reads them as its Micro value (Task #3106).
+  const tierScore = withSixTiers(charProfile.follower_tier_affinity)[tier] || 0.60;
   score += tierScore * 0.10; // 10% weight
 
   // ── 5. Platform Alignment ──────────────────────────────────────────────
@@ -1017,7 +1019,7 @@ async function autoAssignAllFollowers(db, profileId, profileData) {
             drama_bonus: dbp.drama_bonus ?? 0.05,
             adult_penalty: dbp.adult_penalty ?? -0.10,
             same_platform_bonus: dbp.same_platform_bonus || {},
-            follower_tier_affinity: dbp.follower_tier_affinity || { micro: 0.60, mid: 0.70, macro: 0.75, mega: 0.65 },
+            follower_tier_affinity: dbp.follower_tier_affinity || { ...DEFAULT_TIER_AFFINITY },
             base_follow_threshold: dbp.base_follow_threshold ?? 0.35,
           };
 
