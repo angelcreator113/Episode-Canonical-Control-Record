@@ -87,13 +87,6 @@ function pick(scored) {
   return { posters, commenters };
 }
 
-const parse = (v) => {
-  if (typeof v !== 'string') return v ?? null;
-  try { return JSON.parse(v); } catch (err) { console.error('[PulseEventPosting] bad JSON:', err.message); return null; }
-};
-const guestIds = (list) => (Array.isArray(list) ? list : [])
-  .map((g) => Number(typeof g === 'object' && g ? (g.profile_id ?? g.social_profile_id ?? g.id) : g))
-  .filter(Number.isInteger);
 
 /**
  * Map(other profile → closeness to `profileId`) at `order`: each pair's
@@ -125,10 +118,12 @@ async function reactorsOf(db, { showId, episodeId }) {
   // The episode's one event, by the rule every service shares (utils/episodeEventSql; Task #1917).
   const { EPISODE_EVENT_ID_SQL } = require('../utils/episodeEventSql');
   const [events] = await sequelize.query(
-    `SELECT id, name, canon_consequences FROM world_events
+    `SELECT id, name, canon_consequences, source_profile_id FROM world_events
       WHERE id = ${EPISODE_EVENT_ID_SQL} AND show_id = :showId AND deleted_at IS NULL`,
     { replacements: { showId, episodeId } });
-  const guests = new Set(events.flatMap((ev) => guestIds(parse(ev.canon_consequences)?.automation?.guest_profiles)));
+  // Its attendees: the host and the Event Package's Guests (utils/eventAttendees, Task #3082).
+  const { eventAttendees } = require('../utils/eventAttendees');
+  const guests = new Set(events.flatMap((ev) => [...eventAttendees(ev)]));
   const lalaId = await require('./lalaFeedProfile').lalaProfileId(sequelize);
   // Who Lala has met by the episode's After, not by now: its guests meet her during it.
   const order = require('./storyClock').orderOf(episode.episode_number ?? 0, 'after_episode');

@@ -34,14 +34,6 @@ const MOMENT_PHASES = {
 };
 const MOMENTS = [...Object.keys(MOMENT_PHASES), 'story_time'];
 
-const parse = (v) => {
-  if (v == null || typeof v !== 'string') return v || null;
-  try { return JSON.parse(v); } catch (err) {
-    console.error('[PulseReveals] stored JSON parse failed:', err.message);
-    return null;
-  }
-};
-
 /** The episode number a reveal hangs on: its episode, else its event's (used_in_episode_id, else a brief's). */
 async function episodeNumberOf(db, { episode_id: episodeId, event_id: eventId }) {
   const { sequelize } = db;
@@ -81,17 +73,6 @@ function stateAt(reveal, at) {
   return reveal.mode === 'hidden' ? 'hidden' : 'teaser';
 }
 
-async function hasColumn(sequelize, table, column) {
-  const [rows] = await sequelize.query(
-    `SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = :table AND column_name = :column`,
-    { replacements: { table, column } });
-  return rows.length > 0;
-}
-
-const guestIds = (list) => (Array.isArray(list) ? list : [])
-  .map((g) => Number(g?.profile_id ?? g?.id ?? g))
-  .filter((id) => Number.isInteger(id) && id > 0);
-
 /**
  * Map profile id → { episode_id, episode_number, from: 'guest' | 'post' }:
  * the first episode each profile meets Lala in, derived.
@@ -105,9 +86,8 @@ async function metLala(db, showId) {
   };
 
   // (1) Guests of the event an episode was made from, or of its brief's event.
-  const withGuestList = await hasColumn(sequelize, 'world_events', 'guest_list');
   const [events] = await sequelize.query(
-    `SELECT ep.id AS episode_id, ep.episode_number, we.canon_consequences${withGuestList ? ', we.guest_list' : ''}
+    `SELECT ep.id AS episode_id, ep.episode_number, we.canon_consequences, we.source_profile_id
        FROM world_events we
        JOIN episodes ep ON ep.deleted_at IS NULL AND ep.show_id = we.show_id AND ep.episode_number IS NOT NULL
         AND (ep.id = we.used_in_episode_id OR EXISTS (
@@ -115,8 +95,9 @@ async function metLala(db, showId) {
       WHERE we.show_id = :showId AND we.deleted_at IS NULL`,
     { replacements: { showId } });
   for (const ev of events) {
-    const ids = new Set([...guestIds(parse(ev.canon_consequences)?.automation?.guest_profiles), ...guestIds(parse(ev.guest_list))]);
-    for (const id of ids) keep(id, ev, 'guest');
+    // Its attendees by the shared rule: the host and the Event Package's
+    // Guests; the older guest_list column no longer counts (Task #3082).
+    for (const id of require('../utils/eventAttendees').eventAttendees(ev)) keep(id, ev, 'guest');
   }
   const fromGuests = new Set(met.keys());
 
