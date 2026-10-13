@@ -14,6 +14,9 @@
  *   home_city   the show's lala_home city (Show Settings; utils/lalaHome).
  *   career      her career tier from her reputation (character_state,
  *               utils/careerTiers): { tier, label }.
+ *   followers   her canon follower count at the moment and its audience
+ *               tier (pulseFollowers, pulseAudience; Task #3062), else the
+ *               profile's estimate marked estimated.
  *   friends     the LalaVerse profiles she knows directly
  *               (social_profiles.lala_relationship = 'direct'; Evoni's
  *               choice of 2026-10-11), the first six and the total.
@@ -76,6 +79,29 @@ async function friendsOf(sequelize, ownerId, limit, hidden = []) {
 }
 
 /**
+ * Lala's follower count for The Pulse's header (Task #3062; Evoni,
+ * 2026-10-13: her canon count at the moment, with her tier): her accepted
+ * count at `at` in the follower ledger (pulseFollowers.countAt; no `at`, the
+ * latest) and its audience tier (pulseAudience). Before her starting count
+ * is accepted, the profile's free-text estimate, marked estimated. Null
+ * with neither.
+ */
+async function followersOf(models, showId, profile, at) {
+  if (!profile) return null;
+  let count = null;
+  try {
+    count = await require('./pulseFollowers').countAt(models, showId, profile.id, Number.isInteger(at) ? at : null);
+  } catch (err) {
+    console.error('[LalaFeedProfile] follower count read failed:', err.message);
+  }
+  if (count !== null) {
+    const tier = require('./pulseAudience').tierFor(count);
+    return { count, tier: tier ? { key: tier.key, label: tier.label } : null, estimated: false };
+  }
+  return profile.follower_count_approx ? { count: null, tier: null, estimated: true, estimate: profile.follower_count_approx } : null;
+}
+
+/**
  * `allFriends`: every friend (the Friends tab), not the column's first six.
  * `at`: a story order; friends Lala has not met by then are left out (Task #2939).
  */
@@ -89,6 +115,7 @@ async function getLalaFeedProfile(models, showId, { allFriends = false, at } = {
   const tier = state && state.reputation !== null && state.reputation !== undefined ? careerTierFromReputation(state.reputation) : null;
   return {
     profile,
+    followers: await followersOf(models, showId, profile, at),
     portrait_url: character?.portrait_url || null,
     cover_url: character?.cover_url || null,
     home_city: readLalaHome(show?.metadata)?.city || null,

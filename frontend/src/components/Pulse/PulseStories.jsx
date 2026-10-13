@@ -5,8 +5,9 @@
  * photo, else their initial, with their city. Cities: a ring in the city's
  * first colour around its story-bubble image, else its initial in its
  * colours, with its subtitle. Tapping a person filters the feed to them;
- * a city is quiet until phase 7 brings city feeds. A city's story-bubble
- * image before its reveal (Task 2939) is blurred, or its initial when hidden.
+ * a city opens its own feed where the page passes onCity (Task 2987). A
+ * city's story-bubble image before its reveal (Task 2939) shows as its
+ * teaser (Task 3034), or its initial when hidden or with no teaser yet.
  * Styles: pages/SocialMediaPage.css (pl-*).
  */
 import React from 'react';

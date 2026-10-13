@@ -6,7 +6,7 @@
  * Invitation sent, Lala arrives, During, After, the day after, a week after),
  * starting at the present. The preview is Lala's view at that moment: the
  * same reads The Pulse makes with ?at=, so the story clock and reveals apply
- * (hidden items absent, teasers blurred). "Open in The Pulse" goes to
+ * (hidden items absent, teasers in place of their images). "Open in The Pulse" goes to
  * /pulse?at=<order>, which only admins can use.
  * Styles: styles/AdminPanel.css (pulse-clock-*) and, for the preview,
  * pages/SocialMediaPage.css (pl-*).
@@ -92,7 +92,7 @@ export default function PulseStoryClock() {
   return (
     <section className="pulse-clock" aria-labelledby="pulse-clock-heading" data-testid="pulse-clock">
       <h3 id="pulse-clock-heading">Story clock</h3>
-      <p className="pulse-hint">Pick a story moment to see The Pulse exactly as Lala's audience saw it then: hidden items are left out and teasers are blurred.</p>
+      <p className="pulse-hint">Pick a story moment to see The Pulse exactly as Lala's audience saw it then: hidden items are left out and teasers show in place of their images.</p>
       {ctx.loadError && <p className="pulse-error" role="alert">{ctx.loadError}</p>}
       <div className="pulse-clock-controls">
         <button type="button" className="pulse-btn" aria-label="An earlier moment" disabled={i === 0} onClick={() => step(-1)}>

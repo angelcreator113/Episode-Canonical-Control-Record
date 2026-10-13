@@ -5,8 +5,9 @@
  * docs/reads/2026-10-11-pulse-story-clock-read.md). A reveal places one
  * item (post, image, event, character) on the story clock
  * (services/storyClock.js): a moment of its event's episode or a set
- * story time. Before that moment the item is hidden or a blurred "first
- * look" teaser; from it, revealed.
+ * story time. Before that moment the item is hidden or a "first look"
+ * teaser (a detail cut from its image by default, or the image blurred;
+ * services/pulseTeasers.js, Task #3034); from it, revealed.
  *
  *   resolveOrder(db, fields)   the reveal's story order (null when its
  *                              episode is not known yet)

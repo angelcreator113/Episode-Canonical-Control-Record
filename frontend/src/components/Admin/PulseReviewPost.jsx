@@ -1,7 +1,7 @@
 /**
  * The feed's director tools (Task 2925; The Pulse spec §1: nothing behind
  * the curtain appears in Lala's view). Admin › The Pulse › Review uses them;
- * pages/SocialMediaPage uses them until its frame issue removes them.
+ * pages/SocialMediaPage only re-exports them for older imports.
  *
  * Reactions   a post's comments as records: live and drafts, approve and
  *             delete, "Draft reactions" with the reactor picker.

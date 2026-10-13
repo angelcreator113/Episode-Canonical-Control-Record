@@ -10,7 +10,9 @@
  * - the next message defaults to the other one in the conversation;
  * - approve, edit, reject (admin only, once); with ?at= only live messages at
  *   or before the moment show, without the gate or drafts; profile_id=lala
- *   reads Lala's (her Phone) and names her profile.
+ *   reads Lala's (her Phone) and names her profile;
+ * - a refused first message (a sender not Alive, or no manual requests left)
+ *   opens no thread (Task #3053).
  */
 jest.unmock('uuid');
 
@@ -209,5 +211,29 @@ const SECRET = 'still not over the brand deal falling through';
     expect(view.body.threads[0].messages).toHaveLength(2);
     const director = await as(admin, request(app).get(`/api/v1/pulse-dms?show_id=${ids.show}`));
     expect(director.body.threads.find((x) => x.id === threadId).messages).toHaveLength(2);
+  });
+
+  test('a refused first message opens no conversation: a sender not Alive, or no manual requests left (Task #3053)', async () => {
+    const queue = require('../../src/services/pulseQueue');
+    const open = (sender) => as(admin, request(app).post('/api/v1/pulse-dms')).send({ show_id: ids.show, profile_a_id: p.marcus, profile_b_id: p.nia, sender_profile_id: sender, topic: 'the gala' });
+    const threadsOfPair = () => models.PulseDmThread.count({ where: { show_id: ids.show, profile_a_id: Math.min(p.marcus, p.nia), profile_b_id: Math.max(p.marcus, p.nia) }, paranoid: false });
+    // Nia has no registry character, so is not Alive: refused, and no thread.
+    const notAlive = await open(p.nia);
+    expect(notAlive.status).toBeGreaterThanOrEqual(400);
+    expect(notAlive.status).toBeLessThan(500);
+    expect(await threadsOfPair()).toBe(0);
+    // Marcus may write, but today's manual requests are set to 0: 429, and no thread.
+    await queue.saveSettings(models, ids.show, { manual_requests: 0 });
+    try {
+      const capped = await open(p.marcus);
+      expect(capped.status).toBe(429);
+      expect(await threadsOfPair()).toBe(0);
+    } finally {
+      await queue.saveSettings(models, ids.show, { manual_requests: 15 });
+    }
+    // With room, the same request opens the thread and queues its first message.
+    const ok = await open(p.marcus);
+    expect(ok.status).toBe(201);
+    expect(await threadsOfPair()).toBe(1);
   });
 });
