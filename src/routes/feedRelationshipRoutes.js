@@ -10,7 +10,8 @@
  * POST   /              — create
  * PUT    /:id           — update
  * DELETE /:id           — delete
- * GET    /canvas        — nodes + edges formatted for SVG renderer
+ * GET    /canvas        — nodes + edges formatted for SVG renderer; with
+ *                          ?show_id=, each edge's Pulse closeness (read only)
  * POST   /:id/generate-ripples — generate caught-in-middle flags
  */
 const express = require('express');
@@ -114,6 +115,9 @@ router.delete('/:id', async (req, res) => {
 router.get('/canvas', async (req, res) => {
   const { FeedProfileRelationship, SocialProfile } = getModels(req);
   const authorMode = req.query.author_mode === 'true';
+  if (req.query.show_id && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(req.query.show_id))) {
+    return res.status(400).json({ error: 'show_id must be a show id.' });
+  }
   try {
     const relationships = await FeedProfileRelationship.findAll({
       include: [
@@ -160,6 +164,17 @@ router.get('/canvas', async (req, res) => {
       }
     }
 
+    // The Pulse's closeness for each pair at the show's present (Task #3072;
+    // Evoni, 2026-10-13): read only. The kind of relationship The Pulse uses
+    // is social_profile_relationships; this map's types do not steer it.
+    let closeness = null;
+    if (req.query.show_id) {
+      const models = getModels(req);
+      const at = await require('../services/storyClock').presentOrder(models, req.query.show_id);
+      closeness = await require('../services/pulseCloseness').closenessOfPairs(
+        models, req.query.show_id, filteredRels.map(r => [r.influencer_a_id, r.influencer_b_id]), at);
+    }
+    const { pairOf } = require('../services/pulseCloseness');
     const edges = filteredRels.map(r => ({
       id: r.id,
       source: r.influencer_a_id,
@@ -167,6 +182,7 @@ router.get('/canvas', async (req, res) => {
       type: r.relationship_type,
       is_public: r.is_public,
       style: EDGE_STYLES[r.relationship_type] || EDGE_STYLES.orbit,
+      closeness: closeness ? (closeness.get(pairOf(r.influencer_a_id, r.influencer_b_id).join(':')) ?? null) : null,
     }));
 
     res.json({ nodes: Array.from(nodeMap.values()), edges, author_mode: authorMode });

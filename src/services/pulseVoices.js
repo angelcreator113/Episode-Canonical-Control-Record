@@ -14,9 +14,19 @@
  *   aliveProfiles(db, ids)    which of these Feed profiles are Alive
  *   voiceSource(character, profile)  the public face a voice is built
  *                             from; sourceHash() fingerprints it
- *   buildVoice(db, characterId)  one Haiku call: the habits, saved
+ *   buildVoice(db, characterId, { lane, jobId })  one Haiku call: the
+ *                             habits, saved; a manual request by default,
+ *                             an automated one from the queue (Task #3070)
+ *   queueVoiceBuilds(db)      each Active or Alive character with a Feed
+ *                             profile and no voice gets one `voice` job,
+ *                             once (Task #3070; Evoni, 2026-10-13); hourly
+ *                             while the engine runs (startScheduler)
+ *   learnFromEdit(db, …)      an approved draft Evoni edited becomes an
+ *                             "edit" example of its poster's voice
  *   normalizeHabits(raw)      the habits' shape, cleaned and capped
- *   addExample / removeExample   Evoni's edits and pinned posts
+ *   addExample / removeExample   Evoni's edits and pinned posts; the newest
+ *                             MAX_EDIT_EXAMPLES edits are kept, and an edit
+ *                             never pushes out a pinned example
  *
  * Stages (Evoni, 2026-10-12; docs/reads/2026-10-12-pulse-decisions-read.md
  * §1): an Active character gets a Voice Profile and can post; an Alive one
@@ -37,6 +47,8 @@ const ALIVE_STAGES = ['alive'];             // also DMs, closeness, event reacti
 const POSTING_STAGES = ACTIVE_STAGES;
 const stagesFor = (stage) => (stage === 'alive' ? ALIVE_STAGES : ACTIVE_STAGES);
 const MAX_EXAMPLES = 20;
+const MAX_EDIT_EXAMPLES = 8;   // Evoni's edits kept as examples, newest first (Task #3070)
+const TICK_MS = 60 * 60 * 1000;
 const MAX_TEXT = 600;
 
 /** Phrases that read as AI-written: no draft may use them (the gate checks, #2969). */
@@ -163,13 +175,14 @@ Never use these phrases anywhere: ${BANNED_PHRASES.slice(0, 30).join(', ')}.`;
 }
 
 /** Builds (or rebuilds) a character's voice: one AI call, then saved. Examples are kept. */
-async function buildVoice(db, characterId) {
+async function buildVoice(db, characterId, { lane = 'manual', jobId = null } = {}) {
   const { character, profile } = await loadCharacter(db, characterId);
   const source = voiceSource(character.toJSON(), profile);
-  // Building (or rebuilding) a voice is manual work: one request (Task #3031).
+  // Building (or rebuilding) a voice is one request (Task #3031): manual from
+  // Voices, automated when the queue builds it at Active (Task #3070).
   const [[registry]] = await db.sequelize.query('SELECT show_id FROM character_registries WHERE id = :id', { replacements: { id: character.registry_id } });
   if (!registry?.show_id) throw new VoiceError(409, 'This character\'s registry belongs to no show.');
-  await require('./pulseRequests').take(db, { showId: registry.show_id, lane: 'manual', kind: 'voice' });
+  await require('./pulseRequests').take(db, { showId: registry.show_id, lane, kind: 'voice', jobId });
   let message;
   for (const model of MODELS) {
     try {
@@ -289,16 +302,103 @@ async function aliveProfiles(db, profileIds) {
   return new Set(rows.map((r) => Number(r.feed_profile_id)));
 }
 
-/** Adds an example (kind pinned or edit) to a voice, newest first, keeping MAX_EXAMPLES. */
-async function addExample(voice, { text, kind = 'pinned', postId = null, by = null } = {}) {
+/**
+ * Adds an example (kind pinned or edit) to a voice, newest first, keeping
+ * MAX_EXAMPLES. Edits (Task #3070): only the newest MAX_EDIT_EXAMPLES are
+ * kept, and when the list is full an edit pushes out the oldest edit, never
+ * a pinned example.
+ */
+async function addExample(voice, { text, kind = 'pinned', postId = null, commentId = null, by = null } = {}) {
   const clean = typeof text === 'string' ? text.trim().slice(0, MAX_TEXT) : '';
   if (!clean) throw new VoiceError(400, 'An example needs its text.');
   if (!['pinned', 'edit'].includes(kind)) throw new VoiceError(400, 'kind must be pinned or edit.');
   const examples = Array.isArray(voice.examples_json) ? voice.examples_json : [];
   if (postId && examples.some((e) => e.post_id === postId)) throw new VoiceError(409, 'That post is already an example.');
-  const example = { id: crypto.randomUUID(), text: clean, kind, post_id: postId, added_by: by, added_at: new Date().toISOString() };
-  await voice.update({ examples_json: [example, ...examples].slice(0, MAX_EXAMPLES) });
+  if (commentId && examples.some((e) => e.comment_id === commentId)) throw new VoiceError(409, 'That comment is already an example.');
+  const example = {
+    id: crypto.randomUUID(), text: clean, kind, post_id: postId, ...(commentId ? { comment_id: commentId } : {}),
+    added_by: by, added_at: new Date().toISOString(),
+  };
+  let next = [example, ...examples];
+  // Too many edits: the oldest edits go first (the list is newest first).
+  const dropOldestEdit = () => {
+    for (let i = next.length - 1; i >= 0; i -= 1) if (next[i].kind === 'edit') { next.splice(i, 1); return true; }
+    return false;
+  };
+  while (next.filter((e) => e.kind === 'edit').length > MAX_EDIT_EXAMPLES) dropOldestEdit();
+  while (next.length > MAX_EXAMPLES && (kind === 'edit' ? dropOldestEdit() : false)) { /* edits make room */ }
+  if (next.length > MAX_EXAMPLES) next = next.slice(0, MAX_EXAMPLES);
+  await voice.update({ examples_json: next });
   return example;
+}
+
+/**
+ * An approved draft Evoni edited becomes an "edit" example of its poster's
+ * voice (Task #3070; Evoni, 2026-10-13). Returns the example, or null (no
+ * voice, or already one). Never throws: a failure is logged and the
+ * approval stands.
+ */
+async function learnFromEdit(db, { socialProfileId, text, postId = null, commentId = null, by = null }) {
+  try {
+    if (!socialProfileId) return null;
+    const voice = await db.PulseVoice.findOne({ where: { social_profile_id: socialProfileId } });
+    if (!voice) return null;
+    return await addExample(voice, { text, kind: 'edit', postId, commentId, by });
+  } catch (err) {
+    if (err instanceof VoiceError && err.status === 409) return null;
+    console.error('[PulseVoices] the edit could not be kept as an example:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Queues one `voice` build for each Active or Alive character with a Feed
+ * profile and no voice, once ever: a character with any voice job (queued,
+ * done, failed or skipped) is not queued again; a failed build is Evoni's
+ * to retry by hand in Voices. Never calls AI. Returns the jobs.
+ */
+async function queueVoiceBuilds(db) {
+  const [rows] = await db.sequelize.query(
+    `SELECT rc.id, cr.show_id FROM registry_characters rc JOIN character_registries cr ON cr.id = rc.registry_id
+      WHERE rc.deleted_at IS NULL AND cr.deleted_at IS NULL AND cr.show_id IS NOT NULL
+        AND rc.depth_level::text IN (:stages) AND rc.feed_profile_id IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM pulse_voices v WHERE v.registry_character_id = rc.id)
+        AND NOT EXISTS (SELECT 1 FROM pulse_jobs j WHERE j.kind = 'voice' AND j.payload_json->>'character_id' = rc.id::text AND j.deleted_at IS NULL)
+      ORDER BY rc.created_at`, { replacements: { stages: ACTIVE_STAGES } });
+  const queue = require('./pulseQueue');
+  const jobs = [];
+  for (const r of rows) jobs.push(await queue.enqueue(db, { showId: r.show_id, kind: 'voice', payload: { character_id: r.id } }));
+  return jobs;
+}
+
+/** The queue's `voice` handler: builds the voice, unapproved; skipped when one exists by then. */
+async function handleVoiceJob(db, job) {
+  const characterId = job.payload_json?.character_id;
+  if (!characterId) return { skipped: 'No character named.' };
+  if (await db.PulseVoice.findOne({ where: { registry_character_id: characterId } })) return { skipped: 'This character already has a voice.' };
+  await buildVoice(db, characterId, { lane: 'automated', jobId: job.id });
+  return { draftIds: [] };
+}
+
+function registerHandlers() {
+  require('./pulseQueue').register('voice', handleVoiceJob);
+}
+
+let timer = null;
+
+/** The hourly check for characters who need a voice (app.js, with the worker). */
+function startScheduler(db = require('../models'), { intervalMs = TICK_MS } = {}) {
+  if (timer) return false;
+  timer = setInterval(() => {
+    queueVoiceBuilds(db).catch((err) => console.error('[PulseVoices] queueing voice builds failed:', err));
+  }, intervalMs);
+  if (typeof timer.unref === 'function') timer.unref();
+  return true;
+}
+
+function stopScheduler() {
+  if (timer) clearInterval(timer);
+  timer = null;
 }
 
 async function removeExample(voice, exampleId) {
@@ -312,4 +412,5 @@ module.exports = {
   BANNED_PHRASES, POSTING_STAGES, ACTIVE_STAGES, ALIVE_STAGES, MAX_EXAMPLES, TEMPERAMENTS, aliveProfiles,
   findBanned, voiceSource, sourceHash, normalizeHabits, needsRebuild, eligible, buildVoice, addExample, removeExample, VoiceError,
   isApproved, approveVoice, unapproveVoice, automationBlocker,
+  MAX_EDIT_EXAMPLES, learnFromEdit, queueVoiceBuilds, handleVoiceJob, registerHandlers, startScheduler, stopScheduler,
 };

@@ -926,6 +926,8 @@
 .pulse-growth-btn:disabled { opacity: 0.6; cursor: default; }
 .pulse-growth-error { color: var(--danger-text); background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 4px; padding: 6px 8px; font-size: 13px; }
 .pulse-growth-muted { margin: 4px 0 0; color: var(--lala-ink-muted); font-size: 12px; }
+.pulse-growth-influence-now { margin: 0 0 6px; font-size: 14px; }
+.pulse-growth-influence-now b { font-size: 22px; }
 .pulse-growth-card { padding: 12px; border: 1px solid var(--lala-parchment-3); border-radius: var(--lala-radius); background: var(--surface-card); min-width: 0; }
 .pulse-growth-card h3 { margin: 0 0 8px; font-size: 15px; }
 .pulse-growth-chart { width: 100%; min-width: 0; }

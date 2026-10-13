@@ -16,6 +16,9 @@
  *   closenessAt(db, showId, a, b, at)       one pair
  *   ledgerDeltas(db, showId, profileId, at) Map(other → accepted change) for
  *                                           one profile's pairs (event posting)
+ *   closenessOfPairs(db, showId, pairs, at) Map('a:b' → closeness) for many
+ *                                           pairs in two queries (the
+ *                                           Relationship Map, Task #3072)
  *   proposeFromPost(db, postId)             when a post or a comment goes live
  *     (between Alive characters and Lala only; Task #3030):
  *     comment   a live comment on someone's post        NUDGE.comment
@@ -77,6 +80,37 @@ async function ledgerDeltas(db, showId, profileId, at) {
         AND story_order <= :at AND deleted_at IS NULL
       GROUP BY 1`, { replacements: { showId, id: Number(profileId), at } });
   return new Map(rows.map((r) => [Number(r.other), Number(r.sum) || 0]));
+}
+
+/**
+ * Map('a:b' → closeness at `at`) for many pairs of profile ids, keyed by the
+ * lower id first (pairOf): the same value closenessAt gives, in two queries.
+ */
+async function closenessOfPairs(db, showId, pairs, at) {
+  const out = new Map();
+  const keyed = pairs.filter(([a, b]) => a != null && b != null && Number(a) !== Number(b)).map(([a, b]) => pairOf(a, b));
+  if (!keyed.length) return out;
+  const { CLOSENESS } = require('./pulseEventPosting');
+  const ids = [...new Set(keyed.flat())];
+  const [rels] = await db.sequelize.query(
+    `SELECT source_profile_id AS a, target_profile_id AS b, relationship_type::text AS type FROM social_profile_relationships
+      WHERE source_profile_id IN (:ids) AND target_profile_id IN (:ids)`, { replacements: { ids } });
+  const [sums] = await db.sequelize.query(
+    `SELECT profile_a_id AS a, profile_b_id AS b, SUM(delta)::float AS sum FROM pulse_closeness
+      WHERE show_id = :showId AND status = 'accepted' AND story_order <= :at AND deleted_at IS NULL
+        AND profile_a_id IN (:ids) AND profile_b_id IN (:ids)
+      GROUP BY 1, 2`, { replacements: { showId, at, ids } });
+  const base = new Map();
+  for (const r of rels) {
+    const key = pairOf(r.a, r.b).join(':');
+    base.set(key, Math.max(base.get(key) || 0, CLOSENESS[r.type] ?? 0.3));
+  }
+  const moved = new Map(sums.map((r) => [pairOf(r.a, r.b).join(':'), Number(r.sum) || 0]));
+  for (const pair of keyed) {
+    const key = pair.join(':');
+    out.set(key, clamp((base.get(key) || 0) + (moved.get(key) || 0)));
+  }
+  return out;
 }
 
 /** Proposes one change; auto-accepts a small one between other characters. Returns the row, or null (a repeat, or no change). */
@@ -216,5 +250,5 @@ async function decide(row, action, { delta, reason, by } = {}) {
 
 module.exports = {
   NUDGE, AUTO_STEP, AUTO_MOMENT, MAX_ADJUST, CLOSE_LINE, IGNORE_AFTER, CAUSES,
-  pairOf, clamp, handlesIn, baseOf, closenessAt, ledgerDeltas, propose, proposeFromPost, proposeLater, decide, ClosenessError,
+  pairOf, clamp, handlesIn, baseOf, closenessAt, ledgerDeltas, closenessOfPairs, propose, proposeFromPost, proposeLater, decide, ClosenessError,
 };

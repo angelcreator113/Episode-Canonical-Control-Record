@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   Calendar, Camera, Clapperboard, Compass, Home, ImagePlus, Inbox, MapPin, MessageCircle,
-  PlusSquare, Search, Sparkles, User, Users, X,
+  PlusSquare, Search, User, Users, X,
 } from 'lucide-react';
 import api from '../services/api';
 import useActiveShow from '../hooks/useActiveShow';
@@ -131,32 +131,22 @@ const NAV = [
   { key: 'posts', label: 'Feed', Icon: Home },
   { key: 'cities', label: 'Dream Cities', Icon: MapPin },
   { key: 'events', label: 'Events', Icon: Calendar },
-  { key: 'stories', label: 'Stories', Icon: Sparkles },
   { key: 'people', label: 'Characters', Icon: Users },
   { key: 'messages', label: 'Messages', Icon: MessageCircle },
 ];
-const EXPLORE = ['Trending', 'Fashion', 'Beauty', 'Music', 'Lifestyle', 'Creator Hub'];
-const LIVE = new Set(TABS.map((t) => t.key));
-
+// Only views that exist (Evoni, 2026-10-13, Task 3073): the Stories and
+// Explore placeholders are gone; the spec keeps them for later.
 function LeftNav({ tab, onTab }) {
   return (
     <nav className="pl-nav" aria-label="The Pulse">
       <ul>
         {NAV.map(({ key, label, Icon }) => (
           <li key={key}>
-            {LIVE.has(key) ? (
-              <button type="button" className={tab === key ? 'pl-nav-item active' : 'pl-nav-item'} aria-current={tab === key ? 'page' : undefined} onClick={() => onTab(key)}>
-                <Icon size={18} aria-hidden="true" /> {label}
-              </button>
-            ) : (
-              <span className="pl-nav-item quiet" aria-disabled="true" title="Coming to The Pulse"><Icon size={18} aria-hidden="true" /> {label}</span>
-            )}
+            <button type="button" className={tab === key ? 'pl-nav-item active' : 'pl-nav-item'} aria-current={tab === key ? 'page' : undefined} onClick={() => onTab(key)}>
+              <Icon size={18} aria-hidden="true" /> {label}
+            </button>
           </li>
         ))}
-      </ul>
-      <p className="pl-nav-label">Explore</p>
-      <ul className="pl-explore">
-        {EXPLORE.map((label) => <li key={label}><span aria-disabled="true" title="Coming to The Pulse">{label}</span></li>)}
       </ul>
     </nav>
   );

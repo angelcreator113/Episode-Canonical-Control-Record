@@ -29,6 +29,7 @@ const GROWTH = {
   best: [{ post_id: 'x1', likes: 5000, shares: 500, status: 'viral', content_text: 'The gold one.' }, { post_id: 'x2', likes: 2000, shares: 200, status: 'accepted', content_text: 'Studio day.' }],
   worst: [{ post_id: 'x3', likes: 50, shares: 5, status: 'flop', content_text: 'Rain.' }],
   jumps: [{ id: 'b', label: 'After Ep 2', change: 8500, cause: 'episode', episode_number: 2 }, { id: 'o', label: 'The day after Ep 1', change: -500, cause: 'override', reason: 'A quiet day.' }],
+  influence: { now: 6, scale: 10, by_episode: [{ episode_id: 'e1', episode_number: 1, change: 1, after: 5 }, { episode_id: 'e2', episode_number: 2, change: 1, after: 6 }] },
 };
 
 const renderGrowth = (data) => {
@@ -66,13 +67,27 @@ describe('helpers', () => {
 });
 
 describe('the Growth tab', () => {
-  test('reads the growth for the show; a summary with the count and tier, no Influence', async () => {
+  test("Influence, read only (Task 3066): the value of the scale and each episode's change", async () => {
+    renderGrowth(GROWTH);
+    const card = await screen.findByTestId('pulse-growth-influence');
+    expect(card.textContent).toContain('6 of 10');
+    const rows = within(screen.getByTestId('pulse-growth-influence-episodes')).getAllByRole('listitem').map((li) => li.textContent);
+    expect(rows).toEqual(['+1Episode 1 · 5 after', '+1Episode 2 · 6 after']);
+    expect(card.textContent).toContain('Read only: completing an episode changes Influence; The Pulse does not.');
+  });
+
+  test('Influence with no state yet says so', async () => {
+    renderGrowth({ ...GROWTH, influence: { now: null, scale: 10, by_episode: [] } });
+    expect((await screen.findByTestId('pulse-growth-influence')).textContent).toContain('No Influence for Lala yet');
+  });
+
+  test('reads the growth for the show; a summary with the count and tier (Influence has its own card, Task 3066)', async () => {
     renderGrowth(GROWTH);
     const summary = await screen.findByTestId('pulse-growth-summary');
     expect(api.get).toHaveBeenCalledWith('/api/v1/pulse-followers/growth?show_id=show-1');
     expect(summary.textContent).toBe('@lala has 62,500 followers · Mid-tier, +12,500 since her start. One episode change waits in Review.');
     expect(within(summary).getByRole('link', { name: 'Review' }).getAttribute('href')).toBe('/admin?tab=pulse&sub=review');
-    expect(screen.queryByText(/influence/i)).toBeNull();
+    expect(summary.textContent).not.toMatch(/influence/i);
     expect(screen.getByTestId('pulse-growth-start').textContent).toBe('Started at 50,000 followers.');
   });
 
