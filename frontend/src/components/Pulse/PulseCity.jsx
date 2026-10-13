@@ -82,7 +82,7 @@ export default function PulseCity({ show, cities, cityKey, viewAt, onCity }) {
       {error && <p className="pl-error" role="alert">{error}</p>}
       {!posts && !error && <p className="pl-quiet">Loading…</p>}
       {posts && posts.length === 0 && !error && <p className="pl-empty" data-testid="pl-cityfeed-empty">Nothing posted in {city.name} yet.</p>}
-      {(posts || []).map((p) => <PulsePost key={p.id} post={p} />)}
+      {(posts || []).map((p) => <PulsePost key={p.id} post={p} onCity={onCity} />)}
     </div>
   );
 }

@@ -885,6 +885,9 @@ app.use('/api/v1/pulse-polls', pulsePollRoutes);
 // The weekly Pulse recap, Admin side (Task #3008): reads requireAuth; writes requireAuth + ADMIN.
 const pulseRecapRoutes = trackRouteLoad('pulseRecaps', () => require('./routes/pulseRecaps'));
 app.use('/api/v1/pulse-recaps', pulseRecapRoutes);
+// Amazon order history onto wardrobe pieces (Task #3102): requireAuth + ADMIN; never coins.
+const wardrobeOrderRoutes = trackRouteLoad('wardrobeOrders', () => require('./routes/wardrobeOrders'));
+app.use('/api/v1/wardrobe-orders', wardrobeOrderRoutes);
 // The Pulse's posting engine settings and queue (Task #2968): reads requireAuth; settings requireAuth + ADMIN.
 const pulseEngineRoutes = trackRouteLoad('pulseEngine', () => require('./routes/pulseEngine'));
 app.use('/api/v1/pulse-engine', pulseEngineRoutes);

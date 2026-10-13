@@ -6,7 +6,7 @@
  */
 import React from 'react';
 import { vi, describe, beforeEach, afterEach, test, expect } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({ default: { get: vi.fn(), post: vi.fn() } }));
@@ -15,7 +15,9 @@ import PublicRecap, { PUBLIC_RECAPS_URL, weekLabel } from './PublicRecap';
 
 const LIST = [{ id: 'r2', title: 'The gala week', week_start: '2026-09-28' }, { id: 'r1', title: 'A quiet week', week_start: '2026-09-21' }];
 const ONE = (id, title) => ({ recap: { id, title, intro: 'Here is what everyone said.', week_start: id === 'r2' ? '2026-09-28' : '2026-09-21', posts: [
-  { poster_handle: 'marcus.k', poster_display_name: 'Marcus', content_text: 'the gala though', likes: 12400, comments_count: 31, moment: 'During Ep 1' },
+  { poster_handle: 'marcus.k', poster_display_name: 'Marcus', content_text: 'the gala though', likes: 12400, comments_count: 31, moment: 'During Ep 1',
+    image: { url: 'https://site.cdn/site-public/recaps/r/a.jpg', alt: 'Lala on the gala stairs' } },
+  { poster_handle: 'nia', poster_display_name: 'Nia', content_text: 'words only', likes: 3, comments_count: 0, moment: null, image: null },
 ] } });
 const reply = (status, body) => Promise.resolve({ ok: status >= 200 && status < 300, status, json: () => Promise.resolve(body) });
 let fetchMock;
@@ -50,6 +52,11 @@ describe('the public recap page', () => {
     expect(p.textContent).toContain('the gala though');
     expect(p.textContent).toContain('12,400 likes · 31 comments');
     expect(p.textContent).toContain('During Ep 1');
+    // Its public image copy, with its alt text (Task 3099); a post with none shows none.
+    const img = within(p).getByTestId('site-recap-image');
+    expect(img.getAttribute('src')).toBe('https://site.cdn/site-public/recaps/r/a.jpg');
+    expect(img.getAttribute('alt')).toBe('Lala on the gala stairs');
+    expect(within(screen.getAllByTestId('site-recap-post')[1]).queryByTestId('site-recap-image')).toBeNull();
     expect(screen.getByRole('link', { name: 'A quiet week' }).getAttribute('href')).toBe('/pulse-recap/r1');
     expect(screen.queryByRole('link', { name: 'The gala week' })).toBeNull();
     expect(fetchMock.mock.calls.map((c) => c[0])).toEqual([PUBLIC_RECAPS_URL, `${PUBLIC_RECAPS_URL}/r2`]);

@@ -45,6 +45,10 @@ async function shaped(recap) {
     id: recap.id, show_id: recap.show_id, week_start: recap.week_start, status: recap.status,
     title: recap.title, intro: recap.intro, post_ids: recap.post_ids, posts,
     published_at: recap.published_at, published_by: recap.published_by,
+    // Images copied to the public site at publishing, and those that could not be (Task #3099).
+    public_images: Object.values(recap.images || {}).reduce((n, c) => ({
+      copied: n.copied + (c?.key ? 1 : 0), failed: n.failed + (c?.failed ? 1 : 0),
+    }), { copied: 0, failed: 0 }),
   };
 }
 
