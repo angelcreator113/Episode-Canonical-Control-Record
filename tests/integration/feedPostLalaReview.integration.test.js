@@ -1,10 +1,11 @@
 /**
  * Lala's posts always go to Review (Task #3047; The Pulse spec, "Always to
- * Review: Lala's posts, posts or comments about Lala"). Evoni, 2026-10-13:
- * an admin may still post as Lala live (Producer Mode's "Post now") and
- * approve in Review; anyone else's Lala post, or post about her, is saved
- * as a draft for Review, and releasing one is refused. Other posters are
- * unchanged.
+ * Review: Lala's posts, posts or comments about Lala"). Evoni, 2026-10-13
+ * (Task #3103): ALWAYS, even an admin's. A Lala post, or a post about her,
+ * is saved as a draft for Review whoever sends it; only an admin releases
+ * one (her Approve in Review), anyone else's release is refused. Other
+ * posters are unchanged. Lala's finance posts and ripple replies about her
+ * are drafts too.
  */
 jest.unmock('uuid');
 
@@ -64,7 +65,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(word.body.data.status).toBe('live');
   });
 
-  test('a non-admin cannot release a held post; an admin approves it, and may post as Lala live', async () => {
+  test('a non-admin cannot release a held post; an admin approves it, but her own post as Lala is held too', async () => {
     const held = (await create(editor, { content_text: 'New look.', poster_handle: 'lala', status: 'live' })).body.data;
     const refused = await as(editor, request(app).put(`/api/v1/feed-posts/${held.id}`)).send({ status: 'live' });
     expect(refused.status).toBe(403);
@@ -79,8 +80,58 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(approved.body.data.status).toBe('live');
     expect(await wall()).toContain(held.id);
 
-    const now = await create(admin, { content_text: 'Posting this myself.', poster_handle: 'lala', status: 'live' });
-    expect(now.body.held_for_review).toBeUndefined();
-    expect(now.body.data.status).toBe('live');
+    // Task #3103: an admin's post as Lala, or about her, waits in Review like anyone's.
+    for (const body of [{ content_text: 'Posting this myself.', poster_handle: 'lala', status: 'live' }, { content_text: 'Look at @lala tonight.', poster_handle: 'mayaxo' }]) {
+      const now = await create(admin, body);
+      expect(now.body).toMatchObject({ held_for_review: true, data: { status: 'draft', posted_at: null } });
+      expect(await wall()).not.toContain(now.body.data.id);
+    }
+    // An admin's everyday post as someone else still goes live.
+    expect((await create(admin, { content_text: 'Coffee first.', poster_handle: 'mayaxo', status: 'live' })).body.data.status).toBe('live');
+  });
+
+  test("Lala's finance posts are drafts for Review, with or without an episode (Task #3103)", async () => {
+    const finance = require('../../src/services/financialFeedService');
+    const res = await finance.postMilestoneReached(sequelize, showId, [{ goal: { label: '10K coins', reward_coins: 50 } }]);
+    expect(res.posted).toBe(1);
+    const [rows] = await run("SELECT status, poster_handle FROM feed_posts WHERE show_id = :showId AND narrative_function = 'flex'", { showId });
+    expect(rows).toEqual([{ status: 'draft', poster_handle: 'lala' }]);
+  });
+
+  test('a ripple reply about Lala is a draft for Review; one about anyone else follows its live parent (Task #3103)', async () => {
+    const { generateRippleEffects } = require('../../src/services/feedEngagementService');
+    const reactors = [];
+    for (const archetype of ['chaos_creator', 'the_peer', 'polished_curator']) {
+      const [[row]] = await run(`INSERT INTO social_profiles (handle, platform, vibe_sentence, display_name, feed_layer, status, archetype, created_at, updated_at)
+        VALUES (:handle, 'instagram', 'test', :handle, 'lalaverse', 'finalized', :archetype, NOW(), NOW()) RETURNING id`,
+      { handle: `rip${archetype.slice(0, 4)}${showId.slice(0, 6)}`, archetype });
+      reactors.push(row.id);
+    }
+    const parent = async (handle) => models.FeedPost.create({
+      show_id: showId, poster_handle: handle, poster_platform: 'lalaverse', post_type: 'post', content_text: 'big night',
+      status: 'live', posted_at: new Date(), likes: 50000, comments_count: 900, shares: 3000, sample_comments: [], sort_order: 0,
+    });
+    const random = jest.spyOn(Math, 'random').mockReturnValue(0.1);   // every reactor posts
+    // The reactors are these three (the engine picks any finalized profiles at random).
+    const scoped = jest.spyOn(models.SocialProfile, 'findAll').mockResolvedValue(await models.SocialProfile.findAll({ where: { id: reactors } }));
+    try {
+      const lalaPost = await parent('lala');
+      await generateRippleEffects(lalaPost.id, models);
+      const [lalaReplies] = await run('SELECT content_text, status FROM feed_posts WHERE parent_post_id = :id', { id: lalaPost.id });
+      const mentions = lalaReplies.filter((r) => r.content_text.includes('@lala'));
+      expect(mentions.length).toBeGreaterThan(0);
+      expect(mentions.every((r) => r.status === 'draft')).toBe(true);
+
+      const otherPost = await parent('mayaxo');
+      await generateRippleEffects(otherPost.id, models);
+      const [otherReplies] = await run('SELECT status FROM feed_posts WHERE parent_post_id = :id', { id: otherPost.id });
+      expect(otherReplies.length).toBeGreaterThan(0);
+      expect(otherReplies.every((r) => r.status === 'live')).toBe(true);
+    } finally {
+      random.mockRestore();
+      scoped.mockRestore();
+      await run('DELETE FROM feed_posts WHERE social_profile_id IN (:ids)', { ids: reactors });
+      await run('DELETE FROM social_profiles WHERE id IN (:ids)', { ids: reactors });
+    }
   });
 });

@@ -5,8 +5,9 @@
 // otherwise; the episode's own feed answers both; PUT refuses a live post
 // with 409 (2009: no edit button) and only accepts draft|live; posts
 // created inside an episode start as drafts (the generator, a ripple
-// reply to a draft, a financial post tied to an episode); publishing the
-// episode no longer sets them live: they wait for approval (Task #2749).
+// reply to a draft); publishing the episode no longer sets them live: they
+// wait for approval (Task #2749). Lala's finance posts are always drafts,
+// and a ripple reply about Lala too (Task #3103).
 
 const fs = require('fs');
 const path = require('path');
@@ -33,10 +34,11 @@ describe('feed post status contract', () => {
   });
   test('posts created inside an episode start as drafts', () => {
     expect(read('src', 'services', 'feedPostGeneratorService.js')).toMatch(/sort_order: i,\s*\/\/[^\n]*\n\s*status: 'draft',/);
-    expect(read('src', 'services', 'feedEngagementService.js')).toMatch(/status: post\.status === 'draft' \? 'draft' : 'live'/);
+    expect(read('src', 'services', 'feedEngagementService.js')).toMatch(/status: post\.status === 'draft' \|\| held \? 'draft' : 'live'/);
     const fin = read('src', 'services', 'financialFeedService.js');
     expect(fin).toMatch(/timeline_position, status, created_at, updated_at/);
-    expect(fin).toMatch(/status: post\.episode_id \? 'draft' : 'live'/);
+    expect(fin).toMatch(/status: 'draft',/);
+    expect(fin).not.toMatch(/'live'/);
   });
   test('publishing the episode leaves its drafts waiting for approval (Task #2749)', () => {
     const ctl = read('src', 'controllers', 'episodeController.js');
