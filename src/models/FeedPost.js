@@ -32,6 +32,9 @@ module.exports = (sequelize) => {
     // world_locations venue whose city fills place_city. A label only, never Lala's travel.
     place_city: { type: DataTypes.STRING(40), allowNull: true },
     place_location_id: { type: DataTypes.UUID, allowNull: true },
+    // Up to four photos, in order: [{ url, alt }] (migration 20261013060000; Task #3089).
+    // image_url and image_description stay the first one.
+    photos: { type: DataTypes.JSONB, allowNull: true },
 
     likes: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 0 },
     comments_count: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 0 },

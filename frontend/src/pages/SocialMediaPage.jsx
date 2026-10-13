@@ -10,6 +10,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { isAdmin } from '../utils/authGroups';
 import { loadCities, loadPulseCities } from '../lib/pulseCities';
 import PulsePost, { Avatar, cityName } from '../components/Pulse/PulsePost';
+import ComposerPhotos from '../components/Pulse/ComposerPhotos';
+import { addPhotos, photosFormData, MAX_PHOTOS } from '../lib/composerPhotos';
 import PulseStories, { recentPosters } from '../components/Pulse/PulseStories';
 import PulseCity from '../components/Pulse/PulseCity';
 import PulseMessages from '../components/Pulse/PulseMessages';
@@ -174,6 +176,19 @@ function Composer({ show, lala, director, onShared }) {
       .catch((err) => console.error('[ThePulse] places could not be read:', err.response?.status || err.message));
   }, []);
 
+  // Up to four photos, uploaded with the draft (Task 3089); never AI.
+  const [photos, setPhotos] = useState([]);
+  const photosRef = useRef(photos);
+  photosRef.current = photos;
+  useEffect(() => () => photosRef.current.forEach((p) => URL.revokeObjectURL?.(p.preview)), []);
+
+  const pickPhotos = (e) => {
+    const { list, refused } = addPhotos(photos, e.target.files);
+    setPhotos(list);
+    setError(refused ? `Up to ${MAX_PHOTOS} photos, PNG, JPEG or WebP.` : null);
+    e.target.value = '';
+  };
+
   useEffect(() => {
     if (kind !== 'friends' || people.length) return;
     api.get('/api/v1/social-profiles?feed_layer=lalaverse&limit=100')
@@ -192,13 +207,24 @@ function Composer({ show, lala, director, onShared }) {
     try {
       // Lala's posts always wait for Evoni (spec §7): a draft with the
       // current story time, released from Admin › The Pulse › Review.
-      await api.post('/api/v1/feed-posts', {
+      const res = await api.post('/api/v1/feed-posts', {
         show_id: show.id, content_text: composed, poster_handle: ownerHandle,
         poster_display_name: ownerName, social_profile_id: owner?.id || null, poster_platform: 'lalaverse',
         status: 'draft',
         ...(kind === 'update' ? {} : { post_type: RELATIONSHIP_POST_TYPE }),
         ...placeBody(place),
       });
+      const postId = res?.data?.data?.id;
+      if (photos.length && postId) {
+        try {
+          await api.post(`/api/v1/feed-posts/${postId}/photos`, photosFormData(photos));
+        } catch (err) {
+          console.error('[ThePulse] photos could not be added:', err.response?.status || err.message);
+          setError(`The post was saved, but its photos were not: ${err.response?.data?.error || 'try again from Review'}.`);
+        }
+      }
+      photos.forEach((p) => URL.revokeObjectURL?.(p.preview));
+      setPhotos([]);
       setText(''); setFriendId(''); setKind('update'); setPlace('');
       setNote(director ? 'Saved as a draft in Admin › The Pulse › Review.' : 'Sent.');
       onShared?.();
@@ -225,9 +251,14 @@ function Composer({ show, lala, director, onShared }) {
         {kind === 'status' && (
           <p className="pl-chips">{STATUSES.map((s) => <button key={s} type="button" className="pl-chip" onClick={() => setText(s)}>{s}</button>)}</p>
         )}
+        <ComposerPhotos photos={photos} onChange={setPhotos} disabled={busy} />
         <div className="pl-composer-row">
-          <span className="pl-quiet-tools">
-            <span aria-disabled="true" title="Photos are coming to The Pulse"><Camera size={16} aria-hidden="true" /> Photo</span>
+          <span className="pl-composer-tools">
+            <label className={photos.length >= MAX_PHOTOS || busy ? 'pl-photo-pick is-full' : 'pl-photo-pick'}>
+              <Camera size={16} aria-hidden="true" /> Photo{photos.length ? ` (${photos.length}/${MAX_PHOTOS})` : ''}
+              <input type="file" accept="image/png,image/jpeg,image/webp" multiple className="pl-sr" data-testid="pl-photo-input"
+                disabled={photos.length >= MAX_PHOTOS || busy} onChange={pickPhotos} />
+            </label>
           </span>
           <label className="pl-place-pick">
             <MapPin size={16} aria-hidden="true" />

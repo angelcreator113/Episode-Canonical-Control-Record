@@ -41,6 +41,38 @@ export const photosOf = (post) => {
 };
 
 /**
+ * The post's photos with their alt text, { src, alt }: its `photos` list
+ * (Task 3089, up to four) when it has one, else photosOf with the first
+ * photo's description. A first look's photo has no alt text.
+ */
+export function photoItemsOf(post) {
+  const list = Array.isArray(post.photos) ? post.photos.filter((p) => p?.url) : [];
+  const items = list.length
+    ? list.map((p) => ({ src: p.url, alt: p.alt || '' }))
+    : photosOf(post).map((src, i) => ({ src, alt: i === 0 ? (post.image_description || '') : '' }));
+  return items.slice(0, 4).map((p) => (post.photo_teaser ? { ...p, alt: '' } : p));
+}
+
+/** Several photos swipe one at a time (scroll-snap), with "1 / 3" (Task 3089). */
+function PhotoCarousel({ photos }) {
+  const [index, setIndex] = useState(0);
+  const onScroll = (e) => {
+    const el = e.currentTarget;
+    if (el.clientWidth) setIndex(Math.min(photos.length - 1, Math.max(0, Math.round(el.scrollLeft / el.clientWidth))));
+  };
+  return (
+    <div className="pl-photos pl-carousel" data-testid="pl-photos" role="group" aria-roledescription="carousel" aria-label={`${photos.length} photos`}>
+      <div className="pl-carousel-track" onScroll={onScroll} tabIndex={0} aria-label="Swipe for more photos">
+        {photos.map((p, i) => (
+          <img key={p.src} src={p.src} alt={p.alt} aria-roledescription="slide" aria-label={`${i + 1} of ${photos.length}`} />
+        ))}
+      </div>
+      <p className="pl-carousel-count" data-testid="pl-carousel-count" aria-hidden="true">{index + 1} / {photos.length}</p>
+    </div>
+  );
+}
+
+/**
  * revealLabel: Director view's "Reveals: …" chip for the post (or its photos).
  * onCity(key): opens a Dream City's feed from the post's place.
  */
@@ -54,7 +86,7 @@ export default function PulsePost({ post, revealLabel = null, onCity = null }) {
   const commentCount = comments ? comments.length : (post.comments_count ?? 0);
   const shown = comments ? (allComments ? comments : comments.slice(0, 1)) : [];
   const more = comments ? comments.length - shown.length : 0;
-  const photos = photosOf(post);
+  const photos = photoItemsOf(post);
   const when = whenLabel(post.posted_at);
   return (
     <article className="pl-post" data-testid="pl-post">
@@ -78,9 +110,11 @@ export default function PulsePost({ post, revealLabel = null, onCity = null }) {
         : post.content_text && <p className="pl-post-text"><TaggedText text={post.content_text} /></p>}
       {photos.length > 0 && (
         <FirstLook active={Boolean(post.photo_teaser)} style={post.teaser_style}>
-          <div className={`pl-photos pl-photos-${photos.length}`} data-testid="pl-photos">
-            {photos.map((src, i) => <img key={src} src={src} alt={post.photo_teaser ? '' : (i === 0 ? (post.image_description || '') : '')} />)}
-          </div>
+          {photos.length > 1 ? <PhotoCarousel photos={photos} /> : (
+            <div className="pl-photos pl-photos-1" data-testid="pl-photos">
+              <img src={photos[0].src} alt={photos[0].alt} />
+            </div>
+          )}
         </FirstLook>
       )}
       <p className="pl-post-actions">
