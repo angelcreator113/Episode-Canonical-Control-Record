@@ -609,7 +609,10 @@ router.put('/:postId', requireAuth, async (req, res) => {
     }
 
     const released = post.status !== 'live' && updates.status === 'live';
+    const newPhoto = updates.image_url !== undefined && (updates.image_url || null) !== (post.image_url || null);
     await post.update(updates);
+    // A new photo: its teasers are cut again from it before the answer (Task #3052).
+    if (newPhoto) await require('../services/pulseTeasers').recutFor(require('../models'), require('../services/pulseTeasers').postReveals(post.id));
     res.json({ data: post });
     // A draft going live has its numbers proposed after the response, never failing the release (Task #2953).
     if (released) require('../services/pulseNumbers').proposeLater(post);
