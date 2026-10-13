@@ -149,7 +149,7 @@ describe('feedScheduler', () => {
       const createCall = db.SocialProfile.create.mock.calls[0]?.[0];
       if (createCall) {
         // Invalid values should fall back to defaults
-        expect(['micro', 'mid', 'macro', 'mega']).toContain(createCall.follower_tier);
+        expect(require('../../../src/utils/followerTiers').FOLLOWER_TIER_KEYS).toContain(createCall.follower_tier);
         expect(createCall.archetype).toBeDefined();
         expect(createCall.current_trajectory).toBeDefined();
       }
@@ -433,10 +433,12 @@ describe('feedScheduler', () => {
     });
 
     it('should choose a valid follower tier', () => {
-      const validTiers = ['micro', 'mid', 'macro', 'mega'];
-      const spark = scheduler.generateCreatorSpark('real_world');
-
-      expect(validTiers).toContain(spark.follower_tier);
+      // The six count tiers since Task #3106; the spark picks one at random.
+      const validTiers = require('../../../src/utils/followerTiers').FOLLOWER_TIER_KEYS;
+      expect(validTiers).toEqual(['emerging', 'nano', 'micro', 'mid', 'macro', 'mega']);
+      const seen = new Set();
+      for (let i = 0; i < 200; i++) seen.add(scheduler.generateCreatorSpark('real_world').follower_tier);
+      for (const tier of seen) expect(validTiers).toContain(tier);
     });
 
     it('should include lalaverse-specific fields for lalaverse layer', () => {
