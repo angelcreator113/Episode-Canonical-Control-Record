@@ -51,7 +51,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   });
 
   it('a draft can be edited; Release makes it live, posted now, and then it is locked', async () => {
-    const draft = (await auth(request(app).post('/api/v1/feed-posts')).send({ show_id: showId, content_text: 'First words.', status: 'draft' })).body.data;
+    const draft = (await auth(request(app).post('/api/v1/feed-posts')).send({ show_id: showId, content_text: 'First words.', poster_handle: 'mayaxo', status: 'draft' })).body.data;
     const edited = await auth(request(app).put(`/api/v1/feed-posts/${draft.id}`)).send({ content_text: 'Better words.' });
     expect(edited.body.data).toMatchObject({ content_text: 'Better words.', status: 'draft', posted_at: null });
 

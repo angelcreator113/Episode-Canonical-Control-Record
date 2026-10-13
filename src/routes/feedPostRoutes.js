@@ -19,6 +19,23 @@ const { statusWhere, isLive, LOCKED_MESSAGE } = require('../services/feedPostSta
 const { draftReactions, pickReactors, recountComments, DraftError, COMMENT_LOCKED } = require('../services/feedCommentDrafter');
 
 /**
+ * Why a post may go live only by an admin's hand (The Pulse spec, "Always to
+ * Review: Lala's posts, posts or comments about Lala"; Task #3047): Lala's
+ * own posts and posts about her, by pulseGate.reviewReasons. Evoni, 2026-10-13:
+ * an admin (her "Post now" as Lala, her Approve in Review) may still put one
+ * live; anyone else's is held for Review. [] means no hold: other posters, or
+ * an admin. Reads Lala's profile only when it has to.
+ */
+async function reviewHold(req, post) {
+  const { userInGroup } = require('../middleware/auth');
+  if (userInGroup(req.user, 'admin')) return [];
+  const { sequelize } = require('../models');
+  const lalaProfileId = await require('../services/lalaFeedProfile').lalaProfileId(sequelize);
+  return require('../services/pulseGate').reviewReasons(post, { pass: true }, { lalaProfileId })
+    .filter((r) => r === 'lala' || r === 'about_lala');
+}
+
+/**
  * Adds author_portrait_url to each post and portrait_url to each of its
  * comments, from the registry character linked to the author's profile
  * (registry_characters.feed_profile_id; Task #2924). One query for the page.
@@ -210,15 +227,21 @@ router.post('/', requireAuth, async (req, res) => {
     if (!content_text?.trim()) return res.status(400).json({ error: 'content_text is required' });
     const scoped = statusWhere(status === undefined ? 'live' : status);
     if (scoped.error || !scoped.status) return res.status(400).json({ error: 'status must be draft or live' });
-    const post = await FeedPost.create({
-      show_id,
-      episode_id: episode_id || null,
+    const fields = {
       social_profile_id: social_profile_id || null,
       poster_handle: String(poster_handle || 'lala').replace(/^@/, ''),
+      content_text: content_text.trim(),
+    };
+    // Lala's posts and posts about her wait in Review unless an admin posts them (Task #3047).
+    const held = scoped.status === 'live' ? await reviewHold(req, fields) : [];
+    if (held.length) scoped.status = 'draft';
+    const post = await FeedPost.create({
+      ...fields,
+      show_id,
+      episode_id: episode_id || null,
       poster_display_name: poster_display_name || null,
       poster_platform: poster_platform || 'lalaverse',
       post_type: post_type || 'post',
-      content_text: content_text.trim(),
       likes: 0, comments_count: 0, shares: 0, sample_comments: [],
       posted_at: scoped.status === 'live' ? new Date() : null,
       timeline_position: episode_id ? 'during_episode' : null,
@@ -229,7 +252,7 @@ router.post('/', requireAuth, async (req, res) => {
       status: scoped.status,
       sort_order: 0,
     });
-    res.json({ data: post });
+    res.json(held.length ? { data: post, held_for_review: true, review_reasons: held } : { data: post });
     // A post created live has its numbers proposed after the response (Task #2953).
     require('../services/pulseNumbers').proposeLater(post);
     // …and the closeness changes it causes (Task #2983).
@@ -577,6 +600,13 @@ router.put('/:postId', requireAuth, async (req, res) => {
     // now (approving an episode's post, Task #2749, does the same); its story
     // time stays as stamped.
     if (updates.status === 'live' && !post.posted_at && updates.posted_at === undefined) updates.posted_at = new Date();
+    // Releasing Lala's post, or one about her, is Review's: an admin's (Task #3047).
+    if (updates.status === 'live' && post.status !== 'live') {
+      const held = await reviewHold(req, { ...post.get(), ...updates });
+      if (held.length) {
+        return res.status(403).json({ error: 'Lala\'s posts and posts about her go live through Review.', code: 'REVIEW_REQUIRED', review_reasons: held });
+      }
+    }
 
     const released = post.status !== 'live' && updates.status === 'live';
     await post.update(updates);
