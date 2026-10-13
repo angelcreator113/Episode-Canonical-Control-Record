@@ -379,6 +379,7 @@ module.exports = {
   MAX_CLIP_BYTES,
   WebsiteSlotError,
   storageConfig,
+  putObject,
   publicUrl,
   youtubeIdFrom,
   clipSeconds,

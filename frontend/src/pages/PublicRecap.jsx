@@ -6,8 +6,9 @@
  * GET /api/v1/public/recaps (published only, no auth; #3008): the title,
  * Evoni's intro, the posts as The Pulse shows them now (text, likes,
  * comments, the story moment), earlier weeks to open, and a share link
- * (this page's address). Text only: no images until website storage is
- * live. Inside the public site's frame (PublicSiteLayout).
+ * (this page's address). A post's image is its public copy, sent only
+ * while it matches The Pulse (Task #3099), with its alt text. Inside the
+ * public site's frame (PublicSiteLayout).
  */
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -101,6 +102,7 @@ export default function PublicRecap() {
                   <li key={i} className="site-recap__post" data-testid="site-recap-post">
                     <p className="site-recap__who"><b>{p.poster_display_name || `@${p.poster_handle}`}</b> <span>@{p.poster_handle}</span>{p.moment ? <span> · {p.moment}</span> : null}</p>
                     {p.content_text && <p className="site-recap__text">{p.content_text}</p>}
+                    {p.image?.url && <img className="site-recap__image" src={p.image.url} alt={p.image.alt || ''} loading="lazy" data-testid="site-recap-image" />}
                     <p className="site-recap__numbers">{count(p.likes)} likes · {count(p.comments_count)} comments</p>
                   </li>
                 ))}

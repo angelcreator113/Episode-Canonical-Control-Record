@@ -22,7 +22,11 @@
  *   postsOf(db, recap)                its posts as The Pulse shows them now
  *                                     (a post since hidden or taken down
  *                                     drops out, even after publishing)
- *   update / publish / unpublish / drop   Evoni's edits and decisions
+ *   update / publish / unpublish / drop   Evoni's edits and decisions;
+ *                                     publishing copies each post's image
+ *                                     to the public site bucket (Task #3099)
+ *   publicImageOf(recap, post)        the post's public image { url, alt },
+ *                                     or null
  *   tick / startScheduler                  each hour, last week's draft for
  *                                          every show with live posts in it
  *                                          (app.js, with the posting engine)
@@ -69,7 +73,10 @@ const titleFor = (weekStart) => `The Pulse, week of ${new Date(`${weekStart}T00:
  * `where` (SQL on fp, with replacements): numbers on the curve, nothing
  * hidden, and no teaser: The Pulse sends a teaser post with no words, so the
  * public recap must not send them either (Task #3080, as Trending, #3048). Returns [{ id, poster_handle, poster_display_name, content_text,
- * likes, comments_count, posted_at, story_order }].
+ * likes, comments_count, posted_at, story_order, image }]: image is the
+ * photo as The Pulse shows it (routes/feedPostRoutes applyPostReveal): its
+ * teaser while the photo is one, none while it is hidden, else
+ * { url, alt } (Task #3099).
  */
 async function visiblePosts(db, showId, where, replacements) {
   const clock = require('./storyClock');
@@ -77,7 +84,7 @@ async function visiblePosts(db, showId, where, replacements) {
   const order = clock.postOrderSql('fp');
   const [rows] = await db.sequelize.query(
     `SELECT fp.id, fp.social_profile_id, fp.poster_handle, fp.poster_display_name, fp.content_text,
-            fp.likes, fp.comments_count, fp.posted_at, ${order} AS story_order
+            fp.image_url, fp.image_description, fp.likes, fp.comments_count, fp.posted_at, ${order} AS story_order
        FROM feed_posts fp
       WHERE fp.show_id = :showId AND fp.status = 'live' AND fp.deleted_at IS NULL
         AND (${order} IS NULL OR ${order} <= :present) AND ${where}`,
@@ -93,7 +100,63 @@ async function visiblePosts(db, showId, where, replacements) {
     id: p.id, poster_handle: p.poster_handle, poster_display_name: p.poster_display_name || null,
     content_text: p.content_text, likes: Number(p.likes) || 0, comments_count: Number(p.comments_count) || 0,
     posted_at: p.posted_at, story_order: p.story_order == null ? null : Number(p.story_order),
+    image: imageAsShown(p, reveals),
   }));
+}
+
+/** A post's photo as The Pulse shows it: the teaser while it is one, none while hidden. */
+function imageAsShown(post, reveals) {
+  if (!post.image_url) return null;
+  const state = reveals.stateOf('image', post.id, 'post_photo');
+  if (state === 'hidden') return null;
+  if (state === 'teaser') {
+    const teaser = reveals.teaserOf('image', post.id, 'post_photo');
+    return teaser?.url ? { url: teaser.url, alt: '' } : null;
+  }
+  return { url: post.image_url, alt: post.image_description || '' };
+}
+
+const PUBLIC_IMAGE_SIDE = 1600;
+
+/**
+ * Copies each post's image, as The Pulse shows it now, into the public site
+ * bucket, re-encoded (no camera metadata) and resized; a post whose copy
+ * already matches is left alone. Without SITE_PUBLIC_BUCKET nothing is
+ * copied (text only); an image that cannot be read or stored is marked
+ * failed and the rest go on. Returns the recap's images map.
+ */
+async function copyImages(posts, recap) {
+  const slots = require('./websiteSlotService');
+  const cfg = slots.storageConfig();
+  const images = { ...(recap.images || {}) };
+  if (!cfg) return images;
+  for (const post of posts) {
+    const id = String(post.id);
+    if (!post.image) continue;
+    if (images[id]?.key && images[id].source === post.image.url) continue;
+    try {
+      const sharp = require('sharp');
+      const bytes = await module.exports.imageBytes(post.image.url);
+      const buffer = await sharp(bytes).rotate()
+        .resize({ width: PUBLIC_IMAGE_SIDE, height: PUBLIC_IMAGE_SIDE, fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 86 }).toBuffer();
+      const key = `${cfg.prefix}/recaps/${recap.id}/${require('crypto').randomUUID()}.jpg`;
+      await slots.putObject(cfg, key, buffer, 'image/jpeg');
+      images[id] = { key, source: post.image.url };
+    } catch (err) {
+      console.error(`[PulseRecap] the image of post ${id} could not be copied to the public site:`, err.message);
+      images[id] = { failed: true, source: post.image.url };
+    }
+  }
+  return images;
+}
+
+/** The post's public image { url, alt } while its copy matches what The Pulse shows now; else null. */
+function publicImageOf(recap, post) {
+  const copy = (recap.images || {})[String(post.id)];
+  if (!copy?.key || !post.image || copy.source !== post.image.url) return null;
+  const url = require('./websiteSlotService').publicUrl(copy.key);
+  return url ? { url, alt: post.image.alt || '' } : null;
 }
 
 /** The week's moments, biggest first (likes, then comments, then newest). */
@@ -161,8 +224,10 @@ async function update(db, recap, { title, intro, postIds }) {
 async function publish(db, recap, by) {
   if (recap.status === 'published') throw new RecapError(409, 'This recap is already published.');
   if (recap.status === 'dropped') throw new RecapError(409, 'This recap was dropped.');
-  if (!(await postsOf(db, recap)).length) throw new RecapError(400, 'A recap needs at least one post to publish.');
-  return recap.update({ status: 'published', published_at: new Date(), published_by: by || null });
+  const posts = await postsOf(db, recap);
+  if (!posts.length) throw new RecapError(400, 'A recap needs at least one post to publish.');
+  const images = await copyImages(posts, recap);
+  return recap.update({ status: 'published', published_at: new Date(), published_by: by || null, images });
 }
 
 async function unpublish(recap) {
@@ -214,4 +279,7 @@ function stopScheduler() {
 module.exports = {
   TOP, MAX_POSTS, RecapError,
   weekStartOf, candidates, buildDraft, postsOf, update, publish, unpublish, drop, tick, startScheduler, stopScheduler,
+  publicImageOf,
+  // The bytes of a stored image (pulseTeasers.imageBytes); here so a test can stand in for the download.
+  imageBytes: (url) => require('./pulseTeasers').imageBytes(url),
 };

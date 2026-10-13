@@ -301,6 +301,7 @@
 .site .site-recap__post p { margin: 0 0 8px; }
 .site .site-recap__who span { opacity: 0.75; }
 .site .site-recap__text { font-size: 17px; }
+.site .site-recap__image { display: block; width: 100%; max-width: 560px; height: auto; margin: 10px 0 4px; border-radius: 12px; }
 .site .site-recap__numbers { margin: 0; font-size: 14px; opacity: 0.8; font-variant-numeric: tabular-nums; }
 .site .site-recap__share { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .site .site-recap__earlier { margin-top: 48px; }
