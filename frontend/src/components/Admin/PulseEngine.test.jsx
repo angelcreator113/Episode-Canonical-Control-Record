@@ -22,6 +22,7 @@ const STATE = {
   jobs: [
     { id: 'j1', kind: 'event', status: 'done', drafts: 1, finished_at: '2026-10-12T10:00:00Z' },
     { id: 'j2', kind: 'ambient', status: 'skipped', drafts: 0, error: "Today's 5 automated requests are used; they reset at midnight UTC.", finished_at: '2026-10-12T11:00:00Z' },
+    { id: 'j3', kind: 'event', status: 'done', drafts: 1, error: 'bo: the batch answer had no readable draft.', finished_at: '2026-10-12T12:00:00Z' },
   ],
 };
 
@@ -47,6 +48,8 @@ describe('the Engine tab', () => {
     const jobs = within(screen.getByTestId('pulse-engine-jobs')).getAllByRole('listitem').map((li) => li.textContent);
     expect(jobs[0]).toMatch(/^DoneEvent post · 1 draft/);
     expect(jobs[1]).toMatch(/^SkippedAmbient post.*Today's 5 automated requests are used; they reset at midnight UTC\.$/);
+    // A batch that drafted some of its items says which it could not (Task 3032).
+    expect(jobs[2]).toMatch(/^DoneEvent post · 1 draft.*bo: the batch answer had no readable draft\.$/);
   });
 
   test('no worker note once the server runs the engine', async () => {

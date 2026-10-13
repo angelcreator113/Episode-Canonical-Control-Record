@@ -17,12 +17,17 @@
  *     picking the same people. Lurkers never post; they may comment.
  *     → { posters, commenters, order, about, eventId }
  *   enqueueForEpisode(db, { showId, episodeId })
- *     queues one `event` job per poster, at the episode's After; once per
- *     episode; only while PULSE_ENGINE_ENABLED is on. Never calls AI.
+ *     queues one `event` job for the posters (BATCH_MAX a job), at the
+ *     episode's After; once per episode; only while PULSE_ENGINE_ENABLED is
+ *     on. Never calls AI.
  *   registerHandlers()
- *     event   → pulseDrafter.draftAndRoute, then queues `comment` jobs for
- *               the commenters on the new post
- *     comment → pulseDrafter.draftCommentAndRoute
+ *     event   → pulseDrafter.draftPostsAndRoute: one request drafts every
+ *               poster's post (Task #3032), each gated on its own; then one
+ *               `comment` job per new post for its commenters
+ *     comment → pulseDrafter.draftCommentsAndRoute: one request drafts the
+ *               post's replies
+ *   A job queued before #3032 names one character (character_id) and runs
+ *   as a batch of one.
  */
 
 const crypto = require('crypto');
@@ -134,43 +139,62 @@ async function enqueueForEpisode(db, { showId, episodeId }) {
   if (done.n > 0) return [];
   const plan = await whoPosts(db, { showId, episodeId });
   const queue = require('./pulseQueue');
+  const { BATCH_MAX } = require('./pulseDrafter');
   const jobs = [];
-  for (const poster of plan.posters) {
+  for (let i = 0; i < plan.posters.length; i += BATCH_MAX) {
+    const batch = plan.posters.slice(i, i + BATCH_MAX);
     jobs.push(await queue.enqueue(db, {
       showId, kind: 'event',
       payload: {
-        episode_id: String(episodeId), event_id: plan.eventId, character_id: poster.characterId, moment: plan.order,
-        about: plan.about, score: poster.score, commenters: plan.commenters.map((c) => c.characterId),
+        episode_id: String(episodeId), event_id: plan.eventId, posters: batch.map((x) => x.characterId), moment: plan.order,
+        about: plan.about, scores: batch.map((x) => x.score), commenters: plan.commenters.map((c) => c.characterId),
       },
     }));
   }
   return jobs;
 }
 
+/** The characters a job names: a batch (Task #3032), or the one a job queued before it named. */
+const namedIn = (list, single) => (Array.isArray(list) ? list : (single ? [single] : []));
+
+/** Splits characters into those whose voice is approved and the reasons for the rest (Task #3029). */
+async function approvedOf(db, characterIds) {
+  const ready = [];
+  const waiting = [];
+  for (const id of characterIds) {
+    const blocked = await require('./pulseVoices').automationBlocker(db, id);
+    if (blocked) waiting.push(blocked); else ready.push(id);
+  }
+  return { ready, waiting };
+}
+
 /** The queue handlers for event posts and their comments. */
 async function handleEvent(db, job) {
   const p = job.payload_json || {};
-  const blocked = await require('./pulseVoices').automationBlocker(db, p.character_id);
-  if (blocked) return { skipped: blocked };
-  const { post } = await require('./pulseDrafter').draftAndRoute(db, {
-    showId: job.show_id, characterId: p.character_id, moment: p.moment,
+  const { ready, waiting } = await approvedOf(db, namedIn(p.posters, p.character_id));
+  if (!ready.length) return { skipped: waiting.join(' ') || 'No posters named.' };
+  const drafter = require('./pulseDrafter');
+  const { routed, failed } = await drafter.draftPostsAndRoute(db, {
+    showId: job.show_id, items: ready.map((characterId) => ({ characterId })), moment: p.moment,
     context: { about: p.about, episode_id: p.episode_id || null, event_id: p.event_id || null },
     request: { kind: 'event', jobId: job.id },
   });
+  // One comment job per new post: its commenters' replies in one request.
   const queue = require('./pulseQueue');
-  for (const characterId of Array.isArray(p.commenters) ? p.commenters : []) {
-    if (characterId === p.character_id) continue;
-    await queue.enqueue(db, { showId: job.show_id, kind: 'comment', payload: { post_id: post.id, character_id: characterId, episode_id: p.episode_id || null } });
+  const commenters = Array.isArray(p.commenters) ? p.commenters : [];
+  for (const r of routed) {
+    const ids = commenters.filter((id) => id !== r.characterId).slice(0, drafter.BATCH_MAX);
+    if (ids.length) await queue.enqueue(db, { showId: job.show_id, kind: 'comment', payload: { post_id: r.post.id, character_ids: ids, episode_id: p.episode_id || null } });
   }
-  return { draftIds: [post.id] };
+  return { draftIds: routed.map((r) => r.post.id), failed: [...waiting, ...failed.map((f) => f.error)] };
 }
 
 async function handleComment(db, job) {
   const p = job.payload_json || {};
-  const blocked = await require('./pulseVoices').automationBlocker(db, p.character_id);
-  if (blocked) return { skipped: blocked };
-  const { comment } = await require('./pulseDrafter').draftCommentAndRoute(db, { postId: p.post_id, characterId: p.character_id, jobId: job.id });
-  return { draftIds: [comment.id] };
+  const { ready, waiting } = await approvedOf(db, namedIn(p.character_ids, p.character_id));
+  if (!ready.length) return { skipped: waiting.join(' ') || 'No commenters named.' };
+  const { routed, failed } = await require('./pulseDrafter').draftCommentsAndRoute(db, { postId: p.post_id, characterIds: ready, jobId: job.id });
+  return { draftIds: routed.map((r) => r.comment.id), failed: [...waiting, ...failed.map((f) => f.error)] };
 }
 
 function registerHandlers() {

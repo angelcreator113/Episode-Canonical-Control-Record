@@ -19,7 +19,7 @@
  *                                 handler, retries with a backoff; a job
  *                                 whose lane's requests are used is skipped
  *                                 with the reason; null when idle
- *   register(kind, handler)       handler(db, job) → { draftIds }; the
+ *   register(kind, handler)       handler(db, job) → { draftIds, failed? }; the
  *                                 drafting handlers come with #2969-#2971
  *   start() / stop()              the worker loop; app.js starts it only
  *                                 when PULSE_ENGINE_ENABLED === 'true'
@@ -168,7 +168,9 @@ async function runOne(db, { now = new Date() } = {}) {
       return job;
     }
     const draftIds = Array.isArray(result.draftIds) ? result.draftIds.map(String) : [];
-    await finish({ status: 'done', error: null, draft_ids: draftIds });
+    // A batch may finish with some items not drafted (Task #3032): kept on the job, which is still done.
+    const failed = Array.isArray(result.failed) ? result.failed.filter(Boolean).map(String) : [];
+    await finish({ status: 'done', error: failed.length ? failed.join(' ').slice(0, 1000) : null, draft_ids: draftIds });
   } catch (err) {
     // The lane's requests for today are used (pulseRequests.take): skipped, not retried.
     if (err instanceof require('./pulseRequests').RequestCapError) {
