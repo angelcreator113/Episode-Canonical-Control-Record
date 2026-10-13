@@ -273,7 +273,7 @@ The box has about 1.9 GB of memory and no swap. Deploy runs 93–94 (2026-10-12)
       "default": "none",
       "allowedPattern": "^(none|https://<ARTIFACT_BUCKET>\\.s3(\\.<REGION>)?\\.amazonaws\\.com/deploy-builds/[0-9a-f]{40}-[0-9]+-[0-9]+\\.tgz\\?[A-Za-z0-9%&=._~-]+)$"
     },
-    "artifact_sha256": {
+    "artifactSha256": {
       "type": "String",
       "description": "none, or the sha256 of the runner's frontend build",
       "default": "none",
@@ -287,13 +287,15 @@ The box has about 1.9 GB of memory and no swap. Deploy runs 93–94 (2026-10-12)
       "inputs": {
         "timeoutSeconds": "1800",
         "runCommand": [
-          "sudo -u ubuntu -H bash -c 'set -euo pipefail; cd /home/ubuntu/episode-metadata; git fetch --quiet origin main; git merge-base --is-ancestor {{ sha }} origin/main; f=$(mktemp); trap \"rm -f $f\" EXIT; git show {{ sha }}:scripts/deploy/workflow-deploy.sh >\"$f\"; bash \"$f\" {{ phase }} {{ sha }} \"{{ artifact }}\" {{ artifact_sha256 }}'"
+          "sudo -u ubuntu -H bash -c 'set -euo pipefail; cd /home/ubuntu/episode-metadata; git fetch --quiet origin main; git merge-base --is-ancestor {{ sha }} origin/main; f=$(mktemp); trap \"rm -f $f\" EXIT; git show {{ sha }}:scripts/deploy/workflow-deploy.sh >\"$f\"; bash \"$f\" {{ phase }} {{ sha }} \"{{ artifact }}\" {{ artifactSha256 }}'"
         ]
       }
     }
   ]
 }
 ```
+
+   SSM parameter names are letters and digits only (the console refuses `artifact_sha256` with `InvalidDocumentContent: … is not alpha-numeric`, 2026-10-13), hence `artifactSha256`.
 
    The link is in double quotes because it holds `&` and `?`. Its pattern allows no quote, space, `$` or backtick, so it cannot break out of them. The script on the box checks the link and the sha256 again before it downloads anything.
 4. **Check the box has no untracked frontend settings.** The runner builds from the repository alone. On the box, `ls -a ~/episode-metadata/frontend | grep '^\.env'` should list only `.env.example` and `.env.production`, which are both in the repository. A `.env.local` or `.env.production.local` there means the box's builds used settings the runner's will not: tell the session which variable names it holds (not the values) before going on.

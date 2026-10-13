@@ -266,7 +266,7 @@ esac
     const res = run('deploy', { ARTIFACT_URL: LINK, ARTIFACT_SHA256: SHA });
     expect(res.err).toBe('');
     expect(res.status).toBe(0);
-    expect(res.params).toEqual({ phase: ['deploy'], sha: [TARGET], artifact: [LINK], artifact_sha256: [SHA] });
+    expect(res.params).toEqual({ phase: ['deploy'], sha: [TARGET], artifact: [LINK], artifactSha256: [SHA] });
     expect(res.out).not.toContain('X-Amz');
     expect(fs.readFileSync(path.join(tmp, 'comment'), 'utf8')).not.toContain('X-Amz');
     expect(fs.existsSync(path.join(tmp, 'phase-deploy.params.json'))).toBe(false);

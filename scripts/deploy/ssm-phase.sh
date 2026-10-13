@@ -40,7 +40,7 @@ PARAMS="$RUNNER_TEMP/phase-$PHASE.params.json"
 if [ "$PHASE" = "deploy" ] && [ -n "${ARTIFACT_URL:-}" ]; then
   : "${ARTIFACT_SHA256:?ARTIFACT_SHA256 is needed with ARTIFACT_URL}"
   jq -n --arg p "$PHASE" --arg s "$TARGET_SHA" --arg u "$ARTIFACT_URL" --arg h "$ARTIFACT_SHA256" \
-    '{phase: [$p], sha: [$s], artifact: [$u], artifact_sha256: [$h]}' >"$PARAMS"
+    '{phase: [$p], sha: [$s], artifact: [$u], artifactSha256: [$h]}' >"$PARAMS"
   echo "Passing the runner's frontend build (sha256 ${ARTIFACT_SHA256:0:12}…)."
 else
   jq -n --arg p "$PHASE" --arg s "$TARGET_SHA" '{phase: [$p], sha: [$s]}' >"$PARAMS"
