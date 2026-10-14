@@ -229,3 +229,40 @@ It returns names, keys and flags only: no images, users or secrets. Its rows let
 3. **What a Voice tap does in playback for now,** until the script cue language (spec §8) is built: nothing visible, a brief "Lala speaks" toast, or an event the script cue reads later?
 4. **The Hair section:** show an existing Hair screen if the show has one, else leave it out of playback (recommended), or add a hair category to the wardrobe (a larger change)?
 5. **Coins outside an episode** (for example a purchase from the closet): count them before Episode 1, as the financial summary does (recommended), or leave them out of "as of the beat"?
+
+## 11. Results and rulings (Evoni, 2026-10-14)
+
+**§6, run read-only on production** (session `default_transaction_read_only=on`):
+- The show is "Styling Adventures with Lala", with 34 rows: 13 screens, 15 icons and 6 production overlays.
+- The home is `homepage`. Every row has a picture.
+
+**The eight icons:**
+
+| Icon | Her icon → opens | |
+|---|---|---|
+| The Pulse | `the_pulse` → `perfume_page` | **miswired**: `the_pulse_page` exists |
+| Closet | `closet_icon` → `closet` | ok |
+| To-do | `to_do_list` → `to_do_list_page` | ok |
+| Location | `location_icon` → `map_screen` | ok |
+| Bank | `wallet` → `homepage` | no Bank screen |
+| Mail | none; `messages_icon` → `messages_page` | no Mail screen; the Messages page is pending a ruling |
+| Call | `phone` → `homepage` | **miswired**: `phone_call_list` exists |
+| Voice | `talking_icon`, opens nothing | ok: an action |
+
+**The Closet sections:**
+- `outfit_page` exists, but `outfit_icon` opens `closet`.
+- `shoe_page`, `hair_page`, `accessories_page` and `perfume_page` exist and are wired.
+- There is **no jewelry page**; `jewelry_icon` opens `closet`.
+- `purse_page` (`purse_icon`) is not in the spec's list.
+
+**Rulings** (on §10):
+1. **Voice:** a "Lala speaks" toast; no screen.
+2. **Hair:** becomes a wardrobe category (its own issue, #3167).
+3. **The Closet section list:** stored in show settings (`shows.metadata`), with no migration.
+4. **Coins outside an episode:** counted from the start, before Episode 1, as the money summary does. A follow-up: out-of-episode purchases should carry a story-time stamp.
+
+**Change to the §9 plan for #3163:** her homepage and icons stay. Each icon's `opens_screen` already holds the mapping, so no new storage is needed. #3163 checks the eight, flags miswired or missing ones, and offers "+ Add screen" in the editor only.
+
+**Pending Evoni:**
+- whether the Messages page serves as Mail;
+- whether the Purse page is its own Closet section.
