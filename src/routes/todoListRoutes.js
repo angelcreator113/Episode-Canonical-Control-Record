@@ -79,7 +79,20 @@ router.get('/episodes/:episodeId/todo', requireAuth, async (req, res) => {
     const { episodeId } = req.params;
     const models = req.app.get('models') || require('../models');
     const { getTodoList } = require('../services/todoListService');
-    const todoList = await getTodoList(episodeId, models);
+    // ?beat=<1-14>&line=<index>: crossed off as of that point of the script
+    // (Task #3188); without it, from the look as it is now.
+    const asOf = {};
+    if (req.query.beat !== undefined) {
+      const beat = Number(req.query.beat);
+      if (!Number.isInteger(beat) || beat < 1 || beat > 14) return res.status(400).json({ error: 'beat must be 1-14' });
+      asOf.beat = beat;
+      if (req.query.line !== undefined) {
+        const line = Number(req.query.line);
+        if (!Number.isInteger(line) || line < 0) return res.status(400).json({ error: 'line must be a line number in the beat (0 or more)' });
+        asOf.line = line;
+      }
+    }
+    const todoList = await getTodoList(episodeId, models, asOf);
 
     if (!todoList) {
       return res.json({ data: null, message: 'No to-do list yet. POST /generate to create one.' });

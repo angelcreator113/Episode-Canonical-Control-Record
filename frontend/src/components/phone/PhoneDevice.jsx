@@ -142,6 +142,7 @@ export default function PhoneDevice({
   tapLayer,
   episodeId,
   storyAt = null,
+  beat = null,
   showId,
   contentInteractive = false,
   icons = [],
@@ -184,6 +185,7 @@ export default function PhoneDevice({
               interactive={contentInteractive}
               episodeId={episodeId}
               storyAt={storyAt}
+              beat={beat}
             />
             {!tapLayer && (
               <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} icons={icons} onNavigate={onNavigate} highlightIconKey={highlightIconKey} />
