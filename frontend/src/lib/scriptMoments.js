@@ -493,3 +493,88 @@ export function wearFlags(beats = [], look = []) {
     .filter((c) => c.flag)
     .map((c) => ({ beatIndex: c.beatIndex, lineIndex: c.lineIndex, flag: c.flag, text: FLAG_TEXT[c.flag](c) }));
 }
+
+// ── The deal checklist and the to-do mode, beat by beat (Task #3191) ──
+// Evoni, 2026-10-14 (Lala's Phone phase 3, rulings 3 and 6):
+// `[DELIVER: <deliverable id>]` ticks that deal item from its line. A tick
+// never changes the deliverable's status; approval stays manual in Money.
+// `[TODO_MODE: shopping|deal|career]` sets the list Lala's phone shows in
+// its beat; otherwise the Shopping list through the closet beat, the deal
+// checklist at a deal whose terms are locked, else the Career list. The
+// server reads them the same way (src/utils/scriptTodo.js).
+
+const DELIVER_LINE = /^\s*\[DELIVER:\s*([^\]\s]+)\s*\]\s*$/i;
+const TODO_MODE_LINE = /^\s*\[TODO_MODE:\s*([^\]\s]*)\s*\]\s*$/i;
+export const TODO_MODES = ['shopping', 'deal', 'career'];
+export const TODO_MODE_LABELS = { shopping: 'Shopping list', deal: 'Deal checklist', career: 'Career list' };
+
+/** The deliverable id a `[DELIVER: id]` line names, or null for any other line. */
+export function deliverOf(line) {
+  const m = String(line || '').match(DELIVER_LINE);
+  return m ? m[1] : null;
+}
+
+/** The line a picker writes for a deliverable. */
+export const deliverLine = (deliverableId) => `[DELIVER: ${String(deliverableId || '').trim()}]`;
+
+/** The mode a `[TODO_MODE: …]` line names (lowercase, valid or not), or null for any other line. */
+export function todoModeOf(line) {
+  const m = String(line || '').match(TODO_MODE_LINE);
+  return m ? m[1].toLowerCase() : null;
+}
+
+/** Every [DELIVER] cue in order: { beatIndex, lineIndex, id, deliverable (the event's, or null) }. */
+export function deliverCues(beats = [], deliverables = []) {
+  const byId = new Map((Array.isArray(deliverables) ? deliverables : []).filter(Boolean).map((d) => [String(d.id), d]));
+  const cues = [];
+  (beats || []).forEach((beat, beatIndex) => {
+    (beat?.lines || []).forEach((line, lineIndex) => {
+      const id = deliverOf(line);
+      if (id) cues.push({ beatIndex, lineIndex, id, deliverable: byId.get(String(id)) || null });
+    });
+  });
+  return cues;
+}
+
+/** The deliverable ids ticked at or before a line (a Set). */
+export function deliveredAt(beats = [], beatIndex = 0, lineIndex = Infinity, deliverables = []) {
+  const ids = new Set();
+  for (const c of deliverCues(beats, deliverables)) {
+    if (c.beatIndex > beatIndex || (c.beatIndex === beatIndex && c.lineIndex > lineIndex)) break;
+    if (c.deliverable) ids.add(String(c.deliverable.id));
+  }
+  return ids;
+}
+
+/** The list shown at a beat (its index): { mode, source: 'cue' | 'auto' }. `closetNumber` is closetBeat's. */
+export function todoModeAt(beats = [], beatIndex = 0, { closetNumber = null, dealLocked = false } = {}) {
+  let cue = null;
+  for (const line of beats[beatIndex]?.lines || []) {
+    const mode = todoModeOf(line);
+    if (TODO_MODES.includes(mode)) cue = mode;
+  }
+  if (cue) return { mode: cue, source: 'cue' };
+  const closet = closetNumber == null ? -1 : beats.findIndex((b) => b.number === closetNumber);
+  if (closet >= 0 && beatIndex <= closet) return { mode: 'shopping', source: 'auto' };
+  return { mode: dealLocked ? 'deal' : 'career', source: 'auto' };
+}
+
+/**
+ * The deal cues that do nothing, with a line to show each: a [DELIVER] id
+ * that isn't one of the event's deliverables, and a [TODO_MODE] that isn't
+ * shopping, deal or career. { beatIndex, lineIndex, flag, text }.
+ */
+export function dealCueFlags(beats = [], deliverables = []) {
+  const flags = deliverCues(beats, deliverables)
+    .filter((c) => !c.deliverable)
+    .map((c) => ({ beatIndex: c.beatIndex, lineIndex: c.lineIndex, flag: 'not_this_event', text: `[DELIVER: ${c.id}] is not a deliverable of this event` }));
+  (beats || []).forEach((beat, beatIndex) => {
+    (beat?.lines || []).forEach((line, lineIndex) => {
+      const mode = todoModeOf(line);
+      if (mode !== null && !TODO_MODES.includes(mode)) {
+        flags.push({ beatIndex, lineIndex, flag: 'bad_mode', text: `[TODO_MODE: ${mode}] is not shopping, deal or career` });
+      }
+    });
+  });
+  return flags.sort((a, b) => a.beatIndex - b.beatIndex || a.lineIndex - b.lineIndex);
+}

@@ -128,6 +128,23 @@ function withMissingRequiredDeliverables(tasks, deliverables = []) {
   return [...list, ...missing.map(deliverableTask)];
 }
 
+/**
+ * The deal checklist's heading on Lala's phone (Lala's Phone spec §5; Task
+ * #3191): "At STUDIO BY SABLE's Studio", who the deal is with (host_brand,
+ * else host, as documentByline names it) and where (the event's venue_name,
+ * else its venue location's name; a leading "The" drops after the
+ * possessive). A venue that already carries the name reads alone; with no
+ * venue, "For <who>"; with neither, the event's name.
+ */
+function dealLocationLabel(event, venueLocationName = null) {
+  const who = String(event?.host_brand || event?.host || '').trim();
+  const venue = String(event?.venue_name || venueLocationName || '').trim();
+  if (who && venue) return venue.toLowerCase().includes(who.toLowerCase()) ? `At ${venue}` : `At ${who}'s ${venue.replace(/^the\s+/i, '')}`;
+  if (venue) return `At ${venue}`;
+  if (who) return `For ${who}`;
+  return String(event?.name || '').trim() ? `At ${String(event.name).trim()}` : 'The deal';
+}
+
 module.exports = {
   TASK_SOURCES,
   withMissingRequiredDeliverables,
@@ -137,4 +154,5 @@ module.exports = {
   isSocialTaskRequired,
   deliverableTask,
   withDeliverableTasks,
+  dealLocationLabel,
 };

@@ -6,6 +6,7 @@
  *
  * POST /generate        — Generate to-do list from linked event
  * GET  /                — Get current to-do list with completion state
+ * GET  /at              — The list the phone shows at a beat, and the deal checklist
  * POST /complete/:slot  — Mark a slot as complete
  */
 
@@ -16,6 +17,40 @@ const { requireAuth } = require('../middleware/auth');
 const { isSocialTaskRequired } = require('../utils/socialTaskSource');
 
 const WARDROBE_COMPLETION_DERIVED = 'WARDROBE_COMPLETION_DERIVED';
+
+/** ?beat=<1-14>&line=<index in the beat>: { asOf } or { error }. */
+function readAsOf(query) {
+  const asOf = {};
+  if (query.beat === undefined) return { asOf };
+  const beat = Number(query.beat);
+  if (!Number.isInteger(beat) || beat < 1 || beat > 14) return { error: 'beat must be 1-14' };
+  asOf.beat = beat;
+  if (query.line !== undefined) {
+    const line = Number(query.line);
+    if (!Number.isInteger(line) || line < 0) return { error: 'line must be a line number in the beat (0 or more)' };
+    asOf.line = line;
+  }
+  return { asOf };
+}
+
+// GET /episodes/:episodeId/todo/at?beat=&line= — the list Lala's phone shows
+// at that point of the script (shopping, deal or career) and the deal
+// checklist, ticked from its [DELIVER] cues (Task #3191). Read-only: a tick
+// never changes a deliverable's status; approval stays in Money.
+router.get('/episodes/:episodeId/todo/at', requireAuth, async (req, res) => {
+  try {
+    const { asOf, error } = readAsOf(req.query);
+    if (error) return res.status(400).json({ error });
+    const models = req.app.get('models') || require('../models');
+    const { getTodoAt } = require('../services/dealChecklistService');
+    const data = await getTodoAt(req.params.episodeId, models, asOf);
+    if (!data) return res.status(404).json({ error: 'Episode not found' });
+    return res.json({ success: true, data });
+  } catch (err) {
+    console.error('Get to-do at a beat error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
 
 router.post('/episodes/:episodeId/todo/generate', requireAuth, async (req, res) => {
   try {
@@ -81,17 +116,8 @@ router.get('/episodes/:episodeId/todo', requireAuth, async (req, res) => {
     const { getTodoList } = require('../services/todoListService');
     // ?beat=<1-14>&line=<index>: crossed off as of that point of the script
     // (Task #3188); without it, from the look as it is now.
-    const asOf = {};
-    if (req.query.beat !== undefined) {
-      const beat = Number(req.query.beat);
-      if (!Number.isInteger(beat) || beat < 1 || beat > 14) return res.status(400).json({ error: 'beat must be 1-14' });
-      asOf.beat = beat;
-      if (req.query.line !== undefined) {
-        const line = Number(req.query.line);
-        if (!Number.isInteger(line) || line < 0) return res.status(400).json({ error: 'line must be a line number in the beat (0 or more)' });
-        asOf.line = line;
-      }
-    }
+    const { asOf, error } = readAsOf(req.query);
+    if (error) return res.status(400).json({ error });
     const todoList = await getTodoList(episodeId, models, asOf);
 
     if (!todoList) {
