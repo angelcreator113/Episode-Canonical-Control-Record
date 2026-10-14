@@ -17,7 +17,11 @@ const CASES = [
   ['no lock, affordable', { is_owned: false, lock_type: 'none', coin_cost: 120 }, { coins: 500 }, true, true],
   ['no lock, not affordable', { is_owned: false, lock_type: 'none', coin_cost: 900 }, { coins: 500 }, false, false],
   ['null lock and null ownership, affordable', { is_owned: null, lock_type: null, coin_cost: 50 }, { coins: 50 }, true, true],
-  ['no price is free', { is_owned: false, lock_type: 'none' }, {}, true, true],
+  // Evoni's ruling, 2026-10-14 (Task #3143): a price is required; an
+  // unowned piece with no coin_cost above 0 is not for sale until priced.
+  ['no price: price required', { is_owned: false, lock_type: 'none' }, { coins: 9999 }, false, false],
+  ['zero price: price required', { is_owned: false, lock_type: 'coin', coin_cost: 0 }, { coins: 9999 }, false, false],
+  ['owned with no price is still wearable', { is_owned: true, lock_type: 'none' }, { coins: 0 }, true, false],
   ['reputation lock is bought, not earned', { is_owned: false, lock_type: 'reputation', reputation_required: 3, coin_cost: 200 }, { coins: 100, reputation: 9 }, false, false],
   ['reputation lock, affordable at reputation 0', { is_owned: false, lock_type: 'reputation', reputation_required: 3, coin_cost: 200 }, { coins: 200 }, true, true],
   ['unknown lock type is for sale', { is_owned: false, lock_type: 'dream_fund', coin_cost: 10 }, { coins: 10 }, true, true],
@@ -45,6 +49,9 @@ describe('lockReason and setCost (Evoni, 2026-10-06)', () => {
     expect(lockReason({ is_owned: false, lock_type: 'none', coin_cost: 400 }, { coins: 100 })).toBe('Need 400 coins');
     expect(lockReason({ is_owned: false, lock_type: 'reputation', coin_cost: 50 }, { coins: 100 })).toBeNull();
     expect(lockReason({ is_owned: true, lock_type: 'brand_exclusive' }, {})).toBeNull();
+    // Task #3143: an unpriced piece waits for a price, whatever her coins.
+    expect(lockReason({ is_owned: false, lock_type: 'none' }, { coins: 9999 })).toBe('Price required');
+    expect(lockReason({ is_owned: true, lock_type: 'none' }, {})).toBeNull();
   });
 
   test('setCost adds the pieces Lala can buy and lists the ones not for sale', () => {
@@ -53,10 +60,12 @@ describe('lockReason and setCost (Evoni, 2026-10-06)', () => {
       { id: 'b', is_owned: false, lock_type: 'none', coin_cost: 120 },
       { id: 'c', is_owned: null, lock_type: 'coin', coin_cost: 80 },
       { id: 'd', is_owned: false, lock_type: 'season_drop', coin_cost: 10 },
+      { id: 'e', is_owned: false, lock_type: 'none' },
     ];
     const r = setCost(pieces);
     expect(r.cost).toBe(200);
     expect(r.toBuy.map((p) => p.id)).toEqual(['b', 'c']);
     expect(r.notForSale.map((p) => p.id)).toEqual(['d']);
+    expect(r.priceRequired.map((p) => p.id)).toEqual(['e']);
   });
 });

@@ -13,6 +13,8 @@
  * brand-exclusive or season-drop piece (Evoni's ruling, 2026-10-06). A
  * piece is within reach when it is owned (is_owned true; null is not
  * owned), or for sale and affordable. Reputation no longer gates a piece.
+ * A price is required (Evoni, 2026-10-14, Task #3143): an unowned piece with
+ * no coin_cost above 0 is not for sale until priced, never a free buy.
  */
 
 function num(v) {
@@ -23,9 +25,14 @@ function num(v) {
 /** The lock types that are never for sale. */
 export const NOT_FOR_SALE = new Set(['brand_exclusive', 'season_drop']);
 
+/** Whether a piece Lala does not own is waiting for a price (Task #3143). */
+export function priceRequired(item) {
+  return item?.is_owned !== true && !NOT_FOR_SALE.has(item?.lock_type) && !((Number(item?.coin_cost) || 0) > 0);
+}
+
 /** Whether a piece Lala does not own can be bought. */
 export function isForSale(item) {
-  return item?.is_owned !== true && !NOT_FOR_SALE.has(item?.lock_type);
+  return item?.is_owned !== true && !NOT_FOR_SALE.has(item?.lock_type) && !priceRequired(item);
 }
 
 export function itemReach(item, characterState = {}) {
@@ -39,6 +46,7 @@ export function itemReach(item, characterState = {}) {
     can_select: owned || affordable,
     can_purchase: affordable,
     needs_purchase: forSale,
+    price_required: priceRequired(item),
     coin_cost: coinCost,
   };
 }
@@ -59,6 +67,7 @@ export function lockReason(item, characterState) {
   if (item?.lock_type === 'season_drop' && item?.is_owned !== true) {
     return item?.season_unlock_episode ? `Drops Ep ${item.season_unlock_episode} · not for sale` : 'Season drop · not for sale';
   }
+  if (priceRequired(item)) return 'Price required';
   if (itemReach(item, characterState).can_select) return null;
   return `Need ${Number(item?.coin_cost) || 0} coins`;
 }
@@ -72,6 +81,7 @@ export function setCost(pieces = []) {
   return {
     cost: toBuy.reduce((n, p) => n + (Number(p.coin_cost) || 0), 0),
     toBuy,
-    notForSale: pieces.filter((p) => p?.is_owned !== true && !isForSale(p)),
+    notForSale: pieces.filter((p) => p?.is_owned !== true && !isForSale(p) && !priceRequired(p)),
+    priceRequired: pieces.filter(priceRequired),
   };
 }

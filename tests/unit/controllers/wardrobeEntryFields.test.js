@@ -111,6 +111,23 @@ describe('wardrobe entry fields (Task #1743)', () => {
     });
   });
 
+  // Evoni's ruling, 2026-10-14 (Task #3143): "every wardrobe piece that I
+  // upload should need purchased". The 2026-10-05 rule made a piece with no
+  // lock Lala's on upload; now every upload starts unowned, whatever is sent.
+  describe('every uploaded piece starts unowned (Task #3143)', () => {
+    test.each([
+      ['no lock, no ownership sent', {}],
+      ['lock none', { lockType: 'none' }],
+      ['isOwned "true" sent', { isOwned: 'true' }],
+      ['isOwned true and lock none', { isOwned: true, lockType: 'none' }],
+      ['coin lock', { lockType: 'coin', coinCost: '300' }],
+    ])('createWardrobeItem with %s saves is_owned false', async (_label, extra) => {
+      mockWardrobe.create.mockResolvedValue({ id: 'w-new' });
+      await wardrobeController.createWardrobeItem({ body: { character: 'Lala', name: 'Opera gloves', price: '120', ...extra } }, makeRes());
+      expect(mockWardrobe.create.mock.calls[0][0].is_owned).toBe(false);
+    });
+  });
+
   describe('tags reach Wardrobe as an array of strings', () => {
     test.each([
       ['comma-separated string (upload FormData)', 'elegant, evening , silk', ['elegant', 'evening', 'silk']],

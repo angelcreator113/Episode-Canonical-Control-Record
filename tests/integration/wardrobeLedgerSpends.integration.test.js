@@ -223,4 +223,48 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       expect(rows.some((r) => r.episode_id === ep2)).toBe(false);
     });
   });
+
+  // Evoni's ruling, 2026-10-14 (Task #3143): an unowned piece with no lock is
+  // bought for its coin price, and a piece with no price can't be bought until
+  // it is priced, never a free buy.
+  describe('a price is required (Task #3143)', () => {
+    const addPiece = async (ids, fields) => (await models.Wardrobe.create({
+      clothing_category: 'shoes', show_id: ids.show, is_owned: false, ...fields,
+    })).id;
+    const ownedOf = async (id) => (await q('SELECT is_owned FROM wardrobe WHERE id = :id', { id }))[0].is_owned;
+
+    it('/purchase buys an unowned piece with no lock for its coin price', async () => {
+      const ids = await seed();
+      const heels = await addPiece(ids, { name: 'Satin Heels', lock_type: 'none', coin_cost: 120 });
+      const res = await post('/purchase', { wardrobe_id: heels, show_id: ids.show });
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ coins_before: 1000, coins_after: 880 });
+      expect(await ownedOf(heels)).toBe(true);
+    });
+
+    it('/purchase refuses an unpriced piece with the reason, and writes nothing', async () => {
+      const ids = await seed();
+      const heels = await addPiece(ids, { name: 'Unpriced Heels', lock_type: 'none', coin_cost: 0 });
+      const res = await post('/purchase', { wardrobe_id: heels, show_id: ids.show });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('Cannot purchase — price required: give it a coin price first');
+      expect(res.body.price_required).toBe(true);
+      expect(await ownedOf(heels)).toBe(false);
+      expect(await purchaseRows(ids)).toEqual([]);
+      expect(await ledgerOf(ids)).toBe(1000);
+    });
+
+    it('/lock-outfit-atomic refuses an unpriced piece, naming it and why, before any spend', async () => {
+      const ids = await seed();
+      const heels = await addPiece(ids, { name: 'Unpriced Heels', lock_type: 'none', coin_cost: 0 });
+      const res = await post('/lock-outfit-atomic', { episode_id: ids.ep, show_id: ids.show, wardrobe_ids: [ids.gown, heels] });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('Not within reach: Unpriced Heels');
+      expect(res.body.out_of_reach).toEqual([
+        { id: heels, name: 'Unpriced Heels', lock_type: 'none', reason: 'price required: give it a coin price first' },
+      ]);
+      expect(await purchaseRows(ids)).toEqual([]);
+      expect(await ownedOf(ids.gown)).toBe(false);
+    });
+  });
 });

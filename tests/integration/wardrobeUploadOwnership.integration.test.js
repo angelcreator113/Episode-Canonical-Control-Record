@@ -1,8 +1,9 @@
 /**
- * A wardrobe piece created with no lock is Lala's (the upload form calls
- * lock "None" "always available"); with a coin lock it is not (Evoni,
- * 2026-10-05: an upload saved with the defaults showed Locked in the
- * styling game with no way to wear or buy it).
+ * Every uploaded wardrobe piece starts unowned and is bought for its coin
+ * price (Evoni's ruling, 2026-10-14, Task #3143: "every wardrobe piece that
+ * I upload should need purchased"). It replaces the 2026-10-05 rule that
+ * made a piece with no lock Lala's on upload; since #2650 every unowned
+ * priced piece is for sale, so it is no longer a dead end.
  */
 jest.unmock('uuid');
 
@@ -34,10 +35,15 @@ const shouldSkip =
     .field({ character: 'Lala', clothingCategory: 'dress', showId: show, ...fields });
   const owned = async (res) => (await models.Wardrobe.findByPk(res.body.data?.id || res.body.item?.id || res.body.id, { raw: true }))?.is_owned;
 
-  it('no lock and no ownership given: owned', async () => {
-    const res = await create({ name: 'Plain Dress' });
+  it('no lock and no ownership given: not owned', async () => {
+    const res = await create({ name: 'Plain Dress', price: '120' });
     expect(res.status).toBeLessThan(300);
-    expect(await owned(res)).toBe(true);
+    expect(await owned(res)).toBe(false);
+  });
+  it('an isOwned true sent with no lock is not honoured: not owned', async () => {
+    const res = await create({ name: 'Claimed Dress', price: '120', isOwned: 'true' });
+    expect(res.status).toBeLessThan(300);
+    expect(await owned(res)).toBe(false);
   });
   it('a coin lock: not owned', async () => {
     const res = await create({ name: 'Coin Dress', lockType: 'coin', coinCost: '100' });

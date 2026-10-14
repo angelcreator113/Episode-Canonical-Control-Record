@@ -147,7 +147,6 @@ module.exports = {
         outfitMatchWeight,
         influenceRequired,
         seasonUnlockEpisode,
-        isOwned,
         isVisible,
         lalaReactionOwn,
         lalaReactionLocked,
@@ -293,11 +292,14 @@ module.exports = {
         outfit_match_weight: outfitMatchWeight != null && outfitMatchWeight !== '' ? parseInt(outfitMatchWeight, 10) : undefined,
         influence_required: influenceRequired != null && influenceRequired !== '' ? parseInt(influenceRequired, 10) : undefined,
         season_unlock_episode: seasonUnlockEpisode != null && seasonUnlockEpisode !== '' ? parseInt(seasonUnlockEpisode, 10) : undefined,
-        // A piece with no lock is "always available" (the upload form's own
-        // words): with no ownership given it is Lala's. Saved unowned, the
-        // styling game showed it Locked with no way to wear or buy it
-        // (Evoni, 2026-10-05). A coin or reputation lock stays unowned.
-        is_owned: isOwned != null ? (isOwned === 'true' || isOwned === true) : ((!lockType || lockType === 'none') ? true : undefined),
+        // Every uploaded piece starts unowned and is bought for its coin
+        // price (Evoni's ruling, 2026-10-14, Task #3143: "every wardrobe piece
+        // that I upload should need purchased"). An isOwned sent by a client
+        // is not honoured here; ownership comes from a purchase (or the
+        // edit form's Owned box, after upload). It replaces the 2026-10-05
+        // rule that made a piece with no lock Lala's on upload; every unowned
+        // piece is for sale since #2650, so it is no longer a dead end.
+        is_owned: false,
         is_visible: isVisible != null ? (isVisible === 'true' || isVisible === true) : undefined,
         lala_reaction_own: lalaReactionOwn || undefined,
         lala_reaction_locked: lalaReactionLocked || undefined,
