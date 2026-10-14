@@ -209,8 +209,9 @@ const hasText = (v) => typeof v === 'string' && v.trim().length > 0;
  *                             event scene set's first image the sheet falls back to)
  *   Inspo                     one of her uploads (automatic textures don't count)
  *   Wardrobe                  a saved look with every required slot filled, Body included
- *   Palette                   five colours saved, or (none saved yet) piece images
- *                             the page takes its five colours from
+ *   Palette                   five colours saved (Evoni's ruling, "five colours";
+ *                             Task #3155). Colours the page takes from the
+ *                             pieces count once they are saved.
  *   Tagline                   not empty
  */
 function styleReadiness(lb, sheet) {
@@ -226,7 +227,7 @@ function styleReadiness(lb, sheet) {
     venue: (images.venue || []).some((i) => i.in_lookbook) || (lb.venue_options || []).length > 0,
     inspo: (images.inspo || []).some((i) => i.source === 'upload'),
     wardrobe: sheet.wardrobe?.state !== 'none' && columns.length > 0 && !columns.some((c) => c.needed),
-    palette: saved && saved.length ? saved.length >= 5 : (sheet.palette_sources || []).length > 0,
+    palette: Boolean(saved && saved.length >= 5),
     tagline: hasText(lb.tagline),
   };
   const items = READINESS_CHIPS.map(([key, label]) => ({ key, label, ready: Boolean(ready[key]) }));
@@ -354,8 +355,12 @@ async function buildStyleSheet(models, episodeId) {
       state: hairPhoto && nailsPhoto && beautyCount === 3 ? 'ready' : (hairPhoto || nailsPhoto || beautyCount ? 'partial' : 'missing'),
       detail: `Hair ${hairPhoto ? '✓' : '—'} · Nails ${nailsPhoto ? '✓' : '—'} · Beauty ${beautyCount} of 3` },
     { key: 'palette', label: 'Color palette', source: 'Piece images',
-      state: sheet.palette ? 'ready' : (sheet.palette_sources.length ? 'partial' : 'missing'),
-      detail: sheet.palette ? (sheet.palette.some((s) => s.source === 'edited') ? 'Adjusted by you' : 'From the pieces') : (sheet.palette_sources.length ? 'Taken from the pieces when you preview' : 'No piece images yet') },
+      // Ready with five colours saved, as the readiness chip (Task #3155).
+      state: sheet.palette && sheet.palette.length >= 5 ? 'ready' : (sheet.palette || sheet.palette_sources.length ? 'partial' : 'missing'),
+      detail: sheet.palette && sheet.palette.length >= 5
+        ? (sheet.palette.some((s) => s.source === 'edited') ? 'Adjusted by you' : 'From the pieces')
+        : sheet.palette ? `${sheet.palette.length} of 5 colours saved`
+          : (sheet.palette_sources.length ? 'Taken from the pieces: save the five colours' : 'No piece images yet') },
     { key: 'mood', label: 'Mood words', source: 'Event keywords',
       state: sheet.mood_words.length ? 'ready' : 'missing',
       detail: sheet.mood_words.length ? sheet.mood_words.join(', ') : 'The event has no keywords' },

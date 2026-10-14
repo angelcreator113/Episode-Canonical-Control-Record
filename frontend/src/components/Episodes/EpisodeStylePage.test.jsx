@@ -185,6 +185,27 @@ describe('Style Page', () => {
     expect(panel().getByRole('heading', { name: 'Editing Beauty details · Eyes' })).toBeTruthy();
   });
 
+  // Task #3155: the Palette chip counts five saved colours; colours taken
+  // from the pieces are offered to save, and saved as they are shown.
+  test('colours taken from the pieces can be saved, and are saved as shown', async () => {
+    const { extractPalette } = await import('../../lib/stylePalette');
+    const FIVE = ['#A01428', '#B8962E', '#D4AF93', '#BB6573', '#E3D4AD'].map((hex) => ({ hex, source: 'pieces' }));
+    vi.mocked(extractPalette).mockResolvedValueOnce(FIVE);
+    await renderPage({ sh: sheet({ palette: null, palette_sources: ['data:image/png;base64,AA'] }) });
+    fireEvent.click(sheetEl().getByRole('button', { name: /Palette/ }));
+    const save = await waitFor(() => panel().getByTestId('esp2-palette-save'));
+    expect(save.textContent).toContain('Save these colours');
+    api.put.mockResolvedValue({ data: { data: lookbook() } });
+    fireEvent.click(save);
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith(LB_URL, { palette: FIVE }));
+  });
+
+  test('with five colours already saved there is nothing to save', async () => {
+    await renderPage({ sh: sheet({ palette: ['#A01428', '#B8962E', '#D4AF93', '#BB6573', '#E3D4AD'].map((hex) => ({ hex })) }) });
+    fireEvent.click(sheetEl().getByRole('button', { name: /Palette/ }));
+    expect(panel().queryByTestId('esp2-palette-save')).toBeNull();
+  });
+
   test('the wardrobe spot lists the saved look and opens Wardrobe', async () => {
     const { onOpenTab } = await renderPage();
     fireEvent.click(sheetEl().getByRole('button', { name: 'Add Body (needed)' }));

@@ -483,6 +483,13 @@ function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, te
             </label>
           ))}
           {!(palette || []).length && <p className="esp2-hint">No colours yet: the palette is taken from the saved look's piece images.</p>}
+          {/* Taken from the pieces but not saved: the Palette chip counts once
+              the five colours are saved (Task #3155). */}
+          {!sheet.palette && (palette || []).length > 0 && !locked && (
+            <button type="button" className="esp2-btn" data-testid="esp2-palette-save" onClick={() => savePalette(palette)}>
+              <CheckCircle2 size={16} aria-hidden="true" /> Save these colours
+            </button>
+          )}
           {sheet.palette && !locked && sheet.palette_sources?.length > 0 && (
             <button type="button" className="esp2-btn" onClick={async () => { const p = await extractPalette(sheet.palette_sources); if (p.length) savePalette(p); }}>
               <RotateCcw size={16} aria-hidden="true" /> Take from the pieces again

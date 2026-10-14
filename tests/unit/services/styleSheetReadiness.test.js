@@ -71,13 +71,20 @@ describe('styleReadiness (server)', () => {
     expect(chip(styleReadiness(d.lb, d.sheet), 'wardrobe')).toBe(false);
   });
 
-  test('palette: five saved colours, or none saved and piece images to take them from', () => {
-    let d = full(); d.lb.palette = FIVE.slice(0, 4);
+  // Evoni's ruling, "Palette (five colours)" (Task #3155): piece images to
+  // take colours from are not five saved colours; they count once saved.
+  test('palette: five saved colours only', () => {
+    let d = full();
+    expect(chip(styleReadiness(d.lb, d.sheet), 'palette')).toBe(true);
+    d = full(); d.lb.palette = FIVE.slice(0, 4);
     expect(chip(styleReadiness(d.lb, d.sheet), 'palette')).toBe(false);
     d = full(); d.lb.palette = null;
     expect(chip(styleReadiness(d.lb, d.sheet), 'palette')).toBe(false);
     d.sheet.palette_sources = ['data:image/png;base64,AA'];
-    expect(chip(styleReadiness(d.lb, d.sheet), 'palette')).toBe(true);
+    expect(chip(styleReadiness(d.lb, d.sheet), 'palette')).toBe(false);
+    d = full(); d.lb.palette = [];
+    d.sheet.palette_sources = ['data:image/png;base64,AA'];
+    expect(chip(styleReadiness(d.lb, d.sheet), 'palette')).toBe(false);
   });
 
   test('tagline: not empty', () => {
