@@ -235,7 +235,12 @@ describe('EpisodeWardrobeGameplay — reach in Closet and Search (Task #1937)', 
     fireEvent.click(screen.getByText('Budget Wrap Dress'));
     await waitFor(() => expect(screen.getAllByText('Budget Wrap Dress').length).toBe(2));
     fireEvent.click(screen.getByText('Midnight Gown'));
-    expect(await screen.findByText(/🔒 Need 900 coins/)).toBeTruthy();
+    // Task #3144: the inspector says why in full, and a closet piece that was
+    // never scored shows no "0/60" and no empty LALA SAYS.
+    expect((await screen.findByTestId('inspect-cannot-buy')).textContent).toBe('🔒 Not enough coins: it costs 🪙 900, Lala has 🪙 500');
+    expect(screen.queryByTestId('inspect-score')).toBeNull();
+    expect(screen.queryByText('0/60')).toBeNull();
+    expect(screen.queryByTestId('inspect-lala-says')).toBeNull();
   });
 
   test('Search uses the same rule', async () => {
