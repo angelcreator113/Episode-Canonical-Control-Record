@@ -3,10 +3,11 @@
  * ScreenFlowMap — Visual diagram of screen connections
  */
 import { useState, useCallback, useEffect, useMemo, useRef, Fragment } from 'react';
-import { X, ChevronLeft, Wifi, Signal, BatteryFull, RotateCcw, Target, CheckCircle2, Circle } from 'lucide-react';
+import { X, Wifi, Signal, BatteryFull, RotateCcw, Target, CheckCircle2, Circle } from 'lucide-react';
 import PhoneDevice from './phone/PhoneDevice';
 import { isIcon, isScreen, resolveZoneIcon } from '../lib/overlayUtils';
 import { filterZones, applyActions, actionsForZone, evaluateMissions, applyMissionRewards } from '../lib/phoneRuntime';
+import { isVoiceZone, VOICE_TOAST } from '../lib/phoneVoice';
 
 const TOKENS = { parchment: '#FAF7F0', gold: '#B8962E', ink: '#2C2C2C', lavender: '#5B4B8A' }; // lavender: --lala-lavender, the Phone Hub's primary (2026-10-07)
 const MONO = "'DM Mono', monospace";
@@ -194,6 +195,10 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
     }, TRANSITION_MS);
   }, [findScreen, activeScreen, animating]);
 
+  // The show's icons, so each tap zone draws its icon's current image
+  // (doctrine rule 17, Task #2005), and a Voice zone is known (Task #3163).
+  const icons = useMemo(() => screens.filter(isIcon), [screens]);
+
   /**
    * The single entry point for tapping a zone. In author mode we run actions
    * locally through applyActions; in player mode we delegate to the server via
@@ -202,6 +207,11 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
    * the same UI updates.
    */
   const handleZoneTap = useCallback(async (zone) => {
+    // Voice is an action, not a screen (Task #3163): "Lala speaks", and the
+    // tap opens nothing. The tap still runs below, so missions and the
+    // playthrough see it.
+    const voice = isVoiceZone(zone, icons);
+    if (voice) setToasts(prev => [...prev, { id: Date.now(), text: VOICE_TOAST }]);
     if (playthrough?.tap && zone.id) {
       // Player mode — server executes (zone actions + mission rewards). The
       // response already contains any reward-merged effects plus the list of
@@ -226,7 +236,7 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
           celebrate(justDone);
         }
       }
-      if (effects?.navigate) navigateTo(effects.navigate, 'left');
+      if (effects?.navigate && !voice) navigateTo(effects.navigate, 'left');
       return;
     }
 
@@ -265,8 +275,8 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
     }
     if (rewardResult.effects.completeEpisode) setEpisodeComplete(true);
     const finalNavigate = effects.navigate || rewardResult.effects.navigate;
-    if (finalNavigate) navigateTo(finalNavigate, 'left');
-  }, [evalContext, navigateTo, playthrough, state, visitedScreens, missions, completedMissionIds, celebrate, activeScreen]);
+    if (finalNavigate && !voice) navigateTo(finalNavigate, 'left');
+  }, [evalContext, navigateTo, playthrough, state, visitedScreens, missions, completedMissionIds, celebrate, activeScreen, icons]);
 
   // Auto-dismiss toasts after 2.5s
   useEffect(() => {
@@ -329,9 +339,6 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
     return getLinks(homeScreen).filter(l => l.persistent && l.icon_url);
   }, [homeScreen, activeScreen]);
   const allLinks = [...getLinks(activeScreen), ...persistentLinks];
-  // The show's icons, so each tap zone draws its icon's current image
-  // (doctrine rule 17, Task #2005).
-  const icons = useMemo(() => screens.filter(isIcon), [screens]);
   const { visible: links } = filterZones(allLinks, evalContext);
 
   const slideTransform = slideDir === 'left'
@@ -339,7 +346,7 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
     ? 'translateX(100%)' : 'translateX(0)';
 
   // The Preview's runtime, drawn inside PhoneDevice's screen area in place of
-  // its own tap zones: status bar, back, opens_screen, the runtime-filtered tap
+  // its own tap zones: status bar, opens_screen, the runtime-filtered tap
   // zones with the slide transition, and a home target along the bottom. The
   // layer itself lets taps through (pointer-events: none) so anything under it
   // that is not covered by one of these controls stays reachable.
@@ -358,20 +365,6 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
           <BatteryFull size={11} color="#fff" />
         </div>
       </div>
-
-      {/* Back button */}
-      {history.length > 0 && (
-        <button onClick={goBack} style={{
-          position: 'absolute', top: 26, left: 8, zIndex: 6,
-          background: 'rgba(0,0,0,0.5)', border: 'none', borderRadius: 12,
-          padding: '4px 8px', cursor: 'pointer', color: '#fff',
-          display: 'flex', alignItems: 'center', gap: 2,
-          backdropFilter: 'blur(4px)', fontSize: 10, fontWeight: 700,
-          pointerEvents: 'auto',
-        }}>
-          <ChevronLeft size={12} /> Back
-        </button>
-      )}
 
       {/* Tap targets with slide transition */}
       <div style={{
@@ -602,6 +595,8 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
         firstScreen={homeScreen}
         globalFit={globalFit}
         tapLayer={tapLayer}
+        // The device's own Back (Task #3162): the previous screen, else home.
+        onBack={history.length ? goBack : goHome}
         showId={showId}
         episodeId={episodeId}
         storyAt={storyAt}

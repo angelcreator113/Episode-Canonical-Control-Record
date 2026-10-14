@@ -71,20 +71,21 @@ describe('UIOverlaysTab top area — pinned before the setup guide (Task #2053)'
   // the cards' rule: Homepage has a zone with no destination, mail inbox has
   // nothing linking to it and dm thread has no image, so 1 of the 4 screens.
   // The header bar (Evoni's mockup, 2026-10-08): the tiles became chips.
-  // calls list is reached from Homepage but leads nowhere (a dead end);
+  // calls list is reached from Homepage but leads nowhere, which is no
+  // longer a dead end (the phone's own Back, Task #3162), so it has no chip;
   // mail inbox is reached from nothing; dm thread has no image, so it is in
   // neither count.
-  test('the header bar reads Lala\'s Phone and its chips: screens ready, icons, dead ends, not reachable', async () => {
+  test('the header bar reads Lala\'s Phone and its chips: screens ready, icons, not reachable', async () => {
     await renderPage();
     const header = document.querySelector('.overlays-header');
     expect(within(header).getByRole('heading', { name: "Lala's Phone" })).toBeTruthy();
     const chips = Array.from(header.querySelectorAll('[data-testid="phone-hub-chips"] li')).map(li => li.textContent);
-    expect(chips).toEqual(['1/4 screens ready', '1 icon', '1 dead end', '1 screen not reachable']);
+    expect(chips).toEqual(['1/4 screens ready', '1 icon', '1 screen not reachable']);
   });
 
-  test('a chip opens the stage that fixes it: dead ends open the Map', async () => {
+  test('a chip opens the stage that fixes it: not reachable opens the Map', async () => {
     await renderPage();
-    fireEvent.click(screen.getByTestId('phone-chip-dead'));
+    fireEvent.click(screen.getByTestId('phone-chip-unreachable'));
     await waitFor(() => expect(within(document.querySelector('.phone-hub-stage-row')).getByRole('button', { name: 'Map' }).getAttribute('aria-current')).toBe('page'));
     expect(screen.getByRole('heading', { name: 'How Lala moves through her phone' })).toBeTruthy();
   });

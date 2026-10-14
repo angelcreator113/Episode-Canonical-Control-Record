@@ -97,9 +97,8 @@
 .phone-map-stage__note.is-key { background: var(--lala-lavender-soft); color: var(--lala-ink); }
 .phone-map-stage__note.is-key .phone-map-stage__note-title { color: var(--lala-lavender-text); }
 .phone-map-stage__key-onward { color: var(--lala-teal-dark); font-weight: 600; }
-.phone-map-stage__key-dead { color: var(--lala-danger); font-weight: 600; }
 
-.phone-map-stage__chips, .phone-map-stage__names { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.phone-map-stage__chips { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .phone-map-stage__chip {
   display: flex; align-items: center; gap: 8px;
   padding: 6px 10px 6px 6px; min-height: 44px;

@@ -72,6 +72,15 @@ describe('PhonePreviewMode behaviour (Task #1990)', () => {
     await goToDms();
     fireEvent.click(screen.getByRole('button', { name: 'Back' }));
     await screen.findByAltText('Home');
+    // Home again: no Back there (Task #3162).
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+  });
+
+  test('a screen opened with no history still has Back, and it goes home (Task #3162)', async () => {
+    renderPreview({ initialScreen: DMS });
+    expect(screen.getAllByRole('button', { name: 'Back' })).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    await screen.findByAltText('Home');
   });
 
   test('home returns to the first screen', async () => {
