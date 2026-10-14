@@ -33,6 +33,22 @@ export function showIdFromPath(pathname) {
   return m && m[1] !== 'create' ? decodeURIComponent(m[1]) : null;
 }
 
+/**
+ * A show's name for a picker, told apart from another show of the same name
+ * (Task #3140): its episode count, then the start of its id. Two shows both
+ * named "Styling Adventures with Lala" otherwise read the same in a list.
+ */
+export function showLabel(show, shows = []) {
+  const nameOf = (s) => s?.name || s?.title || 'Untitled show';
+  const name = nameOf(show);
+  const same = (shows || []).filter((s) => nameOf(s) === name);
+  if (same.length <= 1) return name;
+  const count = Number(show?.episodeCount);
+  const episodes = Number.isFinite(count) ? `${count} episode${count === 1 ? '' : 's'}` : null;
+  const sameCount = same.filter((s) => Number(s.episodeCount) === count).length > 1;
+  return [name, episodes, (!episodes || sameCount) ? String(show?.id || '').slice(0, 8) : null].filter(Boolean).join(' · ');
+}
+
 /** The active show's id among shows ([{ id }]), or null when it has to be chosen. */
 export function activeShowId({ pathname = '', shows = [] } = {}) {
   const ids = new Set((shows || []).map((s) => String(s.id)));

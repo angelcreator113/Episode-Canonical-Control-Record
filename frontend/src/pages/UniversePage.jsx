@@ -32,6 +32,7 @@ import { worldIdeas, latelyItems, bookSummary } from '../lib/lalaverseOverview';
 import { castCounts } from '../lib/theCast';
 import useActiveShow from '../hooks/useActiveShow';
 import ShowChooser from '../components/ShowChooser';
+import { showLabel } from '../utils/activeShow';
 import ShowBiblePage from './ShowBiblePage';
 import WorldFoundation from './WorldFoundation';
 import SocialSystems from './SocialSystems';
@@ -209,6 +210,28 @@ function Overview() {
       {failed && <div role="alert" className="lvh-alert">The shows could not be loaded, so this overview has no show to describe.</div>}
       <HubBanner tab="overview" title={show?.name || 'Styling Adventures with Lala'}
         line={show?.description || 'No description for this show yet. Add one in the show’s settings.'} />
+      {/* Which show this is (Task #3140): the Overview described the show
+          remembered in this browser without naming it, so a description
+          from another show read as this one's. It names the show, switches
+          it when there are several, and opens that same show's settings. */}
+      {show && (
+        <div className="lvh-showline" data-testid="lalaverse-show-line">
+          {shows.length > 1 ? (
+            <label className="lvh-showline-pick">
+              Showing{' '}
+              <select value={String(show.id)} onChange={(e) => choose(e.target.value)} data-testid="lalaverse-show-select">
+                {shows.map((s) => <option key={s.id} value={String(s.id)}>{showLabel(s, shows)}</option>)}
+              </select>
+            </label>
+          ) : (
+            <span>Showing <strong>{showLabel(show, shows)}</strong></span>
+          )}
+          <Link className="lvh-showline-link" data-testid="lalaverse-show-settings"
+            to={`/admin?tab=show-settings&show=${encodeURIComponent(show.id)}`}>
+            Edit its name and description in Show settings →
+          </Link>
+        </div>
+      )}
       <TabOrientation id="overview" {...ORIENTATION.overview} />
 
       {data && (
