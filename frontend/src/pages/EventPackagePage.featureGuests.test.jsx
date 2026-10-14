@@ -124,3 +124,60 @@ describe('feature a guest by clicking their name', () => {
     expect(screen.getByTestId('guest-list-locked').textContent).toBe('Featured attendees are locked: Episode 4 is accepted.');
   });
 });
+
+// Task #3138: Add from Feed is where Featured Attendees are chosen. A name
+// already on the guest list was a disabled row and the handler refused it,
+// so picking an invited guest there never featured them.
+describe('Add from Feed features an invited guest', () => {
+  const feed = (profiles) => {
+    const base = vi.mocked(api.get).getMockImplementation();
+    vi.mocked(api.get).mockImplementation(async (url) => (
+      url.startsWith('/api/v1/social-profiles?') ? { data: { profiles } } : base(url)
+    ));
+  };
+  const openFeed = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: /Add from Feed/ }));
+  };
+
+  test('picking an invited guest features them in place; the guest list is not added to', async () => {
+    stored = eventWith(guests([0]));
+    feed([{ id: 'p2', handle: 'guest3', display_name: 'Guest Three' }, { id: 'p0', handle: 'guest1', display_name: 'Guest One' }]);
+    renderPage();
+    await openFeed();
+    const invited = await screen.findByTestId('guest-feed-result-p2');
+    expect(invited.disabled).toBe(false);
+    expect(invited.textContent).toContain('Invited · pick to feature');
+    const featured = screen.getByTestId('guest-feed-result-p0');
+    expect(featured.disabled).toBe(true);
+    expect(featured.textContent).toContain('Featured');
+
+    fireEvent.click(invited);
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+    const saved = savedGuests(0);
+    expect(saved).toHaveLength(7);
+    expect(saved.map((g) => g.featured)).toEqual([true, false, true, false, false, false, false]);
+    await screen.findByText('Featured Attendees (2/5)');
+  });
+
+  test('a creator not on the list is added and featured, as before', async () => {
+    stored = eventWith(guests());
+    feed([{ id: 'p99', handle: 'newface', display_name: 'New Face' }]);
+    renderPage();
+    await openFeed();
+    fireEvent.click(await screen.findByTestId('guest-feed-result-p99'));
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+    const saved = savedGuests(0);
+    expect(saved).toHaveLength(8);
+    expect(saved[7]).toMatchObject({ profile_id: 'p99', display_name: 'New Face', featured: true });
+  });
+
+  test('at five featured, picking an invited guest says why and saves nothing', async () => {
+    stored = eventWith(guests([0, 1, 2, 3, 4]));
+    feed([{ id: 'p5', handle: 'guest6', display_name: 'Guest Six' }]);
+    renderPage();
+    await openFeed();
+    fireEvent.click(await screen.findByTestId('guest-feed-result-p5'));
+    expect(await screen.findByText('Only 5 guests can be featured at once — remove one first.')).toBeTruthy();
+    expect(api.put).not.toHaveBeenCalled();
+  });
+});
