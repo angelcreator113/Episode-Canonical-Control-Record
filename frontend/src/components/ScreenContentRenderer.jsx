@@ -20,6 +20,7 @@ import { RELATIONSHIP_POST_TYPE, parseRelationship } from '../lib/feedRelationsh
 import { pulseFeedUrl } from '../lib/pulsePosts';
 import { storyLabel } from '../lib/storyClock';
 import PhoneMapView from './phone/PhoneMapView';
+import PieceImage from './Wardrobe/PieceImage';
 
 // ── Content type registry — maps type keys to renderer components and metadata ──
 export const CONTENT_TYPES = [
@@ -823,10 +824,6 @@ function WardrobeGridRenderer({ showId, config }) {
       {items.map((item, i) => {
         const owned = item.is_owned === true;
         const cost = item.coin_cost;
-        // Prefer the background-removed (cutout) image so tiles read as
-        // game-inventory icons — not raw photos with cluttered backgrounds.
-        // Falls back to the processed thumbnail, then the raw upload.
-        const img = item.s3_url_processed || item.thumbnail_url || item.s3_url;
         return (
           <div key={item.id || i} style={{
             position: 'relative',
@@ -846,20 +843,8 @@ function WardrobeGridRenderer({ showId, config }) {
             alignItems: 'center',
             justifyContent: 'center',
           }}>
-            {img ? (
-              <img
-                src={img}
-                alt={item.name}
-                style={{
-                  width: '100%', height: '100%',
-                  // Cutouts display best with contain — cover would crop
-                  // limbs/straps off transparent PNGs.
-                  objectFit: 'contain',
-                }}
-              />
-            ) : (
-              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, opacity: 0.5 }}>👗</div>
-            )}
+            {/* The cut-out on its Producer Mode backdrop (Task #3151), as in the closet. */}
+            <PieceImage item={item} radius={6} testId={`phone-closet-piece-${item.id || i}`} />
             {/* Badge — "OWNED" in green if she has it, coin cost in gold if she doesn't.
                 Cost hidden when it's zero/missing (gifts, vintage, etc.). */}
             {owned ? (
@@ -1214,7 +1199,8 @@ function ClosetWishlistGridRenderer({ showId, config }) {
     <div style={{ width: '100%', height: '100%', padding: 4, background: config.bg || 'rgba(0,0,0,0.25)', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
       {items.map(w => (
         <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: 3, background: 'rgba(255,255,255,0.06)', borderRadius: 3 }}>
-          {w.image_url && <img src={w.image_url} alt="" style={{ width: 22, height: 22, objectFit: 'cover', borderRadius: 2, flexShrink: 0 }} />}
+          {/* On its Producer Mode backdrop (Task #3151). */}
+          <PieceImage item={w} src={w.image_url || null} size={22} radius={2} alt="" testId={`phone-wishlist-piece-${w.id}`} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 8, color: '#fff', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</div>
             <div style={{ fontSize: 6, color: 'rgba(255,255,255,0.5)' }}>{w.brand || '—'} · {w.tier || 'basic'}</div>

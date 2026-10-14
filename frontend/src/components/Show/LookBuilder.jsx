@@ -12,7 +12,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import { getEpisodeAnchorEvent } from '../../services/episodeEventsApi';
-import { resolveWardrobeImageUrl } from '../../utils/wardrobeImage';
+import PieceImage from '../Wardrobe/PieceImage';
 import { outfitPieces } from '../../lib/closetGrouping';
 import { restoreLook, lookIds, toggleInLook, toggleSetInLook, setReach, lookRows, lookCosts, canSaveLook, sameLook } from '../../lib/lookBuilder';
 
@@ -147,11 +147,10 @@ export function LookBuilderPanel({ look, coinsNow }) {
         <ul className="wa-look-rows">
           {rows.map((row, i) => (
             <li key={row.item?.id || `${row.slot}-${i}`} className={`wa-look-row${row.item ? '' : ' empty'}`} data-testid={`look-row-${row.slot}`}>
-              {(() => {
-                // The closet's own picture of the piece (wardrobeImage), the swatch when it has none.
-                const url = row.item ? resolveWardrobeImageUrl(row.item) : null;
-                return <span className="wa-look-swatch" aria-hidden="true" style={url ? { backgroundImage: `url(${url})` } : undefined} />;
-              })()}
+              {/* The piece on its Producer Mode backdrop (Task #3151); an empty slot keeps the swatch. */}
+              {row.item
+                ? <PieceImage item={row.item} size={40} radius={8} testId={`look-row-img-${row.slot}`} />
+                : <span className="wa-look-swatch" aria-hidden="true" />}
               <span className="wa-look-row-text">
                 <span className="wa-look-row-slot">{row.label}</span>
                 <strong>{row.item ? row.item.name : 'Pick a piece'}</strong>

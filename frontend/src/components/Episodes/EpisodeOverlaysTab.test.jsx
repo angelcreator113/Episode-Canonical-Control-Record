@@ -250,6 +250,11 @@ describe("EpisodeOverlaysTab: Lala's look as overlays (Task #2791)", () => {
     expect(dress.querySelector('img').getAttribute('src')).toBe('https://img/dress-nobg.png');
     expect(dress.textContent).toContain('Sculpted Dress');
     expect(screen.getByTestId('eot-look-look_gold_drops').textContent).toContain('Gold Drops');
+    // Task #3151: each piece on its slot backdrop, by its category; no picture, its slot's icon.
+    expect(dress.querySelector('.wa-wd-backdrop').dataset.backdrop).toBe('body');
+    const drops = screen.getByTestId('eot-look-look_gold_drops').querySelector('.wa-wd-backdrop');
+    expect(drops.dataset.backdrop).toBe('jewelry');
+    expect(drops.textContent).toBe('💍');
     expect(screen.queryByTestId('eot-look-none')).toBeNull();
   });
 

@@ -4,6 +4,13 @@
  * Part 2) with plain coloured placeholder images.
  */
 const sharp = require('sharp');
+
+// Task #3151: record the backdrops painted behind the wardrobe columns.
+jest.mock('../../../src/utils/wardrobeBackdrop', () => {
+  const actual = jest.requireActual('../../../src/utils/wardrobeBackdrop');
+  return { ...actual, paintBackdrop: jest.fn(actual.paintBackdrop) };
+});
+const { paintBackdrop } = require('../../../src/utils/wardrobeBackdrop');
 const { EXPORTS, renderExport, renderSheetCanvas } = require('../../../src/services/styleSheetRenderService');
 
 const ph = async (colour) => `data:image/png;base64,${(await sharp({ create: { width: 60, height: 80, channels: 3, background: colour } }).png().toBuffer()).toString('base64')}`;
@@ -72,5 +79,14 @@ describe('style sheet render', () => {
     const at = (x, y) => { const i = (y * info.width + x) * info.channels; return [data[i], data[i + 1], data[i + 2]]; };
     expect(at(540, 20)).toEqual([0xE9, 0xC4, 0xD5]);
     expect(at(540, 1900)).toEqual([0x30, 0x25, 0x3D]);
+  });
+
+  // Task #3151: a piece sits on its slot backdrop, as in Producer Mode's closet.
+  test('each wardrobe column with a piece is drawn on its slot backdrop; an empty one is not', async () => {
+    paintBackdrop.mockClear();
+    await renderSheetCanvas(sheet);
+    const slots = paintBackdrop.mock.calls.map((c) => c[1]);
+    // The fixture's columns: body (needed, no image), shoes (an image), jewelry (no image).
+    expect(slots).toEqual(['shoes']);
   });
 });

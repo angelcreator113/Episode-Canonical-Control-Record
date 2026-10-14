@@ -214,5 +214,7 @@ export function wornLooks(filled) {
  * .wa-wd-backdrop.bd-<key> with a pastel and a studio glow.
  */
 export function backdropFor(item) {
-  return closetGroupFor(item?.clothing_category);
+  // A look piece names it category (the event's outfit snapshot, episodeLook,
+  // the Overlays look); a wardrobe row clothing_category (Task #3151).
+  return closetGroupFor(item?.clothing_category || item?.category);
 }

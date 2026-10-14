@@ -61,6 +61,9 @@ describe('Producer Mode look builder', () => {
 
     fireEvent.click(screen.getByTestId('wardrobe-look-w2'));
     await waitFor(() => expect(within(panel).getByTestId('look-row-shoes').textContent).toContain('Crimson Pump'));
+    // Task #3151: each piece in the look sits on its slot backdrop; an empty slot keeps the swatch.
+    expect(within(panel).getByTestId('look-row-img-body').dataset.backdrop).toBe('body');
+    expect(within(panel).getByTestId('look-row-img-shoes').dataset.backdrop).toBe('shoes');
     const money = within(panel).getByTestId('look-money').textContent;
     expect(money).toContain('−200 coins');
     expect(money).toContain('+650 coins');

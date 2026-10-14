@@ -1205,7 +1205,7 @@ router.get('/:id/financial-breakdowns', requireAuth, async (req, res) => {
         { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
       );
       const [wishlistRows] = await sequelize.query(
-        `SELECT id, name, coin_cost, price, tier, brand, s3_url_processed, s3_url
+        `SELECT id, name, clothing_category, coin_cost, price, tier, brand, s3_url_processed, s3_url
          FROM wardrobe
          WHERE (show_id = :showId OR show_id IS NULL) AND deleted_at IS NULL
            AND (is_owned = false OR is_owned IS NULL)
@@ -1225,6 +1225,8 @@ router.get('/:id/financial-breakdowns', requireAuth, async (req, res) => {
           coin_cost: Number(w.coin_cost) || Number(w.price) || 0,
           tier: w.tier,
           brand: w.brand,
+          // The piece's slot backdrop on the phone (Task #3151).
+          clothing_category: w.clothing_category || null,
           image_url: w.s3_url_processed || w.s3_url || null,
         })),
       };
