@@ -42,4 +42,22 @@ describe("Lala's Phone closet screens", () => {
     expect(pearls.dataset.backdrop).toBe('jewelry');
     expect(pearls.querySelector('img').getAttribute('src')).toBe('pearls.png');
   });
+
+  test('the Hair area reads hairstyles and wigs on the Hair backdrop; Accessories leaves them out, bows kept (Task 3167)', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { data: [
+      { id: 'h1', name: 'Honey Lace Wig', clothing_category: 'hair', is_owned: true },
+    ] } });
+    render(<ScreenContentRenderer zones={[zone('wardrobe_hair')]} showId="s-1" />);
+    const wig = await screen.findByTestId('phone-closet-piece-h1');
+    expect(wig.dataset.backdrop).toBe('hair');
+    expect(vi.mocked(api.get).mock.calls[0][0]).toContain(`category=${encodeURIComponent('hair,wig,wigs,hairstyle,hairstyles')}`);
+
+    vi.mocked(api.get).mockResolvedValue({ data: { data: [
+      { id: 'h2', name: 'Honey Lace Wig', clothing_category: 'hair', is_owned: true },
+      { id: 'b1', name: 'Velvet Bow', clothing_category: 'hair bow', is_owned: true },
+    ] } });
+    render(<ScreenContentRenderer zones={[{ ...zone('wardrobe_accessories'), id: 'z2' }]} showId="s-1" />);
+    await screen.findByTestId('phone-closet-piece-b1');
+    expect(screen.queryByTestId('phone-closet-piece-h2')).toBeNull();
+  });
 });

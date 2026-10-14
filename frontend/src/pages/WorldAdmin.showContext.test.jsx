@@ -19,7 +19,7 @@ import WorldAdmin from './WorldAdmin';
 import { rememberedShowId } from '../utils/activeShow';
 
 const SHOWS = [
-  { id: 'show-1', name: 'Styling Adventures', metadata: { required_slots: ['outfit', 'shoes', 'jewelry', 'accessories', 'fragrance'] } },
+  { id: 'show-1', name: 'Styling Adventures', metadata: { required_slots: ['outfit', 'shoes', 'jewelry', 'accessories', 'hair', 'fragrance'] } },
   { id: 'show-2', name: 'Another Show', metadata: {} },
 ];
 let path;

@@ -2,8 +2,8 @@
  * Episode Wardrobe game — category grouping and Full Closet loading
  * (Task #2377).
  *
- * The game's slots (Body/Top/Bottom/Shoes/Accessories/Jewelry/Perfume) are
- * finer than the shared five-slot taxonomy in lib/wardrobeSlots (which folds
+ * The game's slots (Body/Top/Bottom/Outerwear/Shoes/Accessories/Jewelry/Hair/
+ * Perfume) are finer than the shared slot taxonomy in lib/wardrobeSlots (which folds
  * dress/top/bottom into one "outfit" slot), so they are keyed by the shared
  * *canonical category* instead: a clothing_category is resolved to a
  * canonical category through CATEGORY_TO_SLOT / CATEGORY_ALIASES (the one
@@ -29,6 +29,9 @@ export const GAME_SLOT_DEFS = [
   { key: 'shoes', icon: '👠', label: 'Shoes', categories: ['shoes'], required: true, desc: 'Required' },
   { key: 'accessories', icon: '👜', label: 'Accessories', categories: ['accessory', 'bag'], required: false, desc: 'Optional' },
   { key: 'jewelry', icon: '💍', label: 'Jewelry', categories: ['jewelry'], required: false, desc: 'Optional' },
+  // Evoni, 2026-10-14 (Task #3167): the hairstyle or wig, one at a time; a
+  // new one replaces the last. Hair bows and clips stay Accessories.
+  { key: 'hair', icon: '💇', label: 'Hair', categories: ['hair'], required: false, desc: 'One hairstyle or wig' },
   { key: 'perfume', icon: '🌸', label: 'Perfume', categories: ['perfume'], required: false, desc: 'Optional' },
 ];
 
@@ -79,6 +82,7 @@ export const ALL_GROUP = { key: 'all', icon: '🗂️', label: 'All', categories
 export const OTHER_GROUP = { key: 'other', icon: '📦', label: 'Other', categories: [], required: false, desc: 'Uncategorized pieces' };
 
 const exactCanonical = (w) => (CATEGORY_TO_SLOT[w] ? w : CATEGORY_ALIASES[w] || null);
+const PHRASE_ALIASES = Object.keys(CATEGORY_ALIASES).filter((k) => k.includes(' '));
 
 /**
  * clothing_category → canonical category ('dress', 'bottom', 'outerwear' …),
@@ -92,6 +96,11 @@ export function canonicalCategory(clothingCategory) {
   if (!n) return null;
   const direct = exactCanonical(n);
   if (direct) return direct;
+  // A multi-word alias first: "velvet hair bow" is an accessory, though its
+  // words hold "hair" (Task #3167).
+  for (const key of PHRASE_ALIASES) {
+    if (n.includes(key)) return CATEGORY_ALIASES[key];
+  }
   const words = n.split(/[\s/_,&+-]+/).filter(Boolean);
   for (let i = words.length - 1; i >= 0; i -= 1) {
     const hit = exactCanonical(words[i]);
