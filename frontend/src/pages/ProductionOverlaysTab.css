@@ -46,6 +46,8 @@
 .sol-btn.is-primary { border-color: var(--lala-lavender); background: var(--lala-lavender); color: var(--text-inverse); }
 .sol-btn.is-primary:hover:not(:disabled) { border-color: var(--lala-lavender-dark); background: var(--lala-lavender-dark); }
 .sol-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+/* The overlay that is the stats panel (Task 3164). */
+.sol-btn.is-panel { border-color: var(--lala-lavender); background: var(--lala-lavender-soft); }
 
 .sol-link {
   display: inline-flex;

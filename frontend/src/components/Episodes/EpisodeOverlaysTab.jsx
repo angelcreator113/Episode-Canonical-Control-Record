@@ -30,6 +30,10 @@
  * list and the Career plan, each a wide card with its preview on the left
  * and its status, what it is and its actions on the right; "+ New overlay"
  * holds the ways to add one; the show-wide overlays follow as chips.
+ *
+ * The stats panel (Task #3164; Evoni, 2026-10-14) follows Lala's look: the
+ * show's panel with her numbers for this episode, "before → after", and its
+ * PNG to download. The audience sees it, not Lala.
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -38,6 +42,7 @@ import { ImageOff, Plus } from 'lucide-react';
 import { getEpisodeOverlaysApi, STATUS_LABELS } from './EpisodeTitleChip';
 import EpisodeTitleCard, { formatEstimate } from './EpisodeTitleCard';
 import EpisodeLibraryOverlays from './EpisodeLibraryOverlays';
+import EpisodeStatsPanel from '../StatsPanel/EpisodeStatsPanel';
 import EventDocuments from '../EventPackage/EventDocuments';
 import { overlayRows } from '../../lib/episodeOverlays';
 import PieceImage from '../Wardrobe/PieceImage';
@@ -279,6 +284,9 @@ export default function EpisodeOverlaysTab({ episode, showId, onChanged }) {
             )}
             <p className="eot-look-hint">Put a piece on screen from the Script tab: a beat&apos;s Phone / overlay button.</p>
           </div>
+
+          {/* The audience's stats panel (Task #3164): Lala's numbers before → after, as a PNG. */}
+          <EpisodeStatsPanel showId={data.show_id || showId} episode={episode} />
         </section>
       )}
 
