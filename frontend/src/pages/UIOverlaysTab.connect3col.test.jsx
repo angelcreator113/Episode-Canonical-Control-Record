@@ -1,7 +1,8 @@
 /**
  * Connect in three columns (Evoni's mockup, 2026-10-08): the screen list
- * grouped Needs you · Dead ends · Ready, "things to check" naming zones
- * that open the same screen, and the dead-ends banner's "Add back buttons".
+ * grouped Needs you · Ready, and "things to check" naming zones that open
+ * the same screen. The Dead ends group and the dead-ends banner's "Add back
+ * buttons" are gone: the phone has its own Back (Task #3162).
  */
 
 import React from 'react';
@@ -64,11 +65,11 @@ async function openConnect(items) {
 const group = (key) => Array.from(screen.getByTestId(`connect-group-${key}`).querySelectorAll('.connect-screens__item')).map(b => b.textContent);
 
 describe("Connect in three columns (Evoni's mockup)", () => {
-  test('the screens are grouped: needs you, dead ends, ready', async () => {
+  test('the screens are grouped: needs you, ready; no dead ends (Task #3162)', async () => {
     await openConnect([HOME, CLOSET, CAMERA, HAIR]);
     expect(group('needs')).toEqual(['Hair PageNothing links here']);
-    expect(group('dead')).toEqual(['CameraNo way back']);
-    expect(group('ready')).toEqual(['HomepageHome · 3 zones', 'Closet1 zone']);
+    expect(screen.queryByTestId('connect-group-dead')).toBeNull();
+    expect(group('ready')).toEqual(['HomepageHome · 3 zones', 'Closet1 zone', 'Camera0 zones']);
   });
 
   test('a screen in the list opens it in the editor', async () => {
@@ -84,19 +85,10 @@ describe("Connect in three columns (Evoni's mockup)", () => {
     expect(within(checks).getByText('wallet and closet both open Closet. Is that on purpose?')).toBeTruthy();
   });
 
-  test('"Add back buttons" gives each dead end a Back zone to the home screen, after asking', async () => {
+  test('no dead-end banner and no "Add back buttons": the phone has its own Back (Task #3162)', async () => {
     await openConnect([HOME, CLOSET, CAMERA, HAIR]);
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
-    const banner = screen.getByTestId('zones-dead-ends');
-    expect(banner.textContent).toContain('1 screen is a dead end.');
-    fireEvent.click(within(banner).getByRole('button', { name: 'Add back buttons to it' }));
-    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('zones-dead-ends')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Add back buttons/ })).toBeNull();
     expect(api.put).not.toHaveBeenCalled();
-    fireEvent.click(within(banner).getByRole('button', { name: 'Add back buttons to it' }));
-    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
-    const [url, body] = vi.mocked(api.put).mock.calls[0];
-    expect(url).toBe(`/api/v1/ui-overlays/${SHOW}/screen-links/a-camera`);
-    expect(body.screen_links).toEqual([expect.objectContaining({ label: 'Back', target: 'home', x: 4, y: 5 })]);
-    await waitFor(() => expect(screen.queryByTestId('zones-dead-ends')).toBeNull());
   });
 });

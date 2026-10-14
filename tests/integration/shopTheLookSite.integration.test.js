@@ -137,7 +137,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     ]);
     const body = JSON.stringify(one.body);
     for (const id of [ids.ep, ids.show, ids.pump, ids.studs, ids.event]) expect(body).not.toContain(id);
-    expect(body).not.toMatch(/price|128|420/);
+    // The prices never leave; the publish time and the random key are left
+    // out of this check, since "…:35.420Z" or a key can hold the digits.
+    const { published_at: _when, key: _key, ...rest } = one.body.look;
+    expect(JSON.stringify(rest)).not.toMatch(/price|128|420/);
 
     // Read live: a piece's link edited after publishing shows at once.
     await run('UPDATE wardrobe SET real_product_url = :u WHERE id = :id', { u: 'https://shop.example/pump-2', id: ids.pump });

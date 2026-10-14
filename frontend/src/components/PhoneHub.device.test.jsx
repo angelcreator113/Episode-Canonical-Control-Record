@@ -172,16 +172,16 @@ describe('PhoneHub device — characterization (Task #1983)', () => {
     expect(d.getByText('Beat 1')).toBeTruthy();
   });
 
-  test('the back button shows only with history and onBack, and calls onBack', () => {
-    const noHistory = renderHub({ onBack: vi.fn() });
-    expect(noHistory.d.queryByText('← Back')).toBeNull();
+  test('Back shows on every screen but the home, with onBack, and calls onBack (Task #3162)', () => {
+    const onHome = renderHub({ navigationHistory: ['dms'], onBack: vi.fn() });
+    expect(onHome.d.queryByText('← Back')).toBeNull();
     cleanup();
-    const noHandler = renderHub({ navigationHistory: ['home'] });
+    const noHandler = renderHub({ activeScreen: DMS, navigationHistory: ['home'] });
     expect(noHandler.d.queryByText('← Back')).toBeNull();
     cleanup();
     const onBack = vi.fn();
-    const withBoth = renderHub({ navigationHistory: ['home'], onBack });
-    fireEvent.click(withBoth.d.getByText('← Back'));
+    const noHistory = renderHub({ activeScreen: DMS, onBack });
+    fireEvent.click(noHistory.d.getByText('← Back'));
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 

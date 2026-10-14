@@ -3,7 +3,7 @@
  * ScreenFlowMap — Visual diagram of screen connections
  */
 import { useState, useCallback, useEffect, useMemo, useRef, Fragment } from 'react';
-import { X, ChevronLeft, Wifi, Signal, BatteryFull, RotateCcw, Target, CheckCircle2, Circle } from 'lucide-react';
+import { X, Wifi, Signal, BatteryFull, RotateCcw, Target, CheckCircle2, Circle } from 'lucide-react';
 import PhoneDevice from './phone/PhoneDevice';
 import { isIcon, isScreen, resolveZoneIcon } from '../lib/overlayUtils';
 import { filterZones, applyActions, actionsForZone, evaluateMissions, applyMissionRewards } from '../lib/phoneRuntime';
@@ -346,7 +346,7 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
     ? 'translateX(100%)' : 'translateX(0)';
 
   // The Preview's runtime, drawn inside PhoneDevice's screen area in place of
-  // its own tap zones: status bar, back, opens_screen, the runtime-filtered tap
+  // its own tap zones: status bar, opens_screen, the runtime-filtered tap
   // zones with the slide transition, and a home target along the bottom. The
   // layer itself lets taps through (pointer-events: none) so anything under it
   // that is not covered by one of these controls stays reachable.
@@ -365,20 +365,6 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
           <BatteryFull size={11} color="#fff" />
         </div>
       </div>
-
-      {/* Back button */}
-      {history.length > 0 && (
-        <button onClick={goBack} style={{
-          position: 'absolute', top: 26, left: 8, zIndex: 6,
-          background: 'rgba(0,0,0,0.5)', border: 'none', borderRadius: 12,
-          padding: '4px 8px', cursor: 'pointer', color: '#fff',
-          display: 'flex', alignItems: 'center', gap: 2,
-          backdropFilter: 'blur(4px)', fontSize: 10, fontWeight: 700,
-          pointerEvents: 'auto',
-        }}>
-          <ChevronLeft size={12} /> Back
-        </button>
-      )}
 
       {/* Tap targets with slide transition */}
       <div style={{
@@ -609,6 +595,8 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
         firstScreen={homeScreen}
         globalFit={globalFit}
         tapLayer={tapLayer}
+        // The device's own Back (Task #3162): the previous screen, else home.
+        onBack={history.length ? goBack : goHome}
         showId={showId}
         episodeId={episodeId}
         storyAt={storyAt}

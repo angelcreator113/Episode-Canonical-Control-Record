@@ -11,7 +11,8 @@
  *   onSelectScreen(overlay) — callback when a screen slot is clicked
  *   onNavigate(screenKey)   — callback when a tap zone is clicked (navigates to target screen)
  *   navigationHistory       — array of previous screen keys for back navigation
- *   onBack()                — callback for back button (pops navigation history)
+ *   onBack()                — the device's Back, shown on every screen but the
+ *                             home (Task #3162): the previous screen, else home
  *   deviceFrame   — optional custom device frame image URL
  */
 import { useState, useRef, useEffect, useMemo, memo } from 'react';
