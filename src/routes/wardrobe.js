@@ -9,7 +9,7 @@ const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { InsufficientCoinsError, insufficientCoinsBody } = require('../services/coinBalanceGuard');
 const { spendFromLedger, syncCoinsFromLedger } = require('../services/coinLedgerSync');
-const { itemReach, isForSale, toCharacter } = require('../services/wardrobeReach');
+const { itemReach, isForSale, cannotBuyReason, toCharacter } = require('../services/wardrobeReach');
 // Game responses never carry a piece's real-world source (Task #3020).
 const { withoutRealFields, allWithoutRealFields } = require('../utils/wardrobeInWorld');
 const { DecisionLogger } = require('../utils/decisionLogger');
@@ -1649,7 +1649,8 @@ router.post('/select', requireAuth, async (req, res) => {
     }
 
     if (!item.is_owned) {
-      return res.status(400).json({ error: 'Item is not owned — cannot select a locked item' });
+      const why = cannotBuyReason(item);
+      return res.status(400).json({ error: why ? `Cannot select "${item.name}" — ${why}` : 'Item is not owned — cannot select a locked item' });
     }
 
     // 2. Upsert link. Task #1924: the styling game's pick is a deliberate
@@ -1794,7 +1795,7 @@ router.post('/lock-outfit-atomic', requireAuth, async (req, res) => {
       return res.status(400).json({
         success: false,
         error: `Not within reach: ${names.join(', ')}`,
-        out_of_reach: outOfReach.map((p) => ({ id: p.item.id, name: p.item.name, lock_type: p.item.lock_type })),
+        out_of_reach: outOfReach.map((p) => ({ id: p.item.id, name: p.item.name, lock_type: p.item.lock_type, reason: cannotBuyReason(p.item) })),
       });
     }
 
@@ -1921,7 +1922,8 @@ router.post('/purchase', requireAuth, async (req, res) => {
     // Every unowned piece is for sale except brand-exclusive and season-drop
     // ones (wardrobeReach.isForSale; Evoni's ruling, 2026-10-06). This
     // refused everything but coin-locked pieces.
-    if (!isForSale(item)) return res.status(400).json({ error: `Cannot purchase — ${item.lock_type === 'season_drop' ? 'a season drop' : 'brand exclusive'}, not for sale` });
+    // An unpriced piece is not for sale until it is priced (Task #3143).
+    if (!isForSale(item)) return res.status(400).json({ error: `Cannot purchase — ${cannotBuyReason(item) || 'not for sale'}`, price_required: item.lock_type !== 'season_drop' && item.lock_type !== 'brand_exclusive' });
 
     // 2. Lala's coins are the ledger balance (D1; Task #2248). This read is
     //    only a fast refusal; spendFromLedger decides under the show lock.

@@ -14,7 +14,7 @@ export const EMPTY_PIECE = Object.freeze({
   description: '', season: '', occasion: '', tags: '', tier: '', isFavorite: false,
   coinCost: '', acquisitionType: 'purchased', lockType: 'none', eraAlignment: '', reputationRequired: '',
   aestheticTags: '', eventTypes: '', outfitMatchWeight: '', influenceRequired: '', seasonUnlockEpisode: '',
-  isOwned: true, isVisible: true, lalaReactionOwn: '', lalaReactionLocked: '', lalaReactionReject: '',
+  isVisible: true, lalaReactionOwn: '', lalaReactionLocked: '', lalaReactionReject: '',
 });
 
 export const SEASONS = ['spring', 'summer', 'fall', 'winter', 'all-season'];
@@ -27,7 +27,7 @@ export const TIERS = [
 ];
 export const ACQUISITIONS = ['purchased', 'gifted', 'borrowed', 'rented', 'custom', 'vintage'];
 export const LOCKS = [
-  { value: 'none', label: 'None, always available' },
+  { value: 'none', label: 'None, bought for its story price' },
   { value: 'coin', label: 'Coins, pay to unlock' },
   { value: 'reputation', label: 'Reputation gate' },
   { value: 'brand_exclusive', label: 'Brand exclusive' },
@@ -42,12 +42,31 @@ export const ERAS = [
   { value: 'legacy', label: 'Legacy' },
 ];
 
-/** What the piece still needs before it can be added: [] when ready. */
+// The lock types that are never for sale (src/services/wardrobeReach.js NOT_FOR_SALE).
+const NOT_FOR_SALE = new Set(['brand_exclusive', 'season_drop']);
+
+/**
+ * The piece's story price in coins: the coin cost typed, else the price at a
+ * coin a dollar (the server's own default, wardrobeController); 0 when none.
+ */
+export function storyPrice(form) {
+  const coins = Number(form?.coinCost);
+  if (String(form?.coinCost ?? '').trim() !== '' && Number.isFinite(coins)) return Math.max(0, Math.round(coins));
+  const price = parseFloat(form?.price);
+  return Number.isFinite(price) && price > 0 ? Math.round(price) : 0;
+}
+
+/**
+ * What the piece still needs before it can be added: [] when ready. Every
+ * uploaded piece starts unowned and is bought for its story price (Evoni,
+ * 2026-10-14, Task #3143), so a piece for sale needs a price above 0.
+ */
 export function missingForAdd(form, file) {
   const missing = [];
   if (!file) missing.push('a photo');
   if (!String(form?.name || '').trim()) missing.push('a name');
   if (!form?.clothingCategory) missing.push('a category');
+  if (!NOT_FOR_SALE.has(form?.lockType) && storyPrice(form) <= 0) missing.push('a price (or a story price in coins)');
   return missing;
 }
 
@@ -87,14 +106,11 @@ export function applyAutoFill(prev, answer) {
     character: 'Lala',
   };
   if (!answer?.gameplay) return next;
-  const aiLocks = prev.lockType === 'none' && ai.lock_type && ai.lock_type !== 'none';
   return {
     ...next,
     coinCost: prev.coinCost || suggestCoinCost(prev.price, ai.coin_cost, aiPrice),
     acquisitionType: prev.acquisitionType === 'purchased' && ai.acquisition_type ? ai.acquisition_type : (prev.acquisitionType || 'purchased'),
     lockType: prev.lockType === 'none' && ai.lock_type ? ai.lock_type : (prev.lockType || 'none'),
-    // A lock the AI suggests is a piece Lala does not own yet.
-    ...(aiLocks ? { isOwned: false } : {}),
     eraAlignment: prev.eraAlignment || ai.era_alignment || '',
     aestheticTags: prev.aestheticTags || (ai.aesthetic_tags || []).join(', '),
     eventTypes: prev.eventTypes || (ai.event_types || []).join(', '),
@@ -132,7 +148,7 @@ export function pieceFormData(form, file, showId, real = null) {
   if (form.isFavorite) fd.append('isFavorite', 'true');
   if (form.acquisitionType && form.acquisitionType !== 'purchased') fd.append('acquisitionType', form.acquisitionType);
   if (form.lockType && form.lockType !== 'none') fd.append('lockType', form.lockType);
-  fd.append('isOwned', form.isOwned ? 'true' : 'false');
+  // No isOwned: every uploaded piece starts unowned (Task #3143).
   if (form.isVisible === false) fd.append('isVisible', 'false');
   if (showId) fd.append('showId', showId);
   let realFilled = false;

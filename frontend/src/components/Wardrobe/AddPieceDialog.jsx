@@ -26,7 +26,7 @@ import api from '../../services/api';
 import { SLOT_KEYS, SLOT_DEFS, SLOT_SUBCATEGORIES } from '../../lib/wardrobeSlots';
 import {
   EMPTY_PIECE, SEASONS, TIERS, ACQUISITIONS, LOCKS, ERAS,
-  missingForAdd, missingText, applyAutoFill, pieceFormData, autoFillErrorText, uploadErrorText, photoDropped,
+  missingForAdd, missingText, applyAutoFill, pieceFormData, autoFillErrorText, uploadErrorText, photoDropped, storyPrice,
 } from '../../lib/wardrobeAddPiece';
 import RealWorldFields from './RealWorldFields';
 import { realDraftFrom, realWorldErrorText } from '../../lib/wardrobeRealWorld';
@@ -44,14 +44,18 @@ function Field({ label, hint, children, wide = false }) {
   );
 }
 
-const LOCK_WORDS = { none: 'always available', coin: 'unlocked with coins', reputation: 'reputation gate', brand_exclusive: 'brand exclusive', season_drop: 'season drop' };
+const LOCK_WORDS = { none: 'bought for its price', coin: 'unlocked with coins', reputation: 'reputation gate', brand_exclusive: 'brand exclusive', season_drop: 'season drop' };
 
-/** "Lala owns it · purchased · always available": what In the story holds, closed. */
+/**
+ * "Lala buys it · purchased · bought for its price · 2,400 coins": what In
+ * the story holds, closed. Every uploaded piece starts unowned and is bought
+ * (Evoni, 2026-10-14, Task #3143), so the line never says she owns it.
+ */
 const storyLine = (f) => [
-  f.isOwned ? 'Lala owns it' : 'Lala does not own it yet',
+  'Lala buys it',
   f.acquisitionType || 'purchased',
   LOCK_WORDS[f.lockType || 'none'] || f.lockType,
-  f.coinCost ? `${Number(f.coinCost).toLocaleString()} coins` : null,
+  storyPrice(f) > 0 ? `${storyPrice(f).toLocaleString()} coins` : 'price required',
 ].filter(Boolean).join(' · ');
 
 export default function AddPieceDialog({ showId, onClose, onAdded }) {
@@ -251,7 +255,7 @@ export default function AddPieceDialog({ showId, onClose, onAdded }) {
                   </select>
                 </Field>
                 <Field label="Lock">
-                  <select value={form.lockType} onChange={(e) => set({ lockType: e.target.value, isOwned: e.target.value === 'none' })}>
+                  <select value={form.lockType} onChange={(e) => set({ lockType: e.target.value })}>
                     {LOCKS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
                   </select>
                 </Field>
@@ -266,9 +270,7 @@ export default function AddPieceDialog({ showId, onClose, onAdded }) {
                   </Field>
                 )}
               </div>
-              <label className="apd-check">
-                <input type="checkbox" checked={form.isOwned} onChange={(e) => set({ isOwned: e.target.checked })} /> Lala already owns it
-              </label>
+              <p className="apd-more-line">Lala buys every piece you add, for its story price: it starts in To buy, not in her closet.</p>
             </details>
 
             <details className="apd-more">

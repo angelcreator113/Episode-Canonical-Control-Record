@@ -32,7 +32,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import api from '../services/api';
 import { resolveWardrobeCutoutUrl } from '../utils/wardrobeImage';
-import { withReach, lockReason, setCost } from '../utils/wardrobeReach';
+import { withReach, lockReason, setCost, priceRequired } from '../utils/wardrobeReach';
 import { GAME_SLOT_DEFS as SLOT_DEFS, OTHER_GROUP, ALL_GROUP, SETS_GROUP, MULTI_SLOTS, gameSlotFor, closetGroupFor, fetchClosetWithTotal, slotPieces, outfitPieces, normalizeSlots, matchingSetsFrom, equipInto, wornLooks, backdropFor } from '../lib/closetGrouping';
 import { eventLookPieces, lookAgainstEvent, shoppingListSource, eventPackagePath } from '../lib/eventLook';
 import { lookTotal, pieceChargeText } from '../lib/lookCharge';
@@ -577,7 +577,9 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
       setError(`The ${set.name} costs 🪙 ${cost.toLocaleString()} for the pieces Lala doesn't own; she has ${Number(coins).toLocaleString()}`);
       return;
     }
-    const locked = set.pieces.filter(p => !p.can_select);
+    // Not wearable now: not for sale, or waiting for a price (Task #3143).
+    const locked = set.pieces.filter(p => !p.can_select && !priceRequired(p));
+    const unpriced = set.pieces.filter(p => !p.can_select && priceRequired(p));
     const noSlot = set.pieces.filter(p => p.can_select && !gameSlotFor(p.clothing_category));
     const wearable = set.pieces.filter(p => p.can_select && gameSlotFor(p.clothing_category));
     // The body (a dress, or the separates) first, so the rest add to it.
@@ -590,6 +592,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
     setFilledSlots(prev => wearable.reduce((acc, piece) => equipInto(acc, piece), prev));
     const notes = [];
     if (locked.length) notes.push(`${locked.length} piece${locked.length === 1 ? '' : 's'} left out (not for sale): ${locked.map(p => p.name).join(', ')}`);
+    if (unpriced.length) notes.push(`${unpriced.length} piece${unpriced.length === 1 ? '' : 's'} left out (price required): ${unpriced.map(p => p.name).join(', ')}`);
     if (noSlot.length) notes.push(`${noSlot.length} piece${noSlot.length === 1 ? '' : 's'} left out (no game slot): ${noSlot.map(p => p.name).join(', ')}`);
     setSuccess([`Wearing the ${set.name}`, ...notes].join(' · '));
   };
@@ -1122,6 +1125,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                           {`${set.pieces.length} pieces · `}
                           {price.cost > 0 ? `🪙 ${price.cost.toLocaleString()} to buy · Lala has ${Number(coins).toLocaleString()}` : 'all Lala\'s'}
                           {price.notForSale.length > 0 && ` · ${price.notForSale.length} not for sale`}
+                          {price.priceRequired.length > 0 && ` · ${price.priceRequired.length} need a price`}
                         </div>
                       </div>
                       {wearing

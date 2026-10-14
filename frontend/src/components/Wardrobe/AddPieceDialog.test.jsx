@@ -24,10 +24,16 @@ beforeEach(() => {
 
 describe('wardrobeAddPiece helpers', () => {
   test('what is missing, in plain words', () => {
-    expect(missingForAdd(EMPTY_PIECE, null)).toEqual(['a photo', 'a name', 'a category']);
+    // Task #3143: every uploaded piece is bought, so a piece for sale needs a price.
+    expect(missingForAdd(EMPTY_PIECE, null)).toEqual(['a photo', 'a name', 'a category', 'a price (or a story price in coins)']);
     expect(missingText(['a photo', 'a name', 'a category'])).toBe('Add a photo, a name and a category');
     expect(missingText(['a name'])).toBe('Add a name');
-    expect(missingForAdd({ ...EMPTY_PIECE, name: ' Dress ', clothingCategory: 'dress' }, photo())).toEqual([]);
+    expect(missingForAdd({ ...EMPTY_PIECE, name: ' Dress ', clothingCategory: 'dress' }, photo())).toEqual(['a price (or a story price in coins)']);
+    expect(missingForAdd({ ...EMPTY_PIECE, name: ' Dress ', clothingCategory: 'dress', price: '120' }, photo())).toEqual([]);
+    expect(missingForAdd({ ...EMPTY_PIECE, name: ' Dress ', clothingCategory: 'dress', coinCost: '300' }, photo())).toEqual([]);
+    expect(missingForAdd({ ...EMPTY_PIECE, name: ' Dress ', clothingCategory: 'dress', coinCost: '0', price: '120' }, photo())).toEqual(['a price (or a story price in coins)']);
+    // Never for sale, so no price is asked for.
+    expect(missingForAdd({ ...EMPTY_PIECE, name: ' Dress ', clothingCategory: 'dress', lockType: 'season_drop' }, photo())).toEqual([]);
   });
 
   test('auto-fill fills what is empty and keeps what she typed', () => {
@@ -36,19 +42,20 @@ describe('wardrobeAddPiece helpers', () => {
       success: true, gameplay: true,
       data: { name: 'Gold Slip', item_type: 'Skirt', color: 'gold', price_estimate: '$450', coin_cost: 450, lock_type: 'coin', aesthetic_tags: ['silk'] },
     });
-    expect(next).toMatchObject({ name: 'Gold Slip', clothingCategory: 'bottom', color: 'gold', price: '300', coinCost: 300, lockType: 'coin', isOwned: false, tags: 'silk', aestheticTags: 'silk' });
+    expect(next).toMatchObject({ name: 'Gold Slip', clothingCategory: 'bottom', color: 'gold', price: '300', coinCost: 300, lockType: 'coin', tags: 'silk', aestheticTags: 'silk' });
     expect(applyAutoFill(prev, { data: { lock_type: 'coin' } }).lockType).toBe('none'); // no gameplay mode
   });
 
   test('the upload sends only what is set, trimmed', () => {
-    const fd = pieceFormData({ ...EMPTY_PIECE, name: ' Gold Slip ', clothingCategory: 'dress', brand: '  ', color: 'gold', lockType: 'coin', isOwned: false, website: 'https://x' }, photo(), 'show-1');
+    const fd = pieceFormData({ ...EMPTY_PIECE, name: ' Gold Slip ', clothingCategory: 'dress', brand: '  ', color: 'gold', lockType: 'coin', website: 'https://x' }, photo(), 'show-1');
     expect(fd.get('name')).toBe('Gold Slip');
     expect(fd.get('brand')).toBeNull();
     expect(fd.get('color')).toBe('gold');
     expect(fd.get('purchaseLink')).toBe('https://x');
     expect(fd.get('lockType')).toBe('coin');
     expect(fd.get('acquisitionType')).toBeNull();
-    expect(fd.get('isOwned')).toBe('false');
+    // Task #3143: no ownership is sent; every uploaded piece starts unowned.
+    expect(fd.get('isOwned')).toBeNull();
     expect(fd.get('showId')).toBe('show-1');
     expect(fd.get('image')).toBeTruthy();
   });
@@ -85,12 +92,14 @@ describe('AddPieceDialog', () => {
     api.post.mockResolvedValue({ data: { success: true, data: { id: 'w1', name: 'Gold Slip', s3_url: 'https://img/w1.png' } } });
     render(<AddPieceDialog showId="show-1" onClose={() => {}} onAdded={onAdded} />);
     expect(screen.getByRole('dialog', { name: 'Add a piece' })).toBeTruthy();
-    expect(screen.getByTestId('add-piece-missing').textContent).toBe('Add a photo, a name and a category');
+    expect(screen.getByTestId('add-piece-missing').textContent).toBe('Add a photo, a name, a category and a price (or a story price in coins)');
     expect(screen.getByTestId('add-piece-save').disabled).toBe(true);
     pick();
     type('Name', 'Gold Slip');
-    expect(screen.getByTestId('add-piece-missing').textContent).toBe('Add a category');
+    expect(screen.getByTestId('add-piece-missing').textContent).toBe('Add a category and a price (or a story price in coins)');
     type('Category', 'dress');
+    expect(screen.getByTestId('add-piece-missing').textContent).toBe('Add a price (or a story price in coins)');
+    type('Price ($)', '120');
     expect(screen.queryByTestId('add-piece-missing')).toBeNull();
     fireEvent.click(screen.getByTestId('add-piece-save'));
     await waitFor(() => expect(onAdded).toHaveBeenCalled());
@@ -104,7 +113,7 @@ describe('AddPieceDialog', () => {
     api.post.mockRejectedValueOnce({ response: { status: 400, data: { error: 'Invalid real-world fields', details: ['real_price_paid must be a number of zero or more'] } } });
     api.post.mockResolvedValueOnce({ data: { success: true, data: { id: 'w3', s3_url: 'https://img/w3.png' } } });
     render(<AddPieceDialog showId="show-1" onClose={() => {}} onAdded={onAdded} />);
-    pick(); type('Name', 'Gold Slip'); type('Category', 'dress');
+    pick(); type('Name', 'Gold Slip'); type('Category', 'dress'); type('Price ($)', '120');
     const section = screen.getByTestId('wardrobe-real-world');
     expect(section.querySelector('input[name="real_brand"]')).toBeNull();
     section.open = true;
@@ -140,7 +149,7 @@ describe('AddPieceDialog', () => {
     const onAdded = vi.fn();
     api.post.mockRejectedValue({ response: { status: 500, data: { error: 'S3 is down' } } });
     render(<AddPieceDialog showId="show-1" onClose={() => {}} onAdded={onAdded} />);
-    pick(); type('Name', 'Gold Slip'); type('Category', 'dress');
+    pick(); type('Name', 'Gold Slip'); type('Category', 'dress'); type('Price ($)', '120');
     fireEvent.click(screen.getByTestId('add-piece-save'));
     expect((await screen.findByTestId('add-piece-error')).textContent).toBe("The piece wasn't added: S3 is down");
     expect(onAdded).not.toHaveBeenCalled();
@@ -151,7 +160,7 @@ describe('AddPieceDialog', () => {
     const onAdded = vi.fn();
     api.post.mockResolvedValue({ data: { success: true, data: { id: 'w2', s3_url: null } } });
     render(<AddPieceDialog showId="show-1" onClose={() => {}} onAdded={onAdded} />);
-    pick(); type('Name', 'Gold Slip'); type('Category', 'dress');
+    pick(); type('Name', 'Gold Slip'); type('Category', 'dress'); type('Price ($)', '120');
     fireEvent.click(screen.getByTestId('add-piece-save'));
     await waitFor(() => expect(onAdded).toHaveBeenCalled());
     expect(onAdded.mock.calls[0][1]).toMatchObject({ photoDropped: true });
@@ -191,6 +200,9 @@ describe('AddPieceDialog', () => {
 
   test('In the story summarises its fields while closed', () => {
     render(<AddPieceDialog showId="show-1" onClose={() => {}} />);
-    expect(screen.getByTestId('add-piece-story').textContent).toContain('Lala owns it · purchased · always available');
+    expect(screen.getByTestId('add-piece-story').textContent).toContain('Lala buys it · purchased · bought for its price · price required');
+    type('Price ($)', '120');
+    expect(screen.getByTestId('add-piece-story').textContent).toContain('Lala buys it · purchased · bought for its price · 120 coins');
+    expect(screen.queryByText('Lala already owns it')).toBeNull();
   });
 });
