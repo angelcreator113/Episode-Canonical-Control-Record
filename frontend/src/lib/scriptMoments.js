@@ -391,3 +391,83 @@ export function phoneCheck(lines = [], on = {}, { startAt = null } = {}) {
   });
   return { moments, taps, missing };
 }
+
+// ── What Lala has put on, line by line (Task #3180) ──
+// Evoni, 2026-10-14 (Lala's Phone phase 3, ruling 1): the beat source for the
+// Shopping list's crossing off is a script cue, `[WEAR: <wardrobe id>]`,
+// naming the piece by id. Older scripts' `[UI:SELECT Item <name>]` lines are
+// read by name, and a name that matches no piece or several pieces of the
+// look is flagged, never guessed. The server's parser reads the same cue
+// (src/utils/scriptBeatParser.js, beat.tags.wear).
+
+const WEAR_LINE = /^\s*\[WEAR:\s*([^\]\s]+)\s*\]\s*$/i;
+
+/** The piece id a `[WEAR: id]` line names, or null for any other line. */
+export function wearOf(line) {
+  const m = String(line || '').match(WEAR_LINE);
+  return m ? m[1] : null;
+}
+
+/** The line a picker writes for a piece. */
+export const wearLine = (pieceId) => `[WEAR: ${String(pieceId || '').trim()}]`;
+
+const nameKey = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+/**
+ * Every wear cue in the script, in order: { beatIndex, lineIndex, via
+ * ('wear' | 'select'), text, piece (the look's piece, or null), flag }.
+ * flag is null when the cue names exactly one piece of the look, else
+ * 'not_in_look' (a [WEAR] id the look doesn't hold), 'no_match' (a legacy
+ * name no piece has) or 'several' (a legacy name several pieces share).
+ * `beats` are the Script tab's beats ({ lines }); `look` the locked outfit
+ * ({ id, name }).
+ */
+export function wearCues(beats = [], look = []) {
+  const pieces = Array.isArray(look) ? look.filter(Boolean) : [];
+  const byId = new Map(pieces.map((p) => [String(p.id), p]));
+  const cues = [];
+  (beats || []).forEach((beat, beatIndex) => {
+    (beat?.lines || []).forEach((line, lineIndex) => {
+      const id = wearOf(line);
+      if (id) {
+        const piece = byId.get(String(id)) || null;
+        cues.push({ beatIndex, lineIndex, via: 'wear', text: id, piece, flag: piece ? null : 'not_in_look' });
+        return;
+      }
+      const moment = parseMoment(line);
+      if (!moment || moment.verb !== 'SELECT') return;
+      const name = moment.target.replace(/^item\s+/i, '').trim();
+      if (!name) return;
+      const matches = pieces.filter((p) => nameKey(p.name) === nameKey(name));
+      cues.push({
+        beatIndex, lineIndex, via: 'select', text: name,
+        piece: matches.length === 1 ? matches[0] : null,
+        flag: matches.length === 1 ? null : (matches.length ? 'several' : 'no_match'),
+      });
+    });
+  });
+  return cues;
+}
+
+/** The look's pieces Lala has put on at or before a line (each once, in the order she put them on). */
+export function wornAt(beats = [], beatIndex = 0, lineIndex = Infinity, look = []) {
+  const seen = new Map();
+  for (const c of wearCues(beats, look)) {
+    if (c.beatIndex > beatIndex || (c.beatIndex === beatIndex && c.lineIndex > lineIndex)) break;
+    if (c.piece && !seen.has(String(c.piece.id))) seen.set(String(c.piece.id), c.piece);
+  }
+  return [...seen.values()];
+}
+
+const FLAG_TEXT = {
+  not_in_look: (c) => `[WEAR: ${c.text}] is not a piece of the locked look`,
+  no_match: (c) => `"${c.text}" matches no piece of the look`,
+  several: (c) => `"${c.text}" matches several pieces of the look; use [WEAR: id]`,
+};
+
+/** The wear cues that name no single piece, with a line to show each: { beatIndex, lineIndex, flag, text }. */
+export function wearFlags(beats = [], look = []) {
+  return wearCues(beats, look)
+    .filter((c) => c.flag)
+    .map((c) => ({ beatIndex: c.beatIndex, lineIndex: c.lineIndex, flag: c.flag, text: FLAG_TEXT[c.flag](c) }));
+}
