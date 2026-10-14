@@ -21,6 +21,7 @@
  *            canSwapVenue, onSwapVenue() }
  */
 import React, { forwardRef, useEffect, useRef } from 'react';
+import '../../styles/wardrobe-backdrop.css';
 import './StyleSheetTemplate.css';
 
 export const SHEET_WIDTH = 1024;
@@ -40,11 +41,18 @@ export function useSheetFonts() {
   }, []);
 }
 
+// The WARDROBE BREAKDOWN columns that hold a piece, by its Producer Mode
+// backdrop (Task #3151; the server draws the same, utils/wardrobeBackdrop
+// SHEET_COLUMN_SLOT). Hair and nails are Lookbook photos, not pieces.
+export const COLUMN_BACKDROP = Object.freeze({ body: 'body', shoes: 'shoes', bag: 'accessories', jewelry: 'jewelry', perfume: 'perfume' });
+
 // Photos are drawn as backgrounds (cover, or contain for pieces): html2canvas
-// ignores object-fit, so an <img> would print stretched in the PNG.
-function Photo({ src, label, alt = label, className = '' }) {
+// ignores object-fit, so an <img> would print stretched in the PNG. A piece
+// (backdrop set) sits on its slot backdrop, as in the closet.
+function Photo({ src, label, alt = label, className = '', backdrop = null }) {
+  const onBackdrop = src && backdrop ? ` wa-wd-backdrop bd-${backdrop}` : '';
   return (
-    <div className={`ss-photo ${className}`.trim()}>
+    <div className={`ss-photo ${className}${onBackdrop}`.trim()} data-backdrop={onBackdrop ? backdrop : undefined}>
       {src
         ? <div className="ss-photo-img" role="img" aria-label={alt} style={{ backgroundImage: `url("${src}")` }} />
         : <span className="ss-photo-empty">{label}</span>}
@@ -180,7 +188,7 @@ const StyleSheetTemplate = forwardRef(function StyleSheetTemplate({ sheet, palet
             <figure key={c.key} className={`ss-column${c.needed ? ' is-needed' : ''}`} data-testid={`ss-col-${c.key}`}>
               <div className="ss-column-label">{c.label}</div>
               <div className="ss-spot-wrap ss-column-photo-wrap">
-                <Photo src={c.image} label={c.needed && !edit ? 'Needed' : ''} alt={c.name || c.label} className="ss-frame ss-column-photo" />
+                <Photo src={c.image} label={c.needed && !edit ? 'Needed' : ''} alt={c.name || c.label} className="ss-frame ss-column-photo" backdrop={COLUMN_BACKDROP[c.key] || null} />
                 {(() => {
                   // Hair and nails are Lookbook spots; the other columns are the saved look's pieces.
                   const spot = c.key === 'hair' || c.key === 'nails' ? c.key : 'wardrobe';

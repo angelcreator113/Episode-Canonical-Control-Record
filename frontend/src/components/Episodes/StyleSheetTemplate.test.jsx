@@ -46,6 +46,20 @@ describe('style sheet template', () => {
     for (const k of ['bag', 'hair', 'perfume', 'nails']) expect(within(screen.getByTestId(`ss-col-${k}`)).queryByText('Needed')).toBeNull();
   });
 
+  // Task #3151: a piece sits on its Producer Mode backdrop, as in the closet.
+  test('a wardrobe column with a piece sits on its slot backdrop; empty, hair and nails do not', () => {
+    const jewelry = { key: 'jewelry', label: 'JEWELRY', name: 'Drops', image: 'data:image/png;base64,AA', needed: false };
+    const hair = { key: 'hair', label: 'HAIR', name: 'Sleek bun', image: 'data:image/png;base64,AA', needed: false };
+    const sheet = { ...EPISODE_ONE, wardrobe: { ...EPISODE_ONE.wardrobe, columns: [...EPISODE_ONE.wardrobe.columns.filter((c) => !['jewelry', 'hair'].includes(c.key)), jewelry, hair] } };
+    render(<StyleSheetTemplate sheet={sheet} />);
+    const frame = (key) => screen.getByTestId(`ss-col-${key}`).querySelector('.ss-column-photo');
+    expect(frame('shoes').className).toContain('wa-wd-backdrop bd-shoes');
+    expect(frame('jewelry').dataset.backdrop).toBe('jewelry');
+    expect(frame('body').className).not.toContain('wa-wd-backdrop'); // Needed, no piece
+    expect(frame('bag').className).not.toContain('wa-wd-backdrop'); // empty
+    expect(frame('hair').className).not.toContain('wa-wd-backdrop'); // a Lookbook photo, not a piece
+  });
+
   test('five swatches: the palette given, the rest empty; mood words print; no tagline invented', () => {
     const { container } = render(<StyleSheetTemplate sheet={EPISODE_ONE} palette={[{ hex: '#A01428' }, { hex: '#B8962E' }]} />);
     const sw = screen.getAllByTestId('ss-swatch');

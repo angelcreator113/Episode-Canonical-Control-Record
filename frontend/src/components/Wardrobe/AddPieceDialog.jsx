@@ -29,6 +29,7 @@ import {
   missingForAdd, missingText, applyAutoFill, pieceFormData, autoFillErrorText, uploadErrorText, photoDropped, storyPrice,
 } from '../../lib/wardrobeAddPiece';
 import RealWorldFields from './RealWorldFields';
+import PieceImage from './PieceImage';
 import { realDraftFrom, realWorldErrorText } from '../../lib/wardrobeRealWorld';
 import './AddPieceDialog.css';
 
@@ -160,7 +161,8 @@ export default function AddPieceDialog({ showId, onClose, onAdded }) {
               data-testid="add-piece-drop"
             >
               {preview ? (
-                <img src={preview} alt="The piece" />
+                // On the backdrop of the category chosen (Task #3151), as it will sit in the closet.
+                <PieceImage item={{ clothing_category: form.clothingCategory }} src={preview} radius={14} alt="The piece" testId="add-piece-preview" />
               ) : (
                 <span className="apd-drop-empty">
                   <ImagePlus size={26} aria-hidden="true" />

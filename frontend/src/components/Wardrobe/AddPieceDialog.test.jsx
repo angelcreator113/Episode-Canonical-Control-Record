@@ -198,6 +198,16 @@ describe('AddPieceDialog', () => {
     expect(document.body.textContent).not.toMatch(/PM2|\.env|Service Worker/);
   });
 
+  // Task #3151: the photo sits on the backdrop of the category chosen, as in the closet.
+  test("the photo's preview sits on its category's backdrop", async () => {
+    render(<AddPieceDialog showId="show-1" onClose={() => {}} />);
+    pick();
+    const preview = await screen.findByTestId('add-piece-preview');
+    expect(preview.dataset.backdrop).toBe('other');
+    type('Category', 'shoes');
+    expect(screen.getByTestId('add-piece-preview').dataset.backdrop).toBe('shoes');
+  });
+
   test('In the story summarises its fields while closed', () => {
     render(<AddPieceDialog showId="show-1" onClose={() => {}} />);
     expect(screen.getByTestId('add-piece-story').textContent).toContain('Lala buys it · purchased · bought for its price · price required');

@@ -1640,7 +1640,8 @@
   background: var(--lala-surface);
   color: var(--lala-lavender-text);
 }
-.epp-outfit-piece-img img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+/* The piece fills the tile on its slot backdrop (PieceImage, Task 3151). */
+.epp-outfit-piece-img > .wa-wd-backdrop { position: absolute; inset: 0; }
 .epp-outfit-piece-name {
   display: -webkit-box;
   -webkit-line-clamp: 2;

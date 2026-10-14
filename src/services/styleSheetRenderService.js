@@ -20,6 +20,7 @@
  * Great Vibes (OFL; src/assets/fonts).
  */
 const path = require('path');
+const { paintBackdrop, SHEET_COLUMN_SLOT } = require('../utils/wardrobeBackdrop');
 
 const W = 1024;
 const H = 1536;
@@ -175,9 +176,12 @@ function pill(ctx, text, x, y, align = 'left') {
   ctx.textBaseline = 'alphabetic';
 }
 
-function photo(ctx, img, x, y, w, h, { framed = true, fit = 'cover', inset = 0, dashed = false, fill } = {}) {
+function photo(ctx, img, x, y, w, h, { framed = true, fit = 'cover', inset = 0, dashed = false, fill, backdrop = null } = {}) {
   if (framed) frame(ctx, x, y, w, h, { dashed, fill: fill || C.photoBg });
   else { ctx.fillStyle = fill || C.photoBg; ctx.fillRect(x, y, w, h); }
+  // A wardrobe piece sits on its slot backdrop, as in Producer Mode's closet
+  // (Task #3151; utils/wardrobeBackdrop), inside the frame's border.
+  if (img && backdrop) paintBackdrop(ctx, backdrop, x + (framed ? 2 : 0), y + (framed ? 2 : 0), w - (framed ? 4 : 0), h - (framed ? 4 : 0), { radius: framed ? 8 : 0 });
   if (img) drawImageIn(ctx, img, x + inset + (framed ? 2 : 0), y + inset + (framed ? 2 : 0), w - 2 * inset - (framed ? 4 : 0), h - 2 * inset - (framed ? 4 : 0), { fit, radius: framed ? 8 : 0 });
 }
 
@@ -315,7 +319,7 @@ async function drawSheet(ctx, sheet, palette) {
     ctx.fillStyle = C.plum;
     spacedText(ctx, c.label, x + colW / 2, colY + 11, 0.16, 'center');
     const ph = WARDROBE.y + WARDROBE.h - colY - 12 - 6 - 6 - 28;
-    photo(ctx, images[`col_${c.key}`], x, colY + 18, colW, ph, { fit: 'contain', inset: 6, dashed: c.needed, fill: C.white });
+    photo(ctx, images[`col_${c.key}`], x, colY + 18, colW, ph, { fit: 'contain', inset: 6, dashed: c.needed, fill: C.white, backdrop: SHEET_COLUMN_SLOT[c.key] || null });
     const nameY = colY + 18 + ph + 6;
     ctx.textAlign = 'center';
     if (c.needed) {

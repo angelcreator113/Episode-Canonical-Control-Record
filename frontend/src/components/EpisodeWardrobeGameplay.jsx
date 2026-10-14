@@ -31,10 +31,10 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import api from '../services/api';
-import { resolveWardrobeCutoutUrl } from '../utils/wardrobeImage';
+import PieceImage from './Wardrobe/PieceImage';
 import { withReach, lockReason, setCost, priceRequired } from '../utils/wardrobeReach';
 import { inspectScore, inspectLalaSays, inspectCannotBuy } from '../lib/wardrobeInspect';
-import { GAME_SLOT_DEFS as SLOT_DEFS, OTHER_GROUP, ALL_GROUP, SETS_GROUP, MULTI_SLOTS, gameSlotFor, closetGroupFor, fetchClosetWithTotal, slotPieces, outfitPieces, normalizeSlots, matchingSetsFrom, equipInto, wornLooks, backdropFor } from '../lib/closetGrouping';
+import { GAME_SLOT_DEFS as SLOT_DEFS, OTHER_GROUP, ALL_GROUP, SETS_GROUP, MULTI_SLOTS, gameSlotFor, closetGroupFor, fetchClosetWithTotal, slotPieces, outfitPieces, normalizeSlots, matchingSetsFrom, equipInto, wornLooks } from '../lib/closetGrouping';
 import { eventLookPieces, lookAgainstEvent, shoppingListSource, eventPackagePath } from '../lib/eventLook';
 import { lookTotal, pieceChargeText } from '../lib/lookCharge';
 import EventDocuments from './EventPackage/EventDocuments';
@@ -96,53 +96,10 @@ export function slotNeeded(key, slots = {}) {
 const SCORE_DEBOUNCE_MS = 350;
 
 // ─── GARMENT IMAGE ───
-// Draws the item's real picture through the shared resolver. The category
-// emoji stays as the placeholder when the item has no image, and replaces the
-// image if it fails to load. Keyed by URL so a new URL gets a fresh attempt.
-
+// The piece on its Producer Mode backdrop: the shared PieceImage (Task #3151),
+// which every screen showing a piece now uses.
 function GarmentImage({ item, fallback, size, height, radius = 8 }) {
-  // Producer Mode's order, so the piece sits on its backdrop (not the thumbnail's own background).
-  const url = resolveWardrobeCutoutUrl(item);
-  return <GarmentImageInner key={url || 'none'} url={url} name={item?.name} fallback={fallback} size={size} height={height} radius={radius} backdrop={backdropFor(item)} />;
-}
-
-// The piece sits on Producer Mode's closet backdrop for its slot (Evoni,
-// 2026-10-06: "the backgrounds to look the same as producer mode
-// wardrobe"; styles/wardrobe-backdrop.css).
-function GarmentImageInner({ url, name, fallback, size, height, radius, backdrop }) {
-  const [failed, setFailed] = useState(false);
-  const backdropClass = `wa-wd-backdrop bd-${backdrop}`;
-  const box = {
-    width: size || '100%',
-    height: height || size,
-    borderRadius: radius,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    flexShrink: 0,
-  };
-  if (!url || failed) {
-    const emojiSize = Math.min(40, Math.max(16, Math.round((height || size || 40) * 0.5)));
-    return (
-      <div data-testid="garment-fallback" role="img" aria-label={name || 'Wardrobe item'} className={backdropClass} style={box}>
-        <span style={{ fontSize: emojiSize }}>{fallback}</span>
-      </div>
-    );
-  }
-  return (
-    <div className={backdropClass} style={box}>
-      <img
-        className="wa-wd-img"
-        src={url}
-        alt={name || 'Wardrobe item'}
-        loading="lazy"
-        decoding="async"
-        onError={() => setFailed(true)}
-        style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
-      />
-    </div>
-  );
+  return <PieceImage item={item} fallback={fallback} size={size} height={height} radius={radius} />;
 }
 
 // ─── MAIN COMPONENT ───

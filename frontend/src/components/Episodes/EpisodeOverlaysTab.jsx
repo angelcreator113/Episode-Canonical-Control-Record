@@ -40,6 +40,7 @@ import EpisodeTitleCard, { formatEstimate } from './EpisodeTitleCard';
 import EpisodeLibraryOverlays from './EpisodeLibraryOverlays';
 import EventDocuments from '../EventPackage/EventDocuments';
 import { overlayRows } from '../../lib/episodeOverlays';
+import PieceImage from '../Wardrobe/PieceImage';
 import './EpisodeOverlaysTab.css';
 
 
@@ -266,7 +267,8 @@ export default function EpisodeOverlaysTab({ episode, showId, onChanged }) {
               <ul className="eot-look-list">
                 {data.wardrobe.map((w) => (
                   <li key={w.key} className="eot-look-piece" data-testid={`eot-look-${w.key}`}>
-                    <span className="eot-look-img">{w.image_url ? <img src={w.image_url} alt="" loading="lazy" /> : null}</span>
+                    {/* On its Producer Mode backdrop (Task #3151). */}
+                    <span className="eot-look-img"><PieceImage item={w} src={w.image_url || null} radius={6} alt={w.label} /></span>
                     <span className="eot-look-name">{w.label}</span>
                     {w.category && <span className="eot-look-cat">{w.category}</span>}
                   </li>

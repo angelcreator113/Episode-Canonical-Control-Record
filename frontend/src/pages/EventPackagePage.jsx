@@ -92,6 +92,7 @@ import { sceneSetThumb, sceneSetPath } from '../utils/sceneSets';
 import { InvitationButton } from './InvitationGenerator';
 import EventTermsSection from '../components/EventPackage/EventTermsSection';
 import EventLookRecommendations from '../components/EventPackage/EventLookRecommendations';
+import PieceImage from '../components/Wardrobe/PieceImage';
 import EventDocuments from '../components/EventPackage/EventDocuments';
 import EventGuestRecommendations from '../components/EventPackage/EventGuestRecommendations';
 import EventOutfitPicker from '../components/EventOutfitPicker';
@@ -1811,15 +1812,10 @@ export default function EventPackagePage() {
                         when there is none or it fails to load. */}
                     {outfitPieces.map((piece, i) => (
                       <li key={piece.id || i} className="epp-outfit-piece" data-testid={`look-piece-${piece.id || i}`}>
+                        {/* On its Producer Mode backdrop (Task #3151). */}
                         <span className="epp-outfit-piece-img">
-                          <Shirt size={22} aria-hidden="true" />
-                          {piece.image_url && (
-                            <img
-                              src={piece.image_url} alt={piece.name || 'Outfit piece'} loading="lazy"
-                              data-testid={`look-piece-img-${piece.id || i}`}
-                              onError={(e) => { e.currentTarget.hidden = true; }}
-                            />
-                          )}
+                          <PieceImage item={piece} src={piece.image_url || null} radius={0} alt={piece.name || 'Outfit piece'}
+                            fallback={<Shirt size={22} aria-hidden="true" />} imgTestId={`look-piece-img-${piece.id || i}`} />
                         </span>
                         <span className="epp-outfit-piece-name">{piece.name || 'Unnamed piece'}</span>
                         {episodeLook && (

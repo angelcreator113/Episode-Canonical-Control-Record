@@ -148,7 +148,11 @@ async function episodeLook(sequelize, { episodeId, event, showId = null }) {
     coin_cost: p.coin_cost != null ? (parseFloat(p.coin_cost) || 0) : (p.price != null ? (parseFloat(p.price) || 0) : null),
     acquisition_type: p.acquisition_type || null,
     rental_price: p.rental_price != null ? (parseFloat(p.rental_price) || 0) : null,
-    image_url: p.thumbnail_url || p.s3_url_processed || p.s3_url || p.image_url || null,
+    // The cut-out first, as Producer Mode's closet and the styling game show
+    // a piece (frontend utils/wardrobeImage resolveWardrobeCutoutUrl), so it
+    // sits on its slot backdrop; the thumbnail is cut before the background
+    // is removed and covered the backdrop (Task #3151).
+    image_url: p.s3_url_regenerated || p.s3_url_processed || p.s3_url || p.image_url || p.thumbnail_url || null,
   });
   // Each piece's charge by the rule Finalize charges by (lookCharges): the
   // Wardrobe and the Event Package used to add up every unowned piece's
@@ -170,7 +174,7 @@ async function episodeLook(sequelize, { episodeId, event, showId = null }) {
   let linked = [];
   try {
     linked = await sequelize.query(
-      `SELECT w.id, w.name, w.clothing_category, w.is_owned, w.coin_cost, w.price, w.thumbnail_url, w.s3_url_processed, w.s3_url,
+      `SELECT w.id, w.name, w.clothing_category, w.is_owned, w.coin_cost, w.price, w.thumbnail_url, w.s3_url_processed, w.s3_url, w.s3_url_regenerated,
               w.acquisition_type, w.rental_price,
               COALESCE(ew.approval_status, 'pending') AS approval_status
          FROM episode_wardrobe ew JOIN wardrobe w ON w.id = ew.wardrobe_id

@@ -106,8 +106,12 @@ describe("Lala's Look shows each piece's picture", () => {
     expect(within(section).getByTestId('look-piece-p1').textContent).toContain('Gold Slip Dress');
     expect(within(section).queryByTestId('look-piece-img-p2')).toBeNull();
     expect(within(section).getByTestId('look-piece-p2').querySelector('svg')).toBeTruthy();
+    // Task #3151: each piece sits on its slot backdrop; a failed picture
+    // falls back to the shirt on the same backdrop.
+    expect(img.closest('.wa-wd-backdrop')).toBeTruthy();
     fireEvent.error(img);
-    expect(img.hidden).toBe(true);
+    expect(within(section).queryByTestId('look-piece-img-p1')).toBeNull();
+    expect(within(section).getByTestId('look-piece-p1').querySelector('.wa-wd-backdrop svg')).toBeTruthy();
   });
 });
 

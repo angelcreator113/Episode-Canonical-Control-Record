@@ -7,6 +7,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../services/api';
 import { API_URL } from '../config/api';
+import PieceImage from '../components/Wardrobe/PieceImage';
 import './OutfitCalendar.css';
 
 // File-local helpers — wardrobe + outfit-sets read.
@@ -141,11 +142,8 @@ const OutfitCalendar = () => {
               <div className="item-previews">
                 {dayItems.slice(0, 3).map(item => (
                   <div key={item.id} className="item-dot" title={item.name}>
-                    {item.s3_url ? (
-                      <img src={item.thumbnail_url || item.s3_url} alt="" />
-                    ) : (
-                      <span>👗</span>
-                    )}
+                    {/* On its Producer Mode backdrop (Task #3151). */}
+                    <PieceImage item={item} radius={0} alt="" />
                   </div>
                 ))}
                 {dayItems.length > 3 && <span className="more-items">+{dayItems.length - 3}</span>}
@@ -198,11 +196,7 @@ const OutfitCalendar = () => {
             {dayItems.map(item => (
               <div key={item.id} className="day-item-card">
                 <div className="item-image">
-                  {item.s3_url ? (
-                    <img src={item.thumbnail_url || item.s3_url} alt={item.name} />
-                  ) : (
-                    <div className="placeholder">👗</div>
-                  )}
+                  <PieceImage item={item} radius={0} />
                 </div>
                 <div className="item-info">
                   <div className="item-name">{item.name}</div>
@@ -322,11 +316,7 @@ const OutfitCalendar = () => {
             {stats.recentlyWorn.map(item => (
               <div key={item.id} className="recent-item">
                 <div className="recent-image">
-                  {item.s3_url ? (
-                    <img src={item.thumbnail_url || item.s3_url} alt={item.name} />
-                  ) : (
-                    <div className="placeholder">👗</div>
-                  )}
+                  <PieceImage item={item} radius={0} />
                 </div>
                 <div className="recent-info">
                   <div className="recent-name">{item.name}</div>

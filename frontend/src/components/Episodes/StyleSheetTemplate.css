@@ -110,6 +110,9 @@
 .ss-column-label { font: 700 12px/1 var(--ss-sans); letter-spacing: 0.16em; text-align: center; }
 .ss-column-photo { flex: 1; min-height: 0; background: var(--ss-white); }
 .ss-column-photo .ss-photo-img { inset: 6px; background-size: contain; }
+/* A piece sits on its Producer Mode backdrop (Task 3151; styles/wardrobe-backdrop.css),
+   over the column's white, in the app and in the exported PNG. */
+.ss-column-photo.wa-wd-backdrop { background: radial-gradient(ellipse 70% 60% at 50% 45%, var(--surface-card) 0%, var(--bd) 72%); }
 .ss-column-name { font: 600 11px/1.25 var(--ss-sans); font-variant: small-caps; letter-spacing: 0.04em; text-align: center; min-height: 28px; }
 .ss-column.is-needed .ss-column-photo { border-style: dashed; }
 .ss-column.is-needed .ss-column-name, .ss-column.is-needed .ss-photo-empty { color: var(--ss-pink); font-style: italic; }

@@ -68,7 +68,8 @@
 }
 .apd-drop:hover, .apd-drop:focus-visible { border-color: var(--lala-lavender); outline: none; }
 .apd-drop.has-photo { border-style: solid; background: repeating-conic-gradient(var(--lala-parchment-2) 0 25%, var(--surface-card) 0 50%) 0 0 / 14px 14px; }
-.apd-drop img { width: 100%; height: 100%; object-fit: contain; }
+/* The photo on its category's backdrop (PieceImage, Task 3151). */
+.apd-drop > .wa-wd-backdrop { width: 100%; height: 100%; }
 .apd-drop-empty { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px; text-align: center; font-size: 12px; }
 .apd-drop-empty strong { font-size: 14px; }
 .apd-photo-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
