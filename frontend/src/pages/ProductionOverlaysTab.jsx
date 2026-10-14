@@ -13,14 +13,20 @@
  * Same backend as the Phone Hub (/api/v1/ui-overlays/), category
  * 'production'.
  *
+ * The stats panel (Task 3164; Evoni, 2026-10-14): any overlay with a
+ * picture can be the panel's art; "Use as stats panel" opens its editor
+ * (components/StatsPanel), where her numbers get their boxes and icons. The
+ * audience sees it, never Lala's Phone; an episode downloads its PNG.
+ *
  * New overlay starts from a picture (Evoni, 2026-10-07: "i need to be able
  * to upload pictures in producer mode overlays"): upload one, or describe
  * it for Make with AI. With a picture, the type is made and the picture
  * uploaded to it (POST /types, then POST /upload/:type_key).
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Sparkles, Loader2, Upload, Trash2, Download, X, Plus, ImageOff, Ruler } from 'lucide-react';
+import { Sparkles, Loader2, Upload, Trash2, Download, X, Plus, ImageOff, Ruler, Gauge } from 'lucide-react';
 import api from '../services/api';
+import StatsPanelEditor from '../components/StatsPanel/StatsPanelEditor';
 import { episodesUsing, usageLine, libraryTiles, overlayState } from '../lib/showOverlays';
 import './ProductionOverlaysTab.css';
 
@@ -53,6 +59,8 @@ export default function ProductionOverlaysTab({ showId: propShowId }) {
   const [toast, setToast] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [sizesOpen, setSizesOpen] = useState(false);
+  // The overlay whose stats panel boxes are being edited (Task 3164).
+  const [panelFor, setPanelFor] = useState(null);
   const fileInputRef = useRef(null);
   const uploadTarget = useRef(null);
 
@@ -230,6 +238,7 @@ export default function ProductionOverlaysTab({ showId: propShowId }) {
           <span>Full screen (HD): <b>1920 × 1080</b> px, 16:9</span>
           <span>Full screen (4K): <b>3840 × 2160</b> px, 16:9</span>
           <span>Buttons and icons: <b>512 × 512</b> px, square</span>
+          <span>Stats panel: <b>1920 × 220</b> px, transparent, the <b>1600 × 180</b> design centred</span>
           <span className="sol-sizes-note">PNG with transparency for pieces that sit over the video; JPG for full-frame cards.</span>
         </section>
       )}
@@ -275,6 +284,11 @@ export default function ProductionOverlaysTab({ showId: propShowId }) {
                       {isBusy('upload') ? <Loader2 size={14} className="sol-spin" aria-hidden="true" /> : <Upload size={14} aria-hidden="true" />} Upload
                     </button>
                     {o.url && (
+                      <button type="button" className={`sol-btn${o.stats_panel ? ' is-panel' : ''}`} onClick={() => setPanelFor(o)} disabled={!!busy} data-testid={`sol-panel-${o.id}`}>
+                        <Gauge size={14} aria-hidden="true" /> {o.stats_panel ? 'Stats panel' : 'Use as stats panel'}
+                      </button>
+                    )}
+                    {o.url && (
                       <button type="button" className="sol-icon" onClick={() => download(o)} aria-label={`Download ${o.name}`}>
                         <Download size={15} />
                       </button>
@@ -293,6 +307,19 @@ export default function ProductionOverlaysTab({ showId: propShowId }) {
       <input ref={fileInputRef} type="file" accept="image/*" onChange={upload} hidden data-testid="sol-file" />
 
       {createOpen && <CreateOverlayDialog onClose={() => setCreateOpen(false)} onCreate={create} />}
+
+      {panelFor && (
+        <StatsPanelEditor
+          showId={showId}
+          overlay={panelFor}
+          overlays={overlays}
+          onClose={() => setPanelFor(null)}
+          onSaved={(o, spots) => {
+            setOverlays((list) => list.map((x) => (x.id === o.id ? { ...x, stats_panel: spots ? { spots } : null } : x)));
+            flash(spots ? 'Stats panel saved' : 'No longer the stats panel');
+          }}
+        />
+      )}
     </div>
   );
 }

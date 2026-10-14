@@ -829,6 +829,30 @@ router.get('/:id/financial-summary', requireAuth, async (req, res) => {
 });
 
 /**
+ * GET /api/v1/shows/:id/lala-stats?at=
+ * Lala's stats for the audience's stats panel (Task #3164): her coins,
+ * reputation and influence as of `at` (a story order, ep:<n>:<phase>, or
+ * "present"; none is the present), and her followers once The Pulse has her
+ * numbers, else null. Read only; services/lalaStats.statsAt says where each
+ * comes from.
+ */
+router.get('/:id/lala-stats', requireAuth, async (req, res) => {
+  try {
+    const Show = getShow();
+    const show = await Show.findByPk(req.params.id);
+    if (!show) return res.status(404).json({ success: false, error: 'Show not found' });
+    const models = require('../models');
+    const at = await require('../services/storyClock').resolveAt(models, show.id, req.query.at);
+    const data = await require('../services/lalaStats').statsAt(models, show.id, at);
+    return res.json({ success: true, data });
+  } catch (err) {
+    if (err.status === 400) return res.status(400).json({ success: false, error: err.message });
+    console.error('GET /shows/:id/lala-stats error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * POST /api/v1/shows/:id/seed-finance-apps
  * Idempotent: creates the 5 finance-app phone screens + icons if they don't
  * already exist for this show. Rerunning the endpoint only fills in missing
