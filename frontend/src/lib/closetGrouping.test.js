@@ -29,6 +29,11 @@ const ITEMS = [
   { id: 'fragrance', clothing_category: 'Fragrance' },
   { id: 'outerwear', clothing_category: 'outerwear' },
   { id: 'coat', clothing_category: 'coat' },
+  // Hair (Task #3167): the hairstyle or wig; hair bows and clips stay accessories.
+  { id: 'hair', clothing_category: 'hair' },
+  { id: 'wig', clothing_category: 'Wig' },
+  { id: 'hair-bow', clothing_category: 'velvet hair bow' },
+  { id: 'hair-clip', clothing_category: 'Hair Clips' },
   // no game slot
   { id: 'unknown', clothing_category: 'costume piece' },
   { id: 'null', clothing_category: null },
@@ -40,8 +45,9 @@ const EXPECTED = {
   top: ['top'],
   bottom: ['bottom', 'bottoms', 'skirt', 'pants', 'mini-skirt', 'wide-leg'],
   shoes: ['shoes', 'dress-shoes', 'ankle-boots'],
-  accessories: ['accessory', 'bag', 'accessories'],
+  accessories: ['accessory', 'bag', 'accessories', 'hair-bow', 'hair-clip'],
   jewelry: ['jewelry'],
+  hair: ['hair', 'wig'],
   perfume: ['perfume', 'fragrance'],
   outerwear: ['outerwear', 'coat'],
   other: ['unknown', 'null', 'empty'],

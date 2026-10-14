@@ -18,6 +18,7 @@ import api from '../services/api';
 import { evaluate as evaluatePhoneConditions } from '../lib/phoneRuntime';
 import { RELATIONSHIP_POST_TYPE, parseRelationship } from '../lib/feedRelationship';
 import { pulseFeedUrl } from '../lib/pulsePosts';
+import { getSlotForCategory } from '../lib/wardrobeSlots';
 import { storyLabel } from '../lib/storyClock';
 import PhoneMapView from './phone/PhoneMapView';
 import PieceImage from './Wardrobe/PieceImage';
@@ -44,6 +45,8 @@ export const CONTENT_TYPES = [
   { key: 'wardrobe_shoes', label: 'Shoes', icon: '👠', desc: 'Shoes from the closet', group: 'wardrobe' },
   { key: 'wardrobe_accessories', label: 'Accessories', icon: '👜', desc: 'Accessories + jewelry', group: 'wardrobe' },
   { key: 'wardrobe_perfume', label: 'Perfume', icon: '🧴', desc: 'Fragrance collection', group: 'wardrobe' },
+  // Task #3167: the closet's Hair (hairstyles and wigs), for the Hair page.
+  { key: 'wardrobe_hair', label: 'Hair', icon: '💇', desc: 'Hairstyles and wigs from the closet', group: 'wardrobe' },
   { key: 'outfit_card', label: 'Full Outfit', icon: '💃', desc: 'One complete composed look (multiple pieces)', group: 'wardrobe' },
   { key: 'wardrobe_price', label: 'Wardrobe Price', icon: '💰', desc: 'Price from the screen\u2019s wardrobe item', group: 'wardrobe' },
   { key: 'wardrobe_brand', label: 'Wardrobe Brand', icon: '🏷️', desc: 'Brand name from the screen\u2019s wardrobe item', group: 'wardrobe' },
@@ -167,7 +170,12 @@ function ContentZoneRenderer({ zone, showId, episodeId, storyAt = null, screenMe
       return <WardrobeGridRenderer showId={showId} config={{
         ...config,
         inverse_category: 'dress,top,bottom,outerwear,jacket,coat,skirt,pants,shirt,blouse,shoes,heels,boots,sneakers,sandals,flats,perfume,fragrance,cologne',
+        // Hair (hairstyles, wigs) has its own section (Task #3167), by the
+        // shared routing, so hair bows and clips stay here.
+        exclude_slot: 'hair',
       }} />;
+    case 'wardrobe_hair':
+      return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'hair,wig,wigs,hairstyle,hairstyles' }} />;
     case 'wardrobe_perfume':
       return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'perfume,fragrance,cologne' }} />;
     case 'outfit_card':
@@ -792,6 +800,7 @@ function WardrobeGridRenderer({ showId, config }) {
       // Way more forgiving than exact equality and keeps items out of
       // Accessories whenever any clothing/shoes/perfume keyword appears
       // in the category at all.
+      if (config.exclude_slot && getSlotForCategory(cat) === config.exclude_slot) return false;
       return !inverseCats.some(inv => cat.includes(inv));
     });
   }

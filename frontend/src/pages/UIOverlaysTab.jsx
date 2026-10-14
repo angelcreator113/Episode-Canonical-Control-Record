@@ -13,6 +13,7 @@ import { createPortal } from 'react-dom';
 import PhoneHub from '../components/PhoneHub';
 import PhoneHubSectionTabs from '../components/PhoneHubSectionTabs';
 import { phoneHubTiles, screenCaption, screenCardStatus, homeScreenOf, incomingById, phoneFlowMap } from '../lib/phoneHubSummary';
+import { backTargetOf } from '../lib/phoneBack';
 import ScreenLinkEditor from '../components/ScreenLinkEditor';
 import { isIcon, isScreen, isGeneratedScreen, deriveTypeKey, getScreenLinks, resolveZoneIconKey, withResolvedIconKey, pickZoneLibraryIcon, isZoneOutOfBounds, moveZoneInside } from '../lib/overlayUtils';
 
@@ -1029,13 +1030,17 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     }
   };
 
-  // The phone's Back (Task #3162): the previous screen, else the home screen,
-  // as in the Preview and playback.
+  // The phone's Back (Task #3162): the previous screen, else the screen whose
+  // icon opens this one (Closet for a section page, Task #3165), else the home
+  // screen, as in the Preview and playback.
   const handleBack = async () => {
     const home = homeScreenOf(overlays);
     if (navHistory.length === 0 && (!home || activeScreen?.id === home.id)) return;
     if (editorsDirty() && !(await leaveEditors())) return;
-    if (navHistory.length === 0) { setActiveScreen(home); return; }
+    if (navHistory.length === 0) {
+      setActiveScreen(backTargetOf(activeScreen, overlays.filter(isScreen), overlays.filter(isIcon), home) || home);
+      return;
+    }
     const prevKey = navHistory[navHistory.length - 1];
     setNavHistory(prev => prev.slice(0, -1));
     const prevScreen = overlays.find(o => o.id === prevKey);

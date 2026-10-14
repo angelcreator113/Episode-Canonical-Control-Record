@@ -171,7 +171,7 @@ const getColorHex = (colorName) => {
   }
   return null;
 };
-const CAT_ICONS = { all: '🏷️', dress: '👗', top: '👚', bottom: '👖', shoes: '👟', accessory: '🎀', jewelry: '💍', bag: '👜', outerwear: '🧥', perfume: '🌸' };
+const CAT_ICONS = { all: '🏷️', dress: '👗', top: '👚', bottom: '👖', shoes: '👟', accessory: '🎀', jewelry: '💍', bag: '👜', outerwear: '🧥', perfume: '🌸', hair: '💇' };
 
 const EMPTY_EVENT = {
   name: '', event_type: 'invite', host: '', host_brand: '', description: '',
@@ -5252,18 +5252,19 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     every slot (jewelry, accessories, fragrance included) as
                     required for this show. Persists to Show.metadata.required_slots. */}
                 {(() => {
-                  const allFive = ['outfit', 'shoes', 'jewelry', 'accessories', 'fragrance'];
+                  // Every slot, Hair included (Task #3167).
+                  const allSlots = SLOT_KEYS;
                   const current = Array.isArray(show?.metadata?.required_slots) ? show.metadata.required_slots : null;
-                  const requireAll = current && allFive.every(s => current.includes(s));
+                  const requireAll = current && allSlots.every(s => current.includes(s));
                   const label = requireAll ? '✓ All slots required' : 'Require all slots';
                   return (
                     <button
                       onClick={async () => {
-                        const next = requireAll ? ['outfit', 'shoes'] : allFive;
+                        const next = requireAll ? ['outfit', 'shoes'] : allSlots;
                         try {
                           await api.put(`/api/v1/shows/${showId}/wardrobe-config`, { required_slots: next });
                           setShow(prev => prev ? { ...prev, metadata: { ...(prev.metadata || {}), required_slots: next } } : prev);
-                          setToast(requireAll ? 'Outfit + shoes required' : 'All 5 slots required');
+                          setToast(requireAll ? 'Outfit + shoes required' : `All ${allSlots.length} slots required`);
                         } catch (err) {
                           setToast('Could not save: ' + (err.response?.data?.error || err.message));
                         }
@@ -5697,7 +5698,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       if (data.success && data.data) {
                         const ai = data.data;
                         setWardrobeEditBrandIsFictional(!!ai.brand_is_fictional && !wf.vendor);
-                        const catMap = { dress: 'dress', top: 'top', bottom: 'bottom', shoes: 'shoes', accessory: 'accessory', jewelry: 'jewelry', bag: 'bag', outerwear: 'outerwear', perfume: 'perfume', skirt: 'bottom', pants: 'bottom', shirt: 'top', blouse: 'top', fragrance: 'perfume' };
+                        const catMap = { dress: 'dress', top: 'top', bottom: 'bottom', shoes: 'shoes', accessory: 'accessory', jewelry: 'jewelry', bag: 'bag', outerwear: 'outerwear', perfume: 'perfume', skirt: 'bottom', pants: 'bottom', shirt: 'top', blouse: 'top', fragrance: 'perfume', hair: 'hair', wig: 'hair' };
                         // Only fill empty fields
                         setWardrobeForm(prev => ({
                           ...prev,
