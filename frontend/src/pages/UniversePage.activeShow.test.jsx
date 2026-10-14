@@ -52,6 +52,42 @@ describe('UniversePage: the active show', () => {
     expect(showReads().some((u) => u.includes('show-a'))).toBe(false);
   });
 
+  // Task #3140: the Overview described the remembered show without naming
+  // it, so another show's description ("ffffffff") read as this show's.
+  test('names the show it describes, switches it, and opens that same show\'s settings', async () => {
+    const twins = [
+      { id: 'show-a', name: 'Styling Adventures with Lala', episodeCount: 0, description: 'ffffffff' },
+      { id: 'show-b', name: 'Styling Adventures with Lala', episodeCount: 12, description: 'Lala styles her way through the LalaVerse.' },
+    ];
+    vi.mocked(api.get).mockImplementation(async (url) => (
+      url === '/api/v1/shows' ? { data: { success: true, data: twins } } : { data: { data: [], events: [], registries: [], books: [] } }
+    ));
+    rememberShow('show-a');
+    renderIt();
+
+    const select = await screen.findByTestId('lalaverse-show-select');
+    expect(select.value).toBe('show-a');
+    expect([...select.querySelectorAll('option')].map((o) => o.textContent))
+      .toEqual(['Styling Adventures with Lala · 0 episodes', 'Styling Adventures with Lala · 12 episodes']);
+    expect(screen.getByTestId('lalaverse-banner').textContent).toContain('ffffffff');
+    expect(screen.getByTestId('lalaverse-show-settings').getAttribute('href')).toBe('/admin?tab=show-settings&show=show-a');
+
+    fireEvent.change(select, { target: { value: 'show-b' } });
+    await waitFor(() => expect(screen.getByTestId('lalaverse-banner').textContent).toContain('Lala styles her way through the LalaVerse.'));
+    expect(screen.getByTestId('lalaverse-banner').textContent).not.toContain('ffffffff');
+    expect(screen.getByTestId('lalaverse-show-settings').getAttribute('href')).toBe('/admin?tab=show-settings&show=show-b');
+    expect(rememberedShowId()).toBe('show-b');
+  });
+
+  test('one show: named, with no selector', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => (
+      url === '/api/v1/shows' ? { data: { success: true, data: [SHOWS[1]] } } : { data: { data: [], events: [], registries: [], books: [] } }
+    ));
+    renderIt();
+    expect((await screen.findByTestId('lalaverse-show-line')).textContent).toContain('Showing Styling Adventures');
+    expect(screen.queryByTestId('lalaverse-show-select')).toBeNull();
+  });
+
   test('a failed shows read says so instead of describing nothing', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.mocked(api.get).mockImplementation(async (url) => {

@@ -4,6 +4,9 @@
  * one); with several shows and nothing to go on, a "Which show?" picker.
  * With several shows a selector switches. Picking a show remembers it and
  * drops the query keys in `resetKeys` (a tab's own sub-tab, for one).
+ * A show opened by ?show= (a link, the /shows/:id/settings redirect) is
+ * remembered too, so the rest of the app (the LalaVerse Overview, the
+ * Sidebar) works on the show Admin is editing (Task #3140).
  * Styles: styles/AdminPanel.css.
  */
 import React, { useEffect, useState } from 'react';
@@ -11,7 +14,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import LoadingSpinner from '../LoadingSpinner';
 import showService from '../../services/showService';
-import { activeShowId, rememberShow } from '../../utils/activeShow';
+import { activeShowId, rememberShow, showLabel } from '../../utils/activeShow';
 
 export default function AdminShowGate({ children, resetKeys = [] }) {
   const [params, setParams] = useSearchParams();
@@ -29,6 +32,13 @@ export default function AdminShowGate({ children, resetKeys = [] }) {
     return () => { alive = false; };
   }, []);
 
+  // The show this tab works on is the active show everywhere: a show opened
+  // by ?show= used to be edited here while the rest of the app stayed on the
+  // remembered one (Task #3140).
+  const asked = params.get('show');
+  const askedKnown = !!shows && !!asked && shows.some((sh) => String(sh.id) === asked);
+  useEffect(() => { if (askedKnown) rememberShow(asked); }, [askedKnown, asked]);
+
   const pick = (id) => {
     rememberShow(id);
     setParams((prev) => {
@@ -43,10 +53,8 @@ export default function AdminShowGate({ children, resetKeys = [] }) {
   if (!shows) return <LoadingSpinner />;
   if (shows.length === 0) return <p className="admin-subtitle">No shows yet. <Link to="/shows">Create one</Link> first.</p>;
 
-  const ids = new Set(shows.map((sh) => String(sh.id)));
-  const asked = params.get('show');
-  const showId = asked && ids.has(asked) ? asked : activeShowId({ shows });
-  const nameOf = (sh) => sh.name || sh.title || 'Untitled show';
+  const showId = askedKnown ? asked : activeShowId({ shows });
+  const nameOf = (sh) => showLabel(sh, shows);
 
   if (!showId) {
     return (
