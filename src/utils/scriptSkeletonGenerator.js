@@ -19,6 +19,9 @@
  * @param {string} [options.intent] - Episode intent (failure_comeback_setup, etc.)
  * @param {boolean} [options.includeNarration] - Include Prime narration placeholders
  * @param {boolean} [options.includeAnimations] - Include Lala animation notes
+ * @param {Array}   [options.look] - The locked look's pieces ({ id, name,
+ *   clothing_category }). A segment whose slot has one writes [WEAR: <id>]
+ *   in place of the text-only [UI:SELECT Item <name>] (Task #3180).
  * @returns {string} Full script content
  */
 function generateScriptSkeleton(event, options = {}) {
@@ -27,6 +30,7 @@ function generateScriptSkeleton(event, options = {}) {
     intent = null,
     includeNarration = true,
     includeAnimations = true,
+    look = [],
   } = options;
 
   const e = event || {};
@@ -168,6 +172,7 @@ function generateScriptSkeleton(event, options = {}) {
   lines.push('');
 
   const segments = generateTransformationSegments(checklist, dressCode, bias);
+  const usedPieceIds = new Set();
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i];
     lines.push(`(Segment ${i + 1} — ${seg.label})`);
@@ -183,7 +188,15 @@ function generateScriptSkeleton(event, options = {}) {
     if (includeNarration && i === 0) {
       lines.push(`Prime: "Oh... wait... ${seg.reactionLine}"`);
     }
-    lines.push(`[UI:SELECT Item ${seg.selectedItem}]`);
+    // The look's piece for this segment, by id, when one is locked
+    // (Evoni, 2026-10-14: [WEAR] names the piece by id); else today's line.
+    const worn = lookPieceFor(seg.category, look, usedPieceIds);
+    if (worn) {
+      usedPieceIds.add(String(worn.id));
+      lines.push(`[WEAR: ${worn.id}]`);
+    } else {
+      lines.push(`[UI:SELECT Item ${seg.selectedItem}]`);
+    }
     lines.push('[FX:SPARKLE Small]');
     lines.push(`[UI:CHECK ToDoList "${seg.checklistItem}"]`);
     lines.push('');
@@ -312,6 +325,21 @@ function generateChecklist(dressCode, strictness) {
   }
 
   return items;
+}
+
+// A Transformation segment's closet category → the wardrobe slot whose
+// locked piece it puts on (utils/wardrobeSlots). Makeup has no piece.
+const SEGMENT_SLOT = { Outfit: 'outfit', Accessories: 'accessories', Shoes: 'shoes', Bags: 'accessories', Fragrance: 'fragrance', Hair: 'hair' };
+
+/** The look's first piece not yet worn whose slot is the segment's (a bag for Bags), or null. */
+function lookPieceFor(category, look, usedIds) {
+  const slot = SEGMENT_SLOT[category];
+  if (!slot || !Array.isArray(look)) return null;
+  const { getSlotForCategory } = require('./wardrobeSlots');
+  const isBag = (c) => /\b(bag|purse|clutch|tote|handbag)/i.test(String(c || ''));
+  return look.find((p) => p && p.id != null && !usedIds.has(String(p.id))
+    && getSlotForCategory(p.clothing_category) === slot
+    && (category === 'Bags' ? isBag(p.clothing_category) : category !== 'Accessories' || !isBag(p.clothing_category))) || null;
 }
 
 function generateTransformationSegments(checklist, dressCode, bias) {
