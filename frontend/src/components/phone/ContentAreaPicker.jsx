@@ -18,6 +18,7 @@ export const CONTENT_AREA_KINDS = [
   { key: 'dm_thread', label: 'DM thread', desc: 'A conversation in Messages', tone: 'pink', content_type: 'dm_thread', content_config: {} },
   { key: 'profile_card', label: 'Profile card', desc: 'Any character, from the registry', tone: 'lavender', content_type: 'profile_header', content_config: {} },
   { key: 'lala_stats', label: "Lala's stats", desc: 'Coins and her next goal', tone: 'gold', content_type: 'money_balance', content_config: {} },
+  { key: 'stats_panel', label: 'Stats panel', desc: 'Coins, reputation, influence and followers, as of the beat', tone: 'gold', content_type: 'home_stats', content_config: {} },
 ];
 
 /** A zone's kind in words: the picker's name when it matches one, else the content type's label. */

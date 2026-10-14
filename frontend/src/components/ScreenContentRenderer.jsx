@@ -52,6 +52,7 @@ export const CONTENT_TYPES = [
   { key: 'world_map', label: 'World Map', icon: '🗺️', desc: 'Auto-pinned locations on your show’s map', group: 'world' },
   { key: 'engagement_stats', label: 'Engagement Stats', icon: '📈', desc: 'Likes, reach, trending', group: 'stats' },
   { key: 'money_balance', label: 'Money Balance', icon: '💰', desc: 'Lala’s live coin balance + next goal', group: 'stats' },
+  { key: 'home_stats', label: 'Stats Panel', icon: '✨', desc: 'Lala’s coins, reputation and influence as of this beat, and her followers once The Pulse has them', group: 'stats' },
   { key: 'balance_trend_sparkline', label: 'Balance Trend', icon: '📈', desc: 'Last 12 episodes balance line chart', group: 'stats' },
   { key: 'income_expense_bars', label: 'Income/Expense Bars', icon: '📉', desc: 'Category rollup bars (side: income|expenses)', group: 'stats' },
   { key: 'goal_progress_bar', label: 'Goal Progress', icon: '🎯', desc: 'Progress bar toward next financial goal', group: 'stats' },
@@ -186,6 +187,8 @@ function ContentZoneRenderer({ zone, showId, episodeId, storyAt = null, screenMe
       return <EngagementStatsRenderer showId={showId} config={config} />;
     case 'money_balance':
       return <MoneyBalanceRenderer showId={showId} config={config} />;
+    case 'home_stats':
+      return <HomeStatsRenderer showId={showId} storyAt={storyAt} config={config} />;
     case 'balance_trend_sparkline':
       return <BalanceTrendSparklineRenderer showId={showId} config={config} />;
     case 'income_expense_bars':
@@ -963,6 +966,44 @@ function WardrobeBrandRenderer({ config, screenMeta }) {
 // financial-config endpoint. Small-screen friendly: headline balance + a
 // 3px progress bar under it. When the show hasn't configured any goals
 // yet, the bar disappears and we just show the balance.
+// ── The stats panel (Lala's Phone spec §2; Task #3164) ──
+// Her coins, reputation and influence as of the beat (GET
+// /shows/:id/phone-stats?at=, services/phoneStats), a zone's own pinned
+// order, or the present; her followers only once The Pulse has her numbers
+// (null until then, and the row is left out, never 0).
+export const phoneStatsUrl = (showId, at) =>
+  `/api/v1/shows/${encodeURIComponent(showId)}/phone-stats?at=${encodeURIComponent(at ?? 'present')}`;
+
+export function HomeStatsRenderer({ showId, storyAt = null, config = {} }) {
+  const at = Number.isInteger(config.at) ? config.at : (Number.isInteger(storyAt) ? storyAt : null);
+  const url = showId ? phoneStatsUrl(showId, at) : null;
+  const { data, loading } = useContentData(url);
+  if (loading) return <ZoneLoader />;
+  const s = data?.data;
+  if (!s) return <ZoneEmpty label="No stats" />;
+  const n = (v) => (Number.isFinite(Number(v)) && v !== null ? Number(v).toLocaleString('en-US') : '—');
+  const rows = [
+    { key: 'coins', icon: '💰', label: config.currency_label || 'Coins', value: n(s.coins) },
+    { key: 'reputation', icon: '⭐', label: 'Reputation', value: s.reputation === null ? '—' : `${n(s.reputation)}/${s.scale || 10}` },
+    { key: 'influence', icon: '✨', label: 'Influence', value: s.influence === null ? '—' : `${n(s.influence)}/${s.scale || 10}` },
+    s.followers && { key: 'followers', icon: '👥', label: s.followers.tier?.label ? `Followers · ${s.followers.tier.label}` : 'Followers', value: n(s.followers.count) },
+  ].filter(Boolean);
+  return (
+    <div data-testid="home-stats-zone" style={{
+      width: '100%', height: '100%', padding: '4px 6px', boxSizing: 'border-box',
+      background: config.bg || 'rgba(0,0,0,0.45)',
+      display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2,
+    }}>
+      {rows.map((r) => (
+        <div key={r.key} data-testid={`home-stats-${r.key}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6 }}>
+          <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.6)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.icon} {r.label}</span>
+          <span style={{ fontSize: config.font_size || 11, fontWeight: 800, color: config.color || '#fff', fontFamily: "'DM Mono', monospace" }}>{r.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function MoneyBalanceRenderer({ showId, config }) {
   const url = showId ? `/api/v1/shows/${showId}/financial-config` : null;
   const { data, loading } = useContentData(url);
