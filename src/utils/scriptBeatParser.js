@@ -212,6 +212,10 @@ function parseScript(scriptContent, options = {}) {
     const uiActions = [];
     const mailPayloads = [];
     const statPayloads = [];
+    // [WEAR: <wardrobe id>]: Lala puts this piece on at this line (Task #3180;
+    // Evoni, 2026-10-14, phone phase 3 ruling 1). The beat source for the
+    // Shopping list's crossing off; the piece is named by id, never by text.
+    const wearCues = [];
     const fxEvents = [];
     const sceneLoads = [];
     const dialogueLines = [];
@@ -309,6 +313,13 @@ function parseScript(scriptContent, options = {}) {
         continue;
       }
 
+      // ── WEAR Tags: a piece put on at this line ──
+      const wearMatch = trimmed.match(/^\[WEAR:\s*([^\]\s]+)\s*\]$/i);
+      if (wearMatch) {
+        wearCues.push({ piece_id: wearMatch[1], line: lineNumber });
+        continue;
+      }
+
       // ── LOCATION_HINT ──
       const locMatch = trimmed.match(/^\[LOCATION_HINT:\s*"?([^"\]]+)"?\]$/i);
       if (locMatch) {
@@ -360,6 +371,7 @@ function parseScript(scriptContent, options = {}) {
 
     if (mailPayloads.length > 0) beat.tags.mail = mailPayloads;
     if (statPayloads.length > 0) beat.tags.stats = statPayloads;
+    if (wearCues.length > 0) beat.tags.wear = wearCues;
     if (fxEvents.length > 0) beat.tags.fx = fxEvents;
     if (sceneLoads.length > 0) beat.tags.scenes = sceneLoads;
     if (raw.locationHint) beat.tags.location_hint = raw.locationHint;
