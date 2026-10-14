@@ -5,7 +5,7 @@
  * other screens that have content.
  *
  * The kinds are existing content types. The mockup's Shopping list is
- * `shopping_list` (Task #3179); its Career plan has no content type yet.
+ * `shopping_list` (Task #3179) and its Career plan `career_list` (Task #3181).
  */
 import { CONTENT_TYPE_MAP } from '../ScreenContentRenderer';
 import './ContentAreaPicker.css';
@@ -19,6 +19,7 @@ export const CONTENT_AREA_KINDS = [
   { key: 'profile_card', label: 'Profile card', desc: 'Any character, from the registry', tone: 'lavender', content_type: 'profile_header', content_config: {} },
   { key: 'lala_stats', label: "Lala's stats", desc: 'Coins and her next goal', tone: 'gold', content_type: 'money_balance', content_config: {} },
   { key: 'shopping_list', label: 'Shopping list', desc: 'Her handwritten list, crossed off as she dresses', tone: 'pink', content_type: 'shopping_list', content_config: {} },
+  { key: 'career_list', label: 'Career list', desc: 'Her goals, brands worked with and milestones', tone: 'lavender', content_type: 'career_list', content_config: {} },
 ];
 
 /** A zone's kind in words: the picker's name when it matches one, else the content type's label. */
