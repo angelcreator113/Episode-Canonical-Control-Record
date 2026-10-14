@@ -41,6 +41,15 @@ async function releaseHold(req, post) {
 }
 
 /**
+ * A comment read as a post for the same checks (Task #3135; as
+ * pulseDrafter.routeComment): its commenter and its words. Comments by Lala
+ * or about her wait for Review like posts.
+ */
+const commentAsPost = (comment) => ({
+  social_profile_id: comment.social_profile_id || null, poster_handle: comment.handle, content_text: comment.text,
+});
+
+/**
  * Adds author_portrait_url to each post and portrait_url to each of its
  * comments, from the registry character linked to the author's profile
  * (registry_characters.feed_profile_id; Task #2924). One query for the page.
@@ -490,10 +499,15 @@ router.post('/:postId/comments', requireAuth, async (req, res) => {
     if (!handle?.trim() || !text?.trim()) return res.status(400).json({ error: 'handle and text are required' });
     if (status !== undefined && !['draft', 'live'].includes(status)) return res.status(400).json({ error: 'status must be draft or live' });
     const existing = await FeedComment.count({ where: { feed_post_id: post.id } });
+    // Lala's comment, or one about her, waits for Review whoever writes it (Task #3135).
+    const held = status === 'live'
+      ? await lalaHold(commentAsPost({ social_profile_id, handle: handle.trim().replace(/^@/, ''), text: text.trim() }))
+      : [];
+    const live = status === 'live' && !held.length;
     const comment = await FeedComment.create({
       feed_post_id: post.id, show_id: post.show_id, social_profile_id: social_profile_id || null,
       handle: handle.trim().replace(/^@/, ''), display_name: display_name || null, text: text.trim(),
-      status: status || 'draft', posted_at: status === 'live' ? new Date() : null, sort_order: existing, ai_generated: false,
+      status: live ? 'live' : 'draft', posted_at: live ? new Date() : null, sort_order: existing, ai_generated: false,
       // Its story time: now, never before the post (Task #3064).
       story_order: await require('../services/storyClock').commentOrder(models, post),
     });
@@ -501,7 +515,7 @@ router.post('/:postId/comments', requireAuth, async (req, res) => {
       await recountComments(models, post.id);
       require('../services/pulseCloseness').proposeLater(post.id);   // Task #2983
     }
-    return res.json({ data: comment });
+    return res.json(held.length ? { data: comment, held_for_review: true, review_reasons: held } : { data: comment });
   } catch (err) {
     console.error('[FeedComments] Create error:', err);
     return res.status(500).json({ error: err.message });
@@ -544,7 +558,14 @@ router.patch('/comments/:commentId', requireAuth, async (req, res) => {
       // Evoni changing an AI draft's words is remembered (Task #3070).
       if (comment.ai_generated && updates.text !== String(comment.text || '').trim()) updates.edited_at = new Date();
     }
-    if (status === 'live') { updates.status = 'live'; updates.posted_at = comment.posted_at || new Date(); }
+    if (status === 'live') {
+      // Releasing Lala's comment, or one about her, is Review's: an admin's (Task #3135).
+      const held = await releaseHold(req, commentAsPost({ ...comment.get(), ...updates }));
+      if (held.length) {
+        return res.status(403).json({ error: 'Lala\'s comments and comments about her go live through Review.', code: 'REVIEW_REQUIRED', review_reasons: held });
+      }
+      updates.status = 'live'; updates.posted_at = comment.posted_at || new Date();
+    }
     const learn = status === 'live' && comment.ai_generated && Boolean(updates.edited_at || comment.edited_at);
     await comment.update(updates);
     // An approved draft Evoni edited becomes an example of the commenter's voice (Task #3070).
