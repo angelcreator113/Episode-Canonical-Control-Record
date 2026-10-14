@@ -1489,6 +1489,42 @@ router.post('/:id/seed-balance', requireAuth, async (req, res) => {
 });
 
 /**
+ * GET /api/v1/shows/:id/career-list?episode_id=
+ * Lala's Career list as of an episode, else now (Task #3181): goals,
+ * milestones and the brands she has worked with, less the hidden ones.
+ * services/careerListService.careerListAt says where each comes from.
+ */
+router.get('/:id/career-list', requireAuth, async (req, res) => {
+  try {
+    const { careerListAt } = require('../services/careerListService');
+    const episodeId = req.query.episode_id ? String(req.query.episode_id) : null;
+    const data = await careerListAt(require('../models'), req.params.id, { episodeId });
+    return res.json({ success: true, data });
+  } catch (err) {
+    if (err.name === 'CareerListError') return res.status(err.status).json({ success: false, error: err.message, code: err.code });
+    console.error('GET /shows/:id/career-list error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * PUT /api/v1/shows/:id/career-list/hidden-brands  { brands: [name, ...] }
+ * The brands left out of the Career list (Evoni, 2026-10-14: a per-brand
+ * hide, no separate list). Saved in show settings; no migration.
+ */
+router.put('/:id/career-list/hidden-brands', requireAuth, async (req, res) => {
+  try {
+    const { saveHiddenBrands } = require('../services/careerListService');
+    const brands = await saveHiddenBrands(require('../models'), req.params.id, req.body?.brands);
+    return res.json({ success: true, data: { hidden_brands: brands } });
+  } catch (err) {
+    if (err.name === 'CareerListError') return res.status(err.status).json({ success: false, error: err.message, code: err.code });
+    console.error('PUT /shows/:id/career-list/hidden-brands error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * PUT /api/v1/shows/:id/wardrobe-config
  * Persist show-level wardrobe settings onto Show.metadata.
  * Body: { required_slots: ['outfit','shoes','jewelry','accessories','fragrance'] }
