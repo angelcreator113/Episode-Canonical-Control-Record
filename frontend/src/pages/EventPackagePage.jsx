@@ -912,9 +912,21 @@ export default function EventPackagePage() {
     saveGuestProfiles(updated);
   };
 
+  // Add from Feed is where Featured Attendees are chosen (Task #3138). A
+  // name already on the guest list used to be a disabled row, and the
+  // handler refused it ("already on the guest list"), so picking an invited
+  // guest there never featured them. Now an invited guest is featured in
+  // place (the same toggle the Full Guest List uses); a new one is added
+  // and featured. Ids compare as strings, as featureRecommended does.
   const addGuestFromFeed = (profile) => {
-    if (guestList.some((g) => g.profile_id === profile.id)) {
-      setToast(`${profile.display_name || profile.handle} is already on the guest list.`);
+    const at = guestList.findIndex((g) => String(g.profile_id) === String(profile.id));
+    if (at >= 0) {
+      if (guestList[at].featured) {
+        setToast(`${profile.display_name || profile.handle} is already featured.`);
+        return;
+      }
+      setGuestFeedPickerOpen(false); setGuestFeedSearch(''); setGuestFeedResults([]);
+      toggleFeatured(at);
       return;
     }
     if (guestList.filter((g) => g.featured).length >= MAX_FEATURED_GUESTS) {
@@ -2475,18 +2487,22 @@ export default function EventPackagePage() {
                 <div className="epp-empty">Searching…</div>
               ) : guestFeedResults.length ? (
                 guestFeedResults.map((p) => {
-                  const alreadyGuest = guestList.some((g) => g.profile_id === p.id);
+                  // An invited guest can be picked to feature them (Task #3138);
+                  // only one already featured is done.
+                  const guest = guestList.find((g) => String(g.profile_id) === String(p.id));
+                  const isFeatured = !!guest?.featured;
                   return (
                     <button
-                      key={p.id} className="epp-modal-result"
-                      disabled={guestSaving || alreadyGuest}
+                      key={p.id} className="epp-modal-result" data-testid={`guest-feed-result-${p.id}`}
+                      disabled={guestSaving || isFeatured}
                       onClick={() => addGuestFromFeed(p)}
                     >
                       <div>
                         <div className="epp-host-name">{p.display_name || p.handle}</div>
                         {p.handle && <div className="epp-host-handle">@{String(p.handle).replace(/^@/, '')}</div>}
+                        {guest && <div className="epp-host-handle">{isFeatured ? 'Featured' : 'Invited · pick to feature'}</div>}
                       </div>
-                      {alreadyGuest && <CheckCircle2 size={16} />}
+                      {isFeatured && <CheckCircle2 size={16} />}
                     </button>
                   );
                 })
