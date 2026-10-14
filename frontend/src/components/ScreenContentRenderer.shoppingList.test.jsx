@@ -69,4 +69,17 @@ describe("Lala's Shopping list on the phone", () => {
     await screen.findByTestId('phone-shopping-list');
     expect(api.get).toHaveBeenCalledWith('/api/v1/episodes/ep-1/todo?beat=8');
   });
+
+  test('spent so far, in her hand under the lines; hidden when nothing is spent (Task 3189)', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { data: { tasks: TASKS, spent_so_far: 1240 } } });
+    const { unmount } = render(<ShoppingListRenderer episodeId="ep-1" beat={8} />);
+    const spent = await screen.findByTestId('phone-shopping-spent');
+    expect(spent.textContent).toBe('spent so far: 🪙 1,240');
+    expect(spent.parentElement.dataset.testid).toBe('phone-shopping-list');
+    unmount();
+    vi.mocked(api.get).mockResolvedValue({ data: { data: { tasks: TASKS, spent_so_far: 0 } } });
+    render(<ShoppingListRenderer episodeId="ep-1" beat={8} />);
+    await screen.findByTestId('phone-shopping-list');
+    expect(screen.queryByTestId('phone-shopping-spent')).toBeNull();
+  });
 });

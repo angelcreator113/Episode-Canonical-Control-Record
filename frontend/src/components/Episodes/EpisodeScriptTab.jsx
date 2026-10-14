@@ -1291,7 +1291,9 @@ export default function EpisodeScriptTab({ episode, show }) {
         <section className="esp-truth" data-testid="script-beat-state">
           <h3 className="esp-side-title">True at Beat {truth.number}</h3>
           <dl className="esp-truth-list">
-            <div data-testid="script-truth-coins"><dt><Coins size={14} aria-hidden="true" /> Coins</dt><dd>{truth.coins.text}{truth.coins.detail && <span className="esp-truth-note">{truth.coins.detail}</span>}</dd></div>
+            <div data-testid="script-truth-coins"><dt><Coins size={14} aria-hidden="true" /> Coins</dt><dd>{truth.coins.text}{truth.coins.detail && <span className="esp-truth-note">{truth.coins.detail}</span>}
+              {/* Spent so far on the look by this beat (Task #3189), from the saved script; hidden at zero. */}
+              {Number(shoppingAt?.spent_so_far) > 0 && <span className="esp-truth-note" data-testid="script-truth-spent">Spent on the look so far: 🪙 {Number(shoppingAt.spent_so_far).toLocaleString('en-US')}</span>}</dd></div>
             <div data-testid="script-truth-wearing"><dt><Shirt size={14} aria-hidden="true" /> Wearing</dt><dd>{truth.wearing.text}</dd></div>
             {shoppingAt?.tasks?.length > 0 && (
               <div data-testid="script-truth-shopping"><dt><ListChecks size={14} aria-hidden="true" /> Shopping list</dt><dd>
