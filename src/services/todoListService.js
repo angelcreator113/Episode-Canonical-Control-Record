@@ -641,7 +641,32 @@ async function generateEpisodeTodoList(episodeId, showId, models) {
   return { tasks, assetUrl, assetId: asset.id, eventName: event.name };
 }
 
-async function getTodoList(episodeId, models) {
+/**
+ * As of a beat (Task #3188; Evoni, 2026-10-14, phone phase 3 rulings 1 and
+ * 2): the locked look's pieces Lala has put on by that beat and line of the
+ * script (utils/scriptWear.wornByBeat: [WEAR] cues, legacy selects by
+ * name, an uncued piece from the last getting-ready beat), and the uncued
+ * pieces to flag.
+ */
+async function wornAsOf(sequelize, episodeId, { beat, line }) {
+  const [episode] = await sequelize.query(
+    'SELECT script_content FROM episodes WHERE id = :episodeId AND deleted_at IS NULL',
+    { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
+  );
+  const look = await sequelize.query(
+    `SELECT w.id, w.name, w.clothing_category
+     FROM episode_wardrobe ew
+     JOIN wardrobe w ON w.id = ew.wardrobe_id
+     WHERE ew.episode_id = :episodeId AND ew.deleted_at IS NULL AND ew.approval_status = 'approved'
+       AND w.deleted_at IS NULL AND w.parent_item_id IS NULL
+     ORDER BY ew.created_at ASC`,
+    { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
+  );
+  const { wornByBeat } = require('../utils/scriptWear');
+  return wornByBeat(episode?.script_content || '', look, beat, Number.isInteger(line) ? line : Infinity);
+}
+
+async function getTodoList(episodeId, models, { beat = null, line = null } = {}) {
   const { sequelize } = models;
 
   const [todoList] = await sequelize.query(
@@ -653,17 +678,34 @@ async function getTodoList(episodeId, models) {
 
   // Which slots Lala's outfit fills (T7, §8(bb); Task #2307): a wardrobe
   // task's completion comes only from here, never from a manual toggle. A
-  // piece counts when it is linked to the episode and not rejected.
-  const wardrobeItems = await sequelize.query(
-    `SELECT w.clothing_category
-     FROM episode_wardrobe ew
-     JOIN wardrobe w ON w.id = ew.wardrobe_id
-     WHERE ew.episode_id = :episodeId AND ew.deleted_at IS NULL
-       AND COALESCE(ew.approval_status, 'pending') <> 'rejected'`,
-    { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
-  );
+  // piece counts when it is linked to the episode and not rejected. As of a
+  // beat, only the pieces she has put on by then count (Task #3188).
+  let categories;
+  let asOf = null;
+  if (Number.isInteger(beat)) {
+    const { worn, uncued, beatFound } = await wornAsOf(sequelize, episodeId, { beat, line });
+    categories = worn.map(p => p.clothing_category);
+    asOf = {
+      beat,
+      line: Number.isInteger(line) ? line : null,
+      beat_found: beatFound,
+      worn: worn.map(p => ({ id: p.id, name: p.name })),
+      // Flagged "in the look, never equipped on screen" (ruling 2).
+      uncued: uncued.map(p => ({ id: p.id, name: p.name })),
+    };
+  } else {
+    const wardrobeItems = await sequelize.query(
+      `SELECT w.clothing_category
+       FROM episode_wardrobe ew
+       JOIN wardrobe w ON w.id = ew.wardrobe_id
+       WHERE ew.episode_id = :episodeId AND ew.deleted_at IS NULL
+         AND COALESCE(ew.approval_status, 'pending') <> 'rejected'`,
+      { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
+    );
+    categories = wardrobeItems.map(w => w.clothing_category);
+  }
 
-  const filledSlots = listSlotsFilled(wardrobeItems.map(w => w.clothing_category));
+  const filledSlots = listSlotsFilled(categories);
 
   const saved = typeof todoList.tasks === 'string' ? JSON.parse(todoList.tasks) : todoList.tasks;
   // A list with no Purse line predates it; its Accessories line held bags.
@@ -676,6 +718,7 @@ async function getTodoList(episodeId, models) {
   return {
     ...todoList,
     tasks,
+    ...(asOf ? { as_of: asOf } : {}),
     completion: {
       total: tasks.length,
       completed: tasks.filter(t => t.completed).length,

@@ -9,7 +9,7 @@ import { episodePlanning } from '../../utils/episodePlanning';
 import { scriptInputs, mustCover, scriptPeople } from '../../lib/episodeScript';
 import { beatState } from '../../lib/beatState';
 import { moveBeat, moveLine, dropIndex, replaceBeat, appendLine, insertLine } from '../../lib/scriptBeatOrder';
-import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers, phoneCheck, messageLine, closetBeat, wearFlags } from '../../lib/scriptMoments';
+import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers, phoneCheck, messageLine, closetBeat, wearFlags, uncuedPieces, lastGettingReadyIndex } from '../../lib/scriptMoments';
 import { isScreen, isIcon, isProduction } from '../../lib/overlayUtils';
 import { draftLine, lalaLine, lalaLineSlots } from '../../lib/lalaLineDraft';
 import { beatImage, beatImageLabel } from '../BeatPlan/BeatPlanParts';
@@ -1081,6 +1081,18 @@ export default function EpisodeScriptTab({ episode, show }) {
   // when it has a phone moment; the open beat's context for the chips.
   const openId = expandedBeat === undefined ? beats[0]?.id : expandedBeat;
   const openBeat = beats.find((b) => b.id === openId) || null;
+  // The Shopping list as of the open beat, from the saved script (Task
+  // #3188): crossed off from the line each piece is put on.
+  const [shoppingAt, setShoppingAt] = useState(null);
+  const openBeatNumber = openBeat?.number ?? null;
+  useEffect(() => {
+    if (!episodeId || !openBeatNumber) { setShoppingAt(null); return undefined; }
+    let cancelled = false;
+    api.get(`/api/v1/episodes/${episodeId}/todo?beat=${openBeatNumber}`)
+      .then((res) => { if (!cancelled) setShoppingAt(res.data?.data || null); })
+      .catch((err) => { console.error('[EpisodeScript] shopping list as of the beat failed:', err); if (!cancelled) setShoppingAt(null); });
+    return () => { cancelled = true; };
+  }, [episodeId, openBeatNumber, scriptText]);
   const phoneBeats = new Set(beats.filter((b) => hasPhoneMoment(b.lines, onScreen)).map((b) => b.id));
   const openScene = openBeat ? scenePlan.find((p) => p.beat_number === openBeat.number) : null;
   const inRoom = openBeat ? beatSpeakers(openBeat.lines) : [];
@@ -1107,6 +1119,14 @@ export default function EpisodeScriptTab({ episode, show }) {
   const wearIssues = openBeat && Array.isArray(outfit) && outfit.length
     ? wearFlags(beats, outfit).filter((f) => f.beatIndex === beats.indexOf(openBeat))
     : [];
+  // A piece of the look no cue puts on is crossed off at the last
+  // getting-ready beat and flagged there (Task #3188; ruling 2).
+  if (openBeat && Array.isArray(outfit) && outfit.length
+    && beats.indexOf(openBeat) === Math.max(0, lastGettingReadyIndex(beats, outfit, closetBeat(scriptText)))) {
+    for (const p of uncuedPieces(beats, outfit)) {
+      wearIssues.push({ beatIndex: beats.indexOf(openBeat), lineIndex: `uncued-${p.id}`, flag: 'uncued', text: `"${p.name}" is in the look, never equipped on screen` });
+    }
+  }
 
   // Lala line slots after worn pieces with no line of hers (Task #3190).
   const lineSlots = Array.isArray(outfit) && outfit.length ? lalaLineSlots(beats, outfit) : [];
@@ -1304,6 +1324,12 @@ export default function EpisodeScriptTab({ episode, show }) {
           <dl className="esp-truth-list">
             <div data-testid="script-truth-coins"><dt><Coins size={14} aria-hidden="true" /> Coins</dt><dd>{truth.coins.text}{truth.coins.detail && <span className="esp-truth-note">{truth.coins.detail}</span>}</dd></div>
             <div data-testid="script-truth-wearing"><dt><Shirt size={14} aria-hidden="true" /> Wearing</dt><dd>{truth.wearing.text}</dd></div>
+            {shoppingAt?.tasks?.length > 0 && (
+              <div data-testid="script-truth-shopping"><dt><ListChecks size={14} aria-hidden="true" /> Shopping list</dt><dd>
+                {shoppingAt.completion?.completed ?? 0} of {shoppingAt.completion?.total ?? shoppingAt.tasks.length} crossed off
+                {shoppingAt.tasks.some((t) => t.completed) && <span className="esp-truth-note">{shoppingAt.tasks.filter((t) => t.completed).map((t) => t.label || t.slot).join(' · ')}</span>}
+              </dd></div>
+            )}
             <div data-testid="script-truth-where"><dt><MapPin size={14} aria-hidden="true" /> Where</dt><dd>{truth.where}</dd></div>
             <div data-testid="script-truth-room"><dt><Users size={14} aria-hidden="true" /> In the room</dt><dd>Speaking: {truth.speaking}{truth.cast && <span className="esp-truth-note">Cast: {truth.cast}</span>}</dd></div>
             <div data-testid="script-truth-time"><dt><Clock size={14} aria-hidden="true" /> Story time</dt><dd>{truth.storyTime}{truth.eventTimed && <span className="esp-truth-note">The event&apos;s date and time; a beat has no clock of its own</span>}</dd></div>
