@@ -33,6 +33,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import api from '../services/api';
 import { resolveWardrobeCutoutUrl } from '../utils/wardrobeImage';
 import { withReach, lockReason, setCost, priceRequired } from '../utils/wardrobeReach';
+import { inspectScore, inspectLalaSays, inspectCannotBuy } from '../lib/wardrobeInspect';
 import { GAME_SLOT_DEFS as SLOT_DEFS, OTHER_GROUP, ALL_GROUP, SETS_GROUP, MULTI_SLOTS, gameSlotFor, closetGroupFor, fetchClosetWithTotal, slotPieces, outfitPieces, normalizeSlots, matchingSetsFrom, equipInto, wornLooks, backdropFor } from '../lib/closetGrouping';
 import { eventLookPieces, lookAgainstEvent, shoppingListSource, eventPackagePath } from '../lib/eventLook';
 import { lookTotal, pieceChargeText } from '../lib/lookCharge';
@@ -1261,8 +1262,14 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
         </details>
       )}
 
-      {/* ═══ INSPECT MODAL ═══ */}
-      {inspecting && (
+      {/* ═══ INSPECT MODAL ═══ (Task #3144: a score only when the piece was
+          scored, Lala's line only when there is one, and why she can't have
+          it in words; lib/wardrobeInspect) */}
+      {inspecting && (() => {
+        const score = inspectScore(inspecting, pool);
+        const lalaSays = inspectLalaSays(inspecting, pool);
+        const cannotBuy = inspectCannotBuy(inspecting, coins);
+        return (
         <div style={W.overlay} onClick={() => setInspecting(null)}>
           <div style={W.modal} onClick={e => e.stopPropagation()}>
             <button onClick={() => setInspecting(null)} style={W.modalClose}>✕</button>
@@ -1273,22 +1280,26 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                 <div style={{ fontSize: 12, color: 'var(--lala-ink-muted)' }}>{[inspecting.clothing_category, inspecting.color, inspecting.tier].filter(Boolean).join(' · ')}</div>
               </div>
             </div>
-            <div style={{ padding: 12, background: 'var(--lala-parchment-2)', borderRadius: 10, marginBottom: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontSize: 12, fontWeight: 600 }}>Match Score</span>
-                <span style={{ fontSize: 15, fontWeight: 800, color: inspecting.match_score >= 40 ? 'var(--success-text)' : 'var(--warning-text)' }}>{inspecting.match_score}/60</span>
+            {score && (
+              <div style={{ padding: 12, background: 'var(--lala-parchment-2)', borderRadius: 10, marginBottom: 10 }} data-testid="inspect-score">
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600 }}>Match Score</span>
+                  <span style={{ fontSize: 15, fontWeight: 800, color: score.value >= 40 ? 'var(--success-text)' : 'var(--warning-text)' }}>{score.value}/60</span>
+                </div>
+                <div style={{ height: 6, background: 'var(--lala-parchment-3)', borderRadius: 3 }}>
+                  <div style={{ height: '100%', width: `${Math.min(100, (score.value / 60) * 100)}%`, borderRadius: 3, background: score.value >= 40 ? 'var(--success)' : 'var(--warning)' }} />
+                </div>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
+                  {score.reasons.map((r, i) => <span key={i} style={W.reasonPill}>{r}</span>)}
+                </div>
               </div>
-              <div style={{ height: 6, background: 'var(--lala-parchment-3)', borderRadius: 3 }}>
-                <div style={{ height: '100%', width: `${Math.min(100, (inspecting.match_score / 60) * 100)}%`, borderRadius: 3, background: inspecting.match_score >= 40 ? 'var(--success)' : 'var(--warning)' }} />
+            )}
+            {lalaSays && (
+              <div style={{ padding: 12, background: 'var(--warning-bg)', borderRadius: 10, marginBottom: 10 }} data-testid="inspect-lala-says">
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--lala-lavender-text)', letterSpacing: 1, marginBottom: 3 }}>LALA SAYS</div>
+                <div style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--lala-ink-muted)' }}>"{lalaSays}"</div>
               </div>
-              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
-                {(inspecting.match_reasons || []).map((r, i) => <span key={i} style={W.reasonPill}>{r}</span>)}
-              </div>
-            </div>
-            <div style={{ padding: 12, background: 'var(--warning-bg)', borderRadius: 10, marginBottom: 10 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--lala-lavender-text)', letterSpacing: 1, marginBottom: 3 }}>LALA SAYS</div>
-              <div style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--lala-ink-muted)' }}>"{inspecting.lala_reaction}"</div>
-            </div>
+            )}
             {inspecting.can_select && (
               <button onClick={() => assignToSlot(inspecting)} style={W.modalSelectBtn}>✨ Equip</button>
             )}
@@ -1298,14 +1309,15 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                 {purchasing === inspecting.id ? '⏳...' : `🪙 Buy for ${inspecting.coin_cost}`}
               </button>
             )}
-            {!inspecting.can_select && !inspecting.can_purchase && (
-              <div style={{ padding: 10, background: 'var(--lala-parchment-2)', borderRadius: 8, textAlign: 'center', color: 'var(--lala-ink-muted)', fontSize: 12, fontWeight: 600 }}>
-                🔒 {lockReason(inspecting, { coins })}
+            {cannotBuy && (
+              <div style={{ padding: 10, background: 'var(--lala-parchment-2)', borderRadius: 8, textAlign: 'center', color: 'var(--lala-ink-muted)', fontSize: 12, fontWeight: 600 }} data-testid="inspect-cannot-buy">
+                🔒 {cannotBuy}
               </div>
             )}
           </div>
         </div>
-      )}
+        );
+      })()}
 
       <style>{`@keyframes fadeSlide { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }`}</style>
     </div>
