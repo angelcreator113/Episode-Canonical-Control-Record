@@ -63,4 +63,10 @@ describe("Lala's Shopping list on the phone", () => {
     render(<ScreenContentRenderer episodeId="ep-1" showId="s-1" zones={[{ id: 'z1', content_type: 'shopping_list', x: 0, y: 0, w: 60, h: 50 }]} />);
     expect(await screen.findByTestId('phone-shopping-list')).toBeTruthy();
   });
+
+  test('at a beat of the script, the list is crossed off as of that beat (Task 3188)', async () => {
+    render(<ScreenContentRenderer episodeId="ep-1" showId="s-1" beat={8} zones={[{ id: 'z1', content_type: 'shopping_list', x: 0, y: 0, w: 60, h: 50 }]} />);
+    await screen.findByTestId('phone-shopping-list');
+    expect(api.get).toHaveBeenCalledWith('/api/v1/episodes/ep-1/todo?beat=8');
+  });
 });

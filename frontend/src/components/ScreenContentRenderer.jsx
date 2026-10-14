@@ -78,7 +78,7 @@ export const CONTENT_TYPE_MAP = Object.fromEntries(CONTENT_TYPES.map(t => [t.key
 // ── Main renderer — renders all content zones over a screen ──
 // `runtimeContext` is the optional phone-runtime context used to filter zones by
 // their `conditions` array. When absent, all zones render (editor "author view").
-export default function ScreenContentRenderer({ zones = [], showId, episodeId, storyAt = null, interactive = false, runtimeContext = null, screenMeta = null, mapEditable = false }) {
+export default function ScreenContentRenderer({ zones = [], showId, episodeId, storyAt = null, beat = null, interactive = false, runtimeContext = null, screenMeta = null, mapEditable = false }) {
   if (!zones.length) return null;
 
   // Filter zones by `conditions` when a runtime context is provided. Editor/author
@@ -110,6 +110,7 @@ export default function ScreenContentRenderer({ zones = [], showId, episodeId, s
             showId={showId}
             episodeId={episodeId}
             storyAt={storyAt}
+            beat={beat}
             screenMeta={screenMeta}
             mapEditable={mapEditable}
           />
@@ -126,7 +127,7 @@ function evaluateZoneConditions(zone, ctx) {
 }
 
 // ── Dispatch to the right sub-renderer based on content_type ──
-function ContentZoneRenderer({ zone, showId, episodeId, storyAt = null, screenMeta, mapEditable = false }) {
+function ContentZoneRenderer({ zone, showId, episodeId, storyAt = null, beat = null, screenMeta, mapEditable = false }) {
   const config = zone.content_config || {};
 
   switch (zone.content_type) {
@@ -215,7 +216,7 @@ function ContentZoneRenderer({ zone, showId, episodeId, storyAt = null, screenMe
     case 'task_list':
       return <TaskListRenderer episodeId={episodeId} config={config} />;
     case 'shopping_list':
-      return <ShoppingListRenderer episodeId={episodeId} config={config} />;
+      return <ShoppingListRenderer episodeId={episodeId} beat={beat} config={config} />;
     case 'custom_text':
       return <CustomTextRenderer config={config} />;
     default:
@@ -576,8 +577,11 @@ export const TASK_SOURCE_LABELS = {
 // fills it, read from the current look as the To-Do tab does
 // (todoListService.getTodoList); crossing off from the beat follows the
 // [WEAR] cue (phone phase 3, issue 3).
-export function ShoppingListRenderer({ episodeId, config = {} }) {
-  const url = episodeId ? `/api/v1/episodes/${episodeId}/todo` : null;
+export function ShoppingListRenderer({ episodeId, beat = null, config = {} }) {
+  // As of the beat shown (Task #3188): crossed off from the line each piece
+  // is put on; with no beat, from the look as it is now.
+  const asOf = Number.isInteger(beat) && beat >= 1 && beat <= 14 ? `?beat=${beat}` : '';
+  const url = episodeId ? `/api/v1/episodes/${episodeId}/todo${asOf}` : null;
   const { data, loading } = useContentData(url);
 
   if (!episodeId) return <ZoneEmpty label="Shopping list · shown in an episode" />;

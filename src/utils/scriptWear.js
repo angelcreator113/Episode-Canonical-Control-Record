@@ -13,10 +13,11 @@
  * - `[WEAR: <wardrobe id>]` puts the look's piece on at its line; an older
  *   `[UI:SELECT Item <name>]` does when exactly one look piece has that name
  *   (case and spaces ignored). Any other cue counts for nothing.
- * - A look piece with no cue anywhere is put on at the last getting-ready
- *   beat: the closet beat (the beat that opens the closet, else canonical
- *   beat 8), or the last beat with a wear cue if later. With neither, from
- *   the start. It is flagged "in the look, never equipped on screen".
+ * - A look piece with no cue anywhere is put on at the end of the last
+ *   getting-ready beat: the closet beat (the beat that opens the closet,
+ *   else canonical beat 8), or the last beat with a wear cue if later. With
+ *   neither, from the start. It is flagged "in the look, never equipped on
+ *   screen".
  */
 
 const BEAT_COUNT = 14;
@@ -102,8 +103,11 @@ function wornByBeat(scriptText, look, beatNumber, lineIndex = Infinity) {
     if (c.beatIndex > at || (c.beatIndex === at && c.lineIndex > lineIndex)) break;
     if (c.piece && !seen.has(String(c.piece.id))) seen.set(String(c.piece.id), c.piece);
   }
+  // Uncued pieces come on at the end of the last getting-ready beat: after
+  // its cued pieces, so a line inside it crosses off only what was cued.
   const ready = lastGettingReadyIndex(beats, cues);
-  if (at >= ready) for (const p of uncued) seen.set(String(p.id), p);
+  const atEnd = ready < 0 || at > ready || (at === ready && lineIndex >= beats[ready].lines.length - 1);
+  if (atEnd) for (const p of uncued) seen.set(String(p.id), p);
   return { worn: [...seen.values()], uncued, beatFound: true };
 }
 

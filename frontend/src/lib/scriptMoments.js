@@ -465,6 +465,28 @@ const FLAG_TEXT = {
   several: (c) => `"${c.text}" matches several pieces of the look; use [WEAR: id]`,
 };
 
+/**
+ * The look's pieces no cue puts on (Task #3188; Evoni, 2026-10-14, ruling
+ * 2): crossed off at the last getting-ready beat and flagged "in the look,
+ * never equipped on screen". The server reads them the same way
+ * (src/utils/scriptWear.js).
+ */
+export function uncuedPieces(beats = [], look = []) {
+  const cued = new Set(wearCues(beats, look).filter((c) => c.piece).map((c) => String(c.piece.id)));
+  return (Array.isArray(look) ? look : []).filter((p) => p && !cued.has(String(p.id)));
+}
+
+/**
+ * The index of the last getting-ready beat: the closet beat (its number, as
+ * closetBeat gives it), or the last beat with a wear cue if later; -1 with
+ * neither, when uncued pieces count from the start.
+ */
+export function lastGettingReadyIndex(beats = [], look = [], closetNumber = null) {
+  const closet = closetNumber == null ? -1 : beats.findIndex((b) => b.number === closetNumber);
+  const lastCue = wearCues(beats, look).filter((c) => c.piece).reduce((max, c) => Math.max(max, c.beatIndex), -1);
+  return Math.max(closet, lastCue);
+}
+
 /** The wear cues that name no single piece, with a line to show each: { beatIndex, lineIndex, flag, text }. */
 export function wearFlags(beats = [], look = []) {
   return wearCues(beats, look)

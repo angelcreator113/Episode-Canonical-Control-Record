@@ -5,7 +5,7 @@
  * several is flagged, never guessed.
  */
 import { test, expect } from 'vitest';
-import { wearOf, wearLine, wearCues, wornAt, wearFlags } from './scriptMoments';
+import { wearOf, wearLine, wearCues, wornAt, wearFlags, uncuedPieces, lastGettingReadyIndex } from './scriptMoments';
 
 const LOOK = [
   { id: 'dress-1', name: 'Crimson Gown' },
@@ -52,4 +52,12 @@ test('the flags read in plain words', () => {
     { beatIndex: 1, lineIndex: 2, flag: 'no_match', text: '"Velvet Hat" matches no piece of the look' },
     { beatIndex: 1, lineIndex: 3, flag: 'not_in_look', text: '[WEAR: gone-9] is not a piece of the locked look' },
   ]);
+});
+
+test('a look piece no cue puts on is uncued (Task 3188, ruling 2); the last getting-ready beat is the closet beat or the last cued beat if later', () => {
+  const look = [...LOOK, { id: 'bag-1', name: 'Pearl Clutch' }];
+  expect(uncuedPieces(BEATS, look).map((p) => p.id)).toEqual(['ear-1', 'ear-2', 'bag-1']);
+  expect(lastGettingReadyIndex(BEATS, look, 7)).toBe(1); // a wear cue in beat 8 is later than the closet
+  expect(lastGettingReadyIndex([BEATS[0], { number: 9, lines: ['Lala: "Go."'] }], look, 7)).toBe(0);
+  expect(lastGettingReadyIndex([{ number: 2, lines: ['Hi'] }], look, null)).toBe(-1);
 });

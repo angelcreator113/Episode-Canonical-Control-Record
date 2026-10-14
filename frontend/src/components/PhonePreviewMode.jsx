@@ -38,7 +38,7 @@ function getLinks(screen) {
  * `storyAt` (Task 2986) is the story order of the episode's beats
  * (lib/storyClock.beatOrder); The Pulse zones read The Pulse as of it.
  */
-export default function PhonePreviewMode({ screens = [], initialScreen, onClose, globalFit, phoneSkin = 'midnight', customFrameUrl = null, playthrough = null, missions = [], embedded = false, showId, episodeId, storyAt = null }) {
+export default function PhonePreviewMode({ screens = [], initialScreen, onClose, globalFit, phoneSkin = 'midnight', customFrameUrl = null, playthrough = null, missions = [], embedded = false, showId, episodeId, storyAt = null, beat = null }) {
   const [activeScreen, setActiveScreen] = useState(initialScreen || screens.find(isScreen) || screens[0] || null);
   const [history, setHistory] = useState([]);
   // The phone's home: Home and Reset go here, not to the screen the preview
@@ -617,6 +617,8 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
         showId={showId}
         episodeId={episodeId}
         storyAt={storyAt}
+        // The script beat shown, for the Shopping list (Task #3188).
+        beat={beat}
       />
 
       {/* Breadcrumb trail. The screen's name is on the device itself, so it

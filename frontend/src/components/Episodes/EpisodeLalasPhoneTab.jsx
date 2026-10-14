@@ -243,6 +243,8 @@ function EpisodeLalasPhoneTab({ episode, onPreview, previewError = null }) {
                 showId={showId}
                 episodeId={episodeId}
                 storyAt={storyAt}
+                // A moment row names its beat: the Shopping list is crossed off as of it (Task #3188).
+                beat={Number.isInteger(shownMoment?.beat_number) ? shownMoment.beat_number : null}
               />
               {playable.length === 0 ? (
                 <p className="lalas-phone-device-hint">
