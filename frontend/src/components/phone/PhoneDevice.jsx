@@ -219,7 +219,8 @@ export default function PhoneDevice({
             on every screen but the home, in one place and look, drawn by the
             frame rather than a tap zone. `firstScreen` is the home; without
             one it shows only with history. The caller's onBack goes to the
-            previous screen, else home. Below the Dynamic Island on the
+            previous screen, else the screen whose icon opens this one
+            (lib/phoneBack), else home. Below the Dynamic Island on the
             built-in frame, below the status bar on a custom one. */}
         {showBack && (
           <button type="button" onClick={onBack} aria-label="Back" data-testid="phone-back" style={{

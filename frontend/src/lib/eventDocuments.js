@@ -53,6 +53,7 @@ export function docOverlay(doc, lookTotal = null) {
 const CANONICAL_TO_LINE = {
   dress: 'dress', top: 'top', bottom: 'bottom', shoes: 'shoes',
   bag: 'purse', accessory: 'accessories', jewelry: 'jewelry', perfume: 'perfume',
+  hair: 'hair',   // the hairstyle or wig (Task #3167)
 };
 export function lineOfPiece(piece) {
   return CANONICAL_TO_LINE[canonicalCategory(piece?.category || piece?.clothing_category)] || null;

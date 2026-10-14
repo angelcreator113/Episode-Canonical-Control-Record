@@ -58,7 +58,7 @@ const ROLE_STYLES = {
   risky: { bg: 'var(--danger-bg)', border: 'var(--danger-border)', label: '⚡ Risky', color: 'var(--danger-text)' },
   locked_tease: { bg: 'var(--lala-parchment-2)', border: 'var(--lala-parchment-3)', label: '🔒 Locked', color: 'var(--lala-ink-muted)' },
 };
-const CAT_ICONS = { dress: '👗', top: '👚', bottom: '👖', outerwear: '🧥', shoes: '👠', accessories: '👜', accessory: '👜', bag: '👜', jewelry: '💍', perfume: '🌸' };
+const CAT_ICONS = { dress: '👗', top: '👚', bottom: '👖', outerwear: '🧥', shoes: '👠', accessories: '👜', accessory: '👜', bag: '👜', jewelry: '💍', perfume: '🌸', hair: '💇' };
 
 /** A piece's colour and era, whichever it has ("Gold · Modern"), or ''. */
 export const pieceDetails = (item) => [item?.color, item?.era_alignment].filter(Boolean).join(' · ');
