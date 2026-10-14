@@ -217,6 +217,53 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect((await roadmap(show)).phases[0].slots[1].state).toBe('in_production');
   });
 
+  // Task #3137: the brief's narrative purpose is never the event's
+  // description (guest copy); it is the slot's primary story purpose, or empty.
+  const purposeOf = async (episodeId) => (await rows(
+    'SELECT narrative_purpose FROM episode_briefs WHERE episode_id = :episodeId AND deleted_at IS NULL', { episodeId }))[0]?.narrative_purpose;
+  const GUEST_COPY = 'Join us for an evening of couture under the stars. Dress to impress.';
+
+  test("Start Episode: the brief's narrative purpose is the slot's story purpose, never the event description", async () => {
+    const { show, arcId } = await seedSeason();
+    const event = await addEvent(show, 'Starlight Gala', { status: 'ready' });
+    await run('UPDATE world_events SET description = :d WHERE id = :event', { d: GUEST_COPY, event });
+    const s4 = await slotId(arcId, 4);
+    await run('UPDATE season_slots SET story_purpose = :p WHERE id = :s4', { p: 'Lala proves she belongs in the room', s4 });
+    await pencil(show, s4, event);
+
+    const res = await startEpisode(show, event);
+
+    expect(res.status).toBe(201);
+    const episodeId = res.body.data?.episode?.id || res.body.episode?.id;
+    const purpose = await purposeOf(episodeId);
+    expect(purpose).toBe('Lala proves she belongs in the room');
+    expect(purpose).not.toContain('couture under the stars');
+  });
+
+  test('Start Episode with no story purpose leaves the narrative purpose empty, not the description', async () => {
+    const { show } = await seedSeason();
+    const event = await addEvent(show, 'Rooftop Mixer', { status: 'ready' });
+    await run('UPDATE world_events SET description = :d WHERE id = :event', { d: GUEST_COPY, event });
+
+    const res = await startEpisode(show, event);
+
+    expect(res.status).toBe(201);
+    const episodeId = res.body.data?.episode?.id || res.body.episode?.id;
+    expect(await purposeOf(episodeId)).toBeNull();
+  });
+
+  test('a narrative purpose already written is kept when the slot is snapshotted again', async () => {
+    const { show, arcId } = await seedSeason();
+    const episodeId = await addEpisode(show, 'Written');
+    await run(`INSERT INTO episode_briefs (id, episode_id, narrative_purpose, status, created_at, updated_at)
+               VALUES (:id, :episodeId, 'Her own words', 'draft', NOW(), NOW())`, { id: uuid(), episodeId });
+    const s6 = await slotId(arcId, 6);
+    await run('UPDATE season_slots SET story_purpose = :p WHERE id = :s6', { p: 'The slot purpose', s6 });
+    await placeIn(show, s6, episodeId);
+
+    expect(await purposeOf(episodeId)).toBe('Her own words');
+  });
+
   test('a regenerate keeps the slot, now on the new episode', async () => {
     const { show, arcId } = await seedSeason();
     const event = await addEvent(show, 'Redo');
