@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * The stats panel on Lala's Phone home screen (spec §2; Task #3164; the
+ * Lala's stats as of a beat, for the audience's stats panel (Task #3164; the
  * phase 1 read, docs/reads/2026-10-14-phone-hub-read.md §7 and §9): her
  * coins, reputation and influence as of a beat, and her followers once The
  * Pulse has her numbers. Read only; each stat from its one owner.
@@ -86,7 +86,7 @@ async function followersAt(db, showId, at, lalaProfileId) {
     return { count, tier: tier ? { key: tier.key, label: tier.label } : null };
   } catch (err) {
     // The row is left out rather than the panel failing (Task #3164).
-    console.error('[PhoneStats] follower count read failed:', err.message);
+    console.error('[LalaStats] follower count read failed:', err.message);
     return null;
   }
 }

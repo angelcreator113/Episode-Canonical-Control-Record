@@ -1,5 +1,5 @@
 /**
- * The stats panel on Lala's Phone home screen (Task #3164), against the test
+ * Lala's stats for the audience's stats panel (Task #3164), against the test
  * database: coins, reputation and influence as of a beat, and followers once
  * The Pulse has her numbers.
  * - An episode counts once it completes (its "after", n × 10 + 7): a beat
@@ -18,7 +18,7 @@ const crypto = require('crypto');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
-const { statsAt } = require('../../src/services/phoneStats');
+const { statsAt } = require('../../src/services/lalaStats');
 
 const { sequelize } = models;
 
@@ -30,14 +30,14 @@ const shouldSkip =
 const uuid = () => crypto.randomUUID();
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
-(shouldSkip ? describe.skip : describe)('Phone stats panel (Task #3164)', () => {
+(shouldSkip ? describe.skip : describe)('Lala stats as of a beat (Task #3164)', () => {
   const tag = uuid().slice(0, 8);
   const ids = { show: uuid(), bare: uuid(), ep1: uuid(), ep2: uuid(), ep3: uuid(), gone: uuid() };
   let lala;
   let token;
 
   beforeAll(async () => {
-    token = TokenService.generateTokenPair({ id: 'test-user-phone-stats', email: 'ed@phone-stats.dev', name: 'Ed', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    token = TokenService.generateTokenPair({ id: 'test-user-lala-stats', email: 'ed@lala-stats.dev', name: 'Ed', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
     for (const [id, name] of [[ids.show, 'Stats'], [ids.bare, 'Bare']]) {
       await run('INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:id, :name, :slug, NOW(), NOW())',
         { id, name: `${name} ${tag}`, slug: `${name.toLowerCase()}-${tag}` });
@@ -124,7 +124,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   });
 
   test('the route: auth, the beat as a story order or ep:<n>:<phase>, and a bad `at` is a 400', async () => {
-    const url = `/api/v1/shows/${ids.show}/phone-stats`;
+    const url = `/api/v1/shows/${ids.show}/lala-stats`;
     expect((await request(app).get(url)).status).toBe(401);
     const auth = (q) => request(app).get(`${url}${q}`).set('Authorization', `Bearer ${token}`);
     const byOrder = await auth('?at=25');

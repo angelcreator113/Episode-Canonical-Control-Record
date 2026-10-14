@@ -159,6 +159,8 @@ router.get('/:showId', requireAuth, async (req, res) => {
         screen_links: primary?.metadata?.screen_links || null,
         image_fit: primary?.metadata?.image_fit || null,
         content_zones: primary?.metadata?.content_zones || null,
+        // The stats panel's number boxes, on its art (Task #3164).
+        stats_panel: primary?.metadata?.stats_panel || null,
         // Content zones read these on the device (phone audit, 2026-10-07):
         // the feed/DM/notification zones need the show, the wardrobe
         // price/brand zones read the screen's metadata. Only those two keys
@@ -1154,6 +1156,53 @@ router.delete('/:showId/asset/:assetId', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[UIOverlays] Delete asset error:', err.message);
     return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── STATS PANEL (the audience's overlay; Task #3164) ────────────────────────
+// services/statsPanelService: the show's panel art (one of its overlays), the
+// boxes where Lala's numbers go, and an episode's PNG with each number as
+// "before → after". Separate from Lala's Phone (Evoni, 2026-10-14).
+
+function sendStatsPanelError(res, err, where) {
+  const { StatsPanelError } = require('../services/statsPanelService');
+  if (err instanceof StatsPanelError) return res.status(err.status).json({ success: false, error: err.message, code: err.code });
+  console.error(`[UIOverlay] ${where} error:`, err);
+  return res.status(500).json({ success: false, error: err.message });
+}
+
+// PUT /api/v1/ui-overlays/:showId/stats-panel/:assetId — save the panel's number boxes on its art
+router.put('/:showId/stats-panel/:assetId', requireAuth, async (req, res) => {
+  try {
+    const { saveSpots } = require('../services/statsPanelService');
+    const data = await saveSpots(require('../models'), req.params.showId, req.params.assetId, req.body?.spots);
+    return res.json({ success: true, data });
+  } catch (err) {
+    return sendStatsPanelError(res, err, 'PUT stats-panel');
+  }
+});
+
+// GET /api/v1/ui-overlays/:showId/stats-panel/episode/:episodeId — the episode's numbers, before → after
+router.get('/:showId/stats-panel/episode/:episodeId', requireAuth, async (req, res) => {
+  try {
+    const { episodePanel } = require('../services/statsPanelService');
+    const data = await episodePanel(require('../models'), req.params.showId, req.params.episodeId);
+    return res.json({ success: true, data });
+  } catch (err) {
+    return sendStatsPanelError(res, err, 'GET stats-panel episode');
+  }
+});
+
+// GET /api/v1/ui-overlays/:showId/stats-panel/episode/:episodeId/png?size=1080p|4k — the PNG to download
+router.get('/:showId/stats-panel/episode/:episodeId/png', requireAuth, async (req, res) => {
+  try {
+    const { renderPng } = require('../services/statsPanelService');
+    const { buffer, filename } = await renderPng(require('../models'), req.params.showId, req.params.episodeId, String(req.query.size || '1080p'));
+    res.set('Content-Type', 'image/png');
+    res.set('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(buffer);
+  } catch (err) {
+    return sendStatsPanelError(res, err, 'GET stats-panel png');
   }
 });
 

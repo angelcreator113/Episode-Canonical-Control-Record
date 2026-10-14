@@ -1,7 +1,7 @@
 /**
- * services/phoneStats (Task #3164), with a stand-in database: which rows
+ * services/lalaStats (Task #3164), with a stand-in database: which rows
  * each stat reads, and its fallbacks. The SQL itself runs against the test
- * database in tests/integration/phoneStats.integration.test.js.
+ * database in tests/integration/lalaStats.integration.test.js.
  */
 jest.mock('../../../src/services/financialTransactionService', () => ({ getCurrentBalance: jest.fn() }));
 jest.mock('../../../src/services/pulseFollowers', () => ({ countAt: jest.fn() }));
@@ -10,7 +10,7 @@ jest.mock('../../../src/services/lalaFeedProfile', () => ({ lalaProfileId: jest.
 const { getCurrentBalance } = require('../../../src/services/financialTransactionService');
 const { countAt } = require('../../../src/services/pulseFollowers');
 const { lalaProfileId } = require('../../../src/services/lalaFeedProfile');
-const { statsAt } = require('../../../src/services/phoneStats');
+const { statsAt } = require('../../../src/services/lalaStats');
 
 /** A sequelize stand-in: answers by what the SQL reads; records each call. */
 function fakeDb({ laterNet = 0, state = { reputation: 7, influence: 6 }, counted = [], uncounted = [] } = {}) {
@@ -73,5 +73,5 @@ test('followers: null before her numbers exist, with no Lala profile, or when th
   jest.spyOn(console, 'error').mockImplementation(() => {});
   countAt.mockRejectedValueOnce(new Error('down'));
   expect((await statsAt(db, 's', 15)).followers).toBeNull();
-  expect(console.error).toHaveBeenCalledWith('[PhoneStats] follower count read failed:', 'down');
+  expect(console.error).toHaveBeenCalledWith('[LalaStats] follower count read failed:', 'down');
 });
