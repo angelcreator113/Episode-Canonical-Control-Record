@@ -865,15 +865,37 @@ describe('EpisodeWardrobeGameplay — matching sets (W1)', () => {
     }
   });
 
-  test('a set Lala cannot afford says what it needs and does not equip', async () => {
+  // Evoni's ruling, 2026-10-14 (Task #3153): short of coins, "wear what she
+  // owns and say what's left to buy"; the set was refused whole before.
+  test('a set Lala cannot afford wears what she owns and says what is left to buy', async () => {
     CLOSET[3] = { ...CLOSET[3], is_owned: false, lock_type: 'coin', coin_cost: 9999, is_visible: true };
     try {
       const card = await openSets();
-      const btn = within(card).getByRole('button', { name: 'Need 🪙 9,999' });
+      const btn = within(card).getByTestId('matching-set-wear-set-floral');
+      expect(btn.textContent).toBe('Wear what she owns · 🪙 9,999 left to buy');
+      expect(btn.disabled).toBe(false);
+      fireEvent.click(btn);
+      await waitFor(() => expect(within(slotCard('top')).getByText('Floral Corset')).toBeTruthy());
+      expect(within(slotCard('bottom')).getByText('Floral Skirt')).toBeTruthy();
+      expect(within(slotCard('jewelry')).getByText('Floral Earrings')).toBeTruthy();
+      expect(within(slotCard('jewelry')).queryByText('Floral Choker')).toBeNull();
+      expect(await screen.findByText(/Wearing what Lala can of the Floral Corset Set · left to buy: Floral Choker \(🪙 9,999\) · 🪙 9,999, Lala has 500 after this look/)).toBeTruthy();
+    } finally {
+      CLOSET[3] = { ...own, id: 'f-neck', name: 'Floral Choker', clothing_category: 'necklace', ...SET };
+    }
+  });
+
+  test('when nothing in the set can be worn now, the button says what it needs and is disabled', async () => {
+    const saved = CLOSET.slice(0, 4);
+    for (let i = 0; i < 4; i += 1) CLOSET[i] = { ...CLOSET[i], is_owned: false, lock_type: 'coin', coin_cost: 9999, is_visible: true };
+    try {
+      const card = await openSets();
+      const btn = within(card).getByTestId('matching-set-wear-set-floral');
+      expect(btn.textContent).toBe('Need 🪙 39,996');
       expect(btn.disabled).toBe(true);
       expect(screen.queryByTestId('outfit-look')).toBeNull();
     } finally {
-      CLOSET[3] = { ...own, id: 'f-neck', name: 'Floral Choker', clothing_category: 'necklace', ...SET };
+      saved.forEach((p, i) => { CLOSET[i] = p; });
     }
   });
 });

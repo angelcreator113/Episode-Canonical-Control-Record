@@ -16,6 +16,7 @@
  */
 import { fetchAllPages } from './fetchAllPages';
 import { CATEGORY_TO_SLOT, CATEGORY_ALIASES } from './wardrobeSlots';
+import { isForSale, priceRequired } from '../utils/wardrobeReach';
 
 export const GAME_SLOT_DEFS = [
   { key: 'body', icon: '👗', label: 'Body', categories: ['dress'], required: true, desc: 'Dress or Top+Bottom' },
@@ -172,6 +173,51 @@ export function matchingSetsFrom(items) {
     byId.get(id).pieces.push(item);
   }
   return [...byId.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+}
+
+/**
+ * Which pieces of a matching set Lala wears now, given her coins (Evoni's
+ * ruling, 2026-10-14, Task #3153: when she can't afford the whole set, "wear
+ * what she owns and say what's left to buy"; docs/reads/2026-10-14-set-
+ * ownership-read.md). Pure.
+ *
+ * Every owned piece with a game slot is worn. The unowned pieces for sale are
+ * bought on Lock, body first (a dress, or the separates), then the cheapest,
+ * while their running total fits her coins; the rest are left to buy. Pieces
+ * not for sale, waiting for a price, or with no game slot are left out with
+ * their reason. `wear` is in equip order, body first.
+ *
+ * Returns { wear, buy, cost, leftToBuy, leftToBuyCost, notForSale,
+ * priceRequired, noSlot, whole }: `whole` when nothing is left to buy.
+ */
+export function planSetWear(pieces = [], coins = 0) {
+  const order = ['body', 'top', 'bottom'];
+  const rank = (p) => { const i = order.indexOf(gameSlotFor(p?.clothing_category)); return i < 0 ? 9 : i; };
+  const price = (p) => Number(p?.coin_cost) || 0;
+  const list = (pieces || []).filter(Boolean);
+  const owned = list.filter((p) => p.is_owned === true);
+  const noSlot = list.filter((p) => (p.is_owned === true || isForSale(p)) && !gameSlotFor(p.clothing_category));
+  const buyable = list
+    .filter((p) => p.is_owned !== true && isForSale(p) && gameSlotFor(p.clothing_category))
+    .sort((a, b) => rank(a) - rank(b) || price(a) - price(b));
+  let budget = Number(coins) || 0;
+  const buy = [];
+  const leftToBuy = [];
+  for (const p of buyable) {
+    if (price(p) <= budget) { buy.push(p); budget -= price(p); } else leftToBuy.push(p);
+  }
+  const wear = [...owned.filter((p) => gameSlotFor(p.clothing_category)), ...buy].sort((a, b) => rank(a) - rank(b));
+  return {
+    wear,
+    buy,
+    cost: buy.reduce((n, p) => n + price(p), 0),
+    leftToBuy,
+    leftToBuyCost: leftToBuy.reduce((n, p) => n + price(p), 0),
+    notForSale: list.filter((p) => p.is_owned !== true && !isForSale(p) && !priceRequired(p)),
+    priceRequired: list.filter(priceRequired),
+    noSlot,
+    whole: leftToBuy.length === 0,
+  };
 }
 
 /**
