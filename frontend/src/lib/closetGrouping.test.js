@@ -5,7 +5,7 @@
 import { describe, test, expect, vi } from 'vitest';
 import {
   GAME_SLOT_DEFS, OTHER_GROUP, canonicalCategory, gameSlotFor, closetGroupFor,
-  groupClosetItems, fetchAllClosetItems, MULTI_SLOTS, slotPieces, outfitPieces, normalizeSlots, backdropFor, equipInto } from './closetGrouping';
+  groupClosetItems, fetchAllClosetItems, MULTI_SLOTS, slotPieces, outfitPieces, normalizeSlots, backdropFor, equipInto, planSetWear } from './closetGrouping';
 
 const ITEMS = [
   { id: 'dress', clothing_category: 'dress' },
@@ -179,5 +179,57 @@ describe('outerwear layers over the outfit', () => {
     const look = equipInto(equipInto({}, jacket), { id: 'coat', clothing_category: 'coat' });
     expect(look.outerwear.id).toBe('coat');
     expect(MULTI_SLOTS.has('outerwear')).toBe(false);
+  });
+});
+
+// Evoni's ruling, 2026-10-14 (Task #3153): short of coins, a set is worn as
+// far as Lala can, and the rest is left to buy. The read's mixes
+// (docs/reads/2026-10-14-set-ownership-read.md §2): an owned top and an
+// unowned skirt, with Lala at 500 coins.
+describe('planSetWear', () => {
+  const top = { id: 'top', name: 'Owned Top', clothing_category: 'top', is_owned: true, lock_type: 'none', coin_cost: 0 };
+  const skirt = (extra) => ({ id: 'skirt', name: 'Skirt', clothing_category: 'bottom', is_owned: false, ...extra });
+  const ids = (list) => list.map((p) => p.id);
+
+  test.each([
+    ['coin, affordable', { lock_type: 'coin', coin_cost: 300 }, ['top', 'skirt'], [], true],
+    ['coin, unaffordable', { lock_type: 'coin', coin_cost: 900 }, ['top'], ['skirt'], false],
+    ['none priced, affordable', { lock_type: 'none', coin_cost: 300 }, ['top', 'skirt'], [], true],
+    ['none priced, unaffordable', { lock_type: 'none', coin_cost: 900 }, ['top'], ['skirt'], false],
+    ['unknown lock, priced', { lock_type: 'dream_fund', coin_cost: 300 }, ['top', 'skirt'], [], true],
+  ])('owned + %s', (_label, extra, wear, leftToBuy, whole) => {
+    const plan = planSetWear([top, skirt(extra)], 500);
+    expect(ids(plan.wear)).toEqual(wear);
+    expect(ids(plan.leftToBuy)).toEqual(leftToBuy);
+    expect(plan.whole).toBe(whole);
+  });
+
+  test('unpriced and not-for-sale pieces are left out with their reason, not left to buy', () => {
+    const unpriced = planSetWear([top, skirt({ lock_type: 'none', coin_cost: 0 })], 500);
+    expect(ids(unpriced.wear)).toEqual(['top']);
+    expect(ids(unpriced.priceRequired)).toEqual(['skirt']);
+    expect(unpriced.whole).toBe(true);
+    const exclusive = planSetWear([top, skirt({ lock_type: 'brand_exclusive', coin_cost: 300 })], 500);
+    expect(ids(exclusive.notForSale)).toEqual(['skirt']);
+    expect(ids(exclusive.wear)).toEqual(['top']);
+  });
+
+  test('buys the body first, then the cheapest, while they fit; the cost and what is left are counted', () => {
+    const dress = { id: 'dress', clothing_category: 'dress', is_owned: false, lock_type: 'coin', coin_cost: 400 };
+    const shoes = { id: 'shoes', clothing_category: 'shoes', is_owned: false, lock_type: 'coin', coin_cost: 80 };
+    const bag = { id: 'bag', clothing_category: 'bag', is_owned: false, lock_type: 'coin', coin_cost: 50 };
+    const plan = planSetWear([shoes, bag, dress], 500);
+    expect(ids(plan.buy)).toEqual(['dress', 'bag']);
+    expect(plan.cost).toBe(450);
+    expect(ids(plan.leftToBuy)).toEqual(['shoes']);
+    expect(plan.leftToBuyCost).toBe(80);
+    expect(ids(plan.wear)[0]).toBe('dress');
+  });
+
+  test('a piece with no game slot is left out, never bought', () => {
+    const scarf = { id: 'scarf', clothing_category: 'umbrella', is_owned: false, lock_type: 'coin', coin_cost: 10 };
+    const plan = planSetWear([top, scarf], 500);
+    expect(ids(plan.noSlot)).toEqual(['scarf']);
+    expect(plan.buy).toEqual([]);
   });
 });

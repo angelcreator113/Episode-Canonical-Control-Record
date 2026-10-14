@@ -32,9 +32,9 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import api from '../services/api';
 import PieceImage from './Wardrobe/PieceImage';
-import { withReach, lockReason, setCost, priceRequired } from '../utils/wardrobeReach';
+import { withReach, lockReason, setCost } from '../utils/wardrobeReach';
 import { inspectScore, inspectLalaSays, inspectCannotBuy } from '../lib/wardrobeInspect';
-import { GAME_SLOT_DEFS as SLOT_DEFS, OTHER_GROUP, ALL_GROUP, SETS_GROUP, MULTI_SLOTS, gameSlotFor, closetGroupFor, fetchClosetWithTotal, slotPieces, outfitPieces, normalizeSlots, matchingSetsFrom, equipInto, wornLooks } from '../lib/closetGrouping';
+import { GAME_SLOT_DEFS as SLOT_DEFS, OTHER_GROUP, ALL_GROUP, SETS_GROUP, MULTI_SLOTS, gameSlotFor, closetGroupFor, fetchClosetWithTotal, slotPieces, outfitPieces, normalizeSlots, matchingSetsFrom, equipInto, wornLooks, planSetWear } from '../lib/closetGrouping';
 import { eventLookPieces, lookAgainstEvent, shoppingListSource, eventPackagePath } from '../lib/eventLook';
 import { lookTotal, pieceChargeText } from '../lib/lookCharge';
 import EventDocuments from './EventPackage/EventDocuments';
@@ -529,30 +529,23 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
   const looks = useMemo(() => wornLooks(filledSlots), [filledSlots]);
   const wearSet = (set) => {
     // Every piece Lala doesn't own is bought on Lock, unless it is not for
-    // sale (Evoni, 2026-10-06), so the set's price must fit her coins.
-    const { cost } = setCost(set.pieces);
-    if (cost > coins) {
-      setError(`The ${set.name} costs 🪙 ${cost.toLocaleString()} for the pieces Lala doesn't own; she has ${Number(coins).toLocaleString()}`);
+    // sale (Evoni, 2026-10-06). When her coins don't cover the whole set she
+    // wears what she owns, and what fits, and is told what's left to buy
+    // (Evoni, 2026-10-14, Task #3153; lib/closetGrouping planSetWear).
+    const plan = planSetWear(set.pieces, coins);
+    const names = (list) => list.map(p => p.name).join(', ');
+    const count = (n) => `${n} piece${n === 1 ? '' : 's'}`;
+    if (!plan.wear.length) {
+      setError(`Nothing in the ${set.name} can be worn now${plan.leftToBuy.length ? `: it costs 🪙 ${plan.leftToBuyCost.toLocaleString()} for the pieces Lala doesn't own; she has ${Number(coins).toLocaleString()}` : ''}`);
       return;
     }
-    // Not wearable now: not for sale, or waiting for a price (Task #3143).
-    const locked = set.pieces.filter(p => !p.can_select && !priceRequired(p));
-    const unpriced = set.pieces.filter(p => !p.can_select && priceRequired(p));
-    const noSlot = set.pieces.filter(p => p.can_select && !gameSlotFor(p.clothing_category));
-    const wearable = set.pieces.filter(p => p.can_select && gameSlotFor(p.clothing_category));
-    // The body (a dress, or the separates) first, so the rest add to it.
-    const order = ['body', 'top', 'bottom'];
-    wearable.sort((a, b) => {
-      const ia = order.indexOf(gameSlotFor(a.clothing_category));
-      const ib = order.indexOf(gameSlotFor(b.clothing_category));
-      return (ia < 0 ? 9 : ia) - (ib < 0 ? 9 : ib);
-    });
-    setFilledSlots(prev => wearable.reduce((acc, piece) => equipInto(acc, piece), prev));
+    setFilledSlots(prev => plan.wear.reduce((acc, piece) => equipInto(acc, piece), prev));
     const notes = [];
-    if (locked.length) notes.push(`${locked.length} piece${locked.length === 1 ? '' : 's'} left out (not for sale): ${locked.map(p => p.name).join(', ')}`);
-    if (unpriced.length) notes.push(`${unpriced.length} piece${unpriced.length === 1 ? '' : 's'} left out (price required): ${unpriced.map(p => p.name).join(', ')}`);
-    if (noSlot.length) notes.push(`${noSlot.length} piece${noSlot.length === 1 ? '' : 's'} left out (no game slot): ${noSlot.map(p => p.name).join(', ')}`);
-    setSuccess([`Wearing the ${set.name}`, ...notes].join(' · '));
+    if (plan.leftToBuy.length) notes.push(`left to buy: ${plan.leftToBuy.map(p => `${p.name} (🪙 ${(Number(p.coin_cost) || 0).toLocaleString()})`).join(', ')} · 🪙 ${plan.leftToBuyCost.toLocaleString()}, Lala has ${Number(coins - plan.cost).toLocaleString()} after this look`);
+    if (plan.notForSale.length) notes.push(`${count(plan.notForSale.length)} left out (not for sale): ${names(plan.notForSale)}`);
+    if (plan.priceRequired.length) notes.push(`${count(plan.priceRequired.length)} left out (price required): ${names(plan.priceRequired)}`);
+    if (plan.noSlot.length) notes.push(`${count(plan.noSlot.length)} left out (no game slot): ${names(plan.noSlot)}`);
+    setSuccess([plan.whole ? `Wearing the ${set.name}` : `Wearing what Lala can of the ${set.name}`, ...notes].join(' · '));
   };
 
   // The event's look (Evoni, 2026-10-07: "connect wardrobe to the event"):
@@ -1073,7 +1066,15 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                 const wornIds = new Set(outfitPieces(filledSlots).map(({ item: w }) => w.id));
                 const wearing = set.pieces.every(p => wornIds.has(p.id));
                 const price = setCost(set.pieces);
-                const short = price.cost > coins;
+                // Task #3153: short of coins, she wears what she owns (and what
+                // fits) and the rest is left to buy; disabled only when nothing
+                // in the set can be worn now.
+                const plan = planSetWear(set.pieces, coins);
+                const short = !plan.whole;
+                const nothing = plan.wear.length === 0;
+                const wearLabel = !short ? 'Wear the set'
+                  : nothing ? `Need 🪙 ${price.cost.toLocaleString()}`
+                    : `${plan.buy.length ? 'Wear what fits' : 'Wear what she owns'} · 🪙 ${plan.leftToBuyCost.toLocaleString()} left to buy`;
                 return (
                   <div key={set.id} data-testid={`matching-set-${set.id}`} style={{ ...W.browseCard, gridColumn: '1/-1', border: '1px solid var(--lala-lavender-line)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
@@ -1088,7 +1089,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                       </div>
                       {wearing
                         ? <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--success-text)' }}>✓ Wearing</span>
-                        : <button type="button" onClick={() => wearSet(set)} disabled={short} style={{ padding: '5px 10px', border: 'none', borderRadius: 6, background: short ? 'var(--lala-parchment-3)' : 'var(--lala-lavender)', color: short ? 'var(--lala-ink-muted)' : 'var(--text-inverse)', fontSize: 11, fontWeight: 700, cursor: short ? 'not-allowed' : 'pointer' }}>{short ? `Need 🪙 ${price.cost.toLocaleString()}` : 'Wear the set'}</button>}
+                        : <button type="button" data-testid={`matching-set-wear-${set.id}`} onClick={() => wearSet(set)} disabled={nothing} style={{ padding: '5px 10px', border: 'none', borderRadius: 6, background: nothing ? 'var(--lala-parchment-3)' : 'var(--lala-lavender)', color: nothing ? 'var(--lala-ink-muted)' : 'var(--text-inverse)', fontSize: 11, fontWeight: 700, cursor: nothing ? 'not-allowed' : 'pointer' }}>{wearLabel}</button>}
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       {set.pieces.map(p => (
