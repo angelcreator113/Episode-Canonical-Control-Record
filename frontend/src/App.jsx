@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom';
+import { PulseRedirect, WebsiteRedirect } from './routes/redirects';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import apiClient from './services/api';
 
@@ -126,12 +127,9 @@ const BookToWriteRedirect = () => {
 // locks it); any other route to /feed keeps today's default layer.
 // /feed is Social Media (2026-10-04): Posts by default, People (the
 // profile generator) as a tab; its old ?layer= links still open People.
-// It is The Pulse at /pulse (Task #2912); /feed redirects with its query.
+// It is The Pulse at /pulse (Task #2912); /feed redirects with its query
+// and hash (routes/redirects, Task #3157).
 const SocialMediaPage = lazy(() => import('./pages/SocialMediaPage'));
-function PulseRedirect() {
-  const { search } = useLocation();
-  return <Navigate to={`/pulse${search}`} replace />;
-}
 const CharacterRegistryPage = lazy(() => import('./pages/CharacterRegistryPage'));
 const ContinuityEnginePage = lazy(() => import('./pages/ContinuityEnginePage'));
 const UniversePage = lazy(() => import('./pages/UniversePage'));
@@ -353,7 +351,7 @@ function AppContent() {
           <Route path="/start" element={<SessionStart />} />
           {/* The Website page is Admin's Website tab (Task #2913); the signed-in
               preview of the public site stays here (Task #2822). */}
-          <Route path="/website" element={<Navigate to="/admin?tab=website" replace />} />
+          <Route path="/website" element={<WebsiteRedirect />} />
           <Route path="/site-preview" element={<PublicLanding preview />} />
           {/* The weekly Pulse recap, public (Task #3009): the same page signed in. */}
           <Route path="/pulse-recap" element={<PublicRecap />} />
