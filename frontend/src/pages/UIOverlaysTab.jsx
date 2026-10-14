@@ -1029,9 +1029,13 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     }
   };
 
+  // The phone's Back (Task #3162): the previous screen, else the home screen,
+  // as in the Preview and playback.
   const handleBack = async () => {
-    if (navHistory.length === 0) return;
+    const home = homeScreenOf(overlays);
+    if (navHistory.length === 0 && (!home || activeScreen?.id === home.id)) return;
     if (editorsDirty() && !(await leaveEditors())) return;
+    if (navHistory.length === 0) { setActiveScreen(home); return; }
     const prevKey = navHistory[navHistory.length - 1];
     setNavHistory(prev => prev.slice(0, -1));
     const prevScreen = overlays.find(o => o.id === prevKey);
@@ -1072,37 +1076,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     if (!ids.size || !activeScreen) return;
     const source = linkEditorRef.current?.getZones?.() || getScreenLinks(activeScreen);
     await handleSaveLinks(source.map(z => (ids.has(z.id) ? moveZoneInside(z) : z)));
-  };
-
-  // "Add back buttons to all N" (Evoni's mockup, 2026-10-08): each dead-end
-  // screen gets a Back zone, top left, that opens the home screen. Asks
-  // first; each screen is saved on its own and failures are named.
-  const [addingBack, setAddingBack] = useState(false);
-  const handleAddBackButtons = async (deadEnds, home) => {
-    const targets = (deadEnds || []).filter(sc => sc.asset_id);
-    if (!showId || !home || !targets.length) return;
-    if (!window.confirm(`Add a Back zone (top left, opens ${home.name}) to ${targets.length === 1 ? targets[0].name : `${targets.length} screens`}?`)) return;
-    setAddingBack(true);
-    const failed = [];
-    for (const sc of targets) {
-      const current = overlays.find(o => o.id === sc.id) || sc;
-      const next = [...getScreenLinks(current), {
-        id: `link-back-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        x: 4, y: 5, w: 18, h: 6, label: 'Back', target: home.id,
-      }];
-      try {
-        await api.put(`/api/v1/ui-overlays/${showId}/screen-links/${sc.asset_id}`, { screen_links: next });
-        const withLinks = (o) => ({ ...o, screen_links: next, metadata: { ...(o.metadata || {}), screen_links: next } });
-        setOverlays(prev => prev.map(o => (o.id === sc.id ? withLinks(o) : o)));
-        setActiveScreen(prev => (prev?.id === sc.id ? withLinks(prev) : prev));
-      } catch (err) {
-        console.error('[UIOverlaysTab] adding a Back zone failed on', sc.name, err);
-        failed.push(sc.name);
-      }
-    }
-    setAddingBack(false);
-    if (failed.length) flash(`Back zones added, except on: ${failed.join(', ')}`, 'error');
-    else flash(`Back zone added to ${targets.length === 1 ? targets[0].name : `${targets.length} screens`}`);
   };
 
   // The Icons stage (Evoni's mockup, 2026-10-08): put an icon on a screen —
@@ -1506,8 +1479,9 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     flowAudit,
   });
   // The header bar's chips (Evoni's mockup, 2026-10-08): screens ready and
-  // icons always; unplaced icons, dead ends and screens nothing reaches
-  // only when there are any. Hidden screens and icons aren't counted.
+  // icons always; unplaced icons and screens nothing reaches only when
+  // there are any. Hidden screens and icons aren't counted. No dead-end
+  // chip: every screen but the home has the phone's own Back (Task #3162).
   const flowMap = useMemo(
     () => phoneFlowMap(overlays.filter(o => !hiddenScreens.includes(o.id)), iconOverlaysForEditor),
     [overlays, hiddenScreens, iconOverlaysForEditor]
@@ -1524,7 +1498,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       { key: 'ready', text: `${ready} screens ready`, tone: readyOf > 0 && readyN === readyOf ? 'good' : 'plain', tab: 'screens' },
       { key: 'icons', text: n(visibleIcons.length, 'icon'), tone: 'plain', tab: 'icons' },
       unplaced > 0 && { key: 'unplaced', text: `${n(unplaced, 'icon')} unplaced`, tone: 'warn', tab: 'icons' },
-      flowMap.deadEnds.length > 0 && { key: 'dead', text: n(flowMap.deadEnds.length, 'dead end'), tone: 'danger', tab: 'map' },
       flowMap.unreachable.length > 0 && { key: 'unreachable', text: `${n(flowMap.unreachable.length, 'screen')} not reachable`, tone: 'danger', tab: 'map' },
     ].filter(Boolean);
   })();
@@ -1901,7 +1874,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                     screens={editableScreens.filter(sc => !hiddenScreens.includes(sc.id))}
                     activeId={activeScreen.id}
                     diagnostics={screenDiagnostics}
-                    flowMap={flowMap}
                     homeId={homeForConnect?.id}
                     onSelect={switchToScreen}
                     onAdd={() => { setCreateMode('phone'); setShowCreateModal(true); }}
@@ -2286,21 +2258,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                               })}
                             </div>
                           )}
-                        </div>
-                      )}
-
-                      {/* Dead ends (Evoni's mockup, 2026-10-08): screens Lala
-                          can open but not tap back out of, with one action that
-                          gives each a Back zone to the home screen. */}
-                      {flowMap.deadEnds.length > 0 && homeForConnect && (
-                        <div className="zones-dead-ends" data-testid="zones-dead-ends">
-                          <p>
-                            <strong>{flowMap.deadEnds.length === 1 ? '1 screen is a dead end.' : `${flowMap.deadEnds.length} screens are dead ends.`}</strong>{' '}
-                            Lala can open {flowMap.deadEnds.length === 1 ? 'it' : 'them'} but can&apos;t tap back out. A &ldquo;back&rdquo; zone on each fixes it.
-                          </p>
-                          <button type="button" className="zones-dead-ends__fix" onClick={afterSave(() => handleAddBackButtons(flowMap.deadEnds, homeForConnect))} disabled={addingBack}>
-                            {addingBack ? 'Adding…' : `Add back buttons to ${flowMap.deadEnds.length === 1 ? 'it' : `all ${flowMap.deadEnds.length}`}`}
-                          </button>
                         </div>
                       )}
 

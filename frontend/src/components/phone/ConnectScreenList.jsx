@@ -1,13 +1,13 @@
 /**
  * ConnectScreenList — Connect's left column (Evoni's mockup, 2026-10-08):
- * the phone's screens in three groups, the ones that need something first.
+ * the phone's screens in two groups, the ones that need something first.
  *
  *   Needs you   a zone goes nowhere, or nothing leads here (home aside)
- *   Dead ends   Lala can open it but can't tap back out (phoneFlowMap)
  *   Ready       the rest
  *
- * A row picks the screen to wire; "+ Add" adds a screen. Pure display: the
- * page passes the screens, its screenDiagnostics and phoneFlowMap's result.
+ * There is no "Dead ends" group: every screen but the home has the phone's
+ * own Back (Task #3162). A row picks the screen to wire; "+ Add" adds a
+ * screen. Pure display: the page passes the screens and its screenDiagnostics.
  */
 import { incomingById } from '../../lib/phoneHubSummary';
 import './ConnectScreenList.css';
@@ -15,17 +15,15 @@ import './ConnectScreenList.css';
 const NO_SCREENS = [];
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-export function groupConnectScreens({ screens = NO_SCREENS, diagnostics, flowMap, homeId }) {
+export function groupConnectScreens({ screens = NO_SCREENS, diagnostics, homeId }) {
   const reach = incomingById(screens);
-  const dead = new Set((flowMap?.deadEnds || []).map(s => s.id));
-  const groups = { needs: [], dead: [], ready: [] };
+  const groups = { needs: [], ready: [] };
   screens.forEach((s) => {
     const d = diagnostics?.get?.(s.id);
     const nowhere = (d?.missingTarget || 0) + (d?.brokenTarget || 0);
     const zones = (d?.counts?.tap || 0) + (d?.counts?.icon || 0);
     if (nowhere > 0) groups.needs.push({ screen: s, line: `${plural(nowhere, 'zone goes', 'zones go')} nowhere` });
     else if (s.id !== homeId && !(reach.get(s.id) > 0)) groups.needs.push({ screen: s, line: 'Nothing links here' });
-    else if (dead.has(s.id)) groups.dead.push({ screen: s, line: 'No way back' });
     else groups.ready.push({ screen: s, line: s.id === homeId ? `Home · ${plural(zones, 'zone')}` : plural(zones, 'zone') });
   });
   return groups;
@@ -33,12 +31,11 @@ export function groupConnectScreens({ screens = NO_SCREENS, diagnostics, flowMap
 
 const SECTIONS = [
   { key: 'needs', title: 'Needs you', tone: 'danger' },
-  { key: 'dead', title: 'Dead ends', tone: 'warn' },
   { key: 'ready', title: 'Ready', tone: 'plain' },
 ];
 
-export default function ConnectScreenList({ screens = NO_SCREENS, activeId, diagnostics, flowMap, homeId, onSelect, onAdd }) {
-  const groups = groupConnectScreens({ screens, diagnostics, flowMap, homeId });
+export default function ConnectScreenList({ screens = NO_SCREENS, activeId, diagnostics, homeId, onSelect, onAdd }) {
+  const groups = groupConnectScreens({ screens, diagnostics, homeId });
   return (
     <nav className="connect-screens" aria-label="Screens">
       <div className="connect-screens__head">

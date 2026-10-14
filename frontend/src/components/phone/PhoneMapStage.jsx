@@ -3,8 +3,9 @@
  * "How Lala moves through her phone · Every tap, from the home screen out").
  *
  * The home screen on the phone, a line to each screen one of its zones
- * opens (green: it leads on; red: a dead end, Lala can't tap back out;
- * grey: the zone names no screen), and beside it what the phone can't do:
+ * opens (green: it leads on; plain: it leads no further, and the phone's
+ * own Back brings Lala out (Task #3162); grey: the zone names no screen),
+ * and beside it what the phone can't do:
  * screens nothing leads to, and screens opened twice from one screen. A
  * screen opens in Connect. Reads phoneFlowMap (lib/phoneHubSummary); saves
  * nothing.
@@ -18,7 +19,7 @@ const noop = () => {};
 
 const TAP_LINE = {
   onward: (t) => `${t.onward} link${t.onward === 1 ? '' : 's'} onward`,
-  dead: () => 'dead end',
+  end: () => 'no taps onward',
   missing: () => 'opens no screen',
 };
 
@@ -32,7 +33,7 @@ export default function PhoneMapStage({
   onOpenScreen,
 }) {
   const map = phoneFlowMap(overlays, icons);
-  const { home, taps, deadEnds, unreachable, openedTwice } = map;
+  const { home, taps, unreachable, openedTwice } = map;
 
   if (!home) {
     return (
@@ -43,7 +44,7 @@ export default function PhoneMapStage({
     );
   }
 
-  const allGood = taps.length > 0 && deadEnds.length === 0 && unreachable.length === 0 && openedTwice.length === 0;
+  const allGood = taps.length > 0 && unreachable.length === 0 && openedTwice.length === 0;
 
   return (
     <section className="phone-map-stage" aria-label="Phone map">
@@ -115,18 +116,6 @@ export default function PhoneMapStage({
             </div>
           )}
 
-          {deadEnds.length > 0 && (
-            <div className="phone-map-stage__note is-danger" data-testid="phone-map-dead-ends">
-              <div className="phone-map-stage__note-title">{deadEnds.length} dead end{deadEnds.length === 1 ? '' : 's'}</div>
-              <p>Lala can open {deadEnds.length === 1 ? 'it' : 'them'} but can&apos;t tap back out. A zone back to {home.name}, or an icon pinned on {home.name}, fixes it.</p>
-              <ul className="phone-map-stage__names">
-                {deadEnds.map((s) => (
-                  <li key={s.id}><button type="button" className="phone-map-stage__link" onClick={() => onOpenScreen?.(s)}>{s.name}</button></li>
-                ))}
-              </ul>
-            </div>
-          )}
-
           {openedTwice.length > 0 && (
             <div className="phone-map-stage__note is-warn" data-testid="phone-map-opened-twice">
               <div className="phone-map-stage__note-title">Opened twice</div>
@@ -143,15 +132,15 @@ export default function PhoneMapStage({
 
           {allGood && (
             <div className="phone-map-stage__note is-good" data-testid="phone-map-all-good">
-              <div className="phone-map-stage__note-title">Every screen can be reached and left</div>
-              <p>No dead ends, and nothing opened twice.</p>
+              <div className="phone-map-stage__note-title">Every screen can be reached</div>
+              <p>Nothing out of reach, and nothing opened twice.</p>
             </div>
           )}
 
           <div className="phone-map-stage__note is-key">
             <div className="phone-map-stage__note-title">Key</div>
             <p><span className="phone-map-stage__key-onward">Green</span>: has its own taps onward</p>
-            <p><span className="phone-map-stage__key-dead">Red</span>: dead end, no way back</p>
+            <p>Every screen but {home.name} has the phone&apos;s own Back.</p>
           </div>
         </div>
       </div>

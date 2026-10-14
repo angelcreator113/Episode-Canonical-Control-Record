@@ -14,8 +14,8 @@
  *   tapLayer           — a node the caller renders inside the screen area in
  *                        place of the tap zones and persistent icons, so the
  *                        Preview keeps its own runtime (conditions, missions,
- *                        playthrough, back, home). Rendered on every screen,
- *                        generated or not.
+ *                        playthrough, home). Rendered on every screen,
+ *                        generated or not. Back is the device's own, below.
  *   episodeId          — passed to ScreenContentRenderer.
  *   storyAt            — the story order of the beat shown (Task 2986), passed
  *                        to ScreenContentRenderer for The Pulse zones.
@@ -147,6 +147,9 @@ export default function PhoneDevice({
   icons = [],
   highlightIconKey = null,
 }) {
+  const showBack = Boolean(onBack && activeScreen) && (firstScreen
+    ? activeScreen.id !== firstScreen.id
+    : navigationHistory.length > 0);
   return (
       <PhoneFrame
         skin={skin}
@@ -212,12 +215,17 @@ export default function PhoneDevice({
 
         {tapLayer}
 
-        {/* Back button for navigation — position shifts when Dynamic Island is present */}
-        {navigationHistory.length > 0 && onBack && (
-          <button onClick={onBack} style={{
+        {/* The phone's own Back (Lala's Phone spec §1 Rule 6, Task #3162):
+            on every screen but the home, in one place and look, drawn by the
+            frame rather than a tap zone. `firstScreen` is the home; without
+            one it shows only with history. The caller's onBack goes to the
+            previous screen, else home. Below the Dynamic Island on the
+            built-in frame, below the status bar on a custom one. */}
+        {showBack && (
+          <button type="button" onClick={onBack} aria-label="Back" data-testid="phone-back" style={{
             position: 'absolute',
-            top: useCustomFrame ? 6 : 38,
-            left: useCustomFrame ? 6 : 8,
+            top: useCustomFrame ? 26 : 38,
+            left: 8,
             zIndex: 10,
             padding: '3px 8px', fontSize: 9, fontWeight: 700, border: 'none',
             borderRadius: 10, background: 'rgba(0,0,0,0.5)', color: '#fff',

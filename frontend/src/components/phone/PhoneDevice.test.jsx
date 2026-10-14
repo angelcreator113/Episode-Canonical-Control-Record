@@ -139,13 +139,34 @@ describe('PhoneDevice (Task #1983)', () => {
     expect(onCustomFrameError).toHaveBeenCalledTimes(1);
   });
 
-  test('the back button shows only with history and onBack', () => {
-    renderDevice({ onBack: vi.fn() });
-    expect(screen.queryByText('← Back')).toBeNull();
+  test('Back shows on every screen but the home, with or without history (Task #3162)', () => {
+    // Home: never, even with history.
+    renderDevice({ onBack: vi.fn(), navigationHistory: ['dms'] });
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
     cleanup();
-    const onBack = vi.fn();
-    renderDevice({ navigationHistory: ['home'], onBack });
-    fireEvent.click(screen.getByText('← Back'));
-    expect(onBack).toHaveBeenCalledTimes(1);
+    // Another screen: always, history or not, in one place on either frame.
+    for (const history of [[], ['home']]) {
+      const onBack = vi.fn();
+      renderDevice({ phoneScreen: DMS, activeScreen: DMS, navigationHistory: history, onBack });
+      const back = screen.getByRole('button', { name: 'Back' });
+      expect(back.textContent).toBe('← Back');
+      expect([back.style.top, back.style.left]).toEqual(['38px', '8px']);
+      fireEvent.click(back);
+      expect(onBack).toHaveBeenCalledTimes(1);
+      cleanup();
+    }
+    renderDevice({ phoneScreen: DMS, activeScreen: DMS, onBack: vi.fn(), useCustomFrame: true, customFrameUrl: 'https://x/frame.png' });
+    expect(screen.getByRole('button', { name: 'Back' }).style.top).toBe('26px');
+  });
+
+  test('Back needs onBack; with no home known it follows history', () => {
+    renderDevice({ phoneScreen: DMS, activeScreen: DMS });
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+    cleanup();
+    renderDevice({ phoneScreen: DMS, activeScreen: DMS, firstScreen: null, onBack: vi.fn() });
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+    cleanup();
+    renderDevice({ phoneScreen: DMS, activeScreen: DMS, firstScreen: null, onBack: vi.fn(), navigationHistory: ['home'] });
+    expect(screen.getByRole('button', { name: 'Back' })).toBeTruthy();
   });
 });
