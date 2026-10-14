@@ -105,9 +105,10 @@ export function screenCaption(screen, diagnostics) {
  *   taps        one per home zone with a destination, in zone order:
  *               { zoneId, label, targetKey, target (screen or null),
  *                 onward (how many screens it leads on to),
- *                 state: 'onward' | 'dead' | 'missing' }
- *   deadEnds    screens Lala can reach but not leave by a tap: no zone
- *               leads anywhere and no pinned home icon shows there
+ *                 state: 'onward' | 'end' | 'missing' }
+ *               'end' opens a screen with no taps onward. That is not a
+ *               dead end: every screen but the home has the phone's own
+ *               Back (Task #3162), so nothing reports dead ends any more.
  *   unreachable screens nothing leads to from home (home itself aside)
  *   openedTwice on one screen, two or more zones open the same screen:
  *               { screen, target, labels, zoneIds }
@@ -119,7 +120,7 @@ export function phoneFlowMap(overlays, icons = []) {
   const screens = list.filter((o) => isScreen(o) && o.generated && o.url);
   const byId = new Map(screens.map((s) => [s.id, s]));
   const home = homeScreenOf(list);
-  const empty = { home: null, taps: [], deadEnds: [], unreachable: [], openedTwice: [] };
+  const empty = { home: null, taps: [], unreachable: [], openedTwice: [] };
   if (!home) return empty;
 
   const iconName = (z) => {
@@ -128,8 +129,6 @@ export function phoneFlowMap(overlays, icons = []) {
   };
   const labelOf = (z, i) => (z?.label || '').trim() || iconName(z) || `Zone ${i + 1}`;
   const targetsOf = (s) => getScreenLinks(s).map((z) => z?.target).filter((t) => t && byId.has(t) && t !== s.id);
-  // A pinned home icon shows on every other screen, so it is a way out.
-  const pinnedOut = getScreenLinks(home).some((z) => z?.persistent && z?.target && byId.has(z.target));
 
   const taps = getScreenLinks(home)
     .map((z, i) => ({ z, i }))
@@ -137,7 +136,7 @@ export function phoneFlowMap(overlays, icons = []) {
     .map(({ z, i }) => {
       const target = byId.get(z.target) || null;
       const onward = target ? new Set(targetsOf(target)).size : 0;
-      const state = !target ? 'missing' : (onward > 0 || (pinnedOut && target.id !== home.id)) ? 'onward' : 'dead';
+      const state = !target ? 'missing' : onward > 0 ? 'onward' : 'end';
       return { zoneId: z.id, label: labelOf(z, i), targetKey: z.target, target, onward, state };
     });
 
@@ -148,7 +147,6 @@ export function phoneFlowMap(overlays, icons = []) {
     targetsOf(byId.get(id)).forEach((t) => { if (!reached.has(t)) { reached.add(t); queue.push(t); } });
   }
 
-  const deadEnds = screens.filter((s) => s.id !== home.id && reached.has(s.id) && targetsOf(s).length === 0 && !pinnedOut);
   const unreachable = screens.filter((s) => !reached.has(s.id));
 
   const openedTwice = [];
@@ -163,5 +161,5 @@ export function phoneFlowMap(overlays, icons = []) {
     });
   });
 
-  return { home, taps, deadEnds, unreachable, openedTwice };
+  return { home, taps, unreachable, openedTwice };
 }

@@ -19,9 +19,11 @@ test('every tap out of home, with what the phone cannot do beside it', () => {
   render(<PhoneMapStage overlays={OVERLAYS} onOpenScreen={() => {}} />);
   expect(screen.getByText('3 taps out')).toBeTruthy();
   const taps = within(screen.getByTestId('phone-map-taps')).getAllByRole('button').map(b => b.textContent);
-  expect(taps).toEqual(['Closet1 link onward', 'Closetfrom wallet · 1 link onward', 'Cameradead end']);
+  expect(taps).toEqual(['Closet1 link onward', 'Closetfrom wallet · 1 link onward', 'Camerano taps onward']);
   expect(within(screen.getByTestId('phone-map-unreachable')).getByText('Hair Page')).toBeTruthy();
-  expect(within(screen.getByTestId('phone-map-dead-ends')).getByText('Camera')).toBeTruthy();
+  // No dead ends (Task #3162): every screen but the home has the phone's own Back.
+  expect(screen.queryByTestId('phone-map-dead-ends')).toBeNull();
+  expect(screen.getByText("Every screen but Homepage has the phone's own Back.")).toBeTruthy();
   expect(screen.getByTestId('phone-map-opened-twice').textContent).toContain('On Homepage, Closet opens from closet and wallet.');
 });
 
@@ -34,9 +36,9 @@ test('a screen opens in Connect', () => {
   expect(onOpenScreen).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'home' }));
 });
 
-test('all good says so; no home asks for an image', () => {
-  render(<PhoneMapStage overlays={[S('home', 'Homepage', [Z('z1', 'closet', 'closet')], { is_home: true }), S('closet', 'Closet', [Z('z2', 'home', 'back')])]} />);
-  expect(screen.getByTestId('phone-map-all-good')).toBeTruthy();
+test('all good says so, a screen with no taps onward included; no home asks for an image', () => {
+  render(<PhoneMapStage overlays={[S('home', 'Homepage', [Z('z1', 'closet', 'closet')], { is_home: true }), S('closet', 'Closet')]} />);
+  expect(screen.getByTestId('phone-map-all-good').textContent).toContain('Every screen can be reached');
   cleanup();
   render(<PhoneMapStage overlays={[]} />);
   expect(screen.getByText('Give a screen an image in Build to start the map.')).toBeTruthy();
