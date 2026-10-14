@@ -186,7 +186,12 @@ async function wardrobeColumns(sequelize, ep, event) {
     else if (slot === 'accessories' && isBag(p.category)) byColumn.bag.push(p);
   }
   const show = await one(sequelize, 'SELECT metadata FROM shows WHERE id = :id', { id: ep.show_id || null });
-  const required = requiredSlotsFor(show ? { metadata: parseJson(show.metadata, {}) } : null).map((s) => SLOT_COLUMN[s]).filter(Boolean);
+  // Body is always required on the style sheet, whatever the show's
+  // configured required slots, which replace the defaults (Evoni's SP1
+  // ruling, "every required slot, Body included"; Task #3156). Other
+  // readers of requiredSlotsFor keep the show's own list.
+  const configured = requiredSlotsFor(show ? { metadata: parseJson(show.metadata, {}) } : null).map((s) => SLOT_COLUMN[s]).filter(Boolean);
+  const required = ['body', ...configured.filter((c) => c !== 'body')];
   return { state: look.state || 'none', pieces: look.pieces || [], byColumn, required };
 }
 

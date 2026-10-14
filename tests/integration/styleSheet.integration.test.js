@@ -187,6 +187,25 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(s.readiness.done).toBe(s.readiness.items.filter((i) => i.ready).length);
   });
 
+  // Evoni's SP1 ruling, "every required slot, Body included" (Task #3156): a
+  // show's configured required slots replace the defaults, but Body stays.
+  it("Body is needed whatever the show's required slots; with a dress Wardrobe is ready", async () => {
+    const ids = await seedEpisodeOne();
+    await run(`UPDATE shows SET metadata = CAST(:m AS jsonb) WHERE id = :show`, { show: ids.show, m: JSON.stringify({ required_slots: ['shoes'] }) });
+    const get = async () => (await auth(request(app).get(sheetUrl(ids.ep)))).body.data;
+    let s = await get();
+    const body = () => s.wardrobe.columns.find((c) => c.key === 'body');
+    expect(body()).toMatchObject({ name: null, needed: true });
+    expect(s.readiness.items.find((i) => i.key === 'wardrobe').ready).toBe(false);
+
+    const dress = await models.Wardrobe.create({ name: 'Ink Column Dress', clothing_category: 'dress', show_id: ids.show, s3_url: dataPng });
+    await run(`INSERT INTO episode_wardrobe (id, episode_id, wardrobe_id, approval_status, created_at, updated_at)
+               VALUES (:id, :ep, :w, 'pending', NOW(), NOW())`, { id: uuid(), ep: ids.ep, w: dress.id });
+    s = await get();
+    expect(body()).toMatchObject({ name: 'Ink Column Dress', needed: false });
+    expect(s.readiness.items.find((i) => i.key === 'wardrobe').ready).toBe(true);
+  });
+
   it('exports: refused while Draft and while out of date; each size at its dimensions once approved (Task #2877)', async () => {
     const ids = await seedEpisodeOne();
     const exp = (size) => auth(request(app).get(`${sheetUrl(ids.ep)}/export/${size}`)).buffer(true).parse((res, cb) => {
