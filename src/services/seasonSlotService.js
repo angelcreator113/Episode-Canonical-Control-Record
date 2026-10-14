@@ -398,11 +398,16 @@ async function snapshotEpisode(sequelize, { slotId, episodeId, transaction }) {
     `UPDATE episodes SET season_context = CAST(:context AS jsonb), season_number = :season, updated_at = NOW()
       WHERE id = :episodeId`,
     { replacements: { context: JSON.stringify(context), season, episodeId }, transaction });
+  // The brief's narrative purpose is the slot's primary story purpose where
+  // the brief has none (Task #3137); a purpose already written is kept.
+  const primary = context.story_purposes.find((p) => p.primary && p.text) || context.story_purposes.find((p) => p.text);
+  const purpose = (primary && primary.text) || context.story_purpose || null;
   await sequelize.query(
     `UPDATE episode_briefs
-        SET arc_number = COALESCE(arc_number, :phase), position_in_arc = COALESCE(position_in_arc, :position)
+        SET arc_number = COALESCE(arc_number, :phase), position_in_arc = COALESCE(position_in_arc, :position),
+            narrative_purpose = COALESCE(NULLIF(BTRIM(narrative_purpose), ''), :purpose)
       WHERE episode_id = :episodeId AND deleted_at IS NULL`,
-    { replacements: { phase: slot.phase, position: context.position_in_phase, episodeId }, transaction });
+    { replacements: { phase: slot.phase, position: context.position_in_phase, purpose, episodeId }, transaction });
   // Q10: the slot's outcome range sets the brief's designed intent and
   // allowed outcomes, so the slot is the one source.
   const { outcomeRangeToBrief } = require('./seasonIntentionService');
