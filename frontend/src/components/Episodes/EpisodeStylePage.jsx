@@ -566,7 +566,7 @@ function ShareExport({ episodeId, episodeNumber, canExport, approved, stale, onO
       {sent?.sent && (
         <p className="esp2-hint" role="status" data-testid="esp2-sent">
           Sent: {sent.items.length} sizes and a caption draft are in Distribution.
-          {sent.disclosure ? ' The affiliate disclosure is added.' : ''}{' '}
+          {sent.disclosure ? ' The disclosure is added.' : ''}{' '}
           <button type="button" className="esp2-link" disabled={!onOpenTab} onClick={() => onOpenTab && onOpenTab('distribution')}>Open Distribution</button>
         </p>
       )}

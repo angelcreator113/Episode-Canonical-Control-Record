@@ -72,6 +72,14 @@ describe('Style sheet in Distribution', () => {
     click.mockRestore();
   });
 
+  test('with an Amazon link, both sentences show, locked', async () => {
+    const both = 'Some links are affiliate links; I may earn a commission. As an Amazon Associate I earn from qualifying purchases.';
+    await renderCard(entry({ include_shop_links: true, disclosure: both, disclosure_locked: true }));
+    const disclosure = await screen.findByTestId('ssd-disclosure');
+    expect(disclosure.textContent).toContain(both);
+    expect(disclosure.querySelector('input, textarea, button')).toBeNull();
+  });
+
   test('including the links saves the toggle; the disclosure shows, locked, with no field to edit it', async () => {
     await renderCard();
     api.patch.mockResolvedValue({ data: { data: entry({ include_shop_links: true, disclosure: DISCLOSURE, disclosure_locked: true }) } });
@@ -79,7 +87,7 @@ describe('Style sheet in Distribution', () => {
     await waitFor(() => expect(api.patch).toHaveBeenCalledWith(URL_, { include_shop_links: true }));
     const disclosure = await screen.findByTestId('ssd-disclosure');
     expect(disclosure.textContent).toContain(DISCLOSURE);
-    expect(disclosure.textContent).toContain('Added because an affiliate link is included');
+    expect(disclosure.textContent).toContain('Added because Shop the Look links are included');
     expect(disclosure.querySelector('input, textarea, button')).toBeNull();
     expect(screen.getByLabelText('Caption').value).not.toContain(DISCLOSURE);
   });

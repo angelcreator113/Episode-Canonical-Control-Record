@@ -5,8 +5,8 @@
  * /api/v1/public/looks. No auth middleware and no req.user: the website is
  * for logged-out visitors. Only looks Evoni published
  * (styleSheetDistributionService.publishStyleSheetToSite) and still shows;
- * each link is read live from its piece, and the affiliate disclosure comes
- * whenever any link is an affiliate link. A look's random key is its only
+ * each link is read live from its piece, and the disclosure comes first
+ * (styleSheetDistributionService.disclosureFor). A look's random key is its only
  * public id: no episode, show or wardrobe ids, and no prices, leave here.
  * Text only until website storage is live.
  *
@@ -37,7 +37,7 @@ router.get('/', readLimiter, async (req, res) => {
   }
 });
 
-// PUBLIC: one published Shop the Look page; its caption, links and the affiliate disclosure, no production ids or prices, no identity read.
+// PUBLIC: one published Shop the Look page; its caption, links and the disclosure, no production ids or prices, no identity read.
 router.get('/:key', readLimiter, async (req, res) => {
   try {
     const look = await service().publicLook(getModels(), req.params.key);

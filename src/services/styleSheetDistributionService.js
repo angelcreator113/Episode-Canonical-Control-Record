@@ -12,10 +12,12 @@
  *
  * The items are the export sizes of the sheet that was approved; each is
  * drawn on request by GET /episodes/:id/style-sheet/export/:size, so no
- * image is stored. Shop the Look links and the affiliate disclosure are
- * read from the look's wardrobe pieces every time, so the disclosure is
- * there whenever an included link is an affiliate link and cannot be
- * edited away. Nothing is posted anywhere and no external service is called.
+ * image is stored. Shop the Look links and the disclosure are read from the
+ * look's wardrobe pieces every time (Evoni, 2026-10-14; Task #3170): the
+ * affiliate sentence leads whenever links are included, the Amazon
+ * Associates sentence follows whenever an included link is an Amazon link,
+ * and neither can be edited away. Nothing is posted anywhere and no external
+ * service is called.
  *
  * On the website (Task #3021; The Pulse spec §10): Evoni publishes a sent
  * sheet's Shop the Look with { site: { published_at, published_by, key,
@@ -40,6 +42,11 @@ const crypto = require('crypto');
 const { LookbookError } = require('./episodeLookbookService');
 
 const DISCLOSURE = 'Some links are affiliate links; I may earn a commission.';
+const AMAZON_DISCLOSURE = 'As an Amazon Associate I earn from qualifying purchases.';
+// Amazon by hostname: amazon.<tld> (amazon.com, amazon.co.uk, amazon.com.au)
+// and its subdomains, and Amazon's short links. Never a substring match.
+const AMAZON_HOST_RE = /(^|\.)amazon\.(?:[a-z]{2,3}|co\.[a-z]{2}|com\.[a-z]{2})$/;
+const AMAZON_SHORT_HOSTS = new Set(['amzn.to', 'amzn.eu', 'a.co']);
 const CAPTION_MAX = 2200;
 const KEY = 'style_sheet';
 const SITE_KEY_RE = /^[A-Za-z0-9_-]{12}$/;
@@ -121,6 +128,23 @@ async function shopLinks(models, sheet) {
   return links;
 }
 
+function isAmazonUrl(url) {
+  let host;
+  try { host = new URL(String(url || '')).hostname.toLowerCase(); } catch { /* silent-ok: an address that does not parse is not an Amazon link */
+    return false;
+  }
+  return AMAZON_SHORT_HOSTS.has(host) || AMAZON_HOST_RE.test(host);
+}
+
+/**
+ * The locked disclosure for the included links, or null with none: the
+ * affiliate sentence, then the Amazon sentence when any link is Amazon's.
+ */
+function disclosureFor(links) {
+  if (!links.length) return null;
+  return links.some((l) => isAmazonUrl(l.url)) ? `${DISCLOSURE} ${AMAZON_DISCLOSURE}` : DISCLOSURE;
+}
+
 /** The text she copies: the locked disclosure, her caption, then the links. */
 function postText(caption, links, disclosure) {
   const parts = [];
@@ -141,7 +165,7 @@ async function view(models, episodeId, entry, sheet) {
   const { EXPORTS } = require('./styleSheetRenderService');
   const links = await shopLinks(models, sheet);
   const included = entry.include_shop_links ? links : [];
-  const disclosure = included.some((l) => l.affiliate) ? DISCLOSURE : null;
+  const disclosure = disclosureFor(included);
   const outOfDate = sheet.status !== 'approved' || sheet.stale || sheet.inputs_hash !== entry.sheet_hash;
   return {
     sent: true,
@@ -346,7 +370,7 @@ async function listPublicLooks(models) {
  * One published look for the website, or null: its title, its image (the
  * look strip in the public bucket, or null), her caption, the
  * links (label, retailer, url, affiliate), read live from its pieces, and
- * the disclosure first whenever any of them is an affiliate link. No ids,
+ * the disclosure first (disclosureFor; a published look has links). No ids,
  * no prices.
  */
 async function publicLook(models, key) {
@@ -362,7 +386,7 @@ async function publicLook(models, key) {
     published_at: look.site.published_at || null,
     image: publicImageOf(look.site, title),
     caption: text(look.entry.caption) || '',
-    disclosure: links.some((l) => l.affiliate) ? DISCLOSURE : null,
+    disclosure: disclosureFor(links),
     links: links.map((l) => ({ label: l.label, retailer: l.retailer, url: l.url, affiliate: l.affiliate })),
   };
 }
@@ -379,7 +403,7 @@ async function removeStyleSheetFromDistribution(models, episodeId) {
 }
 
 module.exports = {
-  DISCLOSURE, CAPTION_MAX, captionDraft, postText, keepStyleSheet, parseMetadata,
+  DISCLOSURE, AMAZON_DISCLOSURE, CAPTION_MAX, isAmazonUrl, disclosureFor, captionDraft, postText, keepStyleSheet, parseMetadata,
   getStyleSheetDistribution, sendStyleSheetToDistribution, updateStyleSheetDistribution, removeStyleSheetFromDistribution,
   publishStyleSheetToSite, takeDownStyleSheetFromSite, listPublicLooks, publicLook,
   // The look strip, drawn as the export (styleSheetService); here so a test can stand in for the drawing.

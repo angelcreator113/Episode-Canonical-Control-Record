@@ -79,7 +79,14 @@ describe('the public Shop the Look page', () => {
     expect(fetchMock.mock.calls.map(([u]) => u)).toEqual([`${PUBLIC_LOOKS_URL}/Ab3_k9-Zq1Lm`]);
   });
 
-  test('a look with no affiliate link shows no disclosure', async () => {
+  test('both sentences show when the server sends them (an Amazon link)', async () => {
+    const both = 'Some links are affiliate links; I may earn a commission. As an Amazon Associate I earn from qualifying purchases.';
+    fetchMock.mockImplementation(() => reply(200, { look: { ...LOOK.look, disclosure: both } }));
+    renderAt('/shop-the-look/Ab3_k9-Zq1Lm');
+    expect((await screen.findByTestId('site-shop-disclosure')).textContent).toBe(both);
+  });
+
+  test('a look the server sends no disclosure for shows none', async () => {
     fetchMock.mockImplementation(() => reply(200, { look: { ...LOOK.look, disclosure: null, links: [LOOK.look.links[0]] } }));
     renderAt('/shop-the-look/Ab3_k9-Zq1Lm');
     await screen.findByTestId('site-shop-look');

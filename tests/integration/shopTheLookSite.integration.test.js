@@ -5,7 +5,7 @@
  * - publish and take down are ADMIN only; publish needs the sheet sent,
  *   its Shop the Look links included, and a piece with a link;
  * - the public list and one look: title, caption, links read live, and the
- *   affiliate disclosure first; no episode, show or wardrobe ids, no prices;
+ *   disclosure first; no episode, show or wardrobe ids, no prices;
  * - publishing again and sending again keep the public key; turning the
  *   links off hides it; taking it down, or removing the sheet from
  *   Distribution, makes it a 404.

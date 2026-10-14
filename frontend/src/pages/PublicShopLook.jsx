@@ -3,7 +3,8 @@
  * the Look links appear on the public website, with the affiliate
  * disclosure). /shop-the-look lists the looks Evoni published, newest
  * first; /shop-the-look/:key shows one: its title, her caption, the
- * disclosure first whenever a link is an affiliate link, then each link.
+ * disclosure first (the server's, with the Amazon Associates sentence when
+ * a link is Amazon's; Task #3170), then each link.
  * Affiliate links carry rel="sponsored". Plain fetches of
  * GET /api/v1/public/looks (published only, no auth; #3021). A look's image
  * is the look strip copied to the public site bucket when Evoni publishes
