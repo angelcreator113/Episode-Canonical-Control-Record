@@ -16,7 +16,7 @@ This is Task #3122, the read for Lala's Phone spec §15 phase 3, **To-do modes**
    - "From the beat" comes from the script: a wear cue linked to the piece.
    - Spent so far sums the worn pieces' look charges up to that line.
    - The phone gets one to-do content area that picks its mode (Shopping, deal, Career) by the beat.
-   - Five decisions are listed in §6.
+   - Evoni ruled on all six decisions (§6).
 
 ## 2. What exists
 
@@ -154,7 +154,7 @@ No open issue builds any To-do mode.
 | A Lala line slot after each equip, drafted from the piece (§7.2) | **Not built** | no equip cue (`scriptBeatParser.js:348-350`); the skeleton's one fixed line (`scriptSkeletonGenerator.js:190-195`); `Wardrobe.lala_reaction_*` unused there |
 | The Shopping list stays her handwritten note (§13) | **Built** for the Event Package and its overlay; **not built** on the phone | `eventDocumentOverlayService.js:151-193`; phone `task_list` plain text (`ScreenContentRenderer.jsx:570-590`) |
 
-## 4. Design direction (for the rulings in §6)
+## 4. Design direction (ruled in §6)
 
 - **"From the beat" comes from the script.** It is where Lala picks each piece, it already has line order (`beatOnScreen`), and it needs no migration. The alternative is a beat stamp saved with each equip: a new `episode_wardrobe` column, a migration, and the Wardrobe routes would need to know the beat, which they don't.
   - **A wear cue linked to the piece.** For example `[WEAR: <piece id or exact name>]`, or the existing `[UI:SELECT Item <name>]` resolved by name. The parser records it, and `scriptMoments` gains "worn so far" line by line, like `beatOnScreen`.
@@ -167,75 +167,74 @@ No open issue builds any To-do mode.
   
   It is drawn as her handwritten note (§13), reusing the Event Package paper's look.
 
-## 5. Proposed issues, in order (plan only; none opened)
+## 5. Proposed issues, in order (plan only; updated with Evoni's rulings in §6)
 
-Each fits one phone-reviewable PR.
+Each fits one phone-reviewable PR. **Issues 1, 2 and 7 open now and run in parallel. Issues 3–6 follow once 2 merges. Issue 8 waits for the phase 5 read (#3124).**
 
 1. **feat(phone): the Shopping list on Lala's Phone, as her handwritten note.**
    - A `shopping_list` content type reads `GET /episodes/:id/todo` (the wardrobe tasks, crossed off from the current look as today) and draws the Event Package paper's look: Caveat, lined pink, tape.
    - Added to the content picker.
-   - Files: `ScreenContentRenderer.jsx`, `ContentAreaPicker.jsx`, a shared note style (a CSS module, or reusing `EventDocuments.css` classes).
+   - Files: `ScreenContentRenderer.jsx`, `ContentAreaPicker.jsx`, and a shared note style, reusing the `EventDocuments` paper.
    - Tests: vitest for the render, a strike per completed line, and the picker kind.
    - **No migration.**
-2. **feat(script): a wear cue linked to the piece, and "worn so far" by line.**
-   - The parser reads the wear cue (form per decision 1) into a `wear` action with the piece's id.
-   - The Script tab resolves names to the episode's look; `scriptMoments.wornAt(beats, beatIndex, lineIndex)`.
-   - The skeleton writes the cue for each segment in place of the text-only `[UI:SELECT Item]`.
+2. **feat(script): `[WEAR: <piece id>]`, and "worn so far" by line** (ruling 1).
+   - The parser reads `[WEAR: <wardrobe id>]` into a `wear` action with the piece's id and line.
+   - Older scripts keep working: `[UI:SELECT Item <name>]` is read by name against the episode's look. **A name that doesn't match exactly one piece is flagged** (no match, or several), never guessed.
+   - `scriptMoments.wornAt(beats, beatIndex, lineIndex)` gives the pieces worn up to a line, following the `beatOnScreen` precedent.
+   - The skeleton writes `[WEAR: id]` for each segment when the look is known.
+   - The Script tab shows the flags.
    - Files: `src/utils/scriptBeatParser.js`, `scriptSkeletonGenerator.js`, `frontend/src/lib/scriptMoments.js`, `EpisodeScriptTab.jsx`.
-   - Tests: parser and `scriptMoments` unit tests, and skeleton output.
+   - Tests: parser (WEAR, legacy SELECT, ambiguous and unknown names), `wornAt`, and skeleton output.
    - **No migration.**
-3. **feat(phone): the Shopping list crosses off from the beat.**
-   - The `shopping_list` area (issue 1) takes the beat and line from the episode playback, `beatState`-style. A line is crossed off when a worn piece fills it at or before that point.
-   - The Script tab's beat card shows the same.
-   - Server: `GET /episodes/:id/todo?beat=&line=` computes from the script's wear cues; `todoListService` gains `filledAt`.
-   - Tests: unit tests for `filledAt`, and vitest that a line crosses off at its beat and not before.
+3. **feat(phone): the Shopping list crosses off from the beat** (after 2; ruling 2).
+   - A line is crossed off from the line where a worn piece fills it.
+   - **A piece in the look with no cue is crossed off at the last getting-ready beat and flagged "in the look, never equipped on screen".**
+   - "The last getting-ready beat" is the script's closet beat (`scriptMoments.closetBeat`), or the last beat with a wear cue if later. This is INFERRED and confirmed in the build issue.
+   - Server: `GET /episodes/:id/todo?beat=&line=` computes from the script's cues; `todoListService.filledAt`.
+   - The phone area and the Script tab's beat card agree.
+   - Tests: `filledAt`, the uncued piece and its flag, and vitest for crossing off at the beat.
    - **No migration.**
-4. **feat(phone): spent so far on the Shopping list.**
-   - The worn pieces' look charges up to the beat (`episodeLook` per piece), shown on the note ("spent so far: 1,240 coins") and on the beat card.
-   - Files: `todoListService`/`episodeLookCharges` (a per-piece charge map), the note and `beatState.js`.
-   - Tests: unit tests (owned, bought, rental) and vitest.
-   - **No migration.**
-5. **feat(script): a Lala line slot after each wear cue, drafted from the piece (§7.2).**
-   - After each wear cue, the Script tab offers an empty `Lala: ""` slot. Its draft comes from the piece's name, in-world price and fit with the dress code, plus `lala_reaction_own` when set (per decision 5). Evoni edits it.
-   - Files: `EpisodeScriptTab.jsx` and a small `lib/lalaLineDraft.js`. If AI drafting is ruled in, a Haiku route with `aiRateLimiter` and the cost tracker.
-   - Tests: unit tests for the draft text, and vitest for the slot.
-   - **No migration.**
-6. **feat(phone): the deal checklist mode, labelled with the location.**
-   - The to-do area shows the event's deliverable tasks with "At <host_brand or host>'s <venue>", when the episode's event has locked terms (`findTermsLockEpisode`). Items tick at the beats per decision 3.
-   - Files: `ScreenContentRenderer.jsx`, `socialTaskSource.js` (the label), and a `deliver` cue in the parser if ruled.
-   - Tests: the label, and ticks by beat.
-   - **No migration.**
-7. **feat(phone): the Career list mode, with brands worked with.**
-   - The active and completed `CareerGoal`s, milestones, and brands worked with, derived from completed events' `host_brand` (decision 4), as of the episode.
-   - Files: a new `src/services/careerListService.js`, a route, and the content area.
+4. **feat(phone): spent so far on the Shopping list** (after 3).
+   - The worn pieces' `episodeLook` charges up to the beat (owned, already bought, gifted or borrowed free; a rental its fee), on the note and the beat card.
+   - Files: `episodeLookCharges` (a per-piece charge map), `todoListService`, the note and `beatState.js`.
    - Tests: unit and vitest.
-   - **No migration** if derived; a migration only if Evoni wants a stored brands list.
-8. **(After phase 5, #3124) The audience sees the Career list only at the career moment.**
-   - The mode choice uses the skeleton's career-moment beat.
-   - Blocked on the phase 5 read.
+   - **No migration.**
+5. **feat(script): a Lala line slot after each `[WEAR]`, drafted from a free template** (after 2; ruling 5).
+   - After each wear cue, the Script tab offers a `Lala: "…"` slot. It is drafted from a template using the piece's name, in-world price and the dress code. Evoni edits it.
+   - **An AI draft comes later, behind a button, under the daily cap**: a separate issue with `aiRateLimiter` and the cost tracker.
+   - Files: `EpisodeScriptTab.jsx` and `frontend/src/lib/lalaLineDraft.js`.
+   - Tests: unit tests for the template, and vitest for the slot.
+   - **No migration.**
+6. **feat(phone): the deal checklist mode, labelled with the location, and the mode switch** (after 2; rulings 3 and 6).
+   - At an episode whose event has locked terms (`findTermsLockEpisode`), the to-do area shows its deliverable tasks under "At <host_brand or host>'s <venue>".
+   - **Each item ticks at its own `[DELIVER: <deliverable id>]` cue.** Ticking does **not** change the deliverable's status. A ticked item may show "ready to approve", and approval stays manual in Money.
+   - **The mode is automatic by beat:**
+     - Shopping through the getting-ready beats;
+     - the deal checklist at an event with locked terms;
+     - otherwise the Career list.
+   - **There is a manual override per beat**, as a script cue in that beat (`[TODO_MODE: shopping|deal|career]`), with no migration. The cue's form is to be confirmed in the build issue.
+   - Files: `scriptBeatParser.js` (DELIVER and TODO_MODE), `scriptMoments.js` (`deliveredAt`, `todoModeAt`), `ScreenContentRenderer.jsx`, `socialTaskSource.js` (the label).
+   - Tests: the label, ticks by cue, that the status is unchanged, and the mode by beat with its override.
+   - **No migration.**
+7. **feat(career): the Career list, with brands worked with** (parallel; ruling 4).
+   - Active and completed `CareerGoal`s and milestones, as of the episode.
+   - **Brands worked with are derived from executed agreements and past deals**: events whose terms locked in a completed episode, by `host_brand`. When the brand agreement's EXECUTED state exists (phase 4, #3123), it is read too.
+   - **A per-brand hide option**, with no separate list. Hidden brands are stored in show settings (`shows.metadata.career_hidden_brands`), with no migration.
+   - A new `src/services/careerListService.js`, `GET /shows/:id/career-list?episode_id=`, `PUT …/career-list/hidden-brands`, and a `career_list` phone content area drawn as her note.
+   - Tests: unit tests (derivation, hide, as of the episode) and vitest.
+   - **No migration.**
+8. **(After the phase 5 read, #3124) The audience sees the Career list only at the career moment.**
+   - The mode switch uses the skeleton's career-moment beat. Blocked until #3124.
 
-Issues 1, 2 and 7 can start in parallel. 3 needs 1 and 2; 4 needs 3; 5 needs 2; 6 needs 1.
+## 6. Rulings (Evoni, 2026-10-14)
 
-## 6. Decisions for Evoni ([decide])
-
-1. **[decide] Where "from the beat" comes from:**
-   - the script's wear cue (recommended, no migration); or
-   - a beat saved with each equip in Wardrobe (a migration, and Wardrobe would need to know the beat).
-   
-   And the cue's form: a new `[WEAR: piece]`, or the existing `[UI:SELECT Item <name>]` matched by name?
-2. **[decide] A piece in the look with no wear cue:**
-   - crossed off from the closet beat on, as the beat card's "Wearing" does today; or
-   - never crossed off until a cue is written?
-3. **[decide] Deal items tick:**
-   - each at its own script cue (`[DELIVER: …]`); or
-   - all at canonical beat 12, Deliverable Creation?
-   
-   And should a tick also move the deliverable's status (pending → completed), or stay display only?
-4. **[decide] "Brands worked with":**
-   - derived from completed events' `host_brand` (recommended, no migration); or
-   - a list she keeps herself (a migration)?
-5. **[decide] Lala's line after each equip:**
-   - a template from the piece's fields and `lala_reaction_own` (free); or
-   - an AI draft in her voice (Haiku, costed and budget-gated)?
-
-And one for the mode switch: **the phone's to-do area picks its mode by the beat automatically** (recommended), or Evoni picks the mode per screen area?
+1. **Beat source:** a script cue, no migration.
+   - A new `[WEAR: piece]` cue references the piece **by id**.
+   - Existing `[UI:SELECT Item …]` lines are still read by name for old scripts. Any name that doesn't match exactly one piece is flagged.
+2. **A piece in the look with no cue** is crossed off at the last getting-ready beat and flagged "in the look, never equipped on screen".
+3. **Deal items** tick each at its own cue.
+   - Ticking does not change the deliverable's status.
+   - It may show "ready to approve", but approval stays manual in Money.
+4. **Brands worked with** are derived from executed agreements and past deals, with a per-brand hide option. There is no separate list.
+5. **Lala's line after each piece** is a free template from the piece's name, in-world price and the dress code. An AI draft comes later, behind a button, under the daily cap.
+6. **To-do mode** is automatic by beat, with a manual override per beat.
