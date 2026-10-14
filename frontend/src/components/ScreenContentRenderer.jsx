@@ -22,6 +22,8 @@ import { getSlotForCategory } from '../lib/wardrobeSlots';
 import { storyLabel } from '../lib/storyClock';
 import PhoneMapView from './phone/PhoneMapView';
 import PieceImage from './Wardrobe/PieceImage';
+// The Event Package paper, for Lala's Shopping list on the phone (Task #3179).
+import './EventPackage/EventDocuments.css';
 
 // ── Content type registry — maps type keys to renderer components and metadata ──
 export const CONTENT_TYPES = [
@@ -66,6 +68,8 @@ export const CONTENT_TYPES = [
   // read, each task with its source. Canonical beat 9 (Reminder/Deadline)
   // shows it on Lala's Phone.
   { key: 'task_list', label: 'Task List', icon: '📋', desc: 'The episode’s one task list, each task with its source', group: 'messages' },
+  // Task #3179: Lala's Shopping list on her phone, her handwritten note.
+  { key: 'shopping_list', label: 'Shopping List', icon: '🛍️', desc: 'Lala’s handwritten shopping list for the episode; a line is crossed off once her look fills it', group: 'messages' },
   { key: 'custom_text', label: 'Custom Text', icon: '✏️', desc: 'Static text overlay', group: 'other' },
 ];
 
@@ -210,6 +214,8 @@ function ContentZoneRenderer({ zone, showId, episodeId, storyAt = null, screenMe
       return <ClosetWishlistGridRenderer showId={showId} config={config} />;
     case 'task_list':
       return <TaskListRenderer episodeId={episodeId} config={config} />;
+    case 'shopping_list':
+      return <ShoppingListRenderer episodeId={episodeId} config={config} />;
     case 'custom_text':
       return <CustomTextRenderer config={config} />;
     default:
@@ -562,6 +568,40 @@ export const TASK_SOURCE_LABELS = {
 // Read-only: GET /episodes/:id/todo/social returns the saved list and its
 // completion; nothing here completes a task. A show's screen (no episode)
 // says where the list comes from instead of fetching.
+// ── Lala's Shopping list, her handwritten note (Lala's Phone spec §5, §13;
+// Task #3179) ──
+// The episode's wardrobe list (GET /episodes/:id/todo), drawn on the Event
+// Package's paper (EventPackage/EventDocuments.css, .evd-paper.is-phone):
+// lined pink paper, tape, her hand. A line is crossed off once her look
+// fills it, read from the current look as the To-Do tab does
+// (todoListService.getTodoList); crossing off from the beat follows the
+// [WEAR] cue (phone phase 3, issue 3).
+export function ShoppingListRenderer({ episodeId, config = {} }) {
+  const url = episodeId ? `/api/v1/episodes/${episodeId}/todo` : null;
+  const { data, loading } = useContentData(url);
+
+  if (!episodeId) return <ZoneEmpty label="Shopping list · shown in an episode" />;
+  if (loading) return <ZoneLoader />;
+  const tasks = [...(data?.data?.tasks || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).slice(0, config.max_items || 12);
+  if (!tasks.length) return <ZoneEmpty label="No shopping list yet" />;
+  return (
+    <div style={{ width: '100%', height: '100%', containerType: 'inline-size' }}>
+      <div className="evd-paper is-phone" data-testid="phone-shopping-list">
+        <span className="evd-tape" aria-hidden="true" />
+        <div className="evd-paper-title">Lala&apos;s shopping list</div>
+        <ul className="evd-paper-lines">
+          {tasks.map((t, i) => (
+            <li key={t.slot || i} data-testid="phone-shopping-line" data-crossed={t.completed ? 'true' : 'false'}>
+              <span className="evd-box" aria-hidden="true">{t.completed ? '✓' : ''}</span>
+              <span className={`evd-line-text${t.completed ? ' is-crossed' : ''}`}>{t.label || t.description || t.slot}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 function TaskListRenderer({ episodeId, config }) {
   const maxItems = config.max_items || 6;
   const url = episodeId ? `/api/v1/episodes/${episodeId}/todo/social` : null;

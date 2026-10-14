@@ -4,8 +4,8 @@
  * from (the next area drawn on the phone gets the picked kind), and the
  * other screens that have content.
  *
- * The four kinds are existing content types; the mockup's Shopping list and
- * Career plan (in-world documents) have no content type yet.
+ * The kinds are existing content types. The mockup's Shopping list is
+ * `shopping_list` (Task #3179); its Career plan has no content type yet.
  */
 import { CONTENT_TYPE_MAP } from '../ScreenContentRenderer';
 import './ContentAreaPicker.css';
@@ -18,6 +18,7 @@ export const CONTENT_AREA_KINDS = [
   { key: 'dm_thread', label: 'DM thread', desc: 'A conversation in Messages', tone: 'pink', content_type: 'dm_thread', content_config: {} },
   { key: 'profile_card', label: 'Profile card', desc: 'Any character, from the registry', tone: 'lavender', content_type: 'profile_header', content_config: {} },
   { key: 'lala_stats', label: "Lala's stats", desc: 'Coins and her next goal', tone: 'gold', content_type: 'money_balance', content_config: {} },
+  { key: 'shopping_list', label: 'Shopping list', desc: 'Her handwritten list, crossed off as she dresses', tone: 'pink', content_type: 'shopping_list', content_config: {} },
 ];
 
 /** A zone's kind in words: the picker's name when it matches one, else the content type's label. */
