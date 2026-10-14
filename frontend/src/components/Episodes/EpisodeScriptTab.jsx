@@ -9,7 +9,7 @@ import { episodePlanning } from '../../utils/episodePlanning';
 import { scriptInputs, mustCover, scriptPeople } from '../../lib/episodeScript';
 import { beatState } from '../../lib/beatState';
 import { moveBeat, moveLine, dropIndex, replaceBeat, appendLine, insertLine } from '../../lib/scriptBeatOrder';
-import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers, phoneCheck, messageLine, closetBeat } from '../../lib/scriptMoments';
+import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers, phoneCheck, messageLine, closetBeat, wearFlags } from '../../lib/scriptMoments';
 import { isScreen, isIcon, isProduction } from '../../lib/overlayUtils';
 import { beatImage, beatImageLabel } from '../BeatPlan/BeatPlanParts';
 import './EpisodeScriptPage.css';
@@ -1074,6 +1074,11 @@ export default function EpisodeScriptTab({ episode, show }) {
   // phone check (Task #2884).
   const cover = mustCover({ beats, deliverables, event: source?.event || null, brief });
   const check = openBeat ? phoneCheck(openBeat.lines, onScreen) : null;
+  // Wear cues that name no single piece of the locked look (Task #3180):
+  // checked once a look is locked, flagged, never fixed.
+  const wearIssues = openBeat && Array.isArray(outfit) && outfit.length
+    ? wearFlags(beats, outfit).filter((f) => f.beatIndex === beats.indexOf(openBeat))
+    : [];
 
   const showBeatList = hasScript && !developerMode && beats.length > 0;
   return (
@@ -1295,6 +1300,18 @@ export default function EpisodeScriptTab({ episode, show }) {
               {!check.taps.length && !check.missing.length && <li className="is-covered"><Check size={14} aria-hidden="true" /><span>Every screen and overlay it names is made.</span></li>}
             </ul>
           )}
+        </section>
+      )}
+      {hasScript && openBeat && wearIssues.length > 0 && (
+        <section className="esp-phonecheck" data-testid="script-wear-check">
+          <h3 className="esp-side-title">Wardrobe cues · Beat {openBeat.number}</h3>
+          <ul className="esp-cover-list">
+            {wearIssues.map((f) => (
+              <li key={`wear-${f.lineIndex}`} className="is-gap" data-testid="script-wear-flag" data-flag={f.flag}>
+                <AlertTriangle size={14} aria-hidden="true" /><span>{f.text}</span>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
       <section className="esp-voice" data-testid="script-voice">
