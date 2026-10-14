@@ -7,6 +7,7 @@ import { X, Wifi, Signal, BatteryFull, RotateCcw, Target, CheckCircle2, Circle }
 import PhoneDevice from './phone/PhoneDevice';
 import { isIcon, isScreen, resolveZoneIcon } from '../lib/overlayUtils';
 import { filterZones, applyActions, actionsForZone, evaluateMissions, applyMissionRewards } from '../lib/phoneRuntime';
+import { backTargetOf } from '../lib/phoneBack';
 
 const TOKENS = { parchment: '#FAF7F0', gold: '#B8962E', ink: '#2C2C2C', lavender: '#5B4B8A' }; // lavender: --lala-lavender, the Phone Hub's primary (2026-10-07)
 const MONO = "'DM Mono', monospace";
@@ -303,6 +304,21 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
     }, TRANSITION_MS);
   }, [homeScreen, initialScreen, screens, animating]);
 
+  // Back with no history (Task #3165): the screen whose icon opens this one
+  // (Closet for a section page), else home. A link or a resumed play-through
+  // can open a page with nothing to go back to.
+  const goUp = useCallback(() => {
+    const target = backTargetOf(activeScreen, screens, screens.filter(isIcon), homeScreen);
+    if (!target || target.id === homeScreen?.id || animating) { goHome(); return; }
+    setSlideDir('right');
+    setAnimating(true);
+    setTimeout(() => {
+      setActiveScreen(target);
+      setSlideDir(null);
+      setAnimating(false);
+    }, TRANSITION_MS);
+  }, [activeScreen, screens, homeScreen, animating, goHome]);
+
   // ESC key handler — overlay only; an embedded phone leaves ESC to its page.
   useEffect(() => {
     if (embedded) return undefined;
@@ -588,8 +604,9 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
         firstScreen={homeScreen}
         globalFit={globalFit}
         tapLayer={tapLayer}
-        // The device's own Back (Task #3162): the previous screen, else home.
-        onBack={history.length ? goBack : goHome}
+        // The device's own Back (Task #3162): the previous screen, else the
+        // screen whose icon opens this one, else home (Task #3165).
+        onBack={history.length ? goBack : goUp}
         showId={showId}
         episodeId={episodeId}
         storyAt={storyAt}
