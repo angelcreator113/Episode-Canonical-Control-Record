@@ -37,7 +37,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     ids.dress = dress.id; ids.shoes = shoes.id; ids.bag = bag.id;
     const script = [
       '## BEAT: 7 · Interruption Pulse 2', 'Lala: "A deal?"',
-      '## BEAT: 8 · Transformation Loop', '[UI:OPEN Closet]', `[WEAR: ${dress.id}]`, `[UI:SELECT Item Satin Pump ${tag}]`,
+      // A line after the select, so line 2 is not the beat's end (the
+      // uncued clutch comes on at its last line).
+      '## BEAT: 8 · Transformation Loop', '[UI:OPEN Closet]', `[WEAR: ${dress.id}]`, `[UI:SELECT Item Satin Pump ${tag}]`, 'Lala: "Perfect."',
       '## BEAT: 10 · Location', 'Lala: "Ready."',
     ].join('\n');
     await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, script_content, created_at, updated_at)
