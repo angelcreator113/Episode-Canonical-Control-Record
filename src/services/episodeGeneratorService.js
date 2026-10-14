@@ -713,7 +713,12 @@ Return ONLY JSON.` }],
         beat_outline: aiBeatOutline,
         episode_archetype: inferArchetype(event),
         designed_intent: inferIntent(event),
-        narrative_purpose: `${event.name} — ${event.description || 'Event-driven episode'}`,
+        // Never the event's description, which is guest copy for attendees
+        // (rule 12; the synopsis above follows the same rule) (Task #3137).
+        // It starts empty: the season slot's primary story purpose fills it
+        // (seasonSlotService.snapshotEpisode, right after this transaction),
+        // and an episode in no slot leaves it for the Overview to ask.
+        narrative_purpose: null,
         forward_hook: aiForwardHook,
         status: 'draft',
       }, { transaction });
