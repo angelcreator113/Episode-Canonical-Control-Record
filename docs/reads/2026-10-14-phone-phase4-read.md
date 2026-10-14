@@ -27,13 +27,13 @@ This is Task #3123, the read for Lala's Phone spec §15 phase 4, **Opportunities
    - a brand logo or profile;
    - an accepted state for the OFFER → EXECUTED stamp;
    - a `#ad` disclosure.
-6. **Recommendation (§4):**
+6. **Ruled by Evoni (§6), originally recommended as follows (§4):**
    - A brand is a Pulse profile marked as a brand account.
    - A brand deal is an extended Opportunity, the one opportunities record, using the deal model.
    - It arrives mid-episode by a script cue at its beat, as `[WEAR]` does.
    - Per-brand trust is a ledger by story order, like followers.
    - Payouts are pending ledger rows that the balance ignores until they are paid.
-   - Nine decisions are listed in §6.
+   - Evoni ruled on all nine (§6). She added: the offer, the event and the sponsored post stay separate records; a 0–100 trust scale; "Open Deal Package"; and three safeguards (§4).
 
 ## 2. What exists
 
@@ -195,112 +195,168 @@ No open issue builds brand deals, Mail, Bank payouts or the brand agreement.
 | Offers drafted to fit story and influence tier, approved by Evoni | **Partly built**: rule-drafted, tiered by result, no approval step | `characterSyncService.js:315-331` |
 | The brand agreement (§13): letterhead, parties, clauses, signatures, OFFER → EXECUTED | **Not built**: clause data mostly exists (§2.6) | only the Career plan card and overlay |
 
-## 4. Design direction (for the rulings in §6)
+## 4. Design (ruled by Evoni in §6)
 
-- **A brand is a Pulse profile marked as a brand account.**
-  - It is a character with a handle, voice and posts (spec §6), linked to its `lalaverse_brands` row when there is one.
-  - It gets a logo for the agreement's letterhead.
-  - It takes **one migration**: `social_profiles.account_kind` ('person' | 'brand'), plus `lalaverse_brands.social_profile_id` and a logo.
-- **A brand deal is an Opportunity**, the one opportunities record (spec §6, "one system"), with the deal model added. The brand is the offerer and the event stays the host's.
-  - It gets the brand profile, `deal_components` and fees, `conditions` (exclusivity, must-wear piece ids), a story-time deadline, and an accepted or declined state with when.
-  - Its deliverables are `event_deliverables` rows with `owed_to: 'brand'` and an `opportunity_id`, so the payout and approval code is reused.
-  - It takes **one migration.**
-- **Mid-episode arrival comes from a script cue**, `[OFFER: <opportunity id>]`, at its beat (the `[WEAR]` precedent, PR #3184). Mail shows it from that line. It needs no migration.
-- **Bank pending → paid:**
-  - When a deal is accepted, its fees are written as `pending` ledger rows, which the balance already ignores (`ledgerBalanceFilter.js:19-23`).
-  - On approval and at Complete, they turn `executed`, rather than a new row being inserted.
-  - The phone's Bank gets a "payouts" content type.
-- **Per-brand trust:** a `brand_trust` ledger by story order, as `pulse_followers` is (`src/services/pulseFollowers.js`). One migration.
-  - Results adds a change per brand: all delivered raises it; a miss lowers it.
-  - The offer drafter reads it.
-- **The brand agreement** is a third document type, `brand_agreement`, for a deal with a brand. It replaces `career_plan` there (spec §13).
-  - Its clauses are filled from §2.6.
-  - It shows the OFFER stamp until the deal is accepted, then EXECUTED with Lala's signature.
+**A brand deal is a business opportunity in Lala's world, an event is somewhere she goes, and a sponsored post is something she delivers. They are connected, but they are not the same record** (Evoni, 2026-10-14). The same separation lets Brand Deals, The Pulse, Events, Career, Prime Bank and episode production work together without duplicating anything.
 
-## 5. Proposed issues, in order (plan only; none opened)
+- **A brand** is a Pulse profile with a brand type, linked **one to one** to its LalaVerse Brand Registry row. There is one brand identity, never two disconnected ones.
+- **A brand deal** is an extended Opportunity. The brand owns the offer, and an event keeps its actual host.
+  - **An accepted offer never creates an event by itself.**
+  - If the deal includes an appearance at an existing event, the deal links that event.
+  - If it needs a new brand-hosted event, that event is made separately, with the brand as its host.
+- **Arrival:** `[OFFER: id]` introduces an existing offer at its beat, validated against the offer and its episode.
+- **Acceptance:** Evoni confirms Lala's yes or no on the offer record. **Script cues portray the decision; they never finalize it.**
+- **Money:** amounts move through four distinct stages, so an offer never raises Lala's Prime Bank balance:
+  - proposed, the offer;
+  - contracted, at acceptance;
+  - earned and pending, a pending ledger row;
+  - paid, executed.
+- **Per-brand trust** runs 0–100 and starts at 50. It is separate from Lala's overall stat (today `character_state.brand_trust`, 0–10, which stays as it is).
+- **The Career plan stays, simplified.** Its event objectives link to the canonical Career Goals, with no second plan and no conflicting checklists.
+- **Every brand deal has an "Open Deal Package" action from the episode.** It shows the original offer, the brand, the payment terms, the deliverables, deadlines, exclusivity and Lala's decision.
 
-Each fits one phone-reviewable PR. Migrations are new files under `src/migrations/` only.
+**How a deal flows through an episode** (Evoni, 2026-10-14):
+1. **The brand creates an offer**, tied to its Pulse profile, with deliverables, compensation, a deadline and any exclusivity terms.
+2. **Prime Studios places it in the episode** with `[OFFER: id]` at the intended beat.
+3. **Lala receives it on her phone**, in Mail, with a possible Pulse notification.
+4. **Lala responds in the story**, and Evoni confirms the outcome on the offer.
+5. **Deliverables are tracked**: a sponsored Pulse post, an event appearance, or other contracted work, attached to the deal.
+6. **Payment is recorded**: a pending ledger row when payment becomes owed under the deal's terms, posted to her available balance only when paid.
+7. **The world reacts** after the outcome is accepted: brand trust, approved rival-brand consequences, and the relevant Pulse conversations.
 
-1. **feat(pulse): brand accounts.**
-   - What: a Pulse profile marked as a brand, with a logo, linked to its LalaVerse brand row.
-   - Migration: `social_profiles.account_kind` ('person' default | 'brand'), `social_profiles.logo_url`, `lalaverse_brands.social_profile_id`.
-   - Files: the models, `socialProfileRoutes` (set and read), and the Feed profile editor (a "Brand account" toggle and logo upload).
-   - Tests: model, route and vitest.
-2. **feat(deals): a brand deal on the deal model** (the Opportunity extended).
-   - What: the offering brand's profile, `deal_components` and fees, `conditions`, a story-time deadline, and an accepted or declined state.
-   - Migration: on `opportunities`, `brand_profile_id`, `deal_components` JSONB, the fee columns, `conditions` JSONB, `deadline_order` INT, `accepted_at`, `declined_at`; on `event_deliverables`, an `opportunity_id` (with `event_id` kept for the host's event).
-   - Files: `Opportunity.js`, `opportunityRoutes.js` (the lifecycle Offered → Accepted/Declined → Active → Delivered → Paid), and `dealComponents.js` reused.
-   - Tests: unit and integration.
-3. **feat(script): `[OFFER: <opportunity id>]`, the offer arriving at its beat.**
-   - The parser and `scriptMoments.offersAt`, as `[WEAR]` does, with flags for unknown ids.
-   - Files: `scriptBeatParser.js`, `scriptMoments.js`, `EpisodeScriptTab.jsx`.
+**Safeguards** (Evoni, 2026-10-14):
+- **Canon authority:** script cues introduce and portray offers. The approved offer record is the source of truth for acceptance, terms, deliverables and payment.
+- **Financial integrity:** proposed, contracted, earned/pending and paid amounts stay distinct. Pending money never raises Lala's available Prime Coins (`ledgerBalanceFilter.js:19-23` already counts executed rows only). In-world coins stay separate from real-world records (the `real_*` wardrobe fields, Shop the Look).
+- **Sponsorship disclosure:** a sponsored post shows **"#ad" and "Paid partnership with <brand>"**, prominently, not buried in the caption.
+- **Compatibility and audit:**
+  - existing episodes and opportunities keep working, with every new column nullable or defaulted;
+  - canonical ids throughout;
+  - an audit history (status history, trust changes as rows);
+  - no duplicate payouts (the existing once-only indexes extended);
+  - story-world changes only after the relevant production approval.
+
+## 5. Proposed issues, in order (plan only; updated with Evoni's rulings in §6)
+
+Each fits one phone-reviewable PR. Migrations are new files under `src/migrations/` only, every new column nullable or defaulted, so existing records keep working.
+
+1. **feat(pulse): brand accounts, one identity per brand** (ruling 1).
+   - Migration: `social_profiles.account_kind` ('person' default | 'brand'), `social_profiles.logo_url`, and `lalaverse_brands.social_profile_id` with a **unique** index (one to one).
+   - Files: the models, `socialProfileRoutes` (set and read), the Brand Registry routes (`wardrobeBrands.js`, link and unlink), and the Feed profile editor ("Brand account" plus logo).
+   - Tests:
+     - linking a second profile to a brand, or a second brand to a profile, is refused;
+     - an unmarked profile is a person;
+     - vitest for the editor.
+2. **feat(deals): a brand deal on the extended Opportunity** (rulings 2 and 4).
+   - **Migration on `opportunities`:**
+     - `brand_profile_id` (the brand's Pulse profile);
+     - `deal_components` JSONB and the fee columns;
+     - `conditions` JSONB (exclusivity, must-wear piece ids);
+     - `deadline_order` INT (story time);
+     - `linked_event_id` (an existing event the deal appears at, its host unchanged);
+     - `proposed_amount` and `contracted_amount`;
+     - `decision` (null | accepted | declined), `decided_at`, `decided_by`.
+   - **Migration on `event_deliverables`:** `opportunity_id`, with `event_id` nullable for a deliverable that belongs to a deal and not an event. Check the existing NOT NULL and the cascade first.
+   - **The lifecycle:** Offered → Accepted/Declined (Evoni confirms; `status_history` keeps the audit) → Active → Delivered → Paid → Counted. **Accepting never creates an event.**
+   - Files: `Opportunity.js`, `opportunityRoutes.js` (the decision route, Evoni only), `dealComponents.js` reused, `careerPipelineService.convertOpportunityToEvent` (no longer used for brand deals; old ones still read).
+   - Tests:
+     - the decision recorded once, with an audit row;
+     - proposed versus contracted amounts;
+     - no event made on accept;
+     - existing opportunities unchanged.
+3. **feat(script): `[OFFER: <opportunity id>]`, the offer arriving at its beat** (ruling 3).
+   - The parser and `scriptMoments.offersAt`, as `[WEAR]` does (PR #3184).
+   - It is validated: the id must be an existing offer, and the offer must belong to the episode (or be unplaced). Otherwise it is flagged in the Script tab.
+   - The cue portrays only; it never changes the offer's decision.
    - **No migration.**
-4. **feat(phone): Mail, the inbox.**
-   - A `mail_inbox` content type: the episode's invitation, plus offers that have arrived by the beat (from issue 3), each with its brand, ask, pay and deadline.
-   - Files: `ScreenContentRenderer.jsx`, `ContentAreaPicker.jsx`, and a read route.
+4. **feat(phone): Mail, the inbox, and "Open Deal Package".**
+   - A `mail_inbox` content type: the episode's invitation and the offers that have arrived by the beat, each with its brand, ask, pay and deadline.
+   - A possible Pulse notification when an offer arrives (through The Pulse's review).
+   - In the episode, **every brand deal has "Open Deal Package"**, showing the original offer, brand, payment terms, deliverables, deadlines, exclusivity and Lala's decision.
+   - Files: `ScreenContentRenderer.jsx`, `ContentAreaPicker.jsx`, a read route, and the episode's deal view.
    - **No migration.**
-5. **feat(bank): payouts pending, then paid.**
-   - Accepting a deal writes its fees as `pending` ledger rows. Approval and Complete turn them `executed`, keeping the once-only guarantee.
-   - The Money page reads them.
-   - A `payouts` content type for the phone's Bank.
-   - Files: `dealPayoutService.js`, `episodeMoneyLines.js`, `ScreenContentRenderer.jsx`.
-   - Tests: the balance ignores pending; flipping to paid books no double payment.
-   - **No migration** (the status exists).
-6. **feat(documents): the brand agreement.**
-   - A `brand_agreement` document type for a brand deal:
-     - letterhead with the brand's logo;
+5. **feat(bank): payments pending, then paid** (ruling 5; financial integrity).
+   - When payment becomes owed under the deal's terms, write a **pending** ledger row; turn it **executed** when paid, rather than inserting a second row.
+   - The once-only guarantee extends to deal rows (the unique indexes in `20260929200004` / `20260930160000`). **A new migration may extend the index; the old ones are not edited.**
+   - Pending never enters the available balance (`ledgerBalanceFilter.js`).
+   - The Money page and a phone Bank `payouts` content type show pending and paid apart.
+   - Tests:
+     - the balance ignores pending;
+     - pending turning paid books no second row;
+     - an offer's proposed amount never reaches the ledger.
+6. **feat(documents): the brand agreement, and the Career plan simplified** (rulings 7 and 8).
+   - **The brand agreement:** a `brand_agreement` document for a brand deal:
+     - letterhead with the brand's logo (issue 1);
      - "Creator Partnership Agreement · <event>";
      - the Brand and Creator boxes;
      - the numbered clauses from §2.6;
      - signature lines;
-     - OFFER → EXECUTED with Lala's signature when she accepts.
-   - Its overlay is drawn on the server.
+     - OFFER → EXECUTED when Evoni confirms acceptance.
+     
+     Its disclosure clause carries "#ad" and "Paid partnership with <brand>".
+   - **The Career plan:** keep it for events, simplified. Its "this event" objectives link to canonical Career Goals rather than being a second list. No duplicate fields.
    - Files: `eventDocumentsService.js`, `eventDocumentOverlayService.js`, `EventDocuments.jsx`.
-   - **No migration** (stored in `canon_consequences.documents`, as today).
-7. **feat(trust): per-brand trust.**
-   - A `brand_trust` ledger by story order.
-   - Results: all delivered raises that brand's trust and a miss lowers it (amounts per decision 6).
-   - `trustAt(brand, at)`.
-   - Files: a new service, `episodeCompletionService.js`, and a migration for the table.
-8. **feat(pulse): the sponsored post.**
-   - A post made for a deliverable carries its brand and shows the in-world "#ad". The brand reposts it, and friends react, through The Pulse's existing review.
-   - Migration: `feed_posts.sponsored_by_profile_id`.
+   - **No migration** (`canon_consequences.documents`, as today).
+7. **feat(trust): per-brand trust, 0–100** (ruling 6).
+   - **Migration:** a `brand_trust_changes` table, one row per change, the audit history. It has the brand profile, the deal, the deliverable (nullable), the kind, the change, the story order, and a **unique key per (deal, deliverable, kind)**, so a retry never counts twice.
+   - A brand Lala has never worked with reads 50 (neutral). The value is clamped to 0–100.
+   - **The scale:**
+
+     | Outcome | Change |
+     |---|---|
+     | Deal accepted | 0 |
+     | Deliverable completed on time | +5 |
+     | Entire deal completed successfully | +10, once |
+     | Deliverable submitted late | −5 |
+     | Deliverable missed | −15 |
+     | Deal broken or abandoned | −25 |
+   - **Changes apply only when the outcome is confirmed** (a deliverable approved, or the episode's result accepted), never from a draft.
+   - Lala's overall `character_state.brand_trust` is unchanged.
+   - Files: a new `brandTrustService.js` (`trustAt(brand, at)`, `recordOutcome`), `episodeCompletionService.js`, `eventDeliverables.js` (on approval).
+   - Tests:
+     - each change;
+     - the clamp;
+     - the completion bonus once;
+     - a retried approval not double-counted;
+     - overall trust untouched.
+8. **feat(pulse): the sponsored post** (ruling 8).
+   - A post made for a deal's deliverable carries the brand. It shows **"#ad" and "Paid partnership with <brand>"** prominently, above the caption, not inside it.
+   - The brand reposts it, and friends react, through The Pulse's existing review.
+   - **Migration:** `feed_posts.sponsored_by_profile_id`.
    - Touches #3086's follower causes.
-9. **feat(deals): offers drafted to fit, approved by Evoni.**
-   - Draft offers by influence tier, niche and per-brand trust. They start as "draft" until approved, then become "offered".
-   - Rival brands: a `rival` relationship between brand profiles (`SocialProfileRelationship`), with proposed consequences when Lala accepts a rival's deal (unfollow, shade, a pulled offer), approved like other Pulse content.
-   - Files: `characterSyncService.js` / `feedEventPipelineService.js`, `opportunityRoutes.js`.
-   - **No migration** beyond issue 2.
+9. **feat(deals): offers drafted to fit, and rival brands as proposals** (ruling 9).
+   - Draft offers by influence tier, niche and per-brand trust. They start as drafts until Evoni approves them, then become "offered".
+   - Rival brands use a `rival` relationship between brand profiles (`SocialProfileRelationship`). When Lala accepts a rival's deal, the consequences (unfollow, shade, a pulled offer, a trust change) are **proposed for Prime Studios' review and never applied to canon automatically**.
+   - **No migration** beyond issues 1, 2 and 7.
 
-Order: 1 and 2 first, in parallel. 3 needs 2; 4 needs 3; 5 needs 2; 6 needs 1 and 2; 7 needs 2; 8 needs 1; 9 needs 1, 2 and 7.
+Order: 1 and 2 first, in parallel. 3 needs 2; 4 needs 2 and 3; 5 needs 2; 6 needs 1 and 2; 7 needs 1 and 2; 8 needs 1; 9 needs 1, 2 and 7.
 
-## 6. Decisions for Evoni ([decide])
+## 6. Rulings (Evoni, 2026-10-14)
 
-1. **[decide] What a brand is:**
-   - a Pulse profile marked as a brand account, linked to its LalaVerse brand (recommended); or
-   - the LalaVerse brand row alone, with no Pulse presence; or
-   - a new brand table?
-2. **[decide] Where a brand deal lives:**
-   - the Opportunity, extended with the deal model, so the brand offers and the event stays the host's (recommended); or
-   - a world event as today, with the brand as host, which can't arrive mid-episode because the terms lock?
-3. **[decide] How it arrives mid-episode:**
-   - a script cue `[OFFER: id]` at its beat (recommended, like `[WEAR]`); or
-   - a beat saved on the offer?
-4. **[decide] Who accepts or declines:**
-   - Evoni records Lala's choice on the offer, and the script shows it at the beat; or
-   - a script cue (`[ACCEPT: id]` / `[DECLINE: id]`) is the record?
-5. **[decide] Bank pending:**
-   - pending ledger rows that turn paid (recommended; the balance already ignores them); or
-   - keep pending as a Money-page display only?
-6. **[decide] Brand trust:**
-   - Is its scale 0–10, like Lala's stats?
-   - What does all-delivered add and a miss take away (for example +1 and −1)?
-   - Does the global `brand_trust` stay, as the average or the latest, or retire?
-7. **[decide] The Career plan:**
-   - The brand agreement replaces it for brand deals (spec §13). For an event with no brand deal, keep the Career plan, or drop it now that the Career list holds her goals?
-8. **[decide] The sponsored post's disclosure:**
-   - exactly "#ad"; or
-   - "#ad" plus "Paid partnership with <brand>"?
-9. **[decide] Rival consequences:**
-   - proposed for Evoni's approval (recommended); or
-   - applied automatically when Lala accepts a rival's deal?
+1. **Brand identity:** a brand is a Pulse profile with a brand type, linked one to one to the canonical Brand Registry. No duplicate brand identities.
+2. **Deal ownership:** Opportunities are extended to support brand deals. Deals belong to brands; events keep their actual hosts. An existing event is linked when appropriate. An accepted offer never creates an event automatically; a new brand-hosted event is made separately, with the brand as host.
+3. **Script integration:** `[OFFER: id]` introduces an existing offer at a specific episode beat. The offer id and its episode association are validated.
+4. **Acceptance authority:** Prime Studios confirms Lala's acceptance or rejection on the offer record. Script cues represent story actions, not final business-state changes.
+5. **Payments:** real ledger rows with pending and paid states. Pending money never increases available Prime Coins. In-world currency stays distinct from real-world financial records.
+6. **Brand trust:** independent trust per brand, 0–100, starting at 50.
+   - on-time deliverable +5;
+   - successful deal completion +10;
+   - late deliverable −5;
+   - missed deliverable −15;
+   - broken deal −25.
+   
+   Lala's existing overall Trust is kept as a separate stat. Changes apply once per approved outcome.
+7. **Career planning:** event-specific career objectives are kept but linked to the canonical Career Goals system. No duplicate planning fields or conflicting checklists.
+8. **Sponsored content:** both "#ad" and "Paid partnership with <brand>" show on sponsored Pulse posts.
+9. **Rival-brand consequences:** proposals for Prime Studios' review. Relationships, trust, opportunities and canon are never altered automatically.
+
+Plus the design rule that every brand deal has **Open Deal Package** from the episode, and the safeguards in §4.
+
+## 7. Open questions for the build issues
+
+- **"Late" needs a story time for delivery.** A deliverable's `due_date` is a story date (§2.1), but `approved_at` and `submitted_at` are wall-clock. Two possible fixes:
+  - read the delivery's story time from its `[DELIVER: id]` cue's beat (phase 3, #3191);
+  - stamp it when the deliverable is submitted.
+  
+  Issue 7 must settle which before it can tell on time from late.
+- **When payment becomes owed** under each deal component, which decides when the pending row is written: today, components at Complete and the content fee at approval (`dealPayoutService.js:6-33`). Issue 5 keeps that timing unless Evoni rules otherwise.
+- **The overall stat's name:** the code calls it `brand_trust`, while the ruling calls it "Trust". Issue 7 leaves it unchanged; renaming it is a separate decision.
