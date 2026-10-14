@@ -69,6 +69,8 @@ export const CONTENT_TYPES = [
   // shows it on Lala's Phone.
   { key: 'task_list', label: 'Task List', icon: '📋', desc: 'The episode’s one task list, each task with its source', group: 'messages' },
   // Task #3179: Lala's Shopping list on her phone, her handwritten note.
+  // Task #3181: her Career list, as of the episode, on the same paper.
+  { key: 'career_list', label: 'Career List', icon: '⭐', desc: 'Lala’s goals, the brands she has worked with and her milestones, as of the episode', group: 'messages' },
   { key: 'shopping_list', label: 'Shopping List', icon: '🛍️', desc: 'Lala’s handwritten shopping list for the episode; a line is crossed off once her look fills it', group: 'messages' },
   { key: 'custom_text', label: 'Custom Text', icon: '✏️', desc: 'Static text overlay', group: 'other' },
 ];
@@ -217,6 +219,8 @@ function ContentZoneRenderer({ zone, showId, episodeId, storyAt = null, beat = n
       return <TaskListRenderer episodeId={episodeId} config={config} />;
     case 'shopping_list':
       return <ShoppingListRenderer episodeId={episodeId} beat={beat} config={config} />;
+    case 'career_list':
+      return <CareerListRenderer showId={showId} episodeId={episodeId} />;
     case 'custom_text':
       return <CustomTextRenderer config={config} />;
     default:
@@ -601,6 +605,68 @@ export function ShoppingListRenderer({ episodeId, beat = null, config = {} }) {
             </li>
           ))}
         </ul>
+      </div>
+    </div>
+  );
+}
+
+// ── Lala's Career list (Lala's Phone spec §5; Task #3181) ──
+// Goals, brands worked with and milestones, as of the episode shown (GET
+// /shows/:id/career-list?episode_id=, services/careerListService), on the
+// same handwritten paper as her Shopping list. Hidden brands are left out
+// by the server; a completed goal is crossed off.
+export const careerListUrl = (showId, episodeId) =>
+  `/api/v1/shows/${encodeURIComponent(showId)}/career-list${episodeId ? `?episode_id=${encodeURIComponent(episodeId)}` : ''}`;
+
+export function CareerListRenderer({ showId, episodeId = null }) {
+  const url = showId ? careerListUrl(showId, episodeId) : null;
+  const { data, loading } = useContentData(url);
+  if (!showId) return <ZoneEmpty label="Career list" />;
+  if (loading) return <ZoneLoader />;
+  const list = data?.data;
+  if (!list) return <ZoneEmpty label="No career list yet" />;
+  const goals = list.goals || [];
+  const brands = list.brands || [];
+  const milestones = list.milestones || [];
+  if (!goals.length && !brands.length && !milestones.length) return <ZoneEmpty label="No career list yet" />;
+  return (
+    <div style={{ width: '100%', height: '100%', containerType: 'inline-size' }}>
+      <div className="evd-paper is-phone" data-testid="phone-career-list">
+        <span className="evd-tape" aria-hidden="true" />
+        <div className="evd-paper-title">Lala&apos;s career list</div>
+        {goals.length > 0 && (
+          <section data-testid="phone-career-goals">
+            <div className="evd-paper-by">Goals</div>
+            <ul className="evd-paper-lines">
+              {goals.map((g) => (
+                <li key={g.id} data-testid="phone-career-goal" data-done={g.status === 'completed' ? 'true' : 'false'}>
+                  <span className="evd-box" aria-hidden="true">{g.status === 'completed' ? '✓' : ''}</span>
+                  <span className={`evd-line-text${g.status === 'completed' ? ' is-crossed' : ''}`}>{g.title}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {brands.length > 0 && (
+          <section data-testid="phone-career-brands">
+            <div className="evd-paper-by">Brands worked with</div>
+            <ul className="evd-paper-lines">
+              {brands.map((b) => (
+                <li key={b.name} data-testid="phone-career-brand"><span className="evd-line-text">{b.name}</span></li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {milestones.length > 0 && (
+          <section data-testid="phone-career-milestones">
+            <div className="evd-paper-by">Milestones</div>
+            <ul className="evd-paper-lines">
+              {milestones.map((m, i) => (
+                <li key={`${m.kind}-${i}`} data-testid="phone-career-milestone"><span className="evd-line-text">★ {m.title}</span></li>
+              ))}
+            </ul>
+          </section>
+        )}
       </div>
     </div>
   );

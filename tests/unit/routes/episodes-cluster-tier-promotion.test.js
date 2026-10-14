@@ -111,8 +111,9 @@ const REQUIRE_AUTH_COUNTS = {
   // +2 for GET and PUT /:id/scene-defaults (L3, §8(hh), requireAuth);
   // +3 for GET, POST and DELETE /:id/logo (the show's logo, requireAuth);
   // +4 for GET, POST, PATCH and DELETE /:id/pulse-cover (The Pulse's cover, Task #2919, requireAuth);
-  // +1 for GET /:id/lala-stats (Lala's stats as of a beat, Task #3164, requireAuth).
-  'shows.js': 31,
+  // +1 for GET /:id/lala-stats (Lala's stats as of a beat, Task #3164, requireAuth);
+  // +2 for GET /:id/career-list and PUT /:id/career-list/hidden-brands (Task #3181, requireAuth).
+  'shows.js': 33,
   // 25 at CP2 close; +1 for PUT /:showId/phone-skin (Task #1964, requireAuth);
   // +1 for GET /:showId/usage (the show's Overlays library, 2026-10-07, requireAuth);
   // +3 for the stats panel: PUT /:showId/stats-panel/:assetId, GET its episode read and PNG (Task #3164, requireAuth).
@@ -304,7 +305,8 @@ describe('Step 3 CP2 — Episodes cluster tier promotion', () => {
     // +4 for shows.js GET, POST, PATCH and DELETE /:id/pulse-cover (Task #2919).
     // +2 for episodes.js POST and DELETE /:id/style-sheet/distribution/site (Task #3021).
     // +1 for shows.js GET /:id/lala-stats and +3 for uiOverlayRoutes.js stats panel routes (Task #3164).
-    test('CP2 zone contains 313 total requireAuth references across 22 files', () => {
+    // +2 for shows.js GET and PUT /:id/career-list (Task #3181).
+    test('CP2 zone contains 315 total requireAuth references across 22 files', () => {
       const total = CP2_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
@@ -318,7 +320,7 @@ describe('Step 3 CP2 — Episodes cluster tier promotion', () => {
     // +5 for episodes.js Lookbook GET, PUT, POST images, PATCH and DELETE image (Task #2812).
     // +1 for episodes.js PUT /:id/lookbook/venue (Task #2813).
     // +3 for episodes.js style sheet GET, approve and reopen (Task #2814).
-      expect(total).toBe(313);
+      expect(total).toBe(315);
     });
 
     test('F-AUTH-3 Tier 3 consumer count unchanged from CP1 (5 in src/routes/)', () => {
