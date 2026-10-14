@@ -57,6 +57,7 @@ import { EVENT_PAGE_PARAM, parseEventPage, paginateEvents, eventPageNumbers, rea
 import { eventCardDetails, matchesDealTypeFilter, dealTypeFilterOptions } from '../utils/eventCardSummary';
 import { completeMoneyWarning } from '../utils/moneyWarnings';
 import { fetchAllEpisodes, fetchAllSceneSets, partialNote } from '../lib/fetchAllPages';
+import CareerBrands from '../components/Career/CareerBrands';
 import './WorldAdmin.css';
 import '../styles/wardrobe-backdrop.css';
 
@@ -4646,6 +4647,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
               ))}
             </div>
           )}
+          {/* Brands worked with, with a per-brand hide (Task #3181). */}
+          <CareerBrands showId={showId} />
         </div>
       )}
 

@@ -1,0 +1,19 @@
+/* Brands worked with, in the Season Plan (Task 3181). Tokens only. */
+.cb { margin-top: 20px; padding: 16px; border: 1px solid var(--lala-lavender-line); border-radius: 14px; background: var(--surface-card); font-family: var(--font-sans); color: var(--lala-ink); }
+.cb-title { margin: 0; font-family: var(--font-prose); font-size: 18px; font-weight: 600; }
+.cb-line { margin: 4px 0 12px; color: var(--lala-ink-muted); font-size: 13px; line-height: 1.5; }
+.cb-error { margin: 0 0 8px; padding: 8px 12px; border-radius: 8px; background: var(--danger-bg); color: var(--danger-text); font-size: 13px; }
+.cb-muted { margin: 0; color: var(--lala-ink-muted); font-size: 13px; }
+.cb-spin { animation: cb-spin 1s linear infinite; vertical-align: -2px; }
+@keyframes cb-spin { to { transform: rotate(360deg); } }
+.cb-list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.cb-item { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 10px; background: var(--lala-lavender-soft); }
+.cb-name { font-weight: 600; overflow-wrap: anywhere; }
+.cb-eps { color: var(--lala-ink-muted); font-size: 12px; }
+.cb-btn, .cb-chip { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 6px 12px; border: 1px solid var(--lala-lavender-line); border-radius: 999px; background: var(--surface-card); color: var(--lala-lavender-text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.cb-btn:disabled, .cb-chip:disabled { opacity: 0.6; cursor: wait; }
+.cb-hidden { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
+@media (max-width: 600px) {
+  .cb-item { grid-template-columns: minmax(0, 1fr) auto; }
+  .cb-eps { grid-column: 1; }
+}
