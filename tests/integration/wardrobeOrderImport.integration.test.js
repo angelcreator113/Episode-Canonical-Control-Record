@@ -28,6 +28,11 @@ const shouldSkip =
 
 const uuid = () => crypto.randomUUID();
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
+// The file's card ("Visa - 4242") and address ("Secret Lane") must never be
+// stored or returned. Row ids are random UUIDs, and one can contain "4242"
+// (a CI run failed on "f2dec95c-4242-…"), so ids are masked before the check.
+const LEAK = /Secret Lane|Visa|4242/;
+const withoutIds = (v) => JSON.stringify(v).replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<id>');
 
 // Retail.OrderHistory.1.csv (Request your data), with the columns that must never be stored.
 const RETAIL = (n) => [
@@ -47,7 +52,9 @@ const REPORT = [
 
 (shouldSkip ? describe.skip : describe)('Amazon order import (Task #3102)', () => {
   const tag = uuid().slice(0, 8);
-  const n = String(Math.floor(Math.random() * 9000) + 1000);
+  // Order ids are 111-<n>001-…; n is never 4242, the card's last four, so an id can't trip LEAK.
+  let n = String(Math.floor(Math.random() * 9000) + 1000);
+  if (n === '4242') n = '4243';
   const ids = { show: uuid() };
   const pieces = {};
   let admin;
@@ -95,7 +102,7 @@ const REPORT = [
     });
     expect(byAsin.B0GOLDHEEL).toMatchObject({ price_paid: 1129, suggestion: { wardrobe_id: pieces.heel, reason: 'asin' } });
     expect(byAsin.B0PHONECAS.suggestion).toBeNull();
-    expect(JSON.stringify(res.body)).not.toMatch(/Secret Lane|Visa|4242/);
+    expect(withoutIds(res.body)).not.toMatch(LEAK);
     const [[{ count }]] = await run('SELECT COUNT(*)::int AS count FROM wardrobe_order_lines WHERE show_id = :show', ids);
     expect(count).toBe(0);
 
@@ -138,7 +145,7 @@ const REPORT = [
     // Nothing from the file but the order fields is stored.
     const [rows] = await run('SELECT * FROM wardrobe_order_lines WHERE show_id = :show', ids);
     expect(rows).toHaveLength(3);
-    expect(JSON.stringify(rows)).not.toMatch(/Secret Lane|Visa|4242/);
+    expect(withoutIds(rows)).not.toMatch(LEAK);
 
     const again = await upload(RETAIL(n));
     expect(again.body.lines.map((l) => l.status)).toEqual(['duplicate', 'duplicate', 'duplicate']);
