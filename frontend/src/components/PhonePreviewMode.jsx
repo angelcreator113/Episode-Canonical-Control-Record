@@ -7,6 +7,7 @@ import { X, ChevronLeft, Wifi, Signal, BatteryFull, RotateCcw, Target, CheckCirc
 import PhoneDevice from './phone/PhoneDevice';
 import { isIcon, isScreen, resolveZoneIcon } from '../lib/overlayUtils';
 import { filterZones, applyActions, actionsForZone, evaluateMissions, applyMissionRewards } from '../lib/phoneRuntime';
+import { isVoiceZone, VOICE_TOAST } from '../lib/phoneVoice';
 
 const TOKENS = { parchment: '#FAF7F0', gold: '#B8962E', ink: '#2C2C2C', lavender: '#5B4B8A' }; // lavender: --lala-lavender, the Phone Hub's primary (2026-10-07)
 const MONO = "'DM Mono', monospace";
@@ -194,6 +195,10 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
     }, TRANSITION_MS);
   }, [findScreen, activeScreen, animating]);
 
+  // The show's icons, so each tap zone draws its icon's current image
+  // (doctrine rule 17, Task #2005), and a Voice zone is known (Task #3163).
+  const icons = useMemo(() => screens.filter(isIcon), [screens]);
+
   /**
    * The single entry point for tapping a zone. In author mode we run actions
    * locally through applyActions; in player mode we delegate to the server via
@@ -202,6 +207,11 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
    * the same UI updates.
    */
   const handleZoneTap = useCallback(async (zone) => {
+    // Voice is an action, not a screen (Task #3163): "Lala speaks", and the
+    // tap opens nothing. The tap still runs below, so missions and the
+    // playthrough see it.
+    const voice = isVoiceZone(zone, icons);
+    if (voice) setToasts(prev => [...prev, { id: Date.now(), text: VOICE_TOAST }]);
     if (playthrough?.tap && zone.id) {
       // Player mode — server executes (zone actions + mission rewards). The
       // response already contains any reward-merged effects plus the list of
@@ -226,7 +236,7 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
           celebrate(justDone);
         }
       }
-      if (effects?.navigate) navigateTo(effects.navigate, 'left');
+      if (effects?.navigate && !voice) navigateTo(effects.navigate, 'left');
       return;
     }
 
@@ -265,8 +275,8 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
     }
     if (rewardResult.effects.completeEpisode) setEpisodeComplete(true);
     const finalNavigate = effects.navigate || rewardResult.effects.navigate;
-    if (finalNavigate) navigateTo(finalNavigate, 'left');
-  }, [evalContext, navigateTo, playthrough, state, visitedScreens, missions, completedMissionIds, celebrate, activeScreen]);
+    if (finalNavigate && !voice) navigateTo(finalNavigate, 'left');
+  }, [evalContext, navigateTo, playthrough, state, visitedScreens, missions, completedMissionIds, celebrate, activeScreen, icons]);
 
   // Auto-dismiss toasts after 2.5s
   useEffect(() => {
@@ -329,9 +339,6 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
     return getLinks(homeScreen).filter(l => l.persistent && l.icon_url);
   }, [homeScreen, activeScreen]);
   const allLinks = [...getLinks(activeScreen), ...persistentLinks];
-  // The show's icons, so each tap zone draws its icon's current image
-  // (doctrine rule 17, Task #2005).
-  const icons = useMemo(() => screens.filter(isIcon), [screens]);
   const { visible: links } = filterZones(allLinks, evalContext);
 
   const slideTransform = slideDir === 'left'
