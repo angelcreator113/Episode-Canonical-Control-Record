@@ -820,7 +820,7 @@ async function suggestTags(imageUrl) {
           type: 'text',
           text: `Analyze this clothing item for fashion metadata. Return a JSON object with this exact format:
 {
-  "category": "dress|top|bottom|outerwear|shoes|accessory|jewelry|bag",
+  "category": "dress|top|bottom|outerwear|shoes|accessory|jewelry|bag|hair",
   "subcategory": "specific type (e.g., mini dress, blazer, sneakers)",
   "material": "primary material (e.g., tweed, silk, leather, cotton)",
   "style_tags": ["array of style descriptors"],
@@ -924,7 +924,7 @@ async function analyzeImage(imageUrl) {
   "colors": [
     {"name": "color name", "hex": "#RRGGBB", "percentage": 50}
   ],
-  "category": "dress|top|bottom|outerwear|shoes|accessory|jewelry|bag",
+  "category": "dress|top|bottom|outerwear|shoes|accessory|jewelry|bag|hair",
   "subcategory": "specific type",
   "material": "primary material",
   "style_tags": ["style descriptors"],

@@ -106,7 +106,8 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     res = await auth(request(app).get(url));
     expect(res.body.data).toMatchObject({ covered: false, missing: ['jewelry', 'accessories', 'fragrance'], text: 'Missing required slots: jewelry, accessories, fragrance' });
     expect(res.body.data.slots.map((s) => [s.slot, s.required, s.count])).toEqual([
-      ['outfit', true, 1], ['shoes', true, 1], ['jewelry', true, 0], ['accessories', true, 0], ['fragrance', true, 0],
+      // Hair (Task #3167) is a slot, optional unless the show requires it.
+      ['outfit', true, 1], ['shoes', true, 1], ['jewelry', true, 0], ['accessories', true, 0], ['hair', false, 0], ['fragrance', true, 0],
     ]);
 
     expect((await auth(request(app).get('/api/v1/wardrobe/slot-coverage'))).status).toBe(400);

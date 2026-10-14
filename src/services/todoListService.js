@@ -52,6 +52,9 @@ const SLOTS = [
   { slot: 'perfume',     icon: '🌸', label: 'Perfume',      required: false },
   { slot: 'top',         icon: '👚', label: 'Top',          required: false },
   { slot: 'bottom',      icon: '👖', label: 'Bottom',       required: false },
+  // The hairstyle or wig (Evoni, 2026-10-14, Task #3167); last, so the
+  // lines before it keep their places.
+  { slot: 'hair',        icon: '💇', label: 'Hair',         required: false },
 ];
 
 // ─── WHICH LIST LINES THE OUTFIT FILLS ─────────────────────────────────────────
@@ -66,6 +69,7 @@ const SLOTS = [
 const CATEGORY_TO_LIST_SLOT = {
   dress: 'dress', top: 'top', bottom: 'bottom', shoes: 'shoes',
   bag: 'purse', accessory: 'accessories', jewelry: 'jewelry', perfume: 'perfume',
+  hair: 'hair',
 };
 
 function listSlotOf(clothingCategory) {
@@ -132,7 +136,7 @@ Location: ${event.location_hint || 'exclusive venue'}
 Prestige: ${prestige}/10
 ${stakes ? `Stakes: ${stakes}` : ''}
 
-Write exactly 7 tasks — one for each wardrobe slot below.
+Write exactly 9 tasks — one for each wardrobe slot below.
 The "label" must be a CUTE, VIVID, VIBE-BASED name (7-15 words max) — never generic.
 The "description" is one whispered sentence about why this piece matters for tonight.
 Mark required: true for dress and shoes. Everything else required: false.
@@ -141,11 +145,12 @@ Slots (in order):
 1. dress — the main outfit (dress, or top + bottom combination)
 2. shoes — footwear
 3. purse — bag, purse, clutch, handbag, tote
-4. accessories — belt, scarf, hat, sunglasses, hair piece (not a bag)
+4. accessories — belt, scarf, hat, sunglasses, hair bow or clip (not a bag)
 5. jewelry — earrings, necklace, rings, bracelet
 6. perfume — fragrance, scent
 7. top — alternative to dress (top half only)
 8. bottom — alternative to dress (skirt, pants, bottom half)
+9. hair — the hairstyle or wig
 
 Respond ONLY with a JSON array. No preamble. No explanation.
 
@@ -158,7 +163,7 @@ Respond ONLY with a JSON array. No preamble. No explanation.
     "completed": false,
     "order": 1
   },
-  ...8 total
+  ...9 total
 ]`;
 
   const response = await getAnthropic().messages.create({
@@ -191,6 +196,7 @@ Respond ONLY with a JSON array. No preamble. No explanation.
       perfume:     { label: 'Find a scent that makes someone lean in close',          desc: 'The invisible accessory they remember most' },
       top:         { label: 'Find a top that turns heads on its own',                 desc: 'Sometimes the top half does all the talking' },
       bottom:      { label: 'Find a bottom that moves like it was made for tonight',  desc: 'Pair it right and the outfit writes itself' },
+      hair:        { label: 'Find a hairstyle that frames the whole look',           desc: 'The crown of the outfit, and the first thing they see' },
     };
     return SLOTS.map((s, i) => ({
       slot:        s.slot,

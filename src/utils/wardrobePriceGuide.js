@@ -27,6 +27,8 @@ const PRICE_RANGES = Object.freeze({
   outerwear:  { basic: [60, 180], mid: [180, 600], luxury: [600, 3500], elite: [3500, 20000] },
   swimwear:   { basic: [25, 80],  mid: [80, 200],  luxury: [200, 600],  elite: [600, 1500] },
   activewear: { basic: [20, 70],  mid: [70, 150],  luxury: [150, 400],  elite: [400, 1000] },
+  // A wig or styled hairpiece (Task #3167); hair bows and clips are accessories.
+  hair:       { basic: [30, 150], mid: [150, 600], luxury: [600, 2500], elite: [2500, 8000] },
 });
 
 const dollars = (n) => `$${n.toLocaleString('en-US')}`;

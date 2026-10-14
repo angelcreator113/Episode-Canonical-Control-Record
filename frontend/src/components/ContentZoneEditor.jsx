@@ -689,7 +689,7 @@ function ZoneConfigPanel({ zone, profiles, profilesLoading, events = [], eventsL
           )}
 
           {/* Max items — for lists (feed, DMs, notifications, comments, stories, wardrobe grids, the task list) */}
-          {['feed_posts', 'dm_thread', 'pulse_messages', 'notifications', 'feed_notifications', 'relationship_changes', 'comments_list', 'story_ring', 'wardrobe_grid', 'wardrobe_outfit', 'wardrobe_shoes', 'wardrobe_accessories', 'wardrobe_perfume', 'task_list'].includes(zone.content_type) && (
+          {['feed_posts', 'dm_thread', 'pulse_messages', 'notifications', 'feed_notifications', 'relationship_changes', 'comments_list', 'story_ring', 'wardrobe_grid', 'wardrobe_outfit', 'wardrobe_shoes', 'wardrobe_accessories', 'wardrobe_perfume', 'wardrobe_hair', 'task_list'].includes(zone.content_type) && (
             <div>
               <label style={labelStyle}>MAX ITEMS</label>
               <input
@@ -740,12 +740,13 @@ function ZoneConfigPanel({ zone, profiles, profilesLoading, events = [], eventsL
                   <option value="accessories">Accessories</option>
                   <option value="jewelry">Jewelry</option>
                   <option value="perfume">Perfume</option>
+                  <option value="hair">Hair</option>
                 </select>
               </div>
             </>
           )}
 
-          {['wardrobe_grid', 'wardrobe_outfit', 'wardrobe_shoes', 'wardrobe_accessories', 'wardrobe_perfume'].includes(zone.content_type) && (
+          {['wardrobe_grid', 'wardrobe_outfit', 'wardrobe_shoes', 'wardrobe_accessories', 'wardrobe_perfume', 'wardrobe_hair'].includes(zone.content_type) && (
             <>
               <div>
                 <label style={labelStyle}>SHOW</label>

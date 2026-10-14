@@ -81,6 +81,7 @@ export function missingText(missing) {
 const CATEGORY_OF = {
   dress: 'dress', top: 'top', bottom: 'bottom', shoes: 'shoes', accessory: 'accessory', jewelry: 'jewelry', bag: 'bag',
   outerwear: 'outerwear', perfume: 'perfume', skirt: 'bottom', pants: 'bottom', shirt: 'top', blouse: 'top', fragrance: 'perfume',
+  hair: 'hair', wig: 'hair',   // the hairstyle or wig (Task #3167)
 };
 
 /**

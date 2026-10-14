@@ -76,7 +76,8 @@ describe('generateTasks falls back with a Purse line', () => {
   it('the fallback list has Purse and Accessories as separate lines', async () => {
     Anthropic.mockImplementation(() => ({ messages: { create: jest.fn().mockResolvedValue({ content: [{ text: 'not json' }] }) } }));
     const tasks = await generateTasks({ name: 'Gala', prestige: 8 });
-    expect(tasks.map((t) => t.slot)).toEqual(['dress', 'shoes', 'purse', 'accessories', 'jewelry', 'perfume', 'top', 'bottom']);
+    // Hair is the last line (Task #3167), so the others keep their places.
+    expect(tasks.map((t) => t.slot)).toEqual(['dress', 'shoes', 'purse', 'accessories', 'jewelry', 'perfume', 'top', 'bottom', 'hair']);
     expect(tasks.find((t) => t.slot === 'purse').label).toBe('Find a clutch that holds secrets and lipstick');
   });
 });

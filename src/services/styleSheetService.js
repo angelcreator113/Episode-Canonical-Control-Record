@@ -36,7 +36,7 @@ const COLUMNS = Object.freeze([
   { key: 'nails', label: 'NAILS' },
 ]);
 // A required closet slot → the column that shows "Needed" when it is empty.
-const SLOT_COLUMN = Object.freeze({ outfit: 'body', shoes: 'shoes', jewelry: 'jewelry', fragrance: 'perfume', accessories: 'bag' });
+const SLOT_COLUMN = Object.freeze({ outfit: 'body', shoes: 'shoes', jewelry: 'jewelry', fragrance: 'perfume', accessories: 'bag', hair: 'hair' });
 
 const text = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
 const parseJson = (v, fallback) => {
@@ -176,13 +176,14 @@ async function wardrobeColumns(sequelize, ep, event) {
   } catch (err) {
     console.error('[StyleSheet] reading the saved look failed:', err.message);
   }
-  const byColumn = { body: [], shoes: [], bag: [], jewelry: [], perfume: [] };
+  const byColumn = { body: [], shoes: [], bag: [], jewelry: [], hair: [], perfume: [] };
   for (const p of look.pieces || []) {
     const slot = getSlotForCategory(p.category);
     if (slot === 'outfit') byColumn.body.push(p);
     else if (slot === 'shoes') byColumn.shoes.push(p);
     else if (slot === 'jewelry') byColumn.jewelry.push(p);
     else if (slot === 'fragrance') byColumn.perfume.push(p);
+    else if (slot === 'hair') byColumn.hair.push(p);
     else if (slot === 'accessories' && isBag(p.category)) byColumn.bag.push(p);
   }
   const show = await one(sequelize, 'SELECT metadata FROM shows WHERE id = :id', { id: ep.show_id || null });
@@ -193,6 +194,31 @@ async function wardrobeColumns(sequelize, ep, event) {
   const configured = requiredSlotsFor(show ? { metadata: parseJson(show.metadata, {}) } : null).map((s) => SLOT_COLUMN[s]).filter(Boolean);
   const required = ['body', ...configured.filter((c) => c !== 'body')];
   return { state: look.state || 'none', pieces: look.pieces || [], byColumn, required };
+}
+
+/**
+ * One WARDROBE BREAKDOWN column's { name, url, source }. Hair and nails are
+ * the Lookbook's photo and name, except that HAIR without a Lookbook photo
+ * shows the look's Hair piece (Evoni, 2026-10-14, Task #3167: the photo
+ * wins, else the piece). The other columns are the look's pieces.
+ */
+function columnContent(key, { lb = {}, hairPhoto = null, nailsPhoto = null, byColumn = {} } = {}) {
+  const fromPieces = (pieces) => ({
+    name: pieces.map((p) => p.name).filter(Boolean).join(' + ') || null,
+    url: (pieces.find((p) => p.image_url) || {}).image_url || null,
+    source: 'saved look',
+  });
+  const hairPieces = key === 'hair' && !hairPhoto ? byColumn.hair || [] : [];
+  if (hairPieces.length) return fromPieces(hairPieces);
+  if (key === 'hair' || key === 'nails') {
+    return {
+      name: text(key === 'hair' ? lb.hair_name : lb.nails_name),
+      url: (key === 'hair' ? hairPhoto : nailsPhoto)?.image_url || null,
+      source: 'Lookbook',
+    };
+  }
+  const pieces = byColumn[key] || [];
+  return pieces.length ? fromPieces(pieces) : { name: null, url: null, source: 'saved look' };
 }
 
 // ── Readiness: "Ready x of 12" (Evoni's ruling, 2026-10-10) ──
@@ -268,20 +294,7 @@ async function buildStyleSheet(models, episodeId) {
   const nailsPhoto = firstImage(lb, 'nails');
   const columns = [];
   for (const col of COLUMNS) {
-    let name = null;
-    let url = null;
-    let source = 'saved look';
-    if (col.key === 'hair' || col.key === 'nails') {
-      source = 'Lookbook';
-      name = text(col.key === 'hair' ? lb.hair_name : lb.nails_name);
-      url = (col.key === 'hair' ? hairPhoto : nailsPhoto)?.image_url || null;
-    } else {
-      const pieces = wardrobe.byColumn[col.key];
-      if (pieces.length) {
-        name = pieces.map((p) => p.name).filter(Boolean).join(' + ') || null;
-        url = (pieces.find((p) => p.image_url) || {}).image_url || null;
-      }
-    }
+    const { name, url, source } = columnContent(col.key, { lb, hairPhoto, nailsPhoto, byColumn: wardrobe.byColumn });
     const filled = Boolean(name || url);
     columns.push({ key: col.key, label: col.label, name, source, image: await inline(url), needed: !filled && wardrobe.required.includes(col.key) });
   }
@@ -430,4 +443,4 @@ async function reopenStyleSheet(models, episodeId) {
   return buildStyleSheet(models, episodeId);
 }
 
-module.exports = { COLUMNS, READINESS_CHIPS, styleReadiness, buildStyleSheet, approveStyleSheet, reopenStyleSheet, exportStyleSheet, inlineImage, isBag };
+module.exports = { COLUMNS, READINESS_CHIPS, styleReadiness, buildStyleSheet, approveStyleSheet, reopenStyleSheet, exportStyleSheet, inlineImage, isBag, columnContent };

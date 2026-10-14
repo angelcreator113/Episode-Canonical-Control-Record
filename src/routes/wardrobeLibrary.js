@@ -267,7 +267,7 @@ router.post('/analyze-image', requireAuth, aiRateLimiter, upload.single('image')
 Analyze this image and return JSON:
 {
   "name": "descriptive name (e.g. 'Floral Smocked Sundress')",
-  "item_type": "dress|top|bottom|shoes|accessory|jewelry|bag|outerwear|swimwear|activewear",
+  "item_type": "dress|top|bottom|shoes|accessory|jewelry|bag|outerwear|hair|swimwear|activewear",
   "color": "primary color name",
   "colors": ["all colors present"],
   "description": "2-3 sentences: material, style, fit, notable details",
@@ -288,7 +288,7 @@ Return ONLY the JSON.`;
 
 {
   "name": "descriptive name (e.g. 'Floral Smocked Sundress')",
-  "item_type": "dress|top|bottom|shoes|accessory|jewelry|bag|outerwear|swimwear|activewear",
+  "item_type": "dress|top|bottom|shoes|accessory|jewelry|bag|outerwear|hair|swimwear|activewear",
   "color": "primary color name",
   "colors": ["all colors present"],
   "description": "2-3 sentences: material, style, fit, notable details",

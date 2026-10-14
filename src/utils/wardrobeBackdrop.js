@@ -21,6 +21,7 @@ const SLOT_BACKDROP = Object.freeze({
   jewelry: '#fef3c7', // --warning-bg
   perfume: '#F7E4DC', // --danger-bg
   outerwear: '#dbeafe', // --info-bg
+  hair: '#D9CFEE', // --lala-lavender-line (Task #3167)
   other: '#F4EFE4', // the default --bd, --lala-parchment-2
 });
 
