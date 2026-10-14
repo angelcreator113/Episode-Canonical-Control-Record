@@ -2,8 +2,9 @@
  * The approved style sheet in the episode's Distribution (Task #2878): Send
  * adds every export size with a caption draft from the episode, its event
  * and the tagline; Shop the Look links come from the look's wardrobe rows;
- * the affiliate disclosure is there, and cannot be edited away, whenever an
- * included link is an affiliate link. Stored in
+ * the disclosure is there, and cannot be edited away, whenever links are
+ * included, with the Amazon Associates sentence for an Amazon link (Task
+ * #3170). Stored in
  * episodes.distribution_metadata.style_sheet; the other Distribution
  * writers keep it. Nothing is posted anywhere.
  */
@@ -14,7 +15,7 @@ const crypto = require('crypto');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
-const { DISCLOSURE } = require('../../src/services/styleSheetDistributionService');
+const { DISCLOSURE, AMAZON_DISCLOSURE } = require('../../src/services/styleSheetDistributionService');
 
 const { sequelize } = models;
 
@@ -132,7 +133,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(dm.style_sheet.sent_by).toBe('evoni@sheet-dist.dev');
   });
 
-  it('with an affiliate link included, the disclosure leads the post and cannot be edited away', async () => {
+  it('with links included, the disclosure leads the post and cannot be edited away', async () => {
     const ids = await seed();
     await approve(ids.ep);
     const sent = await auth(request(app).post(distUrl(ids.ep))).send({ include_shop_links: true });
@@ -148,13 +149,19 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(edited.body.data).toMatchObject({ caption: 'Studio night.', disclosure: DISCLOSURE });
     expect(edited.body.data.post_text.startsWith(`${DISCLOSURE}\n\nStudio night.\n\n`)).toBe(true);
 
-    // No affiliate link left: no disclosure, links still listed.
+    // No affiliate link left: the disclosure stays while links are included (Task #3170).
     await run('UPDATE wardrobe SET affiliate_url = NULL WHERE id = :id', { id: ids.studs });
     const plain = (await auth(request(app).get(distUrl(ids.ep)))).body.data;
-    expect(plain).toMatchObject({ disclosure: null, disclosure_locked: false });
+    expect(plain).toMatchObject({ disclosure: DISCLOSURE, disclosure_locked: true });
     expect(plain.post_text).toContain('Crimson Bloom Enamel Stud Earrings: https://shop.example/studs');
 
-    // Links left out: no disclosure even with an affiliate link on the look.
+    // An Amazon link: the Amazon Associates sentence follows the affiliate one, locked.
+    await run('UPDATE wardrobe SET affiliate_url = :u WHERE id = :id', { id: ids.studs, u: 'https://www.amazon.com/dp/B0TEST?tag=lala-20' });
+    const amazon = (await auth(request(app).get(distUrl(ids.ep)))).body.data;
+    expect(amazon).toMatchObject({ disclosure: `${DISCLOSURE} ${AMAZON_DISCLOSURE}`, disclosure_locked: true });
+    expect(amazon.post_text.startsWith(`${DISCLOSURE} ${AMAZON_DISCLOSURE}\n\nStudio night.\n\n`)).toBe(true);
+
+    // Links left out: no disclosure, even with affiliate and Amazon links on the look.
     await run('UPDATE wardrobe SET affiliate_url = :u WHERE id = :id', { id: ids.studs, u: 'https://aff.example/studs' });
     const off = (await auth(request(app).patch(distUrl(ids.ep))).send({ include_shop_links: false })).body.data;
     expect(off).toMatchObject({ disclosure: null, post_text: 'Studio night.' });

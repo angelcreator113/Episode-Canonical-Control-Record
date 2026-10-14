@@ -272,7 +272,7 @@ describe('Style Page', () => {
     fireEvent.click(screen.getByTestId('esp2-send-distribution'));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${SHEET_URL}/distribution`, { include_shop_links: true }));
     const status = await screen.findByTestId('esp2-sent');
-    expect(status.textContent).toMatch(/Sent: 6 sizes and a caption draft are in Distribution\. The affiliate disclosure is added\./);
+    expect(status.textContent).toMatch(/Sent: 6 sizes and a caption draft are in Distribution\. The disclosure is added\./);
     fireEvent.click(within(status).getByRole('button', { name: 'Open Distribution' }));
     expect(onOpenTab).toHaveBeenCalledWith('distribution');
   });

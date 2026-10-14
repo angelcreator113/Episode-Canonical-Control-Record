@@ -6,8 +6,9 @@ import { downloadStyleSheetExport, styleSheetDistributionApi, styleSheetError } 
 /**
  * The approved style sheet in Distribution (Task #2878): every export size as
  * a download, the caption draft she edits, Shop the Look links, and the
- * affiliate disclosure. The disclosure is the server's: it leads the post
- * whenever an included link is an affiliate link and has no edit control.
+ * disclosure. The disclosure is the server's: it leads the post whenever
+ * links are included, with the Amazon Associates sentence when one is an
+ * Amazon link (Task #3170), and has no edit control.
  * Nothing here posts anywhere; "Copy post text" puts it on the clipboard.
  */
 /** Why the look cannot go on the website yet, or null when it can. */
@@ -144,7 +145,7 @@ export default function StyleSheetDistributionCard({ episodeId, episodeNumber })
         <p className="ssd-disclosure" data-testid="ssd-disclosure">
           <Lock size={14} aria-hidden="true" />
           <span>{entry.disclosure}</span>
-          <span className="ssd-locked">Added because an affiliate link is included</span>
+          <span className="ssd-locked">Added because Shop the Look links are included</span>
         </p>
       )}
 
