@@ -644,7 +644,7 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
   );
 }
 
-export default function EpisodeScriptTab({ episode, show }) {
+export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange }) {
   const episodeId = episode?.id;
   const showId = show?.id || episode?.show_id;
   const [scriptText, setScriptText] = useState(episode?.script_content || '');
@@ -669,7 +669,6 @@ export default function EpisodeScriptTab({ episode, show }) {
   const scriptRef = useRef(scriptText);
   scriptRef.current = scriptText;
   const [developerMode, setDeveloperMode] = useState(false);
-  const [devScript, setDevScript] = useState('');
   const [toast, setToast] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState(null);
@@ -819,7 +818,7 @@ export default function EpisodeScriptTab({ episode, show }) {
     if (!episodeId) return;
     const script = episode?.script_content || '';
     const locks = Array.isArray(episode?.script_locked_beats) ? episode.script_locked_beats : [];
-    setScriptText(script); setDevScript(script); setSavedScript(script); setLockedBeats(locks);
+    setScriptText(script); setSavedScript(script); setLockedBeats(locks);
     if (script) setBeats(parseScriptIntoBeats(script, locks));
     api.get(`/api/v1/episode-brief/${episodeId}`).then(({ data }) => {
       const b = data?.data || null;
@@ -841,7 +840,7 @@ export default function EpisodeScriptTab({ episode, show }) {
     }).catch(() => {});
   }, [episodeId]);
 
-  useEffect(() => { if (scriptText) setBeats(parseScriptIntoBeats(scriptText, lockedBeats)); }, [scriptText, lockedBeats]);
+  useEffect(() => { setBeats(scriptText ? parseScriptIntoBeats(scriptText, lockedBeats) : []); }, [scriptText, lockedBeats]);
 
   // One drag at a time: a beat (by position) or a line inside one beat.
   const dragRef = useRef(null);
@@ -862,13 +861,13 @@ export default function EpisodeScriptTab({ episode, show }) {
     // The open beat stays open where it lands (the default open beat is
     // whichever is first, so it is pinned before the order changes).
     if (expandedBeat === undefined) setExpandedBeat(beats[0]?.id ?? null);
-    setScriptText(next); setDevScript(next);
+    setScriptText(next);
   };
   const handleMoveLine = (beatId, from, to) => {
     const at = beats.findIndex(b => b.id === beatId);
     if (at < 0 || beats[at].approved) return;
     const next = moveLine(scriptText, at, from, to);
-    if (next !== scriptText) { setScriptText(next); setDevScript(next); }
+    if (next !== scriptText) { setScriptText(next); }
   };
 
   // A phone moment or an overlay, added at the end of the beat (Task #2789).
@@ -876,7 +875,7 @@ export default function EpisodeScriptTab({ episode, show }) {
     const at = beats.findIndex(b => b.id === beatId);
     if (at < 0 || beats[at].approved) return;
     const next = after === null ? appendLine(scriptText, at, line) : insertLine(scriptText, at, after, line);
-    if (next !== scriptText) { setScriptText(next); setDevScript(next); }
+    if (next !== scriptText) { setScriptText(next); }
   };
 
   const flash = (msg, type, ms = 3000) => { setToast({ msg, type }); setTimeout(() => setToast(null), ms); };
@@ -891,7 +890,7 @@ export default function EpisodeScriptTab({ episode, show }) {
       const res = await api.put(`/api/v1/episodes/${episodeId}`, { script_content: scriptText });
       const stored = typeof res?.data?.data?.script_content === 'string' ? res.data.data.script_content : scriptText;
       const kept = res?.data?.locked_beats_kept || [];
-      if (stored !== scriptText) { setScriptText(stored); setDevScript(stored); }
+      if (stored !== scriptText) { setScriptText(stored); }
       setSavedScript(stored);
       setUnsaved(null); setSaved(true); setTimeout(() => setSaved(false), 3000);
       if (kept.length) flash(`Saved. ${keptNote(kept)}.`, 'error', 5000);
@@ -900,6 +899,39 @@ export default function EpisodeScriptTab({ episode, show }) {
     catch (err) { console.error('[EpisodeScript] save failed:', err); flash('Save failed', 'error'); }
     finally { setSaving(false); }
   }, [episodeId, scriptText, syncPostDrafts]);
+
+  // The episode page holds the episode the tab started from. Each saved
+  // script and lock goes back to it, so leaving the tab and coming back
+  // shows what was saved, not what the page first read.
+  const reportedRef = useRef(null);
+  useEffect(() => {
+    const now = JSON.stringify([savedScript, lockedBeats]);
+    if (reportedRef.current === null) { reportedRef.current = now; return; }
+    if (now === reportedRef.current) return;
+    reportedRef.current = now;
+    onSaved?.({ script_content: savedScript, script_locked_beats: lockedBeats });
+  }, [savedScript, lockedBeats, onSaved]);
+
+  // Unsaved edits: the episode page asks before another tab is opened, the
+  // browser asks before the page is closed or reloaded, and Ctrl/Cmd+S saves.
+  const dirty = scriptText !== savedScript;
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
+  useEffect(() => {
+    if (!dirty) return undefined;
+    const warn = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 's') return;
+      e.preventDefault();
+      if (dirty && !saving) handleSave();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [dirty, saving, handleSave]);
 
   const handleEditLine = (beatId, lineIndex, newText) => {
     if (beats.find(b => b.id === beatId)?.approved) return;
@@ -954,7 +986,7 @@ export default function EpisodeScriptTab({ episode, show }) {
       const current = scriptRef.current;
       const next = replaceBeat(current, at, res.data?.beat);
       if (next === current) { flash('The beat came back the same; try again.', 'error'); return; }
-      setScriptText(next); setDevScript(next);
+      setScriptText(next);
       flash(`Beat ${beat.number} rewritten ✦ Save to keep it.`, 'success');
     } catch (err) {
       console.error('[EpisodeScript] beat regenerate failed:', err);
@@ -977,7 +1009,7 @@ export default function EpisodeScriptTab({ episode, show }) {
       setLockedBeats(Array.isArray(data.script_locked_beats) ? data.script_locked_beats : next);
       if (dirty) {
         const stored = typeof data.script_content === 'string' ? data.script_content : scriptText;
-        if (stored !== scriptText) { setScriptText(stored); setDevScript(stored); }
+        if (stored !== scriptText) { setScriptText(stored); }
         setSavedScript(stored); setUnsaved(null);
       }
       const kept = res?.data?.locked_beats_kept || [];
@@ -1009,7 +1041,7 @@ export default function EpisodeScriptTab({ episode, show }) {
           const ep = res.data?.data || res.data || {};
           const script = typeof ep.script_content === 'string' ? ep.script_content : null;
           if (script !== null && script !== before) {
-            setScriptText(script); setDevScript(script); setSavedScript(script); setUnsaved(null);
+            setScriptText(script); setSavedScript(script); setUnsaved(null);
             if (Array.isArray(ep.script_locked_beats)) setLockedBeats(ep.script_locked_beats);
             flash('✦ Script generated and saved.', 'success', 5000);
             return;
@@ -1039,7 +1071,7 @@ export default function EpisodeScriptTab({ episode, show }) {
         }
       }
       const script = res.data.script || res.data.script_text || '';
-      setScriptText(script); setDevScript(script);
+      setScriptText(script);
       if (res.data.saved !== false) { setSavedScript(script); if (/\[UI:\s*POST\s/i.test(script)) syncPostDrafts(); }
       // The server saves as part of success (audit GATE-03). Generated but
       // not saved: keep the draft here and say so; Save keeps it without
@@ -1233,7 +1265,9 @@ export default function EpisodeScriptTab({ episode, show }) {
       {waitingForScript && <div className="esp-waiting" role="status" data-testid="script-waiting">Still writing. The new script will show here as soon as it is saved; no need to refresh.</div>}
 
       {hasScript && developerMode && approvedCount > 0 && <p className="esp-raw-note" data-testid="script-raw-locked-note">🔒 Approved beats are locked. Changes to them here are put back when the script is saved.</p>}
-      {hasScript && developerMode && <textarea className="esp-raw" aria-label="Raw script" value={devScript} onChange={e => { setDevScript(e.target.value); setScriptText(e.target.value); }} rows={30} />}
+      {/* The raw editor is the script itself, so a line edit or rewrite shows
+          here, and it stays open when its text is cleared. */}
+      {developerMode && <textarea className="esp-raw" aria-label="Raw script" value={scriptText} onChange={e => setScriptText(e.target.value)} rows={30} />}
 
       {!developerMode && (hasScript ? (
         <div>
