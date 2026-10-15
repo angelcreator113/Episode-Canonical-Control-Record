@@ -85,14 +85,16 @@
   position: fixed;
   top: 20px;
   right: 20px;
-  z-index: 9999;
+  /* Above the workspace (10000) and the lightbox, so an error there shows. */
+  z-index: 10100;
   border-radius: 10px;
   padding: 12px 18px;
   font-size: var(--text-md);
   font-weight: 500;
   font-family: 'DM Mono', monospace;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-  max-width: 360px;
+  /* Inside a 375px screen with a 16px gutter each side. */
+  max-width: min(360px, calc(100vw - 32px));
   animation: toastLife 4s ease forwards;
 }
 
@@ -3764,8 +3766,15 @@
   transition: opacity var(--ss-transition);
 }
 
-.scene-sets-angle-row:hover .scene-sets-promote-btn {
+.scene-sets-angle-row:hover .scene-sets-promote-btn,
+.scene-sets-angle-row:focus-within .scene-sets-promote-btn,
+.scene-sets-promote-btn:focus-visible {
   opacity: 1;
+}
+
+/* Touch screens have no hover: the button always shows. */
+@media (hover: none) {
+  .scene-sets-promote-btn { opacity: 1; }
 }
 
 .scene-sets-promote-btn:hover {
