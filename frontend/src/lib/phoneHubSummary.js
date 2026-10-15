@@ -9,6 +9,7 @@
  * image, icons included ("10/11 screens ready" with 6 screens).
  */
 import { isScreen, isIcon, getScreenLinks } from './overlayUtils';
+import { isBackZone } from './phoneBack';
 
 // A screen's state in plain words and its one next action (doctrine rule 18,
 // Task #2042), from what the page already computes: whether the screen has an
@@ -135,7 +136,8 @@ export function phoneFlowMap(overlays, icons = []) {
     .filter(({ z }) => z?.target)
     .map(({ z, i }) => {
       const target = byId.get(z.target) || null;
-      const onward = target ? new Set(targetsOf(target)).size : 0;
+      // A Back zone leads back, not onward (lib/phoneBack isBackZone).
+      const onward = target ? new Set(targetsOf({ ...target, screen_links: getScreenLinks(target).filter((l) => !isBackZone(l)) })).size : 0;
       const state = !target ? 'missing' : onward > 0 ? 'onward' : 'end';
       return { zoneId: z.id, label: labelOf(z, i), targetKey: z.target, target, onward, state };
     });

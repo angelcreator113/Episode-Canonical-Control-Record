@@ -12,6 +12,21 @@
  */
 import { getScreenLinks, isScreen, resolveZoneIconKey } from './overlayUtils';
 
+/**
+ * The screen's own Back tap zone, or null: a zone labelled "Back" ("‹ Back",
+ * "Back home", "Go back"…) that opens a screen. The Connect stage's old "Add
+ * back buttons" saved these top left, where the phone's own Back draws, and
+ * Evoni draws them over a back arrow painted on the screen image. A screen
+ * that has one keeps it as its only Back (one Back per screen).
+ */
+const BACK_LABEL = /^[\s‹<←«]*(go\s+)?back\b/i;
+export function isBackZone(z) {
+  return Boolean(z?.target && !z.persistent && BACK_LABEL.test(z.label || ''));
+}
+export function ownBackZone(screen) {
+  return getScreenLinks(screen).find(isBackZone) || null;
+}
+
 /** The screen Back opens from `screen` with no history: its parent, else `home`. */
 export function backTargetOf(screen, screens = [], icons = [], home = null) {
   if (!screen || (home && screen.id === home.id)) return null;

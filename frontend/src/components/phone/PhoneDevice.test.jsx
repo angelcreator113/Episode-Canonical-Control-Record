@@ -56,6 +56,8 @@ const DMS = {
   id: 'dms', name: 'DMs', category: 'phone', generated: true, url: 'https://x/dms.png', show_id: 'show-1',
   screen_links: [{ id: 'z-back', x: 0, y: 0, w: 20, h: 10, target: 'home', label: 'Back home' }],
 };
+// A screen with no Back zone of its own, so the phone draws its own Back.
+const FEED = { id: 'feed', name: 'Feed', category: 'phone', generated: true, url: 'https://x/feed.png', show_id: 'show-1', screen_links: [] };
 const MAP = { id: 'map', name: 'Map', category: 'phone', generated: true, url: 'https://x/map-fallback.png', show_id: 'show-1' };
 const CAMERA = { id: 'camera', name: 'Camera', category: 'phone', generated: false, url: null, show_id: 'show-1' };
 const PERSISTENT = HOME.screen_links.filter((l) => l.persistent && l.icon_url);
@@ -147,7 +149,7 @@ describe('PhoneDevice (Task #1983)', () => {
     // Another screen: always, history or not, in one place on either frame.
     for (const history of [[], ['home']]) {
       const onBack = vi.fn();
-      renderDevice({ phoneScreen: DMS, activeScreen: DMS, navigationHistory: history, onBack });
+      renderDevice({ phoneScreen: FEED, activeScreen: FEED, navigationHistory: history, onBack });
       const back = screen.getByRole('button', { name: 'Back' });
       expect(back.textContent).toBe('← Back');
       expect([back.style.top, back.style.left]).toEqual(['38px', '8px']);
@@ -155,18 +157,30 @@ describe('PhoneDevice (Task #1983)', () => {
       expect(onBack).toHaveBeenCalledTimes(1);
       cleanup();
     }
-    renderDevice({ phoneScreen: DMS, activeScreen: DMS, onBack: vi.fn(), useCustomFrame: true, customFrameUrl: 'https://x/frame.png' });
+    renderDevice({ phoneScreen: FEED, activeScreen: FEED, onBack: vi.fn(), useCustomFrame: true, customFrameUrl: 'https://x/frame.png' });
     expect(screen.getByRole('button', { name: 'Back' }).style.top).toBe('26px');
   });
 
   test('Back needs onBack; with no home known it follows history', () => {
-    renderDevice({ phoneScreen: DMS, activeScreen: DMS });
+    renderDevice({ phoneScreen: FEED, activeScreen: FEED });
     expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
     cleanup();
-    renderDevice({ phoneScreen: DMS, activeScreen: DMS, firstScreen: null, onBack: vi.fn() });
+    renderDevice({ phoneScreen: FEED, activeScreen: FEED, firstScreen: null, onBack: vi.fn() });
     expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
     cleanup();
-    renderDevice({ phoneScreen: DMS, activeScreen: DMS, firstScreen: null, onBack: vi.fn(), navigationHistory: ['home'] });
+    renderDevice({ phoneScreen: FEED, activeScreen: FEED, firstScreen: null, onBack: vi.fn(), navigationHistory: ['home'] });
+    expect(screen.getByRole('button', { name: 'Back' })).toBeTruthy();
+  });
+
+  test('a screen with its own Back zone keeps that one: no second Back', () => {
+    // DMS has a "Back home" zone, as "Add back buttons" saved them, top left.
+    renderDevice({ phoneScreen: DMS, activeScreen: DMS, onBack: vi.fn(), navigationHistory: ['home'] });
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+    expect(screen.getAllByTitle(/back/i)).toHaveLength(1);
+    cleanup();
+    // A zone merely naming "back" mid-label is not a Back zone.
+    const BACKPACK = { ...FEED, id: 'bag', screen_links: [{ id: 'z-bp', x: 0, y: 0, w: 10, h: 10, target: 'home', label: 'Backpack' }] };
+    renderDevice({ phoneScreen: BACKPACK, activeScreen: BACKPACK, onBack: vi.fn() });
     expect(screen.getByRole('button', { name: 'Back' })).toBeTruthy();
   });
 });
