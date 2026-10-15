@@ -229,5 +229,42 @@ describe('the character page', () => {
     await waitFor(() => expect(screen.getByText('Protagonist')).toBeTruthy());
     expect(screen.queryByText(/Special/)).toBeNull();
   });
+
+  test('their places: the home with its everyday picture, shared to The Pulse as a draft', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/character-registry/characters/c1') return { data: { character: CHARACTER } };
+      if (url === '/api/v1/cast/characters/c1/places') {
+        return { data: { success: true, show_id: 's1', is_lead: false, places: [
+          { role: 'home', scene_set_id: 'set-1', scene_set_name: "Sable's Loft", image_url: 'https://cdn/everyday.jpg', everyday: true },
+        ] } };
+      }
+      return { data: {} };
+    });
+    vi.mocked(api.post).mockResolvedValue({ data: { success: true, post: { id: 'post-1' } } });
+    renderIt();
+    const places = await screen.findByTestId('ch-places');
+    await waitFor(() => expect(places.textContent).toContain("Sable's Loft"));
+    expect(places.textContent).toContain('Home · everyday look');
+    expect(places.querySelector('img').getAttribute('src')).toBe('https://cdn/everyday.jpg');
+    fireEvent.click(within(places).getByRole('button', { name: 'Share to The Pulse' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/cast/characters/c1/places/share', { scene_set_id: 'set-1' }));
+    expect(await within(places).findByRole('link', { name: 'Open Review' })).toBeTruthy();
+  });
+
+  test('no home yet: choose one of the show\'s scene sets', async () => {
+    vi.mocked(api.get).mockImplementation(async (url, opts) => {
+      if (url === '/api/v1/character-registry/characters/c1') return { data: { character: CHARACTER } };
+      if (url === '/api/v1/cast/characters/c1/places') return { data: { success: true, show_id: 's1', places: [] } };
+      if (url === '/api/v1/scene-sets' && opts?.params?.show_id === 's1') return { data: { success: true, data: [{ id: 'set-9', name: 'Echo Park Studio' }] } };
+      return { data: {} };
+    });
+    vi.mocked(api.post).mockResolvedValue({ data: { success: true } });
+    renderIt();
+    const places = await screen.findByTestId('ch-places');
+    fireEvent.click(await within(places).findByRole('button', { name: 'Choose their home' }));
+    fireEvent.change(await within(places).findByLabelText('Their home set'), { target: { value: 'set-9' } });
+    fireEvent.click(within(places).getByRole('button', { name: 'Make it home' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/shows/s1/character-places', { character_id: 'c1', scene_set_id: 'set-9', role: 'home' }));
+  });
 });
 
