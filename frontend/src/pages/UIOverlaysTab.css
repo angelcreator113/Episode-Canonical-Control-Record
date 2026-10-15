@@ -1011,13 +1011,36 @@
 }
 
 /* Preview stage (doctrine rule 18, Task #2010): the embedded, non-saving
-   Preview phone in the device's place, beside the screen list. */
-.phone-hub-preview-pane {
+   Preview phone on its own, large and centred (Evoni, 2026-10-15), with
+   the screen it starts on picked above it. */
+.phone-preview-stage {
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 12px;
+  padding: 8px 0 24px;
+}
+.phone-preview-stage__start {
+  display: inline-flex;
+  align-items: center;
   gap: 8px;
-  max-width: 100%;
+  font-size: 12px;
+  color: var(--lala-ink-muted);
+}
+.phone-preview-stage__start select {
+  min-height: 34px;
+  padding: 6px 10px;
+  font: inherit;
+  color: var(--lala-ink);
+  background: var(--surface-card, #fff);
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 8px;
+}
+.phone-preview-stage__phone {
+  width: min(380px, 100%);
+}
+.phone-preview-stage .phone-hub-frame {
+  width: min(380px, calc(100vw - 48px));
 }
 
 .phone-hub-preview-hint {
