@@ -20,7 +20,8 @@ describe('listSlotOf', () => {
     ['accessory', 'accessories'], ['accessories', 'accessories'], ['belt', 'accessories'], ['silk scarf', 'accessories'],
     ['jewelry', 'jewelry'], ['earrings', 'jewelry'], ['perfume', 'perfume'], ['fragrance', 'perfume'],
     ['shoes', 'shoes'], ['heels', 'shoes'], ['dress', 'dress'], ['gown', 'dress'], ['top', 'top'], ['skirt', 'bottom'],
-    ['outerwear', null], [null, null], ['', null],
+    // A jacket fills an outerwear line when the list names one (Task #3205).
+    ['outerwear', 'outerwear'], ['jacket', 'outerwear'], [null, null], ['', null],
   ])('%s → %s', (category, slot) => {
     expect(listSlotOf(category)).toBe(slot);
   });
