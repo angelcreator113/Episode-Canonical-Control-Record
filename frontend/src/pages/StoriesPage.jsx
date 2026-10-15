@@ -10,6 +10,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import useActiveShow from '../hooks/useActiveShow';
 import ShowChooser from '../components/ShowChooser';
+import Beat11Piece from '../components/Beat11Piece';
 
 const FORMAT_CONFIG = {
   short_story: { icon: '📖', label: 'Short Story', color: '#6366f1' },
@@ -182,6 +183,9 @@ export default function StoriesPage() {
             )}
           </div>
         </div>
+
+        {/* Beat 11: the short story's animated piece in the episode (docs/CANON.md) */}
+        {selectedStory.format === 'short_story' && selectedStory.episode_id && !editing && <Beat11Piece storyId={selectedStory.id} />}
 
         {/* Content */}
         {editing ? (

@@ -23,6 +23,7 @@ import ExportPanel from '../components/ExportPanel';
 import NarrativeIntelligence from '../components/NarrativeIntelligence';
 import { ContinuityGuard } from '../components/ContinuityGuard';
 import { MemoryCard, MEMORY_STYLES } from '../components/MemoryConfirmation';
+import ChapterFromShow from '../components/ChapterFromShow';
 
 
 import { authedFetch } from '../utils/authedFetch';
@@ -3388,6 +3389,9 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
                 <div className="wm-transition-hint">Generates connective prose between scenes. Place cursor at the break point.</div>
               </div>
             )}
+
+            {/* ── From the show: the chapter's episode (docs/CANON.md) ── */}
+            <ChapterFromShow bookId={bookId} chapterId={chapterId} prose={prose} onPreview={setPreviewText} />
 
             {/* ── Reference Chapter ── */}
             <div className="wm-ctx-field">
