@@ -24,7 +24,10 @@ jest.mock('../../../src/services/imageGenerationService', () => ({
     onLogged({ costUsd: 0.03 });
     return 'https://fal.example/still.png';
   }),
-  generateImageFromImage: jest.fn(),
+  generateImageFromImage: jest.fn(async (ref, prompt, { onLogged }) => {
+    onLogged({ costUsd: 0.04 });
+    return { url: 'https://fal.example/kontext.png' };
+  }),
 }));
 jest.mock('../../../src/services/sceneBriefService', () => ({
   ...jest.requireActual('../../../src/services/sceneBriefService'),
@@ -81,5 +84,68 @@ describe('generateAngle completes and validates against the SceneSpec', () => {
     expect(sceneSpecService.validateAngleAgainstSpec).toHaveBeenCalledWith(result.stillUrl, spec, 'WIDE');
     expect(lastStatus()).toBe('complete');
     expect(SceneAngle.update.mock.calls.at(-1)[0].quality_review.spec_validation).toEqual(expect.objectContaining({ score: 90, pass: true }));
+  });
+});
+
+// A SceneSpec is built from one base picture (_meta.base_still_url). After a
+// new base, its frames and objects are the old picture's: the angle must not
+// be cropped at the old coordinates or checked against the old room.
+describe('a SceneSpec built from another base picture', () => {
+  const db = { query: jest.fn(async () => [[]]) };
+  let SceneSet;
+  let SceneAngle;
+  const angle = { id: 'angle-3', angle_label: 'VANITY', angle_name: 'Vanity' };
+  const specFor = (url) => ({
+    camera_contracts: [{ angle: 'VANITY', frame: { left: 0.5, top: 0.2, width: 0.4, height: 0.6 } }],
+    objects: [{ name: 'old mirror' }],
+    _meta: { base_still_url: url },
+  });
+
+  beforeAll(() => { process.env.FAL_KEY = process.env.FAL_KEY || 'test-fal-key'; });
+  beforeEach(() => {
+    delete process.env.ANTHROPIC_API_KEY;
+    SceneSet = { sequelize: db, update: jest.fn(async () => [1]), increment: jest.fn(async () => {}) };
+    SceneAngle = { sequelize: db, update: jest.fn(async () => [1]) };
+    sceneSpecService.validateAngleAgainstSpec.mockClear();
+    sceneSpecService.buildAngleConstraints.mockClear();
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  test('is not used: no crop at its frame, no constraints or validation from it', async () => {
+    const set = { id: 'set-3', show_id: 'show-1', base_still_url: 'https://s3.example/new-base.png', scene_spec: specFor('https://s3.example/old-base.png') };
+
+    const result = await sceneGen.generateAngle(angle, set, { SceneAngle, SceneSet });
+
+    expect(result.success).toBe(true);
+    expect(set.scene_spec).toBeNull();
+    expect(sceneSpecService.buildAngleConstraints).not.toHaveBeenCalled();
+    expect(sceneSpecService.validateAngleAgainstSpec).not.toHaveBeenCalled();
+    expect(require('../../../src/services/imageGenerationService').generateImageFromImage)
+      .toHaveBeenCalledWith('https://s3.example/new-base.png', expect.any(String), expect.any(Object));
+  });
+
+  test('one built from this base is kept', () => {
+    const base = 'https://s3.example/base.png';
+    expect(sceneGen.specFitsBase(specFor(base), base)).toBe(true);
+    expect(sceneGen.specFitsBase(specFor('https://s3.example/old.png'), base)).toBe(false);
+    expect(sceneGen.specFitsBase({ camera_contracts: [] }, base)).toBe(false);
+    expect(sceneGen.specFitsBase(null, base)).toBe(false);
+  });
+
+  test('anchor objects come from this base\'s analysis, not one it replaced', () => {
+    const base = 'https://s3.example/new-base.png';
+    const vl = { anchor_objects: [{ name: 'old bed', position: 'left', description: 'canopy' }], image_analysis: { source_url: 'https://s3.example/old-base.png' } };
+    const stale = sceneGen.angleBriefOptions({ angle_label: 'WIDE' }, { base_still_url: base, visual_language: vl });
+    expect(stale.relevantAnchors).toEqual([]);
+
+    const fresh = sceneGen.angleBriefOptions({ angle_label: 'WIDE' }, { base_still_url: base, visual_language: vl }, {
+      imageAnalysis: { source_url: base, anchor_objects: [{ name: 'new sofa', position: 'centre', description: 'velvet' }] },
+    });
+    expect(fresh.relevantAnchors).toEqual(['new sofa (centre): velvet']);
+
+    const current = sceneGen.angleBriefOptions({ angle_label: 'WIDE' }, { base_still_url: base, visual_language: { ...vl, image_analysis: { source_url: base } } });
+    expect(current.relevantAnchors).toEqual(['old bed (left): canopy']);
   });
 });

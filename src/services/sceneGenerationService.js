@@ -1685,7 +1685,10 @@ async function cropAndOutpaint(baseImageUrl, angleLabel, setId, angleId, prompt,
 function angleBriefOptions(sceneAngle, sceneSet, { imageAnalysis = null, overrides = null } = {}) {
   const angleLabel = sceneAngle.angle_label || 'WIDE';
   const vl = sceneSet.visual_language || {};
-  const anchorObjects = vl.anchor_objects || imageAnalysis?.anchor_objects || [];
+  // Anchors from the analysis of this base, not of a base it replaced.
+  const storedFit = !sceneSet.base_still_url || vl.image_analysis?.source_url === sceneSet.base_still_url;
+  const freshFit = imageAnalysis && imageAnalysis.source_url === sceneSet.base_still_url;
+  const anchorObjects = (freshFit && imageAnalysis.anchor_objects) || (storedFit && vl.anchor_objects) || [];
 
   // ── The shot's required visible features: the SceneSpec camera
   // contracts (preferred), else the anchor objects ──
@@ -1721,6 +1724,11 @@ function angleBriefOptions(sceneAngle, sceneSet, { imageAnalysis = null, overrid
     relevantAnchors,
     specConstraints,
   };
+}
+
+/** True when a SceneSpec was built from this base picture (its _meta.base_still_url). */
+function specFitsBase(spec, baseUrl) {
+  return Boolean(spec && baseUrl && spec._meta?.base_still_url === baseUrl);
 }
 
 /** L14 (b): { kind, name } for an angle that is a zone of its set; null otherwise. */
@@ -1819,14 +1827,23 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
       console.warn(`[SceneGen] Image analysis failed (non-blocking): ${err.message}`);
     }
 
-    // Auto-build SceneSpec if not present
-    if (!sceneSet.scene_spec && imageAnalysis) {
-      try {
-        const spec = await sceneSpecService.buildSceneSpec(sceneSet, SceneSet);
-        if (spec) sceneSet.scene_spec = spec;
-      } catch (specErr) {
-        console.warn(`[SceneGen] SceneSpec build failed (non-blocking): ${specErr.message}`);
+    // The SceneSpec describes the picture it was built from. After a new
+    // base, its frames, objects and checks belong to the old picture (a crop
+    // at the old coordinates, the old room's objects demanded), so it is
+    // rebuilt from this base; one that cannot be rebuilt is not used.
+    if (!specFitsBase(sceneSet.scene_spec, sceneSet.base_still_url)) {
+      let spec = null;
+      if (imageAnalysis) {
+        try {
+          spec = await sceneSpecService.buildSceneSpec(sceneSet, SceneSet);
+        } catch (specErr) {
+          console.warn(`[SceneGen] SceneSpec build failed (non-blocking): ${specErr.message}`);
+        }
       }
+      if (sceneSet.scene_spec && !spec) {
+        console.warn(`[SceneGen] SceneSpec for set ${sceneSet.id} was built from another base picture; not used for this angle`);
+      }
+      sceneSet.scene_spec = spec || null;
     }
   }
 
@@ -2212,6 +2229,7 @@ module.exports = {
   MOOD_PRESETS,
   generateAngle,
   angleBriefOptions,
+  specFitsBase,
   zoneOf,
   zoneReferenceImage,
   refinedBriefOptions,
