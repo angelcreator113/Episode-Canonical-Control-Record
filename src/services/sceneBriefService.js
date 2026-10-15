@@ -425,16 +425,30 @@ function briefToPrompt(brief) {
   const byLayer = (layer) => (brief?.lines || []).filter((l) => l.layer === layer && l.text).map((l) => l.text);
   const join = (parts) => parts.join(' ').replace(/\s+/g, ' ').trim();
   const rules = join(brief?.rules || BRIEF_RULES);
+  // A brief made from a reference image (an angle or a zone: it has a
+  // continuity line) leads with the shot: the image model edits the
+  // reference, and a camera line after the whole room's description reads
+  // as a description of the reference, so the camera barely moves.
+  const fromReference = (brief?.lines || []).some((l) => l.key === 'continuity' && l.text);
   const body = brief?.mode === 'event_dressing'
     ? join([DRESSING_KEEP, ...byLayer('event'), DRESSING_END])
-    : join([
-      ...byLayer('place'),
-      FURNISHED,
-      ...byLayer('event'),
-      ...byLayer('shot'),
-      ...byLayer('environment'),
-      'Photorealistic.',
-    ]);
+    : join(fromReference
+      ? [
+        ...byLayer('shot'),
+        ...byLayer('place'),
+        FURNISHED,
+        ...byLayer('event'),
+        ...byLayer('environment'),
+        'Photorealistic.',
+      ]
+      : [
+        ...byLayer('place'),
+        FURNISHED,
+        ...byLayer('event'),
+        ...byLayer('shot'),
+        ...byLayer('environment'),
+        'Photorealistic.',
+      ]);
   const room = MAX_PROMPT - rules.length - 1;
   const cut = body.length > room ? `${body.slice(0, room - 3)}...` : body;
   return `${cut} ${rules}`;

@@ -148,4 +148,38 @@ describe('a SceneSpec built from another base picture', () => {
     const current = sceneGen.angleBriefOptions({ angle_label: 'WIDE' }, { base_still_url: base, visual_language: { ...vl, image_analysis: { source_url: base } } });
     expect(current.relevantAnchors).toEqual(['old bed (left): canopy']);
   });
+
+  test('an anchor that names no angle binds the wide views only; a named one binds its angle', () => {
+    const base = 'https://s3.example/base.png';
+    const vl = {
+      image_analysis: { source_url: base },
+      anchor_objects: [
+        { name: 'bed', position: 'left', description: 'canopy' },
+        { name: 'mirror', position: 'right', description: 'gilt', must_appear_in: ['VANITY'] },
+      ],
+    };
+    const anchors = (label) => sceneGen.angleBriefOptions({ angle_label: label }, { base_still_url: base, visual_language: vl }).relevantAnchors;
+    expect(anchors('WIDE')).toEqual(['bed (left): canopy']);
+    expect(anchors('VANITY')).toEqual(['mirror (right): gilt']);
+    expect(anchors('CLOSE')).toEqual([]);
+  });
+
+  test('a spec frame under half the picture\'s width is generated from the base, not stretched', async () => {
+    const base = 'https://s3.example/base.png';
+    const set = {
+      id: 'set-4', show_id: 'show-1', base_still_url: base,
+      scene_spec: { camera_contracts: [{ angle: 'VANITY', frame: { left: 0.6, top: 0.2, width: 0.3, height: 0.5 } }], objects: [], _meta: { base_still_url: base } },
+    };
+    const imageGen = require('../../../src/services/imageGenerationService');
+    imageGen.generateImageFromImage.mockClear();
+    const axios = require('axios');
+    axios.get.mockClear();
+
+    const result = await sceneGen.generateAngle(angle, set, { SceneAngle, SceneSet });
+
+    expect(result.success).toBe(true);
+    expect(imageGen.generateImageFromImage).toHaveBeenCalledWith(base, expect.any(String), expect.not.objectContaining({ guidanceScale: expect.anything() }));
+    // No download of the base for a crop: only the generated still is fetched.
+    expect(axios.get.mock.calls.map((c) => c[0])).not.toContain(base);
+  });
 });

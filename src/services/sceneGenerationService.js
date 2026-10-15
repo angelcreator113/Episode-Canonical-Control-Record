@@ -34,7 +34,7 @@ const S3_BUCKET          = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_B
 const AWS_REGION         = process.env.AWS_REGION || 'us-east-1';
 
 const s3 = new S3Client({ region: AWS_REGION });
-const { buildSceneBrief, briefToPrompt, prepareSceneBrief, loadBriefLocation } = require('./sceneBriefService');
+const { buildSceneBrief, briefToPrompt, prepareSceneBrief, loadBriefLocation, shotKey } = require('./sceneBriefService');
 const { noteBaseChanged, descriptionAfterAnalysis, writeReview } = require('./baseDescriptionService');
 const { ZONE_KINDS } = require('../constants/beatLocations');
 const { assertBaseReplaceable } = require('./approvedBaseService');
@@ -1531,12 +1531,24 @@ const CAMERA_CROP_MAP = {
  * For crop+extend angles (VANITY, WINDOW): crops, extends canvas, uses
  * gpt-image-1.5 (OUTPAINT_MODEL) to fill the new area while keeping original pixels.
  */
+// The narrowest frame, as a share of the base's width, kept as a pure crop:
+// the base is rendered at 1024 px wide, so a half-width frame is already
+// about 3x enlarged at 1536.
+const MIN_PURE_CROP_FRACTION = 0.5;
+
 async function cropAndOutpaint(baseImageUrl, angleLabel, setId, angleId, prompt, { onLogged, frame = null } = {}) {
   // A frame from the set's own spec is a pure crop of that part of its
   // picture; without one, the fixed map (direct callers only: generateAngle
   // crops only with a frame, Evoni 2026-10-07).
   const config = frame ? { crop: frame, extend: 'none', extendAmount: 0 } : CAMERA_CROP_MAP[angleLabel];
   if (!config || !baseImageUrl) return null;
+  // A pure crop is a real view only with enough of the picture's own pixels:
+  // a small region stretched to full size is a blur, so it is generated from
+  // the base instead (null: the caller's Kontext path).
+  if ((config.extend === 'none' || config.extendAmount === 0) && !(config.crop.width >= MIN_PURE_CROP_FRACTION)) {
+    console.log(`[SceneGen] Frame for ${angleLabel} is ${Math.round((config.crop.width || 0) * 100)}% of the picture's width; generated instead of cropped`);
+    return null;
+  }
 
   try {
     console.log(`[SceneGen] Crop+outpaint for ${angleLabel}: crop=${JSON.stringify(config.crop)}, extend=${config.extend}`);
@@ -1559,9 +1571,9 @@ async function cropAndOutpaint(baseImageUrl, angleLabel, setId, angleId, prompt,
       .toBuffer();
 
     if (config.extend === 'none' || config.extendAmount === 0) {
-      // Pure crop — just upscale to target resolution
+      // The frame keeps its own shape (no cut to 3:2), at most 1536x1024.
       const resultBuffer = await sharp(croppedBuffer)
-        .resize(1536, 1024, { fit: 'cover' })
+        .resize(1536, 1024, { fit: 'inside' })
         .png()
         .toBuffer();
 
@@ -1699,8 +1711,14 @@ function angleBriefOptions(sceneAngle, sceneSet, { imageAnalysis = null, overrid
   }
 
   // Build legacy anchors (used both as the fallback and as DALL-E hint)
+  // An anchor that names no angles belongs to the wide views: a close or
+  // single-wall angle told to show every anchor drifts back to a wide shot.
+  const key = shotKey(angleLabel);
+  const wideShot = WIDE_SHOTS.includes(key);
   const relevantAnchors = anchorObjects
-    .filter(a => !a.must_appear_in || a.must_appear_in.length === 0 || a.must_appear_in.some(label => angleLabel.includes(label)))
+    .filter(a => (!a.must_appear_in || a.must_appear_in.length === 0)
+      ? wideShot
+      : a.must_appear_in.some(label => angleLabel.toUpperCase().includes(String(label).toUpperCase())))
     .map(a => `${a.name} (${a.position}): ${a.description}`)
     .slice(0, 5);
 
@@ -1725,6 +1743,9 @@ function angleBriefOptions(sceneAngle, sceneSet, { imageAnalysis = null, overrid
     specConstraints,
   };
 }
+
+// Framings that show the whole space (sceneBriefService.SHOT_CAMERAS).
+const WIDE_SHOTS = Object.freeze(['WIDE', 'ESTABLISHING', 'OVERHEAD']);
 
 /** True when a SceneSpec was built from this base picture (its _meta.base_still_url). */
 function specFitsBase(spec, baseUrl) {
@@ -1944,7 +1965,8 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
       const { imageUrl } = await startTextToImage(prompt, {
         styleReference,
         referenceImages,
-        guidanceScale: 1.5,
+        // Kontext's own guidance, as zones and dressed angles use: 1.5 (a
+        // Runway-era weight) let it ignore the camera line.
         onLogged: angleCosts.onLogged,
       });
       stillUrl = await downloadAndStoreStill(imageUrl, sceneSet.id, sceneAngle.id);
@@ -1964,7 +1986,6 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
         const retryPrompt = buildIdentityLockPrompt(prompt, angleLabel, consistencyCheck?.issues || []);
         const { imageUrl: retryImageUrl } = await startTextToImage(retryPrompt, {
           referenceImages: [{ uri: referenceImageForEdit, weight: 0.95 }],
-          guidanceScale: 1.3,
           onLogged: angleCosts.onLogged,
         });
 

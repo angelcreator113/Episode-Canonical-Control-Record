@@ -240,3 +240,18 @@ describe('the camera follows the angle\'s label', () => {
     expect(camera({ angleLabel: 'Close up' })).toBe(SHOT_CAMERAS.CLOSE);
   });
 });
+
+// An angle or zone is an edit of a reference image: its prompt leads with
+// the shot, or the image model reads the camera line as a description of
+// the reference and barely moves the camera (audit, 2026-10-15).
+describe('the prompt\'s order', () => {
+  test('a brief from a reference leads with the camera; a base brief ends with it', () => {
+    const angle = briefToPrompt(buildSceneBrief({ sceneSet: SET, location: LOCATION, angleLabel: 'VANITY', continuity: true }));
+    expect(angle.startsWith(SHOT_CAMERAS.VANITY)).toBe(true);
+    const zone = briefToPrompt(buildSceneBrief({ sceneSet: SET, location: LOCATION, angleLabel: 'OTHER', zone: { kind: 'back' } }));
+    expect(zone.startsWith('Establishing view of the back of The Glasshouse')).toBe(true);
+    const base = briefToPrompt(buildSceneBrief({ sceneSet: SET, location: LOCATION, angleLabel: 'WIDE' }));
+    expect(base.startsWith(SHOT_CAMERAS.WIDE)).toBe(false);
+    expect(base.indexOf(SHOT_CAMERAS.WIDE)).toBeGreaterThan(base.indexOf(FURNISHED));
+  });
+});
