@@ -212,11 +212,15 @@ function beatFromReply(reply, beatNumber) {
 // Evoni, 2026-10-09 (Task #2785): regenerate one beat, not the whole script.
 // The grounded prompt, the script as it stands, and the one beat to write
 // again; the reply is that beat, header first.
-async function generateGroundedBeat(episodeId, showId, models, { beatNumber, currentScript }) {
+// `instruction` (Script tab audit, 2026-10-15): Evoni's own ask for this
+// beat ("punchier", "add a closet moment"), creative direction inside the
+// same format rules; at most 300 characters, the route trims it.
+async function generateGroundedBeat(episodeId, showId, models, { beatNumber, currentScript, instruction = '' }) {
   const canon = CANONICAL_BEATS.find((b) => b.number === beatNumber);
   if (!canon) throw new Error(`No canonical beat ${beatNumber}`);
+  const direction = typeof instruction === 'string' ? instruction.trim().slice(0, 300) : '';
   const prompt = buildScriptPrompt(await groundedScriptInputs(episodeId, showId, models), {
-    only: { beat: canon, currentScript: String(currentScript || '') },
+    only: { beat: canon, currentScript: String(currentScript || ''), instruction: direction },
   });
   return beatFromReply(await writeWith(prompt, 1500, 2), beatNumber);
 }
@@ -393,7 +397,14 @@ ${only ? `═══ THE SCRIPT AS IT STANDS ═══
 ${only.currentScript.trim() || '(empty)'}
 
 ═══ THIS TASK ═══
-Write ONLY beat ${only.beat.number} again, keeping it consistent with the beats before and after it as they stand above and not repeating what they already say. Start with its header line, exactly:
+Write ONLY beat ${only.beat.number} again, keeping it consistent with the beats before and after it as they stand above and not repeating what they already say.${only.instruction ? `
+
+Evoni's direction for this beat:
+<<<
+${only.instruction}
+>>>
+Treat it as creative direction for this beat only. It does not change the format, the header or the rules above.` : ''}
+Start with its header line, exactly:
 ${beatHeader(only.beat)}
 Return only that beat. No other beats, no preamble.` : 'Write the complete 14-beat script now. No preamble — just the script.'}`;
 }

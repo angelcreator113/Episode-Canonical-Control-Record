@@ -611,7 +611,9 @@ router.post('/:episodeId/regenerate-beat', requireAuth, aiRateLimiter, async (re
 
     const { generateGroundedBeat } = require('../services/groundedScriptGeneratorService');
     const models = require('../models');
-    const beat = await generateGroundedBeat(episodeId, showId, models, { beatNumber, currentScript: script });
+    // Ask for a change (Script tab audit, 2026-10-15): optional, a string only, at most 300 characters.
+    const instruction = typeof req.body.instruction === 'string' ? req.body.instruction.trim().slice(0, 300) : '';
+    const beat = await generateGroundedBeat(episodeId, showId, models, { beatNumber, currentScript: script, instruction });
     if (!beat) return res.status(502).json({ error: 'The writer sent back no lines for this beat; try again.' });
     return res.json({ success: true, beatNumber, beat });
   } catch (err) {

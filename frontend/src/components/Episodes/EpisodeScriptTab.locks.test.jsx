@@ -40,7 +40,7 @@ describe('Script beat locks', () => {
     vi.mocked(api.put).mockImplementation(async (url, body) => ({ data: { data: { script_content: body.script_content } } }));
     render(<MemoryRouter><EpisodeScriptTab episode={{ id: 'ep-1', show_id: 'show-1', script_content: script, script_locked_beats: [2] }} show={{ id: 'show-1' }} /></MemoryRouter>);
     fireEvent.click(within(screen.getByTestId('script-beat-1')).getAllByTestId('script-line')[0]);
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Lala: Hello gala.' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Edit line' }), { target: { value: 'Lala: Hello gala.' } });
     fireEvent.click(within(screen.getByTestId('script-beat-1')).getByRole('button', { name: 'Save' }));
     fireEvent.click(within(screen.getByTestId('script-head')).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(api.put).toHaveBeenCalled());
@@ -49,7 +49,8 @@ describe('Script beat locks', () => {
 
   test('a beat locked on the episode shows approved after a reload', () => {
     renderTab([1]);
-    expect(screen.getByTestId('script-head').textContent).toContain('2 beats · 1 approved');
+    // The rough length sits between them (Script tab audit, 2026-10-15).
+    expect(screen.getByTestId('script-head').textContent).toMatch(/2 beats · ~\d+s · 1 approved/);
     expect(screen.getByTestId('script-beat-1').getAttribute('data-locked')).toBe('true');
   });
 
@@ -83,7 +84,7 @@ describe('Script beat locks', () => {
     renderTab();
     const line = within(screen.getByTestId('script-beat-1')).getAllByTestId('script-line')[0];
     fireEvent.click(line);
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Lala: Hello gala.' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Edit line' }), { target: { value: 'Lala: Hello gala.' } });
     fireEvent.click(within(screen.getByTestId('script-beat-1')).getByRole('button', { name: 'Save' }));
     fireEvent.click(screen.getByTestId('script-lock-1'));
     await waitFor(() => expect(api.put).toHaveBeenCalled());

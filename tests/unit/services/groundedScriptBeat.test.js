@@ -61,6 +61,33 @@ describe('generateGroundedBeat', () => {
     expect(call.messages[0].content).not.toContain('Write the complete 14-beat script now');
   });
 
+  // Ask for a change (Script tab audit, 2026-10-15).
+  test("Evoni's direction goes into the prompt, delimited, with the format rules kept", async () => {
+    const create = jest.fn(async () => ({ content: [{ text: '## BEAT: 5 · Reveal\nLala: punchier' }] }));
+    mockAnthropic(create);
+    const { generateGroundedBeat } = require('../../../src/services/groundedScriptGeneratorService');
+    await generateGroundedBeat('ep1', 'show-1', models(), { beatNumber: 5, currentScript: '', instruction: '  make it punchier  ' });
+    const prompt = create.mock.calls[0][0].messages[0].content;
+    expect(prompt).toContain("Evoni's direction for this beat:\n<<<\nmake it punchier\n>>>");
+    expect(prompt).toContain('Write ONLY beat 5 again');
+    expect(prompt).toContain('RULES:');
+    expect(prompt).toContain('Return only that beat.');
+  });
+
+  test('no direction, or one that is not a string, adds no section; a long one is cut to 300 characters', async () => {
+    const create = jest.fn(async () => ({ content: [{ text: 'Me: x' }] }));
+    mockAnthropic(create);
+    const { generateGroundedBeat } = require('../../../src/services/groundedScriptGeneratorService');
+    await generateGroundedBeat('ep1', 'show-1', models(), { beatNumber: 5, currentScript: '' });
+    await generateGroundedBeat('ep1', 'show-1', models(), { beatNumber: 5, currentScript: '', instruction: { evil: true } });
+    await generateGroundedBeat('ep1', 'show-1', models(), { beatNumber: 5, currentScript: '', instruction: 'a'.repeat(400) });
+    expect(create.mock.calls[0][0].messages[0].content).not.toContain("Evoni's direction");
+    expect(create.mock.calls[1][0].messages[0].content).not.toContain("Evoni's direction");
+    const long = create.mock.calls[2][0].messages[0].content;
+    expect(long).toContain(`<<<\n${'a'.repeat(300)}\n>>>`);
+    expect(long).not.toContain('a'.repeat(301));
+  });
+
   test('tries a second time when the first call fails', async () => {
     const create = jest.fn()
       .mockRejectedValueOnce(new Error('overloaded'))
