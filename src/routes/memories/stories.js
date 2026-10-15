@@ -59,7 +59,7 @@ const WRITE_MODE_CHARACTER_RULES = `
 KEY RULES:
 - JustAWoman is ACTIVE — posting, trying, showing up. Wound is invisibility, not fear.
 - The Husband never speaks aloud — he exists only in her interior monologue.
-- Chloe appears on screens only — never in person, never in the same physical space.
+- Nia Vale (the Comparison Creator) appears on screens only — never in person, never in the same physical space.
 - Lala in Book 1: one intrusive thought maximum — brief, different altitude, not JustAWoman being confident.
 - First person. Vary sentence rhythm. Short when doubt peaks, longer when something opens.
 - Do not give her clarity she hasn't yet earned.`;

@@ -42,7 +42,7 @@ const QUESTIONS = [
   {
     id: 'who_present',
     question: "Who is physically present besides JustAWoman?",
-    hint: "Could be nobody. Could be Chloe. Could be strangers in the background.",
+    hint: "Could be nobody. Could be Nia Vale on a screen. Could be strangers in the background.",
     placeholder: "Just her. Her friends are all at work. She posted an hour ago and she's been alone with her phone ever since.",
     field: null,
   },
@@ -50,7 +50,7 @@ const QUESTIONS = [
     id: 'relationships',
     question: "If someone else is present — how does she know them and what's the energy?",
     hint: "Skip this if she's alone. If someone's there, describe the dynamic honestly.",
-    placeholder: "Chloe is her girl. No pretending with her. She can be happy for Chloe without it costing her anything. Most of the time.",
+    placeholder: "Nia is on her screen again. Same lane, no hesitation. She can watch without it costing her anything. Most of the time.",
     field: null,
   },
   {

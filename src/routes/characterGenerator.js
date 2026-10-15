@@ -67,7 +67,7 @@ const WORLD_CONFIGS = {
     age_range: [28, 45],
     setting: 'Real world — suburban/urban America. Content creators, professionals, mothers, wives, friends.',
     tone: 'Grounded, specific, adult. The texture of real life: dinner tables, commutes, DMs, mortgages.',
-    existing_characters: ['JustAWoman', 'David', 'Dana', 'Chloe', 'Jade', 'Marcus', 'Miles', 'Noah'],
+    existing_characters: ['JustAWoman', 'David', 'Elias', 'Zion', 'The Witness', 'Nia Vale', 'Jade', 'Marcus'],
   },
   lalaverse: {
     label: 'LalaVerse',
@@ -907,7 +907,7 @@ router.post('/commit', requireAuth, async (req, res) => {
     }
 
     // Check if PNOS seed character — block edit
-    const PNOS_SEEDS = ['JustAWoman', 'David', 'Dana', 'Chloe', 'Jade', 'Marcus', 'Miles', 'Noah'];
+    const PNOS_SEEDS = ['JustAWoman', 'David', 'Elias', 'Zion', 'The Witness', 'Nia Vale', 'Jade', 'Marcus'];
     if (PNOS_SEEDS.includes(rawName)) {
       return res.status(403).json({ error: `${rawName} is a PNOS Book 1 seed character and cannot be overwritten.` });
     }
