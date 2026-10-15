@@ -1164,7 +1164,8 @@ router.post('/:id/generate-base', validateUUIDParam('id'), requireAuth, aiRateLi
       console.log(`[SceneGen] Base scene for "${set.name}" generation complete`);
     } catch (genErr) {
       console.error(`[SceneGen] Base scene for "${set.name}" failed:`, genErr.message);
-      await set.update({ generation_status: 'failed' });
+      // Approved during the run: the set keeps its approved base, complete.
+      if (!(genErr instanceof approvedBase.ApprovedBaseError)) await set.update({ generation_status: 'failed' });
     }
   } catch (err) {
     console.error('Scene Sets POST /:id/generate-base error:', err);
