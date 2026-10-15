@@ -85,7 +85,7 @@ const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
   it('the migration is re-runnable', async () => {
     await migration.up(sequelize.getQueryInterface(), Sequelize);
     const cols = await rows(`SELECT column_name FROM information_schema.columns WHERE table_name = 'location_look_variants'`);
-    expect(cols.map((c) => c.column_name)).toEqual(expect.arrayContaining(['world_location_id', 'kind', 'value', 'status', 'source', 'image_url', 'deleted_at']));
+    expect(cols.map((c) => c.column_name)).toEqual(expect.arrayContaining(['world_location_id', 'scene_set_id', 'source_angle_id', 'kind', 'value', 'status', 'source', 'image_url', 'deleted_at']));
   });
 
   it('a set that is not the everyday look has no variants', async () => {
@@ -123,7 +123,10 @@ const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
     const end = Date.now() + 5000;
     while ((await variant(loc, 'season', 'winter'))?.status === 'generating' && Date.now() < end) await new Promise((r) => setTimeout(r, 10));
     expect(dressed).toHaveBeenCalledWith(expect.objectContaining({ id: set }), expect.stringMatching(/^Winter/), 'https://x/front.jpg', { suffix: 'variant-season-winter' });
-    expect(await variant(loc, 'season', 'winter')).toMatchObject({ status: 'complete', source: 'generated', image_url: 'https://x/winter.jpg', source_image_url: 'https://x/front.jpg' });
+    expect(await variant(loc, 'season', 'winter')).toMatchObject({ status: 'complete', source: 'generated', image_url: 'https://x/winter.jpg', source_image_url: 'https://x/front.jpg', scene_set_id: set });
+    // The season remembers the Front angle it shows.
+    const [front] = await rows(`SELECT id FROM scene_angles WHERE scene_set_id = :set AND angle_kind = 'front'`, { set });
+    expect((await variant(loc, 'season', 'winter')).source_angle_id).toBe(front.id);
     expect(Number((await variant(loc, 'season', 'winter')).cost_usd)).toBe(0.04);
   });
 
@@ -157,10 +160,45 @@ const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
 
   it('a run stuck for 10 minutes reads as failed', async () => {
     const { loc, set } = await everyday();
-    await run(`INSERT INTO location_look_variants (world_location_id, kind, value, status, created_at, updated_at)
-               VALUES (:loc, 'time', 'morning', 'generating', NOW(), NOW() - INTERVAL '11 minutes')`, { loc });
+    await run(`INSERT INTO location_look_variants (world_location_id, scene_set_id, kind, value, status, created_at, updated_at)
+               VALUES (:loc, :set, 'time', 'morning', 'generating', NOW(), NOW() - INTERVAL '11 minutes')`, { loc, set });
     const list = await auth(request(app).get(url(set)));
     expect(list.body.data.time.find((s) => s.value === 'morning').variant).toMatchObject({ status: 'failed', error: 'Timed out: no image after 10 minutes' });
     expect((await variant(loc, 'time', 'morning')).status).toBe('failed');
+  });
+
+  it('a second Generate while one runs is refused; an upload made meanwhile is never overwritten', async () => {
+    const { loc, set } = await everyday();
+    let finish;
+    jest.spyOn(sceneGen, 'generateDressedStill').mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    expect((await auth(request(app).post(url(set, '/time/evening/generate'))).send({})).status).toBe(202);
+    const again = await auth(request(app).post(url(set, '/time/evening/generate'))).send({});
+    expect(again.status).toBe(409);
+    expect(again.body.code).toBe('VARIANT_GENERATING');
+
+    const up = await auth(request(app).post(url(set, '/time/evening/upload'))).attach('image', PNG, { filename: 'e.png', contentType: 'image/png' });
+    expect(up.status).toBe(200);
+    finish({ stillUrl: 'https://x/late.jpg', cost: 0.04 });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(await variant(loc, 'time', 'evening')).toMatchObject({ status: 'complete', source: 'uploaded', image_url: up.body.data.image_url });
+  });
+
+  it('a new everyday look starts with none of the old one\'s variants', async () => {
+    const { loc, set } = await everyday();
+    await auth(request(app).post(url(set, '/time/night/upload'))).attach('image', PNG, { filename: 'n.png', contentType: 'image/png' });
+    const other = uuid();
+    await run(`INSERT INTO scene_sets (id, name, scene_type, world_location_id, base_still_url, generation_status, created_at, updated_at)
+               VALUES (:other, 'Loft 2', 'HOME_BASE', :loc, 'https://x/everyday2.jpg', 'complete', NOW(), NOW())`, { other, loc });
+    await run(`UPDATE world_locations SET approved_base_scene_set_id = :other, approved_base_image_url = 'https://x/everyday2.jpg' WHERE id = :loc`, { other, loc });
+    const list = await auth(request(app).get(url(other)));
+    expect(list.status).toBe(200);
+    expect(list.body.data.time.every((s) => s.variant === null)).toBe(true);
+  });
+
+  it('a refused file answers 400 with its reason', async () => {
+    const { set } = await everyday();
+    const res = await auth(request(app).post(url(set, '/time/morning/upload'))).attach('image', Buffer.from('hi'), { filename: 'n.txt', contentType: 'text/plain' });
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ code: 'BAD_FILE', error: 'Only JPEG, PNG, and WebP images are allowed' });
   });
 });
