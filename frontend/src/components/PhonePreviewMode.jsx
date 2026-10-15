@@ -7,7 +7,7 @@ import { X, Wifi, Signal, BatteryFull, RotateCcw, Target, CheckCircle2, Circle }
 import PhoneDevice from './phone/PhoneDevice';
 import { isIcon, isScreen, resolveZoneIcon } from '../lib/overlayUtils';
 import { filterZones, applyActions, actionsForZone, evaluateMissions, applyMissionRewards } from '../lib/phoneRuntime';
-import { backTargetOf } from '../lib/phoneBack';
+import { backTargetOf, isBackZone } from '../lib/phoneBack';
 import { isVoiceZone, VOICE_TOAST } from '../lib/phoneVoice';
 
 const TOKENS = { parchment: '#FAF7F0', gold: '#B8962E', ink: '#2C2C2C', lavender: '#5B4B8A' }; // lavender: --lala-lavender, the Phone Hub's primary (2026-10-07)
@@ -213,6 +213,14 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
     // playthrough see it.
     const voice = isVoiceZone(zone, icons);
     if (voice) setToasts(prev => [...prev, { id: Date.now(), text: VOICE_TOAST }]);
+    // A Back zone is the phone's Back: where it would open its own saved
+    // screen, it goes back instead (the previous screen, else the page's
+    // parent, else home). The tap still runs, for missions and actions.
+    const go = (target) => {
+      if (!target || voice) return;
+      if (isBackZone(zone) && target === zone.target && backRef.current) backRef.current();
+      else navigateTo(target, 'left');
+    };
     if (playthrough?.tap && zone.id) {
       // Player mode — server executes (zone actions + mission rewards). The
       // response already contains any reward-merged effects plus the list of
@@ -237,7 +245,7 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
           celebrate(justDone);
         }
       }
-      if (effects?.navigate && !voice) navigateTo(effects.navigate, 'left');
+      go(effects?.navigate);
       return;
     }
 
@@ -276,7 +284,7 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
     }
     if (rewardResult.effects.completeEpisode) setEpisodeComplete(true);
     const finalNavigate = effects.navigate || rewardResult.effects.navigate;
-    if (finalNavigate && !voice) navigateTo(finalNavigate, 'left');
+    go(finalNavigate);
   }, [evalContext, navigateTo, playthrough, state, visitedScreens, missions, completedMissionIds, celebrate, activeScreen, icons]);
 
   // Auto-dismiss toasts after 2.5s
@@ -328,6 +336,9 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
       setAnimating(false);
     }, TRANSITION_MS);
   }, [activeScreen, screens, homeScreen, animating, goHome]);
+  // The device's Back, for Back zones (handleZoneTap runs before these exist).
+  const backRef = useRef(null);
+  backRef.current = history.length ? goBack : goUp;
 
   // ESC key handler — overlay only; an embedded phone leaves ESC to its page.
   useEffect(() => {

@@ -183,4 +183,18 @@ describe('PhoneDevice (Task #1983)', () => {
     renderDevice({ phoneScreen: BACKPACK, activeScreen: BACKPACK, onBack: vi.fn() });
     expect(screen.getByRole('button', { name: 'Back' })).toBeTruthy();
   });
+
+  test('a Back zone is the phone\'s Back: it calls onBack, not onNavigate', () => {
+    const onBack = vi.fn();
+    const onNavigate = vi.fn();
+    renderDevice({ phoneScreen: DMS, activeScreen: DMS, onBack, onNavigate });
+    fireEvent.click(screen.getByTitle('Back home'));
+    expect(onBack).toHaveBeenCalledTimes(1);
+    expect(onNavigate).not.toHaveBeenCalledWith('home');
+    cleanup();
+    // Without onBack (the Map's drawing), the zone opens its screen as before.
+    renderDevice({ phoneScreen: DMS, activeScreen: DMS, onNavigate });
+    fireEvent.click(screen.getByTitle('Back home'));
+    expect(onNavigate).toHaveBeenCalledWith('home');
+  });
 });
