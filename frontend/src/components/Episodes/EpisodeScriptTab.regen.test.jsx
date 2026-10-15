@@ -80,6 +80,9 @@ describe('Regenerate that outlasts its request', () => {
       return { data: { data: { script_content: calls < 2 ? SCRIPT : NEW } } };
     });
     renderTab();
+    // The tab reads the saved script once as it opens; the waiting counts from here.
+    await waitFor(() => expect(calls).toBe(1));
+    calls = 0;
     fireEvent.click(screen.getByTestId('script-regenerate'));
     await waitFor(() => expect(screen.getByTestId('script-waiting')).toBeTruthy());
     await act(async () => { await vi.advanceTimersByTimeAsync(8000); });
