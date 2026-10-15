@@ -46,12 +46,13 @@ describe('the character page', () => {
     expect(withLala({ events: [] })).toBeNull();
   });
 
-  test('their voice: a sample post, the habit, a phrase and what they never say outright', () => {
+  test('their voice: a sample post, the habit, a phrase, the inner voice and what they never say outright', () => {
     const voice = voiceOf(
-      { voice_signature: JSON.stringify({ catchphrases: ['make it wearable'], internal_monologue_style: 'that they are scared' }) },
+      { voice_signature: JSON.stringify({ catchphrases: ['make it wearable'], internal_monologue_style: 'fragmented, anxious' }),
+        deep_profile: { speech_and_silence: { what_they_never_say_directly: 'that they are scared' } } },
       { sample_captions: [{ text: 'New drop, come play.' }], posting_voice: 'all lowercase' },
     );
-    expect(voice).toEqual({ sample: 'New drop, come play.', habit: 'all lowercase', phrase: 'make it wearable', neverSays: 'that they are scared' });
+    expect(voice).toEqual({ sample: 'New drop, come play.', habit: 'all lowercase', phrase: 'make it wearable', innerVoice: 'fragmented, anxious', neverSays: 'that they are scared' });
     expect(voiceOf({}, null)).toBeNull();
   });
 });

@@ -276,3 +276,43 @@ describe('CharacterRegistryPage: the cast', () => {
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/character-registry/characters/bulk-delete', { ids: ['j2', 'j1'] }));
   });
 });
+
+describe('CharacterRegistryPage: every feed person, none archived', () => {
+  beforeEach(() => rememberShow('show-b'));
+
+  test('feed people past the first 100 are loaded, and an archived one is left out', async () => {
+    const page1 = Array.from({ length: 100 }, (_, i) => ({ id: 1000 + i, feed_layer: 'lalaverse', handle: `p${i}`, display_name: `Person ${i}` }));
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/shows') return { data: { success: true, data: SHOWS } };
+      if (url.startsWith('/api/v1/character-registry/registries')) return { data: { success: true, registries: [CAST_REGISTRY] } };
+      if (url.includes('/api/v1/social-profiles') && url.includes('page=1')) return { data: { profiles: page1 } };
+      if (url.includes('/api/v1/social-profiles') && url.includes('page=2')) {
+        return { data: { profiles: [
+          { id: 8, feed_layer: 'lalaverse', handle: 'slowsift', display_name: 'slowsift' },
+          { id: 9, feed_layer: 'lalaverse', handle: 'oldone', display_name: 'Archived One', status: 'archived' },
+        ] } };
+      }
+      if (url.startsWith('/api/v1/cast/review')) return { data: { success: true, ...CAST_REVIEW } };
+      return { data: {} };
+    });
+    renderAt();
+    await waitFor(() => expect(screen.getByTestId('cast-people').textContent).toContain('@slowsift'));
+    expect(screen.getByTestId('cast-people').textContent).not.toContain('Archived One');
+  });
+
+  test('"All registries" counts the review of every registry', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/shows') return { data: { success: true, data: SHOWS } };
+      if (url.startsWith('/api/v1/character-registry/registries')) return { data: { success: true, registries: [CAST_REGISTRY, REGISTRIES[0]] } };
+      if (url.startsWith('/api/v1/social-profiles')) return { data: { profiles: CAST_PROFILES } };
+      if (url.startsWith('/api/v1/cast/review')) return { data: { success: true, ...CAST_REVIEW } };
+      return { data: {} };
+    });
+    renderAt('/character-registry');
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/v1/cast/review?registry_id=reg-sal'));
+    const select = await screen.findByRole('combobox');
+    fireEvent.change(select, { target: { value: '' } });
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/v1/cast/review?registry_id=reg-other'));
+  });
+});
+

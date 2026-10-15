@@ -177,6 +177,12 @@ const SHARED_WHERE = { [Op.or]: [{ show_id: null }, { is_franchise_asset: true }
 const SCOPES = ['show', 'shared', 'all'];
 const MAX_LIMIT = 500;
 
+/** The artifact categories a refine addresses: the ones given, else the angle's flagged ones. */
+function refineCategories(given, angle) {
+  if (Array.isArray(given)) return given.filter(c => typeof c === 'string' && c);
+  return (angle?.artifact_flags || []).map(f => f?.category).filter(Boolean);
+}
+
 /** The query's where, or { error } for a bad request. Exported for tests. */
 function sceneSetListScope(query = {}) {
   const showId = typeof query.show_id === 'string' && query.show_id.trim() ? query.show_id.trim() : null;
@@ -1756,8 +1762,7 @@ router.post('/:id/angles/:angleId/regenerate', validateUUIDParam('id'), requireA
     if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
 
     // Accept artifact categories to address, or use previously flagged ones
-    const categories = req.body.categories
-      || (angle.artifact_flags || []).map(f => f.category).filter(Boolean);
+    const categories = refineCategories(req.body.categories, angle);
 
     if (categories.length === 0) {
       return res.status(400).json({
@@ -2042,7 +2047,10 @@ router.post('/:id/brief', validateUUIDParam('id'), requireAuth, async (req, res)
           ? { kind: 'zone', zone_kind: zone.kind, angle_id: angle.id, angle_label: angle.angle_label, angle_name: angle.angle_name, reference_image_url: reference?.url || null, reference_source: reference?.source || null }
           : (angle ? { kind: 'angle', angle_id: angle.id, angle_label: angle.angle_label, angle_name: angle.angle_name } : { kind: 'base' }),
         brief,
-        prompt: briefToPrompt(brief),
+        // A refine's prompt carries the fixes for the angle's flagged problems.
+        prompt: angle && req.body?.refine
+          ? sceneGenService.refinePrompt(briefToPrompt(brief), refineCategories(req.body.categories, angle))
+          : briefToPrompt(brief),
         estimate,
       },
     });
@@ -2269,6 +2277,13 @@ const variantUpload = multer({
     else cb(new Error('Only JPEG, PNG, and WebP images are allowed'));
   },
 }).fields([{ name: 'image', maxCount: 1 }, { name: 'images', maxCount: 1 }]);
+// A refused file (type, size) answers 400 with its reason, not a server error.
+const variantUploadOr400 = (req, res, next) => variantUpload(req, res, (err) => {
+  if (!err) return next();
+  console.error('Scene Sets look variant upload refused:', err.message);
+  const tooBig = err.code === 'LIMIT_FILE_SIZE';
+  return res.status(400).json({ success: false, code: tooBig ? 'FILE_TOO_LARGE' : 'BAD_FILE', error: tooBig ? 'The image is larger than 10 MB' : err.message });
+});
 
 router.get('/:id/look-variants', validateUUIDParam('id'), requireAuth, async (req, res) => {
   try {
@@ -2300,7 +2315,7 @@ router.post('/:id/look-variants/:kind/:value/generate', validateUUIDParam('id'),
   }
 });
 
-router.post('/:id/look-variants/:kind/:value/upload', validateUUIDParam('id'), requireAuth, variantUpload, async (req, res) => {
+router.post('/:id/look-variants/:kind/:value/upload', validateUUIDParam('id'), requireAuth, variantUploadOr400, async (req, res) => {
   try {
     const file = [...(req.files?.images || []), ...(req.files?.image || [])][0];
     if (!file) return res.status(400).json({ success: false, error: 'No image file provided' });

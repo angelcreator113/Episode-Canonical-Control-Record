@@ -146,6 +146,7 @@ async function generateFullCharacter({ spark, worldContext, bookContext, existin
 const INTERIOR_ARCHITECTURE_SYSTEM = `You are generating the complete interior architecture for a character. Generate a complete JSON object with exactly these fields. Every field is required. Be specific, contradictory where appropriate, and never generic.
 
 {
+  "real_name": "their real full name, first and last: the name on their ID, fitting their background. Not their social media handle or the name they post under.",
   "want_architecture": {
     "surface_want": "what they say they want — the public ambition",
     "real_want": "what they actually want underneath — may contradict surface",
@@ -283,12 +284,13 @@ Role in story: ${role}`;
 // ─────────────────────────────────────────────────────────────────────────────
 
 const INTERIOR_FIELDS = [
+  'selected_name', // their real name (generated as real_name)
   'want_architecture', 'wound', 'the_mask', 'living_state', 'triggers',
   'blind_spot', 'change_capacity', 'self_narrative', 'operative_cosmology',
   'foreclosed_possibility', 'experience_of_joy', 'time_orientation',
   'dilemma', 'deep_profile',
 ];
-const INTERIOR_TEXT = ['blind_spot', 'self_narrative', 'operative_cosmology', 'foreclosed_possibility', 'experience_of_joy'];
+const INTERIOR_TEXT = ['selected_name', 'blind_spot', 'self_narrative', 'operative_cosmology', 'foreclosed_possibility', 'experience_of_joy'];
 const INTERIOR_OBJECTS = ['want_architecture', 'wound', 'the_mask', 'living_state', 'change_capacity', 'dilemma', 'deep_profile'];
 const TIME_ORIENTATIONS = ['past_anchored', 'future_obsessed', 'impulsive_present', 'waiting'];
 
@@ -312,7 +314,8 @@ function missingInteriorFields(character, requested = null) {
 function interiorUpdates(generated, fields) {
   const updates = {};
   for (const f of fields) {
-    const v = generated?.[f];
+    // The real name is asked for as real_name, so it is not read as a handle.
+    const v = f === 'selected_name' ? generated?.real_name : generated?.[f];
     if (!isFilled(v)) continue;
     if (f === 'time_orientation') {
       const key = String(v).trim().toLowerCase().replace(/[\s-]+/g, '_');
@@ -367,7 +370,7 @@ async function generateMissingInterior({ character, feedProfile = null, fields }
   const generated = await generateInteriorArchitecture({
     name, vibe, role, worldString, age,
     known: characterContext(character, feedProfile),
-    only: fields,
+    only: fields.map((f) => (f === 'selected_name' ? 'real_name' : f)),
   });
   return interiorUpdates(generated, fields);
 }

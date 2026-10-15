@@ -1126,7 +1126,6 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
   const [angleUploadPreview, setAngleUploadPreview] = useState(null);
   const [showMenu, setShowMenu] = useState(false);
   const [showPromptEditor, setShowPromptEditor] = useState(false);
-  const [editDesc, setEditDesc] = useState(set.canonical_description || '');
   const [savingPrompt, setSavingPrompt] = useState(false);
   const [showPromptPreview, setShowPromptPreview] = useState(false);
   const [previewData, setPreviewData] = useState(null);
@@ -1158,6 +1157,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
   const [toolsAction, setToolsAction] = useState(null);
   const [templates, setTemplates] = useState([]);
   const [comparison, setComparison] = useState(null);
+  // The event dress code's matches in the wardrobe (GET /scene-sets/:id/wardrobe-match).
+  const [wardrobeMatch, setWardrobeMatch] = useState(null);
   const [seeding, setSeeding] = useState(false);
   const [editingDesc, setEditingDesc] = useState(false);
   const [descDraft, setDescDraft] = useState('');
@@ -1196,21 +1197,6 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
   }, [isGenerating]);
 
   // menuRef used for positioning the portaled kebab dropdown
-
-  const handleSavePrompt = async (andRegenerate = false, andCascade = false) => {
-    setSavingPrompt(true);
-    await onUpdatePrompt(set, editDesc);
-    setSavingPrompt(false);
-    if (andCascade) {
-      setShowPromptEditor(false);
-      onCascadeRegenerate(set, editDesc);
-    } else if (andRegenerate) {
-      setShowPromptEditor(false);
-      onRegenerateBase(set);
-    } else {
-      setShowPromptEditor(false);
-    }
-  };
 
   const handlePreviewPrompt = async () => {
     setLoadingPreview(true);
@@ -1651,6 +1637,17 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                           }}>
                             <Save size={10} /> Save
                           </button>
+                          {/* The new description goes with the regenerate (the cascade saves it with the base). */}
+                          {set.base_still_url && !set.base_approved && (
+                            <button className="scene-sets-btn-details" disabled={isGenerating} data-testid={`scene-set-desc-cascade-${set.id}`} onClick={() => {
+                              setLocalDesc(descDraft);
+                              setDescReview(null);
+                              setEditingDesc(false);
+                              onCascadeRegenerate(set, descDraft);
+                            }}>
+                              <RefreshCw size={10} /> Save &amp; regenerate base + angles
+                            </button>
+                          )}
                           <button className="scene-sets-btn-details" onClick={() => setEditingDesc(false)}>Cancel</button>
                         </div>
                       </div>
@@ -1671,6 +1668,19 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                       )}
                     </div>
 
+                    {/* Analysis: the angles against the base, and the event's dress code against the wardrobe. */}
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Analysis</div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button className="scene-sets-btn-generate" onClick={async () => {
+                          try { const r = await getComparisonApi(set.id); setComparison(r.data); } catch (err) { showToast(err.response?.data?.error || 'Comparison failed', 'error'); }
+                        }}><Eye size={11} /> Side-by-Side Compare</button>
+
+                        <button className="scene-sets-btn-generate" onClick={async () => {
+                          try { const r = await getWardrobeMatchApi(set.id); setWardrobeMatch(r.data); } catch (err) { showToast(err.response?.data?.error || 'Wardrobe match failed', 'error'); }
+                        }}><Heart size={11} /> Wardrobe Match</button>
+                      </div>
+                    </div>
                     {/* D2: the set's show */}
                     <div className="scene-sets-modal-field">
                       <label>Show</label>
@@ -1872,6 +1882,18 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                           {!hasBase && (
                             <button type="button" onClick={() => onGenerateBase(set)} disabled={isGenerating} className="scene-sets-btn-details">
                               {isGenerating ? <Loader size={12} className="spin" /> : <Sparkles size={12} />} Generate image
+                            </button>
+                          )}
+                          {hasBase && !set.base_approved && (
+                            <button type="button" onClick={() => onRegenerateBase(set)} disabled={isGenerating} className="scene-sets-btn-details"
+                              data-testid={`scene-set-regenerate-base-${set.id}`} title="Make a new base image from the brief">
+                              {isGenerating ? <Loader size={12} className="spin" /> : <RefreshCw size={12} />} Regenerate
+                            </button>
+                          )}
+                          {hasBase && !set.base_approved && totalAngles > 0 && (
+                            <button type="button" onClick={() => onCascadeRegenerate(set)} disabled={isGenerating} className="scene-sets-btn-details"
+                              data-testid={`scene-set-cascade-${set.id}`} title="A new base image, then every angle from it">
+                              <RefreshCw size={12} /> Regenerate base + angles
                             </button>
                           )}
                         </div>
@@ -2125,6 +2147,15 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                             <div className="scene-sets-angle-row-status">
                               {isComplete && (() => {
                                 const sv = a.quality_review?.spec_validation;
+                                // A check that could not run has no score: shown as not checked, never as a pass.
+                                if (sv && (sv.checked === false || sv.score == null)) {
+                                  return (
+                                    <span data-testid={`spec-unchecked-${a.id}`} title={`Spec not checked${sv.reason ? `: ${sv.reason}` : ''}`}
+                                      style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 9, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace" }}>
+                                      <ShieldAlert size={11} /> –
+                                    </span>
+                                  );
+                                }
                                 if (sv) {
                                   const scoreColor = sv.score >= 80 ? 'var(--success-text)' : sv.score >= 60 ? 'var(--lala-gold-text)' : 'var(--danger-text)';
                                   return (
@@ -2554,19 +2585,6 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                       </div>
                     )}
 
-                    {/* Analysis section */}
-                    <div>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Analysis</div>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button className="scene-sets-btn-generate" onClick={async () => {
-                          try { const r = await getComparisonApi(set.id); setComparison(r.data); } catch {}
-                        }}><Eye size={11} /> Side-by-Side Compare</button>
-
-                        <button className="scene-sets-btn-generate" onClick={async () => {
-                          try { const r = await getWardrobeMatchApi(set.id); setWardrobeMatch(r.data); } catch {}
-                        }}><Heart size={11} /> Wardrobe Match</button>
-                      </div>
-                    </div>
                   </div>
                 )}
 
@@ -2767,6 +2785,38 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
         document.body
       )}
 
+      {/* Wardrobe Match Modal (card-level) */}
+      {wardrobeMatch && createPortal(
+        <div className="scene-sets-modal-backdrop" onClick={() => setWardrobeMatch(null)}>
+          <div className="scene-sets-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
+            <div className="scene-sets-modal-header">
+              <h3 className="scene-sets-modal-title">Wardrobe Match</h3>
+              <button className="scene-sets-modal-close" onClick={() => setWardrobeMatch(null)}><X size={16} /></button>
+            </div>
+            <div className="scene-sets-modal-body">
+              {wardrobeMatch.event ? (
+                <>
+                  <div style={{ padding: '8px 12px', background: 'var(--warning-bg)', borderRadius: 8, marginBottom: 12, fontSize: 12 }}>
+                    Event: <strong>{wardrobeMatch.event.name}</strong> — Dress code: <strong>{wardrobeMatch.event.dress_code || 'None'}</strong>
+                    {wardrobeMatch.event.keywords?.length > 0 && <div style={{ marginTop: 4 }}>Keywords: {wardrobeMatch.event.keywords.join(', ')}</div>}
+                  </div>
+                  {wardrobeMatch.matches?.length > 0 ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
+                      {wardrobeMatch.matches.map(m => (
+                        <div key={m.id} style={{ background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 8, overflow: 'hidden' }}>
+                          {(m.thumbnail_url || m.image_url) && <img src={m.thumbnail_url || m.image_url} alt={m.name} style={{ width: '100%', aspectRatio: '1', objectFit: 'cover' }} />}
+                          <div style={{ padding: '4px 6px', fontSize: 10, fontWeight: 600 }}>{m.name}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <p style={{ color: 'var(--text-secondary)', textAlign: 'center' }}>No wardrobe items match the dress code keywords.</p>}
+                </>
+              ) : <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: 20 }}>No event linked to this scene set.</p>}
+            </div>
+          </div>
+        </div>, document.body
+      )}
+
       {/* Comparison Modal (card-level) */}
       {comparison && createPortal(
         <div className="scene-sets-modal-backdrop" onClick={() => setComparison(null)}>
@@ -2903,7 +2953,6 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
   const [reviewModal, setReviewModal] = useState(null); // { setId, angle }
   const [allShows, setAllShows] = useState([]);
   const [allEpisodes, setAllEpisodes] = useState([]);
-  const [wardrobeMatch, setWardrobeMatch] = useState(null);
   const [filmstrip, setFilmstrip] = useState(null);
   const [angleHistory, setAngleHistory] = useState(null);
   const [createShowId, setCreateShowId] = useState('');
@@ -4006,38 +4055,6 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         />
       )}
 
-
-      {/* Wardrobe Match Modal */}
-      {wardrobeMatch && createPortal(
-        <div className="scene-sets-modal-backdrop" onClick={() => setWardrobeMatch(null)}>
-          <div className="scene-sets-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
-            <div className="scene-sets-modal-header">
-              <h3 className="scene-sets-modal-title">Wardrobe Match</h3>
-              <button className="scene-sets-modal-close" onClick={() => setWardrobeMatch(null)}><X size={16} /></button>
-            </div>
-            <div className="scene-sets-modal-body">
-              {wardrobeMatch.event ? (
-                <>
-                  <div style={{ padding: '8px 12px', background: 'var(--warning-bg)', borderRadius: 8, marginBottom: 12, fontSize: 12 }}>
-                    Event: <strong>{wardrobeMatch.event.name}</strong> — Dress code: <strong>{wardrobeMatch.event.dress_code || 'None'}</strong>
-                    {wardrobeMatch.event.keywords?.length > 0 && <div style={{ marginTop: 4 }}>Keywords: {wardrobeMatch.event.keywords.join(', ')}</div>}
-                  </div>
-                  {wardrobeMatch.matches?.length > 0 ? (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
-                      {wardrobeMatch.matches.map(m => (
-                        <div key={m.id} style={{ background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 8, overflow: 'hidden' }}>
-                          {(m.thumbnail_url || m.image_url) && <img src={m.thumbnail_url || m.image_url} alt={m.name} style={{ width: '100%', aspectRatio: '1', objectFit: 'cover' }} />}
-                          <div style={{ padding: '4px 6px', fontSize: 10, fontWeight: 600 }}>{m.name}</div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : <p style={{ color: 'var(--text-secondary)', textAlign: 'center' }}>No wardrobe items match the dress code keywords.</p>}
-                </>
-              ) : <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: 20 }}>No event linked to this scene set.</p>}
-            </div>
-          </div>
-        </div>, document.body
-      )}
 
       {/* Angle History Modal */}
       {angleHistory && createPortal(

@@ -1848,10 +1848,10 @@ async function generateZone(sceneAngle, sceneSet, models, options = {}) {
 
   const { options: briefOptions } = angleBriefOptions(sceneAngle, sceneSet, { overrides: options.overrides });
   const brief = await prepareSceneBrief(sequelize, sceneSet, briefOptions);
-  const prompt = briefToPrompt(brief);
+  const prompt = refinePrompt(briefToPrompt(brief), options.refine);
 
   await SceneAngle.update(
-    { generation_status: 'generating', runway_prompt: prompt },
+    { generation_status: 'generating', runway_prompt: prompt, ...(options.refine ? { refined_prompt: prompt } : {}) },
     { where: { id: sceneAngle.id } }
   );
   try {
@@ -1923,7 +1923,7 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
     imageAnalysis, overrides: options.overrides, zoneAngle,
   });
   const brief = await prepareSceneBrief(briefDb(models), sceneSet, briefOptions);
-  const prompt = briefToPrompt(brief);
+  const prompt = refinePrompt(briefToPrompt(brief), options.refine);
   if (specConstraints) console.log(`[SceneGen] Using SceneSpec camera contracts for ${angleLabel}`);
 
   // Keep base-image conditioning on by default. Only disable it for known
@@ -1935,7 +1935,7 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
   const referenceImageForEdit = shouldDisableReference ? null : sourceImage;
 
   await SceneAngle.update(
-    { generation_status: 'generating', runway_prompt: prompt },
+    { generation_status: 'generating', runway_prompt: prompt, ...(options.refine ? { refined_prompt: prompt } : {}) },
     { where: { id: sceneAngle.id } }
   );
 
@@ -1954,7 +1954,9 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
     // left) and cut the same region from every set's picture, a house's
     // outside included. Now only a frame from this set's spec is cropped;
     // without one the angle is generated.
-    const frame = zoneAngle ? null : sceneSpecService.contractFrame(sceneSet.scene_spec, angleLabel);
+    // A refine asks for a new picture without the flagged problems, and a
+    // framing on a zone is made from the zone's picture: neither is a crop.
+    const frame = (options.refine || zoneAngle) ? null : sceneSpecService.contractFrame(sceneSet.scene_spec, angleLabel);
     if (referenceImageForEdit && frame) {
       stillUrl = await cropAndOutpaint(
         referenceImageForEdit, angleLabel, sceneSet.id, sceneAngle.id, prompt,
@@ -2078,6 +2080,8 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
     }
     if (specValidation) {
       qualityReview.spec_validation = {
+        checked: specValidation.checked !== false,
+        ...(specValidation.checked === false ? { reason: specValidation.reason || null } : {}),
         score: specValidation.score,
         pass: specValidation.pass,
         missing_required: specValidation.missing_required,
@@ -2165,123 +2169,61 @@ async function generateAngleVideo(sceneAngle, sceneSet, models) {
 // ─── HIGH-LEVEL: REGENERATE ANGLE WITH REFINED PROMPT ─────────────────────────
 
 /**
- * The Scene Brief options for a refined angle regeneration: the angle's
- * camera label with continuity, and the base's event and overrides
- * (options.overrides replaces those, S2). regenerateAngleRefined and the
- * brief shown before it (POST /scene-sets/:id/brief with refine) share it.
+ * The angle's prompt with the fixes for the flagged problems (refine: the
+ * artifact categories); the prompt unchanged without them.
  */
-function refinedBriefOptions(sceneAngle, sceneSet, { overrides = null } = {}) {
-  const baseBrief = sceneSet.base_generation?.brief || null;
-  return {
-    angleLabel: sceneAngle.angle_label || 'WIDE',
-    continuity: true,
-    eventId: baseBrief?.event_id || null,
-    overrides: overrides && typeof overrides === 'object' ? overrides : (baseBrief?.overrides || {}),
-  };
+function refinePrompt(prompt, refine) {
+  return Array.isArray(refine) && refine.length ? artifactDetection.buildRefinedPrompt(prompt, refine) : prompt;
 }
 
-async function regenerateAngleRefined(sceneAngle, sceneSet, artifactCategories, models, options = {}) {
-  const { SceneAngle, SceneSet } = models;
+/**
+ * The Scene Brief options for a refined angle regeneration: the angle's own
+ * (angleBriefOptions: its camera direction, zone and required features), so
+ * the brief shown before a refine (POST /scene-sets/:id/brief with refine)
+ * is the one sent.
+ */
+function refinedBriefOptions(sceneAngle, sceneSet, { overrides = null } = {}) {
+  return angleBriefOptions(sceneAngle, sceneSet, { overrides }).options;
+}
 
+/**
+ * Regenerate an angle's still with the fixes for the flagged problems.
+ * The angle is made as Generate makes it (generateAngle: a zone from the
+ * approved base, the camera direction, the required features, the
+ * consistency check) with the fixes added to its prompt, never cropped
+ * again; then its quality is checked again. No video: a video is made on
+ * request (generateAngleVideo).
+ */
+async function regenerateAngleRefined(sceneAngle, sceneSet, artifactCategories, models, options = {}) {
+  const { SceneAngle } = models;
   if (!sceneSet.base_still_url) {
     throw new Error('base_still_url not set on parent scene set. Run generateBaseScene first.');
   }
+  const categories = (artifactCategories || []).map(c => (c && typeof c === 'object' ? c.category : c)).filter(Boolean);
+  console.log(`[SceneGen] Regenerating angle with refined prompt: ${sceneAngle.angle_name}; addressing ${categories.join(', ')}`);
+  const result = await generateAngle(sceneAngle, sceneSet, models, { ...options, refine: categories });
 
-  const angleLabel = sceneAngle.angle_label || 'WIDE';
-  const brief = await prepareSceneBrief(briefDb(models), sceneSet, refinedBriefOptions(sceneAngle, sceneSet, {
-    overrides: options.overrides,
-  }));
-  const basePrompt = briefToPrompt(brief);
-  const refinedPrompt = artifactDetection.buildRefinedPrompt(basePrompt, artifactCategories);
-
-  await SceneAngle.update(
-    { generation_status: 'generating', runway_prompt: refinedPrompt, refined_prompt: refinedPrompt },
-    { where: { id: sceneAngle.id } }
-  );
-
+  let qualityData = { qualityScore: null, flags: [] };
   try {
-    console.log(`[SceneGen] Regenerating angle with refined prompt: ${sceneAngle.angle_name}`);
-    console.log(`[SceneGen] Addressing artifacts: ${artifactCategories.join(', ')}`);
-
-    const numericSeed = sceneSet.base_runway_seed && !isNaN(Number(sceneSet.base_runway_seed))
-      ? Number(sceneSet.base_runway_seed)
-      : null;
-    const seedVariation = numericSeed !== null
-      ? String(numericSeed + (sceneAngle.generation_attempt || 1))
-      : undefined;
-
-    // Style reference
-    const styleReference = (sceneAngle.style_reference_url || sceneSet.style_reference_url)
-      ? { uri: sceneAngle.style_reference_url || sceneSet.style_reference_url, weight: 0.7 }
-      : undefined;
-    const referenceImages = sceneSet.base_still_url
-      ? [{ uri: sceneSet.base_still_url, weight: 0.8 }]
-      : undefined;
-
-    const refineCosts = createCostCollector(`refined angle ${sceneAngle.id}`);
-    const { imageUrl } = await startTextToImage(refinedPrompt, {
-      seed: seedVariation,
-      styleReference,
-      referenceImages,
-      onLogged: refineCosts.onLogged,
-    });
-    const stillUrl = await downloadAndStoreStill(imageUrl, sceneSet.id, sceneAngle.id);
-
-    // Video with camera motion and duration
-    const videoDuration = sceneAngle.video_duration || VIDEO_DURATION_MAP[angleLabel] || 5;
-    const cameraMotion = sceneAngle.camera_motion || CAMERA_MOTION_MAP[angleLabel] || 'static';
-
-    const { jobId: videoJobId } = await startImageToVideo(
-      refinedPrompt,
-      stillUrl,
-      { duration: videoDuration, cameraMotion }
-    );
-    const videoResult = await pollTask(videoJobId);
-    let videoUrl = null;
-    if (videoResult.status === 'SUCCEEDED') {
-      videoUrl = await storeInS3(videoResult.outputUrl, sceneSet.id, sceneAngle.id, 'video');
-    }
-
-    let qualityData = { qualityScore: null, flags: [] };
-    try {
-      qualityData = await artifactDetection.analyzeImageQuality(stillUrl);
-    } catch (qaErr) {
-      console.warn(`[SceneGen] Quality analysis on refined image failed: ${qaErr.message}`);
-    }
-
-    // Still: the logged Kontext cost (rate-table estimate, Task #2396), not a
-    // literal. Runway video credits are added as before (INFERRED unchanged).
-    const totalCost = (refineCosts.value() || 0) + (videoResult.creditsUsed || 0);
-
-    await SceneAngle.update({
-      still_image_url: stillUrl,
-      video_clip_url: videoUrl,
-      runway_seed: String(videoResult.seed ?? videoJobId),
-      generation_status: 'complete',
-      generation_cost: totalCost,
-      quality_score: qualityData.qualityScore,
-      artifact_flags: qualityData.flags || [],
-      generation_attempt: (sceneAngle.generation_attempt || 0) + 1,
-      refined_prompt: refinedPrompt,
-      camera_motion: cameraMotion,
-      video_duration: videoDuration,
-    }, { where: { id: sceneAngle.id } });
-
-    await SceneSet.increment('generation_cost', { by: totalCost, where: { id: sceneSet.id } });
-
-    return {
-      success: true,
-      stillUrl,
-      videoUrl,
-      seed: null,
-      qualityScore: qualityData.qualityScore,
-      artifactFlags: qualityData.flags,
-      attempt: (sceneAngle.generation_attempt || 0) + 1,
-    };
-  } catch (err) {
-    await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
-    throw err;
+    qualityData = await artifactDetection.analyzeImageQuality(result.stillUrl);
+  } catch (qaErr) {
+    console.warn(`[SceneGen] Quality analysis on refined image failed: ${qaErr.message}`);
   }
+  await SceneAngle.update({
+    quality_score: qualityData.qualityScore,
+    artifact_flags: qualityData.flags || [],
+  }, { where: { id: sceneAngle.id } });
+
+  return {
+    success: true,
+    stillUrl: result.stillUrl,
+    videoUrl: null,
+    seed: null,
+    qualityScore: qualityData.qualityScore,
+    artifactFlags: qualityData.flags,
+    specValidation: result.specValidation || null,
+    attempt: (sceneAngle.generation_attempt || 0) + 1,
+  };
 }
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -2310,6 +2252,7 @@ module.exports = {
   zoneReferenceImage,
   extraZoneAngle,
   refinedBriefOptions,
+  refinePrompt,
   generateAngleVideo,
   regenerateAngleRefined,
   generateBestVariation,
