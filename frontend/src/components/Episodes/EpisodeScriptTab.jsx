@@ -12,7 +12,7 @@ import { moveBeat, moveLine, dropIndex, replaceBeat, appendLine, insertLine } fr
 import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers, phoneCheck, messageLine, closetBeat, wearFlags, uncuedPieces, lastGettingReadyIndex, todoModeAt, deliveredAt, dealCueFlags, TODO_MODE_LABELS } from '../../lib/scriptMoments';
 import { isScreen, isIcon, isProduction } from '../../lib/overlayUtils';
 import { draftLine, lalaLine, lalaLineSlots } from '../../lib/lalaLineDraft';
-import { beatNumberForLabel, BEAT_SPLIT, HAS_BEAT_HEADER } from '../../lib/beatLabelNumber';
+import { beatNumberForLabel, BEAT_SPLIT, HAS_BEAT_HEADER, normalizeBeatHeaders } from '../../lib/beatLabelNumber';
 import { beatImage, beatImageLabel } from '../BeatPlan/BeatPlanParts';
 import { beatSeconds, scriptSeconds, formatRuntime } from '../../lib/scriptRuntime';
 import { scriptHealth } from '../../lib/scriptHealth';
@@ -67,14 +67,16 @@ const BEAT_NAMES = [
 // whose number is in lockedBeats is approved, and locked
 // (src/utils/scriptBeatLocks.js numbers beats the same way).
 const BEAT_HEADER_START = /^\s*##\s*BEAT:/i;
-export function scriptPreamble(scriptText) {
-  if (!HAS_BEAT_HEADER.test(scriptText || '')) return '';
+export function scriptPreamble(text) {
+  const scriptText = normalizeBeatHeaders(text);
+  if (!HAS_BEAT_HEADER.test(scriptText)) return '';
   const first = scriptText.split(BEAT_SPLIT)[0];
   return BEAT_HEADER_START.test(first) ? '' : first.trimEnd();
 }
 
-export function parseScriptIntoBeats(scriptText, lockedBeats = []) {
-  if (!scriptText?.trim()) return [];
+export function parseScriptIntoBeats(text, lockedBeats = []) {
+  const scriptText = normalizeBeatHeaders(text);
+  if (!scriptText.trim()) return [];
   const locked = new Set(lockedBeats);
   if (HAS_BEAT_HEADER.test(scriptText)) {
     const sections = scriptText.split(BEAT_SPLIT).filter(s => BEAT_HEADER_START.test(s));
@@ -146,9 +148,28 @@ const isPhoneWidth = () => {
   try { return window.matchMedia?.('(max-width: 760px)').matches || false; } catch (err) { console.error('[EpisodeScript] width check failed:', err); return false; }
 };
 
+//
+// A header that names no beat (`## BEAT: Bonus scene`) is numbered by its
+// place, so moving another beat past it gave it, and its lock, another
+// number (Script tab re-audit, 2026-10-15). Its number is written in first
+// (`## BEAT: 2 · Bonus scene`), so it keeps it wherever beats move; the
+// server puts a locked beat back the same way (src/utils/scriptBeatLocks.js).
 export function withBeatHeaders(scriptText, lockedBeats = []) {
-  if (!String(scriptText || '').trim() || HAS_BEAT_HEADER.test(scriptText)) return scriptText;
-  return parseScriptIntoBeats(scriptText, lockedBeats).map((b) => `## BEAT: ${b.number} · ${b.name}\n${b.lines.join('\n')}`).join('\n\n');
+  if (!String(scriptText || '').trim()) return scriptText;
+  const text = normalizeBeatHeaders(scriptText);
+  if (!HAS_BEAT_HEADER.test(text)) {
+    return parseScriptIntoBeats(text, lockedBeats).map((b) => `## BEAT: ${b.number} · ${b.name}\n${b.lines.join('\n')}`).join('\n\n');
+  }
+  let place = 0;
+  const numbered = text.split('\n').map((line) => {
+    const m = line.match(/^\s*##[ \t]*BEAT:[ \t]*(.*)$/i);
+    if (!m) return line;
+    place += 1;
+    const label = m[1].trim();
+    if (beatNumberForLabel(label) || place > BEAT_NAMES.length) return line;
+    return `## BEAT: ${place}${label ? ` · ${label}` : ''}`;
+  }).join('\n');
+  return numbered === scriptText ? scriptText : numbered;
 }
 
 const NOT_SPEAKERS = new Set(['location', 'scene', 'setting', 'time', 'note', 'notes', 'transition', 'cut', 'int', 'ext', 'beat', 'act', 'sfx', 'music', 'caption']);

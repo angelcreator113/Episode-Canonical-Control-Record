@@ -53,4 +53,16 @@ function beatNumberForLabel(label) {
   return LABEL_NUMBERS[keyOf(text)] || null;
 }
 
-module.exports = { beatNumberForLabel, LABEL_NUMBERS };
+// Script tab re-audit (2026-10-15): a pasted script can have Windows line
+// ends, or headers in Markdown dress (`**## BEAT: 3**`, `### BEAT: 3`). The
+// tab read them one way and the server another (or not at all), so a lock
+// was not kept and the coverage check found no beats. Both sides read the
+// script through this first; frontend/src/lib/beatLabelNumber.js has the
+// same rule.
+const HEADER_VARIANT = /^[ \t]*(\*\*|__)?[ \t]*(#{2,3})[ \t]*BEAT[ \t]*:[ \t]*(.*?)[ \t]*(?:\*\*|__)?[ \t]*$/gim;
+function normalizeBeatHeaders(text) {
+  return String(text ?? '').replace(/\r\n?/g, '\n')
+    .replace(HEADER_VARIANT, (line, bold, hashes, label) => (bold || hashes.length === 3 ? `## BEAT: ${label}` : line));
+}
+
+module.exports = { beatNumberForLabel, normalizeBeatHeaders, LABEL_NUMBERS };

@@ -18,7 +18,7 @@
  */
 import { beatName } from './canonicalBeats';
 import { parseMoment, resolveMoment, messageOf, verbLabel, deviceLabel } from './scriptMoments';
-import { beatNumberForLabel } from './beatLabelNumber';
+import { beatNumberForLabel, normalizeBeatHeaders } from './beatLabelNumber';
 
 const BEAT_HEADER = /^\s*##\s*BEAT:\s*(.*)$/i;
 const TAG_LINE = /^\s*\[\s*([A-Za-z_]+)\s*:\s*([^\]]*)\]?\s*$/;
@@ -99,7 +99,7 @@ export function readLine(line, on = null) {
  * Returns { preamble: string[], beats: [{ number, name, label, lines }] }.
  */
 export function scriptSections(scriptText) {
-  const lines = String(scriptText || '').split(/\r?\n/);
+  const lines = normalizeBeatHeaders(scriptText || '').split('\n');
   const preamble = [];
   const beats = [];
   for (const line of lines) {

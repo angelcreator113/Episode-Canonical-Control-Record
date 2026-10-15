@@ -20,7 +20,7 @@
  *   screen".
  */
 
-const { beatNumberForLabel } = require('./beatLabelNumber');
+const { beatNumberForLabel, normalizeBeatHeaders } = require('./beatLabelNumber');
 
 const BEAT_COUNT = 14;
 const CLOSET_CANON = 8;
@@ -32,12 +32,13 @@ const normKey = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
 /** The script's beats as the Script tab numbers them: [{ number, lines }]. */
 function scriptBeats(scriptText) {
-  const text = String(scriptText || '');
+  const text = normalizeBeatHeaders(scriptText || '');
   if (!text.trim()) return [];
-  if (/##\s*BEAT:/i.test(text)) {
+  // A header starts its line (scriptBeatLocks reads it the same way).
+  if (/^[ \t]*##[ \t]*BEAT:/im.test(text)) {
     // A header starts its line; a beat's number is the header's number or the
     // canonical beat its name names (utils/beatLabelNumber.js), else its place.
-    return text.split(/(?=^[ \t]*##\s*BEAT:)/im)
+    return text.split(/(?=^[ \t]*##[ \t]*BEAT:)/im)
       .filter((s) => /^\s*##\s*BEAT:/i.test(s))
       .map((section, i) => {
         const lines = section.split('\n').filter((l) => l.trim());

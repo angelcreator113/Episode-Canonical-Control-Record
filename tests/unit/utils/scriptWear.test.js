@@ -108,3 +108,10 @@ describe('getTodoList as of a beat', () => {
     expect(list.tasks.every((t) => t.completed)).toBe(true);
   });
 });
+
+// Script tab re-audit (2026-10-15): Markdown-dressed headers and Windows
+// line ends are beats here as on the Script tab.
+test('Markdown-dressed headers and Windows line ends are beats', () => {
+  expect(scriptBeats('**## BEAT: 8 · Transformation Loop**\r\nLala: on\r\n### BEAT: 9\r\nx').map((b) => [b.number, b.lines])).toEqual([[8, ['Lala: on']], [9, ['x']]]);
+  expect(scriptBeats('Lala: "say ## BEAT: 3 here"\nMe: hi')[0].number).toBe(1);
+});

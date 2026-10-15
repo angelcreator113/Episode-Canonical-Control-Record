@@ -60,4 +60,29 @@ describe('scriptBeatLocks', () => {
     expect(scriptKeepingLocks(episode, script(beat(4, 'Interruption Pulse 1', 'new'))).script).toBe(script(beat(4, 'Interruption Pulse 1', 'kept')));
     expect(scriptKeepingLocks(null, 'x').script).toBe('x');
   });
+
+  // Script tab re-audit (2026-10-15).
+  test('a number held by two beats keeps both approved copies', () => {
+    const prev = '## BEAT: 3 · Welcome\nA1\n\n## BEAT: 3 · Welcome\nB1\n\n## BEAT: 4\nC1';
+    const next = '## BEAT: 3 · Welcome\nA2\n\n## BEAT: 3 · Welcome\nNEW-B\n\n## BEAT: 4\nC2';
+    expect(keepLockedBeats(next, prev, [3])).toEqual({ script: '## BEAT: 3 · Welcome\nA1\n\n## BEAT: 3 · Welcome\nB1\n\n## BEAT: 4\nC2', kept: [3], changed: [3] });
+    // A copy the new script dropped goes back after the first.
+    expect(keepLockedBeats('## BEAT: 3 · Welcome\nA2\n\n## BEAT: 4\nC2', prev, [3]).script).toBe(prev.replace('C1', 'C2'));
+  });
+
+  test('an approved beat numbered by its place goes back with its number written in', () => {
+    const prev = '## BEAT: 1 · Opening Ritual\nA\n\n## BEAT: Bonus Scene\nBONUS\n\n## BEAT: Extra\nEXTRA';
+    const moved = '## BEAT: 1 · Opening Ritual\nA\n\n## BEAT: 3 · Extra\nEXTRA\n\n## BEAT: 2 · Bonus Scene\nBONUS';
+    expect(keepLockedBeats(moved, prev, [2])).toEqual({ script: moved, kept: [2], changed: [] });
+    const written = '## BEAT: 1 · Opening Ritual\nA2\n\n## BEAT: 2 · Login Sequence\nNEW\n\n## BEAT: 3 · Welcome\nC2';
+    expect(keepLockedBeats(written, prev, [2]).script).toBe('## BEAT: 1 · Opening Ritual\nA2\n\n## BEAT: 2 · Bonus Scene\nBONUS\n\n## BEAT: 3 · Welcome\nC2');
+  });
+
+  test('Windows line ends and Markdown-dressed headers are beats, so their locks hold', () => {
+    const crlf = '## BEAT: 1 · Opening Ritual\r\nLala: "Hi"\r\n\r\n## BEAT: 2 · Login Sequence\r\nLala: "In"';
+    expect(splitScriptBeats(crlf).beats.map((b) => b.number)).toEqual([1, 2]);
+    expect(keepLockedBeats('## BEAT: 1 · Opening Ritual\nChanged\n\n## BEAT: 2 · Login Sequence\nNew', crlf, [1]).changed).toEqual([1]);
+    expect(splitScriptBeats('**## BEAT: 1 · Opening Ritual**\nx\n### BEAT: 2\ny').beats.map((b) => b.number)).toEqual([1, 2]);
+  });
 });
+
