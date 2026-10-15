@@ -899,6 +899,10 @@
 .zones-tap-row__number {
   width: 26px;
   height: 26px;
+  /* Not stretched by the site-wide 44px touch minimum: it is the zone's
+     number on the phone, and the row's grid is built around 26px. */
+  min-width: 26px;
+  min-height: 26px;
   border: 0;
   border-radius: 50%;
   background: var(--accent-dark);
