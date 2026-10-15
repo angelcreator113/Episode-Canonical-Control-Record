@@ -828,6 +828,11 @@ export default function PhoneHub({
         @media (hover: none) {
           .screen-card-menu { opacity: 0.7 !important; }
         }
+        /* The card menu stays a 28px button on touch screens (the site-wide
+           44px minimum drew a large dark square over the thumbnail); an
+           invisible 8px ring keeps its tap area 44px. */
+        .screen-card-menu { position: relative; min-width: 28px; min-height: 28px; }
+        .screen-card-menu::before { content: ''; position: absolute; inset: -8px; }
       `}</style>
     </div>
   );
