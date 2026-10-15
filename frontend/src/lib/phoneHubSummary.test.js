@@ -65,3 +65,12 @@ describe('homeScreenOf and incomingById', () => {
     expect(incomingById([HOME, FEED]).get('home')).toBeUndefined();
   });
 });
+
+test('incomingById: a screen linking to itself does not reach itself', () => {
+  const reach = incomingById([
+    { id: 'a', category: 'phone', screen_links: [{ id: 'z1', target: 'a' }, { id: 'z2', target: 'b' }] },
+    { id: 'b', category: 'phone', screen_links: [{ id: 'z3', target: 'a' }] },
+  ]);
+  expect(reach.get('a')).toBe(1);
+  expect(reach.get('b')).toBe(1);
+});

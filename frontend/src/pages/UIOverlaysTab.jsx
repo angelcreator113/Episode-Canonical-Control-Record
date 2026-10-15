@@ -7,7 +7,7 @@
  * Bottom: detail panel for selected screen (generate, upload, edit, delete)
  */
 import { useState, useEffect, useCallback, useRef, useMemo, Component } from 'react';
-import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Maximize, Copy, Info, Monitor, Undo2, ChevronDown, ChevronRight, ChevronLeft, GitBranch, Check } from 'lucide-react';
+import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Maximize, Copy, Info, Monitor, Undo2, ChevronDown, ChevronRight, ChevronLeft, Check } from 'lucide-react';
 import api from '../services/api';
 import { createPortal } from 'react-dom';
 import PhoneHub from '../components/PhoneHub';
@@ -186,6 +186,8 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [shows, setShows] = useState([]);
   const [overlays, setOverlays] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
+  const [showsLoaded, setShowsLoaded] = useState(false);
   const [activeScreen, setActiveScreen] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [editorTab, setEditorTab] = useState('actions');
@@ -211,13 +213,16 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   // Connect and Content edit a screen, never an icon: with an icon selected
   // they used to open on it and save tap zones onto the icon's image. They
   // move to the home screen, else the first screen with an image (Evoni,
-  // 2026-10-07, Lala's Phone step 1).
+  // 2026-10-07, Lala's Phone step 1). A screen with no image moves too
+  // (phone audit, 2026-10-15): there is nothing to draw zones or areas on,
+  // and the stage opened blank.
+  const editableHere = Boolean(activeScreen && isScreen(activeScreen) && activeScreen.url);
   useEffect(() => {
-    if (!(editingLinks || editingContent) || !activeScreen || isScreen(activeScreen)) return;
+    if (!(editingLinks || editingContent) || editableHere) return;
     const target = overlays.find(o => o.is_home && o.generated && o.url && isScreen(o))
       || overlays.find(o => o.generated && o.url && isScreen(o));
     if (target) setActiveScreen(target);
-  }, [editingLinks, editingContent, activeScreen, overlays]);
+  }, [editingLinks, editingContent, editableHere, overlays]);
   // Connect has one zone editor, ScreenLinkEditor (Task #2021): it draws tap
   // zones, places library icons by tapping, and edits both. The Tap / Icon
   // toggle and IconPlacementMode are gone. Content zones are a different
@@ -266,16 +271,33 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const requestedScreenRef = useRef(
     typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('screen') : null,
   );
-  const [hiddenScreens, setHiddenScreens] = useState(() => {
+  // Hidden screens are kept per show (phone audit, 2026-10-15): the ids are
+  // name slugs, so one shared list hid "feed" in every show. The old shared
+  // list moves, once, to the first show opened, and is then gone.
+  const hiddenKey = showId ? `phone_hub_hidden:${showId}` : null;
+  const readHidden = (key) => {
+    if (!key) return [];
     // Guard against malformed storage (non-array JSON) — earlier bugs wrote
     // strings or objects; if `.includes()` is called on a non-array it throws
     // and breaks the whole grid render. Fail closed (empty list) so creators
     // just see everything instead of a blank screen.
     try {
-      const raw = JSON.parse(localStorage.getItem('phone_hub_hidden') || '[]');
+      let stored = localStorage.getItem(key);
+      const legacy = localStorage.getItem('phone_hub_hidden');
+      if (stored === null && legacy !== null) {
+        stored = legacy;
+        localStorage.setItem(key, legacy);
+        localStorage.removeItem('phone_hub_hidden');
+      }
+      const raw = JSON.parse(stored ?? '[]');
       return Array.isArray(raw) ? raw : [];
-    } catch { return []; }
-  });
+    } catch (err) {
+      console.error('[UIOverlaysTab] hidden screens unreadable:', err);
+      return [];
+    }
+  };
+  const [hiddenScreens, setHiddenScreens] = useState(() => readHidden(hiddenKey));
+  useEffect(() => { setHiddenScreens(readHidden(hiddenKey)); }, [hiddenKey]);
   const [showHidden, setShowHidden] = useState(false);
   const fileInputRef = useRef(null);
   const frameInputRef = useRef(null);
@@ -344,7 +366,11 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const handleHideScreen = (key) => {
     setHiddenScreens(prev => {
       const next = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key];
-      localStorage.setItem('phone_hub_hidden', JSON.stringify(next));
+      if (hiddenKey) {
+        try { localStorage.setItem(hiddenKey, JSON.stringify(next)); } catch (err) {
+          console.error('[UIOverlaysTab] could not save hidden screens:', err);
+        }
+      }
       return next;
     });
   };
@@ -398,9 +424,11 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     if (panelOpen && !['screens', 'icons', 'placements'].includes(activeTab)) setPanelOpen(false);
   }, [panelOpen, activeTab]);
 
+  // Closing the panel keeps the stage you were on (phone audit, 2026-10-15:
+  // closing an icon's panel jumped from Icons to Screens).
   const closePanel = useCallback(() => {
     setPanelOpen(false);
-    setActiveTab('screens');
+    setActiveTab(t => (t === 'placements' ? 'icons' : t));
     undoStackRef.current = [];
   }, []);
 
@@ -427,13 +455,15 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     return () => window.removeEventListener('keydown', handler);
   }, [handleUndo, panelOpen, closePanel]);
 
-  // Lock body scroll when editor modal is open
+  // Lock body scroll while the editor is a modal. Docked beside the grid
+  // (detailHost) it is part of the page, and the lock left the page unable
+  // to scroll on narrower screens (phone audit, 2026-10-15).
   useEffect(() => {
-    if (!panelOpen) return;
+    if (!panelOpen || detailHost) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = prev; };
-  }, [panelOpen]);
+  }, [panelOpen, detailHost]);
 
   const toggleSection = (key) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
 
@@ -497,13 +527,17 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     api.get('/api/v1/shows').then(r => {
       const s = r.data?.data || [];
       setShows(s);
+      setShowsLoaded(true);
       // The standalone page opens on the active show (utils/activeShow). With
       // several shows and none active it asks (audit CTX-01), never the first.
       if (s.length > 0 && !showId) {
         const active = activeShowId({ pathname: typeof window !== 'undefined' ? window.location.pathname : '', shows: s });
         if (active) setShowId(active);
       }
-    }).catch((err) => { console.error('[UIOverlaysTab] shows load failed:', err); });
+    }).catch((err) => {
+      console.error('[UIOverlaysTab] shows load failed:', err);
+      setShowsLoaded(true);
+    });
   }, [propShowId]);
 
   // Load overlays — auto-select home screen as default
@@ -514,6 +548,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       .then(r => {
         const data = r.data?.data || [];
         setOverlays(data);
+        setLoadError(null);
         // A screen named in the link opens in its editor, built or not, in
         // Build; an id this phone doesn't have says so and falls back to the
         // home screen below.
@@ -537,7 +572,14 @@ export default function UIOverlaysTab({ showId: propShowId }) {
           if (home) setActiveScreen(home);
         }
       })
-      .catch(() => setOverlays([]))
+      // A failed load says so, with Retry; it is not an empty phone (phone
+      // audit, 2026-10-15). A failed refresh keeps the screens shown.
+      .catch((err) => {
+        console.error('[UIOverlaysTab] phone screens load failed:', err);
+        const msg = err.response?.data?.error || err.message || 'Could not load the phone.';
+        setLoadError(msg);
+        if (!showLoader) flash(`The phone didn't refresh: ${msg}`, 'error');
+      })
       .finally(() => setLoading(false));
   }, [showId, flash]);
 
@@ -692,6 +734,20 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     setPendingIssueFocus({ screenId: target.id, mode: 'zones', zoneId });
   };
 
+  // Another show starts clean (phone audit, 2026-10-15): the last show's
+  // screen, Back history, flow test and open panel stayed on the phone.
+  const loadedShowRef = useRef(showId);
+  useEffect(() => {
+    if (loadedShowRef.current === showId) return;
+    loadedShowRef.current = showId;
+    activeScreenRef.current = null;
+    setActiveScreen(null);
+    setOverlays([]);
+    setNavHistory([]);
+    setFlowAudit(null);
+    setPanelOpen(false);
+    setLoadError(null);
+  }, [showId]);
   useEffect(() => { loadOverlays(true); }, [loadOverlays]);
 
   // "Generate All" was removed from the toolbar (Task #2016): it spent on AI
@@ -851,7 +907,15 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       setOverlays(prev => prev.map(dropLinks));
       // Optimistic removal from local state
       setOverlays(prev => prev.filter(o => o.id !== deletedKey));
-      if (activeScreen?.id === deletedKey) { closePanel(); }
+      // The phone moves off the deleted screen, to the home screen (phone
+      // audit, 2026-10-15: its image and Back stayed on the phone).
+      if (activeScreen?.id === deletedKey) {
+        closePanel();
+        const rest = overlays.filter(o => o.id !== deletedKey);
+        setActiveScreen(rest.find(o => o.is_home && o.generated && o.url && isScreen(o))
+          || rest.find(o => o.generated && o.url && isScreen(o)) || null);
+        setNavHistory([]);
+      }
       if (failed.length) flash(`Deleted, but links to it remain on: ${failed.join(', ')}`, 'error');
       else flash('Deleted');
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
@@ -1410,7 +1474,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
-  const generatedCount = overlays.filter(o => o.generated).length;
   const activeIsHome = !!activeScreen && activeScreen.id === homeScreenOf(overlays)?.id;
   const headerTiles = phoneHubTiles(overlays.filter(o => !hiddenScreens.includes(o.id)), screenDiagnostics);
   // The screen panel's status: the cards' Ready rule and their lines in one
@@ -1477,9 +1540,15 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   // this browser.
   // Hidden (removed) screens and icons aren't counted: they read as work
   // still to do (phone audit, 2026-10-07).
+  // One count for the whole page (phone audit, 2026-10-15): the Build
+  // toggle, the header chips, the setup guide and the flow test all count
+  // the screens and icons that aren't hidden.
+  const visibleScreens = screenOverlays.filter(o => !hiddenScreens.includes(o.id));
+  const visibleIcons = iconOverlays.filter(o => !hiddenScreens.includes(o.id));
+  const flowTestScreens = visibleScreens.filter(o => o.generated && o.url);
   const setupProgress = phoneSetupProgress({
-    screens: screenOverlays.filter(o => !hiddenScreens.includes(o.id)),
-    icons: iconOverlays.filter(o => !hiddenScreens.includes(o.id)),
+    screens: visibleScreens,
+    icons: visibleIcons,
     diagnostics: screenDiagnostics,
     flowAudit,
   });
@@ -1492,10 +1561,8 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     [overlays, hiddenScreens, iconOverlaysForEditor]
   );
   const headerChips = (() => {
-    const visibleIcons = iconOverlays.filter(o => !hiddenScreens.includes(o.id));
-    const placed = new Set();
-    screenOverlays.forEach(sc => getScreenLinks(sc).forEach(l => { const k = resolveZoneIconKey(l, visibleIcons); if (k) placed.add(k); }));
-    const unplaced = visibleIcons.filter(i => !placed.has(i.id)).length;
+    // Unplaced as the setup guide counts it: no zone on a shown screen.
+    const unplaced = setupProgress.icons.total - setupProgress.icons.placed;
     const ready = headerTiles.find(t => t.key === 'ready')?.value || '0/0';
     const [readyN, readyOf] = ready.split('/').map(Number);
     const n = (count, one, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
@@ -1532,7 +1599,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   //   screens → Build, the first screen with no image (or "+ Add" ▸ Screen
   //             when there are no screens)
   //   links   → Connect on the first screen with a zone that has no destination
-  //   icons   → Connect on the home screen, where icons are placed
+  //   icons   → the Icons stage, where each unplaced icon has "Place it"
   const continueSetup = (next) => {
     if (!next) return;
     if (next.key === 'screens') {
@@ -1541,17 +1608,25 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       return;
     }
     if (next.key === 'links') { handleContinueCard(next.screen, 'links'); return; }
-    if (next.key === 'icons') {
-      const home = homeScreenForGuide();
-      if (home) handleContinueCard(home, 'incoming');
-    }
+    // Unplaced icons open the Icons stage, as the header chip does, where
+    // each unplaced icon has its "Place it".
+    if (next.key === 'icons') setActiveTab('icons');
   };
   // Preview's Run: the Flow Test, from the home screen.
   const runSetupFlowTest = () => {
     const home = homeScreenForGuide();
     if (!home) return;
-    setFlowAudit(auditPhoneFlow(overlays.filter(o => o.generated && o.url && isScreen(o)), home.id));
+    setFlowAudit(auditPhoneFlow(flowTestScreens, home.id));
   };
+  // A flow test describes the phone it ran on: any change to the screens
+  // clears it, so the guide doesn't keep saying "no issues" (phone audit,
+  // 2026-10-15).
+  const flowTestFor = useRef(overlays);
+  useEffect(() => {
+    if (flowTestFor.current === overlays) return;
+    flowTestFor.current = overlays;
+    setFlowAudit(null);
+  }, [overlays]);
 
 
 
@@ -1581,7 +1656,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
             {!propShowId && shows.length > 0 && (
               <select
                 value={showId || ''}
-                onChange={(e) => { setShowId(e.target.value); rememberShow(e.target.value); }}
+                onChange={(e) => { const id = e.target.value; afterSave(() => { setShowId(id); rememberShow(id); })(); }}
                 aria-label="Show"
                 className="overlays-show-select"
               >
@@ -1637,14 +1712,13 @@ export default function UIOverlaysTab({ showId: propShowId }) {
             </button>
             {/* The header Preview button was removed (Task #2016): the Preview
                 stage plays the phone inside the page. */}
-            {/* The Flow Map and the phone frame sit in "More": used less often
-                ("+ Add" only asks what you're adding, Task #2024). Batch upload,
-                the contact sheet and variants were removed (Evoni, 2026-10-07,
-                Lala's Phone step 2). */}
+            {/* The phone frame sits in "More": used less often ("+ Add" only
+                asks what you're adding, Task #2024). Batch upload, the contact
+                sheet and variants were removed (Evoni, 2026-10-07, Lala's
+                Phone step 2). The Map opens from its stage only (phone audit,
+                2026-10-15: More ▸ Flow Map was a second way to the same
+                stage). */}
             <ToolbarMenu label="More">
-              <button onClick={afterSave(() => setActiveTab('map'))} disabled={!generatedCount}>
-                <GitBranch size={13} /> Flow Map
-              </button>
               <button onClick={() => frameInputRef.current?.click()}>
                 <Monitor size={13} /> {customFrameUrl ? 'Change Frame' : 'Upload Frame'}
               </button>
@@ -1696,10 +1770,30 @@ export default function UIOverlaysTab({ showId: propShowId }) {
         />
       )}
 
-      {loading ? (
+      {/* No show to open (phone audit, 2026-10-15: "Loading…" spun for good):
+          the chooser above asks, or there are no shows yet. */}
+      {!showId ? (
+        showsLoaded && shows.length === 0 ? (
+          <div className="overlays-load-state" role="status">
+            <p>There are no shows yet. Lala&apos;s Phone belongs to a show: create one first.</p>
+          </div>
+        ) : !showsLoaded ? (
+          <div className="overlays-loading">
+            <Loader size={24} className="spin" />
+            <p>Loading shows...</p>
+          </div>
+        ) : null
+      ) : loading ? (
         <div className="overlays-loading">
           <Loader size={24} className="spin" />
           <p>Loading phone screens...</p>
+        </div>
+      ) : loadError && overlays.length === 0 ? (
+        <div className="overlays-load-state is-error" role="alert">
+          <p>The phone&apos;s screens didn&apos;t load: {loadError}</p>
+          <button type="button" className="ph-btn" onClick={() => loadOverlays(true)}>
+            <RefreshCw size={13} /> Try again
+          </button>
         </div>
       ) : (
         <>
@@ -1712,8 +1806,8 @@ export default function UIOverlaysTab({ showId: propShowId }) {
             part="build"
             activeTab={activeTab}
             onChangeTab={afterSave(setActiveTab)}
-            screenCount={screenOverlays.length}
-            iconCount={iconOverlays.length}
+            screenCount={visibleScreens.length}
+            iconCount={visibleIcons.length}
             placementCount={placementsCount}
             hiddenCount={hiddenScreens.length}
             showHidden={showHidden}
@@ -1865,7 +1959,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
               };
               // The Flow Test starts where the player does, at home (phone
               // audit, 2026-10-07: it started from the screen being edited).
-              const runFlowAudit = () => setFlowAudit(auditPhoneFlow(editableScreens, (homeScreenOf(overlays) || activeScreen).id));
+              const runFlowAudit = () => setFlowAudit(auditPhoneFlow(flowTestScreens, (homeScreenOf(overlays) || activeScreen).id));
               // "Things to check" also names zones on this screen that open
               // the same screen (Evoni's mockup, 2026-10-08).
               const twiceHere = flowMap.openedTwice.filter(o => o.screen.id === activeScreen.id);
@@ -2772,7 +2866,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                   screen's Zones tab. Saves go straight through the same
                   screen-links endpoint Tap zones use. */}
               {editorTab === 'placements' && isIcon(activeScreen) && activeScreen?.url && (() => {
-                const iconUrl = activeScreen.url;
                 // Only a screen with an image can hold placements; one without
                 // had no asset, so a placement saved to screen-links/null
                 // (phone audit, 2026-10-07).
@@ -2807,27 +2900,13 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                   }
                 };
 
-                const addToScreen = async (screen) => {
+                // The same placement as the Icons stage's "Place it" (phone
+                // audit, 2026-10-15): the first free spot of the grid, and the
+                // icon's own destination. A fixed spot stacked repeat adds on
+                // top of each other, with no destination.
+                const addToScreen = (screen) => {
                   if (!screen) return;
-                  const links = screen.screen_links || screen.metadata?.screen_links || [];
-                  const newLink = {
-                    id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
-                    x: 8, y: 14, w: 12, h: 9,
-                    target: '',
-                    label: (activeScreen.name || '').replace(/\s*Icon$/i, ''),
-                    icon_url: iconUrl,
-                    icon_overlay_id: activeScreen.id,
-                  };
-                  const next = [...links, newLink];
-                  try {
-                    await api.put(`/api/v1/ui-overlays/${showId}/screen-links/${screen.asset_id}`, { screen_links: next });
-                    setOverlays(prev => prev.map(o => o.id === screen.id
-                      ? { ...o, screen_links: next, metadata: { ...(o.metadata || {}), screen_links: next } }
-                      : o));
-                    flash(`Placed on ${screen.name}`);
-                  } catch (err) {
-                    flash(`Failed: ${err?.message || 'unknown error'}`, 'error');
-                  }
+                  handlePlaceIcon(activeScreen, null, screen);
                 };
 
                 return (
@@ -2837,7 +2916,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                         Placed on {placements.length} screen{placements.length === 1 ? '' : 's'}
                       </div>
                       <div style={{ fontSize: 11, color: '#888', lineHeight: 1.5 }}>
-                        Add this icon to more screens, or remove it from screens it's already on. Targets and positions stay editable in each screen's Zones tab.
+                        Add this icon to more screens, or remove it from screens it's already on. Targets and positions stay editable in each screen's Connect stage.
                       </div>
                     </div>
 

@@ -97,7 +97,6 @@ describe('"+ Add" asks what you\'re adding (Task #2024)', () => {
     await renderPage();
     const more = openMenu('More');
     expect(more.getByRole('button', { name: /Upload Frame/ }).disabled).toBe(false);
-    expect(more.getByRole('button', { name: /Flow Map/ }).disabled).toBe(true);
   });
 
   test('Screen and Icon open their create forms, which show the key the name gets', async () => {

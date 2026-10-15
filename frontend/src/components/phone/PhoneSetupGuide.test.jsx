@@ -94,8 +94,8 @@ describe('PhoneSetupGuide (Task #2053)', () => {
     const lines = Array.from(container.querySelectorAll('.phone-setup-guide__line')).map(l => l.textContent.replace('Run', '').trim());
     expect(lines).toEqual([
       '⚠Screens: 1 with an image of 2',
-      '⚠Icons: 0 placed of 1',
       '⚠Links: 0 of 1 zone has a destination',
+      '⚠Icons: 0 placed of 1',
       '·Content: 0 screens with content zones',
       '·Preview: not run yet',
     ]);
