@@ -2097,7 +2097,6 @@ function refinedBriefOptions(sceneAngle, sceneSet, { overrides = null } = {}) {
   const baseBrief = sceneSet.base_generation?.brief || null;
   return {
     angleLabel: sceneAngle.angle_label || 'WIDE',
-    cameraDirection: sceneAngle.camera_direction || null,
     continuity: true,
     eventId: baseBrief?.event_id || null,
     overrides: overrides && typeof overrides === 'object' ? overrides : (baseBrief?.overrides || {}),
