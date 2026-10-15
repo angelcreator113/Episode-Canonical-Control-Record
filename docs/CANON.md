@@ -28,6 +28,65 @@ screen says something else, this wins: change the prompt, not the canon.
 - The older "daughter" framing (Lala as JustAWoman's daughter, "she
   inherited her mother's ambition") is retired.
 
+## How Lala became sentient
+
+- JustAWoman poured so much of herself into building Lala that **her
+  consciousness transferred** into Lala. Evoni, 2026-10-15: still canon.
+  When in the story it happens is not decided yet.
+- Lala still does not know. She feels the resonance and cannot name its
+  source.
+
+## The books are written from the show
+
+Evoni, 2026-10-15. *Before Lala* is not prewritten; it follows the show.
+Each episode is told three ways:
+
+| Layer | Covers |
+|---|---|
+| The episode | what the viewer sees |
+| The short story | the event, in full |
+| The book chapter | everything the viewer does not see |
+
+- **Beat 11 (Event Outcome) carries a piece of the short story.** A short,
+  animated part of the short story plays there, so the viewer asks "what
+  happened at that event?" The full event is the short story.
+- **The chapters are JustAWoman's point of view**: everything the viewer
+  does not see, from JustAWoman creating Lala's world to well beyond the
+  events — the juicy details, all that JustAWoman, in her prime, imagines
+  is happening in that world.
+
+## The Book 1 cast (Cast B)
+
+Evoni, 2026-10-15. JustAWoman's world:
+
+- Husband: **David**.
+- Sons: **Elias** (9, the quiet witness) and **Zion** (5, the loud anchor).
+- **Marcus** is the paying man, never a son.
+- The Comparison Creator is **Nia Vale** (the escalation mirror).
+- **The Witness** is unnamed.
+- The rest of the 24-character ecosystem is `BOOK1_ECOSYSTEM` in
+  `src/routes/memories/engine.js`.
+
+Retired: the sons Marcus (7), Miles (5) and Noah (3); Dana as the Witness;
+Chloe as the Comparison Creator.
+
+## The Lala bleed
+
+One intrusive thought, once. Not Lala speaking: Lala's register surfacing
+once in JustAWoman's narration.
+
+**The bleed follows the transfer** (Evoni, 2026-10-15): it comes in the
+first chapter after the consciousness transfer, not at a fixed chapter
+number. Until the transfer is placed, no chapter carries it. (The Story
+Engine used to put it in chapter 47 of its 50-chapter plan.)
+
+## No JustAWoman in the LalaVerse
+
+Lala does not know JustAWoman exists, so JustAWoman has no LalaVerse
+profile. The locked @justawoman record is removed (migration
+`20261015190000-remove-justawoman-lalaverse-profile`); its seeder no longer
+inserts it. Her real-world feed (`feed_layer` `real_world`) stays.
+
 ## Where the app encodes it
 
 Cited by name, so a later edit can find them.
@@ -43,6 +102,11 @@ Cited by name, so a later edit can find them.
   ("Lala does NOT know she was built by JustAWoman").
 - Consciousness: `src/routes/consciousness.js` (JustAWoman's consciousness
   in Lala; Lala does not know).
+- Book 1 cast: `BOOK1_NODES` / `BOOK1_EDGES` (the relationship map's seed)
+  and `BOOK1_ECOSYSTEM` in `src/routes/memories/engine.js`;
+  `WORLD_CONFIGS.book1` in `src/routes/characterGenerator.js`;
+  `WRITE_MODE_CHARACTER_RULES` in `src/routes/memories/stories.js`;
+  `frontend/src/data/characterAppearanceRules.js`.
 - Show Bible: "Character Bible — Lala Identity" in
   `src/seeders/20260312800000-show-brain-franchise-laws.js` ("Lala does NOT
   know she is in a show").
