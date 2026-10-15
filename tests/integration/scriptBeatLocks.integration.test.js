@@ -126,6 +126,20 @@ const ORIGINAL = script(beat(1, 'Opening Ritual', 'Prime: "Hey besties"'), beat(
     expect(row.script_locked_beats).toEqual([1, 2, 3]);
   });
 
+  test('the response says what the saved script still does not cover', async () => {
+    // Evoni, 2026-10-15: "is it making sure everything is being done within the script?"
+    generateGroundedScript.mockResolvedValueOnce({
+      script: script(beat(1, 'Opening Ritual', 'Prime: "Hi"'), beat(2, 'Login Sequence', 'Lala: "x"'), beat(3, 'Welcome', 'Lala: "y"')),
+      coverage: { missing: [], fixed_beats: [1] },
+      facts: { deliverables: [{ description: 'TikTok outfit reveal' }], goals: [], forwardHook: '', lockedPieces: [] },
+    });
+    const res = await auth(request(app).post(`/api/v1/episode-brief/${ep}/generate-script`)).send({ showId: show, confirmOverwrite: true });
+    expect(res.status).toBe(200);
+    expect(res.body.coverage.fixed_beats).toEqual([1]);
+    expect(res.body.coverage.missing).toEqual(expect.arrayContaining([{ kind: 'deliverable', label: 'TikTok outfit reveal', target: 12 }]));
+    expect(res.body.script).toContain('## BEAT: 1');
+  });
+
   test('unlocking lets Save change the beat again', async () => {
     expect((await locks({ locked_beats: [] })).body.data.script_locked_beats).toEqual([]);
     const { script_content: current } = await stored();
