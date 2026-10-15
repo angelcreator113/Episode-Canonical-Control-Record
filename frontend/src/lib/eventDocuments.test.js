@@ -22,7 +22,9 @@ describe('eventDocuments (Evoni, 2026-10-06)', () => {
     expect(lineOfPiece({ category: 'dress' })).toBe('dress');
     expect(lineOfPiece({ category: 'Handbag' })).toBe('purse');
     expect(lineOfPiece({ clothing_category: 'heels' })).toBe('shoes');
-    expect(lineOfPiece({ category: 'outerwear' })).toBeNull();
+    // A jacket fills an outerwear line when the list names one (Task 3205).
+    expect(lineOfPiece({ category: 'outerwear' })).toBe('outerwear');
+    expect(lineOfPiece({ category: 'something else' })).toBeNull();
   });
 
   test('the shopping list\'s lines carry the look\'s pieces: owned ticked, the rest their coins', () => {

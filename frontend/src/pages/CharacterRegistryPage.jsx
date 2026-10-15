@@ -17,7 +17,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import useActiveShow from '../hooks/useActiveShow';
-import { chooseRegistry, findLala, feedPeople, oldSystem, sameNames, sameNameNote } from '../lib/theCast';
+import { chooseRegistry, findLala, feedPeople, oldSystem, sameNames, sameNameNote, otherProtagonists } from '../lib/theCast';
 import './TheCast.css';
 
 const ROLE_CONFIG = {
@@ -67,6 +67,7 @@ export default function CharacterRegistryPage() {
   const [oldTab, setOldTab] = useState('review');
   const [matching, setMatching] = useState(null); // { id, profileId } while a match is being chosen
   const [busyId, setBusyId] = useState(null);
+  const [crossingId, setCrossingId] = useState(null); // the feed person whose character is being made
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({ display_name: '', role_type: 'pressure', icon: '👤' });
   const [creating, setCreating] = useState(false);
@@ -99,6 +100,21 @@ export default function CharacterRegistryPage() {
       const res = await api.get('/api/v1/social-profiles?feed_layer=lalaverse&limit=100');
       setProfiles(res.data?.profiles || []);
     } catch (err) { console.error('[CharacterRegistryPage] feed profiles load failed:', err); setProfiles([]); }
+  };
+
+  // "Create character" on a feed person with none (Task #3201; the cast read
+  // §3.2): the Feed's Cross (POST /social-profiles/:id/cross) makes the
+  // character in the active show's registry and links it by feed_profile_id.
+  const createCharacterFor = async (person) => {
+    setCrossingId(person.id);
+    try {
+      const res = await api.post(`/api/v1/social-profiles/${person.id}/cross`, activeShowId ? { show_id: activeShowId } : {});
+      showToast(res.data?.registry_character ? `Character created for ${person.name}` : (res.data?.registry_note || `No character was created for ${person.name}`));
+      await Promise.all([loadProfiles(), loadCharacters()]);
+    } catch (err) {
+      console.error('[CharacterRegistryPage] create character failed:', err);
+      showToast('Failed: ' + (err.response?.data?.message || err.response?.data?.error || err.message));
+    } finally { setCrossingId(null); }
   };
 
   const loadReview = async (id) => {
@@ -157,7 +173,9 @@ export default function CharacterRegistryPage() {
   const people = feedPeople(profiles, allCharacters);
   const old = oldSystem(characters, profiles, lala);
   const twins = sameNames(old);
-  const protagonists = characters.filter((c) => c.role_type === 'protagonist').length;
+  // Lala is the Protagonist whatever her stored role (Task #3199); anyone
+  // else tagged Protagonist is flagged.
+  const alsoProtagonist = otherProtagonists(characters, lala);
   const isKept = (c) => review?.byId[c.id]?.cast_review === 'kept';
   const toReview = old.filter((c) => !isKept(c));
   const kept = old.filter(isKept);
@@ -255,9 +273,9 @@ export default function CharacterRegistryPage() {
             <h2 className="cast-lala-name">{lala.display_name}</h2>
             <p className="cast-note">{people.length} {people.length === 1 ? 'person' : 'people'} in her world</p>
           </div>
-          {lala.role_type !== 'protagonist' && (
-            <p className="cast-lala-warn" data-testid="cast-lala-role">
-              <strong>Role says "{ROLE_LABEL[lala.role_type] || lala.role_type}".</strong> Lala should be the show's one Protagonist; that filter shows {protagonists} today.
+          {alsoProtagonist.length > 0 && (
+            <p className="cast-lala-warn" data-testid="cast-other-protagonists">
+              <strong>Lala is the show&apos;s one Protagonist.</strong> Also tagged Protagonist: {alsoProtagonist.map((c) => c.display_name || c.character_key).join(', ')}.
             </p>
           )}
           <button type="button" className="cast-btn-lavender" onClick={() => navigate(`/character/${lala.id}`)}>Open Lala</button>
@@ -289,6 +307,15 @@ export default function CharacterRegistryPage() {
                     {p.characterId && episodes(p.characterId) > 0 && <span className="cast-chip is-green">In {episodesLabel(episodes(p.characterId))}</span>}
                   </span>
                 </Link>
+                {/* With no registry, Cross would mark the profile crossed and make no character. */}
+                {!p.characterId && (
+                  <button type="button" className="cast-btn-soft cast-person-create" data-testid="cast-create-character"
+                    disabled={crossingId === p.id || registries.length === 0}
+                    title={registries.length === 0 ? 'No character registry to add this person to yet' : undefined}
+                    onClick={() => createCharacterFor(p)}>
+                    {crossingId === p.id ? 'Creating…' : 'Create character'}
+                  </button>
+                )}
               </li>
             ))}
           </ul>

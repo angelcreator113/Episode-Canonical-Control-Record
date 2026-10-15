@@ -1,6 +1,6 @@
 /** The cast's sorting: Lala, her world (LalaVerse feed profiles), and the old system. */
 import { describe, test, expect } from 'vitest';
-import { findLala, feedPeople, oldSystem, sameNames, sameNameNote, archetypeLabel, castCounts } from './theCast';
+import { findLala, feedPeople, oldSystem, sameNames, sameNameNote, archetypeLabel, castCounts, otherProtagonists } from './theCast';
 
 const CHARS = [
   { id: 'l', display_name: 'Lala', character_key: 'lala', role_type: 'special' },
@@ -43,6 +43,17 @@ describe('the cast', () => {
 
   test('no archetype reads as none', () => {
     expect(archetypeLabel({})).toBeNull();
+  });
+
+  test('Lala is the Protagonist whatever her stored role; only others tagged Protagonist are flagged (Task 3199)', () => {
+    const lala = findLala(CHARS);
+    expect(lala.role_type).toBe('special');
+    expect(otherProtagonists(CHARS, lala)).toEqual([]);
+    const jaw = { id: 'jaw', display_name: 'JustAWoman', role_type: 'protagonist' };
+    expect(otherProtagonists([...CHARS, jaw], lala)).toEqual([jaw]);
+    // Lala tagged 'protagonist' herself is not flagged.
+    expect(otherProtagonists([{ ...lala, role_type: 'protagonist' }], lala)).toEqual([]);
+    expect(otherProtagonists([jaw], null)).toEqual([jaw]);
   });
 });
 
