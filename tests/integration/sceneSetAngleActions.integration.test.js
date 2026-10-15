@@ -76,11 +76,13 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const res = await auth(request(app).post(`/api/v1/scene-sets/${setId}/generate-all-angles`)).send({ angle_ids: ids });
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ success: true, queued: 3, angle_ids: ids.slice(0, 3), remaining: 2 });
-    // The failed angles it queued are pending again; the ones left are untouched.
-    for (const id of ids.slice(0, 3)) expect(await statusOf(id)).toBe('pending');
+    // The angles it queued, failed ones included, are claimed for their
+    // generation (a second Generate All starts none of them again).
+    for (const id of ids.slice(0, 3)) expect(await statusOf(id)).toBe('generating');
   });
 
   test('without angle_ids, only pending angles, as before', async () => {
+    await run(`UPDATE scene_angles SET generation_status = 'pending' WHERE scene_set_id = :id`, { id: setId });
     await run(`UPDATE scene_angles SET generation_status = 'failed' WHERE id = :id`, { id: ids[0] });
     const res = await auth(request(app).post(`/api/v1/scene-sets/${setId}/generate-all-angles`)).send({});
     expect(res.status).toBe(200);
