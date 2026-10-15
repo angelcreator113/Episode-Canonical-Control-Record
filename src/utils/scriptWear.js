@@ -75,13 +75,18 @@ function wearCues(beats, look) {
   return cues;
 }
 
-/** The index of the last getting-ready beat, or -1 when the script has none. */
-function lastGettingReadyIndex(beats, cues) {
-  let closet = beats.findIndex((b) => b.lines.some((l) => {
+/** The index of the closet beat (the beat that opens the closet, else canonical beat 8), or -1. */
+function closetIndex(beats) {
+  const opens = beats.findIndex((b) => b.lines.some((l) => {
     const m = String(l).match(UI_LINE);
     return m && m[1].toUpperCase() === 'OPEN' && normKey(m[2]).startsWith('closet');
   }));
-  if (closet < 0) closet = beats.findIndex((b) => b.number === CLOSET_CANON);
+  return opens >= 0 ? opens : beats.findIndex((b) => b.number === CLOSET_CANON);
+}
+
+/** The index of the last getting-ready beat, or -1 when the script has none. */
+function lastGettingReadyIndex(beats, cues) {
+  const closet = closetIndex(beats);
   const lastCue = cues.filter((c) => c.piece).reduce((max, c) => Math.max(max, c.beatIndex), -1);
   return Math.max(closet, lastCue);
 }
@@ -111,4 +116,4 @@ function wornByBeat(scriptText, look, beatNumber, lineIndex = Infinity) {
   return { worn: [...seen.values()], uncued, beatFound: true };
 }
 
-module.exports = { scriptBeats, wearCues, lastGettingReadyIndex, wornByBeat };
+module.exports = { scriptBeats, wearCues, closetIndex, lastGettingReadyIndex, wornByBeat };

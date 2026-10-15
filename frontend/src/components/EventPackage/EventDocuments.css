@@ -104,6 +104,8 @@
 .evd-paper.is-phone .evd-paper-lines li { gap: 2cqw; font-size: 6.6cqw; line-height: 10cqw; }
 .evd-paper.is-phone .evd-box { width: 4.6cqw; height: 4.6cqw; border-width: 1px; font-size: 3.6cqw; }
 .evd-line-text.is-crossed { text-decoration: line-through; text-decoration-thickness: 1.5px; opacity: 0.75; }
+/* A deal item ticked at its cue, until it is approved in Money (Task 3191). */
+.evd-line-note { margin-left: auto; white-space: nowrap; font-size: 0.75em; font-style: italic; opacity: 0.8; }
 
 /* The career plan: a lavender card, two sections of checkboxes, a signature. */
 .evd-career {
