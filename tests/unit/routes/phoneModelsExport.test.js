@@ -137,6 +137,11 @@ describe('the playthrough no longer takes the not-available branch', () => {
     jest.spyOn(db.sequelize, 'query').mockResolvedValue([[{ id: EP, show_id: SHOW }]]);
     const row = { id: 's1', user_id: 'u1', episode_id: EP, show_id: SHOW, state_flags: {}, visited_screens: ['home'], save: jest.fn(async () => {}) };
     jest.spyOn(db.PhonePlaythroughState, 'findOne').mockResolvedValue(row);
+    // The save runs under a row lock (withLockedState): a transaction that
+    // re-reads the row with findByPk. The test predates the lock and mocked
+    // only findOne, so the transaction reached for a real database.
+    jest.spyOn(db.sequelize, 'transaction').mockImplementation(async (fn) => fn({ LOCK: { UPDATE: 'UPDATE' } }));
+    jest.spyOn(db.PhonePlaythroughState, 'findByPk').mockResolvedValue(row);
     const res = await as(request(app).put(`/api/v1/episodes/${EP}/phone-state/screen`)).send({ screen_id: 'chat' });
     expect(res.status).toBe(200);
     expect(row.last_screen_id).toBe('chat');

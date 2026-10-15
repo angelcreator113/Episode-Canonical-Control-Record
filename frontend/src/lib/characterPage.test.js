@@ -1,6 +1,6 @@
 /** The character page's rows and sentences (lib/characterPage). */
 import { describe, test, expect } from 'vitest';
-import { depthOf, cityLabel, archetypeOf, showUpRows, withLala, voiceOf } from './characterPage';
+import { depthOf, depthLevelOf, cityLabel, archetypeOf, showUpRows, withLala, voiceOf } from './characterPage';
 
 const APPEARANCES = {
   linked: true,
@@ -53,5 +53,25 @@ describe('the character page', () => {
     );
     expect(voice).toEqual({ sample: 'New drop, come play.', habit: 'all lowercase', phrase: 'make it wearable', neverSays: 'that they are scared' });
     expect(voiceOf({}, null)).toBeNull();
+  });
+});
+
+describe('depthLevelOf', () => {
+  test('a feed person with no level saved reads Active, not Sparked', () => {
+    expect(depthLevelOf({ feed_profile_id: 7, depth_level: null })).toBe('active');
+  });
+  test('nothing at all is Sparked', () => {
+    expect(depthLevelOf({})).toBe('sparked');
+  });
+  test('a wound alone is Breathing; empty objects do not count', () => {
+    expect(depthLevelOf({ wound: { description: 'x' } })).toBe('breathing');
+    expect(depthLevelOf({ wound: {}, want_architecture: { real_want: '' } })).toBe('sparked');
+  });
+  test('the full interior with a description is Alive', () => {
+    const o = { a: 'x' };
+    expect(depthLevelOf({ want_architecture: o, wound: o, the_mask: o, triggers: ['t'], blind_spot: 'b', dilemma: o, deep_profile: o, description: 'd' })).toBe('alive');
+  });
+  test('a saved level further along is kept', () => {
+    expect(depthLevelOf({ depth_level: 'alive' })).toBe('alive');
   });
 });

@@ -8,6 +8,7 @@ import { isAppPath } from '../utils/sceneSets';
 import EventLookImage from '../components/EventPackage/EventLookImage';
 import DressedAngles from '../components/SceneSets/DressedAngles';
 import CharacterHomes, { notifyCharacterPlacesChanged } from '../components/SceneSets/CharacterHomes';
+import LookVariants from '../components/SceneSets/LookVariants';
 import './SceneSetsTab.css';
 import { BaseModelSelect } from '../components/SceneModelComparison';
 import SceneBriefConfirm from '../components/SceneBriefConfirm';
@@ -2233,6 +2234,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                     <LooksRow set={set} focusZone={focused ? focusZone : null} onToast={showToast} />
                     {/* 2026-10-15: which characters live here (their home, closet or another place). */}
                     {set.show_id && <CharacterHomes set={set} onToast={showToast} onDefaultsChanged={onDefaultsChanged} />}
+                    {/* 2026-10-15: the everyday look at each time of day and in each season. */}
+                    {set.base_approved && <LookVariants setId={set.id} onToast={showToast} />}
                     {!set.base_approved && !set.location_approved_base && !(set.world_location_id && set.base_still_url)
                       && (set.looks || []).length === 0 && eventLookCount === 0 && (
                       <p className="scene-sets-ws-empty">No events use this set yet. When an event is held here, its look is made on this tab.</p>

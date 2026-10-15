@@ -54,7 +54,9 @@ describe('the character page', () => {
     expect(screen.getByText('@studiobysable · Support · Echo Park')).toBeTruthy();
     expect(screen.getByText('The peer')).toBeTruthy();
     expect(screen.getByText('Feed profile')).toBeTruthy();
-    expect(screen.getByRole('button', { name: '↑ Deepen to Active' })).toBeTruthy();
+    // Saved as Breathing, but a feed profile already makes them Active.
+    expect(screen.getByText('Active', { selector: '.ch-chip' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '↑ Deepen to Alive' })).toBeTruthy();
     expect(screen.getByRole('link', { name: '← The cast' }).getAttribute('href')).toBe('/character-registry');
     expect(screen.getAllByRole('button', { pressed: undefined }).filter((b) => b.className.includes('ch-tab')).map((b) => b.textContent))
       .toEqual(['Overview', 'Inner life', 'Voice & feed', 'Connections', 'In the world']);
@@ -107,5 +109,62 @@ describe('the character page', () => {
     fireEvent.change(screen.getByLabelText('World'), { target: { value: 'lalaverse' } });
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/character-registry/characters/c1', { world: 'lalaverse' }));
     expect(screen.getByLabelText('World').value).toBe('lalaverse');
+  });
+
+  test('Inner life: Generate fills that section in', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { success: true, filled: ['wound'], character: { ...CHARACTER, wound: { description: 'The shop that closed.' } } } });
+    renderIt();
+    await waitFor(() => expect(screen.getAllByText('In Episode 1')).toHaveLength(2));
+    fireEvent.click(screen.getByRole('button', { name: 'Inner life' }));
+    const wound = screen.getByText('Wound not defined yet.').closest('.cp-empty-state');
+    fireEvent.click(wound.querySelector('button'));
+    await waitFor(() => expect(screen.getByText('The shop that closed.')).toBeTruthy());
+    expect(api.post).toHaveBeenCalledWith('/api/v1/character-registry/characters/c1/interior/generate', { fields: ['wound'] });
+    expect(screen.queryByText('Wound not defined yet.')).toBeNull();
+  });
+
+  test('Deepen fills in everything missing, on the Inner life tab', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { success: true, filled: ['want_architecture'], character: { ...CHARACTER, want_architecture: { surface_want: 'To be stocked', real_want: 'To be chosen', forbidden_want: 'To quit' } } } });
+    renderIt();
+    await waitFor(() => expect(screen.getAllByText('In Episode 1')).toHaveLength(2));
+    fireEvent.click(screen.getByRole('button', { name: '↑ Deepen to Alive' }));
+    await waitFor(() => expect(screen.getByText('To be chosen')).toBeTruthy());
+    expect(api.post).toHaveBeenCalledWith('/api/v1/character-registry/characters/c1/interior/generate', {});
+    expect(screen.getByRole('button', { name: 'Inner life' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText('Filled in: want.')).toBeTruthy();
+  });
+
+  test('a failed Generate says why', async () => {
+    vi.mocked(api.post).mockRejectedValue({ response: { data: { error: 'Daily AI budget reached.' } } });
+    renderIt();
+    await waitFor(() => expect(screen.getAllByText('In Episode 1')).toHaveLength(2));
+    fireEvent.click(screen.getByRole('button', { name: 'Inner life' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Fill in everything missing' }));
+    await waitFor(() => expect(screen.getByText('Daily AI budget reached.')).toBeTruthy());
+  });
+
+  test('a deep profile from the older endpoints (objects, not text) opens without crashing', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/character-registry/characters/c1') return { data: { character: { ...CHARACTER, deep_profile: { the_body: { posture: 'Upright', stress_location: '' } } } } };
+      return { data: {} };
+    });
+    renderIt();
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Inner life' }));
+    expect(screen.getByText('1/14 dimensions')).toBeTruthy();
+    fireEvent.click(screen.getByText('The Body'));
+    expect(screen.getByText('posture: Upright')).toBeTruthy();
+  });
+
+  test('a finalized character offers no Generate', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/character-registry/characters/c1') return { data: { character: { ...CHARACTER, status: 'finalized' } } };
+      return { data: {} };
+    });
+    renderIt();
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Inner life' }));
+    expect(screen.queryByRole('button', { name: /Generate/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Fill in everything missing' })).toBeNull();
   });
 });

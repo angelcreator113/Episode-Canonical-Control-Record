@@ -22,6 +22,32 @@ export function depthOf(level) {
   return { index: i, step: DEPTH_STEPS[i], next: DEPTH_STEPS[i + 1] || null };
 }
 
+const filled = (v) => {
+  if (v === null || v === undefined) return false;
+  if (typeof v === 'string') return v.trim().length > 0;
+  if (Array.isArray(v)) return v.length > 0;
+  if (typeof v === 'object') return Object.values(v).some(filled);
+  return !!v;
+};
+
+/**
+ * How alive the character is, from what they have: the saved level, or what
+ * their fields reach, whichever is further (the server's calculateDepthLevel
+ * rules). Most feed people never had a level saved, so they read "Sparked"
+ * with a feed profile and a voice.
+ */
+export function depthLevelOf(character) {
+  const c = { ...(character || {}) };
+  c.prose_overview = c.prose_overview || c.description;
+  const alive = ['want_architecture', 'wound', 'the_mask', 'triggers', 'blind_spot', 'dilemma', 'deep_profile', 'prose_overview'];
+  let reached = 'sparked';
+  if (alive.every((f) => filled(c[f]))) reached = 'alive';
+  else if (filled(c.feed_profile_id) || filled(c.living_state)) reached = 'active';
+  else if (filled(c.deep_profile) || filled(c.wound) || filled(c.want_architecture)) reached = 'breathing';
+  const at = (k) => DEPTH_STEPS.findIndex((s) => s.key === k);
+  return at(c.depth_level) > at(reached) ? c.depth_level : reached;
+}
+
 const CITY_LABELS = {
   dazzle_district: 'Dazzle District', radiance_row: 'Radiance Row', echo_park: 'Echo Park',
   ascent_tower: 'Ascent Tower', maverick_harbor: 'Maverick Harbor',
