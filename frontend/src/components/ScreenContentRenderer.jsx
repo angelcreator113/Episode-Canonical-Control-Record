@@ -45,7 +45,9 @@ export const CONTENT_TYPES = [
   // and column count.
   { key: 'wardrobe_outfit', label: 'Outfit', icon: '👗', desc: 'All clothes — dresses, tops, bottoms mixed', group: 'wardrobe' },
   { key: 'wardrobe_shoes', label: 'Shoes', icon: '👠', desc: 'Shoes from the closet', group: 'wardrobe' },
-  { key: 'wardrobe_accessories', label: 'Accessories', icon: '👜', desc: 'Accessories + jewelry', group: 'wardrobe' },
+  { key: 'wardrobe_accessories', label: 'Accessories', icon: '👜', desc: 'Bags, scarves, belts, hats, hair bows', group: 'wardrobe' },
+  // Jewelry is its own section, not part of Accessories (Evoni, 2026-10-15).
+  { key: 'wardrobe_jewelry', label: 'Jewelry', icon: '💍', desc: 'Necklaces, earrings, rings, bracelets, watches', group: 'wardrobe' },
   { key: 'wardrobe_perfume', label: 'Perfume', icon: '🧴', desc: 'Fragrance collection', group: 'wardrobe' },
   // Task #3167: the closet's Hair (hairstyles and wigs), for the Hair page.
   { key: 'wardrobe_hair', label: 'Hair', icon: '💇', desc: 'Hairstyles and wigs from the closet', group: 'wardrobe' },
@@ -181,9 +183,14 @@ function ContentZoneRenderer({ zone, showId, episodeId, storyAt = null, beat = n
         ...config,
         inverse_category: 'dress,top,bottom,outerwear,jacket,coat,skirt,pants,shirt,blouse,shoes,heels,boots,sneakers,sandals,flats,perfume,fragrance,cologne',
         // Hair (hairstyles, wigs) has its own section (Task #3167), by the
-        // shared routing, so hair bows and clips stay here.
-        exclude_slot: 'hair',
+        // shared routing, so hair bows and clips stay here. So does Jewelry
+        // (Evoni, 2026-10-15): necklaces, earrings, rings and the rest.
+        exclude_slots: ['hair', 'jewelry'],
       }} />;
+    case 'wardrobe_jewelry':
+      // Every piece the shared routing files under Jewelry (lib/wardrobeSlots):
+      // jewelry, necklace, earrings, ring, bracelet, watch and their plurals.
+      return <WardrobeGridRenderer showId={showId} config={{ ...config, slot: 'jewelry' }} />;
     case 'wardrobe_hair':
       return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'hair,wig,wigs,hairstyle,hairstyles' }} />;
     case 'wardrobe_perfume':
@@ -941,11 +948,15 @@ function WardrobeGridRenderer({ showId, config }) {
   const inverseCats = config.inverse_category
     ? config.inverse_category.split(',').map(c => c.trim().toLowerCase()).filter(Boolean)
     : null;
-  // Inverse mode pulls a wider page so post-filtering still leaves enough
-  // tiles to fill the grid.
-  const fetchLimit = inverseCats ? Math.max(maxItems * 4, 60) : maxItems;
+  // `slot` keeps the pieces the shared routing files under that slot
+  // (lib/wardrobeSlots getSlotForCategory), whatever their category says.
+  const slotOnly = config.slot || null;
+  const excludeSlots = config.exclude_slots || (config.exclude_slot ? [config.exclude_slot] : []);
+  // Inverse and slot modes pull a wider page so post-filtering still leaves
+  // enough tiles to fill the grid.
+  const fetchLimit = (inverseCats || slotOnly) ? Math.max(maxItems * 4, 60) : maxItems;
   const params = new URLSearchParams({ show_id: String(showId || ''), limit: String(fetchLimit) });
-  if (config.category && !inverseCats) params.set('category', config.category);
+  if (config.category && !inverseCats && !slotOnly) params.set('category', config.category);
   if (config.scope === 'owned') params.set('is_owned', 'true');
   else if (config.scope === 'wishlist') params.set('is_owned', 'false');
   const url = showId ? `/api/v1/wardrobe?${params.toString()}` : null;
@@ -963,15 +974,19 @@ function WardrobeGridRenderer({ showId, config }) {
       // Way more forgiving than exact equality and keeps items out of
       // Accessories whenever any clothing/shoes/perfume keyword appears
       // in the category at all.
-      if (config.exclude_slot && getSlotForCategory(cat) === config.exclude_slot) return false;
+      if (excludeSlots.includes(getSlotForCategory(cat))) return false;
       return !inverseCats.some(inv => cat.includes(inv));
     });
+  }
+  if (slotOnly) {
+    items = items.filter(item => getSlotForCategory((item.clothing_category || '').toLowerCase().trim()) === slotOnly);
   }
   items = items.slice(0, maxItems);
   if (!items.length) {
     const cat = (config.category || '').toLowerCase();
     let friendly = config.category;
     if (inverseCats) friendly = 'accessories';
+    else if (slotOnly === 'jewelry') friendly = 'jewelry';
     else if (cat.includes('dress') || cat.includes('top') || cat.includes('bottom')) friendly = 'clothes';
     else if (cat.includes('shoes') || cat.includes('heels') || cat.includes('boots')) friendly = 'shoes';
     else if (cat.includes('accessor') || cat.includes('bag') || cat.includes('jewelry')) friendly = 'accessories';

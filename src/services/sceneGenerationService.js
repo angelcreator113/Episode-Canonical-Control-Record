@@ -463,20 +463,30 @@ const SCENE_BASE_MODELS = {
   },
 };
 
-// Today's behaviour (Flux dev from the prompt) when neither the set nor the
-// environment names a model.
-const BUILTIN_BASE_MODEL_DEFAULT = 'flux-dev';
+// The base model when neither the set nor the environment names one:
+// gpt-image-1.5 (Evoni, 2026-10-15: "make gpt-image-1.5 the default base
+// model"; 1536x1024 high, ~$0.20 a still, against Flux dev's 1024x576 at
+// ~$0.025). Without an OpenAI key it would fail every base, so it falls back
+// to Flux dev, the previous default.
+const BUILTIN_BASE_MODEL_DEFAULT = 'gpt-image-1.5';
+const BUILTIN_BASE_MODEL_FALLBACK = 'flux-dev';
 
 function isBaseModelKey(value) {
   return typeof value === 'string' && Object.prototype.hasOwnProperty.call(SCENE_BASE_MODELS, value);
 }
 
-/** The default base model: env SCENE_BASE_MODEL_DEFAULT when valid, else flux-dev. */
+/**
+ * The default base model: env SCENE_BASE_MODEL_DEFAULT when valid, else
+ * gpt-image-1.5, or flux-dev when no OpenAI key is configured.
+ */
 function defaultBaseModel() {
   const fromEnv = process.env.SCENE_BASE_MODEL_DEFAULT;
   if (fromEnv) {
     if (isBaseModelKey(fromEnv)) return fromEnv;
-    console.warn(`[SceneGen] SCENE_BASE_MODEL_DEFAULT="${fromEnv}" is not one of ${Object.keys(SCENE_BASE_MODELS).join(', ')}; using ${BUILTIN_BASE_MODEL_DEFAULT}`);
+    console.warn(`[SceneGen] SCENE_BASE_MODEL_DEFAULT="${fromEnv}" is not one of ${Object.keys(SCENE_BASE_MODELS).join(', ')}; using the built-in default`);
+  }
+  if (SCENE_BASE_MODELS[BUILTIN_BASE_MODEL_DEFAULT].provider === 'openai' && !(process.env.OPENAI_API_KEY || OPENAI_API_KEY)) {
+    return BUILTIN_BASE_MODEL_FALLBACK;
   }
   return BUILTIN_BASE_MODEL_DEFAULT;
 }
@@ -1541,7 +1551,7 @@ const CAMERA_CROP_MAP = {
  * gpt-image-1.5 (OUTPAINT_MODEL) to fill the new area while keeping original pixels.
  */
 // The narrowest frame, as a share of the base's width, kept as a pure crop:
-// the base is rendered at 1024 px wide, so a half-width frame is already
+// a Flux base is rendered 1024 px wide, so a half-width frame is already
 // about 3x enlarged at 1536.
 const MIN_PURE_CROP_FRACTION = 0.5;
 
