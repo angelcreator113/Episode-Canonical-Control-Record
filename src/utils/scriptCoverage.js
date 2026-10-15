@@ -110,6 +110,7 @@ function beatRequirements(gaps) {
     if (g.kind === 'hook') return `End on the forward hook: "${g.label}".`;
     if (g.kind === 'wear') return `Right after the line where Lala puts on "${g.label}", write its own line exactly: [WEAR: ${g.id}]`;
     if (g.kind === 'phone') return 'Show what happens on Lala\'s phone in this beat with at least one [UI:VERB Target] line.';
+    if (g.kind === 'cut') return 'Write this beat in full: the first draft stopped partway through it.';
     return null;
   }).filter(Boolean);
 }

@@ -187,19 +187,19 @@ async function groundedScriptInputs(episodeId, showId, models) {
 
 const MODELS = ['claude-sonnet-4-6'];
 
-// A Sonnet call. The whole script tries once, as it always has (a second
-// 8000-token try doubles a wait that already runs long); one beat tries
-// twice, the retry the AI routes use.
+// A Sonnet call: { text, cut }. The whole script tries once, as it always
+// has (a second 8000-token try doubles a wait that already runs long); one
+// beat tries twice, the retry the AI routes use. `cut` is a reply stopped at
+// its token limit, so its last beat may be half written.
 async function writeWith(prompt, maxTokens, attempts) {
   let lastErr = null;
   for (const model of MODELS) {
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       try {
         const response = await getClient().messages.create({ model, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] });
-        // A reply cut off at its token limit is noted, so the coverage
-        // check knows the last beats may be missing.
-        if (response.stop_reason === 'max_tokens') console.warn(`[ScriptGen] ${model} reply hit its ${maxTokens}-token limit`);
-        return response.content[0]?.text || '';
+        const cut = response.stop_reason === 'max_tokens';
+        if (cut) console.warn(`[ScriptGen] ${model} reply hit its ${maxTokens}-token limit`);
+        return { text: response.content[0]?.text || '', cut };
       } catch (err) {
         lastErr = err;
         console.error(`[ScriptGen] ${model} attempt ${attempt} failed:`, err.message);
@@ -219,13 +219,44 @@ async function writeWith(prompt, maxTokens, attempts) {
 // hook, a wear cue, a phone moment, a beat that did not come back) is
 // written into its beat in one pass, each such beat once, never an
 // approved one. Returns { script, coverage: { missing, fixed_beats }, facts }.
+//
+// Script tab re-audit (2026-10-15):
+// - a first draft with fewer than MIN_DRAFT_BEATS of the 14 beats (a
+//   refusal, an empty reply) is not a script: it throws DRAFT_INCOMPLETE
+//   before any fix is paid for, and nothing is saved;
+// - the fix pass writes the beats that did not come back first (a reply
+//   cut off at its limit loses the outcome, deliverable and hook beats),
+//   then the half-written last beat of a cut reply, then the hook,
+//   deliverables, goals, wear cues, phone moments;
+// - a fix goes in only when it leaves the script missing less than before,
+//   so a reply that is not the beat never replaces one that was.
 const MAX_FIX_BEATS = 5;
+const MIN_DRAFT_BEATS = CANONICAL_BEATS.length - MAX_FIX_BEATS;
+const GAP_RANK = { beat: 0, cut: 1, hook: 2, deliverable: 3, goal: 4, wear: 5, phone: 6 };
+
+class DraftIncompleteError extends Error {
+  constructor(found) {
+    super(`The writer sent back ${found} of the ${CANONICAL_BEATS.length} beats, too few to finish; nothing was saved. Try again.`);
+    this.code = 'DRAFT_INCOMPLETE';
+    this.found = found;
+  }
+}
+
 async function generateGroundedScript(episodeId, showId, models, { lockedBeats = [] } = {}) {
   const inputs = await groundedScriptInputs(episodeId, showId, models);
-  let script = await writeWith(buildScriptPrompt(inputs, { lockedBeats }), 8000, 1);
+  const draft = await writeWith(buildScriptPrompt(inputs, { lockedBeats }), 8000, 1);
+  let script = draft.text;
   const facts = coverageFacts(inputs);
   const locked = new Set(lockedBeats.map((b) => b.number));
   const { scriptCoverage, beatRequirements, replaceBeatByNumber, insertBeatByNumber } = require('../utils/scriptCoverage');
+  const { splitScriptBeats } = require('../utils/scriptBeatLocks');
+
+  const drafted = splitScriptBeats(script).beats.map((b) => b.number);
+  const found = new Set([...drafted, ...locked].filter((n) => CANONICAL_BEATS.some((c) => c.number === n))).size;
+  if (found < MIN_DRAFT_BEATS) {
+    console.error(`[ScriptGen] Episode ${episodeId}: first draft has ${found} of ${CANONICAL_BEATS.length} beats${draft.cut ? ' (cut off)' : ''}; not saved`);
+    throw new DraftIncompleteError(found);
+  }
   // Approved beats are read as approved (the route puts them back word for
   // word anyway), so what they already cover is not written twice.
   for (const b of lockedBeats) {
@@ -234,33 +265,43 @@ async function generateGroundedScript(episodeId, showId, models, { lockedBeats =
   }
 
   const byBeat = new Map();
+  const gapAt = (n, gap) => { if (!byBeat.has(n)) byBeat.set(n, []); byBeat.get(n).push(gap); };
   for (const gap of scriptCoverage(script, facts).missing) {
-    if (locked.has(gap.target)) continue;
-    if (!byBeat.has(gap.target)) byBeat.set(gap.target, []);
-    byBeat.get(gap.target).push(gap);
+    if (!locked.has(gap.target)) gapAt(gap.target, gap);
   }
-  const targets = [...byBeat.keys()].sort((a, b) => a - b).slice(0, MAX_FIX_BEATS);
+  // A cut reply's last beat stopped mid-line.
+  const lastDrafted = drafted[drafted.length - 1];
+  if (draft.cut && lastDrafted && !locked.has(lastDrafted)) gapAt(lastDrafted, { kind: 'cut', target: lastDrafted });
+  const rank = (n) => Math.min(...byBeat.get(n).map((g) => GAP_RANK[g.kind] ?? 9));
+  const targets = [...byBeat.keys()].sort((a, b) => rank(a) - rank(b) || a - b).slice(0, MAX_FIX_BEATS);
   const written = await Promise.allSettled(targets.map(async (n) => {
     const canon = CANONICAL_BEATS.find((b) => b.number === n);
     const prompt = buildScriptPrompt(inputs, {
       only: { beat: canon, currentScript: script, requirements: beatRequirements(byBeat.get(n)) },
     });
-    return { n, text: beatFromReply(await writeWith(prompt, 1500, 2), n) };
+    return { n, text: beatFromReply((await writeWith(prompt, 1500, 2)).text, n) };
   }));
   const fixedBeats = [];
+  const gapsIn = (s) => scriptCoverage(s, facts).missing.length;
   for (const r of written) {
     if (r.status !== 'fulfilled') { console.error('[ScriptGen] coverage fix failed (non-blocking):', r.reason?.message); continue; }
     const { n, text } = r.value;
     if (!text) continue;
     const isMissing = byBeat.get(n).some((g) => g.kind === 'beat');
     const next = isMissing ? insertBeatByNumber(script, n, text) : replaceBeatByNumber(script, n, text);
-    if (next !== script) { script = next; fixedBeats.push(n); }
+    if (next === script) continue;
+    const isCut = byBeat.get(n).some((g) => g.kind === 'cut');
+    if (!isCut && gapsIn(next) >= gapsIn(script)) {
+      console.warn(`[ScriptGen] Episode ${episodeId}: the rewrite of beat ${n} covered nothing more; the beat stays as written`);
+      continue;
+    }
+    script = next; fixedBeats.push(n);
   }
   const { missing } = scriptCoverage(script, facts);
   if (fixedBeats.length || missing.length) {
     console.log(`[ScriptGen] Coverage for episode ${episodeId}: rewrote beats ${fixedBeats.join(', ') || 'none'}; still missing ${missing.length}`);
   }
-  return { script, coverage: { missing, fixed_beats: fixedBeats }, facts };
+  return { script, coverage: { missing, fixed_beats: fixedBeats.sort((a, b) => a - b) }, facts };
 }
 
 // What the coverage check needs from the writer's inputs.
@@ -275,19 +316,22 @@ function coverageFacts(inputs) {
 }
 
 // One beat's text from the writer's reply: the section under the beat's own
-// header, or the whole reply under that header when the header did not come
-// back. The header is always the canonical one. null when nothing came back.
+// header, or the whole reply under that header when it has no header at
+// all. The header is always the canonical one. null when the reply is not
+// this beat (Script tab re-audit, 2026-10-15): it has only other beats'
+// headers, or no line of a script (a speaker's line, an action in
+// parentheses, a [cue]), as a refusal has none.
+const SCRIPT_LINE = /^\s*(?:\[|\(|[\p{L}][\p{L}\p{M}'’. -]{0,40}(?:\s*\([^)]*\))?\s*:)/u;
 function beatFromReply(reply, beatNumber) {
   const canon = CANONICAL_BEATS.find((b) => b.number === beatNumber);
   if (!canon) return null;
   const { splitScriptBeats } = require('../utils/scriptBeatLocks');
   const split = splitScriptBeats(String(reply || '').trim());
   const own = split.beats.find((b) => b.number === beatNumber);
-  const body = own
-    ? own.text.split('\n').slice(1).join('\n')
-    : [split.preamble, ...split.beats.map((b) => b.text.split('\n').slice(1).join('\n'))].join('\n');
+  if (!own && split.beats.length) return null;
+  const body = own ? own.text.split('\n').slice(1).join('\n') : split.preamble;
   const lines = body.split('\n').map((l) => l.replace(/\s+$/, '')).filter((l) => l.trim());
-  if (!lines.length) return null;
+  if (!lines.some((l) => SCRIPT_LINE.test(l))) return null;
   return [beatHeader(canon), ...lines].join('\n');
 }
 
@@ -304,7 +348,7 @@ async function generateGroundedBeat(episodeId, showId, models, { beatNumber, cur
   const prompt = buildScriptPrompt(await groundedScriptInputs(episodeId, showId, models), {
     only: { beat: canon, currentScript: String(currentScript || ''), instruction: direction },
   });
-  return beatFromReply(await writeWith(prompt, 1500, 2), beatNumber);
+  return beatFromReply((await writeWith(prompt, 1500, 2)).text, beatNumber);
 }
 
 // The Script Writer's blocks for what `story` holds: money, career, the
@@ -508,4 +552,4 @@ ${beatHeader(only.beat)}
 Return only that beat. No other beats, no preamble.` : 'Write the complete 14-beat script now. No preamble — just the script.'}`;
 }
 
-module.exports = { generateGroundedScript, generateGroundedBeat, buildScriptPrompt, beatFromReply, coverageFacts };
+module.exports = { generateGroundedScript, generateGroundedBeat, buildScriptPrompt, beatFromReply, coverageFacts, DraftIncompleteError, MIN_DRAFT_BEATS };

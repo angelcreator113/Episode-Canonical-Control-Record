@@ -36,6 +36,14 @@ describe('beatFromReply', () => {
     expect(beatFromReply(reply, 7)).toBe(`${beatHeader(CANONICAL_BEATS[6])}\nMe: seven\nLala: yes bestie`);
   });
 
+  test('a reply with only other beats, or no script line, is not the beat', () => {
+    // Script tab re-audit (2026-10-15).
+    expect(beatFromReply('## BEAT: 9 · Reminder/Deadline\nMe: nine', 8)).toBeNull();
+    expect(beatFromReply("I'm sorry, I can't write that beat.", 8)).toBeNull();
+    expect(beatFromReply('(She opens the closet.)', 8)).toBe(`${beatHeader(CANONICAL_BEATS[7])}\n(She opens the closet.)`);
+    expect(beatFromReply('Lala (V.O.): "this one"', 8)).toBe(`${beatHeader(CANONICAL_BEATS[7])}\nLala (V.O.): "this one"`);
+  });
+
   test('a reply without a header becomes the beat under its header', () => {
     expect(beatFromReply('Me: hi besties\n\nLala: hey', 3)).toBe(`${beatHeader(CANONICAL_BEATS[2])}\nMe: hi besties\nLala: hey`);
   });
@@ -110,8 +118,10 @@ describe('generateGroundedBeat', () => {
 });
 
 describe('whole-script Regenerate reads the locked beats', () => {
+  // A first draft with every beat (one with too few is refused).
+  const FULL = CANONICAL_BEATS.map((b) => `${beatHeader(b)}\nMe: hi`).join('\n\n');
   test('the approved beats go into the prompt, to be written around', async () => {
-    const create = jest.fn(async () => ({ content: [{ text: 'SCRIPT' }] }));
+    const create = jest.fn(async () => ({ content: [{ text: FULL }] }));
     mockAnthropic(create);
     const { generateGroundedScript } = require('../../../src/services/groundedScriptGeneratorService');
     await generateGroundedScript('ep1', 'show-1', models(), { lockedBeats: [{ number: 5, text: '## BEAT: 5 · Reveal\nLala: The approved reveal.' }] });
@@ -122,7 +132,7 @@ describe('whole-script Regenerate reads the locked beats', () => {
   });
 
   test('with nothing locked, the prompt has no approved-beats section', async () => {
-    const create = jest.fn(async () => ({ content: [{ text: 'SCRIPT' }] }));
+    const create = jest.fn(async () => ({ content: [{ text: FULL }] }));
     mockAnthropic(create);
     const { generateGroundedScript } = require('../../../src/services/groundedScriptGeneratorService');
     await generateGroundedScript('ep1', 'show-1', models());

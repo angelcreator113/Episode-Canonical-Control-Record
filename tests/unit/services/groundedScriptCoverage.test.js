@@ -125,4 +125,42 @@ describe("the Script tab's writer", () => {
     expect(out.coverage.fixed_beats).toEqual([8, 12, 14]);
     expect(out.coverage.missing).toEqual([]);
   });
+
+  // Script tab re-audit (2026-10-15).
+  test('a first draft that is not a script (a refusal) is refused before any fix is paid for', async () => {
+    const create = jest.fn(async () => reply('Sorry, I cannot help with that.'));
+    mockAnthropic(create);
+    const { generateGroundedScript } = require('../../../src/services/groundedScriptGeneratorService');
+    await expect(generateGroundedScript('ep1', 'show-1', models())).rejects.toMatchObject({ code: 'DRAFT_INCOMPLETE', found: 0 });
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  test('a draft cut off at its limit gets its lost beats written first', async () => {
+    const cut = draft.split('## BEAT: 10')[0].trimEnd();
+    const create = jest.fn(async (call) => {
+      const asked = call.messages[0].content.match(/Write ONLY beat (\d+) again/);
+      if (!asked) return { ...reply(cut), stop_reason: 'max_tokens' };
+      const n = Number(asked[1]);
+      return reply(beat(n, NAMES[n - 1], n === 14 ? 'Me: and then the DM arrives' : `Me: beat ${n}`, '[UI:OPEN Mail]'));
+    });
+    mockAnthropic(create);
+    const { generateGroundedScript } = require('../../../src/services/groundedScriptGeneratorService');
+    const out = await generateGroundedScript('ep1', 'show-1', models());
+    const asked = create.mock.calls.slice(1).map((c) => Number(c[0].messages[0].content.match(/Write ONLY beat (\d+) again/)[1])).sort((a, b) => a - b);
+    expect(asked).toEqual([10, 11, 12, 13, 14]);
+    expect(out.coverage.fixed_beats).toEqual([10, 11, 12, 13, 14]);
+    expect(out.coverage.missing.some((g) => g.kind === 'beat')).toBe(false);
+  });
+
+  test('a fix that is not the beat, or covers nothing more, leaves the beat as written', async () => {
+    const create = jest.fn(async (call) => whenBeat(8, beat(8, 'Transformation Loop', '[UI:OPEN Closet]', 'Lala: a different dress'))(call)
+      || whenBeat(12, "Sorry, I can't write that.")(call)
+      || reply(draft));
+    mockAnthropic(create);
+    const { generateGroundedScript } = require('../../../src/services/groundedScriptGeneratorService');
+    const out = await generateGroundedScript('ep1', 'show-1', models());
+    expect(out.script).toBe(draft);
+    expect(out.coverage.fixed_beats).toEqual([]);
+    expect(out.coverage.missing.map((g) => g.target).sort((a, b) => a - b)).toEqual([8, 12]);
+  });
 });
