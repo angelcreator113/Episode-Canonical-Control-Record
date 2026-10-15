@@ -2879,7 +2879,9 @@ router.post('/:id/generate-all-angles', validateUUIDParam('id'), requireAuth, ai
     const where = rawIds
       ? { scene_set_id: set.id, id: rawIds, generation_status: ['pending', 'failed'] }
       : { scene_set_id: set.id, generation_status: 'pending' };
-    const eligible = await SceneAngle.findAll({ where, order: [['sort_order', 'ASC']] });
+    // Zones before the extras made from their pictures (generationOrder).
+    const eligible = require('../services/sceneGenerationService').generationOrder(
+      await SceneAngle.findAll({ where, order: [['sort_order', 'ASC']] }));
     let pendingAngles = eligible.slice(0, MAX_BATCH);
     const remaining = eligible.length - pendingAngles.length;
 
