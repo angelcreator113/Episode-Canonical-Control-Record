@@ -558,6 +558,13 @@ module.exports = {
       updateData.distribution_metadata = await keepStyleSheet(Episode.sequelize, episode.id, updateData.distribution_metadata);
     }
 
+    // Version history (services/scriptVersions.js): the script this save
+    // replaces is kept first; a failure to keep it never stops the save.
+    if (typeof updateData.script_content === 'string') {
+      const { snapshotScript } = require('../services/scriptVersions');
+      await snapshotScript(require('../models'), episode, { source: 'save', userId: req.user?.id, next: updateData.script_content });
+    }
+
     await episode.update(updateData);
 
     // Publishing no longer puts the episode's draft feed posts live (Evoni,
@@ -659,6 +666,8 @@ module.exports = {
       const locks = keepLockedBeats(scriptContent, episode.script_content, stillLocked);
       update.script_content = locks.script;
       lockedKept = locks.changed;
+      const { snapshotScript } = require('../services/scriptVersions');
+      await snapshotScript(require('../models'), episode, { source: 'lock', userId: req.user?.id, next: update.script_content });
     }
     await episode.update(update);
 

@@ -18,6 +18,8 @@ import { beatSeconds, scriptSeconds, formatRuntime } from '../../lib/scriptRunti
 import { scriptHealth } from '../../lib/scriptHealth';
 import ScriptHealthPanel from './ScriptHealthPanel';
 import ScriptReadActions from './ScriptReadActions';
+import ScriptHistory from './ScriptHistory';
+import useScriptDraft from '../../hooks/useScriptDraft';
 import './EpisodeScriptPage.css';
 
 // Track 6 CP15 partial-migration extension (5th instance) — file already
@@ -579,7 +581,27 @@ function LalaLineSlot({ piece, dressCode = '', onInsert, onAiDraft = null }) {
   );
 }
 
-function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, onEdit, onDeleteLine, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, onScreen, onAddMoment, phoneUpAtStart = false, request = null, people = [], lalaSlots = [], dressCode = '' }) {
+// A rewrite or a regenerated beat before it goes in (Script tab audit,
+// 2026-10-15): the new words beside what they replace, "Use it" or "Keep mine".
+function ProposalCard({ proposal, onAccept, onDiscard }) {
+  const shown = (line) => { const p = parseLine(line); return !p || p.hidden ? null : p.type === 'dialogue' ? `${p.speaker}: ${p.text}` : p.text; };
+  const lines = proposal.kind === 'beat'
+    ? proposal.text.split('\n').slice(1).map(shown).filter(Boolean)
+    : [shown(proposal.text) || proposal.text];
+  return (
+    <div className="esp-proposal" role="region" aria-label={proposal.kind === 'beat' ? `New version of beat ${proposal.number}` : 'Rewritten line'} data-testid="script-proposal">
+      <p className="esp-proposal-title">{proposal.kind === 'beat' ? `↻ New version of beat ${proposal.number}` : '✦ Rewritten line'}</p>
+      {proposal.kind === 'line' && <p className="esp-proposal-was">Was: {shown(proposal.originalLine) || proposal.originalLine}</p>}
+      <ul className="esp-proposal-lines">{lines.map((l, i) => <li key={i}>{l}</li>)}</ul>
+      <div className="esp-proposal-actions">
+        <button type="button" className="esp-btn-primary is-small" data-testid="script-proposal-accept" onClick={(e) => { e.stopPropagation(); onAccept(); }}>Use it</button>
+        <button type="button" className="esp-btn is-small" data-testid="script-proposal-discard" onClick={(e) => { e.stopPropagation(); onDiscard(); }}>Keep mine</button>
+      </div>
+    </div>
+  );
+}
+
+function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, proposal = null, onAcceptProposal, onDiscardProposal, onEdit, onDeleteLine, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, onScreen, onAddMoment, phoneUpAtStart = false, request = null, people = [], lalaSlots = [], dressCode = '' }) {
   const scene = scenePlan?.find(p => p.beat_number === beat.number);
   const cardRef = useRef(null);
   const [picking, setPicking] = useState(false);
@@ -656,6 +678,7 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
       </div>
       {expanded && (
         <div className="esp-beat-body">
+          {proposal && <ProposalCard proposal={proposal} onAccept={onAcceptProposal} onDiscard={onDiscardProposal} />}
           {/* The scene this beat plays in (Task #2789), the picture the Scenes tab shows. */}
           {picture ? (
             <button type="button" className="esp-beat-picture" data-testid={`script-picture-${beat.number}`} onClick={(e) => { e.stopPropagation(); setZoomed(true); }} aria-label="See the scene larger">
@@ -765,6 +788,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   const [savedScript, setSavedScript] = useState(episode?.script_content || '');
   const [lockedBeats, setLockedBeats] = useState(() => (Array.isArray(episode?.script_locked_beats) ? episode.script_locked_beats : []));
   const [locking, setLocking] = useState(false);
+  // Unsaved edits kept in this browser, offered back when the tab opens.
+  const draft = useScriptDraft({ episodeId, scriptText, savedScript });
   const [beats, setBeats] = useState([]);
   // undefined: nothing chosen yet, so the first beat is open.
   const [expandedBeat, setExpandedBeat] = useState(undefined);
@@ -772,6 +797,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [rewritingLine, setRewritingLine] = useState(null);
+  // A rewrite or regenerated beat waiting for "Use it" / "Keep mine".
+  const [proposal, setProposal] = useState(null);
   const [regeneratingBeat, setRegeneratingBeat] = useState(null);
   // Regenerate outlasted its request: the page waits for the saved script.
   const [waitingForScript, setWaitingForScript] = useState(false);
@@ -1100,16 +1127,9 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       if (!mountedRef.current) return;
       const next = rewrittenLine(originalLine, res.data?.rewrittenLine);
       if (!next) { flash('The rewrite came back the same; try again.', 'error'); return; }
-      // The rewrite goes into the script as it is now (Script tab audit,
-      // 2026-10-15): edits made while it ran stay, and the line is found
-      // again by its words if it moved.
-      const current = scriptRef.current;
-      const nowBeat = parseScriptIntoBeats(current, lockedRef.current).find(b => b.id === beatId);
-      const at = nowBeat?.lines[lineIndex] === originalLine ? lineIndex : (nowBeat?.lines.indexOf(originalLine) ?? -1);
-      const written = at < 0 ? null : scriptWithLine(current, lockedRef.current, beatId, at, next);
-      if (written === null) { flash('The line changed or was approved while it was being rewritten, so the rewrite was not put in.', 'error', 6000); return; }
-      setScriptText(written);
-      flash('Line rewritten ✦ Save to keep it.', 'success');
+      if (parseScriptIntoBeats(scriptRef.current, lockedRef.current).find(b => b.id === beatId)?.approved !== false) { flash('The line changed or was approved while it was being rewritten, so the rewrite was not put in.', 'error', 6000); return; }
+      // Shown in its beat first; "Use it" puts it in (acceptProposal).
+      setProposal({ kind: 'line', beatId, lineIndex, originalLine, text: next });
     } catch (err) {
       console.error('[EpisodeScript] rewrite failed:', err);
       flash(`Rewrite failed: ${err.response?.data?.error || err.message || 'no answer'}`, 'error', 6000);
@@ -1127,21 +1147,45 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     try {
       const res = await api.post(`/api/v1/episode-brief/${episodeId}/regenerate-beat`, { showId, beatNumber: beat.number, script: withBeatHeaders(scriptText, lockedBeats), ...(instruction ? { instruction } : {}) });
       if (!mountedRef.current) return;
-      // The beat is found again in the script as it is now (Script tab
-      // audit, 2026-10-15), so a beat moved while it was written is not
-      // written over, and a beat approved meanwhile is left as approved.
-      const current = withBeatHeaders(scriptRef.current, lockedRef.current);
-      const nowBeats = parseScriptIntoBeats(current, lockedRef.current);
-      const at = nowBeats.findIndex(b => b.id === beatId);
-      if (at < 0 || nowBeats[at].approved) { flash(`Beat ${beat.number} was approved or removed while it was being written, so the new version was not put in.`, 'error', 6000); return; }
-      const next = replaceBeat(current, at, res.data?.beat);
-      if (next === current) { flash('The beat came back the same; try again.', 'error'); return; }
-      setScriptText(next);
-      flash(`Beat ${beat.number} rewritten ✦ Save to keep it.`, 'success');
+      const proposed = String(res.data?.beat || '');
+      const nowBeat = parseScriptIntoBeats(withBeatHeaders(scriptRef.current, lockedRef.current), lockedRef.current).find(b => b.id === beatId);
+      if (!nowBeat || nowBeat.approved) { flash(`Beat ${beat.number} was approved or removed while it was being written, so the new version was not put in.`, 'error', 6000); return; }
+      if (!/^\s*##\s*BEAT:/i.test(proposed) || (nowBeat && nowBeat.raw.trimEnd() === proposed.trimEnd())) { flash('The beat came back the same; try again.', 'error'); return; }
+      // Shown in the beat first; "Use it" puts it in (acceptProposal).
+      setProposal({ kind: 'beat', beatId, number: beat.number, text: proposed });
     } catch (err) {
       console.error('[EpisodeScript] beat regenerate failed:', err);
       flash(`Regenerate failed: ${err.response?.data?.error || err.message || 'no answer'}`, 'error', 6000);
     } finally { if (mountedRef.current) setRegeneratingBeat(null); }
+  };
+
+  // A rewrite or a regenerated beat is a suggestion until "Use it" (Script
+  // tab audit, 2026-10-15: they replaced the text straight away). It goes
+  // into the script as it is then: edits made meanwhile stay, a line is
+  // found again by its words if it moved, a beat by its id, and one
+  // approved meanwhile is left as approved.
+  const acceptProposal = () => {
+    const p = proposal;
+    if (!p || busy) return;
+    setProposal(null);
+    if (p.kind === 'line') {
+      const current = scriptRef.current;
+      const nowBeat = parseScriptIntoBeats(current, lockedRef.current).find(b => b.id === p.beatId);
+      const at = nowBeat?.lines[p.lineIndex] === p.originalLine ? p.lineIndex : (nowBeat?.lines.indexOf(p.originalLine) ?? -1);
+      const written = at < 0 ? null : scriptWithLine(current, lockedRef.current, p.beatId, at, p.text);
+      if (written === null) { flash('The line changed or was approved while it was being rewritten, so the rewrite was not put in.', 'error', 6000); return; }
+      setScriptText(written);
+      flash('Line rewritten ✦ Save to keep it.', 'success');
+      return;
+    }
+    const current = withBeatHeaders(scriptRef.current, lockedRef.current);
+    const nowBeats = parseScriptIntoBeats(current, lockedRef.current);
+    const at = nowBeats.findIndex(b => b.id === p.beatId);
+    if (at < 0 || nowBeats[at].approved) { flash(`Beat ${p.number} was approved or removed while it was being written, so the new version was not put in.`, 'error', 6000); return; }
+    const next = replaceBeat(current, at, p.text);
+    if (next === current) { flash('The beat came back the same; try again.', 'error'); return; }
+    setScriptText(next);
+    flash(`Beat ${p.number} rewritten ✦ Save to keep it.`, 'success');
   };
 
   // Approve = lock (Evoni, 2026-10-08). The lock is kept on the episode, so
@@ -1392,6 +1436,11 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
         {hasScript ? (
           <div className="esp-actions">
             {/* Table read and Export (Script tab audit, 2026-10-15): the script as on the page. */}
+            <ScriptHistory episodeId={episodeId} dirty={scriptText !== savedScript} onRestore={(text) => {
+              if (busy) { flash('Wait for the new script before putting a version back.', 'error'); return; }
+              setScriptText(text);
+              flash('An earlier version is on the page ✦ Save to keep it.', 'success', 5000);
+            }} />
             <ScriptReadActions scriptText={scriptText} title={episode?.title || (episode?.episode_number ? `Episode ${episode.episode_number}` : 'Script')} dirty={scriptText !== savedScript} onScreen={onScreenWithDrafts} scenePlan={scenePlan} startBeat={Math.max(0, beats.indexOf(openBeat))} />
             <button type="button" className={`esp-btn${developerMode ? ' is-on' : ''}`} onClick={() => setDeveloperMode(d => !d)}>{developerMode ? 'Beat view' : 'Raw editor'}</button>
             <button type="button" className="esp-btn" data-testid="script-regenerate" onClick={() => {
@@ -1411,6 +1460,16 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
         )}
       </section>
       {genError && <div className="esp-error" role="alert">{genError}</div>}
+      {draft.offer && (
+        <div className="esp-draft" role="region" aria-label="Unsaved changes kept in this browser" data-testid="script-draft">
+          <span className="esp-draft-text">
+            Unsaved changes{draft.offer.at ? ` from ${new Date(draft.offer.at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''} were kept in this browser.
+            {draft.offer.baseChanged ? ' The saved script has changed since.' : ''}
+          </span>
+          <button type="button" className="esp-btn-primary is-small" data-testid="script-draft-restore" onClick={() => { setScriptText(draft.offer.text); draft.discard(); flash('Your unsaved changes are back ✦ Save to keep them.', 'success', 5000); }}>Put them back</button>
+          <button type="button" className="esp-btn is-small" data-testid="script-draft-discard" onClick={draft.discard}>Discard</button>
+        </div>
+      )}
       {showBeatList && <ScriptHealthPanel rows={healthRows} beatNumbers={Object.fromEntries(beats.map((b) => [b.id, b.number]))} onOpenBeat={chooseBeat} />}
       {/* At phone width (Task #2881): the beats as pills, and the open beat's
           context from the episode's own data. */}
@@ -1447,7 +1506,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
           {beats.map((beat, index) => {
             const open = (expandedBeat === undefined ? beats[0]?.id : expandedBeat) === beat.id;
             const phoneUp = phoneUpAtStart[index] || false;
-            return <BeatSection key={beat.id} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open && !isPhoneWidth() ? null : beat.id)} onApprove={handleApprove} onEdit={handleEditLine} onDeleteLine={handleDeleteLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking || busy} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} phoneUpAtStart={phoneUp} people={people} lalaSlots={lineSlots.filter((s) => s.beatIndex === index)} dressCode={source?.event?.dress_code || ''} />;
+            return <BeatSection key={beat.id} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open && !isPhoneWidth() ? null : beat.id)} onApprove={handleApprove} proposal={proposal?.beatId === beat.id ? proposal : null} onAcceptProposal={acceptProposal} onDiscardProposal={() => setProposal(null)} onEdit={handleEditLine} onDeleteLine={handleDeleteLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking || busy} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} phoneUpAtStart={phoneUp} people={people} lalaSlots={lineSlots.filter((s) => s.beatIndex === index)} dressCode={source?.event?.dress_code || ''} />;
           })}
           {/* Franchise Guard Results */}
           {guardResult && (

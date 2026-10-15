@@ -44,6 +44,8 @@ describe('Regenerate one beat', () => {
     renderTab();
     fireEvent.click(screen.getByTestId('script-beat-2').querySelector('.esp-beat-head'));
     fireEvent.click(screen.getByTestId('script-regen-beat-2'));
+    // A suggestion until "Use it" (Script tab audit, 2026-10-15).
+    fireEvent.click(await screen.findByTestId('script-proposal-accept'));
     await waitFor(() => expect(screen.getByTestId('script-beat-2').textContent).toContain('Fresh login.'));
     const [url, body] = vi.mocked(api.post).mock.calls[0];
     expect(url).toBe('/api/v1/episode-brief/ep-1/regenerate-beat');
