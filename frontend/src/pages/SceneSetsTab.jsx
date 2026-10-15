@@ -449,6 +449,18 @@ export const reorderAnglesApi = (setId, payload) =>
 export const generateAllAnglesApi = (setId, payload) =>
   apiClient.post(`${API_BASE}/scene-sets/${setId}/generate-all-angles`, payload);
 
+/** The angles Generate All makes, in card order: pending ones, and failed ones retried. */
+export const generateAllTargets = (set) => (set?.angles || [])
+  .filter(a => a.generation_status === 'pending' || a.generation_status === 'failed')
+  .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+
+/** Generate All's batch result in words; `remaining` angles wait for the next click. */
+export function generateAllOutcome({ completed = 0, failed = 0, remaining = 0 }) {
+  const more = remaining > 0 ? ` ${remaining} more waiting: click Generate All Angles again for the next batch.` : '';
+  if (failed === 0) return { tone: 'success', text: `${completed} angle${completed === 1 ? '' : 's'} generated.${more}` };
+  return { tone: 'error', text: `${completed} completed, ${failed} failed.${more}` };
+}
+
 // AI / suggestions
 export const suggestAnglesApi = (setId, payload) =>
   apiClient.post(`${API_BASE}/scene-sets/${setId}/suggest-angles`, payload);
@@ -1952,14 +1964,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                               <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--warning)' }} />
                               <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)' }}>Step 3: Generate {generableAngles.length} Angle Images</span>
                             </div>
-                            <button onClick={async () => {
-                              if (failedAngles.length > 0) {
-                                for (const a of failedAngles) {
-                                  try { await updateAngleApi(set.id, a.id, { generation_status: 'pending' }); } catch { /* continue */ }
-                                }
-                              }
-                              onGenerateAll(set, false);
-                            }} disabled={isGenerating} className="scene-sets-btn-generate" style={{ width: '100%' }}>
+                            <button onClick={() => onGenerateAll(set)} disabled={isGenerating} className="scene-sets-btn-generate" style={{ width: '100%' }}>
                               {isGenerating ? <><Loader size={12} className="spin" /> Generating...</> : <><Sparkles size={12} /> Generate All Angles ({generableAngles.length})</>}
                             </button>
                           </>
@@ -1997,17 +2002,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                     {/* Generate All — for sets without spec but with pending angles */}
                     {!specStage && hasBase && !hasSpec && generableAngles.length > 0 && (
                       <div style={{ marginTop: 6 }}>
-                        <button onClick={async () => {
-                          // Reset failed angles to pending first so they get included
-                          if (failedAngles.length > 0) {
-                            for (const a of failedAngles) {
-                              try {
-                                await updateAngleApi(set.id, a.id, { generation_status: 'pending' });
-                              } catch { /* continue */ }
-                            }
-                          }
-                          onGenerateAll(set, false);
-                        }} disabled={isGenerating} className="scene-sets-btn-generate" style={{ width: '100%' }}>
+                        <button onClick={() => onGenerateAll(set)} disabled={isGenerating} className="scene-sets-btn-generate" style={{ width: '100%' }}>
                           {isGenerating ? <><Loader size={12} className="spin" /> Generating...</> : <><Sparkles size={12} /> Generate All Angles ({generableAngles.length})</>}
                         </button>
                       </div>
@@ -3022,11 +3017,9 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
     { setId: set.id, angleId: angle.id, title: `Generate “${angle.angle_name || angle.angle_label}”` },
     (overrides) => runGenerateAngle(set, angle, overrides),
   );
-  const handleGenerateAll = (set, regenerate = false) => {
-    const targets = regenerate
-      ? set.angles?.filter(a => a.generation_status === 'complete' || a.generation_status === 'failed') || []
-      : set.angles?.filter(a => a.generation_status === 'pending') || [];
-    if (targets.length === 0) return;
+  const handleGenerateAll = (set) => {
+    const targets = generateAllTargets(set);
+    if (targets.length === 0) { showToast('No angles are waiting to be generated'); return; }
     askBrief(
       {
         setId: set.id,
@@ -3034,7 +3027,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         title: `Generate ${targets.length} angle${targets.length === 1 ? '' : 's'} for “${set.name}”`,
         note: targets.length > 1 ? `Shown for “${targets[0].angle_name || targets[0].angle_label}”; each angle uses this brief with its own camera.` : null,
       },
-      (overrides) => runGenerateAll(set, regenerate, overrides),
+      (overrides) => runGenerateAll(set, overrides),
     );
   };
   const handleCascadeRegenerate = (set, description) => askBrief(
@@ -3206,26 +3199,32 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
     }
   };
 
-  const runGenerateAll = async (set, regenerate, overrides) => {
-    const targets = regenerate
-      ? set.angles?.filter(a => a.generation_status === 'complete' || a.generation_status === 'failed') || []
-      : set.angles?.filter(a => a.generation_status === 'pending') || [];
+  const runGenerateAll = async (set, overrides) => {
+    const targets = generateAllTargets(set);
     if (targets.length === 0) return;
     startGenerating(set.id);
-    const targetIds = new Set(targets.map(a => a.id));
     const batchStartTime = Date.now();
 
-    // Show progress immediately with all angles queued
-    const progressAngles = targets.map(a => ({ id: a.id, label: a.angle_label || a.angle_name, status: 'queued' }));
-    setProgress(set.id, { angles: progressAngles, currentIndex: 0, startTime: batchStartTime, completedCount: 0, failedCount: 0 });
-
     try {
-      // Use the backend batch endpoint — it generates sequentially to avoid rate limits
-      const res = await generateAllAnglesApi(set.id, { overrides });
-      const json = res.data;
+      // The server makes at most a few angles per request (its per-operation
+      // image cap) and names the ones it queued: only those are tracked.
+      const res = await generateAllAnglesApi(set.id, { overrides, angle_ids: targets.map(a => a.id) });
+      const json = res.data || {};
+      const queuedIds = json.angle_ids || [];
+      const remaining = json.remaining || 0;
+      if (queuedIds.length === 0) {
+        showToast('No angles are waiting to be generated');
+        fetchSets();
+        return;
+      }
+      const targetIds = new Set(queuedIds);
+      const progressAngles = targets.filter(a => targetIds.has(a.id))
+        .map(a => ({ id: a.id, label: a.angle_label || a.angle_name, status: 'queued' }));
+      setProgress(set.id, { angles: progressAngles, currentIndex: 0, startTime: batchStartTime, completedCount: 0, failedCount: 0 });
 
       // Poll for completion
       const maxPolls = 120; // 5s * 120 = 10 minutes max
+      let finished = false;
       for (let poll = 0; poll < maxPolls; poll++) {
         await new Promise(r => setTimeout(r, 5000));
         try {
@@ -3263,15 +3262,19 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
           }));
 
           if (generating === 0 && pending === 0) {
-            if (failed === 0) showToast(`All ${completed} angles generated!`);
-            else showToast(`${completed} completed, ${failed} failed`, 'error');
+            const outcome = generateAllOutcome({ completed, failed, remaining });
+            showToast(outcome.text, outcome.tone);
+            finished = true;
             break;
           }
-        } catch { /* retry */ }
+        } catch (pollErr) {
+          console.error('Generate All: status check failed, retrying', pollErr);
+        }
       }
+      if (!finished) showToast('Still generating after 10 minutes; the page will show the angles when they finish.', 'error');
       fetchSets();
     } catch (err) {
-      showToast(err?.message || 'Generation failed', 'error');
+      showToast(err?.response?.data?.error || err?.message || 'Generation failed', 'error');
     } finally {
       setTimeout(() => stopGenerating(set.id), 3000);
     }

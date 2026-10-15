@@ -8,7 +8,7 @@ const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/cl
 const { requireAuth } = require('../middleware/auth');
 const { authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
-const { validateUUIDParam } = require('../middleware/requestValidation');
+const { validateUUIDParam, validateUUID } = require('../middleware/requestValidation');
 const Anthropic          = require('@anthropic-ai/sdk');
 const sceneGenService    = require('../services/sceneGenerationService');
 const { noteBaseChanged, writeReview } = require('../services/baseDescriptionService');
@@ -1530,6 +1530,40 @@ router.post('/:id/angles/:angleId/upload', validateUUIDParam('id'), requireAuth,
   }
 });
 
+// ─── PATCH /:id/angles/reorder  — reorder angles by sort_order ───────────────
+
+// Registered before PATCH /:id/angles/:angleId, which would otherwise take
+// "reorder" as an angle id (every reorder failed).
+router.patch('/:id/angles/reorder', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+
+    const { order } = req.body; // [{ id: 'uuid', sort_order: 0 }, ...]
+    if (!Array.isArray(order)) {
+      return res.status(400).json({ success: false, error: 'order must be an array of { id, sort_order }' });
+    }
+
+    for (const item of order) {
+      if (!item.id || typeof item.sort_order !== 'number') continue;
+      await SceneAngle.update(
+        { sort_order: item.sort_order },
+        { where: { id: item.id, scene_set_id: set.id } }
+      );
+    }
+
+    const angles = await SceneAngle.findAll({
+      where: { scene_set_id: set.id },
+      order: [['sort_order', 'ASC']],
+    });
+
+    res.json({ success: true, data: angles });
+  } catch (err) {
+    console.error('Scene Sets PATCH /:id/angles/reorder error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ─── PATCH /:id/angles/:angleId  — rename / update angle fields ──────────────
 
 router.patch('/:id/angles/:angleId', validateUUIDParam('id'), requireAuth, async (req, res) => {
@@ -2002,38 +2036,6 @@ router.get('/:id/preview-prompt', validateUUIDParam('id'), requireAuth, async (r
     });
   } catch (err) {
     console.error('Scene Sets GET /:id/preview-prompt error:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// ─── PATCH /:id/angles/reorder  — reorder angles by sort_order ───────────────
-
-router.patch('/:id/angles/reorder', validateUUIDParam('id'), requireAuth, async (req, res) => {
-  try {
-    const set = await SceneSet.findByPk(req.params.id);
-    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
-
-    const { order } = req.body; // [{ id: 'uuid', sort_order: 0 }, ...]
-    if (!Array.isArray(order)) {
-      return res.status(400).json({ success: false, error: 'order must be an array of { id, sort_order }' });
-    }
-
-    for (const item of order) {
-      if (!item.id || typeof item.sort_order !== 'number') continue;
-      await SceneAngle.update(
-        { sort_order: item.sort_order },
-        { where: { id: item.id, scene_set_id: set.id } }
-      );
-    }
-
-    const angles = await SceneAngle.findAll({
-      where: { scene_set_id: set.id },
-      order: [['sort_order', 'ASC']],
-    });
-
-    res.json({ success: true, data: angles });
-  } catch (err) {
-    console.error('Scene Sets PATCH /:id/angles/reorder error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -2695,19 +2697,39 @@ router.post('/:id/generate-all-angles', validateUUIDParam('id'), requireAuth, ai
     const briefOverrides = readBriefOverrides(req.body?.overrides);
     if (briefOverrides.error) return res.status(400).json({ success: false, error: briefOverrides.error });
 
+    // angle_ids: the angles the page asked for, pending or failed (a failed
+    // one is retried); none named: the set's pending angles, as before. At
+    // most MAX_BATCH per request; the reply names the ones queued and how
+    // many eligible angles are left for the next request.
     const MAX_BATCH = parseInt(process.env.IMAGE_CALLS_PER_OPERATION) || 3;
-    const pendingAngles = await SceneAngle.findAll({
-      where: { scene_set_id: set.id, generation_status: 'pending' },
-      order: [['sort_order', 'ASC']],
-      limit: MAX_BATCH,
-    });
+    const rawIds = req.body?.angle_ids;
+    if (rawIds !== undefined && (!Array.isArray(rawIds) || rawIds.some((id) => typeof id !== 'string' || !validateUUID(id)))) {
+      return res.status(400).json({ success: false, error: 'angle_ids must be an array of angle ids' });
+    }
+    const where = rawIds
+      ? { scene_set_id: set.id, id: rawIds, generation_status: ['pending', 'failed'] }
+      : { scene_set_id: set.id, generation_status: 'pending' };
+    const eligible = await SceneAngle.findAll({ where, order: [['sort_order', 'ASC']] });
+    const pendingAngles = eligible.slice(0, MAX_BATCH);
+    const remaining = eligible.length - pendingAngles.length;
 
     if (pendingAngles.length === 0) {
-      return res.json({ success: true, message: 'No pending angles to generate', queued: 0 });
+      return res.json({ success: true, message: 'No pending angles to generate', queued: 0, angle_ids: [], remaining: 0 });
+    }
+
+    const failedIds = pendingAngles.filter((a) => a.generation_status === 'failed').map((a) => a.id);
+    if (failedIds.length) {
+      await SceneAngle.update({ generation_status: 'pending' }, { where: { id: failedIds, scene_set_id: set.id } });
     }
 
     // Return immediately, generate in background
-    res.json({ success: true, queued: pendingAngles.length, message: `Generating ${pendingAngles.length} angles in background` });
+    res.json({
+      success: true,
+      queued: pendingAngles.length,
+      angle_ids: pendingAngles.map((a) => a.id),
+      remaining,
+      message: `Generating ${pendingAngles.length} angles in background`,
+    });
 
     // Background generation
     const sceneGenService = require('../services/sceneGenerationService');
