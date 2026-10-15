@@ -26,9 +26,9 @@ This is the plan, in the order it ships. Each step is its own PR; steps that add
 
 ## 3. Character homes
 
-- A character links to their places: home, closet, and optional extras (work, hangout). A new table links `registry_characters` to `world_locations` with a role.
-- When an episode needs "home", the character's own home comes first, then the show default.
-- Open question for Evoni: whose home an episode needs. Either the show names a lead character (Lala for *Styling Adventures*), or each episode names its main character.
+- Any character links to their places: home, closet, and optional extras (work, hangout). A new table links `registry_characters` to `world_locations` with a role. Evoni, 2026-10-15: "Lead character is Lala but other characters have home sets."
+- The show names its lead character (Lala for *Styling Adventures*). When an episode needs "home", the lead's home comes first, then the show default.
+- Other characters' homes are there for the episodes that go to them: a scene planned at another character's home uses that character's home set.
 
 ## 4. The right picture, automatically
 
