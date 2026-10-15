@@ -216,6 +216,12 @@ function parseScript(scriptContent, options = {}) {
     // Evoni, 2026-10-14, phone phase 3 ruling 1). The beat source for the
     // Shopping list's crossing off; the piece is named by id, never by text.
     const wearCues = [];
+    // [DELIVER: <deliverable id>]: that deal item is delivered at this line;
+    // [TODO_MODE: shopping|deal|career]: the list Lala's phone shows in this
+    // beat (Task #3191; phone phase 3 rulings 3 and 6). A tick never changes
+    // the deliverable's status.
+    const deliverCues = [];
+    let todoMode = null;
     const fxEvents = [];
     const sceneLoads = [];
     const dialogueLines = [];
@@ -320,6 +326,20 @@ function parseScript(scriptContent, options = {}) {
         continue;
       }
 
+      // ── DELIVER Tags: a deal item delivered at this line ──
+      const deliverMatch = trimmed.match(/^\[DELIVER:\s*([^\]\s]+)\s*\]$/i);
+      if (deliverMatch) {
+        deliverCues.push({ deliverable_id: deliverMatch[1], line: lineNumber });
+        continue;
+      }
+
+      // ── TODO_MODE: the beat's list on the phone (the last valid one wins) ──
+      const modeMatch = trimmed.match(/^\[TODO_MODE:\s*([^\]\s]*)\s*\]$/i);
+      if (modeMatch) {
+        if (['shopping', 'deal', 'career'].includes(modeMatch[1].toLowerCase())) todoMode = modeMatch[1].toLowerCase();
+        continue;
+      }
+
       // ── LOCATION_HINT ──
       const locMatch = trimmed.match(/^\[LOCATION_HINT:\s*"?([^"\]]+)"?\]$/i);
       if (locMatch) {
@@ -372,6 +392,8 @@ function parseScript(scriptContent, options = {}) {
     if (mailPayloads.length > 0) beat.tags.mail = mailPayloads;
     if (statPayloads.length > 0) beat.tags.stats = statPayloads;
     if (wearCues.length > 0) beat.tags.wear = wearCues;
+    if (deliverCues.length > 0) beat.tags.deliver = deliverCues;
+    if (todoMode) beat.tags.todo_mode = todoMode;
     if (fxEvents.length > 0) beat.tags.fx = fxEvents;
     if (sceneLoads.length > 0) beat.tags.scenes = sceneLoads;
     if (raw.locationHint) beat.tags.location_hint = raw.locationHint;

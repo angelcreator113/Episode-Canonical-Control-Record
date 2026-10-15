@@ -9,7 +9,7 @@ import { episodePlanning } from '../../utils/episodePlanning';
 import { scriptInputs, mustCover, scriptPeople } from '../../lib/episodeScript';
 import { beatState } from '../../lib/beatState';
 import { moveBeat, moveLine, dropIndex, replaceBeat, appendLine, insertLine } from '../../lib/scriptBeatOrder';
-import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers, phoneCheck, messageLine, closetBeat, wearFlags, uncuedPieces, lastGettingReadyIndex } from '../../lib/scriptMoments';
+import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers, phoneCheck, messageLine, closetBeat, wearFlags, uncuedPieces, lastGettingReadyIndex, todoModeAt, deliveredAt, dealCueFlags, TODO_MODE_LABELS } from '../../lib/scriptMoments';
 import { isScreen, isIcon, isProduction } from '../../lib/overlayUtils';
 import { beatImage, beatImageLabel } from '../BeatPlan/BeatPlanParts';
 import './EpisodeScriptPage.css';
@@ -1065,6 +1065,19 @@ export default function EpisodeScriptTab({ episode, show }) {
       .catch((err) => { console.error('[EpisodeScript] shopping list as of the beat failed:', err); if (!cancelled) setShoppingAt(null); });
     return () => { cancelled = true; };
   }, [episodeId, openBeatNumber, scriptText]);
+  // The deal checklist (Task #3191): the episode's deal, its location label
+  // and whether its terms are locked here; ticks and the mode are read from
+  // the script being edited. Read-only: nothing here moves a status.
+  const [deal, setDeal] = useState(null);
+  useEffect(() => {
+    if (!episodeId) { setDeal(null); return undefined; }
+    let cancelled = false;
+    api.get(`/api/v1/episodes/${episodeId}/todo/at`)
+      .then((res) => { if (!cancelled) setDeal(res.data?.data?.deal || null); })
+      .catch((err) => { console.error('[EpisodeScript] deal checklist load failed:', err); if (!cancelled) setDeal(null); });
+    return () => { cancelled = true; };
+  }, [episodeId]);
+  const dealItems = (deal?.items || []).map((i) => ({ ...i, id: i.deliverable_id }));
   const phoneBeats = new Set(beats.filter((b) => hasPhoneMoment(b.lines, onScreen)).map((b) => b.id));
   const openScene = openBeat ? scenePlan.find((p) => p.beat_number === openBeat.number) : null;
   const inRoom = openBeat ? beatSpeakers(openBeat.lines) : [];
@@ -1099,6 +1112,13 @@ export default function EpisodeScriptTab({ episode, show }) {
       wearIssues.push({ beatIndex: beats.indexOf(openBeat), lineIndex: `uncued-${p.id}`, flag: 'uncued', text: `"${p.name}" is in the look, never equipped on screen` });
     }
   }
+
+  // The open beat's to-do list and what of the deal is delivered by its end
+  // (Task #3191); [DELIVER] and [TODO_MODE] cues that do nothing are flagged.
+  const openIndex = openBeat ? beats.indexOf(openBeat) : -1;
+  const todoMode = openBeat ? todoModeAt(beats, openIndex, { closetNumber: closetBeat(scriptText), dealLocked: Boolean(deal?.locked) }) : null;
+  const delivered = openBeat ? deliveredAt(beats, openIndex, Infinity, dealItems) : new Set();
+  const dealIssues = openBeat ? dealCueFlags(beats, dealItems).filter((f) => f.beatIndex === openIndex) : [];
 
   const showBeatList = hasScript && !developerMode && beats.length > 0;
   return (
@@ -1299,6 +1319,15 @@ export default function EpisodeScriptTab({ episode, show }) {
                 {shoppingAt.tasks.some((t) => t.completed) && <span className="esp-truth-note">{shoppingAt.tasks.filter((t) => t.completed).map((t) => t.label || t.slot).join(' · ')}</span>}
               </dd></div>
             )}
+            {todoMode && (
+              <div data-testid="script-truth-todo" data-mode={todoMode.mode}><dt><ListChecks size={14} aria-hidden="true" /> To-do on her phone</dt><dd>
+                {TODO_MODE_LABELS[todoMode.mode]}{todoMode.source === 'cue' ? ' (set in this beat)' : ''}
+                {todoMode.mode === 'deal' && dealItems.length > 0 && (
+                  <span className="esp-truth-note">{deal.label} · {delivered.size} of {dealItems.length} delivered
+                    {dealItems.some((i) => delivered.has(String(i.id)) && i.status !== 'approved') ? ' · ready to approve in Money' : ''}</span>
+                )}
+              </dd></div>
+            )}
             <div data-testid="script-truth-where"><dt><MapPin size={14} aria-hidden="true" /> Where</dt><dd>{truth.where}</dd></div>
             <div data-testid="script-truth-room"><dt><Users size={14} aria-hidden="true" /> In the room</dt><dd>Speaking: {truth.speaking}{truth.cast && <span className="esp-truth-note">Cast: {truth.cast}</span>}</dd></div>
             <div data-testid="script-truth-time"><dt><Clock size={14} aria-hidden="true" /> Story time</dt><dd>{truth.storyTime}{truth.eventTimed && <span className="esp-truth-note">The event&apos;s date and time; a beat has no clock of its own</span>}</dd></div>
@@ -1334,6 +1363,18 @@ export default function EpisodeScriptTab({ episode, show }) {
           <ul className="esp-cover-list">
             {wearIssues.map((f) => (
               <li key={`wear-${f.lineIndex}`} className="is-gap" data-testid="script-wear-flag" data-flag={f.flag}>
+                <AlertTriangle size={14} aria-hidden="true" /><span>{f.text}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {hasScript && openBeat && dealIssues.length > 0 && (
+        <section className="esp-phonecheck" data-testid="script-deliver-check">
+          <h3 className="esp-side-title">Deal cues · Beat {openBeat.number}</h3>
+          <ul className="esp-cover-list">
+            {dealIssues.map((f) => (
+              <li key={`deal-${f.lineIndex}`} className="is-gap" data-testid="script-deliver-flag" data-flag={f.flag}>
                 <AlertTriangle size={14} aria-hidden="true" /><span>{f.text}</span>
               </li>
             ))}
