@@ -72,7 +72,10 @@ const BEAT_TEMPLATES = {
 /**
  * Load all context data for script generation
  */
-async function loadScriptContext(episodeId, showId, models) {
+// `lite` (the Script tab's writer, Script tab re-audit 2026-10-15): skip the
+// wardrobe intelligence, which that writer never reads and which costs a
+// query per piece of the look.
+async function loadScriptContext(episodeId, showId, models, { lite = false } = {}) {
   const { EpisodeBrief, ScenePlan, SceneSet, SceneAngle, FranchiseKnowledge,
           WorldEvent, WorldLocation, sequelize } = models;
 
@@ -212,7 +215,7 @@ async function loadScriptContext(episodeId, showId, models) {
 
   // 5b. Wardrobe Intelligence — repeat detection, brand loyalty, outfit scoring
   context.wardrobeIntelligence = null;
-  if (context.wardrobe.length > 0 && context.event) {
+  if (!lite && context.wardrobe.length > 0 && context.event) {
     try {
       const { getWardrobeIntelligence } = require('./wardrobeIntelligenceService');
       context.wardrobeIntelligence = await getWardrobeIntelligence(context.wardrobe, context.event, showId, models);
