@@ -46,6 +46,22 @@ function getModels() {
   return models;
 }
 
+// The worlds a character can belong to (RegistryCharacter.world).
+const WORLDS = ['book-1', 'lalaverse', 'series-2'];
+
+/**
+ * The world of a character made in a registry: the one asked for, else the
+ * registry's. Only the Book 1 registry (book_tag "Book 1 · Before Lala") is
+ * JustAWoman's world; every other registry is Lala's. Every new character
+ * used to default to 'book-1', so Lala's-world characters read as Book 1.
+ * Canon (Evoni, 2026-10-15): JustAWoman lives in her world and writes Lala's.
+ */
+function worldForNewCharacter(body, registry) {
+  const asked = body?.world || body?.layer;
+  if (WORLDS.includes(asked)) return asked;
+  return /book\s*1|before lala/i.test(registry?.book_tag || '') ? 'book-1' : 'lalaverse';
+}
+
 /**
  * A character's real name is their selected_name; on the feed it is the
  * linked profile's creator_name ("the real name behind the handle"). Saving
@@ -278,7 +294,7 @@ router.post('/registries/:id/characters', requireAuth, async (req, res) => {
       icon: icon || null,
       display_name: display_name || 'New Character',
       subtitle: subtitle || null,
-      world: req.body.world || req.body.layer || 'book-1',
+      world: worldForNewCharacter(req.body, registry),
       role_type: role_type || 'pressure',
       role_label: role_label || null,
       appearance_mode: appearance_mode || 'on_page',
