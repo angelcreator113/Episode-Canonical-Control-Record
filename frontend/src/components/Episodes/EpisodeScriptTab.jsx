@@ -1,7 +1,7 @@
 // frontend/src/components/Episodes/EpisodeScriptTab.jsx
 // Beat-by-beat script reviewer with Show Brain AI rewrite
 
-import { useState, useEffect, useLayoutEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import { Fragment, useState, useEffect, useLayoutEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { Link } from 'react-router-dom';
 import { PenLine, GripVertical, ArrowUp, ArrowDown, Smartphone, Image as ImageIcon, X, Plus, Coins, Shirt, MapPin, Users, ListChecks, Check, Circle, AlertTriangle, Bell, MessageCircle, Send, Clock } from 'lucide-react';
 import api from '../../services/api';
@@ -11,6 +11,7 @@ import { beatState } from '../../lib/beatState';
 import { moveBeat, moveLine, dropIndex, replaceBeat, appendLine, insertLine } from '../../lib/scriptBeatOrder';
 import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers, phoneCheck, messageLine, closetBeat, wearFlags, uncuedPieces, lastGettingReadyIndex, todoModeAt, deliveredAt, dealCueFlags, TODO_MODE_LABELS } from '../../lib/scriptMoments';
 import { isScreen, isIcon, isProduction } from '../../lib/overlayUtils';
+import { draftLine, lalaLine, lalaLineSlots } from '../../lib/lalaLineDraft';
 import { beatImage, beatImageLabel } from '../BeatPlan/BeatPlanParts';
 import './EpisodeScriptPage.css';
 
@@ -463,7 +464,26 @@ function MessageAdder({ kind, people = [], lines = [], onScreen, onAdd, onClose 
 
 // request: { kind: 'line' | 'phone', n } from the phone's bottom bar (Task
 // #2881), opening this beat's line adder or phone picker as its own buttons do.
-function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, onEdit, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, onScreen, onAddMoment, phoneUpAtStart = false, request = null, people = [] }) {
+// Lala's line after a piece she puts on (Task 3190; Evoni, 2026-10-14, phone
+// phase 3 ruling 5): a draft from a free template (lib/lalaLineDraft), shown
+// under the cue; Insert writes it after the cue for Evoni to edit. Nothing
+// is written without her click. The later AI draft goes behind its own
+// button here (onAiDraft), under the daily cap; nothing passes it yet.
+function LalaLineSlot({ piece, dressCode = '', onInsert, onAiDraft = null }) {
+  const draft = draftLine(piece, { dressCode });
+  return (
+    <div className="esp-lala-slot" data-testid="script-lala-slot">
+      <span className="esp-lala-slot-label">Add Lala&apos;s line</span>
+      <span className="esp-lala-slot-draft" data-testid="script-lala-draft">&ldquo;{draft}&rdquo;</span>
+      <span className="esp-lala-slot-actions">
+        <button type="button" className="esp-btn-primary is-small" data-testid="script-lala-insert" onClick={() => onInsert(lalaLine(draft))}>Insert</button>
+        {onAiDraft && <button type="button" className="esp-btn is-small" onClick={() => onAiDraft(piece)}>Draft with AI</button>}
+      </span>
+    </div>
+  );
+}
+
+function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, onEdit, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, onScreen, onAddMoment, phoneUpAtStart = false, request = null, people = [], lalaSlots = [], dressCode = '' }) {
   const scene = scenePlan?.find(p => p.beat_number === beat.number);
   const cardRef = useRef(null);
   const [picking, setPicking] = useState(false);
@@ -562,7 +582,15 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
           )}
           {scene?.scene_context && <div className="esp-beat-context">🎬 {scene.scene_context.slice(0, 200)}{scene.scene_context.length > 200 ? '...' : ''}</div>}
           {scene?.emotional_intent && <div className="esp-beat-intent">✦ {scene.emotional_intent}</div>}
-          <div className="esp-lines">{beat.lines.map((line, i) => <ScriptLine key={`${i}:${line}`} line={line} beatId={beat.id} lineIndex={i} lineCount={beat.lines.length} onEdit={onEdit} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${i}`} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} onScreen={onScreen} withOnScreen={withByLine[i]} phoneDown={phoneDownAt.includes(i)} beatNumber={beat.number} />)}</div>
+          <div className="esp-lines">{beat.lines.map((line, i) => {
+            const slot = beat.approved ? null : lalaSlots.find((s) => s.lineIndex === i);
+            return (
+              <Fragment key={`${i}:${line}`}>
+                <ScriptLine line={line} beatId={beat.id} lineIndex={i} lineCount={beat.lines.length} onEdit={onEdit} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${i}`} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} onScreen={onScreen} withOnScreen={withByLine[i]} phoneDown={phoneDownAt.includes(i)} beatNumber={beat.number} />
+                {slot && <LalaLineSlot piece={slot.piece} dressCode={dressCode} onInsert={(text) => onAddMoment(beat.id, text, i)} />}
+              </Fragment>
+            );
+          })}</div>
           {adding && !beat.approved && (
             <LineAdder key={`adder-${adding}`} initialKind={typeof adding === 'string' ? adding : 'Lala'} lines={beat.lines} onScreen={onScreen} onClose={() => setAdding(false)}
               onAdd={(line, after) => onAddMoment(beat.id, line, after)} />
@@ -1113,6 +1141,8 @@ export default function EpisodeScriptTab({ episode, show }) {
     }
   }
 
+  // Lala line slots after worn pieces with no line of hers (Task #3190).
+  const lineSlots = Array.isArray(outfit) && outfit.length ? lalaLineSlots(beats, outfit) : [];
   // The open beat's to-do list and what of the deal is delivered by its end
   // (Task #3191); [DELIVER] and [TODO_MODE] cues that do nothing are flagged.
   const openIndex = openBeat ? beats.indexOf(openBeat) : -1;
@@ -1211,7 +1241,7 @@ export default function EpisodeScriptTab({ episode, show }) {
           {beats.map((beat, index) => {
             const open = (expandedBeat === undefined ? beats[0]?.id : expandedBeat) === beat.id;
             const phoneUp = phoneUpAtStart[index] || false;
-            return <BeatSection key={beat.id} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open ? null : beat.id)} onApprove={handleApprove} onEdit={handleEditLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} phoneUpAtStart={phoneUp} people={people} />;
+            return <BeatSection key={beat.id} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open ? null : beat.id)} onApprove={handleApprove} onEdit={handleEditLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} phoneUpAtStart={phoneUp} people={people} lalaSlots={lineSlots.filter((s) => s.beatIndex === index)} dressCode={source?.event?.dress_code || ''} />;
           })}
           {/* Franchise Guard Results */}
           {guardResult && (
