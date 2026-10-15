@@ -252,6 +252,8 @@ function mockProviders() {
     const job = await models.GenerationJob.findByPk(res.body.data.jobId);
     expect(job.payload).toEqual({ force: true, event_id: ids.event });
     await job.destroy();
+    // The first regeneration has ended (no worker runs here): one at a time.
+    await set.update({ generation_status: 'complete' });
     const none = await auth(request(app).post(`/api/v1/scene-sets/${set.id}/cascade-regenerate`)).send({});
     const noneJob = await models.GenerationJob.findByPk(none.body.data.jobId);
     expect(noneJob.payload).toEqual({ force: true });

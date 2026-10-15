@@ -243,13 +243,14 @@ describe('ArtifactDetectionService', () => {
       expect(result).not.toMatch(/Cinematic quality\..*QUALITY EMPHASIS/);
     });
 
-    it('should respect the 1000 character limit when appending', () => {
-      const longPrompt = 'A'.repeat(950);
+    it('never cuts a long prompt: its rules at the end are kept', () => {
+      const longPrompt = `${'A'.repeat(1500)} No people.`;
       const flags = ['FURNITURE_DISTORTION'];
       const result = buildRefinedPrompt(longPrompt, flags);
 
-      expect(result.length).toBeLessThanOrEqual(1000);
-      expect(result).toMatch(/\.\.\.$/);
+      expect(result.startsWith(longPrompt)).toBe(true);
+      expect(result).toMatch(/QUALITY EMPHASIS:/);
+      expect(result).not.toMatch(/\.\.\.$/);
     });
 
     it('should not truncate when combined length is under 1000', () => {

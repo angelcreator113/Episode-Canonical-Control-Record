@@ -125,6 +125,9 @@ describe('SceneBriefConfirm (S2)', () => {
     expect(estimateText(null)).toBeNull();
     expect(estimateText({ usd: null, priced: false })).toBe('price not set');
     expect(estimateText({ usd: 0.034 })).toBe('est. $0.03');
+    // An angle whose consistency check may pay for one retry.
+    expect(estimateText({ usd: 0.04, max_usd: 0.08 })).toBe('est. $0.04 (up to $0.08)');
+    expect(estimateText({ usd: 0, max_usd: 0 })).toBe('est. $0.00');
   });
 });
 
