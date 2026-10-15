@@ -1,5 +1,32 @@
 'use strict';
 const { Model } = require('sequelize');
+const { pulseFieldsFor, isPulseLayer, PULSE, PLAYROOM, PULSE_ACCOUNTS } = require('../utils/pulsePlatform');
+
+// A LalaVerse profile not yet on The Pulse: a real app as its platform, or
+// a real app among its accounts (utils/pulsePlatform; Evoni, 2026-10-15).
+// Its accounts are pulse, pulse_private and playroom (adult content).
+function needsPulse(p) {
+  if (!isPulseLayer(p.feed_layer)) return false;
+  const presences = p.platform_presences && typeof p.platform_presences === 'object' ? p.platform_presences : {};
+  return p.platform !== PULSE
+    || Object.keys(presences).some((k) => !PULSE_ACCOUNTS.includes(k))
+    || (!!p.front_platform && ![PULSE, PLAYROOM].includes(p.front_platform))
+    || (!!p.real_platform && !PULSE_ACCOUNTS.includes(p.real_platform));
+}
+
+const PULSE_FIELDS = ['platform', 'platform_presences', 'front_platform', 'real_platform'];
+
+function toPulse(profile) {
+  const plain = profile.get({ plain: true });
+  if (!needsPulse(plain)) return;
+  // A row loaded with only some attributes (findByPk(id, { attributes }))
+  // must not have its accounts rebuilt from fields it never read: then only
+  // a loaded platform is set.
+  const loaded = (k) => profile.isNewRecord || Object.prototype.hasOwnProperty.call(profile.dataValues, k);
+  const next = pulseFieldsFor(plain);
+  if (PULSE_FIELDS.every(loaded)) profile.set(next);
+  else if (loaded('platform')) profile.set('platform', next.platform);
+}
 
 module.exports = (sequelize, DataTypes) => {
   class SocialProfile extends Model {
@@ -29,7 +56,10 @@ module.exports = (sequelize, DataTypes) => {
     id:                    { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
     series_id:             { type: DataTypes.INTEGER, allowNull: true },
     handle:                { type: DataTypes.STRING(100), allowNull: false },
-    platform:              { type: DataTypes.ENUM('tiktok','instagram','youtube','twitter','onlyfans','twitch','substack','multi'), allowNull: false },
+    // 'pulse': a LalaVerse profile's social is The Pulse (the hooks below set it; migration 20261015120000).
+    platform:              { type: DataTypes.ENUM('tiktok','instagram','youtube','twitter','onlyfans','twitch','substack','multi','pulse'), allowNull: false },
+    // What a LalaVerse profile had before it moved to The Pulse: { platform, front_platform, real_platform, platform_presences }.
+    former_platforms:      { type: DataTypes.JSONB, allowNull: true },
     vibe_sentence:         { type: DataTypes.TEXT, allowNull: false },
     display_name:          { type: DataTypes.STRING(200), allowNull: true },
     creator_name:          { type: DataTypes.STRING(200), allowNull: true },  // Real name behind the handle �� e.g. "Jessica Chen"
@@ -229,6 +259,14 @@ module.exports = (sequelize, DataTypes) => {
     modelName:  'SocialProfile',
     tableName:  'social_profiles',
     underscored: true,
+    hooks: {
+      // Every create and save of a LalaVerse profile lands on The Pulse,
+      // whatever platform the form, generator or import asked for.
+      // beforeValidate lets a create pass the NOT NULL platform check;
+      // beforeSave puts the fields into an update's written fields.
+      beforeValidate: toPulse,
+      beforeSave: toPulse,
+    },
   });
 
   return SocialProfile;

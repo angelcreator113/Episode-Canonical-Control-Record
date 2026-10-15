@@ -16,8 +16,9 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { Sparkles, ArrowRight } from 'lucide-react';
 import { API_URL } from '../config/api';
 import CharacterDepthPanel from '../components/CharacterDepthPanel';
+import { platformLabel } from './feed/feedConstants';
 import apiClient from '../services/api';
-import { DEPTH_STEPS, depthOf, cityLabel, archetypeOf, showUpRows, withLala, voiceOf } from '../lib/characterPage';
+import { DEPTH_STEPS, depthOf, depthLevelOf, cityLabel, archetypeOf, showUpRows, withLala, voiceOf } from '../lib/characterPage';
 import './CharacterProfilePage.css';
 
 // ─── Track 6 CP9 module-scope helpers (Pattern F prophylactic — Api suffix) ───
@@ -38,6 +39,10 @@ export const getAppearancesApi = (id) =>
   apiClient.get(`${API_URL}/cast/characters/${id}/appearances`);
 export const draftProseApi = (id) =>
   apiClient.post(`${API_URL}/character-registry/characters/${id}/writer-paragraph/generate`);
+// Fills in the missing inner life (want, wound, mask, dilemma, deep profile …);
+// no fields means everything missing. Never overwrites what is there.
+export const generateInteriorApi = (id, fields) =>
+  apiClient.post(`${API_URL}/character-registry/characters/${id}/interior/generate`, fields ? { fields } : {});
 
 /* ── Config ──────────────────────────────────────────────────────────────────── */
 
@@ -84,15 +89,69 @@ const DIMENSION_ICONS = {
   the_unseen:          '\uD83D\uDD2E',
 };
 
+// Something is there: non-empty text, a list with items, or an object with a filled value.
+function hasValue(v) {
+  if (v === null || v === undefined) return false;
+  if (typeof v === 'string') return v.trim().length > 0;
+  if (Array.isArray(v)) return v.length > 0;
+  if (typeof v === 'object') return Object.values(v).some(hasValue);
+  return !!v;
+}
+
 /* ── Empty State ─────────────────────────────────────────────────────────────── */
 
-function EmptyState({ label }) {
+// `gen` (from useInteriorGenerate) and `fields` make Generate a real button;
+// without them the state is only a label (the old Generate was text that did
+// nothing). `children` replaces the button, e.g. a link to where it is made.
+function EmptyState({ label, gen, fields, children }) {
+  const key = fields?.join(',');
+  const busy = gen && gen.busy === key;
+  const note = gen?.note?.key === key ? gen.note : null;
   return (
     <div className="cp-empty-state">
       <p className="cp-empty-label">{label}</p>
-      <span className="cp-empty-generate">Generate</span>
+      {gen && fields && !gen.locked && (
+        <button type="button" className="ch-btn-chip cp-empty-generate" disabled={!!gen.busy} onClick={() => gen.run(fields)}>
+          <Sparkles size={14} aria-hidden="true" /> {busy ? 'Generating…' : 'Generate'}
+        </button>
+      )}
+      {children}
+      {note && <p className={`ch-note${note.error ? ' is-error' : ''}`} role="status">{note.text}</p>}
     </div>
   );
+}
+
+const FIELD_LABELS = {
+  want_architecture: 'want', wound: 'wound', the_mask: 'mask', living_state: 'living state',
+  triggers: 'triggers', blind_spot: 'blind spot', change_capacity: 'change capacity',
+  self_narrative: 'self-narrative', operative_cosmology: 'cosmology', foreclosed_possibility: 'foreclosed possibility',
+  experience_of_joy: 'joy', time_orientation: 'time orientation', dilemma: 'dilemma', deep_profile: 'deep profile',
+};
+
+/**
+ * Generating the inner life. One at a time: `busy` is the key of the run
+ * (its fields joined, or 'all'); `note` says what came of the last one.
+ */
+function useInteriorGenerate(character, onSaved) {
+  const [busy, setBusy] = useState(null);
+  const [note, setNote] = useState(null);
+  const id = character?.id;
+  const run = useCallback(async (fields = null) => {
+    const key = fields ? fields.join(',') : 'all';
+    setBusy(key); setNote(null);
+    try {
+      const res = await generateInteriorApi(id, fields);
+      const { filled = [], character: updated, message } = res.data || {};
+      if (updated) onSaved(updated);
+      setNote({ key, text: filled.length
+        ? `Filled in: ${filled.map((f) => FIELD_LABELS[f] || f).join(', ')}.`
+        : (message || 'Nothing new came back.') });
+    } catch (err) {
+      console.error('[CharacterProfilePage] generate inner life failed:', err);
+      setNote({ key, error: true, text: err.response?.data?.error || err.message || 'Could not generate it.' });
+    } finally { setBusy(null); }
+  }, [id, onSaved]);
+  return { busy, note, run, locked: character?.status === 'finalized' };
 }
 
 /* ── Overview ────────────────────────────────────────────────────────────────── */
@@ -197,8 +256,9 @@ function TheirVoice({ character, feedProfile }) {
       <h2 id="ch-voice" className="ch-kicker is-blue">Their voice</h2>
       {!voice ? <p className="ch-note">No voice yet. It comes from their feed profile and voice signature.</p> : (<>
         {voice.sample && <p className="ch-sample"><strong>{name}</strong> {voice.sample}</p>}
+        {/* The habit is a paragraph of direction, too long for a pill. */}
+        {voice.habit && <p className="ch-voice-habit">{voice.habit}</p>}
         <div className="ch-chips">
-          {voice.habit && <span className="ch-chip">{voice.habit}</span>}
           {voice.phrase && <span className="ch-chip">{voice.phrase}</span>}
           {voice.neverSays && <span className="ch-chip">never says outright: {voice.neverSays}</span>}
         </div>
@@ -236,15 +296,30 @@ function TabOverview({ character, appearances, feedProfile, onSaved }) {
 
 /* ── Tab 2: Interior ─────────────────────────────────────────────────────────── */
 
-function TabInterior({ character }) {
+function TabInterior({ character, gen }) {
   const want    = character.want_architecture;
   const wound   = character.wound;
   const mask    = character.the_mask;
-  const dilemma = character.dilemma;
+  // The column, or the older generate-section shape in extra_fields.
+  const dilemma = character.dilemma || character.extra_fields?.dilemma || null;
   const triggers = character.triggers;
+  const missing = ['want_architecture', 'wound', 'the_mask', 'triggers', 'dilemma', 'deep_profile', 'living_state',
+    'self_narrative', 'operative_cosmology', 'foreclosed_possibility', 'experience_of_joy', 'change_capacity']
+    .filter((f) => !hasValue(character[f]));
+  const allNote = gen.note?.key === 'all' ? gen.note : null;
 
   return (
     <div className="cp-tab-content">
+      {missing.length > 0 && !gen.locked && (
+        <div className="cp-fill-all">
+          <p className="ch-note">{missing.length} {missing.length === 1 ? 'part' : 'parts'} of their inner life {missing.length === 1 ? 'is' : 'are'} empty. Fill them in from who they already are; nothing written is changed.</p>
+          <button type="button" className="ch-btn" disabled={!!gen.busy} onClick={() => gen.run()}>
+            {gen.busy === 'all' ? 'Filling in… (about a minute)' : 'Fill in everything missing'}
+          </button>
+          {allNote && <p className={`ch-note${allNote.error ? ' is-error' : ''}`} role="status">{allNote.text}</p>}
+        </div>
+      )}
+
       {/* Want Architecture — three cards */}
       <section className="cp-section">
         <h3 className="cp-section-title">Want Architecture</h3>
@@ -263,7 +338,7 @@ function TabInterior({ character }) {
               <p>{want.forbidden_want}</p>
             </div>
           </div>
-        ) : <EmptyState label="Want architecture not generated yet." />}
+        ) : <EmptyState label="Want architecture not generated yet." gen={gen} fields={['want_architecture']} />}
       </section>
 
       {/* Wound */}
@@ -286,7 +361,7 @@ function TabInterior({ character }) {
               </div>
             )}
           </div>
-        ) : <EmptyState label="Wound not defined yet." />}
+        ) : <EmptyState label="Wound not defined yet." gen={gen} fields={['wound']} />}
       </section>
 
       {/* The Mask */}
@@ -309,7 +384,7 @@ function TabInterior({ character }) {
               </div>
             )}
           </div>
-        ) : <EmptyState label="Mask not defined yet." />}
+        ) : <EmptyState label="Mask not defined yet." gen={gen} fields={['the_mask']} />}
       </section>
 
       {/* Dilemma — two column */}
@@ -317,7 +392,7 @@ function TabInterior({ character }) {
         <h3 className="cp-section-title">Central Dilemma</h3>
         {dilemma ? (
           <div className="cp-dilemma-block">
-            <p className="cp-dilemma-tension">{dilemma.central_tension}</p>
+            <p className="cp-dilemma-tension">{dilemma.central_tension || dilemma.central_dilemma}</p>
             <div className="cp-dilemma-options">
               <div className="cp-dilemma-option">
                 <span className="cp-option-label">A</span>
@@ -329,9 +404,11 @@ function TabInterior({ character }) {
                 <p>{dilemma.option_b}</p>
               </div>
             </div>
-            <p className="cp-dilemma-cost">Either way: {dilemma.what_both_cost}</p>
+            {(dilemma.what_both_cost || dilemma.stakes) && (
+              <p className="cp-dilemma-cost">Either way: {dilemma.what_both_cost || dilemma.stakes}</p>
+            )}
           </div>
-        ) : <EmptyState label="Dilemma not generated yet." />}
+        ) : <EmptyState label="Dilemma not generated yet." gen={gen} fields={['dilemma']} />}
       </section>
 
       {/* Triggers */}
@@ -343,7 +420,7 @@ function TabInterior({ character }) {
               <span key={i} className="cp-trigger-pill">{typeof t === 'string' ? t : t.label || t.name}</span>
             ))}
           </div>
-        ) : <EmptyState label="Triggers not defined yet." />}
+        ) : <EmptyState label="Triggers not defined yet." gen={gen} fields={['triggers']} />}
       </section>
 
       {/* Blind Spot — author only */}
@@ -418,7 +495,9 @@ function TabConnections({ character, relationships, entanglements }) {
               </div>
             ))}
           </div>
-        ) : <EmptyState label="No relationships defined yet." />}
+        ) : <EmptyState label="No relationships defined yet.">
+          <Link className="ch-link" to="/feed-relationships">Open Relationship Map</Link>
+        </EmptyState>}
       </section>
 
       {/* Entanglements */}
@@ -499,7 +578,9 @@ function TabOnline({ character, feedProfile }) {
           <div className="cp-empty-state">
             <p className="cp-empty-label">No Feed profile</p>
             <p className="cp-offline-note">
-              {character.feed_profile_id ? 'This character exists off the grid' : 'Cap was reached at creation — no Feed profile was auto-generated.'}
+              {character.feed_profile_id
+                ? 'Their feed profile could not be loaded. Reload the page to try again.'
+                : <>Not on the feed yet. Match them to a feed person on <Link to="/character-registry">The cast</Link>.</>}
             </p>
           </div>
         </section>
@@ -514,7 +595,7 @@ function TabOnline({ character, feedProfile }) {
                 <div className="cp-feed-identity">
                   <span className="cp-feed-handle">@{feedProfile.handle}</span>
                   <span className="cp-feed-display">{feedProfile.display_name}</span>
-                  <span className="cp-feed-platform">{feedProfile.platform}</span>
+                  <span className="cp-feed-platform">{platformLabel(feedProfile.platform)}</span>
                   {feedProfile.registry_character_id && (
                     <span className="cp-registry-badge" title="Linked to registry character" style={{fontSize:10,fontWeight:700,padding:'1px 6px',borderRadius:8,background:'#eef0fb',color:'#6366f1',marginLeft:4}}>Registry</span>
                   )}
@@ -603,8 +684,10 @@ function TabOnline({ character, feedProfile }) {
 
 /* ── Tab 5: World ────────────────────────────────────────────────────────────── */
 
-function TabWorld({ character, onSaved }) {
-  const living = character.living_state || character.living_context;
+function TabWorld({ character, onSaved, gen }) {
+  // living_context (the backfill's shape) has none of these three fields, so it read as an empty grid.
+  const living = hasValue(character.living_state) ? character.living_state : null;
+  const plotThreads = character.plot_threads || character.extra_fields?.plot_threads || [];
   const dp     = character.deep_profile;
 
   return (
@@ -665,7 +748,7 @@ function TabWorld({ character, onSaved }) {
               </div>
             )}
           </div>
-        ) : <EmptyState label="Living state not generated yet." />}
+        ) : <EmptyState label="Living state not generated yet." gen={gen} fields={['living_state']} />}
       </section>
 
       {/* Arc Stage */}
@@ -677,13 +760,13 @@ function TabWorld({ character, onSaved }) {
       )}
 
       {/* Plot Threads */}
-      {character.plot_threads?.length > 0 && (
+      {plotThreads.length > 0 && (
         <section className="cp-section">
           <h3 className="cp-section-title">Plot Threads</h3>
           <div className="cp-thread-list">
-            {character.plot_threads.map((t, i) => (
-              <div key={i} className="cp-thread-row">
-                <span className="cp-thread-name">{typeof t === 'string' ? t : t.name || t.label}</span>
+            {plotThreads.map((t, i) => (
+              <div key={t.id || i} className="cp-thread-row">
+                <span className="cp-thread-name">{typeof t === 'string' ? t : t.title || t.name || t.label}</span>
                 {t.status && <span className="cp-thread-status">{t.status}</span>}
               </div>
             ))}
@@ -760,19 +843,32 @@ function TabWorld({ character, onSaved }) {
 
 /* ── Tab 6: Deep Profile ─────────────────────────────────────────────────────── */
 
-function TabDeepProfile({ character }) {
+// A dimension is text (generation v2) or an object of notes (the older
+// deep-profile endpoints); an object used to crash the page when opened.
+function dimensionText(value) {
+  if (!value) return null;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object') {
+    const parts = Object.entries(value).filter(([, v]) => hasValue(v))
+      .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${typeof v === 'string' ? v : JSON.stringify(v)}`);
+    return parts.length ? parts.join('\n') : null;
+  }
+  return String(value);
+}
+
+function TabDeepProfile({ character, gen }) {
   const dp = character.deep_profile;
   const [open, setOpen] = useState(null);
 
-  if (!dp || Object.keys(dp).length === 0) {
+  if (!hasValue(dp)) {
     return (
       <div className="cp-tab-content">
-        <EmptyState label="Deep Profile not generated yet." />
+        <EmptyState label="Deep Profile not generated yet." gen={gen} fields={['deep_profile']} />
       </div>
     );
   }
 
-  const populated = DIMENSION_KEYS.filter(k => dp[k]);
+  const populated = DIMENSION_KEYS.filter(k => dimensionText(dp[k]));
   const isComplete = populated.length === 14;
 
   return (
@@ -785,7 +881,7 @@ function TabDeepProfile({ character }) {
 
       <div className="cp-dp-list">
         {DIMENSION_KEYS.map(key => {
-          const value  = dp[key];
+          const value  = dimensionText(dp[key]);
           const label  = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
           const icon   = DIMENSION_ICONS[key] || '\u00B7';
           const isOpen = open === key;
@@ -873,7 +969,8 @@ export default function CharacterProfilePage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const onSaved = (patch) => setCharacter((prev) => ({ ...prev, ...patch }));
+  const onSaved = useCallback((patch) => setCharacter((prev) => ({ ...prev, ...patch })), []);
+  const gen = useInteriorGenerate(character, onSaved);
 
   // Export: the character as JSON, to keep or share.
   const exportJson = () => {
@@ -900,7 +997,9 @@ export default function CharacterProfilePage() {
   );
 
   const name = character.display_name || character.selected_name || character.name || 'Unnamed';
-  const { index: depthIndex, step, next } = depthOf(character.depth_level || 'sparked');
+  const { index: depthIndex, step, next } = depthOf(depthLevelOf(character));
+  // Inner life shows its own note for the same run.
+  const deepenNote = gen.note?.key === 'all' && activeTab !== 'inner' ? gen.note : null;
   const handle = feedProfile?.handle ? `@${feedProfile.handle.replace(/^@/, '')}` : null;
   const city = cityLabel(feedProfile?.city);
   const archetype = archetypeOf(feedProfile);
@@ -933,8 +1032,13 @@ export default function CharacterProfilePage() {
             ))}
           </ol>
           {next && (
-            <button type="button" className="ch-btn-deepen" onClick={() => navigate('/world-studio')}>&uarr; Deepen to {next.label}</button>
+            <button type="button" className="ch-btn-deepen" disabled={!!gen.busy || gen.locked}
+              title="Fills in the missing inner life from who they already are"
+              onClick={() => { setActiveTab('inner'); gen.run(); }}>
+              {gen.busy === 'all' ? 'Deepening… (about a minute)' : <>&uarr; Deepen to {next.label}</>}
+            </button>
           )}
+          {deepenNote && <p className={`ch-note${deepenNote.error ? ' is-error' : ''}`} role="status">{deepenNote.text}</p>}
           <button type="button" className="ch-link" onClick={exportJson}>Export</button>
         </div>
       </header>
@@ -952,14 +1056,14 @@ export default function CharacterProfilePage() {
         {activeTab === 'overview' && <TabOverview character={character} appearances={appearances} feedProfile={feedProfile} onSaved={onSaved} />}
         {activeTab === 'inner' && (
           <div className="ch-card">
-            <TabInterior character={character} />
+            <TabInterior character={character} gen={gen} />
             <section className="cp-section">
               <h3 className="cp-section-title">DEPTH</h3>
               <CharacterDepthPanel characterId={character.id} characterName={name} />
             </section>
             <section className="cp-section">
               <h3 className="cp-section-title">Deep Profile</h3>
-              <TabDeepProfile character={character} />
+              <TabDeepProfile character={character} gen={gen} />
             </section>
           </div>
         )}
@@ -970,7 +1074,7 @@ export default function CharacterProfilePage() {
           </div>
         )}
         {activeTab === 'connections' && <div className="ch-card"><TabConnections character={character} relationships={relationships} entanglements={entanglements} /></div>}
-        {activeTab === 'world' && <div className="ch-card"><TabWorld character={character} onSaved={onSaved} /></div>}
+        {activeTab === 'world' && <div className="ch-card"><TabWorld character={character} onSaved={onSaved} gen={gen} /></div>}
       </div>
     </div>
   );

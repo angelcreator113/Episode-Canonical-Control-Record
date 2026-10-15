@@ -175,6 +175,7 @@ const MAX_HISTORY = 50;
 const LALAVERSE_CITIES = DREAM_CITY_KEYS;
 const CITY_CULTURE = DREAM_CITY_CULTURE;
 
+const { PULSE, isPulseLayer, platformLabel, pulsePromptRules } = require('../utils/pulsePlatform');
 const PLATFORMS = ['instagram', 'tiktok', 'youtube', 'twitter', 'onlyfans'];
 const ARCHETYPES = [
   'polished_curator', 'messy_transparent', 'soft_life', 'explicitly_paid',
@@ -271,7 +272,9 @@ async function autoFillAgent(db) {
  * (Legacy random fallback — used when AI spark generation is unavailable)
  */
 function generateCreatorSpark(layer) {
-  const platform = PLATFORMS[Math.floor(Math.random() * PLATFORMS.length)];
+  // A LalaVerse creator's social is The Pulse (utils/pulsePlatform).
+  const platform = isPulseLayer(layer) ? PULSE : PLATFORMS[Math.floor(Math.random() * PLATFORMS.length)];
+  const app = platformLabel(platform);
   const archetype = ARCHETYPES[Math.floor(Math.random() * ARCHETYPES.length)];
   const tier = FOLLOWER_TIERS[Math.floor(Math.random() * FOLLOWER_TIERS.length)];
 
@@ -284,9 +287,9 @@ function generateCreatorSpark(layer) {
   const handle = `@${prefix}${root}${suffix}`;
 
   const vibes = [
-    `${tier} ${platform} creator. ${archetype.replace(/_/g, ' ')} energy. Posts like they have something to prove.`,
-    `A ${tier}-tier ${archetype.replace(/_/g, ' ')} on ${platform}. Curates chaos and calls it content.`,
-    `${platform} ${archetype.replace(/_/g, ' ')}. ${tier} following. The kind of creator you watch alone at night.`,
+    `${tier} ${app} creator. ${archetype.replace(/_/g, ' ')} energy. Posts like they have something to prove.`,
+    `A ${tier}-tier ${archetype.replace(/_/g, ' ')} on ${app}. Curates chaos and calls it content.`,
+    `${app} ${archetype.replace(/_/g, ' ')}. ${tier} following. The kind of creator you watch alone at night.`,
   ];
   const vibe_sentence = vibes[Math.floor(Math.random() * vibes.length)];
 
@@ -393,15 +396,15 @@ EXISTING FEED COMPOSITION (${existing.length} profiles):
 - Tier distribution: ${JSON.stringify(existingTiers)}
 
 VALID VALUES:
-- platform: instagram, tiktok, youtube, twitter, onlyfans
+- platform: ${isPulseLayer(layer) ? 'pulse (The Pulse is the only social app in the LalaVerse)' : 'instagram, tiktok, youtube, twitter, onlyfans'}
 - archetype: polished_curator, messy_transparent, soft_life, explicitly_paid, overnight_rise, cautionary, the_peer, the_watcher, chaos_creator, community_builder
 - follower_tier: emerging, nano, micro, mid, macro, mega
 
 REQUIREMENTS:
 1. Each creator must feel like a REAL person with a specific story, wound, contradiction, or tension
-2. Handles should feel authentic to each platform's culture (not generic word combos)
-3. Diversify across archetypes, platforms, tiers, demographics, content niches, and geographic bases
-4. Fill GAPS in the existing distribution — if there are too many Instagram polished_curators, generate TikTok chaos_creators instead
+2. Handles should feel authentic to ${isPulseLayer(layer) ? "The Pulse's culture" : "each platform's culture"} (not generic word combos)
+3. Diversify across archetypes, ${isPulseLayer(layer) ? '' : 'platforms, '}tiers, demographics, content niches, and geographic bases
+4. Fill GAPS in the existing distribution — if there are too many polished_curators, generate chaos_creators instead${pulsePromptRules(layer)}
 5. Vibe sentences should be specific, evocative, and narratively charged — not generic templates
 6. Include advanced_context hints (location, follower range, relationship drama, aesthetic, revenue) where they add narrative depth
 7. Each creator should have parasocial potential — why would the protagonist keep watching?
@@ -410,7 +413,7 @@ Return a JSON array of exactly ${count} objects:
 [
   {
     "handle": "@realhandle",
-    "platform": "instagram",
+    "platform": "${isPulseLayer(layer) ? PULSE : 'instagram'}",
     "vibe_sentence": "Specific, evocative one-sentence description of who this creator is and why they matter.",
     "archetype": "polished_curator",
     "follower_tier": "mid",
@@ -450,10 +453,11 @@ Return ONLY the JSON array. No markdown, no explanation.`;
   }
 
   // A LalaVerse spark's city is a DREAM city: an old name the AI gives is
-  // read as July's mapping does, anything else gets one at random.
+  // read as July's mapping does, anything else gets one at random. Its
+  // social is The Pulse, whatever the AI wrote.
   if (layer === 'lalaverse') {
     sparks.forEach((s) => {
-      if (s && typeof s === 'object') s.city = feedCity(s.city) || randomFeedCity();
+      if (s && typeof s === 'object') { s.city = feedCity(s.city) || randomFeedCity(); s.platform = PULSE; }
     });
   }
 
@@ -637,14 +641,17 @@ async function generateAndSaveProfile(db, spark, layer) {
 
 PROTAGONIST: ${ctx.name} — ${ctx.description} Wound: ${ctx.wound} Goal: ${ctx.goal}.
 
-CREATOR: ${spark.handle} on ${spark.platform}. "${spark.vibe_sentence}"${advHints ? `\nHints: ${advHints}` : ''}
+CREATOR: ${spark.handle} on ${platformLabel(spark.platform)}. "${spark.vibe_sentence}"${advHints ? `\nHints: ${advHints}` : ''}
 ${layer === 'lalaverse' && city ? `\nLALAVERSE: Lives in ${city.replace(/_/g, ' ')} — ${CITY_CULTURE[city] || ''}. Lala relationship: ${spark.lala_relationship || 'mutual_unaware'}. Career pressure: ${spark.career_pressure || 'level'}. Do not reference JustAWoman or the real world.` : ''}${societyArchetypeLine(society)}${brain.block || ''}
 
 IMPORTANT RULES:
-- Creators exist across MULTIPLE platforms with DIFFERENT personas on each
+${isPulseLayer(layer) ? `- Every creator is on The Pulse. Some also keep a PRIVATE Pulse account (close friends, an alt) with a DIFFERENT persona
+- Adult content is sold on The PlayRoom. A PlayRoom creator might present as a "fashion haul queen" on The Pulse — the feed should show what they APPEAR to be, not just what they are
+- Revenue sources should be realistic — most creators have a "front" income and a real income
+- Some creators have secrets: a private account, a discreet PlayRoom, past rebrands, banned accounts${pulsePromptRules(layer)}` : `- Creators exist across MULTIPLE platforms with DIFFERENT personas on each
 - An OnlyFans creator might present as a "fashion haul queen" on Instagram — the feed should show what they APPEAR to be, not just what they are
 - Revenue sources should be realistic — most creators have a "front" income and a real income
-- Some creators have secrets: hidden platforms, past rebrands, banned accounts
+- Some creators have secrets: hidden platforms, past rebrands, banned accounts`}
 - celebrity_tier determines event access: accessible (any event), selective (prestige 5+), exclusive (prestige 8+), untouchable (never attends — cultural icon only)
 
 Return ONLY valid JSON with these fields:
@@ -675,12 +682,12 @@ Return ONLY valid JSON with these fields:
 
   "platform_presences": {
     "${spark.platform}": { "handle": "${spark.handle}", "persona": "what they appear to be HERE", "followers": "count", "content_style": "brief style", "is_primary": true },
-    "SECOND_PLATFORM": { "handle": "@alt_handle", "persona": "different persona here", "followers": "count", "content_style": "style", "visibility": "public|discreet" }
+    ${isPulseLayer(layer) ? '"pulse_private": { "handle": "@alt_handle", "persona": "different persona here", "followers": "count", "content_style": "style", "visibility": "private" } — only if they keep a private account,\n    "playroom": { "handle": "@playroom_handle", "persona": "their adult-content persona", "followers": "subscriber count", "content_style": "style", "visibility": "public|discreet" } — only if they do adult content' : '"SECOND_PLATFORM": { "handle": "@alt_handle", "persona": "different persona here", "followers": "count", "content_style": "style", "visibility": "public|discreet" }'}
   },
   "public_persona": "What the general audience believes this person does for a living — 1 sentence",
   "private_reality": "What's actually true about their income, motivations, or secrets — 1 sentence",
-  "front_platform": "the platform they promote publicly",
-  "real_platform": "where the real money or real content lives (may differ from front)",
+  "front_platform": "${isPulseLayer(layer) ? 'pulse' : 'the platform they promote publicly'}",
+  "real_platform": "${isPulseLayer(layer) ? 'playroom if the real money is adult content, pulse_private if it is on their private account, else pulse' : 'where the real money or real content lives (may differ from front)'}",
   "celebrity_tier": "accessible|selective|exclusive|untouchable",
   "primary_income_source": "e.g. brand deals, subscriptions, merch, affiliate",
   "income_breakdown": { "brand_deals": 40, "subscriptions": 30, "content_creation": 20, "other": 10 },
@@ -1089,7 +1096,8 @@ async function autoDiscoverAgent(db) {
       if (hasRel(a.id, b.id)) continue;
 
       let score = 0;
-      if (a.platform === b.platform) score += 1;
+      // Everyone in the LalaVerse is on The Pulse: sharing it says nothing.
+      if (a.platform === b.platform && a.platform !== PULSE) score += 1;
       if (a.content_category && a.content_category === b.content_category) score += 2;
       if (a.geographic_cluster && a.geographic_cluster === b.geographic_cluster) score += 2;
       for (const [x,y] of tensions) {
@@ -1105,7 +1113,7 @@ async function autoDiscoverAgent(db) {
             source_profile_id: a.id,
             target_profile_id: b.id,
             relationship_type: relType,
-            description: `Auto-discovered: shared ${a.content_category || 'niche'} on ${a.platform}`,
+            description: `Auto-discovered: shared ${a.content_category || 'niche'} on ${platformLabel(a.platform)}`,
             auto_generated: true,
             direction: 'mutual',
             public_visibility: 'public',

@@ -30,6 +30,7 @@
  */
 const Anthropic = require('@anthropic-ai/sdk');
 const { formatSystemPrompt } = require('./promptCacheHelper');
+const { pulsePromptRules } = require('../utils/pulsePlatform');
 const client    = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const _DEEP_PROFILE_DIMENSIONS = [
@@ -86,6 +87,8 @@ async function generateFullCharacter({ spark, worldContext, bookContext, existin
     feedProfileProposal = await generateFeedProfile({
       name, vibe, role, worldString,
       interior: interiorArchitecture,
+      // Lala's world (the default) has one social app, The Pulse.
+      onPulse: !worldContext || /lala/i.test(worldContext.name || ''),
     });
   }
 
@@ -209,35 +212,59 @@ const INTERIOR_ARCHITECTURE_SYSTEM = `You are generating the complete interior a
 
 Return ONLY the JSON object. No preamble. No explanation.`;
 
-async function generateInteriorArchitecture({ name, vibe, role, worldString, bookString, castString, age }) {
+// Sonnet 4.6 with the two-attempt loop (CLAUDE.md, AI conventions).
+const INTERIOR_MODELS = ['claude-sonnet-4-6'];
+
+/**
+ * generateInteriorArchitecture
+ * `known` is what the character already has (an existing character being
+ * deepened), so the interior grows out of it rather than from a bare spark.
+ * `only` limits the answer to those keys.
+ */
+async function generateInteriorArchitecture({ name, vibe, role, worldString, bookString, castString, age, known = null, only = null }) {
   const isMinor = age != null && age < 18;
   const minorRule = isMinor
     ? `\nIMPORTANT — MINOR SAFEGUARD: This character is a minor (age ${age}). Do NOT generate "sexuality_desire" content. Set it to: "Dimension deferred — character is a minor."\n`
     : '';
+  const knownBlock = known && Object.keys(known).length > 0
+    ? `\nThis character already exists. Everything below is canon: build the interior out of it and never contradict it.\n${JSON.stringify(known, null, 2)}\n`
+    : '';
+  const onlyRule = Array.isArray(only) && only.length > 0
+    ? `\nReturn ONLY these keys of the JSON object: ${only.join(', ')}. Leave every other key out.\n`
+    : '';
 
   // Dynamic user message with character-specific data only
   const userMessage = `${worldString}
-${bookString}
-${castString}
-${minorRule}
-
+${bookString || ''}
+${castString || ''}
+${minorRule}${knownBlock}${onlyRule}
 Character: ${name}
 Vibe: ${vibe}
 Role in story: ${role}`;
 
-  const response = await client.messages.create({
-    model:      'claude-sonnet-4-20250514',
-    max_tokens: 4000,
-    // Cached system prompt - reduces input cost by ~90% for repeated calls
-    system:     formatSystemPrompt(INTERIOR_ARCHITECTURE_SYSTEM),
-    messages:   [{ role: 'user', content: userMessage }],
-  });
+  let response;
+  for (const model of INTERIOR_MODELS) {
+    try {
+      response = await client.messages.create({
+        model,
+        max_tokens: 8000,
+        // Cached system prompt - reduces input cost by ~90% for repeated calls
+        system:     formatSystemPrompt(INTERIOR_ARCHITECTURE_SYSTEM),
+        messages:   [{ role: 'user', content: userMessage }],
+      });
+      break;
+    } catch (modelErr) {
+      console.warn(`[characterGenerationService] interior with ${model} failed:`, modelErr.message);
+      if (model === INTERIOR_MODELS[INTERIOR_MODELS.length - 1]) throw modelErr;
+    }
+  }
 
   const text  = response.content[0]?.text || '{}';
   const clean = text.replace(/```json|```/g, '').trim();
+  const match = clean.match(/\{[\s\S]*\}/);
 
   try {
-    const parsed = JSON.parse(clean);
+    const parsed = JSON.parse(match ? match[0] : clean);
     // Hard enforcement: strip sexuality_desire for minors regardless of what the model returned
     if (isMinor && parsed.deep_profile) {
       parsed.deep_profile.sexuality_desire = 'Dimension deferred — character is a minor.';
@@ -247,6 +274,102 @@ Role in story: ${role}`;
     console.error('[characterGenerationService] Interior architecture parse failed:', clean.slice(0, 200));
     return {};
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DEEPENING AN EXISTING CHARACTER
+// A character who came from the feed (or the old system) has no interior.
+// These fill in what is missing, and never touch what is already there.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const INTERIOR_FIELDS = [
+  'want_architecture', 'wound', 'the_mask', 'living_state', 'triggers',
+  'blind_spot', 'change_capacity', 'self_narrative', 'operative_cosmology',
+  'foreclosed_possibility', 'experience_of_joy', 'time_orientation',
+  'dilemma', 'deep_profile',
+];
+const INTERIOR_TEXT = ['blind_spot', 'self_narrative', 'operative_cosmology', 'foreclosed_possibility', 'experience_of_joy'];
+const INTERIOR_OBJECTS = ['want_architecture', 'wound', 'the_mask', 'living_state', 'change_capacity', 'dilemma', 'deep_profile'];
+const TIME_ORIENTATIONS = ['past_anchored', 'future_obsessed', 'impulsive_present', 'waiting'];
+
+function isFilled(val) {
+  if (val === null || val === undefined) return false;
+  if (typeof val === 'string') return val.trim().length > 0;
+  if (Array.isArray(val)) return val.length > 0;
+  if (typeof val === 'object') return Object.values(val).some(isFilled);
+  return !!val;
+}
+
+/** The interior fields this character is missing, limited to `requested` when given. */
+function missingInteriorFields(character, requested = null) {
+  const pool = Array.isArray(requested) && requested.length > 0
+    ? INTERIOR_FIELDS.filter((f) => requested.includes(f))
+    : INTERIOR_FIELDS;
+  return pool.filter((f) => !isFilled(character[f]));
+}
+
+/** What a generated answer may write: only `fields`, and only values each column takes. */
+function interiorUpdates(generated, fields) {
+  const updates = {};
+  for (const f of fields) {
+    const v = generated?.[f];
+    if (!isFilled(v)) continue;
+    if (f === 'time_orientation') {
+      const key = String(v).trim().toLowerCase().replace(/[\s-]+/g, '_');
+      if (TIME_ORIENTATIONS.includes(key)) updates[f] = key;
+    } else if (f === 'triggers') {
+      const list = (Array.isArray(v) ? v : [v]).filter(isFilled);
+      if (list.length) updates[f] = list;
+    } else if (INTERIOR_TEXT.includes(f)) {
+      if (typeof v === 'string') updates[f] = v.trim();
+    } else if (INTERIOR_OBJECTS.includes(f)) {
+      if (typeof v === 'object' && !Array.isArray(v)) updates[f] = v;
+    }
+  }
+  return updates;
+}
+
+/** What the character already is, for the prompt. Empty values are left out. */
+function characterContext(character, feedProfile = null) {
+  const known = {};
+  const fields = [
+    'display_name', 'selected_name', 'role_type', 'role_label', 'description', 'prose_overview',
+    'core_belief', 'core_wound', 'core_desire', 'core_fear', 'hidden_want', 'mask_persona',
+    'truth_persona', 'personality', 'signature_trait', 'emotional_baseline', 'pressure_type',
+    'pressure_quote', 'character_archetype', 'writer_notes', 'gender', 'pronouns', 'age',
+    'ethnicity', 'hometown', 'current_city', 'class_origin', 'current_class', 'family_structure',
+    'relationship_status', 'profession', 'career_status', 'aesthetic_dna', 'voice_signature',
+    ...INTERIOR_FIELDS,
+  ];
+  for (const f of fields) if (isFilled(character[f])) known[f] = character[f];
+  if (feedProfile) {
+    const feed = {};
+    for (const f of ['handle', 'platform', 'archetype', 'bio', 'content_persona', 'content_posture',
+      'posting_voice', 'real_signal', 'career_pressure', 'city', 'follower_tier', 'vibe_tags']) {
+      if (isFilled(feedProfile[f])) feed[f] = feedProfile[f];
+    }
+    if (Object.keys(feed).length) known.feed_profile = feed;
+  }
+  return known;
+}
+
+/**
+ * generateMissingInterior
+ * Asks for the missing fields of an existing character, built from what is
+ * there. Returns the column values to write; writes nothing itself.
+ */
+async function generateMissingInterior({ character, feedProfile = null, fields }) {
+  const name = character.display_name || character.selected_name || 'this character';
+  const vibe = character.prose_overview || character.description || feedProfile?.content_persona || feedProfile?.bio || 'not written yet';
+  const role = character.role_label || character.role_type || 'supporting';
+  const age = Number.isInteger(character.age) ? character.age : null;
+  const worldString = 'World: LalaVerse. A contemporary world where identity, social media, and commerce intersect.';
+  const generated = await generateInteriorArchitecture({
+    name, vibe, role, worldString, age,
+    known: characterContext(character, feedProfile),
+    only: fields,
+  });
+  return interiorUpdates(generated, fields);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -286,7 +409,7 @@ Return JSON only:
 // FEED PROFILE GENERATION
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function generateFeedProfile({ name, vibe, role, worldString, interior }) {
+async function generateFeedProfile({ name, vibe, role, worldString, interior, onPulse = false }) {
   const maskDesc = interior?.the_mask?.description || '';
   const ambition = interior?.deep_profile?.ambition_identity || '';
 
@@ -300,12 +423,12 @@ Their ambition: ${ambition}
 
 Generate their social media profile. The profile should reflect their mask, not their deep interior.
 The gap between the Feed profile and the Deep Profile is where the story lives.
-
+${onPulse ? pulsePromptRules('lalaverse') : ''}
 Return JSON only:
 {
   "handle": "their username — no @ symbol",
   "display_name": "their display name",
-  "platform": "instagram OR tiktok OR youtube OR twitter",
+  "platform": "${onPulse ? 'pulse' : 'instagram OR tiktok OR youtube OR twitter'}",
   "bio": "their bio — 1-2 sentences in their voice",
   "vibe_tags": ["3-5 aesthetic/content tags"],
   "starting_state": "rising OR peaking OR plateauing",
@@ -471,6 +594,12 @@ function calculateDepthLevel(character) {
 module.exports = {
   generateFullCharacter,
   generateInteriorArchitecture,
+  generateMissingInterior,
+  missingInteriorFields,
+  interiorUpdates,
+  characterContext,
+  isFilled,
+  INTERIOR_FIELDS,
   determinesSocialPresence,
   generateFeedProfile,
   generateFamilyTree,

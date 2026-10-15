@@ -1225,14 +1225,11 @@
   margin: 0;
 }
 
-.cp-empty-generate {
-  font-size: var(--text-sm);
-  color: #a889c8;
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-.cp-empty-generate:hover { color: #8055b8; }
+.cp-empty-state .cp-empty-generate { align-self: center; }
+
+/* Inner life: fill in everything missing at once. */
+.cp-fill-all { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 16px; border-radius: 14px; background: var(--lala-lavender-soft); }
+.ch-note.is-error { color: var(--danger-text); }
 
 /* ── Loading / Error ───────────────────────────────────────────────────────── */
 .cp-loading {
@@ -1382,4 +1379,14 @@ a.ch-show:hover .ch-show-text strong { text-decoration: underline; }
   .ch-card { padding: 16px; }
   .ch-show { grid-template-columns: minmax(0, 1fr) 20px; }
   .ch-show-kind { grid-column: 1 / -1; }
+}
+
+/* The character page: the old tab bodies fill their card (they were capped
+   at 780px, which left half of Inner life empty), and stack on a phone. */
+.ch-card .cp-tab-content { max-width: none; }
+.cp-dp-content { white-space: pre-line; }
+.ch-voice-habit { margin: 0; padding: 12px 14px; border-radius: 12px; background: var(--surface-card); color: var(--info-text); font-size: 14px; line-height: 1.5; }
+@media (max-width: 640px) {
+  .cp-want-row { grid-template-columns: 1fr; }
+  .cp-dilemma-options { grid-template-columns: 1fr; }
 }
