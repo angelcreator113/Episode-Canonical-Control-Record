@@ -1249,10 +1249,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     }
   };
 
-  // Preview stage (Task #2010): the embedded, non-saving Preview phone takes
-  // the device's place — no playthrough, nothing saved, as in the Episode
-  // tab. It starts on the selected screen when that screen has an image,
-  // otherwise on Home.
+  // Preview stage (Task #2010): the embedded, non-saving Preview phone, on its
+  // own and large (Evoni, 2026-10-15) — no playthrough, nothing saved, as in
+  // the Episode tab. It starts on the selected screen when that screen has an
+  // image, otherwise on Home; "Start on" picks another.
   const previewing = activeTab === 'preview';
   // Bumped on every screen-card pick in Preview, so picking the screen
   // already selected still restarts the phone there.
@@ -1260,6 +1260,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const previewStart = (activeScreen && isScreen(activeScreen) && activeScreen.generated && activeScreen.url)
     ? activeScreen
     : (overlays.find(o => o.is_home && o.generated && isScreen(o)) || overlays.find(o => o.generated && isScreen(o)) || null);
+  // The screens the Preview can start on: shown ones with an image, home first.
+  const previewScreens = overlays
+    .filter(o => isScreen(o) && o.generated && o.url && !hiddenScreens.includes(o.id))
+    .sort((a, b) => Number(!!b.is_home) - Number(!!a.is_home));
 
   // Zone-level AI — called from ContentZoneEditor via prop. Returns the proposal;
   // the editor renders an inline Apply/Discard surface and applies on approve.
@@ -1830,7 +1834,47 @@ export default function UIOverlaysTab({ showId: propShowId }) {
               })}
             />
           )}
-          {activeTab !== 'map' && !((editingLinks || editingContent) && activeScreen?.url && isScreen(activeScreen)) && <div className="phone-hub-main">
+          {/* The Preview stage (Evoni, 2026-10-15: "I thought preview would
+              enlarge it and I would just see the phone"): the phone alone,
+              large and centred, with the screen it starts on picked above
+              it. Nothing here is saved. */}
+          {previewing && (
+            <section className="phone-preview-stage" aria-label="Preview">
+              <label className="phone-preview-stage__start">
+                Start on
+                <select
+                  value={previewStart?.id || ''}
+                  onChange={(e) => {
+                    const s = previewScreens.find(o => o.id === e.target.value);
+                    if (!s) return;
+                    setActiveScreen(s);
+                    setNavHistory([]);
+                    setPreviewRun(n => n + 1);
+                  }}
+                >
+                  {previewScreens.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                </select>
+              </label>
+              <div className="phone-preview-stage__phone">
+                {/* Keyed on the starting screen and each pick: a pick
+                    restarts the phone there. */}
+                <PhonePreviewMode
+                  key={`${previewStart?.id || 'none'}:${previewRun}`}
+                  embedded
+                  screens={overlays}
+                  initialScreen={previewStart}
+                  globalFit={globalFit}
+                  phoneSkin={phoneSkin}
+                  customFrameUrl={customFrameUrl}
+                  playthrough={null}
+                  missions={[]}
+                  showId={showId}
+                />
+              </div>
+              <p className="phone-hub-preview-hint">Tap the icons on the phone to try it. Nothing here is saved.</p>
+            </section>
+          )}
+          {activeTab !== 'map' && !previewing && !((editingLinks || editingContent) && activeScreen?.url && isScreen(activeScreen)) && <div className="phone-hub-main">
             <OverlayErrorBoundary>
               <PhoneHub
                 screens={overlays}
@@ -1841,7 +1885,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                   // screens by clicking cards without committing to editing.
                   setActiveScreen(s);
                   setNavHistory([]);
-                  if (previewing) setPreviewRun(n => n + 1);
                 })}
                 onEditScreen={openScreenEditor}
                 screenDiagnostics={screenDiagnostics}
@@ -1862,13 +1905,12 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                 onPlaceIcon={handlePlaceIcon}
                 onNewIcon={() => { setCreateMode('phone_icon'); setShowCreateModal(true); }}
                 iconsLastStep={setupProgress.next?.key === 'icons'}
-                // Preview shows the screen list beside the embedded phone.
-                activeTab={previewing ? 'screens' : activeTab}
+                activeTab={activeTab}
                 onChangeTab={afterSave(setActiveTab)}
                 suppressSectionTabs
                 detailOpen={!!(panelOpen && activeScreen && ['screens', 'icons', 'placements'].includes(activeTab))}
                 detailRef={setDetailHost}
-                deviceFooter={!previewing && activeScreen && isScreen(activeScreen) ? (
+                deviceFooter={activeScreen && isScreen(activeScreen) ? (
                   <div className="ph-device-caption" data-testid="phone-device-caption">
                     <div className="ph-device-name">{activeScreen.name}</div>
                     <div className="ph-device-meta">{screenCaption(activeScreen, screenDiagnostics)}</div>
@@ -1879,25 +1921,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                         <button type="button" className="ph-btn" onClick={() => setActiveTab('preview')}>Play through</button>
                       )}
                     </div>
-                  </div>
-                ) : null}
-                devicePane={previewing ? (
-                  <div className="phone-hub-preview-pane">
-                    {/* Keyed on the starting screen and each pick: picking a
-                        screen card restarts the phone there. */}
-                    <PhonePreviewMode
-                      key={`${previewStart?.id || 'none'}:${previewRun}`}
-                      embedded
-                      screens={overlays}
-                      initialScreen={previewStart}
-                      globalFit={globalFit}
-                      phoneSkin={phoneSkin}
-                      customFrameUrl={customFrameUrl}
-                      playthrough={null}
-                      missions={[]}
-                      showId={showId}
-                    />
-                    <p className="phone-hub-preview-hint">Tap to try it. Nothing here is saved.</p>
                   </div>
                 ) : null}
               />

@@ -69,29 +69,37 @@ describe('UIOverlaysTab — stages (Task #2010)', () => {
     expect(screen.queryByTestId('view-zones')).toBeNull();
   });
 
-  test('Preview puts the embedded phone in the device\'s place, beside the screen list', async () => {
+  // The phone on its own, large and centred (Evoni, 2026-10-15: "I thought
+  // preview would enlarge it and I would just see the phone").
+  test('Preview shows the phone on its own, with the screen it starts on picked above it', async () => {
     await renderPage();
     stage('Preview');
     await waitFor(() => expect(embedded()).toBeTruthy());
-    const device = document.querySelector('.phone-hub-device');
-    expect(device.contains(embedded())).toBe(true);
-    expect(device.querySelectorAll('.phone-hub-frame')).toHaveLength(1);
-    expect(screen.getByText('Tap to try it. Nothing here is saved.')).toBeTruthy();
-    expect(document.querySelector('.phone-hub-screen-grid')).toBeTruthy();
-    expect(within(device).getByAltText('Homepage')).toBeTruthy();
+    const stageEl = document.querySelector('.phone-preview-stage');
+    expect(stageEl.contains(embedded())).toBe(true);
+    expect(stageEl.querySelectorAll('.phone-hub-frame')).toHaveLength(1);
+    expect(screen.getByText('Tap the icons on the phone to try it. Nothing here is saved.')).toBeTruthy();
+    // No screen grid, and no Producer Mode phone beside it.
+    expect(document.querySelector('.phone-hub-screen-grid')).toBeNull();
+    expect(document.querySelector('.phone-hub-device')).toBeNull();
+    expect(within(stageEl).getByAltText('Homepage')).toBeTruthy();
+    const start = within(stageEl).getByRole('combobox');
+    expect(Array.from(start.options).map(o => o.textContent)).toEqual(['Homepage', 'calls list']);
   });
 
-  test('Preview sends no request: entering, tapping through and picking a screen', async () => {
+  test('Preview sends no request: entering, tapping through and picking a start screen', async () => {
     await renderPage();
     const before = ['get', 'post', 'put', 'patch', 'delete'].map(m => vi.mocked(api[m]).mock.calls.length);
     stage('Preview');
     await waitFor(() => expect(embedded()).toBeTruthy());
-    const device = () => within(document.querySelector('.phone-hub-device'));
-    fireEvent.click(device().getByTitle('Open calls'));
-    await waitFor(() => expect(device().getByAltText('calls list')).toBeTruthy());
-    // Picking a screen card restarts the phone on that screen.
-    fireEvent.click(within(document.querySelector('.phone-hub-screen-grid')).getByText('Homepage'));
-    await waitFor(() => expect(device().getByAltText('Homepage')).toBeTruthy());
+    const phone = () => within(document.querySelector('.phone-preview-stage'));
+    fireEvent.click(phone().getByTitle('Open calls'));
+    await waitFor(() => expect(phone().getByAltText('calls list')).toBeTruthy());
+    // Picking a start screen restarts the phone there.
+    fireEvent.change(phone().getByRole('combobox'), { target: { value: 'home' } });
+    await waitFor(() => expect(phone().getByAltText('Homepage')).toBeTruthy());
+    fireEvent.change(phone().getByRole('combobox'), { target: { value: 'calls' } });
+    await waitFor(() => expect(phone().getByAltText('calls list')).toBeTruthy());
     const after = ['get', 'post', 'put', 'patch', 'delete'].map(m => vi.mocked(api[m]).mock.calls.length);
     expect(after).toEqual(before);
   });
