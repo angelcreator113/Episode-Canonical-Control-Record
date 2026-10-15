@@ -67,7 +67,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       guest_profiles: [{ profile_id: profiles.guest }, { id: 'not-a-number' }],
       relationship_goals: [{ slot: 'relationship_host', label: 'Follow up with the host after the event' }],
     } }) });
-    await run(`UPDATE world_events SET event_date = 'Nov 12', venue_name = 'The Studio', is_paid = true, payment_amount = 439 WHERE id = :ev`, ids);
+    await run(`UPDATE world_events SET event_date = 'Nov 12', venue_name = 'The Studio', is_paid = true, payment_amount = 439,
+                      description = 'The launch of her spring line', theme = 'Velvet hour', dress_code = 'Black tie' WHERE id = :ev`, ids);
     // The host lives at a place with one scene set, and has one post.
     await run(`INSERT INTO world_locations (id, name, created_at, updated_at) VALUES (:loc, :name, NOW(), NOW())`, { ...ids, name: `Studio ${TAG}` });
     await run('UPDATE social_profiles SET home_location_id = :loc, lala_relationship = \'direct\' WHERE id = :p', { ...ids, p: profiles.host });
@@ -113,6 +114,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       id: ids.ev, show_id: ids.show, role: 'host', event_date: 'Nov 12', venue_name: 'The Studio', is_paid: true, payment_amount: 439,
       goals: [{ slot: 'relationship_host', label: 'Follow up with the host after the event' }],
       episode: { id: ids.ep, episode_number: 1, title: 'Cast episode' },
+      // What the event is for (services/characterEvents).
+      description: 'The launch of her spring line', theme: 'Velvet hour', dress_code: 'Black tie',
     });
     expect(res.body.episodes).toEqual([{ id: ids.ep, episode_number: 1, title: 'Cast episode' }]);
     expect(res.body.place).toMatchObject({ id: ids.loc, residents: 1, scene_sets: 1 });
