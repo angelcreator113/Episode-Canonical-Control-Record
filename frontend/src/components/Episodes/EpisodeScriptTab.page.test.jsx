@@ -74,7 +74,7 @@ describe('Script page', () => {
 
   test('with a script: its beats and approvals, and Raw editor, Regenerate and Save', () => {
     renderTab('## BEAT: 1 · Opening Ritual\nLala: Hi besties.\n\n## BEAT: 2 · Login Sequence\nLala: Logging in.\n');
-    expect(screen.getByTestId('script-head').textContent).toContain('2 beats · 0 approved');
+    expect(screen.getByTestId('script-head').textContent).toMatch(/2 beats · ~\d+s · 0 approved/);
     for (const name of ['Raw editor', 'Regenerate', 'Save']) expect(screen.getByRole('button', { name })).toBeTruthy();
     expect(screen.queryByTestId('script-empty')).toBeNull();
   });

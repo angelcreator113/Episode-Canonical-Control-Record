@@ -390,3 +390,38 @@
 .esp-lala-slot-label { font-family: 'DM Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); }
 .esp-lala-slot-draft { flex: 1 1 200px; min-width: 0; font-family: 'Lora', serif; overflow-wrap: anywhere; }
 .esp-lala-slot-actions { display: flex; gap: 6px; }
+
+/* Script writing flow (Script tab audit, 2026-10-15): "Ready to film?",
+   each beat's rough length, a line opened from the keyboard, Delete line,
+   and Ask for a change beside Regenerate beat. */
+.esp-health { margin-bottom: 14px; border: 1px solid var(--lala-lavender-line); border-radius: 14px; background: var(--surface-card); }
+.esp-health-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 12px 16px; border: none; border-radius: 14px; background: none; color: var(--lala-ink); font: inherit; text-align: left; cursor: pointer; }
+.esp-health.has-gaps .esp-health-head > svg:first-child { color: var(--warning-text); }
+.esp-health.is-clear .esp-health-head > svg:first-child { color: var(--success-text); }
+.esp-health-title { font-family: var(--font-prose); font-size: 16px; font-weight: 600; }
+.esp-health-sum { margin-left: auto; font-family: 'DM Mono', var(--font-mono); font-size: 11px; color: var(--lala-ink-muted); }
+.esp-health-chev { flex: none; color: var(--lala-ink-muted); transition: transform 0.15s; }
+.esp-health-head[aria-expanded="true"] .esp-health-chev { transform: rotate(180deg); }
+.esp-health-list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0 16px 14px; list-style: none; }
+.esp-health-list li { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 1.45; color: var(--text-primary); overflow-wrap: anywhere; }
+.esp-health-list li svg { flex: none; margin-top: 2px; }
+.esp-health-list li.is-ok svg { color: var(--success-text); }
+.esp-health-list li.is-gap svg { color: var(--warning-text); }
+.esp-health-text { flex: 1; min-width: 0; }
+.esp-health-open { flex: none; padding: 2px 10px; border: 1px solid var(--lala-lavender-line); border-radius: 8px; background: var(--surface-card); color: var(--lala-lavender-text); font-size: 12px; font-weight: 600; cursor: pointer; }
+.esp-beat-runtime { color: var(--lala-ink-muted); }
+.esp-beat-runtime::before { content: ' · '; }
+.esp-line:focus-visible { outline: 2px solid var(--lala-lavender); outline-offset: 2px; }
+.esp-line-delete { display: inline-flex; align-items: center; gap: 4px; color: var(--danger-text); }
+.esp-ask { display: inline-flex; flex: 1 1 260px; gap: 6px; min-width: 0; }
+.esp-ask-input { flex: 1; min-width: 0; padding: 7px 10px; border: 1px solid var(--lala-lavender-line); border-radius: 8px; background: var(--surface-card); color: var(--lala-ink); font-size: 13px; }
+@media (max-width: 760px) {
+  .esp-health-list li { flex-wrap: wrap; }
+  .esp-health-open { margin-left: 22px; }
+  .esp-ask { flex-basis: 100%; }
+  /* At phone width the length goes under the line count, so the beat's name keeps its room. */
+  .esp-beat-count { display: flex; flex-direction: column; align-items: flex-end; }
+  .esp-beat-runtime::before { content: none; }
+  .esp-ask-input { min-height: 44px; font-size: 16px; /* iOS zooms into smaller inputs */ }
+  .esp-line-edit-actions { flex-wrap: wrap; }
+}
