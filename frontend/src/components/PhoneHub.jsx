@@ -380,7 +380,10 @@ export default function PhoneHub({
   const { iconLinkByKey, screenReachById } = useMemo(() => {
     const iconLinkByKey = new Map();
     const screenReachById = new Map();
-    screenTypes.forEach(src => {
+    // Hidden screens don't count, as in the header and the setup guide
+    // (phone audit, 2026-10-15): an icon placed only on a hidden screen is
+    // unplaced, and a hidden screen's link reaches nothing.
+    screenTypes.filter(src => !hiddenScreens.includes(src.id)).forEach(src => {
       const links = src.screen_links || src.metadata?.screen_links || [];
       links.forEach(link => {
         // Icon usage (by icon key, dedup screens per icon)
@@ -391,8 +394,8 @@ export default function PhoneHub({
           entry.screens.add(src.id);
           if (link.target) entry.hasTargetedPlacement = true;
         }
-        // Screen reach (count of zones pointing to each target)
-        if (link.target) {
+        // Screen reach (count of zones pointing to each target, not itself)
+        if (link.target && link.target !== src.id) {
           screenReachById.set(link.target, (screenReachById.get(link.target) || 0) + 1);
         }
       });
@@ -401,7 +404,7 @@ export default function PhoneHub({
     const iconOut = new Map();
     iconLinkByKey.forEach((v, k) => iconOut.set(k, { screenCount: v.screens.size, screenIds: [...v.screens], hasTargetedPlacement: v.hasTargetedPlacement }));
     return { iconLinkByKey: iconOut, screenReachById };
-  }, [screenTypes, iconTypes]);
+  }, [screenTypes, iconTypes, hiddenScreens]);
 
   // The selected icon's placements on the screen the device shows: its own
   // zones, plus the home screen's persistent icons where the device draws them.

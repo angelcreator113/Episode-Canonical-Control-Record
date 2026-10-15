@@ -1541,9 +1541,15 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   // this browser.
   // Hidden (removed) screens and icons aren't counted: they read as work
   // still to do (phone audit, 2026-10-07).
+  // One count for the whole page (phone audit, 2026-10-15): the Build
+  // toggle, the header chips, the setup guide and the flow test all count
+  // the screens and icons that aren't hidden.
+  const visibleScreens = screenOverlays.filter(o => !hiddenScreens.includes(o.id));
+  const visibleIcons = iconOverlays.filter(o => !hiddenScreens.includes(o.id));
+  const flowTestScreens = visibleScreens.filter(o => o.generated && o.url);
   const setupProgress = phoneSetupProgress({
-    screens: screenOverlays.filter(o => !hiddenScreens.includes(o.id)),
-    icons: iconOverlays.filter(o => !hiddenScreens.includes(o.id)),
+    screens: visibleScreens,
+    icons: visibleIcons,
     diagnostics: screenDiagnostics,
     flowAudit,
   });
@@ -1556,10 +1562,8 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     [overlays, hiddenScreens, iconOverlaysForEditor]
   );
   const headerChips = (() => {
-    const visibleIcons = iconOverlays.filter(o => !hiddenScreens.includes(o.id));
-    const placed = new Set();
-    screenOverlays.forEach(sc => getScreenLinks(sc).forEach(l => { const k = resolveZoneIconKey(l, visibleIcons); if (k) placed.add(k); }));
-    const unplaced = visibleIcons.filter(i => !placed.has(i.id)).length;
+    // Unplaced as the setup guide counts it: no zone on a shown screen.
+    const unplaced = setupProgress.icons.total - setupProgress.icons.placed;
     const ready = headerTiles.find(t => t.key === 'ready')?.value || '0/0';
     const [readyN, readyOf] = ready.split('/').map(Number);
     const n = (count, one, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
@@ -1596,7 +1600,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   //   screens → Build, the first screen with no image (or "+ Add" ▸ Screen
   //             when there are no screens)
   //   links   → Connect on the first screen with a zone that has no destination
-  //   icons   → Connect on the home screen, where icons are placed
+  //   icons   → the Icons stage, where each unplaced icon has "Place it"
   const continueSetup = (next) => {
     if (!next) return;
     if (next.key === 'screens') {
@@ -1605,17 +1609,25 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       return;
     }
     if (next.key === 'links') { handleContinueCard(next.screen, 'links'); return; }
-    if (next.key === 'icons') {
-      const home = homeScreenForGuide();
-      if (home) handleContinueCard(home, 'incoming');
-    }
+    // Unplaced icons open the Icons stage, as the header chip does, where
+    // each unplaced icon has its "Place it".
+    if (next.key === 'icons') setActiveTab('icons');
   };
   // Preview's Run: the Flow Test, from the home screen.
   const runSetupFlowTest = () => {
     const home = homeScreenForGuide();
     if (!home) return;
-    setFlowAudit(auditPhoneFlow(overlays.filter(o => o.generated && o.url && isScreen(o)), home.id));
+    setFlowAudit(auditPhoneFlow(flowTestScreens, home.id));
   };
+  // A flow test describes the phone it ran on: any change to the screens
+  // clears it, so the guide doesn't keep saying "no issues" (phone audit,
+  // 2026-10-15).
+  const flowTestFor = useRef(overlays);
+  useEffect(() => {
+    if (flowTestFor.current === overlays) return;
+    flowTestFor.current = overlays;
+    setFlowAudit(null);
+  }, [overlays]);
 
 
 
@@ -1796,8 +1808,8 @@ export default function UIOverlaysTab({ showId: propShowId }) {
             part="build"
             activeTab={activeTab}
             onChangeTab={afterSave(setActiveTab)}
-            screenCount={screenOverlays.length}
-            iconCount={iconOverlays.length}
+            screenCount={visibleScreens.length}
+            iconCount={visibleIcons.length}
             placementCount={placementsCount}
             hiddenCount={hiddenScreens.length}
             showHidden={showHidden}
@@ -1949,7 +1961,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
               };
               // The Flow Test starts where the player does, at home (phone
               // audit, 2026-10-07: it started from the screen being edited).
-              const runFlowAudit = () => setFlowAudit(auditPhoneFlow(editableScreens, (homeScreenOf(overlays) || activeScreen).id));
+              const runFlowAudit = () => setFlowAudit(auditPhoneFlow(flowTestScreens, (homeScreenOf(overlays) || activeScreen).id));
               // "Things to check" also names zones on this screen that open
               // the same screen (Evoni's mockup, 2026-10-08).
               const twiceHere = flowMap.openedTwice.filter(o => o.screen.id === activeScreen.id);
