@@ -14,7 +14,8 @@
  * Each variant is uploaded, or generated as a Flux Kontext edit of its
  * source image (generateDressedStill), so the place stays the same and only
  * the light or the season changes. The cost is shown first (S2). Rows live
- * in location_look_variants, one per venue, kind and value.
+ * in location_look_variants, one per everyday set, kind and value: another
+ * everyday look starts with none of the old one's.
  *
  * The everyday set is the scene set the location approved
  * (world_locations.approved_base_scene_set_id); the routes take its id.
@@ -73,24 +74,27 @@ async function loadEveryday(sequelize, setId) {
   return set;
 }
 
-/** The Front view a season variant is made from: the set's first Front zone with an image, else null. */
+/** The Front view a season shows: the set's first Front zone with an image ({ id, url }), else null. */
 async function frontView(sequelize, setId) {
   const [[angle]] = await sequelize.query(
     `SELECT id, still_image_url FROM scene_angles
       WHERE scene_set_id = :setId AND angle_kind = 'front' AND still_image_url IS NOT NULL AND deleted_at IS NULL
       ORDER BY sort_order ASC, created_at ASC LIMIT 1`,
     { replacements: { setId } });
-  return angle ? angle.still_image_url : null;
+  return angle ? { id: angle.id, url: angle.still_image_url } : null;
 }
 
-/** The source image of a variant; a season with no Front view is refused. */
+/**
+ * The source of a variant: { url, angleId }. A time re-lights the everyday
+ * look; a season re-seasons the Front view, and is refused without one.
+ */
 async function sourceImage(sequelize, set, kind) {
-  if (kind === 'time') return set.approved_base_image_url;
-  const url = await frontView(sequelize, set.id);
-  if (!url) {
+  if (kind === 'time') return { url: set.approved_base_image_url, angleId: null };
+  const front = await frontView(sequelize, set.id);
+  if (!front) {
     throw new LookVariantError('Season variants show the outside: make this set\'s Front zone image first', 409, 'NO_FRONT_VIEW');
   }
-  return url;
+  return { url: front.url, angleId: front.id };
 }
 
 const isStuck = (row) => row?.status === 'generating' && row.updated_at && Date.now() - new Date(row.updated_at).getTime() > STUCK_AFTER_MS;
@@ -104,8 +108,8 @@ async function listVariants(sequelize, setId) {
   const set = await loadEveryday(sequelize, setId);
   const [rows] = await sequelize.query(
     `SELECT id, kind, value, status, source, image_url, error, cost_usd, generated_at, updated_at
-       FROM location_look_variants WHERE world_location_id = :loc AND deleted_at IS NULL`,
-    { replacements: { loc: set.world_location_id } });
+       FROM location_look_variants WHERE scene_set_id = :setId AND deleted_at IS NULL`,
+    { replacements: { setId: set.id } });
   for (const row of rows.filter(isStuck)) {
     console.warn(`[LookVariants] ${row.kind} ${row.value} for location ${set.world_location_id} stuck; marked failed`);
     await sequelize.query(
@@ -128,7 +132,7 @@ async function listVariants(sequelize, setId) {
   return {
     world_location_id: set.world_location_id,
     everyday_image_url: set.approved_base_image_url,
-    front_view_url: await frontView(sequelize, set.id),
+    front_view_url: (await frontView(sequelize, set.id))?.url || null,
     time: slot('time'),
     season: slot('season'),
   };
@@ -139,9 +143,11 @@ async function planVariant(sequelize, { setId, kind, value }) {
   readKindValue(kind, value);
   const set = await loadEveryday(sequelize, setId);
   const sceneGen = require('./sceneGenerationService');
+  const source = await sourceImage(sequelize, set, kind);
   return {
     kind, value, label: LABELS[value],
-    source_image_url: await sourceImage(sequelize, set, kind),
+    source_image_url: source.url,
+    source_angle_id: source.angleId,
     prompt: variantPrompt(kind, value),
     estimate: { ...sceneGen.estimateDressingCost(), model: sceneGen.SCENE_DRESSING_MODEL.key },
   };
@@ -155,26 +161,35 @@ async function startVariant(sequelize, { setId, kind, value }) {
   if (!process.env.FAL_KEY) throw new LookVariantError('Variants use Flux Kontext, which needs FAL_KEY, which is not configured.', 503, 'PROVIDER_NOT_CONFIGURED');
   const plan = await planVariant(sequelize, { setId, kind, value });
   const set = await loadEveryday(sequelize, setId);
+  // One run per slot: a slot already generating (and not stuck) is refused,
+  // so a second click is never a second paid run.
   const [[row]] = await sequelize.query(
-    `INSERT INTO location_look_variants (id, world_location_id, kind, value, status, source, source_image_url, prompt, estimate_usd, error, created_at, updated_at)
-     VALUES (gen_random_uuid(), :loc, :kind, :value, 'generating', 'generated', :src, :prompt, :estimate, NULL, NOW(), NOW())
-     ON CONFLICT (world_location_id, kind, value) WHERE deleted_at IS NULL
+    `INSERT INTO location_look_variants (id, world_location_id, scene_set_id, kind, value, status, source, source_image_url, source_angle_id, prompt, estimate_usd, error, created_at, updated_at)
+     VALUES (gen_random_uuid(), :loc, :setId, :kind, :value, 'generating', 'generated', :src, :angleId, :prompt, :estimate, NULL, NOW(), NOW())
+     ON CONFLICT (scene_set_id, kind, value) WHERE deleted_at IS NULL
      DO UPDATE SET status = 'generating', source = 'generated', source_image_url = EXCLUDED.source_image_url,
-                   prompt = EXCLUDED.prompt, estimate_usd = EXCLUDED.estimate_usd, error = NULL, updated_at = NOW()
+                   source_angle_id = EXCLUDED.source_angle_id, prompt = EXCLUDED.prompt,
+                   estimate_usd = EXCLUDED.estimate_usd, error = NULL, updated_at = NOW()
+       WHERE location_look_variants.status <> 'generating'
+          OR location_look_variants.updated_at < NOW() - INTERVAL '10 minutes'
      RETURNING id`,
-    { replacements: { loc: set.world_location_id, kind, value, src: plan.source_image_url, prompt: plan.prompt, estimate: plan.estimate?.usd ?? null } });
+    { replacements: { loc: set.world_location_id, setId: set.id, kind, value, src: plan.source_image_url, angleId: plan.source_angle_id, prompt: plan.prompt, estimate: plan.estimate?.usd ?? null } });
+  if (!row) throw new LookVariantError(`${LABELS[value]} is already being generated`, 409, 'VARIANT_GENERATING');
+  // The run's result lands only on its own generation: an upload, a removal
+  // or a newer run made meanwhile is never overwritten.
+  const ownRun = `id = :id AND status = 'generating' AND source = 'generated' AND deleted_at IS NULL`;
   const run = async () => {
     try {
       const sceneGen = require('./sceneGenerationService');
       const out = await sceneGen.generateDressedStill(set, plan.prompt, plan.source_image_url, { suffix: `variant-${kind}-${value}` });
       await sequelize.query(
         `UPDATE location_look_variants SET status = 'complete', image_url = :url, cost_usd = :cost, generated_at = NOW(), updated_at = NOW()
-          WHERE id = :id`,
+          WHERE ${ownRun}`,
         { replacements: { id: row.id, url: out.stillUrl, cost: out.cost } });
     } catch (err) {
       console.error(`[LookVariants] ${kind} ${value} for "${set.name}" failed:`, err.message);
       await sequelize.query(
-        `UPDATE location_look_variants SET status = 'failed', error = :error, updated_at = NOW() WHERE id = :id`,
+        `UPDATE location_look_variants SET status = 'failed', error = :error, updated_at = NOW() WHERE ${ownRun}`,
         { replacements: { id: row.id, error: String(err.message || err).slice(0, 500) } });
     }
   };
@@ -190,15 +205,19 @@ async function startVariant(sequelize, { setId, kind, value }) {
 async function uploadVariant(sequelize, { setId, kind, value, storeImage }) {
   readKindValue(kind, value);
   const set = await loadEveryday(sequelize, setId);
+  // A season shows the Front view it stands for (the set's current one),
+  // so the beat planner swaps that view only.
+  const angleId = kind === 'season' ? (await frontView(sequelize, set.id))?.id || null : null;
   const url = await storeImage(set);
   const [[row]] = await sequelize.query(
-    `INSERT INTO location_look_variants (id, world_location_id, kind, value, status, source, image_url, cost_usd, generated_at, created_at, updated_at)
-     VALUES (gen_random_uuid(), :loc, :kind, :value, 'complete', 'uploaded', :url, 0, NOW(), NOW(), NOW())
-     ON CONFLICT (world_location_id, kind, value) WHERE deleted_at IS NULL
+    `INSERT INTO location_look_variants (id, world_location_id, scene_set_id, kind, value, status, source, image_url, source_angle_id, cost_usd, generated_at, created_at, updated_at)
+     VALUES (gen_random_uuid(), :loc, :setId, :kind, :value, 'complete', 'uploaded', :url, :angleId, 0, NOW(), NOW(), NOW())
+     ON CONFLICT (scene_set_id, kind, value) WHERE deleted_at IS NULL
      DO UPDATE SET status = 'complete', source = 'uploaded', image_url = EXCLUDED.image_url, source_image_url = NULL,
-                   prompt = NULL, estimate_usd = NULL, cost_usd = 0, error = NULL, generated_at = NOW(), updated_at = NOW()
+                   source_angle_id = EXCLUDED.source_angle_id, prompt = NULL, estimate_usd = NULL, cost_usd = 0,
+                   error = NULL, generated_at = NOW(), updated_at = NOW()
      RETURNING id, kind, value, status, source, image_url`,
-    { replacements: { loc: set.world_location_id, kind, value, url } });
+    { replacements: { loc: set.world_location_id, setId: set.id, kind, value, url, angleId } });
   return row;
 }
 
@@ -208,8 +227,8 @@ async function removeVariant(sequelize, { setId, kind, value }) {
   const set = await loadEveryday(sequelize, setId);
   const [, meta] = await sequelize.query(
     `UPDATE location_look_variants SET deleted_at = NOW(), updated_at = NOW()
-      WHERE world_location_id = :loc AND kind = :kind AND value = :value AND deleted_at IS NULL`,
-    { replacements: { loc: set.world_location_id, kind, value } });
+      WHERE scene_set_id = :setId AND kind = :kind AND value = :value AND deleted_at IS NULL`,
+    { replacements: { setId: set.id, kind, value } });
   return { removed: (meta?.rowCount ?? 0) > 0 };
 }
 
