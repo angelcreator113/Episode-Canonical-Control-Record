@@ -57,6 +57,10 @@
 /* ── Lala's world ── */
 .cast-section-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 .cast-people { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+/* A card and, with no character yet, its Create character button (Task 3201). */
+.cast-people > li { display: flex; flex-direction: column; gap: 6px; }
+.cast-people > li > .cast-person { flex: 1; }
+.cast-person-create { align-self: stretch; }
 .cast-person {
   display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 4px 10px; align-items: center; height: 100%; box-sizing: border-box;
   padding: 12px 14px; border-radius: 16px; background: var(--surface-card); border: 1px solid var(--lala-lavender-line);

@@ -1,0 +1,108 @@
+/* Table read and export (Script tab audit, 2026-10-15). str-* classes.
+   The dialog is portalled to <body>, so print can hide everything else.
+   Colours are tokens only (the studio theme), plain black on white in print. */
+
+body.str-open { overflow: hidden; }
+
+.str-root {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; flex-direction: column;
+  background: var(--lala-parchment); color: var(--lala-ink);
+  outline: none;
+}
+
+.str-bar {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px;
+  padding: 10px 16px; border-bottom: 1px solid var(--lala-gold-line);
+  background: var(--lala-parchment);
+}
+.str-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; margin: 0; font-weight: 400; }
+.str-kicker { font-family: 'DM Mono', var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--lala-gold-text); }
+.str-episode { overflow: hidden; font-family: var(--font-prose); font-size: 17px; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; }
+.str-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.str-jump select {
+  max-width: 220px; min-height: 36px; padding: 4px 8px; border: 1px solid var(--lala-gold-line); border-radius: 8px;
+  background: var(--lala-surface); color: var(--lala-ink); font-family: 'DM Mono', var(--font-mono); font-size: 12px;
+}
+.str-icon-btn {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 36px; min-height: 36px; padding: 0 8px;
+  border: 1px solid var(--lala-gold-line); border-radius: 8px;
+  background: transparent; color: var(--lala-ink); cursor: pointer;
+  font-family: 'DM Mono', var(--font-mono); font-size: 12px; font-weight: 700;
+}
+.str-icon-btn:hover:not(:disabled) { background: var(--lala-gold-soft); }
+.str-icon-btn:disabled { opacity: 0.4; cursor: default; }
+.str-icon-btn:focus-visible, .str-jump select:focus-visible { outline: 2px solid var(--lala-gold); outline-offset: 2px; }
+.str-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.str-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.str-page {
+  box-sizing: border-box; max-width: 38em; margin: 0 auto; padding: 24px 16px 96px;
+  font-family: var(--font-prose); font-size: var(--str-size, 20px); line-height: 1.6;
+}
+.str-print-title { display: none; }
+
+.str-beat { scroll-margin-top: 12px; }
+.str-beat-head {
+  margin: 2em 0 0.9em; padding-bottom: 6px; border-bottom: 1px solid var(--lala-gold-line);
+  font-family: 'DM Mono', var(--font-mono); font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--lala-gold-text);
+}
+.str-beat:first-child .str-beat-head { margin-top: 0.5em; }
+
+.str-dialogue { margin: 0 0 1em; }
+.str-speaker {
+  display: block; font-family: 'DM Mono', var(--font-mono); font-size: 0.6em; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--str-speaker, var(--lala-ink));
+}
+.str-paren { display: block; font-size: 0.85em; font-style: italic; color: var(--lala-ink-muted); }
+.str-words { margin: 0.1em 0 0; }
+.str-action, .str-narration { margin: 0 0 1em; }
+.str-action { font-style: italic; color: var(--lala-ink-muted); }
+.str-moment {
+  display: flex; align-items: baseline; gap: 6px; margin: 0 0 1em;
+  font-family: 'DM Mono', var(--font-mono); font-size: 0.6em; letter-spacing: 0.02em; color: var(--lala-ink-muted);
+}
+.str-moment svg { flex: none; align-self: center; }
+
+@media (max-width: 480px) {
+  .str-bar { padding: 8px 12px; }
+  .str-controls { width: 100%; margin-left: 0; }
+  .str-jump { flex: 1; min-width: 0; }
+  .str-jump select { width: 100%; max-width: none; }
+  .str-page { padding: 18px 16px 80px; }
+}
+
+/* The Script tab's Table read button and Export menu. */
+.str-launch { display: inline-flex; align-items: center; gap: 6px; }
+.str-export { position: relative; }
+.str-export > summary { list-style: none; }
+.str-export > summary::-webkit-details-marker { display: none; }
+.str-export-menu {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; display: flex; flex-direction: column; min-width: 190px; padding: 6px;
+  border: 1px solid var(--lala-gold-line); border-radius: 10px; background: var(--lala-surface);
+  box-shadow: var(--shadow-md);
+}
+.str-export-item {
+  display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 6px 10px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--lala-ink); font-family: 'DM Mono', var(--font-mono); font-size: 12px; text-align: left; cursor: pointer;
+}
+.str-export-item:hover, .str-export-item:focus-visible { background: var(--lala-gold-soft); outline: none; }
+.str-export-note { margin: 4px 10px 2px; font-family: 'DM Mono', var(--font-mono); font-size: 10px; color: var(--warning-text); }
+@media (max-width: 480px) { .str-export-menu { right: auto; left: 0; } }
+
+/* Print / PDF: only the script, black on white, no line split over a page. */
+@media print {
+  body.str-open { overflow: visible !important; }
+  body.str-open > *:not(.str-root) { display: none !important; }
+  .str-root { position: static; display: block; background: white; color: black; }
+  .str-bar { display: none; }
+  .str-scroll { overflow: visible; }
+  .str-page { max-width: none; padding: 0; font-size: 12pt; line-height: 1.45; }
+  .str-print-title { display: block; margin: 0 0 1.5em; font-size: 18pt; text-align: center; }
+  .str-beat-head { color: black; border-color: black; break-after: avoid; page-break-after: avoid; }
+  .str-speaker, .str-paren, .str-action, .str-moment { color: black; }
+  .str-speaker { break-after: avoid; page-break-after: avoid; }
+  .str-dialogue, .str-action, .str-narration, .str-moment { break-inside: avoid; page-break-inside: avoid; }
+  .str-moment svg { display: none; }
+}

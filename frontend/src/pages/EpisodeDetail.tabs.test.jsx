@@ -68,7 +68,15 @@ vi.mock('../components/Episodes/EpisodeAssetsTab', () => ({
   default: () => <div data-testid="episode-assets">Assets body</div>,
 }));
 vi.mock('../components/Episodes/EpisodeLalasPhoneTab', () => ({ default: () => null }));
-vi.mock('../components/Episodes/EpisodeScriptTab', () => ({ default: () => null }));
+vi.mock('../components/Episodes/EpisodeScriptTab', () => ({
+  default: ({ episode, onSaved, onDirtyChange }) => (
+    <div data-testid="episode-script">
+      <span data-testid="script-text">{episode?.script_content || ''}</span>
+      <button type="button" data-testid="script-edit" onClick={() => onDirtyChange?.(true)}>edit</button>
+      <button type="button" data-testid="script-save" onClick={() => { onSaved?.({ script_content: 'Saved script' }); onDirtyChange?.(false); }}>save</button>
+    </div>
+  ),
+}));
 vi.mock('../components/Episodes/EpisodeDistributionTab', () => ({ default: () => null }));
 vi.mock('../components/EpisodeWardrobeGameplay', () => ({ default: () => null }));
 vi.mock('../components/Episodes/EpisodeStyleSheetPanel', () => ({ default: () => null }));
@@ -167,5 +175,53 @@ describe('EpisodeDetail: the tab is the URL (LINK-04)', () => {
   test('?tab=nope lands on the checklist, not on an empty page', async () => {
     renderAt('/episodes/ep-1?tab=nope');
     expect(await screen.findByTestId('episode-checklist')).toBeTruthy();
+  });
+});
+
+// The Script tab's saved work and unsaved edits (Script tab audit, 2026-10-15):
+// Ctrl/Cmd+S on the Script tab is the tab's own Save, not "go to Scenes";
+// leaving the tab with unsaved edits asks first; and a save reaches the
+// episode the page holds, so coming back to the tab shows the saved script.
+describe('EpisodeDetail: the Script tab keeps its work', () => {
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    vi.mocked(api.get).mockResolvedValue({ data: {} });
+  });
+
+  test('Ctrl+S on the Script tab stays on the Script tab', async () => {
+    renderAt('/episodes/ep-1?tab=scripts');
+    expect(await screen.findByTestId('episode-script')).toBeTruthy();
+    fireEvent.keyDown(window, { key: 's', ctrlKey: true });
+    expect(where()).toBe('/episodes/ep-1?tab=scripts');
+  });
+
+  test('another tab asks first while the script has unsaved edits', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    try {
+      renderAt('/episodes/ep-1?tab=scripts');
+      fireEvent.click(await screen.findByTestId('script-edit'));
+      fireEvent.click(screen.getByTitle('Overview'));
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(where()).toBe('/episodes/ep-1?tab=scripts');
+
+      confirm.mockReturnValue(true);
+      fireEvent.click(screen.getByTitle('Overview'));
+      expect(where()).toBe('/episodes/ep-1?tab=overview');
+    } finally { confirm.mockRestore(); }
+  });
+
+  test('no question when nothing is unsaved, and a saved script is what the tab shows on return', async () => {
+    const confirm = vi.spyOn(window, 'confirm');
+    try {
+      renderAt('/episodes/ep-1?tab=scripts');
+      fireEvent.click(await screen.findByTestId('script-edit'));
+      fireEvent.click(screen.getByTestId('script-save'));
+      fireEvent.click(screen.getByTitle('Overview'));
+      expect(confirm).not.toHaveBeenCalled();
+      expect(await screen.findByTestId('episode-overview')).toBeTruthy();
+
+      fireEvent.keyDown(window, { key: '3', ctrlKey: true });
+      expect((await screen.findByTestId('script-text')).textContent).toBe('Saved script');
+    } finally { confirm.mockRestore(); }
   });
 });

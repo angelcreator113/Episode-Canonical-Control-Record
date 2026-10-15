@@ -74,7 +74,7 @@ describe('Script page', () => {
 
   test('with a script: its beats and approvals, and Raw editor, Regenerate and Save', () => {
     renderTab('## BEAT: 1 · Opening Ritual\nLala: Hi besties.\n\n## BEAT: 2 · Login Sequence\nLala: Logging in.\n');
-    expect(screen.getByTestId('script-head').textContent).toContain('2 beats · 0 approved');
+    expect(screen.getByTestId('script-head').textContent).toMatch(/2 beats · ~\d+s · 0 approved/);
     for (const name of ['Raw editor', 'Regenerate', 'Save']) expect(screen.getByRole('button', { name })).toBeTruthy();
     expect(screen.queryByTestId('script-empty')).toBeNull();
   });
@@ -96,6 +96,8 @@ describe('Script page', () => {
     vi.mocked(api.post).mockResolvedValueOnce({ data: { rewrittenLine: 'Hey besties, welcome back!' } });
     renderTab(SCRIPT);
     fireEvent.click(screen.getAllByRole('button', { name: '✦ Rewrite' })[0]);
+    // A suggestion until "Use it" (Script tab audit, 2026-10-15).
+    fireEvent.click(await screen.findByTestId('script-proposal-accept'));
     await waitFor(() => expect(screen.getAllByTestId('script-line')[0].textContent).toContain('"Hey besties, welcome back!"'));
     expect(screen.getAllByTestId('script-line')[0].textContent).toContain('Prime');
     expect(screen.getAllByRole('button', { name: '✦ Rewrite' })).toHaveLength(2);

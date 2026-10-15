@@ -126,6 +126,7 @@ router.get('/episodes/:episodeId/todo', requireAuth, async (req, res) => {
 
     return res.json({ data: todoList });
   } catch (err) {
+    console.error('[TodoList] GET /todo failed:', err);
     return res.status(500).json({ error: err.message });
   }
 });

@@ -178,6 +178,38 @@ describe('CharacterRegistryPage: the cast', () => {
     expect(screen.getByText('reviewed').previousSibling.textContent).toBe('3');
   });
 
+  test('"Create character" shows only on a feed person with none, crosses them for the active show, and the chip clears (Task 3201)', async () => {
+    let profiles = CAST_PROFILES;
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/shows') return { data: { success: true, data: SHOWS } };
+      if (url.startsWith('/api/v1/character-registry/registries')) return { data: { success: true, registries: [CAST_REGISTRY] } };
+      if (url.startsWith('/api/v1/social-profiles')) return { data: { profiles } };
+      if (url.startsWith('/api/v1/cast/review')) return { data: { success: true, ...CAST_REVIEW } };
+      return { data: {} };
+    });
+    vi.mocked(api.post).mockImplementation(async () => {
+      profiles = CAST_PROFILES.map((p) => (p.id === 8 ? { ...p, registry_character_id: 'kim' } : p));
+      return { data: { crossed: true, registry_character: { id: 'kim' }, registry_note: null } };
+    });
+    await ready();
+    const buttons = screen.getAllByTestId('cast-create-character');
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].closest('li').textContent).toContain('slowsift');
+    expect(screen.getByTestId('cast-people').textContent).toContain('No character yet');
+    fireEvent.click(buttons[0]);
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/social-profiles/8/cross', { show_id: 'show-b' }));
+    await waitFor(() => expect(screen.queryByTestId('cast-create-character')).toBeNull());
+    expect(screen.getByTestId('cast-people').textContent).not.toContain('No character yet');
+    expect(screen.getByText('Character created for slowsift')).toBeTruthy();
+  });
+
+  test('"Create character" shows the route\'s reason when no character is made', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { crossed: true, registry_character: null, registry_note: 'No character registry to add this profile to yet.' } });
+    await ready();
+    fireEvent.click(screen.getByTestId('cast-create-character'));
+    expect(await screen.findByText('No character registry to add this profile to yet.')).toBeTruthy();
+  });
+
   test('another character tagged Protagonist is flagged on Lala\'s card (Task 3199)', async () => {
     const withJaw = { ...CAST_REGISTRY, characters: [...CAST_REGISTRY.characters, { id: 'jaw', display_name: 'JustAWoman', character_key: 'justawoman', role_type: 'protagonist' }] };
     vi.mocked(api.get).mockImplementation(async (url) => {

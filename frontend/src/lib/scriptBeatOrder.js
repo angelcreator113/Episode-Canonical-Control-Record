@@ -5,12 +5,14 @@
 // own beat. Text before the first beat (an [EVENT:] tag) stays first, and
 // every beat that doesn't move keeps its text exactly.
 
+import { BEAT_SPLIT } from './beatLabelNumber';
+
 const HEADER_START = /^\s*##\s*BEAT:/i;
 
 // { preamble, sections } where each section is one beat's text, header
 // first; the same split EpisodeScriptTab's parseScriptIntoBeats uses.
 export function splitSections(scriptText) {
-  const parts = String(scriptText || '').split(/(?=##\s*BEAT:)/i);
+  const parts = String(scriptText || '').split(BEAT_SPLIT);
   const preamble = parts.length && !HEADER_START.test(parts[0]) ? parts.shift().trimEnd() : '';
   return { preamble, sections: parts.filter((p) => HEADER_START.test(p)).map((p) => p.trimEnd()) };
 }

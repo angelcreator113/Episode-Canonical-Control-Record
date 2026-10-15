@@ -22,7 +22,10 @@ describe('script messages', () => {
   test('messageLine writes the line, and nothing without words', () => {
     expect(messageLine('notify', 'STUDIO BY SABLE', 'You are invited')).toBe('[UI:NOTIFY STUDIO BY SABLE: You are invited]');
     expect(messageLine('dm', 'Mar:cus', '  See   you [there] ')).toBe('[UI:DM Marcus: See you there]');
-    expect(messageLine('dm', '', 'Hi')).toBe('[UI:DM Hi]');
+    // No sender: a bare colon, so a colon in the words stays in them (Script tab audit, 2026-10-15).
+    expect(messageLine('dm', '', 'Hi')).toBe('[UI:DM : Hi]');
+    expect(messageOf(parseMoment(messageLine('dm', '', 'Meet at 5:30')))).toMatchObject({ who: null, text: 'Meet at 5:30', name: 'DM' });
+    expect(messageOf(parseMoment('[UI:DM Hi]'))).toMatchObject({ who: null, text: 'Hi' });
     expect(messageLine('post', 'ignored', 'Studio night.')).toBe('[UI:POST Studio night.]');
     expect(messageLine('post', null, '   ')).toBeNull();
     expect(messageLine('nope', null, 'x')).toBeNull();

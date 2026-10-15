@@ -3362,7 +3362,10 @@ router.get('/world/locations', optionalAuth, async (req, res) => {
       const rows = await WorldLocation.findAll({ order: [['name', 'ASC']], limit: 200 });
       return res.json({ locations: rows });
     }
-  } catch (err) { res.json({ locations: [] }); }
+  } catch (err) {
+    console.error('[WorldStudio] GET /world/locations failed:', err);
+    res.json({ locations: [] });
+  }
 });
 
 // POST /world/locations — create a location

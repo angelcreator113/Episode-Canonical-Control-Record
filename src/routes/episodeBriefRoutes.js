@@ -528,7 +528,16 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
       ? splitScriptBeats(episodeForGuard?.script_content).beats.filter((b, i, all) => lockedNumbers.includes(b.number) && all.findIndex((x) => x.number === b.number) === i)
       : [];
     const generated = await generateGroundedScript(episodeId, showId, models, { lockedBeats });
-    const locks = scriptKeepingLocks(episodeForGuard, generated);
+    // Writing the script takes minutes, and the page can approve a beat or
+    // save while it runs (Script tab audit, 2026-10-15). The locks kept are
+    // the episode's as they are now, not as they were when the request came
+    // in, so a beat approved during the writing keeps its approved words.
+    // A failed read keeps the paid script: it falls back to the first read.
+    const current = (await Episode.findByPk(episodeId).catch((readErr) => {
+      console.error('[ScriptGen] Could not re-read the episode before saving:', readErr.message);
+      return null;
+    })) || episodeForGuard;
+    const locks = scriptKeepingLocks(current, generated);
     const script = locks.script;
 
     // Audit GATE-03 (2026-10-03): saving is part of success. A script that
@@ -538,10 +547,13 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
     let saved = false;
     let saveError = null;
     try {
-      const episode = episodeForGuard || await models.Episode.findByPk(episodeId);
+      const episode = current;
       if (!episode) {
         saveError = 'Episode not found';
       } else {
+        // Version history: the script Regenerate replaces is kept first.
+        const { snapshotScript } = require('../services/scriptVersions');
+        await snapshotScript(models, episode, { source: 'generate', userId: req.user?.id, next: script });
         await episode.update({ script_content: script });
         saved = true;
       }
@@ -602,7 +614,9 @@ router.post('/:episodeId/regenerate-beat', requireAuth, aiRateLimiter, async (re
 
     const { generateGroundedBeat } = require('../services/groundedScriptGeneratorService');
     const models = require('../models');
-    const beat = await generateGroundedBeat(episodeId, showId, models, { beatNumber, currentScript: script });
+    // Ask for a change (Script tab audit, 2026-10-15): optional, a string only, at most 300 characters.
+    const instruction = typeof req.body.instruction === 'string' ? req.body.instruction.trim().slice(0, 300) : '';
+    const beat = await generateGroundedBeat(episodeId, showId, models, { beatNumber, currentScript: script, instruction });
     if (!beat) return res.status(502).json({ error: 'The writer sent back no lines for this beat; try again.' });
     return res.json({ success: true, beatNumber, beat });
   } catch (err) {
