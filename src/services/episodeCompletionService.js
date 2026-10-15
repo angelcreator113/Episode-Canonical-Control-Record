@@ -582,11 +582,13 @@ ${narrativeLines.short || ''}`,
     // Add character state snapshot as knowledge
     episodeKnowledge.push({
       title: `Character State after Episode ${episode.episode_number || '?'}`,
-      content: `JustAWoman's stats after Episode ${episode.episode_number}: coins=${newState.coins}, reputation=${newState.reputation}, influence=${newState.influence}, brand_trust=${newState.brand_trust}, stress=${newState.stress}. ${newState.stress >= 8 ? 'STRESS IS CRITICAL — character is near breakdown.' : newState.stress >= 5 ? 'Stress is elevated — character is feeling pressure.' : 'Stress is manageable.'} ${newState.reputation >= 8 ? 'Reputation is strong — character is well-known.' : ''} ${newState.influence >= 8 ? 'Influence is high — character moves culture.' : ''}`,
+      // The show's state is Lala's (F-Sec-3 decision, 2026-07-02; docs/CANON.md):
+      // this note goes into every show prompt, so it names her, not JustAWoman.
+      content: `Lala's stats after Episode ${episode.episode_number}: coins=${newState.coins}, reputation=${newState.reputation}, influence=${newState.influence}, brand_trust=${newState.brand_trust}, stress=${newState.stress}. ${newState.stress >= 8 ? 'STRESS IS CRITICAL — character is near breakdown.' : newState.stress >= 5 ? 'Stress is elevated — character is feeling pressure.' : 'Stress is manageable.'} ${newState.reputation >= 8 ? 'Reputation is strong — character is well-known.' : ''} ${newState.influence >= 8 ? 'Influence is high — character moves culture.' : ''}`,
       category: 'character',
       severity: 'important',
       always_inject: true,
-      applies_to: JSON.stringify(['character_state', 'justawoman', 'current_stats']),
+      applies_to: JSON.stringify(['character_state', 'lala', 'current_stats']),
       source_document: 'episode-completion',
       source_version: FORMULA_VERSION,
       scope: 'show',
