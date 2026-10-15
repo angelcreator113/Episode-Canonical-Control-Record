@@ -124,7 +124,7 @@ async function processJob(job) {
         // Step 2: Generate all angles sequentially
         const angleResults = [];
         const freshSet = await SceneSet.findByPk(set.id);
-        for (const angle of (set.angles || [])) {
+        for (const angle of sceneGenService.generationOrder(set.angles)) {
           // The cascade claims each angle as the routes do: one already
           // running (its own Generate, Generate All) is left to that run,
           // not paid for twice (audit, 2026-10-15).

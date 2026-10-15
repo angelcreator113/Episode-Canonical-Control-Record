@@ -37,7 +37,7 @@ const s3 = new S3Client({ region: AWS_REGION });
 const { buildSceneBrief, briefToPrompt, prepareSceneBrief, loadBriefLocation, shotKey, GENERIC_SHOTS } = require('./sceneBriefService');
 const { noteBaseChanged, descriptionAfterAnalysis, writeReview } = require('./baseDescriptionService');
 const { ZONE_KINDS } = require('../constants/beatLocations');
-const { assertBaseReplaceable } = require('./approvedBaseService');
+const { assertBaseReplaceable, baseReplaceRefusal, ApprovedBaseError } = require('./approvedBaseService');
 
 // Ruling S4 (Evoni, 2026-09-30; EVENT_EPISODE_FLOW.md §8(dd), quoted
 // there): the injected generic style and lighting instructions are removed,
@@ -548,7 +548,7 @@ function estimateAngleCost(sceneAngle, sceneSet) {
     const e = imageGen.estimateGenerationCost({ size: 'landscape' });
     return { usd: e.usd, priced: e.priced, model: e.model, base_model: 'flux-dev', method: 'text_to_image' };
   }
-  if (isInsideBaseShot(sceneAngle)) return { usd: 0, priced: true, model: 'base', base_model: 'base', method: 'base' };
+  if (isInsideBaseShot(sceneAngle) || zoneIsBase(sceneAngle, sceneSet)) return { usd: 0, priced: true, model: 'base', base_model: 'base', method: 'base' };
   const onZone = String(sceneAngle?.angle_kind || '').toLowerCase() === 'extra' && sceneAngle.zone_angle_id;
   const frame = !onZone && specFitsBase(sceneSet.scene_spec, sceneSet.base_still_url)
     ? cropFrame(sceneSet.scene_spec, sceneAngle?.angle_label || 'WIDE') : null;
@@ -950,6 +950,16 @@ async function generateBaseScene(sceneSet, models, options = {}) {
       : await generateBaseStill(sceneSet, prompt, modelKey);
     const lockedSeed = null;
 
+    // S6: the base may have been approved while the picture was being made
+    // (a claim gone stale). The approved base stays; the new picture is not
+    // kept and the old one is not deleted.
+    const lateRefusal = await baseReplaceRefusal(briefDb(models), sceneSet.id);
+    if (lateRefusal) {
+      console.warn(`[SceneGen] ${sceneSet.name}: base approved during generation; new still not kept (${stillUrl})`);
+      await SceneSet.update({ generation_status: 'complete' }, { where: { id: sceneSet.id } });
+      throw new ApprovedBaseError({ ...lateRefusal, error: `${lateRefusal.error} It was approved while the new picture was being made, so the new picture was not kept.` });
+    }
+
     // Clean up old base still from S3 (best-effort), unless something
     // still shows it.
     if (sceneSet.base_still_url) {
@@ -1040,7 +1050,11 @@ Return ONLY JSON.` },
 
     return { success: true, stillUrl, videoUrl: null, seed: lockedSeed, model: modelKey, cost };
   } catch (err) {
-    await SceneSet.update({ generation_status: 'failed' }, { where: { id: sceneSet.id } });
+    // A run refused because the base was approved meanwhile leaves the set
+    // complete with its approved base, not failed.
+    if (!(err instanceof ApprovedBaseError)) {
+      await SceneSet.update({ generation_status: 'failed' }, { where: { id: sceneSet.id } });
+    }
     throw err;
   }
 }
@@ -1660,6 +1674,27 @@ const CAMERA_CROP_MAP = {
 // was checked).
 const MIN_PURE_CROP_FRACTION = 0.5;
 
+/**
+ * A region (pixels) grown to the stills' 16:9 around its centre, kept
+ * inside the w x h picture; when the picture is too narrow or short for
+ * that, the region is cut to 16:9 instead. Whole pixels.
+ */
+function widenToStillShape(left, top, width, height, w, h) {
+  const ratio = 16 / 9;
+  let cw = width;
+  let ch = height;
+  if (cw / ch < ratio) cw = ch * ratio; else ch = cw / ratio;
+  if (cw > w) { cw = w; ch = cw / ratio; }
+  if (ch > h) { ch = h; cw = ch * ratio; }
+  const cx = left + width / 2;
+  const cy = top + height / 2;
+  const outW = Math.max(1, Math.min(w, Math.round(cw)));
+  const outH = Math.max(1, Math.min(h, Math.round(ch)));
+  const outL = Math.round(Math.min(Math.max(cx - cw / 2, 0), w - outW));
+  const outT = Math.round(Math.min(Math.max(cy - ch / 2, 0), h - outH));
+  return { left: outL, top: outT, width: outW, height: outH };
+}
+
 async function cropAndOutpaint(baseImageUrl, angleLabel, setId, angleId, prompt, { onLogged, frame = null } = {}) {
   // A frame from the set's own spec is a pure crop of that part of its
   // picture; without one, the fixed map (direct callers only: generateAngle
@@ -1684,31 +1719,27 @@ async function cropAndOutpaint(baseImageUrl, angleLabel, setId, angleId, prompt,
     const w = metadata.width || 1920;
     const h = metadata.height || 1080;
 
-    // Calculate crop region
-    const cropLeft = Math.round(w * config.crop.left);
-    const cropTop = Math.round(h * config.crop.top);
-    const cropWidth = Math.min(Math.round(w * config.crop.width), w - cropLeft);
-    const cropHeight = Math.min(Math.round(h * config.crop.height), h - cropTop);
+    const pureCrop = config.extend === 'none' || config.extendAmount === 0;
+    // Calculate crop region. A pure crop is grown to 16:9 around its centre
+    // (within the picture) and stored as every still is, 1920x1080: kept at
+    // its own shape, a tall frame was a near-square among 16:9 stills
+    // (audit, 2026-10-15).
+    const region = pureCrop
+      ? widenToStillShape(w * config.crop.left, h * config.crop.top, w * config.crop.width, h * config.crop.height, w, h)
+      : null;
+    const cropLeft = region ? region.left : Math.round(w * config.crop.left);
+    const cropTop = region ? region.top : Math.round(h * config.crop.top);
+    const cropWidth = region ? region.width : Math.min(Math.round(w * config.crop.width), w - cropLeft);
+    const cropHeight = region ? region.height : Math.min(Math.round(h * config.crop.height), h - cropTop);
 
     // Crop the region
     const croppedBuffer = await sharp(imageRes.data)
       .extract({ left: cropLeft, top: cropTop, width: cropWidth, height: cropHeight })
       .toBuffer();
 
-    if (config.extend === 'none' || config.extendAmount === 0) {
-      // The frame keeps its own shape (no cut to 3:2), at most 1536x1024.
-      const resultBuffer = await sharp(croppedBuffer)
-        .resize(1536, 1024, { fit: 'inside' })
-        .png()
-        .toBuffer();
-
-      const s3Key = `scene-sets/${setId}/angles/${angleId}/crop-${Date.now()}.png`;
-      await s3.send(new PutObjectCommand({
-        Bucket: S3_BUCKET, Key: s3Key, Body: resultBuffer,
-        ContentType: 'image/png', CacheControl: 'max-age=31536000',
-      }));
-      const url = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
-      console.log(`[SceneGen] Pure crop complete for ${angleLabel}: ${url}`);
+    if (pureCrop) {
+      const url = await storeStillBuffer(croppedBuffer, setId, `angle-${angleId}-crop`);
+      console.log(`[SceneGen] Pure crop complete for ${angleLabel} (${cropWidth}x${cropHeight}): ${url}`);
       return url;
     }
 
@@ -1866,11 +1897,21 @@ function angleBriefOptions(sceneAngle, sceneSet, { imageAnalysis = null, overrid
       ...(zone ? { zone } : {}),
       ...(partOf ? { partOf } : {}),
       eventId: baseBrief?.event_id || null,
-      overrides: overrides && typeof overrides === 'object' ? overrides : (baseBrief?.overrides || {}),
+      overrides: overrides && typeof overrides === 'object' ? overrides : inheritedOverrides(baseBrief?.overrides),
     },
     relevantAnchors,
     specConstraints,
   };
+}
+
+// The base brief's overrides an angle inherits: the place, event and
+// environment lines. The shot lines (camera, what must be visible,
+// continuity, space for characters) were the base's own shot; inherited,
+// an edited Camera line made every angle that shot (audit, 2026-10-15).
+const SHOT_OVERRIDE_KEYS = Object.freeze(['camera', 'required_features', 'continuity', 'overlay_space']);
+function inheritedOverrides(baseOverrides) {
+  if (!baseOverrides || typeof baseOverrides !== 'object') return {};
+  return Object.fromEntries(Object.entries(baseOverrides).filter(([k]) => !SHOT_OVERRIDE_KEYS.includes(k)));
 }
 
 // Framings that show the whole space (sceneBriefService.SHOT_CAMERAS).
@@ -1889,7 +1930,10 @@ const MAX_PARTIAL_FRAME = 0.85;
 function cropFrame(spec, angleLabel) {
   const frame = sceneSpecService.contractFrame(spec, angleLabel);
   if (!frame) return null;
-  const nearlyWhole = frame.width > MAX_PARTIAL_FRAME && frame.height > MAX_PARTIAL_FRAME;
+  // A crop is stored grown to 16:9 (widenToStillShape); on a 16:9 base its
+  // width and height shares then both become the larger of the two, so a
+  // tall or wide frame over the limit is the base again once grown.
+  const nearlyWhole = Math.max(frame.width, frame.height) > MAX_PARTIAL_FRAME;
   return nearlyWhole && !['WIDE', 'ESTABLISHING'].includes(shotKey(angleLabel)) ? null : frame;
 }
 
@@ -1912,8 +1956,13 @@ function zoneOf(sceneAngle) {
 
 // A new still's checks belong to it alone: the previous image's quality
 // score, flags, consistency and spec results were kept, so a refine worked
-// on the old picture's problems (audit, 2026-10-15).
-const FRESH_QUALITY = Object.freeze({ quality_score: null, artifact_flags: [] });
+// on the old picture's problems (audit, 2026-10-15). Its post-processed
+// copies go too: Scene Studio and the lookbook prefer them, so a
+// regenerated angle kept showing its old picture.
+const FRESH_QUALITY = Object.freeze({
+  quality_score: null, artifact_flags: [],
+  enhanced_still_url: null, enhanced_video_url: null, post_processing_status: null,
+});
 function freshQualityReview(sceneAngle) {
   const review = { ...(sceneAngle.quality_review || {}) };
   for (const k of ['base_consistency', 'spec_validation', 'from_base', 'zone_reference']) delete review[k];
@@ -1930,14 +1979,39 @@ function isInsideBaseShot(sceneAngle) {
   return isInside(sceneAngle) && GENERIC_SHOTS.includes(shotKey(sceneAngle?.angle_label || 'WIDE'));
 }
 
+/**
+ * A Front or Back zone that the set's own spec frames as (nearly) the whole
+ * base picture: the base is that view (a house whose base is its facade).
+ * Redrawn as "a different part of the place", it became a second, different
+ * facade (audit, 2026-10-15).
+ */
+function zoneIsBase(sceneAngle, sceneSet) {
+  if (!zoneOf(sceneAngle) || !specFitsBase(sceneSet?.scene_spec, sceneSet?.base_still_url)) return false;
+  const frame = sceneSpecService.contractFrame(sceneSet.scene_spec, sceneAngle.angle_label || 'WIDE');
+  return Boolean(frame && frame.width > MAX_PARTIAL_FRAME && frame.height > MAX_PARTIAL_FRAME);
+}
+
+/**
+ * Angles in the order they are generated: by sort_order, with each extra
+ * framing on a zone (zone_angle_id) after the zones, since it is made from
+ * its zone's new picture. Listed first, an extra was made from the old zone
+ * picture (cascade) or refused NO_ZONE_IMAGE (batch) (audit, 2026-10-15).
+ */
+function generationOrder(angles) {
+  const onZone = (a) => String(a?.angle_kind || '').toLowerCase() === 'extra' && Boolean(a.zone_angle_id);
+  const bySort = [...(angles || [])].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+  return [...bySort.filter((a) => !onZone(a)), ...bySort.filter(onZone)];
+}
+
 /** An angle made from the set's base (or approved base): a zone, or Inside. Without one it is refused (NO_BASE). */
 function needsBase(sceneAngle) {
   return Boolean(zoneOf(sceneAngle)) || isInside(sceneAngle);
 }
 
 /**
- * An Inside angle with a generic label is the set's base picture (the
- * approved base when this set is the approved one): stored as the angle's
+ * An Inside angle with a generic label, or a zone the base frames whole
+ * (zoneIsBase), is the set's base picture (the approved base when this set
+ * is the approved one): stored as the angle's
  * still with no image call. Returns generateAngle's result shape.
  */
 async function useBaseAsAngle(sceneAngle, sceneSet, models, reference) {
@@ -1955,7 +2029,7 @@ async function useBaseAsAngle(sceneAngle, sceneSet, models, reference) {
     quality_review: qualityReview,
     ...FRESH_QUALITY,
   }, { where: { id: sceneAngle.id } });
-  console.log(`[SceneGen] Inside angle ${sceneAngle.angle_name || sceneAngle.id} is the base picture (${reference.source})`);
+  console.log(`[SceneGen] Angle ${sceneAngle.angle_name || sceneAngle.id} (${sceneAngle.angle_kind}) is the base picture (${reference.source})`);
   return { success: true, stillUrl: reference.url, seed: null, specValidation: null, fromBase: true };
 }
 
@@ -2016,6 +2090,10 @@ async function generateZone(sceneAngle, sceneSet, models, options = {}) {
   const sequelize = briefDb(models);
   const reference = await zoneReferenceImage(sceneSet, sequelize);
   if (!reference) throw noBaseError();
+  // The set's own base picture is this zone's view; a refine asks for a new one.
+  if (!options.refine && reference.url === sceneSet.base_still_url && zoneIsBase(sceneAngle, sceneSet)) {
+    return useBaseAsAngle(sceneAngle, sceneSet, models, reference);
+  }
 
   const { options: briefOptions } = angleBriefOptions(sceneAngle, sceneSet, { overrides: options.overrides });
   const brief = await prepareSceneBrief(sequelize, sceneSet, briefOptions);
@@ -2459,6 +2537,9 @@ module.exports = {
   angleBriefOptions,
   specFitsBase,
   zoneOf,
+  zoneIsBase,
+  generationOrder,
+  widenToStillShape,
   deleteOldBaseImage,
   isInsideBaseShot,
   needsBase,

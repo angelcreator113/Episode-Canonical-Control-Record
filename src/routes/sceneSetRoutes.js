@@ -1155,7 +1155,8 @@ router.post('/:id/generate-base', validateUUIDParam('id'), requireAuth, aiRateLi
       console.log(`[SceneGen] Base scene for "${set.name}" generation complete`);
     } catch (genErr) {
       console.error(`[SceneGen] Base scene for "${set.name}" failed:`, genErr.message);
-      await set.update({ generation_status: 'failed' });
+      // Approved during the run: the set keeps its approved base, complete.
+      if (!(genErr instanceof approvedBase.ApprovedBaseError)) await set.update({ generation_status: 'failed' });
     }
   } catch (err) {
     console.error('Scene Sets POST /:id/generate-base error:', err);
@@ -2927,7 +2928,9 @@ router.post('/:id/generate-all-angles', validateUUIDParam('id'), requireAuth, ai
     const where = rawIds
       ? { scene_set_id: set.id, id: rawIds, generation_status: ['pending', 'failed'] }
       : { scene_set_id: set.id, generation_status: 'pending' };
-    const eligible = await SceneAngle.findAll({ where, order: [['sort_order', 'ASC']] });
+    // Zones before the extras made from their pictures (generationOrder).
+    const eligible = require('../services/sceneGenerationService').generationOrder(
+      await SceneAngle.findAll({ where, order: [['sort_order', 'ASC']] }));
     let pendingAngles = eligible.slice(0, MAX_BATCH);
     const remaining = eligible.length - pendingAngles.length;
 

@@ -1329,6 +1329,14 @@ exports.regenerateSceneSetBackground = async (req, res) => {
       userId: req.user?.id || null,
     });
 
+    // S6: the base may have been approved while the restyle ran; the
+    // approved picture stays and the restyle is not kept.
+    const lateRefusal = result.restyled_url ? await approvedBaseService.baseReplaceRefusal(sequelize, id) : null;
+    if (lateRefusal) {
+      console.warn(`Scene Studio regenerateBackground: ${id} approved during restyle; restyle not kept (${result.restyled_url})`);
+      return res.status(lateRefusal.status).json({ success: false, error: `${lateRefusal.error} It was approved while the restyle ran, so the restyle was not kept.`, approved_base_of: lateRefusal.approved_base_of });
+    }
+
     if (result.restyled_url) {
       await SceneSet.update(
         { base_still_url: result.restyled_url },
