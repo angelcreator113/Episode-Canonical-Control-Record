@@ -162,8 +162,9 @@ describe('CharacterRegistryPage: the cast', () => {
   test('Lala, her world and the old system, each in its place, with episode counts', async () => {
     await ready();
     expect(api.get).toHaveBeenCalledWith('/api/v1/cast/review?registry_id=reg-sal');
-    expect(screen.getByTestId('cast-lala-role').textContent).toContain('Role says "Special"');
-    expect(screen.getByTestId('cast-lala-role').textContent).toContain('that filter shows 0 today');
+    // Lala is the Protagonist though her stored role is 'special' (Task 3199): no warning.
+    expect(screen.getByTestId('cast-lala').textContent).toContain('Protagonist');
+    expect(screen.queryByTestId('cast-other-protagonists')).toBeNull();
     const people = screen.getByTestId('cast-people');
     expect(people.textContent).toContain('@studiobysable');
     expect(people.textContent).toContain('The peer');
@@ -207,6 +208,20 @@ describe('CharacterRegistryPage: the cast', () => {
     await ready();
     fireEvent.click(screen.getByTestId('cast-create-character'));
     expect(await screen.findByText('No character registry to add this profile to yet.')).toBeTruthy();
+  });
+
+  test('another character tagged Protagonist is flagged on Lala\'s card (Task 3199)', async () => {
+    const withJaw = { ...CAST_REGISTRY, characters: [...CAST_REGISTRY.characters, { id: 'jaw', display_name: 'JustAWoman', character_key: 'justawoman', role_type: 'protagonist' }] };
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/shows') return { data: { success: true, data: SHOWS } };
+      if (url.startsWith('/api/v1/character-registry/registries')) return { data: { success: true, registries: [withJaw] } };
+      if (url.startsWith('/api/v1/social-profiles')) return { data: { profiles: CAST_PROFILES } };
+      if (url.startsWith('/api/v1/cast/review')) return { data: { success: true, ...CAST_REVIEW } };
+      return { data: {} };
+    });
+    renderAt();
+    const flag = await screen.findByTestId('cast-other-protagonists');
+    expect(flag.textContent).toBe("Lala is the show's one Protagonist. Also tagged Protagonist: JustAWoman.");
   });
 
   test('Keep moves a character to Kept; Back to review undoes it', async () => {
