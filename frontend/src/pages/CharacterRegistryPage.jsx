@@ -17,7 +17,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import useActiveShow from '../hooks/useActiveShow';
-import { chooseRegistry, findLala, feedPeople, oldSystem, sameNames, sameNameNote } from '../lib/theCast';
+import { chooseRegistry, findLala, feedPeople, oldSystem, sameNames, sameNameNote, otherProtagonists } from '../lib/theCast';
 import './TheCast.css';
 
 const ROLE_CONFIG = {
@@ -157,7 +157,9 @@ export default function CharacterRegistryPage() {
   const people = feedPeople(profiles, allCharacters);
   const old = oldSystem(characters, profiles, lala);
   const twins = sameNames(old);
-  const protagonists = characters.filter((c) => c.role_type === 'protagonist').length;
+  // Lala is the Protagonist whatever her stored role (Task #3199); anyone
+  // else tagged Protagonist is flagged.
+  const alsoProtagonist = otherProtagonists(characters, lala);
   const isKept = (c) => review?.byId[c.id]?.cast_review === 'kept';
   const toReview = old.filter((c) => !isKept(c));
   const kept = old.filter(isKept);
@@ -255,9 +257,9 @@ export default function CharacterRegistryPage() {
             <h2 className="cast-lala-name">{lala.display_name}</h2>
             <p className="cast-note">{people.length} {people.length === 1 ? 'person' : 'people'} in her world</p>
           </div>
-          {lala.role_type !== 'protagonist' && (
-            <p className="cast-lala-warn" data-testid="cast-lala-role">
-              <strong>Role says "{ROLE_LABEL[lala.role_type] || lala.role_type}".</strong> Lala should be the show's one Protagonist; that filter shows {protagonists} today.
+          {alsoProtagonist.length > 0 && (
+            <p className="cast-lala-warn" data-testid="cast-other-protagonists">
+              <strong>Lala is the show&apos;s one Protagonist.</strong> Also tagged Protagonist: {alsoProtagonist.map((c) => c.display_name || c.character_key).join(', ')}.
             </p>
           )}
           <button type="button" className="cast-btn-lavender" onClick={() => navigate(`/character/${lala.id}`)}>Open Lala</button>
