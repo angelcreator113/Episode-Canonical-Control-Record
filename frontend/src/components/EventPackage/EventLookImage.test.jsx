@@ -178,7 +178,7 @@ describe('EventLookImage (L7-L9)', () => {
     await screen.findByTestId('event-look-generating');
     lookState = { scene_set: { ...SET, base_still_url: null, generation_status: 'failed', error: 'Timed out: no image after 10 minutes' }, approved_base: null, look: null };
     expect((await screen.findByTestId('event-look-base-failed')).textContent).toBe('The base could not be generated: Timed out: no image after 10 minutes.');
-    expect(onToast).toHaveBeenCalledWith('The base could not be generated: Timed out: no image after 10 minutes');
+    expect(onToast).toHaveBeenCalledWith('The base could not be generated: Timed out: no image after 10 minutes', 'error');
   });
 
   // DJ 6 (Evoni, 2026-10-02): after the venue's base is approved, the Place
