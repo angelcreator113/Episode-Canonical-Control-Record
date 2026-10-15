@@ -727,7 +727,7 @@ async function extractColors(imageUrl) {
   const mediaType = imageUrl.includes('.png') ? 'image/png' : 'image/jpeg';
 
   const result = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 500,
     messages: [{
       role: 'user',
@@ -803,7 +803,7 @@ async function suggestTags(imageUrl) {
   const mediaType = imageUrl.includes('.png') ? 'image/png' : 'image/jpeg';
 
   const result = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 800,
     messages: [{
       role: 'user',
@@ -904,7 +904,7 @@ async function analyzeImage(imageUrl) {
   const mediaType = imageUrl.includes('.png') ? 'image/png' : 'image/jpeg';
 
   const result = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 1200,
     messages: [{
       role: 'user',

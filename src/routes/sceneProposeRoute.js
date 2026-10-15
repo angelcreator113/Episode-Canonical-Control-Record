@@ -301,7 +301,7 @@ Respond ONLY in valid JSON. No markdown. No backticks. No explanation outside th
 }`;
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 2000,
       system: `You are the narrative intelligence layer of Prime Studios. You know this franchise deeply. You propose scenes that feel inevitable, not convenient. You never propose what is safe — you propose what the story needs. Respond ONLY in valid JSON.`,
       messages: [{ role: 'user', content: proposalPrompt }],

@@ -438,7 +438,7 @@ Respond ONLY in valid JSON:
 }`;
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4000,
       system: 'You extract franchise knowledge into structured entries. Respond ONLY in valid JSON.',
       messages: [{ role: 'user', content: prompt }],
@@ -612,7 +612,7 @@ Respond ONLY in valid JSON:
 }`;
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: items ? 2500 : 1000,
       system: 'You are the franchise guard. Respond ONLY in valid JSON.',
       messages: [{ role: 'user', content: guardPrompt }],

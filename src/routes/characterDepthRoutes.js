@@ -37,7 +37,7 @@ const { RegistryCharacter, CharacterRegistry } = db;
 // ── Anthropic ──
 const anthropic = new Anthropic();
 const FAST_MODEL = 'claude-haiku-4-5-20251001';
-const DEEP_MODEL = 'claude-sonnet-4-20250514';
+const DEEP_MODEL = 'claude-sonnet-4-6';
 
 // ── All depth engine field names (de_ prefix) ──
 const DE_FIELDS = [

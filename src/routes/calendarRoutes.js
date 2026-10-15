@@ -353,7 +353,7 @@ router.post('/events/:id/ripples/generate', requireAuth, aiRateLimiter, async (r
       const Anthropic = require('@anthropic-ai/sdk');
       const client = new Anthropic();
       const response = await client.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 1000,
         system: `You are Amber, production intelligence for a narrative fiction project called "Before Lala". You generate ripple thread proposals — short story threads that describe how an event propagates through the world and affects characters who weren't necessarily present. Each proposal is 2–3 sentences.
 
