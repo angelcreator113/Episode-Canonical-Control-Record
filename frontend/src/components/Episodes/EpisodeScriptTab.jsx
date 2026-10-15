@@ -17,6 +17,7 @@ import { beatImage, beatImageLabel } from '../BeatPlan/BeatPlanParts';
 import { beatSeconds, scriptSeconds, formatRuntime } from '../../lib/scriptRuntime';
 import { scriptHealth } from '../../lib/scriptHealth';
 import ScriptHealthPanel from './ScriptHealthPanel';
+import ScriptReadActions from './ScriptReadActions';
 import './EpisodeScriptPage.css';
 
 // Track 6 CP15 partial-migration extension (5th instance) — file already
@@ -1390,6 +1391,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
         </div>
         {hasScript ? (
           <div className="esp-actions">
+            {/* Table read and Export (Script tab audit, 2026-10-15): the script as on the page. */}
+            <ScriptReadActions scriptText={scriptText} title={episode?.title || (episode?.episode_number ? `Episode ${episode.episode_number}` : 'Script')} dirty={scriptText !== savedScript} onScreen={onScreenWithDrafts} scenePlan={scenePlan} startBeat={Math.max(0, beats.indexOf(openBeat))} />
             <button type="button" className={`esp-btn${developerMode ? ' is-on' : ''}`} onClick={() => setDeveloperMode(d => !d)}>{developerMode ? 'Beat view' : 'Raw editor'}</button>
             <button type="button" className="esp-btn" data-testid="script-regenerate" onClick={() => {
               const ask = approvedCount > 0
