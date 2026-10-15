@@ -37,7 +37,7 @@ const s3 = new S3Client({ region: AWS_REGION });
 const { buildSceneBrief, briefToPrompt, prepareSceneBrief, loadBriefLocation, shotKey, GENERIC_SHOTS } = require('./sceneBriefService');
 const { noteBaseChanged, descriptionAfterAnalysis, writeReview } = require('./baseDescriptionService');
 const { ZONE_KINDS } = require('../constants/beatLocations');
-const { assertBaseReplaceable } = require('./approvedBaseService');
+const { assertBaseReplaceable, baseReplaceRefusal, ApprovedBaseError } = require('./approvedBaseService');
 
 // Ruling S4 (Evoni, 2026-09-30; EVENT_EPISODE_FLOW.md §8(dd), quoted
 // there): the injected generic style and lighting instructions are removed,
@@ -947,6 +947,16 @@ async function generateBaseScene(sceneSet, models, options = {}) {
       : await generateBaseStill(sceneSet, prompt, modelKey);
     const lockedSeed = null;
 
+    // S6: the base may have been approved while the picture was being made
+    // (a claim gone stale). The approved base stays; the new picture is not
+    // kept and the old one is not deleted.
+    const lateRefusal = await baseReplaceRefusal(briefDb(models), sceneSet.id);
+    if (lateRefusal) {
+      console.warn(`[SceneGen] ${sceneSet.name}: base approved during generation; new still not kept (${stillUrl})`);
+      await SceneSet.update({ generation_status: 'complete' }, { where: { id: sceneSet.id } });
+      throw new ApprovedBaseError({ ...lateRefusal, error: `${lateRefusal.error} It was approved while the new picture was being made, so the new picture was not kept.` });
+    }
+
     // Clean up old base still from S3 (best-effort), unless something
     // still shows it.
     if (sceneSet.base_still_url) {
@@ -1037,7 +1047,11 @@ Return ONLY JSON.` },
 
     return { success: true, stillUrl, videoUrl: null, seed: lockedSeed, model: modelKey, cost };
   } catch (err) {
-    await SceneSet.update({ generation_status: 'failed' }, { where: { id: sceneSet.id } });
+    // A run refused because the base was approved meanwhile leaves the set
+    // complete with its approved base, not failed.
+    if (!(err instanceof ApprovedBaseError)) {
+      await SceneSet.update({ generation_status: 'failed' }, { where: { id: sceneSet.id } });
+    }
     throw err;
   }
 }
