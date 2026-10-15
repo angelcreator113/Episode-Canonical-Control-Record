@@ -1631,7 +1631,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
 
 
   return (
-    <div style={{ padding: '20px 0' }}>
+    <div className="phone-hub-page">
       {/* Toast */}
       {toast && (
         <div className={`overlays-toast overlays-toast--${toast.type === 'error' ? 'error' : 'success'}`}>

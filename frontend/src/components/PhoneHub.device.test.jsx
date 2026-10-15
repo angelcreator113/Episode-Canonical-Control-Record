@@ -176,13 +176,20 @@ describe('PhoneHub device — characterization (Task #1983)', () => {
     const onHome = renderHub({ navigationHistory: ['dms'], onBack: vi.fn() });
     expect(onHome.d.queryByText('← Back')).toBeNull();
     cleanup();
-    const noHandler = renderHub({ activeScreen: DMS, navigationHistory: ['home'] });
+    // A DMs screen without its own Back zone, so the phone draws its Back.
+    const plain = { ...DMS, screen_links: [] };
+    const noHandler = renderHub({ activeScreen: plain, navigationHistory: ['home'] });
     expect(noHandler.d.queryByText('← Back')).toBeNull();
     cleanup();
     const onBack = vi.fn();
-    const noHistory = renderHub({ activeScreen: DMS, onBack });
+    const noHistory = renderHub({ activeScreen: plain, onBack });
     fireEvent.click(noHistory.d.getByText('← Back'));
     expect(onBack).toHaveBeenCalledTimes(1);
+    cleanup();
+    // DMs has its own "Back home" zone: that is its one Back.
+    const own = renderHub({ activeScreen: DMS, navigationHistory: ['home'], onBack: vi.fn() });
+    expect(own.d.queryByText('← Back')).toBeNull();
+    expect(own.d.getAllByTitle(/back/i)).toHaveLength(1);
   });
 
   test.each([

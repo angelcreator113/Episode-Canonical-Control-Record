@@ -36,13 +36,14 @@ import PhoneFrame from './PhoneFrame';
 import PhoneMapView, { isMapScreen } from './PhoneMapView';
 import { getScreenImageStyle } from './phoneStyle';
 import { resolveZoneIcon, resolveZoneIconKey } from '../../lib/overlayUtils';
+import { isBackZone, ownBackZone } from '../../lib/phoneBack';
 
 // The selected icon's placements are outlined (doctrine rule 17, Task #2008).
 const HIGHLIGHT_STYLE = { outline: '2px solid #B8962E', outlineOffset: 1, boxShadow: '0 0 0 4px rgba(184,150,46,0.3)' };
 const isHighlighted = (link, icons, key) => !!key && resolveZoneIconKey(link, icons) === key;
 
 // Renders interactive tap zone overlays on the phone screen
-function ScreenLinkOverlay({ links = [], icons = [], onNavigate, highlightIconKey }) {
+function ScreenLinkOverlay({ links = [], icons = [], onNavigate, onBack, highlightIconKey }) {
   if (!links.length || !onNavigate) return null;
   return (
     <>
@@ -51,7 +52,10 @@ function ScreenLinkOverlay({ links = [], icons = [], onNavigate, highlightIconKe
           key={link.id}
           onClick={(e) => {
             e.stopPropagation();
-            if (link.target) onNavigate(link.target);
+            // A Back zone is the phone's Back: the previous screen, else the
+            // page's parent, else home (lib/phoneBack isBackZone).
+            if (isBackZone(link) && onBack) onBack();
+            else if (link.target) onNavigate(link.target);
           }}
           title={link.label || link.target}
           data-highlighted={isHighlighted(link, icons, highlightIconKey) || undefined}
@@ -148,7 +152,8 @@ export default function PhoneDevice({
   icons = [],
   highlightIconKey = null,
 }) {
-  const showBack = Boolean(onBack && activeScreen) && (firstScreen
+  // One Back per screen: a screen with its own Back zone keeps that one.
+  const showBack = Boolean(onBack && activeScreen) && !ownBackZone(activeScreen) && (firstScreen
     ? activeScreen.id !== firstScreen.id
     : navigationHistory.length > 0);
   return (
@@ -188,7 +193,7 @@ export default function PhoneDevice({
               beat={beat}
             />
             {!tapLayer && (
-              <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} icons={icons} onNavigate={onNavigate} highlightIconKey={highlightIconKey} />
+              <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} icons={icons} onNavigate={onNavigate} onBack={onBack} highlightIconKey={highlightIconKey} />
             )}
             {/* Persistent icons from home screen — show on non-home screens
                 except the Map, which is meant to be a full-bleed canvas
@@ -219,7 +224,9 @@ export default function PhoneDevice({
 
         {/* The phone's own Back (Lala's Phone spec §1 Rule 6, Task #3162):
             on every screen but the home, in one place and look, drawn by the
-            frame rather than a tap zone. `firstScreen` is the home; without
+            frame rather than a tap zone. A screen with its own Back zone
+            (lib/phoneBack ownBackZone) keeps that one instead, so no screen
+            shows two. `firstScreen` is the home; without
             one it shows only with history. The caller's onBack goes to the
             previous screen, else the screen whose icon opens this one
             (lib/phoneBack), else home. Below the Dynamic Island on the
