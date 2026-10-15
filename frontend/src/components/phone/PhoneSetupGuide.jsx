@@ -4,8 +4,8 @@
  *
  * Five lines, each counted from data the Phone Hub already has:
  *   Screens  N with an image of M
- *   Icons    N placed of M
  *   Links    N of M zones have a destination
+ *   Icons    N placed of M
  *   Content  N screens with content zones          (informational)
  *   Preview  the last flow test's issues, or "not run yet" with a Run link
  *                                                    (informational)
@@ -95,7 +95,11 @@ export function phoneSetupProgress({ screens = [], icons = [], diagnostics = new
 
   const core = [screensLine, iconsLine, linksLine];
   return {
-    lines: [screensLine, iconsLine, linksLine, contentLine, previewLine],
+    // Listed in the order "Continue setup →" takes them (phone audit,
+    // 2026-10-15: the guide read Screens, Icons, Links and went Screens,
+    // Links, Icons).
+    lines: [screensLine, linksLine, iconsLine, contentLine, previewLine],
+    icons: { placed, total: icons.length },
     next,
     complete: core.every(l => l.state !== 'todo'),
     doneCount: core.filter(l => l.state !== 'todo').length,
@@ -122,7 +126,7 @@ export default function PhoneSetupGuide({ progress, collapsed = false, onToggle,
           onClick={onToggle}
         >
           <span className="phone-setup-guide__title">Setup</span>
-          {/* Three parts, filled as Screens, Icons and Links are done (Evoni's mock, 2026-10-07) */}
+          {/* Three parts, filled as Screens, Links and Icons are done (Evoni's mock, 2026-10-07) */}
           <span className="phone-setup-guide__bar" aria-hidden="true">
             {[0, 1, 2].map(i => <span key={i} className={`phone-setup-guide__seg${i < doneCount ? ' is-done' : ''}`} />)}
           </span>

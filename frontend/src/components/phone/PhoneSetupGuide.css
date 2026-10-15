@@ -163,14 +163,21 @@
   background: var(--lala-lavender-dark);
 }
 
-/* A phone: the next step wraps to its own line instead of cutting off. */
+/* A phone: the next step wraps to its own line instead of cutting off. The
+   arrow stays at the end of the first line, by "1 of 3 done" (phone audit,
+   2026-10-15: it sat alone on a third line). */
 @media (max-width: 600px) {
   .phone-setup-guide__toggle {
     flex-wrap: wrap;
   }
 
   .phone-setup-guide__next {
+    order: 1;
     flex: 1 1 100%;
     white-space: normal;
+  }
+
+  .phone-setup-guide__chevron {
+    margin-left: auto;
   }
 }

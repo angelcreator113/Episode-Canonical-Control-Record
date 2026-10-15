@@ -106,13 +106,43 @@ describe('UIOverlaysTab — setup guide (Task #2053)', () => {
     expect(api.put).not.toHaveBeenCalled();
   });
 
-  test('then Icons: Continue opens Connect on the home screen', async () => {
+  test('then Icons: Continue opens the Icons stage, as the header chip does', async () => {
     await renderPage([MAIL, CALLS, HOME_LINKED, CALL, MAIL_ICON]);
     openGuide();
     expect(line('links')).toBe('✓Links: 1 of 1 zone has a destination');
     continueSetup();
-    await waitFor(() => expect(stage('Connect').getAttribute('aria-current')).toBe('page'));
-    await waitFor(() => expect(connectScreen()).toBe('Homepage'));
+    await waitFor(() => expect(document.querySelector('.phone-hub-icon-grid')).toBeTruthy());
+    expect(stage('Build').getAttribute('aria-current')).toBe('page');
+  });
+
+  // One count for the page (phone audit, 2026-10-15).
+  test('the toggle, the chips and the guide count the same screens and icons; hidden ones count nowhere', async () => {
+    // MAIL is hidden, and the Mail icon is placed only on it.
+    const MAIL_WITH_ICON = { ...MAIL, screen_links: [zone('z-m', { target: 'calls', label: 'Mail', icon_overlay_id: 'mail_icon' })] };
+    window.localStorage.setItem(`phone_hub_hidden:${SHOW}`, JSON.stringify(['mail']));
+    await renderPage([HOME_LINKED, CALLS, MAIL_WITH_ICON, CALL, MAIL_ICON]);
+    openGuide();
+    expect(line('icons')).toBe('⚠Icons: 1 placed of 2');
+    expect(screen.getByTestId('phone-chip-unplaced').textContent).toBe('1 icon unplaced');
+    expect(screen.getByTestId('phone-chip-icons').textContent).toBe('2 icons');
+    const toggle = within(screen.getByRole('group', { name: 'Build' }));
+    expect(toggle.getByRole('button', { name: /^Screens/ }).textContent).toBe('Screens · 2');
+    expect(toggle.getByRole('button', { name: /^Icons/ }).textContent).toBe('Icons · 2');
+    expect(line('screens')).toBe('✓Screens: 2 with an image of 2');
+  });
+
+  test('a flow test result is cleared when the phone changes', async () => {
+    await renderPage([HOME_LINKED, CALLS, MAIL, CALL]);
+    vi.mocked(api.delete).mockResolvedValue({ data: { success: true } });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    openGuide();
+    fireEvent.click(within(guide()).getByRole('button', { name: 'Run' }));
+    expect(line('preview')).toMatch(/in the last flow test$/);
+    // Deleting a screen changes the phone the test ran on.
+    const card = within(document.querySelector('.phone-hub-screen-grid')).getByText('mail inbox').closest('.screen-card');
+    fireEvent.click(within(card).getByLabelText('Screen options'));
+    fireEvent.click(within(card).getByText('Delete'));
+    await waitFor(() => expect(line('preview')).toBe('·Preview: not run yet'));
   });
 
   test('no screens yet: Continue opens "+ Add" ▸ Screen', async () => {
