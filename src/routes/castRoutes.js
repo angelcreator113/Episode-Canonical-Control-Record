@@ -14,6 +14,11 @@
  *   DELETE /api/v1/cast/characters/:id/permanent    delete an archived one for good
  *   GET    /api/v1/cast/characters/:id/appearances  where the character shows up (the
  *                                                  character page's "Where they show up")
+ *   GET    /api/v1/cast/characters/:id/places       their home, closet and other places
+ *                                                  (#3228), with each set's picture
+ *   POST   /api/v1/cast/characters/:id/places/share { scene_set_id, caption? }: a draft
+ *                                                  Pulse post of that place from their
+ *                                                  feed profile (services/characterPlaceShare)
  *
  * Archived is the registry's soft delete (registry_characters.deleted_at).
  *
@@ -301,6 +306,39 @@ router.get('/characters/:id/appearances', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[Cast] GET /characters/:id/appearances error:', err);
     return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// A place error is its own status and message; anything else is a 500.
+function placeError(res, err, label) {
+  const { PlaceShareError, CharacterPlacesError } = require('../services/characterPlaceShare');
+  if (err instanceof PlaceShareError || err instanceof CharacterPlacesError) {
+    return res.status(err.status).json({ success: false, code: err.code, error: err.message });
+  }
+  console.error(`[cast] ${label} error:`, err);
+  return res.status(500).json({ success: false, error: err.message });
+}
+
+router.get('/characters/:id/places', requireAuth, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const { placesForCharacter } = require('../services/characterPlaceShare');
+    return res.json({ success: true, ...(await placesForCharacter(getModels().sequelize, req.params.id)) });
+  } catch (err) {
+    return placeError(res, err, 'GET characters/:id/places');
+  }
+});
+
+router.post('/characters/:id/places/share', requireAuth, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const sceneSetId = req.body?.scene_set_id;
+    if (!UUID_RE.test(String(sceneSetId || ''))) return res.status(400).json({ success: false, error: 'scene_set_id must be a scene set id (UUID)' });
+    const { sharePlace } = require('../services/characterPlaceShare');
+    const { post } = await sharePlace(getModels(), { characterId: req.params.id, sceneSetId, caption: req.body?.caption });
+    return res.status(201).json({ success: true, post });
+  } catch (err) {
+    return placeError(res, err, 'POST characters/:id/places/share');
   }
 });
 

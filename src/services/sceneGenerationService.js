@@ -34,7 +34,7 @@ const S3_BUCKET          = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_B
 const AWS_REGION         = process.env.AWS_REGION || 'us-east-1';
 
 const s3 = new S3Client({ region: AWS_REGION });
-const { buildSceneBrief, briefToPrompt, prepareSceneBrief, loadBriefLocation, shotKey } = require('./sceneBriefService');
+const { buildSceneBrief, briefToPrompt, prepareSceneBrief, loadBriefLocation, shotKey, GENERIC_SHOTS } = require('./sceneBriefService');
 const { noteBaseChanged, descriptionAfterAnalysis, writeReview } = require('./baseDescriptionService');
 const { ZONE_KINDS } = require('../constants/beatLocations');
 const { assertBaseReplaceable, baseReplaceRefusal, ApprovedBaseError } = require('./approvedBaseService');
@@ -81,7 +81,11 @@ const VIDEO_DURATION_MAP = {
 };
 
 // Require stronger base-image continuity for angle generations.
-const CONSISTENCY_MIN_SCORE = 85;
+// The score under which an angle is retried: the check's own pass mark
+// (checkAngleConsistency, 70). At 85 a real camera move (a close-up),
+// which reads as less "the identical room", paid for a retry told to keep
+// every object in place (audit, 2026-10-15).
+const CONSISTENCY_MIN_SCORE = 70;
 const CONSISTENCY_MAX_RETRIES = 1;
 
 // Video-specific movement descriptions for image_to_video (describe camera MOTION, not static composition)
@@ -541,9 +545,10 @@ function estimateAngleCost(sceneAngle, sceneSet) {
     const e = imageGen.estimateGenerationCost({ size: 'landscape' });
     return { usd: e.usd, priced: e.priced, model: e.model, base_model: 'flux-dev', method: 'text_to_image' };
   }
+  if (isInsideBaseShot(sceneAngle)) return { usd: 0, priced: true, model: 'base', base_model: 'base', method: 'base' };
   const onZone = String(sceneAngle?.angle_kind || '').toLowerCase() === 'extra' && sceneAngle.zone_angle_id;
   const frame = !onZone && specFitsBase(sceneSet.scene_spec, sceneSet.base_still_url)
-    ? sceneSpecService.contractFrame(sceneSet.scene_spec, sceneAngle?.angle_label || 'WIDE') : null;
+    ? cropFrame(sceneSet.scene_spec, sceneAngle?.angle_label || 'WIDE') : null;
   if (frame && frame.width >= MIN_PURE_CROP_FRACTION && frame.height >= MIN_PURE_CROP_FRACTION) {
     return { usd: 0, priced: true, model: 'crop', base_model: 'crop', method: 'crop' };
   }
@@ -830,6 +835,36 @@ async function storeBufferInS3(buffer, setId, angleId, assetType, contentType) {
  * Extracts the S3 key from the URL and issues a DeleteObjectCommand.
  * Silently ignores errors — cleanup is best-effort.
  */
+/**
+ * An old base image is deleted only when nothing else shows it: an Inside
+ * angle is the base picture itself (useBaseAsAngle), a promoted angle keeps
+ * the URL it gave the base, and an approved base is the location's
+ * everyday look. Deleting it left those pointing at a removed file (audit,
+ * 2026-10-15). A check that cannot run keeps the file.
+ */
+async function imageStillUsed(sequelize, url) {
+  if (!sequelize) return true;
+  try {
+    const [[row]] = await sequelize.query(
+      `SELECT (EXISTS (SELECT 1 FROM scene_angles WHERE still_image_url = :url AND deleted_at IS NULL)
+            OR EXISTS (SELECT 1 FROM world_locations WHERE approved_base_image_url = :url AND deleted_at IS NULL)) AS used`,
+      { replacements: { url } });
+    return Boolean(row?.used);
+  } catch (err) {
+    console.warn(`[SceneGen] could not check whether ${url} is still used; it is kept: ${err.message}`);
+    return true;
+  }
+}
+
+async function deleteOldBaseImage(url, sequelize) {
+  if (!url) return;
+  if (await imageStillUsed(sequelize, url)) {
+    console.log(`[SceneGen] Old base image kept: an angle or an approved base still shows it (${url})`);
+    return;
+  }
+  await deleteOldS3Asset(url);
+}
+
 async function deleteOldS3Asset(url) {
   if (!url || !S3_BUCKET) return;
   try {
@@ -922,9 +957,10 @@ async function generateBaseScene(sceneSet, models, options = {}) {
       throw new ApprovedBaseError({ ...lateRefusal, error: `${lateRefusal.error} It was approved while the new picture was being made, so the new picture was not kept.` });
     }
 
-    // Clean up old base still from S3 (best-effort)
+    // Clean up old base still from S3 (best-effort), unless something
+    // still shows it.
     if (sceneSet.base_still_url) {
-      await deleteOldS3Asset(sceneSet.base_still_url);
+      await deleteOldBaseImage(sceneSet.base_still_url, briefDb(models));
     }
 
     console.log(`[SceneGen] Still complete (${modelKey}); cost ${cost == null ? 'unpriced' : `$${cost}`}`);
@@ -1083,8 +1119,34 @@ async function mergeVisualLanguage(SceneSetModel, setId, patch) {
     { replacements: { id: setId, patch: JSON.stringify(patch) } });
 }
 
+// The analyses running now, by set and picture: a new base starts one
+// without waiting, and a cascade or Generate All started meanwhile ran a
+// second paid one with a copy of the set that predates it (audit,
+// 2026-10-15).
+const analysesInFlight = new Map();
+
 async function analyzeBaseImage(sceneSet, SceneSetModel) {
   if (!process.env.ANTHROPIC_API_KEY || !sceneSet.base_still_url) return null;
+  const key = `${sceneSet.id}|${sceneSet.base_still_url}`;
+  const running = analysesInFlight.get(key);
+  if (running) {
+    console.log(`[SceneGen] Waiting for the analysis already running for ${sceneSet.name}`);
+    const analysis = await running;
+    if (analysis) {
+      sceneSet.visual_language = { ...(sceneSet.visual_language || {}), image_analysis: analysis, ...(analysis.anchor_objects ? { anchor_objects: analysis.anchor_objects } : {}) };
+    }
+    return analysis;
+  }
+  const run = analyzeBaseImageOnce(sceneSet, SceneSetModel);
+  analysesInFlight.set(key, run);
+  try {
+    return await run;
+  } finally {
+    analysesInFlight.delete(key);
+  }
+}
+
+async function analyzeBaseImageOnce(sceneSet, SceneSetModel) {
 
   const IMAGE_ANALYSIS_VERSION = 7; // bump to invalidate cache when schema changes
   // Check cache — skip if already analyzed for this base image with current version
@@ -1829,15 +1891,83 @@ const WIDE_SHOTS = Object.freeze(['WIDE', 'ESTABLISHING', 'OVERHEAD']);
 // base picture it failed for.
 const specBuildFailed = new WeakMap();
 
+// A frame this close to the whole picture is the base again, not a view of
+// part of it: kept as a crop only for WIDE and ESTABLISHING, which are the
+// whole room (audit, 2026-10-15: the spec prompt's own example frame is 0,0,1,1).
+const MAX_PARTIAL_FRAME = 0.85;
+
+/** The part of the base an angle is cropped from, or null when it is generated. */
+function cropFrame(spec, angleLabel) {
+  const frame = sceneSpecService.contractFrame(spec, angleLabel);
+  if (!frame) return null;
+  const nearlyWhole = frame.width > MAX_PARTIAL_FRAME && frame.height > MAX_PARTIAL_FRAME;
+  return nearlyWhole && !['WIDE', 'ESTABLISHING'].includes(shotKey(angleLabel)) ? null : frame;
+}
+
 /** True when a SceneSpec was built from this base picture (its _meta.base_still_url). */
 function specFitsBase(spec, baseUrl) {
   return Boolean(spec && baseUrl && spec._meta?.base_still_url === baseUrl);
 }
 
-/** L14 (b): { kind, name } for an angle that is a zone of its set; null otherwise. */
+/**
+ * L14 (b): { kind, name } for an angle that is a zone of its set (another
+ * part of the place); null otherwise. Inside is not one: L14 answer 1,
+ * "Inside is the set's base image" (BASE_KINDS). An Inside angle was made
+ * as "a different part of the place, not the same view" of its own base
+ * (audit, 2026-10-15), so every WIDE angle was told not to match the room.
+ */
 function zoneOf(sceneAngle) {
   const kind = String(sceneAngle?.angle_kind || '').toLowerCase();
-  return ZONE_KINDS.includes(kind) ? { kind, name: sceneAngle.angle_name || null } : null;
+  return ZONE_KINDS.includes(kind) && kind !== 'inside' ? { kind, name: sceneAngle.angle_name || null } : null;
+}
+
+// A new still's checks belong to it alone: the previous image's quality
+// score, flags, consistency and spec results were kept, so a refine worked
+// on the old picture's problems (audit, 2026-10-15).
+const FRESH_QUALITY = Object.freeze({ quality_score: null, artifact_flags: [] });
+function freshQualityReview(sceneAngle) {
+  const review = { ...(sceneAngle.quality_review || {}) };
+  for (const k of ['base_consistency', 'spec_validation', 'from_base', 'zone_reference']) delete review[k];
+  return review;
+}
+
+/** An Inside angle: a view of the set's base room. */
+function isInside(sceneAngle) {
+  return String(sceneAngle?.angle_kind || '').toLowerCase() === 'inside';
+}
+
+/** An Inside angle whose label names no framing of its own (WIDE): the base picture itself. */
+function isInsideBaseShot(sceneAngle) {
+  return isInside(sceneAngle) && GENERIC_SHOTS.includes(shotKey(sceneAngle?.angle_label || 'WIDE'));
+}
+
+/** An angle made from the set's base (or approved base): a zone, or Inside. Without one it is refused (NO_BASE). */
+function needsBase(sceneAngle) {
+  return Boolean(zoneOf(sceneAngle)) || isInside(sceneAngle);
+}
+
+/**
+ * An Inside angle with a generic label is the set's base picture (the
+ * approved base when this set is the approved one): stored as the angle's
+ * still with no image call. Returns generateAngle's result shape.
+ */
+async function useBaseAsAngle(sceneAngle, sceneSet, models, reference) {
+  const { SceneAngle } = models;
+  const qualityReview = freshQualityReview(sceneAngle);
+  qualityReview.from_base = { url: reference.url, source: reference.source };
+  await SceneAngle.update({
+    still_image_url: reference.url,
+    video_clip_url: null,
+    runway_seed: null,
+    runway_prompt: null,
+    generation_status: 'complete',
+    generation_cost: 0,
+    generation_attempt: (sceneAngle.generation_attempt || 0) + 1,
+    quality_review: qualityReview,
+    ...FRESH_QUALITY,
+  }, { where: { id: sceneAngle.id } });
+  console.log(`[SceneGen] Inside angle ${sceneAngle.angle_name || sceneAngle.id} is the base picture (${reference.source})`);
+  return { success: true, stillUrl: reference.url, seed: null, specValidation: null, fromBase: true };
 }
 
 /**
@@ -1912,7 +2042,7 @@ async function generateZone(sceneAngle, sceneSet, models, options = {}) {
     const result = await generateImageFromImage(reference.url, prompt, { size: 'landscape', onLogged: costs.onLogged });
     const stillUrl = await downloadAndStoreStill(result.url, sceneSet.id, sceneAngle.id);
     const totalCost = costs.value();
-    const qualityReview = { ...(sceneAngle.quality_review || {}) };
+    const qualityReview = freshQualityReview(sceneAngle);
     qualityReview.zone_reference = { url: reference.url, source: reference.source, model: SCENE_DRESSING_MODEL.key };
     await SceneAngle.update({
       still_image_url: stillUrl,
@@ -1922,6 +2052,7 @@ async function generateZone(sceneAngle, sceneSet, models, options = {}) {
       generation_cost: totalCost,
       generation_attempt: (sceneAngle.generation_attempt || 0) + 1,
       quality_review: qualityReview,
+      ...FRESH_QUALITY,
     }, { where: { id: sceneAngle.id } });
     if (typeof totalCost === 'number' && totalCost > 0) {
       await SceneSet.increment('generation_cost', { by: totalCost, where: { id: sceneSet.id } });
@@ -1936,6 +2067,14 @@ async function generateZone(sceneAngle, sceneSet, models, options = {}) {
 async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
   const { SceneAngle, SceneSet } = models;
   if (zoneOf(sceneAngle)) return generateZone(sceneAngle, sceneSet, models, options);
+  // Inside is the base room: with no base it is refused, as a zone is
+  // (L14 b, NO_BASE); with no framing of its own it is the base picture. A
+  // refine asks for a new picture, so it is generated.
+  if (isInside(sceneAngle)) {
+    const reference = await zoneReferenceImage(sceneSet, briefDb(models));
+    if (!reference) throw noBaseError();
+    if (isInsideBaseShot(sceneAngle) && !options.refine) return useBaseAsAngle(sceneAngle, sceneSet, models, reference);
+  }
 
   const angleLabel = sceneAngle.angle_label || 'WIDE';
   const zoneAngle = await extraZoneAngle(sceneAngle, SceneAngle);
@@ -2011,7 +2150,7 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
     // without one the angle is generated.
     // A refine asks for a new picture without the flagged problems, and a
     // framing on a zone is made from the zone's picture: neither is a crop.
-    const frame = (options.refine || zoneAngle) ? null : sceneSpecService.contractFrame(sceneSet.scene_spec, angleLabel);
+    const frame = (options.refine || zoneAngle) ? null : cropFrame(sceneSet.scene_spec, angleLabel);
     if (referenceImageForEdit && frame) {
       stillUrl = await cropAndOutpaint(
         referenceImageForEdit, angleLabel, sceneSet.id, sceneAngle.id, prompt,
@@ -2067,8 +2206,10 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
       const styleReference = (sceneAngle.style_reference_url || sceneSet.style_reference_url)
         ? { uri: sceneAngle.style_reference_url || sceneSet.style_reference_url, weight: 0.7 }
         : undefined;
-      const referenceImages = sourceImage
-        ? [{ uri: sourceImage, weight: 0.8 }]
+      // A mood board or collage base is not edited (referenceImageForEdit
+      // null): the angle is drawn from the prompt.
+      const referenceImages = referenceImageForEdit
+        ? [{ uri: referenceImageForEdit, weight: 0.8 }]
         : undefined;
 
       const { imageUrl } = await startTextToImage(prompt, {
@@ -2100,8 +2241,16 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
           onLogged: angleCosts.onLogged,
         });
 
-        stillUrl = await downloadAndStoreStill(retryImageUrl, sceneSet.id, sceneAngle.id);
-        consistencyCheck = await checkAngleConsistency(referenceImageForEdit, stillUrl, sceneAngle.angle_name);
+        const retryUrl = await downloadAndStoreStill(retryImageUrl, sceneSet.id, sceneAngle.id);
+        const retryCheck = await checkAngleConsistency(referenceImageForEdit, retryUrl, sceneAngle.angle_name);
+        // The better of the two is kept: a retry that scored worse replaced
+        // the first image (audit, 2026-10-15).
+        if (!retryCheck?.checked || retryCheck.score >= consistencyCheck.score) {
+          stillUrl = retryUrl;
+          consistencyCheck = retryCheck;
+        } else {
+          console.warn(`[SceneGen] Retry for ${angleLabel} scored ${retryCheck.score}, below the first image's ${consistencyCheck.score}; the first is kept`);
+        }
       }
     }
 
@@ -2121,7 +2270,7 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
       }
     }
 
-    const qualityReview = sceneAngle.quality_review || {};
+    const qualityReview = freshQualityReview(sceneAngle);
     if (consistencyCheck) {
       qualityReview.base_consistency = {
         checked: Boolean(consistencyCheck.checked),
@@ -2159,6 +2308,7 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
       generation_cost: totalCost,
       generation_attempt: (sceneAngle.generation_attempt || 0) + 1,
       quality_review: qualityReview,
+      ...FRESH_QUALITY,
     }, { where: { id: sceneAngle.id } });
 
     if (typeof totalCost === 'number' && totalCost > 0) {
@@ -2255,6 +2405,13 @@ async function regenerateAngleRefined(sceneAngle, sceneSet, artifactCategories, 
     throw new Error('base_still_url not set on parent scene set. Run generateBaseScene first.');
   }
   const categories = (artifactCategories || []).map(c => (c && typeof c === 'object' ? c.category : c)).filter(Boolean);
+  // A refine with nothing to fix would pay for the same prompt again.
+  if (artifactDetection.refineFixes(categories).length === 0) {
+    const err = new Error(`Nothing to fix: ${categories.length ? `no fix is known for ${categories.join(', ')}` : 'no problems were named'}. Generate the angle again instead.`);
+    err.status = 400;
+    err.code = 'NO_FIXES';
+    throw err;
+  }
   console.log(`[SceneGen] Regenerating angle with refined prompt: ${sceneAngle.angle_name}; addressing ${categories.join(', ')}`);
   const result = await generateAngle(sceneAngle, sceneSet, models, { ...options, refine: categories });
 
@@ -2304,6 +2461,9 @@ module.exports = {
   angleBriefOptions,
   specFitsBase,
   zoneOf,
+  deleteOldBaseImage,
+  isInsideBaseShot,
+  needsBase,
   zoneReferenceImage,
   extraZoneAngle,
   refinedBriefOptions,
