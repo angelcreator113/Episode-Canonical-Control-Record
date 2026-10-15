@@ -1451,7 +1451,7 @@ router.post('/:id/angles/:angleId/generate', validateUUIDParam('id'), requireAut
 
     // L14 (b): a zone is made from the set's approved base or its base;
     // without either, say so before anything is started.
-    if (sceneGenService.zoneOf(angle) && !(await sceneGenService.zoneReferenceImage(set, SceneSet.sequelize))) {
+    if (sceneGenService.needsBase(angle) && !(await sceneGenService.zoneReferenceImage(set, SceneSet.sequelize))) {
       return res.status(409).json({ success: false, code: 'NO_BASE', error: 'Generate or upload this set\'s base first: each zone is made from it, so the zones read as one place.' });
     }
 

@@ -1886,10 +1886,19 @@ function freshQualityReview(sceneAngle) {
   return review;
 }
 
+/** An Inside angle: a view of the set's base room. */
+function isInside(sceneAngle) {
+  return String(sceneAngle?.angle_kind || '').toLowerCase() === 'inside';
+}
+
 /** An Inside angle whose label names no framing of its own (WIDE): the base picture itself. */
 function isInsideBaseShot(sceneAngle) {
-  return String(sceneAngle?.angle_kind || '').toLowerCase() === 'inside'
-    && GENERIC_SHOTS.includes(shotKey(sceneAngle?.angle_label || 'WIDE'));
+  return isInside(sceneAngle) && GENERIC_SHOTS.includes(shotKey(sceneAngle?.angle_label || 'WIDE'));
+}
+
+/** An angle made from the set's base (or approved base): a zone, or Inside. Without one it is refused (NO_BASE). */
+function needsBase(sceneAngle) {
+  return Boolean(zoneOf(sceneAngle)) || isInside(sceneAngle);
 }
 
 /**
@@ -2013,11 +2022,13 @@ async function generateZone(sceneAngle, sceneSet, models, options = {}) {
 async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
   const { SceneAngle, SceneSet } = models;
   if (zoneOf(sceneAngle)) return generateZone(sceneAngle, sceneSet, models, options);
-  // Inside, with no framing of its own: the base picture. A refine asks for
-  // a new picture, so it is generated.
-  if (isInsideBaseShot(sceneAngle) && !options.refine) {
+  // Inside is the base room: with no base it is refused, as a zone is
+  // (L14 b, NO_BASE); with no framing of its own it is the base picture. A
+  // refine asks for a new picture, so it is generated.
+  if (isInside(sceneAngle)) {
     const reference = await zoneReferenceImage(sceneSet, briefDb(models));
-    if (reference) return useBaseAsAngle(sceneAngle, sceneSet, models, reference);
+    if (!reference) throw noBaseError();
+    if (isInsideBaseShot(sceneAngle) && !options.refine) return useBaseAsAngle(sceneAngle, sceneSet, models, reference);
   }
 
   const angleLabel = sceneAngle.angle_label || 'WIDE';
@@ -2406,6 +2417,7 @@ module.exports = {
   specFitsBase,
   zoneOf,
   isInsideBaseShot,
+  needsBase,
   zoneReferenceImage,
   extraZoneAngle,
   refinedBriefOptions,

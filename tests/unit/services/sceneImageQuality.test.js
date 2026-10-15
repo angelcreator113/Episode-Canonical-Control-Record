@@ -64,6 +64,17 @@ describe('Inside is the base room', () => {
     expect(sceneGen.estimateAngleCost(angle, { base_still_url: base })).toMatchObject({ usd: 0, method: 'base' });
   });
 
+  test('Inside with no base is refused (NO_BASE), as a zone is, before any call', async () => {
+    for (const label of ['WIDE', 'BED']) {
+      await expect(sceneGen.generateAngle({ id: 'a0', angle_kind: 'inside', angle_label: label }, { id: 's0', base_still_url: null }, { SceneAngle, SceneSet }))
+        .rejects.toMatchObject({ status: 409, code: 'NO_BASE' });
+    }
+    expect(imageGen.generateImageFromImage).not.toHaveBeenCalled();
+    expect(imageGen.generateImageUrl).not.toHaveBeenCalled();
+    expect(sceneGen.needsBase({ angle_kind: 'inside' })).toBe(true);
+    expect(sceneGen.needsBase({ angle_kind: 'extra' })).toBe(false);
+  });
+
   test('Inside is never a zone: a BED on it is a framing of the base, with continuity', () => {
     const bed = { angle_kind: 'inside', angle_label: 'BED', angle_name: 'Bed' };
     expect(sceneGen.zoneOf(bed)).toBeNull();
