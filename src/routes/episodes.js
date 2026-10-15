@@ -1771,7 +1771,7 @@ router.post(
     try {
       const anthropic = new Anthropic();
       const PRIMARY_MODEL = 'claude-sonnet-4-6';
-      const FALLBACK_MODEL = 'claude-sonnet-4-20250514';
+      const FALLBACK_MODEL = 'claude-sonnet-4-6';
       const callClaude = async (model) => anthropic.messages.create({
         model,
         max_tokens: 4000,

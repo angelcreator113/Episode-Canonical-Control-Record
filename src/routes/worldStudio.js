@@ -58,7 +58,7 @@ async function claude(system, user, maxTokens = 4000) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const msg = await client.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: maxTokens,
         system,
         messages: [{ role: 'user', content: user }],
@@ -3720,7 +3720,8 @@ router.post('/world/create-story-task', requireAuth, async (req, res) => {
       title: `${char.display_name} — ${char.arc_role || char.character_type || 'Character'} Arc`,
       description: [char.origin_story, char.how_they_meet, char.dynamic].filter(Boolean).join(' ').slice(0, 500),
       story_type: char.character_type === 'protagonist' ? 'character_arc' : 'character_development',
-      world: char.world_tag || 'book-1',
+      // World Studio's characters default to the LalaVerse (WORLD_CONFIGS fallback).
+      world: char.world_tag || 'lalaverse',
       characters: [char.character_key || char.display_name?.toLowerCase().replace(/\s+/g, '')],
       surface_want: char.surface_want || '',
       real_want: char.real_want || '',
