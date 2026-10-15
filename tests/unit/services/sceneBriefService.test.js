@@ -221,8 +221,17 @@ describe('the camera follows the angle\'s label', () => {
     expect(camera({ angleLabel: 'WIDE', zone: { kind: 'inside' } })).toMatch(/^Establishing view of the main room/);
   });
 
-  test('a camera direction outranks the zone and the label', () => {
-    expect(camera({ angleLabel: 'OTHER', cameraDirection: 'Low angle across the bar top', zone: { kind: 'area', name: 'Bar' } })).toBe('Low angle across the bar top.');
+  // Evoni, 2026-10-15: a zone always uses its establishing view; its camera
+  // direction does not change that; a label naming a shot of its own does.
+  test('a zone is its establishing view whatever its camera direction', () => {
+    expect(camera({ angleLabel: 'OTHER', cameraDirection: 'Low angle across the bar top', zone: { kind: 'area', name: 'Bar' } }))
+      .toBe('Establishing view of the Bar area of The Glasshouse.');
+    expect(camera({ angleLabel: 'ESTABLISHING', cameraDirection: 'From the room edge', zone: { kind: 'front' } }))
+      .toMatch(/^Establishing view of the front of The Glasshouse/);
+    expect(camera({ angleLabel: 'DOORWAY', cameraDirection: 'From the street', zone: { kind: 'front' } })).toBe(SHOT_CAMERAS.DOORWAY);
+  });
+
+  test('outside a zone, a camera direction outranks the label', () => {
     expect(camera({ angleLabel: 'VANITY', cameraDirection: 'Over the shoulder into the mirror' })).toBe('Over the shoulder into the mirror.');
   });
 

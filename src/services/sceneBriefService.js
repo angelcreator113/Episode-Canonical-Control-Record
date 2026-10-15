@@ -317,16 +317,21 @@ function buildSceneBrief({
   }
 
   // ── The shot ──
-  // The angle's own framing (its camera direction, else the shot its label
-  // names) wins, so the image is what the card's label says: a DOORWAY on
-  // the Front zone is the doorway looking in, not the exterior. A zone's
-  // establishing view stands in only for a label that names no framing.
+  // The image is what the card's label says. An angle's camera direction,
+  // else the shot its label names, sets the camera. A zone (L14 b; Evoni,
+  // 2026-10-15) is its establishing view whatever its camera direction;
+  // only a label naming a shot of its own still wins there, so a DOORWAY on
+  // the Front zone is the doorway looking in, not the exterior.
   const key = shotKey(angle);
   const labelShot = SHOT_CAMERAS[key] || labelCamera(key);
-  const zoneShot = zone && !cameraDirection && GENERIC_SHOTS.includes(key)
+  const namedShot = !GENERIC_SHOTS.includes(key) && SHOT_CAMERAS[key] ? SHOT_CAMERAS[key] : null;
+  const zoneShot = zone && !namedShot
     ? zoneCamera(zone, clean(set.name || location?.name || 'the place'))
     : null;
-  add('shot', 'camera', 'Camera', sentence(cameraDirection || zoneShot || labelShot), 'venue', true);
+  const camera = zone
+    ? (namedShot || zoneShot || cameraDirection || labelShot)
+    : (cameraDirection || labelShot);
+  add('shot', 'camera', 'Camera', sentence(camera), 'venue', true);
   if (requiredFeatures) add('shot', 'required_features', 'Must be visible', sentence(requiredFeatures), 'venue');
   if (zone && ZONE_CAMERAS[String(zone.kind || '').toLowerCase()]) add('shot', 'continuity', 'Continuity', ZONE_CONTINUITY, 'venue');
   else if (continuity) add('shot', 'continuity', 'Continuity', 'The same room as the reference image: same walls, furniture and decor; only the camera moved.', 'venue');
