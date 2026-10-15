@@ -253,13 +253,29 @@ function createManualReview(categories, notes = null) {
  * Build a refined prompt that incorporates artifact feedback.
  * Used when regenerating an angle after quality review.
  */
-function buildRefinedPrompt(originalPrompt, artifactFlags) {
-  const fixes = artifactFlags
+// The fixes for the problems analyzeImageQuality flags by itself. They had
+// none, so a refine for them sent the same prompt again and paid for the
+// same picture (audit, 2026-10-15).
+const QUALITY_FLAG_FIXES = Object.freeze({
+  LOW_RESOLUTION: 'high resolution with crisp fine detail',
+  SOFT_FOCUS: 'sharp focus throughout with crisp edges',
+  FLAT_IMAGE: 'rich contrast and depth, with defined light and shadow',
+  HIGH_CONTRAST_ARTIFACT: 'balanced exposure with no blown highlights or crushed shadows',
+  COLOR_CAST: 'neutral, natural white balance with true colours',
+});
+
+/** The prompt fixes for the flagged problems ({ category } or a category name); unknown ones have none. */
+function refineFixes(artifactFlags) {
+  return [...new Set((artifactFlags || [])
     .map(f => {
-      const cat = ARTIFACT_CATEGORIES[f.category || f];
-      return cat?.promptFix;
+      const key = (f && typeof f === 'object') ? f.category : f;
+      return ARTIFACT_CATEGORIES[key]?.promptFix || QUALITY_FLAG_FIXES[key];
     })
-    .filter(Boolean);
+    .filter(Boolean))];
+}
+
+function buildRefinedPrompt(originalPrompt, artifactFlags) {
+  const fixes = refineFixes(artifactFlags);
 
   if (fixes.length === 0) return originalPrompt;
 
@@ -284,4 +300,6 @@ module.exports = {
   analyzeImageQuality,
   createManualReview,
   buildRefinedPrompt,
+  refineFixes,
+  QUALITY_FLAG_FIXES,
 };
