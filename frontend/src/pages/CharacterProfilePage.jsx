@@ -16,6 +16,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { Sparkles, ArrowRight } from 'lucide-react';
 import { API_URL } from '../config/api';
 import CharacterDepthPanel from '../components/CharacterDepthPanel';
+import { platformLabel } from './feed/feedConstants';
 import apiClient from '../services/api';
 import { ROLE_LABELS } from '../constants/characterConstants';
 import { findLala } from '../lib/theCast';
@@ -713,7 +714,7 @@ function TabOnline({ character, feedProfile, appearances }) {
                 <div className="cp-feed-identity">
                   <span className="cp-feed-handle">@{feedProfile.handle}</span>
                   <span className="cp-feed-display">{feedProfile.display_name}</span>
-                  <span className="cp-feed-platform">{feedProfile.platform}</span>
+                  <span className="cp-feed-platform">{platformLabel(feedProfile.platform)}</span>
                   {feedProfile.registry_character_id && (
                     <span className="cp-registry-badge" title="Linked to registry character" style={{fontSize:10,fontWeight:700,padding:'1px 6px',borderRadius:8,background:'#eef0fb',color:'#6366f1',marginLeft:4}}>Registry</span>
                   )}

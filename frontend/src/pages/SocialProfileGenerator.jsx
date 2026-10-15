@@ -27,7 +27,7 @@ function Spinner() {
 import {
   API, SCHED_API, C, PLATFORMS, ARCHETYPE_LABELS, STATUS_LABELS, STATUS_COLORS,
   FEED_STATE_CONFIG, LALAVERSE_CITIES, LALA_RELATIONSHIPS, CAREER_PRESSURES,
-  PROTAGONISTS, lalaClass, fp,
+  PROTAGONISTS, lalaClass, fp, PULSE_PLATFORM, platformLabel,
 } from './feed/feedConstants';
 
 // ── Track 3 module-scope helpers (Pattern D) — user-facing operations ──
@@ -403,7 +403,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
     try{
       const hasAdv=Object.values(advFields).some(v=>v);
       const lvFields=feedLayer==='lalaverse'?{feed_layer:'lalaverse',city:lvCity,lala_relationship:lvRelationship,career_pressure:lvPressure}:{feed_layer:'real_world'};
-      const res=await generateProfileApi({handle:handle.trim(),platform,vibe_sentence:vibe.trim(),character_context:protagonist.context,character_key:protagonist.key,...lvFields,...(hasAdv?{advanced_context:advFields}:{})});
+      const res=await generateProfileApi({handle:handle.trim(),platform:feedLayer==='lalaverse'?PULSE_PLATFORM:platform,vibe_sentence:vibe.trim(),character_context:protagonist.context,character_key:protagonist.key,...lvFields,...(hasAdv?{advanced_context:advFields}:{})});
       const data=res.data;
       setSelected(data.profile);setHandle('');setVibe('');setAdvFields({location_hint:'',follower_hint:'',relationship_hint:'',drama_hint:'',aesthetic_hint:'',revenue_hint:''});setShowAdvanced(false);setPage(1);
       // New Episode choose-host mode (Task #1628): a newly created creator
@@ -438,9 +438,9 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
     try{
       const res=await autofillDraftApi({
         layer:lv?'lalaverse':'real_world',
-        ...(replaceAll?{}:{platform}),
+        ...(replaceAll||lv?{}:{platform}),
         allowed:{
-          platforms:PLATFORMS.map(p=>p.value),
+          platforms:lv?[PULSE_PLATFORM]:PLATFORMS.map(p=>p.value),
           cities:LALAVERSE_CITIES.map(c=>c.value),
           relationships:LALA_RELATIONSHIPS.map(r=>r.value),
           careerPressures:CAREER_PRESSURES.map(p=>p.value),
@@ -454,7 +454,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
         setHandle(d.handle);
         setHandleTaken(d.handleTaken?`${d.handle} is already taken — change the handle before creating.`:null);
       }
-      apply(replaceAll?'':platform,d.platform,setPlatform);
+      if(!lv)apply(replaceAll?'':platform,d.platform,setPlatform);
       apply(vibe.trim(),d.vibe,setVibe);
       if(lv){
         apply(lvCity,d.city,setLvCity);
@@ -915,9 +915,14 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
                   </div>
                   <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:140}}>
                     <label style={{fontSize:11,fontWeight:600,color:C.inkLight}}>Platform</label>
+                    {/* A LalaVerse creator's social is The Pulse (Evoni, 2026-10-15). */}
+                    {feedLayer==='lalaverse'?(
+                      <span data-testid="pulse-platform" style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:13,color:C.lavender,background:C.lavLight,fontFamily:C.font,fontWeight:600}}>The Pulse</span>
+                    ):(
                     <select value={platform} onChange={e=>setPlatform(e.target.value)} disabled={generating} style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font}}>
                       {PLATFORMS.map(p=><option key={p.value} value={p.value}>{p.label}</option>)}
                     </select>
+                    )}
                   </div>
                   <div style={{display:'flex',flexDirection:'column',gap:4,flex:1,minWidth:200}}>
                     <label style={{fontSize:11,fontWeight:600,color:C.inkLight}}>Vibe</label>
@@ -1020,7 +1025,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
                     <div style={{minWidth:0,flex:1}}>
                       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
                         <span style={{fontSize:13,fontWeight:700,color:C.ink}}>{spark.handle}</span>
-                        <span style={{fontSize:10,padding:'1px 6px',borderRadius:4,background:C.blueLight,color:C.blue,fontWeight:600}}>{spark.platform}</span>
+                        <span style={{fontSize:10,padding:'1px 6px',borderRadius:4,background:C.blueLight,color:C.blue,fontWeight:600}}>{platformLabel(spark.platform)}</span>
                         <span style={{fontSize:10,padding:'1px 6px',borderRadius:4,background:C.lavLight,color:C.lavender,fontWeight:600}}>{spark.archetype?.replace(/_/g,' ')}</span>
                         <span style={{fontSize:10,padding:'1px 6px',borderRadius:4,background:C.pinkLight,color:C.pink,fontWeight:600}}>{spark.follower_tier}</span>
                       </div>
@@ -1061,9 +1066,14 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
                 </div>
                 <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:140}}>
                   <label style={{fontSize:11,fontWeight:600,color:C.inkLight}}>Platform</label>
+                  {/* A LalaVerse creator's social is The Pulse (Evoni, 2026-10-15). */}
+                  {feedLayer==='lalaverse'?(
+                    <span data-testid="pulse-platform" style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:13,color:C.lavender,background:C.lavLight,fontFamily:C.font,fontWeight:600}}>The Pulse</span>
+                  ):(
                   <select value={platform} onChange={e=>setPlatform(e.target.value)} disabled={generating} style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font}}>
                     {PLATFORMS.map(p=><option key={p.value} value={p.value}>{p.label}</option>)}
                   </select>
+                  )}
                 </div>
                 <div style={{display:'flex',flexDirection:'column',gap:4,flex:1,minWidth:200}}>
                   <label style={{fontSize:11,fontWeight:600,color:C.inkLight}}>Vibe</label>

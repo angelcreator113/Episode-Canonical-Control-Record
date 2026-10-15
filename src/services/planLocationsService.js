@@ -148,8 +148,10 @@ async function loadPlanSets(sequelize, setIds) {
   const ids = [...new Set((setIds || []).filter(Boolean))];
   if (!ids.length) return new Map();
   const [rows] = await sequelize.query(
-    `SELECT id, name, scene_type, script_context, base_still_url, generation_status, deleted_at
-       FROM scene_sets WHERE id IN (:ids)`,
+    `SELECT s.id, s.name, s.scene_type, s.script_context, s.base_still_url, s.generation_status, s.deleted_at,
+            EXISTS (SELECT 1 FROM world_locations l
+                     WHERE l.approved_base_scene_set_id = s.id AND l.deleted_at IS NULL) AS everyday
+       FROM scene_sets s WHERE s.id IN (:ids)`,
     { replacements: { ids } });
   return new Map(rows.map((s) => [s.id, s]));
 }
@@ -193,11 +195,21 @@ async function planWithAngles(sequelize, rows) {
   const setsById = await loadPlanSets(sequelize, rows.map((r) => r.scene_set_id));
   const episodeId = rows.find((r) => r.episode_id)?.episode_id || null;
   const dressing = episodeId ? await loadDressing(sequelize, episodeId) : null;
+  // Step 4 (docs/VENUE_EVERYDAY_AND_EVENT_LOOKS_PLAN.md): the everyday
+  // look at the beat's time of day, the Front view in the event's season.
+  const picking = require('./lookVariantPicking');
+  const moment = episodeId ? await picking.episodeMoment(sequelize, episodeId) : null;
+  const variantsBySet = moment ? await picking.variantsForSets(sequelize, rows.map((r) => r.scene_set_id)) : new Map();
   return rows.map((r) => {
     const set = r.scene_set_id ? setsById.get(r.scene_set_id) || null : null;
     const location = rowAngleStatus(r, anglesBySet, dressing);
     location.generating = Boolean(location.generating) || set?.generation_status === 'generating';
-    location.image = beatPicture(location, set);
+    const picture = beatPicture(location, set);
+    const variant = picking.variantFor({
+      picture, angleKind: location.angle?.kind || null, angleId: location.angle?.id || null, everyday: Boolean(set?.everyday && !set.deleted_at),
+      variants: set ? variantsBySet.get(set.id) : null, beatNumber: r.beat_number, moment,
+    });
+    location.image = picking.applyVariant(picture, variant, set?.name);
     const sceneSet = set ? {
       ...(r.sceneSet || {}),
       id: set.id, name: set.name, scene_type: set.scene_type, script_context: set.script_context,

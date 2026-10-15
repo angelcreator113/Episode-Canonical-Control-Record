@@ -11,6 +11,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
+import { platformLabel } from './feed/feedConstants';
 
 const STATE_COLORS = {
   rising:        { bg: '#f0faf4', text: '#2d7a4f', border: '#b8e8cc' },
@@ -618,7 +619,7 @@ function UndergroundPanel() {
             </div>
             <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>
               {p.display_name || p.handle}
-              {p.platform && ` · ${p.platform}`}
+              {p.platform && ` · ${platformLabel(p.platform)}`}
               {p.current_state && ` · ${p.current_state.replace(/_/g, ' ')}`}
             </div>
             {p.content_category && (

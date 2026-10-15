@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import {
-  C, ARCHETYPE_LABELS, FEED_STATE_CONFIG, PROTAGONISTS, fp, lalaClass,
+  C, ARCHETYPE_LABELS, FEED_STATE_CONFIG, PROTAGONISTS, fp, lalaClass, platformLabel,
 } from './feedConstants';
 
 function Spinner() {
@@ -42,7 +42,7 @@ export default function FeedViewContent({
                             <span style={{fontSize:14,fontWeight:700,color:C.ink,cursor:'pointer'}} onClick={()=>selectProfile(p)}>{p.creator_name||d.creator_name||p.display_name||d.display_name||p.handle}</span>
                             {sc&&<span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:8,background:sc.bg,color:sc.color}}>{sc.label}</span>}
                           </div>
-                          <div style={{fontSize:12,color:C.inkLight}}>{p.handle} · {p.platform}{(p.creator_name||d.creator_name)&&(p.display_name||d.display_name)&&(p.creator_name||d.creator_name)!==(p.display_name||d.display_name)?` · ${p.display_name||d.display_name}`:''} · {p.follower_count_approx||d.follower_count_approx}{feedLayer==='lalaverse'&&p.feed_layer==='real_world'&&<span style={{marginLeft:6,fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:C.blueLight,color:C.blue}}>◈ Following</span>}</div>
+                          <div style={{fontSize:12,color:C.inkLight}}>{p.handle} · {platformLabel(p.platform)}{(p.creator_name||d.creator_name)&&(p.display_name||d.display_name)&&(p.creator_name||d.creator_name)!==(p.display_name||d.display_name)?` · ${p.display_name||d.display_name}`:''} · {p.follower_count_approx||d.follower_count_approx}{feedLayer==='lalaverse'&&p.feed_layer==='real_world'&&<span style={{marginLeft:6,fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:C.blueLight,color:C.blue}}>◈ Following</span>}</div>
                         </div>
                         <span style={{fontSize:10,fontWeight:700,color:score>=7?C.lavender:score>=4?C.blue:C.inkLight}}>✦{score}</span>
                       </div>
@@ -286,7 +286,7 @@ export default function FeedViewContent({
                                 <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:8,background:`${tc}15`,color:tc,textTransform:'uppercase'}}>{m.moment_type}</span>
                                 {m.platform_format&&<span style={{fontSize:10,color:C.inkLight}}>{m.platform_format}</span>}
                                 <span style={{marginLeft:'auto',fontSize:11,fontWeight:700,color:C.ink,cursor:'pointer'}} onClick={()=>{const pr=profiles.find(p=>p.id===m.profile_id);if(pr)setSelected(pr);}}>{m.handle}</span>
-                                <span style={{fontSize:10,color:C.inkLight}}>{m.platform}</span>
+                                <span style={{fontSize:10,color:C.inkLight}}>{platformLabel(m.platform)}</span>
                                 {m.lala_seed&&<span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:6,background:C.lavLight,color:C.lavender}}>Lala Seed</span>}
                               </div>
                               <div style={{fontSize:13,color:C.ink,lineHeight:1.6,marginBottom:6}}>{m.description}</div>
@@ -350,7 +350,7 @@ export default function FeedViewContent({
                         <div style={{fontSize:14,fontWeight:700,color:C.ink,marginBottom:12}}>Platforms</div>
                         {Object.entries(diversityData.platforms||{}).sort((a,b)=>b[1]-a[1]).map(([plat,count])=>(
                           <div key={plat} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0',borderBottom:`1px solid ${C.border}`}}>
-                            <span style={{fontSize:12,fontWeight:600,color:C.ink,textTransform:'capitalize'}}>{plat}</span>
+                            <span style={{fontSize:12,fontWeight:600,color:C.ink,textTransform:'capitalize'}}>{platformLabel(plat)}</span>
                             <span style={{fontSize:12,fontWeight:700,color:C.blue}}>{count}</span>
                           </div>
                         ))}
@@ -504,7 +504,7 @@ export default function FeedViewContent({
                         </div>
                         {t.description&&<div style={{fontSize:12,color:C.inkMid,marginBottom:6}}>{t.description}</div>}
                         <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                          {t.template_data?.platform&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.blueLight,color:C.blue}}>{t.template_data.platform}</span>}
+                          {t.template_data?.platform&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.blueLight,color:C.blue}}>{platformLabel(t.template_data.platform)}</span>}
                           {t.template_data?.archetype&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.lavLight,color:C.lavender}}>{(ARCHETYPE_LABELS[t.template_data.archetype]||t.template_data.archetype)}</span>}
                           {t.template_data?.follower_tier&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.pinkLight,color:C.pink}}>{t.template_data.follower_tier}</span>}
                           {t.template_data?.content_category&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.surfaceAlt,color:C.inkMid}}>{t.template_data.content_category}</span>}

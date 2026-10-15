@@ -13,6 +13,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const express   = require('express');
+const { PULSE, isPulseLayer, platformLabel, pulsePromptRules } = require('../utils/pulsePlatform');
 const router    = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
 
@@ -112,9 +113,9 @@ ${ctx.detail || ''}
 
 THE CREATOR SPARK:
 Handle: ${handle}
-Platform: ${platform}
+Platform: ${platformLabel(platform)}
 Vibe: ${vibe_sentence}${advBlock}
-
+${platform === PULSE ? pulsePromptRules('lalaverse') : ''}
 Generate a COMPLETE, psychologically specific social profile with realistic metrics.
 This is ADULT LITERARY FICTION. Write real content — explicit if the character warrants it. Do not sanitize.
 The persona vs. real signal gap is where the character lives. Find it.
@@ -184,7 +185,7 @@ Respond ONLY in valid JSON:
   "known_associates": [
     {
       "handle": "@realistic_handle — make up a handle that sounds real for this platform/scene",
-      "platform": "same or different platform",
+      "platform": "${platform === PULSE ? 'pulse' : 'same or different platform'}",
       "relationship_type": "collab|rival|couple|ex|baby_daddy|baby_mama|bestie|mentor|copycat|shade|situationship|family|management|feud|secret_link",
       "drama_level": 0-10,
       "description": "Brief — what the connection is and why it matters"
@@ -217,7 +218,7 @@ Respond ONLY in valid JSON:
     {
       "moment_type": "live|post|comment|dm|collab|controversy|disappearance",
       "description": "The specific moment. What happened. What was said or shown.",
-      "platform_format": "tiktok live|instagram reel|youtube video|etc",
+      "platform_format": "${platform === PULSE ? 'pulse post|pulse story|pulse video|pulse live' : 'tiktok live|instagram reel|youtube video|etc'}",
       "protagonist_reaction": "How ${ctx.name} responded internally.",
       "lala_seed": true or false,
       "lala_seed_reason": "If true: why this moment contains narrative seed potential."
@@ -318,11 +319,14 @@ async function refuseTakenRename(db, profile, body, res) {
 router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
   if (!checkRateLimit(req, res)) return;
   const {
-    handle, platform, vibe_sentence, series_id,
+    handle, vibe_sentence, series_id,
     character_context, character_key: _character_key, advanced_context,
     feed_layer, city, lala_relationship, career_pressure,
   } = req.body;
 
+  const layer = feed_layer || 'real_world';
+  // A LalaVerse creator's social is The Pulse, whatever the form sent.
+  const platform = isPulseLayer(layer) ? PULSE : req.body.platform;
   if (!handle || !platform || !vibe_sentence) {
     return res.status(400).json({ error: 'handle, platform, and vibe_sentence are required' });
   }
@@ -330,7 +334,6 @@ router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
     return res.status(400).json({ error: 'handle must be a string' });
   }
 
-  const layer = feed_layer || 'real_world';
   if (layer === 'lalaverse' && !city) {
     return res.status(400).json({ error: 'city is required for LalaVerse Feed profiles' });
   }
@@ -508,7 +511,7 @@ function buildAutofillPrompt({ layer, platformHint, platforms, cities, relations
   const lines = [
     'You are drafting the starting spark for ONE new social media creator in a literary fiction franchise.',
     layer === 'lalaverse'
-      ? 'This creator lives in the LalaVerse, the online world of the character Lala. Keep everything native to that world.'
+      ? `This creator lives in the LalaVerse, the online world of the character Lala. Keep everything native to that world.${pulsePromptRules(layer)}`
       : 'This creator is a real-world social media creator the protagonist watches online.',
     '',
     'Pick every categorical value from the lists given. Use the exact value string. Do not invent new values.',
@@ -606,7 +609,8 @@ function parseAutofillReply(response, { platforms, cities, relationships, career
   return {
     draft: {
       handle:         autofillHandle(parsed.handle),
-      platform:       autofillPick(parsed.platform, platforms),
+      // The LalaVerse's one app is The Pulse, whatever the model drafted.
+      platform:       platforms.length === 1 && platforms[0] === PULSE ? PULSE : autofillPick(parsed.platform, platforms),
       vibe:           autofillVibe(parsed.vibe),
       city:           autofillPick(parsed.city, cities),
       relationship:   autofillPick(parsed.relationship, relationships),
@@ -626,9 +630,10 @@ router.post('/autofill-draft', requireAuth, aiRateLimiter, async (req, res) => {
     // list when sent), so a drafted platform can always be saved by /generate.
     const enumPlatforms = db.SocialProfile?.rawAttributes?.platform?.values || [];
     const formPlatforms = autofillAllowedList(allowed.platforms);
-    const platforms = formPlatforms.length
+    // The LalaVerse has one app, The Pulse; JustAWoman's feed has real apps only.
+    const platforms = isPulseLayer(layer) ? [PULSE] : (formPlatforms.length
       ? formPlatforms.filter((p) => enumPlatforms.length === 0 || enumPlatforms.includes(p))
-      : enumPlatforms.slice();
+      : enumPlatforms.slice()).filter((p) => p !== PULSE);
     const cities = layer === 'lalaverse' ? autofillAllowedList(allowed.cities) : [];
     const relationships = layer === 'lalaverse' ? autofillAllowedList(allowed.relationships) : [];
     const careerPressures = layer === 'lalaverse' ? autofillAllowedList(allowed.careerPressures) : [];
@@ -780,7 +785,8 @@ const CHARACTER_FOLLOW_PROFILES = {
     },
     drama_bonus:       0.15,  // Drama is her #1 engagement driver
     adult_penalty:    -0.05,  // More unfazed than her mother
-    same_platform_bonus: { tiktok: 0.15, instagram: 0.08, youtube: 0.05 },
+    // The Pulse is Lala's one app: her strongest bonus, as TikTok's was.
+    same_platform_bonus: { pulse: 0.15, tiktok: 0.15, instagram: 0.08, youtube: 0.05 },
     follower_tier_affinity: { emerging: 0.80, nano: 0.80, micro: 0.80, mid: 0.75, macro: 0.70, mega: 0.60 },
     base_follow_threshold: 0.30,  // Lower threshold — she follows more freely
   },
@@ -1649,7 +1655,7 @@ router.post('/:id/cross', requireAuth, guardJustAWomanRecord, async (req, res) =
           status: 'accepted',
           core_desire: profile.parasocial_function || null,
           core_wound: profile.what_it_costs_her || null,
-          description: `Social media creator (${profile.platform}). ${profile.content_persona || ''}`.trim(),
+          description: `${isPulseLayer(profile.feed_layer) ? 'Creator on The Pulse' : `Social media creator (${platformLabel(profile.platform)})`}. ${profile.content_persona || ''}`.trim(),
           personality: profile.real_signal || null,
           metadata: {
             source: 'social_profile_crossing',
@@ -1674,7 +1680,7 @@ router.post('/:id/cross', requireAuth, guardJustAWomanRecord, async (req, res) =
     if (!alreadyCrossed) try {
       await db.WorldTimelineEvent.create({
         event_name: `${profile.display_name || profile.handle} crosses into the story world`,
-        event_description: `Social media creator ${profile.handle} (${profile.platform}) enters the story via: ${profile.crossing_mechanism || 'direct encounter'}. Trigger: ${crossing_note || profile.crossing_trigger || 'story need'}`,
+        event_description: `Creator ${profile.handle} (${platformLabel(profile.platform)}) enters the story via: ${profile.crossing_mechanism || 'direct encounter'}. Trigger: ${crossing_note || profile.crossing_trigger || 'story need'}`,
         event_type: 'character',
         impact_level: profile.lala_relevance_score >= 7 ? 'major' : 'moderate',
         characters_involved: registryCharacter ? [registryCharacter.id] : [],
@@ -1947,7 +1953,7 @@ router.post('/:id/crossing-preview', requireAuth, async (req, res) => {
       status: 'accepted',
       core_desire: profile.parasocial_function || null,
       core_wound: profile.what_it_costs_her || null,
-      description: `Social media creator (${profile.platform}). ${profile.content_persona || ''}`.trim(),
+      description: `${isPulseLayer(profile.feed_layer) ? 'Creator on The Pulse' : `Social media creator (${platformLabel(profile.platform)})`}. ${profile.content_persona || ''}`.trim(),
       personality: profile.real_signal || null,
       metadata: {
         source: 'social_profile_crossing',
@@ -1958,7 +1964,7 @@ router.post('/:id/crossing-preview', requireAuth, async (req, res) => {
       },
       timeline_event: {
         event_name: `${profile.display_name || profile.handle} crosses into the story world`,
-        event_description: `Social media creator ${profile.handle} (${profile.platform}) enters the story via: ${profile.crossing_mechanism || 'direct encounter'}. Trigger: ${profile.crossing_trigger || 'story need'}`,
+        event_description: `Creator ${profile.handle} (${platformLabel(profile.platform)}) enters the story via: ${profile.crossing_mechanism || 'direct encounter'}. Trigger: ${profile.crossing_trigger || 'story need'}`,
         impact_level: profile.lala_relevance_score >= 7 ? 'major' : 'moderate',
       },
     };
@@ -2016,7 +2022,7 @@ router.get('/:id/scene-context', requireAuth, async (req, res) => {
 
     // Voice-safe formatted context (no author-knowledge fields)
     const context = `
-SOCIAL PROFILE: ${p.handle} (${p.platform})
+SOCIAL PROFILE: ${p.handle} (${platformLabel(p.platform)})
 Display name: ${p.display_name} · ${p.follower_count_approx} followers · ${p.content_category}
 Archetype: ${p.archetype}
 

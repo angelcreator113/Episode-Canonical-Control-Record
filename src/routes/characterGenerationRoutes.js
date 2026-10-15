@@ -34,6 +34,7 @@ const {
   generateFullCharacter,
   calculateDepthLevel,
 } = require('../services/characterGenerationService');
+const { PULSE, isPulseLayer } = require('../utils/pulsePlatform');
 const { fitRecordToModel, warnTruncated, logValueTooLong } = require('../utils/fitToModel');
 const { findHandleHolder, handleTakenBody } = require('../utils/socialProfileHandle');
 const { assignSocietyArchetype } = require('../services/societyArchetypes');
@@ -221,7 +222,10 @@ router.post('/confirm-feed', async (req, res) => {
     const { fitted: createRecord, truncated } = fitRecordToModel(SocialProfile, {
       handle:          feed_proposal.handle,
       display_name:    feed_proposal.display_name,
-      platform:        feed_proposal.platform,
+      // A LalaVerse profile is on The Pulse (the model's hook sets it too);
+      // JustAWoman's feed takes a real app, never 'pulse'.
+      platform:        isPulseLayer(layer) ? PULSE
+        : (feed_proposal.platform && feed_proposal.platform !== PULSE ? feed_proposal.platform : 'instagram'),
       vibe_sentence:   feed_proposal.bio || '',
       current_state:   feed_proposal.starting_state || 'rising',
       follower_count_approx: feed_proposal.follower_range || 'micro',
