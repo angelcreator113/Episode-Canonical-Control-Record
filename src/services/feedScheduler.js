@@ -645,10 +645,10 @@ CREATOR: ${spark.handle} on ${platformLabel(spark.platform)}. "${spark.vibe_sent
 ${layer === 'lalaverse' && city ? `\nLALAVERSE: Lives in ${city.replace(/_/g, ' ')} — ${CITY_CULTURE[city] || ''}. Lala relationship: ${spark.lala_relationship || 'mutual_unaware'}. Career pressure: ${spark.career_pressure || 'level'}. Do not reference JustAWoman or the real world.` : ''}${societyArchetypeLine(society)}${brain.block || ''}
 
 IMPORTANT RULES:
-${isPulseLayer(layer) ? `- Every creator is on The Pulse. Some also keep a PRIVATE Pulse account (close friends, subscribers, an alt) with a DIFFERENT persona
-- A creator selling intimate content on a private Pulse account might present as a "fashion haul queen" on their public one — the feed should show what they APPEAR to be, not just what they are
+${isPulseLayer(layer) ? `- Every creator is on The Pulse. Some also keep a PRIVATE Pulse account (close friends, an alt) with a DIFFERENT persona
+- Adult content is sold on The PlayRoom. A PlayRoom creator might present as a "fashion haul queen" on The Pulse — the feed should show what they APPEAR to be, not just what they are
 - Revenue sources should be realistic — most creators have a "front" income and a real income
-- Some creators have secrets: a private account, past rebrands, banned accounts${pulsePromptRules(layer)}` : `- Creators exist across MULTIPLE platforms with DIFFERENT personas on each
+- Some creators have secrets: a private account, a discreet PlayRoom, past rebrands, banned accounts${pulsePromptRules(layer)}` : `- Creators exist across MULTIPLE platforms with DIFFERENT personas on each
 - An OnlyFans creator might present as a "fashion haul queen" on Instagram — the feed should show what they APPEAR to be, not just what they are
 - Revenue sources should be realistic — most creators have a "front" income and a real income
 - Some creators have secrets: hidden platforms, past rebrands, banned accounts`}
@@ -682,12 +682,12 @@ Return ONLY valid JSON with these fields:
 
   "platform_presences": {
     "${spark.platform}": { "handle": "${spark.handle}", "persona": "what they appear to be HERE", "followers": "count", "content_style": "brief style", "is_primary": true },
-    ${isPulseLayer(layer) ? '"pulse_private": { "handle": "@alt_handle", "persona": "different persona here", "followers": "count", "content_style": "style", "visibility": "private" } — only if they keep a private account' : '"SECOND_PLATFORM": { "handle": "@alt_handle", "persona": "different persona here", "followers": "count", "content_style": "style", "visibility": "public|discreet" }'}
+    ${isPulseLayer(layer) ? '"pulse_private": { "handle": "@alt_handle", "persona": "different persona here", "followers": "count", "content_style": "style", "visibility": "private" } — only if they keep a private account,\n    "playroom": { "handle": "@playroom_handle", "persona": "their adult-content persona", "followers": "subscriber count", "content_style": "style", "visibility": "public|discreet" } — only if they do adult content' : '"SECOND_PLATFORM": { "handle": "@alt_handle", "persona": "different persona here", "followers": "count", "content_style": "style", "visibility": "public|discreet" }'}
   },
   "public_persona": "What the general audience believes this person does for a living — 1 sentence",
   "private_reality": "What's actually true about their income, motivations, or secrets — 1 sentence",
   "front_platform": "${isPulseLayer(layer) ? 'pulse' : 'the platform they promote publicly'}",
-  "real_platform": "${isPulseLayer(layer) ? 'pulse_private if the real money or real content is on their private account, else pulse' : 'where the real money or real content lives (may differ from front)'}",
+  "real_platform": "${isPulseLayer(layer) ? 'playroom if the real money is adult content, pulse_private if it is on their private account, else pulse' : 'where the real money or real content lives (may differ from front)'}",
   "celebrity_tier": "accessible|selective|exclusive|untouchable",
   "primary_income_source": "e.g. brand deals, subscriptions, merch, affiliate",
   "income_breakdown": { "brand_deals": 40, "subscriptions": 30, "content_creation": 20, "other": 10 },

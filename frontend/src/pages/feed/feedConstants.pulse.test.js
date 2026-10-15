@@ -9,6 +9,7 @@ describe('platformLabel', () => {
     expect(platformLabel('pulse')).toBe('The Pulse');
     expect(platformLabel('pulse_private')).toBe('Private Pulse account');
     expect(platformLabel('lalaverse')).toBe('The Pulse');
+    expect(platformLabel('playroom')).toBe('The PlayRoom');
   });
   test("JustAWoman's real apps read by their names", () => {
     expect(platformLabel('instagram')).toBe('Instagram');

@@ -3,7 +3,8 @@
  *
  * The SocialProfile hooks put every LalaVerse profile on The Pulse on create
  * and on update, whatever platform the form, generator or import asked for;
- * a hidden real-app account becomes a private Pulse account. JustAWoman's
+ * an adult-content account (OnlyFans) becomes The PlayRoom, another hidden
+ * account a private Pulse account. JustAWoman's
  * feed (feed_layer 'real_world') keeps its real apps.
  *
  * No database: the model is defined on an unconnected Sequelize instance
@@ -39,18 +40,47 @@ const VELVET = {
 };
 
 describe('SocialProfile on The Pulse', () => {
-  test('a LalaVerse profile is created on The Pulse, its hidden account a private Pulse account', async () => {
+  test('a LalaVerse profile is created on The Pulse, its discreet OnlyFans on The PlayRoom', async () => {
     const { SocialProfile, captured } = defineModel();
     const p = await SocialProfile.create({ ...VELVET, feed_layer: 'lalaverse' });
     expect(p.platform).toBe('pulse');
     expect(p.front_platform).toBe('pulse');
-    expect(p.real_platform).toBe('pulse_private');
+    expect(p.real_platform).toBe('playroom');
     expect(p.platform_presences).toEqual({
       pulse: { handle: '@velvet', persona: 'haul queen', is_primary: true, visibility: 'public' },
-      pulse_private: { handle: '@velvet_after', persona: 'the real money', visibility: 'private' },
+      playroom: { handle: '@velvet_after', persona: 'the real money', visibility: 'discreet' },
     });
     const insert = captured.find((c) => c.op === 'insert');
-    expect(insert.values).toMatchObject({ platform: 'pulse', front_platform: 'pulse', real_platform: 'pulse_private' });
+    expect(insert.values).toMatchObject({ platform: 'pulse', front_platform: 'pulse', real_platform: 'playroom' });
+  });
+
+  test('a hidden account that is not adult content is a private Pulse account', async () => {
+    const { SocialProfile } = defineModel();
+    const p = await SocialProfile.create({
+      handle: '@mira', vibe_sentence: 'x', feed_layer: 'lalaverse', platform: 'tiktok',
+      platform_presences: { tiktok: { handle: '@mira' }, instagram: { handle: '@mira_cf', visibility: 'secret' } },
+      front_platform: 'tiktok', real_platform: 'instagram',
+    });
+    expect(p.platform_presences).toEqual({
+      pulse: { handle: '@mira', visibility: 'public', is_primary: true },
+      pulse_private: { handle: '@mira_cf', visibility: 'private' },
+    });
+    expect(p.real_platform).toBe('pulse_private');
+  });
+
+  test('an openly adult creator (OnlyFans was their main app) is public on The PlayRoom', async () => {
+    const { SocialProfile } = defineModel();
+    const p = await SocialProfile.create({
+      handle: '@after', vibe_sentence: 'x', feed_layer: 'lalaverse', platform: 'onlyfans',
+      platform_presences: { onlyfans: { handle: '@after', is_primary: true } }, front_platform: 'onlyfans', real_platform: 'onlyfans',
+    });
+    expect(p.platform).toBe('pulse');
+    expect(p.front_platform).toBe('playroom');
+    expect(p.real_platform).toBe('playroom');
+    expect(p.platform_presences).toEqual({
+      pulse: { handle: '@after', visibility: 'public', is_primary: true },
+      playroom: { handle: '@after', visibility: 'public' },
+    });
   });
 
   test('a LalaVerse profile with no platform at all is created on The Pulse', async () => {
@@ -100,14 +130,22 @@ describe('pulsePlatform helpers', () => {
     expect(pulse.platformLabel('pulse')).toBe('The Pulse');
     expect(pulse.platformLabel('lalaverse')).toBe('The Pulse');
     expect(pulse.platformLabel('pulse_private')).toBe('a private Pulse account');
+    expect(pulse.platformLabel('playroom')).toBe('The PlayRoom');
     expect(pulse.platformLabel('instagram')).toBe('instagram');
     expect(pulse.platformLabel(null)).toBeNull();
   });
 
-  test('a real money platform with no presence entry still gets a private Pulse account', () => {
+  test('an adult real-money app with no presence entry still gets a PlayRoom account', () => {
     const out = pulse.toPulsePresences({ platform: 'instagram', front_platform: 'instagram', real_platform: 'onlyfans', platform_presences: { instagram: { handle: '@a' } } });
-    expect(out.real_platform).toBe('pulse_private');
-    expect(out.platform_presences.pulse_private).toEqual({ visibility: 'private' });
+    expect(out.real_platform).toBe('playroom');
+    expect(out.platform_presences.playroom).toEqual({ visibility: 'discreet' });
+    expect(out.platform_presences).not.toHaveProperty('pulse_private');
+  });
+
+  test('a profile already in LalaVerse shape is unchanged', () => {
+    const shaped = { platform: 'pulse', front_platform: 'pulse', real_platform: 'playroom',
+      platform_presences: { pulse: { handle: '@a' }, playroom: { handle: '@b', visibility: 'discreet' } } };
+    expect(pulse.toPulsePresences(shaped)).toEqual({ platform_presences: shaped.platform_presences, front_platform: 'pulse', real_platform: 'playroom' });
   });
 
   test('same front and real platform: one public Pulse account, no private one', () => {
@@ -121,9 +159,9 @@ describe('pulsePlatform helpers', () => {
   });
 
   test('the migration moves LalaVerse profiles only', () => {
-    const mig = require(path.join('..', '..', '..', 'src', 'migrations', '20261015120000-lalaverse-profiles-on-the-pulse.js'));
-    expect(typeof mig.up).toBe('function');
-    const src = require('fs').readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'migrations', '20261015120000-lalaverse-profiles-on-the-pulse.js'), 'utf8');
-    expect(src).toMatch(/feed_layer::text = 'lalaverse'/);
+    const fs = require('fs');
+    const mig = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'migrations', '20261015120000-lalaverse-profiles-on-the-pulse.js'), 'utf8');
+    expect(mig).toMatch(/feed_layer::text = 'lalaverse'/);
+    expect(mig).toMatch(/const PLAYROOM = 'playroom'/);
   });
 });

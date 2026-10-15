@@ -1,17 +1,17 @@
 'use strict';
 const { Model } = require('sequelize');
-const { pulseFieldsFor, isPulseLayer, PULSE, PULSE_PRIVATE } = require('../utils/pulsePlatform');
+const { pulseFieldsFor, isPulseLayer, PULSE, PLAYROOM, PULSE_ACCOUNTS } = require('../utils/pulsePlatform');
 
 // A LalaVerse profile not yet on The Pulse: a real app as its platform, or
 // a real app among its accounts (utils/pulsePlatform; Evoni, 2026-10-15).
+// Its accounts are pulse, pulse_private and playroom (adult content).
 function needsPulse(p) {
   if (!isPulseLayer(p.feed_layer)) return false;
-  const pulseKeys = [PULSE, PULSE_PRIVATE];
   const presences = p.platform_presences && typeof p.platform_presences === 'object' ? p.platform_presences : {};
   return p.platform !== PULSE
-    || Object.keys(presences).some((k) => !pulseKeys.includes(k))
-    || (!!p.front_platform && p.front_platform !== PULSE)
-    || (!!p.real_platform && !pulseKeys.includes(p.real_platform));
+    || Object.keys(presences).some((k) => !PULSE_ACCOUNTS.includes(k))
+    || (!!p.front_platform && ![PULSE, PLAYROOM].includes(p.front_platform))
+    || (!!p.real_platform && !PULSE_ACCOUNTS.includes(p.real_platform));
 }
 
 const PULSE_FIELDS = ['platform', 'platform_presences', 'front_platform', 'real_platform'];

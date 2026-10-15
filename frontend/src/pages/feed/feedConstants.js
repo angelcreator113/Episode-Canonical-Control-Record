@@ -39,13 +39,15 @@ export const PLATFORMS = [
 ];
 
 // A LalaVerse profile's social is The Pulse (Evoni, 2026-10-15): 'pulse' is
-// its public account, 'pulse_private' a private one; feed posts on The Pulse
-// carry 'lalaverse'. JustAWoman's feed keeps the real apps above.
+// its public account, 'pulse_private' a private one, 'playroom' adult
+// content on The PlayRoom; feed posts on The Pulse carry 'lalaverse'.
+// JustAWoman's feed keeps the real apps above.
 export const PULSE_PLATFORM = 'pulse';
 const PLATFORM_LABELS = {
   ...Object.fromEntries(PLATFORMS.map(p => [p.value, p.label])),
   pulse: 'The Pulse',
   pulse_private: 'Private Pulse account',
+  playroom: 'The PlayRoom',
   lalaverse: 'The Pulse',
 };
 /** How a platform value reads on screen: The Pulse, or the app's own name. */

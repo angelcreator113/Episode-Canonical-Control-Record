@@ -259,7 +259,7 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
                       <Section title="Platform Presences">
                         <div style={{display:'flex',flexDirection:'column',gap:4}}>
                           {Object.entries(p.platform_presences).map(([plat, info]) => (
-                            <div key={plat} style={{padding:'6px 8px',background:plat===p.platform?'#eef2ff':'#f8f8f8',borderRadius:6,borderLeft:`3px solid ${plat==='onlyfans'||plat==='pulse_private'?C.pink:plat===p.platform?C.lavender:'#ddd'}`}}>
+                            <div key={plat} style={{padding:'6px 8px',background:plat===p.platform?'#eef2ff':'#f8f8f8',borderRadius:6,borderLeft:`3px solid ${['onlyfans','playroom','pulse_private'].includes(plat)?C.pink:plat===p.platform?C.lavender:'#ddd'}`}}>
                               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                                 <span style={{fontSize:11,fontWeight:700,color:C.ink}}>{platformLabel(plat)}{info.is_primary?' ★':''}</span>
                                 <span style={{fontSize:9,color:C.inkLight}}>{info.followers||''}</span>
