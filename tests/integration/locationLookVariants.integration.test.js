@@ -31,6 +31,7 @@ const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
 const sceneGen = require('../../src/services/sceneGenerationService');
 const migration = require('../../src/migrations/20261015150000-create-location-look-variants');
+const perSetMigration = require('../../src/migrations/20261015170000-location-look-variants-per-set');
 
 const { sequelize } = models;
 
@@ -71,6 +72,7 @@ const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
 
   beforeAll(async () => {
     await migration.up(sequelize.getQueryInterface(), Sequelize);
+    await perSetMigration.up(sequelize.getQueryInterface(), Sequelize);
     token = TokenService.generateTokenPair({
       id: 'test-user-variants', email: 'user@variants.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
     }).accessToken;
@@ -84,6 +86,7 @@ const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
 
   it('the migration is re-runnable', async () => {
     await migration.up(sequelize.getQueryInterface(), Sequelize);
+    await perSetMigration.up(sequelize.getQueryInterface(), Sequelize);
     const cols = await rows(`SELECT column_name FROM information_schema.columns WHERE table_name = 'location_look_variants'`);
     expect(cols.map((c) => c.column_name)).toEqual(expect.arrayContaining(['world_location_id', 'scene_set_id', 'source_angle_id', 'kind', 'value', 'status', 'source', 'image_url', 'deleted_at']));
   });
@@ -201,4 +204,16 @@ const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
     expect(res.status).toBe(400);
     expect(res.body).toMatchObject({ code: 'BAD_FILE', error: 'Only JPEG, PNG, and WebP images are allowed' });
   });
+
+  it('the follow-up migration gives older rows their everyday set, and drops rows with none', async () => {
+    const { loc, set } = await everyday();
+    const orphanLoc = (await everyday({ approved: false })).loc;
+    await run(`INSERT INTO location_look_variants (world_location_id, kind, value, status, source, image_url, created_at, updated_at)
+               VALUES (:loc, 'time', 'afternoon', 'complete', 'uploaded', 'https://x/a.jpg', NOW(), NOW()),
+                      (:orphanLoc, 'time', 'afternoon', 'complete', 'uploaded', 'https://x/b.jpg', NOW(), NOW())`, { loc, orphanLoc });
+    await perSetMigration.up(sequelize.getQueryInterface(), Sequelize);
+    expect((await variant(loc, 'time', 'afternoon')).scene_set_id).toBe(set);
+    expect(await variant(orphanLoc, 'time', 'afternoon')).toBeUndefined();
+  });
 });
+

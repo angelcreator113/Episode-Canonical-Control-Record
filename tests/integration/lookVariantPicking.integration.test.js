@@ -18,6 +18,7 @@ const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
 const variantsMigration = require('../../src/migrations/20261015150000-create-location-look-variants');
+const perSetMigration = require('../../src/migrations/20261015170000-location-look-variants-per-set');
 
 const { sequelize } = models;
 
@@ -56,6 +57,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
   beforeAll(async () => {
     await variantsMigration.up(sequelize.getQueryInterface(), Sequelize);
+    await perSetMigration.up(sequelize.getQueryInterface(), Sequelize);
     token = TokenService.generateTokenPair({ id: 'test-user-picking', email: 'u@picking.dev', name: 'Editor', groups: ['USER'], role: 'USER' }).accessToken;
     await run(`INSERT INTO shows (id, name, slug, metadata, created_at, updated_at) VALUES (:show, :n, :n, '{}', NOW(), NOW())`, { show, n: `picking-${show.slice(0, 8)}` });
     await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, created_at, updated_at) VALUES (:ep, :show, 'Picking', :num, 'draft', NOW(), NOW())`,

@@ -7,12 +7,8 @@
  * day changes every view, season only exterior views;
  * docs/VENUE_EVERYDAY_AND_EVENT_LOOKS_PLAN.md step 2).
  *
- * Variants belong to the everyday set they were made for (scene_set_id,
- * the location's approved set at the time): choosing another everyday look
- * does not carry the old one's variants over. One live row per
- * (scene_set_id, kind, value), a partial unique index; regenerating or
- * re-uploading updates it. A season remembers the Front angle it shows
- * (source_angle_id), so it replaces that view only.
+ * One live row per (world_location_id, kind, value), a partial unique
+ * index; regenerating or re-uploading updates it.
  *   kind 'time':   morning, afternoon, golden_hour, evening, night
  *                  (a re-light of the everyday look)
  *   kind 'season': spring, summer, fall, winter (a re-season of the
@@ -37,8 +33,6 @@ module.exports = {
       await queryInterface.createTable(TABLE, {
         id: { type: Sequelize.UUID, primaryKey: true, allowNull: false, defaultValue: Sequelize.literal('gen_random_uuid()') },
         world_location_id: { type: Sequelize.UUID, allowNull: false },
-        scene_set_id: { type: Sequelize.UUID, allowNull: false },
-        source_angle_id: { type: Sequelize.UUID, allowNull: true },
         kind: { type: Sequelize.STRING(10), allowNull: false },
         value: { type: Sequelize.STRING(20), allowNull: false },
         status: { type: Sequelize.STRING(20), allowNull: false, defaultValue: 'generating' },
@@ -56,7 +50,7 @@ module.exports = {
       }, { transaction });
       await sequelize.query(
         `CREATE UNIQUE INDEX IF NOT EXISTS location_look_variants_unique
-           ON location_look_variants (scene_set_id, kind, value) WHERE deleted_at IS NULL`,
+           ON location_look_variants (world_location_id, kind, value) WHERE deleted_at IS NULL`,
         { transaction });
     });
   },
