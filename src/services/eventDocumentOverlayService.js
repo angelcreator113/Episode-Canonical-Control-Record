@@ -111,17 +111,39 @@ function pieceHad(piece) {
  * shoppingLines). Each item takes the first piece for its line; a piece no
  * item takes is a line of its own, so the total is every piece the look
  * costs, not only the ones the list names.
+ *
+ * The main outfit line (slot dress) is a dress, or a top and a bottom
+ * (listSlotsFilled; Task #3205): with no dress it takes the look's top and
+ * bottom, or is covered when its own top and bottom lines hold them. A
+ * line's slot is read like a piece's category, so the AI's "heels" or
+ * "clutch" still names the shoes or purse line.
  */
 function shoppingLines(doc, outfitPieces = []) {
   const { listSlotOf } = require('./todoListService');
   const pieces = Array.isArray(outfitPieces) ? outfitPieces.filter(Boolean) : [];
   const used = new Set();
-  const line = (base, piece) => ({ ...base, piece, owned: piece ? pieceHad(piece) : false, cost: piece ? pieceCost(piece) : 0 });
-  const lines = (doc?.items || []).map((item) => {
-    const index = pieces.findIndex((p, i) => !used.has(i) && listSlotOf(p.category || p.clothing_category) === item.slot);
+  const lineOf = (p) => listSlotOf(p.category || p.clothing_category);
+  const take = (slot) => {
+    const index = pieces.findIndex((p, i) => !used.has(i) && lineOf(p) === slot);
     if (index >= 0) used.add(index);
-    return line({ slot: item.slot, label: item.label }, index >= 0 ? pieces[index] : null);
-  });
+    return index >= 0 ? pieces[index] : null;
+  };
+  const line = (base, piece) => ({ ...base, piece, owned: piece ? pieceHad(piece) : false, cost: piece ? pieceCost(piece) : 0, filled: Boolean(piece) });
+  const items = doc?.items || [];
+  const slots = items.map((item) => (item.slot == null || item.slot === '' ? null : listSlotOf(String(item.slot)) || String(item.slot).toLowerCase().trim()));
+  const lines = items.map((item, n) => line({ slot: item.slot, label: item.label }, take(slots[n])));
+  const main = lines.findIndex((l, n) => slots[n] === 'dress' && !l.piece);
+  if (main >= 0) {
+    const onOwnLine = (slot) => lines.some((l, n) => slots[n] === slot && l.piece);
+    const free = (slot) => pieces.some((p, i) => !used.has(i) && lineOf(p) === slot);
+    const halves = ['top', 'bottom'];
+    if (halves.every((s) => onOwnLine(s) || free(s))) {
+      const taken = halves.filter((s) => !onOwnLine(s)).map(take);
+      lines[main] = taken.length
+        ? { ...lines[main], piece: taken[0], pieces: taken, filled: true, owned: taken.every(pieceHad), cost: taken.reduce((n, p) => n + pieceCost(p), 0) }
+        : { ...lines[main], filled: true, covered: true };
+    }
+  }
   pieces.forEach((p, i) => {
     if (!used.has(i)) lines.push(line({ slot: 'extra', label: p.name || 'Another piece', extra: true }, p));
   });

@@ -54,9 +54,19 @@ const CANONICAL_TO_LINE = {
   dress: 'dress', top: 'top', bottom: 'bottom', shoes: 'shoes',
   bag: 'purse', accessory: 'accessories', jewelry: 'jewelry', perfume: 'perfume',
   hair: 'hair',   // the hairstyle or wig (Task #3167)
+  outerwear: 'outerwear', // a jacket over the outfit (Task #3205)
 };
 export function lineOfPiece(piece) {
   return CANONICAL_TO_LINE[canonicalCategory(piece?.category || piece?.clothing_category)] || null;
+}
+/**
+ * A list line's slot read the way a piece's category is (Task #3205): the
+ * drafted list's slots are the AI's words, so "heels" or "clutch" still
+ * name the shoes and purse lines. A slot no category names keeps its own.
+ */
+export function lineOfSlot(slot) {
+  if (slot == null || slot === '') return null;
+  return CANONICAL_TO_LINE[canonicalCategory(slot)] || String(slot).toLowerCase().trim();
 }
 
 // What a piece costs on the list, and whether Lala has it. A piece of the
@@ -80,16 +90,40 @@ function pieceHad(piece) {
  * piece no line takes is a line of its own, so the total is every piece the
  * look costs (the server's eventDocumentOverlayService.shoppingLines draws
  * the same lines).
+ *
+ * The main outfit line (slot dress) is a dress, or a top and a bottom, as
+ * the Wardrobe locks a look and the episode's list ticks it (todoListService
+ * listSlotsFilled; Task #3205). With no dress, it takes the look's top and
+ * bottom, costing both; when the list has its own top and bottom lines and
+ * they hold them, it is covered (`covered`) and costs nothing more. Before,
+ * it took a dress only, so a top and a skirt fell to the end as extra lines
+ * and the outfit read as still to find. `filled` says a line has its piece.
  */
 export function shoppingLines(doc, outfitPieces = []) {
   const pieces = Array.isArray(outfitPieces) ? outfitPieces.filter(Boolean) : [];
   const used = new Set();
-  const line = (base, piece) => ({ ...base, piece, owned: piece ? pieceHad(piece) : false, cost: piece ? pieceCost(piece) : 0 });
-  const lines = (doc?.items || []).map((item) => {
-    const index = pieces.findIndex((p, i) => !used.has(i) && lineOfPiece(p) === item.slot);
+  const take = (slot) => {
+    const index = pieces.findIndex((p, i) => !used.has(i) && lineOfPiece(p) === slot);
     if (index >= 0) used.add(index);
-    return line(item, index >= 0 ? pieces[index] : null);
-  });
+    return index >= 0 ? pieces[index] : null;
+  };
+  const line = (base, piece) => ({ ...base, piece, owned: piece ? pieceHad(piece) : false, cost: piece ? pieceCost(piece) : 0, filled: Boolean(piece) });
+  const items = doc?.items || [];
+  const slots = items.map((item) => lineOfSlot(item.slot));
+  const lines = items.map((item, n) => line(item, take(slots[n])));
+  const main = lines.findIndex((l, n) => slots[n] === 'dress' && !l.piece);
+  if (main >= 0) {
+    // Each half is on its own line already, or still free for this one.
+    const onOwnLine = (slot) => lines.some((l, n) => slots[n] === slot && l.piece);
+    const free = (slot) => pieces.some((p, i) => !used.has(i) && lineOfPiece(p) === slot);
+    const halves = ['top', 'bottom'];
+    if (halves.every((s) => onOwnLine(s) || free(s))) {
+      const taken = halves.filter((s) => !onOwnLine(s)).map(take);
+      lines[main] = taken.length
+        ? { ...lines[main], piece: taken[0], pieces: taken, filled: true, owned: taken.every(pieceHad), cost: taken.reduce((n, p) => n + pieceCost(p), 0) }
+        : { ...lines[main], filled: true, covered: true };
+    }
+  }
   pieces.forEach((p, i) => {
     if (!used.has(i)) lines.push(line({ slot: 'extra', label: p.name || 'Another piece', extra: true }, p));
   });
