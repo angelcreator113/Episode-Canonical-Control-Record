@@ -96,15 +96,24 @@ export default function StoriesPage() {
     try {
       const formats = ['short_story', 'social_fiction', 'snippet', 'recap'];
       let count = 0;
+      const failed = [];
       for (const format of formats) {
         try {
           await api.post(`/api/v1/world/${showId}/episodes/${episodeId}/generate-story`, { format });
           count++;
-        } catch { /* continue with other formats */ }
+        } catch (err) {
+          // Keep going with the other formats; say which ones failed.
+          console.error(`[StoriesPage] ${format} generation failed:`, err);
+          failed.push(format.replace(/_/g, ' '));
+        }
       }
-      showToast(`${count} stories generated`);
+      if (failed.length === 0) showToast(`${count} stories generated`);
+      else showToast(`${count} of ${formats.length} stories generated. Failed: ${failed.join(', ')}`, 'error');
       loadStories(showId);
-    } catch { showToast('Generation failed', 'error'); }
+    } catch (err) {
+      console.error('[StoriesPage] generate all failed:', err);
+      showToast('Generation failed', 'error');
+    }
     finally { setGenerating(false); }
   };
 
