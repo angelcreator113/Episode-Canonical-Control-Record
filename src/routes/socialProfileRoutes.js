@@ -748,8 +748,8 @@ const CHARACTER_FOLLOW_PROFILES = {
     base_follow_threshold: 0.35,  // Minimum score to auto-follow
   },
 
-  // ── Lala: The daughter. Digitally native, sharp, pattern-reader ──
-  // Wound: "She inherited her mother's ambition but not her patience."
+  // ── Lala: a sentient fashion game and AI character JustAWoman created;
+  // she does not know it (docs/CANON.md). Digitally native, pattern-reader.
   // The algorithm sees her before she sees herself. Creating = consuming.
   lala: {
     name: 'Lala',
@@ -784,7 +784,7 @@ const CHARACTER_FOLLOW_PROFILES = {
       parasocial:   0.20,  // Emotional investment she won't name
     },
     drama_bonus:       0.15,  // Drama is her #1 engagement driver
-    adult_penalty:    -0.05,  // More unfazed than her mother
+    adult_penalty:    -0.05,  // More unfazed than JustAWoman
     // The Pulse is Lala's one app: her strongest bonus, as TikTok's was.
     same_platform_bonus: { pulse: 0.15, tiktok: 0.15, instagram: 0.08, youtube: 0.05 },
     follower_tier_affinity: { emerging: 0.80, nano: 0.80, micro: 0.80, mid: 0.75, macro: 0.70, mega: 0.60 },

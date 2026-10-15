@@ -112,4 +112,20 @@ describe("completeEpisode uses character_key 'lala' (Task #1816)", () => {
       expect(q.sql).not.toMatch(/justawoman/);
     }
   });
+
+  // The stats note is injected into every show prompt: it is Lala's
+  // (F-Sec-3; docs/CANON.md), not JustAWoman's.
+  it("writes the stats note as Lala's, never JustAWoman's", async () => {
+    const { sequelize, queries } = makeSequelize({
+      existingState: { id: 'state-lala', coins: 900, reputation: 3, brand_trust: 2, influence: 2, stress: 1 },
+    });
+    await completeEpisode(EPISODE_ID, SHOW_ID, sequelize);
+    const insert = queries.find(q => /INSERT INTO franchise_knowledge/.test(q.sql));
+    expect(insert).toBeDefined();
+    const values = JSON.stringify(insert.opts.replacements);
+    expect(values).toContain("Lala's stats after Episode 1");
+    expect(values).not.toMatch(/JustAWoman's stats/);
+    expect(values).toContain('[\\"character_state\\",\\"lala\\",\\"current_stats\\"]');
+  });
 });
+
