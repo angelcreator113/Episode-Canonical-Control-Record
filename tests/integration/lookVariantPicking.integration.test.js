@@ -109,4 +109,16 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(at(11).variant_missing).toMatchObject({ value: 'evening', text: 'Loft has no Evening variant yet' });
     expect(at(3)).toEqual({ url: 'https://x/Plain-room-base.jpg', source: 'base', label: 'Plain room · Inside' });
   });
+
+  // Audit, 2026-10-15: a generated time of day re-lights the approved base
+  // it was made from; after a new base is approved it showed the old room.
+  it('a generated time variant of an older approved base is not used', async () => {
+    await run(`UPDATE location_look_variants SET source = 'generated', source_image_url = 'https://x/old-base.jpg'
+                WHERE scene_set_id = :loft AND kind = 'time' AND value = 'night'`, { loft });
+    const at = await plan();
+    expect(at(13)).toMatchObject({ url: 'https://x/Loft-base.jpg', label: 'Loft · Inside (no Night variant yet)' });
+    await run(`UPDATE location_look_variants SET source_image_url = 'https://x/Loft-base.jpg'
+                WHERE scene_set_id = :loft AND kind = 'time' AND value = 'night'`, { loft });
+    expect((await plan())(13)).toMatchObject({ url: 'https://x/night.jpg' });
+  });
 });

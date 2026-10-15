@@ -245,7 +245,7 @@ Return ONLY valid JSON:
     "primary_trigger": "the specific thing about JustAWoman — her content, her voice, her presence — that hits Lala in a way she cannot explain",
     "what_lala_calls_it": "how Lala names this feeling to herself — what she thinks it is",
     "what_it_actually_is": "what the reader knows it is",
-    "physical_sensation": "what happens in Lala's body when she encounters JustAWoman's content",
+    "physical_sensation": "what happens in Lala's body when the resonance hits — she does not know JustAWoman exists, so she cannot name its source",
     "story_engine_note": "how to write a resonance trigger scene — what to show, what to withhold, how to let the reader hold the secret"
   }
 }`;
@@ -262,7 +262,7 @@ router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 3000,
       messages: [{
         role: 'user',
@@ -295,7 +295,7 @@ router.post('/generate-lala', requireAuth, aiRateLimiter, async (req, res) => {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 3000,
       messages: [{
         role: 'user',
@@ -445,7 +445,7 @@ Return ONLY valid JSON:
 }`;
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 1500,
       messages: [{ role: 'user', content: prompt }],
     });
@@ -579,7 +579,7 @@ When all_complete is true, also include:
     ]);
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 2000,
       system: systemPrompt,
       messages,

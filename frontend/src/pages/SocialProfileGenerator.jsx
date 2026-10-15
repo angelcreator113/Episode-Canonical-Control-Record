@@ -42,8 +42,6 @@ export const createEventFromProfileApi = (showId, payload) =>
 
 export const fetchProfiles = (qs) => apiClient.get(`${API}?${qs}`);
 export const fetchProfileDetail = (id) => apiClient.get(`${API}/${id}`);
-export const fetchJustAWomanProfile = () =>
-  apiClient.get(`${API}?feed_layer=lalaverse&search=justawoman&limit=1`);
 
 // Profile lifecycle (Api suffix avoids name shadow vs the component-local
 // user-facing handlers — those wrap these network helpers + UI state).
@@ -233,7 +231,6 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
   // 409 from /generate). Clears when the handle is edited; while set, both
   // Create buttons are disabled.
   const [handleTaken,setHandleTaken] = useState(null);
-  const [justAwomanProfile,setJustAwomanProfile] = useState(null);
 
   // ── Load profiles ──────────────────────────────────────────────────
   const loadProfiles = useCallback(async (targetPage) => {
@@ -266,14 +263,6 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
   },[filterStatus,debouncedSearch,sortBy,page,feedLayer,filterArchetypes,filterPlatforms,filterCategory,filterRelevanceMin,filterRelevanceMax,filterAdultContent,filterCelebrityTier,filterFollowMotivation]);
 
   useEffect(()=>{loadProfiles();},[loadProfiles]);
-
-  // Load JustAWoman's locked record for Lala's Feed pinned card
-  useEffect(()=>{
-    if(feedLayer!=='lalaverse'){setJustAwomanProfile(null);return;}
-    fetchJustAWomanProfile()
-      .then(r=>{const jw=(r.data?.profiles||[]).find(p=>p.is_justawoman_record);setJustAwomanProfile(jw||null);})
-      .catch(()=>{setJustAwomanProfile(null);});
-  },[feedLayer]);
 
   // ── SSE job tracking ───────────────────────────────────────────────
   const sseRef = useRef(null);
@@ -1292,29 +1281,6 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
 
           <div className="spg-content-area" style={{flex:1,padding:'16px 24px',overflowY:'auto'}}>
             <FeedPagination {...paginationProps}/>
-            {/* JustAWoman's pinned record — Lala's Feed only */}
-            {feedLayer==='lalaverse'&&justAwomanProfile&&page===1&&!search&&(
-              <div style={{background:C.surface,borderRadius:C.radius,border:`2px solid ${C.pink}`,marginBottom:16,overflow:'hidden',boxShadow:C.shadowMd}}>
-                <div style={{height:3,background:`linear-gradient(90deg,${C.pink},${C.lavender})`}}/>
-                <div style={{padding:'14px 18px'}}>
-                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-                    <div>
-                      <span style={{fontSize:16,fontWeight:700,color:C.ink}}>@justawoman</span>
-                      <span style={{fontSize:12,color:C.inkMid,marginLeft:8}}>{justAwomanProfile.display_name}</span>
-                    </div>
-                    <span style={{fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:10,background:C.pinkLight,color:C.pink}}>Locked</span>
-                  </div>
-                  <div style={{fontSize:12,color:C.lavender,fontWeight:600,fontStyle:'italic',marginBottom:6}}>The one she doesn't know she's becoming</div>
-                  <div style={{fontSize:13,color:C.inkMid,lineHeight:1.6,marginBottom:10}}>{justAwomanProfile.content_persona}</div>
-                  <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                    <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:8,background:C.pinkLight,color:C.pink}}>mega</span>
-                    <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:8,background:'#fdf8e8',color:'#8a6010'}}>Peaking</span>
-                    <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:8,background:C.blueLight,color:C.blue}}>ahead</span>
-                    <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:8,background:C.lavLight,color:C.lavender}}>multi-platform</span>
-                  </div>
-                </div>
-              </div>
-            )}
             {loading && <div style={{display:'flex',alignItems:'center',justifyContent:'center',padding:40,gap:10,color:C.inkLight}}><Spinner/> Loading profiles…</div>}
             {!loading&&profiles.length===0 && (
               <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'60px 24px',gap:16,textAlign:'center',maxWidth:480,margin:'0 auto'}}>

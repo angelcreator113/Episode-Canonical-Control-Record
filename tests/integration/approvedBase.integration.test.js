@@ -290,6 +290,39 @@ function mockProviders() {
     await waitForBase(set.id);
   });
 
+  it('a base being generated is not approved; one approved during a run keeps its approved picture', async () => {
+    const set = await makeSet();
+    await set.update({ base_still_url: BASE_URL, generation_status: 'generating' });
+    const busy = await approve(set.id);
+    expect(busy.status).toBe(409);
+    expect(busy.body.error).toMatch(/is being generated/);
+    expect((await locationRow()).approved_base_scene_set_id).toBeNull();
+
+    // A claim older than the stale window is a run that died: it does not block.
+    await run(`UPDATE scene_sets SET updated_at = NOW() - INTERVAL '20 minutes' WHERE id = :id`, { id: set.id });
+    expect((await approve(set.id)).status).toBe(200);
+    expect((await unapprove(set.id)).status).toBe(200);
+
+    // Approved while the paid call ran (a stale claim): the new picture is
+    // not kept, the approved one is neither replaced nor deleted.
+    await set.update({ generation_status: 'complete' });
+    const s3 = require('@aws-sdk/client-s3');
+    s3.DeleteObjectCommand.mockClear();
+    axios.post.mockImplementation(async (url) => {
+      await run(`UPDATE world_locations SET approved_base_scene_set_id = :set, approved_base_image_url = :url, approved_base_at = NOW() WHERE id = :location`,
+        { set: set.id, url: BASE_URL, location: ids.location });
+      if (url.startsWith('https://fal.run/')) return { status: 200, data: { images: [{ url: 'https://fal.media/x.jpg' }] } };
+      throw new Error(`unexpected provider call ${url}`);
+    });
+    await expect(sceneGen.generateBaseScene(await models.SceneSet.findByPk(set.id), models, { skipAnalysis: true }))
+      .rejects.toThrow(/approved while the new picture was being made/);
+    const row = await models.SceneSet.findByPk(set.id, { attributes: ['base_still_url', 'generation_status'] });
+    expect(row.base_still_url).toBe(BASE_URL);
+    expect(row.generation_status).toBe('complete');
+    expect(s3.DeleteObjectCommand.mock.calls.map(([input]) => input.Key)).not.toContain('scene-sets/approved-base.jpg');
+    expect((await locationRow()).approved_base_image_url).toBe(BASE_URL);
+  });
+
   it('an event-dressed version: the approved base edited with only the event layer, priced as Flux Kontext in the brief', async () => {
     const approved = await approvedSet();
     const set = await makeSet();

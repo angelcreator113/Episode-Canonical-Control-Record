@@ -239,7 +239,7 @@ export default function ChapterBrief({ chapter, characters = [], onUpdated }) {
       <BriefField label='SCENE GOAL' hint='What must happen by the end of this chapter?'>
         <textarea
           style={{ ...s.textarea, minHeight: 60 }}
-          placeholder='e.g. Establish the comparison pattern. Reader understands JustAWoman is measuring herself against Chloe and losing.'
+          placeholder='e.g. Establish the comparison pattern. Reader understands JustAWoman is measuring herself against Nia Vale and losing.'
           value={form.scene_goal}
           onChange={e => set('scene_goal', e.target.value)}
         />
