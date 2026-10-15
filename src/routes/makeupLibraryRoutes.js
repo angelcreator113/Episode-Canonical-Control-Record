@@ -184,7 +184,7 @@ router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
       }
     }
     const message = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4000,
       system: `You design the makeup library for Lala — a confident AI fashion creator living in LalaVerse.
 Lala's makeup reflects JustAWoman's real looks. Each look has a name, a mood, and a specific moment it belongs to.

@@ -83,7 +83,7 @@ describe('EventLookImage: Upload this look', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const { onToast } = renderIt();
     await pick();
-    await waitFor(() => expect(onToast).toHaveBeenCalledWith('Only JPEG, PNG, and WebP images are allowed'));
+    await waitFor(() => expect(onToast).toHaveBeenCalledWith('Only JPEG, PNG, and WebP images are allowed', 'error'));
   });
 
   test('outside the Scene Sets panel, or with the Place locked, there is no upload', async () => {

@@ -436,7 +436,7 @@ Generate content for all five formats. Respond ONLY in valid JSON:
 }`;
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 2000,
       system: 'You are the Multi-Product Content Engine for Prime Studios. You generate authentic content in JustAWoman\'s voice across five formats. Never break character. Never reference Lala before her launch. Always speak to Besties. Respond ONLY in valid JSON.',
       messages: [{ role: 'user', content: contentPrompt }],

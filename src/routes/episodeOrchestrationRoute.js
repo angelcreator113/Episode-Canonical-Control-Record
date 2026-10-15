@@ -179,7 +179,7 @@ router.post('/generate-episode-orchestration', requireAuth, aiRateLimiter, async
     });
 
     const message = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 6000,
       system: `You are the showrunner and director of Styling Adventures with Lala — 
 a Twitch-style fashion game show where Lala (a confident AI content creator) navigates 
