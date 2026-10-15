@@ -67,7 +67,11 @@ async function variantsForSets(sequelize, setIds) {
          FROM world_locations l
          JOIN location_look_variants v ON v.scene_set_id = l.approved_base_scene_set_id AND v.deleted_at IS NULL
         WHERE l.approved_base_scene_set_id IN (:ids) AND l.deleted_at IS NULL
-          AND v.status = 'complete' AND v.image_url IS NOT NULL`,
+          AND v.status = 'complete' AND v.image_url IS NOT NULL
+          -- A generated time of day re-lights the approved base it was made
+          -- from: after a new base is approved it shows the old room
+          -- (audit, 2026-10-15). Uploaded ones are her own pictures.
+          AND (v.kind <> 'time' OR v.source <> 'generated' OR v.source_image_url = l.approved_base_image_url)`,
       { replacements: { ids } });
     for (const r of rows) {
       if (!out.has(r.set_id)) out.set(r.set_id, { time: new Map(), season: new Map() });

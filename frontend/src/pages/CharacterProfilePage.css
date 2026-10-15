@@ -1405,3 +1405,9 @@ a.ch-show:hover .ch-show-text strong { text-decoration: underline; }
 /* Who an entanglement is with: a link to their Pulse profile. */
 .cp-entanglement-who { font-weight: 700; color: var(--lala-lavender-text); text-decoration: none; }
 .cp-entanglement-who:hover { text-decoration: underline; }
+/* Their places: each set's picture beside its name, stacked on a phone. */
+.ch-places { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.ch-place { display: grid; grid-template-columns: 96px 1fr; gap: 12px; align-items: start; }
+.ch-place-img { width: 96px; height: 72px; object-fit: cover; border-radius: 12px; background: var(--lala-lavender-soft); }
+.ch-place-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ch-place-text strong { font-size: 14px; color: var(--text-primary); overflow-wrap: anywhere; }

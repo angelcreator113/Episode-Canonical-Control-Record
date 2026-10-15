@@ -28,7 +28,8 @@ describe('estimateAngleCost', () => {
   });
 
   test('a frame of the base big enough to crop: free', () => {
-    const set = { base_still_url: base, scene_spec: spec({ left: 0.4, top: 0, width: 0.6, height: 0.9 }) };
+    // (A 0.6 x 0.9 frame, grown to 16:9, is nearly the whole base: generated.)
+    const set = { base_still_url: base, scene_spec: spec({ left: 0.4, top: 0.2, width: 0.6, height: 0.6 }) };
     expect(sceneGen.estimateAngleCost({ angle_label: 'VANITY' }, set)).toMatchObject({ usd: 0, method: 'crop' });
   });
 
