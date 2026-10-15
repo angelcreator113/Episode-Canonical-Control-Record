@@ -104,6 +104,28 @@ const ORIGINAL = script(beat(1, 'Opening Ritual', 'Prime: "Hey besties"'), beat(
     expect(res.body.script).toBe(row.script_content);
   });
 
+  test('a beat approved while Regenerate is writing keeps its approved words', async () => {
+    // Script tab audit (2026-10-15): the writing takes minutes, and the page
+    // can approve a beat (with its unsaved edit) before it comes back.
+    generateGroundedScript.mockImplementationOnce(async () => {
+      const { script_content: now } = await stored();
+      const approved = await locks({ locked_beats: [1, 2, 3], script_content: now.replace('Brand new opening', 'Approved while writing') });
+      expect(approved.status).toBe(200);
+      return script(
+        beat(1, 'Opening Ritual', 'Prime: "Newer opening"'),
+        beat(2, 'Login Sequence', 'Lala: "Newer login"'),
+        beat(3, 'Welcome', 'Lala: "Newer welcome"'),
+      );
+    });
+    const res = await auth(request(app).post(`/api/v1/episode-brief/${ep}/generate-script`)).send({ showId: show, confirmOverwrite: true });
+    expect(res.status).toBe(200);
+    expect(res.body.locked_kept).toEqual([1, 2, 3]);
+    const row = await stored();
+    expect(row.script_content).toContain('Prime: "Approved while writing"');
+    expect(row.script_content).not.toContain('Newer opening');
+    expect(row.script_locked_beats).toEqual([1, 2, 3]);
+  });
+
   test('unlocking lets Save change the beat again', async () => {
     expect((await locks({ locked_beats: [] })).body.data.script_locked_beats).toEqual([]);
     const { script_content: current } = await stored();

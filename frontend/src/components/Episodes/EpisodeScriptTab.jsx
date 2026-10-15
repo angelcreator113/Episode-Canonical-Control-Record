@@ -94,6 +94,24 @@ export function parseScriptIntoBeats(scriptText, lockedBeats = []) {
   }).filter(b => b.lines.length > 0);
 }
 
+// The script with one line of one beat changed. Only that beat is written
+// again; the text before the first beat and every other beat stay exactly as
+// they are (a locked beat included). null: the beat is gone or locked.
+export function scriptWithLine(scriptText, lockedBeats, beatId, lineIndex, newText) {
+  const beats = parseScriptIntoBeats(scriptText, lockedBeats);
+  const target = beats.find(b => b.id === beatId);
+  if (!target || target.approved) return null;
+  const body = beats.map((b) => {
+    if (b === target) {
+      const lines = [...b.lines]; lines[lineIndex] = newText;
+      return `## BEAT: ${b.rawLabel}\n${lines.join('\n')}`;
+    }
+    return !b.raw?.trim() || !BEAT_HEADER_START.test(b.raw) ? `## BEAT: ${b.rawLabel}\n${b.lines.join('\n')}` : b.raw.trimEnd();
+  }).join('\n\n');
+  const preamble = scriptPreamble(scriptText);
+  return preamble ? `${preamble}\n\n${body}` : body;
+}
+
 function parseLine(line) {
   const t = (typeof line === 'string' ? line : '').trim();
   if (!t) return null;
@@ -668,9 +686,15 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // The script as the page has it now, for a reply that lands after more edits.
   const scriptRef = useRef(scriptText);
   scriptRef.current = scriptText;
+  const lockedRef = useRef(lockedBeats);
+  lockedRef.current = lockedBeats;
   const [developerMode, setDeveloperMode] = useState(false);
   const [toast, setToast] = useState(null);
   const [generating, setGenerating] = useState(false);
+  // While a new script is being written (or awaited), the page's script is
+  // about to be replaced: edits, moves, locks and saves wait for it (Script
+  // tab audit, 2026-10-15), so nothing done meanwhile is lost or mixed in.
+  const busy = generating || waitingForScript;
   const [genError, setGenError] = useState(null);
   // Audit GATE-03 (2026-10-03): a script the server generated but could not
   // save. It lives here as a draft until Save keeps it; the reason is shown.
@@ -855,7 +879,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // Reordering edits the script on the page; Save keeps it. A locked beat
   // doesn't move itself, and its lines don't move (src/lib/scriptBeatOrder.js).
   const handleMoveBeat = (from, to) => {
-    if (beats[from]?.approved) return;
+    if (busy || beats[from]?.approved) return;
     const next = moveBeat(scriptText, from, to);
     if (next === scriptText) return;
     // The open beat stays open where it lands (the default open beat is
@@ -865,7 +889,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   };
   const handleMoveLine = (beatId, from, to) => {
     const at = beats.findIndex(b => b.id === beatId);
-    if (at < 0 || beats[at].approved) return;
+    if (busy || at < 0 || beats[at].approved) return;
     const next = moveLine(scriptText, at, from, to);
     if (next !== scriptText) { setScriptText(next); }
   };
@@ -873,7 +897,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // A phone moment or an overlay, added at the end of the beat (Task #2789).
   const handleAddMoment = (beatId, line, after = null) => {
     const at = beats.findIndex(b => b.id === beatId);
-    if (at < 0 || beats[at].approved) return;
+    if (busy || at < 0 || beats[at].approved) return;
     const next = after === null ? appendLine(scriptText, at, line) : insertLine(scriptText, at, after, line);
     if (next !== scriptText) { setScriptText(next); }
   };
@@ -885,12 +909,14 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   const keptNote = (kept) => `Beat${kept.length === 1 ? '' : 's'} ${kept.join(', ')} ${kept.length === 1 ? 'is' : 'are'} locked, so ${kept.length === 1 ? 'it was' : 'they were'} kept as approved`;
 
   const handleSave = useCallback(async () => {
+    if (busy) return;
     setSaving(true);
     try {
       const res = await api.put(`/api/v1/episodes/${episodeId}`, { script_content: scriptText });
       const stored = typeof res?.data?.data?.script_content === 'string' ? res.data.data.script_content : scriptText;
       const kept = res?.data?.locked_beats_kept || [];
-      if (stored !== scriptText) { setScriptText(stored); }
+      // Edits made while the save ran stay on the page (still unsaved).
+      if (stored !== scriptText && scriptRef.current === scriptText) { setScriptText(stored); }
       setSavedScript(stored);
       setUnsaved(null); setSaved(true); setTimeout(() => setSaved(false), 3000);
       if (kept.length) flash(`Saved. ${keptNote(kept)}.`, 'error', 5000);
@@ -898,7 +924,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     }
     catch (err) { console.error('[EpisodeScript] save failed:', err); flash('Save failed', 'error'); }
     finally { setSaving(false); }
-  }, [episodeId, scriptText, syncPostDrafts]);
+  }, [busy, episodeId, scriptText, syncPostDrafts]);
 
   // The episode page holds the episode the tab started from. Each saved
   // script and lock goes back to it, so leaving the tab and coming back
@@ -927,21 +953,16 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     const onKey = (e) => {
       if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 's') return;
       e.preventDefault();
-      if (dirty && !saving) handleSave();
+      if (dirty && !saving && !busy) handleSave();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [dirty, saving, handleSave]);
+  }, [dirty, saving, busy, handleSave]);
 
   const handleEditLine = (beatId, lineIndex, newText) => {
-    if (beats.find(b => b.id === beatId)?.approved) return;
-    const nb = beats.map(b => { if (b.id !== beatId) return b; const nl = [...b.lines]; nl[lineIndex] = newText; return { ...b, lines: nl, edited: true }; });
-    setBeats(nb);
-    // Only the edited beat is rewritten; the text before the first beat and
-    // every other beat stay exactly as they are (a locked beat included).
-    const body = nb.map(b => (b.edited || !b.raw?.trim() || !BEAT_HEADER_START.test(b.raw) ? `## BEAT: ${b.rawLabel}\n${b.lines.join('\n')}` : b.raw.trimEnd())).join('\n\n');
-    const preamble = scriptPreamble(scriptText);
-    setScriptText(preamble ? `${preamble}\n\n${body}` : body);
+    if (busy) return;
+    const next = scriptWithLine(scriptText, lockedBeats, beatId, lineIndex, newText);
+    if (next !== null) setScriptText(next);
   };
 
   // Rewrite one line (Evoni, 2026-10-08: "when i click rewrite in script
@@ -952,8 +973,9 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // Rewrite button. A failure says why.
   const handleRewriteLine = async (beatId, lineIndex, originalLine) => {
     const beat = beats.find(b => b.id === beatId);
-    if (beat?.approved) return;
-    setRewritingLine(`${beatId}-${lineIndex}`);
+    if (busy || beat?.approved) return;
+    const key = `${beatId}-${lineIndex}`;
+    setRewritingLine(key);
     try {
       const parsed = parseLine(originalLine);
       const res = await api.post(`/api/v1/episode-brief/${episodeId}/rewrite-line`, {
@@ -962,28 +984,42 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
         beatLines: (beat?.lines || []).filter((l) => typeof l === 'string' && l.trim() && !parseLine(l)?.hidden),
         showId,
       });
+      if (!mountedRef.current) return;
       const next = rewrittenLine(originalLine, res.data?.rewrittenLine);
       if (!next) { flash('The rewrite came back the same; try again.', 'error'); return; }
-      handleEditLine(beatId, lineIndex, next);
+      // The rewrite goes into the script as it is now (Script tab audit,
+      // 2026-10-15): edits made while it ran stay, and the line is found
+      // again by its words if it moved.
+      const current = scriptRef.current;
+      const nowBeat = parseScriptIntoBeats(current, lockedRef.current).find(b => b.id === beatId);
+      const at = nowBeat?.lines[lineIndex] === originalLine ? lineIndex : (nowBeat?.lines.indexOf(originalLine) ?? -1);
+      const written = at < 0 ? null : scriptWithLine(current, lockedRef.current, beatId, at, next);
+      if (written === null) { flash('The line changed or was approved while it was being rewritten, so the rewrite was not put in.', 'error', 6000); return; }
+      setScriptText(written);
       flash('Line rewritten ✦ Save to keep it.', 'success');
     } catch (err) {
       console.error('[EpisodeScript] rewrite failed:', err);
       flash(`Rewrite failed: ${err.response?.data?.error || err.message || 'no answer'}`, 'error', 6000);
-    } finally { setRewritingLine(null); }
+    } finally { if (mountedRef.current) setRewritingLine((r) => (r === key ? null : r)); }
   };
 
   // Regenerate one beat (Evoni, 2026-10-09, Task #2785: "what if I only want
   // to regenerate a line or a beat?"). The beat is written again against the
   // script as the page has it and put in place; Save keeps it.
   const handleRegenerateBeat = async (beatId) => {
-    const at = beats.findIndex(b => b.id === beatId);
-    const beat = beats[at];
-    if (!beat || beat.approved || regeneratingBeat) return;
+    const beat = beats.find(b => b.id === beatId);
+    if (busy || !beat || beat.approved || regeneratingBeat) return;
     setRegeneratingBeat(beatId);
     try {
       const res = await api.post(`/api/v1/episode-brief/${episodeId}/regenerate-beat`, { showId, beatNumber: beat.number, script: scriptText });
       if (!mountedRef.current) return;
+      // The beat is found again in the script as it is now (Script tab
+      // audit, 2026-10-15), so a beat moved while it was written is not
+      // written over, and a beat approved meanwhile is left as approved.
       const current = scriptRef.current;
+      const nowBeats = parseScriptIntoBeats(current, lockedRef.current);
+      const at = nowBeats.findIndex(b => b.id === beatId);
+      if (at < 0 || nowBeats[at].approved) { flash(`Beat ${beat.number} was approved or removed while it was being written, so the new version was not put in.`, 'error', 6000); return; }
       const next = replaceBeat(current, at, res.data?.beat);
       if (next === current) { flash('The beat came back the same; try again.', 'error'); return; }
       setScriptText(next);
@@ -999,7 +1035,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // page hasn't saved go with the lock, so the beat is locked as shown.
   const handleApprove = async (beatId) => {
     const beat = beats.find(b => b.id === beatId);
-    if (!beat || locking) return;
+    if (busy || !beat || locking) return;
     const next = beat.approved ? lockedBeats.filter(n => n !== beat.number) : [...lockedBeats, beat.number].sort((a, b) => a - b);
     const dirty = scriptText !== savedScript;
     setLocking(true);
@@ -1009,7 +1045,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       setLockedBeats(Array.isArray(data.script_locked_beats) ? data.script_locked_beats : next);
       if (dirty) {
         const stored = typeof data.script_content === 'string' ? data.script_content : scriptText;
-        if (stored !== scriptText) { setScriptText(stored); }
+        if (stored !== scriptText && scriptRef.current === scriptText) { setScriptText(stored); }
         setSavedScript(stored); setUnsaved(null);
       }
       const kept = res?.data?.locked_beats_kept || [];
@@ -1211,7 +1247,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       {unsaved && (
         <div className="esp-unsaved-banner" data-testid="script-unsaved" role="alert">
           <span className="esp-unsaved-banner-text"><strong>Not saved.</strong> {unsaved} The draft is only on this page until it is saved.</span>
-          <button type="button" className="esp-btn-primary is-small" data-testid="script-unsaved-save" onClick={handleSave} disabled={saving}>{saving ? '⏳ Saving…' : '💾 Save now'}</button>
+          <button type="button" className="esp-btn-primary is-small" data-testid="script-unsaved-save" onClick={handleSave} disabled={saving || busy}>{saving ? '⏳ Saving…' : '💾 Save now'}</button>
         </div>
       )}
       {/* The script's card (Evoni's Episode mock): its state, and its actions. */}
@@ -1232,7 +1268,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
               if (!window.confirm(ask)) return;
               handleGenerate(approvedCount > 0);
             }} disabled={generating}>{waitingForScript ? 'Still writing…' : generating ? 'Generating…' : approvedCount > 0 ? 'Regenerate unlocked' : 'Regenerate'}</button>
-            <button type="button" className={`esp-btn-primary${saved ? ' is-saved' : ''}`} onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}</button>
+            <button type="button" className={`esp-btn-primary${saved ? ' is-saved' : ''}`} onClick={handleSave} disabled={saving || busy}>{saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}</button>
           </div>
         ) : (
           <button type="button" className="esp-btn-primary is-large" onClick={() => handleGenerate()} disabled={generating}>
@@ -1262,20 +1298,21 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
           </ul>
         </>
       )}
+      {generating && !waitingForScript && hasScript && <div className="esp-waiting" role="status" data-testid="script-generating">Writing the new script. Editing, approving and saving are paused until it arrives.</div>}
       {waitingForScript && <div className="esp-waiting" role="status" data-testid="script-waiting">Still writing. The new script will show here as soon as it is saved; no need to refresh.</div>}
 
       {hasScript && developerMode && approvedCount > 0 && <p className="esp-raw-note" data-testid="script-raw-locked-note">🔒 Approved beats are locked. Changes to them here are put back when the script is saved.</p>}
       {/* The raw editor is the script itself, so a line edit or rewrite shows
           here, and it stays open when its text is cleared. */}
-      {developerMode && <textarea className="esp-raw" aria-label="Raw script" value={scriptText} onChange={e => setScriptText(e.target.value)} rows={30} />}
+      {developerMode && <textarea className="esp-raw" aria-label="Raw script" value={scriptText} readOnly={busy} onChange={e => setScriptText(e.target.value)} rows={30} />}
 
       {!developerMode && (hasScript ? (
-        <div>
+        <div className={busy ? 'esp-beats is-busy' : 'esp-beats'} aria-busy={busy || undefined} data-testid="script-beats">
           {beats.length > 1 && <p className="esp-order-hint">Drag a beat by its handle, or a line within its beat, to change the order. A beat keeps its number and name wherever it goes. Approved beats stay where they are.</p>}
           {beats.map((beat, index) => {
             const open = (expandedBeat === undefined ? beats[0]?.id : expandedBeat) === beat.id;
             const phoneUp = phoneUpAtStart[index] || false;
-            return <BeatSection key={beat.id} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open ? null : beat.id)} onApprove={handleApprove} onEdit={handleEditLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} phoneUpAtStart={phoneUp} people={people} lalaSlots={lineSlots.filter((s) => s.beatIndex === index)} dressCode={source?.event?.dress_code || ''} />;
+            return <BeatSection key={beat.id} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open ? null : beat.id)} onApprove={handleApprove} onEdit={handleEditLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking || busy} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} phoneUpAtStart={phoneUp} people={people} lalaSlots={lineSlots.filter((s) => s.beatIndex === index)} dressCode={source?.event?.dress_code || ''} />;
           })}
           {/* Franchise Guard Results */}
           {guardResult && (
@@ -1295,7 +1332,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
           {allApproved && (
             <div className="esp-done">
               <p className="esp-done-text">✦ All beats approved — script is ready</p>
-              <button type="button" className="esp-btn-primary" onClick={handleSave}>💾 Save Final Script</button>
+              <button type="button" className="esp-btn-primary" onClick={handleSave} disabled={saving || busy}>💾 Save Final Script</button>
             </div>
           )}
         </div>
@@ -1316,7 +1353,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       {hasScript && scriptText !== savedScript && (
         <div className="esp-savebar" data-testid="script-savebar" role="region" aria-label="Unsaved changes">
           <span className="esp-savebar-text">Unsaved changes</span>
-          <button type="button" className="esp-btn-primary is-small" data-testid="script-savebar-save" onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+          <button type="button" className="esp-btn-primary is-small" data-testid="script-savebar-save" onClick={handleSave} disabled={saving || busy}>{saving ? 'Saving…' : 'Save'}</button>
         </div>
       )}
 
