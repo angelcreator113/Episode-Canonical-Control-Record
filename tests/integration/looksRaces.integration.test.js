@@ -146,6 +146,18 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(map.get(`${look.id}:${angle}`)).toMatchObject({ status: 'failed' });
   });
 
+  it('a generated look on a set with no location of its own is shown (its venue is the brief\'s)', async () => {
+    const loc = await location();
+    const set = await sceneSet(null);
+    const episodeId = uuid();
+    const ev = await event(loc, set, { episodeId });
+    await run(`INSERT INTO scene_set_looks (id, scene_set_id, event_id, status, source, image_url, brief, created_at, updated_at)
+               VALUES (gen_random_uuid(), :set, :ev, 'complete', 'generated', 'https://x/look.jpg',
+                       CAST(:brief AS jsonb), NOW(), NOW())`,
+    { set, ev, brief: JSON.stringify({ world_location_id: loc, approved_base: { image_url: 'https://x/everyday.jpg' } }) });
+    expect((await dressed.episodeLooks(sequelize, episodeId)).get(set)).toMatchObject({ image_url: 'https://x/look.jpg' });
+  });
+
   it('a generated look made from a base that is no longer approved is not shown on the episode', async () => {
     const { loc, set } = await approvedVenue();
     const episodeId = uuid();

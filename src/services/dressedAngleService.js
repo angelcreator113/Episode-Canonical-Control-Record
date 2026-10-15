@@ -56,7 +56,11 @@ async function episodeLooks(sequelize, episodeId) {
   const [rows] = await sequelize.query(
     `SELECT sl.id, sl.scene_set_id, sl.image_url, sl.event_id FROM scene_set_looks sl
        JOIN scene_sets s ON s.id = sl.scene_set_id
-       LEFT JOIN world_locations l ON l.id = s.world_location_id AND l.deleted_at IS NULL
+       -- The venue the look was made at: the brief's (a look on a set with
+       -- no location of its own is made at the event's venue), else the set's.
+       LEFT JOIN world_locations l
+         ON l.id = COALESCE(NULLIF(sl.brief->>'world_location_id', '')::uuid, s.world_location_id)
+        AND l.deleted_at IS NULL
       WHERE sl.event_id = :eventId AND sl.status = 'complete' AND sl.image_url IS NOT NULL AND sl.deleted_at IS NULL
         AND (sl.source <> 'generated'
              OR sl.brief->'approved_base'->>'image_url' IS NULL
