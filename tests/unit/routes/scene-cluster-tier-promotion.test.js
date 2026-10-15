@@ -54,7 +54,7 @@ const AI_RATE_LIMITER_COUNTS = {
   'sceneTemplates.js': 0,
   'sceneLibrary.js': 0,
   'sceneProposeRoute.js': 3,   // 2 import-line matches + 1 handler (POST /propose-scene)
-  'sceneSetRoutes.js': 16,     // 2 import-line matches + 13 handler invocations (+1 Task #2396 POST /model-comparison; +1 POST /:id/look-variants/:kind/:value/generate, 2026-10-15)
+  'sceneSetRoutes.js': 17,     // 2 import-line matches + 14 handler invocations (+1 Task #2396 POST /model-comparison; +1 POST /:id/look-variants/:kind/:value/generate, 2026-10-15; +1 POST /:id/upload-base, which runs the paid base analysis, 2026-10-15)
   'sceneLinks.js': 0,
 };
 
@@ -183,10 +183,11 @@ describe('Step 3 CP4 — Scene cluster pure Tier 1 sweep + AI POST reference mod
     });
 
     // 13 with POST /:id/look-variants/:kind/:value/generate (2026-10-15).
-    test('sceneSetRoutes.js — exactly 13 requireAuth + aiRateLimiter middleware-chain occurrences', () => {
+    // 14 with POST /:id/upload-base (2026-10-15).
+    test('sceneSetRoutes.js — exactly 14 requireAuth + aiRateLimiter middleware-chain occurrences', () => {
       const src = readSrc('sceneSetRoutes.js');
       const matches = src.match(/requireAuth,\s*aiRateLimiter,/g) || [];
-      expect(matches.length).toBe(13);
+      expect(matches.length).toBe(14);
     });
   });
 
@@ -208,7 +209,7 @@ describe('Step 3 CP4 — Scene cluster pure Tier 1 sweep + AI POST reference mod
       expect(total).toBe(146);
     });
 
-    test('CP4 zone contains 19 total aiRateLimiter references (4 import-line matches + 15 handler invocations)', () => {
+    test('CP4 zone contains 20 total aiRateLimiter references (4 import-line matches + 16 handler invocations)', () => {
       // sceneProposeRoute.js (3) + sceneSetRoutes.js (15) = 18 (+1 Task #2396 POST /model-comparison).
       // Import lines have 2 matches each (destructure + module path) since
       // 'aiRateLimiter' appears in both `{ aiRateLimiter }` and `'.../aiRateLimiter'`.
@@ -217,7 +218,7 @@ describe('Step 3 CP4 — Scene cluster pure Tier 1 sweep + AI POST reference mod
         const matches = src.match(/\baiRateLimiter\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(19);
+      expect(total).toBe(20);
     });
 
     test('CP4 zone has zero optionalAuth references', () => {

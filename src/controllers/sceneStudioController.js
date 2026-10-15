@@ -1204,12 +1204,11 @@ exports.generateSceneSetObject = async (req, res) => {
       return res.status(400).json({ success: false, error: 'prompt is required' });
     }
 
-    // Scene sets have show_id directly
-    let showId = null;
-    try {
-      const sceneSet = await SceneSet.findByPk(id, { attributes: ['id', 'show_id'] });
-      showId = sceneSet?.show_id || null;
-    } catch { /* non-critical */ }
+    // Scene sets have show_id directly. A set that does not exist is a 404
+    // before the two paid images, not a charge (audit, 2026-10-15).
+    const sceneSet = await SceneSet.findByPk(id, { attributes: ['id', 'show_id'] });
+    if (!sceneSet) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    const showId = sceneSet.show_id || null;
 
     const options = await objectGenerationService.generateObject(prompt.trim(), {
       sceneId: id,

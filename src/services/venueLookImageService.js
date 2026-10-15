@@ -37,8 +37,11 @@ const STEPS = Object.freeze({ LOOK: 'look', BASE: 'base', AWAITING_APPROVAL: 'aw
 // DJ bug 1 (Evoni, 2026-10-02, §8(hh)): a look or base still generating
 // after this long is marked failed with its reason when it is next read
 // (a restart or a hung provider call leaves nothing else to finish it).
-const STUCK_AFTER_MS = 10 * 60 * 1000;
-const STUCK_REASON = 'Timed out: no image after 10 minutes';
+// The same window as the Scene Sets generation claim: a 10-minute sweep
+// beside the 15-minute claim marked a live base run failed, and a second
+// paid run could start (audit, 2026-10-15).
+const { STALE_MS: STUCK_AFTER_MS, GENERATION_STALE_MINUTES } = require('./generationClaimService');
+const STUCK_REASON = `Timed out: no image after ${GENERATION_STALE_MINUTES} minutes`;
 
 class VenueLookImageError extends Error {
   constructor(message, status = 400, code = 'LOOK_IMAGE_INVALID', extra = {}) {
