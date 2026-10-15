@@ -101,6 +101,8 @@
    the wrappers as they are. */
 .ed-wrap:has(.esp-main), .ed-content:has(> .esp) { overflow-x: clip; }
 .esp-order-hint, .esp-raw-note { margin: 0 0 10px; font-size: 12px; color: var(--lala-ink-muted); }
+/* A new script is being written: the beats wait for it. */
+.esp-beats.is-busy { opacity: 0.6; }
 
 /* Raw editor. */
 .esp-raw { display: block; box-sizing: border-box; width: 100%; margin-bottom: 24px; padding: 16px; border: 1px solid var(--lala-lavender-line); border-radius: 14px; background: var(--surface-card); color: var(--lala-ink); font-family: var(--font-mono); font-size: 13px; line-height: 1.6; resize: vertical; }
