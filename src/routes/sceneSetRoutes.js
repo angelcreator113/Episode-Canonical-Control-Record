@@ -1752,6 +1752,7 @@ router.post('/:id/angles/:angleId/analyze', validateUUIDParam('id'), requireAuth
 // ─── POST /:id/angles/:angleId/regenerate  — regenerate with refined prompt ──
 
 router.post('/:id/angles/:angleId/regenerate', validateUUIDParam('id'), requireAuth, aiRateLimiter, async (req, res) => {
+  let claimed = null;
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -1774,6 +1775,14 @@ router.post('/:id/angles/:angleId/regenerate', validateUUIDParam('id'), requireA
     const briefOverrides = readBriefOverrides(req.body?.overrides);
     if (briefOverrides.error) return res.status(400).json({ success: false, error: briefOverrides.error });
 
+    // Nothing the prompt can fix: refused before anything is claimed or paid.
+    if (require('../services/artifactDetectionService').refineFixes(categories).length === 0) {
+      return res.status(400).json({ success: false, code: 'NO_FIXES', error: `No fix is known for ${categories.join(', ')}. Generate the angle again instead.` });
+    }
+    // One generation of an angle at a time (a double click paid twice).
+    if (!(await claimGeneration(res, 'angle', angle.id, `"${angle.angle_name || angle.angle_label}"`))) return;
+    claimed = angle.id;
+
     const result = await sceneGenService.regenerateAngleRefined(
       angle, set, categories, { SceneAngle, SceneSet }, briefOverrides.value ? { overrides: briefOverrides.value } : {}
     );
@@ -1781,7 +1790,12 @@ router.post('/:id/angles/:angleId/regenerate', validateUUIDParam('id'), requireA
     res.json({ success: true, data: result });
   } catch (err) {
     console.error('Scene Sets POST /:id/angles/:angleId/regenerate error:', err);
-    res.status(isBudgetError(err) ? 429 : 500).json({ success: false, error: err.message });
+    // A refusal before the generation began leaves no angle generating.
+    if (claimed) {
+      await SceneAngle.update({ generation_status: 'failed' }, { where: { id: claimed, generation_status: 'generating' } })
+        .catch((updateErr) => console.error('Scene Sets regenerate: could not release the angle:', updateErr.message));
+    }
+    res.status(err.status || (isBudgetError(err) ? 429 : 500)).json({ success: false, code: err.code, error: err.message });
   }
 });
 
@@ -2587,6 +2601,12 @@ router.post('/:id/spec/validate-angle', validateUUIDParam('id'), requireAuth, as
  * chosen subset of labels. The label is the idempotent key: the same
  * request twice creates nothing the second time.
  */
+/** VANITY_CLOSE_UP → "Vanity close up". */
+function labelName(label) {
+  const words = String(label || '').toLowerCase().replace(/_+/g, ' ').trim();
+  return (words.charAt(0).toUpperCase() + words.slice(1)).slice(0, 60) || 'Angle';
+}
+
 function contractAngleRows(contracts, existingLabels, { only = null } = {}) {
   const { ANGLE_KINDS, KIND_FROM_LABEL } = require('../constants/beatLocations');
   const have = new Set([...existingLabels].map((l) => String(l || '').toUpperCase()));
@@ -2599,10 +2619,19 @@ function contractAngleRows(contracts, existingLabels, { only = null } = {}) {
     if (wanted && !wanted.has(label)) return;
     if (have.has(label)) { existing.push(label); return; }
     have.add(label);
-    const kind = String(c.kind || c.zone_kind || '').toLowerCase();
+    let kind = String(c.kind || c.zone_kind || '').toLowerCase();
+    // A shot that is a part of this picture (a usable frame) is a framing
+    // of the base room (an extra with no zone: Inside), cropped from it;
+    // as a zone it was regenerated as "a different part of the place" and
+    // lost its crop and checks (audit, 2026-10-15). Front and Back keep
+    // their kind: the beats ask for them.
+    const inPicture = Boolean(sceneSpecService.contractFrame({ camera_contracts: [{ ...c, angle: label }] }, label));
+    if (inPicture && !['front', 'back'].includes(kind)) kind = 'extra';
     rows.push({
       angle_label: label,
-      angle_name: (c.description || label).slice(0, 255),
+      // A short name (the label in words); the contract's sentence is the
+      // description, never the name a zone's camera line is built from.
+      angle_name: labelName(label),
       angle_description: c.validation || c.description || '',
       camera_direction: c.description || '',
       angle_kind: ANGLE_KINDS.includes(kind) ? kind : (KIND_FROM_LABEL[label] || null),

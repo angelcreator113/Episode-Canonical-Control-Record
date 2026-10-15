@@ -105,7 +105,10 @@ const SHOT_CAMERAS = Object.freeze({
 // ENTRANCE) read as the framing they name, not as a wide shot.
 const SHOT_ALIASES = Object.freeze({
   CLOSE_UP: 'CLOSE', CLOSEUP: 'CLOSE', DETAIL: 'CLOSE',
-  DOOR: 'DOORWAY', ENTRANCE: 'DOORWAY', ENTRY: 'DOORWAY',
+  // ENTRANCE and ENTRY are not DOORWAY ("looking in"): the spec plans
+  // ENTRANCE for an exterior, which came out as the room (audit,
+  // 2026-10-15). They frame the entrance, like any named thing.
+  DOOR: 'DOORWAY',
   TOP_DOWN: 'OVERHEAD', BIRDS_EYE: 'OVERHEAD',
   ESTABLISHING_SHOT: 'ESTABLISHING', EXTERIOR: 'ESTABLISHING',
   WIDE_SHOT: 'WIDE',
@@ -152,9 +155,16 @@ const ZONE_CAMERAS = Object.freeze({
 // told every piece of the bedroom's furniture must be present).
 const OUTSIDE_ZONES = Object.freeze(['front', 'back']);
 const ZONE_CONTINUITY = 'The same place as the reference image: its architecture, materials and palette; a different part of it, not the same view.';
+// A zone's name in its camera line: a short name only. Angles made from a
+// spec carried the contract's sentence as their name ("Establishing view of
+// the Close-up of the tufted headboard… of the Bedroom").
+const zoneName = (name) => {
+  const n = clean(name || '');
+  return n && n.length <= 40 && !/[.!?;:]/.test(n) ? n : '';
+};
 const zoneCamera = (zone, place) => {
   const make = ZONE_CAMERAS[String(zone?.kind || '').toLowerCase()];
-  return make ? make(place, clean(zone?.name || '')) : null;
+  return make ? make(place, zoneName(zone?.name)) : null;
 };
 
 const TIME_LIGHT = Object.freeze({
@@ -549,6 +559,7 @@ module.exports = {
   TIME_LIGHT,
   SEASON_TEXT,
   shotKey,
+  GENERIC_SHOTS,
   ZONE_CAMERAS,
   timeOfDayFromEventTime,
   seasonFromDate,

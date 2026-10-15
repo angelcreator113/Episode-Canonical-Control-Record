@@ -54,7 +54,8 @@ const refinementQueue = new Bull('scene-refinement', {
     return client;
   },
   defaultJobOptions: {
-    attempts: 2,
+    // One attempt: a retried pass pays for its image again (audit, 2026-10-15).
+    attempts: 1,
     backoff: { type: 'exponential', delay: 5000 },
     removeOnComplete: { age: 24 * 3600, count: 50 },
     removeOnFail: { age: 7 * 24 * 3600 },
@@ -96,6 +97,7 @@ refinementQueue.on('error', (error) => {
 function registerWorker() {
   const sceneGenService = require('../services/sceneGenerationService');
   const postProcessService = require('../services/postProcessingService');
+  const { refineFixes } = require('../services/artifactDetectionService');
 
   refinementQueue.process('refine-angle', 2, async (job) => {
     const {
@@ -148,13 +150,17 @@ function registerWorker() {
       return { qualityScore: result.qualityScore, pass, status: 'quality_met' };
     }
 
-    // If below threshold and more passes available, re-queue
-    if (pass < MAX_REFINEMENT_PASSES) {
+    // Another pass only with a score to compare and problems it can fix:
+    // with no score (the check could not run) or nothing fixable, a pass
+    // regenerated the same prompt and paid again (audit, 2026-10-15).
+    const nextCategories = (result.artifactFlags || []).map(f => f.category).filter(Boolean);
+    const canImprove = result.qualityScore != null && refineFixes(nextCategories).length > 0;
+    if (pass < MAX_REFINEMENT_PASSES && canImprove) {
       console.log(`[RefinementQueue] Quality low (${result.qualityScore}), queuing pass ${pass + 1}`);
       await addRefinementJob({
         angleId,
         sceneSetId,
-        artifactCategories: (result.artifactFlags || []).map(f => f.category).filter(Boolean),
+        artifactCategories: nextCategories,
         pass: pass + 1,
         qualityThreshold,
         runPostProcessing,
