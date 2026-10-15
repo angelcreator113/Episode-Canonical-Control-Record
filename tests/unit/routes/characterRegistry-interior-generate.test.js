@@ -21,10 +21,14 @@ const mockRow = (data) => ({
 });
 
 let mockStored;
+let mockFeedProfile;
 let mockLocked;
 jest.mock('../../../src/models', () => ({
   RegistryCharacter: { findByPk: jest.fn(async (_id, opts) => (opts?.lock ? mockLocked : mockStored)) },
-  SocialProfile: { findByPk: jest.fn(async () => ({ id: 7, handle: 'slowsift', bio: 'linen on a line' })) },
+  SocialProfile: {
+    findByPk: jest.fn(async () => mockFeedProfile),
+    update: jest.fn(async () => [1]),
+  },
   sequelize: { transaction: jest.fn(async (fn) => fn({ LOCK: { UPDATE: 'UPDATE' } })) },
 }));
 jest.mock('../../../src/middleware/auth', () => {
@@ -43,6 +47,8 @@ const url = '/api/v1/character-registry/characters/rc-1/interior/generate';
 
 beforeEach(() => {
   mockGenerateMissingInterior.mockReset();
+  require('../../../src/models').SocialProfile.update.mockClear();
+  mockFeedProfile = { id: 7, handle: 'slowsift', vibe_sentence: 'linen on a line' };
   mockStored = mockRow({ id: 'rc-1', display_name: 'slowsift', feed_profile_id: 7, depth_level: null, wound: { description: 'kept' } });
   mockLocked = mockRow({ ...mockStored.toJSON() });
 });
@@ -127,3 +133,31 @@ test('missingInteriorFields treats empty objects and arrays as missing', () => {
   const missing = gen.missingInteriorFields({ wound: {}, triggers: [], the_mask: { description: 'x' } }, ['wound', 'triggers', 'the_mask']);
   expect(missing).toEqual(['wound', 'triggers']);
 });
+
+describe('their real name', () => {
+  test("a real name the feed profile already has is copied, not invented", async () => {
+    mockFeedProfile.creator_name = 'Maren Ellis';
+    const res = await request(app).post(url).send({ fields: ['selected_name'] });
+    expect(res.status).toBe(200);
+    expect(res.body.filled).toEqual(['selected_name']);
+    expect(mockGenerateMissingInterior).not.toHaveBeenCalled();
+    expect(mockLocked.selected_name).toBe('Maren Ellis');
+  });
+
+  test('a suggested real name is written to the feed profile too (never the locked JustAWoman record)', async () => {
+    mockGenerateMissingInterior.mockResolvedValue({ selected_name: 'Maren Ellis' });
+    const res = await request(app).post(url).send({ fields: ['selected_name'] });
+    expect(res.status).toBe(200);
+    const models = require('../../../src/models');
+    expect(models.SocialProfile.update).toHaveBeenCalledWith(
+      { creator_name: 'Maren Ellis' },
+      { where: { id: 7, is_justawoman_record: expect.anything() } },
+    );
+  });
+
+  test('the generator asks for real_name and reads it back as selected_name', () => {
+    expect(gen.interiorUpdates({ real_name: '  Maren Ellis ' }, ['selected_name'])).toEqual({ selected_name: 'Maren Ellis' });
+    expect(gen.interiorUpdates({ selected_name: '@slowsift' }, ['selected_name'])).toEqual({});
+  });
+});
+

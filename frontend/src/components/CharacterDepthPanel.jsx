@@ -10,7 +10,7 @@
  * lavender for blind spot/change/foreclosed.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { API_URL } from '../config/api';
 import apiClient from '../services/api';
 
@@ -202,8 +202,9 @@ export default function CharacterDepthPanel({ characterId, characterName }) {
     }
   }, [characterId]);
 
-  // Load on first render
-  if (!loaded && !loading) loadDepth();
+  // Load once per character. It used to be called during render whenever
+  // nothing was loaded, so a failed load fired again on every render.
+  useEffect(() => { loadDepth(); }, [loadDepth]);
 
   // ── Helpers ──
   const val = (field) => proposed[field] !== undefined ? proposed[field] : depth[field];

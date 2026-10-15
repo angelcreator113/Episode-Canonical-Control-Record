@@ -150,14 +150,22 @@ const text = (v) => {
   return x.text || x.caption || x.content || null;
 };
 
-/** "Their voice": a sample post, the habit, a phrase, and what they never say outright. */
+/**
+ * "Their voice": a sample post, the habit, a phrase, how they sound inside,
+ * and what they never say outright. "Never says" is the deep profile's
+ * speech dimension; internal_monologue_style is how they think, so it is
+ * the inner voice (it used to be shown as "never says").
+ */
 export function voiceOf(character, feedProfile) {
   const vs = parse(character?.voice_signature) || {};
+  const dp = character?.deep_profile || {};
+  const speech = dp.speech_and_silence || dp.speech_silence;
   const voice = {
     sample: text(feedProfile?.sample_captions) || text(feedProfile?.pinned_post) || null,
     habit: feedProfile?.posting_voice || vs.speech_pattern || null,
     phrase: text(vs.catchphrases) || vs.vocabulary_tone || null,
-    neverSays: vs.internal_monologue_style || null,
+    innerVoice: vs.internal_monologue_style || null,
+    neverSays: (speech && typeof speech === 'object' ? speech.what_they_never_say_directly : null) || null,
   };
   return Object.values(voice).some(Boolean) ? voice : null;
 }

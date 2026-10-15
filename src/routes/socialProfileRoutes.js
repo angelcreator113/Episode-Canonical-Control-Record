@@ -1597,7 +1597,12 @@ router.post('/:id/cross', requireAuth, guardJustAWomanRecord, async (req, res) =
   try {
     const profile = await db.SocialProfile.findByPk(req.params.id);
     if (!profile) return res.status(404).json({ error: 'Not found' });
-    if (profile.status === 'crossed') return res.status(409).json({ error: 'Already crossed into world.' });
+    // A profile crossed before Cross made characters (finding 6b) has no
+    // character: Cross makes it now. Only a crossed profile with one is done.
+    const alreadyCrossed = profile.status === 'crossed';
+    if (alreadyCrossed && await linkedCharacter(db, profile.id)) {
+      return res.status(409).json({ error: 'Already crossed into world.' });
+    }
 
     // Auto-create registry character from social profile, in the registry
     // named, else the show's newest registry, else the newest registry. The
@@ -1634,6 +1639,11 @@ router.post('/:id/cross', requireAuth, guardJustAWomanRecord, async (req, res) =
           character_key: charKey,
           feed_profile_id: profile.id,
           display_name: profile.display_name || profile.handle,
+          // Their real name (the feed profile's creator_name) comes with them;
+          // display_name stays the name they go by on the feed.
+          selected_name: profile.creator_name || null,
+          world: profile.feed_layer === 'lalaverse' ? 'lalaverse' : 'book-1',
+          social_presence: true,
           icon: '\uD83D\uDCF1',
           role_type: 'pressure',
           status: 'accepted',
@@ -1659,8 +1669,9 @@ router.post('/:id/cross', requireAuth, guardJustAWomanRecord, async (req, res) =
       crossing_trigger: crossing_note || profile.crossing_trigger,
     });
 
-    // Log the crossing as a world timeline event
-    try {
+    // Log the crossing as a world timeline event (once: a profile crossed
+    // before, now only given its character, already has one).
+    if (!alreadyCrossed) try {
       await db.WorldTimelineEvent.create({
         event_name: `${profile.display_name || profile.handle} crosses into the story world`,
         event_description: `Social media creator ${profile.handle} (${profile.platform}) enters the story via: ${profile.crossing_mechanism || 'direct encounter'}. Trigger: ${crossing_note || profile.crossing_trigger || 'story need'}`,
@@ -1705,7 +1716,7 @@ router.put('/:id', requireAuth, guardJustAWomanRecord, async (req, res) => {
     if (await refuseTakenRename(db, profile, req.body, res)) return;
 
     const allowed = [
-      'handle', 'platform', 'vibe_sentence', 'display_name',
+      'handle', 'platform', 'vibe_sentence', 'display_name', 'creator_name',
       'content_persona', 'real_signal', 'posting_voice', 'comment_energy',
       'parasocial_function', 'emotional_activation', 'watch_reason',
       'what_it_costs_her', 'current_trajectory', 'trajectory_detail',
@@ -1751,7 +1762,7 @@ router.patch('/:id', requireAuth, guardJustAWomanRecord, async (req, res) => {
     if (await refuseTakenRename(db, profile, req.body, res)) return;
 
     const allowed = [
-      'handle', 'platform', 'vibe_sentence', 'display_name',
+      'handle', 'platform', 'vibe_sentence', 'display_name', 'creator_name',
       'content_persona', 'real_signal', 'posting_voice', 'comment_energy',
       'parasocial_function', 'emotional_activation', 'watch_reason',
       'what_it_costs_her', 'current_trajectory', 'trajectory_detail',
