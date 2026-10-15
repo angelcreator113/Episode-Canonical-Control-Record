@@ -67,6 +67,7 @@ export default function CharacterRegistryPage() {
   const [oldTab, setOldTab] = useState('review');
   const [matching, setMatching] = useState(null); // { id, profileId } while a match is being chosen
   const [busyId, setBusyId] = useState(null);
+  const [crossingId, setCrossingId] = useState(null); // the feed person whose character is being made
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({ display_name: '', role_type: 'pressure', icon: '👤' });
   const [creating, setCreating] = useState(false);
@@ -99,6 +100,21 @@ export default function CharacterRegistryPage() {
       const res = await api.get('/api/v1/social-profiles?feed_layer=lalaverse&limit=100');
       setProfiles(res.data?.profiles || []);
     } catch (err) { console.error('[CharacterRegistryPage] feed profiles load failed:', err); setProfiles([]); }
+  };
+
+  // "Create character" on a feed person with none (Task #3201; the cast read
+  // §3.2): the Feed's Cross (POST /social-profiles/:id/cross) makes the
+  // character in the active show's registry and links it by feed_profile_id.
+  const createCharacterFor = async (person) => {
+    setCrossingId(person.id);
+    try {
+      const res = await api.post(`/api/v1/social-profiles/${person.id}/cross`, activeShowId ? { show_id: activeShowId } : {});
+      showToast(res.data?.registry_character ? `Character created for ${person.name}` : (res.data?.registry_note || `No character was created for ${person.name}`));
+      await Promise.all([loadProfiles(), loadCharacters()]);
+    } catch (err) {
+      console.error('[CharacterRegistryPage] create character failed:', err);
+      showToast('Failed: ' + (err.response?.data?.message || err.response?.data?.error || err.message));
+    } finally { setCrossingId(null); }
   };
 
   const loadReview = async (id) => {
@@ -289,6 +305,15 @@ export default function CharacterRegistryPage() {
                     {p.characterId && episodes(p.characterId) > 0 && <span className="cast-chip is-green">In {episodesLabel(episodes(p.characterId))}</span>}
                   </span>
                 </Link>
+                {/* With no registry, Cross would mark the profile crossed and make no character. */}
+                {!p.characterId && (
+                  <button type="button" className="cast-btn-soft cast-person-create" data-testid="cast-create-character"
+                    disabled={crossingId === p.id || registries.length === 0}
+                    title={registries.length === 0 ? 'No character registry to add this person to yet' : undefined}
+                    onClick={() => createCharacterFor(p)}>
+                    {crossingId === p.id ? 'Creating…' : 'Create character'}
+                  </button>
+                )}
               </li>
             ))}
           </ul>
