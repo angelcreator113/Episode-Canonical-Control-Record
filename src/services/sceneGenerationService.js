@@ -34,7 +34,7 @@ const S3_BUCKET          = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_B
 const AWS_REGION         = process.env.AWS_REGION || 'us-east-1';
 
 const s3 = new S3Client({ region: AWS_REGION });
-const { buildSceneBrief, briefToPrompt, prepareSceneBrief, loadBriefLocation } = require('./sceneBriefService');
+const { buildSceneBrief, briefToPrompt, prepareSceneBrief, loadBriefLocation, shotKey } = require('./sceneBriefService');
 const { noteBaseChanged, descriptionAfterAnalysis, writeReview } = require('./baseDescriptionService');
 const { ZONE_KINDS } = require('../constants/beatLocations');
 const { assertBaseReplaceable } = require('./approvedBaseService');
@@ -1165,8 +1165,12 @@ Return ONLY JSON.` },
  * Returns a consistency score (0-100) and list of discrepancies.
  * Used to auto-retry if the generated angle drifted too far from the base.
  */
+// A check that could not run says so (checked: false, score null); it was
+// recorded as a perfect 100, which hid every failed check.
+const uncheckedConsistency = (reason) => ({ checked: false, score: null, issues: [], pass: null, reason });
+
 async function checkAngleConsistency(baseImageUrl, angleImageUrl, angleName) {
-  if (!process.env.ANTHROPIC_API_KEY) return { score: 100, issues: [], pass: true };
+  if (!process.env.ANTHROPIC_API_KEY) return uncheckedConsistency('ANTHROPIC_API_KEY not configured');
 
   try {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -1198,15 +1202,20 @@ Score guide: 90+ = excellent (same room clearly), 70-89 = acceptable (minor drif
 
     const text = response.content?.[0]?.text || '';
     const match = text.match(/\{[\s\S]*\}/);
-    if (!match) return { score: 100, issues: [], pass: true };
+    if (!match) {
+      console.warn(`[SceneGen] Consistency check for "${angleName}" returned no JSON`);
+      return uncheckedConsistency('The check returned no result');
+    }
 
     const result = JSON.parse(match[0]);
-    result.pass = (result.score || 0) >= 70;
+    if (typeof result.score !== 'number') return uncheckedConsistency('The check returned no score');
+    result.checked = true;
+    result.pass = result.score >= 70;
     console.log(`[SceneGen] Consistency check for "${angleName}": score=${result.score}, pass=${result.pass}, issues=${result.issues?.length || 0}`);
     return result;
   } catch (err) {
     console.warn(`[SceneGen] Consistency check failed (non-blocking): ${err.message}`);
-    return { score: 100, issues: [], pass: true };
+    return uncheckedConsistency(err.message);
   }
 }
 
@@ -1531,12 +1540,24 @@ const CAMERA_CROP_MAP = {
  * For crop+extend angles (VANITY, WINDOW): crops, extends canvas, uses
  * gpt-image-1.5 (OUTPAINT_MODEL) to fill the new area while keeping original pixels.
  */
+// The narrowest frame, as a share of the base's width, kept as a pure crop:
+// the base is rendered at 1024 px wide, so a half-width frame is already
+// about 3x enlarged at 1536.
+const MIN_PURE_CROP_FRACTION = 0.5;
+
 async function cropAndOutpaint(baseImageUrl, angleLabel, setId, angleId, prompt, { onLogged, frame = null } = {}) {
   // A frame from the set's own spec is a pure crop of that part of its
   // picture; without one, the fixed map (direct callers only: generateAngle
   // crops only with a frame, Evoni 2026-10-07).
   const config = frame ? { crop: frame, extend: 'none', extendAmount: 0 } : CAMERA_CROP_MAP[angleLabel];
   if (!config || !baseImageUrl) return null;
+  // A pure crop is a real view only with enough of the picture's own pixels:
+  // a small region stretched to full size is a blur, so it is generated from
+  // the base instead (null: the caller's Kontext path).
+  if ((config.extend === 'none' || config.extendAmount === 0) && !(config.crop.width >= MIN_PURE_CROP_FRACTION)) {
+    console.log(`[SceneGen] Frame for ${angleLabel} is ${Math.round((config.crop.width || 0) * 100)}% of the picture's width; generated instead of cropped`);
+    return null;
+  }
 
   try {
     console.log(`[SceneGen] Crop+outpaint for ${angleLabel}: crop=${JSON.stringify(config.crop)}, extend=${config.extend}`);
@@ -1559,9 +1580,9 @@ async function cropAndOutpaint(baseImageUrl, angleLabel, setId, angleId, prompt,
       .toBuffer();
 
     if (config.extend === 'none' || config.extendAmount === 0) {
-      // Pure crop — just upscale to target resolution
+      // The frame keeps its own shape (no cut to 3:2), at most 1536x1024.
       const resultBuffer = await sharp(croppedBuffer)
-        .resize(1536, 1024, { fit: 'cover' })
+        .resize(1536, 1024, { fit: 'inside' })
         .png()
         .toBuffer();
 
@@ -1685,7 +1706,10 @@ async function cropAndOutpaint(baseImageUrl, angleLabel, setId, angleId, prompt,
 function angleBriefOptions(sceneAngle, sceneSet, { imageAnalysis = null, overrides = null } = {}) {
   const angleLabel = sceneAngle.angle_label || 'WIDE';
   const vl = sceneSet.visual_language || {};
-  const anchorObjects = vl.anchor_objects || imageAnalysis?.anchor_objects || [];
+  // Anchors from the analysis of this base, not of a base it replaced.
+  const storedFit = !sceneSet.base_still_url || vl.image_analysis?.source_url === sceneSet.base_still_url;
+  const freshFit = imageAnalysis && imageAnalysis.source_url === sceneSet.base_still_url;
+  const anchorObjects = (freshFit && imageAnalysis.anchor_objects) || (storedFit && vl.anchor_objects) || [];
 
   // ── The shot's required visible features: the SceneSpec camera
   // contracts (preferred), else the anchor objects ──
@@ -1696,8 +1720,14 @@ function angleBriefOptions(sceneAngle, sceneSet, { imageAnalysis = null, overrid
   }
 
   // Build legacy anchors (used both as the fallback and as DALL-E hint)
+  // An anchor that names no angles belongs to the wide views: a close or
+  // single-wall angle told to show every anchor drifts back to a wide shot.
+  const key = shotKey(angleLabel);
+  const wideShot = WIDE_SHOTS.includes(key);
   const relevantAnchors = anchorObjects
-    .filter(a => !a.must_appear_in || a.must_appear_in.length === 0 || a.must_appear_in.some(label => angleLabel.includes(label)))
+    .filter(a => (!a.must_appear_in || a.must_appear_in.length === 0)
+      ? wideShot
+      : a.must_appear_in.some(label => angleLabel.toUpperCase().includes(String(label).toUpperCase())))
     .map(a => `${a.name} (${a.position}): ${a.description}`)
     .slice(0, 5);
 
@@ -1721,6 +1751,14 @@ function angleBriefOptions(sceneAngle, sceneSet, { imageAnalysis = null, overrid
     relevantAnchors,
     specConstraints,
   };
+}
+
+// Framings that show the whole space (sceneBriefService.SHOT_CAMERAS).
+const WIDE_SHOTS = Object.freeze(['WIDE', 'ESTABLISHING', 'OVERHEAD']);
+
+/** True when a SceneSpec was built from this base picture (its _meta.base_still_url). */
+function specFitsBase(spec, baseUrl) {
+  return Boolean(spec && baseUrl && spec._meta?.base_still_url === baseUrl);
 }
 
 /** L14 (b): { kind, name } for an angle that is a zone of its set; null otherwise. */
@@ -1819,14 +1857,23 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
       console.warn(`[SceneGen] Image analysis failed (non-blocking): ${err.message}`);
     }
 
-    // Auto-build SceneSpec if not present
-    if (!sceneSet.scene_spec && imageAnalysis) {
-      try {
-        const spec = await sceneSpecService.buildSceneSpec(sceneSet, SceneSet);
-        if (spec) sceneSet.scene_spec = spec;
-      } catch (specErr) {
-        console.warn(`[SceneGen] SceneSpec build failed (non-blocking): ${specErr.message}`);
+    // The SceneSpec describes the picture it was built from. After a new
+    // base, its frames, objects and checks belong to the old picture (a crop
+    // at the old coordinates, the old room's objects demanded), so it is
+    // rebuilt from this base; one that cannot be rebuilt is not used.
+    if (!specFitsBase(sceneSet.scene_spec, sceneSet.base_still_url)) {
+      let spec = null;
+      if (imageAnalysis) {
+        try {
+          spec = await sceneSpecService.buildSceneSpec(sceneSet, SceneSet);
+        } catch (specErr) {
+          console.warn(`[SceneGen] SceneSpec build failed (non-blocking): ${specErr.message}`);
+        }
       }
+      if (sceneSet.scene_spec && !spec) {
+        console.warn(`[SceneGen] SceneSpec for set ${sceneSet.id} was built from another base picture; not used for this angle`);
+      }
+      sceneSet.scene_spec = spec || null;
     }
   }
 
@@ -1927,7 +1974,8 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
       const { imageUrl } = await startTextToImage(prompt, {
         styleReference,
         referenceImages,
-        guidanceScale: 1.5,
+        // Kontext's own guidance, as zones and dressed angles use: 1.5 (a
+        // Runway-era weight) let it ignore the camera line.
         onLogged: angleCosts.onLogged,
       });
       stillUrl = await downloadAndStoreStill(imageUrl, sceneSet.id, sceneAngle.id);
@@ -1940,14 +1988,15 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
       consistencyCheck = await checkAngleConsistency(referenceImageForEdit, stillUrl, sceneAngle.angle_name);
       let retryCount = 0;
 
-      while ((consistencyCheck?.score || 0) < CONSISTENCY_MIN_SCORE && retryCount < CONSISTENCY_MAX_RETRIES) {
+      // Only a check that ran and scored low retries: one that could not run
+      // is no evidence the angle drifted.
+      while (consistencyCheck?.checked && consistencyCheck.score < CONSISTENCY_MIN_SCORE && retryCount < CONSISTENCY_MAX_RETRIES) {
         retryCount += 1;
         console.warn(`[SceneGen] Consistency score ${consistencyCheck.score} below ${CONSISTENCY_MIN_SCORE} for ${angleLabel}; retrying (${retryCount}/${CONSISTENCY_MAX_RETRIES})`);
 
         const retryPrompt = buildIdentityLockPrompt(prompt, angleLabel, consistencyCheck?.issues || []);
         const { imageUrl: retryImageUrl } = await startTextToImage(retryPrompt, {
           referenceImages: [{ uri: referenceImageForEdit, weight: 0.95 }],
-          guidanceScale: 1.3,
           onLogged: angleCosts.onLogged,
         });
 
@@ -1975,8 +2024,10 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
     const qualityReview = sceneAngle.quality_review || {};
     if (consistencyCheck) {
       qualityReview.base_consistency = {
+        checked: Boolean(consistencyCheck.checked),
         score: consistencyCheck.score,
-        pass: (consistencyCheck.score || 0) >= CONSISTENCY_MIN_SCORE,
+        pass: consistencyCheck.checked ? consistencyCheck.score >= CONSISTENCY_MIN_SCORE : null,
+        ...(consistencyCheck.checked ? {} : { reason: consistencyCheck.reason || null }),
         issues: consistencyCheck.issues || [],
         validated_at: new Date().toISOString(),
         threshold: CONSISTENCY_MIN_SCORE,
@@ -2211,6 +2262,7 @@ module.exports = {
   MOOD_PRESETS,
   generateAngle,
   angleBriefOptions,
+  specFitsBase,
   zoneOf,
   zoneReferenceImage,
   refinedBriefOptions,

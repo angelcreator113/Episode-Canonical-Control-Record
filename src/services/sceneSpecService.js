@@ -342,10 +342,12 @@ Return ONLY the JSON. No markdown, no commentary.`;
 function buildAngleConstraints(spec, angleLabel) {
   if (!spec?.camera_contracts || !spec?.objects) return '';
 
-  // Find matching contract (case-insensitive, partial match)
-  const contract = spec.camera_contracts.find(c =>
-    c.angle && angleLabel.toUpperCase().includes(c.angle.toUpperCase())
-  );
+  // The contract named exactly, else one whose name the label contains
+  // (as contractFrame): CLOSET is not taken by a CLOSE contract listed first.
+  const norm = (a) => String(a || '').toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+  const label = norm(angleLabel);
+  const contract = spec.camera_contracts.find(c => c.angle && norm(c.angle) === label)
+    || spec.camera_contracts.find(c => c.angle && label.includes(norm(c.angle)));
   if (!contract) return '';
 
   const objectMap = new Map(spec.objects.map(o => [o.id, o]));
@@ -358,8 +360,9 @@ function buildAngleConstraints(spec, angleLabel) {
         const obj = objectMap.get(id);
         if (!obj) return null;
         const cont = obj.continuity || {};
+        // No locked_text: the brief's rules forbid text in the image, and
+        // the image model renders demanded text badly.
         let desc = `${obj.label}: ${obj.description}`;
-        if (cont.locked_text) desc += ` Text reads exactly: "${cont.locked_text}".`;
         if (cont.locked_color) desc += ` Color: ${cont.locked_color}.`;
         if (cont.locked_material) desc += ` Material: ${cont.locked_material}.`;
         return desc;
@@ -381,15 +384,9 @@ function buildAngleConstraints(spec, angleLabel) {
     }
   }
 
-  // Out of frame — should NOT appear
-  if (contract.out_of_frame?.length) {
-    const excludeNames = contract.out_of_frame
-      .map(id => objectMap.get(id)?.label)
-      .filter(Boolean);
-    if (excludeNames.length) {
-      parts.push(`Do NOT include: ${excludeNames.join(', ')}.`);
-    }
-  }
+  // out_of_frame is not written into the prompt: the image model reads
+  // "Do NOT include: X" as a mention of X and tends to add it. It stays in
+  // the spec for validation.
 
   return parts.join('\n\n');
 }
