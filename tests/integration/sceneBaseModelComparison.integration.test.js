@@ -198,10 +198,16 @@ async function waitFor(fn, timeoutMs = 20000) {
   it('GET /base-models lists the three with estimates and the default', async () => {
     const res = await request(app).get('/api/v1/scene-sets/base-models').set('Authorization', `Bearer ${userToken}`);
     expect(res.status).toBe(200);
-    expect(res.body.default_model).toBe('flux-dev');
+    // Evoni, 2026-10-15: gpt-image-1.5 is the default; with no OpenAI key,
+    // flux-dev (the previous default).
+    expect(res.body.default_model).toBe('gpt-image-1.5');
     expect(res.body.models.map((m) => [m.key, m.estimate_usd])).toEqual([
       ['flux-dev', 0.025], ['flux-pro-1.1', 0.04], ['gpt-image-1.5', 0.2],
     ]);
+    delete process.env.OPENAI_API_KEY;
+    const noKey = await request(app).get('/api/v1/scene-sets/base-models').set('Authorization', `Bearer ${userToken}`);
+    expect(noKey.body.default_model).toBe('flux-dev');
+    process.env.OPENAI_API_KEY = 'test-openai';
   });
 
   /**
