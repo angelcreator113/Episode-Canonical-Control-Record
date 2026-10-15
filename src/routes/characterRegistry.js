@@ -1916,6 +1916,85 @@ ${config.schema}`,
 });
 
 /**
+ * POST /characters/:id/interior/generate
+ * Fill in a character's missing inner life: want, wound, mask, living state,
+ * triggers, dilemma, deep profile and the rest of the interior. A character
+ * from the feed or the old system has none of it; until now only a character
+ * made through character-generation /generate got one. Built from what the
+ * character already is (their writing, voice and feed profile). Only empty
+ * fields are written; nothing already there is touched.
+ * Body: { fields?: [...] } — limit it to these (default: everything missing).
+ * Then the depth level moves up to what the character now has.
+ */
+router.post('/characters/:id/interior/generate', requireAuth, aiRateLimiter, async (req, res) => {
+  const { id } = req.params;
+  const requested = req.body?.fields;
+  const db = getModels();
+  const gen = require('../services/characterGenerationService');
+
+  if (requested !== undefined) {
+    const bad = Array.isArray(requested) ? requested.filter((f) => !gen.INTERIOR_FIELDS.includes(f)) : ['fields'];
+    if (bad.length) return res.status(400).json({ error: `Unknown fields: ${bad.join(', ')}. Valid: ${gen.INTERIOR_FIELDS.join(', ')}` });
+  }
+
+  try {
+    const character = await db.RegistryCharacter.findByPk(id);
+    if (!character) return res.status(404).json({ error: 'Character not found' });
+    if (character.status === 'finalized') return res.status(409).json({ error: 'This character is finalized. Unlock them to change their inner life.' });
+
+    const missing = gen.missingInteriorFields(character, requested);
+    if (missing.length === 0) {
+      return res.json({ success: true, filled: [], depth_level: character.depth_level, character, message: 'Nothing is missing.' });
+    }
+
+    let feedProfile = null;
+    if (character.feed_profile_id && db.SocialProfile) {
+      try {
+        const fp = await db.SocialProfile.findByPk(character.feed_profile_id);
+        feedProfile = fp ? (fp.toJSON ? fp.toJSON() : fp) : null;
+      } catch (fpErr) {
+        console.error('[CharacterRegistry] interior: feed profile load failed:', fpErr.message);
+      }
+    }
+
+    const plain = character.toJSON ? character.toJSON() : character;
+    const updates = await gen.generateMissingInterior({ character: plain, feedProfile, fields: missing });
+    if (Object.keys(updates).length === 0) {
+      return res.status(502).json({ error: 'The writer came back with nothing usable. Try again.' });
+    }
+
+    // Write under a row lock, and only into fields still empty, so a save or
+    // another generation made meanwhile is never overwritten.
+    const result = await db.sequelize.transaction(async (transaction) => {
+      const row = await db.RegistryCharacter.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+      if (!row) return null;
+      const patch = {};
+      for (const [field, value] of Object.entries(updates)) {
+        if (!gen.isFilled(row[field])) patch[field] = value;
+      }
+      const after = { ...(row.toJSON ? row.toJSON() : row), ...patch };
+      after.prose_overview = after.prose_overview || after.description;
+      const reached = gen.calculateDepthLevel(after);
+      const LEVELS = ['sparked', 'breathing', 'active', 'alive'];
+      if (LEVELS.indexOf(reached) > LEVELS.indexOf(row.depth_level)) patch.depth_level = reached;
+      if (Object.keys(patch).length) await row.update(patch, { transaction });
+      return { row, filled: Object.keys(patch).filter((f) => f !== 'depth_level') };
+    });
+    if (!result) return res.status(404).json({ error: 'Character not found' });
+
+    return res.json({
+      success: true,
+      filled: result.filled,
+      depth_level: result.row.depth_level,
+      character: result.row,
+    });
+  } catch (err) {
+    console.error('[CharacterRegistry] POST /interior/generate error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * POST /registries/:registryId/backfill-all
  * Bulk backfill: iterate every character in a registry and fill empty JSONB sections.
  */
