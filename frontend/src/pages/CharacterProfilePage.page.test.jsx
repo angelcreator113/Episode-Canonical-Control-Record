@@ -6,7 +6,7 @@
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
@@ -51,7 +51,8 @@ describe('the character page', () => {
     renderIt();
     await waitFor(() => expect(screen.getAllByText('In Episode 1')).toHaveLength(2));
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('STUDIO BY SABLE');
-    expect(screen.getByText('@studiobysable · Support · Echo Park')).toBeTruthy();
+    // The role as The cast says it (ROLE_LABELS): support is Supporting.
+    expect(screen.getByText('@studiobysable · Supporting · Echo Park')).toBeTruthy();
     expect(screen.getByText('The peer')).toBeTruthy();
     expect(screen.getByText('Feed profile')).toBeTruthy();
     // Saved as Breathing, but a feed profile already makes them Active.
@@ -167,4 +168,66 @@ describe('the character page', () => {
     expect(screen.queryByRole('button', { name: /Generate/ })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Fill in everything missing' })).toBeNull();
   });
+
+  test('their names: the real one heads the page, the social one follows, and both save', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/character-registry/characters/c1') return { data: { character: CHARACTER } };
+      if (url === '/api/v1/social-profiles/7') return { data: { profile: { ...PROFILE, display_name: 'STUDIO BY SABLE', creator_name: 'Sable Okafor' } } };
+      if (url === '/api/v1/cast/characters/c1/appearances') return { data: APPEARANCES };
+      return { data: {} };
+    });
+    renderIt();
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Sable Okafor'));
+    expect(screen.getByTestId('ch-aka').textContent).toBe('Online as STUDIO BY SABLE');
+    const names = screen.getByTestId('ch-names');
+    expect(names.textContent).toContain('Sable Okafor');
+    expect(names.textContent).toContain('@studiobysable');
+
+    fireEvent.click(within(names).getAllByRole('button', { name: 'Edit' })[0]);
+    fireEvent.change(screen.getByLabelText('Real name'), { target: { value: 'Sable Okafor-Reid' } });
+    fireEvent.click(within(names).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/character-registry/characters/c1', { selected_name: 'Sable Okafor-Reid' }));
+
+    fireEvent.click(within(screen.getByTestId('ch-names')).getAllByRole('button', { name: 'Edit' })[1]);
+    fireEvent.change(screen.getByLabelText('Social media name'), { target: { value: 'Sable Studio' } });
+    fireEvent.click(within(screen.getByTestId('ch-names')).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/social-profiles/7', { display_name: 'Sable Studio' }));
+  });
+
+  test('no real name yet: Suggest one asks the generator for it', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { success: true, filled: ['selected_name'], character: { ...CHARACTER, selected_name: 'Maren Ellis' } } });
+    renderIt();
+    await waitFor(() => expect(screen.getByTestId('ch-names')).toBeTruthy());
+    expect(screen.getByTestId('ch-names').textContent).toContain('Not set');
+    fireEvent.click(screen.getByRole('button', { name: /Suggest one/ }));
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Maren Ellis'));
+    expect(api.post).toHaveBeenCalledWith('/api/v1/character-registry/characters/c1/interior/generate', { fields: ['selected_name'] });
+  });
+
+  test('Connections loads entanglements from the route that exists, with who they are', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/character-registry/characters/c1') return { data: { character: CHARACTER } };
+      if (url === '/api/v1/entanglements/characters/c1/entanglements') {
+        return { data: { entanglements: [{ id: 'e1', dimension: 'ambition_identity', intensity: 'high', directionality: 'one_way', profile: { id: 9, handle: 'slowsift', display_name: 'slowsift' } }] } };
+      }
+      return { data: {} };
+    });
+    renderIt();
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Connections' }));
+    await waitFor(() => expect(screen.getByRole('link', { name: 'slowsift' }).getAttribute('href')).toBe('/pulse?profile=9'));
+    expect(screen.getByText('one way')).toBeTruthy();
+    expect(screen.queryByText('unresolved')).toBeNull();
+  });
+
+  test('Lala is the Protagonist on her page, as on The cast', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/character-registry/characters/c1') return { data: { character: { ...CHARACTER, display_name: 'Lala', character_key: 'lala', role_type: 'special', feed_profile_id: null } } };
+      return { data: {} };
+    });
+    renderIt();
+    await waitFor(() => expect(screen.getByText('Protagonist')).toBeTruthy());
+    expect(screen.queryByText(/Special/)).toBeNull();
+  });
 });
+
