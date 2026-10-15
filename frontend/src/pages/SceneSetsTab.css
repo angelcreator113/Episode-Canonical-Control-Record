@@ -4273,3 +4273,25 @@
 }
 .ss-filter-row .scene-sets-scope-btn, .ss-filter-row .scene-sets-search-input, .ss-filter-row .scene-sets-select-sm, .ss-hero .scene-sets-btn-create { font-family: var(--font-sans); }
 .ss-hero .scene-sets-btn-create { font-size: 15px; }
+
+/* At phone width the angle row's actions (cover, main background, video,
+   upload, delete) wrap below the name instead of pushing the modal
+   sideways (audit, 2026-10-15). */
+@media (max-width: 480px) {
+  .scene-sets-angle-row {
+    flex-wrap: wrap;
+  }
+  .scene-sets-angle-row-info {
+    min-width: 0;
+    flex: 1 1 60%;
+  }
+  .scene-sets-angle-row-status {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 4px;
+  }
+  .scene-sets-angle-row-status button {
+    white-space: normal;
+  }
+}

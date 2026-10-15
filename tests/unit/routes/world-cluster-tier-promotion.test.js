@@ -230,10 +230,12 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
       );
     });
 
-    test('all 11 AI handlers use uniform requireAuth + aiRateLimiter pattern', () => {
+    // 12 since 2026-10-15: episodes/:episodeId/generate-story (the Stories
+    // page's Generate All Formats) calls Claude and now carries the limiter.
+    test('all 12 AI handlers use uniform requireAuth + aiRateLimiter pattern', () => {
       const aiPattern = /router\.post\([^)]*requireAuth,\s*aiRateLimiter,/g;
       const matches = src.match(aiPattern) || [];
-      expect(matches.length).toBe(11);
+      expect(matches.length).toBe(12);
     });
   });
 

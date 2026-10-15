@@ -15,7 +15,7 @@
  * says "Generating…" and refreshes until the image is done or failed
  * (answer 6). Several sets at the venue: Evoni chooses one (answer 3).
  *
- * Props: showId, eventId, onToast(msg), canGenerate (the Scene Sets panel), fromLabel,
+ * Props: showId, eventId, onToast(msg, type) (type 'error' for a failure), canGenerate (the Scene Sets panel), fromLabel,
  * onSaved() (reloads the event: a set may have been created and linked;
  * also called when a look or base it saw generating finishes or fails, so
  * the page around it shows the new image),
@@ -70,10 +70,10 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
     // A failed re-run keeps the previous image: complete, with the error.
     if (lookGenerating(prev) && data?.look?.status === 'complete' && !data.look.error) toast?.('The look is ready');
     if (lookGenerating(prev) && (data?.look?.status === 'failed' || (data?.look?.status === 'complete' && data.look.error))) {
-      toast?.(`The look could not be generated${data.look.error ? `: ${data.look.error}` : ''}`);
+      toast?.(`The look could not be generated${data.look.error ? `: ${data.look.error}` : ''}`, 'error');
     }
     if (baseGenerating(prev) && data?.scene_set?.generation_status === 'complete') toast?.('The base is ready: approve it in Scene Sets');
-    if (baseGenerating(prev) && data?.scene_set?.generation_status === 'failed') toast?.(`The base could not be generated${data.scene_set.error ? `: ${data.scene_set.error}` : ''}`);
+    if (baseGenerating(prev) && data?.scene_set?.generation_status === 'failed') toast?.(`The base could not be generated${data.scene_set.error ? `: ${data.scene_set.error}` : ''}`, 'error');
     const finished = (lookGenerating(prev) && !lookGenerating(data)) || (baseGenerating(prev) && !baseGenerating(data));
     if (finished) Promise.resolve(savedRef.current?.()).catch((err) => console.error('[EventLookImage] refresh after a run failed:', err));
   };
@@ -144,7 +144,7 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
         : { step: 'base', title: `Generate the base for “${setName}”`, note: 'The empty room, with no event dressing. It then waits for your approval in Scene Sets.' });
     } catch (err) {
       console.error('[EventLookImage] brief failed:', err);
-      onToast?.(err.response?.data?.error || err.message || 'Could not prepare the look');
+      onToast?.(err.response?.data?.error || err.message || 'Could not prepare the look', 'error');
     } finally {
       setAsking(false);
     }
@@ -168,7 +168,7 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
     } catch (err) {
       console.error('[EventLookImage] generate failed:', err);
       if (err.response?.data?.code === 'CHOOSE_SET') setChoose(err.response.data.options || []);
-      onToast?.(err.response?.data?.error || err.message || 'Could not generate the look');
+      onToast?.(err.response?.data?.error || err.message || 'Could not generate the look', 'error');
     }
   };
 
@@ -194,7 +194,7 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
         setChoose(err.response.data.options || []);
         return;
       }
-      onToast?.(err.response?.data?.error || err.message || 'Could not upload the look');
+      onToast?.(err.response?.data?.error || err.message || 'Could not upload the look', 'error');
     } finally {
       setUploading(false);
     }
