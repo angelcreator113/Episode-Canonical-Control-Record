@@ -4928,10 +4928,11 @@ router.get('/world/:showId/balance', requireAuth, async (req, res) => {
         { replacements: { showId }, type: models.sequelize.QueryTypes.SELECT }
       );
       if (nextEvent) affordability = checkAffordability(nextEvent, balance);
-    } catch { /* non-blocking */ }
+    } catch (err) { console.error('[WorldEvents] balance affordability check failed (non-blocking):', err.message); }
 
     return res.json({ success: true, balance, affordability, ...(episodeId ? { balance_before_episode: balanceBeforeEpisode } : {}) });
   } catch (err) {
+    console.error('[WorldEvents] GET /balance failed:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

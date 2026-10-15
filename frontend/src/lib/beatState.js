@@ -68,7 +68,11 @@ export function beatState(beats = [], index = 0, { balanceBefore = null, outfit 
   // Wearing: getting dressed before the closet beat, the locked look from it on.
   const names = Array.isArray(outfit) ? outfit.map((p) => p?.name).filter(Boolean) : [];
   let wearing;
-  if (closetAt != null && beat.number < closetAt) wearing = { text: `Getting dressed at Beat ${closetAt}`, pieces: [], beforeCloset: true };
+  // Before the closet beat by place in the script, as the to-do list reads it
+  // (todoModeAt), so moved beats don't make the two cards disagree.
+  const closetIndex = closetAt == null ? -1 : beats.findIndex((b) => b.number === closetAt);
+  const beforeCloset = closetAt != null && (closetIndex >= 0 ? index < closetIndex : beat.number < closetAt);
+  if (beforeCloset) wearing = { text: `Getting dressed at Beat ${closetAt}`, pieces: [], beforeCloset: true };
   else if (outfit === null) wearing = { text: 'Look not read', pieces: [] };
   else if (Array.isArray(outfit) && outfit.length) wearing = { text: `${outfit.length} piece${outfit.length === 1 ? '' : 's'}${names.length ? `: ${names.slice(0, 3).join(', ')}${names.length > 3 ? ` +${names.length - 3}` : ''}` : ''}`, pieces: names };
   else wearing = { text: 'Not dressed yet', pieces: [] };

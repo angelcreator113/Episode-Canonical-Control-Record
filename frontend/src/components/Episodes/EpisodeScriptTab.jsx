@@ -119,6 +119,12 @@ export function scriptWithLine(scriptText, lockedBeats, beatId, lineIndex, newTe
 // moving, adding, regenerating and locking work on headed beats, so they
 // first give it headers, one per shown beat (Script tab audit, 2026-10-15:
 // on such a script they did nothing). A headed script comes back as it is.
+// At phone width only the open beat shows (EpisodeScriptPage.css), so its
+// header doesn't close it: closing it left no beat on screen.
+const isPhoneWidth = () => {
+  try { return window.matchMedia?.('(max-width: 760px)').matches || false; } catch (err) { console.error('[EpisodeScript] width check failed:', err); return false; }
+};
+
 export function withBeatHeaders(scriptText, lockedBeats = []) {
   if (!String(scriptText || '').trim() || HAS_BEAT_HEADER.test(scriptText)) return scriptText;
   return parseScriptIntoBeats(scriptText, lockedBeats).map((b) => `## BEAT: ${b.number} · ${b.name}\n${b.lines.join('\n')}`).join('\n\n');
@@ -547,8 +553,13 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
   const [adding, setAdding] = useState(false);
   const [messaging, setMessaging] = useState(null);
   const [zoomed, setZoomed] = useState(false);
+  // Each bottom-bar tap acts once: collapsing and reopening the beat no
+  // longer opens the adder again (Script tab audit, 2026-10-15).
+  const handledRequest = useRef(null);
   useEffect(() => {
-    if (!request || !expanded || beat.approved) return;
+    if (!request || !expanded || beat.approved || handledRequest.current === request.n) return;
+    handledRequest.current = request.n;
+    setMessaging(null);
     setAdding(request.kind === 'line' ? 'Lala' : false);
     setPicking(request.kind === 'phone' ? {} : false);
   }, [request, expanded, beat.approved]);
@@ -873,8 +884,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // Load map data when map is opened
   useEffect(() => {
     if (!showMap) return;
-    listLocationsApi().then(d => setMapLocations(d.locations || [])).catch(() => {});
-    getWorldMapApi().then(d => { if (d.url) setMapImageUrl(d.url); }).catch(() => {});
+    listLocationsApi().then(d => setMapLocations(d.locations || [])).catch((err) => console.error('[EpisodeScript] map locations load failed:', err));
+    getWorldMapApi().then(d => { if (d.url) setMapImageUrl(d.url); }).catch((err) => console.error('[EpisodeScript] world map load failed:', err));
   }, [showMap]);
 
   useEffect(() => {
@@ -900,7 +911,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       .catch((err) => { console.error('[EpisodeScript] locked outfit load failed:', err); setOutfit(null); });
     api.get(`/api/v1/episode-brief/${episodeId}/plan`).then(res => {
       setScenePlan((res.data?.data || []).map(p => ({ ...p, scene_set_name: p.sceneSet?.name || null, scene_context: p.scene_context || p.sceneSet?.script_context || null, image: beatImage(p), image_label: beatImageLabel(p) })));
-    }).catch(() => {});
+    }).catch((err) => console.error('[EpisodeScript] scene plan load failed:', err));
   }, [episodeId]);
 
   useEffect(() => { setBeats(scriptText ? parseScriptIntoBeats(scriptText, lockedBeats) : []); }, [scriptText, lockedBeats]);
@@ -944,7 +955,15 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     if (next !== base) { setScriptText(next); }
   };
 
-  const flash = (msg, type, ms = 3000) => { setToast({ msg, type }); setTimeout(() => setToast(null), ms); };
+  // One timer for the toast: an earlier toast's timer no longer clears a
+  // later one early (Script tab audit, 2026-10-15).
+  const toastTimer = useRef(null);
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
+  const flash = (msg, type, ms = 3000) => {
+    clearTimeout(toastTimer.current);
+    setToast({ msg, type });
+    toastTimer.current = setTimeout(() => setToast(null), ms);
+  };
 
   // The server puts a locked beat back as it was (src/utils/scriptBeatLocks.js)
   // and names it; the page then shows the script as saved.
@@ -1092,6 +1111,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
         const stored = typeof data.script_content === 'string' ? data.script_content : text;
         if (stored !== scriptText && scriptRef.current === scriptText) { setScriptText(stored); }
         setSavedScript(stored); setUnsaved(null);
+        // A save with the lock drafts Lala's posts as Save does.
+        if (/\[UI:\s*POST\s/i.test(stored) && !(await syncPostDrafts())) flash("Saved, but Lala's post drafts could not be made. Save again to retry.", 'error', 6000);
       }
       const kept = res?.data?.locked_beats_kept || [];
       if (kept.length) flash(`${keptNote(kept)}.`, 'error', 5000);
@@ -1175,7 +1196,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       } else {
         setToast({ msg: `✦ Script generated!${beatGap}`, type: beatGap ? 'error' : 'success' });
       }
-      setTimeout(() => setToast(null), 5000);
+      clearTimeout(toastTimer.current);
+      toastTimer.current = setTimeout(() => setToast(null), 5000);
     } catch (err) {
       console.error('[EpisodeScript] generate failed:', err);
       const status = err.response?.status;
@@ -1198,6 +1220,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // #3188): crossed off from the line each piece is put on.
   const [shoppingAt, setShoppingAt] = useState(null);
   const openBeatNumber = openBeat?.number ?? null;
+  // The server reads the saved script, so this is read again after a save,
+  // not on every keystroke (Script tab audit, 2026-10-15).
   useEffect(() => {
     if (!episodeId || !openBeatNumber) { setShoppingAt(null); return undefined; }
     let cancelled = false;
@@ -1205,7 +1229,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       .then((res) => { if (!cancelled) setShoppingAt(res.data?.data || null); })
       .catch((err) => { console.error('[EpisodeScript] shopping list as of the beat failed:', err); if (!cancelled) setShoppingAt(null); });
     return () => { cancelled = true; };
-  }, [episodeId, openBeatNumber, scriptText]);
+  }, [episodeId, openBeatNumber, savedScript]);
   // The deal checklist (Task #3191): the episode's deal, its location label
   // and whether its terms are locked here; ticks and the mode are read from
   // the script being edited. Read-only: nothing here moves a status.
@@ -1239,7 +1263,12 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // What the episode must cover, ticked from the script, and the open beat's
   // phone check (Task #2884).
   const cover = mustCover({ beats, deliverables, event: source?.event || null, brief });
-  const check = openBeat ? phoneCheck(openBeat.lines, onScreen) : null;
+  // The phone starts each beat where the beat before left it, not on the
+  // home screen (Script tab audit, 2026-10-15).
+  const phoneScreenAt = [];
+  beats.reduce((at, b, i) => { phoneScreenAt[i] = at; return phoneCheck(b.lines, onScreen, { startAt: at }).endAt; }, null);
+  const openIndex = openBeat ? beats.indexOf(openBeat) : -1;
+  const check = openBeat ? phoneCheck(openBeat.lines, onScreen, { startAt: phoneScreenAt[openIndex] }) : null;
   // Wear cues that name no single piece of the locked look (Task #3180):
   // checked once a look is locked, flagged, never fixed.
   const wearIssues = openBeat && Array.isArray(outfit) && outfit.length
@@ -1258,7 +1287,6 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   const lineSlots = Array.isArray(outfit) && outfit.length ? lalaLineSlots(beats, outfit) : [];
   // The open beat's to-do list and what of the deal is delivered by its end
   // (Task #3191); [DELIVER] and [TODO_MODE] cues that do nothing are flagged.
-  const openIndex = openBeat ? beats.indexOf(openBeat) : -1;
   const todoMode = openBeat ? todoModeAt(beats, openIndex, { closetNumber: closetBeat(scriptText), dealLocked: Boolean(deal?.locked) }) : null;
   const delivered = openBeat ? deliveredAt(beats, openIndex, Infinity, dealItems) : new Set();
   const dealIssues = openBeat ? dealCueFlags(beats, dealItems).filter((f) => f.beatIndex === openIndex) : [];
@@ -1311,7 +1339,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
                 ? `Regenerate the unlocked beats? The ${approvedCount} approved beat${approvedCount === 1 ? '' : 's'} stay${approvedCount === 1 ? 's' : ''} exactly as ${approvedCount === 1 ? 'it is' : 'they are'}; the rest of the script is replaced.`
                 : 'Regenerate the entire script? Your current script will be replaced.';
               if (!window.confirm(ask)) return;
-              handleGenerate(approvedCount > 0);
+              // Already confirmed here, so the server's own "replace it?" is answered.
+              handleGenerate(true);
             }} disabled={generating}>{waitingForScript ? 'Still writing…' : generating ? 'Generating…' : approvedCount > 0 ? 'Regenerate unlocked' : 'Regenerate'}</button>
             <button type="button" className={`esp-btn-primary${saved ? ' is-saved' : ''}`} onClick={handleSave} disabled={saving || busy}>{saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}</button>
           </div>
@@ -1357,7 +1386,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
           {beats.map((beat, index) => {
             const open = (expandedBeat === undefined ? beats[0]?.id : expandedBeat) === beat.id;
             const phoneUp = phoneUpAtStart[index] || false;
-            return <BeatSection key={beat.id} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open ? null : beat.id)} onApprove={handleApprove} onEdit={handleEditLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking || busy} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} phoneUpAtStart={phoneUp} people={people} lalaSlots={lineSlots.filter((s) => s.beatIndex === index)} dressCode={source?.event?.dress_code || ''} />;
+            return <BeatSection key={beat.id} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open && !isPhoneWidth() ? null : beat.id)} onApprove={handleApprove} onEdit={handleEditLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking || busy} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} phoneUpAtStart={phoneUp} people={people} lalaSlots={lineSlots.filter((s) => s.beatIndex === index)} dressCode={source?.event?.dress_code || ''} />;
           })}
           {/* Franchise Guard Results */}
           {guardResult && (

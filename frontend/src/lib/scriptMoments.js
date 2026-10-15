@@ -360,7 +360,8 @@ export function beatSpeakers(lines = []) {
  * every screen; else it names where the icon actually is. A tap on
  * something that is not an icon on the phone, and any moment whose target
  * matches no screen or overlay (or one with no picture yet), is listed as
- * not made yet. Returns { moments, taps: [{ i, name, ok, why }], missing: [{ i, name }] }.
+ * not made yet. Returns { moments, taps: [{ i, name, ok, why }], missing: [{ i, name }], endAt },
+ * endAt being the screen the beat leaves the phone on (the next beat's startAt).
  */
 export function phoneCheck(lines = [], on = {}, { startAt = null } = {}) {
   const screens = on.screens || [];
@@ -395,7 +396,7 @@ export function phoneCheck(lines = [], on = {}, { startAt = null } = {}) {
     }
     if (shown.kind === 'overlay' && !shown.url && !OFF_VERBS.has(moment.verb)) missing.push({ i, name: shown.name });
   });
-  return { moments, taps, missing };
+  return { moments, taps, missing, endAt: at };
 }
 
 // ── What Lala has put on, line by line (Task #3180) ──

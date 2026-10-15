@@ -190,3 +190,16 @@ describe("the open beat's phone check (Task #2884)", () => {
     expect(phoneCheck(['Prime: "No moments."'], on).moments).toBe(0);
   });
 });
+
+describe('phoneCheck carries the screen between beats (Script tab audit, 2026-10-15)', () => {
+  const on = {
+    screens: [{ id: 'home', name: 'Home', is_home: true }, { id: 'closet', name: 'Closet' }],
+    icons: [{ key: 'shoes', name: 'Shoes', on: 'closet', onName: 'Closet', opens: null }],
+  };
+  test('a beat that opens the closet ends there, and the next beat starts there', () => {
+    const first = phoneCheck(['[UI:OPEN Closet]'], on);
+    expect(first.endAt).toBe('closet');
+    expect(phoneCheck(['[UI:CLICK Shoes]'], on).taps[0].ok).toBe(false);
+    expect(phoneCheck(['[UI:CLICK Shoes]'], on, { startAt: first.endAt }).taps[0].ok).toBe(true);
+  });
+});
