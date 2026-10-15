@@ -350,7 +350,7 @@ router.post('/generate-script-from-book', requireAuth, aiRateLimiter, async (req
 
     // ── Pipeline 1: JLAW beats (from book lines) ─────────────────────────
     const jlawResponse = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 2048,
       messages: [{
         role: 'user',
@@ -369,7 +369,7 @@ router.post('/generate-script-from-book', requireAuth, aiRateLimiter, async (req
 
     // ── Pipeline 2: Lala beats (from stats) ──────────────────────────────
     const lalaResponse = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 1024,
       messages: [{
         role: 'user',
@@ -388,7 +388,7 @@ router.post('/generate-script-from-book', requireAuth, aiRateLimiter, async (req
 
     // ── Pipeline 3: Assemble final script ────────────────────────────────
     const scriptResponse = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 3000,
       messages: [{
         role: 'user',

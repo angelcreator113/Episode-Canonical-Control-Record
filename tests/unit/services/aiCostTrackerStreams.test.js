@@ -116,8 +116,8 @@ describe('icon cues', () => {
     expect(text).toBe('[]');
     expect(requests).toHaveLength(1);
     expect(requests[0].url).toMatch(/\/v1\/messages$/);
-    expect(requests[0].body).toMatchObject({ model: 'claude-sonnet-4-20250514', max_tokens: 2000, messages: [{ role: 'user', content: 'prompt' }] });
+    expect(requests[0].body).toMatchObject({ model: 'claude-sonnet-4-6', max_tokens: 2000, messages: [{ role: 'user', content: 'prompt' }] });
     expect(mockRows).toHaveLength(1);
-    expect(mockRows[0]).toMatchObject({ model_name: 'claude-sonnet-4-20250514', input_tokens: 1000, output_tokens: 500 });
+    expect(mockRows[0]).toMatchObject({ model_name: 'claude-sonnet-4-6', input_tokens: 1000, output_tokens: 500 });
   });
 });
