@@ -1390,3 +1390,17 @@ a.ch-show:hover .ch-show-text strong { text-decoration: underline; }
   .cp-want-row { grid-template-columns: 1fr; }
   .cp-dilemma-options { grid-template-columns: 1fr; }
 }
+
+/* Their names: real name and social media name (Overview), and the line
+   under the heading when the two differ. */
+.ch-aka { margin: -4px 0 4px; font-size: 14px; color: var(--text-secondary); }
+.ch-name-row { display: flex; flex-direction: column; gap: 4px; }
+.ch-name-label { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
+.ch-name-value { font-size: 16px; font-weight: 600; color: var(--text-primary); }
+.ch-input { min-height: 40px; padding: 6px 12px; border-radius: 12px; border: 1px solid var(--lala-lavender-line); font: inherit; font-size: 14px; flex: 1 1 180px; min-width: 0; }
+.ch-name-row .ch-row { align-items: center; }
+/* An empty state's link sits under its label, like its Generate button. */
+.cp-empty-state > .ch-link { align-self: center; }
+/* Who an entanglement is with: a link to their Pulse profile. */
+.cp-entanglement-who { font-weight: 700; color: var(--lala-lavender-text); text-decoration: none; }
+.cp-entanglement-who:hover { text-decoration: underline; }

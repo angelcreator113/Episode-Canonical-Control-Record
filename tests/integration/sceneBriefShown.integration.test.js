@@ -234,9 +234,12 @@ function mockProviders() {
     expect(line(b.brief, 'architecture')).toMatchObject({ source: 'override', text: 'A brick warehouse.' });
     expect(line(b.brief, 'continuity')).toBeTruthy();
 
-    b = (await brief(set.id, { angle_id: angle.id, refine: true })).body.data;
-    expect(line(b.brief, 'camera').text).toMatch(/^Camera facing the window wall/);
+    // The refine brief is the angle's own (its camera direction kept), and
+    // its prompt adds the fixes for the flagged problems.
+    b = (await brief(set.id, { angle_id: angle.id, refine: true, categories: ['FURNITURE_DISTORTION'] })).body.data;
+    expect(line(b.brief, 'camera').text).toBe('Low angle toward the arched window.');
     expect(line(b.brief, 'continuity')).toBeTruthy();
+    expect(b.prompt).toMatch(/QUALITY EMPHASIS:/);
 
     // Overrides given for the angle replace the base's.
     b = (await brief(set.id, { angle_id: angle.id, overrides: {} })).body.data;

@@ -69,6 +69,7 @@
 .cast-person:hover { border-color: var(--lala-lavender-light); }
 .cast-person-text { display: flex; flex-direction: column; min-width: 0; font-size: 12px; color: var(--text-secondary); overflow-wrap: break-word; }
 .cast-person-text strong { font-size: 13px; color: var(--text-primary); }
+.cast-real-name { color: var(--text-primary); }
 .cast-chips { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; }
 .cast-chip { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
 .cast-chip.is-lavender { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }

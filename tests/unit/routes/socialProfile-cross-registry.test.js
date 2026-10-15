@@ -127,4 +127,24 @@ describe('POST /:id/cross registry character', () => {
     expect(out.registry_character.id).toBe('rc-kept');
     expect(db.profile.status).toBe('crossed');
   });
+
+  // A profile crossed before Cross made characters has none (finding 6b):
+  // "Create character" on The cast used to answer 409 "Already crossed".
+  test('a crossed profile with no character gets one now; one with a character is refused', async () => {
+    const db = fakeDb({ registries: REGISTRIES });
+    db.profile.status = 'crossed';
+    db.profile.creator_name = 'Sable Okafor';
+    db.profile.feed_layer = 'lalaverse';
+    const timeline = jest.spyOn(db.WorldTimelineEvent, 'create');
+    const { out, code } = await cross(db, { show_id: SHOW_A });
+    expect(code).toBeUndefined();
+    expect(out.registry_character).toMatchObject({
+      feed_profile_id: 7, selected_name: 'Sable Okafor', display_name: 'Studio by Sable', world: 'lalaverse', social_presence: true,
+    });
+    expect(timeline).not.toHaveBeenCalled(); // crossed before: logged then
+
+    const again = await cross(db, { show_id: SHOW_A });
+    expect(again.code).toBe(409);
+  });
 });
+

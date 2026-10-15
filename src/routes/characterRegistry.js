@@ -46,6 +46,26 @@ function getModels() {
   return models;
 }
 
+/**
+ * A character's real name is their selected_name; on the feed it is the
+ * linked profile's creator_name ("the real name behind the handle"). Saving
+ * one sets the other, so The Pulse and the character page say the same.
+ * A failure here is logged and never fails the character's save.
+ */
+async function syncRealNameToFeed(db, character) {
+  if (!character?.feed_profile_id || !db.SocialProfile) return;
+  try {
+    // JustAWoman's hand-authored profile is locked (socialProfileRoutes
+    // isLockedProfile): never written from here.
+    await db.SocialProfile.update(
+      { creator_name: character.selected_name || null },
+      { where: { id: character.feed_profile_id, is_justawoman_record: { [Op.not]: true } } },
+    );
+  } catch (err) {
+    console.error('[CharacterRegistry] real name sync to feed profile failed:', err.message);
+  }
+}
+
 /* ================================================================== */
 /*  REGISTRIES                                                         */
 /* ================================================================== */
@@ -714,6 +734,7 @@ router.put('/characters/:id', requireAuth, express.json(), async (req, res) => {
     filteredAllowed.forEach(f => { if (req.body[f] !== undefined) character[f] = req.body[f]; });
     if (req.body.current_city !== undefined) character.current_city = currentCity;
     await character.save();
+    if (req.body.selected_name !== undefined) await syncRealNameToFeed(getModels(), character);
 
     return res.json({ success: true, character });
   } catch (err) {
@@ -1958,7 +1979,14 @@ router.post('/characters/:id/interior/generate', requireAuth, aiRateLimiter, asy
     }
 
     const plain = character.toJSON ? character.toJSON() : character;
-    const updates = await gen.generateMissingInterior({ character: plain, feedProfile, fields: missing });
+    // A real name the feed profile already has is theirs: copied, not invented.
+    const known = {};
+    if (missing.includes('selected_name') && feedProfile?.creator_name) known.selected_name = feedProfile.creator_name;
+    const toAsk = missing.filter((f) => !(f in known));
+    const updates = {
+      ...known,
+      ...(toAsk.length ? await gen.generateMissingInterior({ character: plain, feedProfile, fields: toAsk }) : {}),
+    };
     if (Object.keys(updates).length === 0) {
       return res.status(502).json({ error: 'The writer came back with nothing usable. Try again.' });
     }
@@ -1981,6 +2009,7 @@ router.post('/characters/:id/interior/generate', requireAuth, aiRateLimiter, asy
       return { row, filled: Object.keys(patch).filter((f) => f !== 'depth_level') };
     });
     if (!result) return res.status(404).json({ error: 'Character not found' });
+    if (result.filled.includes('selected_name')) await syncRealNameToFeed(db, result.row);
 
     return res.json({
       success: true,
@@ -2577,7 +2606,7 @@ Return ONLY a JSON object with 14 dimensions: life_stage, the_body, class_and_mo
  * POST /characters/:id/writer-paragraph/generate
  * Generate a writer-friendly narrative paragraph from the character's deep_profile + registry data.
  */
-router.post('/characters/:id/writer-paragraph/generate', requireAuth, async (req, res) => {
+router.post('/characters/:id/writer-paragraph/generate', requireAuth, aiRateLimiter, async (req, res) => {
   const { id } = req.params;
   const db = getModels();
   try {
@@ -2585,8 +2614,11 @@ router.post('/characters/:id/writer-paragraph/generate', requireAuth, async (req
     if (!character) return res.status(404).json({ error: 'Character not found' });
 
     const dp = character.deep_profile || {};
+    // A dimension is text (generation v2) or an object of notes (the older
+    // endpoints); text used to be skipped, so v2 profiles read as none.
     const hasProfile = Object.keys(dp).some(k => {
       const v = dp[k];
+      if (typeof v === 'string') return v.trim().length > 0;
       return v && typeof v === 'object' && Object.values(v).some(fv => fv !== null && fv !== undefined && fv !== '');
     });
 
@@ -2602,6 +2634,8 @@ router.post('/characters/:id/writer-paragraph/generate', requireAuth, async (req
       truth_persona: character.truth_persona, character_archetype: character.character_archetype,
       signature_trait: character.signature_trait, emotional_baseline: character.emotional_baseline,
       aesthetic_dna: character.aesthetic_dna, voice_signature: character.voice_signature,
+      // The inner life the page now generates (interior/generate).
+      want_architecture: character.want_architecture, wound: character.wound, the_mask: character.the_mask,
     })) { if (v !== null && v !== undefined && v !== '') charData[k] = v; }
 
     const Anthropic = require('@anthropic-ai/sdk');
