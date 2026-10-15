@@ -172,7 +172,7 @@ export default function ImportDraftModal({
               </label>
               <textarea
                 style={ms.textarea}
-                placeholder={`LINE 001\nI don't remember when I started comparing myself to Chloe.\n\nLINE 002\nIt might have been the first time she posted a launch announcement…`}
+                placeholder={`LINE 001\nI don't remember when I started comparing myself to Nia Vale.\n\nLINE 002\nIt might have been the first time she posted a launch announcement…`}
                 value={rawText}
                 onChange={e => { setRawText(e.target.value); setPreview(null); setError(null); }}
                 rows={12}
