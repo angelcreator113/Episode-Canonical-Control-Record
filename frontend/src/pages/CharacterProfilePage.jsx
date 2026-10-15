@@ -35,6 +35,16 @@ export const getCharacterRelationshipsApi = (id) =>
   apiClient.get(`${API_URL}/relationships/character/${id}`, { params: { confirmed: true } });
 export const getCharacterEntanglementsApi = (id) =>
   apiClient.get(`${API_URL}/entanglements/characters/${id}/entanglements`);
+// Their places (home, closet, other; #3228) with pictures, and sharing one
+// on The Pulse as a draft (castRoutes, services/characterPlaceShare).
+export const getPlacesApi = (id) =>
+  apiClient.get(`${API_URL}/cast/characters/${id}/places`);
+export const sharePlaceApi = (id, sceneSetId) =>
+  apiClient.post(`${API_URL}/cast/characters/${id}/places/share`, { scene_set_id: sceneSetId });
+export const showSceneSetsApi = (showId) =>
+  apiClient.get(`${API_URL}/scene-sets`, { params: { show_id: showId } });
+export const linkPlaceApi = (showId, payload) =>
+  apiClient.post(`${API_URL}/shows/${showId}/character-places`, payload);
 export const updateSocialProfileApi = (profileId, payload) =>
   apiClient.put(`${API_URL}/social-profiles/${profileId}`, payload);
 export const getSocialProfileApi = (profileId) =>
@@ -262,7 +272,7 @@ function WhereTheyShowUp({ appearances, feedProfile }) {
             {rows.map((r, i) => {
               const inner = (<>
                 <span className="ch-show-kind">{r.label}</span>
-                <span className="ch-show-text"><strong>{r.title}</strong>{r.sub && <span>{r.sub}</span>}</span>
+                <span className="ch-show-text"><strong>{r.title}</strong>{r.sub && <span>{r.sub}</span>}{r.detail && <span className="ch-show-detail">{r.detail}</span>}</span>
                 {r.to && <ArrowRight size={16} aria-hidden="true" className="ch-show-go" />}
               </>);
               return (
@@ -386,6 +396,122 @@ function TheirNames({ character, feedProfile, onSaved, onFeedSaved, gen }) {
   );
 }
 
+const PLACE_LABEL = { home: 'Home', closet: 'Closet' };
+const PULSE_REVIEW = '/admin?tab=pulse&sub=review';
+
+/**
+ * Their places: home, closet and others (the character homes of #3228),
+ * each with its everyday picture, and "Share to The Pulse", which makes a
+ * draft post from their feed profile with the picture and the venue
+ * (Evoni, 2026-10-15: "their everyday scene sets which can be shared on the
+ * pulse"). With no home yet, one of the show's scene sets can be chosen.
+ */
+function TheirPlaces({ character }) {
+  const [data, setData] = useState(null);
+  const [sets, setSets] = useState(null);
+  const [choice, setChoice] = useState('');
+  const [busy, setBusy] = useState(null);
+  const [note, setNote] = useState(null);
+  const id = character.id;
+
+  const load = useCallback(async () => {
+    try {
+      const res = await getPlacesApi(id);
+      setData(res.data || { places: [] });
+    } catch (err) {
+      console.error('[CharacterProfilePage] places load failed:', err);
+      setData({ places: [], error: err.response?.data?.error || 'Could not load their places.' });
+    }
+  }, [id]);
+  useEffect(() => { load(); }, [load]);
+
+  const places = data?.places || [];
+  const hasHome = places.some((p) => p.role === 'home');
+  const locked = character.status === 'finalized';
+
+  const openPicker = async () => {
+    setNote(null);
+    try {
+      const res = await showSceneSetsApi(data.show_id);
+      const list = res.data?.data || res.data?.sceneSets || res.data?.scene_sets || [];
+      setSets(list.filter((s) => s && s.id));
+    } catch (err) {
+      console.error('[CharacterProfilePage] scene sets load failed:', err);
+      setNote({ error: true, text: 'Could not load the scene sets.' });
+    }
+  };
+  const linkHome = async () => {
+    if (!choice) return;
+    setBusy('link'); setNote(null);
+    try {
+      await linkPlaceApi(data.show_id, { character_id: id, scene_set_id: choice, role: 'home' });
+      setSets(null); setChoice('');
+      await load();
+    } catch (err) {
+      console.error('[CharacterProfilePage] link home failed:', err);
+      setNote({ error: true, text: err.response?.data?.error || 'Could not set their home.' });
+    } finally { setBusy(null); }
+  };
+  const share = async (place) => {
+    setBusy(place.scene_set_id); setNote(null);
+    try {
+      await sharePlaceApi(id, place.scene_set_id);
+      setNote({ shared: true, text: `A draft of their ${PLACE_LABEL[place.role]?.toLowerCase() || place.label || 'place'} is waiting in The Pulse's Review.` });
+    } catch (err) {
+      console.error('[CharacterProfilePage] share place failed:', err);
+      setNote({ error: true, text: err.response?.data?.error || 'Could not share it.' });
+    } finally { setBusy(null); }
+  };
+
+  return (
+    <section className="ch-card" aria-labelledby="ch-places" data-testid="ch-places">
+      <h2 id="ch-places" className="ch-kicker is-pink">Their places</h2>
+      {!data ? <p className="ch-note">Loading…</p>
+        : data.error ? <p className="ch-note is-error">{data.error}</p>
+        : !data.show_id ? <p className="ch-note">Not in a show&rsquo;s cast yet, so no home to set.</p>
+        : (<>
+          {places.length === 0 && <p className="ch-note">No home yet.</p>}
+          <ul className="ch-places">
+            {places.map((p) => (
+              <li key={`${p.role}-${p.scene_set_id}`} className="ch-place">
+                {p.image_url
+                  ? <img className="ch-place-img" src={p.image_url} alt={`${PLACE_LABEL[p.role] || p.label || 'Place'}: ${p.scene_set_name}`} />
+                  : <div className="ch-place-img is-empty" aria-hidden="true" />}
+                <div className="ch-place-text">
+                  <span className="ch-show-kind">{PLACE_LABEL[p.role] || p.label || 'Place'}{p.everyday ? ' · everyday look' : ''}</span>
+                  <strong>{p.scene_set_name}</strong>
+                  {character.feed_profile_id && p.image_url && (
+                    <button type="button" className="ch-btn-chip" disabled={!!busy} onClick={() => share(p)}>
+                      {busy === p.scene_set_id ? 'Sharing…' : 'Share to The Pulse'}
+                    </button>
+                  )}
+                  {!p.image_url && <span className="ch-note">No picture yet</span>}
+                </div>
+              </li>
+            ))}
+          </ul>
+          {!hasHome && !locked && (sets ? (
+            <div className="ch-row">
+              <select className="ch-input" aria-label="Their home set" value={choice} onChange={(e) => setChoice(e.target.value)}>
+                <option value="">Choose a scene set…</option>
+                {sets.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+              <button type="button" className="ch-btn" disabled={!choice || busy === 'link'} onClick={linkHome}>{busy === 'link' ? 'Saving…' : 'Make it home'}</button>
+            </div>
+          ) : (
+            <button type="button" className="ch-link" onClick={openPicker}>Choose their home</button>
+          ))}
+          {places.length > 0 && !character.feed_profile_id && <p className="ch-note">Sharing on The Pulse needs a feed profile.</p>}
+        </>)}
+      {note && (
+        <p className={`ch-note${note.error ? ' is-error' : ''}`} role="status">
+          {note.text}{note.shared && <> <Link to={PULSE_REVIEW}>Open Review</Link></>}
+        </p>
+      )}
+    </section>
+  );
+}
+
 function TabOverview({ character, appearances, feedProfile, onSaved, onFeedSaved, gen }) {
   return (
     <div className="ch-overview">
@@ -397,6 +523,7 @@ function TabOverview({ character, appearances, feedProfile, onSaved, onFeedSaved
       <div className="ch-col">
         <TheirVoice character={character} feedProfile={feedProfile} />
         <WithLala appearances={appearances} />
+        <TheirPlaces character={character} />
       </div>
     </div>
   );

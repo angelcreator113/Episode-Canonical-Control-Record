@@ -990,13 +990,13 @@ router.post('/registries/:id/seed-book1', requireAuth, async (req, res) => {
         character_key: 'comparison-creator',
         icon: '◈',
         display_name: 'The Comparison Creator',
-        selected_name: 'Chloe',
+        selected_name: 'Nia Vale',
         role_type: 'mirror',
         role_label: 'Haunting Mirror / Alt. Timeline',
         appearance_mode: 'composite',
         core_belief: 'Was my hesitation self-protection or self-sabotage?',
-        description: 'Genuine motivation — not a villain. Likable, successful, supportive. The comparison is JustAWoman\'s. Chloe never asked for it.',
-        personality: 'Genuinely successful, genuinely likable, genuinely supportive. She is not doing anything wrong. She is just thriving.',
+        description: 'The escalation mirror. Same content lane as JustAWoman, more extreme, less restrained. Not a villain: she escalates because she is not chosen unless she does. The comparison is JustAWoman\'s.',
+        personality: 'No hesitation, no internal negotiation, no need to remain respectable. Wants to be undeniable without losing control.',
         status: 'draft',
         sort_order: 2,
       },
@@ -1993,6 +1993,15 @@ router.post('/characters/:id/interior/generate', requireAuth, aiRateLimiter, asy
         console.error('[CharacterRegistry] interior: feed profile load failed:', fpErr.message);
       }
     }
+    // The events they host or attend, and what each is for (services/characterEvents).
+    let events = [];
+    if (character.feed_profile_id && typeof db.sequelize?.query === 'function') {
+      try {
+        events = await require('../services/characterEvents').eventsForProfile(db.sequelize, character.feed_profile_id);
+      } catch (evErr) {
+        console.error('[CharacterRegistry] interior: events load failed:', evErr.message);
+      }
+    }
 
     const plain = character.toJSON ? character.toJSON() : character;
     // A real name the feed profile already has is theirs: copied, not invented.
@@ -2001,7 +2010,7 @@ router.post('/characters/:id/interior/generate', requireAuth, aiRateLimiter, asy
     const toAsk = missing.filter((f) => !(f in known));
     const updates = {
       ...known,
-      ...(toAsk.length ? await gen.generateMissingInterior({ character: plain, feedProfile, fields: toAsk }) : {}),
+      ...(toAsk.length ? await gen.generateMissingInterior({ character: plain, feedProfile, events, fields: toAsk }) : {}),
     };
     if (Object.keys(updates).length === 0) {
       return res.status(502).json({ error: 'The writer came back with nothing usable. Try again.' });

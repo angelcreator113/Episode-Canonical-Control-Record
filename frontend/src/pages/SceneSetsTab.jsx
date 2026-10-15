@@ -609,6 +609,14 @@ function TypeBadge({ type }) {
 
 // ─── IMAGE LIGHTBOX (base image) ──────────────────────────────────────────────
 
+/** True when a lightbox, a brief or another dialog is open over the workspace. */
+export function overlayAboveWorkspace(workspace) {
+  if (!workspace) return false;
+  const overlays = document.querySelectorAll('.scene-sets-lightbox-overlay, .sbc-backdrop, .scene-sets-modal-backdrop, [role="dialog"]');
+  return [...overlays].some((el) => el !== workspace && !el.contains(workspace)
+    && Boolean(workspace.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING));
+}
+
 function ImageLightbox({ images: initialImages, initialIndex, onClose, onDeleteAngle, onPromoteToBase, onPromoteError, setId, confirmText = null }) {
   const [images, setImages] = useState(initialImages);
   const [idx, setIdx] = useState(initialIndex || 0);
@@ -1126,6 +1134,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
   const [angleUploadPreview, setAngleUploadPreview] = useState(null);
   const [showMenu, setShowMenu] = useState(false);
   const [showPromptEditor, setShowPromptEditor] = useState(false);
+  // The workspace dialog takes the focus when it opens, so Escape and the
+  // keyboard work in it at once.
+  const workspaceRef = useRef(null);
+  const workspaceOpen = showDetails || showPromptEditor || showAddAngle;
+  useEffect(() => { if (workspaceOpen) workspaceRef.current?.focus(); }, [workspaceOpen]);
   const [savingPrompt, setSavingPrompt] = useState(false);
   const [showPromptPreview, setShowPromptPreview] = useState(false);
   const [previewData, setPreviewData] = useState(null);
@@ -1503,7 +1516,24 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
         {/* ── Unified Popup Modal for Details / Prompt / Add Angle ── */}
         {(showDetails || showPromptEditor || showAddAngle) && createPortal(
           <div className="scene-sets-modal-backdrop" onClick={() => { setShowDetails(false); setShowPromptEditor(false); setShowAddAngle(false); setAngleUploadFile(null); setAngleUploadPreview(null); }}>
-            <div className="scene-sets-modal" onClick={e => e.stopPropagation()}>
+            {/* A dialog for keyboards and screen readers: named by the set's
+                title, focused when it opens, closed by Escape (audit, 2026-10-15). */}
+            <div
+              className="scene-sets-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={`scene-set-title-${set.id}`}
+              tabIndex={-1}
+              ref={workspaceRef}
+              onClick={e => e.stopPropagation()}
+              onKeyDown={(e) => {
+                // Escape closes the window on top first: with a lightbox, a
+                // brief or another dialog open over the workspace, it is
+                // theirs (the event is not stopped, so their own handlers run).
+                if (e.key !== 'Escape' || editingName || overlayAboveWorkspace(workspaceRef.current)) return;
+                setShowDetails(false); setShowPromptEditor(false); setShowAddAngle(false);
+              }}
+            >
               {/* Modal header with set name + hero thumbnail */}
               <div className="scene-sets-modal-header">
                 <div className="scene-sets-modal-header-info">
@@ -1521,15 +1551,19 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                       />
                     ) : (
                       <h3
+                        id={`scene-set-title-${set.id}`}
                         className="scene-sets-modal-title scene-sets-modal-title-editable"
                         onClick={() => { setEditingName(true); setNameValue(set.name || ''); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditingName(true); setNameValue(set.name || ''); } }}
+                        tabIndex={0}
+                        aria-label={`${set.name}: rename`}
                         title="Click to rename"
                       >{set.name}</h3>
                     )}
                     <span className="scene-sets-modal-subtitle">{set.scene_type?.replace(/_/g, ' ')} &middot; {readyAngles}/{totalAngles} views</span>
                   </div>
                 </div>
-                <button className="scene-sets-modal-close" onClick={() => { setShowDetails(false); setShowPromptEditor(false); setShowAddAngle(false); }}>
+                <button className="scene-sets-modal-close" aria-label="Close" onClick={() => { setShowDetails(false); setShowPromptEditor(false); setShowAddAngle(false); }}>
                   <X size={16} />
                 </button>
               </div>
@@ -1574,7 +1608,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                   <div className="scene-sets-modal-section">
                     <BaseModelSelect
                       set={set}
-                      onSaved={() => showToast('Base model saved')}
+                      onSaved={() => { showToast('Base model saved'); onRefresh?.(); }}
                       onError={(msg) => showToast(msg, 'error')}
                     />
                     {/* A description written before the base image changed */}
@@ -1640,10 +1674,12 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                           {/* The new description goes with the regenerate (the cascade saves it with the base). */}
                           {set.base_still_url && !set.base_approved && (
                             <button className="scene-sets-btn-details" disabled={isGenerating} data-testid={`scene-set-desc-cascade-${set.id}`} onClick={() => {
-                              setLocalDesc(descDraft);
-                              setDescReview(null);
-                              setEditingDesc(false);
-                              onCascadeRegenerate(set, descDraft);
+                              const draft = descDraft;
+                              onCascadeRegenerate(set, draft, () => {
+                                setLocalDesc(draft);
+                                setDescReview(null);
+                                setEditingDesc(false);
+                              });
                             }}>
                               <RefreshCw size={10} /> Save &amp; regenerate base + angles
                             </button>
@@ -2113,8 +2149,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                           try {
                             const r = await suggestAnglesFromImageApi(set.id);
                             const d = r.data;
-                            if (d.success) showToast(`${d.angles_created || 0} new angles added`);
-                            else showToast(d.error || 'Failed', 'error');
+                            if (d.success) {
+                              showToast(`${d.angles_created || 0} new angles added`);
+                              // The new angles show now, not after a reload (audit, 2026-10-15).
+                              onRefresh?.();
+                            } else showToast(d.error || 'Failed', 'error');
                           } catch (e) { showToast(e.response?.data?.error || e.message, 'error'); }
                           setSeeding(false);
                         }}>
@@ -2220,12 +2259,12 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                               )}
                               {isComplete && <CheckCircle2 size={14} style={{ color: 'var(--success-text)' }} />}
                               {isFailed && (
-                                <button className="scene-sets-angle-row-btn" onClick={() => onGenerateAngle(set, a)} title="Retry">
+                                <button className="scene-sets-angle-row-btn" onClick={() => onGenerateAngle(set, a)} title="Retry" aria-label={`Retry ${a.angle_name || a.angle_label}`}>
                                   <AlertCircle size={14} style={{ color: 'var(--danger-text)' }} />
                                 </button>
                               )}
                               {!isComplete && !isFailed && !isGen && (
-                                <button className="scene-sets-angle-row-btn" onClick={() => onGenerateAngle(set, a)} title="Generate">
+                                <button className="scene-sets-angle-row-btn" onClick={() => onGenerateAngle(set, a)} title="Generate" aria-label={`Generate ${a.angle_name || a.angle_label}`}>
                                   <Sparkles size={12} />
                                 </button>
                               )}
@@ -2237,8 +2276,24 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                                     angleQuickUploadRef.current?.click();
                                   }}
                                   title={isComplete ? 'Replace image' : 'Upload image'}
+                                  aria-label={`${isComplete ? 'Replace image of' : 'Upload image for'} ${a.angle_name || a.angle_label}`}
                                 >
                                   <Upload size={12} />
+                                </button>
+                              )}
+                              {/* Every angle can be deleted from its row: an angle with no
+                                  image (one Suggest More added) had no Delete anywhere. */}
+                              {!isGen && (
+                                <button
+                                  className="scene-sets-angle-row-btn"
+                                  data-testid={`angle-delete-${a.id}`}
+                                  title="Delete angle"
+                                  aria-label={`Delete ${a.angle_name || a.angle_label}`}
+                                  onClick={() => {
+                                    if (window.confirm(`Delete the angle "${a.angle_name || a.angle_label}"?`)) onDeleteSingleAngle(set, a.id);
+                                  }}
+                                >
+                                  <Trash2 size={12} />
                                 </button>
                               )}
                               {isGen && <Loader size={14} className="spin" style={{ color: 'var(--lala-gold-text)' }} />}
@@ -2791,7 +2846,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
           <div className="scene-sets-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
             <div className="scene-sets-modal-header">
               <h3 className="scene-sets-modal-title">Wardrobe Match</h3>
-              <button className="scene-sets-modal-close" onClick={() => setWardrobeMatch(null)}><X size={16} /></button>
+              <button className="scene-sets-modal-close" aria-label="Close" onClick={() => setWardrobeMatch(null)}><X size={16} /></button>
             </div>
             <div className="scene-sets-modal-body">
               {wardrobeMatch.event ? (
@@ -2823,7 +2878,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
           <div className="scene-sets-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 900 }}>
             <div className="scene-sets-modal-header">
               <h3 className="scene-sets-modal-title">Side-by-Side Comparison</h3>
-              <button className="scene-sets-modal-close" onClick={() => setComparison(null)}><X size={16} /></button>
+              <button className="scene-sets-modal-close" aria-label="Close" onClick={() => setComparison(null)}><X size={16} /></button>
             </div>
             <div className="scene-sets-modal-body" style={{ maxHeight: '70vh', overflow: 'auto' }}>
               {comparison.comparisons?.map(c => (
@@ -2855,7 +2910,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
   if (prev.set.updated_at !== next.set.updated_at) return false;
   if (prev.generationProgress !== next.generationProgress) return false;
   if (prev.defaultRole !== next.defaultRole) return false;
+  // "All shows" shows each card's show (audit, 2026-10-15: the card kept
+  // hiding it after the switch).
+  if (prev.hideShow !== next.hideShow) return false;
   const ps = prev.set, ns = next.set;
+  if (ps.base_model !== ns.base_model) return false;
   if (ps.id !== ns.id) return false;
   if (ps.name !== ns.name) return false;
   if (ps.generation_status !== ns.generation_status) return false;
@@ -2881,7 +2940,9 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
   if (ps.visual_language?.scene_spec !== ns.visual_language?.scene_spec) return false;
   if (ps.time_of_day !== ns.time_of_day) return false;
   if (ps.season !== ns.season) return false;
-  if ((ps.episodes || []).length !== (ns.episodes || []).length) return false;
+  // The linked episodes themselves, not only how many.
+  const episodeIds = (x) => (x.episodes || []).map((e) => e.id).join(',');
+  if (episodeIds(ps) !== episodeIds(ns)) return false;
   if (prev.allShows !== next.allShows) return false;
   if (prev.allEpisodes !== next.allEpisodes) return false;
   const pa = ps.angles || [], na = ns.angles || [];
@@ -3138,12 +3199,17 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         setId: set.id,
         angleId: targets[0].id,
         title: `Generate ${targets.length} angle${targets.length === 1 ? '' : 's'} for “${set.name}”`,
-        note: targets.length > 1 ? `Shown for “${targets[0].angle_name || targets[0].angle_label}”; each angle uses this brief with its own camera.` : null,
+        // The estimate shown is one angle's (audit, 2026-10-15: it read as
+        // the batch's price).
+        note: targets.length > 1 ? `Shown for “${targets[0].angle_name || targets[0].angle_label}”; each angle uses this brief with its own camera. The cost shown is for one angle: the ${targets.length} angles cost about ${targets.length} times that.` : null,
       },
       (overrides) => runGenerateAll(set, overrides),
     );
   };
-  const handleCascadeRegenerate = (set, description) => askBrief(
+  // onConfirmed: called once the server took the regeneration, and the
+  // description with it (the editor closes then: a cancelled brief or a
+  // refused request kept its unsaved text on screen as if saved).
+  const handleCascadeRegenerate = (set, description, onConfirmed) => askBrief(
     {
       setId: set.id,
       showId: set.show_id,
@@ -3151,7 +3217,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       note: 'The angles take the base\'s brief with their own cameras.',
       description: description || undefined,
     },
-    (overrides, choice) => runCascadeRegenerate(set, description, overrides, choice?.eventId),
+    (overrides, choice) => runCascadeRegenerate(set, description, overrides, choice?.eventId, onConfirmed),
   );
 
   // eventId: the event chosen on the brief (S3); undefined sends none, and
@@ -3307,8 +3373,11 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         }
       }
       await fetchSets();
-    } catch {
-      showToast('Angle generation failed', 'error');
+    } catch (err) {
+      // The server's reason ("already being generated", the zone's NO_BASE,
+      // the budget), not a generic line (audit, 2026-10-15).
+      console.error('[SceneSets] angle generation failed:', err);
+      showToast(err.message || 'Angle generation failed', 'error');
     }
   };
 
@@ -3470,8 +3539,8 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       try {
         const res = await createSceneSetApi(createPayload);
         json = res.data;
-      } catch {
-        throw new Error('Failed to create');
+      } catch (err) {
+        throw new Error(err.response?.data?.error || 'Failed to create location');
       }
 
       // Save room properties if set (stored in visual_language JSONB)
@@ -3482,7 +3551,11 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       if (Object.keys(rp).length > 0 && json.data?.id) {
         try {
           await updateSceneSetApi(json.data.id, { room_properties: rp });
-        } catch { /* non-critical */ }
+        } catch (err) {
+          // The set exists; its room size and shape did not save: said, not hidden.
+          console.error('[SceneSets] room properties save failed:', err);
+          showToast('Location created, but its room size and shape did not save', 'error');
+        }
       }
 
       const setName = newSet.name.trim();
@@ -3491,8 +3564,9 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       setShowCreateForm(false);
       showToast(`Created "${setName}" — upload a base image to get started`);
       await fetchSets();
-    } catch {
-      showToast('Failed to create location', 'error');
+    } catch (err) {
+      console.error('[SceneSets] create failed:', err);
+      showToast(err.message || 'Failed to create location', 'error');
     } finally {
       setCreating(false);
     }
@@ -3501,20 +3575,30 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
   // D1: a set in use asks for a replacement (DeleteSetDialog); an unused one
   // is confirmed and deleted as before.
   const handleDeleteSet = async (set) => {
+    // Where the set is used is read first. A read that failed went on to
+    // delete with confirm_orphan, leaving its beats and episodes pointing at
+    // a removed set without saying so (audit, 2026-10-15): now it stops.
     let uses = null;
     try {
       uses = (await getSceneSetUsesApi(set.id)).data?.data || null;
     } catch (err) {
       console.error('[SceneSets] uses read failed:', err);
+      showToast(`Could not check where "${set.name}" is used, so it was not deleted. Try again.`, 'error');
+      return;
     }
     if (uses && uses.total > 0) { setDeleting({ set, uses }); return; }
     if (!window.confirm(`Delete location "${set.name}"? This will soft-delete the location and all its angles.`)) return;
     try {
-      await deleteSceneSetApi(set.id, uses ? '' : '?confirm_orphan=true');
+      // No confirm_orphan: if a use appeared meanwhile, the server says so.
+      await deleteSceneSetApi(set.id, '');
       showToast(`Deleted "${set.name}"`);
       fetchSets();
     } catch (err) {
       console.error('[SceneSets] delete failed:', err);
+      if (err.response?.data?.code === 'SET_IN_USE' && err.response.data.uses) {
+        setDeleting({ set, uses: err.response.data.uses });
+        return;
+      }
       showToast(err.response?.data?.error || 'Failed to delete location', 'error');
     }
   };
@@ -3557,8 +3641,9 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       await deleteAngleApi(set.id, angleId);
       showToast('Angle deleted');
       fetchSets();
-    } catch {
-      showToast('Failed to delete angle', 'error');
+    } catch (err) {
+      console.error('[SceneSets] angle delete failed:', err);
+      showToast(err.response?.data?.error || 'Failed to delete angle', 'error');
     }
   };
 
@@ -3597,8 +3682,9 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         try {
           await uploadAngleApi(set.id, newAngle.id, formData);
           showToast(`Added angle "${angleData.angle_label}" with uploaded image`);
-        } catch {
-          showToast('Angle created but image upload failed', 'error');
+        } catch (err) {
+          console.error('[SceneSets] angle image upload failed:', err);
+          showToast(`Angle created but image upload failed${err.response?.data?.error ? `: ${err.response.data.error}` : ''}`, 'error');
         }
       } else {
         showToast(`Added angle "${angleData.angle_label}"`);
@@ -3609,8 +3695,9 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       }
 
       await fetchSets();
-    } catch {
-      showToast('Failed to add angle', 'error');
+    } catch (err) {
+      console.error('[SceneSets] add angle failed:', err);
+      showToast(err.message || 'Failed to add angle', 'error');
     }
   };
 
@@ -3668,7 +3755,9 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
     }
   };
 
-  const runCascadeRegenerate = async (set, description, overrides, eventId) => {
+  // onSaved: called once the server took the request (and the description
+  // with it); a refusal (rate limit, bad overrides) keeps the editor open.
+  const runCascadeRegenerate = async (set, description, overrides, eventId, onSaved) => {
     startGenerating(set.id);
     try {
       let json;
@@ -3681,6 +3770,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       } catch (err) {
         throw new Error(err.response?.data?.error || 'Cascade regeneration failed');
       }
+      onSaved?.();
       showToast('Cascade regeneration queued...');
       const job = await pollJob(json.data.jobId);
       if (job.status === 'completed') {
@@ -4062,7 +4152,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
           <div className="scene-sets-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 600 }}>
             <div className="scene-sets-modal-header">
               <h3 className="scene-sets-modal-title">Generation History — {angleHistory.angle?.angle_name}</h3>
-              <button className="scene-sets-modal-close" onClick={() => setAngleHistory(null)}><X size={16} /></button>
+              <button className="scene-sets-modal-close" aria-label="Close" onClick={() => setAngleHistory(null)}><X size={16} /></button>
             </div>
             <div className="scene-sets-modal-body" style={{ maxHeight: '60vh', overflow: 'auto' }}>
               {angleHistory.current && (

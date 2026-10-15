@@ -67,7 +67,7 @@ const WORLD_CONFIGS = {
     age_range: [28, 45],
     setting: 'Real world — suburban/urban America. Content creators, professionals, mothers, wives, friends.',
     tone: 'Grounded, specific, adult. The texture of real life: dinner tables, commutes, DMs, mortgages.',
-    existing_characters: ['JustAWoman', 'David', 'Dana', 'Chloe', 'Jade', 'Marcus', 'Miles', 'Noah'],
+    existing_characters: ['JustAWoman', 'David', 'Elias', 'Zion', 'The Witness', 'Nia Vale', 'Jade', 'Marcus'],
   },
   lalaverse: {
     label: 'LalaVerse',
@@ -711,7 +711,7 @@ Return ONLY valid JSON — no preamble, no markdown:
 }`;
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: Math.max(3000, count * 300),
       system: systemPrompt,
       messages: [{ role: 'user', content: `Propose ${count} character seeds.` }],
@@ -760,7 +760,7 @@ router.post('/generate-batch', requireAuth, aiRateLimiter, async (req, res) => {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 8000,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
@@ -907,7 +907,7 @@ router.post('/commit', requireAuth, async (req, res) => {
     }
 
     // Check if PNOS seed character — block edit
-    const PNOS_SEEDS = ['JustAWoman', 'David', 'Dana', 'Chloe', 'Jade', 'Marcus', 'Miles', 'Noah'];
+    const PNOS_SEEDS = ['JustAWoman', 'David', 'Elias', 'Zion', 'The Witness', 'Nia Vale', 'Jade', 'Marcus'];
     if (PNOS_SEEDS.includes(rawName)) {
       return res.status(403).json({ error: `${rawName} is a PNOS Book 1 seed character and cannot be overwritten.` });
     }
@@ -1213,7 +1213,7 @@ router.post('/rewrite-field', requireAuth, aiRateLimiter, async (req, res) => {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 500,
       system: `You are rewriting a single character profile field for an AI-generated character. Match the adult-fiction register — specific, grounded, no softening. Return ONLY the new text (no quotes, no preamble, no explanation).\n\nCharacter: ${characterContext?.name || 'Unknown'}\nRole: ${characterContext?.role || '?'}\nLayer: ${characterContext?.layer || '?'}`,
       messages: [{

@@ -40,7 +40,6 @@ const API = '/api/v1';
 
 // Storyteller — books / chapters / lines
 export const getBookApi = (bookId) => apiClient.get(`${API}/storyteller/books/${bookId}`);
-export const getChapterApi = (chapterId) => apiClient.get(`${API}/storyteller/chapters/${chapterId}`);
 export const updateChapterApi = (chapterId, payload) =>
   apiClient.put(`${API}/storyteller/chapters/${chapterId}`, payload);
 export const createChapterApi = (bookId, payload) =>
@@ -415,7 +414,7 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
       );
       setAllChapters(chapters);
       return chapters;
-    } catch { return null; }
+    } catch (err) { console.error('[WriteMode] chapter reload failed:', err); return null; }
   }, [bookId]);
 
   // ── LOAD BOOK + ALL CHAPTERS ──────────────────────────────────────────
@@ -565,7 +564,7 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
           : [];
         setRegistryCharacters(chars);
       })
-      .catch(() => {});
+      .catch(err => console.error('[WriteMode] character registries did not load:', err));
   }, []);
 
   // ── NEW: Load review lines when switching to Review tab ───────────────
@@ -668,8 +667,16 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
     return () => clearTimeout(autoSaveRef.current);
   }, [prose, saved]);
 
+  // A failed write is shown, never swallowed: the draft stays "unsaved".
+  const reportFailure = useCallback((message, err) => {
+    console.error(`[WriteMode] ${message}:`, err);
+    setHint(`${message}. Your text is still here; try again.`);
+    setTimeout(() => setHint(null), 6000);
+  }, []);
+
+  // Returns true when the draft reached the server.
   const saveDraft = useCallback(async (text) => {
-    if (!text) return;
+    if (!text) return true;
     setSaving(true);
     try {
       await saveDraftApi(chapterId, { draft_prose: text });
@@ -683,7 +690,8 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
               ...s,
               prose: curSP[s.id] ?? s.prose ?? '',
             }));
-            updateChapterApi(chapterId, { sections: updatedSections }).catch(() => {});
+            updateChapterApi(chapterId, { sections: updatedSections })
+              .catch(err => reportFailure('Section text not saved', err));
             return { ...prev, sections: updatedSections };
           }
           return prev;
@@ -691,9 +699,15 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
       }
       setSaved(true);
       setLastSavedAt(Date.now());
-    } catch {}
-    setSaving(false);
-  }, [chapterId]);
+      setSaving(false);
+      return true;
+    } catch (err) {
+      setSaved(false);
+      reportFailure('Draft not saved', err);
+      setSaving(false);
+      return false;
+    }
+  }, [chapterId, reportFailure]);
 
   // ── CHAPTER-LEVEL INSTRUCTION ─────────────────────────────────────────
   const handleChapterInstruction = useCallback(async () => {
@@ -713,9 +727,11 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
         setChapterInstruction('');
         setChapterInstructionOpen(false);
       }
-    } catch {}
+    } catch (err) {
+      reportFailure('Chapter instruction failed', err);
+    }
     setChapterInstructionLoading(false);
-  }, [chapterInstruction, prose, bookId, chapterId]);
+  }, [chapterInstruction, prose, bookId, chapterId, reportFailure]);
 
   // ── READ ALOUD (TTS) ─────────────────────────────────────────────────
 
@@ -822,15 +838,19 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
 
   const loadReferenceChapter = useCallback(async (refChId) => {
     if (!refChId) return;
-    try {
-      const res = await getChapterApi(refChId);
-      const data = res.data;
-      const ch = data?.chapter || data;
-      setReferenceChapter(ch);
-      setReferenceProse(ch?.draft_prose || ch?.prose || '');
-      setShowReference(true);
-    } catch { setHint('Could not load reference chapter'); setTimeout(() => setHint(null), 3000); }
-  }, []);
+    // There is no GET for one chapter; the book's chapters carry their prose.
+    // Reload them so the reference shows the chapter as last saved.
+    const chapters = await reloadChapters();
+    const ch = (chapters || allChapters).find(c => c.id === refChId);
+    if (!ch) {
+      console.error('[WriteMode] reference chapter not found:', refChId);
+      setHint('Could not load reference chapter'); setTimeout(() => setHint(null), 3000);
+      return;
+    }
+    setReferenceChapter(ch);
+    setReferenceProse(ch.draft_prose || ch.prose || '');
+    setShowReference(true);
+  }, [reloadChapters, allChapters]);
 
   // ── DAILY WRITING STATS ───────────────────────────────────────────────
 
@@ -867,6 +887,7 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
     setGenerating(true);
 
     let accumulated = prose || '';
+    const failed = [];
 
     for (let i = 0; i < sceneHeaders.length; i++) {
       setCurrentSceneIdx(i);
@@ -905,19 +926,27 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
           setProse(accumulated);
           setWordCount(accumulated.split(/\s+/).filter(Boolean).length);
           setSaved(false);
+        } else {
+          // story-continue can answer 200 with prose: null and an error.
+          console.error(`Scene ${i + 1} came back empty:`, data.error || data);
+          failed.push(sceneName);
         }
       } catch (err) {
         console.error(`Scene ${i + 1} generation error:`, err);
-        setHint(`Scene "${sceneName}" failed — continuing with remaining scenes.`);
-        setTimeout(() => setHint(null), 3000);
+        failed.push(sceneName);
       }
     }
 
     setWritingAllScenes(false);
     setCurrentSceneIdx(-1);
     setGenerating(false);
-    setHint(`All ${sceneHeaders.length} scenes generated! Review and refine.`);
-    setTimeout(() => setHint(null), 5000);
+    const written = sceneHeaders.length - failed.length;
+    if (failed.length === 0) {
+      setHint(`All ${sceneHeaders.length} scenes generated! Review and refine.`);
+    } else {
+      setHint(`${written} of ${sceneHeaders.length} scenes written. Not written: ${failed.map(n => `"${n}"`).join(', ')}. Try those again.`);
+    }
+    setTimeout(() => setHint(null), failed.length ? 8000 : 5000);
   }, [chapter, prose, bookId, book, selectedCharacter, genLength, takeSnapshot]);
 
   // ── VOICE RECOGNITION — MAIN ─────────────────────────────────────────
@@ -998,16 +1027,35 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
         }),
       });
 
+      if (!res.ok) {
+        let message = `Server error (${res.status}) — please try again.`;
+        try {
+          const errData = await res.json();
+          if (errData?.error) message = errData.error;
+        } catch (parseErr) {
+          console.error('voice-to-story: error body was not JSON:', parseErr);
+        }
+        console.error('voice-to-story failed:', res.status, message);
+        setHint(message);
+        setTimeout(() => setHint(null), 5000);
+        return;
+      }
+
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let fullText = '';
       let hintData = null;
+      let streamError = null;
+      // An SSE event can be split across two reads: keep the unfinished
+      // line in the buffer until the rest of it arrives.
+      let buffer = '';
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
           try {
@@ -1025,8 +1073,11 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
               hintData = evt.hint || null;
             } else if (evt.type === 'error') {
               console.error('voice-to-story stream error:', evt.error);
+              streamError = evt.error || 'Voice to story failed — please try again.';
             }
-          } catch {}
+          } catch (parseErr) {
+            console.error('voice-to-story: bad stream line:', parseErr);
+          }
         }
       }
 
@@ -1042,12 +1093,18 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
           setHint(hintData);
           setTimeout(() => setHint(null), 6000);
         }
+      } else {
+        setHint(streamError || 'Nothing came back — please try again.');
+        setTimeout(() => setHint(null), 5000);
       }
     } catch (err) {
       console.error('voice-to-story error:', err);
+      setHint('Voice to story failed — please try again.');
+      setTimeout(() => setHint(null), 5000);
+    } finally {
+      setStreamingText('');
+      setGenerating(false);
     }
-    setStreamingText('');
-    setGenerating(false);
   }, [prose, chapter, book, sessionLog, genLength, selectedCharacter, takeSnapshot]);
 
   const toggleListening = useCallback(async () => {
@@ -1373,9 +1430,11 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
       const bookData = data?.book || data;
       const ch = (bookData.chapters || []).find(c => c.id === chapterId);
       setReviewLines(ch?.lines || []);
-    } catch {}
+    } catch (err) {
+      reportFailure('Review lines did not load', err);
+    }
     setReviewLoading(false);
-  }, [bookId, chapterId]);
+  }, [bookId, chapterId, reportFailure]);
 
   // ── REVIEW LINE ACTIONS ─────────────────────────────────────────────
 
@@ -1392,14 +1451,18 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
       if (line) setLastApprovedLine({ ...line, status: 'approved' });
       // Sync approved lines back to draft prose
       syncLinesToDraft(updatedLines);
-    } catch {}
+    } catch (err) {
+      reportFailure('Line not approved', err);
+    }
   };
 
   const rejectLine = async (lineId) => {
     try {
       await deleteLineApi(lineId);
       setReviewLines(prev => prev.filter(l => l.id !== lineId));
-    } catch {}
+    } catch (err) {
+      reportFailure('Line not rejected', err);
+    }
   };
 
   const startLineEdit = (line) => { setEditingLine(line.id); setEditText(line.text || line.content || ''); };
@@ -1413,7 +1476,9 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
       setEditText('');
       // Sync edited lines back to draft prose
       syncLinesToDraft(updatedLines);
-    } catch {}
+    } catch (err) {
+      reportFailure('Line edit not saved', err);
+    }
   };
 
   const approveAll = async () => {
@@ -1436,8 +1501,13 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
     // Persist to server
     try {
       await saveDraftApi(chapterId, { draft_prose: rebuiltProse });
-    } catch {}
-  }, [reviewLines, chapterId]);
+      setSaved(true);
+      setLastSavedAt(Date.now());
+    } catch (err) {
+      setSaved(false);
+      reportFailure('Approved lines not saved to the draft', err);
+    }
+  }, [reviewLines, chapterId, reportFailure]);
 
   // ── SEND TO REVIEW ────────────────────────────────────────────────────
 
@@ -1464,7 +1534,9 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
         for (const ln of toDelete) {
           try {
             await deleteLineApi(ln.id);
-          } catch {}
+          } catch (err) {
+            console.error('[WriteMode] sendToReview: pending line not removed:', ln.id, err);
+          }
         }
       }
 
@@ -1478,17 +1550,17 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
         submitEmotionalImpactApi(chapterId, {
           prose,
           character_id: selectedCharacter.id,
-        }).catch(() => {}); // Fire-and-forget
+        }).catch(err => console.error('[WriteMode] emotional impact failed:', err)); // Fire-and-forget
       }
 
       // Switch to Review tab instead of navigating away
       setCenterTab('review');
       await loadReviewLines();
     } catch (err) {
-      console.error('sendToReview error:', err);
+      reportFailure('Not sent to review', err);
     }
     setSaving(false);
-  }, [prose, chapterId, bookId, selectedCharacter, loadReviewLines]);
+  }, [prose, chapterId, bookId, selectedCharacter, loadReviewLines, reportFailure]);
 
   // ── PROSE EDIT (direct typing) ────────────────────────────────────────
 
@@ -1624,8 +1696,8 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
 
   const switchChapter = useCallback(async (targetId) => {
     if (targetId === chapterId) return;
-    // auto-save current
-    if (prose) await saveDraft(prose);
+    // auto-save current; stay if it did not save
+    if (prose && !(await saveDraft(prose))) return;
     navigate(`/chapter/${bookId}/${targetId}`);
   }, [chapterId, bookId, prose, saveDraft, navigate]);
 
@@ -3497,12 +3569,14 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
           <div className="wm-modal" onClick={e => e.stopPropagation()}>
             <div className="wm-modal-title">Leave Write Mode?</div>
             <div className="wm-modal-sub">
-              {prose ? 'Your draft is saved. You can come back.' : 'Nothing written yet.'}
+              {!prose ? 'Nothing written yet.'
+                : saved ? 'Your draft is saved. You can come back.'
+                : 'Your latest changes will be saved before you leave.'}
             </div>
             <div className="wm-modal-btns">
               <button className="wm-modal-cancel" onClick={() => setShowExit(false)}>Stay</button>
               <button className="wm-modal-leave" onClick={async () => {
-                if (prose) await saveDraft(prose);
+                if (prose && !(await saveDraft(prose))) { setShowExit(false); return; }
                 navigate(`/book/${bookId}`);
               }}>
                 {prose ? 'Save & Leave' : 'Leave'}
