@@ -16,7 +16,10 @@
  *       private_state       words from the character's Living State, quoted
  *       unrevealed_character  a character Lala has not met by the post's moment
  *       unrevealed_event    an event still hidden at the post's moment
- *       future_event        an event whose episode comes after the post
+ *       future_event        an event whose episode comes after the post,
+ *                           unless its host posts it once it is announced
+ *                           (Evoni, 2026-10-15: hosts announce their own
+ *                           events; hostAnnouncing)
  *       doesnt_know         an event the poster could not know about at the
  *                           post's moment: not there, not told by a close
  *                           tie, never posted (pulseKnowledge; spec §6)
@@ -103,7 +106,7 @@ async function canonFlags(db, post, { privateState = null, lalaProfileId } = {})
     for (const ev of events) {
       if (!ev.name || !mentions(text, ev.name)) continue;
       if (hiddenEvents.has(ev.id)) { flags.push({ code: 'unrevealed_event', detail: ev.name }); flagged.add(ev.id); }
-      else if (ev.episode_number != null && orderOf(ev.episode_number, 'during_episode') > at) { flags.push({ code: 'future_event', detail: ev.name }); flagged.add(ev.id); }
+      else if (ev.episode_number != null && orderOf(ev.episode_number, 'during_episode') > at && !hostAnnouncing(ev, post, at, orderOf)) { flags.push({ code: 'future_event', detail: ev.name }); flagged.add(ev.id); }
     }
     // Who knows what (Task #2982): an event the poster was not at, was not told of, and saw no post about.
     const unknown = (await knowledge.unknownMentions(db, post, { lalaProfileId: lalaId, events })).filter((ev) => !flagged.has(ev.id));
@@ -147,6 +150,18 @@ Answer with JSON only: {"score": 0.0, "why": "one short line"}`;
 }
 
 /** The gate: { pass, voice, voice_why, flags }. */
+
+/**
+ * A host may post about their own event once it is announced (its episode's
+ * 'announced' moment, storyClock) and before it happens. The words are still
+ * the voice and canon checks'; only the future_event flag is waived.
+ */
+function hostAnnouncing(ev, post, at, orderOf) {
+  if (ev.host_profile_id == null || post?.social_profile_id == null) return false;
+  if (Number(ev.host_profile_id) !== Number(post.social_profile_id)) return false;
+  return at >= orderOf(ev.episode_number, 'announced');
+}
+
 async function check(db, post, { voice = null, privateState = null, lalaProfileId } = {}) {
   const flags = await canonFlags(db, post, { privateState, lalaProfileId });
   const scored = await voiceScore(voice, post.content_text || '');
@@ -172,4 +187,5 @@ function reviewReasons(post, gate, { lalaProfileId = null, revealsStory = false 
   return reasons;
 }
 
-module.exports = { VOICE_PASS, MIN_PRIVATE, mentions, privateLeaks, canonFlags, voiceScore, check, reviewReasons };
+module.exports = {
+  hostAnnouncing, VOICE_PASS, MIN_PRIVATE, mentions, privateLeaks, canonFlags, voiceScore, check, reviewReasons };

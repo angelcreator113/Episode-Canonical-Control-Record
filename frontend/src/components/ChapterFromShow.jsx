@@ -6,7 +6,9 @@
  * chapter is everything the viewer does not see, in JustAWoman's point of
  * view. Here a chapter is tied to its episode, written from it (a preview,
  * inserted only when accepted), checked against the episode's short story,
- * and the book's ledger shows what each episode still owes.
+ * and the book's ledger shows what each episode still owes. The episode of
+ * the consciousness transfer is set here too: the chapter writer puts the
+ * Lala bleed in the first chapter after it (none until it is set).
  *
  * API: routes/bookFromShowRoutes.js (/api/v1/book-from-show).
  */
@@ -25,6 +27,8 @@ export const writeFromEpisodeApi = (chapterId) =>
   apiClient.post(`${API}/chapters/${chapterId}/write-from-episode`, {}, { timeout: 180000 });
 export const checkAgainstStoryApi = (chapterId, prose) =>
   apiClient.post(`${API}/chapters/${chapterId}/check-against-story`, { prose }, { timeout: 120000 });
+export const setTransferApi = (showId, episodeId) =>
+  apiClient.put(`${API}/shows/${showId}/transfer`, { episode_id: episodeId });
 const listShowsApi = () => apiClient.get('/api/v1/shows');
 
 const errorOf = (err, fallback) => err?.response?.data?.error || fallback;
@@ -40,7 +44,7 @@ export default function ChapterFromShow({ bookId, chapterId, prose, onPreview })
   const [shows, setShows] = useState(null);       // only when the book names no show
   const [showId, setShowId] = useState(() => rememberedShowId() || null);
   const [linked, setLinked] = useState(null);     // { episode, short_story }
-  const [busy, setBusy] = useState(null);         // 'link' | 'write' | 'check'
+  const [busy, setBusy] = useState(null);         // 'link' | 'write' | 'check' | 'transfer'
   const [error, setError] = useState(null);
   const [issues, setIssues] = useState(null);
   const [showLedger, setShowLedger] = useState(false);
@@ -90,6 +94,19 @@ export default function ChapterFromShow({ bookId, chapterId, prose, onPreview })
     } catch (err) {
       console.error('[ChapterFromShow] link failed:', err);
       setError(errorOf(err, 'The episode was not saved.'));
+    }
+    setBusy(null);
+  };
+
+  const setTransfer = async (episodeId) => {
+    if (!ledger?.show_id) return;
+    setBusy('transfer'); setError(null);
+    try {
+      await setTransferApi(ledger.show_id, episodeId || null);
+      await loadLedger(showId);
+    } catch (err) {
+      console.error('[ChapterFromShow] transfer not saved:', err);
+      setError(errorOf(err, 'The transfer episode was not saved.'));
     }
     setBusy(null);
   };
@@ -174,6 +191,20 @@ export default function ChapterFromShow({ bookId, chapterId, prose, onPreview })
       )}
 
       {error && <p className="wm-from-show-error" role="alert">{error}</p>}
+
+      {ledger && (
+        <div className="wm-from-show-transfer">
+          <label className="wm-ctx-label" htmlFor="wm-from-show-transfer">The consciousness transfer happens in</label>
+          <select id="wm-from-show-transfer" className="wm-reference-select" value={ledger.transfer?.episode_id || ''}
+            disabled={busy === 'transfer'} onChange={(e) => setTransfer(e.target.value)}>
+            <option value="">Not decided yet</option>
+            {episodes.map((ep) => <option key={ep.id} value={ep.id}>Episode {ep.episode_number ?? '?'}: {ep.title || 'Untitled'}</option>)}
+          </select>
+          <p className="wm-from-show-note">{ledger.transfer
+            ? 'The Lala bleed comes in the first chapter after it: one intrusive thought, once.'
+            : 'Until it is set, no chapter carries the Lala bleed.'}</p>
+        </div>
+      )}
 
       {owed && (
         <div className="wm-from-show-ledger">
