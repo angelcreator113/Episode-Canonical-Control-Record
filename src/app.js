@@ -1687,6 +1687,15 @@ try {
   console.error('✗ Failed to load Cast routes:', e.message);
 }
 
+// The book follows the show — episode → short story → chapter (docs/CANON.md)
+try {
+  const bookFromShowRoutes = require('./routes/bookFromShowRoutes');
+  app.use('/api/v1/book-from-show', bookFromShowRoutes);
+  console.log('✓ Book from the show loaded at /api/v1/book-from-show');
+} catch (e) {
+  console.error('✗ Failed to load Book from the show routes:', e.message);
+}
+
 // Feed Posts — timeline activity after episodes
 try {
   const feedPostRoutes = require('./routes/feedPostRoutes');
