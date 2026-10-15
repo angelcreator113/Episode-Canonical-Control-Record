@@ -14,6 +14,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const express = require('express');
+const { PULSE, isPulseLayer } = require('../utils/pulsePlatform');
 const router  = express.Router();
 const multer  = require('multer');
 const path    = require('path');
@@ -129,6 +130,9 @@ Lala does not know she was built. The world she lives in feels complete and self
 
 async function generateSingleProfile(creator, { db, seriesId, characterContext, characterKey: _characterKey, feedLayer }) {
   const canSave = !!(db && db.SocialProfile);
+  // A LalaVerse creator's social is The Pulse, whatever the import guessed
+  // (utils/pulsePlatform; the SocialProfile hook sets it on save as well).
+  if (isPulseLayer(feedLayer)) creator = { ...creator, platform: PULSE };
 
   // The handle is known before the model call (it is the candidate's own
   // input), so a taken handle is refused here — no Sonnet cost, no write.

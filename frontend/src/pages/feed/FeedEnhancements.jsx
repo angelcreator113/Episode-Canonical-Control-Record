@@ -6,6 +6,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import apiClient from '../../services/api';
+import { platformLabel } from './feedConstants';
 
 // File-local helper. Memories AI is a generic prompt-completion endpoint.
 export const generateMemoriesAiApi = (payload) =>
@@ -89,7 +90,7 @@ export function ProfileComparison({ profiles, onClose }) {
 
       {/* Comparison Grid */}
       <CompareRow label="Handle" leftVal={left.handle} rightVal={right.handle} />
-      <CompareRow label="Platform" leftVal={left.platform} rightVal={right.platform} />
+      <CompareRow label="Platform" leftVal={platformLabel(left.platform)} rightVal={platformLabel(right.platform)} />
       <CompareRow label="Archetype" leftVal={left.archetype?.replace(/_/g, ' ')} rightVal={right.archetype?.replace(/_/g, ' ')} />
       <CompareRow label="Follow" leftVal={MOTIVATION_COLORS[left.follow_motivation]?.label} rightVal={MOTIVATION_COLORS[right.follow_motivation]?.label} />
       <CompareRow label="Emotion" leftVal={left.follow_emotion} rightVal={right.follow_emotion} />
@@ -118,7 +119,7 @@ export function LalaReactions({ profile, showId, onClose }) {
       const d = await generateMemoriesAiApi({
         prompt: `You are writing internal monologue for Lala, a luxury fashion content creator in the LalaVerse.
 
-She just saw content from ${p.display_name || p.handle} (${p.platform}).
+She just saw content from ${p.display_name || p.handle} (${platformLabel(p.platform)}).
 Follow motivation: ${p.follow_motivation || 'general interest'}
 Follow emotion: ${p.follow_emotion || 'neutral'}
 Follow trigger: ${p.follow_trigger || 'their content'}
