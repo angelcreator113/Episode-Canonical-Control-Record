@@ -100,10 +100,48 @@ const upload = multer({
   },
 });
 
-const uploadSceneSetImages = upload.fields([
+/**
+ * The upload middleware with its refusals answered as the person's mistake:
+ * 413 for a file over the limit, 400 for a file that is not an image or a
+ * malformed upload. Before (audit, 2026-10-15) they reached Express's
+ * error handler as 500s.
+ */
+const uploadOrRefuse = (middleware) => (req, res, next) => middleware(req, res, (err) => {
+  if (!err) return next();
+  console.error('Scene Sets upload refused:', err.code || '', err.message);
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({ success: false, error: 'The image is larger than 10 MB', code: 'FILE_TOO_LARGE' });
+  }
+  return res.status(400).json({ success: false, error: err.message || 'The upload could not be read', code: 'BAD_FILE' });
+});
+
+const uploadSceneSetImages = uploadOrRefuse(upload.fields([
   { name: 'image', maxCount: 1 },
   { name: 'images', maxCount: 20 },
-]);
+]));
+
+/**
+ * One paid generation at a time for a set's base or an angle (audit,
+ * 2026-10-15: a double click started and billed two). Claims the row by
+ * marking it generating in one statement, unless it is generating already;
+ * a claim older than GENERATION_CLAIM_STALE_MINUTES (a run that died) can
+ * be taken again, as the page treats it (hasLiveGeneration). Answers 409
+ * ALREADY_GENERATING and returns false when the row is taken.
+ */
+const GENERATION_CLAIM_STALE_MINUTES = 15;
+const CLAIM_TABLES = Object.freeze({ set: 'scene_sets', angle: 'scene_angles' });
+async function claimGeneration(res, kind, id, what) {
+  const [rows] = await SceneSet.sequelize.query(
+    `UPDATE ${CLAIM_TABLES[kind]} SET generation_status = 'generating', updated_at = NOW()
+      WHERE id = :id
+        AND (generation_status IS DISTINCT FROM 'generating'
+             OR updated_at < NOW() - make_interval(mins => :stale))
+      RETURNING id`,
+    { replacements: { id, stale: GENERATION_CLAIM_STALE_MINUTES } });
+  if (rows.length) return true;
+  res.status(409).json({ success: false, code: 'ALREADY_GENERATING', error: `${what} is already being generated. Wait for it to finish.` });
+  return false;
+}
 
 // Ensure generation_jobs table exists (safe to call multiple times)
 let generationJobsSynced = false;
@@ -1060,7 +1098,7 @@ router.post('/:id/generate-base', validateUUIDParam('id'), requireAuth, aiRateLi
       return res.status(503).json({ success: false, error: `Base model ${baseModelKey} needs ${missingKeys.join(', ')}, which is not configured.` });
     }
 
-    await set.update({ generation_status: 'generating' });
+    if (!(await claimGeneration(res, 'set', set.id, `The base of "${set.name}"`))) return;
 
     // Return immediately, generate in background
     res.status(202).json({ success: true, data: { status: 'generating', base_model: baseModelKey, message: 'Base generation started in background' } });
@@ -1411,8 +1449,8 @@ router.post('/:id/angles/:angleId/generate', validateUUIDParam('id'), requireAut
       return res.status(409).json({ success: false, code: 'NO_BASE', error: 'Generate or upload this set\'s base first: each zone is made from it, so the zones read as one place.' });
     }
 
-    // Mark as generating
-    await angle.update({ generation_status: 'generating' });
+    // Mark as generating: one generation of an angle at a time.
+    if (!(await claimGeneration(res, 'angle', angle.id, `"${angle.angle_name || angle.angle_label}"`))) return;
 
     // Return immediately, generate in background
     res.status(202).json({ success: true, data: { status: 'generating', message: 'Generation started in background' } });
@@ -1965,7 +2003,9 @@ router.post('/:id/brief', validateUUIDParam('id'), requireAuth, async (req, res)
       // also adds the fixes for the flagged problems to this brief.
       options = req.body?.refine
         ? sceneGenService.refinedBriefOptions(angle, draft, { overrides: briefOverrides.value })
-        : sceneGenService.angleBriefOptions(angle, draft, { overrides: briefOverrides.value }).options;
+        : sceneGenService.angleBriefOptions(angle, draft, {
+          overrides: briefOverrides.value, zoneAngle: await sceneGenService.extraZoneAngle(angle, SceneAngle),
+        }).options;
     } else {
       const saved = set.base_generation?.brief || null;
       options = {
@@ -2067,10 +2107,8 @@ router.post('/:id/cascade-regenerate', validateUUIDParam('id'), requireAuth, aiR
       await set.update({ canonical_description: req.body.canonical_description });
     }
 
-    // Mark as generating (non-fatal if column not yet migrated)
-    try { await set.update({ generation_status: 'generating' }); } catch (e) {
-      console.warn('cascade-regenerate: could not update generation_status:', e.message);
-    }
+    // Mark as generating: one regeneration of the set at a time.
+    if (!(await claimGeneration(res, 'set', set.id, `"${set.name}"`))) return;
 
     await ensureGenerationJobsTable();
     // S2: the base takes the overrides; its angles inherit them from the
@@ -2798,16 +2836,24 @@ router.post('/:id/generate-all-angles', validateUUIDParam('id'), requireAuth, ai
       ? { scene_set_id: set.id, id: rawIds, generation_status: ['pending', 'failed'] }
       : { scene_set_id: set.id, generation_status: 'pending' };
     const eligible = await SceneAngle.findAll({ where, order: [['sort_order', 'ASC']] });
-    const pendingAngles = eligible.slice(0, MAX_BATCH);
+    let pendingAngles = eligible.slice(0, MAX_BATCH);
     const remaining = eligible.length - pendingAngles.length;
 
     if (pendingAngles.length === 0) {
       return res.json({ success: true, message: 'No pending angles to generate', queued: 0, angle_ids: [], remaining: 0 });
     }
 
-    const failedIds = pendingAngles.filter((a) => a.generation_status === 'failed').map((a) => a.id);
-    if (failedIds.length) {
-      await SceneAngle.update({ generation_status: 'pending' }, { where: { id: failedIds, scene_set_id: set.id } });
+    // Claim the batch in one statement: a second request (a double click)
+    // finds these generating and starts none of them again.
+    const [claimedRows] = await SceneSet.sequelize.query(
+      `UPDATE scene_angles SET generation_status = 'generating', updated_at = NOW()
+        WHERE id IN (:ids) AND scene_set_id = :setId AND generation_status IN ('pending', 'failed')
+        RETURNING id`,
+      { replacements: { ids: pendingAngles.map((a) => a.id), setId: set.id } });
+    const claimed = new Set(claimedRows.map((r) => r.id));
+    pendingAngles = pendingAngles.filter((a) => claimed.has(a.id));
+    if (pendingAngles.length === 0) {
+      return res.json({ success: true, message: 'No pending angles to generate', queued: 0, angle_ids: [], remaining });
     }
 
     // Return immediately, generate in background

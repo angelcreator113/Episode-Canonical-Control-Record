@@ -951,7 +951,7 @@ function formatTime(secs) {
 // L9 (Evoni, 2026-10-02, §8(hh)): "a venue's set shows a Looks row: its
 // approved base, then one card per event's dressed version, each naming its
 // event"; "Scene Sets links each look back to its event."
-export function LooksRow({ set, focusZone = null, onToast }) {
+export function LooksRow({ set, focusZone = null, onToast, onRefresh }) {
   const looks = set.looks || [];
   const events = set.events || [];
   if (!set.base_approved && looks.length === 0 && events.length === 0) return null;
@@ -982,7 +982,8 @@ export function LooksRow({ set, focusZone = null, onToast }) {
         <div key={ev.id} data-testid={`scene-set-event-${ev.id}`}
           className={`scene-sets-event-look${focusZone === `look:${ev.id}` ? ' is-zone-focus' : ''}`}>
           <Link className="scene-sets-event-look-name" to={`/shows/${ev.show_id}/events/${ev.id}`}>{ev.name}</Link>
-          <EventLookImage showId={ev.show_id} eventId={ev.id} canGenerate onToast={onToast} />
+          {/* A look made or uploaded here shows in the row above (onRefresh). */}
+          <EventLookImage showId={ev.show_id} eventId={ev.id} canGenerate onToast={onToast} onSaved={onRefresh} />
           {ev.used_in_episode_id && <DressedAngles episodeId={ev.used_in_episode_id} setId={set.id} onToast={onToast} />}
         </div>
       ))}
@@ -1248,8 +1249,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
     try {
       await updateSceneSetApi(set.id, { name: trimmed });
       if (onToast) onToast(`Renamed to "${trimmed}"`);
-    } catch {
-      if (onToast) onToast('Failed to rename', 'error');
+      onRefresh?.();
+    } catch (err) {
+      console.error('[SceneSets] rename failed:', err);
+      if (onToast) onToast(err.response?.data?.error || 'Failed to rename', 'error');
     }
     setSavingName(false);
     setEditingName(false);
@@ -2230,7 +2233,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                         location are made from it, and it is not replaced until it is
                         un-approved. */}
                     <ApprovedBaseRow set={set} onToast={showToast} onRefresh={onRefresh} />
-                    <LooksRow set={set} focusZone={focused ? focusZone : null} onToast={showToast} />
+                    <LooksRow set={set} focusZone={focused ? focusZone : null} onToast={showToast} onRefresh={onRefresh} />
                     {/* 2026-10-15: the everyday look at each time of day and in each season. */}
                     {set.base_approved && <LookVariants setId={set.id} onToast={showToast} />}
                     {!set.base_approved && !set.location_approved_base && !(set.world_location_id && set.base_still_url)

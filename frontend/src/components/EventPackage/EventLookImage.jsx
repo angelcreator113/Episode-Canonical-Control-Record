@@ -16,7 +16,9 @@
  * (answer 6). Several sets at the venue: Evoni chooses one (answer 3).
  *
  * Props: showId, eventId, onToast(msg), canGenerate (the Scene Sets panel), fromLabel,
- * onSaved() (reloads the event: a set may have been created and linked),
+ * onSaved() (reloads the event: a set may have been created and linked;
+ * also called when a look or base it saw generating finishes or fails, so
+ * the page around it shows the new image),
  * pollMs (the refresh interval; tests shorten it).
  *
  * S8 (Evoni, 2026-10-02; §8(dd), answer 1): the look is made in the Scene
@@ -59,6 +61,8 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
   const last = useRef(null);
   const toastRef = useRef(onToast);
   toastRef.current = onToast;
+  const savedRef = useRef(onSaved);
+  savedRef.current = onSaved;
 
   // Says when a look or base this section saw generating finishes or fails.
   const announce = (prev, data) => {
@@ -67,6 +71,8 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
     if (lookGenerating(prev) && data?.look?.status === 'failed') toast?.(`The look could not be generated${data.look.error ? `: ${data.look.error}` : ''}`);
     if (baseGenerating(prev) && data?.scene_set?.generation_status === 'complete') toast?.('The base is ready: approve it in Scene Sets');
     if (baseGenerating(prev) && data?.scene_set?.generation_status === 'failed') toast?.(`The base could not be generated${data.scene_set.error ? `: ${data.scene_set.error}` : ''}`);
+    const finished = (lookGenerating(prev) && !lookGenerating(data)) || (baseGenerating(prev) && !baseGenerating(data));
+    if (finished) Promise.resolve(savedRef.current?.()).catch((err) => console.error('[EventLookImage] refresh after a run failed:', err));
   };
 
   const load = useCallback(async () => {
