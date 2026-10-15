@@ -70,6 +70,9 @@ const CATEGORY_TO_LIST_SLOT = {
   dress: 'dress', top: 'top', bottom: 'bottom', shoes: 'shoes',
   bag: 'purse', accessory: 'accessories', jewelry: 'jewelry', perfume: 'perfume',
   hair: 'hair',
+  // A jacket over the outfit has a line of its own when the list names one
+  // (Task #3205); before, it filled nothing.
+  outerwear: 'outerwear',
 };
 
 function listSlotOf(clothingCategory) {

@@ -18,6 +18,17 @@ export function findLala(characters) {
   return list.find((c) => norm(c.character_key) === 'lala') || list.find((c) => norm(c.display_name) === 'lala') || null;
 }
 
+/**
+ * Lala is the show's Protagonist whatever her stored role (Task #3199; the
+ * cast read §5, docs/reads/2026-10-14-cast-generator-read.md). Her row says
+ * 'special', which onboarding, the canon tier and the relationship layers
+ * read, so the data stays and the page decides. Returns the other characters
+ * tagged 'protagonist', which the page flags.
+ */
+export function otherProtagonists(characters, lala) {
+  return (characters || []).filter((c) => c && c.role_type === 'protagonist' && (!lala || String(c.id) !== String(lala.id)));
+}
+
 /** The LalaVerse feed profiles (not the real-world ones Lala follows), each with its character if linked. */
 export function feedPeople(profiles, characters) {
   const byId = new Map((characters || []).map((c) => [String(c.id), c]));
