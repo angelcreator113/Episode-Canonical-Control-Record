@@ -170,6 +170,24 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect((await places(s.id)).body.data.characters.find((c) => c.id === marcus).places.map((p) => p.scene_set_id)).toEqual([penthouse]);
   });
 
+  it('the first lead keeps the show\'s home and closet, except where she has her own', async () => {
+    const s = await show();
+    const lala = await s.character('Lala');
+    const loft = await s.set('Loft');
+    const closet = await s.set('Closet');
+    const studio = await s.set('Studio');
+    await run(`UPDATE shows SET metadata = :m WHERE id = :id`,
+      { id: s.id, m: JSON.stringify({ scene_defaults: { home_set_id: loft, closet_set_id: closet } }) });
+    await link(s.id, { character_id: lala, scene_set_id: studio, role: 'home' });
+
+    const res = await auth(request(app).put(`/api/v1/shows/${s.id}/lead-character`)).send({ character_id: lala });
+    expect(res.status).toBe(200);
+    const m = await defaults(s.id);
+    expect(m.lead_character_id).toBe(lala);
+    // Her own home replaces the show's; the show's closet becomes hers.
+    expect(m.scene_defaults).toEqual({ home_set_id: studio, closet_set_id: closet });
+  });
+
   it('an old lead whose home is also her closet keeps it as her home', async () => {
     const s = await show();
     const lala = await s.character('Lala');
