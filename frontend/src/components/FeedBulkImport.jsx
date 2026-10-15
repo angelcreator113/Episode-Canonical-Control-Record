@@ -608,7 +608,10 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
                     </div>
                   )}
                 </div>
-                {/* Platform selector */}
+                {/* Platform selector: a LalaVerse creator is on The Pulse (the server sets it). */}
+                {feedLayer === 'lalaverse' ? (
+                  <span style={{ padding: '4px 6px', background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: '6px', color: C.text, fontSize: '11px' }}>The Pulse</span>
+                ) : (
                 <select
                   value={c.platform}
                   onChange={e => updateCandidate(i, 'platform', e.target.value)}
@@ -616,6 +619,7 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
                 >
                   {PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
+                )}
                 {c.source_text && (
                   <span title={c.source_text} style={{ fontSize: '10px', color: C.textFaint, cursor: 'help' }}>✦ extracted</span>
                 )}

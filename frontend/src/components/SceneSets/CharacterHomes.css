@@ -1,0 +1,13 @@
+/* Characters' places on a scene set (2026-10-15). Wraps at 375px. */
+.ch { display: grid; gap: 4px; margin: 6px 0; }
+.ch-label { font-family: 'DM Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-secondary); }
+.ch-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ch-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border: 1px solid var(--lala-parchment-3); border-radius: 12px; font-size: 11px; background: var(--surface-card); }
+.ch-x { display: inline-flex; border: none; background: none; padding: 0; cursor: pointer; color: var(--text-secondary); min-width: 20px; min-height: 20px; align-items: center; justify-content: center; }
+.ch-none { font-size: 11px; color: var(--text-secondary); }
+.ch-btn { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 2px 8px; border: 1px solid var(--lala-parchment-3); border-radius: 4px; background: var(--surface-card); color: var(--text-primary); font-size: 11px; cursor: pointer; }
+.ch-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.ch-btn-primary { border-color: var(--lala-gold); color: var(--lala-gold-text); }
+.ch-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; }
+.ch-form select, .ch-form input { min-height: 28px; font-size: 12px; max-width: 100%; }
+.ch-lead { display: inline-flex; align-items: center; gap: 4px; color: var(--text-secondary); }

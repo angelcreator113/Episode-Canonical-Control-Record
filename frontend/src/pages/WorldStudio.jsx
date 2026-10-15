@@ -18,6 +18,7 @@ import apiClient from '../services/api';
 import { TENSION } from '../components/RelationshipEngine/tokens';
 import { DREAM_CITIES } from '../data/dreamCities';
 import './WorldStudio.css';
+import { platformLabel } from './feed/feedConstants';
 
 const RelationshipEngine = lazy(() => import('./RelationshipEngine'));
 const SocialProfileGenerator = lazy(() => import('./SocialProfileGenerator'));
@@ -628,7 +629,7 @@ function CharacterFollowsTab({ characterKey, characterName }) {
                   <div style={{ width: 6, height: 28, borderRadius: 3, background: f.influence_level >= 8 ? '#a889c8' : f.influence_level >= 5 ? '#7ab3d4' : '#ddd', flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e' }}>
-                      @{p.handle || '?'} <span style={{ fontWeight: 400, color: '#9999b3' }}>{p.platform}</span>
+                      @{p.handle || '?'} <span style={{ fontWeight: 400, color: '#9999b3' }}>{platformLabel(p.platform)}</span>
                     </div>
                     <div style={{ fontSize: 11, color: '#5a5a7a', lineHeight: 1.4 }}>{f.follow_context || ''}</div>
                   </div>

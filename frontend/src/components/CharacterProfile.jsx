@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { API_URL } from '../config/api';
 import apiClient from '../services/api';
 import './CharacterProfile.css';
+import { platformLabel } from '../pages/feed/feedConstants';
 
 // File-local cross-CP duplicates of CP9 helpers per v2.12 §9.11
 // (CharacterProfilePage uses same endpoints).
@@ -326,7 +327,7 @@ function TabOnline({ character, feedProfile }) {
                 <div className="feed-identity">
                   <span className="feed-handle">@{feedProfile.handle}</span>
                   <span className="feed-display">{feedProfile.display_name}</span>
-                  <span className="feed-platform">{feedProfile.platform}</span>
+                  <span className="feed-platform">{platformLabel(feedProfile.platform)}</span>
                 </div>
                 {stateCfg && (
                   <span

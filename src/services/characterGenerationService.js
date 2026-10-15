@@ -30,6 +30,7 @@
  */
 const Anthropic = require('@anthropic-ai/sdk');
 const { formatSystemPrompt } = require('./promptCacheHelper');
+const { pulsePromptRules } = require('../utils/pulsePlatform');
 const client    = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const _DEEP_PROFILE_DIMENSIONS = [
@@ -86,6 +87,8 @@ async function generateFullCharacter({ spark, worldContext, bookContext, existin
     feedProfileProposal = await generateFeedProfile({
       name, vibe, role, worldString,
       interior: interiorArchitecture,
+      // Lala's world (the default) has one social app, The Pulse.
+      onPulse: !worldContext || /lala/i.test(worldContext.name || ''),
     });
   }
 
@@ -406,7 +409,7 @@ Return JSON only:
 // FEED PROFILE GENERATION
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function generateFeedProfile({ name, vibe, role, worldString, interior }) {
+async function generateFeedProfile({ name, vibe, role, worldString, interior, onPulse = false }) {
   const maskDesc = interior?.the_mask?.description || '';
   const ambition = interior?.deep_profile?.ambition_identity || '';
 
@@ -420,12 +423,12 @@ Their ambition: ${ambition}
 
 Generate their social media profile. The profile should reflect their mask, not their deep interior.
 The gap between the Feed profile and the Deep Profile is where the story lives.
-
+${onPulse ? pulsePromptRules('lalaverse') : ''}
 Return JSON only:
 {
   "handle": "their username — no @ symbol",
   "display_name": "their display name",
-  "platform": "instagram OR tiktok OR youtube OR twitter",
+  "platform": "${onPulse ? 'pulse' : 'instagram OR tiktok OR youtube OR twitter'}",
   "bio": "their bio — 1-2 sentences in their voice",
   "vibe_tags": ["3-5 aesthetic/content tags"],
   "starting_state": "rising OR peaking OR plateauing",
