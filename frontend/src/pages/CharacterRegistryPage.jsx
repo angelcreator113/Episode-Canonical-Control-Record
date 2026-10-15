@@ -95,10 +95,19 @@ export default function CharacterRegistryPage() {
   };
 
   // Lala's world: the LalaVerse feed profiles, each with its linked character.
+  // Every page of them: one page of 100 cut people off past it (the
+  // LalaVerse cap is 200, and the real-world profiles Lala follows share the
+  // pages). An archived profile is not in her world.
   const loadProfiles = async () => {
     try {
-      const res = await api.get('/api/v1/social-profiles?feed_layer=lalaverse&limit=100');
-      setProfiles(res.data?.profiles || []);
+      const all = [];
+      for (let page = 1; page <= 10; page += 1) {
+        const res = await api.get(`/api/v1/social-profiles?feed_layer=lalaverse&limit=100&page=${page}`);
+        const batch = res.data?.profiles || [];
+        all.push(...batch);
+        if (batch.length < 100) break;
+      }
+      setProfiles(all.filter((p) => p && p.status !== 'archived'));
     } catch (err) { console.error('[CharacterRegistryPage] feed profiles load failed:', err); setProfiles([]); }
   };
 
@@ -117,18 +126,22 @@ export default function CharacterRegistryPage() {
     } finally { setCrossingId(null); }
   };
 
+  // The review of the registry in view, or of every registry in "All
+  // registries" (it was none there, so "reviewed" read "–" and kept
+  // characters were counted as still to review).
   const loadReview = async (id) => {
-    if (!id) { setReview(null); return; }
+    const ids = id ? [id] : registries.map((r) => r.id);
+    if (!ids.length) { setReview(null); return; }
     try {
-      const res = await api.get(`/api/v1/cast/review?registry_id=${id}`);
+      const all = await Promise.all(ids.map((rid) => api.get(`/api/v1/cast/review?registry_id=${rid}`)));
       setReview({
-        byId: Object.fromEntries((res.data?.characters || []).map((c) => [c.id, c])),
-        archived: res.data?.archived || [],
-        counts: res.data?.episode_counts || {},
+        byId: Object.fromEntries(all.flatMap((res) => (res.data?.characters || []).map((c) => [c.id, c]))),
+        archived: all.flatMap((res) => res.data?.archived || []),
+        counts: Object.assign({}, ...all.map((res) => res.data?.episode_counts || {})),
       });
     } catch (err) { console.error('[CharacterRegistryPage] cast review load failed:', err); setReview(null); }
   };
-  useEffect(() => { loadReview(registryId); }, [registryId]);
+  useEffect(() => { loadReview(registryId); }, [registryId, registries]);
 
   // Once the registries and the active show are known, settle the registry
   // in view; the URL keeps it so a link or Back lands on the same one.
@@ -295,11 +308,12 @@ export default function CharacterRegistryPage() {
           <ul className="cast-people" data-testid="cast-people">
             {people.map((p) => (
               <li key={p.id}>
-                <Link className="cast-person" to={p.characterId ? `/character/${p.characterId}` : '/pulse'}>
+                <Link className="cast-person" to={p.characterId ? `/character/${p.characterId}` : `/pulse?profile=${p.id}`}>
                   <span className="cast-avatar" aria-hidden="true">{p.name.charAt(0).toUpperCase()}</span>
                   <span className="cast-person-text">
                     <strong>{p.name}</strong>
                     {p.handle && <span>@{p.handle.replace(/^@/, '')}</span>}
+                    {p.realName && p.realName !== p.name && <span className="cast-real-name">{p.realName}</span>}
                   </span>
                   <span className="cast-chips">
                     {p.archetype && <span className="cast-chip is-lavender">{p.archetype}</span>}

@@ -34,14 +34,19 @@ export function feedPeople(profiles, characters) {
   const byId = new Map((characters || []).map((c) => [String(c.id), c]));
   return (profiles || [])
     .filter((p) => p && p.feed_layer === 'lalaverse')
-    .map((p) => ({
-      id: p.id,
-      name: p.display_name || p.handle || 'Unnamed profile',
-      handle: p.handle || null,
-      archetype: archetypeLabel(p),
-      characterId: p.registry_character_id || null,
-      character: p.registry_character_id ? byId.get(String(p.registry_character_id)) || null : null,
-    }));
+    .map((p) => {
+      const character = p.registry_character_id ? byId.get(String(p.registry_character_id)) || null : null;
+      return {
+        id: p.id,
+        name: p.display_name || p.handle || 'Unnamed profile',
+        handle: p.handle || null,
+        archetype: archetypeLabel(p),
+        characterId: p.registry_character_id || null,
+        character,
+        // Their real name: the character's, else the profile's creator_name.
+        realName: character?.selected_name || p.creator_name || null,
+      };
+    });
 }
 
 /** A profile's archetype as words: the Society tab's, else the feed's. */
@@ -57,7 +62,9 @@ export function oldSystem(characters, profiles, lala) {
   // Only LalaVerse profiles count: a character is in Lala's world when one names it.
   const linked = new Set((profiles || []).filter((p) => p?.feed_layer === 'lalaverse').map((p) => p.registry_character_id).filter(Boolean).map(String));
   return (characters || [])
-    .filter((c) => c && !linked.has(String(c.id)) && c.id !== lala?.id)
+    // Every registry's Lala is Lala, not an old-system character ("All
+    // registries" holds one per registry).
+    .filter((c) => c && !linked.has(String(c.id)) && c.id !== lala?.id && !findLala([c]))
     .sort((a, b) => String(a.display_name || '').localeCompare(String(b.display_name || '')));
 }
 

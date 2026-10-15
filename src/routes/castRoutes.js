@@ -161,7 +161,8 @@ router.put('/characters/:id/feed-profile', requireAuth, async (req, res) => {
     if (holder && holder.id !== character.id) {
       return res.status(409).json({ success: false, error: `@${profile.handle} is already ${holder.display_name}'s feed profile`, holder_id: holder.id });
     }
-    await RegistryCharacter.update({ feed_profile_id: profileId }, { where: { id: character.id } });
+    // A matched feed profile is their social presence (the page read it as None).
+    await RegistryCharacter.update({ feed_profile_id: profileId, social_presence: true }, { where: { id: character.id } });
     return res.json({ success: true, id: character.id, feed_profile_id: profileId });
   } catch (err) {
     console.error('[Cast] PUT /characters/:id/feed-profile error:', err);
