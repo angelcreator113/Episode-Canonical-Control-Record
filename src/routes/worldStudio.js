@@ -3720,7 +3720,8 @@ router.post('/world/create-story-task', requireAuth, async (req, res) => {
       title: `${char.display_name} — ${char.arc_role || char.character_type || 'Character'} Arc`,
       description: [char.origin_story, char.how_they_meet, char.dynamic].filter(Boolean).join(' ').slice(0, 500),
       story_type: char.character_type === 'protagonist' ? 'character_arc' : 'character_development',
-      world: char.world_tag || 'book-1',
+      // World Studio's characters default to the LalaVerse (WORLD_CONFIGS fallback).
+      world: char.world_tag || 'lalaverse',
       characters: [char.character_key || char.display_name?.toLowerCase().replace(/\s+/g, '')],
       surface_want: char.surface_want || '',
       real_want: char.real_want || '',

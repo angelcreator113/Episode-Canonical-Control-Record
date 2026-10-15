@@ -523,6 +523,27 @@ Return ONLY JSON.` },
 }
 
 /**
+ * A spec edited by hand, kept as the spec of the picture it was edited for:
+ * its version and its base picture (_meta.base_still_url) are the spec's it
+ * replaced, else the set's current base. Without them (audit, 2026-10-15)
+ * the next angle generation read the edited spec as stale and rebuilt it,
+ * discarding the edit.
+ */
+function bindEditedSpec(spec, existing, baseStillUrl) {
+  const meta = { ...(existing?._meta || {}), ...(spec._meta || {}) };
+  return {
+    ...spec,
+    version: spec.version || existing?.version || SPEC_VERSION,
+    _meta: {
+      ...meta,
+      base_still_url: spec._meta?.base_still_url || existing?._meta?.base_still_url || baseStillUrl || null,
+      last_edited: new Date().toISOString(),
+      source: 'user_edit',
+    },
+  };
+}
+
+/**
  * Merge user edits into an existing scene spec.
  * Preserves AI-generated data while allowing manual overrides.
  *
@@ -587,5 +608,6 @@ module.exports = {
   getValidationPrompt,
   validateAngleAgainstSpec,
   mergeSpecEdits,
+  bindEditedSpec,
   SPEC_VERSION,
 };

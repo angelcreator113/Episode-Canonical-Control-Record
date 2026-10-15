@@ -228,7 +228,8 @@ function mockProviders() {
     });
     let b = (await brief(set.id, { angle_id: angle.id })).body.data;
     expect(b.target).toMatchObject({ kind: 'angle', angle_id: angle.id, angle_label: 'WINDOW' });
-    expect(b.estimate).toBeNull();
+    // Priced as it will be made: an edit of the base, one Flux Kontext image.
+    expect(b.estimate).toMatchObject({ method: 'edit', base_model: 'flux-kontext' });
     expect(line(b.brief, 'camera').text).toBe('Low angle toward the arched window.');
     expect(line(b.brief, 'architecture')).toMatchObject({ source: 'override', text: 'A brick warehouse.' });
     expect(line(b.brief, 'continuity')).toBeTruthy();
