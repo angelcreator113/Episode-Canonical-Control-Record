@@ -26,9 +26,10 @@ This is the plan, in the order it ships. Each step is its own PR; steps that add
 
 ## 3. Character homes
 
-- Any character links to their places: home, closet, and optional extras (work, hangout). A new table links `registry_characters` to `world_locations` with a role. Evoni, 2026-10-15: "Lead character is Lala but other characters have home sets."
-- The show names its lead character (Lala for *Styling Adventures*). When an episode needs "home", the lead's home comes first, then the show default.
-- Other characters' homes are there for the episodes that go to them: a scene planned at another character's home uses that character's home set.
+- Evoni, 2026-10-15: "Lead character is Lala but other characters have home sets."
+- The show names its lead character (`shows.metadata.lead_character_id`; Lala for *Styling Adventures*). The lead's home and closet are the show's scene defaults, which L3 already calls "Lala's home set and closet set", so linking hers sets those defaults and there is one place for them. The Episode Locations step labels the rows "Home (Lala's)" and "Closet (Lala's)".
+- Any other character links to their own scene sets in `character_places` (character, scene set, role `home`, `closet` or `other` with a label, `deleted_at`): one home and one closet each (a new one replaces), any number of other places. The characters are the show's: those in its character registries.
+- Service: `characterPlacesService`. Routes on `/shows/:id`: `GET character-places`, `PUT lead-character`, `POST character-places`, `POST character-places/unlink`. Pages: `CharacterHomes` ("Characters' places" on each scene set card in Scene Sets, with the lead chosen in its form) and the Episode Locations step, which offers each other character's home in one click as an extra location named for them ("Jade's home").
 
 ## 4. The right picture, automatically
 

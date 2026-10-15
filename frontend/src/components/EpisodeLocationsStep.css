@@ -34,3 +34,4 @@
 /* S8 (Evoni, 2026-10-02): each gap's one action, Open in Scene Sets. */
 .els-gap-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
 .els-gap-open { font-size: 11px; color: #8a6d1f; }
+.els-homes { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
