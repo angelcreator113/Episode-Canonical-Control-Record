@@ -101,6 +101,26 @@ const SHOT_CAMERAS = Object.freeze({
   OTHER: 'A composition suited to this place.',
 });
 
+// Typed and template spellings of the same framing ("Close up", CLOSE-UP,
+// ENTRANCE) read as the framing they name, not as a wide shot.
+const SHOT_ALIASES = Object.freeze({
+  CLOSE_UP: 'CLOSE', CLOSEUP: 'CLOSE', DETAIL: 'CLOSE',
+  DOOR: 'DOORWAY', ENTRANCE: 'DOORWAY', ENTRY: 'DOORWAY',
+  TOP_DOWN: 'OVERHEAD', BIRDS_EYE: 'OVERHEAD',
+  ESTABLISHING_SHOT: 'ESTABLISHING', EXTERIOR: 'ESTABLISHING',
+  WIDE_SHOT: 'WIDE',
+});
+/** The SHOT_CAMERAS key a label names ('Close up' → CLOSE), else the label in key form. */
+function shotKey(label) {
+  const key = String(label || 'WIDE').toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'WIDE';
+  return SHOT_ALIASES[key] || key;
+}
+// The labels that name no framing of their own: a zone's establishing view
+// stands in for them (L14 b).
+const GENERIC_SHOTS = Object.freeze(['WIDE', 'ESTABLISHING', 'OTHER']);
+/** A label outside SHOT_CAMERAS (BED, RACKS, BAR …) frames the thing it names. */
+const labelCamera = (key) => `Camera framed on the ${key.toLowerCase().replace(/_/g, ' ')}: it fills most of the frame, with enough of the space around it to place it.`;
+
 // Room for the characters, laid over the image later, placed by angle
 // (Evoni, 2026-10-02: "an open patch of floor in the foreground where a
 // person could stand, with the room fully dressed around it" in place of
@@ -297,12 +317,20 @@ function buildSceneBrief({
   }
 
   // ── The shot ──
-  const zoneShot = zone ? zoneCamera(zone, clean(set.name || location?.name || 'the place')) : null;
-  add('shot', 'camera', 'Camera', sentence(zoneShot || cameraDirection || SHOT_CAMERAS[angle] || SHOT_CAMERAS.WIDE), 'venue', true);
+  // The angle's own framing (its camera direction, else the shot its label
+  // names) wins, so the image is what the card's label says: a DOORWAY on
+  // the Front zone is the doorway looking in, not the exterior. A zone's
+  // establishing view stands in only for a label that names no framing.
+  const key = shotKey(angle);
+  const labelShot = SHOT_CAMERAS[key] || labelCamera(key);
+  const zoneShot = zone && !cameraDirection && GENERIC_SHOTS.includes(key)
+    ? zoneCamera(zone, clean(set.name || location?.name || 'the place'))
+    : null;
+  add('shot', 'camera', 'Camera', sentence(cameraDirection || zoneShot || labelShot), 'venue', true);
   if (requiredFeatures) add('shot', 'required_features', 'Must be visible', sentence(requiredFeatures), 'venue');
-  if (zoneShot) add('shot', 'continuity', 'Continuity', ZONE_CONTINUITY, 'venue');
+  if (zone && ZONE_CAMERAS[String(zone.kind || '').toLowerCase()]) add('shot', 'continuity', 'Continuity', ZONE_CONTINUITY, 'venue');
   else if (continuity) add('shot', 'continuity', 'Continuity', 'The same room as the reference image: same walls, furniture and decor; only the camera moved.', 'venue');
-  add('shot', 'overlay_space', 'Space for characters', overlaySpace(zoneShot ? 'WIDE' : angle), 'venue');
+  add('shot', 'overlay_space', 'Space for characters', overlaySpace(zoneShot ? 'WIDE' : key), 'venue');
 
   // ── The environment ──
   // Q4: the look's lighting, else the event's time; for an undressed base,
@@ -343,7 +371,7 @@ function buildSceneBrief({
   const dressing = lookDressing
     ? Boolean(location?.approved_base_image_url && event)
     : Boolean(
-      location?.approved_base_image_url && event && angle === 'WIDE' && !continuity && !zone
+      location?.approved_base_image_url && event && key === 'WIDE' && !continuity && !zone
       && (!set.id || set.id !== location.approved_base_scene_set_id)
     );
 
@@ -478,6 +506,7 @@ module.exports = {
   BRIEF_RULES,
   FURNISHED,
   SHOT_CAMERAS,
+  shotKey,
   ZONE_CAMERAS,
   timeOfDayFromEventTime,
   seasonFromDate,

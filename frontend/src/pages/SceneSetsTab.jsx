@@ -1217,10 +1217,12 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
     const trimmed = newLabel.trim().toUpperCase();
     if (!trimmed) { setEditingAngleId(null); return; }
     try {
-      await updateAngleApi(set.id, angleId, { angle_label: trimmed });
-      if (onToast) onToast(`Renamed to "${trimmed}"`);
-    } catch {
-      if (onToast) onToast('Rename failed', 'error');
+      const res = await updateAngleApi(set.id, angleId, { angle_label: trimmed });
+      const stale = res?.data?.image_stale;
+      if (onToast) onToast(stale ? `Renamed to "${trimmed}". Regenerate this angle so its picture matches the new label.` : `Renamed to "${trimmed}"`);
+      if (onRefresh) await onRefresh();
+    } catch (err) {
+      if (onToast) onToast(err?.response?.data?.error || 'Rename failed', 'error');
     }
     setEditingAngleId(null);
   };
@@ -2787,6 +2789,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
   for (let i = 0; i < pa.length; i++) {
     if (pa[i].id !== na[i].id) return false;
     if (pa[i].generation_status !== na[i].generation_status) return false;
+    if (pa[i].angle_label !== na[i].angle_label || pa[i].angle_name !== na[i].angle_name) return false;
+    if (pa[i].angle_kind !== na[i].angle_kind || pa[i].camera_direction !== na[i].camera_direction) return false;
     if (pa[i].still_image_url !== na[i].still_image_url) return false;
     if (pa[i].video_clip_url !== na[i].video_clip_url) return false;
   }

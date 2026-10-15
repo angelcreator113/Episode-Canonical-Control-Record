@@ -4,7 +4,7 @@
  * environment, no people.
  */
 const {
-  buildSceneBrief, briefToPrompt, timeOfDayFromEventTime, seasonFromDate, SHOT_CAMERAS,
+  buildSceneBrief, briefToPrompt, timeOfDayFromEventTime, seasonFromDate, SHOT_CAMERAS, shotKey,
   BRIEF_RULES, DRESSING_KEEP, FURNISHED,
 } = require('../../../src/services/sceneBriefService');
 
@@ -201,5 +201,42 @@ describe('a zone\'s brief (L14 b)', () => {
   test('fully dressed, with an open patch of floor in the foreground', () => {
     expect(line(zoneBrief('area', 'Bar'), 'overlay_space').text).toBe('Leave an open patch of floor in the foreground where a person could stand, with the room fully dressed around it.');
     expect(briefToPrompt(zoneBrief('area', 'Bar'))).toContain(FURNISHED);
+  });
+});
+
+// The image is what the card's label says: the angle's own framing outranks
+// its zone's establishing view and the WIDE default.
+describe('the camera follows the angle\'s label', () => {
+  const camera = (opts) => line(buildSceneBrief({ sceneSet: SET, location: LOCATION, ...opts }), 'camera').text;
+
+  test('a DOORWAY on the Front zone is the doorway looking in, not the exterior', () => {
+    const brief = buildSceneBrief({ sceneSet: SET, location: LOCATION, angleLabel: 'DOORWAY', zone: { kind: 'front', name: 'Entrance Frame' } });
+    expect(line(brief, 'camera').text).toBe(SHOT_CAMERAS.DOORWAY);
+    expect(line(brief, 'continuity').text).toMatch(/^The same place as the reference image/);
+    expect(line(brief, 'overlay_space').text).toMatch(/beyond the threshold/);
+  });
+
+  test('an ESTABLISHING or OTHER zone angle keeps its zone\'s establishing view', () => {
+    expect(camera({ angleLabel: 'ESTABLISHING', zone: { kind: 'front' } })).toMatch(/^Establishing view of the front of The Glasshouse/);
+    expect(camera({ angleLabel: 'WIDE', zone: { kind: 'inside' } })).toMatch(/^Establishing view of the main room/);
+  });
+
+  test('a camera direction outranks the zone and the label', () => {
+    expect(camera({ angleLabel: 'OTHER', cameraDirection: 'Low angle across the bar top', zone: { kind: 'area', name: 'Bar' } })).toBe('Low angle across the bar top.');
+    expect(camera({ angleLabel: 'VANITY', cameraDirection: 'Over the shoulder into the mirror' })).toBe('Over the shoulder into the mirror.');
+  });
+
+  test('a label outside the map frames what it names, never the WIDE shot', () => {
+    expect(camera({ angleLabel: 'BED' })).toBe('Camera framed on the bed: it fills most of the frame, with enough of the space around it to place it.');
+    expect(camera({ angleLabel: 'FRONT_ROW' })).toMatch(/^Camera framed on the front row:/);
+    expect(camera({ angleLabel: 'RACKS' })).not.toBe(SHOT_CAMERAS.WIDE);
+  });
+
+  test('typed spellings read as the framing they name', () => {
+    expect(shotKey('Close up')).toBe('CLOSE');
+    expect(shotKey('CLOSE-UP')).toBe('CLOSE');
+    expect(shotKey('entrance')).toBe('DOORWAY');
+    expect(shotKey('')).toBe('WIDE');
+    expect(camera({ angleLabel: 'Close up' })).toBe(SHOT_CAMERAS.CLOSE);
   });
 });

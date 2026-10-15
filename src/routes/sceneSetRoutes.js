@@ -1566,8 +1566,16 @@ router.patch('/:id/angles/:angleId', validateUUIDParam('id'), requireAuth, async
       return res.status(400).json({ success: false, error: 'No updatable fields provided' });
     }
 
+    // A label that names a different shot: the old camera direction was
+    // written for the old shot and would outrank the new label, so it goes
+    // (unless this request sets one); the still is the old shot until the
+    // angle is regenerated.
+    const { shotKey } = require('../services/sceneBriefService');
+    const shotChanged = updates.angle_label !== undefined && shotKey(updates.angle_label) !== shotKey(angle.angle_label);
+    if (shotChanged && updates.camera_direction === undefined) updates.camera_direction = null;
+
     await angle.update(updates);
-    res.json({ success: true, data: angle });
+    res.json({ success: true, data: angle, image_stale: Boolean(shotChanged && angle.still_image_url) });
   } catch (err) {
     console.error('Scene Sets PATCH /:id/angles/:angleId error:', err);
     res.status(500).json({ success: false, error: err.message });
