@@ -50,19 +50,38 @@ async function episodeLooks(sequelize, episodeId) {
   const event = await episodeEvent(sequelize, episodeId);
   const out = new Map();
   if (!event) return out;
+  // A generated look is an edit of the venue's approved base: one made from
+  // a base that is no longer approved shows the old room, so it is not used
+  // (audit, 2026-10-15). An uploaded look is her own picture and stays.
   const [rows] = await sequelize.query(
-    `SELECT id, scene_set_id, image_url, event_id FROM scene_set_looks
-      WHERE event_id = :eventId AND status = 'complete' AND image_url IS NOT NULL AND deleted_at IS NULL`,
+    `SELECT sl.id, sl.scene_set_id, sl.image_url, sl.event_id FROM scene_set_looks sl
+       JOIN scene_sets s ON s.id = sl.scene_set_id
+       LEFT JOIN world_locations l ON l.id = s.world_location_id AND l.deleted_at IS NULL
+      WHERE sl.event_id = :eventId AND sl.status = 'complete' AND sl.image_url IS NOT NULL AND sl.deleted_at IS NULL
+        AND (sl.source <> 'generated'
+             OR sl.brief->'approved_base'->>'image_url' IS NULL
+             OR sl.brief->'approved_base'->>'image_url' = l.approved_base_image_url)`,
     { replacements: { eventId: event.id } });
   for (const r of rows) out.set(r.scene_set_id, { id: r.id, image_url: r.image_url, event_id: r.event_id });
   return out;
 }
+
+const STUCK_AFTER_MS = 10 * 60 * 1000;
+const STUCK_REASON = 'The generation did not finish within 10 minutes. Try again.';
 
 /** The looks' dressed angles: Map<`${look_id}:${scene_angle_id}`, row>. */
 async function lookAngles(sequelize, lookIds) {
   const ids = [...new Set((lookIds || []).filter(Boolean))];
   const out = new Map();
   if (!ids.length) return out;
+  // A dressed angle generating for longer than STUCK_AFTER_MS (a restart, a
+  // hung call) is marked failed, so the beat stops waiting on it (audit,
+  // 2026-10-15: nothing ever released it).
+  await sequelize.query(
+    `UPDATE scene_set_look_angles SET status = 'failed', error = :reason, updated_at = NOW()
+      WHERE look_id IN (:ids) AND status = 'generating' AND deleted_at IS NULL
+        AND updated_at < NOW() - make_interval(secs => :stuck)`,
+    { replacements: { ids, reason: STUCK_REASON, stuck: STUCK_AFTER_MS / 1000 } });
   const [rows] = await sequelize.query(
     `SELECT id, look_id, scene_angle_id, status, image_url, source, error FROM scene_set_look_angles
       WHERE look_id IN (:ids) AND deleted_at IS NULL`,
@@ -137,6 +156,11 @@ async function dressedAngleBrief(sequelize, args) {
 }
 
 async function upsertRow(sequelize, { lookId, angleId, status, imageUrl = null, source, brief = null, estimate = null }) {
+  // A generation does not replace a run still going (a double click paid
+  // twice); an upload always wins.
+  const idle = status === 'generating'
+    ? `WHERE scene_set_look_angles.status <> 'generating' OR scene_set_look_angles.updated_at < NOW() - make_interval(secs => ${STUCK_AFTER_MS / 1000})`
+    : '';
   const [[row]] = await sequelize.query(
     `INSERT INTO scene_set_look_angles (id, look_id, scene_angle_id, status, image_url, source, brief, estimate_usd, error, generated_at, created_at, updated_at)
      VALUES (gen_random_uuid(), :lookId, :angleId, :status, :imageUrl, :source, CAST(:brief AS jsonb), :estimate, NULL,
@@ -145,10 +169,14 @@ async function upsertRow(sequelize, { lookId, angleId, status, imageUrl = null, 
      DO UPDATE SET status = EXCLUDED.status, image_url = EXCLUDED.image_url, source = EXCLUDED.source, brief = EXCLUDED.brief,
                    estimate_usd = EXCLUDED.estimate_usd, cost_usd = NULL, error = NULL,
                    generated_at = EXCLUDED.generated_at, updated_at = NOW()
+       ${idle}
      RETURNING id`,
     { replacements: { lookId, angleId, status, imageUrl, source, brief: brief ? JSON.stringify(brief) : null, estimate } });
+  if (!row) throw new DressedAngleError('This dressed angle is already being generated. Wait for it to finish.', 409, 'ANGLE_GENERATING');
   return row.id;
 }
+
+const OWN_ANGLE_RUN = `id = :id AND status = 'generating' AND source = 'generated' AND deleted_at IS NULL`;
 
 /**
  * "Generate angle" on a beat at the look's set, after the cost was
@@ -166,14 +194,15 @@ async function startDressedAngle(sequelize, args) {
     const sceneGen = require('./sceneGenerationService');
     try {
       const out = await sceneGen.generateDressedStill(plan.set, plan.prompt, plan.look.image_url, { suffix: `look-angle-${rowId}` });
+      // Only this run's row: an upload since is kept (audit, 2026-10-15).
       await sequelize.query(
         `UPDATE scene_set_look_angles SET status = 'complete', image_url = :url, cost_usd = :cost, generated_at = NOW(), updated_at = NOW()
-          WHERE id = :id`,
+          WHERE ${OWN_ANGLE_RUN}`,
         { replacements: { id: rowId, url: out.stillUrl, cost: out.cost } });
     } catch (err) {
       console.error(`[DressedAngle] ${plan.angle.angle_name || plan.angle.angle_label} on "${plan.set.name}" failed:`, err.message);
       await sequelize.query(
-        `UPDATE scene_set_look_angles SET status = 'failed', error = :error, updated_at = NOW() WHERE id = :id`,
+        `UPDATE scene_set_look_angles SET status = 'failed', error = :error, updated_at = NOW() WHERE ${OWN_ANGLE_RUN}`,
         { replacements: { id: rowId, error: String(err.message || err).slice(0, 500) } });
     }
   };
