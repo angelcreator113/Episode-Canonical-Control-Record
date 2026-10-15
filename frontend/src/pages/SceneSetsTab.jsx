@@ -973,6 +973,9 @@ export function LooksRow({ set, focusZone = null, onToast, onRefresh }) {
               : <span className="scene-sets-look-empty">{l.status === 'failed' ? 'Failed' : 'Generating…'}</span>}
             <figcaption>
               <Link to={`/shows/${l.event_show_id}/events/${l.event_id}`}>{l.event_name}</Link>
+              {/* The beat picker does not use a look made from an old
+                  everyday look (episodeLooks), so the row says so. */}
+              {l.status === 'complete' && l.stale && <span className="scene-sets-look-stale" data-testid={`scene-set-look-stale-${l.id}`}> · old everyday look</span>}
             </figcaption>
           </figure>
         ))}

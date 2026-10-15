@@ -67,8 +67,11 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
   // Says when a look or base this section saw generating finishes or fails.
   const announce = (prev, data) => {
     const toast = toastRef.current;
-    if (lookGenerating(prev) && data?.look?.status === 'complete') toast?.('The look is ready');
-    if (lookGenerating(prev) && data?.look?.status === 'failed') toast?.(`The look could not be generated${data.look.error ? `: ${data.look.error}` : ''}`);
+    // A failed re-run keeps the previous image: complete, with the error.
+    if (lookGenerating(prev) && data?.look?.status === 'complete' && !data.look.error) toast?.('The look is ready');
+    if (lookGenerating(prev) && (data?.look?.status === 'failed' || (data?.look?.status === 'complete' && data.look.error))) {
+      toast?.(`The look could not be generated${data.look.error ? `: ${data.look.error}` : ''}`);
+    }
     if (baseGenerating(prev) && data?.scene_set?.generation_status === 'complete') toast?.('The base is ready: approve it in Scene Sets');
     if (baseGenerating(prev) && data?.scene_set?.generation_status === 'failed') toast?.(`The base could not be generated${data.scene_set.error ? `: ${data.scene_set.error}` : ''}`);
     const finished = (lookGenerating(prev) && !lookGenerating(data)) || (baseGenerating(prev) && !baseGenerating(data));
@@ -234,9 +237,12 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
         <figure className="ell-figure">
           <img src={look.image_url} alt="This event's look" data-testid="event-look-thumb" />
           {look.source === 'uploaded' && <figcaption className="ell-note" data-testid="event-look-uploaded">Uploaded</figcaption>}
+          {look.stale && (
+            <figcaption className="ell-error" data-testid="event-look-stale">Made from an old everyday look: episodes don't use it. Generate it again.</figcaption>
+          )}
         </figure>
       )}
-      {!generating && look?.status === 'failed' && (
+      {!generating && (look?.status === 'failed' || (lookReady && look.error)) && (
         <p className="ell-error" data-testid="event-look-failed">The last try failed{look.error ? `: ${look.error}` : ''}.</p>
       )}
       {!generating && baseFailed && (
