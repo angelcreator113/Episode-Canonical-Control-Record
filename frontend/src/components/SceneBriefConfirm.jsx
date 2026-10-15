@@ -188,9 +188,9 @@ export default function SceneBriefConfirm({ setId, angleId = null, title, note =
             {brief.mode === 'event_dressing' && brief.approved_base && (
               // S6: an event-dressed version of the location's approved base.
               <div className="sbc-dressing" data-testid="sbc-dressing">
-                {brief.approved_base.image_url && <img src={brief.approved_base.image_url} alt="The approved base" />}
+                {brief.approved_base.image_url && <img src={brief.approved_base.image_url} alt="The everyday look" />}
                 <p>
-                  Made from this location's approved base image with Flux Kontext. Only the event layer is sent;
+                  Made from this location's everyday look with Flux Kontext. Only the event layer is sent;
                   the place, the shot and the environment come from the image.
                 </p>
               </div>
@@ -202,7 +202,7 @@ export default function SceneBriefConfirm({ setId, angleId = null, title, note =
                 <p>
                   {zoneBlocked
                     ? "Generate or upload this set's base first: each zone is made from it, so the zones read as one place."
-                    : `Made from this set's ${zone.reference_source === 'approved_base' ? 'approved base' : 'base'} image with Flux Kontext, as the style and architecture reference, so this zone reads as the same place.`}
+                    : `Made from this set's ${zone.reference_source === 'approved_base' ? 'everyday look' : 'base'} image with Flux Kontext, as the style and architecture reference, so this zone reads as the same place.`}
                 </p>
               </div>
             )}

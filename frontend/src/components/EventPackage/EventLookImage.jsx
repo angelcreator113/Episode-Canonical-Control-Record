@@ -31,7 +31,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import OpenInSceneSets from '../OpenInSceneSets';
-import { Sparkles, Loader2 } from 'lucide-react';
+import { Sparkles, Loader2, Upload } from 'lucide-react';
 import api from '../../services/api';
 import SceneBriefConfirm from '../SceneBriefConfirm';
 import './EventLookImage.css';
@@ -52,6 +52,9 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
   const [chosenSet, setChosenSet] = useState(null);
   const [brief, setBrief] = useState(null); // { step, title, note }
   const [waiting, setWaiting] = useState(null); // 'look' | 'base', from Confirm until the server shows it
+  const [uploading, setUploading] = useState(false);
+  const pendingFile = useRef(null); // an upload waiting for the set to be chosen
+  const fileInput = useRef(null);
   const polls = useRef(0);
   const last = useRef(null);
   const toastRef = useRef(onToast);
@@ -128,7 +131,7 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
       }
       const setName = data.scene_set?.name || data.creates_set?.name || 'the venue';
       setBrief(data.step === 'look'
-        ? { step: 'look', title: `Generate this look on “${setName}”`, note: 'An edit of the approved base with this event\'s look.' }
+        ? { step: 'look', title: `Generate this look on “${setName}”`, note: 'An edit of the venue\'s everyday look, dressed for this event.' }
         : { step: 'base', title: `Generate the base for “${setName}”`, note: 'The empty room, with no event dressing. It then waits for your approval in Scene Sets.' });
     } catch (err) {
       console.error('[EventLookImage] brief failed:', err);
@@ -160,6 +163,34 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
     }
   };
 
+  // Evoni, 2026-10-15: the event's look from her own image, beside "Generate
+  // this look"; several sets at the venue, she chooses one first (answer 3).
+  const upload = async (file, setId = chosenSet) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append('image', file);
+      if (setId) form.append('scene_set_id', setId);
+      await api.post(`${base}/upload`, form);
+      pendingFile.current = null;
+      setChoose(null);
+      await onSaved?.();
+      await load();
+      onToast?.('The look is uploaded');
+    } catch (err) {
+      console.error('[EventLookImage] upload failed:', err);
+      if (err.response?.data?.code === 'CHOOSE_SET') {
+        pendingFile.current = file;
+        setChoose(err.response.data.options || []);
+        return;
+      }
+      onToast?.(err.response?.data?.error || err.message || 'Could not upload the look');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const set = state?.scene_set || null;
   const look = state?.look || null;
   const lookReady = look?.status === 'complete' && look.image_url;
@@ -179,6 +210,15 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
             <Sparkles size={14} aria-hidden="true" /> {asking ? 'Preparing…' : 'Generate this look'}
           </button>
         )}
+        {canGenerate && !locked && (
+          <>
+            <button type="button" className="epp-btn epp-btn-small" onClick={() => fileInput.current?.click()} disabled={uploading || generating} data-testid="upload-this-look">
+              <Upload size={14} aria-hidden="true" /> {uploading ? 'Uploading…' : 'Upload this look'}
+            </button>
+            <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" hidden data-testid="upload-this-look-input"
+              onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; upload(f); }} />
+          </>
+        )}
       </div>
 
       {generating && (
@@ -187,6 +227,7 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
       {!generating && lookReady && (
         <figure className="ell-figure">
           <img src={look.image_url} alt="This event's look" data-testid="event-look-thumb" />
+          {look.source === 'uploaded' && <figcaption className="ell-note" data-testid="event-look-uploaded">Uploaded</figcaption>}
         </figure>
       )}
       {!generating && look?.status === 'failed' && (
@@ -204,9 +245,9 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
           which "Generate this look" dresses for this event. */}
       {!generating && !lookReady && approved?.image_url && (
         <figure className="ell-figure" data-testid="event-look-approved-base">
-          <img src={approved.image_url} alt="The venue's approved base" />
+          <img src={approved.image_url} alt="The venue's everyday look" />
           <figcaption className="ell-note">
-            The venue's approved base.{locked ? '' : (canGenerate ? ' Generate this look to dress it for this event.' : " Make this event's look in Scene Sets.")}
+            The venue's everyday look.{locked ? '' : (canGenerate ? ' Generate this look to dress it for this event.' : " Make this event's look in Scene Sets.")}
           </figcaption>
         </figure>
       )}
@@ -233,7 +274,7 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
           <p className="ell-note">This venue has several scene sets. Choose the one for this look:</p>
           {choose.map((o) => (
             <button key={o.id} type="button" className="epp-btn epp-btn-small" data-testid={`event-look-choose-${o.id}`}
-              onClick={() => { setChosenSet(o.id); ask(o.id); }}>
+              onClick={() => { setChosenSet(o.id); if (pendingFile.current) upload(pendingFile.current, o.id); else ask(o.id); }}>
               {o.name}
             </button>
           ))}

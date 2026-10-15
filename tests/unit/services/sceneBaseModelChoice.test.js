@@ -86,16 +86,21 @@ afterEach(() => {
 });
 
 describe('base model resolution', () => {
-  it('null base_model uses flux-dev (today\'s behaviour)', () => {
-    expect(sceneGen.resolveBaseModel({ id: 's', base_model: null })).toBe('flux-dev');
+  // Evoni, 2026-10-15: gpt-image-1.5 is the default base model; without an
+  // OpenAI key the default is flux-dev (the previous one), never a failure.
+  it('null base_model uses gpt-image-1.5; flux-dev when no OpenAI key is configured', () => {
+    expect(sceneGen.resolveBaseModel({ id: 's', base_model: null })).toBe('gpt-image-1.5');
+    expect(sceneGen.defaultBaseModel()).toBe('gpt-image-1.5');
+    delete process.env.OPENAI_API_KEY;
     expect(sceneGen.defaultBaseModel()).toBe('flux-dev');
+    expect(sceneGen.resolveBaseModel({ id: 's', base_model: null })).toBe('flux-dev');
   });
 
   it('SCENE_BASE_MODEL_DEFAULT sets the default; an unknown value warns and falls back', () => {
-    process.env.SCENE_BASE_MODEL_DEFAULT = 'gpt-image-1.5';
-    expect(sceneGen.resolveBaseModel({ id: 's' })).toBe('gpt-image-1.5');
-    process.env.SCENE_BASE_MODEL_DEFAULT = 'dall-e-9';
+    process.env.SCENE_BASE_MODEL_DEFAULT = 'flux-dev';
     expect(sceneGen.resolveBaseModel({ id: 's' })).toBe('flux-dev');
+    process.env.SCENE_BASE_MODEL_DEFAULT = 'dall-e-9';
+    expect(sceneGen.resolveBaseModel({ id: 's' })).toBe('gpt-image-1.5');
     expect(console.warn).toHaveBeenCalledWith(expect.stringMatching(/SCENE_BASE_MODEL_DEFAULT="dall-e-9"/));
   });
 
@@ -254,6 +259,8 @@ describe('generateBaseScene records the logged cost per model', () => {
   ])('%s: calls %s at landscape_16_9 and records $%s (not a literal 0.04)', async (choice, falModel, cost) => {
     axios.post.mockResolvedValue({ status: 200, data: { images: [{ url: 'https://fal.media/x.jpg' }] } });
     axios.get.mockResolvedValue({ data: Buffer.from('jpg') });
+    // No base_model and no OpenAI key: the default falls back to flux-dev.
+    if (choice === null) delete process.env.OPENAI_API_KEY;
     const models = sceneModels();
     await sceneGen.generateBaseScene(baseSet({ base_model: choice, generation_cost: '0.5' }), models, { skipAnalysis: true });
 
