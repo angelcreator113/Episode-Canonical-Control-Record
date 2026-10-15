@@ -143,4 +143,38 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect((await auth(request(app).put(`/api/v1/shows/${s.id}/lead-character`)).send({ character_id: stranger })).status).toBe(404);
     expect((await places(uuid())).status).toBe(404);
   });
+
+  it('changing the lead moves the homes with the people', async () => {
+    const s = await show();
+    const lala = await s.character('Lala');
+    const marcus = await s.character('Marcus');
+    const loft = await s.set('Loft');
+    const penthouse = await s.set('Penthouse');
+    await auth(request(app).put(`/api/v1/shows/${s.id}/lead-character`)).send({ character_id: lala });
+    await link(s.id, { character_id: lala, scene_set_id: loft, role: 'home' });
+    await link(s.id, { character_id: marcus, scene_set_id: penthouse, role: 'home' });
+
+    const res = await auth(request(app).put(`/api/v1/shows/${s.id}/lead-character`)).send({ character_id: marcus });
+    expect(res.status).toBe(200);
+    const m = await defaults(s.id);
+    expect(m.lead_character_id).toBe(marcus);
+    expect(m.scene_defaults).toEqual({ home_set_id: penthouse, closet_set_id: null });
+
+    const list = (await places(s.id)).body.data.characters;
+    expect(list.find((c) => c.id === marcus).places.map((p) => [p.role, p.scene_set_id, p.source])).toEqual([['home', penthouse, 'show_default']]);
+    expect(list.find((c) => c.id === lala).places.map((p) => [p.role, p.scene_set_id, p.source])).toEqual([['home', loft, 'character']]);
+
+    // And back: Lala's home is the default again; Marcus keeps his.
+    await auth(request(app).put(`/api/v1/shows/${s.id}/lead-character`)).send({ character_id: lala });
+    expect((await defaults(s.id)).scene_defaults.home_set_id).toBe(loft);
+    expect((await places(s.id)).body.data.characters.find((c) => c.id === marcus).places.map((p) => p.scene_set_id)).toEqual([penthouse]);
+  });
+
+  it('a malformed id is a 400, not a server error', async () => {
+    const s = await show();
+    const jade = await s.character('Jade');
+    expect((await places('not-an-id')).status).toBe(400);
+    expect((await link(s.id, { character_id: jade, scene_set_id: 'nope', role: 'home' })).status).toBe(400);
+    expect((await auth(request(app).put(`/api/v1/shows/${s.id}/lead-character`)).send({ character_id: 'nope' })).status).toBe(400);
+  });
 });

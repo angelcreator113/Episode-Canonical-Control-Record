@@ -21,6 +21,8 @@
 
 const { readSceneDefaults, saveSceneDefaults } = require('./episodeLocationsService');
 
+const { validateUUID } = require('../middleware/requestValidation');
+
 const ROLES = Object.freeze(['home', 'closet', 'other']);
 const SINGLE = new Set(['home', 'closet']);
 const LEAD_DEFAULT_KEY = Object.freeze({ home: 'home_set_id', closet: 'closet_set_id' });
@@ -36,8 +38,16 @@ class CharacterPlacesError extends Error {
 
 const parseMetadata = (m) => (typeof m === 'string' ? JSON.parse(m) : (m || {}));
 
+/** Ids from the request must be ids: a bad one is a 400, not a database error. */
+function assertIds(ids) {
+  for (const [name, value] of Object.entries(ids)) {
+    if (value != null && value !== '' && !validateUUID(String(value))) throw new CharacterPlacesError(`${name} must be an id`, 400, 'BAD_ID');
+  }
+}
+
 async function loadShow(sequelize, showId) {
-  const [[show]] = await sequelize.query('SELECT id, metadata FROM shows WHERE id = :showId', { replacements: { showId } });
+  assertIds({ show: showId });
+  const [[show]] = await sequelize.query('SELECT id, metadata FROM shows WHERE id = :showId AND deleted_at IS NULL', { replacements: { showId } });
   if (!show) throw new CharacterPlacesError('Show not found', 404, 'SHOW_NOT_FOUND');
   return { ...show, metadata: parseMetadata(show.metadata) };
 }
@@ -101,14 +111,54 @@ async function assertCharacter(sequelize, showId, characterId) {
   return character;
 }
 
-/** Names the show's lead character (null clears it). */
+/**
+ * Names the show's lead character (null clears it). The lead's home and
+ * closet live in the show's scene defaults, so a change of lead moves
+ * them with the people: the old lead's become her own places
+ * (character_places), the new lead's own home and closet become the
+ * defaults (empty when she has none). One transaction; the metadata keys
+ * are merged in the database, so another key written meanwhile is kept.
+ */
 async function setLead(sequelize, { showId, characterId }) {
+  assertIds({ character_id: characterId });
   const show = await loadShow(sequelize, showId);
   if (characterId) await assertCharacter(sequelize, showId, characterId);
-  const metadata = { ...show.metadata, lead_character_id: characterId || null };
-  await sequelize.query('UPDATE shows SET metadata = CAST(:metadata AS json), updated_at = NOW() WHERE id = :showId',
-    { replacements: { metadata: JSON.stringify(metadata), showId } });
-  return { lead_character_id: metadata.lead_character_id };
+  const oldLead = show.metadata.lead_character_id || null;
+  const next = characterId || null;
+  if (String(oldLead || '') === String(next || '')) return { lead_character_id: next };
+  await sequelize.transaction(async (transaction) => {
+    const [[locked]] = await sequelize.query('SELECT metadata FROM shows WHERE id = :showId FOR UPDATE', { replacements: { showId }, transaction });
+    const defaults = readSceneDefaults(parseMetadata(locked.metadata));
+    const nextDefaults = { home_set_id: null, closet_set_id: null };
+    if (oldLead) {
+      for (const [role, key] of Object.entries(LEAD_DEFAULT_KEY)) {
+        if (!defaults[key]) continue;
+        await sequelize.query(
+          `INSERT INTO character_places (id, registry_character_id, scene_set_id, role, created_at, updated_at)
+           VALUES (gen_random_uuid(), :characterId, :setId, :role, NOW(), NOW())
+           ON CONFLICT (registry_character_id, scene_set_id) WHERE deleted_at IS NULL
+           DO UPDATE SET role = EXCLUDED.role, updated_at = NOW()`,
+          { replacements: { characterId: oldLead, setId: defaults[key], role }, transaction });
+      }
+    }
+    if (next) {
+      const [own] = await sequelize.query(
+        `SELECT id, scene_set_id, role FROM character_places
+          WHERE registry_character_id = :characterId AND role IN ('home', 'closet') AND deleted_at IS NULL`,
+        { replacements: { characterId: next }, transaction });
+      for (const p of own) {
+        nextDefaults[LEAD_DEFAULT_KEY[p.role]] = p.scene_set_id;
+        await sequelize.query('UPDATE character_places SET deleted_at = NOW(), updated_at = NOW() WHERE id = :id', { replacements: { id: p.id }, transaction });
+      }
+    }
+    await sequelize.query(
+      `UPDATE shows SET metadata = (COALESCE(metadata::jsonb, '{}'::jsonb)
+                                     || jsonb_build_object('lead_character_id', CAST(:lead AS text), 'scene_defaults', CAST(:defaults AS jsonb)))::json,
+                        updated_at = NOW()
+        WHERE id = :showId`,
+      { replacements: { lead: next, defaults: JSON.stringify(nextDefaults), showId }, transaction });
+  });
+  return { lead_character_id: next };
 }
 
 /**
@@ -117,6 +167,7 @@ async function setLead(sequelize, { showId, characterId }) {
  * character's home or closet replaces their previous one.
  */
 async function linkPlace(sequelize, { showId, characterId, sceneSetId, role, label }) {
+  assertIds({ character_id: characterId, scene_set_id: sceneSetId });
   if (!ROLES.includes(role)) throw new CharacterPlacesError(`role must be one of ${ROLES.join(', ')}`);
   const cleanLabel = typeof label === 'string' ? label.trim() : '';
   if (cleanLabel.length > LABEL_MAX) throw new CharacterPlacesError(`label must be at most ${LABEL_MAX} characters`);
@@ -149,6 +200,7 @@ async function linkPlace(sequelize, { showId, characterId, sceneSetId, role, lab
 
 /** Unlinks a character's place; for the lead's home or closet, clears the show default. */
 async function unlinkPlace(sequelize, { showId, characterId, sceneSetId, role }) {
+  assertIds({ character_id: characterId, scene_set_id: sceneSetId });
   const show = await loadShow(sequelize, showId);
   await assertCharacter(sequelize, showId, characterId);
   if (String(show.metadata.lead_character_id || '') === String(characterId) && SINGLE.has(role)) {

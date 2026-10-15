@@ -11,7 +11,7 @@ vi.mock('../../services/api', () => ({
 }));
 
 import api from '../../services/api';
-import CharacterHomes, { clearCharacterPlacesCache } from './CharacterHomes';
+import CharacterHomes, { clearCharacterPlacesCache, notifyCharacterPlacesChanged } from './CharacterHomes';
 
 const SET = { id: 'set-loft', name: 'Loft', show_id: 'show-1' };
 const data = (lalaPlaces = [], jadePlaces = []) => ({
@@ -75,5 +75,14 @@ describe('CharacterHomes', () => {
     const { container } = render(<CharacterHomes set={{ id: 's', name: 'Shared', show_id: null }} />);
     expect(container.textContent).toBe('');
     expect(api.get).not.toHaveBeenCalled();
+  });
+
+  test('a change elsewhere (another card, Make default) refreshes this card', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { data: data() } });
+    render(<CharacterHomes set={SET} />);
+    expect((await screen.findByTestId('character-homes-set-loft')).textContent).toMatch(/None yet/);
+    vi.mocked(api.get).mockResolvedValue({ data: { data: data([{ role: 'home', scene_set_id: 'set-loft', source: 'show_default' }]) } });
+    notifyCharacterPlacesChanged('show-1');
+    expect((await screen.findByTestId('character-place-c-lala')).textContent).toMatch(/Lala · home \(lead\)/);
   });
 });

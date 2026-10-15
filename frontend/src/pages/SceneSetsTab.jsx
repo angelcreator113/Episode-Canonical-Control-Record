@@ -7,7 +7,7 @@ import { fetchAllPages } from '../lib/fetchAllPages';
 import { isAppPath } from '../utils/sceneSets';
 import EventLookImage from '../components/EventPackage/EventLookImage';
 import DressedAngles from '../components/SceneSets/DressedAngles';
-import CharacterHomes from '../components/SceneSets/CharacterHomes';
+import CharacterHomes, { notifyCharacterPlacesChanged } from '../components/SceneSets/CharacterHomes';
 import './SceneSetsTab.css';
 import { BaseModelSelect } from '../components/SceneModelComparison';
 import SceneBriefConfirm from '../components/SceneBriefConfirm';
@@ -2977,6 +2977,8 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
     try {
       const res = await putSceneDefaultsApi(set.show_id, { [key]: set.id });
       setSceneDefaults((prev) => ({ ...prev, [String(set.show_id)]: res.data?.scene_defaults || {} }));
+      // The show's defaults are its lead's home and closet: the cards' chips follow.
+      notifyCharacterPlacesChanged(set.show_id);
       showToast(`${set.name} is now the default ${key === 'closet_set_id' ? 'closet' : 'home'}`);
     } catch (err) {
       console.error('[SceneSetsTab] make default failed:', err);

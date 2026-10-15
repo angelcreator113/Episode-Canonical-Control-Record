@@ -16,9 +16,19 @@ import './CharacterHomes.css';
 
 const ROLE_LABELS = { home: 'home', closet: 'closet', other: 'place' };
 
-// One read per show for every card on the page; a write refreshes it.
+// One read per show for every card on the page. Any change (here, on
+// another card, or "Make default" on the page) clears the show's entry and
+// tells every card of that show to read again.
 const cache = new Map();
+const CHANGED = 'character-places-changed';
 export function clearCharacterPlacesCache() { cache.clear(); }
+// next: the show's places as the write returned them (cached for every
+// card); without it, every card reads them again.
+export function notifyCharacterPlacesChanged(showId, next = undefined) {
+  if (next) cache.set(showId, Promise.resolve(next));
+  else cache.delete(showId);
+  window.dispatchEvent(new CustomEvent(CHANGED, { detail: { showId } }));
+}
 function readPlaces(showId, fresh = false) {
   if (fresh || !cache.has(showId)) {
     cache.set(showId, api.get(`/api/v1/shows/${showId}/character-places`).then((res) => res.data?.data || null)
@@ -43,6 +53,11 @@ export default function CharacterHomes({ set, onToast, onDefaultsChanged }) {
   }, [showId]);
 
   useEffect(() => { if (showId) load(); }, [showId, load]);
+  useEffect(() => {
+    const onChanged = (e) => { if (String(e.detail?.showId) === String(showId)) load(); };
+    window.addEventListener(CHANGED, onChanged);
+    return () => window.removeEventListener(CHANGED, onChanged);
+  }, [showId, load]);
 
   if (!showId || !data) return null;
 
@@ -51,8 +66,8 @@ export default function CharacterHomes({ set, onToast, onDefaultsChanged }) {
     .map((p) => ({ character: c, place: p })));
 
   const after = async (next, toast, leadDefaultsChanged) => {
-    cache.set(showId, Promise.resolve(next));
     setData(next);
+    notifyCharacterPlacesChanged(showId, next);
     if (leadDefaultsChanged) onDefaultsChanged?.(showId);
     onToast?.(toast);
   };
@@ -99,6 +114,9 @@ export default function CharacterHomes({ set, onToast, onDefaultsChanged }) {
       await api.put(`/api/v1/shows/${showId}/lead-character`, { character_id: characterId || null });
       const next = await readPlaces(showId, true);
       setData(next);
+      notifyCharacterPlacesChanged(showId, next);
+      // A new lead brings her own home and closet as the show's defaults.
+      onDefaultsChanged?.(showId);
       const lead = next?.characters.find((c) => c.is_lead);
       onToast?.(lead ? `${lead.name} is the show's lead` : 'The show has no lead');
     } catch (err) {
