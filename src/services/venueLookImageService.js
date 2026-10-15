@@ -219,10 +219,10 @@ async function startLook(models, { showId, eventId, chosenSetId = null, override
 
   if (!process.env.FAL_KEY) throw new VenueLookImageError('A look uses Flux Kontext, which needs FAL_KEY, which is not configured.', 503, 'PROVIDER_NOT_CONFIGURED');
   const [[look]] = await sequelize.query(
-    `INSERT INTO scene_set_looks (id, scene_set_id, event_id, status, brief, estimate_usd, error, created_at, updated_at)
-     VALUES (gen_random_uuid(), :setId, :eventId, 'generating', CAST(:brief AS jsonb), :estimate, NULL, NOW(), NOW())
+    `INSERT INTO scene_set_looks (id, scene_set_id, event_id, status, source, brief, estimate_usd, error, created_at, updated_at)
+     VALUES (gen_random_uuid(), :setId, :eventId, 'generating', 'generated', CAST(:brief AS jsonb), :estimate, NULL, NOW(), NOW())
      ON CONFLICT (scene_set_id, event_id) WHERE deleted_at IS NULL
-     DO UPDATE SET status = 'generating', brief = EXCLUDED.brief, estimate_usd = EXCLUDED.estimate_usd, error = NULL, updated_at = NOW()
+     DO UPDATE SET status = 'generating', source = 'generated', brief = EXCLUDED.brief, estimate_usd = EXCLUDED.estimate_usd, error = NULL, updated_at = NOW()
      RETURNING id`,
     { replacements: { setId: set.id, eventId: event.id, brief: JSON.stringify(plan.brief), estimate: plan.estimate?.usd ?? null } });
   const run = async () => {
@@ -240,6 +240,38 @@ async function startLook(models, { showId, eventId, chosenSetId = null, override
     }
   };
   return { result: { step: plan.step, scene_set_id: set.id, look_id: look.id }, run };
+}
+
+/**
+ * An event's look from Evoni's own image (Evoni, 2026-10-15: the event look
+ * uploadable as well as generated). The look goes on the event's set as a
+ * generated one would (answer 3: several sets at the venue, she chooses;
+ * none, one is made), complete at once, source 'uploaded', no cost. The
+ * venue's everyday look is not needed and not touched. storeImage(set) puts
+ * the file in S3 and returns its URL (the route's job, as for uploads).
+ */
+async function uploadLook(models, { showId, eventId, chosenSetId = null, storeImage }) {
+  const { sequelize } = models;
+  const event = await loadEvent(sequelize, { showId, eventId });
+  // L13 (§8(hh)): the Place locks when the episode is accepted.
+  const { isPlaceLocked, PLACE_LOCKED_CODE, PLACE_LOCKED_MESSAGE } = require('../utils/placeLock');
+  if (await isPlaceLocked(sequelize, event.id)) throw new VenueLookImageError(PLACE_LOCKED_MESSAGE, 409, PLACE_LOCKED_CODE);
+  const target = await resolveLookSet(sequelize, event, chosenSetId);
+  if (target.kind === 'choose') {
+    throw new VenueLookImageError('This venue has several scene sets: choose one', 409, 'CHOOSE_SET', { options: target.options });
+  }
+  const set = target.kind === 'create' ? await createVenueSet(models, event, target.locationId) : target.set;
+  if (target.kind === 'create' || target.link) await linkEvent(sequelize, event.id, set.id);
+  const imageUrl = await storeImage(set);
+  const [[look]] = await sequelize.query(
+    `INSERT INTO scene_set_looks (id, scene_set_id, event_id, status, source, image_url, brief, estimate_usd, cost_usd, error, generated_at, created_at, updated_at)
+     VALUES (gen_random_uuid(), :setId, :eventId, 'complete', 'uploaded', :url, NULL, NULL, 0, NULL, NOW(), NOW(), NOW())
+     ON CONFLICT (scene_set_id, event_id) WHERE deleted_at IS NULL
+     DO UPDATE SET status = 'complete', source = 'uploaded', image_url = EXCLUDED.image_url, brief = NULL,
+                   estimate_usd = NULL, cost_usd = 0, error = NULL, generated_at = NOW(), updated_at = NOW()
+     RETURNING id, status, source, image_url`,
+    { replacements: { setId: set.id, eventId: event.id, url: imageUrl } });
+  return { scene_set_id: set.id, look };
 }
 
 /** A base that failed: generation_status failed, its reason kept in base_generation.last_error. */
@@ -277,7 +309,7 @@ async function eventLook(sequelize, { showId, eventId }) {
   }
   const location = await loadLocation(sequelize, set.world_location_id || venueLocationId(event));
   const readLook = async () => (await sequelize.query(
-    `SELECT id, status, image_url, error, generated_at, updated_at FROM scene_set_looks
+    `SELECT id, status, source, image_url, error, generated_at, updated_at FROM scene_set_looks
       WHERE scene_set_id = :setId AND event_id = :eventId AND deleted_at IS NULL`,
     { replacements: { setId: set.id, eventId: event.id } }))[0][0];
   let look = await readLook();
@@ -306,7 +338,7 @@ async function looksForSets(sequelize, setIds) {
   const bySet = new Map();
   if (!ids.length) return bySet;
   const [rows] = await sequelize.query(
-    `SELECT l.id, l.scene_set_id, l.event_id, l.status, l.image_url, l.generated_at,
+    `SELECT l.id, l.scene_set_id, l.event_id, l.status, l.source, l.image_url, l.generated_at,
             e.name AS event_name, e.show_id AS event_show_id
        FROM scene_set_looks l JOIN world_events e ON e.id = l.event_id AND e.deleted_at IS NULL
       WHERE l.scene_set_id IN (:ids) AND l.deleted_at IS NULL
@@ -356,6 +388,7 @@ module.exports = {
   planLook,
   lookBrief,
   startLook,
+  uploadLook,
   eventLook,
   looksForSets,
 };
