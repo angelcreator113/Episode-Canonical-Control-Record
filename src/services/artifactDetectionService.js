@@ -273,9 +273,9 @@ function buildRefinedPrompt(originalPrompt, artifactFlags) {
     );
   }
 
-  // Otherwise append (respecting 1000 char limit)
-  const combined = `${originalPrompt} ${suffix}`;
-  return combined.length > 1000 ? combined.slice(0, 997) + '...' : combined;
+  // Otherwise append. Never cut: the end of a scene prompt carries its
+  // rules (no people, the camera), and the image models take long prompts.
+  return `${originalPrompt} ${suffix}`;
 }
 
 module.exports = {

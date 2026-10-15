@@ -48,11 +48,15 @@ export const SOURCE_LABELS = Object.freeze({ venue: 'From venue', event: 'From e
 const LAYER_TITLES = Object.freeze({ place: 'The place', event: 'The event', shot: 'The shot', environment: 'Environment' });
 const LAYERS = ['place', 'event', 'shot', 'environment'];
 
-/** "est. $0.04", "price not set", or null when there is no estimate. */
+/**
+ * "est. $0.04", "est. $0.04 (up to $0.08)" when a retry may be paid for,
+ * "price not set", or null when there is no estimate.
+ */
 export function estimateText(estimate) {
   if (!estimate) return null;
   if (typeof estimate.usd !== 'number') return 'price not set';
-  return `est. $${estimate.usd.toFixed(2)}`;
+  const most = typeof estimate.max_usd === 'number' && estimate.max_usd > estimate.usd ? ` (up to $${estimate.max_usd.toFixed(2)})` : '';
+  return `est. $${estimate.usd.toFixed(2)}${most}`;
 }
 
 const errorText = (err) => err?.response?.data?.error || err?.message || 'Something went wrong';
