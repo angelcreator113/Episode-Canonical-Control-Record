@@ -164,6 +164,21 @@ async function processJob(job) {
       completed_at: canRetry ? null : new Date(),
     });
 
+    // A cascade claims its set (claimGeneration); one that failed before
+    // its base was made (an approval since, a brief that could not be read)
+    // must not leave the set generating, which would refuse every start for
+    // 15 minutes.
+    if (!canRetry && job.job_type === 'cascade_regenerate' && job.scene_set_id) {
+      try {
+        await SceneSet.update(
+          { generation_status: 'failed' },
+          { where: { id: job.scene_set_id, generation_status: 'generating' } }
+        );
+      } catch (updateErr) {
+        console.error(`[GenWorker] Failed to update set status:`, updateErr.message);
+      }
+    }
+
     // If the job was for an angle, reset its status on permanent failure
     if (!canRetry && job.scene_angle_id) {
       try {

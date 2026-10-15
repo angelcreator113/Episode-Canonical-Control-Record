@@ -148,6 +148,19 @@ describe('EventLookImage (L7-L9)', () => {
     expect(onToast).toHaveBeenCalledWith('The look is ready');
   });
 
+  // Audit, 2026-10-15: the Scene Sets Looks row kept showing "Generating…".
+  test('a look that finishes tells the page around it (onSaved), once', async () => {
+    lookState = { ...lookState, look: { id: 'look-1', status: 'generating' } };
+    const { onSaved } = renderIt();
+    expect(await screen.findByTestId('event-look-generating')).toBeTruthy();
+    expect(onSaved).not.toHaveBeenCalled();
+    lookState = { ...lookState, look: { id: 'look-1', status: 'complete', image_url: 'https://x/look.jpg' } };
+    await screen.findByTestId('event-look-thumb');
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(onSaved).toHaveBeenCalledTimes(1);
+  });
+
   test('a load that fails says so, not "No look image yet", and Try again reloads', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     lookState = { scene_set: SET, approved_base: null, look: null };

@@ -74,8 +74,11 @@ async function lookAngles(sequelize, lookIds) {
 /** The angle, its set and the episode's look on that set; throws without a look. */
 async function resolveTarget(sequelize, { episodeId, angleId }) {
   const [[angle]] = await sequelize.query(
-    `SELECT id, scene_set_id, angle_label, angle_name, camera_direction FROM scene_angles
-      WHERE id = :angleId AND deleted_at IS NULL`,
+    `SELECT a.id, a.scene_set_id, a.angle_label, a.angle_name, a.camera_direction, a.angle_kind,
+            z.angle_kind AS zone_kind, z.angle_name AS zone_name
+       FROM scene_angles a
+       LEFT JOIN scene_angles z ON z.id = a.zone_angle_id AND z.scene_set_id = a.scene_set_id AND z.deleted_at IS NULL
+      WHERE a.id = :angleId AND a.deleted_at IS NULL`,
     { replacements: { angleId } });
   if (!angle) throw new DressedAngleError('Angle not found', 404, 'ANGLE_NOT_FOUND');
   const [[set]] = await sequelize.query(
@@ -99,14 +102,22 @@ async function planDressedAngle(sequelize, { episodeId, angleId, overrides: rawO
   const { angle, set, event, look } = await resolveTarget(sequelize, { episodeId, angleId });
   const location = await loadBriefLocation(sequelize, set.world_location_id);
   const briefEvent = await loadBriefEvent(sequelize, event.id, null);
+  // A zone is dressed as its own view of the place (L14 b), and a framing
+  // on a Front or Back zone shows none of the described room, as when the
+  // plain angle is made (audit, 2026-10-15).
+  const sceneGen = require('./sceneGenerationService');
+  const zone = sceneGen.zoneOf(angle);
+  const partOf = !zone && angle.angle_kind === 'extra' && angle.zone_kind
+    ? sceneGen.zoneOf({ angle_kind: angle.zone_kind, angle_name: angle.zone_name }) : null;
   const brief = {
     ...buildSceneBrief({
       sceneSet: set, location, event: briefEvent, angleLabel: angle.angle_label || 'WIDE',
-      cameraDirection: angle.camera_direction || null, continuity: true, overrides: overrides.value || {},
+      cameraDirection: angle.camera_direction || null, continuity: !zone, overrides: overrides.value || {},
+      ...(zone ? { zone } : {}),
+      ...(partOf ? { partOf } : {}),
     }),
     source: { kind: 'look', look_id: look.id, image_url: look.image_url },
   };
-  const sceneGen = require('./sceneGenerationService');
   return {
     angle, set, event, look, brief,
     prompt: briefToPrompt(brief),
