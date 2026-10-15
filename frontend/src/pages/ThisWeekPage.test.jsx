@@ -4,7 +4,7 @@
  * still owes something.
  */
 import React from 'react';
-import { vi, beforeEach, test, expect } from 'vitest';
+import { vi, beforeEach, describe, test, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { readFileSync } from 'fs';
@@ -12,7 +12,7 @@ import { resolve } from 'path';
 
 vi.mock('../services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn() } }));
 import api from '../services/api';
-import ThisWeekPage, { episodeToOpen } from './ThisWeekPage';
+import ThisWeekPage, { episodeToOpen, PlanChapters } from './ThisWeekPage';
 import { rememberShow } from '../utils/activeShow';
 
 const EP1 = { id: 'e1', episode_number: 1, title: 'The Gala', status: 'published', short_story: { id: 'st1', status: 'draft', word_count: 2400, has_beat11: true }, chapter: { id: 'c1', title: 'One', written: true } };
@@ -92,4 +92,48 @@ test('the app mounts it and the sidebar links it', () => {
   expect(app).toMatch(/<Route path="\/this-week" element=\{<ThisWeekPage \/>\} \/>/);
   const sidebar = readFileSync(resolve(process.cwd(), 'src/components/layout/Sidebar.jsx'), 'utf8');
   expect(sidebar).toMatch(/label: "This week's episode", route: '\/this-week'/);
+});
+
+describe('Plan the next chapters', () => {
+  const PLAN = [
+    { episode_id: 'e2', episode_number: 2, episode_title: 'The Brunch', chapter_id: null, title: 'Mimosas at Noon', scene_goal: 'She plays it safe.', emotional_state_start: 'tired', emotional_state_end: 'restless', chapter_notes: 'Zion spills juice.', bleed: false },
+    { episode_id: 'e3', episode_number: 3, episode_title: 'The Gala', chapter_id: 'c3', title: 'Velvet', scene_goal: 'x', emotional_state_start: '', emotional_state_end: '', chapter_notes: 'y', bleed: true },
+  ];
+
+  test('plans, lets her edit and pick, then adds the picked ones to the book', async () => {
+    const onApplied = vi.fn();
+    vi.mocked(api.post).mockImplementation(async (url, body) => {
+      if (url.endsWith('/plan')) return { data: { plan: PLAN } };
+      if (url.endsWith('/plan/apply')) return { data: { created: 1, filled: 0, chapters: ['c9'] } };
+      throw new Error(url);
+    });
+    render(<PlanChapters bookId="b1" showId="s1" onApplied={onApplied} />);
+    fireEvent.click(screen.getByText('Plan'));
+    const title = await screen.findByLabelText('Chapter title for episode 2');
+    expect(screen.getByText(/Episode 3: The Gala \(has a chapter: fills its empty plan only\) · the Lala bleed/)).toBeTruthy();
+    fireEvent.change(title, { target: { value: 'Noon, Again' } });
+    fireEvent.click(screen.getAllByRole('checkbox')[1]);   // leave episode 3 out
+    fireEvent.click(screen.getByText('Add 1 to the book'));
+    await screen.findByText('1 chapter added.');
+    expect(api.post).toHaveBeenCalledWith('/api/v1/book-from-show/books/b1/plan', { show_id: 's1', count: 4 }, { timeout: 180000 });
+    const [, applied] = vi.mocked(api.post).mock.calls.find(([u]) => u.endsWith('/plan/apply'));
+    expect(applied.items.map((i) => [i.episode_id, i.title])).toEqual([['e2', 'Noon, Again']]);
+    expect(onApplied).toHaveBeenCalled();
+  });
+
+  test('nothing to plan says so; a failure is shown', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(api.post).mockResolvedValueOnce({ data: { plan: [], message: 'Every episode has its chapter.' } });
+    render(<PlanChapters bookId="b1" showId="s1" />);
+    fireEvent.click(screen.getByText('Plan'));
+    expect(await screen.findByText('Every episode has its chapter.')).toBeTruthy();
+    vi.mocked(api.post).mockRejectedValueOnce({ response: { data: { error: 'AI rate limit exceeded' } } });
+    fireEvent.click(screen.getByText('Plan'));
+    expect((await screen.findByRole('alert')).textContent).toBe('AI rate limit exceeded');
+  });
+
+  test('the sidebar no longer sends "Structure" back to Stories', () => {
+    const sidebar = readFileSync(resolve(process.cwd(), 'src/components/layout/Sidebar.jsx'), 'utf8');
+    expect(sidebar).not.toMatch(/label: 'Structure', route: '\/story-engine'/);
+  });
 });
