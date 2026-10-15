@@ -1103,7 +1103,7 @@ export default function StoryEvaluationEngine() {
       if (document.hidden) notify('Stories Generated', `3 voices ready for "${brief.scene_title || 'your scene'}"`);
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
-  }, [brief, toneDial]);
+  }, [brief, toneDial, chapterId]);
 
   const handleEvaluate = useCallback(async () => {
     if (!storyId) return;
@@ -1162,17 +1162,21 @@ export default function StoryEvaluationEngine() {
       ];
       const confirmedReg = regUpdates.filter((_, i) => selectedReg.has(i));
 
+      // Send the approved version as edited here (an open edit included);
+      // the server otherwise writes the synthesis saved at evaluation.
+      const approved = editingApproved ? approvedText : evaluation?.approved_version;
       const data = await apiPost('write-back', {
         story_id: storyId,
         chapter_id: chapterId.trim(),
         confirmed_memories: confirmedMems,
         confirmed_registry_updates: confirmedReg,
+        approved_text: approved || undefined,
       }, { timeoutMs: 120000 });
       setWriteResult(data);
       setStep('writeback');
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
-  }, [storyId, chapterId, plotMemories, revelations, regUpdates, selectedPlot, selectedRev, selectedReg]);
+  }, [storyId, chapterId, plotMemories, revelations, regUpdates, selectedPlot, selectedRev, selectedReg, editingApproved, approvedText, evaluation]);
 
   const toggleSet = (set, setter, idx) => {
     const next = new Set(set);
@@ -1191,6 +1195,9 @@ export default function StoryEvaluationEngine() {
         characters_in_scene: brief.characters,
         registry_id: brief.registry_id || undefined,
         tone_dial: toneDial,
+        must_include: brief.must_include || undefined,
+        never_include: brief.never_include || undefined,
+        chapter_id: chapterId || undefined,
       }, { timeoutMs: 180000 });
       setStoryId(data.story_id);
       setStories(data.stories);
@@ -1202,7 +1209,7 @@ export default function StoryEvaluationEngine() {
       setStep('read');
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
-  }, [brief, toneDial]);
+  }, [brief, toneDial, chapterId]);
 
   // ── Export all voices as markdown ─────────────────────────────────────
   const exportAsMarkdown = useCallback(() => {

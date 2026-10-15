@@ -4630,7 +4630,7 @@ router.put('/world/:showId/events/:eventId/overlay-selections', requireAuth, asy
 // ═══════════════════════════════════════════════════════════════════════
 
 // POST /world/:showId/episodes/:episodeId/generate-story
-router.post('/world/:showId/episodes/:episodeId/generate-story', requireAuth, async (req, res) => {
+router.post('/world/:showId/episodes/:episodeId/generate-story', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { showId, episodeId } = req.params;
     const { format = 'short_story', povCharacter = 'lala' } = req.body;
