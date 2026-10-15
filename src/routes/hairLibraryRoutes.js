@@ -186,7 +186,7 @@ router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
       }
     }
     const message = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4000,
       system: `You design the hair library for Lala — a confident AI fashion creator living in LalaVerse.
 Lala's hair reflects JustAWoman's real styles. Each look has a name, a mood, and a moment it belongs to.

@@ -289,7 +289,7 @@ Return JSON only (no markdown):
 For lala_detected: set true ONLY if the content shows signs of a character breaking through their surface persona — speaking in third person, referencing an alter ego, sudden tone shifts from controlled to raw, or direct "she/her" references about self.`;
 
         const response = await client.messages.create({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-6',
           max_tokens: 1500,
           messages: [{ role: 'user', content: analysisPrompt }],
         });
@@ -422,7 +422,7 @@ Return JSON only:
 }`;
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 1500,
       messages: [{ role: 'user', content: lalaPrompt }],
     });

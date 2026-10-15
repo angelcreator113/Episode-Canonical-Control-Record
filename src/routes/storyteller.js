@@ -1218,7 +1218,7 @@ router.post('/chapters/:chapterId/save-draft', requireAuth, async (req, res) => 
 // The system reads what happened to the character in the scene
 // and shifts their emotional state accordingly.
 // If thresholds cross — the character knocks. You get the email.
-router.post('/chapters/:id/emotional-impact', requireAuth, async (req, res) => {
+router.post('/chapters/:id/emotional-impact', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { prose, character_id } = req.body;
     const chapterId = req.params.id;

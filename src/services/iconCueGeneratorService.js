@@ -404,7 +404,7 @@ Focus on story-relevant moments. Be conservative - only suggest icons when clear
     // axios call made.
     const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY, maxRetries: 0 });
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 2000,
       messages: [
         {

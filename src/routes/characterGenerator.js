@@ -711,7 +711,7 @@ Return ONLY valid JSON — no preamble, no markdown:
 }`;
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: Math.max(3000, count * 300),
       system: systemPrompt,
       messages: [{ role: 'user', content: `Propose ${count} character seeds.` }],
@@ -760,7 +760,7 @@ router.post('/generate-batch', requireAuth, aiRateLimiter, async (req, res) => {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 8000,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
@@ -1213,7 +1213,7 @@ router.post('/rewrite-field', requireAuth, aiRateLimiter, async (req, res) => {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 500,
       system: `You are rewriting a single character profile field for an AI-generated character. Match the adult-fiction register — specific, grounded, no softening. Return ONLY the new text (no quotes, no preamble, no explanation).\n\nCharacter: ${characterContext?.name || 'Unknown'}\nRole: ${characterContext?.role || '?'}\nLayer: ${characterContext?.layer || '?'}`,
       messages: [{

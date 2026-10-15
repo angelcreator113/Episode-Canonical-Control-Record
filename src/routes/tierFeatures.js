@@ -167,7 +167,7 @@ router.post('/continuity-check', requireAuth, aiRateLimiter, async (req, res) =>
     ).join('\n');
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4000,
       system: `You are a continuity editor for a novel. Given the established character knowledge, relationship states, and a new scene, check for continuity violations. Return ONLY valid JSON.`,
       messages: [{
@@ -574,7 +574,7 @@ router.post('/franchise-guard-check', requireAuth, aiRateLimiter, async (req, re
     ).join('\n');
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 3000,
       system: `You are a franchise continuity guard. Given a set of franchise laws and a scene, check whether the scene violates any laws. Return ONLY valid JSON.`,
       messages: [{
@@ -782,7 +782,7 @@ router.post('/plot-hole-detection', requireAuth, aiRateLimiter, async (req, res)
     ).join('\n');
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4000,
       system: `You are a manuscript continuity analyst. Given chapter summaries, character memories, and story threads, detect plot holes, contradictions, and continuity errors. Return ONLY valid JSON.`,
       messages: [{
@@ -887,7 +887,7 @@ router.post('/dead-thread-detection', requireAuth, aiRateLimiter, async (req, re
     ).join('\n');
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4000,
       system: `You are a narrative structure analyst. Given a manuscript's chapter content and existing tracked threads, identify dead or abandoned threads — subplots, mysteries, character arcs, or promises to the reader that were introduced but never followed up. Return ONLY valid JSON.`,
       messages: [{
@@ -975,7 +975,7 @@ router.post('/generate-chapter-beats', requireAuth, aiRateLimiter, async (req, r
     const arcPosition = totalChapters > 0 ? Math.round((currentPosition / Math.max(totalChapters, 1)) * 100) : 50;
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4000,
       system: `You are a narrative structure architect for literary fiction. Generate a beat sheet for a single chapter that serves the larger story arc. Return ONLY valid JSON.`,
       messages: [{
@@ -1068,7 +1068,7 @@ router.post('/generate-book-outline', requireAuth, aiRateLimiter, async (req, re
     const numChapters = target_chapters || 20;
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 6000,
       system: `You are a literary fiction story architect. Design a complete macro beat outline for a novel. Return ONLY valid JSON.`,
       messages: [{

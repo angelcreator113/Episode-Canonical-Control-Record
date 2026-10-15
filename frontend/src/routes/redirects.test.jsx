@@ -37,10 +37,11 @@ describe('moved addresses', () => {
     expect((await screen.findByTestId('where')).textContent).toBe(to);
   });
 
-  test('App mounts the redirects on /feed and /website', () => {
+  test('App mounts the redirects on /feed, /website and /book/:id', () => {
     const app = readFileSync(resolve(__dirname, '../App.jsx'), 'utf8');
     expect(app).toMatch(/<Route path="\/feed" element={<PulseRedirect \/>} \/>/);
     expect(app).toMatch(/<Route path="\/website" element={<WebsiteRedirect \/>} \/>/);
-    expect(app).toMatch(/import \{ PulseRedirect, WebsiteRedirect \} from '\.\/routes\/redirects';/);
+    expect(app).toMatch(/<Route path="\/book\/:id" element={<BookToWriteRedirect \/>} \/>/);
+    expect(app).toMatch(/import \{ PulseRedirect, WebsiteRedirect, BookToWriteRedirect \} from '\.\/routes\/redirects';/);
   });
 });

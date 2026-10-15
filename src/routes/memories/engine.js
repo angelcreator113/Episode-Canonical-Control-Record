@@ -4808,7 +4808,7 @@ async function runPipeline({ characterKey, storyNumber, taskBrief, previousStori
 // ─── POST /pipeline-generate ──────────────────────────────────────────────────
 // Automated pipeline: generate → quality gate → auto-revise if needed → return.
 // Handles a single story through the full quality pipeline without manual steps.
-router.post('/pipeline-generate', requireAuth, async (req, res) => {
+router.post('/pipeline-generate', requireAuth, aiRateLimiter, async (req, res) => {
   const { characterKey, storyNumber, taskBrief, previousStories, useMultiVoice } = req.body;
 
   if (!characterKey || !storyNumber || !taskBrief) {
@@ -4848,7 +4848,7 @@ setInterval(() => {
 
 // ─── POST /pipeline-generate-background ──────────────────────────────────────
 // Starts generation as a background job. Returns a jobId for polling.
-router.post('/pipeline-generate-background', requireAuth, async (req, res) => {
+router.post('/pipeline-generate-background', requireAuth, aiRateLimiter, async (req, res) => {
   const { characterKey, storyNumber, taskBrief, previousStories, useMultiVoice } = req.body;
 
   if (!characterKey || !storyNumber || !taskBrief) {
@@ -4913,7 +4913,7 @@ router.get('/pipeline-generate-status/:jobId', requireAuth, (req, res) => {
 // ─── POST /batch-generate ────────────────────────────────────────────────────
 // Generates multiple stories sequentially through the quality pipeline.
 // Uses SSE (Server-Sent Events) to stream progress to the frontend.
-router.post('/batch-generate', requireAuth, async (req, res) => {
+router.post('/batch-generate', requireAuth, aiRateLimiter, async (req, res) => {
   const { characterKey, taskBriefs, previousStories: initialPrevious } = req.body;
 
   if (!characterKey || !taskBriefs?.length) {
@@ -5010,7 +5010,7 @@ router.post('/batch-generate', requireAuth, async (req, res) => {
 // ─── POST /batch-generate-background ──────────────────────────────────────────
 // Starts batch generation as a background job. Returns a jobId for polling.
 // Each story is generated sequentially, results accumulate in the job store.
-router.post('/batch-generate-background', requireAuth, async (req, res) => {
+router.post('/batch-generate-background', requireAuth, aiRateLimiter, async (req, res) => {
   const { characterKey, taskBriefs, previousStories: initialPrevious } = req.body;
 
   if (!characterKey || !taskBriefs?.length) {
