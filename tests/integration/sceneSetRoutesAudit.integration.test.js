@@ -122,6 +122,16 @@ const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
     expect((await api('patch', `/${set.id}/angles/${a.id}`).send({ generation_status: 'failed' })).status).toBe(200);
   });
 
+  it('an edit or a reject does not free the claim of a running generation', async () => {
+    const set = await makeSet();
+    const busy = await angle(set.id, { generation_status: 'generating' });
+    expect((await api('patch', `/${set.id}/angles/${busy.id}`).send({ generation_status: 'pending' })).status).toBe(409);
+    expect((await api('patch', `/${set.id}/angles/${busy.id}/reject`).send({ reason: 'wrong view' })).status).toBe(409);
+    expect((await api('patch', `/${set.id}/angles/${busy.id}`).send({ angle_name: 'Bar stools' })).status).toBe(200);
+    const [row] = await rows('SELECT generation_status FROM scene_angles WHERE id = :id', { id: busy.id });
+    expect(row.generation_status).toBe('generating');
+  });
+
   it('an approved base is not replaced by edit, and its set is not deleted until un-approved', async () => {
     const set = await makeSet();
     await approve(set);

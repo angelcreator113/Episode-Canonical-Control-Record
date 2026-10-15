@@ -609,6 +609,14 @@ function TypeBadge({ type }) {
 
 // ─── IMAGE LIGHTBOX (base image) ──────────────────────────────────────────────
 
+/** True when a lightbox, a brief or another dialog is open over the workspace. */
+export function overlayAboveWorkspace(workspace) {
+  if (!workspace) return false;
+  const overlays = document.querySelectorAll('.scene-sets-lightbox-overlay, .sbc-backdrop, .scene-sets-modal-backdrop, [role="dialog"]');
+  return [...overlays].some((el) => el !== workspace && !el.contains(workspace)
+    && Boolean(workspace.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING));
+}
+
 function ImageLightbox({ images: initialImages, initialIndex, onClose, onDeleteAngle, onPromoteToBase, onPromoteError, setId, confirmText = null }) {
   const [images, setImages] = useState(initialImages);
   const [idx, setIdx] = useState(initialIndex || 0);
@@ -1519,10 +1527,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
               ref={workspaceRef}
               onClick={e => e.stopPropagation()}
               onKeyDown={(e) => {
-                if (e.key === 'Escape' && !editingName) {
-                  e.stopPropagation();
-                  setShowDetails(false); setShowPromptEditor(false); setShowAddAngle(false);
-                }
+                // Escape closes the window on top first: with a lightbox, a
+                // brief or another dialog open over the workspace, it is
+                // theirs (the event is not stopped, so their own handlers run).
+                if (e.key !== 'Escape' || editingName || overlayAboveWorkspace(workspaceRef.current)) return;
+                setShowDetails(false); setShowPromptEditor(false); setShowAddAngle(false);
               }}
             >
               {/* Modal header with set name + hero thumbnail */}
@@ -3197,9 +3206,9 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       (overrides) => runGenerateAll(set, overrides),
     );
   };
-  // onConfirmed: called once the brief is confirmed (the description editor
-  // closes then, not when the brief opens: a cancel kept its unsaved text on
-  // screen as if saved).
+  // onConfirmed: called once the server took the regeneration, and the
+  // description with it (the editor closes then: a cancelled brief or a
+  // refused request kept its unsaved text on screen as if saved).
   const handleCascadeRegenerate = (set, description, onConfirmed) => askBrief(
     {
       setId: set.id,
@@ -3208,7 +3217,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       note: 'The angles take the base\'s brief with their own cameras.',
       description: description || undefined,
     },
-    (overrides, choice) => { onConfirmed?.(); return runCascadeRegenerate(set, description, overrides, choice?.eventId); },
+    (overrides, choice) => runCascadeRegenerate(set, description, overrides, choice?.eventId, onConfirmed),
   );
 
   // eventId: the event chosen on the brief (S3); undefined sends none, and
@@ -3746,7 +3755,9 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
     }
   };
 
-  const runCascadeRegenerate = async (set, description, overrides, eventId) => {
+  // onSaved: called once the server took the request (and the description
+  // with it); a refusal (rate limit, bad overrides) keeps the editor open.
+  const runCascadeRegenerate = async (set, description, overrides, eventId, onSaved) => {
     startGenerating(set.id);
     try {
       let json;
@@ -3759,6 +3770,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       } catch (err) {
         throw new Error(err.response?.data?.error || 'Cascade regeneration failed');
       }
+      onSaved?.();
       showToast('Cascade regeneration queued...');
       const job = await pollJob(json.data.jobId);
       if (job.status === 'completed') {

@@ -1686,6 +1686,9 @@ router.patch('/:id/angles/:angleId', validateUUIDParam('id'), requireAuth, valid
     if (updates.generation_status !== undefined && !['pending', 'failed'].includes(updates.generation_status)) {
       return res.status(400).json({ success: false, error: 'generation_status can only be set to pending or failed' });
     }
+    // Not while it is being generated: resetting it freed the run's claim,
+    // and a second paid generation could start.
+    if (updates.generation_status !== undefined && refuseWhileGenerating(res, angle, `"${angle.angle_name || angle.angle_label}"`)) return;
     if (updates.angle_kind !== undefined) {
       const { ANGLE_KINDS } = require('../constants/beatLocations');
       if (updates.angle_kind === '') updates.angle_kind = null;
@@ -3250,6 +3253,9 @@ router.patch('/:id/angles/:angleId/reject', validateUUIDParam('id'), requireAuth
   try {
     const angle = await SceneAngle.findOne({ where: { id: req.params.angleId, scene_set_id: req.params.id } });
     if (!angle) return res.status(404).json({ error: 'Angle not found' });
+    // Rejecting resets the angle to pending: not under a running generation
+    // (it freed the run's claim for a second paid one).
+    if (refuseWhileGenerating(res, angle, `"${angle.angle_name || angle.angle_label}"`)) return;
 
     const review = angle.quality_review || {};
     review.rejected = true;

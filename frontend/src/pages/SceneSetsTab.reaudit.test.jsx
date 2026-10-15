@@ -84,4 +84,44 @@ describe('SceneSetsTab (re-audit)', () => {
     fireEvent.keyDown(dialog, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog', { name: /Atelier/ })).toBeNull());
   });
+
+  // Third re-audit (2026-10-15): regressions in the fixes above.
+  test('Escape with another window open over the workspace leaves the workspace open', async () => {
+    renderTab();
+    await waitFor(() => expect(card('set-1')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('scene-set-open-set-1'));
+    const dialog = screen.getByRole('dialog', { name: /Atelier/ });
+    const lightbox = document.createElement('div');
+    lightbox.className = 'scene-sets-lightbox-overlay';
+    document.body.appendChild(lightbox);
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(screen.getByRole('dialog', { name: /Atelier/ })).toBeTruthy();
+    lightbox.remove();
+  });
+
+  test('a refused "Save & regenerate" keeps the description editor and its text', async () => {
+    vi.mocked(apiClient.get).mockImplementation(async (url) => {
+      if (url.endsWith('/uses')) return { data: { success: true, data: { total: 0 } } };
+      return url.includes('/scene-sets')
+        ? { data: { success: true, data: sets().map((x) => ({ ...x, canonical_description: 'A sunlit atelier.' })) } }
+        : { data: { success: true, data: [] } };
+    });
+    vi.mocked(apiClient.post).mockImplementation(async (url) => {
+      if (url.endsWith('/brief')) {
+        return { data: { success: true, data: { target: { kind: 'base' }, brief: { version: 1, lines: [], rules: [], missing: [], overrides: {} }, prompt: 'p', estimate: null } } };
+      }
+      if (url.endsWith('/cascade-regenerate')) throw Object.assign(new Error('429'), { response: { status: 429, data: { error: 'Too many AI requests' } } });
+      return { data: { success: true, data: {} } };
+    });
+    renderTab();
+    await waitFor(() => expect(card('set-1')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('scene-set-open-set-1'));
+    fireEvent.click(screen.getByRole('button', { name: /Details & Usage/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Edit Description/ }));
+    fireEvent.change(document.querySelector('.scene-sets-desc-textarea'), { target: { value: 'A moonlit atelier.' } });
+    fireEvent.click(screen.getByTestId('scene-set-desc-cascade-set-1'));
+    fireEvent.click(await screen.findByTestId('sbc-confirm'));
+    await waitFor(() => expect(screen.getByText('Too many AI requests')).toBeTruthy());
+    expect(document.querySelector('.scene-sets-desc-textarea').value).toBe('A moonlit atelier.');
+  });
 });
