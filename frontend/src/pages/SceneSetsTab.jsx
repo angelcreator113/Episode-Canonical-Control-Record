@@ -288,7 +288,7 @@ export function SetWorldLocationSelect({ set, onSaved, onError }) {
     return (
       <div className="scene-sets-location-locked" data-testid={`set-location-${set.id}`}>
         <span>{name || 'Linked'}</span>
-        <span className="scene-sets-location-hint">Its base is this location's approved base. Un-approve it to change the location.</span>
+        <span className="scene-sets-location-hint">Its base is this location's everyday look. Un-approve it to change the location.</span>
       </div>
     );
   }
@@ -961,7 +961,7 @@ export function LooksRow({ set, focusZone = null, onToast }) {
         {set.base_approved && set.base_still_url && (
           <figure className="scene-sets-look" data-testid={`scene-set-look-base-${set.id}`}>
             <img src={set.base_still_url} alt="" />
-            <figcaption>Approved base</figcaption>
+            <figcaption>Everyday look</figcaption>
           </figure>
         )}
         {looks.map((l) => (
@@ -1011,9 +1011,9 @@ export function ApprovedBaseRow({ set, onToast = () => {}, onRefresh = () => {} 
   if (set.base_approved) {
     return (
       <div className="scene-sets-approved-row" data-testid={`approved-base-${set.id}`}>
-        <span className="scene-sets-approved-badge"><ShieldCheck size={11} /> Approved base</span>
+        <span className="scene-sets-approved-badge"><ShieldCheck size={11} /> Everyday look</span>
         <button type="button" className="scene-sets-approved-btn" disabled={busy}
-          onClick={() => act(unapproveBaseApi, `${set.name} is no longer the approved base`)}>
+          onClick={() => act(unapproveBaseApi, `${set.name} is no longer the location's everyday look`)}>
           Un-approve
         </button>
         <span className="scene-sets-approved-hint">Event versions at this location are made from this image. It can't be replaced until it is un-approved.</span>
@@ -1023,7 +1023,7 @@ export function ApprovedBaseRow({ set, onToast = () => {}, onRefresh = () => {} 
   if (set.location_approved_base) {
     return (
       <div className="scene-sets-approved-row" data-testid={`approved-base-${set.id}`}>
-        <span className="scene-sets-approved-note">Event versions here are made from this location's approved base.</span>
+        <span className="scene-sets-approved-note">Event looks here are made from this location's everyday look.</span>
       </div>
     );
   }
@@ -1031,10 +1031,10 @@ export function ApprovedBaseRow({ set, onToast = () => {}, onRefresh = () => {} 
     return (
       <div className="scene-sets-approved-row" data-testid={`approved-base-${set.id}`}>
         <button type="button" className="scene-sets-approved-btn" disabled={busy}
-          onClick={() => act(approveBaseApi, `${set.name} is now the location's approved base`)}>
-          <ShieldCheck size={11} /> Approve as the location's base
+          onClick={() => act(approveBaseApi, `${set.name} is now the location's everyday look`)}>
+          <ShieldCheck size={11} /> Use as the location's everyday look
         </button>
-        <span className="scene-sets-approved-hint">Approving makes this the original that event versions at this location are made from, and locks it until un-approved.</span>
+        <span className="scene-sets-approved-hint">The everyday look is the place as it usually is, undressed: every event's look at this location is made from it. It stays locked until un-approved.</span>
       </div>
     );
   }
