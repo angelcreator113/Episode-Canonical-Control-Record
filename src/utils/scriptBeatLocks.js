@@ -9,11 +9,14 @@
  *
  * A beat is the text from one `## BEAT:` header to the next, header
  * included. Its number is the header's number when it names a canonical
- * beat (1-14), otherwise its position, the same rule the Script tab's
+ * beat (1-14), or the beat a name names (utils/beatLabelNumber.js),
+ * otherwise its position: the same rule the Script tab's
  * parseScriptIntoBeats uses, so a lock means the same beat on both sides.
  *
  * Pure; no I/O.
  */
+
+const { beatNumberForLabel } = require('./beatLabelNumber');
 
 const BEAT_COUNT = 14;
 const HEADER_LINE_RE = /^\s*##\s*BEAT:\s*(.*)$/i;
@@ -27,8 +30,8 @@ function splitScriptBeats(script) {
   for (const line of lines) {
     const m = line.match(HEADER_LINE_RE);
     if (m) {
-      const numbered = Number((m[1].trim().match(/^(\d{1,2})\b/) || [])[1]);
-      const number = numbered >= 1 && numbered <= BEAT_COUNT ? numbered : beats.length + 1;
+      // A header's number, or the canonical beat its name names, else its place.
+      const number = beatNumberForLabel(m[1]) || beats.length + 1;
       current = { number, lines: [line] };
       beats.push(current);
     } else if (current) {

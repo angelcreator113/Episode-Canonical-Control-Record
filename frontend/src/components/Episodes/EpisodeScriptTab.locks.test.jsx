@@ -30,7 +30,7 @@ describe('Script beat locks', () => {
   });
 
   test('a tag before the first beat is not a beat, so numbers match the locks', () => {
-    const beats = parseScriptIntoBeats(`[EVENT: name="Gala"]\n\n## BEAT: CLIFFHANGER\nx\n\n## BEAT: 2 · Login Sequence\ny`, [1]);
+    const beats = parseScriptIntoBeats(`[EVENT: name="Gala"]\n\n## BEAT: Cold open\nx\n\n## BEAT: 2 · Login Sequence\ny`, [1]);
     expect(beats.map((b) => [b.number, b.approved])).toEqual([[1, true], [2, false]]);
     expect(scriptPreamble('[EVENT: name="Gala"]\n\n## BEAT: 1 · Opening Ritual\nx')).toBe('[EVENT: name="Gala"]');
   });

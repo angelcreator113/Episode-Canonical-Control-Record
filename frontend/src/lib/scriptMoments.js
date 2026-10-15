@@ -12,6 +12,8 @@
  * /episodes/:id/overlays), so the line shows that screen's picture.
  */
 
+import { beatNumberForLabel, BEAT_SPLIT, HAS_BEAT_HEADER } from './beatLabelNumber';
+
 const UI_LINE = /^\s*\[UI:\s*([A-Za-z_]+)\s*(.*?)\s*\]\s*$/;
 
 /** The UI line's verb and target, or null for any other line. */
@@ -122,9 +124,10 @@ export function messageOf(moment) {
   const kind = MESSAGE_VERBS[String(moment?.verb || '').toUpperCase()];
   if (!kind) return null;
   const target = String(moment.target || '').trim();
+  // `[UI:DM : words]` has no sender, so a colon in the words stays in them.
   const at = kind === 'post' ? -1 : target.indexOf(':');
   const who = at > 0 ? target.slice(0, at).trim() : null;
-  const text = (at > 0 ? target.slice(at + 1) : target).trim();
+  const text = (at >= 0 ? target.slice(at + 1) : target).trim();
   const name = kind === 'post' ? 'Lala posts' : kind === 'dm' ? `DM${who ? ` with ${who}` : ''}` : `Notification${who ? ` from ${who}` : ''}`;
   return { kind, name, who, text, url: null };
 }
@@ -134,7 +137,10 @@ export function messageLine(kind, who, text) {
   const words = String(text || '').replace(/[[\]]/g, '').replace(/\s+/g, ' ').trim();
   const sender = String(who || '').replace(/[[\]:]/g, '').trim();
   if (!verb || !words) return null;
-  return kind === 'post' || !sender ? `[UI:${verb} ${words}]` : `[UI:${verb} ${sender}: ${words}]`;
+  if (kind === 'post') return `[UI:${verb} ${words}]`;
+  // No sender: the words follow a bare colon, so "Meet at 5:30" stays whole
+  // (Script tab audit, 2026-10-15).
+  return sender ? `[UI:${verb} ${sender}: ${words}]` : `[UI:${verb} : ${words}]`;
 }
 
 /**
@@ -297,20 +303,20 @@ export const EXPECTED_ON_SCREEN = {
  * The script's closet beat (Task #2880): the beat whose lines open the closet
  * (`[UI:OPEN Closet…]`, as the script skeleton writes it), else the beat whose
  * canonical number is the one that opens it (CLOSET_OPEN). Numbered as the
- * Script tab numbers beats (a `## BEAT: 8 · …` header, else its place). Null
+ * Script tab numbers beats (a `## BEAT: 8 · …` header or a beat's name, else
+ * its place). Null
  * when the script has no beats, or no beat that opens the closet: then no
  * beat is named anywhere ("Beat 8 needs it" was written into the pages).
  */
 const CLOSET_CANON = Number(Object.keys(EXPECTED_ON_SCREEN).find((n) => EXPECTED_ON_SCREEN[n].action === 'CLOSET_OPEN'));
 export function closetBeat(scriptText) {
   const script = String(scriptText || '');
-  if (!/##\s*BEAT:/i.test(script)) return null;
-  const sections = script.split(/(?=##\s*BEAT:)/i).filter((s) => /^\s*##\s*BEAT:/i.test(s));
+  if (!HAS_BEAT_HEADER.test(script)) return null;
+  const sections = script.split(BEAT_SPLIT).filter((s) => /^\s*##\s*BEAT:/i.test(s));
   const beats = sections.map((section, i) => {
     const [header, ...lines] = section.split('\n');
     const label = (header.match(/##\s*BEAT:\s*(.+)/i)?.[1] || '').trim();
-    const numbered = Number((label.match(/^(\d{1,2})\b/) || [])[1]);
-    return { number: numbered >= 1 && numbered <= 14 ? numbered : i + 1, lines };
+    return { number: beatNumberForLabel(label) || i + 1, lines };
   });
   const opens = beats.find((b) => b.lines.some((l) => {
     const m = parseMoment(l);

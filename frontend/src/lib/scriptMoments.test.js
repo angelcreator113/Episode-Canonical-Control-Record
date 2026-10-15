@@ -142,8 +142,10 @@ describe("the script's closet beat (Task #2880)", () => {
     expect(closetBeat('Prime: "No headers here."\n[UI:OPEN closet]')).toBeNull();
     expect(closetBeat(S('## BEAT: 1 · Opening Ritual', '## BEAT: 2 · Login', '[UI:OPEN MailIcon]'))).toBeNull();
   });
-  test('a name-only header is numbered by its place', () => {
-    expect(closetBeat(S('## BEAT: OPENING', 'x', '## BEAT: TRANSFORMATION', '[UI:OPEN ClosetCategory Outfit]'))).toBe(2);
+  test("a canonical beat's name is its number; any other name is numbered by its place", () => {
+    // Script tab audit (2026-10-15): the skeleton's TRANSFORMATION is beat 8.
+    expect(closetBeat(S('## BEAT: OPENING', 'x', '## BEAT: TRANSFORMATION', '[UI:OPEN ClosetCategory Outfit]'))).toBe(8);
+    expect(closetBeat(S('## BEAT: OPENING', 'x', '## BEAT: Getting ready', '[UI:OPEN ClosetCategory Outfit]'))).toBe(2);
   });
 });
 
