@@ -4,8 +4,8 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { buildArcContext } = require('./arcTrackingService');
 
 const client = new Anthropic();
-const MODEL = 'claude-sonnet-4-20250514';
-const FALLBACK_MODEL = 'claude-sonnet-4-20250514';
+const MODEL = 'claude-sonnet-4-6';
+const FALLBACK_MODEL = 'claude-sonnet-4-6';
 
 // Safe extraction of text from Claude response
 function extractText(response) {

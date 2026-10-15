@@ -143,7 +143,7 @@ IMMERSION RULES:
 Respond with ONLY the prose. No preamble. No explanation. No quotes around it.`;
 
     const maxTok = gen_length === 'sentence' ? 200 : 900;
-    const MODELS = ['claude-sonnet-4-6', 'claude-sonnet-4-5-20250514'];
+    const MODELS = ['claude-sonnet-4-6'];
 
     // ── STREAMING PATH ──
     if (stream) {
@@ -881,7 +881,7 @@ async function safeAIWithTemp(systemPrompt, userPrompt, maxTokens = 800, tempera
 // Called by: CharacterDilemmaEngine.jsx
 // ════════════════════════════════════════════════════════════════════════
 
-router.post('/character-dilemma', requireAuth, async (req, res) => {
+router.post('/character-dilemma', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const {
       character_id,
@@ -1038,7 +1038,7 @@ Generate 5 dilemmas that will reveal who this character actually is.`;
 // Called by: VoiceAttributionButton in StoryTeller chapter header
 // ════════════════════════════════════════════════════════════════════════
 
-router.post('/attribute-voices', requireAuth, async (req, res) => {
+router.post('/attribute-voices', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { chapter_id, lines, book_context } = req.body;
 
@@ -1169,7 +1169,7 @@ router.post('/confirm-voice', requireAuth, async (req, res) => {
 // Used by WriteModeAIWriter component
 // ════════════════════════════════════════════════════════════════════════
 
-router.post('/ai-writer-action', requireAuth, async (req, res) => {
+router.post('/ai-writer-action', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const {
       character,       // { name, type, role, belief_pressured, emotional_function, writer_notes }

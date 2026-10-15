@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom';
-import { PulseRedirect, WebsiteRedirect } from './routes/redirects';
+import { PulseRedirect, WebsiteRedirect, BookToWriteRedirect } from './routes/redirects';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import apiClient from './services/api';
 
 // Contexts
 import { BulkSelectionProvider } from './contexts/BulkSelectionContext';
@@ -98,29 +97,6 @@ function ShowSettingsRedirect() {
 }
 const ExportPage = lazy(() => import('./pages/ExportPage'));
 const AssetLibrary = lazy(() => import('./pages/AssetLibrary'));
-// Redirect from /book/:id → WriteMode (first chapter)
-const BookToWriteRedirect = () => {
-  const { id } = useParams();
-  const [loading, setLoading] = useState(true);
-  const nav = useNavigate();
-  useEffect(() => {
-    apiClient.get(`/api/v1/storyteller/books/${id}`)
-      .then(r => r.data)
-      .then(data => {
-        const chapters = Array.isArray(data.chapters) ? data.chapters : [];
-        if (chapters.length > 0) {
-          const sorted = [...chapters].sort((a, b) => (a.order ?? a.chapter_number ?? 0) - (b.order ?? b.chapter_number ?? 0));
-          nav(`/chapter/${id}/${sorted[0].id}`, { replace: true });
-        } else {
-          nav('/storyteller', { replace: true });
-        }
-      })
-      .catch(() => nav('/storyteller', { replace: true }))
-      .finally(() => setLoading(false));
-  }, [id, nav]);
-  if (loading) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontFamily:'Lora,serif',color:'rgba(28,24,20,0.4)'}}>Opening book…</div>;
-  return null;
-};
 // Lala's Feed, standalone (Task #1631). The Sidebar's FRANCHISE entry links
 // here with ?layer=lalaverse so it opens on the LalaVerse feed with the
 // switcher still available (unlike New Episode's choose-host mode, which

@@ -23,7 +23,7 @@ const { safeAIWithTemp } = require('./stories');
 // AI feedback on how the current prose reads — voice, rhythm, tension
 // ════════════════════════════════════════════════════════════════════════
 
-router.post('/prose-critique', requireAuth, async (req, res) => {
+router.post('/prose-critique', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { character_id, prose } = req.body;
     if (!prose?.trim()) {
@@ -59,7 +59,7 @@ Give your editorial read. What works? What drifts? Where could it go deeper?`;
 // AI-generated 2-3 sentence synopsis of the current chapter prose
 // ════════════════════════════════════════════════════════════════════════
 
-router.post('/chapter-synopsis', requireAuth, async (req, res) => {
+router.post('/chapter-synopsis', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { character_id, prose, chapter_title } = req.body;
     if (!prose?.trim()) {
@@ -96,7 +96,7 @@ Write a 2-3 sentence synopsis.`;
 // AI-generated prose transition between two adjacent scenes
 // ════════════════════════════════════════════════════════════════════════
 
-router.post('/scene-transition', requireAuth, async (req, res) => {
+router.post('/scene-transition', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { character_id, scene_a_end, scene_b_start, chapter_title, theme } = req.body;
     if (!scene_a_end?.trim() || !scene_b_start?.trim()) {

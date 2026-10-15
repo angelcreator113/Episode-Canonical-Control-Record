@@ -133,7 +133,7 @@ router.post('/start', requireAuth, async (req, res) => {
     const systemPrompt = buildWizardSystemPrompt(1, [], {});
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 1000,
       system: systemPrompt,
       messages: [{
@@ -201,7 +201,7 @@ router.post('/respond', requireAuth, async (req, res) => {
     ]);
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 1000,
       system: systemPrompt,
       messages,

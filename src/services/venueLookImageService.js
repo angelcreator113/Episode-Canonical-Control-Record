@@ -71,15 +71,23 @@ async function liveSet(sequelize, id) {
   return set || null;
 }
 
-async function venueSets(sequelize, locationId) {
+/**
+ * The sets at a venue that this show can use: its own and unassigned ones.
+ * Venues are shared across a universe's shows; another show's set was
+ * linked to this show's event and its look made on it (audit, 2026-10-15).
+ */
+async function venueSets(sequelize, locationId, showId) {
   if (!locationId) return [];
   const [rows] = await sequelize.query(
     `SELECT id, name, base_still_url FROM scene_sets
       WHERE world_location_id = :locationId AND deleted_at IS NULL
+        AND (show_id = :showId OR show_id IS NULL)
       ORDER BY name ASC, created_at ASC`,
-    { replacements: { locationId } });
+    { replacements: { locationId, showId: showId || null } });
   return rows;
 }
+
+const otherShows = (set, event) => Boolean(set?.show_id && event?.show_id && String(set.show_id) !== String(event.show_id));
 
 /**
  * The set the look is made on (answer 3):
@@ -90,8 +98,8 @@ async function venueSets(sequelize, locationId) {
 async function resolveLookSet(sequelize, event, chosenSetId = null) {
   const venueId = venueLocationId(event);
   const own = await liveSet(sequelize, event.scene_set_id);
-  if (own) return { kind: 'set', set: own, link: false };
-  const sets = await venueSets(sequelize, venueId);
+  if (own && !otherShows(own, event)) return { kind: 'set', set: own, link: false };
+  const sets = await venueSets(sequelize, venueId, event.show_id);
   if (chosenSetId) {
     const chosen = sets.find((s) => String(s.id) === String(chosenSetId));
     if (!chosen) throw new VenueLookImageError('That scene set is not at this event\'s venue', 400, 'SET_NOT_AT_VENUE');
@@ -206,7 +214,14 @@ async function startLook(models, { showId, eventId, chosenSetId = null, override
     const { missingProviderKeys } = require('./sceneModelComparisonService');
     const missing = missingProviderKeys([plan.estimate.base_model]);
     if (missing.length) throw new VenueLookImageError(`Base model ${plan.estimate.base_model} needs ${missing.join(', ')}, which is not configured.`, 503, 'PROVIDER_NOT_CONFIGURED');
-    await models.SceneSet.update({ generation_status: 'generating' }, { where: { id: set.id } });
+    // One base at a time (a double click paid twice); a run stuck past
+    // STUCK_AFTER_MS can be started again.
+    const [claimed] = await sequelize.query(
+      `UPDATE scene_sets SET generation_status = 'generating', updated_at = NOW()
+        WHERE id = :id AND (generation_status IS DISTINCT FROM 'generating' OR updated_at < NOW() - make_interval(secs => :stuck))
+        RETURNING id`,
+      { replacements: { id: set.id, stuck: STUCK_AFTER_MS / 1000 } });
+    if (!claimed.length) throw new VenueLookImageError(`The base of "${set.name}" is already being generated. Wait for it to finish.`, 409, 'BASE_GENERATING');
     const run = async () => {
       try {
         const instance = await models.SceneSet.findByPk(set.id);
@@ -226,19 +241,26 @@ async function startLook(models, { showId, eventId, chosenSetId = null, override
      VALUES (gen_random_uuid(), :setId, :eventId, 'generating', 'generated', CAST(:brief AS jsonb), :estimate, NULL, NOW(), NOW())
      ON CONFLICT (scene_set_id, event_id) WHERE deleted_at IS NULL
      DO UPDATE SET status = 'generating', source = 'generated', brief = EXCLUDED.brief, estimate_usd = EXCLUDED.estimate_usd, error = NULL, updated_at = NOW()
+       WHERE scene_set_looks.status <> 'generating' OR scene_set_looks.updated_at < NOW() - make_interval(secs => :stuck)
      RETURNING id`,
-    { replacements: { setId: set.id, eventId: event.id, brief: JSON.stringify(plan.brief), estimate: plan.estimate?.usd ?? null } });
+    { replacements: { setId: set.id, eventId: event.id, brief: JSON.stringify(plan.brief), estimate: plan.estimate?.usd ?? null, stuck: STUCK_AFTER_MS / 1000 } });
+  // A look already generating is not started (and paid for) again.
+  if (!look) throw new VenueLookImageError('This look is already being generated. Wait for it to finish.', 409, 'LOOK_GENERATING');
   const run = async () => {
     try {
       const out = await sceneGen.generateDressedStill(set, briefToPrompt(plan.brief), plan.brief.approved_base.image_url, { suffix: `look-${event.id}` });
-      await sequelize.query(
+      // Only this run's row: an upload (or a newer run) since is kept
+      // (audit, 2026-10-15: a late result overwrote an uploaded look).
+      const [done] = await sequelize.query(
         `UPDATE scene_set_looks SET status = 'complete', image_url = :url, cost_usd = :cost, generated_at = NOW(), updated_at = NOW()
-          WHERE id = :id`,
+          WHERE ${OWN_LOOK_RUN} RETURNING id`,
         { replacements: { id: look.id, url: out.stillUrl, cost: out.cost } });
+      if (done.length) await dropDressedAngles(sequelize, look.id);
+      else console.warn(`[VenueLookImage] look ${look.id} changed while generating; this result is not kept`);
     } catch (err) {
       console.error(`[VenueLookImage] look for event ${event.id} on "${set.name}" failed:`, err.message);
       await sequelize.query(
-        `UPDATE scene_set_looks SET status = 'failed', error = :error, updated_at = NOW() WHERE id = :id`,
+        `UPDATE scene_set_looks SET status = 'failed', error = :error, updated_at = NOW() WHERE ${OWN_LOOK_RUN}`,
         { replacements: { id: look.id, error: String(err.message || err).slice(0, 500) } });
     }
   };
@@ -274,7 +296,21 @@ async function uploadLook(models, { showId, eventId, chosenSetId = null, storeIm
                    estimate_usd = NULL, cost_usd = 0, error = NULL, generated_at = NOW(), updated_at = NOW()
      RETURNING id, status, source, image_url`,
     { replacements: { setId: set.id, eventId: event.id, url: imageUrl } });
+  await dropDressedAngles(sequelize, look.id);
   return { scene_set_id: set.id, look };
+}
+
+// The row a look's run may write: its own, while it is still the run.
+const OWN_LOOK_RUN = `id = :id AND status = 'generating' AND source = 'generated' AND deleted_at IS NULL`;
+
+/**
+ * A look with a new image: its dressed angles were cut from the old one,
+ * so they are removed (soft) and made again from the new look.
+ */
+async function dropDressedAngles(sequelize, lookId) {
+  await sequelize.query(
+    `UPDATE scene_set_look_angles SET deleted_at = NOW(), updated_at = NOW() WHERE look_id = :lookId AND deleted_at IS NULL`,
+    { replacements: { lookId } });
 }
 
 /** A base that failed: generation_status failed, its reason kept in base_generation.last_error. */
