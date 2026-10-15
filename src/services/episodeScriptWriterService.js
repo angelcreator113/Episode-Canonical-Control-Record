@@ -388,6 +388,148 @@ async function loadScriptContext(episodeId, showId, models) {
   return context;
 }
 
+// The people, the content she must make, continuity and her numbers: the
+// blocks between the wardrobe and the beat plan. Shared with the Script
+// tab's writer (groundedScriptGeneratorService; Script tab audit,
+// 2026-10-15), which has its own season block, so it passes withSeason false.
+function storyContextBlocks(context, { withSeason = true } = {}) {
+  // Social profiles — host + guests with real voices
+  let socialBlock = '';
+  if (context.socialProfiles?.length > 0) {
+    socialBlock = '═══ CHARACTERS AT THE EVENT ═══\n';
+    if (context.socialProfiles.some(p => p.story_role !== null && p.story_role !== undefined) || context.unfeaturedGuestCount > 0) {
+      socialBlock += 'Featured guests below are the named people the episode may use; others attending are present but not story participants.\n';
+    }
+    socialBlock += context.socialProfiles.map(p => {
+      let block = `${p.creator_name || p.display_name || p.handle} (@${p.handle}, ${p.platform})
+  Archetype: ${p.archetype || 'unknown'} | Tier: ${p.celebrity_tier || 'accessible'}
+  Voice: ${p.posting_voice || 'Standard social media voice'}
+  Lala follows because: ${p.follow_motivation || 'general interest'}${p.follow_emotion ? ` (feels: ${p.follow_emotion})` : ''}`;
+      if (p.story_role) block += `\n  Story role: ${p.story_role}`;
+      if (LALA_TIES[p.lala_relationship]) block += `\n  With Lala: ${LALA_TIES[p.lala_relationship]}`;
+
+      // Character literary depth (from registry) + therapy + life simulation
+      if (p.core_belief || p.pressure_type || p.depth_level || p.core_wound) {
+        block += `\n  ── CHARACTER DEPTH ──`;
+        if (p.role_type) block += `\n  Role: ${p.role_type}${p.role_label ? ` — ${p.role_label}` : ''}`;
+        if (p.character_archetype) block += `\n  Archetype: ${p.character_archetype}`;
+        if (p.core_belief) block += `\n  Core Belief: "${p.core_belief}"`;
+        if (p.pressure_type) block += `\n  Pressure: ${p.pressure_type}${p.pressure_quote ? ` — "${p.pressure_quote}"` : ''}`;
+        if (p.depth_level) block += `\n  Depth: ${p.depth_level} (${p.depth_level === 'sparked' ? 'surface only — keep dialogue simple' : p.depth_level === 'breathing' ? 'emerging complexity — hints of inner life' : p.depth_level === 'active' ? 'full inner world — internal monologue, contradictions' : 'fully alive — nuanced reactions, wound patterns visible'})`;
+
+        // Therapy data — psychological architecture
+        if (p.core_wound) block += `\n  ── THERAPY PROFILE ──`;
+        if (p.core_wound) block += `\n  Core Wound: "${p.core_wound}"`;
+        if (p.core_desire) block += `\n  Core Desire: "${p.core_desire}"`;
+        if (p.core_fear) block += `\n  Core Fear: "${p.core_fear}"`;
+        if (p.mask_persona) block += `\n  Mask (what they show): ${p.mask_persona}`;
+        if (p.truth_persona) block += `\n  Truth (what's underneath): ${p.truth_persona}`;
+        if (p.therapy_primary_defense) block += `\n  Primary Defense: ${p.therapy_primary_defense}`;
+        if (p.signature_trait) block += `\n  Signature Trait: ${p.signature_trait}`;
+        if (p.emotional_baseline) block += `\n  Baseline: ${p.emotional_baseline}`;
+
+        // Emotional state from therapy (if available)
+        if (p.therapy_emotional_state) {
+          const tes = typeof p.therapy_emotional_state === 'string' ? JSON.parse(p.therapy_emotional_state) : p.therapy_emotional_state;
+          const highEmotions = Object.entries(tes).filter(([_, v]) => v >= 4).map(([k, v]) => `${k}(${v})`);
+          if (highEmotions.length > 0) block += `\n  High Emotions: ${highEmotions.join(', ')}`;
+        }
+
+        // Legacy personality fields
+        if (p.personality?.wound) block += `\n  Wound Pattern: ${p.personality.wound}`;
+        if (p.personality?.defense) block += `\n  Defense: ${p.personality.defense}`;
+        if (p.char_description) block += `\n  Character: ${p.char_description.slice(0, 150)}`;
+      }
+
+      block += `\n  SCRIPT DIRECTIVE: When this character speaks, use THEIR voice. ${p.depth_level === 'alive' ? `Show their wound patterns and defense mechanisms in subtle behavior.${p.core_wound ? ` Their wound ("${p.core_wound.slice(0, 60)}") should bleed through in moments of pressure.` : ''}${p.mask_persona ? ` They present as ${p.mask_persona.slice(0, 40)} but underneath they are ${(p.truth_persona || 'different').slice(0, 40)}.` : ''}` : p.depth_level === 'active' ? `Include internal contradictions — what they say vs what they mean.${p.therapy_primary_defense ? ` Default defense: ${p.therapy_primary_defense}.` : ''}` : 'Keep them consistent with their archetype.'}`;
+
+      return block;
+    }).join('\n\n');
+    if (context.unfeaturedGuestCount > 0) {
+      socialBlock += `\n\n${context.unfeaturedGuestCount} more guest${context.unfeaturedGuestCount === 1 ? '' : 's'} attending — present, but not story participants.`;
+    }
+    socialBlock += '\n';
+  }
+
+  // Social tasks — content Lala needs to create
+  let taskBlock = '';
+  if (context.socialTasks?.length > 0) {
+    const required = context.socialTasks.filter(t => t.required);
+    const before = context.socialTasks.filter(t => t.timing === 'before');
+    const during = context.socialTasks.filter(t => t.timing === 'during');
+    const after = context.socialTasks.filter(t => t.timing === 'after');
+    taskBlock = `═══ SOCIAL MEDIA TASKS (${context.socialTasks.length} total, ${required.length} required) ═══\n`;
+    if (before.length > 0) taskBlock += `BEFORE: ${before.map(t => t.label).join(', ')}\n`;
+    if (during.length > 0) taskBlock += `DURING: ${during.map(t => t.label).join(', ')}\n`;
+    if (after.length > 0) taskBlock += `AFTER: ${after.map(t => t.label).join(', ')}\n`;
+    taskBlock += 'SCRIPT DIRECTIVE: Lala must reference creating this content — filming stories, going live, angling her phone. The content tasks are part of the episode action.\n';
+  }
+
+  // Previous episode continuity
+  let prevBlock = '';
+  if (context.previousEpisode) {
+    const p = context.previousEpisode;
+    prevBlock = `═══ PREVIOUS EPISODE ═══\n"${p.title}" (Episode ${p.episode_number}) — ${p.tier?.toUpperCase()} (${p.score}/100)\n${p.narrative || ''}\nSCRIPT DIRECTIVE: Reference what happened last time — ${p.tier === 'slay' ? 'Lala is riding high from her win' : p.tier === 'fail' ? 'Lala has something to prove after last week' : 'Lala is building momentum'}.\n`;
+  }
+
+  // Arc phase
+  let arcBlock = '';
+  if (context.arcPhase) {
+    const a = context.arcPhase;
+    const phase = a.phase_title ? `Phase ${a.current_phase}: ${a.phase_title}` : `Phase ${a.current_phase}`;
+    arcBlock = `═══ SEASON ARC ═══\n${a.name || 'Current Arc'} — ${phase}\n`;
+    if (a.emotional_arc) arcBlock += `Phase emotional arc: ${a.emotional_arc}\n`;
+    arcBlock += `Emotional Temperature: ${a.emotional_temperature || 'neutral'}\n`;
+    if (a.narrative_debt_summary) arcBlock += `${a.narrative_debt_summary}\n`;
+    arcBlock += 'SCRIPT DIRECTIVE: The emotional tone of this episode should match the season phase.\n';
+  }
+  if (withSeason) arcBlock += buildSeasonPositionBlock(context.seasonPosition);
+
+  // Designed intent direction
+  let intentBlock = '';
+  if (context.designedIntent) {
+    const directions = {
+      slay: 'This episode is DESIGNED TO SLAY. Build toward triumph. Outfit lands, content kills, event goes perfectly. But make the audience feel the stakes — success was not guaranteed.',
+      pass: 'This episode should land solidly. Good but not perfect. Small wins, small missteps. Lala grows but the room doesn\'t part for her.',
+      safe: 'This is a transitional episode. Nothing dramatic. But plant seeds — a look from someone, a notification she ignores, a price she doesn\'t check.',
+      fail: 'This episode is DESIGNED TO FAIL. Build toward it gradually — a wrong outfit choice, a social faux pas, content that doesn\'t land. Make the audience feel it coming.',
+    };
+    intentBlock = `═══ EPISODE DIRECTION ═══\n${directions[context.designedIntent] || ''}\n`;
+  }
+
+  // Character state — exact numbers for internal monologue
+  let charBlock = '';
+  if (context.characterState) {
+    const cs = context.characterState;
+    charBlock = `═══ LALA'S STATS ═══\n🪙 ${cs.coins} coins | ⭐ ${cs.reputation}/10 rep | 🤝 ${cs.brand_trust}/10 trust | 📣 ${cs.influence}/10 influence | 😰 ${cs.stress}/10 stress\nSCRIPT DIRECTIVE: Use the exact coin number in Lala's internal monologue when she checks her balance.\n`;
+  }
+
+  return [socialBlock, taskBlock, prevBlock, arcBlock, intentBlock, charBlock].filter(Boolean).join('\n');
+}
+
+// Lala's money for the prompt: pressure, balance, the episode so far, and
+// whether she can afford the event. Shared with the Script tab's writer.
+function financialContextText(financial) {
+  let financialContext = 'Financial data not available';
+  if (financial) {
+    const emoji = financial.pressure_level === 'desperate' ? '🚨'
+      : financial.pressure_level === 'tight' ? '⚠️'
+      : financial.pressure_level === 'comfortable' ? '✅'
+      : '💰';
+    financialContext = `${emoji} FINANCIAL PRESSURE: ${financial.pressure_level.toUpperCase()}
+  Lala's balance: ${financial.balance} Prime Coins
+  This episode so far: income ${financial.total_income} Prime Coins | expenses ${financial.total_expenses} Prime Coins
+  Financial score: ${financial.financial_score || 'N/A'}`;
+    if (financial.event_cost) {
+      financialContext += `\n  Event cost: ${financial.event_cost} coins | Can afford: ${financial.can_afford ? 'YES' : 'NO — THIS CREATES TENSION'}`;
+    }
+    if (financial.pressure_level === 'desperate' || financial.pressure_level === 'tight') {
+      financialContext += `\n  SCRIPT DIRECTIVE: Lala's financial stress should bleed into her behavior — checking prices, hesitating at checkout, inner monologue about money.`;
+    }
+  }
+  return financialContext;
+}
+
 /**
  * Build the full prompt for Claude
  */
@@ -553,23 +695,7 @@ function buildFullPrompt(context) {
     : 'No scene plan — write based on standard 14-beat structure';
 
   // Financial pressure context
-  let financialContext = 'Financial data not available';
-  if (financial) {
-    const emoji = financial.pressure_level === 'desperate' ? '🚨'
-      : financial.pressure_level === 'tight' ? '⚠️'
-      : financial.pressure_level === 'comfortable' ? '✅'
-      : '💰';
-    financialContext = `${emoji} FINANCIAL PRESSURE: ${financial.pressure_level.toUpperCase()}
-  Lala's balance: ${financial.balance} Prime Coins
-  This episode so far: income ${financial.total_income} Prime Coins | expenses ${financial.total_expenses} Prime Coins
-  Financial score: ${financial.financial_score || 'N/A'}`;
-    if (financial.event_cost) {
-      financialContext += `\n  Event cost: ${financial.event_cost} coins | Can afford: ${financial.can_afford ? 'YES' : 'NO — THIS CREATES TENSION'}`;
-    }
-    if (financial.pressure_level === 'desperate' || financial.pressure_level === 'tight') {
-      financialContext += `\n  SCRIPT DIRECTIVE: Lala's financial stress should bleed into her behavior — checking prices, hesitating at checkout, inner monologue about money.`;
-    }
-  }
+  const financialContext = financialContextText(financial);
 
   // Wardrobe context
   let wardrobeContext = 'No outfit locked for this episode';
@@ -643,120 +769,7 @@ ${stateContext}
 ═══ WARDROBE ═══
 ${wardrobeContext}
 
-${(() => {
-  // Social profiles — host + guests with real voices
-  let socialBlock = '';
-  if (context.socialProfiles?.length > 0) {
-    socialBlock = '═══ CHARACTERS AT THE EVENT ═══\n';
-    if (context.socialProfiles.some(p => p.story_role !== null && p.story_role !== undefined) || context.unfeaturedGuestCount > 0) {
-      socialBlock += 'Featured guests below are the named people the episode may use; others attending are present but not story participants.\n';
-    }
-    socialBlock += context.socialProfiles.map(p => {
-      let block = `${p.creator_name || p.display_name || p.handle} (@${p.handle}, ${p.platform})
-  Archetype: ${p.archetype || 'unknown'} | Tier: ${p.celebrity_tier || 'accessible'}
-  Voice: ${p.posting_voice || 'Standard social media voice'}
-  Lala follows because: ${p.follow_motivation || 'general interest'}${p.follow_emotion ? ` (feels: ${p.follow_emotion})` : ''}`;
-      if (p.story_role) block += `\n  Story role: ${p.story_role}`;
-      if (LALA_TIES[p.lala_relationship]) block += `\n  With Lala: ${LALA_TIES[p.lala_relationship]}`;
-
-      // Character literary depth (from registry) + therapy + life simulation
-      if (p.core_belief || p.pressure_type || p.depth_level || p.core_wound) {
-        block += `\n  ── CHARACTER DEPTH ──`;
-        if (p.role_type) block += `\n  Role: ${p.role_type}${p.role_label ? ` — ${p.role_label}` : ''}`;
-        if (p.character_archetype) block += `\n  Archetype: ${p.character_archetype}`;
-        if (p.core_belief) block += `\n  Core Belief: "${p.core_belief}"`;
-        if (p.pressure_type) block += `\n  Pressure: ${p.pressure_type}${p.pressure_quote ? ` — "${p.pressure_quote}"` : ''}`;
-        if (p.depth_level) block += `\n  Depth: ${p.depth_level} (${p.depth_level === 'sparked' ? 'surface only — keep dialogue simple' : p.depth_level === 'breathing' ? 'emerging complexity — hints of inner life' : p.depth_level === 'active' ? 'full inner world — internal monologue, contradictions' : 'fully alive — nuanced reactions, wound patterns visible'})`;
-
-        // Therapy data — psychological architecture
-        if (p.core_wound) block += `\n  ── THERAPY PROFILE ──`;
-        if (p.core_wound) block += `\n  Core Wound: "${p.core_wound}"`;
-        if (p.core_desire) block += `\n  Core Desire: "${p.core_desire}"`;
-        if (p.core_fear) block += `\n  Core Fear: "${p.core_fear}"`;
-        if (p.mask_persona) block += `\n  Mask (what they show): ${p.mask_persona}`;
-        if (p.truth_persona) block += `\n  Truth (what's underneath): ${p.truth_persona}`;
-        if (p.therapy_primary_defense) block += `\n  Primary Defense: ${p.therapy_primary_defense}`;
-        if (p.signature_trait) block += `\n  Signature Trait: ${p.signature_trait}`;
-        if (p.emotional_baseline) block += `\n  Baseline: ${p.emotional_baseline}`;
-
-        // Emotional state from therapy (if available)
-        if (p.therapy_emotional_state) {
-          const tes = typeof p.therapy_emotional_state === 'string' ? JSON.parse(p.therapy_emotional_state) : p.therapy_emotional_state;
-          const highEmotions = Object.entries(tes).filter(([_, v]) => v >= 4).map(([k, v]) => `${k}(${v})`);
-          if (highEmotions.length > 0) block += `\n  High Emotions: ${highEmotions.join(', ')}`;
-        }
-
-        // Legacy personality fields
-        if (p.personality?.wound) block += `\n  Wound Pattern: ${p.personality.wound}`;
-        if (p.personality?.defense) block += `\n  Defense: ${p.personality.defense}`;
-        if (p.char_description) block += `\n  Character: ${p.char_description.slice(0, 150)}`;
-      }
-
-      block += `\n  SCRIPT DIRECTIVE: When this character speaks, use THEIR voice. ${p.depth_level === 'alive' ? `Show their wound patterns and defense mechanisms in subtle behavior.${p.core_wound ? ` Their wound ("${p.core_wound.slice(0, 60)}") should bleed through in moments of pressure.` : ''}${p.mask_persona ? ` They present as ${p.mask_persona.slice(0, 40)} but underneath they are ${(p.truth_persona || 'different').slice(0, 40)}.` : ''}` : p.depth_level === 'active' ? `Include internal contradictions — what they say vs what they mean.${p.therapy_primary_defense ? ` Default defense: ${p.therapy_primary_defense}.` : ''}` : 'Keep them consistent with their archetype.'}`;
-
-      return block;
-    }).join('\n\n');
-    if (context.unfeaturedGuestCount > 0) {
-      socialBlock += `\n\n${context.unfeaturedGuestCount} more guest${context.unfeaturedGuestCount === 1 ? '' : 's'} attending — present, but not story participants.`;
-    }
-    socialBlock += '\n';
-  }
-
-  // Social tasks — content Lala needs to create
-  let taskBlock = '';
-  if (context.socialTasks?.length > 0) {
-    const required = context.socialTasks.filter(t => t.required);
-    const before = context.socialTasks.filter(t => t.timing === 'before');
-    const during = context.socialTasks.filter(t => t.timing === 'during');
-    const after = context.socialTasks.filter(t => t.timing === 'after');
-    taskBlock = `═══ SOCIAL MEDIA TASKS (${context.socialTasks.length} total, ${required.length} required) ═══\n`;
-    if (before.length > 0) taskBlock += `BEFORE: ${before.map(t => t.label).join(', ')}\n`;
-    if (during.length > 0) taskBlock += `DURING: ${during.map(t => t.label).join(', ')}\n`;
-    if (after.length > 0) taskBlock += `AFTER: ${after.map(t => t.label).join(', ')}\n`;
-    taskBlock += 'SCRIPT DIRECTIVE: Lala must reference creating this content — filming stories, going live, angling her phone. The content tasks are part of the episode action.\n';
-  }
-
-  // Previous episode continuity
-  let prevBlock = '';
-  if (context.previousEpisode) {
-    const p = context.previousEpisode;
-    prevBlock = `═══ PREVIOUS EPISODE ═══\n"${p.title}" (Episode ${p.episode_number}) — ${p.tier?.toUpperCase()} (${p.score}/100)\n${p.narrative || ''}\nSCRIPT DIRECTIVE: Reference what happened last time — ${p.tier === 'slay' ? 'Lala is riding high from her win' : p.tier === 'fail' ? 'Lala has something to prove after last week' : 'Lala is building momentum'}.\n`;
-  }
-
-  // Arc phase
-  let arcBlock = '';
-  if (context.arcPhase) {
-    const a = context.arcPhase;
-    const phase = a.phase_title ? `Phase ${a.current_phase}: ${a.phase_title}` : `Phase ${a.current_phase}`;
-    arcBlock = `═══ SEASON ARC ═══\n${a.name || 'Current Arc'} — ${phase}\n`;
-    if (a.emotional_arc) arcBlock += `Phase emotional arc: ${a.emotional_arc}\n`;
-    arcBlock += `Emotional Temperature: ${a.emotional_temperature || 'neutral'}\n`;
-    if (a.narrative_debt_summary) arcBlock += `${a.narrative_debt_summary}\n`;
-    arcBlock += 'SCRIPT DIRECTIVE: The emotional tone of this episode should match the season phase.\n';
-  }
-  arcBlock += buildSeasonPositionBlock(context.seasonPosition);
-
-  // Designed intent direction
-  let intentBlock = '';
-  if (context.designedIntent) {
-    const directions = {
-      slay: 'This episode is DESIGNED TO SLAY. Build toward triumph. Outfit lands, content kills, event goes perfectly. But make the audience feel the stakes — success was not guaranteed.',
-      pass: 'This episode should land solidly. Good but not perfect. Small wins, small missteps. Lala grows but the room doesn\'t part for her.',
-      safe: 'This is a transitional episode. Nothing dramatic. But plant seeds — a look from someone, a notification she ignores, a price she doesn\'t check.',
-      fail: 'This episode is DESIGNED TO FAIL. Build toward it gradually — a wrong outfit choice, a social faux pas, content that doesn\'t land. Make the audience feel it coming.',
-    };
-    intentBlock = `═══ EPISODE DIRECTION ═══\n${directions[context.designedIntent] || ''}\n`;
-  }
-
-  // Character state — exact numbers for internal monologue
-  let charBlock = '';
-  if (context.characterState) {
-    const cs = context.characterState;
-    charBlock = `═══ LALA'S STATS ═══\n🪙 ${cs.coins} coins | ⭐ ${cs.reputation}/10 rep | 🤝 ${cs.brand_trust}/10 trust | 📣 ${cs.influence}/10 influence | 😰 ${cs.stress}/10 stress\nSCRIPT DIRECTIVE: Use the exact coin number in Lala's internal monologue when she checks her balance.\n`;
-  }
-
-  return [socialBlock, taskBlock, prevBlock, arcBlock, intentBlock, charBlock].filter(Boolean).join('\n');
-})()}
+${storyContextBlocks(context)}
 ═══ 14-BEAT SCENE PLAN ═══
 ${beatContext}
 
@@ -998,4 +1011,4 @@ function renderScriptText(scriptJson) {
   }).join('\n\n');
 }
 
-module.exports = { generateEpisodeScript, loadScriptContext, renderScriptText, buildFullPrompt, buildSeasonPositionBlock, eventContextBlock };
+module.exports = { generateEpisodeScript, loadScriptContext, renderScriptText, buildFullPrompt, buildSeasonPositionBlock, eventContextBlock, storyContextBlocks, financialContextText };

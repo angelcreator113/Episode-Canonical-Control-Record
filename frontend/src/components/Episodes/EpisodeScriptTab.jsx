@@ -167,6 +167,8 @@ function cueLabel(text) {
   return `${kind === 'EVENT' ? 'Event' : 'Episode intent'}${rest ? `: ${rest}` : ''}`;
 }
 
+const COVERAGE_KINDS = { deliverable: 'Deliverable', goal: 'Goal', hook: 'Forward hook', wear: 'Wear cue', phone: 'Phone moment', beat: 'Beat missing' };
+
 function parseLine(line) {
   const t = (typeof line === 'string' ? line : '').trim();
   if (!t) return null;
@@ -817,6 +819,9 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // tab audit, 2026-10-15), so nothing done meanwhile is lost or mixed in.
   const busy = generating || waitingForScript;
   const [genError, setGenError] = useState(null);
+  // What the writer covered after generating (utils/scriptCoverage.js): the
+  // beats it rewrote to cover the episode, and what is still not covered.
+  const [coverage, setCoverage] = useState(null);
   // Audit GATE-03 (2026-10-03): a script the server generated but could not
   // save. It lives here as a draft until Save keeps it; the reason is shown.
   const [unsaved, setUnsaved] = useState(null);
@@ -1252,7 +1257,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   };
 
   const handleGenerate = async (keepsLocked = false) => {
-    setGenerating(true); setGenError(null); setGuardResult(null);
+    setGenerating(true); setGenError(null); setGuardResult(null); setCoverage(null);
     const before = savedScript;
     const post = (confirmOverwrite) => api.post(`/api/v1/episode-brief/${episodeId}/generate-script`, {
       showId, ...(confirmOverwrite ? { confirmOverwrite: true } : {}),
@@ -1280,6 +1285,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
 
       // §8(j): every canonical beat should come back under its own header.
       const check = res.data.beat_check;
+      setCoverage(res.data.coverage || null);
       const beatGap = check && !check.complete
         ? ` — ⚠️ beat${check.missing?.length === 1 ? '' : 's'} ${(check.missing || []).join(', ') || '?'} came back without ${check.missing?.length === 1 ? 'its' : 'their'} header`
         : '';
@@ -1460,6 +1466,20 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
         )}
       </section>
       {genError && <div className="esp-error" role="alert">{genError}</div>}
+      {coverage && (coverage.missing?.length > 0 || coverage.fixed_beats?.length > 0) && (
+        <div className={`esp-coverage${coverage.missing?.length ? ' is-gaps' : ''}`} role="status" data-testid="script-coverage">
+          {coverage.fixed_beats?.length > 0 && <p className="esp-coverage-line">✦ The writer rewrote beat{coverage.fixed_beats.length === 1 ? '' : 's'} {coverage.fixed_beats.join(', ')} to cover what the episode needs.</p>}
+          {coverage.missing?.length > 0 && (
+            <>
+              <p className="esp-coverage-line">Still not in the script:</p>
+              <ul className="esp-coverage-list">
+                {coverage.missing.slice(0, 8).map((m, i) => <li key={`${m.kind}-${i}`}>{COVERAGE_KINDS[m.kind] || m.kind}: {m.label}{m.target ? ` (beat ${m.target})` : ''}</li>)}
+              </ul>
+            </>
+          )}
+          <button type="button" className="esp-btn is-small" onClick={() => setCoverage(null)}>Dismiss</button>
+        </div>
+      )}
       {draft.offer && (
         <div className="esp-draft" role="region" aria-label="Unsaved changes kept in this browser" data-testid="script-draft">
           <span className="esp-draft-text">
