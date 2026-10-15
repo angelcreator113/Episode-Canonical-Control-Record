@@ -166,6 +166,23 @@ JSONB fields:
 - de_foreclosure_visibility: object mapping category to integer 0-100
 - de_crack_conditions: object mapping category to text description`;
 
+/**
+ * The events the character hosts or attends and what each is for
+ * (services/characterEvents; Evoni, 2026-10-15), as a dossier section; ''
+ * when they have no Feed profile or no events.
+ */
+async function eventsSection(character) {
+  if (!character.feed_profile_id) return '';
+  try {
+    const { eventsForProfile, eventsPromptLines } = require('../services/characterEvents');
+    const lines = eventsPromptLines(await eventsForProfile(db.sequelize, character.feed_profile_id));
+    return lines ? `\n\nEVENTS THEY HOST OR ATTEND (what they put their name to):\n${lines}` : '';
+  } catch (err) {
+    console.error('[character-depth] could not read their events:', err.message);
+    return '';
+  }
+}
+
 function buildDimensionPrompt(dimension, fields) {
   return `Generate ONLY the following fields for the ${dimension} dimension:\n${fields.map(f => `- ${f}`).join('\n')}\n\nReturn a JSON object with exactly these keys.`;
 }
@@ -297,7 +314,7 @@ router.post('/:charId/generate', requireAuth, aiRateLimiter, async (req, res) =>
       return res.status(404).json({ success: false, error: 'Character not found' });
     }
 
-    const context = buildCharacterContext(character);
+    const context = buildCharacterContext(character) + await eventsSection(character);
     const userMessage = `Here is the character dossier:\n\n${context}\n\nGenerate ALL 10 depth dimensions. Return a single JSON object with all de_ fields.`;
 
     const raw = await callClaude(SYSTEM_PROMPT, userMessage, DEEP_MODEL, 8000);
@@ -347,7 +364,7 @@ router.post('/:charId/generate/:dimension', requireAuth, aiRateLimiter, async (r
       return res.status(404).json({ success: false, error: 'Character not found' });
     }
 
-    const context = buildCharacterContext(character);
+    const context = buildCharacterContext(character) + await eventsSection(character);
     const dimPrompt = buildDimensionPrompt(dimension, fields);
     const userMessage = `Here is the character dossier:\n\n${context}\n\n${dimPrompt}`;
 
