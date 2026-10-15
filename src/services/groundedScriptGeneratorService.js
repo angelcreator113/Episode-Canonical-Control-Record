@@ -123,7 +123,7 @@ async function groundedScriptInputs(episodeId, showId, models) {
   let outfitScore = null;
   try {
     const [scoreRows] = await sequelize.query(
-      `SELECT w.name, w.clothing_category, w.tier, w.aesthetic_tags
+      `SELECT w.id, w.name, w.clothing_category, w.tier, w.aesthetic_tags
        FROM episode_wardrobe ew
        JOIN wardrobe w ON w.id = ew.wardrobe_id AND w.deleted_at IS NULL
        WHERE ew.episode_id = :episodeId AND ew.deleted_at IS NULL`,
@@ -152,8 +152,15 @@ async function groundedScriptInputs(episodeId, showId, models) {
     console.error('[ScriptGen] season context failed (non-blocking):', err.message);
   }
 
+  // What can be on screen (Script tab audit, 2026-10-15): the show's phone
+  // screens, icons and overlays by name, so the script's [UI:] lines name
+  // things the Script tab can find. getAllOverlayTypes logs and returns []
+  // on a failed read.
+  const { getAllOverlayTypes } = require('./uiOverlayService');
+  const onScreen = showId ? await getAllOverlayTypes(showId, models) : [];
+
   console.log(`[ScriptGen] Prompt for episode ${episodeId} with ${scenePlan.length} planned beats`);
-  return { brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext };
+  return { brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext, onScreen };
 }
 
 const MODELS = ['claude-sonnet-4-6'];
@@ -215,6 +222,20 @@ async function generateGroundedBeat(episodeId, showId, models, { beatNumber, cur
 }
 
 // A10: every season story purpose, primary first, each with its thread.
+// The show's screens, icons and overlays by name (getAllOverlayTypes), for
+// the [UI:] lines; empty when the show has none or they could not be read.
+function onScreenContext(onScreen = []) {
+  const names = (kind) => onScreen.filter((o) => o?.name && kind(o)).map((o) => o.name).slice(0, 40);
+  // As the Script tab sorts them (frontend/src/lib/overlayUtils.js).
+  const isIcon = (o) => o.category === 'phone_icon' || o.category === 'icon';
+  const isProduction = (o) => o.category === 'production';
+  const screens = names((o) => !isIcon(o) && !isProduction(o));
+  const icons = names(isIcon);
+  const overlays = names(isProduction);
+  if (!screens.length && !icons.length && !overlays.length) return '';
+  return `\n═══ ON SCREEN ═══\n${screens.length ? `Screens: ${screens.join(', ')}\n` : ''}${icons.length ? `Icons: ${icons.join(', ')}\n` : ''}${overlays.length ? `Overlays: ${overlays.join(', ')}\n` : ''}`;
+}
+
 function seasonPurposeLines(sc) {
   // A purpose may name only a thread; it then reads as continuing that thread.
   const list = (Array.isArray(sc?.story_purposes) ? sc.story_purposes : [])
@@ -229,7 +250,7 @@ function seasonPurposeLines(sc) {
     ...purposes.map((p, n) => `${n + 1}. ${p.primary ? '[Primary] ' : ''}${p.text}${p.story_thread ? ` (thread: ${p.story_thread})` : ''}`)].join('\n');
 }
 
-function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext = null }, { only = null, lockedBeats = [] } = {}) {
+function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext = null, onScreen = [] }, { only = null, lockedBeats = [] } = {}) {
   // Every canonical beat, in order, whether or not the plan has its row
   // (§8(j): Generate Script instantiates all 14; it never invents its own).
   const planByBeat = new Map(scenePlan.map((b) => [Number(b.beat_number), b]));
@@ -331,7 +352,8 @@ ${statsContext}
 
 ═══ WARDROBE ═══
 ${wardrobeContext}
-${outfitScore ? `\n═══ LOCKED OUTFIT ═══\nLala is wearing ${outfitScore.count} pieces for this event:\n${outfitScore.items.map(i => `- ${i.name} (${i.clothing_category}, ${i.tier})`).join('\n')}\nBeat 8 (Transformation): Reference these SPECIFIC items by name as Lala gets dressed.\nBeat 11 (Event Outcome): Her outfit choice affects how the event goes — she is wearing what she chose.` : ''}
+${outfitScore ? `\n═══ LOCKED OUTFIT ═══\nLala is wearing ${outfitScore.count} pieces for this event:\n${outfitScore.items.map(i => `- ${i.name} (${i.clothing_category}, ${i.tier})${i.id ? ` [WEAR: ${i.id}]` : ''}`).join('\n')}\nBeat 8 (Transformation): Reference these SPECIFIC items by name as Lala gets dressed. Right after the line where she puts a piece on, write that piece's [WEAR: id] line exactly as shown above, once per piece.\nBeat 11 (Event Outcome): Her outfit choice affects how the event goes — she is wearing what she chose.` : ''}
+${onScreenContext(onScreen)}
 
 ═══ SCENE PLAN — 14 BEATS ═══
 ${beatContext}
@@ -351,6 +373,13 @@ Me: [JAWIHP dialogue]
 Lala: [Lala dialogue]
 [STAT: coins +X]
 [TRANSITION: description]
+
+What happens on screen goes on its own line, one moment per line, in this form (the Script tab reads these lines; write the name of a screen, icon or overlay exactly as it is listed under ON SCREEN when it is listed there):
+[UI:SHOW phone] / [UI:HIDE phone] (Lala's phone comes on screen / goes away)
+[UI:OPEN <screen>] [UI:CLICK <icon>] [UI:SCROLL <screen>] [UI:CLOSE <screen>]
+[UI:DISPLAY <overlay>] / [UI:HIDE <overlay>]
+[UI:NOTIFY <sender>: <words>] [UI:DM <sender>: <words>] [UI:POST <caption>]
+Turn each beat's "UI action" above into one or more of these lines (CLOSET_OPEN is [UI:OPEN Closet], MAIL_NOTIFICATION is a [UI:NOTIFY …] line); never write the action's own name in brackets.
 
 RULES:
 1. Beat 8 MUST reference specific wardrobe items by name

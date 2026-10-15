@@ -20,6 +20,8 @@
  *   screen".
  */
 
+const { beatNumberForLabel } = require('./beatLabelNumber');
+
 const BEAT_COUNT = 14;
 const CLOSET_CANON = 8;
 const WEAR_LINE = /^\s*\[WEAR:\s*([^\]\s]+)\s*\]\s*$/i;
@@ -33,13 +35,14 @@ function scriptBeats(scriptText) {
   const text = String(scriptText || '');
   if (!text.trim()) return [];
   if (/##\s*BEAT:/i.test(text)) {
-    return text.split(/(?=##\s*BEAT:)/i)
+    // A header starts its line; a beat's number is the header's number or the
+    // canonical beat its name names (utils/beatLabelNumber.js), else its place.
+    return text.split(/(?=^[ \t]*##\s*BEAT:)/im)
       .filter((s) => /^\s*##\s*BEAT:/i.test(s))
       .map((section, i) => {
         const lines = section.split('\n').filter((l) => l.trim());
         const label = ((lines[0] || '').match(/##\s*BEAT:\s*(.+)/i)?.[1] || '').trim();
-        const numbered = Number((label.match(/^(\d{1,2})\b/) || [])[1]);
-        return { number: numbered >= 1 && numbered <= BEAT_COUNT ? numbered : i + 1, lines: lines.slice(1) };
+        return { number: beatNumberForLabel(label) || i + 1, lines: lines.slice(1) };
       });
   }
   const lines = text.split('\n').filter((l) => l.trim());
