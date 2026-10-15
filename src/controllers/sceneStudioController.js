@@ -1796,14 +1796,41 @@ exports.generateAngleDepth = async (req, res) => {
 
 const axios = require('axios');
 
-// Generic S3 image proxy — validates URL belongs to our S3 bucket
+/**
+ * True only for an https URL on our own bucket's S3 host
+ * (<bucket>.s3.amazonaws.com or <bucket>.s3.<region>.amazonaws.com), with
+ * no port or credentials. Before (audit, 2026-10-15) a URL was accepted
+ * when it merely contained ".s3." and the bucket name anywhere, so
+ * ?url=http://169.254.169.254/...?x=.s3.<bucket> made the server fetch and
+ * return any internal address, the instance metadata included.
+ */
+function isOwnS3Url(raw) {
+  const bucket = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME || '';
+  if (!bucket || typeof raw !== 'string') return false;
+  let url;
+  try {
+    url = new URL(raw);
+  } catch (err) {
+    console.error('[DepthMapProxy] not a URL:', err.message);
+    return false;
+  }
+  if (url.protocol !== 'https:' || url.port || url.username || url.password) return false;
+  const host = url.hostname.toLowerCase();
+  const b = bucket.toLowerCase();
+  if (host === `${b}.s3.amazonaws.com`) return true;
+  // <bucket>.s3.<region>.amazonaws.com, the region an AWS region name (us-east-1).
+  const match = host.match(/^(.+)\.s3\.([a-z]{2}(?:-[a-z]+)+-\d+)\.amazonaws\.com$/);
+  return Boolean(match && match[1] === b);
+}
+
+// Generic S3 image proxy: only our own bucket's S3 host (isOwnS3Url), and
+// no redirects, so S3 cannot hand the request on elsewhere.
 function proxyS3Image(req, res, depthUrl) {
-  const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME || '';
-  if (!depthUrl || !depthUrl.includes('.s3.') || !S3_BUCKET || !depthUrl.includes(S3_BUCKET)) {
+  if (!depthUrl || !isOwnS3Url(depthUrl)) {
     return res.status(404).json({ success: false, error: 'No depth map found' });
   }
 
-  axios.get(depthUrl, { responseType: 'stream', timeout: 15000 })
+  axios.get(depthUrl, { responseType: 'stream', timeout: 15000, maxRedirects: 0 })
     .then((response) => {
       res.set('Content-Type', response.headers['content-type'] || 'image/png');
       res.set('Cache-Control', 'public, max-age=86400');
@@ -1830,10 +1857,8 @@ exports.proxyDepthMap = async (req, res) => {
     }
 
     // Allow ?url= fallback for freshly generated depth maps not yet saved
-    if (!depthUrl && req.query.url) {
-      const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME || '';
-      const allowed = S3_BUCKET && req.query.url.includes('.s3.') && req.query.url.includes(S3_BUCKET);
-      if (allowed) depthUrl = req.query.url;
+    if (!depthUrl && req.query.url && isOwnS3Url(req.query.url)) {
+      depthUrl = req.query.url;
     }
 
     proxyS3Image(req, res, depthUrl);
@@ -1857,10 +1882,8 @@ exports.proxyAngleDepthMap = async (req, res) => {
     depthUrl = angle?.depth_map_url;
 
     // Allow ?url= fallback for freshly generated depth maps not yet saved
-    if (!depthUrl && req.query.url) {
-      const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME || '';
-      const allowed = S3_BUCKET && req.query.url.includes('.s3.') && req.query.url.includes(S3_BUCKET);
-      if (allowed) depthUrl = req.query.url;
+    if (!depthUrl && req.query.url && isOwnS3Url(req.query.url)) {
+      depthUrl = req.query.url;
     }
 
     proxyS3Image(req, res, depthUrl);
@@ -1869,3 +1892,6 @@ exports.proxyAngleDepthMap = async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to fetch depth map' });
   }
 };
+
+// Exported for tests.
+exports.isOwnS3Url = isOwnS3Url;
