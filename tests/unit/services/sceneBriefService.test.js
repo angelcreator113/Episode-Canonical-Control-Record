@@ -244,7 +244,11 @@ describe('the camera follows the angle\'s label', () => {
   test('typed spellings read as the framing they name', () => {
     expect(shotKey('Close up')).toBe('CLOSE');
     expect(shotKey('CLOSE-UP')).toBe('CLOSE');
-    expect(shotKey('entrance')).toBe('DOORWAY');
+    // Not DOORWAY ("looking in"): an exterior's ENTRANCE came out as the
+    // room (audit, 2026-10-15). It frames the entrance.
+    expect(shotKey('entrance')).toBe('ENTRANCE');
+    expect(camera({ angleLabel: 'ENTRANCE' })).toMatch(/^Camera framed on the entrance/);
+    expect(shotKey('door')).toBe('DOORWAY');
     expect(shotKey('')).toBe('WIDE');
     expect(camera({ angleLabel: 'Close up' })).toBe(SHOT_CAMERAS.CLOSE);
   });

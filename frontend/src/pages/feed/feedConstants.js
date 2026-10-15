@@ -125,10 +125,14 @@ export const PROTAGONISTS = [
   },
   {
     key:'lala', label:'Book 2 · Lala', icon:'✦',
+    // Canon (Evoni, 2026-10-15; docs/CANON.md): Lala is a sentient fashion
+    // game and AI character JustAWoman created, and she does not know it.
+    // This goes into LalaVerse prompts, so it never names JustAWoman or a
+    // mother (the old "daughter" framing).
     context: {
       name:'Lala',
-      description:'Born from JustAWoman\'s world but building her own. Young, sharp, digitally native.',
-      wound:'She inherited her mother\'s ambition but not her patience.',
+      description:'A sentient fashion game character living in the LalaVerse, styling her way up. Young, sharp, digitally native. Her world feels complete and real to her.',
+      wound:'Her taste feels like instinct, and she has never asked where it came from.',
       goal:'To become something that can\'t be copied.',
       audience:'The generation that learned to perform before they learned to feel',
       detail:'The line between consuming and creating dissolved before she noticed.',

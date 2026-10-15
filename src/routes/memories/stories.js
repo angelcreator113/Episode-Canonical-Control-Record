@@ -143,7 +143,7 @@ IMMERSION RULES:
 Respond with ONLY the prose. No preamble. No explanation. No quotes around it.`;
 
     const maxTok = gen_length === 'sentence' ? 200 : 900;
-    const MODELS = ['claude-sonnet-4-6', 'claude-sonnet-4-5-20250514'];
+    const MODELS = ['claude-sonnet-4-6'];
 
     // ── STREAMING PATH ──
     if (stream) {

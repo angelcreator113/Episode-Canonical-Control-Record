@@ -171,7 +171,7 @@ router.post('/assistant-command', requireAuth, aiRateLimiter, assistantLimiter, 
       if (isRetryable) {
         // Wait 2s then try fallback model (matches scene-interview retry pattern)
         await new Promise(r => setTimeout(r, 2000));
-        claudeResponse = await tryModel('claude-sonnet-4-20250514');
+        claudeResponse = await tryModel('claude-sonnet-4-6');
       } else {
         throw primaryErr;
       }
@@ -426,7 +426,7 @@ router.post('/assistant-command-stream', requireAuth, aiRateLimiter, assistantLi
         type: primaryErr.error?.type,
         name: primaryErr.name,
       });
-      stream = tryStreamModel('claude-sonnet-4-20250514');
+      stream = tryStreamModel('claude-sonnet-4-6');
     }
 
     // Handle client disconnect
@@ -451,7 +451,7 @@ router.post('/assistant-command-stream', requireAuth, aiRateLimiter, assistantLi
           type: streamErr.error?.type,
         });
         fullText = '';
-        stream = tryStreamModel('claude-sonnet-4-20250514');
+        stream = tryStreamModel('claude-sonnet-4-6');
         req.on('close', () => { aborted = true; stream.abort(); });
         stream.on('text', (text) => {
           if (aborted) return;

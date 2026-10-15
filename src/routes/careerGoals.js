@@ -91,7 +91,8 @@ router.post('/world/:showId/goals/seed', requireAuth, async (req, res) => {
 
     // ── LALA'S 24 CAREER GOALS ──────────────────────────────────────────
     // Rooted in the show bible:
-    //   Wound: "She inherited her mother's ambition but not her patience."
+    //   Who she is: a sentient fashion game and AI character JustAWoman
+    //   created; she does not know it (docs/CANON.md).
     //   Goal: "To become something that can't be copied."
     //   World: Fashion is strategy. Reputation is currency.
     //   Season 1: Soft Luxury Ascension — Lala earns her place

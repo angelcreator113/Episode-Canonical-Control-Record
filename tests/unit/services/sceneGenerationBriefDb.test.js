@@ -53,7 +53,7 @@ describe('the Scene Brief reads through the models\' connection', () => {
   });
 
   test('regenerateAngleRefined with { SceneAngle, SceneSet } (the queue and the route) passes the connection', async () => {
-    await expect(sceneGen.regenerateAngleRefined(angle, set, ['blur'], { SceneAngle, SceneSet })).rejects.toBe(STOP);
+    await expect(sceneGen.regenerateAngleRefined(angle, set, ['SOFT_FOCUS'], { SceneAngle, SceneSet })).rejects.toBe(STOP);
     expect(mockPrepare.mock.calls[0][0]).toBe(db);
   });
 });

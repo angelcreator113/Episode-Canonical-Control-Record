@@ -1189,19 +1189,19 @@ router.post('/generate-story-multi', requireAuth, aiRateLimiter, async (req, res
     req.setTimeout(300000); // 5 min for long AI generation
     const [resultA, resultB, resultC] = await Promise.all([
       anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 6000,
         system: VOICE_SYSTEM.voice_a,
         messages: [{ role: 'user', content: promptA }],
       }),
       anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 6000,
         system: VOICE_SYSTEM.voice_b,
         messages: [{ role: 'user', content: promptB }],
       }),
       anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 6000,
         system: VOICE_SYSTEM.voice_c,
         messages: [{ role: 'user', content: promptC }],
@@ -1330,7 +1330,7 @@ router.post('/evaluate-stories', requireAuth, aiRateLimiter, async (req, res) =>
     const evalExtraCtx = evalFranchise + evalAuthorNotes + evalContinuity + evalGrowth + evalWorldState + evalCrossings;
 
     const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 16000,
       system: `You are a ruthlessly honest literary editor. Evaluate three blind versions of the same scene. Your PRIMARY task is to create a synthesised version that COMBINES the best elements from ALL three voices into an enhanced final version — do NOT simply pick the winner's text. Return ONLY valid JSON — no markdown fences, no commentary.`,
       messages: [{
@@ -1446,7 +1446,7 @@ router.post('/propose-memory', requireAuth, aiRateLimiter, async (req, res) => {
     const enrichmentCtx = continuityCtx + growthCtx + worldStateCtx;
 
     const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4000,
       system: `You are a narrative memory architect. Given a story and existing character memories, propose new memories that should be stored. IMPORTANT: Do NOT propose memories that duplicate or closely restate existing memories listed below — only propose genuinely NEW information this scene reveals. Respect the established timeline, character growth arc, and world state provided below. Return ONLY valid JSON.`,
       messages: [{
@@ -1512,7 +1512,7 @@ router.post('/propose-registry-update', requireAuth, aiRateLimiter, async (req, 
     }).join('\n');
 
     const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4000,
       system: `You are a character registry curator. After reading a story, propose specific updates to character registry profiles. Respect the character growth history, continuity timeline, and world state provided — do NOT propose changes that contradict established arcs. Return ONLY valid JSON.`,
       messages: [{
@@ -1746,7 +1746,7 @@ router.post('/scene-revelation', requireAuth, aiRateLimiter, async (req, res) =>
     }).join('\n');
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4000,
       system: `You are a literary analyst extracting character revelations from a scene.
 
