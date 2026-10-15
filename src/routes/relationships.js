@@ -399,7 +399,7 @@ router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
     let message;
     try {
       message = await claude.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 2000,
         messages: [{
           role: 'user',
@@ -871,7 +871,7 @@ router.post('/generate-family', requireAuth, aiRateLimiter, async (req, res) => 
     const claude = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const message = await claude.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 2000,
       messages: [{
         role: 'user',

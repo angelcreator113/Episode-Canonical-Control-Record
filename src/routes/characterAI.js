@@ -38,7 +38,7 @@ const { buildUniverseContext } = require('../utils/universeContext');
 // ── Anthropic ──
 const anthropic = new Anthropic();
 const PRIMARY_MODEL  = 'claude-sonnet-4-6';
-const FALLBACK_MODEL = 'claude-sonnet-4-20250514';
+const FALLBACK_MODEL = 'claude-sonnet-4-6';
 
 async function callClaude(systemPrompt, userMessage, maxTokens = 4000) {
   const model = PRIMARY_MODEL;

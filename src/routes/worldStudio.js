@@ -58,7 +58,7 @@ async function claude(system, user, maxTokens = 4000) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const msg = await client.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: maxTokens,
         system,
         messages: [{ role: 'user', content: user }],
