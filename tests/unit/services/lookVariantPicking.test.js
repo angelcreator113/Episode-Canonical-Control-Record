@@ -8,7 +8,7 @@ const { beatTimeOfDay, variantFor, applyVariant } = require('../../../src/servic
 
 const variants = {
   time: new Map([['golden_hour', 'https://x/golden.jpg'], ['night', 'https://x/night.jpg']]),
-  season: new Map([['winter', 'https://x/winter.jpg']]),
+  season: new Map([['winter', { url: 'https://x/winter.jpg', angleId: 'a-front' }]]),
 };
 const base = { url: 'https://x/base.jpg', source: 'base', label: 'Loft · Inside' };
 const front = { url: 'https://x/front.jpg', source: 'angle', label: 'Gala Hall · Front steps' };
@@ -37,8 +37,9 @@ describe('variantFor and applyVariant', () => {
     });
   });
 
-  test('the Front view takes the event\'s season', () => {
-    const v = pick({ picture: front, angleKind: 'front', beatNumber: 10 });
+  test('the Front view takes the event\'s season; another Front angle keeps its own picture', () => {
+    expect(pick({ picture: front, angleKind: 'front', angleId: 'a-doorway', beatNumber: 10 })).toBeNull();
+    const v = pick({ picture: front, angleKind: 'front', angleId: 'a-front', beatNumber: 10 });
     expect(v).toMatchObject({ kind: 'season', value: 'winter', url: 'https://x/winter.jpg' });
     expect(applyVariant(front, v, 'Gala Hall').label).toBe('Gala Hall · Front steps · Winter');
   });

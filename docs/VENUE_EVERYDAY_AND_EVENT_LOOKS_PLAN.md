@@ -34,7 +34,7 @@ This is the plan, in the order it ships. Each step is its own PR; steps that add
 
 ## 4. The right picture, automatically
 
-- Evoni, 2026-10-15 (beat times): "Before/after the event". Beats 1-9 (home, closet) are just before the event: one step earlier than its time of day (an evening event, golden hour at home; a morning one stays morning). Beats 10-12 are at the event's time. Beats 13-14 (recap, cliffhanger) are at night. With no event time, no time variant is called for.
-- A beat at a location's everyday set that shows the everyday look (its base) shows the time variant for its time; a beat showing the Front view shows the season variant for the event date's season. The event's look and dressed angles stay first at their set (L10).
+- Evoni, 2026-10-15 (beat times): "Before/after the event". Beats 1-9 (home, closet) are just before the event: one step earlier than its time of day (an evening event, golden hour at home; a morning one stays morning). Beats 10-12 are at the event's time. Beats 13-14 (recap, cliffhanger) are at night, whatever the event's time. With no event time, beats 1-12 call for no time variant.
+- A beat at a location's everyday set that shows the everyday look (its base) shows the time variant for its time; a beat showing the Front view the season was made from shows the season variant for the event date's season (another Front angle, e.g. the Doorway, keeps its own picture). The event's look and dressed angles stay first at their set (L10).
 - A variant the beat calls for that is missing keeps the plain picture, and the picture's label names the gap ("Loft · Inside (no Evening variant yet)"). It never blocks (L5).
 - Code: `lookVariantPicking` (`beatTimeOfDay`, `variantFor`, `applyVariant`), applied in `planWithAngles` (`planLocationsService`) to each beat's `location.image`, which the Beat Plan, the Scenes tab, the Scene Planner and the Script tab already show.

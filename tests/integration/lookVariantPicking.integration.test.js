@@ -43,10 +43,11 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
                VALUES (:id, :ep, :n, :name, :setId, :label, false, true, :n, false, NOW(), NOW())`,
     { id: uuid(), ep, n, name: `Beat ${n}`, setId, label });
   }
+  const frontAngle = uuid();
   const variant = (kind, value) => run(
-    `INSERT INTO location_look_variants (world_location_id, kind, value, status, source, image_url, created_at, updated_at)
-     VALUES (:loc, :kind, :value, 'complete', 'uploaded', :url, NOW(), NOW())`,
-    { loc, kind, value, url: `https://x/${value}.jpg` });
+    `INSERT INTO location_look_variants (world_location_id, scene_set_id, kind, value, status, source, image_url, source_angle_id, created_at, updated_at)
+     VALUES (:loc, :loft, :kind, :value, 'complete', 'uploaded', :url, :angle, NOW(), NOW())`,
+    { loc, loft, kind, value, url: `https://x/${value}.jpg`, angle: kind === 'season' ? frontAngle : null });
   const plan = async () => {
     const res = await auth(request(app).get(`/api/v1/episode-brief/${ep}/plan`));
     expect(res.status).toBe(200);
@@ -66,7 +67,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     }
     await run(`UPDATE world_locations SET approved_base_scene_set_id = :loft, approved_base_image_url = 'https://x/Loft-base.jpg' WHERE id = :loc`, { loft, loc });
     await run(`INSERT INTO scene_angles (id, scene_set_id, angle_name, angle_label, angle_kind, generation_status, still_image_url, beat_affinity, sort_order, created_at, updated_at)
-               VALUES (:id, :loft, 'Front steps', 'ESTABLISHING', 'front', 'complete', 'https://x/front.jpg', '[]', 0, NOW(), NOW())`, { id: uuid(), loft });
+               VALUES (:id, :loft, 'Front steps', 'ESTABLISHING', 'front', 'complete', 'https://x/front.jpg', '[]', 0, NOW(), NOW())`, { id: frontAngle, loft });
+    await run(`INSERT INTO scene_angles (id, scene_set_id, angle_name, angle_label, angle_kind, generation_status, still_image_url, beat_affinity, sort_order, created_at, updated_at)
+               VALUES (:id, :loft, 'Front door', 'DOORWAY', 'front', 'complete', 'https://x/door.jpg', '[]', 1, NOW(), NOW())`, { id: uuid(), loft });
     // An evening event in winter, used by the episode.
     await run(`INSERT INTO world_events (id, show_id, name, event_type, status, prestige, event_time, event_date, used_in_episode_id, created_at, updated_at)
                VALUES (:id, :show, 'Winter Gala', 'invite', 'used', 6, '8:00 PM', '2026-12-12', :ep, NOW(), NOW())`, { id: uuid(), show, ep });
@@ -78,6 +81,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await beat(11, loft);
     await beat(13, loft);
     await beat(3, plain);
+    await beat(12, loft, 'DOORWAY');
   });
   beforeEach(() => {
     jest.spyOn(console, 'log').mockImplementation(() => {});
@@ -91,9 +95,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(at(13)).toMatchObject({ url: 'https://x/night.jpg', label: 'Loft · Inside · Night' });
   });
 
-  it('the Front beat takes the winter variant', async () => {
+  it('the Front beat takes the winter variant; another Front angle keeps its own picture', async () => {
     const at = await plan();
     expect(at(10)).toMatchObject({ url: 'https://x/winter.jpg', source: 'variant_season', label: 'Loft · Front steps · Winter' });
+    expect(at(12)).toEqual({ url: 'https://x/door.jpg', source: 'angle', label: 'Loft · Front door' });
   });
 
   it('a missing variant keeps the plain picture and names the gap; another set is untouched', async () => {

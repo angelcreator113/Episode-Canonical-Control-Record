@@ -206,7 +206,7 @@ async function planWithAngles(sequelize, rows) {
     location.generating = Boolean(location.generating) || set?.generation_status === 'generating';
     const picture = beatPicture(location, set);
     const variant = picking.variantFor({
-      picture, angleKind: location.angle?.kind || null, everyday: Boolean(set?.everyday && !set.deleted_at),
+      picture, angleKind: location.angle?.kind || null, angleId: location.angle?.id || null, everyday: Boolean(set?.everyday && !set.deleted_at),
       variants: set ? variantsBySet.get(set.id) : null, beatNumber: r.beat_number, moment,
     });
     location.image = picking.applyVariant(picture, variant, set?.name);
