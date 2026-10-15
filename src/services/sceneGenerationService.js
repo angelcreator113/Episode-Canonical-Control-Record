@@ -520,6 +520,35 @@ function estimateDressingCost() {
   return require('./imageGenerationService').estimateImageFromImageCost();
 }
 
+/**
+ * The estimated cost of generating an angle that is not a zone, as
+ * generateAngle makes it (audit, 2026-10-15: the brief showed none):
+ *   - a pure crop of the base at its spec frame: free;
+ *   - an edit of the base (or of its zone's picture): one Flux Kontext
+ *     image, and up to CONSISTENCY_MAX_RETRIES more when the consistency
+ *     check (which needs the Anthropic key) asks for a retry (max_usd);
+ *   - no base: one Flux text-to-image.
+ */
+function estimateAngleCost(sceneAngle, sceneSet) {
+  const imageGen = require('./imageGenerationService');
+  if (!sceneSet?.base_still_url) {
+    const e = imageGen.estimateGenerationCost({ size: 'landscape' });
+    return { usd: e.usd, priced: e.priced, model: e.model, base_model: 'flux-dev', method: 'text_to_image' };
+  }
+  const onZone = String(sceneAngle?.angle_kind || '').toLowerCase() === 'extra' && sceneAngle.zone_angle_id;
+  const frame = !onZone && specFitsBase(sceneSet.scene_spec, sceneSet.base_still_url)
+    ? sceneSpecService.contractFrame(sceneSet.scene_spec, sceneAngle?.angle_label || 'WIDE') : null;
+  if (frame && frame.width >= MIN_PURE_CROP_FRACTION && frame.height >= MIN_PURE_CROP_FRACTION) {
+    return { usd: 0, priced: true, model: 'crop', base_model: 'crop', method: 'crop' };
+  }
+  const e = imageGen.estimateImageFromImageCost();
+  const retries = process.env.ANTHROPIC_API_KEY ? CONSISTENCY_MAX_RETRIES : 0;
+  return {
+    usd: e.usd, priced: e.priced, model: e.model, base_model: SCENE_DRESSING_MODEL.key, method: 'edit',
+    ...(retries && typeof e.usd === 'number' ? { max_usd: e.usd * (1 + retries) } : {}),
+  };
+}
+
 /** An event-dressed version: the approved base edited with the event layer only (S6). */
 async function generateDressedStill(sceneSet, prompt, approvedBaseUrl, { suffix = 'base' } = {}) {
   const costs = createCostCollector(`dressed still ${sceneSet.id} (${SCENE_DRESSING_MODEL.key})`);
@@ -1161,6 +1190,11 @@ Return ONLY JSON.` },
     if (Object.keys(updateFields).length) {
       await SceneSetModel.update(updateFields, { where: { id: sceneSet.id } });
     }
+    // The caller's copy is current too: Generate All passes one set to every
+    // angle, and each angle analysed the same picture again (audit,
+    // 2026-10-15), a paid Claude Vision call per angle.
+    sceneSet.visual_language = { ...updatedVl, ...vlPatch };
+    if (updateFields.canonical_description) sceneSet.canonical_description = updateFields.canonical_description;
 
     console.log(`[SceneGen] Image analysis complete: ${analysis.furniture?.length || 0} furniture, ${analysis.room_properties?.room_size || 'unknown'} room`);
     return analysis;
@@ -1766,6 +1800,10 @@ function angleBriefOptions(sceneAngle, sceneSet, { imageAnalysis = null, overrid
 // Framings that show the whole space (sceneBriefService.SHOT_CAMERAS).
 const WIDE_SHOTS = Object.freeze(['WIDE', 'ESTABLISHING', 'OVERHEAD']);
 
+// The set objects (one per batch) whose SceneSpec build failed, with the
+// base picture it failed for.
+const specBuildFailed = new WeakMap();
+
 /** True when a SceneSpec was built from this base picture (its _meta.base_still_url). */
 function specFitsBase(spec, baseUrl) {
   return Boolean(spec && baseUrl && spec._meta?.base_still_url === baseUrl);
@@ -1873,10 +1911,13 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
     // rebuilt from this base; one that cannot be rebuilt is not used.
     if (!specFitsBase(sceneSet.scene_spec, sceneSet.base_still_url)) {
       let spec = null;
-      if (imageAnalysis) {
+      // A build that failed for this picture is not paid for again by the
+      // next angle of the same batch.
+      if (imageAnalysis && specBuildFailed.get(sceneSet) !== sceneSet.base_still_url) {
         try {
           spec = await sceneSpecService.buildSceneSpec(sceneSet, SceneSet);
         } catch (specErr) {
+          specBuildFailed.set(sceneSet, sceneSet.base_still_url);
           console.warn(`[SceneGen] SceneSpec build failed (non-blocking): ${specErr.message}`);
         }
       }
@@ -2291,6 +2332,7 @@ module.exports = {
   SCENE_BASE_MODELS,
   SCENE_DRESSING_MODEL,
   estimateDressingCost,
+  estimateAngleCost,
   generateDressedStill,
   OUTPAINT_MODEL,
   isBaseModelKey,

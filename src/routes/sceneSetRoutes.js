@@ -1983,6 +1983,9 @@ router.post('/:id/brief', validateUUIDParam('id'), requireAuth, async (req, res)
       reference = await sceneGenService.zoneReferenceImage(set, SceneSet.sequelize);
       const e = sceneGenService.estimateDressingCost();
       estimate = { usd: e.usd, priced: e.priced, model: e.model, base_model: sceneGenService.SCENE_DRESSING_MODEL.key };
+    } else if (angle && !req.body?.refine) {
+      // An angle: priced as generateAngle will make it (a crop is free).
+      estimate = sceneGenService.estimateAngleCost(angle, set);
     }
     if (!angle) {
       // S6: an event-dressed version is priced as its Flux Kontext edit.
@@ -2465,12 +2468,14 @@ router.put('/:id/spec', validateUUIDParam('id'), requireAuth, async (req, res) =
       return res.status(400).json({ success: false, error: 'spec must be a JSON object' });
     }
 
-    spec._meta = spec._meta || {};
-    spec._meta.last_edited = new Date().toISOString();
-    spec._meta.source = 'user_edit';
+    // A whole spec must still be usable by the angles it drives.
+    const check = sceneSpecService.validateSpecCandidate(spec);
+    if (!check.ok) return res.status(400).json({ success: false, error: `The spec is not usable: ${check.problems.join('; ')}` });
+    const existing = set.scene_spec || set.visual_language?.scene_spec || null;
+    const saved = sceneSpecService.bindEditedSpec(spec, existing, set.base_still_url);
 
-    await SceneSet.update({ scene_spec: spec }, { where: { id: set.id } });
-    res.json({ success: true, data: spec });
+    await SceneSet.update({ scene_spec: saved }, { where: { id: set.id } });
+    res.json({ success: true, data: saved });
   } catch (err) {
     console.error('PUT /:id/spec error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -2488,7 +2493,8 @@ router.patch('/:id/spec', validateUUIDParam('id'), requireAuth, async (req, res)
       return res.status(400).json({ success: false, error: 'Request body must be a JSON object with spec fields to merge' });
     }
 
-    const merged = sceneSpecService.mergeSpecEdits(set.scene_spec, edits);
+    const existing = set.scene_spec || set.visual_language?.scene_spec || null;
+    const merged = sceneSpecService.bindEditedSpec(sceneSpecService.mergeSpecEdits(existing, edits), existing, set.base_still_url);
     await SceneSet.update({ scene_spec: merged }, { where: { id: set.id } });
     res.json({ success: true, data: merged });
   } catch (err) {
