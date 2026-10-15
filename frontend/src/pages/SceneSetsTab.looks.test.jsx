@@ -27,7 +27,7 @@ describe('SceneSetsTab Looks row (L9)', () => {
     });
     const row = screen.getByTestId('scene-set-looks-set-1');
     const figures = within(row).getAllByRole('figure');
-    expect(figures.map((f) => f.textContent)).toEqual(['Approved base', 'Velour Gala', 'Generating…Garden Brunch']);
+    expect(figures.map((f) => f.textContent)).toEqual(['Everyday look', 'Velour Gala', 'Generating…Garden Brunch']);
     expect(within(row).getByText('Velour Gala').getAttribute('href')).toBe('/shows/show-1/events/ev-1');
     expect(screen.getByTestId('scene-set-look-l1').querySelector('img').getAttribute('src')).toBe('https://x/l1.jpg');
   });

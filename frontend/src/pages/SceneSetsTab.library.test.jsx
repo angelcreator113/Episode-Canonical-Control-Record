@@ -120,7 +120,7 @@ describe('SceneSetsTab: the library', () => {
     renderAt();
     fireEvent.click(await screen.findByTestId('scene-set-open-set-9'));
     const main = screen.getByTestId('scene-set-main-bg-set-9');
-    fireEvent.click(within(main).getByRole('button', { name: /Approve as the location's base/ }));
+    fireEvent.click(within(main).getByRole('button', { name: /Use as the location's everyday look/ }));
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith('/api/v1/scene-sets/set-9/approve-base', {}));
     fireEvent.click(document.querySelector('.scene-sets-modal-close'));
     fireEvent.click(screen.getByTestId('scene-set-open-set-8'));

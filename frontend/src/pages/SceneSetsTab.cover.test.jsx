@@ -41,7 +41,7 @@ describe('helpers', () => {
 
   test('approval says what it means', () => {
     render(<ApprovedBaseRow set={{ id: 's', name: 'Hall', world_location_id: 'loc', base_still_url: 'https://x/b.jpg' }} />);
-    expect(screen.getByTestId('approved-base-s').textContent).toMatch(/original that event versions at this location are made from/);
+    expect(screen.getByTestId('approved-base-s').textContent).toMatch(/every event's look at this location is made from it/);
   });
 });
 
