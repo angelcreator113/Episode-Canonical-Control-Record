@@ -527,7 +527,9 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
     const lockedBeats = lockedNumbers.length
       ? splitScriptBeats(episodeForGuard?.script_content).beats.filter((b, i, all) => lockedNumbers.includes(b.number) && all.findIndex((x) => x.number === b.number) === i)
       : [];
-    const generated = await generateGroundedScript(episodeId, showId, models, { lockedBeats });
+    // The writer returns the script with its coverage (utils/scriptCoverage.js).
+    const written = await generateGroundedScript(episodeId, showId, models, { lockedBeats });
+    const generated = typeof written === 'string' ? written : written?.script || '';
     // Writing the script takes minutes, and the page can approve a beat or
     // save while it runs (Script tab audit, 2026-10-15). The locks kept are
     // the episode's as they are now, not as they were when the request came
@@ -576,6 +578,15 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
       beats: check.beats.map(({ number, name }) => ({ number, name })),
       beat_check: { complete: check.complete, missing: check.missing, unknown: check.unknown, out_of_order: check.outOfOrder },
     };
+    // What the saved script still does not cover, read again after the
+    // locked beats went back, and the beats the writer rewrote to cover it.
+    if (written && typeof written === 'object' && written.facts) {
+      const { scriptCoverage } = require('../utils/scriptCoverage');
+      body.coverage = {
+        missing: scriptCoverage(script, written.facts).missing.map(({ kind, label, target }) => ({ kind, label, target })),
+        fixed_beats: written.coverage?.fixed_beats || [],
+      };
+    }
     if (!saved) {
       body.code = 'SCRIPT_GENERATED_NOT_SAVED';
       body.error = `The script was generated but could not be saved: ${saveError}`;
