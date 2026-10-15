@@ -835,6 +835,36 @@ async function storeBufferInS3(buffer, setId, angleId, assetType, contentType) {
  * Extracts the S3 key from the URL and issues a DeleteObjectCommand.
  * Silently ignores errors — cleanup is best-effort.
  */
+/**
+ * An old base image is deleted only when nothing else shows it: an Inside
+ * angle is the base picture itself (useBaseAsAngle), a promoted angle keeps
+ * the URL it gave the base, and an approved base is the location's
+ * everyday look. Deleting it left those pointing at a removed file (audit,
+ * 2026-10-15). A check that cannot run keeps the file.
+ */
+async function imageStillUsed(sequelize, url) {
+  if (!sequelize) return true;
+  try {
+    const [[row]] = await sequelize.query(
+      `SELECT (EXISTS (SELECT 1 FROM scene_angles WHERE still_image_url = :url AND deleted_at IS NULL)
+            OR EXISTS (SELECT 1 FROM world_locations WHERE approved_base_image_url = :url AND deleted_at IS NULL)) AS used`,
+      { replacements: { url } });
+    return Boolean(row?.used);
+  } catch (err) {
+    console.warn(`[SceneGen] could not check whether ${url} is still used; it is kept: ${err.message}`);
+    return true;
+  }
+}
+
+async function deleteOldBaseImage(url, sequelize) {
+  if (!url) return;
+  if (await imageStillUsed(sequelize, url)) {
+    console.log(`[SceneGen] Old base image kept: an angle or an approved base still shows it (${url})`);
+    return;
+  }
+  await deleteOldS3Asset(url);
+}
+
 async function deleteOldS3Asset(url) {
   if (!url || !S3_BUCKET) return;
   try {
@@ -917,9 +947,10 @@ async function generateBaseScene(sceneSet, models, options = {}) {
       : await generateBaseStill(sceneSet, prompt, modelKey);
     const lockedSeed = null;
 
-    // Clean up old base still from S3 (best-effort)
+    // Clean up old base still from S3 (best-effort), unless something
+    // still shows it.
     if (sceneSet.base_still_url) {
-      await deleteOldS3Asset(sceneSet.base_still_url);
+      await deleteOldBaseImage(sceneSet.base_still_url, briefDb(models));
     }
 
     console.log(`[SceneGen] Still complete (${modelKey}); cost ${cost == null ? 'unpriced' : `$${cost}`}`);
@@ -2416,6 +2447,7 @@ module.exports = {
   angleBriefOptions,
   specFitsBase,
   zoneOf,
+  deleteOldBaseImage,
   isInsideBaseShot,
   needsBase,
   zoneReferenceImage,

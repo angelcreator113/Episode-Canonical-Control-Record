@@ -4,7 +4,7 @@ const express = require('express');
 const router  = express.Router();
 const { Op }  = require('sequelize');
 const multer  = require('multer');
-const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { requireAuth } = require('../middleware/auth');
 const { authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
@@ -889,16 +889,10 @@ router.post('/:id/upload-base', validateUUIDParam('id'), requireAuth, uploadScen
 
     const primaryUrl = uploadedUrls[0].url;
 
-    // Clean up old base image from S3
+    // Clean up old base image from S3 (best effort), unless an angle or an
+    // approved base still shows it (deleteOldBaseImage).
     if (set.base_still_url) {
-      try {
-        const bucketHost = `${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/`;
-        const idx = set.base_still_url.indexOf(bucketHost);
-        if (idx !== -1) {
-          const oldKey = decodeURIComponent(set.base_still_url.slice(idx + bucketHost.length));
-          await s3.send(new DeleteObjectCommand({ Bucket: S3_BUCKET, Key: oldKey }));
-        }
-      } catch (_) { /* best-effort cleanup */ }
+      await sceneGenService.deleteOldBaseImage(set.base_still_url, SceneSet.sequelize);
     }
 
     await set.update({
