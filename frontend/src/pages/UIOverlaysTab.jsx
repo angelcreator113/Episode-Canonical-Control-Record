@@ -7,7 +7,7 @@
  * Bottom: detail panel for selected screen (generate, upload, edit, delete)
  */
 import { useState, useEffect, useCallback, useRef, useMemo, Component } from 'react';
-import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Maximize, Copy, Info, Monitor, Undo2, ChevronDown, ChevronRight, ChevronLeft, GitBranch, Check } from 'lucide-react';
+import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Maximize, Copy, Info, Monitor, Undo2, ChevronDown, ChevronRight, ChevronLeft, Check } from 'lucide-react';
 import api from '../services/api';
 import { createPortal } from 'react-dom';
 import PhoneHub from '../components/PhoneHub';
@@ -1474,7 +1474,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
-  const generatedCount = overlays.filter(o => o.generated).length;
   const activeIsHome = !!activeScreen && activeScreen.id === homeScreenOf(overlays)?.id;
   const headerTiles = phoneHubTiles(overlays.filter(o => !hiddenScreens.includes(o.id)), screenDiagnostics);
   // The screen panel's status: the cards' Ready rule and their lines in one
@@ -1713,14 +1712,13 @@ export default function UIOverlaysTab({ showId: propShowId }) {
             </button>
             {/* The header Preview button was removed (Task #2016): the Preview
                 stage plays the phone inside the page. */}
-            {/* The Flow Map and the phone frame sit in "More": used less often
-                ("+ Add" only asks what you're adding, Task #2024). Batch upload,
-                the contact sheet and variants were removed (Evoni, 2026-10-07,
-                Lala's Phone step 2). */}
+            {/* The phone frame sits in "More": used less often ("+ Add" only
+                asks what you're adding, Task #2024). Batch upload, the contact
+                sheet and variants were removed (Evoni, 2026-10-07, Lala's
+                Phone step 2). The Map opens from its stage only (phone audit,
+                2026-10-15: More ▸ Flow Map was a second way to the same
+                stage). */}
             <ToolbarMenu label="More">
-              <button onClick={afterSave(() => setActiveTab('map'))} disabled={!generatedCount}>
-                <GitBranch size={13} /> Flow Map
-              </button>
               <button onClick={() => frameInputRef.current?.click()}>
                 <Monitor size={13} /> {customFrameUrl ? 'Change Frame' : 'Upload Frame'}
               </button>
