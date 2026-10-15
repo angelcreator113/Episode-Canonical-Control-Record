@@ -123,6 +123,20 @@ const shouldSkip =
     expect(await status(models.SceneSet, set.id)).toBe('generating');
   });
 
+  it('Generate All: an angle refused before its generation began is failed, not left generating', async () => {
+    // A zone on a set with no base: refused (NO_BASE) before any image call.
+    const set = await makeSet();
+    const zone = await models.SceneAngle.create({ scene_set_id: set.id, angle_label: 'WIDE', angle_name: 'Front', angle_kind: 'front', generation_status: 'pending' });
+    const res = await post(`/${set.id}/generate-all-angles`);
+    expect(res.body.angle_ids).toEqual([zone.id]);
+    let s = 'generating';
+    for (let i = 0; i < 50 && s === 'generating'; i += 1) {
+      await new Promise((r) => setTimeout(r, 100));
+      s = await status(models.SceneAngle, zone.id);
+    }
+    expect(s).toBe('failed');
+  });
+
   it('two Generate-all requests at once start each angle once', async () => {
     const set = await makeSet({ base_still_url: 'https://bucket.example/base.jpg' });
     for (const label of ['CLOSE', 'VANITY']) {

@@ -2868,12 +2868,22 @@ router.post('/:id/generate-all-angles', validateUUIDParam('id'), requireAuth, ai
     // Background generation
     const sceneGenService = require('../services/sceneGenerationService');
     const models = require('../models');
-    for (const angle of pendingAngles) {
+    for (let i = 0; i < pendingAngles.length; i += 1) {
+      const angle = pendingAngles[i];
       try {
         await sceneGenService.generateAngle(angle, set, models, briefOverrides.value ? { overrides: briefOverrides.value } : {});
       } catch (err) {
         console.error(`[BatchGen] Angle ${angle.angle_name} failed:`, err.message);
-        if (isBudgetError(err)) break; // budget reached: the rest would be refused too
+        // Claimed above: an angle refused before its generation began (no
+        // zone picture, no base) is not left generating.
+        await SceneAngle.update({ generation_status: 'failed' }, { where: { id: angle.id, generation_status: 'generating' } });
+        if (isBudgetError(err)) {
+          // Budget reached: the rest would be refused too; they go back to
+          // waiting, so the next Generate All picks them up.
+          const rest = pendingAngles.slice(i + 1).map((a) => a.id);
+          if (rest.length) await SceneAngle.update({ generation_status: 'pending' }, { where: { id: rest, generation_status: 'generating' } });
+          break;
+        }
       }
     }
     console.log(`[BatchGen] Completed batch generation for scene set: ${set.name}`);
