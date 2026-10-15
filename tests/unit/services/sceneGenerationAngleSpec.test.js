@@ -181,5 +181,10 @@ describe('a SceneSpec built from another base picture', () => {
     expect(imageGen.generateImageFromImage).toHaveBeenCalledWith(base, expect.any(String), expect.not.objectContaining({ guidanceScale: expect.anything() }));
     // No download of the base for a crop: only the generated still is fetched.
     expect(axios.get.mock.calls.map((c) => c[0])).not.toContain(base);
+    // The consistency check could not run (no key): recorded as unchecked,
+    // and no retry is spent on it.
+    expect(imageGen.generateImageFromImage).toHaveBeenCalledTimes(1);
+    expect(SceneAngle.update.mock.calls.at(-1)[0].quality_review.base_consistency)
+      .toMatchObject({ checked: false, score: null, pass: null });
   });
 });

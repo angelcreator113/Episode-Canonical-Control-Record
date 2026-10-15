@@ -371,6 +371,35 @@ export function createShowIdFor({ pageShowId, chosen, shows }) {
   return (shows || []).length === 1 ? shows[0].id : null;
 }
 export const getSceneSetJobApi = (jobId) => apiClient.get(`${API_BASE}/scene-sets/jobs/${jobId}`);
+/**
+ * True while a set or angle is 'generating' and was updated within
+ * `staleMs` (15 minutes): a row a server restart left 'generating' stops
+ * being polled. A row with no updated_at counts as live.
+ */
+export function hasLiveGeneration(sets, { now = Date.now(), staleMs = 15 * 60 * 1000 } = {}) {
+  const live = (row) => row?.generation_status === 'generating'
+    && (!row.updated_at || now - new Date(row.updated_at).getTime() < staleMs);
+  return (sets || []).some(s => live(s) || (s.angles || []).some(live));
+}
+
+/** Waits on a scene-set job: { status: 'completed' | 'failed', error? }. */
+export async function waitForJob(jobId, { intervalMs = 5000, maxPolls = 72, sleep = (ms) => new Promise(r => setTimeout(r, ms)) } = {}) {
+  let errors = 0;
+  for (let i = 0; i < maxPolls; i++) {
+    await sleep(intervalMs);
+    try {
+      const job = (await getSceneSetJobApi(jobId)).data?.data;
+      if (job && (job.status === 'completed' || job.status === 'failed')) return job;
+      errors = 0;
+    } catch (err) {
+      console.error('[SceneSets] job status check failed:', err);
+      if (err.response?.status === 404) return { status: 'failed', error: 'The job was not found' };
+      errors += 1;
+      if (errors >= 5) return { status: 'failed', error: 'Could not reach the server to check the job' };
+    }
+  }
+  return { status: 'failed', error: 'Still running after 6 minutes; the video will show on the card when it is ready' };
+}
 export const getGenerationCheckApi = () => apiClient.get(`${API_BASE}/scene-sets/generation-check`);
 
 // Spec / refinement
@@ -1223,6 +1252,31 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
     }
     setSavingName(false);
     setEditingName(false);
+  };
+
+  // The exterior video: one job per angle at a time; the button waits on it
+  // and the card refreshes when the video is there.
+  const [videoBusy, setVideoBusy] = useState({});
+  const handleMakeVideo = async (angle) => {
+    setVideoBusy(prev => ({ ...prev, [angle.id]: true }));
+    try {
+      const r = await apiClient.post(`${API_BASE}/scene-sets/${set.id}/angles/${angle.id}/generate-video`);
+      const jobId = r.data?.data?.jobId;
+      if (!r.data?.success || !jobId) { showToast(r.data?.error || 'Video failed', 'error'); return; }
+      showToast(r.data.data.existing ? 'This angle\'s video is already being made' : 'Exterior video started (about a minute)');
+      const job = await waitForJob(jobId);
+      if (job.status === 'completed') {
+        showToast('Exterior video ready');
+        if (onRefresh) await onRefresh();
+      } else {
+        showToast(job.error || 'Video failed', 'error');
+      }
+    } catch (err) {
+      console.error('[SceneSets] video failed:', err);
+      showToast(err.response?.data?.error || 'Video failed', 'error');
+    } finally {
+      setVideoBusy(prev => { const next = { ...prev }; delete next[angle.id]; return next; });
+    }
   };
 
   const handleRenameAngle = async (angleId, newLabel) => {
@@ -2084,18 +2138,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                                   className="scene-sets-angle-row-btn"
                                   data-testid={`angle-video-${a.id}`}
                                   title="Make the exterior video from this Front zone (about a minute)"
-                                  onClick={async () => {
-                                    try {
-                                      const r = await apiClient.post(`${API_BASE}/scene-sets/${set.id}/angles/${a.id}/generate-video`);
-                                      if (r.data?.success) showToast('Exterior video generation started (~1 min)');
-                                      else showToast(r.data?.error || 'Video failed', 'error');
-                                    } catch (err) {
-                                      console.error('[SceneSets] video failed:', err);
-                                      showToast(err.response?.data?.error || 'Video failed', 'error');
-                                    }
-                                  }}
+                                  disabled={Boolean(videoBusy[a.id])}
+                                  onClick={() => handleMakeVideo(a)}
                                 >
-                                  🎬 Video
+                                  {videoBusy[a.id] ? <><Loader size={10} className="spin" /> Making video…</> : '🎬 Video'}
                                 </button>
                               )}
                               {isComplete && (
@@ -2946,13 +2992,10 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
     } catch { /* silent */ }
   }, []);
 
-  // Auto-poll while any generation is in progress
+  // Auto-poll while a generation is in progress (one touched in the last 15
+  // minutes: a row left 'generating' by a server restart is not polled forever)
   useEffect(() => {
-    const hasGenerating = sets.some(s =>
-      s.generation_status === 'generating' ||
-      s.angles?.some(a => a.generation_status === 'generating')
-    );
-    if (!hasGenerating) return;
+    if (!hasLiveGeneration(sets)) return;
     const timer = setTimeout(fetchSets, 5000);
     return () => clearTimeout(timer);
   }, [sets, fetchSets]);

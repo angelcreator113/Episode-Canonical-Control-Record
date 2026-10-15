@@ -1165,8 +1165,12 @@ Return ONLY JSON.` },
  * Returns a consistency score (0-100) and list of discrepancies.
  * Used to auto-retry if the generated angle drifted too far from the base.
  */
+// A check that could not run says so (checked: false, score null); it was
+// recorded as a perfect 100, which hid every failed check.
+const uncheckedConsistency = (reason) => ({ checked: false, score: null, issues: [], pass: null, reason });
+
 async function checkAngleConsistency(baseImageUrl, angleImageUrl, angleName) {
-  if (!process.env.ANTHROPIC_API_KEY) return { score: 100, issues: [], pass: true };
+  if (!process.env.ANTHROPIC_API_KEY) return uncheckedConsistency('ANTHROPIC_API_KEY not configured');
 
   try {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -1198,15 +1202,20 @@ Score guide: 90+ = excellent (same room clearly), 70-89 = acceptable (minor drif
 
     const text = response.content?.[0]?.text || '';
     const match = text.match(/\{[\s\S]*\}/);
-    if (!match) return { score: 100, issues: [], pass: true };
+    if (!match) {
+      console.warn(`[SceneGen] Consistency check for "${angleName}" returned no JSON`);
+      return uncheckedConsistency('The check returned no result');
+    }
 
     const result = JSON.parse(match[0]);
-    result.pass = (result.score || 0) >= 70;
+    if (typeof result.score !== 'number') return uncheckedConsistency('The check returned no score');
+    result.checked = true;
+    result.pass = result.score >= 70;
     console.log(`[SceneGen] Consistency check for "${angleName}": score=${result.score}, pass=${result.pass}, issues=${result.issues?.length || 0}`);
     return result;
   } catch (err) {
     console.warn(`[SceneGen] Consistency check failed (non-blocking): ${err.message}`);
-    return { score: 100, issues: [], pass: true };
+    return uncheckedConsistency(err.message);
   }
 }
 
@@ -1979,7 +1988,9 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
       consistencyCheck = await checkAngleConsistency(referenceImageForEdit, stillUrl, sceneAngle.angle_name);
       let retryCount = 0;
 
-      while ((consistencyCheck?.score || 0) < CONSISTENCY_MIN_SCORE && retryCount < CONSISTENCY_MAX_RETRIES) {
+      // Only a check that ran and scored low retries: one that could not run
+      // is no evidence the angle drifted.
+      while (consistencyCheck?.checked && consistencyCheck.score < CONSISTENCY_MIN_SCORE && retryCount < CONSISTENCY_MAX_RETRIES) {
         retryCount += 1;
         console.warn(`[SceneGen] Consistency score ${consistencyCheck.score} below ${CONSISTENCY_MIN_SCORE} for ${angleLabel}; retrying (${retryCount}/${CONSISTENCY_MAX_RETRIES})`);
 
@@ -2013,8 +2024,10 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
     const qualityReview = sceneAngle.quality_review || {};
     if (consistencyCheck) {
       qualityReview.base_consistency = {
+        checked: Boolean(consistencyCheck.checked),
         score: consistencyCheck.score,
-        pass: (consistencyCheck.score || 0) >= CONSISTENCY_MIN_SCORE,
+        pass: consistencyCheck.checked ? consistencyCheck.score >= CONSISTENCY_MIN_SCORE : null,
+        ...(consistencyCheck.checked ? {} : { reason: consistencyCheck.reason || null }),
         issues: consistencyCheck.issues || [],
         validated_at: new Date().toISOString(),
         threshold: CONSISTENCY_MIN_SCORE,

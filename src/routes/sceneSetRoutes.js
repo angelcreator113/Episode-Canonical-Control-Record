@@ -1456,6 +1456,15 @@ router.post('/:id/angles/:angleId/generate-video', validateUUIDParam('id'), requ
     }
 
     await ensureGenerationJobsTable();
+    // A second click while this angle's video is still queued or running
+    // gets that job back, not another paid one.
+    const running = await GenerationJob.findOne({
+      where: { job_type: 'generate_angle_video', scene_angle_id: angle.id, status: ['queued', 'processing'] },
+      order: [['created_at', 'DESC']],
+    });
+    if (running) {
+      return res.status(202).json({ success: true, data: { jobId: running.id, status: running.status, existing: true } });
+    }
     const job = await GenerationJob.create({
       job_type: 'generate_angle_video',
       scene_set_id: set.id,

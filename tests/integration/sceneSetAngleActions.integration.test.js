@@ -8,6 +8,8 @@
  *     waited ten minutes on the rest; failed angles were never retried.
  *     angle_ids names the angles asked for (pending or failed); the reply
  *     names the ones queued and how many are left.
+ *   - Video: a second click while the angle's video job is queued gets
+ *     that job back instead of a second paid one.
  * The image generation itself is mocked.
  */
 jest.unmock('uuid');
@@ -85,6 +87,18 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(res.body.angle_ids).toEqual([ids[1], ids[2], ids[3]]);
     expect(res.body.remaining).toBe(1);
     expect(await statusOf(ids[0])).toBe('failed');
+  });
+
+  test('a second Video click while the first job is queued gets that job, not another paid one', async () => {
+    const url = `/api/v1/scene-sets/${setId}/angles/${ids[4]}/generate-video`;
+    const first = await auth(request(app).post(url)).send({});
+    expect(first.status).toBe(202);
+    const second = await auth(request(app).post(url)).send({});
+    expect(second.status).toBe(202);
+    expect(second.body.data).toMatchObject({ jobId: first.body.data.jobId, existing: true });
+    const [[{ n }]] = await run(`SELECT COUNT(*)::int AS n FROM generation_jobs WHERE scene_angle_id = :id AND job_type = 'generate_angle_video'`, { id: ids[4] });
+    expect(n).toBe(1);
+    await run('DELETE FROM generation_jobs WHERE scene_angle_id = :id', { id: ids[4] });
   });
 
   test('angle_ids that are not ids are refused', async () => {
