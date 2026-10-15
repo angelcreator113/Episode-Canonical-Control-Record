@@ -101,6 +101,26 @@ const SHOT_CAMERAS = Object.freeze({
   OTHER: 'A composition suited to this place.',
 });
 
+// Typed and template spellings of the same framing ("Close up", CLOSE-UP,
+// ENTRANCE) read as the framing they name, not as a wide shot.
+const SHOT_ALIASES = Object.freeze({
+  CLOSE_UP: 'CLOSE', CLOSEUP: 'CLOSE', DETAIL: 'CLOSE',
+  DOOR: 'DOORWAY', ENTRANCE: 'DOORWAY', ENTRY: 'DOORWAY',
+  TOP_DOWN: 'OVERHEAD', BIRDS_EYE: 'OVERHEAD',
+  ESTABLISHING_SHOT: 'ESTABLISHING', EXTERIOR: 'ESTABLISHING',
+  WIDE_SHOT: 'WIDE',
+});
+/** The SHOT_CAMERAS key a label names ('Close up' → CLOSE), else the label in key form. */
+function shotKey(label) {
+  const key = String(label || 'WIDE').toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'WIDE';
+  return SHOT_ALIASES[key] || key;
+}
+// The labels that name no framing of their own: a zone's establishing view
+// stands in for them (L14 b).
+const GENERIC_SHOTS = Object.freeze(['WIDE', 'ESTABLISHING', 'OTHER']);
+/** A label outside SHOT_CAMERAS (BED, RACKS, BAR …) frames the thing it names. */
+const labelCamera = (key) => `Camera framed on the ${key.toLowerCase().replace(/_/g, ' ')}: it fills most of the frame, with enough of the space around it to place it.`;
+
 // Room for the characters, laid over the image later, placed by angle
 // (Evoni, 2026-10-02: "an open patch of floor in the foreground where a
 // person could stand, with the room fully dressed around it" in place of
@@ -297,12 +317,25 @@ function buildSceneBrief({
   }
 
   // ── The shot ──
-  const zoneShot = zone ? zoneCamera(zone, clean(set.name || location?.name || 'the place')) : null;
-  add('shot', 'camera', 'Camera', sentence(zoneShot || cameraDirection || SHOT_CAMERAS[angle] || SHOT_CAMERAS.WIDE), 'venue', true);
+  // The image is what the card's label says. An angle's camera direction,
+  // else the shot its label names, sets the camera. A zone (L14 b; Evoni,
+  // 2026-10-15) is its establishing view whatever its camera direction;
+  // only a label naming a shot of its own still wins there, so a DOORWAY on
+  // the Front zone is the doorway looking in, not the exterior.
+  const key = shotKey(angle);
+  const labelShot = SHOT_CAMERAS[key] || labelCamera(key);
+  const namedShot = !GENERIC_SHOTS.includes(key) && SHOT_CAMERAS[key] ? SHOT_CAMERAS[key] : null;
+  const zoneShot = zone && !namedShot
+    ? zoneCamera(zone, clean(set.name || location?.name || 'the place'))
+    : null;
+  const camera = zone
+    ? (namedShot || zoneShot || cameraDirection || labelShot)
+    : (cameraDirection || labelShot);
+  add('shot', 'camera', 'Camera', sentence(camera), 'venue', true);
   if (requiredFeatures) add('shot', 'required_features', 'Must be visible', sentence(requiredFeatures), 'venue');
-  if (zoneShot) add('shot', 'continuity', 'Continuity', ZONE_CONTINUITY, 'venue');
+  if (zone && ZONE_CAMERAS[String(zone.kind || '').toLowerCase()]) add('shot', 'continuity', 'Continuity', ZONE_CONTINUITY, 'venue');
   else if (continuity) add('shot', 'continuity', 'Continuity', 'The same room as the reference image: same walls, furniture and decor; only the camera moved.', 'venue');
-  add('shot', 'overlay_space', 'Space for characters', overlaySpace(zoneShot ? 'WIDE' : angle), 'venue');
+  add('shot', 'overlay_space', 'Space for characters', overlaySpace(zoneShot ? 'WIDE' : key), 'venue');
 
   // ── The environment ──
   // Q4: the look's lighting, else the event's time; for an undressed base,
@@ -343,7 +376,7 @@ function buildSceneBrief({
   const dressing = lookDressing
     ? Boolean(location?.approved_base_image_url && event)
     : Boolean(
-      location?.approved_base_image_url && event && angle === 'WIDE' && !continuity && !zone
+      location?.approved_base_image_url && event && key === 'WIDE' && !continuity && !zone
       && (!set.id || set.id !== location.approved_base_scene_set_id)
     );
 
@@ -397,16 +430,30 @@ function briefToPrompt(brief) {
   const byLayer = (layer) => (brief?.lines || []).filter((l) => l.layer === layer && l.text).map((l) => l.text);
   const join = (parts) => parts.join(' ').replace(/\s+/g, ' ').trim();
   const rules = join(brief?.rules || BRIEF_RULES);
+  // A brief made from a reference image (an angle or a zone: it has a
+  // continuity line) leads with the shot: the image model edits the
+  // reference, and a camera line after the whole room's description reads
+  // as a description of the reference, so the camera barely moves.
+  const fromReference = (brief?.lines || []).some((l) => l.key === 'continuity' && l.text);
   const body = brief?.mode === 'event_dressing'
     ? join([DRESSING_KEEP, ...byLayer('event'), DRESSING_END])
-    : join([
-      ...byLayer('place'),
-      FURNISHED,
-      ...byLayer('event'),
-      ...byLayer('shot'),
-      ...byLayer('environment'),
-      'Photorealistic.',
-    ]);
+    : join(fromReference
+      ? [
+        ...byLayer('shot'),
+        ...byLayer('place'),
+        FURNISHED,
+        ...byLayer('event'),
+        ...byLayer('environment'),
+        'Photorealistic.',
+      ]
+      : [
+        ...byLayer('place'),
+        FURNISHED,
+        ...byLayer('event'),
+        ...byLayer('shot'),
+        ...byLayer('environment'),
+        'Photorealistic.',
+      ]);
   const room = MAX_PROMPT - rules.length - 1;
   const cut = body.length > room ? `${body.slice(0, room - 3)}...` : body;
   return `${cut} ${rules}`;
@@ -478,6 +525,7 @@ module.exports = {
   BRIEF_RULES,
   FURNISHED,
   SHOT_CAMERAS,
+  shotKey,
   ZONE_CAMERAS,
   timeOfDayFromEventTime,
   seasonFromDate,

@@ -137,10 +137,10 @@ describe('SceneGenerationService', () => {
       expect(result).toContain('Wide establishing shot');
     });
 
-    it('should default to WIDE for unknown angle labels', () => {
+    it('frames what an unknown angle label names, not the WIDE shot', () => {
       const result = buildPrompt(makeSceneSet({ canonical_description: '' }), 'NONEXISTENT');
-      expect(result).toContain('Wide establishing shot');
-      expect(result).toContain('Wide establishing shot');
+      expect(result).toContain('Camera framed on the nonexistent');
+      expect(result).not.toContain('Wide establishing shot');
     });
 
     it('should use customCameraDirection when provided', () => {
