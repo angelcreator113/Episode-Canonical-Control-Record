@@ -448,3 +448,10 @@
 .esp-history-note, .esp-history-empty { font-size: 12px; color: var(--lala-ink-muted); }
 .esp-draft { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--lala-gold); border-radius: 8px; background: var(--lala-parchment); font-size: 13px; color: var(--lala-ink); }
 .esp-draft-text { flex: 1 1 220px; }
+
+/* What the writer covered after generating (Script tab, 2026-10-15). */
+.esp-coverage { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--lala-gold); border-radius: 8px; background: var(--lala-parchment); font-size: 13px; color: var(--lala-ink); }
+.esp-coverage.is-gaps { border-color: var(--warning-text, var(--lala-gold)); }
+.esp-coverage-line { margin: 0 0 6px; }
+.esp-coverage-list { margin: 0 0 8px; padding-left: 18px; }
+.esp-coverage-list li { overflow-wrap: anywhere; }

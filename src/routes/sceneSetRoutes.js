@@ -2212,6 +2212,85 @@ router.delete('/:id/approve-base', validateUUIDParam('id'), requireAuth, async (
   }
 });
 
+// ─── Time and season variants of the everyday look ───────────────────────────
+// Evoni, 2026-10-15 (docs/VENUE_EVERYDAY_AND_EVENT_LOOKS_PLAN.md step 2):
+// a venue's everyday look at each time of day (a re-light of it) and in each
+// season (a re-season of its Front view). :id is the location's everyday set
+// (its approved base); locationLookVariantService holds the rules.
+const lookVariantError = (res, err, label) => {
+  const { LookVariantError } = require('../services/locationLookVariantService');
+  if (err instanceof LookVariantError) return res.status(err.status).json({ success: false, code: err.code, error: err.message });
+  console.error(`Scene Sets ${label} error:`, err);
+  return res.status(500).json({ success: false, error: err.message });
+};
+const variantUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Only JPEG, PNG, and WebP images are allowed'));
+  },
+}).fields([{ name: 'image', maxCount: 1 }, { name: 'images', maxCount: 1 }]);
+
+router.get('/:id/look-variants', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const { listVariants } = require('../services/locationLookVariantService');
+    res.json({ success: true, data: await listVariants(SceneSet.sequelize, req.params.id) });
+  } catch (err) {
+    lookVariantError(res, err, 'GET /:id/look-variants');
+  }
+});
+
+router.post('/:id/look-variants/:kind/:value/estimate', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const { planVariant } = require('../services/locationLookVariantService');
+    res.json({ success: true, data: await planVariant(SceneSet.sequelize, { setId: req.params.id, kind: req.params.kind, value: req.params.value }) });
+  } catch (err) {
+    lookVariantError(res, err, 'POST /:id/look-variants/estimate');
+  }
+});
+
+router.post('/:id/look-variants/:kind/:value/generate', validateUUIDParam('id'), requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const { startVariant } = require('../services/locationLookVariantService');
+    const { result, run } = await startVariant(SceneSet.sequelize, { setId: req.params.id, kind: req.params.kind, value: req.params.value });
+    res.status(202).json({ success: true, data: result });
+    await run();
+  } catch (err) {
+    if (!res.headersSent) return lookVariantError(res, err, 'POST /:id/look-variants/generate');
+    console.error('Scene Sets look variant generate error after reply:', err);
+  }
+});
+
+router.post('/:id/look-variants/:kind/:value/upload', validateUUIDParam('id'), requireAuth, variantUpload, async (req, res) => {
+  try {
+    const file = [...(req.files?.images || []), ...(req.files?.image || [])][0];
+    if (!file) return res.status(400).json({ success: false, error: 'No image file provided' });
+    const { uploadVariant } = require('../services/locationLookVariantService');
+    const { kind, value } = req.params;
+    const storeImage = async (set) => {
+      const ext = file.mimetype === 'image/png' ? 'png' : file.mimetype === 'image/webp' ? 'webp' : 'jpg';
+      const key = `scene-sets/${set.id}/variants/${kind}-${value}-${Date.now()}.${ext}`;
+      await s3.send(new PutObjectCommand({
+        Bucket: S3_BUCKET, Key: key, Body: file.buffer, ContentType: file.mimetype, CacheControl: 'max-age=31536000',
+      }));
+      return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${key}`;
+    };
+    res.json({ success: true, data: await uploadVariant(SceneSet.sequelize, { setId: req.params.id, kind, value, storeImage }) });
+  } catch (err) {
+    lookVariantError(res, err, 'POST /:id/look-variants/upload');
+  }
+});
+
+router.delete('/:id/look-variants/:kind/:value', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const { removeVariant } = require('../services/locationLookVariantService');
+    res.json({ success: true, data: await removeVariant(SceneSet.sequelize, { setId: req.params.id, kind: req.params.kind, value: req.params.value }) });
+  } catch (err) {
+    lookVariantError(res, err, 'DELETE /:id/look-variants');
+  }
+});
+
 router.post('/:id/promote-to-base', validateUUIDParam('id'), requireAuth, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);

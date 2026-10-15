@@ -7,6 +7,8 @@ import { fetchAllPages } from '../lib/fetchAllPages';
 import { isAppPath } from '../utils/sceneSets';
 import EventLookImage from '../components/EventPackage/EventLookImage';
 import DressedAngles from '../components/SceneSets/DressedAngles';
+import CharacterHomes, { notifyCharacterPlacesChanged } from '../components/SceneSets/CharacterHomes';
+import LookVariants from '../components/SceneSets/LookVariants';
 import './SceneSetsTab.css';
 import { BaseModelSelect } from '../components/SceneModelComparison';
 import SceneBriefConfirm from '../components/SceneBriefConfirm';
@@ -288,7 +290,7 @@ export function SetWorldLocationSelect({ set, onSaved, onError }) {
     return (
       <div className="scene-sets-location-locked" data-testid={`set-location-${set.id}`}>
         <span>{name || 'Linked'}</span>
-        <span className="scene-sets-location-hint">Its base is this location's approved base. Un-approve it to change the location.</span>
+        <span className="scene-sets-location-hint">Its base is this location's everyday look. Un-approve it to change the location.</span>
       </div>
     );
   }
@@ -961,7 +963,7 @@ export function LooksRow({ set, focusZone = null, onToast }) {
         {set.base_approved && set.base_still_url && (
           <figure className="scene-sets-look" data-testid={`scene-set-look-base-${set.id}`}>
             <img src={set.base_still_url} alt="" />
-            <figcaption>Approved base</figcaption>
+            <figcaption>Everyday look</figcaption>
           </figure>
         )}
         {looks.map((l) => (
@@ -1011,9 +1013,9 @@ export function ApprovedBaseRow({ set, onToast = () => {}, onRefresh = () => {} 
   if (set.base_approved) {
     return (
       <div className="scene-sets-approved-row" data-testid={`approved-base-${set.id}`}>
-        <span className="scene-sets-approved-badge"><ShieldCheck size={11} /> Approved base</span>
+        <span className="scene-sets-approved-badge"><ShieldCheck size={11} /> Everyday look</span>
         <button type="button" className="scene-sets-approved-btn" disabled={busy}
-          onClick={() => act(unapproveBaseApi, `${set.name} is no longer the approved base`)}>
+          onClick={() => act(unapproveBaseApi, `${set.name} is no longer the location's everyday look`)}>
           Un-approve
         </button>
         <span className="scene-sets-approved-hint">Event versions at this location are made from this image. It can't be replaced until it is un-approved.</span>
@@ -1023,7 +1025,7 @@ export function ApprovedBaseRow({ set, onToast = () => {}, onRefresh = () => {} 
   if (set.location_approved_base) {
     return (
       <div className="scene-sets-approved-row" data-testid={`approved-base-${set.id}`}>
-        <span className="scene-sets-approved-note">Event versions here are made from this location's approved base.</span>
+        <span className="scene-sets-approved-note">Event looks here are made from this location's everyday look.</span>
       </div>
     );
   }
@@ -1031,17 +1033,17 @@ export function ApprovedBaseRow({ set, onToast = () => {}, onRefresh = () => {} 
     return (
       <div className="scene-sets-approved-row" data-testid={`approved-base-${set.id}`}>
         <button type="button" className="scene-sets-approved-btn" disabled={busy}
-          onClick={() => act(approveBaseApi, `${set.name} is now the location's approved base`)}>
-          <ShieldCheck size={11} /> Approve as the location's base
+          onClick={() => act(approveBaseApi, `${set.name} is now the location's everyday look`)}>
+          <ShieldCheck size={11} /> Use as the location's everyday look
         </button>
-        <span className="scene-sets-approved-hint">Approving makes this the original that event versions at this location are made from, and locks it until un-approved.</span>
+        <span className="scene-sets-approved-hint">The everyday look is the place as it usually is, undressed: every event's look at this location is made from it. It stays locked until un-approved.</span>
       </div>
     );
   }
   return null;
 }
 
-const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZone = null, onGenerateBase, onRegenerateBase, onUploadBase, onUploadAngleImage, onGenerateAngle, onGenerateAll, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, specStage, allShows, allEpisodes, onLoadEpisodes, onToast, onRefresh, defaultRole = null, onMakeDefault, hideShow = false, onUploadAngles }) {
+const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZone = null, onGenerateBase, onRegenerateBase, onUploadBase, onUploadAngleImage, onGenerateAngle, onGenerateAll, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, specStage, allShows, allEpisodes, onLoadEpisodes, onToast, onRefresh, defaultRole = null, onMakeDefault, onDefaultsChanged, hideShow = false, onUploadAngles }) {
   const fileInputRef = useRef(null);
   const menuRef = useRef(null);
   const isGenerating = isGeneratingProp;
@@ -2230,6 +2232,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                         un-approved. */}
                     <ApprovedBaseRow set={set} onToast={showToast} onRefresh={onRefresh} />
                     <LooksRow set={set} focusZone={focused ? focusZone : null} onToast={showToast} />
+                    {/* 2026-10-15: which characters live here (their home, closet or another place). */}
+                    {set.show_id && <CharacterHomes set={set} onToast={showToast} onDefaultsChanged={onDefaultsChanged} />}
+                    {/* 2026-10-15: the everyday look at each time of day and in each season. */}
+                    {set.base_approved && <LookVariants setId={set.id} onToast={showToast} />}
                     {!set.base_approved && !set.location_approved_base && !(set.world_location_id && set.base_still_url)
                       && (set.looks || []).length === 0 && eventLookCount === 0 && (
                       <p className="scene-sets-ws-empty">No events use this set yet. When an event is held here, its look is made on this tab.</p>
@@ -2958,12 +2964,24 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
     return null;
   };
 
+  // Linking the lead's home or closet (CharacterHomes) changes the show's defaults.
+  const refreshSceneDefaults = useCallback(async (showId) => {
+    try {
+      const res = await getSceneDefaultsApi(showId);
+      setSceneDefaults((prev) => ({ ...prev, [String(showId)]: res.data?.scene_defaults || {} }));
+    } catch (err) {
+      console.error('[SceneSetsTab] scene defaults refresh failed:', err);
+    }
+  }, []);
+
   const handleMakeDefault = useCallback(async (set) => {
     const key = DEFAULT_KEY[set.scene_type];
     if (!key || !set.show_id) return;
     try {
       const res = await putSceneDefaultsApi(set.show_id, { [key]: set.id });
       setSceneDefaults((prev) => ({ ...prev, [String(set.show_id)]: res.data?.scene_defaults || {} }));
+      // The show's defaults are its lead's home and closet: the cards' chips follow.
+      notifyCharacterPlacesChanged(set.show_id);
       showToast(`${set.name} is now the default ${key === 'closet_set_id' ? 'closet' : 'home'}`);
     } catch (err) {
       console.error('[SceneSetsTab] make default failed:', err);
@@ -3957,6 +3975,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
               onRefresh={fetchSets}
               defaultRole={defaultRoleOf(set)}
               onMakeDefault={handleMakeDefault}
+              onDefaultsChanged={refreshSceneDefaults}
               hideShow={activeScope === 'show'}
             />
           ))}

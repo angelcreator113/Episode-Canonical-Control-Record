@@ -9,6 +9,7 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 const { latestWorldSnapshotForShow } = require('./worldSnapshotForShow');
+const { careerBlock } = require('./scriptCareerService');
 
 let client = null;
 function getClient() {
@@ -159,8 +160,29 @@ async function groundedScriptInputs(episodeId, showId, models) {
   const { getAllOverlayTypes } = require('./uiOverlayService');
   const onScreen = showId ? await getAllOverlayTypes(showId, models) : [];
 
+  // The rest of what the Script Writer page's writer reads (Evoni,
+  // 2026-10-15: "when a script is being generated what information is it
+  // using?"): her career at the event (deal, deliverables, goals), her
+  // money, who is at the event, the content she must make, the previous
+  // episode, the arc and her stats. One loader for both writers
+  // (episodeScriptWriterService.loadScriptContext), so they read the same
+  // facts. A failed read leaves the script to what is above.
+  let story = null;
+  try {
+    const { loadScriptContext } = require('./episodeScriptWriterService');
+    story = await loadScriptContext(episodeId, showId, models);
+  } catch (err) {
+    console.error('[ScriptGen] story context failed (non-blocking):', err.message);
+  }
+  // The locked look as the Script tab and the Script Writer read it
+  // (approved pieces, no attachments), when that read found one.
+  if (Array.isArray(story?.wardrobe) && story.wardrobe.length) {
+    outfitScore = { items: story.wardrobe, count: story.wardrobe.length };
+  }
+  if (!eventData && story?.event) eventData = story.event;
+
   console.log(`[ScriptGen] Prompt for episode ${episodeId} with ${scenePlan.length} planned beats`);
-  return { brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext, onScreen };
+  return { brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext, onScreen, story };
 }
 
 const MODELS = ['claude-sonnet-4-6'];
@@ -174,6 +196,9 @@ async function writeWith(prompt, maxTokens, attempts) {
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       try {
         const response = await getClient().messages.create({ model, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] });
+        // A reply cut off at its token limit is noted, so the coverage
+        // check knows the last beats may be missing.
+        if (response.stop_reason === 'max_tokens') console.warn(`[ScriptGen] ${model} reply hit its ${maxTokens}-token limit`);
         return response.content[0]?.text || '';
       } catch (err) {
         lastErr = err;
@@ -187,9 +212,66 @@ async function writeWith(prompt, maxTokens, attempts) {
 // `lockedBeats`: the approved beats, [{ number, text }]. The writer reads
 // them and writes the other beats around them; the route puts each one back
 // word for word (utils/scriptBeatLocks.js).
+//
+// Then the coverage check (utils/scriptCoverage.js; Evoni, 2026-10-15: "is
+// it making sure everything is being done within the script?"): what the
+// episode needs that the script does not have (a deliverable, a goal, the
+// hook, a wear cue, a phone moment, a beat that did not come back) is
+// written into its beat in one pass, each such beat once, never an
+// approved one. Returns { script, coverage: { missing, fixed_beats }, facts }.
+const MAX_FIX_BEATS = 5;
 async function generateGroundedScript(episodeId, showId, models, { lockedBeats = [] } = {}) {
-  const prompt = buildScriptPrompt(await groundedScriptInputs(episodeId, showId, models), { lockedBeats });
-  return writeWith(prompt, 8000, 1);
+  const inputs = await groundedScriptInputs(episodeId, showId, models);
+  let script = await writeWith(buildScriptPrompt(inputs, { lockedBeats }), 8000, 1);
+  const facts = coverageFacts(inputs);
+  const locked = new Set(lockedBeats.map((b) => b.number));
+  const { scriptCoverage, beatRequirements, replaceBeatByNumber, insertBeatByNumber } = require('../utils/scriptCoverage');
+  // Approved beats are read as approved (the route puts them back word for
+  // word anyway), so what they already cover is not written twice.
+  for (const b of lockedBeats) {
+    const withIt = replaceBeatByNumber(script, b.number, b.text);
+    script = withIt !== script ? withIt : insertBeatByNumber(script, b.number, b.text);
+  }
+
+  const byBeat = new Map();
+  for (const gap of scriptCoverage(script, facts).missing) {
+    if (locked.has(gap.target)) continue;
+    if (!byBeat.has(gap.target)) byBeat.set(gap.target, []);
+    byBeat.get(gap.target).push(gap);
+  }
+  const targets = [...byBeat.keys()].sort((a, b) => a - b).slice(0, MAX_FIX_BEATS);
+  const written = await Promise.allSettled(targets.map(async (n) => {
+    const canon = CANONICAL_BEATS.find((b) => b.number === n);
+    const prompt = buildScriptPrompt(inputs, {
+      only: { beat: canon, currentScript: script, requirements: beatRequirements(byBeat.get(n)) },
+    });
+    return { n, text: beatFromReply(await writeWith(prompt, 1500, 2), n) };
+  }));
+  const fixedBeats = [];
+  for (const r of written) {
+    if (r.status !== 'fulfilled') { console.error('[ScriptGen] coverage fix failed (non-blocking):', r.reason?.message); continue; }
+    const { n, text } = r.value;
+    if (!text) continue;
+    const isMissing = byBeat.get(n).some((g) => g.kind === 'beat');
+    const next = isMissing ? insertBeatByNumber(script, n, text) : replaceBeatByNumber(script, n, text);
+    if (next !== script) { script = next; fixedBeats.push(n); }
+  }
+  const { missing } = scriptCoverage(script, facts);
+  if (fixedBeats.length || missing.length) {
+    console.log(`[ScriptGen] Coverage for episode ${episodeId}: rewrote beats ${fixedBeats.join(', ') || 'none'}; still missing ${missing.length}`);
+  }
+  return { script, coverage: { missing, fixed_beats: fixedBeats }, facts };
+}
+
+// What the coverage check needs from the writer's inputs.
+function coverageFacts(inputs) {
+  const career = inputs?.story?.career || null;
+  return {
+    deliverables: career?.deliverables || [],
+    goals: career?.goals || [],
+    forwardHook: inputs?.brief?.forward_hook || '',
+    lockedPieces: (inputs?.outfitScore?.items || []).filter((p) => p?.id).map((p) => ({ id: p.id, name: p.name })),
+  };
 }
 
 // One beat's text from the writer's reply: the section under the beat's own
@@ -225,6 +307,20 @@ async function generateGroundedBeat(episodeId, showId, models, { beatNumber, cur
   return beatFromReply(await writeWith(prompt, 1500, 2), beatNumber);
 }
 
+// The Script Writer's blocks for what `story` holds: money, career, the
+// people at the event, the content she must make, continuity and her
+// numbers (episodeScriptWriterService). Empty when it could not be read.
+function storyContext(story) {
+  if (!story) return '';
+  const { storyContextBlocks, financialContextText } = require('./episodeScriptWriterService');
+  const blocks = [
+    story.financial ? `═══ FINANCIAL CONTEXT ═══\n${financialContextText(story.financial)}` : '',
+    careerBlock(story.career),
+    storyContextBlocks(story, { withSeason: false }),
+  ].filter(Boolean);
+  return blocks.length ? `\n${blocks.join('\n\n')}\n` : '';
+}
+
 // A10: every season story purpose, primary first, each with its thread.
 // The show's screens, icons and overlays by name (getAllOverlayTypes), for
 // the [UI:] lines; empty when the show has none or they could not be read.
@@ -254,7 +350,7 @@ function seasonPurposeLines(sc) {
     ...purposes.map((p, n) => `${n + 1}. ${p.primary ? '[Primary] ' : ''}${p.text}${p.story_thread ? ` (thread: ${p.story_thread})` : ''}`)].join('\n');
 }
 
-function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext = null, onScreen = [] }, { only = null, lockedBeats = [] } = {}) {
+function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext = null, onScreen = [], story = null }, { only = null, lockedBeats = [] } = {}) {
   // Every canonical beat, in order, whether or not the plan has its row
   // (§8(j): Generate Script instantiates all 14; it never invents its own).
   const planByBeat = new Map(scenePlan.map((b) => [Number(b.beat_number), b]));
@@ -353,7 +449,7 @@ ${eventContext}
 
 ═══ LALA'S STATE ═══
 ${statsContext}
-
+${storyContext(story)}
 ═══ WARDROBE ═══
 ${wardrobeContext}
 ${outfitScore ? `\n═══ LOCKED OUTFIT ═══\nLala is wearing ${outfitScore.count} pieces for this event:\n${outfitScore.items.map(i => `- ${i.name} (${i.clothing_category}, ${i.tier})${i.id ? ` [WEAR: ${i.id}]` : ''}`).join('\n')}\nBeat 8 (Transformation): Reference these SPECIFIC items by name as Lala gets dressed. Right after the line where she puts a piece on, write that piece's [WEAR: id] line exactly as shown above, once per piece.\nBeat 11 (Event Outcome): Her outfit choice affects how the event goes — she is wearing what she chose.` : ''}
@@ -392,12 +488,15 @@ RULES:
 4. Community engagement: ask audience to react in comments at least twice
 5. Stats only appear as [STAT:] tags
 6. End with a forward hook seeding the next episode
-
+${story?.career && careerBlock(story.career) ? "7. Lala's career is on the page: name the deal, what she owes and what she wants from the event in the beats the CAREER block gives them, in her words, never as a list\n" : ''}
 ${only ? `═══ THE SCRIPT AS IT STANDS ═══
 ${only.currentScript.trim() || '(empty)'}
 
 ═══ THIS TASK ═══
-Write ONLY beat ${only.beat.number} again, keeping it consistent with the beats before and after it as they stand above and not repeating what they already say.${only.instruction ? `
+Write ONLY beat ${only.beat.number} again, keeping it consistent with the beats before and after it as they stand above and not repeating what they already say.${only.requirements?.length ? `
+
+This beat must also:
+${only.requirements.map((r) => `- ${r}`).join('\n')}` : ''}${only.instruction ? `
 
 Evoni's direction for this beat:
 <<<
@@ -409,4 +508,4 @@ ${beatHeader(only.beat)}
 Return only that beat. No other beats, no preamble.` : 'Write the complete 14-beat script now. No preamble — just the script.'}`;
 }
 
-module.exports = { generateGroundedScript, generateGroundedBeat, buildScriptPrompt, beatFromReply };
+module.exports = { generateGroundedScript, generateGroundedBeat, buildScriptPrompt, beatFromReply, coverageFacts };
