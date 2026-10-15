@@ -57,10 +57,12 @@ describe('CharacterProfilePage — Track 6 CP9 module-scope helpers', () => {
     expect(apiClient.get).toHaveBeenCalledWith('/api/v1/relationships/character/c-1', { params: { confirmed: true } });
   });
 
-  test('getCharacterEntanglementsApi GET on /entanglements/character/:id', async () => {
+  // The route is /characters/:characterId/entanglements (entanglementRoutes);
+  // /entanglements/character/:id never existed, so Connections never loaded them.
+  test('getCharacterEntanglementsApi GET on /entanglements/characters/:id/entanglements', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: { entanglements: [] } });
     await getCharacterEntanglementsApi('c-1');
-    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/entanglements/character/c-1');
+    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/entanglements/characters/c-1/entanglements');
   });
 
   test('getSocialProfileApi GET on /social-profiles/:profileId', async () => {

@@ -92,7 +92,8 @@ describe('POST /autofill-draft', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
       handle: '@glow_theory',
-      platform: '',
+      // A LalaVerse creator's social is The Pulse (Evoni, 2026-10-15).
+      platform: 'pulse',
       vibe: 'Skincare chemist who films every failed batch.',
       city: '',
       relationship: '',
@@ -115,7 +116,8 @@ describe('POST /autofill-draft', () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
-      handle: '@taken_one', platform: 'youtube', vibe: 'Runway critic.',
+      // The model drafted youtube; a LalaVerse creator is on The Pulse.
+      handle: '@taken_one', platform: 'pulse', vibe: 'Runway critic.',
       city: 'radiance_row', relationship: 'one_sided', careerPressure: 'level',
       handleTaken: true,
     });

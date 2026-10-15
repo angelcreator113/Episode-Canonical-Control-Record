@@ -30,6 +30,7 @@
  */
 const Anthropic = require('@anthropic-ai/sdk');
 const { formatSystemPrompt } = require('./promptCacheHelper');
+const { pulsePromptRules } = require('../utils/pulsePlatform');
 const client    = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const _DEEP_PROFILE_DIMENSIONS = [
@@ -86,6 +87,8 @@ async function generateFullCharacter({ spark, worldContext, bookContext, existin
     feedProfileProposal = await generateFeedProfile({
       name, vibe, role, worldString,
       interior: interiorArchitecture,
+      // Lala's world (the default) has one social app, The Pulse.
+      onPulse: !worldContext || /lala/i.test(worldContext.name || ''),
     });
   }
 
@@ -143,6 +146,7 @@ async function generateFullCharacter({ spark, worldContext, bookContext, existin
 const INTERIOR_ARCHITECTURE_SYSTEM = `You are generating the complete interior architecture for a character. Generate a complete JSON object with exactly these fields. Every field is required. Be specific, contradictory where appropriate, and never generic.
 
 {
+  "real_name": "their real full name, first and last: the name on their ID, fitting their background. Not their social media handle or the name they post under.",
   "want_architecture": {
     "surface_want": "what they say they want — the public ambition",
     "real_want": "what they actually want underneath — may contradict surface",
@@ -280,12 +284,13 @@ Role in story: ${role}`;
 // ─────────────────────────────────────────────────────────────────────────────
 
 const INTERIOR_FIELDS = [
+  'selected_name', // their real name (generated as real_name)
   'want_architecture', 'wound', 'the_mask', 'living_state', 'triggers',
   'blind_spot', 'change_capacity', 'self_narrative', 'operative_cosmology',
   'foreclosed_possibility', 'experience_of_joy', 'time_orientation',
   'dilemma', 'deep_profile',
 ];
-const INTERIOR_TEXT = ['blind_spot', 'self_narrative', 'operative_cosmology', 'foreclosed_possibility', 'experience_of_joy'];
+const INTERIOR_TEXT = ['selected_name', 'blind_spot', 'self_narrative', 'operative_cosmology', 'foreclosed_possibility', 'experience_of_joy'];
 const INTERIOR_OBJECTS = ['want_architecture', 'wound', 'the_mask', 'living_state', 'change_capacity', 'dilemma', 'deep_profile'];
 const TIME_ORIENTATIONS = ['past_anchored', 'future_obsessed', 'impulsive_present', 'waiting'];
 
@@ -309,7 +314,8 @@ function missingInteriorFields(character, requested = null) {
 function interiorUpdates(generated, fields) {
   const updates = {};
   for (const f of fields) {
-    const v = generated?.[f];
+    // The real name is asked for as real_name, so it is not read as a handle.
+    const v = f === 'selected_name' ? generated?.real_name : generated?.[f];
     if (!isFilled(v)) continue;
     if (f === 'time_orientation') {
       const key = String(v).trim().toLowerCase().replace(/[\s-]+/g, '_');
@@ -364,7 +370,7 @@ async function generateMissingInterior({ character, feedProfile = null, fields }
   const generated = await generateInteriorArchitecture({
     name, vibe, role, worldString, age,
     known: characterContext(character, feedProfile),
-    only: fields,
+    only: fields.map((f) => (f === 'selected_name' ? 'real_name' : f)),
   });
   return interiorUpdates(generated, fields);
 }
@@ -406,7 +412,7 @@ Return JSON only:
 // FEED PROFILE GENERATION
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function generateFeedProfile({ name, vibe, role, worldString, interior }) {
+async function generateFeedProfile({ name, vibe, role, worldString, interior, onPulse = false }) {
   const maskDesc = interior?.the_mask?.description || '';
   const ambition = interior?.deep_profile?.ambition_identity || '';
 
@@ -420,12 +426,12 @@ Their ambition: ${ambition}
 
 Generate their social media profile. The profile should reflect their mask, not their deep interior.
 The gap between the Feed profile and the Deep Profile is where the story lives.
-
+${onPulse ? pulsePromptRules('lalaverse') : ''}
 Return JSON only:
 {
   "handle": "their username — no @ symbol",
   "display_name": "their display name",
-  "platform": "instagram OR tiktok OR youtube OR twitter",
+  "platform": "${onPulse ? 'pulse' : 'instagram OR tiktok OR youtube OR twitter'}",
   "bio": "their bio — 1-2 sentences in their voice",
   "vibe_tags": ["3-5 aesthetic/content tags"],
   "starting_state": "rising OR peaking OR plateauing",

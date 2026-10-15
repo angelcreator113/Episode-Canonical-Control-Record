@@ -1,4 +1,5 @@
 'use strict';
+const { platformLabel } = require('../utils/pulsePlatform');
 
 const Anthropic = require('@anthropic-ai/sdk');
 const { DEFAULT_TIER_AFFINITY, withSixTiers } = require('../utils/followerTiers');
@@ -101,7 +102,7 @@ ${CONTENT_CATEGORIES.map(c => `- ${c}`).join('\n')}
 - drama_bonus: -0.10 to 0.20 (how much drama pulls them beyond baseline)
 - adult_penalty: -0.30 to 0.0 (negative = avoids adult content, zero = unbothered)
 - base_follow_threshold: 0.25 to 0.50 (lower = follows more freely, higher = selective)
-- same_platform_bonus: { instagram, tiktok, youtube, twitter } each 0.0 to 0.15
+- same_platform_bonus: { pulse, instagram, tiktok, youtube, twitter } each 0.0 to 0.15 (pulse is The Pulse, the LalaVerse's one social app; a LalaVerse character's pulse bonus is their highest)
 - follower_tier_affinity: { emerging, nano, micro, mid, macro, mega } each 0.0 to 1.0 (emerging under 1k followers, nano 1k–10k, micro 10k–50k, mid 50k–250k, macro 250k–1M, mega 1M+)
 
 **Generation Reasoning** — 2-3 sentences explaining WHY this character consumes content this way, rooted in their wound and desire. This is the psychological thesis.
@@ -116,7 +117,7 @@ Return ONLY valid JSON with this exact structure:
   "drama_bonus": 0.0,
   "adult_penalty": -0.10,
   "base_follow_threshold": 0.35,
-  "same_platform_bonus": { "instagram": 0.0, "tiktok": 0.0, "youtube": 0.0, "twitter": 0.0 },
+  "same_platform_bonus": { "pulse": 0.0, "instagram": 0.0, "tiktok": 0.0, "youtube": 0.0, "twitter": 0.0 },
   "follower_tier_affinity": { "emerging": 0.0, "nano": 0.0, "micro": 0.0, "mid": 0.0, "macro": 0.0, "mega": 0.0 },
   "generation_reasoning": "..."
 }`;
@@ -253,7 +254,7 @@ async function buildFollowInfluenceContext(db, characterKey, options = {}) {
     const influenceWord = f.influence_level >= 8 ? 'deeply influenced by'
       : f.influence_level >= 5 ? 'regularly watches'
       : 'casually follows';
-    lines.push(`- ${influenceWord} @${p.handle} (${p.platform}, ${p.content_category || 'mixed content'})`);
+    lines.push(`- ${influenceWord} @${p.handle} (${platformLabel(p.platform)}, ${p.content_category || 'mixed content'})`);
     if (f.follow_context) lines.push(`  ${f.follow_context}`);
   }
 

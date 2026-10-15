@@ -1,4 +1,5 @@
 'use strict';
+const { platformLabel, pulsePromptRules } = require('../utils/pulsePlatform');
 
 /**
  * Feed Post Generator Service
@@ -105,7 +106,7 @@ async function generateEpisodeFeedPosts(episodeId, showId, models) {
     const d = p.toJSON();
     const rc = d.registryCharacter || p.registryCharacter;
     let block = `@${d.handle} (${d.display_name || d.handle})${d.creator_name ? ` — real name: ${d.creator_name}` : ''}
-  Platform: ${d.platform} | Archetype: ${d.archetype} | Tier: ${d.follower_tier}
+  Platform: ${platformLabel(d.platform)} | Archetype: ${d.archetype} | Tier: ${d.follower_tier}
   Voice: ${d.posting_voice || d.vibe_sentence}
   Lala's follow motivation: ${d.follow_motivation || 'none'}
   Emotional response: ${d.follow_emotion || 'neutral'}
@@ -194,6 +195,7 @@ Generate 6-10 feed posts that appear in the timeline after this episode. Mix of:
 7. **Thread starters** — posts designed to spark reply chains and drama threads
 8. **Viral contenders** — at least one post with breakout potential (high engagement, shareable hook)
 
+${pulsePromptRules('lalaverse')}
 IMPORTANT: If Lala's outfit is described above, REFERENCE SPECIFIC PIECES by name in posts. Characters should comment on what she wore ("the corset dress was EVERYTHING"), tag brands, compare outfits, or shade her choices. The outfit drives feed reactions.
 
 For each post, return JSON array:
@@ -201,7 +203,7 @@ For each post, return JSON array:
   "poster_handle": "@handle",
   "poster_display_name": "Display Name",
   "poster_creator_name": "Their real full name (e.g. Jessica Chen)",
-  "poster_platform": "instagram",
+  "poster_platform": "lalaverse",
   "post_type": "post",
   "content_text": "caption text with hashtags (include 1-3 relevant hashtags)",
   "image_description": "what the photo/video shows",
@@ -292,7 +294,8 @@ Return ONLY the JSON array.`;
         poster_handle: (post.poster_handle || 'unknown').replace('@', ''),
         poster_display_name: post.poster_display_name || null,
         poster_creator_name: post.poster_creator_name || matchedProfile?.creator_name || null,
-        poster_platform: post.poster_platform || 'instagram',
+        // An episode's posts are on The Pulse ('lalaverse', as pulseDrafter writes them).
+        poster_platform: 'lalaverse',
         post_type: post.post_type || 'post',
         content_text: post.content_text || '',
         image_description: post.image_description || null,

@@ -28,6 +28,12 @@
  *                Q19): [{ role, scene_set_id, text, beats }], shown under
  *                the row while it still holds that set
  *   onConfirm(locations) → [{ role, scene_set_id, name }]
+ *
+ * Character homes (2026-10-15, step 3 of
+ * docs/VENUE_EVERYDAY_AND_EVENT_LOOKS_PLAN.md): Home and Closet name the
+ * show's lead ("Lala's home"); the other characters' homes are one click
+ * each, added as an extra location named for the character. Read from
+ * GET /shows/:showId/character-places; a read that fails offers none.
  *   onCancel, busy
  */
 import React, { useEffect, useMemo, useState } from 'react';
@@ -122,6 +128,21 @@ export default function EpisodeLocationsStep({
   const [{ byRole, extras }, setRows] = useState(() => initialRows(initial));
   const [sets, setSets] = useState([]);
   const [picking, setPicking] = useState(null); // 'home' | 'closet' | 'event' | extra key
+  const [places, setPlaces] = useState(null); // { lead_character_id, characters }
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get(`/api/v1/shows/${showId}/character-places`)
+      .then((res) => { if (!cancelled) setPlaces(res.data?.data || null); })
+      .catch((err) => { console.error('[EpisodeLocationsStep] character places load failed:', err); });
+    return () => { cancelled = true; };
+  }, [showId]);
+  const lead = (places?.characters || []).find((c) => c.is_lead) || null;
+  const characterHomes = (places?.characters || []).filter((c) => !c.is_lead).flatMap((c) => {
+    const home = c.places.find((p) => p.role === 'home');
+    return home ? [{ key: `${c.id}`, name: `${c.name}'s home`, scene_set: { id: home.scene_set_id, name: home.scene_set_name } }] : [];
+  });
+  const fixedLabel = (r) => (lead && (r === 'home' || r === 'closet') ? `${ROLE_LABELS[r]} (${lead.name}'s)` : ROLE_LABELS[r]);
 
   useEffect(() => {
     let cancelled = false;
@@ -144,6 +165,9 @@ export default function EpisodeLocationsStep({
   const setFixed = (role, set) => setRows((r) => ({ ...r, byRole: { ...r.byRole, [role]: { scene_set_id: set.id, scene_set: set } } }));
   const setExtra = (key, patch) => setRows((r) => ({ ...r, extras: r.extras.map((x) => (x.key === key ? { ...x, ...patch } : x)) }));
   const removeExtra = (key) => setRows((r) => ({ ...r, extras: r.extras.filter((x) => x.key !== key) }));
+  const addCharacterHome = (h) => {
+    setRows((r) => ({ ...r, extras: [...r.extras, { key: nextKey(), name: h.name, scene_set_id: h.scene_set.id, scene_set: h.scene_set }] }));
+  };
   const addExtra = () => {
     const key = nextKey();
     setRows((r) => ({ ...r, extras: [...r.extras, { key, name: '', scene_set_id: null, scene_set: null }] }));
@@ -207,7 +231,7 @@ export default function EpisodeLocationsStep({
         <h2 id="els-title" className="els-title">{title}</h2>
         <p className="els-sub">Where this episode happens. Each can be changed; images can come later.</p>
 
-        {FIXED_ROLES.map((r) => row(r, ROLE_LABELS[r], byRole[r], { onPick: (set) => setFixed(r, set) }))}
+        {FIXED_ROLES.map((r) => row(r, fixedLabel(r), byRole[r], { onPick: (set) => setFixed(r, set) }))}
 
         {extras.map((x, i) => row(x.key, `${ROLE_LABELS.extra} ${i + 1}`, x, {
           onPick: (set) => setExtra(x.key, { scene_set_id: set.id, scene_set: set }),
@@ -221,6 +245,18 @@ export default function EpisodeLocationsStep({
         }))}
 
         <button type="button" className="els-btn els-add" onClick={addExtra} data-testid="els-add-extra">+ Add a location</button>
+
+        {characterHomes.length > 0 && (
+          <div className="els-homes" data-testid="els-character-homes">
+            <span className="els-row-label">Add a character's home</span>
+            {characterHomes.map((h) => (
+              <button key={h.key} type="button" className="els-btn" data-testid={`els-character-home-${h.key}`}
+                disabled={used.has(h.scene_set.id)} onClick={() => addCharacterHome(h)}>
+                + {h.name}
+              </button>
+            ))}
+          </div>
+        )}
 
         {duplicate && <p className="els-error">A scene set holds one role in an episode.</p>}
         {unnamed && <p className="els-error">Name each extra location.</p>}

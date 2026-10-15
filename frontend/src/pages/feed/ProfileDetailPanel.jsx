@@ -3,7 +3,7 @@ import apiClient from '../../services/api';
 import {
   API, C, PLATFORMS, ARCHETYPE_LABELS, STATUS_LABELS, STATUS_COLORS,
   FEED_STATE_CONFIG, PROTAGONISTS, lalaClass, fp,
-  profileName, atHandle,
+  profileName, atHandle, platformLabel,
 } from './feedConstants';
 
 // Local Spinner, as in FeedViews.jsx. It stayed behind in
@@ -126,7 +126,7 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
             <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
               {profileName(p)&&<span style={{fontSize:13,color:C.inkMid}} data-testid="spg-detail-profile-name" title="Profile name">{profileName(p)}</span>}
               {p.registry_character_name&&p.registry_character_name!==profileName(p)&&<span style={{fontSize:11,color:C.inkLight}} data-testid="spg-detail-character">Character: {p.registry_character_name}</span>}
-              <span style={{fontSize:11,fontWeight:600,padding:'2px 8px',borderRadius:8,background:C.blueLight,color:C.blue}}>{p.platform}</span>
+              <span style={{fontSize:11,fontWeight:600,padding:'2px 8px',borderRadius:8,background:C.blueLight,color:C.blue}}>{platformLabel(p.platform)}</span>
               {(p.archetype||d.archetype)&&<span style={{fontSize:11,color:C.inkLight}}>{ARCHETYPE_LABELS[p.archetype||d.archetype]||p.archetype||d.archetype}</span>}
               {p.adult_content_present&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:6,background:'#fde8e8',color:C.pink}}>18+ Content</span>}
               {p.feed_layer==='real_world'&&followers.some(f=>f.character_key==='lala')&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:6,background:C.blueLight,color:C.blue}}>◈ From JustAWoman's Feed — Lala follows</span>}
@@ -176,7 +176,8 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
             {editing ? (
               <div style={{gridColumn:'1/-1'}}>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px 16px'}}>
-                  {inp('Handle','handle')}{inp('Profile name','display_name')}{inp('Platform','platform')}{inp('Vibe Sentence','vibe_sentence')}
+                  {/* A LalaVerse profile's platform is The Pulse, not an edit (the server sets it). */}
+                  {inp('Handle','handle')}{inp('Profile name','display_name')}{p.feed_layer==='lalaverse'?null:inp('Platform','platform')}{inp('Vibe Sentence','vibe_sentence')}
                 </div>
                 {inp('Content Persona','content_persona',true)}{inp('Real Signal','real_signal',true)}{inp('Posting Voice','posting_voice',true)}{inp('Comment Energy','comment_energy',true)}{inp('Parasocial Function','parasocial_function',true)}{inp('Emotional Activation','emotional_activation',true)}{inp('Why She Watches','watch_reason',true)}{inp('What It Costs Her','what_it_costs_her',true)}{inp('Trajectory','current_trajectory')}{inp('Pinned Post','pinned_post',true)}
                 {/* Social Intelligence */}
@@ -184,7 +185,7 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
                   <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Social Intelligence</div>
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px 16px'}}>
                     {inp('Public Persona','public_persona')}{inp('Private Reality','private_reality')}
-                    {inp('Front Platform','front_platform')}{inp('Real Platform','real_platform')}
+                    {p.feed_layer==='lalaverse'?null:<>{inp('Front Platform','front_platform')}{inp('Real Platform','real_platform')}</>}
                     <div>
                       <label style={{fontSize:10,fontWeight:600,color:C.inkLight,display:'block',marginBottom:2}}>Celebrity Tier</label>
                       <select value={draft.celebrity_tier||''} onChange={e=>setDraft(d=>({...d,celebrity_tier:e.target.value}))} style={{width:'100%',padding:'6px 8px',borderRadius:C.radiusSm,border:`1px solid ${C.border}`,fontSize:12,background:C.surface}}>
@@ -258,14 +259,14 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
                       <Section title="Platform Presences">
                         <div style={{display:'flex',flexDirection:'column',gap:4}}>
                           {Object.entries(p.platform_presences).map(([plat, info]) => (
-                            <div key={plat} style={{padding:'6px 8px',background:plat===p.platform?'#eef2ff':'#f8f8f8',borderRadius:6,borderLeft:`3px solid ${plat==='onlyfans'?C.pink:plat===p.platform?C.lavender:'#ddd'}`}}>
+                            <div key={plat} style={{padding:'6px 8px',background:plat===p.platform?'#eef2ff':'#f8f8f8',borderRadius:6,borderLeft:`3px solid ${['onlyfans','playroom','pulse_private'].includes(plat)?C.pink:plat===p.platform?C.lavender:'#ddd'}`}}>
                               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                                <span style={{fontSize:11,fontWeight:700,color:C.ink}}>{plat}{info.is_primary?' ★':''}</span>
+                                <span style={{fontSize:11,fontWeight:700,color:C.ink}}>{platformLabel(plat)}{info.is_primary?' ★':''}</span>
                                 <span style={{fontSize:9,color:C.inkLight}}>{info.followers||''}</span>
                               </div>
                               {info.handle && <div style={{fontSize:10,color:C.inkMid}}>{info.handle}</div>}
                               <div style={{fontSize:10,color:C.inkLight,fontStyle:'italic'}}>{info.persona||info.content_style||''}</div>
-                              {info.visibility==='discreet'&&<span style={{fontSize:8,fontWeight:700,padding:'1px 4px',borderRadius:3,background:'#fef3c7',color:'#92400e'}}>discreet</span>}
+                              {['discreet','private'].includes(info.visibility)&&<span style={{fontSize:8,fontWeight:700,padding:'1px 4px',borderRadius:3,background:'#fef3c7',color:'#92400e'}}>{info.visibility}</span>}
                             </div>
                           ))}
                         </div>
@@ -276,7 +277,7 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
                       {p.private_reality && <Section title="Private Reality"><div style={{fontSize:12,color:C.pink,lineHeight:1.6}}>{p.private_reality}</div></Section>}
                       {p.front_platform && p.real_platform && p.front_platform !== p.real_platform && (
                         <div style={{fontSize:10,color:C.inkLight,padding:'4px 8px',background:'#fef2f2',borderRadius:6,marginTop:4}}>
-                          Front: {p.front_platform} → Real: {p.real_platform}
+                          Front: {platformLabel(p.front_platform)} → Real: {platformLabel(p.real_platform)}
                         </div>
                       )}
                       {p.celebrity_tier && p.celebrity_tier !== 'accessible' && (
