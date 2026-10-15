@@ -68,6 +68,9 @@ async function locationChangeRefusal(sequelize, sceneSet, nextLocationId) {
   return null;
 }
 
+/** Same window as the scene-set generation claim (sceneSetRoutes). */
+const GENERATION_STALE_MINUTES = 15;
+
 /** Thrown by generation when it would replace an approved base. */
 class ApprovedBaseError extends Error {
   constructor(refusal) {
@@ -92,6 +95,18 @@ async function approveBase(sequelize, sceneSet) {
   if (!sceneSet.world_location_id) return { status: 400, error: 'This scene set has no World Location to approve its base for.' };
   if (!sceneSet.base_still_url) return { status: 400, error: 'This scene set has no base image to approve.' };
   return sequelize.transaction(async (transaction) => {
+    // A base being generated is about to be replaced: approving it now would
+    // let the run overwrite the approved picture. A claim older than the
+    // generation stale window is a run that died and does not block.
+    const [setRows] = await sequelize.query(
+      `SELECT name, (generation_status = 'generating'
+                     AND updated_at > NOW() - make_interval(mins => :stale)) AS generating
+         FROM scene_sets WHERE id = :id LIMIT 1 FOR UPDATE`,
+      { replacements: { id: sceneSet.id, stale: GENERATION_STALE_MINUTES }, transaction }
+    );
+    if (setRows?.[0]?.generating) {
+      return { status: 409, error: `The base of "${setRows[0].name}" is being generated. Approve it when it is done.` };
+    }
     const [rows] = await sequelize.query(
       `SELECT id, name, approved_base_scene_set_id FROM world_locations
         WHERE id = :id AND deleted_at IS NULL LIMIT 1 FOR UPDATE`,

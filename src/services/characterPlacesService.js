@@ -116,7 +116,8 @@ async function assertCharacter(sequelize, showId, characterId) {
  * closet live in the show's scene defaults, so a change of lead moves
  * them with the people: the old lead's become her own places
  * (character_places), the new lead's own home and closet become the
- * defaults (empty when she has none). One transaction; the metadata keys
+ * defaults (empty when she has none). A show with no lead before keeps its
+ * defaults for the first lead, except where she has her own. One transaction; the metadata keys
  * are merged in the database, so another key written meanwhile is kept.
  */
 async function setLead(sequelize, { showId, characterId }) {
@@ -129,7 +130,9 @@ async function setLead(sequelize, { showId, characterId }) {
   await sequelize.transaction(async (transaction) => {
     const [[locked]] = await sequelize.query('SELECT metadata FROM shows WHERE id = :showId FOR UPDATE', { replacements: { showId }, transaction });
     const defaults = readSceneDefaults(parseMetadata(locked.metadata));
-    const nextDefaults = { home_set_id: null, closet_set_id: null };
+    // With no lead before, the show's home and closet were nobody's: the
+    // first lead takes them, and only her own home or closet replaces one.
+    const nextDefaults = oldLead ? { home_set_id: null, closet_set_id: null } : { ...defaults };
     if (oldLead) {
       for (const [role, key] of Object.entries(LEAD_DEFAULT_KEY)) {
         if (!defaults[key]) continue;
