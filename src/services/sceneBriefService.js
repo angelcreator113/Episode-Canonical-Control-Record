@@ -83,6 +83,10 @@ const BRIEF_RULES = Object.freeze([
 
 // Follows the place layer: the place is shown as described, furnished.
 const FURNISHED = 'Fully furnished and dressed exactly as described: every piece of furniture, fixture, fitting and object described is present and in place.';
+// A shot of one part of the room (a wall, a corner, a detail): the whole
+// room's inventory as "present and in place" pulled the camera back to a
+// wide shot (audit, 2026-10-15). What it frames is still furnished.
+const PART_FURNISHED = 'What this shot frames is furnished and dressed as described; the rest of the room is out of frame.';
 
 // The longest prompt a brief sends.
 const MAX_PROMPT = 3500;
@@ -154,6 +158,8 @@ const ZONE_CAMERAS = Object.freeze({
 // views show none of its furniture (audit, 2026-10-15: a Front zone was
 // told every piece of the bedroom's furniture must be present).
 const OUTSIDE_ZONES = Object.freeze(['front', 'back']);
+// Shots that show the room, or most of it: every other shot frames a part.
+const ROOM_SHOTS = Object.freeze(['WIDE', 'ESTABLISHING', 'OVERHEAD', 'DOORWAY', 'ACTION', 'OTHER']);
 const ZONE_CONTINUITY = 'The same place as the reference image: its architecture, materials and palette; a different part of it, not the same view.';
 // A zone's name in its camera line: a short name only. Angles made from a
 // spec carried the contract's sentence as their name ("Establishing view of
@@ -278,6 +284,9 @@ function buildSceneBrief({
   const viewKind = String((zone || partOf)?.kind || '').toLowerCase();
   const ownShot = !GENERIC_SHOTS.includes(shotKey(angle)) && Boolean(SHOT_CAMERAS[shotKey(angle)]);
   const outsideView = OUTSIDE_ZONES.includes(viewKind) && !(zone && ownShot);
+  // A shot of one part of the room (VANITY, CLOSE, a named thing), not a
+  // zone's own establishing view.
+  const partShot = !outsideView && !(zone && !ownShot) && !ROOM_SHOTS.includes(shotKey(angle));
   const lines = [];
   const add = (layer, key, label, text, source, essential = false) => {
     lines.push({ layer, key, label, text: clean(text), source, essential });
@@ -290,7 +299,7 @@ function buildSceneBrief({
   const description = sentence(set.canonical_description || location?.description);
   add('place', 'description', 'Description', outsideView && description
     ? `For its style only: ${description} This view is another part of the place; none of that room's furniture is in it.`
-    : description, 'venue', true);
+    : (partShot && description ? `The room, of which this shot shows only part: ${description}` : description), 'venue', true);
   if (guide.architecture) add('place', 'architecture', 'Architecture', sentence(`Architecture: ${listText(guide.architecture)}`), 'venue');
   const materials = materialsText(guide.materials);
   if (materials) add('place', 'materials', 'Materials', sentence(`Materials: ${materials}`), 'venue');
@@ -420,7 +429,7 @@ function buildSceneBrief({
     lines: kept,
     // The FURNISHED line ("every piece of furniture described is present")
     // is not sent for a view without the described room.
-    ...(outsideView ? { furnished: false } : {}),
+    ...(outsideView ? { furnished: false } : (partShot ? { furnished: 'part' } : {})),
     rules: [...BRIEF_RULES],
     missing,
     overrides: Object.fromEntries(Object.entries(over).map(([k, v]) => [k, clean(v)])),
@@ -465,7 +474,7 @@ function briefToPrompt(brief) {
   // reference, and a camera line after the whole room's description reads
   // as a description of the reference, so the camera barely moves.
   const fromReference = (brief?.lines || []).some((l) => l.key === 'continuity' && l.text);
-  const furnished = brief?.furnished === false ? [] : [FURNISHED];
+  const furnished = brief?.furnished === false ? [] : [brief?.furnished === 'part' ? PART_FURNISHED : FURNISHED];
   const body = brief?.mode === 'event_dressing'
     ? join([DRESSING_KEEP, ...byLayer('event'), DRESSING_END])
     : join(fromReference
@@ -555,6 +564,7 @@ module.exports = {
   LAYERS,
   BRIEF_RULES,
   FURNISHED,
+  PART_FURNISHED,
   SHOT_CAMERAS,
   TIME_LIGHT,
   SEASON_TEXT,
