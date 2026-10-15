@@ -1560,9 +1560,12 @@ async function resolveStoryRegistryId(story, transaction) {
 
 // ── POST /write-back ──────────────────────────────────────────────────────
 router.post('/write-back', requireAuth, async (req, res) => {
-  const { story_id, chapter_id, confirmed_memories, confirmed_registry_updates } = req.body;
+  const { story_id, chapter_id, confirmed_memories, confirmed_registry_updates, approved_text } = req.body;
   if (!story_id || !chapter_id) {
     return res.status(400).json({ error: 'story_id and chapter_id are required' });
+  }
+  if (approved_text !== undefined && typeof approved_text !== 'string') {
+    return res.status(400).json({ error: 'approved_text must be text' });
   }
 
   const transaction = await db.sequelize.transaction();
@@ -1570,6 +1573,9 @@ router.post('/write-back', requireAuth, async (req, res) => {
 
     const story = await db.StorytellerStory.findByPk(story_id, { transaction, lock: true });
     if (!story) { await transaction.rollback(); return res.status(404).json({ error: 'Story not found' }); }
+    // The approved version as the author last edited it on the evaluation
+    // screen; without it the synthesis saved at evaluation is written.
+    if (approved_text && approved_text.trim()) story.text = approved_text.trim();
     if (!story.text) { await transaction.rollback(); return res.status(400).json({ error: 'No approved text to write back' }); }
     if (story.status === 'written_back') { await transaction.rollback(); return res.status(409).json({ error: 'Story already written back' }); }
 

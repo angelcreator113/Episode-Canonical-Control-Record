@@ -49,7 +49,6 @@ import apiClient from '../services/api';
 import {
   // Storyteller — books / chapters / lines
   getBookApi,
-  getChapterApi,
   updateChapterApi,
   createChapterApi,
   saveDraftApi,
@@ -80,12 +79,6 @@ describe('WriteMode — Track 6 CP3 module-scope helpers', () => {
       vi.mocked(apiClient.get).mockResolvedValue({ data: { book: { chapters: [] } } });
       await getBookApi('book-1');
       expect(apiClient.get).toHaveBeenCalledWith('/api/v1/storyteller/books/book-1');
-    });
-
-    test('getChapterApi GET on /storyteller/chapters/:chapterId', async () => {
-      vi.mocked(apiClient.get).mockResolvedValue({ data: { chapter: {} } });
-      await getChapterApi('ch-1');
-      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/storyteller/chapters/ch-1');
     });
 
     test('updateChapterApi PUT on /storyteller/chapters/:chapterId with payload', async () => {
