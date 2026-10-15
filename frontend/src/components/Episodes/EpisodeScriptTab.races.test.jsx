@@ -2,6 +2,7 @@
  * Replies that land after more edits (Script tab audit, 2026-10-15). An AI
  * reply goes into the script as it is when the reply lands, not as it was
  * when the button was pressed:
+ * (Each is a suggestion until "Use it"; it goes in as the script is then.)
  * - Regenerate beat finds its beat again, so a beat moved meanwhile is not
  *   written over, and a beat approved meanwhile is left alone;
  * - Rewrite line keeps edits made meanwhile, and finds its line by its words;
@@ -39,6 +40,7 @@ describe('Regenerate beat lands on its own beat', () => {
     fireEvent.click(screen.getByTestId('script-regen-beat-2'));
     fireEvent.click(screen.getByTestId('script-beat-up-2'));
     await act(async () => { reply.resolve({ data: { beat: '## BEAT: 2 · Login Sequence\nLala: Fresh login.' } }); });
+    fireEvent.click(await screen.findByTestId('script-proposal-accept'));
 
     const text = raw();
     expect(text).toBe('## BEAT: 2 · Login Sequence\nLala: Fresh login.\n\n## BEAT: 1 · Opening Ritual\nLala: Hi besties.');
@@ -74,6 +76,9 @@ describe('Rewrite line keeps what was done meanwhile', () => {
     fireEvent.click(within(box.closest('.esp-line-edit')).getByRole('button', { name: 'Save' }));
 
     await act(async () => { reply.resolve({ data: { rewrittenLine: 'Hey, gorgeous.' } }); });
+    // The suggestion waits in beat 1.
+    fireEvent.click(screen.getByTestId('script-beat-1').querySelector('.esp-beat-head'));
+    fireEvent.click(await screen.findByTestId('script-proposal-accept'));
     const text = raw();
     expect(text).toContain('Lala: Logged in.');
     expect(text).toContain('Hey, gorgeous.');
@@ -91,6 +96,7 @@ describe('Rewrite line keeps what was done meanwhile', () => {
     fireEvent.click(within(box.closest('.esp-line-edit')).getByRole('button', { name: 'Save' }));
 
     await act(async () => { reply.resolve({ data: { rewrittenLine: 'Hey, gorgeous.' } }); });
+    fireEvent.click(await screen.findByTestId('script-proposal-accept'));
     expect(await screen.findByText(/changed or was approved while it was being rewritten/)).toBeTruthy();
     const text = raw();
     expect(text).toContain('Lala: My own words.');

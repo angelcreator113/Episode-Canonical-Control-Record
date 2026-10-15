@@ -551,6 +551,9 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
       if (!episode) {
         saveError = 'Episode not found';
       } else {
+        // Version history: the script Regenerate replaces is kept first.
+        const { snapshotScript } = require('../services/scriptVersions');
+        await snapshotScript(models, episode, { source: 'generate', userId: req.user?.id, next: script });
         await episode.update({ script_content: script });
         saved = true;
       }
