@@ -1189,19 +1189,19 @@ router.post('/generate-story-multi', requireAuth, aiRateLimiter, async (req, res
     req.setTimeout(300000); // 5 min for long AI generation
     const [resultA, resultB, resultC] = await Promise.all([
       anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 6000,
         system: VOICE_SYSTEM.voice_a,
         messages: [{ role: 'user', content: promptA }],
       }),
       anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 6000,
         system: VOICE_SYSTEM.voice_b,
         messages: [{ role: 'user', content: promptB }],
       }),
       anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 6000,
         system: VOICE_SYSTEM.voice_c,
         messages: [{ role: 'user', content: promptC }],
@@ -1330,7 +1330,7 @@ router.post('/evaluate-stories', requireAuth, aiRateLimiter, async (req, res) =>
     const evalExtraCtx = evalFranchise + evalAuthorNotes + evalContinuity + evalGrowth + evalWorldState + evalCrossings;
 
     const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 16000,
       system: `You are a ruthlessly honest literary editor. Evaluate three blind versions of the same scene. Your PRIMARY task is to create a synthesised version that COMBINES the best elements from ALL three voices into an enhanced final version — do NOT simply pick the winner's text. Return ONLY valid JSON — no markdown fences, no commentary.`,
       messages: [{
@@ -1446,7 +1446,7 @@ router.post('/propose-memory', requireAuth, aiRateLimiter, async (req, res) => {
     const enrichmentCtx = continuityCtx + growthCtx + worldStateCtx;
 
     const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4000,
       system: `You are a narrative memory architect. Given a story and existing character memories, propose new memories that should be stored. IMPORTANT: Do NOT propose memories that duplicate or closely restate existing memories listed below — only propose genuinely NEW information this scene reveals. Respect the established timeline, character growth arc, and world state provided below. Return ONLY valid JSON.`,
       messages: [{
@@ -1512,7 +1512,7 @@ router.post('/propose-registry-update', requireAuth, aiRateLimiter, async (req, 
     }).join('\n');
 
     const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4000,
       system: `You are a character registry curator. After reading a story, propose specific updates to character registry profiles. Respect the character growth history, continuity timeline, and world state provided — do NOT propose changes that contradict established arcs. Return ONLY valid JSON.`,
       messages: [{
@@ -1560,9 +1560,12 @@ async function resolveStoryRegistryId(story, transaction) {
 
 // ── POST /write-back ──────────────────────────────────────────────────────
 router.post('/write-back', requireAuth, async (req, res) => {
-  const { story_id, chapter_id, confirmed_memories, confirmed_registry_updates } = req.body;
+  const { story_id, chapter_id, confirmed_memories, confirmed_registry_updates, approved_text } = req.body;
   if (!story_id || !chapter_id) {
     return res.status(400).json({ error: 'story_id and chapter_id are required' });
+  }
+  if (approved_text !== undefined && typeof approved_text !== 'string') {
+    return res.status(400).json({ error: 'approved_text must be text' });
   }
 
   const transaction = await db.sequelize.transaction();
@@ -1570,6 +1573,9 @@ router.post('/write-back', requireAuth, async (req, res) => {
 
     const story = await db.StorytellerStory.findByPk(story_id, { transaction, lock: true });
     if (!story) { await transaction.rollback(); return res.status(404).json({ error: 'Story not found' }); }
+    // The approved version as the author last edited it on the evaluation
+    // screen; without it the synthesis saved at evaluation is written.
+    if (approved_text && approved_text.trim()) story.text = approved_text.trim();
     if (!story.text) { await transaction.rollback(); return res.status(400).json({ error: 'No approved text to write back' }); }
     if (story.status === 'written_back') { await transaction.rollback(); return res.status(409).json({ error: 'Story already written back' }); }
 
@@ -1740,7 +1746,7 @@ router.post('/scene-revelation', requireAuth, aiRateLimiter, async (req, res) =>
     }).join('\n');
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4000,
       system: `You are a literary analyst extracting character revelations from a scene.
 
