@@ -71,6 +71,9 @@ export const CONTENT_TYPES = [
   // Task #3179: Lala's Shopping list on her phone, her handwritten note.
   // Task #3181: her Career list, as of the episode, on the same paper.
   { key: 'career_list', label: 'Career List', icon: '⭐', desc: 'Lala’s goals, the brands she has worked with and her milestones, as of the episode', group: 'messages' },
+  // Task #3191: her to-do list as the beat has it: the Shopping list, the
+  // deal checklist or the Career list, by the script (TODO_MODE overrides).
+  { key: 'todo', label: 'To-Do (by beat)', icon: '🗒️', desc: 'Lala’s to-do list as the beat has it: shopping while she dresses, the deal checklist at a deal, else her career list', group: 'messages' },
   { key: 'shopping_list', label: 'Shopping List', icon: '🛍️', desc: 'Lala’s handwritten shopping list for the episode; a line is crossed off once her look fills it', group: 'messages' },
   { key: 'custom_text', label: 'Custom Text', icon: '✏️', desc: 'Static text overlay', group: 'other' },
 ];
@@ -221,6 +224,8 @@ function ContentZoneRenderer({ zone, showId, episodeId, storyAt = null, beat = n
       return <ShoppingListRenderer episodeId={episodeId} beat={beat} config={config} />;
     case 'career_list':
       return <CareerListRenderer showId={showId} episodeId={episodeId} />;
+    case 'todo':
+      return <TodoRenderer showId={showId} episodeId={episodeId} beat={beat} config={config} />;
     case 'custom_text':
       return <CustomTextRenderer config={config} />;
     default:
@@ -671,6 +676,50 @@ export function CareerListRenderer({ showId, episodeId = null }) {
             </ul>
           </section>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ── Lala's to-do list by beat (Lala's Phone spec §5; Task #3191) ──
+// Evoni, 2026-10-14 (phone phase 3 rulings 3 and 6). The server says which
+// list the beat shows (GET /episodes/:id/todo/at, services/dealChecklistService):
+// the beat's [TODO_MODE] cue, else the Shopping list through the closet beat,
+// the deal checklist at a deal whose terms are locked, else the Career list.
+// Read-only: nothing here moves a deliverable's status.
+export const todoAtUrl = (episodeId, beat) =>
+  `/api/v1/episodes/${encodeURIComponent(episodeId)}/todo/at${Number.isInteger(beat) && beat >= 1 && beat <= 14 ? `?beat=${beat}` : ''}`;
+
+export function TodoRenderer({ showId, episodeId, beat = null, config = {} }) {
+  const { data, loading } = useContentData(episodeId ? todoAtUrl(episodeId, beat) : null);
+  if (!episodeId) return <ZoneEmpty label="To-do list · shown in an episode" />;
+  if (loading) return <ZoneLoader />;
+  const at = data?.data;
+  if (at?.mode === 'shopping') return <ShoppingListRenderer episodeId={episodeId} beat={beat} config={config} />;
+  if (at?.mode === 'deal' && at.deal) return <DealChecklistRenderer deal={at.deal} />;
+  return <CareerListRenderer showId={showId} episodeId={episodeId} />;
+}
+
+// The deal checklist on her note: headed with where the deal happens
+// ("At STUDIO BY SABLE's Studio"), each item ticked at its [DELIVER] cue and
+// then "ready to approve" until it is approved in Money.
+export function DealChecklistRenderer({ deal }) {
+  const items = deal?.items || [];
+  if (!items.length) return <ZoneEmpty label="No deal items yet" />;
+  return (
+    <div style={{ width: '100%', height: '100%', containerType: 'inline-size' }}>
+      <div className="evd-paper is-phone" data-testid="phone-deal-checklist">
+        <span className="evd-tape" aria-hidden="true" />
+        <div className="evd-paper-title">{deal.label}</div>
+        <ul className="evd-paper-lines">
+          {items.map((i) => (
+            <li key={i.deliverable_id} data-testid="phone-deal-item" data-delivered={i.delivered ? 'true' : 'false'}>
+              <span className="evd-box" aria-hidden="true">{i.delivered ? '✓' : ''}</span>
+              <span className={`evd-line-text${i.delivered ? ' is-crossed' : ''}`}>{i.label}</span>
+              {i.ready_to_approve && <span className="evd-line-note" data-testid="phone-deal-ready">ready to approve</span>}
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
   );
