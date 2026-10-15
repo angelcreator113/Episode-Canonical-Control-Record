@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../services/api';
 import useActiveShow from '../hooks/useActiveShow';
+import { platformLabel } from './feed/feedConstants';
 
 /* ── Feed Relationship Map ──────────────────────────────────────────────────
  * SVG canvas showing influencer-to-influencer relationships.
@@ -413,7 +414,7 @@ export default function FeedRelationshipMap() {
             >
               <option value="">Select…</option>
               {profiles.map(p => (
-                <option key={p.id} value={p.id}>@{p.handle} — {p.display_name || p.platform}</option>
+                <option key={p.id} value={p.id}>@{p.handle} — {p.display_name || platformLabel(p.platform)}</option>
               ))}
             </select>
           </div>
@@ -438,7 +439,7 @@ export default function FeedRelationshipMap() {
             >
               <option value="">Select…</option>
               {profiles.map(p => (
-                <option key={p.id} value={p.id}>@{p.handle} — {p.display_name || p.platform}</option>
+                <option key={p.id} value={p.id}>@{p.handle} — {p.display_name || platformLabel(p.platform)}</option>
               ))}
             </select>
           </div>
@@ -611,7 +612,7 @@ export default function FeedRelationshipMap() {
               @{selected.handle}
             </div>
             <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>
-              {selected.display_name} · {selected.platform}
+              {selected.display_name} · {platformLabel(selected.platform)}
             </div>
             <div style={{
               display: 'inline-block',

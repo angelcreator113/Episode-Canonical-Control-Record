@@ -1,5 +1,5 @@
 import React from 'react';
-import { C, ARCHETYPE_LABELS, STATUS_LABELS, STATUS_COLORS, FEED_STATE_CONFIG, fp, lalaClass, profileName, atHandle } from './feedConstants';
+import { C, ARCHETYPE_LABELS, STATUS_LABELS, STATUS_COLORS, FEED_STATE_CONFIG, fp, lalaClass, profileName, atHandle, platformLabel } from './feedConstants';
 
 export default function ProfileCard({ profile: p, selected, feedLayer, bulkMode, isChecked, onSelect, onToggle, chooseHost, onHostEvent, hosting }) {
   const d = fp(p);
@@ -29,10 +29,10 @@ export default function ProfileCard({ profile: p, selected, feedLayer, bulkMode,
         {/* @handle, then the Profile name when it says something the title does not (Task #2761). */}
         <div style={{ fontSize: 12, color: C.inkMid, marginBottom: 2 }} data-testid="spg-card-handle">{atHandle(p.handle)}{profileName(p) && profileName(p) !== (p.creator_name || d.creator_name) ? ` · ${profileName(p)}` : ''}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 8, background: C.blueLight, color: C.blue }}>{p.platform}</span>
+          <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 8, background: C.blueLight, color: C.blue }}>{platformLabel(p.platform)}</span>
           {/* Multi-platform badges */}
           {p.platform_presences && Object.keys(p.platform_presences).filter(k => k !== p.platform).slice(0, 3).map(plat => (
-            <span key={plat} style={{ fontSize: 8, fontWeight: 600, padding: '1px 5px', borderRadius: 6, background: plat === 'onlyfans' ? '#fde8e8' : '#f0f0f0', color: plat === 'onlyfans' ? C.pink : C.inkLight }}>{p.platform_presences[plat]?.visibility === 'discreet' ? `${plat} ◇` : plat}</span>
+            <span key={plat} style={{ fontSize: 8, fontWeight: 600, padding: '1px 5px', borderRadius: 6, background: plat === 'onlyfans' || plat === 'pulse_private' ? '#fde8e8' : '#f0f0f0', color: plat === 'onlyfans' || plat === 'pulse_private' ? C.pink : C.inkLight }}>{['discreet', 'private'].includes(p.platform_presences[plat]?.visibility) ? `${platformLabel(plat)} ◇` : platformLabel(plat)}</span>
           ))}
           {(p.archetype || d.archetype) && <span style={{ fontSize: 10, color: C.inkLight }}>{ARCHETYPE_LABELS[p.archetype || d.archetype] || p.archetype || d.archetype}</span>}
           {p.celebrity_tier && p.celebrity_tier !== 'accessible' && <span style={{ fontSize: 8, fontWeight: 700, padding: '1px 5px', borderRadius: 6, background: p.celebrity_tier === 'untouchable' ? '#fef3c7' : p.celebrity_tier === 'exclusive' ? '#e0e7ff' : '#f0fdf4', color: p.celebrity_tier === 'untouchable' ? '#92400e' : p.celebrity_tier === 'exclusive' ? '#3730a3' : '#065f46' }}>{p.celebrity_tier}</span>}
