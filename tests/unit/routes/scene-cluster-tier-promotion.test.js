@@ -43,7 +43,7 @@ const REQUIRE_AUTH_COUNTS = {
   'sceneTemplates.js': 6,      // 1 import + 5 handlers
   'sceneLibrary.js': 6,        // 1 import + 5 handlers (3 ex-authenticateToken + 2 ex-bare)
   'sceneProposeRoute.js': 7,   // 1 import + 6 handlers (1 with aiRateLimiter)
-  'sceneSetRoutes.js': 80,     // 1 import + 77 handlers (13 with aiRateLimiter); +4 Task #2396 (base-models, model-comparison x3); +1 S2 POST /:id/brief; +2 S6 POST/DELETE /:id/approve-base; +1 D1 GET /:id/uses; +1 POST /:id/description-review
+  'sceneSetRoutes.js': 85,     // 1 import + 77 handlers (13 with aiRateLimiter); +4 Task #2396 (base-models, model-comparison x3); +1 S2 POST /:id/brief; +2 S6 POST/DELETE /:id/approve-base; +1 D1 GET /:id/uses; +1 POST /:id/description-review; +5 look variants (GET, estimate, generate, upload, DELETE; 2026-10-15)
   'sceneLinks.js': 5,          // 1 import + 4 handlers
 };
 
@@ -54,7 +54,7 @@ const AI_RATE_LIMITER_COUNTS = {
   'sceneTemplates.js': 0,
   'sceneLibrary.js': 0,
   'sceneProposeRoute.js': 3,   // 2 import-line matches + 1 handler (POST /propose-scene)
-  'sceneSetRoutes.js': 15,     // 2 import-line matches + 13 handler invocations (+1 Task #2396 POST /model-comparison)
+  'sceneSetRoutes.js': 16,     // 2 import-line matches + 13 handler invocations (+1 Task #2396 POST /model-comparison; +1 POST /:id/look-variants/:kind/:value/generate, 2026-10-15)
   'sceneLinks.js': 0,
 };
 
@@ -182,10 +182,11 @@ describe('Step 3 CP4 — Scene cluster pure Tier 1 sweep + AI POST reference mod
       );
     });
 
-    test('sceneSetRoutes.js — exactly 12 requireAuth + aiRateLimiter middleware-chain occurrences', () => {
+    // 13 with POST /:id/look-variants/:kind/:value/generate (2026-10-15).
+    test('sceneSetRoutes.js — exactly 13 requireAuth + aiRateLimiter middleware-chain occurrences', () => {
       const src = readSrc('sceneSetRoutes.js');
       const matches = src.match(/requireAuth,\s*aiRateLimiter,/g) || [];
-      expect(matches.length).toBe(12);
+      expect(matches.length).toBe(13);
     });
   });
 
@@ -198,16 +199,16 @@ describe('Step 3 CP4 — Scene cluster pure Tier 1 sweep + AI POST reference mod
   });
 
   describe('CP4 zone aggregate consumer counts', () => {
-    test('CP4 zone contains 141 total requireAuth references across 6 files (6 imports + 133 handlers; +4 Task #2396; +1 S2 POST /:id/brief; +2 S6 approve-base; +1 D1 GET /:id/uses; +1 POST /:id/description-review)', () => {
+    test('CP4 zone contains 146 total requireAuth references across 6 files (6 imports + 133 handlers; +4 Task #2396; +1 S2 POST /:id/brief; +2 S6 approve-base; +1 D1 GET /:id/uses; +1 POST /:id/description-review; +5 look variants)', () => {
       const total = CP4_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(141);
+      expect(total).toBe(146);
     });
 
-    test('CP4 zone contains 18 total aiRateLimiter references (4 import-line matches + 14 handler invocations)', () => {
+    test('CP4 zone contains 19 total aiRateLimiter references (4 import-line matches + 15 handler invocations)', () => {
       // sceneProposeRoute.js (3) + sceneSetRoutes.js (15) = 18 (+1 Task #2396 POST /model-comparison).
       // Import lines have 2 matches each (destructure + module path) since
       // 'aiRateLimiter' appears in both `{ aiRateLimiter }` and `'.../aiRateLimiter'`.
@@ -216,7 +217,7 @@ describe('Step 3 CP4 — Scene cluster pure Tier 1 sweep + AI POST reference mod
         const matches = src.match(/\baiRateLimiter\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(18);
+      expect(total).toBe(19);
     });
 
     test('CP4 zone has zero optionalAuth references', () => {

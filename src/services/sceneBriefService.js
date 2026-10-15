@@ -525,6 +525,8 @@ module.exports = {
   BRIEF_RULES,
   FURNISHED,
   SHOT_CAMERAS,
+  TIME_LIGHT,
+  SEASON_TEXT,
   shotKey,
   ZONE_CAMERAS,
   timeOfDayFromEventTime,

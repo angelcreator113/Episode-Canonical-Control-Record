@@ -20,9 +20,11 @@ This is the plan, in the order it ships. Each step is its own PR; steps that add
 
 ## 2. Time and season variants of the everyday look
 
-- Per venue: five time-of-day images (morning, afternoon, golden hour, evening, night) for every view, and four season images (spring, summer, fall, winter) for exterior views only (the Front zone and outside shots).
-- Each is uploaded, or generated as a Kontext re-light of the everyday look so the place itself stays the same. The cost shows first, as for all generation.
-- A new table holds them (location, kind time or season, value, image, source, cost, `deleted_at`). The blank "Morning"/"Winter" WIDE angles are retired.
+- Per venue: five time-of-day images (morning, afternoon, golden hour, evening, night) and four season images (spring, summer, fall, winter).
+- A time is a re-light of the everyday look. A season is a re-season of the venue's Front view (the everyday set's Front zone angle), because season shows outside; with no Front view, a season can be uploaded but not generated.
+- Each is uploaded, or generated as a Flux Kontext edit of its source image, so the place itself stays the same. The cost shows first, as for all generation.
+- Table `location_look_variants` (location, kind `time` or `season`, value, status, source, image, cost, `deleted_at`), one live row per venue, kind and value. Service: `locationLookVariantService`. Routes: `/scene-sets/:id/look-variants` on the location's everyday set (list, estimate, generate, upload, remove). Page: `LookVariants`, the "Times of day" and "Seasons" rows on the everyday set's card in Scene Sets.
+- The older `POST /scene-sets/:id/time-variants` and `/season-variants` (blank WIDE angles) have no button in the pages and are left as they are.
 
 ## 3. Character homes
 
