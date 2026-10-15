@@ -25,6 +25,7 @@ const SCRIPT = [
   'Lala: "Okay."',
 ].join('\n');
 let outfit;
+let spent;
 
 const renderTab = () => render(
   <MemoryRouter><EpisodeScriptTab episode={{ id: 'ep-1', show_id: 'show-1', script_content: SCRIPT, script_locked_beats: [] }} show={{ id: 'show-1' }} /></MemoryRouter>,
@@ -33,6 +34,7 @@ const renderTab = () => render(
 beforeEach(() => {
   Object.values(api).forEach((fn) => fn?.mockReset?.());
   Element.prototype.scrollIntoView = vi.fn();
+  spent = 1240;
   outfit = [
     { id: 'dress-1', name: 'Crimson Gown' },
     { id: 'ear-1', name: 'Pearl Drop' },
@@ -42,7 +44,7 @@ beforeEach(() => {
     if (url === '/api/v1/wardrobe/outfit/ep-1') return { data: { items: outfit } };
     if (url === '/api/v1/ui-overlays/show-1/frame') return { data: { frame_url: null } };
     if (url === '/api/v1/episodes/ep-1/todo?beat=8') {
-      return { data: { data: { tasks: [{ slot: 'dress', label: 'A showstopper', completed: true }, { slot: 'shoes', label: 'Heels', completed: false }], completion: { completed: 1, total: 2 } } } };
+      return { data: { data: { tasks: [{ slot: 'dress', label: 'A showstopper', completed: true }, { slot: 'shoes', label: 'Heels', completed: false }], completion: { completed: 1, total: 2 }, spent_so_far: spent } } };
     }
     return { data: { data: [] } };
   });
@@ -70,6 +72,19 @@ test('the open beat says how much of the Shopping list is crossed off by then (T
   expect(row.textContent).toContain('1 of 2 crossed off');
   expect(row.textContent).toContain('A showstopper');
   expect(row.textContent).not.toContain('Heels');
+});
+
+test('beside the coins, what the look has cost by this beat; nothing when nothing is spent (Task 3189)', async () => {
+  renderTab();
+  expect((await screen.findByTestId('script-truth-spent')).textContent).toBe('Spent on the look so far: 🪙 1,240');
+  expect(screen.getByTestId('script-truth-coins').contains(screen.getByTestId('script-truth-spent'))).toBe(true);
+});
+
+test('spent so far is hidden at zero', async () => {
+  spent = 0;
+  renderTab();
+  await screen.findByTestId('script-truth-shopping');
+  expect(screen.queryByTestId('script-truth-spent')).toBeNull();
 });
 
 test('before a look is locked, nothing is checked', async () => {

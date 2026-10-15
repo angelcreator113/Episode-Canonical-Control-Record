@@ -194,4 +194,13 @@ async function episodeLook(sequelize, { episodeId, event, showId = null }) {
   return priced(saved.length ? 'event' : 'none', saved);
 }
 
-module.exports = { UUID_RE, loadLookPieces, boughtPieceIds, lookCharges, episodeLook };
+/**
+ * Each piece's charge from an episodeLook result, by piece id: Map(id →
+ * coins), 0 for a piece that costs nothing (Task #3189: spent so far adds
+ * these up for the pieces worn by a beat; the rule stays lookCharges').
+ */
+function chargeMap(look) {
+  return new Map((look?.pieces || []).map((p) => [String(p.id), p.charge ? p.charge.amount : 0]));
+}
+
+module.exports = { UUID_RE, loadLookPieces, boughtPieceIds, lookCharges, episodeLook, chargeMap };

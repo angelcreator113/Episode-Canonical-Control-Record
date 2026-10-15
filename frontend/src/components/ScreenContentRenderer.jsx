@@ -597,6 +597,9 @@ export function ShoppingListRenderer({ episodeId, beat = null, config = {} }) {
   if (loading) return <ZoneLoader />;
   const tasks = [...(data?.data?.tasks || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).slice(0, config.max_items || 12);
   if (!tasks.length) return <ZoneEmpty label="No shopping list yet" />;
+  // Spent so far (Task #3189): what the pieces worn by the beat cost, by the
+  // charge Finalize books; hidden when nothing has been spent.
+  const spent = Number(data?.data?.spent_so_far) || 0;
   return (
     <div style={{ width: '100%', height: '100%', containerType: 'inline-size' }}>
       <div className="evd-paper is-phone" data-testid="phone-shopping-list">
@@ -610,6 +613,7 @@ export function ShoppingListRenderer({ episodeId, beat = null, config = {} }) {
             </li>
           ))}
         </ul>
+        {spent > 0 && <div className="evd-paper-total" data-testid="phone-shopping-spent">spent so far: 🪙 {spent.toLocaleString('en-US')}</div>}
       </div>
     </div>
   );

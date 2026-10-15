@@ -650,7 +650,7 @@ async function generateEpisodeTodoList(episodeId, showId, models) {
  */
 async function wornAsOf(sequelize, episodeId, { beat, line }) {
   const [episode] = await sequelize.query(
-    'SELECT script_content FROM episodes WHERE id = :episodeId AND deleted_at IS NULL',
+    'SELECT script_content, show_id FROM episodes WHERE id = :episodeId AND deleted_at IS NULL',
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
   );
   const look = await sequelize.query(
@@ -663,7 +663,24 @@ async function wornAsOf(sequelize, episodeId, { beat, line }) {
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
   );
   const { wornByBeat } = require('../utils/scriptWear');
-  return wornByBeat(episode?.script_content || '', look, beat, Number.isInteger(line) ? line : Infinity);
+  return {
+    ...wornByBeat(episode?.script_content || '', look, beat, Number.isInteger(line) ? line : Infinity),
+    showId: episode?.show_id || null,
+  };
+}
+
+/**
+ * Spent so far (Task #3189; Lala's Phone spec §5): what the pieces worn by
+ * the beat cost, each by the charge Finalize books for it (episodeLook, the
+ * one charge rule: owned, already bought, gifted or borrowed pieces cost
+ * nothing; a rental its fee; any other its price). The look's total stays
+ * the Money page's; this is the running part up to the beat.
+ */
+async function spentSoFar(sequelize, episodeId, showId, worn) {
+  if (!worn.length) return 0;
+  const { episodeLook, chargeMap } = require('./episodeLookCharges');
+  const charges = chargeMap(await episodeLook(sequelize, { episodeId, event: null, showId }));
+  return worn.reduce((sum, p) => sum + (charges.get(String(p.id)) || 0), 0);
 }
 
 async function getTodoList(episodeId, models, { beat = null, line = null } = {}) {
@@ -682,8 +699,9 @@ async function getTodoList(episodeId, models, { beat = null, line = null } = {})
   // beat, only the pieces she has put on by then count (Task #3188).
   let categories;
   let asOf = null;
+  let spent = null;
   if (Number.isInteger(beat)) {
-    const { worn, uncued, beatFound } = await wornAsOf(sequelize, episodeId, { beat, line });
+    const { worn, uncued, beatFound, showId } = await wornAsOf(sequelize, episodeId, { beat, line });
     categories = worn.map(p => p.clothing_category);
     asOf = {
       beat,
@@ -693,6 +711,7 @@ async function getTodoList(episodeId, models, { beat = null, line = null } = {})
       // Flagged "in the look, never equipped on screen" (ruling 2).
       uncued: uncued.map(p => ({ id: p.id, name: p.name })),
     };
+    spent = await spentSoFar(sequelize, episodeId, showId, worn);
   } else {
     const wardrobeItems = await sequelize.query(
       `SELECT w.clothing_category
@@ -718,7 +737,7 @@ async function getTodoList(episodeId, models, { beat = null, line = null } = {})
   return {
     ...todoList,
     tasks,
-    ...(asOf ? { as_of: asOf } : {}),
+    ...(asOf ? { as_of: asOf, spent_so_far: spent } : {}),
     completion: {
       total: tasks.length,
       completed: tasks.filter(t => t.completed).length,
