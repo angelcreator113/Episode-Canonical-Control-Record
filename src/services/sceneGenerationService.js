@@ -222,8 +222,14 @@ async function downloadAndStoreStill(imageUrl, sceneSetId, suffix = 'still') {
     responseType: 'arraybuffer',
     timeout: 60000,
   });
-  const buffer = Buffer.from(response.data);
+  return storeStillBuffer(Buffer.from(response.data), sceneSetId, suffix);
+}
 
+/**
+ * An image's bytes persisted as every still is: a 1920x1080 JPEG in S3, so
+ * a set's base and its angles share one frame whatever model drew them.
+ */
+async function storeStillBuffer(buffer, sceneSetId, suffix = 'still') {
   const processed = await sharp(buffer)
     .resize(1920, 1080, { fit: 'cover', position: 'center' })
     .jpeg({ quality: 92 })
@@ -609,17 +615,15 @@ async function generateGptImageStill(prompt, { referenceImageUrl = null, sceneSe
     ));
   }
 
+  // Stored as every still is (1920x1080 JPEG): a 1536x1024 base beside
+  // 16:9 angles and looks gave the set mixed shapes (audit, 2026-10-15).
   const item = response.data?.data?.[0];
-  const prefix = sceneSetId ? `scenes/${sceneSetId}/base-gpt-image-1.5` : 'scenes/gpt-image-1.5';
+  const setKey = sceneSetId || 'unknown';
   if (item?.b64_json) {
-    const s3Key = `${prefix}-${Date.now()}.png`;
-    await s3.send(new PutObjectCommand({
-      Bucket: S3_BUCKET, Key: s3Key, Body: Buffer.from(item.b64_json, 'base64'), ContentType: 'image/png',
-    }));
-    return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+    return storeStillBuffer(Buffer.from(item.b64_json, 'base64'), setKey, 'base-gpt-image-1.5');
   }
   if (item?.url) {
-    return downloadAndUploadToS3(item.url, `${prefix}-${Date.now()}.png`);
+    return downloadAndStoreStill(item.url, setKey, 'base-gpt-image-1.5');
   }
   throw new Error('gpt-image-1.5 returned no image data');
 }
@@ -1550,9 +1554,11 @@ const CAMERA_CROP_MAP = {
  * For crop+extend angles (VANITY, WINDOW): crops, extends canvas, uses
  * gpt-image-1.5 (OUTPAINT_MODEL) to fill the new area while keeping original pixels.
  */
-// The narrowest frame, as a share of the base's width, kept as a pure crop:
-// a Flux base is rendered 1024 px wide, so a half-width frame is already
-// about 3x enlarged at 1536.
+// The narrowest frame, as a share of the base's width and of its height,
+// kept as a pure crop: a Flux base is rendered 1024 px wide, so a
+// half-width frame is already about 3x enlarged at 1536, and a frame under
+// half the height is a strip, not a view (audit, 2026-10-15: only the width
+// was checked).
 const MIN_PURE_CROP_FRACTION = 0.5;
 
 async function cropAndOutpaint(baseImageUrl, angleLabel, setId, angleId, prompt, { onLogged, frame = null } = {}) {
@@ -1564,8 +1570,9 @@ async function cropAndOutpaint(baseImageUrl, angleLabel, setId, angleId, prompt,
   // A pure crop is a real view only with enough of the picture's own pixels:
   // a small region stretched to full size is a blur, so it is generated from
   // the base instead (null: the caller's Kontext path).
-  if ((config.extend === 'none' || config.extendAmount === 0) && !(config.crop.width >= MIN_PURE_CROP_FRACTION)) {
-    console.log(`[SceneGen] Frame for ${angleLabel} is ${Math.round((config.crop.width || 0) * 100)}% of the picture's width; generated instead of cropped`);
+  if ((config.extend === 'none' || config.extendAmount === 0)
+    && !(config.crop.width >= MIN_PURE_CROP_FRACTION && config.crop.height >= MIN_PURE_CROP_FRACTION)) {
+    console.log(`[SceneGen] Frame for ${angleLabel} is ${Math.round((config.crop.width || 0) * 100)}% x ${Math.round((config.crop.height || 0) * 100)}% of the picture; generated instead of cropped`);
     return null;
   }
 
@@ -1713,7 +1720,7 @@ async function cropAndOutpaint(baseImageUrl, angleLabel, setId, angleId, prompt,
  * override"). options.imageAnalysis: the base's analysis when generating;
  * the preview reads only what the set already stores.
  */
-function angleBriefOptions(sceneAngle, sceneSet, { imageAnalysis = null, overrides = null } = {}) {
+function angleBriefOptions(sceneAngle, sceneSet, { imageAnalysis = null, overrides = null, zoneAngle = null } = {}) {
   const angleLabel = sceneAngle.angle_label || 'WIDE';
   const vl = sceneSet.visual_language || {};
   // Anchors from the analysis of this base, not of a base it replaced.
@@ -1747,14 +1754,18 @@ function angleBriefOptions(sceneAngle, sceneSet, { imageAnalysis = null, overrid
   const baseBrief = sceneSet.base_generation?.brief || null;
   // L14 (b): a zone is its own establishing view of that part of the place.
   const zone = zoneOf(sceneAngle);
+  // An extra framing on a zone (zone_angle_id) is made from the zone's
+  // picture: the base view's anchors and spec are not its.
+  const partOf = !zone && zoneAngle ? zoneOf(zoneAngle) : null;
   return {
     options: {
       angleLabel,
       cameraDirection: sceneAngle.camera_direction || null,
       // A zone is another part of the place: the base view's anchors are not its.
-      requiredFeatures: zone ? null : (specConstraints || (relevantAnchors.length ? `These must appear: ${relevantAnchors.join('; ')}` : null)),
-      continuity: zone ? false : Boolean(sceneSet.base_still_url),
+      requiredFeatures: (zone || partOf) ? null : (specConstraints || (relevantAnchors.length ? `These must appear: ${relevantAnchors.join('; ')}` : null)),
+      continuity: zone ? false : (partOf ? Boolean(zoneAngle.still_image_url) : Boolean(sceneSet.base_still_url)),
       ...(zone ? { zone } : {}),
+      ...(partOf ? { partOf } : {}),
       eventId: baseBrief?.event_id || null,
       overrides: overrides && typeof overrides === 'object' ? overrides : (baseBrief?.overrides || {}),
     },
@@ -1796,6 +1807,24 @@ async function zoneReferenceImage(sceneSet, sequelize) {
     return { url: location.approved_base_image_url, source: 'approved_base' };
   }
   return sceneSet?.base_still_url ? { url: sceneSet.base_still_url, source: 'base' } : null;
+}
+
+/**
+ * The zone an extra framing is in (L14: angle_kind 'extra' with
+ * zone_angle_id), when it is a zone of the same set; null otherwise.
+ */
+async function extraZoneAngle(sceneAngle, SceneAngle) {
+  if (String(sceneAngle?.angle_kind || '').toLowerCase() !== 'extra' || !sceneAngle.zone_angle_id) return null;
+  if (typeof SceneAngle?.findOne !== 'function') return null;
+  const zoneAngle = await SceneAngle.findOne({ where: { id: sceneAngle.zone_angle_id, scene_set_id: sceneAngle.scene_set_id } });
+  return zoneAngle && zoneOf(zoneAngle) ? zoneAngle : null;
+}
+
+function noZoneImageError(zoneAngle) {
+  const err = new Error(`Generate or upload the zone "${zoneAngle.angle_name || zoneAngle.angle_kind}" first: its framings are made from it.`);
+  err.status = 409;
+  err.code = 'NO_ZONE_IMAGE';
+  return err;
 }
 
 function noBaseError() {
@@ -1857,10 +1886,13 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
   if (zoneOf(sceneAngle)) return generateZone(sceneAngle, sceneSet, models, options);
 
   const angleLabel = sceneAngle.angle_label || 'WIDE';
+  const zoneAngle = await extraZoneAngle(sceneAngle, SceneAngle);
+  if (zoneAngle && !zoneAngle.still_image_url) throw noZoneImageError(zoneAngle);
 
-  // Analyze base image to get blueprint (cached)
+  // Analyze base image to get blueprint (cached); not for a framing on a
+  // zone, which is made from the zone's picture.
   let imageAnalysis = null;
-  if (sceneSet.base_still_url) {
+  if (sceneSet.base_still_url && !zoneAngle) {
     try {
       imageAnalysis = await analyzeBaseImage(sceneSet, SceneSet);
     } catch (err) {
@@ -1888,7 +1920,7 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
   }
 
   const { options: briefOptions, relevantAnchors, specConstraints } = angleBriefOptions(sceneAngle, sceneSet, {
-    imageAnalysis, overrides: options.overrides,
+    imageAnalysis, overrides: options.overrides, zoneAngle,
   });
   const brief = await prepareSceneBrief(briefDb(models), sceneSet, briefOptions);
   const prompt = refinePrompt(briefToPrompt(brief), options.refine);
@@ -1899,7 +1931,8 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
   const imageType = String(imageAnalysis?.image_type || '').toLowerCase();
   const disableReferenceTypes = new Set(['moodboard', 'mood_board', 'collage', 'style_board']);
   const shouldDisableReference = disableReferenceTypes.has(imageType);
-  const referenceImageForEdit = shouldDisableReference ? null : sceneSet.base_still_url;
+  const sourceImage = zoneAngle ? zoneAngle.still_image_url : sceneSet.base_still_url;
+  const referenceImageForEdit = shouldDisableReference ? null : sourceImage;
 
   await SceneAngle.update(
     { generation_status: 'generating', runway_prompt: prompt, ...(options.refine ? { refined_prompt: prompt } : {}) },
@@ -1921,9 +1954,9 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
     // left) and cut the same region from every set's picture, a house's
     // outside included. Now only a frame from this set's spec is cropped;
     // without one the angle is generated.
-    // A refine asks for a new picture without the flagged problems, so it
-    // is generated, not cropped again.
-    const frame = options.refine ? null : sceneSpecService.contractFrame(sceneSet.scene_spec, angleLabel);
+    // A refine asks for a new picture without the flagged problems, and a
+    // framing on a zone is made from the zone's picture: neither is a crop.
+    const frame = (options.refine || zoneAngle) ? null : sceneSpecService.contractFrame(sceneSet.scene_spec, angleLabel);
     if (referenceImageForEdit && frame) {
       stillUrl = await cropAndOutpaint(
         referenceImageForEdit, angleLabel, sceneSet.id, sceneAngle.id, prompt,
@@ -1979,8 +2012,8 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
       const styleReference = (sceneAngle.style_reference_url || sceneSet.style_reference_url)
         ? { uri: sceneAngle.style_reference_url || sceneSet.style_reference_url, weight: 0.7 }
         : undefined;
-      const referenceImages = sceneSet.base_still_url
-        ? [{ uri: sceneSet.base_still_url, weight: 0.8 }]
+      const referenceImages = sourceImage
+        ? [{ uri: sourceImage, weight: 0.8 }]
         : undefined;
 
       const { imageUrl } = await startTextToImage(prompt, {
@@ -2022,7 +2055,7 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
     // ── SceneSpec post-generation validation ──
     // The set's SceneSpec, including one auto-built above. Read here: the
     // brief's copy lives in angleBriefOptions since S2 (#2421).
-    const spec = sceneSet.scene_spec;
+    const spec = zoneAngle ? null : sceneSet.scene_spec;
     let specValidation = null;
     if (spec?.camera_contracts && stillUrl) {
       try {
@@ -2217,6 +2250,7 @@ module.exports = {
   specFitsBase,
   zoneOf,
   zoneReferenceImage,
+  extraZoneAngle,
   refinedBriefOptions,
   refinePrompt,
   generateAngleVideo,

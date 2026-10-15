@@ -147,6 +147,10 @@ const ZONE_CAMERAS = Object.freeze({
   area: (place, name) => (name ? `Establishing view of the ${name} area of ${place}.` : `Establishing view of an area of ${place}.`),
   zone: (place, name) => (name ? `Establishing view of the ${name} of ${place}.` : `Establishing view of a part of ${place}.`),
 });
+// The zones that are not the room the set's description describes: their
+// views show none of its furniture (audit, 2026-10-15: a Front zone was
+// told every piece of the bedroom's furniture must be present).
+const OUTSIDE_ZONES = Object.freeze(['front', 'back']);
 const ZONE_CONTINUITY = 'The same place as the reference image: its architecture, materials and palette; a different part of it, not the same view.';
 const zoneCamera = (zone, place) => {
   const make = ZONE_CAMERAS[String(zone?.kind || '').toLowerCase()];
@@ -247,13 +251,23 @@ function seasonFromDate(date) {
  *                    bug 3, §8(hh)). `event` takes precedence when given.
  *   zone:            { kind, name } for a zone of the set (L14 b): its own
  *                    establishing camera and the same-place continuity line
+ *   partOf:          { kind, name } of the zone an extra framing is in: a
+ *                    Front or Back zone's framings, like the zone, show
+ *                    none of the described room's furniture
  */
 function buildSceneBrief({
   sceneSet, location = null, event = null, angleLabel = 'WIDE', cameraDirection = null,
   requiredFeatures = null, continuity = false, overrides = {}, lookDressing = false, environmentEvent = null, zone = null,
+  partOf = null,
 } = {}) {
   const set = sceneSet || {};
   const angle = String(angleLabel || 'WIDE').toUpperCase();
+  // A view of the Front or Back (a zone's establishing view, or a framing in
+  // one): the described room is not in it. A label naming its own shot on
+  // the zone (DOORWAY on the Front: the doorway looking in) is the room.
+  const viewKind = String((zone || partOf)?.kind || '').toLowerCase();
+  const ownShot = !GENERIC_SHOTS.includes(shotKey(angle)) && Boolean(SHOT_CAMERAS[shotKey(angle)]);
+  const outsideView = OUTSIDE_ZONES.includes(viewKind) && !(zone && ownShot);
   const lines = [];
   const add = (layer, key, label, text, source, essential = false) => {
     lines.push({ layer, key, label, text: clean(text), source, essential });
@@ -263,7 +277,10 @@ function buildSceneBrief({
   const guide = location?.effective_style_guide || parseJson(location?.style_guide, null) || {};
   const placeType = clean(location?.venue_type || location?.property_type || '').replace(/_/g, ' ');
   add('place', 'identity', 'Place', sentence(`${clean(set.name || location?.name || 'The place')}${placeType ? `, ${/^[aeiou]/i.test(placeType) ? 'an' : 'a'} ${placeType}` : ''}`), 'venue', true);
-  add('place', 'description', 'Description', sentence(set.canonical_description || location?.description), 'venue', true);
+  const description = sentence(set.canonical_description || location?.description);
+  add('place', 'description', 'Description', outsideView && description
+    ? `For its style only: ${description} This view is another part of the place; none of that room's furniture is in it.`
+    : description, 'venue', true);
   if (guide.architecture) add('place', 'architecture', 'Architecture', sentence(`Architecture: ${listText(guide.architecture)}`), 'venue');
   const materials = materialsText(guide.materials);
   if (materials) add('place', 'materials', 'Materials', sentence(`Materials: ${materials}`), 'venue');
@@ -277,10 +294,10 @@ function buildSceneBrief({
     CEILING[rp.ceiling_height] || null, SHAPE[rp.room_shape] || null].filter(Boolean);
   const floorPlan = parseJson(location?.floor_plan, null);
   if (floorPlan?.description) layoutParts.push(clean(floorPlan.description));
-  if (layoutParts.length) add('place', 'layout', 'Layout', sentence(`Layout: ${layoutParts.join(', ')}`), 'venue');
+  if (layoutParts.length && !outsideView) add('place', 'layout', 'Layout', sentence(`Layout: ${layoutParts.join(', ')}`), 'venue');
   const details = parseJson(location?.venue_details, {}) || {};
   const equipment = guide.equipment || details.equipment;
-  if (equipment) add('place', 'equipment', 'Equipment', sentence(`Equipment and fixtures: ${listText(equipment)}`), 'venue');
+  if (equipment && !outsideView) add('place', 'equipment', 'Equipment', sentence(`Equipment and fixtures: ${listText(equipment)}`), 'venue');
   if (guide.lighting) add('place', 'lighting', 'Lighting', sentence(`Lighting fixtures: ${listText(guide.lighting)}`), 'venue');
   const district = clean(location?.district || location?.parent?.district);
   const city = clean(location?.city || location?.parent?.city);
@@ -391,6 +408,9 @@ function buildSceneBrief({
       ? { scene_set_id: location.approved_base_scene_set_id || null, image_url: location.approved_base_image_url }
       : null,
     lines: kept,
+    // The FURNISHED line ("every piece of furniture described is present")
+    // is not sent for a view without the described room.
+    ...(outsideView ? { furnished: false } : {}),
     rules: [...BRIEF_RULES],
     missing,
     overrides: Object.fromEntries(Object.entries(over).map(([k, v]) => [k, clean(v)])),
@@ -435,20 +455,21 @@ function briefToPrompt(brief) {
   // reference, and a camera line after the whole room's description reads
   // as a description of the reference, so the camera barely moves.
   const fromReference = (brief?.lines || []).some((l) => l.key === 'continuity' && l.text);
+  const furnished = brief?.furnished === false ? [] : [FURNISHED];
   const body = brief?.mode === 'event_dressing'
     ? join([DRESSING_KEEP, ...byLayer('event'), DRESSING_END])
     : join(fromReference
       ? [
         ...byLayer('shot'),
         ...byLayer('place'),
-        FURNISHED,
+        ...furnished,
         ...byLayer('event'),
         ...byLayer('environment'),
         'Photorealistic.',
       ]
       : [
         ...byLayer('place'),
-        FURNISHED,
+        ...furnished,
         ...byLayer('event'),
         ...byLayer('shot'),
         ...byLayer('environment'),
