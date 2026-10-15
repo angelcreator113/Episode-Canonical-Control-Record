@@ -203,6 +203,7 @@ router.get('/:showId', requireAuth, async (req, res) => {
       generation_status: genStatus,
     });
   } catch (err) {
+    console.error('[UIOverlay] GET /:showId failed:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -536,6 +537,7 @@ router.get('/:showId/frame', requireAuth, async (req, res) => {
 
     return res.json({ success: true, frame_url, global_fit, phone_skin });
   } catch (err) {
+    console.error('[UIOverlay] GET /:showId/frame failed:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

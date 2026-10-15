@@ -105,7 +105,20 @@ const EpisodeDetail = () => {
   const { main: activeTab, sub: epSubTab, key: tabKey } = useMemo(() => resolveEpisodeTab(tabParam), [tabParam]);
   // The one tab transition: any tab or sub-tab by its URL key, keeping the
   // page's other parameters.
-  const openTab = useCallback((tab) => setSearchParams((prev) => withEpisodeTab(prev, tab)), [setSearchParams]);
+  // Leaving the Script tab with unsaved edits asks first: the tab unmounts,
+  // and its edits go with it. The Script tab reports whether it has any.
+  const scriptDirtyRef = useRef(false);
+  const handleScriptDirty = useCallback((dirty) => { scriptDirtyRef.current = dirty; }, []);
+  const openTab = useCallback((tab) => {
+    if (scriptDirtyRef.current && tab !== 'scripts'
+      && !window.confirm('The script has unsaved changes. Leave without saving?')) return;
+    setSearchParams((prev) => withEpisodeTab(prev, tab));
+  }, [setSearchParams]);
+  // A save on the Script tab updates the episode the page holds, so coming
+  // back to the tab (or the Wardrobe tab's closet beat) reads the saved script.
+  const handleScriptSaved = useCallback((fields) => {
+    setEpisode((prev) => (prev ? { ...prev, ...fields } : prev));
+  }, []);
 
   // Keyboard shortcuts for tab navigation
   useEffect(() => {
@@ -125,6 +138,8 @@ const EpisodeDetail = () => {
             openTab('scripts');
             break;
           case 's':
+            // On the Script tab, Ctrl/Cmd+S is the tab's own Save.
+            if (tabKey === 'scripts') break;
             e.preventDefault();
             openTab('scenes');
             break;
@@ -136,7 +151,7 @@ const EpisodeDetail = () => {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [openTab]);
+  }, [openTab, tabKey]);
 
   // The header's balance chip (§8(aa) M1): Lala's ledger balance, from the
   // same /balance the Dashboard reads. It opens Production → Money.
@@ -827,6 +842,8 @@ const EpisodeDetail = () => {
             key={episode.id}
             episode={episode}
             show={episode.show || show}
+            onSaved={handleScriptSaved}
+            onDirtyChange={handleScriptDirty}
           />
         )}
 

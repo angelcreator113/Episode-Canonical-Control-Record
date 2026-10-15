@@ -3,7 +3,7 @@
  * (Closet for a section page), else home.
  */
 import { test, expect } from 'vitest';
-import { backTargetOf } from './phoneBack';
+import { backTargetOf, ownBackZone } from './phoneBack';
 
 const S = (id, links = [], extra = {}) => ({ id, name: id, category: 'phone', generated: true, url: `https://x/${id}.png`, screen_links: links, ...extra });
 const I = (id) => ({ id, name: id, category: 'phone_icon', url: `https://x/${id}.png` });
@@ -34,4 +34,18 @@ test('Closet itself, a page only a plain zone opens, and a page nothing opens go
 test('no Back target on the home, or with no screen', () => {
   expect(backTargetOf(HOME, SCREENS, ICONS, HOME)).toBeNull();
   expect(backTargetOf(null, SCREENS, ICONS, HOME)).toBeNull();
+});
+
+test('ownBackZone: a zone labelled Back that opens a screen', () => {
+  const z = (label, extra = {}) => S('p', [{ id: 'z', target: 'homepage', label, ...extra }]);
+  for (const label of ['Back', '‹ back', '← Back', 'Back home', 'Go back', 'Back to Closet']) {
+    expect(ownBackZone(z(label))?.id).toBe('z');
+  }
+  for (const label of ['Backpack', 'Feedback', 'Home', '', undefined]) {
+    expect(ownBackZone(z(label))).toBeNull();
+  }
+  expect(ownBackZone(z('Back', { target: null }))).toBeNull();
+  expect(ownBackZone(z('Back', { persistent: true }))).toBeNull();
+  expect(ownBackZone({ id: 'p', metadata: { screen_links: [{ id: 'm', target: 'homepage', label: 'Back' }] } })?.id).toBe('m');
+  expect(ownBackZone(null)).toBeNull();
 });

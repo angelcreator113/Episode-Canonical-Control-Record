@@ -19,7 +19,8 @@ test('every tap out of home, with what the phone cannot do beside it', () => {
   render(<PhoneMapStage overlays={OVERLAYS} onOpenScreen={() => {}} />);
   expect(screen.getByText('3 taps out')).toBeTruthy();
   const taps = within(screen.getByTestId('phone-map-taps')).getAllByRole('button').map(b => b.textContent);
-  expect(taps).toEqual(['Closet1 link onward', 'Closetfrom wallet · 1 link onward', 'Camerano taps onward']);
+  // Closet's only zone is its Back, which leads back, not onward.
+  expect(taps).toEqual(['Closetno taps onward', 'Closetfrom wallet · no taps onward', 'Camerano taps onward']);
   expect(within(screen.getByTestId('phone-map-unreachable')).getByText('Hair Page')).toBeTruthy();
   // No dead ends (Task #3162): every screen but the home has the phone's own Back.
   expect(screen.queryByTestId('phone-map-dead-ends')).toBeNull();

@@ -11,10 +11,15 @@ const beat = (n, name, body) => `## BEAT: ${n} · ${name}\n${body}`;
 const script = (...beats) => `[EVENT: gala]\n\n${beats.join('\n\n')}`;
 
 describe('scriptBeatLocks', () => {
-  test('splits on beat headers, numbering by the header and otherwise by position', () => {
-    const split = splitScriptBeats('intro\n## BEAT: 5 · Reveal\nA\n## BEAT: CLIFFHANGER\nB');
+  test('splits on beat headers, numbering by the header, then by a beat name, otherwise by position', () => {
+    const split = splitScriptBeats('intro\n## BEAT: 5 · Reveal\nA\n## BEAT: CLIFFHANGER\nB\n## BEAT: Bonus scene\nC');
     expect(split.preamble).toBe('intro');
-    expect(split.beats).toEqual([{ number: 5, text: '## BEAT: 5 · Reveal\nA' }, { number: 2, text: '## BEAT: CLIFFHANGER\nB' }]);
+    // Script tab audit (2026-10-15): a named header is its canonical beat.
+    expect(split.beats).toEqual([
+      { number: 5, text: '## BEAT: 5 · Reveal\nA' },
+      { number: 14, text: '## BEAT: CLIFFHANGER\nB' },
+      { number: 3, text: '## BEAT: Bonus scene\nC' },
+    ]);
   });
 
   test('locked beat numbers are whole numbers 1-14, once each, in order', () => {

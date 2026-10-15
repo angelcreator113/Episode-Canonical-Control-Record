@@ -112,6 +112,7 @@ let PulsePollOption; // Poll options (Task #3005)
 let PulsePollVote; // Poll votes, hashed (Task #3005)
 let PulseRecap; // The weekly Pulse recap (Task #3008)
 let WardrobeOrderLine; // Imported Amazon order lines (Task #3102)
+let EpisodeScriptVersion; // Scripts the Script tab replaced (Script tab audit, 2026-10-15)
 let WritingRhythm; // Writing rhythm tracking
 let WritingGoal; // Writing goals
 let MultiProductContent; // Multi-product content generation
@@ -390,6 +391,7 @@ try {
   PulsePollVote = require('./PulsePollVote')(sequelize, DataTypes);
   PulseRecap = require('./PulseRecap')(sequelize, DataTypes);
   WardrobeOrderLine = require('./WardrobeOrderLine')(sequelize, DataTypes);
+  EpisodeScriptVersion = require('./EpisodeScriptVersion')(sequelize, DataTypes);
   WritingRhythm = require('./WritingRhythm')(sequelize, DataTypes);
   WritingGoal = require('./WritingGoal')(sequelize, DataTypes);
   MultiProductContent = require('./MultiProductContent')(sequelize, DataTypes);
@@ -587,6 +589,7 @@ const requiredModels = {
   PulsePollVote,
   PulseRecap,
   WardrobeOrderLine,
+  EpisodeScriptVersion,
   WritingRhythm,
   WritingGoal,
   MultiProductContent,
@@ -2124,6 +2127,7 @@ module.exports.PulsePollOption = PulsePollOption;
 module.exports.PulsePollVote = PulsePollVote;
 module.exports.PulseRecap = PulseRecap;
 module.exports.WardrobeOrderLine = WardrobeOrderLine;
+module.exports.EpisodeScriptVersion = EpisodeScriptVersion;
 module.exports.WritingRhythm = WritingRhythm;
 module.exports.WritingGoal = WritingGoal;
 module.exports.MultiProductContent = MultiProductContent;

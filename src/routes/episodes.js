@@ -741,6 +741,33 @@ router.put(
   asyncHandler(episodeController.updateEpisode)
 );
 
+// SCRIPT VERSION HISTORY (services/scriptVersions.js; Script tab audit,
+// 2026-10-15): the scripts the Script tab replaced, newest first, and one
+// with its text. Read-only; a restore on the Script tab is a save.
+router.get('/:id/script-versions', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { listVersions } = require('../services/scriptVersions');
+    return res.json({ success: true, data: await listVersions(models, req.params.id) });
+  } catch (err) {
+    console.error('[ScriptVersions] GET /:id/script-versions failed:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/:id/script-versions/:versionId', validateUUIDParam('id'), validateUUIDParam('versionId'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { getVersion } = require('../services/scriptVersions');
+    const version = await getVersion(models, req.params.id, req.params.versionId);
+    if (!version) return res.status(404).json({ success: false, error: 'Version not found' });
+    return res.json({ success: true, data: version });
+  } catch (err) {
+    console.error('[ScriptVersions] GET /:id/script-versions/:versionId failed:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // LOCK / UNLOCK SCRIPT BEATS (utils/scriptBeatLocks.js)
 router.put(
   '/:id/script-locks',

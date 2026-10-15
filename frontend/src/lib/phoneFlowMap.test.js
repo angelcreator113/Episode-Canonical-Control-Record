@@ -49,3 +49,12 @@ test('a screen with no taps of its own is an end, pinned home icon or not', () =
 test('no home screen: nothing to map', () => {
   expect(phoneFlowMap([]).home).toBeNull();
 });
+
+test('a Back zone leads back, not onward: the screen it is on is an end', () => {
+  const map = phoneFlowMap([
+    S('home', [Z('z1', 'closet'), Z('z2', 'feed')], { is_home: true }),
+    S('closet', [Z('z3', 'home', { label: 'Back' })]),
+    S('feed', [Z('z4', 'home', { label: 'Back' }), Z('z5', 'closet')]),
+  ]);
+  expect(map.taps.map((t) => [t.label, t.state, t.onward])).toEqual([['Zone 1', 'end', 0], ['Zone 2', 'onward', 1]]);
+});
