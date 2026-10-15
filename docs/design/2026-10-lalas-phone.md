@@ -25,7 +25,7 @@ Source: Evoni's design conversations. Companion to docs/design/2026-10-the-pulse
 | Location | World map | Dream Cities, venues, the day's event, travel from home to venue |
 | Bank | Money | Lala's coins, spending, pending and paid deal payouts |
 | Mail | Inbox | Event invitations, brand deals and other opportunities, messages |
-| Call | Calls | Incoming calls from friends at story moments; canon, drafted in voice and approved like DMs |
+| Call | Calls | Incoming calls at story moments; canon, drafted in voice and approved like DMs. Calls come from friends and from brands (a brand may call with an opportunity) (Evoni, 2026-10-14) |
 | Voice | (no screen) | An action: Prime taps it and Lala speaks the line the beat calls for |
 
 ## 4. Modes in the Phone Hub
@@ -98,7 +98,6 @@ The unused Templates page becomes **Style Templates**: several designs of the sa
 Each phase is split into issues small enough for one phone-reviewable PR, each starting with a read when it touches data it has not measured.
 
 ## 16. Open decisions [decide]
-- Who can call Lala, and when calls are drafted automatically vs written.
 - Career unlock thresholds.
 - Seed lines for Prime's outro idea library.
 - Whether "Previously on" is on by default.
