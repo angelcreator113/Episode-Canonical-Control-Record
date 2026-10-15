@@ -691,6 +691,62 @@ router.put('/:id/scene-defaults', requireAuth, async (req, res) => {
   }
 });
 
+// ─── Character homes (2026-10-15; docs/VENUE_EVERYDAY_AND_EVENT_LOOKS_PLAN.md step 3) ───
+// The show's lead (Lala) keeps her home and closet in the scene defaults
+// above; any other character links to their own scene sets.
+// characterPlacesService holds the rules.
+const characterPlacesError = (res, err, label) => {
+  const { CharacterPlacesError } = require('../services/characterPlacesService');
+  const { EpisodeLocationsError } = require('../services/episodeLocationsService');
+  if (err instanceof CharacterPlacesError || err instanceof EpisodeLocationsError) {
+    return res.status(err.status).json({ success: false, code: err.code, error: err.message });
+  }
+  console.error(`${label} error:`, err);
+  return res.status(500).json({ success: false, error: err.message });
+};
+
+router.get('/:id/character-places', requireAuth, async (req, res) => {
+  try {
+    const { listPlaces } = require('../services/characterPlacesService');
+    return res.json({ success: true, data: await listPlaces(getShow().sequelize, req.params.id) });
+  } catch (err) {
+    return characterPlacesError(res, err, 'GET /shows/:id/character-places');
+  }
+});
+
+router.put('/:id/lead-character', requireAuth, async (req, res) => {
+  try {
+    const { setLead } = require('../services/characterPlacesService');
+    return res.json({ success: true, data: await setLead(getShow().sequelize, { showId: req.params.id, characterId: req.body?.character_id || null }) });
+  } catch (err) {
+    return characterPlacesError(res, err, 'PUT /shows/:id/lead-character');
+  }
+});
+
+router.post('/:id/character-places', requireAuth, async (req, res) => {
+  try {
+    const { linkPlace } = require('../services/characterPlacesService');
+    const b = req.body || {};
+    return res.json({ success: true, data: await linkPlace(getShow().sequelize, {
+      showId: req.params.id, characterId: b.character_id, sceneSetId: b.scene_set_id, role: b.role, label: b.label,
+    }) });
+  } catch (err) {
+    return characterPlacesError(res, err, 'POST /shows/:id/character-places');
+  }
+});
+
+router.post('/:id/character-places/unlink', requireAuth, async (req, res) => {
+  try {
+    const { unlinkPlace } = require('../services/characterPlacesService');
+    const b = req.body || {};
+    return res.json({ success: true, data: await unlinkPlace(getShow().sequelize, {
+      showId: req.params.id, characterId: b.character_id, sceneSetId: b.scene_set_id, role: b.role,
+    }) });
+  } catch (err) {
+    return characterPlacesError(res, err, 'POST /shows/:id/character-places/unlink');
+  }
+});
+
 /**
  * GET /api/v1/shows/:id/financial-summary
  * Aggregated financial dashboard for the Finance page. Returns:

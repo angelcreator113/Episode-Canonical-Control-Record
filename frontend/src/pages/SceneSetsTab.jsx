@@ -7,6 +7,7 @@ import { fetchAllPages } from '../lib/fetchAllPages';
 import { isAppPath } from '../utils/sceneSets';
 import EventLookImage from '../components/EventPackage/EventLookImage';
 import DressedAngles from '../components/SceneSets/DressedAngles';
+import CharacterHomes, { notifyCharacterPlacesChanged } from '../components/SceneSets/CharacterHomes';
 import LookVariants from '../components/SceneSets/LookVariants';
 import './SceneSetsTab.css';
 import { BaseModelSelect } from '../components/SceneModelComparison';
@@ -1042,7 +1043,7 @@ export function ApprovedBaseRow({ set, onToast = () => {}, onRefresh = () => {} 
   return null;
 }
 
-const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZone = null, onGenerateBase, onRegenerateBase, onUploadBase, onUploadAngleImage, onGenerateAngle, onGenerateAll, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, specStage, allShows, allEpisodes, onLoadEpisodes, onToast, onRefresh, defaultRole = null, onMakeDefault, hideShow = false, onUploadAngles }) {
+const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZone = null, onGenerateBase, onRegenerateBase, onUploadBase, onUploadAngleImage, onGenerateAngle, onGenerateAll, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, specStage, allShows, allEpisodes, onLoadEpisodes, onToast, onRefresh, defaultRole = null, onMakeDefault, onDefaultsChanged, hideShow = false, onUploadAngles }) {
   const fileInputRef = useRef(null);
   const menuRef = useRef(null);
   const isGenerating = isGeneratingProp;
@@ -2231,6 +2232,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                         un-approved. */}
                     <ApprovedBaseRow set={set} onToast={showToast} onRefresh={onRefresh} />
                     <LooksRow set={set} focusZone={focused ? focusZone : null} onToast={showToast} />
+                    {/* 2026-10-15: which characters live here (their home, closet or another place). */}
+                    {set.show_id && <CharacterHomes set={set} onToast={showToast} onDefaultsChanged={onDefaultsChanged} />}
                     {/* 2026-10-15: the everyday look at each time of day and in each season. */}
                     {set.base_approved && <LookVariants setId={set.id} onToast={showToast} />}
                     {!set.base_approved && !set.location_approved_base && !(set.world_location_id && set.base_still_url)
@@ -2961,12 +2964,24 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
     return null;
   };
 
+  // Linking the lead's home or closet (CharacterHomes) changes the show's defaults.
+  const refreshSceneDefaults = useCallback(async (showId) => {
+    try {
+      const res = await getSceneDefaultsApi(showId);
+      setSceneDefaults((prev) => ({ ...prev, [String(showId)]: res.data?.scene_defaults || {} }));
+    } catch (err) {
+      console.error('[SceneSetsTab] scene defaults refresh failed:', err);
+    }
+  }, []);
+
   const handleMakeDefault = useCallback(async (set) => {
     const key = DEFAULT_KEY[set.scene_type];
     if (!key || !set.show_id) return;
     try {
       const res = await putSceneDefaultsApi(set.show_id, { [key]: set.id });
       setSceneDefaults((prev) => ({ ...prev, [String(set.show_id)]: res.data?.scene_defaults || {} }));
+      // The show's defaults are its lead's home and closet: the cards' chips follow.
+      notifyCharacterPlacesChanged(set.show_id);
       showToast(`${set.name} is now the default ${key === 'closet_set_id' ? 'closet' : 'home'}`);
     } catch (err) {
       console.error('[SceneSetsTab] make default failed:', err);
@@ -3960,6 +3975,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
               onRefresh={fetchSets}
               defaultRole={defaultRoleOf(set)}
               onMakeDefault={handleMakeDefault}
+              onDefaultsChanged={refreshSceneDefaults}
               hideShow={activeScope === 'show'}
             />
           ))}
