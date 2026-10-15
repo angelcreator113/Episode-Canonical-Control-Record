@@ -2866,7 +2866,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                   screen's Zones tab. Saves go straight through the same
                   screen-links endpoint Tap zones use. */}
               {editorTab === 'placements' && isIcon(activeScreen) && activeScreen?.url && (() => {
-                const iconUrl = activeScreen.url;
                 // Only a screen with an image can hold placements; one without
                 // had no asset, so a placement saved to screen-links/null
                 // (phone audit, 2026-10-07).
@@ -2901,27 +2900,13 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                   }
                 };
 
-                const addToScreen = async (screen) => {
+                // The same placement as the Icons stage's "Place it" (phone
+                // audit, 2026-10-15): the first free spot of the grid, and the
+                // icon's own destination. A fixed spot stacked repeat adds on
+                // top of each other, with no destination.
+                const addToScreen = (screen) => {
                   if (!screen) return;
-                  const links = screen.screen_links || screen.metadata?.screen_links || [];
-                  const newLink = {
-                    id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
-                    x: 8, y: 14, w: 12, h: 9,
-                    target: '',
-                    label: (activeScreen.name || '').replace(/\s*Icon$/i, ''),
-                    icon_url: iconUrl,
-                    icon_overlay_id: activeScreen.id,
-                  };
-                  const next = [...links, newLink];
-                  try {
-                    await api.put(`/api/v1/ui-overlays/${showId}/screen-links/${screen.asset_id}`, { screen_links: next });
-                    setOverlays(prev => prev.map(o => o.id === screen.id
-                      ? { ...o, screen_links: next, metadata: { ...(o.metadata || {}), screen_links: next } }
-                      : o));
-                    flash(`Placed on ${screen.name}`);
-                  } catch (err) {
-                    flash(`Failed: ${err?.message || 'unknown error'}`, 'error');
-                  }
+                  handlePlaceIcon(activeScreen, null, screen);
                 };
 
                 return (
@@ -2931,7 +2916,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                         Placed on {placements.length} screen{placements.length === 1 ? '' : 's'}
                       </div>
                       <div style={{ fontSize: 11, color: '#888', lineHeight: 1.5 }}>
-                        Add this icon to more screens, or remove it from screens it's already on. Targets and positions stay editable in each screen's Zones tab.
+                        Add this icon to more screens, or remove it from screens it's already on. Targets and positions stay editable in each screen's Connect stage.
                       </div>
                     </div>
 
