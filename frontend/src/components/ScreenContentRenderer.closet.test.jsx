@@ -60,4 +60,38 @@ describe("Lala's Phone closet screens", () => {
     await screen.findByTestId('phone-closet-piece-b1');
     expect(screen.queryByTestId('phone-closet-piece-h2')).toBeNull();
   });
+
+  // Jewelry is its own section, outside Accessories (Evoni, 2026-10-15).
+  const CLOSET = [
+    { id: 'j1', name: 'Pearl Drops', clothing_category: 'earrings', is_owned: true },
+    { id: 'j2', name: 'Gold Chain', clothing_category: 'necklace', is_owned: true },
+    { id: 'j3', name: 'Tennis Bracelet', clothing_category: 'jewelry', is_owned: true },
+    { id: 'j4', name: 'Rose Watch', clothing_category: 'watch', is_owned: true },
+    { id: 'a1', name: 'Quilted Clutch', clothing_category: 'bag', is_owned: true },
+    { id: 'a2', name: 'Velvet Bow', clothing_category: 'hair bow', is_owned: true },
+    { id: 'd1', name: 'Gold Slip', clothing_category: 'dress', is_owned: true },
+  ];
+
+  test('the Jewelry area shows the jewelry, and nothing else', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { data: CLOSET } });
+    render(<ScreenContentRenderer zones={[zone('wardrobe_jewelry')]} showId="s-1" />);
+    await screen.findByTestId('phone-closet-piece-j1');
+    for (const id of ['j2', 'j3', 'j4']) expect(screen.getByTestId(`phone-closet-piece-${id}`)).toBeTruthy();
+    for (const id of ['a1', 'a2', 'd1']) expect(screen.queryByTestId(`phone-closet-piece-${id}`)).toBeNull();
+    expect(screen.getByTestId('phone-closet-piece-j1').dataset.backdrop).toBe('jewelry');
+  });
+
+  test('Accessories keeps bags and bows and leaves the jewelry out', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { data: CLOSET } });
+    render(<ScreenContentRenderer zones={[zone('wardrobe_accessories')]} showId="s-1" />);
+    await screen.findByTestId('phone-closet-piece-a1');
+    expect(screen.getByTestId('phone-closet-piece-a2')).toBeTruthy();
+    for (const id of ['j1', 'j2', 'j3', 'j4', 'd1']) expect(screen.queryByTestId(`phone-closet-piece-${id}`)).toBeNull();
+  });
+
+  test('an empty Jewelry area says so in its own word', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { data: [CLOSET[4]] } });
+    render(<ScreenContentRenderer zones={[zone('wardrobe_jewelry', { scope: 'owned' })]} showId="s-1" />);
+    expect(await screen.findByText('No jewelry owned')).toBeTruthy();
+  });
 });
