@@ -13,6 +13,7 @@ import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, device
 import { isScreen, isIcon, isProduction } from '../../lib/overlayUtils';
 import { draftLine, lalaLine, lalaLineSlots } from '../../lib/lalaLineDraft';
 import { beatNumberForLabel, BEAT_SPLIT, HAS_BEAT_HEADER } from '../../lib/beatLabelNumber';
+import { speakerLine, unquote } from '../../lib/scriptSpeaker';
 import { beatImage, beatImageLabel } from '../BeatPlan/BeatPlanParts';
 import { beatSeconds, scriptSeconds, formatRuntime } from '../../lib/scriptRuntime';
 import { scriptHealth } from '../../lib/scriptHealth';
@@ -151,7 +152,6 @@ export function withBeatHeaders(scriptText, lockedBeats = []) {
   return parseScriptIntoBeats(scriptText, lockedBeats).map((b) => `## BEAT: ${b.number} · ${b.name}\n${b.lines.join('\n')}`).join('\n\n');
 }
 
-const NOT_SPEAKERS = new Set(['location', 'scene', 'setting', 'time', 'note', 'notes', 'transition', 'cut', 'int', 'ext', 'beat', 'act', 'sfx', 'music', 'caption']);
 const CUE_LINE = /^\[(TRANSITION|WEAR|DELIVER|TODO_MODE|SCENE|LOCATION_HINT|EVENT|EPISODE_INTENT)\s*:?\s*(.*?)\s*\]$/i;
 function cueLabel(text) {
   const m = String(text || '').match(CUE_LINE);
@@ -175,20 +175,20 @@ function parseLine(line) {
   // A UI line is a moment on screen: a phone screen or an overlay (Task #2789).
   const moment = parseMoment(t);
   if (moment) return { type: 'moment', text: t, ...moment };
-  if (/^\[UI:|^\[STAT:|^\[MAIL:/i.test(t)) return { type: 'ui', text: t, hidden: true };
+  // [STAT:] and [MAIL:] are read by the game, not shown. A [UI: line the
+  // moment reader can't read shows as written, so it can be seen and fixed
+  // (Script tab re-audit, 2026-10-15: it was hidden).
+  if (/^\[STAT:|^\[MAIL:/i.test(t)) return { type: 'ui', text: t, hidden: true };
   // A cue the page reads but nobody says (Script tab audit, 2026-10-15: these
   // showed as narration, a [WEAR] cue as a raw id): a short muted note.
   const cue = cueLabel(t);
   if (cue) return { type: 'cue', text: cue };
   if (/^\(.*\)$/.test(t)) return { type: 'action', text: t };
   // A speaker may carry a note, `Lala (V.O.): …`; a label such as
-  // `Location:` is not a speaker.
-  const m = t.match(/^(Me|Prime|Lala|Kelli|Guest|[A-Z][\p{L}'’.-]*(?: [A-Z][\p{L}'’.-]*)?)\s*(?:\([^)]*\))?:\s*(.+)/u);
-  if (m && !NOT_SPEAKERS.has(m[1].toLowerCase())) {
-    const known = { me: 'Prime', prime: 'Prime', lala: 'Lala', kelli: 'Kelli', guest: 'Guest' };
-    const speaker = known[m[1].toLowerCase()] || m[1];
-    return { type: 'dialogue', speaker, text: m[2].replace(/^["“]|["”]$/g, '') };
-  }
+  // `Location:` is not a speaker (lib/scriptSpeaker.js, shared with Rewrite,
+  // the runtime and the export).
+  const sp = speakerLine(t);
+  if (sp && sp.words) return { type: 'dialogue', speaker: sp.speaker, text: unquote(sp.words) };
   return { type: 'narration', text: t };
 }
 
@@ -197,14 +197,17 @@ function parseLine(line) {
  * kept, the new words inside. Null when nothing came back or nothing changed.
  */
 export function rewrittenLine(original, words) {
-  const text = String(words || '').trim().replace(/^(Me|Prime|Lala|Kelli|Guest|[A-Z][a-z]+):\s*/, '').replace(/^["“]|["”]$/g, '').trim();
+  // The reply may repeat the speaker (`Lala (whisper): "…"`); only its words count.
+  const reply = String(words || '').trim();
+  const text = unquote(speakerLine(reply)?.words ?? reply);
   if (!text) return null;
-  const m = String(original || '').match(/^(\s*(?:Me|Prime|Lala|Kelli|Guest|[A-Z][a-z]+):\s*)(["“]?)/);
-  const next = m ? `${m[1]}${m[2] ? `"${text}"` : text}` : text;
+  const from = speakerLine(original);
+  const quoted = from ? /^["“]/.test(from.words) : false;
+  const next = from ? `${from.prefix}${quoted ? `"${text}"` : text}` : text;
   return next.trim() === String(original || '').trim() ? null : next;
 }
 
-function ScriptLine({ line, beatId, beatNumber = null, lineIndex, onEdit, onDelete, onRewrite, rewriting, locked, lineCount, onMoveLine, drag, onScreen, withOnScreen, phoneDown = false }) {
+function ScriptLine({ line, beatId, beatNumber = null, lineIndex, onEdit, onDelete, onRewrite, rewriting, locked, prevLine = null, nextLine = null, onMoveLine, drag, onScreen, withOnScreen, phoneDown = false }) {
   const [editing, setEditing] = useState(false);
   const [dropAt, setDropAt] = useState(null);
   const [editText, setEditText] = useState('');
@@ -220,16 +223,18 @@ function ScriptLine({ line, beatId, beatNumber = null, lineIndex, onEdit, onDele
       <textarea className="esp-line-input" value={editText} onChange={e => setEditText(e.target.value)} autoFocus rows={3} aria-label="Edit line"
         onKeyDown={(e) => {
           if (e.key === 'Escape') { e.preventDefault(); setEditing(false); }
-          else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); onEdit(beatId, lineIndex, editText); setEditing(false); }
+          else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if (onEdit(beatId, lineIndex, editText) !== false) setEditing(false); }
         }} />
       <div className="esp-line-edit-actions">
-        <button type="button" className="esp-btn-primary is-small" onClick={() => { onEdit(beatId, lineIndex, editText); setEditing(false); }}>Save</button>
+        {/* A refused edit (a new script is being written) keeps the editor open. */}
+        <button type="button" className="esp-btn-primary is-small" onClick={() => { if (onEdit(beatId, lineIndex, editText) !== false) setEditing(false); }}>Save</button>
         <button type="button" className="esp-btn is-small" onClick={() => setEditing(false)}>Cancel</button>
-        {onDelete && <button type="button" className="esp-btn is-small esp-line-delete" data-testid="script-line-delete" onClick={() => { if (!window.confirm('Delete this line?')) return; onDelete(beatId, lineIndex); setEditing(false); }}><Trash2 size={13} aria-hidden="true" /> Delete line</button>}
+        {onDelete && <button type="button" className="esp-btn is-small esp-line-delete" data-testid="script-line-delete" onClick={() => { if (!window.confirm('Delete this line?')) return; if (onDelete(beatId, lineIndex) !== false) setEditing(false); }}><Trash2 size={13} aria-hidden="true" /> Delete line</button>}
         {/* Moving without dragging (touch screens, keyboards). */}
         <span className="esp-move esp-move--end">
-          <button type="button" className="esp-move-btn" aria-label="Move line up" disabled={lineIndex === 0} onClick={() => { onMoveLine(beatId, lineIndex, lineIndex - 1); setEditing(false); }}><ArrowUp size={14} aria-hidden="true" /></button>
-          <button type="button" className="esp-move-btn" aria-label="Move line down" disabled={lineIndex >= lineCount - 1} onClick={() => { onMoveLine(beatId, lineIndex, lineIndex + 1); setEditing(false); }}><ArrowDown size={14} aria-hidden="true" /></button>
+          {/* Past the next line shown, not a hidden [STAT:] line (Script tab re-audit, 2026-10-15). */}
+          <button type="button" className="esp-move-btn" aria-label="Move line up" disabled={prevLine === null} onClick={() => { onMoveLine(beatId, lineIndex, prevLine); setEditing(false); }}><ArrowUp size={14} aria-hidden="true" /></button>
+          <button type="button" className="esp-move-btn" aria-label="Move line down" disabled={nextLine === null} onClick={() => { onMoveLine(beatId, lineIndex, nextLine); setEditing(false); }}><ArrowDown size={14} aria-hidden="true" /></button>
         </span>
       </div>
     </div>
@@ -427,7 +432,7 @@ function MomentPicker({ screens, icons = [], overlays, look = [], production = [
           <button type="button" className="esp-btn-primary is-small" data-testid="script-moment-add" onClick={() => {
             const at = after === 'end' ? null : Number(after);
             const written = picked.kind === 'icon' ? tapsTo(picked.icon).map((i) => momentLine('CLICK', i.key)) : [momentLine(verb, picked.key)];
-            onAdd(written.join('\n'), at);
+            if (onAdd(written.join('\n'), at) === false) return;
             setAdded(pickedLabel);
             // The next one goes after this one.
             if (at !== null) setAfter(String(at + written.length));
@@ -467,7 +472,7 @@ function LineAdder({ lines = [], onScreen, onAdd, onClose, initialKind = 'Lala' 
   const add = () => {
     if (!words) return;
     const at = after === 'end' ? null : Number(after);
-    onAdd(LINE_KINDS.find((k) => k.key === kind).write(words), at);
+    if (onAdd(LINE_KINDS.find((k) => k.key === kind).write(words), at) === false) return;
     setText('');
     setAdded((n) => n + 1);
     if (at !== null) setAfter(String(at + 1));
@@ -523,7 +528,7 @@ function MessageAdder({ kind, people = [], lines = [], onScreen, onAdd, onClose 
   const add = () => {
     if (!line) return;
     const at = after === 'end' ? null : Number(after);
-    onAdd(line, at);
+    if (onAdd(line, at) === false) return;
     setText('');
     setAdded((n) => n + 1);
     if (at !== null) setAfter(String(at + 1));
@@ -603,7 +608,7 @@ function ProposalCard({ proposal, onAccept, onDiscard }) {
   );
 }
 
-function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, proposal = null, onAcceptProposal, onDiscardProposal, onEdit, onDeleteLine, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, onScreen, onAddMoment, phoneUpAtStart = false, request = null, people = [], lalaSlots = [], dressCode = '' }) {
+function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, proposal = null, onAcceptProposal, onDiscardProposal, onEdit, onDeleteLine, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, writing = false, onScreen, onAddMoment, phoneUpAtStart = false, request = null, onRequestDone, people = [], lalaSlots = [], dressCode = '' }) {
   const scene = scenePlan?.find(p => p.beat_number === beat.number);
   const cardRef = useRef(null);
   const [picking, setPicking] = useState(false);
@@ -615,16 +620,24 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
   const handledRequest = useRef(null);
   // Ask for a change (Script tab audit, 2026-10-15): words for Regenerate beat.
   const [ask, setAsk] = useState('');
-  const askChange = () => { const words = ask.trim(); if (!words || regenerating) return; onRegenerate(beat.id, words); setAsk(''); };
+  // One beat is written at a time, and none while a new script is: Regenerate
+  // and Ask wait (Script tab re-audit, 2026-10-15: Ask cleared the words and
+  // sent nothing).
+  const cantWrite = regenerating || writing || locking;
+  const askChange = () => { const words = ask.trim(); if (!words || cantWrite) return; onRegenerate(beat.id, words); setAsk(''); };
   useEffect(() => {
     if (!request || !expanded || beat.approved || handledRequest.current === request.n) return;
     handledRequest.current = request.n;
     setMessaging(null);
     setAdding(request.kind === 'line' ? 'Lala' : false);
     setPicking(request.kind === 'phone' ? {} : false);
-  }, [request, expanded, beat.approved]);
+    // Answered, so a remount (Raw editor and back) doesn't open it again.
+    onRequestDone?.();
+  }, [request, expanded, beat.approved, onRequestDone]);
   const picture = scene?.image || null;
   const expects = EXPECTED_ON_SCREEN[beat.number] || null;
+  // The lines the beat shows, by their place in the beat (hidden tags left out).
+  const shownLines = beat.lines.map((l, i) => { const p = parseLine(l); return p && !p.hidden ? i : -1; }).filter((i) => i >= 0);
   // What is on screen through the beat, line by line, and everything it uses (Task #2793).
   const { withByLine, used: usedHere, phoneDownAt } = beatOnScreen(beat.lines, onScreen, { phoneUp: phoneUpAtStart });
   // The phone carries in from an earlier beat (Task #2797): it builds this scene too.
@@ -713,9 +726,10 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
           {scene?.emotional_intent && <div className="esp-beat-intent">✦ {scene.emotional_intent}</div>}
           <div className="esp-lines">{beat.lines.map((line, i) => {
             const slot = beat.approved ? null : lalaSlots.find((s) => s.lineIndex === i);
+            const at = shownLines.indexOf(i);
             return (
               <Fragment key={`${i}:${line}`}>
-                <ScriptLine line={line} beatId={beat.id} lineIndex={i} lineCount={beat.lines.length} onEdit={onEdit} onDelete={onDeleteLine} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${i}`} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} onScreen={onScreen} withOnScreen={withByLine[i]} phoneDown={phoneDownAt.includes(i)} beatNumber={beat.number} />
+                <ScriptLine line={line} beatId={beat.id} lineIndex={i} prevLine={at > 0 ? shownLines[at - 1] : null} nextLine={at >= 0 && at < shownLines.length - 1 ? shownLines[at + 1] : null} onEdit={onEdit} onDelete={onDeleteLine} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${i}`} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} onScreen={onScreen} withOnScreen={withByLine[i]} phoneDown={phoneDownAt.includes(i)} beatNumber={beat.number} />
                 {slot && <LalaLineSlot piece={slot.piece} dressCode={dressCode} onInsert={(text) => onAddMoment(beat.id, text, i)} />}
               </Fragment>
             );
@@ -758,13 +772,13 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
                 ))}
               </span>
             )}
-            {!beat.approved && <button type="button" className="esp-regen-btn" data-testid={`script-regen-beat-${beat.number}`} disabled={regenerating} onClick={e => { e.stopPropagation(); onRegenerate(beat.id); }}>{regenerating ? '⏳ Writing…' : '↻ Regenerate beat'}</button>}
+            {!beat.approved && <button type="button" className="esp-regen-btn" data-testid={`script-regen-beat-${beat.number}`} disabled={cantWrite} onClick={e => { e.stopPropagation(); onRegenerate(beat.id); }}>{regenerating ? '⏳ Writing…' : '↻ Regenerate beat'}</button>}
             {!beat.approved && (
               <span className="esp-ask" data-testid={`script-ask-${beat.number}`}>
                 <input type="text" className="esp-ask-input" data-testid={`script-ask-input-${beat.number}`} value={ask} maxLength={300}
                   placeholder="Ask for a change: punchier, more Lala, add a closet moment…" aria-label={`Ask for a change to beat ${beat.number}`}
                   onChange={(e) => setAsk(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); askChange(); } }} />
-                <button type="button" className="esp-regen-btn" data-testid={`script-ask-send-${beat.number}`} disabled={regenerating || !ask.trim()} onClick={(e) => { e.stopPropagation(); askChange(); }}>Ask</button>
+                <button type="button" className="esp-regen-btn" data-testid={`script-ask-send-${beat.number}`} disabled={cantWrite || !ask.trim()} onClick={(e) => { e.stopPropagation(); askChange(); }}>Ask</button>
               </span>
             )}
             <button type="button" className={`esp-lock-btn${beat.approved ? ' is-locked' : ''}`} data-testid={`script-lock-${beat.number}`} disabled={locking} onClick={e => { e.stopPropagation(); onApprove(beat.id); }}>{beat.approved ? 'Unlock' : '✓ Approve & lock'}</button>
@@ -844,6 +858,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // balance before this episode (Task #2882).
   const [balance, setBalance] = useState(null);
   const [barRequest, setBarRequest] = useState(null);
+  const clearBarRequest = useCallback(() => setBarRequest(null), []);
   const [contextOpen, setContextOpen] = useState(false);
   // Lala's posts in the script (Task #2885): each Post line's draft in her
   // Feed, as the server has it (null: not read yet, or could not be).
@@ -1023,12 +1038,15 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   };
 
   // A phone moment or an overlay, added at the end of the beat (Task #2789).
+  // false when it was not added (the adders then keep what was typed).
   const handleAddMoment = (beatId, line, after = null) => {
     const at = beats.findIndex(b => b.id === beatId);
-    if (busy || at < 0 || beats[at].approved) return;
+    if (busy) { flash('Wait for the new script before adding to it.', 'error'); return false; }
+    if (at < 0 || beats[at].approved) return false;
     const base = withBeatHeaders(scriptText, lockedBeats);
     const next = after === null ? appendLine(base, at, line) : insertLine(base, at, after, line);
     if (next !== base) { setScriptText(next); }
+    return true;
   };
 
   // One timer for the toast: an earlier toast's timer no longer clears a
@@ -1097,7 +1115,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   }, [dirty, saving, busy, handleSave]);
 
   const handleEditLine = (beatId, lineIndex, newText) => {
-    if (busy) return;
+    if (busy) { flash('Wait for the new script before editing it.', 'error'); return false; }
     const next = scriptWithLine(scriptText, lockedBeats, beatId, lineIndex, newText);
     if (next !== null) setScriptText(next);
   };
@@ -1105,7 +1123,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // Delete a line (Script tab audit, 2026-10-15): asked in the line's editor;
   // an approved beat keeps its lines. Save keeps it.
   const handleDeleteLine = (beatId, lineIndex) => {
-    if (busy) return;
+    if (busy) { flash('Wait for the new script before editing it.', 'error'); return false; }
     const next = scriptWithoutLine(scriptText, lockedBeats, beatId, lineIndex);
     if (next !== null) setScriptText(next);
   };
@@ -1526,7 +1544,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
           {beats.map((beat, index) => {
             const open = (expandedBeat === undefined ? beats[0]?.id : expandedBeat) === beat.id;
             const phoneUp = phoneUpAtStart[index] || false;
-            return <BeatSection key={beat.id} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open && !isPhoneWidth() ? null : beat.id)} onApprove={handleApprove} proposal={proposal?.beatId === beat.id ? proposal : null} onAcceptProposal={acceptProposal} onDiscardProposal={() => setProposal(null)} onEdit={handleEditLine} onDeleteLine={handleDeleteLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking || busy} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} phoneUpAtStart={phoneUp} people={people} lalaSlots={lineSlots.filter((s) => s.beatIndex === index)} dressCode={source?.event?.dress_code || ''} />;
+            return <BeatSection key={beat.id} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open && !isPhoneWidth() ? null : beat.id)} onApprove={handleApprove} proposal={proposal?.beatId === beat.id ? proposal : null} onAcceptProposal={acceptProposal} onDiscardProposal={() => setProposal(null)} onEdit={handleEditLine} onDeleteLine={handleDeleteLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking || busy} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} writing={!!regeneratingBeat || busy} onRequestDone={clearBarRequest} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} phoneUpAtStart={phoneUp} people={people} lalaSlots={lineSlots.filter((s) => s.beatIndex === index)} dressCode={source?.event?.dress_code || ''} />;
           })}
           {/* Franchise Guard Results */}
           {guardResult && (

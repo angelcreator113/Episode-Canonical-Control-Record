@@ -14,7 +14,9 @@
 
 import { beatNumberForLabel, BEAT_SPLIT, HAS_BEAT_HEADER } from './beatLabelNumber';
 
-const UI_LINE = /^\s*\[UI:\s*([A-Za-z_]+)\s*(.*?)\s*\]\s*$/;
+// `[ui:open closet]` is a moment too (Script tab re-audit, 2026-10-15: it was
+// hidden on the tab, yet counted in the runtime and the export).
+const UI_LINE = /^\s*\[UI:\s*([A-Za-z_]+)\s*(.*?)\s*\]\s*$/i;
 
 /** The UI line's verb and target, or null for any other line. */
 export function parseMoment(line) {

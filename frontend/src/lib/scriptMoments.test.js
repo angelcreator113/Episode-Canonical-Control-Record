@@ -203,3 +203,8 @@ describe('phoneCheck carries the screen between beats (Script tab audit, 2026-10
     expect(phoneCheck(['[UI:CLICK Shoes]'], on, { startAt: first.endAt }).taps[0].ok).toBe(true);
   });
 });
+
+// Script tab re-audit (2026-10-15): a lowercase [ui:] line is a moment too.
+test('a lowercase ui line is a moment', () => {
+  expect(parseMoment('[ui:OPEN closet]')).toEqual({ verb: 'OPEN', target: 'closet' });
+});
