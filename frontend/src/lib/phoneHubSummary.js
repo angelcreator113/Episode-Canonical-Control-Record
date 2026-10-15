@@ -60,7 +60,8 @@ export function incomingById(screens) {
   const reach = new Map();
   (screens || []).forEach((src) => {
     getScreenLinks(src).forEach((link) => {
-      if (link?.target) reach.set(link.target, (reach.get(link.target) || 0) + 1);
+      // A screen's link to itself doesn't reach it (phone audit, 2026-10-15).
+      if (link?.target && link.target !== src.id) reach.set(link.target, (reach.get(link.target) || 0) + 1);
     });
   });
   return reach;

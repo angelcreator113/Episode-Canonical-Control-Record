@@ -15,6 +15,11 @@
   margin-bottom: 12px;
 }
 
+/* The Build part renders nothing on the other stages: no empty gap. */
+.phone-hub-section-tabs-wrap:empty {
+  display: none;
+}
+
 .phone-hub-section-tabs-wrap > .phone-hub-section-tabs {
   margin-bottom: 0;
 }
@@ -143,6 +148,14 @@
 
 /* Narrow screens: fade the stages' right edge so it reads as scrollable. */
 @media (max-width: 480px) {
+  /* All five stages fit at 375px: tighter, without their icons. */
+  .phone-hub-section-tab {
+    padding: 8px 8px;
+    font-size: 11px;
+  }
+  .phone-hub-section-tab svg {
+    display: none;
+  }
   .phone-hub-section-tab-group {
     -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
     mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);

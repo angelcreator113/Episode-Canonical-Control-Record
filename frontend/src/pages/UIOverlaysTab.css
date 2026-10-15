@@ -116,10 +116,6 @@
   .ph-bar__row { flex-direction: column; align-items: stretch; }
 }
 
-.overlays-header {
-  margin-bottom: 0;
-}
-
 .overlays-header-top {
   display: flex;
   justify-content: space-between;
@@ -358,6 +354,26 @@
   margin-top: 12px;
   font-size: 13px;
 }
+
+/* No show yet, or the screens didn't load: said, not a blank phone. */
+.overlays-load-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin: 24px auto;
+  max-width: 480px;
+  padding: 24px 20px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--lala-ink-muted);
+  background: var(--surface-card, #fff);
+  border: 1px solid var(--lala-lavender-line);
+  border-radius: 14px;
+}
+.overlays-load-state p { margin: 0; }
+.overlays-load-state.is-error { color: var(--lala-danger); border-color: currentColor; }
+.overlays-load-state.is-error .ph-btn { color: var(--lala-ink); }
 
 /* ── Docked Editor Panel ──
    Desktop: docks to the right edge of the viewport, no scrim — the
@@ -934,7 +950,10 @@
     gap: 5px;
   }
 
-  .overlays-toolbar button {
+  /* The toolbar's own buttons only: the Add and More menus' items stay
+     left-aligned (phone audit, 2026-10-15). */
+  .overlays-toolbar .toolbar-menu > button,
+  .overlays-toolbar .overlays-header-actions > button {
     flex: 1 1 auto;
     justify-content: center;
     min-width: 0;
@@ -946,9 +965,16 @@
     display: none;
   }
 
-  .overlays-toolbar button {
+  .overlays-toolbar .toolbar-menu > button,
+  .overlays-toolbar .overlays-header-actions > button {
     padding: 10px 12px !important;
     min-height: 44px !important;
+  }
+
+  /* The Add and More menus keep their word ("More" has no icon, so it
+     would be a bare chevron); the bar has room for both. */
+  .overlays-toolbar .toolbar-menu .btn-label {
+    display: inline;
   }
 
   .editor-modal-body {
@@ -1424,4 +1450,66 @@
   text-transform: none;
   letter-spacing: 0;
   font-weight: 600;
+}
+
+/* ============================================
+   FONTS AND SPACING (phone audit, 2026-10-15)
+   ============================================ */
+
+/* The page's own font. Without it, everything not given a font (the header
+   chips, the screen cards' names, the Map, modal titles) fell back to the
+   system font beside DM Mono stage tabs. DM Mono loads in 300–500 only
+   (index.html), so the browser faked every 600/700 into a smeared bold;
+   weight synthesis off draws them at 500 instead. */
+.phone-hub-page {
+  padding: 20px 0;
+  font-family: var(--font-ui);
+  font-synthesis-weight: none;
+}
+
+/* Inside the phone, the phone's own (system) font, as before. */
+.phone-hub-page .phone-hub-frame {
+  font-family: var(--font-sans);
+  font-synthesis-weight: auto;
+}
+
+/* The standalone page (/phone-hub) is the app's content box's direct child
+   and had no side gutter: it sat against the sidebar. Producer Mode and
+   the Scene Library embed it inside their own padding. */
+.app-content > .phone-hub-page {
+  padding: 20px 24px;
+}
+@media (max-width: 560px) {
+  .app-content > .phone-hub-page {
+    padding: 16px;
+  }
+}
+
+/* The header bar, the setup guide and the stage under them each keep a gap
+   (they sat border to border). */
+.phone-hub-page .phone-setup-guide {
+  margin-bottom: 14px;
+}
+
+/* "More" sits at the bar's right end: its list opens leftwards, not off
+   the screen. */
+.overlays-header-actions .toolbar-menu__list {
+  left: auto;
+  right: 0;
+}
+
+/* The site-wide heading sizes (styles/responsive.css, !important at 768px
+   and 480px) shrank these titles below their own sizes. */
+.phone-hub-page .ph-bar__title { font-size: 26px !important; }
+.phone-hub-page .phone-map-stage__title { font-size: 20px !important; }
+@media (max-width: 560px) {
+  .phone-hub-page .ph-bar__title { font-size: 22px !important; }
+}
+
+/* At 480px and under the bottom sheet spans the screen; the site-wide modal
+   width clamp left it pinned left with a gap on the right. */
+@media (max-width: 480px) {
+  .editor-modal:not(.editor-panel) {
+    max-width: 100% !important;
+  }
 }

@@ -92,9 +92,11 @@ describe('UIOverlaysTab top area — pinned before the setup guide (Task #2053)'
 
   // The contact sheet and batch upload were removed (Evoni, 2026-10-07,
   // Lala's Phone step 2).
-  test('More holds the Flow Map and the frame', async () => {
+  // The Map opens from its stage only (phone audit, 2026-10-15).
+  test('More holds the frame; the Map is a stage, not a menu item', async () => {
     await renderPage();
-    expect(menuItems('More')).toEqual(['Flow Map', 'Upload Frame']);
+    expect(menuItems('More')).toEqual(['Upload Frame']);
+    expect(within(document.querySelector('.phone-hub-stage-row')).getByRole('button', { name: 'Map' })).toBeTruthy();
   });
 
   test('"+ Add" asks what you are adding: Screen, Icon or Content Area', async () => {
