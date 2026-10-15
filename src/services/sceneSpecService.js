@@ -167,6 +167,23 @@ async function buildSceneSpec(sceneSet, SceneSetModel, { force = false } = {}) {
 }
 
 /**
+ * The camera contract for an angle label: the one named exactly, else the
+ * longest contract name that is whole words of the label (VANITY_CLOSE
+ * finds VANITY; CLOSET is never taken by CLOSE). null when none.
+ */
+function findContract(spec, angleLabel) {
+  const contracts = Array.isArray(spec?.camera_contracts) ? spec.camera_contracts : [];
+  const norm = (a) => String(a || '').toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+  const label = norm(angleLabel);
+  if (!label) return null;
+  const exact = contracts.find((c) => c?.angle && norm(c.angle) === label);
+  if (exact) return exact;
+  return contracts
+    .filter((c) => c?.angle && `_${label}_`.includes(`_${norm(c.angle)}_`))
+    .sort((a, b) => norm(b.angle).length - norm(a.angle).length)[0] || null;
+}
+
+/**
  * The part of the base picture a camera contract covers ("frame", 0-1
  * fractions of the image), or null: no contract for this label, no frame,
  * or a frame that is not a usable box (outside the picture, or under a
@@ -174,12 +191,7 @@ async function buildSceneSpec(sceneSet, SceneSetModel, { force = false } = {}) {
  * picture where the spec says the shot is, never a fixed bedroom box.
  */
 function contractFrame(spec, angleLabel) {
-  const label = String(angleLabel || '').toUpperCase();
-  const contracts = Array.isArray(spec?.camera_contracts) ? spec.camera_contracts : [];
-  const norm = (a) => String(a || '').toUpperCase().replace(/[^A-Z0-9_]/g, '_');
-  const contract = contracts.find((c) => norm(c.angle) === label)
-    || contracts.find((c) => c.angle && label.includes(norm(c.angle)));
-  const f = contract?.frame;
+  const f = findContract(spec, angleLabel)?.frame;
   if (!f || typeof f !== 'object') return null;
   const n = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : Number(v));
   const left = n(f.left); const top = n(f.top); const width = n(f.width); const height = n(f.height);
@@ -342,12 +354,7 @@ Return ONLY the JSON. No markdown, no commentary.`;
 function buildAngleConstraints(spec, angleLabel) {
   if (!spec?.camera_contracts || !spec?.objects) return '';
 
-  // The contract named exactly, else one whose name the label contains
-  // (as contractFrame): CLOSET is not taken by a CLOSE contract listed first.
-  const norm = (a) => String(a || '').toUpperCase().replace(/[^A-Z0-9_]/g, '_');
-  const label = norm(angleLabel);
-  const contract = spec.camera_contracts.find(c => c.angle && norm(c.angle) === label)
-    || spec.camera_contracts.find(c => c.angle && label.includes(norm(c.angle)));
+  const contract = findContract(spec, angleLabel);
   if (!contract) return '';
 
   const objectMap = new Map(spec.objects.map(o => [o.id, o]));
@@ -416,13 +423,7 @@ function buildStateAmbient(spec, stateId) {
  * @returns {string|null} Validation prompt or null
  */
 function getValidationPrompt(spec, angleLabel) {
-  if (!spec?.camera_contracts) return null;
-
-  const contract = spec.camera_contracts.find(c =>
-    c.angle && angleLabel.toUpperCase().includes(c.angle.toUpperCase())
-  );
-
-  return contract?.validation || null;
+  return findContract(spec, angleLabel)?.validation || null;
 }
 
 /**
@@ -432,21 +433,19 @@ function getValidationPrompt(spec, angleLabel) {
  * @param {string} imageUrl — URL of the generated angle image
  * @param {object} spec — The SceneSpec
  * @param {string} angleLabel — e.g. "WIDE"
- * @returns {object} { score, pass, missing_required, issues }
+ * @returns {object} { checked, score, pass, missing_required, issues }
+ *   A check that could not run (no key, no contract for the shot, nothing
+ *   to check, an unreadable answer, an error) is { checked: false, score:
+ *   null, pass: null, reason }: never a passing 100, which read as proof
+ *   the angle matched (audit, 2026-10-15).
  */
 async function validateAngleAgainstSpec(imageUrl, spec, angleLabel) {
-  if (!process.env.ANTHROPIC_API_KEY || !spec?.camera_contracts) {
-    return { score: 100, pass: true, missing_required: [], issues: [] };
-  }
+  const unchecked = (reason) => ({ checked: false, score: null, pass: null, reason, missing_required: [], issues: [] });
+  if (!process.env.ANTHROPIC_API_KEY) return unchecked('No Anthropic key');
+  const contract = findContract(spec, angleLabel);
+  if (!contract) return unchecked(`The scene spec has no camera contract for ${angleLabel}`);
 
-  const contract = spec.camera_contracts.find(c =>
-    c.angle && angleLabel.toUpperCase().includes(c.angle.toUpperCase())
-  );
-  if (!contract) {
-    return { score: 100, pass: true, missing_required: [], issues: [] };
-  }
-
-  const objectMap = new Map(spec.objects.map(o => [o.id, o]));
+  const objectMap = new Map((spec.objects || []).map(o => [o.id, o]));
 
   // Build checklist from required + expected
   const checklist = [];
@@ -458,6 +457,7 @@ async function validateAngleAgainstSpec(imageUrl, spec, angleLabel) {
     const obj = objectMap.get(id);
     if (obj) checklist.push({ id, label: obj.label, tier: 'expected', description: obj.description });
   }
+  if (checklist.length === 0 && !contract.validation) return unchecked(`The ${angleLabel} contract names nothing to check`);
 
   try {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -499,21 +499,26 @@ Return ONLY JSON.` },
 
     const text = response.content?.[0]?.text || '';
     const match = text.match(/\{[\s\S]*\}/);
-    if (!match) return { score: 100, pass: true, missing_required: [], issues: [] };
+    if (!match) return unchecked('The check returned no answer');
 
     const result = JSON.parse(match[0]);
-    const missingRequired = (result.missing || []).filter(id =>
+    const score = Number(result.score);
+    if (result.score == null || !Number.isFinite(score)) return unchecked('The check returned no score');
+    const missingRequired = (Array.isArray(result.missing) ? result.missing : []).filter(id =>
       (contract.required || []).includes(id)
     );
 
+    result.checked = true;
+    result.score = Math.max(0, Math.min(100, Math.round(score)));
     result.missing_required = missingRequired;
-    result.pass = (result.score || 0) >= 70 && missingRequired.length === 0;
+    result.issues = Array.isArray(result.issues) ? result.issues : [];
+    result.pass = result.score >= 70 && missingRequired.length === 0;
 
     console.log(`[SceneSpec] Validation for "${angleLabel}": score=${result.score}, pass=${result.pass}, missing_required=${missingRequired.length}`);
     return result;
   } catch (err) {
     console.warn(`[SceneSpec] Validation failed (non-blocking): ${err.message}`);
-    return { score: 100, pass: true, missing_required: [], issues: [] };
+    return unchecked(`The check failed: ${err.message}`);
   }
 }
 
@@ -575,6 +580,7 @@ module.exports = {
   buildSceneSpec,
   buildSpecPrompt,
   contractFrame,
+  findContract,
   validateSpecCandidate,
   buildAngleConstraints,
   buildStateAmbient,
