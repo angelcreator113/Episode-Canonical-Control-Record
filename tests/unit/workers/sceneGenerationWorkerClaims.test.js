@@ -7,7 +7,11 @@
  */
 const mockClaimRow = jest.fn();
 jest.mock('../../../src/services/generationClaimService', () => ({ claimRow: (...a) => mockClaimRow(...a) }));
-const mockGen = { generateBaseScene: jest.fn(), generateAngle: jest.fn(), generateAngleVideo: jest.fn() };
+const mockGen = {
+  generateBaseScene: jest.fn(), generateAngle: jest.fn(), generateAngleVideo: jest.fn(),
+  // The cascade's order (zones before their extras); the listed order here.
+  generationOrder: (angles) => [...(angles || [])],
+};
 jest.mock('../../../src/services/sceneGenerationService', () => mockGen);
 const mockModels = {
   GenerationJob: {},

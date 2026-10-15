@@ -3313,6 +3313,12 @@
   text-overflow: ellipsis;
 }
 
+/* A view made from a base since replaced (fourth audit, 2026-10-15). */
+.scene-sets-angle-row-stale {
+  font-size: var(--text-xs);
+  color: var(--danger-text);
+}
+
 .scene-sets-angle-row-status {
   flex-shrink: 0;
   display: flex;

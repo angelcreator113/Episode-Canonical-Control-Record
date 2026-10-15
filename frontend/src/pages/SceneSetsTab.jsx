@@ -2182,6 +2182,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                             <div className="scene-sets-angle-row-info">
                               <div className="scene-sets-angle-row-label">{a.angle_label}</div>
                               <div className="scene-sets-angle-row-name">{a.angle_name}</div>
+                              {/* Made from a base since replaced: the view shows the old room. */}
+                              {isComplete && a.quality_review?.made_from_base && set.base_still_url && a.quality_review.made_from_base !== set.base_still_url && (
+                                <div className="scene-sets-angle-row-stale" data-testid={`angle-old-base-${a.id}`}>Made from an older base: generate it again</div>
+                              )}
                             </div>
                             <div className="scene-sets-angle-row-status">
                               {isComplete && (() => {

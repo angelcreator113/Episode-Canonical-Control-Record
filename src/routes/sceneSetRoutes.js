@@ -917,17 +917,17 @@ router.post('/:id/upload-base', validateUUIDParam('id'), requireAuth, aiRateLimi
 
     const primaryUrl = uploadedUrls[0].url;
 
-    // Clean up old base image from S3 (best effort), unless an angle or an
-    // approved base still shows it (deleteOldBaseImage).
-    if (set.base_still_url) {
-      await sceneGenService.deleteOldBaseImage(set.base_still_url, SceneSet.sequelize);
-    }
-
+    const oldBaseUrl = set.base_still_url;
     await set.update({
       base_still_url: primaryUrl,
       base_runway_seed: `uploaded-${Date.now()}`,
       generation_status: 'complete',
     });
+    // The angles that are the base picture show the new one; then the old
+    // image is deleted (best effort) unless an angle or an approved base
+    // still shows it, after the new base is saved (fourth audit, 2026-10-15).
+    await sceneGenService.repointBaseAngles(SceneSet.sequelize, set.id, oldBaseUrl, primaryUrl);
+    if (oldBaseUrl) await sceneGenService.deleteOldBaseImage(oldBaseUrl, SceneSet.sequelize);
     // A description of the old base now drives every prompt: flag it, or
     // mark it for rewriting by the new base's analysis (baseDescriptionService).
     await noteBaseChanged(SceneSet.sequelize, set.id, { origin: 'uploaded', baseUrl: primaryUrl });
@@ -1470,6 +1470,9 @@ router.post('/:id/angles/:angleId/generate', validateUUIDParam('id'), requireAut
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    // Not while the set's base is being made: the angle would be made from
+    // the old base, then the base replaced (fourth audit, 2026-10-15).
+    if (refuseWhileGenerating(res, set, `The base of "${set.name}"`)) return;
 
     const angle = await SceneAngle.findOne({
       where: { id: req.params.angleId, scene_set_id: set.id },
@@ -1803,6 +1806,9 @@ router.post('/:id/angles/:angleId/regenerate', validateUUIDParam('id'), requireA
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    // Not while the set's base is being made: the angle would be made from
+    // the old base, then the base replaced (fourth audit, 2026-10-15).
+    if (refuseWhileGenerating(res, set, `The base of "${set.name}"`)) return;
 
     const angle = await SceneAngle.findOne({
       where: { id: req.params.angleId, scene_set_id: set.id },
@@ -1885,6 +1891,9 @@ router.post('/:id/angles/:angleId/auto-refine', validateUUIDParam('id'), require
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    // Not while the set's base is being made: the angle would be made from
+    // the old base, then the base replaced (fourth audit, 2026-10-15).
+    if (refuseWhileGenerating(res, set, `The base of "${set.name}"`)) return;
 
     const angle = await SceneAngle.findOne({
       where: { id: req.params.angleId, scene_set_id: set.id },
@@ -2199,6 +2208,10 @@ router.post('/:id/cascade-regenerate', validateUUIDParam('id'), requireAuth, aiR
       job_type: 'cascade_regenerate',
       scene_set_id: set.id,
       payload,
+      // One attempt: a retry (a failure after the paid base, or a worker
+      // restart mid-run) paid for the base and every angle again (fourth
+      // audit, 2026-10-15).
+      max_attempts: 1,
     });
 
     res.status(202).json({ success: true, data: { jobId: job.id, status: 'queued' } });
@@ -2429,6 +2442,9 @@ router.post('/:id/promote-to-base', validateUUIDParam('id'), requireAuth, async 
     });
     if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
     if (!angle.still_image_url) return res.status(400).json({ success: false, error: 'Angle has no image' });
+    // A base run (generate-base, a cascade) would overwrite the promoted
+    // base after the other angles were reset (fourth audit, 2026-10-15).
+    if (refuseWhileGenerating(res, set, `The base of "${set.name}"`)) return;
     // Promoting resets the other angles: one being generated now would have
     // its claim freed and its result land on a reset angle (audit, 2026-10-15).
     const running = await SceneAngle.count({ where: { scene_set_id: set.id, generation_status: 'generating' } });
@@ -2446,12 +2462,25 @@ router.post('/:id/promote-to-base', validateUUIDParam('id'), requireAuth, async 
     // a description the analysis wrote from one the person wrote.
     await noteBaseChanged(SceneSet.sequelize, set.id, { origin: 'promoted', baseUrl: angle.still_image_url });
 
-    // Reset all OTHER angles to pending (they need to regenerate from new base)
+    // Reset all OTHER angles to pending (they need to regenerate from new
+    // base). Each picture goes into its generation history first, as a
+    // reject keeps it: the paid stills were dropped with no trace (fourth
+    // audit, 2026-10-15). Their enhanced copies and checks go with them.
     const { Op } = require('sequelize');
-    await SceneAngle.update(
-      { generation_status: 'pending', still_image_url: null, video_clip_url: null },
-      { where: { scene_set_id: set.id, id: { [Op.ne]: angle_id } } }
-    );
+    const others = await SceneAngle.findAll({ where: { scene_set_id: set.id, id: { [Op.ne]: angle_id } } });
+    for (const other of others) {
+      const review = { ...(other.quality_review || {}) };
+      const history = Array.isArray(review.generation_history) ? [...review.generation_history] : [];
+      if (other.still_image_url) {
+        history.push({ url: other.still_image_url, replaced_at: new Date(), reason: `Base replaced by promoting ${angle.angle_label}`, attempt: other.generation_attempt });
+      }
+      review.generation_history = history;
+      await other.update({
+        generation_status: 'pending', still_image_url: null, video_clip_url: null,
+        quality_score: null, artifact_flags: [], enhanced_still_url: null, enhanced_video_url: null, post_processing_status: null,
+        quality_review: review,
+      });
+    }
 
     console.log(`[SceneSets] Promoted angle ${angle.angle_label} to base for ${set.name}`);
 
@@ -2912,6 +2941,9 @@ router.post('/:id/generate-all-angles', validateUUIDParam('id'), requireAuth, ai
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ error: 'Scene set not found' });
+    // Not while the set's base is being made: the angle would be made from
+    // the old base, then the base replaced (fourth audit, 2026-10-15).
+    if (refuseWhileGenerating(res, set, `The base of "${set.name}"`)) return;
 
     const briefOverrides = readBriefOverrides(req.body?.overrides);
     if (briefOverrides.error) return res.status(400).json({ success: false, error: briefOverrides.error });
