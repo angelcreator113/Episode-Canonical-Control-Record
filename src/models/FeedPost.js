@@ -100,6 +100,11 @@ module.exports = (sequelize) => {
     // 'load_bearing' (the story reacts to it) or 'ambient' (flavor, any beat); why, for load-bearing.
     post_weight: { type: DataTypes.STRING(16), allowNull: true, validate: { isIn: [['load_bearing', 'ambient']] } },
     post_weight_why: { type: DataTypes.TEXT, allowNull: true },
+    // Release time (step 6c, the two clocks; migration 20261016180000,
+    // services/postRelease): a draft 'scheduled' to go live at release_at, or
+    // 'held' until Evoni releases it. story_order stays its story time.
+    release_state: { type: DataTypes.STRING(12), allowNull: true, validate: { isIn: [['scheduled', 'held']] } },
+    release_at: { type: DataTypes.DATE, allowNull: true },
   }, {
     tableName: 'feed_posts',
     timestamps: true,
