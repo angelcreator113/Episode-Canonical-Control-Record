@@ -185,8 +185,13 @@ async function gatherCharacterContext(characterId) {
     });
   } catch (e) { /* no lines */ }
 
+  // 4. Their facts (Character Consistency Engine step 5; services/characterFacts).
+  const { factsForCharacter, factsPromptBlock } = require('../services/characterFacts');
+  const factsBlock = factsPromptBlock(await factsForCharacter(db, character));
+
   return {
     character,
+    factsBlock,
     universeContext,
     memories,
     relationships,
@@ -201,7 +206,7 @@ async function gatherCharacterContext(characterId) {
 /* ─────────────────────────────────────────────
    SHARED: Format context into prompt blocks
    ───────────────────────────────────────────── */
-function formatCharacterBlock(character) {
+function formatCharacterBlock(character, factsBlock = '') {
   const c = character;
   const parts = [];
   parts.push(`═══ CHARACTER: ${c.selected_name || c.display_name} ═══`);
@@ -247,6 +252,9 @@ function formatCharacterBlock(character) {
     if (career.career_goal) parts.push(`  Ambition: ${career.career_goal}`);
     if (career.ongoing_arc) parts.push(`  Ongoing Arc: ${career.ongoing_arc}`);
   }
+
+  // The facts last: what any writing about them must agree with.
+  if (factsBlock) parts.push(`\n${factsBlock}`);
 
   return parts.join('\n');
 }
@@ -426,7 +434,7 @@ router.post('/write-scene', requireAuth, aiRateLimiter, async (req, res) => {
 
     const systemPrompt = `${universeContext}
 
-${formatCharacterBlock(character)}
+${formatCharacterBlock(character, ctx.factsBlock)}
 
 ${formatConsciousness(character)}
 
@@ -507,7 +515,7 @@ router.post('/character-monologue', requireAuth, aiRateLimiter, async (req, res)
 
     const systemPrompt = `${universeContext}
 
-${formatCharacterBlock(character)}
+${formatCharacterBlock(character, ctx.factsBlock)}
 
 ${formatConsciousness(character)}
 
@@ -574,7 +582,7 @@ Your job: Generate a comprehensive character profile by reading everything the a
 written and established. Fill in what the story has SHOWN, not what you'd invent.
 
 CURRENT PROFILE:
-${formatCharacterBlock(character)}
+${formatCharacterBlock(character, ctx.factsBlock)}
 
 ${formatConsciousness(character)}
 
@@ -671,7 +679,7 @@ router.post('/suggest-gaps', requireAuth, aiRateLimiter, async (req, res) => {
     const systemPrompt = `You are a narrative development consultant analyzing a character in a literary project.
 
 CURRENT CHARACTER PROFILE:
-${formatCharacterBlock(character)}
+${formatCharacterBlock(character, ctx.factsBlock)}
 
 ${formatConsciousness(character)}
 
@@ -746,7 +754,7 @@ router.post('/what-happens-next', requireAuth, aiRateLimiter, async (req, res) =
 
     const systemPrompt = `${universeContext}
 
-${formatCharacterBlock(character)}
+${formatCharacterBlock(character, ctx.factsBlock)}
 
 ${formatConsciousness(character)}
 

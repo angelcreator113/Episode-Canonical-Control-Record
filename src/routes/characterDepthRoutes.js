@@ -183,6 +183,16 @@ async function eventsSection(character) {
   }
 }
 
+/**
+ * Their facts (Character Consistency Engine step 5; services/characterFacts):
+ * the money and status dimensions agree with them; '' when none.
+ */
+async function factsSection(character) {
+  const { factsForCharacter, factsPromptBlock } = require('../services/characterFacts');
+  const block = factsPromptBlock(await factsForCharacter(db, character));
+  return block ? `\n\n${block}` : '';
+}
+
 function buildDimensionPrompt(dimension, fields) {
   return `Generate ONLY the following fields for the ${dimension} dimension:\n${fields.map(f => `- ${f}`).join('\n')}\n\nReturn a JSON object with exactly these keys.`;
 }
@@ -314,7 +324,7 @@ router.post('/:charId/generate', requireAuth, aiRateLimiter, async (req, res) =>
       return res.status(404).json({ success: false, error: 'Character not found' });
     }
 
-    const context = buildCharacterContext(character) + await eventsSection(character);
+    const context = buildCharacterContext(character) + await eventsSection(character) + await factsSection(character);
     const userMessage = `Here is the character dossier:\n\n${context}\n\nGenerate ALL 10 depth dimensions. Return a single JSON object with all de_ fields.`;
 
     const raw = await callClaude(SYSTEM_PROMPT, userMessage, DEEP_MODEL, 8000);
@@ -364,7 +374,7 @@ router.post('/:charId/generate/:dimension', requireAuth, aiRateLimiter, async (r
       return res.status(404).json({ success: false, error: 'Character not found' });
     }
 
-    const context = buildCharacterContext(character) + await eventsSection(character);
+    const context = buildCharacterContext(character) + await eventsSection(character) + await factsSection(character);
     const dimPrompt = buildDimensionPrompt(dimension, fields);
     const userMessage = `Here is the character dossier:\n\n${context}\n\n${dimPrompt}`;
 
