@@ -27,6 +27,8 @@ export default function DressedAngles({ episodeId, setId, onToast, pollMs = POLL
   const [pollingStopped, setPollingStopped] = useState(false);
   const base = `/api/v1/episode-brief/${episodeId}/dressed-angles`;
   const last = useRef(null);
+  const fileInput = useRef(null);
+  const uploadFor = useRef(null);
   const toastRef = useRef(onToast);
   toastRef.current = onToast;
 
@@ -143,16 +145,19 @@ export default function DressedAngles({ episodeId, setId, onToast, pollMs = POLL
                 <button type="button" disabled={busy === a.id || status === 'generating'} onClick={() => setAsking(a)}>
                   {status === 'failed' ? 'Try again' : status === 'complete' ? 'Redo dressed' : 'Generate dressed'}
                 </button>
-                <label className="dressed-angles-upload">
+                {/* A button (a label around a hidden input can't take focus). */}
+                <button type="button" className="dressed-angles-upload" disabled={busy === a.id}
+                  aria-label={`Upload the dressed ${name}`}
+                  onClick={() => { uploadFor.current = a; fileInput.current?.click(); }}>
                   Upload
-                  <input type="file" accept="image/*" hidden aria-label={`Upload the dressed ${name}`} disabled={busy === a.id}
-                    onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) upload(a, f); }} />
-                </label>
+                </button>
               </span>
             </li>
           );
         })}
       </ul>
+      <input ref={fileInput} type="file" accept="image/*" hidden data-testid="dressed-angles-file"
+        onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f && uploadFor.current) upload(uploadFor.current, f); }} />
       {asking && (
         <SceneBriefConfirm
           setId={setId}
