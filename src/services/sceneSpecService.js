@@ -137,6 +137,10 @@ async function buildSceneSpec(sceneSet, SceneSetModel, { force = false } = {}) {
     };
 
     // Persist: one write, the new spec and the one it replaces together.
+    // visual_language is merged in the database, not written from this
+    // copy: a copy taken before the analysis finished (an angle that waited
+    // on it) dropped the stored room properties, layout and style lock
+    // (audit, 2026-10-15).
     if (SceneSetModel) {
       const vl = { ...(sceneSet.visual_language || {}) };
       if (existing) vl.scene_spec_previous = existing;
@@ -144,9 +148,13 @@ async function buildSceneSpec(sceneSet, SceneSetModel, { force = false } = {}) {
       // visual_language.scene_spec would be read back as current.
       delete vl.scene_spec;
       try {
-        await SceneSetModel.update(
-          { scene_spec: spec, visual_language: vl },
-          { where: { id: sceneSet.id } }
+        await SceneSetModel.sequelize.query(
+          `UPDATE scene_sets
+              SET scene_spec = CAST(:spec AS jsonb),
+                  visual_language = (COALESCE(visual_language, '{}'::jsonb) - 'scene_spec') || CAST(:patch AS jsonb),
+                  updated_at = NOW()
+            WHERE id = :id`,
+          { replacements: { id: sceneSet.id, spec: JSON.stringify(spec), patch: JSON.stringify(existing ? { scene_spec_previous: existing } : {}) } }
         );
       } catch (persistErr) {
         // Column may not exist yet (migration pending) — fall back to visual_language

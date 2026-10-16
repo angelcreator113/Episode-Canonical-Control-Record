@@ -54,7 +54,7 @@ const AI_RATE_LIMITER_COUNTS = {
   'sceneTemplates.js': 0,
   'sceneLibrary.js': 0,
   'sceneProposeRoute.js': 3,   // 2 import-line matches + 1 handler (POST /propose-scene)
-  'sceneSetRoutes.js': 23,     // 2 import-line matches + 13 handler invocations (+1 Task #2396 POST /model-comparison; +1 POST /:id/look-variants/:kind/:value/generate, 2026-10-15); +7 re-audit 2026-10-15 (ai-describe, refine-description, suggest-angles, ai-camera-direction, suggest-angles-from-image, lock-style, auto-refine)
+  'sceneSetRoutes.js': 24,     // 2 import-line matches + 13 handler invocations (+1 Task #2396 POST /model-comparison; +1 POST /:id/look-variants/:kind/:value/generate, 2026-10-15); +7 re-audit 2026-10-15 (ai-describe, refine-description, suggest-angles, ai-camera-direction, suggest-angles-from-image, lock-style, auto-refine); +1 POST /:id/upload-base, which runs the paid base analysis (third audit, 2026-10-15)
   'sceneLinks.js': 0,
 };
 
@@ -183,11 +183,12 @@ describe('Step 3 CP4 — Scene cluster pure Tier 1 sweep + AI POST reference mod
     });
 
     // 13 with POST /:id/look-variants/:kind/:value/generate (2026-10-15);
-    // 20 with the 7 paid AI routes the re-audit of 2026-10-15 found without it.
-    test('sceneSetRoutes.js — exactly 20 requireAuth + aiRateLimiter middleware-chain occurrences', () => {
+    // 20 with the 7 paid AI routes the re-audit of 2026-10-15 found without it;
+    // 21 with POST /:id/upload-base (third audit, 2026-10-15).
+    test('sceneSetRoutes.js — exactly 21 requireAuth + aiRateLimiter middleware-chain occurrences', () => {
       const src = readSrc('sceneSetRoutes.js');
       const matches = src.match(/requireAuth,\s*aiRateLimiter,/g) || [];
-      expect(matches.length).toBe(20);
+      expect(matches.length).toBe(21);
     });
   });
 
@@ -209,7 +210,7 @@ describe('Step 3 CP4 — Scene cluster pure Tier 1 sweep + AI POST reference mod
       expect(total).toBe(146);
     });
 
-    test('CP4 zone contains 26 total aiRateLimiter references (4 import-line matches + 22 handler invocations; +7 re-audit 2026-10-15)', () => {
+    test('CP4 zone contains 27 total aiRateLimiter references (4 import-line matches + 23 handler invocations; +7 re-audit 2026-10-15; +1 upload-base, third audit)', () => {
       // sceneProposeRoute.js (3) + sceneSetRoutes.js (15) = 18 (+1 Task #2396 POST /model-comparison).
       // Import lines have 2 matches each (destructure + module path) since
       // 'aiRateLimiter' appears in both `{ aiRateLimiter }` and `'.../aiRateLimiter'`.
@@ -218,7 +219,7 @@ describe('Step 3 CP4 — Scene cluster pure Tier 1 sweep + AI POST reference mod
         const matches = src.match(/\baiRateLimiter\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(26);
+      expect(total).toBe(27);
     });
 
     test('CP4 zone has zero optionalAuth references', () => {
