@@ -68,14 +68,6 @@ ScriptSuggestion	-	no-table
 ScriptTemplate	-	no-table
 ShowAsset	-	no-table
 ShowConfig	-	no-table
-StorytellerBook	conflict	missing-column
-StorytellerBook	pov	missing-column
-StorytellerBook	setting	missing-column
-StorytellerBook	stakes	missing-column
-StorytellerBook	theme	missing-column
-StorytellerBook	tone	missing-column
-StorytellerChapter	chapter_template	missing-column
-StorytellerChapter	sections	missing-column
 Thumbnail	isPrimary	missing-column
 Thumbnail	platformUploadStatus	missing-column
 Thumbnail	platformUrls	missing-column
