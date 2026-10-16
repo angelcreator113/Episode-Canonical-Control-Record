@@ -13,7 +13,7 @@ const router = express.Router();
 // 5th cumulative instance after worldStudio.js @ CP3 + universe.js @ CP6 +
 // franchiseBrainRoutes.js @ CP7 + socialProfileRoutes.js @ CP8). 3 GETs are
 // timeline catalog reads (no req.user consumption); 3 handlers are Tier 1.
-const { optionalAuth, requireAuth } = require('../middleware/auth');
+const { optionalAuth, requireAuth, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { statusWhere, isLive, LOCKED_MESSAGE } = require('../services/feedPostStatus');
 const { draftReactions, pickReactors, recountComments, DraftError, COMMENT_LOCKED } = require('../services/feedCommentDrafter');
@@ -667,6 +667,8 @@ router.put('/:postId', requireAuth, async (req, res) => {
     // now (approving an episode's post, Task #2749, does the same); its story
     // time stays as stamped.
     if (updates.status === 'live' && !post.posted_at && updates.posted_at === undefined) updates.posted_at = new Date();
+    // Published now: any schedule or hold is done with (step 6c, services/postRelease).
+    if (updates.status === 'live') { updates.release_state = null; updates.release_at = null; }
     // Evoni changing an AI draft's words is remembered (Task #3070): on approval it teaches the voice.
     if (post.ai_generated && updates.content_text !== undefined && String(updates.content_text).trim() !== String(post.content_text || '').trim()) {
       updates.edited_at = new Date();
@@ -796,6 +798,28 @@ router.post('/:postId/restore', requireAuth, async (req, res) => {
     return res.json({ data: post });
   } catch (err) {
     console.error('[FeedPosts] Restore error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/v1/feed-posts/:postId/release-time { mode: 'schedule'|'hold'|'clear', at? }
+// (Character Consistency Engine step 6c, the two clocks; services/postRelease):
+// a draft's release time. Schedule: it goes live at `at` (the release timer);
+// hold: it waits until released; clear: an ordinary draft again. Its story
+// time does not change. Publishing now stays PUT /:postId { status: 'live' }.
+router.put('/:postId/release-time', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const { setReleaseTime, ReleaseError } = require('../services/postRelease');
+    const post = await require('../models').FeedPost.findByPk(req.params.postId);
+    try {
+      await setReleaseTime(post, { mode: req.body?.mode, at: req.body?.at ?? null });
+    } catch (err) {
+      if (err instanceof ReleaseError) return res.status(err.status).json({ error: err.message });
+      throw err;
+    }
+    return res.json({ data: post });
+  } catch (err) {
+    console.error('[FeedPosts] release-time error:', err);
     return res.status(500).json({ error: err.message });
   }
 });

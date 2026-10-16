@@ -733,6 +733,11 @@ if (process.env.PULSE_ENGINE_ENABLED === 'true' && process.env.NODE_ENV !== 'tes
   require('./services/pulseRecap').startScheduler(db);
 }
 
+// Release time (Character Consistency Engine step 6c, services/postRelease):
+// each minute, drafts Evoni scheduled whose time has come go live. Not under
+// the posting engine's switch (she chose each time herself); never in tests.
+if (process.env.NODE_ENV !== 'test') require('./services/postRelease').startScheduler(db);
+
 // Phase 2 routes
 app.use('/api/v1/files', filesRoutes);
 app.use('/api/v1/search', searchRoutes);

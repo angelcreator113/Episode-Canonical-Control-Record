@@ -50,6 +50,8 @@
 .prv-btn { min-height: 36px; padding: 4px 14px; border-radius: 6px; border: 1px solid var(--lala-lavender-dark); background: var(--lala-lavender); color: var(--text-inverse); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
 .prv-btn:disabled { opacity: 0.6; cursor: default; }
 .prv-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 6px 0 0; }
+.prv-release { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.prv-release input[type="datetime-local"] { font: inherit; max-width: 100%; }
 .prv-edit { display: flex; flex-direction: column; gap: 6px; }
 .prv-edit textarea, .prv-request textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 16px; padding: 6px 8px; border: 1px solid var(--lala-parchment-3); border-radius: 4px; }
 .prv-error { color: var(--danger-text); background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 4px; padding: 6px 8px; font-size: 13px; }

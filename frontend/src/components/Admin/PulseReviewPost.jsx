@@ -180,6 +180,48 @@ export function BeatPicker({ post, showId }) {
 }
 
 /** One wall item: "Name did a thing." with its comments under it. */
+/**
+ * Release time, the second clock (Character Consistency Engine step 6c;
+ * Evoni, 2026-10-16: "yes publish/schedule/hold"; services/postRelease). A
+ * draft's story time stays as stamped; this is when the audience sees it.
+ * Release publishes now; Schedule picks a date and time (the release timer
+ * publishes it then); Hold keeps it until released. Shows the current state.
+ */
+const releaseWhen = (at) => new Date(at).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+/** A datetime-local value an hour from now, as a starting point. */
+const inAnHour = () => {
+  const d = new Date(Date.now() + 60 * 60 * 1000);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+export function ReleaseTime({ post, busy, act }) {
+  const [picking, setPicking] = useState(false);
+  const [when, setWhen] = useState(inAnHour);
+  const setTime = (body, label) => act(label, () => api.put(`/api/v1/feed-posts/${post.id}/release-time`, body));
+  const state = post.release_state;
+  return (
+    <span className="prv-release" data-testid="prv-release">
+      {state === 'scheduled' && post.release_at && <span className="prv-badge">Scheduled for {releaseWhen(post.release_at)}</span>}
+      {state === 'held' && <span className="prv-badge">Held</span>}
+      {picking ? (
+        <>
+          <input type="datetime-local" aria-label="Release on" value={when} onChange={(e) => setWhen(e.target.value)} />
+          <button type="button" className="prv-btn" disabled={busy || !when}
+            onClick={() => { setPicking(false); setTime({ mode: 'schedule', at: new Date(when).toISOString() }, 'Schedule'); }}>Schedule</button>
+          <button type="button" className="prv-link-btn" onClick={() => setPicking(false)}>Cancel</button>
+        </>
+      ) : (
+        <>
+          <button type="button" className="prv-link-btn" disabled={busy} onClick={() => setPicking(true)}>{state === 'scheduled' ? 'Reschedule' : 'Schedule…'}</button>
+          {state !== 'held' && <button type="button" className="prv-link-btn" disabled={busy} onClick={() => setTime({ mode: 'hold' }, 'Hold')}>Hold</button>}
+          {state && <button type="button" className="prv-link-btn" disabled={busy} onClick={() => setTime({ mode: 'clear' }, 'Clear the release time')}>{state === 'held' ? 'Stop holding' : 'Unschedule'}</button>}
+        </>
+      )}
+    </span>
+  );
+}
+
 export function PostCard({ post, onChange, showId }) {
   const who = posterOf(post);
   const [open, setOpen] = useState(false);
@@ -242,7 +284,8 @@ export function PostCard({ post, onChange, showId }) {
         {(isDraft || isDeleted) && !editing && (
           <p className="prv-actions" data-testid="sm-post-actions">
             {isDraft && <>
-              <button type="button" className="prv-btn" disabled={busy} onClick={release}>Release</button>
+              <button type="button" className="prv-btn" disabled={busy} onClick={release}>{post.release_state ? 'Release now' : 'Release'}</button>
+              <ReleaseTime post={post} busy={busy} act={act} />
               <button type="button" className="prv-link-btn" disabled={busy} onClick={() => setEditing(true)}>Edit</button>
               <button type="button" className="prv-link-btn" disabled={busy} onClick={remove}>Delete</button>
             </>}
@@ -341,7 +384,8 @@ export function RequestPost({ post, onChange }) {
           </>
         ) : (
           <>
-            <button type="button" className="prv-btn" disabled={busy} onClick={() => act('Approve', () => api.put(`/api/v1/feed-posts/${post.id}`, { status: 'live' }))}>Approve</button>
+            <button type="button" className="prv-btn" disabled={busy} onClick={() => act('Approve', () => api.put(`/api/v1/feed-posts/${post.id}`, { status: 'live' }))}>{post.release_state ? 'Approve and publish now' : 'Approve'}</button>
+            <ReleaseTime post={post} busy={busy} act={act} />
             <button type="button" className="prv-link-btn" disabled={busy} onClick={() => setEditing(true)}>Edit</button>
             <button type="button" className="prv-link-btn" disabled={busy}
               onClick={() => { if (window.confirm('Discard this post? It is kept under Deleted and can be restored.')) act('Discard', () => api.delete(`/api/v1/feed-posts/${post.id}`)); }}>Discard</button>
