@@ -258,12 +258,15 @@ async function storeStillBuffer(buffer, sceneSetId, suffix = 'still') {
  * Fixed: ratio now matches text_to_image (1920:1080).
  * Added: camera motion control, scene-specific duration, negative prompt.
  */
+// The image-to-video model startImageToVideo calls.
+const VIDEO_MODEL = 'gen3a_turbo';
+
 async function startImageToVideo(prompt, imageUrl, options = {}) {
   const { seed, duration = 5, cameraMotion } = options;
   const parsedSeed = seed != null && /^\d+$/.test(String(seed)) ? Number(seed) : undefined;
 
   const payload = {
-    model: 'gen3a_turbo',
+    model: VIDEO_MODEL,
     promptText: prompt,
     promptImage: imageUrl,
     duration,
@@ -842,13 +845,17 @@ async function storeBufferInS3(buffer, setId, angleId, assetType, contentType) {
  * everyday look. Deleting it left those pointing at a removed file (audit,
  * 2026-10-15). A check that cannot run keeps the file.
  */
-async function imageStillUsed(sequelize, url) {
+async function imageStillUsed(sequelize, url, { setId = null } = {}) {
   if (!sequelize) return true;
   try {
+    // Another set whose base is the same picture (a base_still_url edited
+    // to point at it) still shows it too (audit, 2026-10-15).
     const [[row]] = await sequelize.query(
       `SELECT (EXISTS (SELECT 1 FROM scene_angles WHERE still_image_url = :url AND deleted_at IS NULL)
-            OR EXISTS (SELECT 1 FROM world_locations WHERE approved_base_image_url = :url AND deleted_at IS NULL)) AS used`,
-      { replacements: { url } });
+            OR EXISTS (SELECT 1 FROM world_locations WHERE approved_base_image_url = :url AND deleted_at IS NULL)
+            OR EXISTS (SELECT 1 FROM scene_sets WHERE base_still_url = :url AND deleted_at IS NULL
+                         AND id IS DISTINCT FROM CAST(:setId AS uuid))) AS used`,
+      { replacements: { url, setId } });
     return Boolean(row?.used);
   } catch (err) {
     console.warn(`[SceneGen] could not check whether ${url} is still used; it is kept: ${err.message}`);
@@ -856,10 +863,10 @@ async function imageStillUsed(sequelize, url) {
   }
 }
 
-async function deleteOldBaseImage(url, sequelize) {
+async function deleteOldBaseImage(url, sequelize, { setId = null } = {}) {
   if (!url) return;
-  if (await imageStillUsed(sequelize, url)) {
-    console.log(`[SceneGen] Old base image kept: an angle or an approved base still shows it (${url})`);
+  if (await imageStillUsed(sequelize, url, { setId })) {
+    console.log(`[SceneGen] Old base image kept: an angle, an approved base or another set still shows it (${url})`);
     return;
   }
   await deleteOldS3Asset(url);
@@ -960,7 +967,7 @@ async function generateBaseScene(sceneSet, models, options = {}) {
     // Clean up old base still from S3 (best-effort), unless something
     // still shows it.
     if (sceneSet.base_still_url) {
-      await deleteOldBaseImage(sceneSet.base_still_url, briefDb(models));
+      await deleteOldBaseImage(sceneSet.base_still_url, briefDb(models), { setId: sceneSet.id });
     }
 
     console.log(`[SceneGen] Still complete (${modelKey}); cost ${cost == null ? 'unpriced' : `$${cost}`}`);
@@ -2407,20 +2414,29 @@ async function generateAngleVideo(sceneAngle, sceneSet, models) {
   // Note: errors propagate naturally — angle stays 'complete' so the still image remains accessible
   console.log(`[SceneGen] Starting on-demand video for angle: ${sceneAngle.angle_name}`);
 
-  const { jobId } = await startImageToVideo(videoPrompt, sourceImageUrl, {
-    duration: videoDuration,
-    cameraMotion,
-  });
-  const result = await pollTask(jobId);
-
-  if (result.status !== 'SUCCEEDED') {
-    throw new Error(`Angle video failed: ${result.error}`);
-  }
+  // Budget-gated and logged as every image call is (audit, 2026-10-15: the
+  // video bypassed the gate and added Runway credits, not dollars, to the
+  // cost). Runway has no price in the rate table, so the call is logged
+  // unpriced and adds nothing to the cost, never a made-up figure.
+  const costs = createCostCollector(`video ${sceneAngle.id} (${VIDEO_MODEL})`);
+  const result = await imageCost.runImageCall(
+    { model: VIDEO_MODEL, provider: 'runway', onLogged: costs.onLogged },
+    async () => {
+      const { jobId } = await startImageToVideo(videoPrompt, sourceImageUrl, {
+        duration: videoDuration,
+        cameraMotion,
+      });
+      const task = await pollTask(jobId);
+      if (task.status !== 'SUCCEEDED') throw new Error(`Angle video failed: ${task.error}`);
+      return task;
+    }
+  );
 
   if (sceneAngle.video_clip_url) await deleteOldS3Asset(sceneAngle.video_clip_url);
 
   const videoUrl = await storeInS3(result.outputUrl, sceneSet.id, sceneAngle.id, 'video');
-  const totalCost = result.creditsUsed || 0;
+  const logged = costs.value();
+  const totalCost = typeof logged === 'number' ? logged : 0;
 
   console.log(`[SceneGen] Video complete for angle: ${sceneAngle.angle_name}`);
 
@@ -2430,7 +2446,7 @@ async function generateAngleVideo(sceneAngle, sceneSet, models) {
     generation_cost: parseFloat(sceneAngle.generation_cost || 0) + totalCost,
   }, { where: { id: sceneAngle.id } });
 
-  await SceneSet.increment('generation_cost', { by: totalCost, where: { id: sceneSet.id } });
+  if (totalCost > 0) await SceneSet.increment('generation_cost', { by: totalCost, where: { id: sceneSet.id } });
 
   return { success: true, videoUrl };
 }

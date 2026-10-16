@@ -50,28 +50,13 @@ describe('Step 3 CP1 — F-AUTH-3 Tier 3 handler disposition', () => {
     });
   });
 
-  describe('manuscript-export.js Tier 3 handlers (3 GETs)', () => {
-    let manuscriptSource;
-    beforeAll(() => {
-      manuscriptSource = fs.readFileSync(MANUSCRIPT_PATH, 'utf8');
-    });
-
-    test('GET /book/:bookId/meta uses factory invocation with degradeOnInfraFailure: true', () => {
-      expect(manuscriptSource).toMatch(
-        /router\.get\(['"]\/book\/:bookId\/meta['"],\s*optionalAuth\(\{\s*degradeOnInfraFailure:\s*true\s*\}\)/,
-      );
-    });
-
-    test('GET /book/:bookId/docx uses factory invocation with degradeOnInfraFailure: true', () => {
-      expect(manuscriptSource).toMatch(
-        /router\.get\(['"]\/book\/:bookId\/docx['"],\s*optionalAuth\(\{\s*degradeOnInfraFailure:\s*true\s*\}\)/,
-      );
-    });
-
-    test('GET /book/:bookId/pdf uses factory invocation with degradeOnInfraFailure: true', () => {
-      expect(manuscriptSource).toMatch(
-        /router\.get\(['"]\/book\/:bookId\/pdf['"],\s*optionalAuth\(\{\s*degradeOnInfraFailure:\s*true\s*\}\)/,
-      );
+  // manuscript-export.js no longer degrades: Evoni, 2026-10-15, the memoir
+  // downloads need sign-in (requireAuth). Pinned in
+  // manuscript-export-mixed-tier-promotion.test.js.
+  describe('manuscript-export.js (3 GETs) require sign-in', () => {
+    test.each(['meta', 'docx', 'pdf'])('GET /book/:bookId/%s uses requireAuth', (kind) => {
+      const manuscriptSource = fs.readFileSync(MANUSCRIPT_PATH, 'utf8');
+      expect(manuscriptSource).toMatch(new RegExp(`router\\.get\\(['"]/book/:bookId/${kind}['"],\\s*requireAuth,`));
     });
   });
 
@@ -111,21 +96,22 @@ describe('Step 3 CP1 — F-AUTH-3 Tier 3 handler disposition', () => {
     test('manuscript-export.js uses direct destructuring import for auth middleware', () => {
       const source = fs.readFileSync(MANUSCRIPT_PATH, 'utf8');
       expect(source).toMatch(
-        /const\s*\{\s*optionalAuth[^}]*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/,
+        /const\s*\{\s*requireAuth[^}]*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/,
       );
     });
   });
 
   describe('F-AUTH-3 consumer count post-CP1', () => {
-    test('press.js + manuscript-export.js together contain exactly 5 degradeOnInfraFailure: true invocations', () => {
+    // manuscript-export.js left Tier 3 on 2026-10-15 (Evoni: the memoir downloads need sign-in).
+    test('press.js + manuscript-export.js together contain exactly 2 degradeOnInfraFailure: true invocations', () => {
       const pressSource = fs.readFileSync(PRESS_PATH, 'utf8');
       const manuscriptSource = fs.readFileSync(MANUSCRIPT_PATH, 'utf8');
       const pattern = /degradeOnInfraFailure:\s*true/g;
       const pressCount = (pressSource.match(pattern) || []).length;
       const manuscriptCount = (manuscriptSource.match(pattern) || []).length;
       expect(pressCount).toBe(2);
-      expect(manuscriptCount).toBe(3);
-      expect(pressCount + manuscriptCount).toBe(5);
+      expect(manuscriptCount).toBe(0);
+      expect(pressCount + manuscriptCount).toBe(2);
     });
   });
 });

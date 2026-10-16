@@ -175,12 +175,13 @@ export function DeleteSetDialog({ set, uses, sets, onDone, onCancel }) {
   };
   return (
     <div className="scene-sets-delete-backdrop">
-      <div className="scene-sets-delete-dialog" role="dialog" aria-label={`Delete ${set.name}`}>
+      <div className="scene-sets-delete-dialog" role="dialog" aria-modal="true" aria-label={`Delete ${set.name}`}
+        onKeyDown={(e) => { if (e.key === 'Escape' && !busy) { e.stopPropagation(); onCancel?.(); } }}>
         <h3>Delete “{set.name}”?</h3>
         <p data-testid="delete-set-uses">{usesText(uses)}</p>
         <label className="scene-sets-create-field">
           <span>Move them to</span>
-          <select aria-label="Replacement set" value={replacement} onChange={e => setReplacement(e.target.value)}>
+          <select aria-label="Replacement set" value={replacement} onChange={e => setReplacement(e.target.value)} autoFocus>
             <option value="">Choose a replacement…</option>
             {choices.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
@@ -269,7 +270,7 @@ export function SetWorldLocationSelect({ set, onSaved, onError }) {
   };
   const create = async () => {
     const name = newName.trim();
-    if (!name) return;
+    if (!name || saving) return;
     setSaving(true);
     try {
       const r = await createWorldLocationApi({ name, location_type: set.scene_type === 'EVENT_LOCATION' ? 'exterior' : 'interior' });
@@ -499,8 +500,6 @@ export const suggestAnglesFromImageApi = (setId, formData) =>
   apiClient.post(`${API_BASE}/scene-sets/${setId}/suggest-angles-from-image`, formData);
 export const getAiCameraDirectionApi = (setId, payload) =>
   apiClient.post(`${API_BASE}/scene-sets/${setId}/ai-camera-direction`, payload);
-export const getMoodVariantsApi = (setId) =>
-  apiClient.get(`${API_BASE}/scene-sets/${setId}/mood-variants`);
 export const generateMoodVariantsApi = (setId, payload) =>
   apiClient.post(`${API_BASE}/scene-sets/${setId}/mood-variants`, payload);
 export const getComparisonApi = (setId) =>
@@ -509,8 +508,6 @@ export const getWardrobeMatchApi = (setId) =>
   apiClient.get(`${API_BASE}/scene-sets/${setId}/wardrobe-match`);
 
 // Episode association
-export const listSceneSetEpisodesApi = (setId) =>
-  apiClient.get(`${API_BASE}/scene-sets/${setId}/episodes`);
 export const unlinkEpisodeFromSceneSetApi = (setId, episodeId) =>
   apiClient.delete(`${API_BASE}/scene-sets/${setId}/episodes/${episodeId}`);
 
@@ -981,6 +978,9 @@ export function LooksRow({ set, focusZone = null, onToast, onRefresh }) {
               : <span className="scene-sets-look-empty">{l.status === 'failed' ? 'Failed' : 'Generating…'}</span>}
             <figcaption>
               <Link to={`/shows/${l.event_show_id}/events/${l.event_id}`}>{l.event_name}</Link>
+              {/* The beat picker does not use a look made from an old
+                  everyday look (episodeLooks), so the row says so. */}
+              {l.status === 'complete' && l.stale && <span className="scene-sets-look-stale" data-testid={`scene-set-look-stale-${l.id}`}> · old everyday look</span>}
             </figcaption>
           </figure>
         ))}
@@ -1054,6 +1054,7 @@ export function ApprovedBaseRow({ set, onToast = () => {}, onRefresh = () => {} 
 
 const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZone = null, onGenerateBase, onRegenerateBase, onUploadBase, onUploadAngleImage, onGenerateAngle, onGenerateAll, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, specStage, allShows, allEpisodes, onLoadEpisodes, onToast, onRefresh, defaultRole = null, onMakeDefault, onDefaultsChanged, hideShow = false, onUploadAngles }) {
   const fileInputRef = useRef(null);
+  const uploadAnglesInput = useRef(null);
   const menuRef = useRef(null);
   const isGenerating = isGeneratingProp;
   const progress = isGeneratingProp ? generationProgress : null;
@@ -1225,7 +1226,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
     const beatArr = newAngle.beat_affinity.trim()
       ? newAngle.beat_affinity.split(',').map(b => parseInt(b.trim(), 10)).filter(n => !isNaN(n))
       : [];
-    await onAddAngle(set, {
+    const added = await onAddAngle(set, {
       angle_label: newAngle.angle_label.trim().toUpperCase(),
       angle_name: newAngle.angle_name.trim(),
       angle_description: newAngle.angle_description.trim() || null,
@@ -1235,11 +1236,15 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
       ...(newAngle.angle_kind === 'extra' && newAngle.zone_angle_id ? { zone_angle_id: newAngle.zone_angle_id } : {}),
       _imageFile: angleUploadFile || null,
     });
+    setAddingAngle(false);
+    // A refused angle keeps the form as typed, open, to fix and try again
+    // (audit, 2026-10-15: the form was cleared and the workspace closed).
+    if (added === false) return;
     setNewAngle({ angle_label: '', angle_name: '', angle_description: '', camera_direction: '', beat_affinity: '', angle_kind: '', zone_angle_id: '' });
     setAngleUploadFile(null);
     setAngleUploadPreview(null);
-    setShowAddAngle(false);
-    setAddingAngle(false);
+    // Back to the set's angles, where the new one shows.
+    openWorkspace('angles');
   };
 
   const handleSaveName = async () => {
@@ -1365,8 +1370,14 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
       const json = res.data;
       if (json.data?.camera_direction) {
         setNewAngle(a => ({ ...a, camera_direction: json.data.camera_direction }));
+      } else {
+        showToast('No camera direction came back. Write one, or try again.', 'error');
       }
-    } catch { /* silent */ }
+    } catch (err) {
+      // Said, not silent: the spinner stopping alone said nothing.
+      console.error('[SceneSets] AI camera direction failed:', err);
+      showToast(err.response?.data?.error || 'Could not suggest a camera direction', 'error');
+    }
     setAiAssistLoading(false);
   };
 
@@ -1522,7 +1533,9 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
               className="scene-sets-modal"
               role="dialog"
               aria-modal="true"
-              aria-labelledby={`scene-set-title-${set.id}`}
+              // Named by the set itself: the title's own label ("…: rename")
+              // made the dialog's name, and while renaming it was not there.
+              aria-label={set.name || 'Scene set'}
               tabIndex={-1}
               ref={workspaceRef}
               onClick={e => e.stopPropagation()}
@@ -1545,8 +1558,14 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                         value={nameValue}
                         onChange={e => setNameValue(e.target.value)}
                         onBlur={handleSaveName}
-                        onKeyDown={e => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') setEditingName(false); }}
+                        onKeyDown={e => {
+                          if (e.key !== 'Enter' && e.key !== 'Escape') return;
+                          if (e.key === 'Enter') handleSaveName(); else setEditingName(false);
+                          // Focus back in the dialog, so Escape still closes it.
+                          setTimeout(() => workspaceRef.current?.focus(), 0);
+                        }}
                         disabled={savingName}
+                        aria-label="Set name"
                         autoFocus
                       />
                     ) : (
@@ -1739,11 +1758,17 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                             value={localTimeOfDay}
                             onChange={async (e) => {
                               const val = e.target.value || null;
+                              const prev = localTimeOfDay;
                               setLocalTimeOfDay(e.target.value);
                               try {
                                 await updateSceneSetApi(set.id, { time_of_day: val });
                                 showToast(`Time set to ${val || 'any'}`);
-                              } catch { showToast('Failed to update', 'error'); }
+                              } catch (err) {
+                                // Not saved: the saved value shows again.
+                                console.error('[SceneSets] time of day save failed:', err);
+                                setLocalTimeOfDay(prev);
+                                showToast(err.response?.data?.error || 'Time of day did not save', 'error');
+                              }
                             }}
                             className="scene-sets-select-sm"
                           >
@@ -1761,11 +1786,16 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                             value={localSeason}
                             onChange={async (e) => {
                               const val = e.target.value || null;
+                              const prev = localSeason;
                               setLocalSeason(e.target.value);
                               try {
                                 await updateSceneSetApi(set.id, { season: val });
                                 showToast(`Season set to ${val || 'any'}`);
-                              } catch { showToast('Failed to update', 'error'); }
+                              } catch (err) {
+                                console.error('[SceneSets] season save failed:', err);
+                                setLocalSeason(prev);
+                                showToast(err.response?.data?.error || 'Season did not save', 'error');
+                              }
                             }}
                             className="scene-sets-select-sm"
                           >
@@ -1794,12 +1824,17 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                               value={localRoomProps[key] || ''}
                               onChange={async (e) => {
                                 const val = e.target.value || null;
+                                const prev = localRoomProps;
                                 const rp = { ...localRoomProps, [key]: val };
                                 setLocalRoomProps(rp);
                                 try {
                                   await updateSceneSetApi(set.id, { room_properties: rp });
                                   showToast(`${label} set to ${val || 'auto'}`);
-                                } catch { showToast('Failed to update', 'error'); }
+                                } catch (err) {
+                                  console.error('[SceneSets] room properties save failed:', err);
+                                  setLocalRoomProps(prev);
+                                  showToast(err.response?.data?.error || `${label} did not save`, 'error');
+                                }
                               }}
                               className="scene-sets-select-sm"
                             >
@@ -1859,8 +1894,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                                 try {
                                   const r = await generateMoodVariantsApi(set.id, { moods: [m.key] });
                                   const d = r.data;
-                                  if (d.success) showToast(`${m.label} created`);
-                                } catch (e) { showToast(e.response?.data?.error || e.message, 'error'); }
+                                  if (d.success) { showToast(`${m.label} created`); onRefresh?.(); } else showToast(d.error || 'No variant was made', 'error');
+                                } catch (e) { console.error('[SceneSets] mood variant failed:', e); showToast(e.response?.data?.error || e.message, 'error'); }
                                 setToolsAction(null);
                               }}>
                               {toolsAction === `mood_${m.key}` ? <Loader size={10} className="spin" /> : m.label}
@@ -2129,18 +2164,24 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                     <div className="scene-sets-ws-subhead">Additional views</div>
                     <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
                       {/* Her own images as angles, several at once (Evoni, 2026-10-07) */}
+                      {/* A button (a label around a hidden input can't take focus). */}
                       {onUploadAngles && (
-                        <label className="scene-sets-btn-details" data-testid={`scene-set-upload-angles-${set.id}`} style={{ cursor: 'pointer' }}>
-                          <Upload size={12} /> Upload angles
+                        <>
+                          <button type="button" className="scene-sets-btn-details" data-testid={`scene-set-upload-angles-${set.id}`}
+                            onClick={() => uploadAnglesInput.current?.click()}>
+                            <Upload size={12} /> Upload angles
+                          </button>
                           <input
+                            ref={uploadAnglesInput}
                             type="file"
                             multiple
                             accept="image/jpeg,image/png,image/webp"
                             style={{ display: 'none' }}
                             aria-label="Upload angle images"
+                            data-testid={`scene-set-upload-angles-input-${set.id}`}
                             onChange={(e) => { const files = Array.from(e.target.files || []); e.target.value = ''; if (files.length) onUploadAngles(set, files); }}
                           />
-                        </label>
+                        </>
                       )}
                       {hasBase && (
                         <button className="scene-sets-btn-details" disabled={seeding} onClick={async () => {
@@ -2610,9 +2651,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                                 try {
                                   const r = await generateMoodVariantsApi(set.id, { moods: [m.key] });
                                   const d = r.data;
-                                  if (d.success) showToast(`${m.label} variant created`);
-                                  else showToast(d.error, 'error');
-                                } catch (e) { showToast(e.response?.data?.error || e.message, 'error'); }
+                                  if (d.success) { showToast(`${m.label} variant created`); onRefresh?.(); } else showToast(d.error || 'No variant was made', 'error');
+                                } catch (e) { console.error('[SceneSets] mood variant failed:', e); showToast(e.response?.data?.error || e.message, 'error'); }
                                 setToolsAction(null);
                               }}
                               title={m.desc}
@@ -3019,10 +3059,15 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
   const [createShowId, setCreateShowId] = useState('');
   const [deleting, setDeleting] = useState(null); // D1: { set, uses }
 
+  // One timer for the toast on screen: each toast's own timer cleared the
+  // next one early (a "queued" toast's timer hid the error after it).
+  const toastTimer = useRef(null);
   const showToast = (msg, type = 'success') => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 4000);
+    clearTimeout(toastTimer.current);
+    setToast({ msg, type, id: Date.now() });
+    toastTimer.current = setTimeout(() => setToast(null), 4000);
   };
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
 
   const initialLoadDone = useRef(false);
   // Audit TRUTH-02 (2026-10-03): a failed read of the list, with Retry, and
@@ -3355,6 +3400,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         // Direct generation flow: poll scene set for angle completion
         showToast(`Generating "${angle.angle_name}" — this may take 30-60s...`);
         const maxPolls = 30;
+        let finished = false;
         for (let i = 0; i < maxPolls; i++) {
           await new Promise(r => setTimeout(r, 4000));
           try {
@@ -3363,14 +3409,20 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
             const updatedAngle = checkJson.data?.angles?.find(a => a.id === angle.id);
             if (updatedAngle?.generation_status === 'complete') {
               showToast(`"${angle.angle_name}" generated!`);
+              finished = true;
               break;
             }
             if (updatedAngle?.generation_status === 'failed') {
               showToast('Angle generation failed', 'error');
+              finished = true;
               break;
             }
-          } catch { /* retry */ }
+          } catch (pollErr) {
+            console.warn('[SceneSets] angle status check failed; retrying:', pollErr.message);
+          }
         }
+        // Two minutes without an answer: said, not silence.
+        if (!finished) showToast(`"${angle.angle_name}" is still generating; it will show here when it is done.`);
       }
       await fetchSets();
     } catch (err) {
@@ -3520,8 +3572,13 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
     }
   };
 
+  // One create at a time: Enter pressed twice made two sets (a ref, so a
+  // second press before the re-render is refused too).
+  const createInFlight = useRef(false);
   const handleCreate = async () => {
+    if (createInFlight.current) return;
     if (!newSet.name.trim()) { showToast('Name is required', 'error'); return; }
+    createInFlight.current = true;
     setCreating(true);
     try {
       const createPayload = {
@@ -3568,6 +3625,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       console.error('[SceneSets] create failed:', err);
       showToast(err.message || 'Failed to create location', 'error');
     } finally {
+      createInFlight.current = false;
       setCreating(false);
     }
   };
@@ -3615,14 +3673,13 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
 
   const handleLinkEpisodes = async (set, episodeIds) => {
     try {
-      await listSceneSetEpisodesApi; // helper exists; using POST helper below for link action
-      // The link endpoint shares the same /episodes path but is a POST (link), not a GET (list).
-      // Migration: use a POST helper rather than the read helper.
       await apiClient.post(`${API_BASE}/scene-sets/${set.id}/episodes`, { episode_ids: episodeIds });
       showToast(`Linked ${episodeIds.length} episode(s)`);
       fetchSets();
-    } catch {
-      showToast('Failed to link episodes', 'error');
+    } catch (err) {
+      // The server's reason (another show's episode, one not found).
+      console.error('[SceneSets] link episodes failed:', err);
+      showToast(err.response?.data?.error || 'Failed to link episodes', 'error');
     }
   };
 
@@ -3695,9 +3752,11 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       }
 
       await fetchSets();
+      return true;
     } catch (err) {
       console.error('[SceneSets] add angle failed:', err);
       showToast(err.message || 'Failed to add angle', 'error');
+      return false;
     }
   };
 
@@ -3852,8 +3911,10 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
           the show (Evoni's mock, 2026-10-07: no second "Back to …"). */}
       {isAppPath(searchParams.get('from')) && <SceneSetsHandoff set={sets.find((x) => x.id === focusSetId) || null} zone={focusZone} />}
       {/* Toast */}
+      {/* Announced to screen readers; above the workspace and the lightbox. */}
       {toast && (
-        <div className={`scene-sets-toast ${toast.type === 'error' ? 'error' : 'success'}`}>
+        <div key={toast.id} className={`scene-sets-toast ${toast.type === 'error' ? 'error' : 'success'}`}
+          role={toast.type === 'error' ? 'alert' : 'status'} aria-live={toast.type === 'error' ? 'assertive' : 'polite'}>
           {toast.msg}
         </div>
       )}
@@ -3971,8 +4032,9 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
               </div>
             )}
             <div className="scene-sets-create-field">
-              <label>Type</label>
+              <label htmlFor="scene-sets-create-type">Type</label>
               <select
+                id="scene-sets-create-type"
                 value={newSet.scene_type}
                 onChange={e => setNewSet(s => ({ ...s, scene_type: e.target.value }))}
               >

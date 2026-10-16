@@ -189,4 +189,23 @@ const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
     const labels = (await rows('SELECT id, angle_label FROM scene_angles WHERE scene_set_id = :id AND deleted_at IS NULL', { id: set.id }));
     expect(labels.filter((a) => a.angle_label === 'WIDE').map((a) => a.id)).toEqual([made.id]);
   });
+
+  it('a mood variation is saved with the set; a second mood keeps the first', async () => {
+    // Third audit (2026-10-15): the stored object changed in place compared
+    // equal to itself, so nothing was written.
+    const sceneGen = require('../../src/services/sceneGenerationService');
+    jest.spyOn(sceneGen, 'generateMoodVariants')
+      .mockResolvedValueOnce({ glam: 'https://x/glam.jpg' })
+      .mockResolvedValueOnce({ cozy: 'https://x/cozy.jpg' })
+      .mockResolvedValueOnce({});
+    const set = await makeSet({ base_still_url: 'https://x/base.jpg' });
+    const post = (moods) => auth(request(app).post(`/api/v1/scene-sets/${set.id}/mood-variants`)).send({ moods });
+    expect((await post(['glam'])).status).toBe(200);
+    expect((await post(['cozy'])).status).toBe(200);
+    const [row] = await rows('SELECT visual_language FROM scene_sets WHERE id = :id', { id: set.id });
+    expect(row.visual_language.mood_variants.base).toEqual({ glam: 'https://x/glam.jpg', cozy: 'https://x/cozy.jpg' });
+    const none = await post(['glam']);
+    expect(none.status).toBe(400);
+    expect(none.body.error).toMatch(/No mood variant could be made/);
+  });
 });
