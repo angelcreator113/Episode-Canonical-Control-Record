@@ -176,6 +176,25 @@ const ORIGINAL = script(beat(1, 'Opening Ritual', 'Prime: "Hey besties"'), beat(
     expect((await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: 42 })).status).toBe(400);
   });
 
+  test('an approved beat whose header names no beat reaches the writer with its number', async () => {
+    // Re-audit 2 (2026-10-15): read by its place, it was saved twice.
+    const other = uuid();
+    await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, script_content, script_locked_beats, created_at, updated_at)
+               VALUES (:other, :show, 'Bonus', 3, 'draft', :script, '[2]'::jsonb, NOW(), NOW())`, { other, show, script: script(beat(1, 'Opening Ritual', 'Me: hi'), '## BEAT: Bonus scene\nLala: "approved bonus"') });
+    await run(`INSERT INTO episode_briefs (id, episode_id, status, created_at, updated_at) VALUES (:id, :other, 'draft', NOW(), NOW())`, { id: uuid(), other });
+    try {
+      generateGroundedScript.mockClear();
+      generateGroundedScript.mockResolvedValueOnce(script(beat(2, 'Login Sequence', 'Lala: "new"')));
+      const res = await auth(request(app).post(`/api/v1/episode-brief/${other}/generate-script`)).send({ showId: show, confirmOverwrite: true });
+      expect(res.status).toBe(200);
+      expect(generateGroundedScript.mock.calls[0][3].lockedBeats).toEqual([{ number: 2, text: '## BEAT: 2 · Bonus scene\nLala: "approved bonus"' }]);
+      expect(res.body.script.match(/approved bonus/g)).toHaveLength(1);
+    } finally {
+      await run(`DELETE FROM episode_briefs WHERE episode_id = :other`, { other });
+      await run(`DELETE FROM episodes WHERE id = :other`, { other });
+    }
+  });
+
   test('unlocking lets Save change the beat again', async () => {
     expect((await locks({ locked_beats: [] })).body.data.script_locked_beats).toEqual([]);
     const { script_content: current } = await stored();

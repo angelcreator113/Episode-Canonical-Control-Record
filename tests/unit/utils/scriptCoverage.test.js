@@ -71,3 +71,10 @@ describe('putting a beat in its place', () => {
     expect(insertBeatByNumber(script, 1, beat(1, 'Opening Ritual', 'again'))).toBe(script);
   });
 });
+
+// Script tab re-audit (2026-10-15): a script with Windows line ends is read
+// beat by beat, not as 14 missing beats.
+test('Windows line ends do not hide the beats', () => {
+  const crlf = Array.from({ length: 14 }, (_, i) => `## BEAT: ${i + 1}\r\nMe: hi`).join('\r\n\r\n');
+  expect(scriptCoverage(crlf).missing.filter((g) => g.kind === 'beat')).toEqual([]);
+});
