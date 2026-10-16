@@ -34,6 +34,12 @@
  *                                    it cannot be read (a context loader)
  *   factsForProfile(db, profile)     the same from a feed profile, through
  *                                    its registry character; null with none
+ *   agreeingFollowers(generated, fallbackTier)   a NEW profile's follower
+ *                                    count and tier made to agree (step 5c):
+ *                                    the tier from a count that reads as a
+ *                                    number, its label normalised, the primary
+ *                                    platform presence's followers set to it;
+ *                                    with only a tier word, no count invented
  *   holdToFacts(section, value, facts)   a generated section with the fields a
  *                                    fact decides set from it (profession,
  *                                    follower tier) and those a fact leaves
@@ -277,6 +283,36 @@ function holdToFacts(section, value, facts) {
   return out;
 }
 
+/**
+ * A newly generated profile has no facts yet, but its own numbers must agree
+ * (the spec's "1.2M vs 2M" drift starts here). Sets, on `generated` itself
+ * (so full_profile keeps the same values), follower_count_approx to the
+ * count's label and follower_tier to the count's tier, and the primary
+ * platform presence's followers to the same label. With no count that reads
+ * as a number, the tier stays (fallbackTier when not one of the six) and the
+ * count is null: no count is invented. Returns { follower_count_approx,
+ * follower_tier, count }.
+ */
+function agreeingFollowers(generated, fallbackTier = 'mid') {
+  const g = generated && typeof generated === 'object' ? generated : {};
+  const { TIERS, tierFor } = require('./pulseAudience');
+  const raw = g.follower_count_approx;
+  const count = typeof raw === 'number' && raw > 0 ? Math.round(raw) : require('./pulseFollowers').parseApprox(raw);
+  const keys = TIERS.map((t) => t.key);
+  let out;
+  if (count) out = { follower_count_approx: formatCount(count), follower_tier: tierFor(count).key, count };
+  else out = { follower_count_approx: null, follower_tier: keys.includes(g.follower_tier) ? g.follower_tier : fallbackTier, count: null };
+  g.follower_count_approx = out.follower_count_approx;
+  g.follower_tier = out.follower_tier;
+  const presences = g.platform_presences && typeof g.platform_presences === 'object' ? g.platform_presences : null;
+  if (presences && out.follower_count_approx) {
+    const entries = Object.entries(presences).filter(([, v]) => v && typeof v === 'object');
+    const primary = entries.find(([, v]) => v.is_primary === true) || entries[0];
+    if (primary) primary[1].followers = out.follower_count_approx;
+  }
+  return out;
+}
+
 /** factsOf, loading the feed profile when not given; null when it cannot be read. */
 async function factsForCharacter(db, character, feedProfile) {
   if (!character) return null;
@@ -305,5 +341,5 @@ async function factsForProfile(db, profile) {
 module.exports = {
   FACT_KEYS, ACCOUNT_STATUSES, INCOME_CADENCES, AFFORDABILITY, FactsError,
   formatCount, affordabilityOf, yearlyIncome, factsOf, setFacts, nextCanonFacts, showIdFor,
-  isDecided, factsPromptBlock, factsForCharacter, factsForProfile, holdToFacts, FACT_FIELDS, STATUS_WORDS,
+  isDecided, factsPromptBlock, factsForCharacter, factsForProfile, holdToFacts, agreeingFollowers, FACT_FIELDS, STATUS_WORDS,
 };

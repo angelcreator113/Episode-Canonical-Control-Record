@@ -129,7 +129,9 @@ describe('bulk generateSingleProfile (POST /social-profiles/bulk/generate)', () 
     expect(defaults).toMatchObject({ handle: 'glow_theory', platform: 'tiktok' });
     expect(Array.from(defaults.display_name).length).toBeLessThanOrEqual(200);
     expect(LONG_NAME.startsWith(defaults.display_name)).toBe(true);
-    expect(defaults.follower_count_approx.length).toBeLessThanOrEqual(50);
+    // A count that reads as a number is kept as its label, with its tier (step 5c: characterFacts agreeingFollowers).
+    expect(defaults.follower_count_approx).toBe('250k');
+    expect(defaults.follower_tier).toBe('macro');
     expect(defaults.emotional_activation.length).toBeLessThanOrEqual(200);
     expect(defaults.archetype).toBe('polished_curator');
     expect(defaults.current_trajectory).toBe('viral_moment');
@@ -140,7 +142,7 @@ describe('bulk generateSingleProfile (POST /social-profiles/bulk/generate)', () 
     expect(warns).toHaveLength(1);
     expect(warns[0]).toContain('bulk-generate');
     expect(warns[0]).toContain(`display_name (${LONG_NAME.length} > 200)`);
-    expect(warns[0]).toContain(`follower_count_approx (${LONG_COUNT.length} > 50)`);
+    expect(warns[0]).not.toContain('follower_count_approx');
     expect(warns[0]).toContain(`emotional_activation (${LONG_ACTIVATION.length} > 200)`);
     expect(warns[0]).not.toContain('Skincare Lab');
   });
@@ -196,28 +198,31 @@ describe('POST /character-generation/confirm-feed', () => {
     const record = SocialProfile.create.mock.calls[0][0];
     expect(Array.from(record.handle).length).toBeLessThanOrEqual(100);
     expect(Array.from(record.display_name).length).toBeLessThanOrEqual(200);
-    expect(record.follower_count_approx.length).toBeLessThanOrEqual(50);
+    // An old tier-word proposal that is not a tier gives no count and no tier: none is invented (step 5c).
+    expect(record.follower_count_approx).toBeNull();
+    expect(record.follower_tier).toBeNull();
 
     const warns = truncWarns();
     expect(warns).toHaveLength(1);
     expect(warns[0]).toContain('confirm-feed');
     expect(warns[0]).toContain(`handle (${longHandle.length} > 100)`);
     expect(warns[0]).toContain(`display_name (${LONG_NAME.length} > 200)`);
-    expect(warns[0]).toContain(`follower_count_approx (${LONG_COUNT.length} > 50)`);
+    expect(warns[0]).not.toContain('follower_count_approx');
   });
 });
 
 describe('feedScheduler.generateAndSaveProfile', () => {
   const spark = { handle: 'glow_theory', platform: 'tiktok', vibe_sentence: 'Skincare chemist.' };
 
-  it('accepts a numeric follower_count_approx without throwing and stores it as a string', async () => {
+  it('accepts a numeric follower_count_approx without throwing and stores it as its label, with its tier', async () => {
     const db = { SocialProfile: socialProfileModel() };
     mockCreate.mockResolvedValue(modelReply({ display_name: 'Glow Theory', follower_count_approx: 250000, archetype: 'soft_life' }));
 
     await expect(feedScheduler.generateAndSaveProfile(db, spark, 'real_world')).resolves.toBeDefined();
 
     const record = db.SocialProfile.create.mock.calls[0][0];
-    expect(record.follower_count_approx).toBe('250000');
+    expect(record.follower_count_approx).toBe('250k');
+    expect(record.follower_tier).toBe('macro');
     expect(record.display_name).toBe('Glow Theory');
     expect(record.handle).toBe('@glow_theory');
     expect(record.content_category).toBeNull();

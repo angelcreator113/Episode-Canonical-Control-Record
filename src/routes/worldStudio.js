@@ -1427,6 +1427,14 @@ router.post('/world/characters/:id/deepen', requireAuth, async (req, res) => {
       career_goal: 'their specific professional ambition',
     };
 
+    // The registry character this one feeds, and their facts (Character
+    // Consistency Engine step 5; services/characterFacts): the deepened
+    // fields agree with them, and the re-sync below keeps a decided occupation.
+    const { factsForCharacter, factsPromptBlock, isDecided } = require('../services/characterFacts');
+    const linked = models.RegistryCharacter ? await models.RegistryCharacter.findOne({ where: { world_character_id: req.params.id } }) : null;
+    const facts = linked ? await factsForCharacter(models, linked) : null;
+    const factsBlock = factsPromptBlock(facts);
+
     const result = await claude(
       wCfg.system_prompt,
       `Deepen this existing character by filling in missing fields. Only generate the MISSING fields listed below.
@@ -1445,6 +1453,7 @@ Surface want: ${char.surface_want || 'none'}
 Real want: ${char.real_want || 'none'}
 Intimate eligible: ${char.intimate_eligible}
 
+${factsBlock ? `\n${factsBlock}\n` : ''}
 MISSING FIELDS TO FILL:
 ${missing.map(f => `- ${f}: ${fieldDescriptions[f] || f}`).join('\n')}
 
@@ -1482,6 +1491,9 @@ Return JSON only — an object with ONLY the missing field keys and their values
       if (rc) {
         const _wCfgSync = WORLD_CONFIGS[updated.world_tag] || WORLD_CONFIGS['lalaverse'];
         const roleType = ROLE_MAP[updated.character_type] || 'special';
+        // A decided occupation is the facts'; an undecided one is not written.
+        const occupation = isDecided(facts, 'occupation') ? facts.occupation
+          : (facts?.undecided || []).includes('occupation') ? null : updated.occupation;
         await sequelize.query(
           `UPDATE registry_characters SET
             display_name = :display_name, selected_name = :selected_name, subtitle = :subtitle,
@@ -1505,7 +1517,7 @@ Return JSON only — an object with ONLY the missing field keys and their values
               rc_id: rc.id,
               display_name: updated.name,
               selected_name: updated.name,
-              subtitle: [updated.age_range, updated.occupation].filter(Boolean).join(' · ') || null,
+              subtitle: [updated.age_range, occupation].filter(Boolean).join(' · ') || null,
               role_type: roleType,
               role_label: updated.character_type || null,
               core_desire: updated.real_want || null,
@@ -1516,7 +1528,7 @@ Return JSON only — an object with ONLY the missing field keys and their values
               character_archetype: updated.character_archetype || null,
               signature_trait: updated.signature || null,
               emotional_baseline: updated.emotional_baseline || null,
-              description: [updated.occupation, updated.dynamic].filter(Boolean).join('. ') || null,
+              description: [occupation, updated.dynamic].filter(Boolean).join('. ') || null,
               personality_matrix: JSON.stringify({
                 core_wound: updated.desire_they_wont_admit || null,
                 desire_line: updated.real_want || null,
@@ -1535,7 +1547,7 @@ Return JSON only — an object with ONLY the missing field keys and their values
                 visual_evolution_notes: null,
               }),
               career_status: JSON.stringify({
-                profession: updated.occupation || null,
+                profession: occupation || null,
                 career_goal: updated.career_goal || null,
                 reputation_level: null, brand_relationships: null, financial_status: null,
                 public_recognition: updated.public_persona || null,

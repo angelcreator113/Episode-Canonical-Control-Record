@@ -99,6 +99,7 @@ function buildPrompt({ character, profile, voice, facts, mask, wound, known, hos
 
 Write exactly in this voice:
 ${JSON.stringify(voice.habits_json || {}, null, 2)}
+${require('./characterTypology').voiceDial(character.typology)}
 Posts they really wrote (match these):
 ${examples}
 Their latest posts (do not repeat them; vary the subject, length and opening):
