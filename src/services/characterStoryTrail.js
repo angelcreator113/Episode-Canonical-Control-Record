@@ -46,7 +46,7 @@ async function storyTrailOf(sequelize, character) {
   const key = character?.character_key || null;
 
   let posts = [];
-  let postCounts = { live: 0, draft: 0 };
+  const postCounts = { live: 0, draft: 0 };
   let episodeIds = [];
   if (profileId != null) {
     const [rows] = await sequelize.query(`
