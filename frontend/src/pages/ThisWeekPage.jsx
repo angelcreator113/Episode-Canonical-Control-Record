@@ -8,7 +8,10 @@
  *   3. the beat 11 piece the short story's animated moment at beat 11
  *   4. the chapter       everything the viewer does not see, in JustAWoman's
  *                        point of view (started here, written in Write Mode)
- * It opens on the first episode that still owes something.
+ * It opens on the first episode that still owes something. Below, "Plan the
+ * next chapters" plans the book from the episodes that still owe a chapter
+ * (it replaces the Story Engine's fixed 50-chapter plan): a preview to edit,
+ * then added to the book.
  *
  * APIs: /api/v1/book-from-show (ledger, chapter's episode), the show's
  * generate-story, and the storyteller books and chapters.
@@ -30,6 +33,10 @@ export const writeShortStoryApi = (showId, episodeId) =>
 export const createChapterApi = (bookId, title) => api.post(`/api/v1/storyteller/books/${bookId}/chapters`, { title });
 export const linkChapterApi = (chapterId, episodeId) =>
   api.put(`/api/v1/book-from-show/chapters/${chapterId}/episode`, { episode_id: episodeId });
+export const planChaptersApi = (bookId, showId, count) =>
+  api.post(`/api/v1/book-from-show/books/${bookId}/plan`, { show_id: showId, count }, { timeout: 180000 });
+export const applyPlanApi = (bookId, showId, items) =>
+  api.post(`/api/v1/book-from-show/books/${bookId}/plan/apply`, { show_id: showId, items });
 
 const readStored = () => { try { return window.localStorage.getItem(BOOK_KEY); } catch (err) { console.error('[ThisWeek] stored book unreadable:', err); return null; } };
 const store = (id) => { try { window.localStorage.setItem(BOOK_KEY, id); } catch (err) { console.error('[ThisWeek] book not remembered:', err); } };
@@ -39,6 +46,90 @@ const errorOf = (err, fallback) => err?.response?.data?.error || fallback;
 export function episodeToOpen(episodes) {
   const owes = (ep) => !ep.short_story || !ep.short_story.has_beat11 || !ep.chapter?.written;
   return (episodes || []).find(owes) || (episodes || [])[episodes.length - 1] || null;
+}
+
+/** Plan the next chapters from the episodes (book-from-show plan, then apply). */
+export function PlanChapters({ bookId, showId, onApplied }) {
+  const [count, setCount] = useState(4);
+  const [plan, setPlan] = useState(null);
+  const [picked, setPicked] = useState(new Set());
+  const [busy, setBusy] = useState(null);   // 'plan' | 'apply'
+  const [error, setError] = useState(null);
+  const [message, setMessage] = useState(null);
+
+  const makePlan = async () => {
+    setBusy('plan'); setError(null); setMessage(null);
+    try {
+      const res = await planChaptersApi(bookId, showId, count);
+      const items = res.data?.plan || [];
+      setPlan(items);
+      setPicked(new Set(items.map((p) => p.episode_id)));
+      if (items.length === 0) setMessage(res.data?.message || 'Nothing to plan.');
+    } catch (err) {
+      console.error('[ThisWeek] plan failed:', err);
+      setError(errorOf(err, 'The plan was not made. Try again.'));
+    }
+    setBusy(null);
+  };
+
+  const edit = (id, field, value) => setPlan((cur) => cur.map((p) => (p.episode_id === id ? { ...p, [field]: value } : p)));
+  const toggle = (id) => setPicked((cur) => { const next = new Set(cur); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+
+  const apply = async () => {
+    setBusy('apply'); setError(null);
+    try {
+      const items = plan.filter((p) => picked.has(p.episode_id));
+      const res = await applyPlanApi(bookId, showId, items);
+      setMessage(`${res.data.created} chapter${res.data.created === 1 ? '' : 's'} added${res.data.filled ? `, ${res.data.filled} filled in` : ''}.`);
+      setPlan(null);
+      onApplied?.();
+    } catch (err) {
+      console.error('[ThisWeek] plan not added:', err);
+      setError(errorOf(err, 'The plan was not added. Try again.'));
+    }
+    setBusy(null);
+  };
+
+  return (
+    <section className="tw-plan" aria-labelledby="tw-plan-h">
+      <h2 id="tw-plan-h" className="tw-plan-h">Plan the next chapters</h2>
+      <p className="tw-note">From the episodes that still owe a chapter: what the viewer does not see, in JustAWoman's point of view. Edit it, then add it to the book. An existing chapter only gets its empty plan fields filled.</p>
+      <div className="tw-actions">
+        <label className="tw-inline">
+          <span>Episodes</span>
+          <select value={count} onChange={(e) => setCount(Number(e.target.value))}>
+            {[2, 4, 6, 8].map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
+        <button type="button" className="tw-btn is-primary" disabled={!!busy || !bookId} onClick={makePlan}>{busy === 'plan' ? 'Planning…' : 'Plan'}</button>
+      </div>
+      {error && <p className="tw-error" role="alert">{error}</p>}
+      {message && <p className="tw-note" role="status">{message}</p>}
+      {plan && plan.length > 0 && (
+        <>
+          <ol className="tw-plan-list">
+            {plan.map((p) => (
+              <li key={p.episode_id} className="tw-plan-item">
+                <label className="tw-plan-pick">
+                  <input type="checkbox" checked={picked.has(p.episode_id)} onChange={() => toggle(p.episode_id)} />
+                  <span>Episode {p.episode_number ?? '?'}: {p.episode_title || 'Untitled'}{p.chapter_id ? ' (has a chapter: fills its empty plan only)' : ''}{p.bleed ? ' · the Lala bleed' : ''}</span>
+                </label>
+                <input className="tw-plan-title" aria-label={`Chapter title for episode ${p.episode_number ?? ''}`} value={p.title} onChange={(e) => edit(p.episode_id, 'title', e.target.value)} />
+                <textarea className="tw-plan-text" aria-label={`Goal for episode ${p.episode_number ?? ''}`} rows={2} value={p.scene_goal} onChange={(e) => edit(p.episode_id, 'scene_goal', e.target.value)} />
+                <textarea className="tw-plan-text" aria-label={`Notes for episode ${p.episode_number ?? ''}`} rows={4} value={p.chapter_notes} onChange={(e) => edit(p.episode_id, 'chapter_notes', e.target.value)} />
+                {(p.emotional_state_start || p.emotional_state_end) && (
+                  <p className="tw-note">She starts: {p.emotional_state_start || '—'} · She ends: {p.emotional_state_end || '—'}</p>
+                )}
+              </li>
+            ))}
+          </ol>
+          <div className="tw-actions">
+            <button type="button" className="tw-btn is-primary" disabled={!!busy || picked.size === 0} onClick={apply}>{busy === 'apply' ? 'Adding…' : `Add ${picked.size} to the book`}</button>
+          </div>
+        </>
+      )}
+    </section>
+  );
 }
 
 function Step({ n, title, done, children }) {
@@ -202,6 +293,8 @@ export default function ThisWeekPage() {
           </Step>
         </ol>
       )}
+
+      {ledger && bookId && showId && <PlanChapters bookId={bookId} showId={showId} onApplied={() => loadLedger(true)} />}
 
       {ledger?.owed && (
         <p className="tw-owed">

@@ -57,7 +57,8 @@ function buildNav() {
           children: [
             // The book follows the show: one episode through episode, short story, beat 11, chapter.
             { icon: '📺', label: "This week's episode", route: '/this-week' },
-            { icon: '🧱', label: 'Structure', route: '/story-engine' },
+            // "Structure" (/story-engine) only redirected to Stories; the book's
+            // plan is now "Plan the next chapters" on This week's episode.
             { icon: '🧵', label: 'Threads', route: '/story-threads' },
             // Story Calendar: the novel's dates. The cultural calendar is Culture &
             // Events; the production schedule is Producer Mode's Season Plan (IA-04).
