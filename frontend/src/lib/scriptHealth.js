@@ -12,17 +12,22 @@ const list = (items) => (items.length <= 2 ? items.join(' and ') : `${items.slic
 const plural = (n, one, many) => (n === 1 ? one : many);
 
 // Flags of one kind, one row per beat: its first flag, and how many more.
-function perBeat(flags, beats, keyPrefix) {
+// A flag may carry `fix`, the screen a step puts the phone on (lib/phonePaths);
+// the beat's row then offers the fix, "Go home first" when that is home.
+function perBeat(flags, beats, keyPrefix, homeName = null) {
   const byBeat = new Map();
   for (const f of flags) {
     if (!byBeat.has(f.beatIndex)) byBeat.set(f.beatIndex, []);
-    byBeat.get(f.beatIndex).push(f.text);
+    byBeat.get(f.beatIndex).push(f);
   }
-  return [...byBeat.entries()].sort((a, b) => a[0] - b[0]).map(([i, texts]) => {
+  return [...byBeat.entries()].sort((a, b) => a[0] - b[0]).map(([i, list]) => {
     const beat = beats[i];
+    const fixes = [...new Set(list.map((f) => f.fix).filter(Boolean))];
     return {
       key: `${keyPrefix}-${beat?.id || i}`, ok: false, beatId: beat?.id || null,
-      text: `Beat ${beat?.number ?? i + 1}: ${texts[0]}${texts.length > 1 ? ` (+${texts.length - 1} more)` : ''}`,
+      text: `Beat ${beat?.number ?? i + 1}: ${list[0].text}${list.length > 1 ? ` (+${list.length - 1} more)` : ''}`,
+      // An approved beat keeps its words, so its row offers no fix.
+      ...(fixes.length && !beat?.approved ? { fix: { kind: 'phone', beatIndex: i, label: fixes.length === 1 && fixes[0] === homeName ? 'Go home first' : fixes.length === 1 ? `Go to ${fixes[0]} first` : 'Fix the phone path' } } : {}),
     };
   });
 }
@@ -56,10 +61,11 @@ export function scriptHealth({
     const check = phoneCheck(b.lines, onScreen, { startAt: at });
     at = check.endAt;
     moments += check.moments;
-    for (const t of check.taps) if (!t.ok) phoneFlags.push({ beatIndex, text: t.why });
+    for (const t of check.taps) if (!t.ok) phoneFlags.push({ beatIndex, text: t.why, fix: t.onName && t.onName !== 'Every screen' ? t.onName : null });
     for (const m of check.missing) phoneFlags.push({ beatIndex, text: `${m.name} isn't made yet` });
   });
-  if (phoneFlags.length) rows.push(...perBeat(phoneFlags, beats, 'phone'));
+  const home = (onScreen.screens || []).find((s) => s.is_home);
+  if (phoneFlags.length) rows.push(...perBeat(phoneFlags, beats, 'phone', home ? (home.name || home.id) : null));
   else if (moments) rows.push({ key: 'phone', ok: true, beatId: null, text: 'Every phone and overlay moment points at something made.' });
 
   // The locked look: pieces never put on, and wear cues that name no piece.

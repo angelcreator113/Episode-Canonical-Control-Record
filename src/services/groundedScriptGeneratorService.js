@@ -182,9 +182,22 @@ async function groundedScriptInputs(episodeId, showId, models) {
   // on a failed read.
   const { getAllOverlayTypes } = require('./uiOverlayService');
   const onScreen = showId ? await getAllOverlayTypes(showId, models) : [];
+  // The phone's map (script phone paths, 2026-10-16): each screen's icons and
+  // what they open, as the Script tab's phone check reads it, for the prompt
+  // and for the steps added after writing. A failed read leaves both out.
+  let phone = null;
+  if (showId) {
+    try {
+      const { overlayStatusForShow } = require('./phoneOverlays');
+      const { phoneFromOverlays } = require('../utils/phonePaths');
+      phone = phoneFromOverlays(await overlayStatusForShow(models, showId, episodeId));
+    } catch (err) {
+      console.error('[ScriptGen] phone map failed (non-blocking):', err.message);
+    }
+  }
 
   console.log(`[ScriptGen] Prompt for episode ${episodeId} with ${scenePlan.length} planned beats`);
-  return { brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext, onScreen, story };
+  return { brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext, onScreen, story, phone };
 }
 
 const MODELS = ['claude-sonnet-4-6'];
@@ -307,11 +320,25 @@ async function generateGroundedScript(episodeId, showId, models, { lockedBeats =
     }
     script = next; fixedBeats.push(n);
   }
+  // Before each tap the phone can't make from where it is, a step to the
+  // icon's screen (utils/phonePaths.js, the Script tab's own check); approved
+  // beats are left as they are, and read for where they leave the phone.
+  let phoneSteps = 0;
+  if (inputs.phone) {
+    try {
+      const { scriptWithPhonePaths } = require('../utils/phonePaths');
+      const skip = splitScriptBeats(script).beats.map((b, i) => (locked.has(b.number) ? i : -1)).filter((i) => i >= 0);
+      const paths = scriptWithPhonePaths(script, inputs.phone, { skip });
+      if (paths.added) { script = paths.script; phoneSteps = paths.added; }
+    } catch (err) {
+      console.error('[ScriptGen] phone paths failed (non-blocking):', err.message);
+    }
+  }
   const { missing } = scriptCoverage(script, facts);
   if (fixedBeats.length || missing.length) {
     console.log(`[ScriptGen] Coverage for episode ${episodeId}: rewrote beats ${fixedBeats.join(', ') || 'none'}; still missing ${missing.length}`);
   }
-  return { script, coverage: { missing, fixed_beats: fixedBeats.sort((a, b) => a - b) }, facts };
+  return { script, coverage: { missing, fixed_beats: fixedBeats.sort((a, b) => a - b), phone_steps: phoneSteps }, facts };
 }
 
 // What the coverage check needs from the writer's inputs.
@@ -451,7 +478,7 @@ function seasonPurposeLines(sc) {
     ...purposes.map((p, n) => `${n + 1}. ${p.primary ? '[Primary] ' : ''}${p.text}${p.story_thread ? ` (thread: ${p.story_thread})` : ''}`)].join('\n');
 }
 
-function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext = null, onScreen = [], story = null }, { only = null, lockedBeats = [] } = {}) {
+function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext = null, onScreen = [], story = null, phone = null }, { only = null, lockedBeats = [] } = {}) {
   // Every canonical beat, in order, whether or not the plan has its row
   // (§8(j): Generate Script instantiates all 14; it never invents its own).
   const planByBeat = new Map(scenePlan.map((b) => [Number(b.beat_number), b]));
@@ -558,7 +585,7 @@ ${statsContext ? `═══ LALA'S STATE ═══\n${statsContext}\n` : ''}${to
 ═══ WARDROBE ═══
 ${wardrobeContext}
 ${outfitScore ? `\n═══ LOCKED OUTFIT ═══\nLala is wearing ${outfitScore.count} pieces for this event:\n${outfitScore.items.map(i => `- ${i.name} (${i.clothing_category}, ${i.tier})${i.id ? ` [WEAR: ${i.id}]` : ''}`).join('\n')}\nBeat 8 (Transformation): Reference these SPECIFIC items by name as Lala gets dressed. Right after the line where she puts a piece on, write that piece's [WEAR: id] line exactly as shown above, once per piece.\nBeat 11 (Event Outcome): Her outfit choice affects how the event goes — she is wearing what she chose.` : ''}
-${onScreenContext(onScreen)}
+${onScreenContext(onScreen)}${phone ? require('../utils/phonePaths').phoneMapContext(phone) : ''}
 
 ═══ SCENE PLAN — 14 BEATS ═══
 ${beatContext}

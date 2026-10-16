@@ -367,8 +367,13 @@ export function beatSpeakers(lines = []) {
  * every screen; else it names where the icon actually is. A tap on
  * something that is not an icon on the phone, and any moment whose target
  * matches no screen or overlay (or one with no picture yet), is listed as
- * not made yet. Returns { moments, taps: [{ i, name, ok, why }], missing: [{ i, name }], endAt },
+ * not made yet. Returns { moments, taps: [{ i, name, ok, why, on, onName }], missing: [{ i, name }], endAt },
  * endAt being the screen the beat leaves the phone on (the next beat's startAt).
+ *
+ * Closing the screen that shows goes back to the one before it, the phone's
+ * own Back, or home when there is none; the phone going away and coming
+ * back starts at home (script phone paths, 2026-10-16: a [UI:CLOSE Bank
+ * Page] left the check on Bank Page, so the next tap was flagged).
  */
 export function phoneCheck(lines = [], on = {}, { startAt = null } = {}) {
   const screens = on.screens || [];
@@ -376,6 +381,8 @@ export function phoneCheck(lines = [], on = {}, { startAt = null } = {}) {
   const home = screens.find((s) => s.is_home) || null;
   const nameOf = (id) => byId.get(id)?.name || id || 'the phone';
   let at = startAt || home?.id || null;
+  const trail = [];
+  const go = (id) => { if (at && at !== id) trail.push(at); at = id; };
   const taps = [];
   const missing = [];
   let moments = 0;
@@ -390,15 +397,17 @@ export function phoneCheck(lines = [], on = {}, { startAt = null } = {}) {
       const icon = (on.icons || []).find((ic) => ic.name === shown.name) || null;
       const everywhere = icon?.onName === 'Every screen';
       const ok = !icon || everywhere || !at || icon.on === at;
-      taps.push({ i, name: shown.name, ok, why: ok ? null : `${shown.name} is on ${icon.onName || nameOf(icon.on)}, but the phone shows ${nameOf(at)}` });
-      if (icon?.opens) at = icon.opens;
+      taps.push({ i, name: shown.name, ok, why: ok ? null : `${shown.name} is on ${icon.onName || nameOf(icon.on)}, but the phone shows ${nameOf(at)}`, on: icon?.on || null, onName: icon?.onName || null });
+      if (icon?.opens) go(icon.opens);
       return;
     }
     if (!shown) { if (!OFF_VERBS.has(moment.verb)) missing.push({ i, name: target }); return; }
-    if (shown.kind === 'device') { if (!DEVICE_ON.has(moment.verb)) at = home?.id || null; return; }
+    if (shown.kind === 'device') { if (!DEVICE_ON.has(moment.verb)) { at = home?.id || null; trail.length = 0; } return; }
     if (shown.kind === 'phone') {
       const screen = screens.find((s) => (s.name || s.id) === shown.name);
-      if (screen && !OFF_VERBS.has(moment.verb)) at = screen.id;
+      if (!screen) return;
+      if (!OFF_VERBS.has(moment.verb)) go(screen.id);
+      else if (screen.id === at) at = trail.pop() || home?.id || null;
       return;
     }
     if (shown.kind === 'overlay' && !shown.url && !OFF_VERBS.has(moment.verb)) missing.push({ i, name: shown.name });

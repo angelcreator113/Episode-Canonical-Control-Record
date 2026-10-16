@@ -179,10 +179,18 @@ describe("the open beat's phone check (Task #2884)", () => {
   });
   test('a tap on an icon that is not on the screen showing says where it is', () => {
     const r = phoneCheck(['[UI:CLICK Reply]'], on);
-    expect(r.taps).toEqual([{ i: 0, name: 'Reply', ok: false, why: 'Reply is on Mail, but the phone shows Home' }]);
+    expect(r.taps).toEqual([expect.objectContaining({ i: 0, name: 'Reply', ok: false, why: 'Reply is on Mail, but the phone shows Home', onName: 'Mail' })]);
   });
   test('opening a screen by name moves the phone there', () => {
     expect(phoneCheck(['[UI:OPEN Mail]', '[UI:CLICK Reply]'], on).taps[0].ok).toBe(true);
+  });
+  test('closing the screen that shows goes back to the one before it, or home', () => {
+    // Script phone paths (2026-10-16): CLOSE left the check on the closed screen.
+    expect(phoneCheck(['[UI:CLICK Mail]', '[UI:CLICK Reply]', '[UI:CLOSE Reply]', '[UI:CLICK Reply]'], on).taps.map((t) => t.ok)).toEqual([true, true, true]);
+    const back = phoneCheck(['[UI:OPEN Mail]', '[UI:CLOSE Mail]', '[UI:CLICK Mail]'], on);
+    expect(back.taps[0].ok).toBe(true);
+    expect(back.endAt).toBe('mail');
+    expect(phoneCheck(['[UI:OPEN Mail]', '[UI:CLOSE Mail]'], on, { startAt: 'mail' }).endAt).toBe('home');
   });
   test('what is not made yet: an unknown tap, an unknown screen, an overlay with no picture', () => {
     const r = phoneCheck(['[UI:CLICK Wallet]', '[UI:OPEN Closet]', '[UI:DISPLAY Invitation]', '[UI:DISPLAY Show Title]', '[UI:HIDE Something]'], on);

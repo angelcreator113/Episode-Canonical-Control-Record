@@ -606,6 +606,8 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
       body.coverage = {
         missing: scriptCoverage(script, written.facts).missing.map(({ kind, label, target }) => ({ kind, label, target })),
         fixed_beats: written.coverage?.fixed_beats || [],
+        // Phone steps added before taps the phone couldn't make (utils/phonePaths.js).
+        phone_steps: written.coverage?.phone_steps || 0,
       };
     }
     if (!saved) {

@@ -17,6 +17,7 @@ import { speakerLine, unquote } from '../../lib/scriptSpeaker';
 import { beatImage, beatImageLabel } from '../BeatPlan/BeatPlanParts';
 import { beatSeconds, scriptSeconds, formatRuntime } from '../../lib/scriptRuntime';
 import { scriptHealth } from '../../lib/scriptHealth';
+import { scriptWithPhonePaths } from '../../lib/phonePaths';
 import ScriptHealthPanel from './ScriptHealthPanel';
 import ScriptReadActions from './ScriptReadActions';
 import ScriptHistory from './ScriptHistory';
@@ -1108,6 +1109,20 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     if (next !== base) { setScriptText(next); }
   };
 
+  // Phone paths (2026-10-16): before each tap the phone can't make from where
+  // it is, a step to the icon's screen (lib/phonePaths). `fix` is a health
+  // row's ({ beatIndex }), or null for every beat. Approved beats keep their
+  // words; the steps are on the page until Save.
+  const handleFixPhonePaths = (fix) => {
+    if (busy) { flash('Wait for the new script before editing it.', 'error'); return; }
+    const base = withBeatHeaders(scriptText, lockedBeats);
+    const skip = parseScriptIntoBeats(base, lockedBeats).map((b, i) => (b.approved ? i : -1)).filter((i) => i >= 0);
+    const { script, added } = scriptWithPhonePaths(base, onScreen, { only: fix ? [fix.beatIndex] : null, skip });
+    if (!added) { flash('No phone step could fix this one; open the beat to change the tap.', 'error', 6000); return; }
+    setScriptText(script);
+    flash(`Added ${added} phone step${added === 1 ? '' : 's'} ✦ Save to keep ${added === 1 ? 'it' : 'them'}.`, 'success', 5000);
+  };
+
   // A phone moment or an overlay, added at the end of the beat (Task #2789).
   // false when it was not added (the adders then keep what was typed).
   const handleAddMoment = (beatId, line, after = null) => {
@@ -1614,9 +1629,10 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
         )}
       </section>
       {genError && <div className="esp-error" role="alert">{genError}</div>}
-      {coverage && (coverage.missing?.length > 0 || coverage.fixed_beats?.length > 0) && (
+      {coverage && (coverage.missing?.length > 0 || coverage.fixed_beats?.length > 0 || coverage.phone_steps > 0) && (
         <div className={`esp-coverage${coverage.missing?.length ? ' is-gaps' : ''}`} role="status" data-testid="script-coverage">
           {coverage.fixed_beats?.length > 0 && <p className="esp-coverage-line">✦ The writer rewrote beat{coverage.fixed_beats.length === 1 ? '' : 's'} {coverage.fixed_beats.join(', ')} to cover what the episode needs.</p>}
+          {coverage.phone_steps > 0 && <p className="esp-coverage-line" data-testid="script-coverage-phone">✦ The writer added {coverage.phone_steps} phone step{coverage.phone_steps === 1 ? '' : 's'}, so every tap is on the screen its icon is on.</p>}
           {coverage.missing?.length > 0 && (
             <>
               <p className="esp-coverage-line">Still not in the script:</p>
@@ -1643,7 +1659,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
           <button type="button" className="esp-btn is-small" data-testid="script-draft-discard" onClick={draft.discard}>Discard</button>
         </div>
       )}
-      {showBeatList && <ScriptHealthPanel rows={healthRows} beatNumbers={Object.fromEntries(beats.map((b) => [b.id, b.number]))} onOpenBeat={chooseBeat} />}
+      {showBeatList && <ScriptHealthPanel rows={healthRows} beatNumbers={Object.fromEntries(beats.map((b) => [b.id, b.number]))} onOpenBeat={chooseBeat} onFix={handleFixPhonePaths} busy={busy} />}
       {/* At phone width (Task #2881): the beats as pills, and the open beat's
           context from the episode's own data. */}
       {showBeatList && (
