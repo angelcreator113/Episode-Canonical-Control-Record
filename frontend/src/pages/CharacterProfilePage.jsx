@@ -42,6 +42,12 @@ export const getFactsApi = (id) =>
   apiClient.get(`${API_URL}/cast/characters/${id}/facts`);
 export const putFactsApi = (id, body) =>
   apiClient.put(`${API_URL}/cast/characters/${id}/facts`, body);
+export const getCheckApi = (id) =>
+  apiClient.get(`${API_URL}/cast/characters/${id}/check`);
+export const markIntentionalApi = (id, flagId, note) =>
+  apiClient.post(`${API_URL}/cast/characters/${id}/check/intentional`, { flag_id: flagId, note });
+export const unmarkIntentionalApi = (id, flagId) =>
+  apiClient.delete(`${API_URL}/cast/characters/${id}/check/intentional/${flagId}`);
 export const getStoryTrailApi = (id) =>
   apiClient.get(`${API_URL}/cast/characters/${id}/story-trail`);
 export const getPlacesApi = (id) =>
@@ -575,7 +581,93 @@ export function TheirFacts({ character, onFeedSaved }) {
           </form>
         )}
       {note && <p className={note.kind === 'error' ? 'ch-note is-error' : 'ch-note'} role={note.kind === 'error' ? 'alert' : 'status'}>{note.text}</p>}
+      {facts && !facts.error && !form && <ProfileCheck characterId={id} />}
     </section>
+  );
+}
+
+/**
+ * The consistency check (Character Consistency Engine step 3): every place
+ * the narrator's text disagrees with their facts. Flag-only: it never edits.
+ * What they post and author-only notes are not checked (a gap there is the
+ * mask). A flag can be marked intentional and stays listed as such.
+ */
+const CHECK_LABELS = {
+  followers: 'Followers', account_status: 'Account status', handle: 'Handle',
+  social_name: 'Social media name', affordability: 'Can afford',
+};
+
+export function ProfileCheck({ characterId }) {
+  const [result, setResult] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await getCheckApi(characterId);
+      setResult(res.data);
+    } catch (err) {
+      console.error('[CharacterProfilePage] profile check failed:', err);
+      setError(err.response?.data?.error || 'Could not check their profile.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const mark = async (flag, on) => {
+    try {
+      if (on) await markIntentionalApi(characterId, flag.id, null);
+      else await unmarkIntentionalApi(characterId, flag.id);
+      await run();
+    } catch (err) {
+      console.error('[CharacterProfilePage] marking a flag failed:', err);
+      setError(err.response?.data?.error || 'Could not save that.');
+    }
+  };
+
+  return (
+    <div className="ch-check" data-testid="ch-check">
+      <button type="button" className="ch-btn-soft" disabled={busy} onClick={run}>
+        {busy ? 'Checking…' : result ? 'Check again' : 'Check their profile against these facts'}
+      </button>
+      {error && <p className="ch-note is-error" role="alert">{error}</p>}
+      {result && (
+        <>
+          <p className="ch-note">
+            {result.flags.length === 0 ? 'Everything agrees with their facts.' : `${result.flags.length} place${result.flags.length === 1 ? '' : 's'} disagree${result.flags.length === 1 ? 's' : ''} with their facts.`}
+            {' '}Checked {result.checked} text field{result.checked === 1 ? '' : 's'}; what they post ({result.skipped.mask}) and author-only notes ({result.skipped.author}) are not checked.
+          </p>
+          {result.flags.length > 0 && (
+            <ul className="ch-check-list">
+              {result.flags.map((f) => (
+                <li key={f.id}>
+                  <span className="ch-check-what"><b>{f.field_label}</b> says &ldquo;{f.found}&rdquo;; the facts say {f.expected}.</span>
+                  <span className="ch-check-excerpt">{f.excerpt}</span>
+                  <span className="ch-facts-row">
+                    <span className="ch-chip is-plain">{CHECK_LABELS[f.check] || f.check}</span>
+                    <button type="button" className="ch-btn-chip" onClick={() => mark(f, true)}>It&rsquo;s intentional</button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {result.intentional.length > 0 && (
+            <details className="ch-check-intentional">
+              <summary>{result.intentional.length} marked intentional</summary>
+              <ul className="ch-check-list">
+                {result.intentional.map((f) => (
+                  <li key={f.id}>
+                    <span className="ch-check-what"><b>{f.field_label}</b>: &ldquo;{f.found}&rdquo;</span>
+                    <button type="button" className="ch-btn-chip" onClick={() => mark(f, false)}>Not intentional</button>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
