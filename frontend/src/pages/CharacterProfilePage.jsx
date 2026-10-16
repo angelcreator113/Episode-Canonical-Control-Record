@@ -272,7 +272,7 @@ function WhereTheyShowUp({ appearances, feedProfile }) {
             {rows.map((r, i) => {
               const inner = (<>
                 <span className="ch-show-kind">{r.label}</span>
-                <span className="ch-show-text"><strong>{r.title}</strong>{r.sub && <span>{r.sub}</span>}</span>
+                <span className="ch-show-text"><strong>{r.title}</strong>{r.sub && <span>{r.sub}</span>}{r.detail && <span className="ch-show-detail">{r.detail}</span>}</span>
                 {r.to && <ArrowRight size={16} aria-hidden="true" className="ch-show-go" />}
               </>);
               return (
