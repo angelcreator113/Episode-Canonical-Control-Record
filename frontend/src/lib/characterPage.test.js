@@ -1,6 +1,6 @@
 /** The character page's rows and sentences (lib/characterPage). */
 import { describe, test, expect } from 'vitest';
-import { depthOf, depthLevelOf, cityLabel, archetypeOf, showUpRows, withLala, voiceOf } from './characterPage';
+import { depthOf, depthLevelOf, cityLabel, archetypeOf, showUpRows, withLala, voiceOf, eventPurpose } from './characterPage';
 
 const APPEARANCES = {
   linked: true,
@@ -30,13 +30,23 @@ describe('the character page', () => {
   test('where they show up: the event, place, episode, goal and feed, each with where it opens', () => {
     const rows = showUpRows(APPEARANCES, { id: 7, feed_layer: 'lalaverse' });
     expect(rows.map((r) => [r.label, r.title, r.sub, r.to])).toEqual([
-      ['Event', 'Organizes Wearable Experiments Studio Session', 'Nov 12 · Echo Park', '/shows/show1/events/ev1'],
+      ['Hosting', 'Organizes Wearable Experiments Studio Session', 'Nov 12 · Echo Park', '/shows/show1/events/ev1'],
       ['Place', "Lives at STUDIO BY SABLE's Studio", '1 resident · 3 scene sets', '/universe?tab=world&sub=locations'],
       ['Episode', 'In Episode 1', 'I Designed My Outfit', '/episodes/ep1'],
       ["Lala's goal", 'Follow up with STUDIO BY SABLE after the event', 'From the event deal', '/episodes/ep1'],
       ['Feed', 'Friends with Lala', '4 posts', '/world-studio?tab=feed&layer=lalaverse&profile=7'],
     ]);
     expect(showUpRows({ linked: false })).toEqual([]);
+  });
+
+  test('an event row says what the event is for', () => {
+    const ev = { ...APPEARANCES.events[0], description: 'A studio day to launch her wearable line.', theme: 'Chrome garden', dress_code: 'Metallics' };
+    const [row] = showUpRows({ ...APPEARANCES, events: [ev] }, null);
+    expect(row.detail).toBe('A studio day to launch her wearable line. · Theme: Chrome garden · Dress code: Metallics');
+    expect(eventPurpose({ name: 'Gala' })).toBeNull();
+    expect(eventPurpose({ description: 'x'.repeat(200) }).length).toBe(160);
+    const [guestRow] = showUpRows({ linked: true, events: [{ ...ev, role: 'guest' }] }, null);
+    expect(guestRow.label).toBe('Event');
   });
 
   test('with Lala: the event they share, the pay and the goal; else the feed tie', () => {
