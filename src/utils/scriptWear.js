@@ -20,29 +20,31 @@
  *   screen".
  */
 
-const { beatNumberForLabel } = require('./beatLabelNumber');
+const { headerNumber, normalizeBeatHeaders } = require('./beatLabelNumber');
 
 const BEAT_COUNT = 14;
 const CLOSET_CANON = 8;
 const WEAR_LINE = /^\s*\[WEAR:\s*([^\]\s]+)\s*\]\s*$/i;
-const UI_LINE = /^\s*\[UI:\s*([A-Za-z_]+)\s*(.*?)\s*\]\s*$/;
+// `[ui:open closet]` is a moment too, as the Script tab reads it (re-audit 2).
+const UI_LINE = /^\s*\[UI:\s*([A-Za-z_]+)\s*(.*?)\s*\]\s*$/i;
 
 const nameKey = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
 const normKey = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
 /** The script's beats as the Script tab numbers them: [{ number, lines }]. */
 function scriptBeats(scriptText) {
-  const text = String(scriptText || '');
+  const text = normalizeBeatHeaders(scriptText || '');
   if (!text.trim()) return [];
-  if (/##\s*BEAT:/i.test(text)) {
+  // A header starts its line (scriptBeatLocks reads it the same way).
+  if (/^[ \t]*##[ \t]*BEAT:/im.test(text)) {
     // A header starts its line; a beat's number is the header's number or the
     // canonical beat its name names (utils/beatLabelNumber.js), else its place.
-    return text.split(/(?=^[ \t]*##\s*BEAT:)/im)
+    return text.split(/(?=^[ \t]*##[ \t]*BEAT:)/im)
       .filter((s) => /^\s*##\s*BEAT:/i.test(s))
       .map((section, i) => {
         const lines = section.split('\n').filter((l) => l.trim());
         const label = ((lines[0] || '').match(/##\s*BEAT:\s*(.+)/i)?.[1] || '').trim();
-        return { number: beatNumberForLabel(label) || i + 1, lines: lines.slice(1) };
+        return { number: headerNumber(label) || i + 1, lines: lines.slice(1) };
       });
   }
   const lines = text.split('\n').filter((l) => l.trim());

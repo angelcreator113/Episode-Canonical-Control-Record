@@ -17,7 +17,10 @@ jest.mock('bull', () => jest.fn().mockImplementation(() => ({
 })));
 jest.mock('../../../src/config/redis', () => ({ redisConfig: {} }));
 const mockClaimRow = jest.fn();
-jest.mock('../../../src/services/generationClaimService', () => ({ claimRow: (...a) => mockClaimRow(...a) }));
+jest.mock('../../../src/services/generationClaimService', () => ({
+  claimRow: (...a) => mockClaimRow(...a),
+  isLiveGeneration: jest.requireActual('../../../src/services/generationClaimService').isLiveGeneration,
+}));
 const mockRegenerate = jest.fn();
 jest.mock('../../../src/services/sceneGenerationService', () => ({ regenerateAngleRefined: (...a) => mockRegenerate(...a) }));
 jest.mock('../../../src/services/postProcessingService', () => ({ processAngleAssets: jest.fn() }));
@@ -75,6 +78,13 @@ describe('the refinement queue', () => {
     mockRegenerate.mockResolvedValueOnce({ qualityScore: 90, artifactFlags: [] });
     expect(await run({ attempt: 2 })).toMatchObject({ status: 'quality_met' });
     expect(mockClaimRow).toHaveBeenLastCalledWith(mockModels.SceneAngle.sequelize, 'angle', 'a1');
+  });
+
+  test('a pass while the set\'s base is being generated is dropped, unpaid', async () => {
+    mockModels.SceneSet.findByPk.mockResolvedValueOnce({ id: 's1', generation_status: 'generating', updatedAt: new Date() });
+    expect(await run({ attempt: 2 })).toMatchObject({ status: 'skipped', reason: 'base generating' });
+    expect(mockClaimRow).not.toHaveBeenCalled();
+    expect(mockRegenerate).not.toHaveBeenCalled();
   });
 
   test('a pass refused before it began releases the angle', async () => {

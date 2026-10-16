@@ -163,6 +163,41 @@ const answer = (text) => ({ content: [{ type: 'text', text }] });
     expect((await request(app).get(`${api}/episodes/${ids.ep2}/beat11`)).body).toMatchObject({ story_id: null, excerpt: null });
   });
 
+  it('plans the next chapters from the episodes, then adds them without overwriting a chapter', async () => {
+    // Now: ch2 is episode 1's chapter, not written; episode 2 has none.
+    await run("UPDATE storyteller_chapters SET chapter_notes = 'Evoni wrote this.' WHERE id = :ch2", ids);
+    mockCreate.mockResolvedValue(answer(JSON.stringify({ chapters: [
+      { episode_id: ids.ep1, title: 'Lights Out', scene_goal: 'She hides the night from David.', emotional_state_start: 'wired', emotional_state_end: 'alone', chapter_notes: 'AI notes for 1' },
+      { episode_id: ids.ep2, title: 'Brunch, Reheated', scene_goal: 'Sunday with the boys.', emotional_state_start: 'flat', emotional_state_end: 'lit', chapter_notes: 'Zion spills juice.' },
+      { episode_id: crypto.randomUUID(), title: 'Not an episode here' },
+    ] })));
+    const planned = await request(app).post(`${api}/books/${ids.book}/plan`).send({ count: 4 });
+    expect(planned.status).toBe(200);
+    expect(planned.body.plan.map((p) => [p.episode_number, p.title, p.chapter_id])).toEqual([[1, 'Lights Out', ids.ch2], [2, 'Brunch, Reheated', null]]);
+    const prompt = mockCreate.mock.calls[0][0].messages[0].content;
+    expect(prompt).toContain(`episode_id ${ids.ep1}`);
+    expect(prompt).toContain('Its short story begins: Lala arrived late.');
+    expect(prompt).toContain('The consciousness transfer is not placed yet: plan no bleed.');
+
+    const applied = await request(app).post(`${api}/books/${ids.book}/plan/apply`).send({ items: planned.body.plan });
+    expect(applied.body).toMatchObject({ created: 1, filled: 1 });
+    const [[kept]] = await run('SELECT title, scene_goal, chapter_notes FROM storyteller_chapters WHERE id = :ch2', ids);
+    expect(kept).toEqual({ title: 'Two', scene_goal: 'She hides the night from David.', chapter_notes: 'Evoni wrote this.' });
+    const [[made]] = await run(`SELECT c.title, c.scene_goal, c.emotional_state_end, c.chapter_notes, c.episode_id
+                                  FROM storyteller_chapters c WHERE c.book_id = :book AND c.episode_id = :ep2`, ids);
+    expect(made).toEqual({ title: 'Brunch, Reheated', scene_goal: 'Sunday with the boys.', emotional_state_end: 'lit', chapter_notes: 'Zion spills juice.', episode_id: ids.ep2 });
+
+    // The chapter writer follows the plan.
+    mockCreate.mockReset();
+    mockCreate.mockResolvedValue(answer('prose'));
+    await request(app).post(`${api}/chapters/${ids.ch2}/write-from-episode`);
+    expect(mockCreate.mock.calls[0][0].messages[0].content).toContain('THE PLAN FOR THIS CHAPTER (follow it):\nGoal: She hides the night from David.');
+
+    // An episode outside the show is refused.
+    expect((await request(app).post(`${api}/books/${ids.book}/plan/apply`).send({ items: [{ episode_id: crypto.randomUUID() }] })).status).toBe(400);
+    await run('DELETE FROM storyteller_chapters WHERE book_id = :book AND episode_id = :ep2', ids);
+  });
+
   it('refuses what it cannot do', async () => {
     expect((await request(app).post(`${api}/chapters/${ids.ch1}/write-from-episode`)).status).toBe(409);   // no episode now
     expect((await request(app).post(`${api}/chapters/${crypto.randomUUID()}/write-from-episode`)).status).toBe(404);

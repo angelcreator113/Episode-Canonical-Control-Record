@@ -20,6 +20,12 @@
  *        nothing is saved
  *   POST /api/v1/book-from-show/chapters/:id/check-against-story
  *        where the chapter's draft contradicts the short story
+ *   POST /api/v1/book-from-show/books/:bookId/plan         { count, show_id }
+ *        plans the next chapters from the episodes that owe one (a
+ *        preview: title, goal, where she starts and ends, notes)
+ *   POST /api/v1/book-from-show/books/:bookId/plan/apply   { items, show_id }
+ *        writes it: a new chapter tied to each episode with none; an
+ *        existing chapter only gets its empty plan fields filled
  *   GET  /api/v1/book-from-show/shows/:showId/transfer
  *   PUT  /api/v1/book-from-show/shows/:showId/transfer      { episode_id | null }
  *        the episode in which JustAWoman's consciousness transfers into Lala
@@ -40,6 +46,7 @@
  */
 
 const express = require('express');
+const { v4: uuidv4 } = require('uuid');
 const Anthropic = require('@anthropic-ai/sdk');
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
@@ -87,7 +94,8 @@ const parseJson = (raw) => {
 
 async function chapterRow(sequelize, id) {
   const [[row]] = await sequelize.query(
-    `SELECT id, book_id, title, chapter_number, sort_order, draft_prose, episode_id
+    `SELECT id, book_id, title, chapter_number, sort_order, draft_prose, episode_id,
+            scene_goal, chapter_notes, emotional_state_start, emotional_state_end
        FROM storyteller_chapters WHERE id = :id AND deleted_at IS NULL`, { replacements: { id } });
   return row || null;
 }
@@ -116,47 +124,61 @@ const clip = (text, n) => {
 
 // ── Ledger ──────────────────────────────────────────────────────────────────
 
+/**
+ * The book's ledger: each episode of the show with its short story (and beat
+ * 11 piece) and the book's chapter for it, and what the book owes. The show
+ * is the book's, else queryShowId. Returns { book, showId, episodes, owed }
+ * or { status, error }.
+ */
+async function ledgerOf(sequelize, bookId, queryShowId) {
+  const [[book]] = await sequelize.query(
+    'SELECT id, title, show_id FROM storyteller_books WHERE id = :bookId AND deleted_at IS NULL', { replacements: { bookId } });
+  if (!book) return { status: 404, error: 'Book not found' };
+  const showId = book.show_id || (UUID_RE.test(String(queryShowId || '')) ? queryShowId : null);
+  if (!showId) return { status: 400, error: 'This book is not tied to a show. Choose the show.', needs_show: true };
+
+  const [rows] = await sequelize.query(`
+    SELECT e.id, e.episode_number, e.title, e.status, e.air_date,
+           s.id AS story_id, s.status AS story_status, s.word_count AS story_words,
+           (s.metadata ? 'beat11_excerpt') AS has_beat11,
+           c.id AS chapter_id, c.title AS chapter_title,
+           (COALESCE(BTRIM(c.draft_prose), '') <> '') AS chapter_written
+      FROM episodes e
+      LEFT JOIN LATERAL (
+        SELECT st.id, st.status, st.word_count, st.metadata FROM stories st
+         WHERE st.episode_id = e.id AND st.format = 'short_story' AND st.deleted_at IS NULL
+         ORDER BY (st.status = 'published') DESC, st.created_at DESC LIMIT 1
+      ) s ON true
+      LEFT JOIN LATERAL (
+        SELECT ch.id, ch.title, ch.draft_prose FROM storyteller_chapters ch
+         WHERE ch.book_id = :bookId AND ch.episode_id = e.id AND ch.deleted_at IS NULL
+         ORDER BY ch.sort_order NULLS LAST LIMIT 1
+      ) c ON true
+     WHERE e.show_id = :showId AND e.deleted_at IS NULL
+     ORDER BY e.episode_number NULLS LAST, e.created_at`, { replacements: { bookId, showId } });
+
+  const episodes = rows.map((r) => ({
+    id: r.id, episode_number: r.episode_number, title: r.title, status: r.status, air_date: r.air_date,
+    short_story: r.story_id ? { id: r.story_id, status: r.story_status, word_count: r.story_words || 0, has_beat11: Boolean(r.has_beat11) } : null,
+    chapter: r.chapter_id ? { id: r.chapter_id, title: r.chapter_title, written: Boolean(r.chapter_written) } : null,
+  }));
+  const owed = {
+    short_stories: episodes.filter((e) => !e.short_story).length,
+    beat11: episodes.filter((e) => e.short_story && !e.short_story.has_beat11).length,
+    chapters: episodes.filter((e) => !e.chapter || !e.chapter.written).length,
+  };
+  return { book, showId, episodes, owed };
+}
+
+
 router.get('/books/:bookId/ledger', requireAuth, async (req, res) => {
   try {
     const { bookId } = req.params;
     if (!UUID_RE.test(bookId)) return res.status(400).json({ success: false, error: 'bookId must be a UUID' });
     const { sequelize } = getDb(req);
-    const [[book]] = await sequelize.query(
-      'SELECT id, title, show_id FROM storyteller_books WHERE id = :bookId AND deleted_at IS NULL', { replacements: { bookId } });
-    if (!book) return res.status(404).json({ success: false, error: 'Book not found' });
-    const showId = book.show_id || (UUID_RE.test(String(req.query.show_id || '')) ? req.query.show_id : null);
-    if (!showId) return res.status(400).json({ success: false, error: 'This book is not tied to a show. Choose the show.', needs_show: true });
-
-    const [rows] = await sequelize.query(`
-      SELECT e.id, e.episode_number, e.title, e.status, e.air_date,
-             s.id AS story_id, s.status AS story_status, s.word_count AS story_words,
-             (s.metadata ? 'beat11_excerpt') AS has_beat11,
-             c.id AS chapter_id, c.title AS chapter_title,
-             (COALESCE(BTRIM(c.draft_prose), '') <> '') AS chapter_written
-        FROM episodes e
-        LEFT JOIN LATERAL (
-          SELECT st.id, st.status, st.word_count, st.metadata FROM stories st
-           WHERE st.episode_id = e.id AND st.format = 'short_story' AND st.deleted_at IS NULL
-           ORDER BY (st.status = 'published') DESC, st.created_at DESC LIMIT 1
-        ) s ON true
-        LEFT JOIN LATERAL (
-          SELECT ch.id, ch.title, ch.draft_prose FROM storyteller_chapters ch
-           WHERE ch.book_id = :bookId AND ch.episode_id = e.id AND ch.deleted_at IS NULL
-           ORDER BY ch.sort_order NULLS LAST LIMIT 1
-        ) c ON true
-       WHERE e.show_id = :showId AND e.deleted_at IS NULL
-       ORDER BY e.episode_number NULLS LAST, e.created_at`, { replacements: { bookId, showId } });
-
-    const episodes = rows.map((r) => ({
-      id: r.id, episode_number: r.episode_number, title: r.title, status: r.status, air_date: r.air_date,
-      short_story: r.story_id ? { id: r.story_id, status: r.story_status, word_count: r.story_words || 0, has_beat11: Boolean(r.has_beat11) } : null,
-      chapter: r.chapter_id ? { id: r.chapter_id, title: r.chapter_title, written: Boolean(r.chapter_written) } : null,
-    }));
-    const owed = {
-      short_stories: episodes.filter((e) => !e.short_story).length,
-      beat11: episodes.filter((e) => e.short_story && !e.short_story.has_beat11).length,
-      chapters: episodes.filter((e) => !e.chapter || !e.chapter.written).length,
-    };
+    const found = await ledgerOf(sequelize, bookId, req.query.show_id);
+    if (found.error) return res.status(found.status).json({ success: false, error: found.error, ...(found.needs_show ? { needs_show: true } : {}) });
+    const { book, showId, episodes, owed } = found;
     const transfer = await transferOf(sequelize, showId);
     return res.json({ success: true, book: { id: book.id, title: book.title }, show_id: showId, episodes, owed, transfer });
   } catch (err) {
@@ -271,6 +293,17 @@ async function pulseAbout(sequelize, episodeId) {
   return rows.map((r) => `- @${String(r.poster_handle || '').replace(/^@/, '')}: ${clip(String(r.content_text).replace(/\s+/g, ' '), 280)}`).join('\n');
 }
 
+/** The chapter's plan (the planner's fields, or Evoni's own), for the prompt. */
+function planOf(chapter) {
+  const lines = [
+    chapter.scene_goal && `Goal: ${clip(chapter.scene_goal, 600)}`,
+    chapter.emotional_state_start && `She starts: ${clip(chapter.emotional_state_start, 300)}`,
+    chapter.emotional_state_end && `She ends: ${clip(chapter.emotional_state_end, 300)}`,
+    chapter.chapter_notes && `Notes: ${clip(chapter.chapter_notes, 1500)}`,
+  ].filter(Boolean);
+  return lines.length ? `\nTHE PLAN FOR THIS CHAPTER (follow it):\n${lines.join('\n')}` : '';
+}
+
 function chapterPrompt({ chapter, episode, story, before, pulse = '', bleed = 'unset' }) {
   return `${CANON}
 
@@ -288,7 +321,7 @@ ${story ? clip(story.content, STORY_LIMIT) : '(not written yet: work from the ep
 ${pulse ? `\nWHAT THE LALAVERSE SAID ON THE PULSE (JustAWoman sees it; she may react to it):\n${pulse}\n` : ''}${before ? `\nTHE END OF THE CHAPTER BEFORE (for continuity):\n${before}\n` : ''}
 ${BLEED_LINES[bleed] || BLEED_LINES.unset}
 
-THIS CHAPTER: "${chapter.title || `Chapter ${chapter.chapter_number || ''}`.trim()}"
+THIS CHAPTER: "${chapter.title || `Chapter ${chapter.chapter_number || ''}`.trim()}"${planOf(chapter)}
 
 Answer with the chapter's prose only: no title, no notes. About 1,800 to 2,500 words.`;
 }
@@ -366,6 +399,144 @@ An empty list when there are none.`,
     return res.json({ success: true, story_id: story.id, issues });
   } catch (err) {
     console.error('[book-from-show] check-against-story error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── Plan the next chapters from the episodes ────────────────────────────────
+// The book follows the show, so its plan does too: this replaces the Story
+// Engine's fixed 50-chapter plan (memories/engine.js ARC_SYSTEM_PROMPT) for
+// the book. A plan is a preview; apply writes it.
+
+const PLAN_MAX = 8;
+const PLAN_FIELDS = ['scene_goal', 'emotional_state_start', 'emotional_state_end', 'chapter_notes'];
+
+/** Which planned episode gets the bleed: the first after the transfer, among chapters there and planned. */
+function planBleed(transfer, episodes, plannedIds) {
+  if (!transfer || transfer.episode_number == null) return null;
+  const withChapter = episodes.filter((e) => (e.chapter || plannedIds.has(e.id)) && e.episode_number != null && e.episode_number > transfer.episode_number);
+  withChapter.sort((a, b) => a.episode_number - b.episode_number);
+  return withChapter[0]?.id || null;
+}
+
+router.post('/books/:bookId/plan', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const { bookId } = req.params;
+    if (!UUID_RE.test(bookId)) return res.status(400).json({ success: false, error: 'bookId must be a UUID' });
+    const count = Math.min(PLAN_MAX, Math.max(1, parseInt(req.body?.count, 10) || 4));
+    const { sequelize } = getDb(req);
+    const found = await ledgerOf(sequelize, bookId, req.body?.show_id);
+    if (found.error) return res.status(found.status).json({ success: false, error: found.error, ...(found.needs_show ? { needs_show: true } : {}) });
+    const { showId, episodes } = found;
+    const todo = episodes.filter((e) => !e.chapter || !e.chapter.written).slice(0, count);
+    if (todo.length === 0) return res.json({ success: true, plan: [], message: 'Every episode has its chapter.' });
+
+    const transfer = await transferOf(sequelize, showId);
+    const bleedId = planBleed(transfer, episodes, new Set(todo.map((e) => e.id)));
+    const details = [];
+    for (const e of todo) {
+      const full = await episodeRow(sequelize, e.id);
+      const story = e.short_story ? await shortStoryOf(sequelize, e.id) : null;
+      details.push(`- episode_id ${e.id} — Episode ${e.episode_number ?? '?'}: "${e.title || 'Untitled'}"`
+        + (full?.description ? `\n  What it is: ${clip(full.description, 500)}` : '')
+        + (story?.content ? `\n  Its short story begins: ${clip(story.content.replace(/\s+/g, ' '), 1200)}` : '\n  (No short story yet.)')
+        + (e.id === bleedId ? '\n  THE LALA BLEED goes in this chapter: the first after the consciousness transfer.' : ''));
+    }
+    const [recent] = await sequelize.query(
+      `SELECT title, scene_goal, chapter_notes FROM storyteller_chapters
+        WHERE book_id = :bookId AND deleted_at IS NULL AND COALESCE(BTRIM(draft_prose), '') <> ''
+        ORDER BY COALESCE(sort_order, chapter_number, 0) DESC LIMIT 3`, { replacements: { bookId } });
+    const before = recent.reverse().map((c) => `- "${c.title || 'Untitled'}"${c.scene_goal ? `: ${clip(c.scene_goal, 200)}` : ''}`).join('\n');
+
+    const raw = await ask({
+      maxTokens: 3500,
+      prompt: `${CANON}
+
+You plan chapters of JustAWoman's book. The book follows the show, Styling Adventures with Lala: the episode is what the viewer sees, the short story is the event in full, and each chapter is everything the viewer does not see, in JustAWoman's first person: her own life in her world while she builds and plays that episode, and the juicy details she, in her prime, imagines happening in Lala's world beyond the event.
+${transfer ? `The consciousness transfer happens in Episode ${transfer.episode_number}.` : 'The consciousness transfer is not placed yet: plan no bleed.'}
+${before ? `\nTHE LAST CHAPTERS WRITTEN:\n${before}\n` : ''}
+PLAN ONE CHAPTER FOR EACH OF THESE EPISODES, in order:
+${details.join('\n')}
+
+Answer with JSON only:
+{"chapters": [{"episode_id": "the id above", "title": "chapter title", "scene_goal": "what this chapter does, one or two sentences", "emotional_state_start": "where she starts", "emotional_state_end": "where she ends", "chapter_notes": "what the viewer does not see: her day, who from her world presses on her (David, Elias, Zion, Marcus, Nia Vale, the Witness...), and what she imagines in Lala's world; 3 to 6 sentences"}]}`,
+    });
+    let parsed;
+    try { parsed = parseJson(raw); } catch (parseErr) {
+      console.error('[book-from-show] plan: answer was not JSON:', parseErr.message);
+      return res.status(502).json({ success: false, error: 'The plan came back in a form that could not be read. Try again.' });
+    }
+    const byId = new Map(todo.map((e) => [e.id, e]));
+    const plan = (Array.isArray(parsed?.chapters) ? parsed.chapters : [])
+      .filter((c) => c && byId.has(c.episode_id))
+      .map((c) => {
+        const e = byId.get(c.episode_id);
+        const item = { episode_id: e.id, episode_number: e.episode_number, episode_title: e.title, chapter_id: e.chapter?.id || null,
+          title: String(c.title || '').trim().slice(0, 255) || `Episode ${e.episode_number ?? ''}`.trim(), bleed: e.id === bleedId };
+        for (const f of PLAN_FIELDS) item[f] = typeof c[f] === 'string' ? c[f].trim() : '';
+        return item;
+      });
+    if (plan.length === 0) return res.status(502).json({ success: false, error: 'The plan came back empty. Try again.' });
+    return res.json({ success: true, plan, transfer, saved: false });
+  } catch (err) {
+    console.error('[book-from-show] plan error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Writes a plan: a new chapter for an episode with none, tied to it; an
+ * episode's existing chapter only has its empty plan fields filled, never
+ * overwritten (Evoni's own notes stay).
+ */
+router.post('/books/:bookId/plan/apply', requireAuth, async (req, res) => {
+  try {
+    const { bookId } = req.params;
+    if (!UUID_RE.test(bookId)) return res.status(400).json({ success: false, error: 'bookId must be a UUID' });
+    const items = Array.isArray(req.body?.items) ? req.body.items.slice(0, PLAN_MAX) : [];
+    if (items.length === 0) return res.status(400).json({ success: false, error: 'items is required' });
+    const { sequelize } = getDb(req);
+    const found = await ledgerOf(sequelize, bookId, req.body?.show_id);
+    if (found.error) return res.status(found.status).json({ success: false, error: found.error });
+    const byId = new Map(found.episodes.map((e) => [e.id, e]));
+    const text = (v, n) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, n) : null);
+    let created = 0;
+    let filled = 0;
+    const chapters = [];
+    for (const item of items) {
+      const e = byId.get(item?.episode_id);
+      if (!e) return res.status(400).json({ success: false, error: 'An item names an episode that is not in this show.' });
+      const values = Object.fromEntries(PLAN_FIELDS.map((f) => [f, text(item[f], 4000)]));
+      if (e.chapter) {
+        const sets = PLAN_FIELDS.filter((f) => values[f]).map((f) => `${f} = COALESCE(NULLIF(BTRIM(${f}), ''), :${f})`);
+        if (sets.length) {
+          await sequelize.query(`UPDATE storyteller_chapters SET ${sets.join(', ')}, updated_at = NOW() WHERE id = :id`,
+            { replacements: { id: e.chapter.id, ...values } });
+          filled += 1;
+        }
+        chapters.push(e.chapter.id);
+      } else {
+        const [[last]] = await sequelize.query(
+          `SELECT COALESCE(MAX(sort_order), 0) AS o, COALESCE(MAX(chapter_number), 0) AS n
+             FROM storyteller_chapters WHERE book_id = :bookId AND deleted_at IS NULL`, { replacements: { bookId } });
+        // SQL, not the model: the model declares columns (sections,
+        // chapter_template) that no migration creates.
+        const chapter = { id: uuidv4(), title: text(item.title, 255) || `Episode ${e.episode_number ?? ''}: ${e.title || 'Untitled'}` };
+        await sequelize.query(
+          `INSERT INTO storyteller_chapters
+             (id, book_id, chapter_number, sort_order, title, episode_id,
+              scene_goal, emotional_state_start, emotional_state_end, chapter_notes, created_at, updated_at)
+           VALUES (:id, :bookId, :n, :o, :title, :episodeId,
+              :scene_goal, :emotional_state_start, :emotional_state_end, :chapter_notes, NOW(), NOW())`,
+          { replacements: { id: chapter.id, bookId, n: Number(last.n) + 1, o: Number(last.o) + 1, title: chapter.title, episodeId: e.id, ...values } });
+        e.chapter = { id: chapter.id, title: chapter.title, written: false };
+        created += 1;
+        chapters.push(chapter.id);
+      }
+    }
+    return res.json({ success: true, created, filled, chapters });
+  } catch (err) {
+    console.error('[book-from-show] plan apply error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
