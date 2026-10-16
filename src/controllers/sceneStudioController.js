@@ -7,6 +7,8 @@
  */
 
 const { Scene, SceneSet, SceneAngle, SceneAsset, Asset, SceneObjectVariant, sequelize } = require('../models');
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const { v4: uuidv4, validate: uuidValidate } = require('uuid');
 const objectGenerationService = require('../services/objectGenerationService');
 const depthEstimationService = require('../services/depthEstimationService');
@@ -905,6 +907,17 @@ exports.saveSceneSetCanvas = async (req, res) => {
     }
 
     if (Array.isArray(objects)) {
+      // An object's angle is one of this set's: another set's angle was
+      // accepted (audit, 2026-10-15), and a malformed id was a 500.
+      const angleIds = [...new Set(objects.filter((o) => o.scene_angle_id).map((o) => String(o.scene_angle_id)))];
+      if (angleIds.length > 0) {
+        const bad = angleIds.some((aid) => !UUID_RE.test(aid));
+        const ownAngles = bad ? [] : await SceneAngle.findAll({ where: { id: angleIds, scene_set_id: id }, attributes: ['id'], transaction });
+        if (bad || ownAngles.length !== angleIds.length) {
+          await transaction.rollback();
+          return res.status(400).json({ success: false, error: 'scene_angle_id must be an angle of this scene set' });
+        }
+      }
       // Validate asset_ids exist for objects that reference them
       const assetIds = [...new Set(objects.filter((o) => o.asset_id).map((o) => o.asset_id))];
       if (assetIds.length > 0) {
@@ -1027,6 +1040,12 @@ exports.addSceneSetObject = async (req, res) => {
     const sceneSet = await SceneSet.findByPk(id);
     if (!sceneSet) {
       return res.status(404).json({ success: false, error: 'Scene set not found' });
+    }
+    // The object's angle is one of this set's (audit, 2026-10-15).
+    if (scene_angle_id) {
+      const own = UUID_RE.test(String(scene_angle_id))
+        && await SceneAngle.findOne({ where: { id: scene_angle_id, scene_set_id: id }, attributes: ['id'] });
+      if (!own) return res.status(400).json({ success: false, error: 'scene_angle_id must be an angle of this scene set' });
     }
 
     const maxLayer = await SceneAsset.max('layer_order', { where: { scene_set_id: id } });
@@ -1283,44 +1302,57 @@ exports.regenerateBackground = async (req, res) => {
 };
 
 exports.regenerateSceneSetBackground = async (req, res) => {
+  // Fourth audit (2026-10-15): the restyle wrote one result into both the
+  // set's base and an angle (the cover, else the first), so a close-up
+  // became the base; it claimed nothing, so it raced a running generation;
+  // and it took any URL the client sent. Now it restyles one picture: the
+  // angle shown (angle_id), else the base, from the set's own image, under
+  // a claim of that row.
+  const { claimRow } = require('../services/generationClaimService');
+  const sceneGen = require('../services/sceneGenerationService');
+  const { noteBaseChanged } = require('../services/baseDescriptionService');
+  let claimed = null;
   try {
     const { id } = req.params;
     const { mood, time_of_day, current_background_url, angle_id } = req.body;
+    if (angle_id && !UUID_RE.test(String(angle_id))) {
+      return res.status(400).json({ success: false, error: 'angle_id must be an angle id' });
+    }
 
-    const sceneSet = await SceneSet.findByPk(id, {
-      attributes: ['id', 'base_still_url', 'cover_angle_id'],
-    });
+    const sceneSet = await SceneSet.findByPk(id, { attributes: ['id', 'base_still_url'] });
     if (!sceneSet) {
       return res.status(404).json({ success: false, error: 'Scene set not found' });
     }
-    // S6: a restyle replaces the base; an approved base is not replaced
-    // until Evoni un-approves it.
-    const refusal = await approvedBaseService.baseReplaceRefusal(sequelize, id);
-    if (refusal) {
-      return res.status(refusal.status).json({ success: false, error: refusal.error, approved_base_of: refusal.approved_base_of });
-    }
 
-    let targetAngle = null;
-    const preferredAngleId = angle_id || sceneSet.cover_angle_id || null;
-    if (preferredAngleId) {
-      targetAngle = await SceneAngle.findOne({
-        where: { id: preferredAngleId, scene_set_id: id },
-        attributes: ['id', 'still_image_url'],
-      });
-    }
+    const targetAngle = angle_id
+      ? await SceneAngle.findOne({ where: { id: angle_id, scene_set_id: id } })
+      : null;
+    if (angle_id && !targetAngle) return res.status(404).json({ success: false, error: 'Angle not found' });
+
     if (!targetAngle) {
-      targetAngle = await SceneAngle.findOne({
-        where: { scene_set_id: id },
-        order: [['sort_order', 'ASC'], ['created_at', 'ASC']],
-        attributes: ['id', 'still_image_url'],
-      });
+      // S6: a restyle replaces the base; an approved base is not replaced
+      // until Evoni un-approves it.
+      const refusal = await approvedBaseService.baseReplaceRefusal(sequelize, id);
+      if (refusal) {
+        return res.status(refusal.status).json({ success: false, error: refusal.error, approved_base_of: refusal.approved_base_of });
+      }
     }
 
-    const baseUrl = targetAngle?.still_image_url || sceneSet.base_still_url;
-    const bgUrl = current_background_url || baseUrl;
-    if (!bgUrl) {
-      return res.status(400).json({ success: false, error: 'No background to restyle' });
+    // The picture restyled: the target's own (the enhanced copy Studio shows
+    // counts as its own); a URL the client sends is used only when it is one of them.
+    const own = targetAngle
+      ? [targetAngle.enhanced_still_url, targetAngle.still_image_url].filter(Boolean)
+      : [sceneSet.base_still_url].filter(Boolean);
+    if (!own.length) return res.status(400).json({ success: false, error: 'No background to restyle' });
+    const bgUrl = current_background_url && own.includes(current_background_url) ? current_background_url : own[0];
+
+    // One generation of a row at a time: not raced, not paid twice.
+    const kind = targetAngle ? 'angle' : 'set';
+    const rowId = targetAngle ? targetAngle.id : id;
+    if (!(await claimRow(sequelize, kind, rowId))) {
+      return res.status(409).json({ success: false, code: 'ALREADY_GENERATING', error: `${targetAngle ? 'This view' : 'The base'} is already being generated. Wait for it to finish.` });
     }
+    claimed = { kind, rowId };
 
     const result = await imageRestyleService.restyleBackground(bgUrl, id, {
       timeOfDay: time_of_day || null,
@@ -1329,26 +1361,39 @@ exports.regenerateSceneSetBackground = async (req, res) => {
       userId: req.user?.id || null,
     });
 
-    // S6: the base may have been approved while the restyle ran; the
-    // approved picture stays and the restyle is not kept.
-    const lateRefusal = result.restyled_url ? await approvedBaseService.baseReplaceRefusal(sequelize, id) : null;
-    if (lateRefusal) {
-      console.warn(`Scene Studio regenerateBackground: ${id} approved during restyle; restyle not kept (${result.restyled_url})`);
-      return res.status(lateRefusal.status).json({ success: false, error: `${lateRefusal.error} It was approved while the restyle ran, so the restyle was not kept.`, approved_base_of: lateRefusal.approved_base_of });
+    if (!result.restyled_url) {
+      await releaseRestyleClaim(claimed);
+      return res.json({ success: true, data: { restyled_url: null, mood, time_of_day, angle_id: targetAngle?.id || null } });
     }
 
-    if (result.restyled_url) {
-      await SceneSet.update(
-        { base_still_url: result.restyled_url },
-        { where: { id } }
-      );
-
-      if (targetAngle?.id) {
-        await SceneAngle.update(
-          { still_image_url: result.restyled_url },
-          { where: { id: targetAngle.id, scene_set_id: id } }
-        );
+    if (targetAngle) {
+      // The angle's picture, with its old one kept in its history; what was
+      // made from the old picture (enhanced copies, checks, video) goes.
+      const review = { ...(targetAngle.quality_review || {}) };
+      const history = Array.isArray(review.generation_history) ? [...review.generation_history] : [];
+      if (targetAngle.still_image_url) history.push({ url: targetAngle.still_image_url, replaced_at: new Date(), reason: 'Restyled', attempt: targetAngle.generation_attempt });
+      review.generation_history = history;
+      for (const k of ['base_consistency', 'spec_validation', 'from_base', 'zone_reference']) delete review[k];
+      await SceneAngle.update({
+        still_image_url: result.restyled_url, generation_status: 'complete', video_clip_url: null,
+        quality_score: null, artifact_flags: [], enhanced_still_url: null, enhanced_video_url: null, post_processing_status: null,
+        quality_review: review,
+      }, { where: { id: targetAngle.id, scene_set_id: id } });
+    } else {
+      // S6: the base may have been approved while the restyle ran; the
+      // approved picture stays and the restyle is not kept.
+      const lateRefusal = await approvedBaseService.baseReplaceRefusal(sequelize, id);
+      if (lateRefusal) {
+        console.warn(`Scene Studio regenerateBackground: ${id} approved during restyle; restyle not kept (${result.restyled_url})`);
+        await releaseRestyleClaim(claimed, 'complete');
+        return res.status(lateRefusal.status).json({ success: false, error: `${lateRefusal.error} It was approved while the restyle ran, so the restyle was not kept.`, approved_base_of: lateRefusal.approved_base_of });
       }
+      const oldBase = sceneSet.base_still_url;
+      await SceneSet.update({ base_still_url: result.restyled_url, generation_status: 'complete' }, { where: { id } });
+      await sceneGen.repointBaseAngles(sequelize, id, oldBase, result.restyled_url);
+      // A restyle of the base keeps its room: as for a generated base, a
+      // description the person wrote stands, one the analysis wrote is redone.
+      await noteBaseChanged(sequelize, id, { origin: 'generated', baseUrl: result.restyled_url });
     }
 
     res.json({
@@ -1362,10 +1407,19 @@ exports.regenerateSceneSetBackground = async (req, res) => {
     });
   } catch (error) {
     console.error('Scene Studio regenerateSceneSetBackground error:', error);
+    await releaseRestyleClaim(claimed);
     const status = isBudgetError(error) || error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
     res.status(status).json({ success: false, error: error.message });
   }
 };
+
+/** A restyle that kept nothing releases its claim (the row is not left generating). */
+async function releaseRestyleClaim(claimed, status = 'complete') {
+  if (!claimed) return;
+  const Model = claimed.kind === 'angle' ? SceneAngle : SceneSet;
+  await Model.update({ generation_status: status }, { where: { id: claimed.rowId, generation_status: 'generating' } })
+    .catch((err) => console.error('Scene Studio restyle: could not release the claim:', err.message));
+}
 
 // ── Smart Suggestions ──
 

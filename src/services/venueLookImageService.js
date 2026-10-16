@@ -240,9 +240,13 @@ async function startLook(models, { showId, eventId, chosenSetId = null, override
     `INSERT INTO scene_set_looks (id, scene_set_id, event_id, status, source, brief, estimate_usd, error, created_at, updated_at)
      VALUES (gen_random_uuid(), :setId, :eventId, 'generating', 'generated', CAST(:brief AS jsonb), :estimate, NULL, NOW(), NOW())
      ON CONFLICT (scene_set_id, event_id) WHERE deleted_at IS NULL
-     DO UPDATE SET status = 'generating', source = 'generated', brief = EXCLUDED.brief, estimate_usd = EXCLUDED.estimate_usd, error = NULL, updated_at = NOW()
+     -- The look's source and brief stay those of its current image until
+     -- this run has one: a failed run that kept the old image had already
+     -- named it generated from the new base, so a stale look was used
+     -- again and an uploaded one became generated (audit, 2026-10-15).
+     DO UPDATE SET status = 'generating', estimate_usd = EXCLUDED.estimate_usd, error = NULL, updated_at = NOW()
        WHERE scene_set_looks.status <> 'generating' OR scene_set_looks.updated_at < NOW() - make_interval(secs => :stuck)
-     RETURNING id`,
+     RETURNING id, updated_at::text AS claimed_at`,
     { replacements: { setId: set.id, eventId: event.id, brief: JSON.stringify(plan.brief), estimate: plan.estimate?.usd ?? null, stuck: STUCK_AFTER_MS / 1000 } });
   // A look already generating is not started (and paid for) again.
   if (!look) throw new VenueLookImageError('This look is already being generated. Wait for it to finish.', 409, 'LOOK_GENERATING');
@@ -252,16 +256,17 @@ async function startLook(models, { showId, eventId, chosenSetId = null, override
       // Only this run's row: an upload (or a newer run) since is kept
       // (audit, 2026-10-15: a late result overwrote an uploaded look).
       const [done] = await sequelize.query(
-        `UPDATE scene_set_looks SET status = 'complete', image_url = :url, cost_usd = :cost, generated_at = NOW(), updated_at = NOW()
+        `UPDATE scene_set_looks SET status = 'complete', image_url = :url, source = 'generated', brief = CAST(:brief AS jsonb),
+                cost_usd = :cost, generated_at = NOW(), updated_at = NOW()
           WHERE ${OWN_LOOK_RUN} RETURNING id`,
-        { replacements: { id: look.id, url: out.stillUrl, cost: out.cost } });
+        { replacements: { id: look.id, claimedAt: look.claimed_at, url: out.stillUrl, cost: out.cost, brief: JSON.stringify(plan.brief) } });
       if (done.length) await dropDressedAngles(sequelize, look.id);
       else console.warn(`[VenueLookImage] look ${look.id} changed while generating; this result is not kept`);
     } catch (err) {
       console.error(`[VenueLookImage] look for event ${event.id} on "${set.name}" failed:`, err.message);
       await sequelize.query(
         `UPDATE scene_set_looks SET status = ${KEEP_PREVIOUS_IMAGE}, error = :error, updated_at = NOW() WHERE ${OWN_LOOK_RUN}`,
-        { replacements: { id: look.id, error: String(err.message || err).slice(0, 500) } });
+        { replacements: { id: look.id, claimedAt: look.claimed_at, error: String(err.message || err).slice(0, 500) } });
     }
   };
   return { result: { step: plan.step, scene_set_id: set.id, look_id: look.id }, run };
@@ -301,7 +306,10 @@ async function uploadLook(models, { showId, eventId, chosenSetId = null, storeIm
 }
 
 // The row a look's run may write: its own, while it is still the run.
-const OWN_LOOK_RUN = `id = :id AND status = 'generating' AND source = 'generated' AND deleted_at IS NULL`;
+// This run's row: still generating since this run claimed it (the claim's
+// own updated_at, exact to the microsecond as text). An upload, a stuck
+// sweep or a newer run changes it, and the late result is not kept.
+const OWN_LOOK_RUN = `id = :id AND status = 'generating' AND updated_at = CAST(:claimedAt AS timestamptz) AND deleted_at IS NULL`;
 
 // A run that failed (or was stuck) on a look that already had an image
 // leaves that image in use, with the error shown beside it: marked failed,

@@ -397,8 +397,9 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
       const pressCount = (pressSrc.match(pattern) || []).length;
       const manuscriptCount = (manuscriptSrc.match(pattern) || []).length;
       expect(pressCount).toBe(2);
-      expect(manuscriptCount).toBe(3);
-      expect(pressCount + manuscriptCount).toBe(5);
+      // manuscript-export.js left Tier 3 on 2026-10-15 (Evoni: the memoir downloads need sign-in).
+      expect(manuscriptCount).toBe(0);
+      expect(pressCount + manuscriptCount).toBe(2);
     });
   });
 });

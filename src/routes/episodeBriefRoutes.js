@@ -331,14 +331,18 @@ router.put('/:episodeId/plan/:beatNumber', requireAuth, async (req, res) => {
 //   POST .../dressed-angles/:angleId/upload    an uploaded image is the dressed angle
 // Without a look they answer 409 NO_LOOK, and the plain angle routes apply.
 
-const dressedUpload = require('multer')({
+// A refused file is a 400 or 413 with its reason, not a 500 (audit, 2026-10-15).
+const dressedUpload = require('../middleware/uploadOrRefuse').uploadOrRefuse(require('multer')({
   storage: require('multer').memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) cb(null, true);
     else cb(new Error('Only JPEG, PNG, and WebP images are allowed'));
   },
-}).fields([{ name: 'image', maxCount: 1 }, { name: 'images', maxCount: 1 }]);
+}).fields([{ name: 'image', maxCount: 1 }, { name: 'images', maxCount: 1 }]), { label: 'Dressed angle upload' });
+// A malformed episode or angle id is a 400, not a database cast error (500).
+const { validateUUIDParam } = require('../middleware/requestValidation');
+const dressedIds = [validateUUIDParam('episodeId'), validateUUIDParam('angleId')];
 
 function dressedError(res, err, label) {
   const { DressedAngleError } = require('../services/dressedAngleService');
@@ -352,7 +356,7 @@ function dressedError(res, err, label) {
 // look on that set and each of the set's angles with its dressed version:
 // { look: { id, image_url } | null, angles: [{ id, label, name, kind,
 // still_image_url, dressed: { status, image_url, error } | null }] }.
-router.get('/:episodeId/dressed-angles', requireAuth, async (req, res) => {
+router.get('/:episodeId/dressed-angles', validateUUIDParam('episodeId'), requireAuth, async (req, res) => {
   try {
     const setId = req.query.scene_set_id;
     if (!setId || !/^[0-9a-f-]{36}$/i.test(String(setId))) return res.status(400).json({ success: false, error: 'scene_set_id is required' });
@@ -382,7 +386,7 @@ router.get('/:episodeId/dressed-angles', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/:episodeId/dressed-angles/:angleId/brief', requireAuth, async (req, res) => {
+router.post('/:episodeId/dressed-angles/:angleId/brief', ...dressedIds, requireAuth, async (req, res) => {
   try {
     const { dressedAngleBrief } = require('../services/dressedAngleService');
     const data = await dressedAngleBrief(models.sequelize, {
@@ -394,7 +398,7 @@ router.post('/:episodeId/dressed-angles/:angleId/brief', requireAuth, async (req
   }
 });
 
-router.post('/:episodeId/dressed-angles/:angleId/generate', requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/:episodeId/dressed-angles/:angleId/generate', ...dressedIds, requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { startDressedAngle } = require('../services/dressedAngleService');
     const { result, run } = await startDressedAngle(models.sequelize, {
@@ -411,7 +415,7 @@ router.post('/:episodeId/dressed-angles/:angleId/generate', requireAuth, aiRateL
   }
 });
 
-router.post('/:episodeId/dressed-angles/:angleId/upload', requireAuth, dressedUpload, async (req, res) => {
+router.post('/:episodeId/dressed-angles/:angleId/upload', ...dressedIds, requireAuth, dressedUpload, async (req, res) => {
   try {
     const file = [...(req.files?.images || []), ...(req.files?.image || [])][0];
     if (!file) return res.status(400).json({ success: false, error: 'No image file provided' });
@@ -602,6 +606,8 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
       body.coverage = {
         missing: scriptCoverage(script, written.facts).missing.map(({ kind, label, target }) => ({ kind, label, target })),
         fixed_beats: written.coverage?.fixed_beats || [],
+        // Phone steps added before taps the phone couldn't make (utils/phonePaths.js).
+        phone_steps: written.coverage?.phone_steps || 0,
       };
     }
     if (!saved) {

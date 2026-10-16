@@ -670,8 +670,8 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
                     <Field label="Role Type" value={crossingPreview.role_type}/>
                     <Field label="Status" value={crossingPreview.status}/>
                     <div style={{gridColumn:'1/-1'}}><Field label="Description" value={crossingPreview.description}/></div>
-                    <div style={{gridColumn:'1/-1'}}><Field label="Core Desire" value={crossingPreview.core_desire}/></div>
-                    <div style={{gridColumn:'1/-1'}}><Field label="Core Wound" value={crossingPreview.core_wound}/></div>
+                    {/* What this creator is to JustAWoman goes into author notes, not their own wound (2026-10-16). */}
+                    {crossingPreview.writer_notes&&<div style={{gridColumn:'1/-1'}}><Field label="Author notes" value={crossingPreview.writer_notes}/></div>}
                     <div style={{gridColumn:'1/-1'}}><Field label="Personality" value={crossingPreview.personality}/></div>
                   </div>
                 </div>

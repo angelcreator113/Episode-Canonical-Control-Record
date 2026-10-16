@@ -68,7 +68,14 @@ Evoni, 2026-10-15. JustAWoman's world:
   `src/routes/memories/engine.js`.
 
 Retired: the sons Marcus (7), Miles (5) and Noah (3); Dana as the Witness;
-Chloe as the Comparison Creator.
+Chloe as the Comparison Creator. Jade, the Almost-Mentor, is deleted
+(Evoni, 2026-10-16): she is out of the seed, the relationship map, the
+Story Engine's character DNA, the appearance rules and the therapy
+profiles.
+
+The `pressure` role is labelled **Pressure**, not Antagonist (2026-10-16):
+David is pressure and cannot be villainized. Lala's species is
+`sentient AI`, not human.
 
 ## The Lala bleed
 
@@ -85,7 +92,11 @@ section (`shows.metadata.consciousness_transfer`). The chapter writer
 (`bleedStateOf` in `src/routes/bookFromShowRoutes.js`) then puts the bleed in
 the book's first chapter whose episode comes after it. The Story Engine's
 50-chapter plan is not tied to episodes, so it does not read the setting; it
-flags no bleed unless a brief says the transfer happened.
+flags no bleed unless a brief says the transfer happened. The book's plan is
+now made from the episodes instead: "Plan the next chapters" on This week's
+episode (`/this-week`; `POST /books/:bookId/plan` in
+`src/routes/bookFromShowRoutes.js`) plans a chapter for each episode that
+still owes one, and marks the bleed on the first chapter after the transfer.
 
 ## The show and the Pulse around the book
 

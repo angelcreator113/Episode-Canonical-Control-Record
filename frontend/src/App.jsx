@@ -80,6 +80,7 @@ const WorldStudio = lazy(() => import('./pages/WorldStudio'));
 const SceneStudio = lazy(() => import('./pages/SceneStudio'));
 const SceneStudioPage = lazy(() => import('./pages/SceneStudioPage'));
 const ScenePlannerPage = lazy(() => import('./pages/ScenePlannerPage'));
+const ThisWeekPage = lazy(() => import('./pages/ThisWeekPage'));
 const EpisodeScriptWriterPage = lazy(() => import('./pages/EpisodeScriptWriterPage'));
 const FeedTimelinePage = lazy(() => import('./pages/FeedTimelinePage'));
 const EventFeedDashboard = lazy(() => import('./pages/feed/EventFeedDashboard'));
@@ -432,6 +433,7 @@ function AppContent() {
           
           {/* StoryTeller Book Editor */}
           <Route path="/stories" element={<StoriesPage />} />
+          <Route path="/this-week" element={<ThisWeekPage />} />
           <Route path="/storyteller" element={<Navigate to="/stories" replace />} />
           <Route path="/book/:id" element={<BookToWriteRedirect />} />
           <Route path="/books/:bookId/read" element={<ReadingMode />} />

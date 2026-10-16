@@ -192,6 +192,20 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(b10.location.angle.still_image_url).toBe(res.body.data.image_url);
   });
 
+  it('an uploaded dressed angle whose re-run fails stays uploaded, with its image', async () => {
+    // Fourth audit (2026-10-15): the claim named the row generated before
+    // the run had an image, so a failed run left her upload marked generated.
+    const w = await world({ plainImage: null });
+    const up = await auth(request(app).post(dressedUrl(w.ep, w.angle, 'upload')))
+      .attach('images', Buffer.from('fake-png'), { filename: 'door.png', contentType: 'image/png' });
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.spyOn(sceneGen, 'generateDressedStill').mockRejectedValue(new Error('provider down'));
+    await auth(request(app).post(dressedUrl(w.ep, w.angle, 'generate'))).send({});
+    await until(async () => (await rows('SELECT status FROM scene_set_look_angles WHERE look_id = :look', { look: w.lookId }))[0]?.status !== 'generating');
+    const [row] = await rows('SELECT status, source, image_url, error FROM scene_set_look_angles WHERE look_id = :look', { look: w.lookId });
+    expect(row).toMatchObject({ status: 'complete', source: 'uploaded', image_url: up.body.data.image_url, error: 'provider down' });
+  });
+
   it('the plan shows and counts the dressed angle at the look\'s set, else the plain one; other sets are as today', async () => {
     const plainOnly = await world();
     let body = await plan(plainOnly.ep);

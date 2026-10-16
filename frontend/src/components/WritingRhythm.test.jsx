@@ -26,6 +26,8 @@ vi.mock('../services/api', () => ({
   },
 }));
 
+vi.mock('../config/api', () => ({ API_URL: '/api/v1' }));
+
 import apiClient from '../services/api';
 import {
   getWritingRhythmStatsApi,
@@ -47,33 +49,33 @@ describe('WritingRhythm — Track 6 CP9 module-scope helpers', () => {
   test('getWritingRhythmStatsApi GET on /writing-rhythm/stats', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: { streak: 0 } });
     await getWritingRhythmStatsApi();
-    expect(apiClient.get).toHaveBeenCalledWith('/writing-rhythm/stats');
+    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/writing-rhythm/stats');
   });
 
   test('getMultiProductAllApi GET on /multi-product/all', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: { content: [] } });
     await getMultiProductAllApi();
-    expect(apiClient.get).toHaveBeenCalledWith('/multi-product/all');
+    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/multi-product/all');
   });
 
   test('logWritingRhythmApi POST on /writing-rhythm/log', async () => {
     vi.mocked(apiClient.post).mockResolvedValue({ data: {} });
     const payload = { scenes_proposed: 3, scenes_generated: 2, scenes_approved: 1, words_written: 1500, session_note: '' };
     await logWritingRhythmApi(payload);
-    expect(apiClient.post).toHaveBeenCalledWith('/writing-rhythm/log', payload);
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/writing-rhythm/log', payload);
   });
 
   test('setWritingRhythmGoalApi PATCH on /writing-rhythm/goal', async () => {
     vi.mocked(apiClient.patch).mockResolvedValue({ data: {} });
     const payload = { goal_type: 'weekly', target_scenes: 10, target_words: 5000, cadence: 'weekdays' };
     await setWritingRhythmGoalApi(payload);
-    expect(apiClient.patch).toHaveBeenCalledWith('/writing-rhythm/goal', payload);
+    expect(apiClient.patch).toHaveBeenCalledWith('/api/v1/writing-rhythm/goal', payload);
   });
 
   test('updateMultiProductStatusApi PATCH on /multi-product/:id/status (verified PATCH not PUT)', async () => {
     vi.mocked(apiClient.patch).mockResolvedValue({ data: {} });
     await updateMultiProductStatusApi('p-1', { status: 'approved' });
-    expect(apiClient.patch).toHaveBeenCalledWith('/multi-product/p-1/status', { status: 'approved' });
+    expect(apiClient.patch).toHaveBeenCalledWith('/api/v1/multi-product/p-1/status', { status: 'approved' });
   });
 
   describe('Error path propagation', () => {

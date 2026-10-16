@@ -58,6 +58,23 @@ const BEAT_TEMPLATES = Object.fromEntries(CANONICAL_BEATS.map((b) => [b.number, 
 async function groundedScriptInputs(episodeId, showId, models) {
   const { EpisodeBrief, ScenePlan, SceneSet, FranchiseKnowledge, sequelize } = models;
 
+  // What the Script Writer page's writer reads (Evoni, 2026-10-15: "when a
+  // script is being generated what information is it using?"): her career
+  // at the event (deal, deliverables, goals), her money, who is at the
+  // event, the content she must make, the previous episode, the arc and her
+  // stats. One loader for both writers (episodeScriptWriterService
+  // .loadScriptContext), so they read the same facts. Read first (Script tab
+  // re-audit, 2026-10-15): the Show Brain rules, the event, the world
+  // snapshot and the locked look it holds are not read a second time below.
+  // A failed read leaves the script to the reads below.
+  let story = null;
+  try {
+    const { loadScriptContext } = require('./episodeScriptWriterService');
+    story = await loadScriptContext(episodeId, showId, models, { lite: true });
+  } catch (err) {
+    console.error('[ScriptGen] story context failed (non-blocking):', err.message);
+  }
+
   // 1. Load Episode Brief
   const brief = await EpisodeBrief.findOne({ where: { episode_id: episodeId } }).catch(() => null);
 
@@ -79,8 +96,8 @@ async function groundedScriptInputs(episodeId, showId, models) {
 
   // 3. Show Brain rules: the same deterministic selection the episode
   //    script writer records (services/brainRules.js, 2026-10-04).
-  let franchiseLaws = [];
-  if (FranchiseKnowledge) {
+  let franchiseLaws = story ? (story.franchiseLaws || []) : [];
+  if (!story && FranchiseKnowledge) {
     const { selectInjectedRules } = require('./brainRules');
     franchiseLaws = await selectInjectedRules(FranchiseKnowledge, { showId })
       .then((s) => s.rules)
@@ -88,14 +105,16 @@ async function groundedScriptInputs(episodeId, showId, models) {
   }
 
   // 4. Load Event data: the episode's event (utils/episodeEventSql; Task #1917)
-  let eventData = null;
-  try {
-    const [rows] = await sequelize.query(
-      `SELECT * FROM world_events WHERE id = ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL}`,
-      { replacements: { episodeId } }
-    );
-    eventData = rows?.[0] || null;
-  } catch { /* non-blocking */ }
+  let eventData = story?.event || null;
+  if (!eventData) {
+    try {
+      const [rows] = await sequelize.query(
+        `SELECT * FROM world_events WHERE id = ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL}`,
+        { replacements: { episodeId } }
+      );
+      eventData = rows?.[0] || null;
+    } catch (err) { console.error('[ScriptGen] event read failed (non-blocking):', err.message); }
+  }
 
   // 5. Load Wardrobe
   // #1883: this read WardrobeLibrary, which declares none of is_owned, slot,
@@ -121,8 +140,12 @@ async function groundedScriptInputs(episodeId, showId, models) {
   }
 
   // 5b. Load outfit synergy score for this episode
-  let outfitScore = null;
-  try {
+  // The locked look as the Script tab and the Script Writer read it
+  // (approved pieces, no attachments), when the story read found one; else
+  // every piece on the episode.
+  let outfitScore = Array.isArray(story?.wardrobe) && story.wardrobe.length
+    ? { items: story.wardrobe, count: story.wardrobe.length } : null;
+  if (!outfitScore) try {
     const [scoreRows] = await sequelize.query(
       `SELECT w.id, w.name, w.clothing_category, w.tier, w.aesthetic_tags
        FROM episode_wardrobe ew
@@ -138,7 +161,7 @@ async function groundedScriptInputs(episodeId, showId, models) {
   // 6. Load Lala's stats
   // The newest snapshot of the show's universe (or of none); the old
   // show_id query named a column the table does not have.
-  const lalaStats = await latestWorldSnapshotForShow(sequelize, showId);
+  const lalaStats = story ? (story.worldState ?? null) : await latestWorldSnapshotForShow(sequelize, showId);
 
   // 7. This episode's season position (§8(ff) A5), snapshotted at Start Episode
   let seasonContext = null;
@@ -159,30 +182,22 @@ async function groundedScriptInputs(episodeId, showId, models) {
   // on a failed read.
   const { getAllOverlayTypes } = require('./uiOverlayService');
   const onScreen = showId ? await getAllOverlayTypes(showId, models) : [];
-
-  // The rest of what the Script Writer page's writer reads (Evoni,
-  // 2026-10-15: "when a script is being generated what information is it
-  // using?"): her career at the event (deal, deliverables, goals), her
-  // money, who is at the event, the content she must make, the previous
-  // episode, the arc and her stats. One loader for both writers
-  // (episodeScriptWriterService.loadScriptContext), so they read the same
-  // facts. A failed read leaves the script to what is above.
-  let story = null;
-  try {
-    const { loadScriptContext } = require('./episodeScriptWriterService');
-    story = await loadScriptContext(episodeId, showId, models);
-  } catch (err) {
-    console.error('[ScriptGen] story context failed (non-blocking):', err.message);
+  // The phone's map (script phone paths, 2026-10-16): each screen's icons and
+  // what they open, as the Script tab's phone check reads it, for the prompt
+  // and for the steps added after writing. A failed read leaves both out.
+  let phone = null;
+  if (showId) {
+    try {
+      const { overlayStatusForShow } = require('./phoneOverlays');
+      const { phoneFromOverlays } = require('../utils/phonePaths');
+      phone = phoneFromOverlays(await overlayStatusForShow(models, showId, episodeId));
+    } catch (err) {
+      console.error('[ScriptGen] phone map failed (non-blocking):', err.message);
+    }
   }
-  // The locked look as the Script tab and the Script Writer read it
-  // (approved pieces, no attachments), when that read found one.
-  if (Array.isArray(story?.wardrobe) && story.wardrobe.length) {
-    outfitScore = { items: story.wardrobe, count: story.wardrobe.length };
-  }
-  if (!eventData && story?.event) eventData = story.event;
 
   console.log(`[ScriptGen] Prompt for episode ${episodeId} with ${scenePlan.length} planned beats`);
-  return { brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext, onScreen, story };
+  return { brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext, onScreen, story, phone };
 }
 
 const MODELS = ['claude-sonnet-4-6'];
@@ -305,11 +320,25 @@ async function generateGroundedScript(episodeId, showId, models, { lockedBeats =
     }
     script = next; fixedBeats.push(n);
   }
+  // Before each tap the phone can't make from where it is, a step to the
+  // icon's screen (utils/phonePaths.js, the Script tab's own check); approved
+  // beats are left as they are, and read for where they leave the phone.
+  let phoneSteps = 0;
+  if (inputs.phone) {
+    try {
+      const { scriptWithPhonePaths } = require('../utils/phonePaths');
+      const skip = splitScriptBeats(script).beats.map((b, i) => (locked.has(b.number) ? i : -1)).filter((i) => i >= 0);
+      const paths = scriptWithPhonePaths(script, inputs.phone, { skip });
+      if (paths.added) { script = paths.script; phoneSteps = paths.added; }
+    } catch (err) {
+      console.error('[ScriptGen] phone paths failed (non-blocking):', err.message);
+    }
+  }
   const { missing } = scriptCoverage(script, facts);
   if (fixedBeats.length || missing.length) {
     console.log(`[ScriptGen] Coverage for episode ${episodeId}: rewrote beats ${fixedBeats.join(', ') || 'none'}; still missing ${missing.length}`);
   }
-  return { script, coverage: { missing, fixed_beats: fixedBeats.sort((a, b) => a - b) }, facts };
+  return { script, coverage: { missing, fixed_beats: fixedBeats.sort((a, b) => a - b), phone_steps: phoneSteps }, facts };
 }
 
 // What the coverage check needs from the writer's inputs.
@@ -364,15 +393,60 @@ async function generateGroundedBeat(episodeId, showId, models, { beatNumber, cur
 // The Script Writer's blocks for what `story` holds: money, career, the
 // people at the event, the content she must make, continuity and her
 // numbers (episodeScriptWriterService). Empty when it could not be read.
-function storyContext(story) {
-  if (!story) return '';
+//
+// Script tab re-audit (2026-10-15), so the prompt says one thing once:
+// - her coins are the ledger's balance (FINANCIAL CONTEXT) wherever a
+//   number is given, LALA'S STATS included;
+// - the season is EPISODE CONTEXT's own (`hasSeason`), so the arc's phase
+//   is not given a second time;
+// - the closing hook is the brief's (`hook`) when it has one: the career
+//   block's beat 14 line tells it through her career, not instead of it.
+// A block that fails to render is left out (logged), never the whole script.
+// Each block renders on its own: one that fails is logged and left out,
+// never the rest (re-audit 2, 2026-10-15: one guest's bad JSON dropped her
+// career, money and stats together). Returns { text, career, stats }: what
+// rendered, so the rules and the fallback stats read only what is there.
+function storyContext(story, { hasSeason = false, hook = '' } = {}) {
+  const none = { text: '', career: false, stats: false };
+  if (!story) return none;
   const { storyContextBlocks, financialContextText } = require('./episodeScriptWriterService');
-  const blocks = [
-    story.financial ? `═══ FINANCIAL CONTEXT ═══\n${financialContextText(story.financial)}` : '',
-    careerBlock(story.career),
-    storyContextBlocks(story, { withSeason: false }),
-  ].filter(Boolean);
-  return blocks.length ? `\n${blocks.join('\n\n')}\n` : '';
+  const block = (name, render) => {
+    try { return render() || ''; } catch (err) { console.error(`[ScriptGen] story block "${name}" failed (non-blocking):`, err.message); return ''; }
+  };
+  const balance = story.financial?.balance;
+  const told = {
+    ...story,
+    characterState: story.characterState && balance != null ? { ...story.characterState, coins: balance } : story.characterState,
+    arcPhase: hasSeason ? null : story.arcPhase,
+  };
+  const financial = story.financial ? block('financial', () => `═══ FINANCIAL CONTEXT ═══\n${financialContextText(story.financial)}`) : '';
+  // A function, so a `$` in the hook is written as it is.
+  const career = block('career', () => {
+    const text = careerBlock(story.career);
+    return text && hook ? text.replace(/^- Beat 14: .*$/m, () => `- Beat 14: end on the forward hook, "${hook}", told through her career: a follow-up offer, a goal still open, or what this deal could lead to.`) : text;
+  });
+  // The guests are the block most likely to hold bad data; without them the
+  // rest (her stats, the last episode, the arc) still goes in.
+  let rest = block('story', () => storyContextBlocks(told, { withSeason: false }));
+  if (!rest && (told.socialProfiles || []).length) rest = block('story without guests', () => storyContextBlocks({ ...told, socialProfiles: [] }, { withSeason: false }));
+  const blocks = [financial, career, rest].filter(Boolean);
+  return {
+    text: blocks.length ? `\n${blocks.join('\n\n')}\n` : '',
+    career: !!career,
+    stats: rest.includes("═══ LALA'S STATS ═══"),
+  };
+}
+
+// The world snapshot's states for LALA'S STATE, with her coins the ledger's
+// balance when it is known (re-audit 2: it gave a second number).
+function snapshotStates(states, balance) {
+  if (balance == null || !states || typeof states !== 'object') return states;
+  const out = { ...states };
+  if ('coins' in out) out.coins = balance;
+  for (const key of Object.keys(out)) {
+    if (/lala/i.test(key) && out[key] && typeof out[key] === 'object' && 'coins' in out[key]) out[key] = { ...out[key], coins: balance };
+  }
+  return out;
 }
 
 // A10: every season story purpose, primary first, each with its thread.
@@ -404,7 +478,7 @@ function seasonPurposeLines(sc) {
     ...purposes.map((p, n) => `${n + 1}. ${p.primary ? '[Primary] ' : ''}${p.text}${p.story_thread ? ` (thread: ${p.story_thread})` : ''}`)].join('\n');
 }
 
-function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext = null, onScreen = [], story = null }, { only = null, lockedBeats = [] } = {}) {
+function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext = null, onScreen = [], story = null, phone = null }, { only = null, lockedBeats = [] } = {}) {
   // Every canonical beat, in order, whether or not the plan has its row
   // (§8(j): Generate Script instantiates all 14; it never invents its own).
   const planByBeat = new Map(scenePlan.map((b) => [Number(b.beat_number), b]));
@@ -460,9 +534,15 @@ function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrob
     eventContext = 'No event assigned';
   }
 
-  const statsContext = lalaStats?.character_states
-    ? JSON.stringify(lalaStats.character_states).slice(0, 200)
+  // Her numbers come from LALA'S STATS when the story read has them; the
+  // world snapshot is the fallback, given whole (a 200-character cut broke
+  // it mid-object).
+  const hook = typeof brief?.forward_hook === 'string' ? brief.forward_hook.trim() : '';
+  const told = storyContext(story, { hasSeason: !!seasonContext?.label, hook });
+  const statsContext = told.stats ? ''
+    : lalaStats?.character_states ? JSON.stringify(snapshotStates(lalaStats.character_states, story?.financial?.balance)).slice(0, 1500)
     : 'Stats not loaded';
+  const people = (story?.socialProfiles || []).length > 0;
 
   // Group Show Brain laws by category for structured injection
   const lawsByCategory = {};
@@ -501,13 +581,11 @@ ${seasonPurposeLines(seasonContext)}
 ═══ EVENT ═══
 ${eventContext}
 
-═══ LALA'S STATE ═══
-${statsContext}
-${storyContext(story)}
+${statsContext ? `═══ LALA'S STATE ═══\n${statsContext}\n` : ''}${told.text}
 ═══ WARDROBE ═══
 ${wardrobeContext}
 ${outfitScore ? `\n═══ LOCKED OUTFIT ═══\nLala is wearing ${outfitScore.count} pieces for this event:\n${outfitScore.items.map(i => `- ${i.name} (${i.clothing_category}, ${i.tier})${i.id ? ` [WEAR: ${i.id}]` : ''}`).join('\n')}\nBeat 8 (Transformation): Reference these SPECIFIC items by name as Lala gets dressed. Right after the line where she puts a piece on, write that piece's [WEAR: id] line exactly as shown above, once per piece.\nBeat 11 (Event Outcome): Her outfit choice affects how the event goes — she is wearing what she chose.` : ''}
-${onScreenContext(onScreen)}
+${onScreenContext(onScreen)}${phone ? require('../utils/phonePaths').phoneMapContext(phone) : ''}
 
 ═══ SCENE PLAN — 14 BEATS ═══
 ${beatContext}
@@ -517,17 +595,17 @@ These beats are approved and stay exactly as written. Write every other beat so 
 ${lockedBeats.map((b) => b.text).join('\n\n')}
 ` : ''}
 ═══ FORMAT ═══
-Each of the 14 beats opens with its header line, exactly as written above, in order from 1 to 14:
+${only ? 'The beat opens with its header line (given under THIS TASK). Under it:' : `Each of the 14 beats opens with its header line, exactly as written above, in order from 1 to 14:
 ${beatHeader(CANONICAL_BEATS[0])}
 ...
 ${beatHeader(CANONICAL_BEATS[CANONICAL_BEATS.length - 1])}
-Do not add, merge, rename or skip beats. Under each header:
+Do not add, merge, rename or skip beats. Under each header:`}
 Me: [JAWIHP dialogue]
 (Action description)
 Lala: [Lala dialogue]
 [STAT: coins +X]
 [TRANSITION: description]
-
+${people ? 'Another character at the event speaks as their name: [their words], in their own voice (CHARACTERS AT THE EVENT).\n' : ''}
 What happens on screen goes on its own line, one moment per line, in this form (the Script tab reads these lines; write the name of a screen, icon or overlay exactly as it is listed under ON SCREEN when it is listed there):
 [UI:SHOW phone] / [UI:HIDE phone] (Lala's phone comes on screen / goes away)
 [UI:OPEN <screen>] [UI:CLICK <icon>] [UI:SCROLL <screen>] [UI:CLOSE <screen>]
@@ -540,9 +618,13 @@ RULES:
 2. JAWIHP reacts to everything in real time
 3. Lala's lines are ALWAYS short and punchy — max 2-3 sentences
 4. Community engagement: ask audience to react in comments at least twice
-5. Stats only appear as [STAT:] tags
-6. End with a forward hook seeding the next episode
-${story?.career && careerBlock(story.career) ? "7. Lala's career is on the page: name the deal, what she owes and what she wants from the event in the beats the CAREER block gives them, in her words, never as a list\n" : ''}
+5. A change to her stats appears only as a [STAT:] tag; she may say her coin balance in her own words when she checks it
+${!only || only.beat.number === 14 ? `6. ${only ? 'This beat ends' : 'Beat 14 ends'} on ${hook ? `the forward hook: "${hook}"` : 'a forward hook seeding the next episode'}\n` : ''}${told.career ? "7. Lala's career is on the page: name the deal, what she owes and what she wants from the event in the beats the CAREER block gives them, in her words, never as a list\n" : ''}
+
+═══ SHOW RULES ═══
+- Lala's phone is on screen from the moment the Start button is clicked in Beat 1 until she travels to the event in Beat 10. Never write [UI:SHOW phone] or [UI:HIDE phone] in between; the phone is already there.
+- Beat 5 (Reveal): JAWIHP reads the whole invitation aloud, every word of it, not a summary.
+- Beat 8 (Transformation Loop): every piece of the look is picked and put on one at a time: its own pick, its own line, its own [WEAR: id] line. Never several pieces at once.
 ${only ? `═══ THE SCRIPT AS IT STANDS ═══
 ${only.currentScript.trim() || '(empty)'}
 
