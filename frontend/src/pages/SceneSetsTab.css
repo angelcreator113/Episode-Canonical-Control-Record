@@ -764,6 +764,9 @@
   white-space: nowrap;
 }
 
+/* An everyday set or event version names sets and events: it wraps at 375px (2026-10-16). */
+.scene-sets-meta-chip.is-version { white-space: normal; overflow-wrap: anywhere; max-width: 100%; }
+
 /* ── Progress bar ───────────────────────────────────── */
 .scene-sets-progress-row {
   display: flex;
