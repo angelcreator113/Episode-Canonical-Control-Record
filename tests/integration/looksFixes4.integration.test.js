@@ -136,12 +136,17 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     const named = await event(showId, { name: 'Named', setId: s });
     const stamped = await event(showId, { name: 'Stamped', setId: s, episodeId: ep });
     let byId = new Map((await eventsForSets(sequelize, [s])).get(s).map((e) => [e.id, e]));
-    expect(byId.get(stamped).is_episode_event).toBe(true);
+    expect(byId.get(stamped)).toMatchObject({ is_episode_event: true, episode_id: ep, episode_event: null, other_events: [] });
+    expect(byId.get(named)).toMatchObject({ is_episode_event: false, episode_id: null, episode_event: null });
     await run(`INSERT INTO episode_briefs (id, episode_id, event_id, status, created_at, updated_at) VALUES (:id, :ep, :named, 'draft', NOW(), NOW())`,
       { id: uuid(), ep, named });
     byId = new Map((await eventsForSets(sequelize, [s])).get(s).map((e) => [e.id, e]));
-    expect(byId.get(stamped).is_episode_event).toBe(false);
-    expect(byId.get(named).is_episode_event).toBe(false);
+    // Evoni, 2026-10-16: the main event's look is dressed, and the others are
+    // named. The event the brief names is the episode's, stamped or not.
+    expect(byId.get(named)).toMatchObject({ is_episode_event: true, episode_id: ep, episode_event: null });
+    expect(byId.get(named).other_events).toEqual([{ id: stamped, name: 'Stamped', show_id: showId }]);
+    expect(byId.get(stamped)).toMatchObject({ is_episode_event: false, episode_id: ep, other_events: [] });
+    expect(byId.get(stamped).episode_event).toEqual({ id: named, name: 'Named', show_id: showId });
   });
 
   it('2: a generated season of a Front view since made again is stale and not picked', async () => {

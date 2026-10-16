@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, memo, useMemo, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams, Link } from 'react-router-dom';
 import { Camera, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight, Heart, Film, Search, FileText, ShieldCheck, ShieldAlert, MapPin, Box, Image as ImageIcon } from 'lucide-react';
@@ -1002,11 +1002,24 @@ export function LooksRow({ set, focusZone = null, onToast, onRefresh }) {
           <Link className="scene-sets-event-look-name" to={`/shows/${ev.show_id}/events/${ev.id}`}>{ev.name}</Link>
           {/* A look made or uploaded here shows in the row above (onRefresh). */}
           <EventLookImage showId={ev.show_id} eventId={ev.id} canGenerate onToast={onToast} onSaved={onRefresh} />
-          {/* The episode dresses its own event's look: an episode made from
-              several events showed its first event's look here (fourth audit). */}
-          {ev.used_in_episode_id && ev.is_episode_event && <DressedAngles episodeId={ev.used_in_episode_id} setId={set.id} onToast={onToast} />}
-          {ev.used_in_episode_id && !ev.is_episode_event && (
-            <p className="scene-sets-ws-empty" data-testid={`scene-set-event-not-episode-${ev.id}`}>Its episode is made from another event: that event's look is dressed.</p>
+          {/* An episode made from several events dresses its own event's
+              look; the others are named, each linking to its event (Evoni,
+              2026-10-16). Its event is the one its brief names, stamped or not. */}
+          {ev.episode_id && ev.is_episode_event && <DressedAngles episodeId={ev.episode_id} setId={set.id} onToast={onToast} />}
+          {ev.is_episode_event && ev.other_events?.length > 0 && (
+            <p className="scene-sets-ws-empty" data-testid={`scene-set-event-others-${ev.id}`}>
+              Also in this episode:{' '}
+              {ev.other_events.map((o, i) => (
+                <Fragment key={o.id}>{i > 0 && ', '}<Link to={`/shows/${o.show_id}/events/${o.id}`}>{o.name}</Link></Fragment>
+              ))}
+            </p>
+          )}
+          {ev.episode_id && !ev.is_episode_event && (
+            <p className="scene-sets-ws-empty" data-testid={`scene-set-event-not-episode-${ev.id}`}>
+              {ev.episode_event
+                ? <>Its episode is made from <Link to={`/shows/${ev.episode_event.show_id}/events/${ev.episode_event.id}`}>{ev.episode_event.name}</Link>: that event's look is dressed.</>
+                : <>Its episode is made from another event: that event's look is dressed.</>}
+            </p>
           )}
         </div>
       ))}

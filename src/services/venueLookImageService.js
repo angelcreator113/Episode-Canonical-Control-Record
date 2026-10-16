@@ -432,28 +432,75 @@ async function looksForSets(sequelize, setIds) {
 /**
  * S8 (Evoni, 2026-10-02; §8(dd), answer 1): the events using each set, for
  * the Scene Sets panel's "Generate this look": Map<setId, [{ id, name,
- * show_id, used_in_episode_id, look: { id, status, image_url } | null }]>.
+ * show_id, used_in_episode_id, episode_id, is_episode_event, episode_event,
+ * other_events, look: { id, status, image_url } | null }]>.
+ *
+ * An episode made from several events dresses its own event's look only
+ * (Evoni, 2026-10-16: the main event's look, and a line naming the others).
+ * The episode's event is the one its brief names, else its first stamped
+ * event (episodeEventIdSql), so:
+ *   episode_id        the episode this event's look dresses: one whose
+ *                     event this is (a brief naming it counts, stamped or
+ *                     not), else the episode stamped on it
+ *   is_episode_event  this event is that episode's event
+ *   episode_event     when it is not: the episode's event { id, name, show_id }
+ *   other_events      when it is: the episode's other events (stamped with
+ *                     it, or named by an older brief), { id, name, show_id }
  */
 async function eventsForSets(sequelize, setIds) {
   const ids = [...new Set((setIds || []).filter(Boolean))];
   const bySet = new Map();
   if (!ids.length) return bySet;
+  const { episodeEventIdSql } = require('../utils/episodeEventSql');
   const [rows] = await sequelize.query(
-    `SELECT e.id, e.name, e.show_id, e.used_in_episode_id, e.scene_set_id,
-            -- Whether the episode's event is this one: an episode made from
-            -- several events dresses its own event's look only (fourth audit).
-            (e.used_in_episode_id IS NOT NULL
-              AND ${require('../utils/episodeEventSql').episodeEventIdSql('e.used_in_episode_id')} = e.id) AS is_episode_event,
+    `WITH ev AS (
+       SELECT e.id, e.name, e.show_id, e.used_in_episode_id, e.scene_set_id, e.updated_at,
+              COALESCE(
+                (SELECT eb.episode_id FROM episode_briefs eb
+                  WHERE eb.event_id = e.id AND eb.deleted_at IS NULL
+                    AND ${episodeEventIdSql('eb.episode_id')} = e.id
+                  ORDER BY eb.created_at DESC LIMIT 1),
+                e.used_in_episode_id) AS episode_id
+         FROM world_events e
+        WHERE e.scene_set_id IN (:ids) AND e.deleted_at IS NULL)
+     SELECT ev.*, m.id AS main_id, m.name AS main_name, m.show_id AS main_show_id,
             l.id AS look_id, l.status AS look_status, l.image_url AS look_image_url
-       FROM world_events e
-       LEFT JOIN scene_set_looks l ON l.event_id = e.id AND l.scene_set_id = e.scene_set_id AND l.deleted_at IS NULL
-      WHERE e.scene_set_id IN (:ids) AND e.deleted_at IS NULL
-      ORDER BY e.updated_at DESC`,
+       FROM ev
+       LEFT JOIN world_events m ON ev.episode_id IS NOT NULL AND m.id = ${episodeEventIdSql('ev.episode_id')}
+       LEFT JOIN scene_set_looks l ON l.event_id = ev.id AND l.scene_set_id = ev.scene_set_id AND l.deleted_at IS NULL
+      ORDER BY ev.updated_at DESC`,
     { replacements: { ids } });
+
+  // The episodes' other events: stamped with the episode, or named by one of
+  // its briefs, other than its event.
+  const mainEpisodes = [...new Set(rows.filter((r) => r.main_id === r.id).map((r) => r.episode_id))];
+  const others = new Map();
+  if (mainEpisodes.length) {
+    const [linked] = await sequelize.query(
+      `SELECT DISTINCT w.id, w.name, w.show_id, x.episode_id
+         FROM (SELECT id, used_in_episode_id AS episode_id FROM world_events
+                WHERE used_in_episode_id IN (:eps) AND deleted_at IS NULL
+               UNION
+               SELECT event_id, episode_id FROM episode_briefs
+                WHERE episode_id IN (:eps) AND event_id IS NOT NULL AND deleted_at IS NULL) x
+         JOIN world_events w ON w.id = x.id AND w.deleted_at IS NULL
+        ORDER BY w.name`,
+      { replacements: { eps: mainEpisodes } });
+    for (const o of linked) {
+      if (!others.has(o.episode_id)) others.set(o.episode_id, []);
+      others.get(o.episode_id).push({ id: o.id, name: o.name, show_id: o.show_id });
+    }
+  }
+
   for (const r of rows) {
     if (!bySet.has(r.scene_set_id)) bySet.set(r.scene_set_id, []);
+    const isMain = Boolean(r.main_id) && r.main_id === r.id;
     bySet.get(r.scene_set_id).push({
-      id: r.id, name: r.name, show_id: r.show_id, used_in_episode_id: r.used_in_episode_id, is_episode_event: Boolean(r.is_episode_event),
+      id: r.id, name: r.name, show_id: r.show_id, used_in_episode_id: r.used_in_episode_id,
+      episode_id: r.episode_id || null,
+      is_episode_event: isMain,
+      episode_event: r.main_id && !isMain ? { id: r.main_id, name: r.main_name, show_id: r.main_show_id } : null,
+      other_events: isMain ? (others.get(r.episode_id) || []).filter((o) => o.id !== r.id) : [],
       look: r.look_id ? { id: r.look_id, status: r.look_status, image_url: r.look_image_url } : null,
     });
   }
