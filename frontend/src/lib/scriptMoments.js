@@ -229,6 +229,26 @@ const OFF_VERBS = new Set(['HIDE', 'REMOVE', 'CLOSE']);
  * is when the beat ends. Taking it away takes its screens with it, and a
  * phone screen opened while it is not on screen is listed in phoneDownAt.
  */
+// The show's own rule (Evoni, 2026-10-16): Lala's phone is on screen from
+// the moment the Start button is clicked in the Opening Ritual (beat 1) until
+// she travels to the event (beat 10, Event Travel); a script does not write
+// [UI:SHOW phone] for it. Clicking or showing the Start button brings it up.
+export const PHONE_UP_FROM_BEAT = 2;
+export const PHONE_UP_UNTIL_BEAT = 10;
+const isStartButton = (moment) => /^start(button)?$/.test(normKey(moment?.target)) && ['CLICK', 'TAP', 'SELECT', 'DISPLAY', 'SHOW'].includes(moment?.verb);
+
+/**
+ * Whether the phone is on screen as a beat starts: always from beat 2 through
+ * beat 10 (the show's rule above), down from beat 11 on unless the script
+ * brings it back, and otherwise as the beat before left it (`carried`).
+ */
+export function phoneUpAtBeat(beatNumber, carried = false, prevNumber = null) {
+  const n = Number(beatNumber);
+  if (n >= PHONE_UP_FROM_BEAT && n <= PHONE_UP_UNTIL_BEAT) return true;
+  if (n > PHONE_UP_UNTIL_BEAT && (prevNumber === null || Number(prevNumber) <= PHONE_UP_UNTIL_BEAT)) return false;
+  return carried;
+}
+
 export function beatOnScreen(lines = [], on = {}, { phoneUp = false } = {}) {
   const showing = new Map(); // name -> kind, in the order they came on
   if (phoneUp) showing.set(PHONE_NAME, 'device');
@@ -242,6 +262,8 @@ export function beatOnScreen(lines = [], on = {}, { phoneUp = false } = {}) {
     const shown = resolveMoment(moment, on);
     const name = shown ? shown.name : moment.target;
     if (shown && !used.has(name)) used.set(name, shown);
+    // The Start button brings the phone up (the show's rule above).
+    if (isStartButton(moment) && !up) { up = true; showing.set(PHONE_NAME, 'device'); }
     if (shown?.kind === 'icon') {
       // Tapping an icon (Task #2801) opens its screen on the phone.
       if (!up) phoneDownAt.push(i);

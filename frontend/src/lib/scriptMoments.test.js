@@ -3,7 +3,7 @@
  * and find the phone screen or overlay they name.
  */
 import { describe, test, expect } from 'vitest';
-import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, phoneIcons, EXPECTED_ON_SCREEN, closetBeat, hasPhoneMoment, beatSpeakers, phoneCheck } from './scriptMoments';
+import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, phoneIcons, EXPECTED_ON_SCREEN, closetBeat, hasPhoneMoment, beatSpeakers, phoneCheck, phoneUpAtBeat } from './scriptMoments';
 
 const SCREENS = [
   { id: 'closet', name: 'Closet', url: 'https://x/closet.png' },
@@ -222,3 +222,19 @@ test('beatSpeakers reads speakers as the tab does', () => {
   expect(beatSpeakers(['LALA: hi', 'Note: x', 'Lala (V.O.): y', 'Mary Jane: z', 'Location: the gala', 'Me: go'])).toEqual(['Lala', 'Mary Jane', 'Prime']);
 });
 
+
+// The show's rule (Evoni, 2026-10-16): the phone is on screen from the Start
+// button (beat 1) until Event Travel (beat 10).
+describe('the phone from the Start button to Event Travel', () => {
+  test('phoneUpAtBeat', () => {
+    expect(phoneUpAtBeat(1, false)).toBe(false);
+    expect(phoneUpAtBeat(2, false, 1)).toBe(true);
+    expect(phoneUpAtBeat(10, false, 9)).toBe(true);
+    expect(phoneUpAtBeat(11, true, 10)).toBe(false);
+    expect(phoneUpAtBeat(12, true, 11)).toBe(true);
+  });
+  test('the Start button brings the phone up in beat 1', () => {
+    expect(beatOnScreen(['[UI:DISPLAY Show Main Title]', '[UI:DISPLAY Start button]'], {}).phoneUpAtEnd).toBe(true);
+    expect(beatOnScreen(['[UI:DISPLAY Show Main Title]'], {}).phoneUpAtEnd).toBe(false);
+  });
+});

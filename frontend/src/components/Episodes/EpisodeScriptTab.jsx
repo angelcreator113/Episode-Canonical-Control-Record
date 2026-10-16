@@ -9,7 +9,7 @@ import { episodePlanning } from '../../utils/episodePlanning';
 import { scriptInputs, mustCover, scriptPeople } from '../../lib/episodeScript';
 import { beatState } from '../../lib/beatState';
 import { moveBeat, moveLine, dropIndex, replaceBeat, appendLine, insertLine } from '../../lib/scriptBeatOrder';
-import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers, phoneCheck, messageLine, closetBeat, wearFlags, uncuedPieces, lastGettingReadyIndex, todoModeAt, deliveredAt, dealCueFlags, TODO_MODE_LABELS } from '../../lib/scriptMoments';
+import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, phoneUpAtBeat, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers, phoneCheck, messageLine, closetBeat, wearFlags, uncuedPieces, lastGettingReadyIndex, todoModeAt, deliveredAt, dealCueFlags, TODO_MODE_LABELS } from '../../lib/scriptMoments';
 import { isScreen, isIcon, isProduction } from '../../lib/overlayUtils';
 import { draftLine, lalaLine, lalaLineSlots } from '../../lib/lalaLineDraft';
 import { headerNumber, BEAT_SPLIT, HAS_BEAT_HEADER, normalizeBeatHeaders } from '../../lib/beatLabelNumber';
@@ -1473,7 +1473,13 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // Whether Lala's phone is on screen as each beat starts: it stays up from
   // the beat that brings it up until one takes it away (Task #2797).
   const phoneUpAtStart = [];
-  beats.reduce((up, b, i) => { phoneUpAtStart[i] = up; return beatOnScreen(b.lines, onScreen, { phoneUp: up }).phoneUpAtEnd; }, false);
+  // From the Start button to Event Travel the phone is up by the show's rule
+  // (lib/scriptMoments.js phoneUpAtBeat; Evoni, 2026-10-16).
+  beats.reduce((up, b, i) => {
+    const start = phoneUpAtBeat(b.number, up, i > 0 ? beats[i - 1].number : null);
+    phoneUpAtStart[i] = start;
+    return beatOnScreen(b.lines, onScreen, { phoneUp: start }).phoneUpAtEnd;
+  }, false);
 
   // The beat list and pills (Task #2881): the script's own beats, each marked
   // when it has a phone moment; the open beat's context for the chips.

@@ -89,3 +89,17 @@ test('a phone map that fails to load leaves the script as written', async () => 
   expect(out.coverage.phone_steps).toBe(0);
   expect(console.error).toHaveBeenCalledWith('[ScriptGen] phone map failed (non-blocking):', 'down');
 });
+
+// The show's rules (Evoni, 2026-10-16): the phone is up from the Start button
+// to Event Travel; the invitation is read in full; pieces go on one by one.
+test('the writer reads the show rules', async () => {
+  const create = jest.fn(async () => ({ content: [{ text: FULL }] }));
+  mockAnthropic(create);
+  const { generateGroundedScript } = require('../../../src/services/groundedScriptGeneratorService');
+  await generateGroundedScript('ep1', 'show-1', models());
+  const prompt = create.mock.calls[0][0].messages[0].content;
+  expect(prompt).toContain('═══ SHOW RULES ═══');
+  expect(prompt).toContain("Lala's phone is on screen from the moment the Start button is clicked in Beat 1 until she travels to the event in Beat 10");
+  expect(prompt).toContain('JAWIHP reads the whole invitation aloud, every word of it');
+  expect(prompt).toContain('every piece of the look is picked and put on one at a time');
+});
