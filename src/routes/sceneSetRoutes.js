@@ -2284,29 +2284,38 @@ router.post('/:id/cascade-regenerate', validateUUIDParam('id'), requireAuth, aiR
     const briefEvent = await readBriefEvent(req.body?.event_id, set);
     if (briefEvent.error) return res.status(briefEvent.status).json({ success: false, error: briefEvent.error });
 
-    // Optionally update the description first
-    if (req.body.canonical_description !== undefined) {
-      await set.update({ canonical_description: req.body.canonical_description });
-    }
-
-    // Mark as generating: one regeneration of the set at a time.
+    // Mark as generating: one regeneration of the set at a time. The claim
+    // comes first: a refused regeneration (409) saved the new description
+    // anyway, without the pictures made from it (fourth audit, 2026-10-15).
+    const statusBefore = set.generation_status && set.generation_status !== 'generating' ? set.generation_status : (set.base_still_url ? 'complete' : 'pending');
     if (!(await claimGeneration(res, 'set', set.id, `"${set.name}"`))) return;
 
-    await ensureGenerationJobsTable();
-    // S2: the base takes the overrides; its angles inherit them from the
-    // base's brief. S3: likewise the event chosen on the brief.
-    const payload = { force: true };
-    if (briefOverrides.value) payload.overrides = briefOverrides.value;
-    if (briefEvent.value !== undefined) payload.event_id = briefEvent.value;
-    const job = await GenerationJob.create({
-      job_type: 'cascade_regenerate',
-      scene_set_id: set.id,
-      payload,
-      // One attempt: a retry (a failure after the paid base, or a worker
-      // restart mid-run) paid for the base and every angle again (fourth
-      // audit, 2026-10-15).
-      max_attempts: 1,
-    });
+    let job;
+    try {
+      if (req.body.canonical_description !== undefined) {
+        await set.update({ canonical_description: req.body.canonical_description });
+      }
+      await ensureGenerationJobsTable();
+      // S2: the base takes the overrides; its angles inherit them from the
+      // base's brief. S3: likewise the event chosen on the brief.
+      const payload = { force: true };
+      if (briefOverrides.value) payload.overrides = briefOverrides.value;
+      if (briefEvent.value !== undefined) payload.event_id = briefEvent.value;
+      job = await GenerationJob.create({
+        job_type: 'cascade_regenerate',
+        scene_set_id: set.id,
+        payload,
+        // One attempt: a retry (a failure after the paid base, or a worker
+        // restart mid-run) paid for the base and every angle again (fourth
+        // audit, 2026-10-15).
+        max_attempts: 1,
+      });
+    } catch (queueErr) {
+      // Nothing was queued: the set is not left generating.
+      await SceneSet.update({ generation_status: statusBefore }, { where: { id: set.id, generation_status: 'generating' } })
+        .catch((releaseErr) => console.error('Scene Sets cascade: could not release the set:', releaseErr.message));
+      throw queueErr;
+    }
 
     res.status(202).json({ success: true, data: { jobId: job.id, status: 'queued' } });
   } catch (err) {
