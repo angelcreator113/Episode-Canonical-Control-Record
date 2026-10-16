@@ -15,8 +15,9 @@ import { Loader, Sparkles, Upload, X } from 'lucide-react';
 import api from '../../services/api';
 import './LookVariants.css';
 
-// While a slot generates, the row refreshes every pollMs; the server marks a
-// run stuck for 10 minutes failed, so the refresh ends.
+// While a slot generates, the row refreshes every pollMs; the server ends a
+// run stuck for 10 minutes (failed, or back to its previous image), so the
+// refresh ends.
 export const POLL_MS = 4000;
 const POLL_MAX = 180;
 
@@ -40,8 +41,10 @@ export default function LookVariants({ setId, onToast, pollMs = POLL_MS }) {
       for (const slot of next?.[kind] || []) {
         const before = (prev?.[kind] || []).find((s) => s.value === slot.value);
         if (before?.variant?.status !== 'generating') continue;
-        if (slot.variant?.status === 'complete') toastRef.current?.(`${slot.label} is ready`);
-        if (slot.variant?.status === 'failed') toastRef.current?.(`${slot.label} could not be generated${slot.variant.error ? `: ${slot.variant.error}` : ''}`, 'error');
+        // A failed re-run keeps the previous image: complete, with the error.
+        const failed = slot.variant?.status === 'failed' || (slot.variant?.status === 'complete' && slot.variant.error);
+        if (slot.variant?.status === 'complete' && !failed) toastRef.current?.(`${slot.label} is ready`);
+        if (failed) toastRef.current?.(`${slot.label} could not be generated${slot.variant.error ? `: ${slot.variant.error}` : ''}`, 'error');
       }
     }
   };
@@ -170,6 +173,10 @@ export default function LookVariants({ setId, onToast, pollMs = POLL_MS }) {
           {v?.source === 'uploaded' && v.status === 'complete' ? ' · uploaded' : ''}
         </figcaption>
         {v?.status === 'failed' && <span className="lv-error" title={v.error || ''}>Failed</span>}
+        {v?.status === 'complete' && v.error && <span className="lv-error" title={v.error}>Last try failed</span>}
+        {v?.status === 'complete' && v.stale && (
+          <span className="lv-error" title="Made from an old everyday look: beats don't use it" data-testid={`look-variant-stale-${kind}-${slot.value}`}>Old</span>
+        )}
         {v?.status !== 'generating' && (
           <span className="lv-actions">
             <button type="button" className="lv-btn" disabled={isBusy || seasonBlocked}

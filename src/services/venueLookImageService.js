@@ -37,8 +37,11 @@ const STEPS = Object.freeze({ LOOK: 'look', BASE: 'base', AWAITING_APPROVAL: 'aw
 // DJ bug 1 (Evoni, 2026-10-02, §8(hh)): a look or base still generating
 // after this long is marked failed with its reason when it is next read
 // (a restart or a hung provider call leaves nothing else to finish it).
-const STUCK_AFTER_MS = 10 * 60 * 1000;
-const STUCK_REASON = 'Timed out: no image after 10 minutes';
+// The same window as the Scene Sets generation claim: a 10-minute sweep
+// beside the 15-minute claim marked a live base run failed, and a second
+// paid run could start (audit, 2026-10-15).
+const { STALE_MS: STUCK_AFTER_MS, GENERATION_STALE_MINUTES } = require('./generationClaimService');
+const STUCK_REASON = `Timed out: no image after ${GENERATION_STALE_MINUTES} minutes`;
 
 class VenueLookImageError extends Error {
   constructor(message, status = 400, code = 'LOOK_IMAGE_INVALID', extra = {}) {
@@ -257,7 +260,7 @@ async function startLook(models, { showId, eventId, chosenSetId = null, override
     } catch (err) {
       console.error(`[VenueLookImage] look for event ${event.id} on "${set.name}" failed:`, err.message);
       await sequelize.query(
-        `UPDATE scene_set_looks SET status = 'failed', error = :error, updated_at = NOW() WHERE ${OWN_LOOK_RUN}`,
+        `UPDATE scene_set_looks SET status = ${KEEP_PREVIOUS_IMAGE}, error = :error, updated_at = NOW() WHERE ${OWN_LOOK_RUN}`,
         { replacements: { id: look.id, error: String(err.message || err).slice(0, 500) } });
     }
   };
@@ -299,6 +302,23 @@ async function uploadLook(models, { showId, eventId, chosenSetId = null, storeIm
 
 // The row a look's run may write: its own, while it is still the run.
 const OWN_LOOK_RUN = `id = :id AND status = 'generating' AND source = 'generated' AND deleted_at IS NULL`;
+
+// A run that failed (or was stuck) on a look that already had an image
+// leaves that image in use, with the error shown beside it: marked failed,
+// the episode stopped using a good look (audit, 2026-10-15).
+const KEEP_PREVIOUS_IMAGE = `CASE WHEN image_url IS NOT NULL THEN 'complete' ELSE 'failed' END`;
+
+/**
+ * SQL: true when a look (alias sl) is a generated edit of a base its venue
+ * (alias loc) no longer has approved. The episode does not use it
+ * (dressedAngleService.episodeLooks); the lists say so with stale.
+ */
+const LOOK_STALE_SQL = (sl, loc) => `(${sl}.source = 'generated'
+  AND ${sl}.brief->'approved_base'->>'image_url' IS NOT NULL
+  AND ${sl}.brief->'approved_base'->>'image_url' IS DISTINCT FROM ${loc}.approved_base_image_url)`;
+const LOOK_LOCATION_JOIN = (sl, s, loc) => `LEFT JOIN world_locations ${loc}
+  ON ${loc}.id = COALESCE(NULLIF(${sl}.brief->>'world_location_id', '')::uuid, ${s}.world_location_id)
+ AND ${loc}.deleted_at IS NULL`;
 
 /**
  * A look with a new image: its dressed angles were cut from the old one,
@@ -345,14 +365,17 @@ async function eventLook(sequelize, { showId, eventId }) {
   }
   const location = await loadLocation(sequelize, set.world_location_id || venueLocationId(event));
   const readLook = async () => (await sequelize.query(
-    `SELECT id, status, source, image_url, error, generated_at, updated_at FROM scene_set_looks
-      WHERE scene_set_id = :setId AND event_id = :eventId AND deleted_at IS NULL`,
+    `SELECT sl.id, sl.status, sl.source, sl.image_url, sl.error, sl.generated_at, sl.updated_at,
+            ${LOOK_STALE_SQL('sl', 'loc')} AS stale
+       FROM scene_set_looks sl JOIN scene_sets s ON s.id = sl.scene_set_id
+       ${LOOK_LOCATION_JOIN('sl', 's', 'loc')}
+      WHERE sl.scene_set_id = :setId AND sl.event_id = :eventId AND sl.deleted_at IS NULL`,
     { replacements: { setId: set.id, eventId: event.id } }))[0][0];
   let look = await readLook();
   if (look?.status === 'generating' && isStuck(look.updated_at)) {
     console.warn(`[VenueLookImage] look ${look.id} stuck since ${new Date(look.updated_at).toISOString()}; marked failed`);
     await sequelize.query(
-      `UPDATE scene_set_looks SET status = 'failed', error = :error, updated_at = NOW() WHERE id = :id AND status = 'generating'`,
+      `UPDATE scene_set_looks SET status = ${KEEP_PREVIOUS_IMAGE}, error = :error, updated_at = NOW() WHERE id = :id AND status = 'generating'`,
       { replacements: { id: look.id, error: STUCK_REASON } });
     look = await readLook();
   }
@@ -374,9 +397,12 @@ async function looksForSets(sequelize, setIds) {
   const bySet = new Map();
   if (!ids.length) return bySet;
   const [rows] = await sequelize.query(
-    `SELECT l.id, l.scene_set_id, l.event_id, l.status, l.source, l.image_url, l.generated_at,
-            e.name AS event_name, e.show_id AS event_show_id
+    `SELECT l.id, l.scene_set_id, l.event_id, l.status, l.source, l.image_url, l.error, l.generated_at,
+            e.name AS event_name, e.show_id AS event_show_id,
+            ${LOOK_STALE_SQL('l', 'loc')} AS stale
        FROM scene_set_looks l JOIN world_events e ON e.id = l.event_id AND e.deleted_at IS NULL
+       JOIN scene_sets s ON s.id = l.scene_set_id
+       ${LOOK_LOCATION_JOIN('l', 's', 'loc')}
       WHERE l.scene_set_id IN (:ids) AND l.deleted_at IS NULL
       ORDER BY l.updated_at DESC`,
     { replacements: { ids } });

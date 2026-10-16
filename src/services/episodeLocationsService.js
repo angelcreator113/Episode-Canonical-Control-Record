@@ -245,10 +245,10 @@ async function resolveStartLocations(sequelize, { showId, event, locations }) {
 }
 
 /** Q12: the show's saved home and closet sets ("Make default" in Scene Sets). */
-async function saveSceneDefaults(sequelize, { showId, body }) {
-  const [[show]] = await sequelize.query('SELECT id, metadata FROM shows WHERE id = :showId', { replacements: { showId } });
+async function saveSceneDefaults(sequelize, { showId, body, leadCharacterId }) {
+  const [[show]] = await sequelize.query('SELECT id FROM shows WHERE id = :showId', { replacements: { showId } });
   if (!show) throw new EpisodeLocationsError('Show not found', 404, 'SHOW_NOT_FOUND');
-  const next = { ...readSceneDefaults(show.metadata) };
+  const changes = {};
   for (const [role, key] of Object.entries(DEFAULT_ROLES)) {
     if (body?.[key] === undefined) continue;
     const id = body[key] || null;
@@ -258,12 +258,27 @@ async function saveSceneDefaults(sequelize, { showId, body }) {
       if (!set) throw new EpisodeLocationsError(`The ${role} scene set no longer exists`, 404, 'SCENE_SET_NOT_FOUND');
       if (set.show_id && String(set.show_id) !== String(showId)) throw new EpisodeLocationsError(`"${set.name}" belongs to another show`);
     }
-    next[key] = id;
+    changes[key] = id;
   }
-  const metadata = { ...(show.metadata || {}), scene_defaults: next };
-  await sequelize.query('UPDATE shows SET metadata = CAST(:metadata AS json), updated_at = NOW() WHERE id = :showId',
-    { replacements: { metadata: JSON.stringify(metadata), showId } });
-  return next;
+  // One locked read and a merge in the database, as setLead writes: the
+  // whole metadata read and written back overwrote a lead change made
+  // meanwhile (audit, 2026-10-15). leadCharacterId: the lead the caller
+  // saved this for (the lead's home or closet), checked under the lock.
+  return sequelize.transaction(async (transaction) => {
+    const [[locked]] = await sequelize.query('SELECT metadata FROM shows WHERE id = :showId FOR UPDATE', { replacements: { showId }, transaction });
+    const metadata = typeof locked.metadata === 'string' ? JSON.parse(locked.metadata || '{}') : (locked.metadata || {});
+    if (leadCharacterId !== undefined && String(metadata.lead_character_id || '') !== String(leadCharacterId || '')) {
+      throw new EpisodeLocationsError('The show\'s lead changed meanwhile. Try again.', 409, 'LEAD_CHANGED');
+    }
+    const next = { ...readSceneDefaults(metadata), ...changes };
+    await sequelize.query(
+      `UPDATE shows SET metadata = (COALESCE(metadata::jsonb, '{}'::jsonb)
+                                     || jsonb_build_object('scene_defaults', CAST(:defaults AS jsonb)))::json,
+                        updated_at = NOW()
+        WHERE id = :showId`,
+      { replacements: { defaults: JSON.stringify(next), showId }, transaction });
+    return next;
+  });
 }
 
 /**

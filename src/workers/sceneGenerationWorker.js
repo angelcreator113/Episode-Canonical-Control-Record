@@ -18,6 +18,7 @@
 const { Op } = require('sequelize');
 const { GenerationJob, SceneSet, SceneAngle, sequelize } = require('../models');
 const sceneGenService = require('../services/sceneGenerationService');
+const { claimRow } = require('../services/generationClaimService');
 
 const POLL_INTERVAL_MS = parseInt(process.env.GEN_WORKER_POLL_MS, 10) || 3000;
 const CONCURRENCY = parseInt(process.env.GEN_WORKER_CONCURRENCY, 10) || 1;
@@ -124,11 +125,26 @@ async function processJob(job) {
         const angleResults = [];
         const freshSet = await SceneSet.findByPk(set.id);
         for (const angle of sceneGenService.generationOrder(set.angles)) {
+          // The cascade claims each angle as the routes do: one already
+          // running (its own Generate, Generate All) is left to that run,
+          // not paid for twice (audit, 2026-10-15).
+          let claimed = false;
           try {
+            claimed = await claimRow(sequelize, 'angle', angle.id);
+            if (!claimed) {
+              angleResults.push({ id: angle.id, label: angle.angle_label, success: false, skipped: true, error: 'Already being generated' });
+              continue;
+            }
             const freshAngle = await SceneAngle.findByPk(angle.id);
             await sceneGenService.generateAngle(freshAngle, freshSet, models);
             angleResults.push({ id: angle.id, label: angle.angle_label, success: true });
           } catch (err) {
+            // Refused before its generation began (no base, no zone picture):
+            // not left generating.
+            if (claimed) {
+              await SceneAngle.update({ generation_status: 'failed' }, { where: { id: angle.id, generation_status: 'generating' } })
+                .catch((updateErr) => console.error(`[GenWorker] Failed to release angle ${angle.id}:`, updateErr.message));
+            }
             angleResults.push({ id: angle.id, label: angle.angle_label, success: false, error: err.message });
           }
         }
@@ -179,8 +195,10 @@ async function processJob(job) {
       }
     }
 
-    // If the job was for an angle, reset its status on permanent failure
-    if (!canRetry && job.scene_angle_id) {
+    // If the job was for an angle, reset its status on permanent failure.
+    // Not for a video: the angle's still is complete, and marking it failed
+    // had Generate All pay for the still again (audit, 2026-10-15).
+    if (!canRetry && job.scene_angle_id && job.job_type !== 'generate_angle_video') {
       try {
         await SceneAngle.update(
           { generation_status: 'failed' },
@@ -265,4 +283,4 @@ function stop() {
   console.log('🎬 [GenWorker] Stopping...');
 }
 
-module.exports = { start, stop };
+module.exports = { start, stop, processJob };
