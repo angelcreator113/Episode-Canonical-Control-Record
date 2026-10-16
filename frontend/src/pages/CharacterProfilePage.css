@@ -1462,3 +1462,146 @@ a.ch-trail-text:hover { text-decoration: underline; }
 .ch-gen-field { display: grid; gap: 4px; font-size: 13px; }
 .ch-gen-field select, .ch-gen-field textarea { font: inherit; padding: 6px 8px; min-height: 40px; border: 1px solid var(--lala-lavender-line); border-radius: 10px; background: var(--surface-card); color: var(--text-primary); max-width: 100%; box-sizing: border-box; }
 .ch-gen-field select { justify-self: start; }
+
+/* ═══ Pink-and-gold profile (Evoni's Marisol Vega mock, 2026-10-16) ═════════
+   Matches the Relationship Engine, Asset Library, Template Studio and The
+   Cast. Tokens only, like everything below the marker above. */
+.ch-page {
+  max-width: 1480px; padding: 12px; gap: 14px;
+  background: linear-gradient(165deg, var(--accent-subtle) 0%, var(--lala-lavender-soft) 55%, var(--lala-parchment) 100%);
+}
+
+/* Hero: a lavender-to-pink banner, or their cover photo under a dark wash. */
+.ch-hero {
+  position: relative; overflow: hidden; isolation: isolate; padding: 26px 28px; border-radius: 22px;
+  border: 1.5px solid var(--lala-gold-line); box-shadow: var(--shadow-lg);
+  background: linear-gradient(115deg, var(--lala-lavender-dark) 0%, var(--accent-dark) 62%, var(--accent) 100%);
+}
+.ch-hero-cover { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; }
+.ch-hero.has-cover::before {
+  content: ''; position: absolute; inset: 0; z-index: -1;
+  background: linear-gradient(100deg,
+    color-mix(in srgb, var(--lala-lavender-dark) 92%, transparent) 0%,
+    color-mix(in srgb, var(--accent-dark) 72%, transparent) 55%,
+    color-mix(in srgb, var(--accent-dark) 25%, transparent) 100%);
+}
+.ch-avatar {
+  width: 148px; height: 148px; border-radius: 26px; overflow: hidden;
+  border: 3px solid var(--lala-gold-line); box-shadow: var(--shadow-xl);
+  background: linear-gradient(135deg, var(--lala-gold-soft), var(--accent-subtle));
+}
+.ch-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.ch-hero .ch-back { color: var(--accent-subtle); }
+.ch-hero .ch-name { font-size: 42px; color: var(--text-inverse); }
+.ch-hero .ch-aka, .ch-hero .ch-sub { color: var(--accent-subtle); }
+.ch-hero .ch-chip { background: var(--surface-card); color: var(--lala-lavender-text); }
+.ch-hero .ch-chip.is-blue { background: var(--info-bg); color: var(--info-text); }
+.ch-hero .ch-chip.is-green { background: var(--success-bg); color: var(--success-text); }
+.ch-hero .ch-chip.is-warn { background: var(--warning-bg); color: var(--warning-text); }
+.ch-hero .ch-chip.is-plain { background: var(--accent-subtle); color: var(--accent-dark); }
+.ch-alive {
+  flex: 0 1 300px; padding: 16px 18px; border-radius: 18px;
+  background: var(--surface-card); color: var(--text-primary); border: 1.5px solid var(--lala-gold-line); box-shadow: var(--shadow-md);
+}
+.ch-step-bar { height: 7px; }
+.ch-btn-deepen { background: var(--accent-dark); color: var(--text-inverse); box-shadow: var(--shadow-sm); }
+.ch-btn-deepen:hover:not(:disabled) { background: var(--lala-lavender); }
+.ch-alive .ch-link { display: inline-flex; align-items: center; gap: 5px; }
+
+/* Tabs: one gold-edged bar with icons. */
+.ch-tabs {
+  align-self: stretch; padding: 6px; border-radius: 18px; background: var(--surface-card);
+  border: 1.5px solid var(--lala-gold-line); box-shadow: var(--shadow-sm);
+}
+.ch-tab { display: inline-flex; align-items: center; gap: 8px; padding: 8px 18px; border-radius: 14px; }
+.ch-tab:hover { background: var(--accent-subtle); }
+.ch-tab.is-on { background: var(--accent-dark); color: var(--text-inverse); }
+
+/* Overview: three columns of gold-edged cards. */
+.ch-overview { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.ch-col { gap: 14px; }
+.ch-card { border: 1.5px solid var(--lala-gold-line); border-radius: 18px; box-shadow: var(--shadow-sm); }
+.ch-kicker { display: inline-flex; align-items: center; gap: 6px; }
+
+.ch-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.ch-icon-btn {
+  display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
+  border: 1.5px solid var(--lala-gold-line); background: var(--surface-card); color: var(--accent-dark);
+}
+.ch-icon-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* Profile images */
+.ch-photos { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 12px; }
+.ch-photo { margin: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ch-photo-frame {
+  display: grid; place-items: center; overflow: hidden; border-radius: 14px; border: 1.5px solid var(--lala-gold-line);
+  background: linear-gradient(160deg, var(--lala-lavender-soft), var(--accent-subtle));
+}
+.ch-photo.is-portrait .ch-photo-frame { aspect-ratio: 4 / 5; }
+.ch-photo.is-cover .ch-photo-frame { aspect-ratio: 16 / 10; }
+.ch-photo-frame img { width: 100%; height: 100%; object-fit: cover; }
+.ch-photo-empty { padding: 10px; text-align: center; font-size: 12px; font-weight: 600; color: var(--lala-lavender-text); }
+.ch-photo-actions { display: flex; align-items: center; gap: 6px; }
+.ch-photo-pick { cursor: pointer; font-size: 12px; }
+.ch-photo-pick.is-busy { opacity: 0.6; cursor: progress; }
+.ch-photo-pick:focus-within { outline: 2px solid var(--accent-dark); outline-offset: 2px; }
+
+/* Stats & influence */
+.ch-stats { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); gap: 8px; }
+.ch-stat { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+.ch-stat-ring {
+  display: grid; place-items: center; width: 50px; height: 50px; border-radius: 50%;
+  border: 3px solid var(--accent); background: var(--surface-card); color: var(--accent-dark);
+}
+.ch-stat-value { font-family: var(--font-prose); font-size: 22px; line-height: 1.1; color: var(--text-primary); overflow-wrap: anywhere; }
+.ch-stat-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.ch-stat.is-lavender .ch-stat-ring { border-color: var(--lala-lavender); color: var(--lala-lavender-text); }
+.ch-stat.is-gold .ch-stat-ring     { border-color: var(--lala-gold); color: var(--lala-gold-text); }
+.ch-stat.is-green .ch-stat-ring    { border-color: var(--success); color: var(--success-text); }
+.ch-stat.is-blue .ch-stat-ring     { border-color: var(--info); color: var(--info-text); }
+
+/* Their events */
+.ch-events { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ch-event {
+  display: grid; grid-template-columns: 44px minmax(0, 1fr) 20px; align-items: center; gap: 12px; padding: 10px 12px;
+  border-radius: 14px; border: 1px solid var(--lala-gold-line); background: var(--lala-gold-soft); color: var(--text-primary); text-decoration: none;
+}
+.ch-event:hover { box-shadow: var(--shadow-md); }
+.ch-event-badge { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--surface-card); color: var(--lala-gold-text); }
+.ch-event-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ch-event-text strong { font-size: 14px; overflow-wrap: anywhere; }
+.ch-event-meta { font-size: 12px; color: var(--text-secondary); }
+
+/* Their people */
+.ch-ties { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.ch-tie { display: grid; grid-template-columns: 40px minmax(0, 1fr) 72px; align-items: center; gap: 10px; }
+.ch-tie-avatar {
+  display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%;
+  background: var(--accent-subtle); color: var(--accent-dark); border: 1.5px solid var(--lala-gold-line);
+  font-family: var(--font-prose); font-weight: 700;
+}
+.ch-tie-text { display: flex; flex-direction: column; min-width: 0; }
+.ch-tie-text strong { font-size: 14px; overflow-wrap: anywhere; }
+.ch-tie-text span { font-size: 12px; color: var(--text-secondary); }
+.ch-tie-meter { height: 7px; border-radius: 999px; background: var(--lala-lavender-soft); overflow: hidden; }
+.ch-tie-meter > span { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+
+@media (max-width: 1200px) {
+  .ch-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ch-overview > .ch-col:nth-child(3) { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+}
+@media (max-width: 900px) {
+  .ch-overview { grid-template-columns: 1fr; }
+  .ch-overview > .ch-col:nth-child(3) { grid-column: auto; display: flex; }
+  .ch-tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+  .ch-tab { flex-shrink: 0; }
+}
+@media (max-width: 560px) {
+  .ch-page { padding: 8px; }
+  .ch-hero { padding: 18px 16px; flex-direction: column; align-items: flex-start; }
+  .ch-hero-text { flex: none; width: 100%; }
+  .ch-avatar { width: 104px; height: 104px; font-size: 40px; }
+  .ch-hero .ch-name { font-size: 30px; }
+  .ch-alive { flex: 1 1 auto; width: 100%; }
+  .ch-photos { grid-template-columns: 1fr 1fr; }
+}
