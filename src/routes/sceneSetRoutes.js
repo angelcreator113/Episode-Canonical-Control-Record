@@ -3050,10 +3050,17 @@ router.post('/:id/mood-variants', validateUUIDParam('id'), requireAuth, async (r
     }
 
     const variants = await sceneGenService.generateMoodVariants(sourceUrl, set.id, sourceLabel, moods || null);
+    if (Object.keys(variants).length === 0) {
+      return res.status(400).json({ success: false, error: 'No mood variant could be made from this image.' });
+    }
 
-    // Store mood variants in visual_language
-    const vl = set.visual_language || {};
-    vl.mood_variants = { ...(vl.mood_variants || {}), [sourceLabel]: variants };
+    // Store mood variants in visual_language. A new object: the stored one
+    // changed in place compared equal to itself, so nothing was saved
+    // (audit, 2026-10-15). The variants of each source are merged, so one
+    // mood made after another keeps the first.
+    const vl = { ...(set.visual_language || {}) };
+    const before = vl.mood_variants || {};
+    vl.mood_variants = { ...before, [sourceLabel]: { ...(before[sourceLabel] || {}), ...variants } };
     await set.update({ visual_language: vl });
 
     res.json({
