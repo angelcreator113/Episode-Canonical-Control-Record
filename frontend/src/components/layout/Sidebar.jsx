@@ -60,6 +60,8 @@ function buildNav() {
             // Story Calendar: the novel's dates. The cultural calendar is Culture &
             // Events; the production schedule is Producer Mode's Season Plan (IA-04).
             { icon: '📅', label: 'Story Calendar', route: '/story-calendar' },
+            // Story Evaluation: write a scene three ways, judge, write back to a chapter.
+            { icon: '⚖️', label: 'Story Evaluation', route: '/story-evaluation' },
           ],
         },
         { icon: '👥', label: 'Characters', route: '/character-registry?view=world' },
