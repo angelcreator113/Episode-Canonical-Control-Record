@@ -290,6 +290,15 @@ module.exports = (sequelize) => {
       allowNull: true,
     },
 
+    // Their facts (Character Consistency Engine step 2; services/characterFacts):
+    // { income: { amount, cadence, source }, occupation, major_possessions: [],
+    //   undecided: [fact keys not decided yet] }. Handle, followers and account
+    // status live on the feed profile and the follower ledger, not here.
+    canon_facts: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+
     /* ── Therapy Dilemma Profile fields ── */
     therapy_primary_defense: {
       type: DataTypes.TEXT,
