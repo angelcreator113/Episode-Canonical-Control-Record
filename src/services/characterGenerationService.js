@@ -223,7 +223,7 @@ const INTERIOR_MODELS = ['claude-sonnet-4-6'];
  * deepened), so the interior grows out of it rather than from a bare spark.
  * `only` limits the answer to those keys.
  */
-async function generateInteriorArchitecture({ name, vibe, role, worldString, bookString, castString, age, known = null, only = null, factsBlock = '' }) {
+async function generateInteriorArchitecture({ name, vibe, role, worldString, bookString, castString, age, known = null, only = null, factsBlock = '', seed = '' }) {
   const isMinor = age != null && age < 18;
   const minorRule = isMinor
     ? `\nIMPORTANT — MINOR SAFEGUARD: This character is a minor (age ${age}). Do NOT generate "sexuality_desire" content. Set it to: "Dimension deferred — character is a minor."\n`
@@ -239,7 +239,7 @@ async function generateInteriorArchitecture({ name, vibe, role, worldString, boo
   const userMessage = `${worldString}
 ${bookString || ''}
 ${castString || ''}
-${minorRule}${knownBlock}${factsBlock ? `\n${factsBlock}\n` : ''}${onlyRule}
+${minorRule}${knownBlock}${seed ? `\n${seed}\n` : ''}${factsBlock ? `\n${factsBlock}\n` : ''}${onlyRule}
 Character: ${name}
 Vibe: ${vibe}
 Role in story: ${role}`;
@@ -394,6 +394,8 @@ function withEvents(known, events) {
  * Returns the column values to write; writes nothing itself.
  */
 async function generateMissingInterior({ character, feedProfile = null, events = [], fields, factsBlock = '' }) {
+  // Their typology seed: the root the inner life grows from (step 6a; services/characterTypology).
+  const seed = require('./characterTypology').seedBlock(character.typology);
   const name = character.display_name || character.selected_name || 'this character';
   const vibe = character.prose_overview || character.description || feedProfile?.content_persona || feedProfile?.bio || 'not written yet';
   const role = character.role_label || character.role_type || 'supporting';
@@ -404,6 +406,7 @@ async function generateMissingInterior({ character, feedProfile = null, events =
     known: withEvents(characterContext(character, feedProfile), events),
     only: fields.map((f) => (f === 'selected_name' ? 'real_name' : f)),
     factsBlock,
+    seed,
   });
   return interiorUpdates(generated, fields);
 }
