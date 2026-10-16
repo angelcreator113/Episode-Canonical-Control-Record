@@ -11,8 +11,9 @@ import React, { useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import api from '../../services/api';
 import { Avatar } from './PulsePost';
+import { atHandle } from '../../pages/feed/feedConstants';
 
-const nameOf = (p) => p?.display_name || (p?.handle ? `@${p.handle}` : 'Someone');
+const nameOf = (p) => p?.display_name || (p?.handle ? `${atHandle(p.handle)}` : 'Someone');
 
 /** The other one in a conversation, from Lala's side. */
 export const otherOf = (thread, meId) => thread.profiles.find((p) => Number(p.id) !== Number(meId)) || thread.profiles[0] || {};
@@ -52,7 +53,7 @@ export default function PulseMessages({ show, lala, viewAt }) {
         <header className="pl-msg-head">
           <button type="button" className="pl-msg-back" onClick={() => setOpenId(null)}><ArrowLeft size={18} aria-hidden="true" /> Messages</button>
           <Avatar name={nameOf(other)} size={32} />
-          <b>{nameOf(other)}</b>{other.handle && <span className="pl-msg-handle">@{other.handle}</span>}
+          <b>{nameOf(other)}</b>{other.handle && <span className="pl-msg-handle">{atHandle(other.handle)}</span>}
         </header>
         <ol className="pl-msg-list">
           {open.messages.map((m) => (

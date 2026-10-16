@@ -16,9 +16,10 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../services/api';
 import { GateResult } from './PulseReviewPost';
+import { atHandle } from '../../pages/feed/feedConstants';
 
 const errorOf = (err, fallback) => err.response?.data?.error || fallback;
-const handleOf = (p) => (p?.handle ? `@${p.handle}` : `profile ${p?.id ?? '?'}`);
+const handleOf = (p) => (p?.handle ? `${atHandle(p.handle)}` : `profile ${p?.id ?? '?'}`);
 
 /** The draft messages waiting in a list of conversations. */
 export const draftsIn = (threads) => (threads || []).reduce((n, t) => n + t.messages.filter((m) => m.status === 'draft').length, 0);
@@ -172,7 +173,7 @@ export function StartConversation({ showId, onStarted }) {
           <label className="prv-num-field">With
             <select value={form.other} onChange={set('other')}>
               <option value="">Choose a character</option>
-              {people.map((c) => <option key={c.registry_character_id} value={c.social_profile_id}>{c.display_name} (@{c.handle})</option>)}
+              {people.map((c) => <option key={c.registry_character_id} value={c.social_profile_id}>{c.display_name} ({atHandle(c.handle)})</option>)}
             </select>
           </label>
           {people.length === 0 && <p className="prv-muted">No character has a voice yet. Build one in Voices.</p>}
