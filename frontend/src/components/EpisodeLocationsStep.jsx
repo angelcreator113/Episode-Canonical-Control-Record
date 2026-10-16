@@ -22,6 +22,7 @@
  *   initial      [{ role, scene_set_id, name, scene_set }] (the proposal, or
  *                the episode's locations)
  *   missing      roles with no default ('home', 'closet', 'event')
+ *   removed      of those, the home or closet whose default set was deleted
  *   eventLook    the event's venue look, shown read-only under Event (L1,
  *                Q10); edited in the Event Package's Place section
  *   angleGaps    the angles the planner will ask for that a set lacks (L4,
@@ -122,7 +123,7 @@ function SetPicker({ showId, sets, role, onPick, onClose, setSets }) {
 }
 
 export default function EpisodeLocationsStep({
-  showId, title = 'Episode locations', confirmLabel = 'Confirm', initial = [], missing = [], eventLook = null, angleGaps = [],
+  showId, title = 'Episode locations', confirmLabel = 'Confirm', initial = [], missing = [], removed = [], eventLook = null, angleGaps = [],
   onConfirm, onCancel, busy = false,
 }) {
   const [{ byRole, extras }, setRows] = useState(() => initialRows(initial));
@@ -211,7 +212,11 @@ export default function EpisodeLocationsStep({
           </div>
         ))}
         {!value?.scene_set_id && missing.includes(key) && (
-          <div className="els-note">No saved default: choose one.</div>
+          <div className="els-note" data-testid={`els-missing-${key}`}>
+            {removed.includes(key)
+              ? `The show's default ${key} was removed from Scene Sets: choose another.`
+              : 'No saved default: choose one.'}
+          </div>
         )}
       </div>
       <button type="button" className="els-btn" onClick={() => setPicking(picking === key ? null : key)} data-testid={`els-change-${key}`}>

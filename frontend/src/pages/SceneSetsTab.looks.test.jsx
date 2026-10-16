@@ -59,12 +59,41 @@ describe('SceneSetsTab Looks row (L9)', () => {
     });
     renderRow({
       id: 'set-4', base_approved: false, looks: [],
-      events: [{ id: 'ev-1', name: 'Velour Gala', show_id: 'show-1', used_in_episode_id: 'ep-1', look: null }],
+      events: [{ id: 'ev-1', name: 'Velour Gala', show_id: 'show-1', used_in_episode_id: 'ep-1', is_episode_event: true, look: null }],
     }, { focusZone: 'look:ev-1' });
     const block = await screen.findByTestId('scene-set-event-ev-1');
     expect(block.classList.contains('is-zone-focus')).toBe(true);
     expect(within(block).getByText('Velour Gala')).toBeTruthy();
     expect(await within(block).findByTestId('generate-this-look')).toBeTruthy();
     await waitFor(() => expect(vi.mocked(api.get).mock.calls.map(([u]) => u)).toContain('/api/v1/episode-brief/ep-1/dressed-angles?scene_set_id=set-4'));
+  });
+  test("an event whose episode is another event's does not show that event's dressed angles (fourth audit)", async () => {
+    vi.mocked(api.get).mockClear();
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url.endsWith('/look')) return { data: { success: true, data: { scene_set: { id: 'set-5', name: 'Hall' }, approved_base: null, look: null, editable: true } } };
+      return { data: {} };
+    });
+    renderRow({
+      id: 'set-5', base_approved: false, looks: [],
+      events: [{ id: 'ev-2', name: 'After party', show_id: 'show-1', used_in_episode_id: 'ep-1', is_episode_event: false, look: null }],
+    });
+    expect(await screen.findByTestId('scene-set-event-not-episode-ev-2')).toBeTruthy();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(vi.mocked(api.get).mock.calls.map(([u]) => u).some((u) => u.includes('dressed-angles'))).toBe(false);
+  });
+
+  test('a look being made again, or whose last try failed, keeps its picture and says so (fourth audit)', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: {} });
+    renderRow({
+      id: 'set-6', base_approved: false, events: [],
+      looks: [
+        { id: 'lk-1', status: 'generating', image_url: 'https://x/old.jpg', event_id: 'e1', event_name: 'Gala', event_show_id: 'show-1' },
+        { id: 'lk-2', status: 'complete', image_url: 'https://x/kept.jpg', error: 'Provider timeout', event_id: 'e2', event_name: 'Brunch', event_show_id: 'show-1' },
+      ],
+    });
+    const regenerating = await screen.findByTestId('scene-set-look-lk-1');
+    expect(regenerating.querySelector('img').getAttribute('src')).toBe('https://x/old.jpg');
+    expect(screen.getByTestId('scene-set-look-regenerating-lk-1')).toBeTruthy();
+    expect(screen.getByTestId('scene-set-look-error-lk-2').textContent).toMatch(/last try failed: Provider timeout/);
   });
 });

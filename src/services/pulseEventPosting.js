@@ -130,9 +130,10 @@ async function reactorsOf(db, { showId, episodeId }) {
   // Who Lala has met by the episode's After, not by now: its guests meet her during it.
   const order = require('./storyClock').orderOf(episode.episode_number ?? 0, 'after_episode');
   // Event reactions are for Alive characters (Evoni, 2026-10-12), and only
-  // approved voices post on their own (Task #3029).
+  // approved voices post on their own (Task #3029). They reply to Lala, so
+  // only those she has met: a public figure she only knows of waits (Evoni, 2026-10-16).
   const { eligible, isApproved } = require('./pulseVoices');
-  const candidates = (await eligible(db, showId, { at: order, stage: 'alive' })).filter((c) => isApproved(c.voice))
+  const candidates = (await eligible(db, showId, { at: order, stage: 'alive', met: true })).filter((c) => isApproved(c.voice))
     .map(({ character, profile, voice }) => {
       const profileId = Number(profile.id);
       const isLala = Boolean(lalaId) && profileId === Number(lalaId);

@@ -111,9 +111,16 @@ const isStuck = (row) => row?.status === 'generating' && row.updated_at && Date.
 async function listVariants(sequelize, setId) {
   const set = await loadEveryday(sequelize, setId);
   const [rows] = await sequelize.query(
-    `SELECT id, kind, value, status, source, source_image_url, image_url, error, cost_usd, generated_at, updated_at
+    `SELECT id, kind, value, status, source, source_image_url, source_angle_id, image_url, error, cost_usd, generated_at, updated_at
        FROM location_look_variants WHERE scene_set_id = :setId AND deleted_at IS NULL`,
     { replacements: { setId: set.id } });
+  // A generated season is made from the Front view's picture: the picture
+  // it was made from, now (null when the angle is gone).
+  const angleIds = [...new Set(rows.filter((r) => r.kind === 'season' && r.source_angle_id).map((r) => r.source_angle_id))];
+  const [angles] = angleIds.length ? await sequelize.query(
+    'SELECT id, still_image_url FROM scene_angles WHERE id IN (:angleIds) AND deleted_at IS NULL',
+    { replacements: { angleIds } }) : [[]];
+  const frontNow = new Map(angles.map((a) => [String(a.id), a.still_image_url]));
   for (const row of rows.filter(isStuck)) {
     console.warn(`[LookVariants] ${row.kind} ${row.value} for location ${set.world_location_id} stuck; marked failed`);
     await sequelize.query(
@@ -130,9 +137,13 @@ async function listVariants(sequelize, setId) {
       variant: row ? {
         id: row.id, status: row.status, source: row.source, image_url: row.image_url, error: row.error,
         cost_usd: row.cost_usd == null ? null : Number(row.cost_usd), generated_at: row.generated_at,
-        // A generated time variant of an everyday look since replaced: the
+        // A generated variant whose source picture has changed: a time of
+        // day of an everyday look since replaced, or a season of a Front
+        // view since made again or removed (fourth audit, 2026-10-15). The
         // beat picker does not use it (lookVariantPicking.variantsForSets).
-        stale: kind === 'time' && row.source === 'generated' && row.source_image_url !== set.approved_base_image_url,
+        stale: row.source === 'generated' && (kind === 'time'
+          ? row.source_image_url !== set.approved_base_image_url
+          : (frontNow.get(String(row.source_angle_id)) ?? null) !== row.source_image_url),
       } : null,
     };
   });
