@@ -319,6 +319,9 @@ function applyPatch() {
       if (!checkBudget(estimatedCost)) {
         const err = new Error(`AI daily budget exceeded ($${getDailySpend().toFixed(2)} / $${DAILY_BUDGET}). Call blocked.`);
         err.status = 429;
+        // The image budget's code (imageCostService), so a route answers
+        // either refusal as a 429 with its reason, not a 500 (fourth audit).
+        err.code = 'AI_BUDGET_EXCEEDED';
         console.error(`[AI Cost] BLOCKED ${routeName} — budget exceeded`);
         return Promise.reject(err);
       }
