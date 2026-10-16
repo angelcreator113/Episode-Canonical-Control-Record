@@ -27,15 +27,13 @@ const _path    = require('path');
 // middleware/auth.js) makes require() boot-safe — direct destructuring
 // import is now correct.
 //
-// F-AUTH-1 Step 3 CP9 (D12): manuscript-export.js disposition is Tier 4 PUBLIC
-// throughout. Per v2.33 §5.21, 9th cumulative instance after worldStudio.js
-// @ CP3 + universe.js @ CP6 + franchiseBrainRoutes.js @ CP7 + socialProfileRoutes.js
-// + feedPostRoutes.js @ CP8 + scripts.js + layers.js + textureLayerRoutes.js
-// @ CP9. F-Auth-3 polymorphic factory `optionalAuth({ degradeOnInfraFailure:
-// true })` preserved verbatim per §5.45 polymorphic factory preservation
-// (graceful degradation on Cognito infra failure). 3 GETs are public manuscript-
-// rendering endpoints; no req.user consumption.
-const { optionalAuth } = require('../middleware/auth');
+// F-AUTH-1 Step 3 CP9 (D12) made these three GETs public (Tier 4: the F-Auth-3
+// polymorphic factory, degrading on Cognito infra failure; the §5.21 9th
+// cumulative instance). Evoni, 2026-10-15, asked "should anyone with the link
+// be able to download your memoir without signing in?": "no". They now take
+// requireAuth. The Export panel downloads through apiClient, which sends the
+// token, so its buttons keep working.
+const { requireAuth } = require('../middleware/auth');
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -129,7 +127,7 @@ function safeFilename(title) {
 
 // ── META endpoint ──────────────────────────────────────────────────────────
 
-router.get('/book/:bookId/meta', optionalAuth({ degradeOnInfraFailure: true }), async (req, res) => {
+router.get('/book/:bookId/meta', requireAuth, async (req, res) => {
   try {
     const db   = req.app.get('db') || require('../models');
     const book = await fetchBook(db, req.params.bookId);
@@ -159,7 +157,7 @@ router.get('/book/:bookId/meta', optionalAuth({ degradeOnInfraFailure: true }), 
 
 // ── DOCX export ────────────────────────────────────────────────────────────
 
-router.get('/book/:bookId/docx', optionalAuth({ degradeOnInfraFailure: true }), async (req, res) => {
+router.get('/book/:bookId/docx', requireAuth, async (req, res) => {
   try {
     const db   = req.app.get('db') || require('../models');
     const book = await fetchBook(db, req.params.bookId);
@@ -567,7 +565,7 @@ router.get('/book/:bookId/docx', optionalAuth({ degradeOnInfraFailure: true }), 
 
 // ── PDF export ─────────────────────────────────────────────────────────────
 
-router.get('/book/:bookId/pdf', optionalAuth({ degradeOnInfraFailure: true }), async (req, res) => {
+router.get('/book/:bookId/pdf', requireAuth, async (req, res) => {
   try {
     const db   = req.app.get('db') || require('../models');
     const book = await fetchBook(db, req.params.bookId);

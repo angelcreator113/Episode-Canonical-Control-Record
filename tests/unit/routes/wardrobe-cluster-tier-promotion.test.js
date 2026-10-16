@@ -245,7 +245,8 @@ describe('Step 3 CP5 — Wardrobe cluster Tier 1 sweep + AI POST + Item 16 + aud
       const worldStudioSrc = readSrc('worldStudio.js');
       const pattern = /degradeOnInfraFailure:\s*true/g;
       expect((pressSrc.match(pattern) || []).length).toBe(2);
-      expect((manuscriptSrc.match(pattern) || []).length).toBe(3);
+      // manuscript-export.js left Tier 3 on 2026-10-15 (Evoni: the memoir downloads need sign-in).
+      expect((manuscriptSrc.match(pattern) || []).length).toBe(0);
       expect((worldStudioSrc.match(pattern) || []).length).toBe(1);
     });
   });
