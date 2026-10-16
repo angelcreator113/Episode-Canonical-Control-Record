@@ -1127,7 +1127,7 @@ function AddBeatModal({ beat, characters, beats, onSubmit, onClose }) {
       <ModalField label='Beat name'  value={name}     onChange={setName}     placeholder='The Comparison' />
       <ModalField label='Location'   value={location} onChange={setLocation} placeholder='Coffee shop' />
       <ModalField label='Time tag'   value={timeTag}  onChange={setTimeTag}  placeholder='Morning - Act I' />
-      <ModalField label='Note'       value={note}     onChange={setNote}     placeholder="JustAWoman sees Chloe's post..." textarea />
+      <ModalField label='Note'       value={note}     onChange={setNote}     placeholder="JustAWoman sees Nia Vale's post..." textarea />
       <ModalField label='Order'      value={String(order)} onChange={v => setOrder(Number(v))} type='number' />
 
       {characters.length > 0 && (

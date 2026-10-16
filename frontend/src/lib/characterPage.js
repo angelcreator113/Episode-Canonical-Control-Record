@@ -72,6 +72,21 @@ export const lalaTie = (rel) => LALA_TIES[rel] || null;
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
+const clip = (text, n) => {
+  const t = typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '';
+  return t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t;
+};
+
+/** What an event is for, in one line: its description, theme and dress code. */
+export function eventPurpose(ev) {
+  const parts = [
+    clip(ev?.description, 160),
+    ev?.theme && `Theme: ${clip(ev.theme, 60)}`,
+    ev?.dress_code && `Dress code: ${clip(ev.dress_code, 60)}`,
+  ].filter(Boolean);
+  return parts.length ? parts.join(' · ') : null;
+}
+
 /**
  * "Where they show up": one row per event, place, episode, goal and the
  * feed, each with where it opens. Events come first, as in the mock.
@@ -81,9 +96,11 @@ export function showUpRows(appearances, feedProfile) {
   const rows = [];
   for (const ev of appearances.events || []) {
     rows.push({
-      kind: 'event', label: 'Event',
+      kind: 'event', label: ev.role === 'host' ? 'Hosting' : 'Event',
       title: `${ev.role === 'host' ? 'Organizes' : 'Guest at'} ${ev.name}`,
       sub: [ev.event_date, ev.venue_name].filter(Boolean).join(' · ') || null,
+      // What the event is for, and how to come dressed.
+      detail: eventPurpose(ev),
       to: ev.show_id ? `/shows/${ev.show_id}/events/${ev.id}` : null,
     });
   }

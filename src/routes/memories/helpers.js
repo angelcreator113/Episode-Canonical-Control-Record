@@ -33,7 +33,7 @@ MEMORY TYPES TO EXTRACT:
    Example: "There was always something in the way. Never the same thing twice."
 
 3. character_dynamic — A relationship pattern or dynamic between characters
-   Example: "Chloe knew I was watching and cheering."
+   Example: "Nia Vale went live and I watched the whole thing."
 
 4. pain_point — A specific content creator struggle documented from lived experience.
    This is the most important new type. Tag it when JustAWoman describes:
