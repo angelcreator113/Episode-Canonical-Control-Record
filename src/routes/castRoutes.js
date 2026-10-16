@@ -234,36 +234,8 @@ router.get('/characters/:id/appearances', requireAuth, async (req, res) => {
     const profileId = character.feed_profile_id;
     if (profileId == null) return res.json({ success: true, linked: false, events: [], episodes: [], place: null, feed: null });
 
-    const [events] = await sequelize.query(`
-      WITH mine AS (
-        SELECT we.*,
-               CASE WHEN COALESCE(we.source_profile_id,
-                      CASE WHEN we.canon_consequences->'automation'->>'host_profile_id' ~ '^[0-9]+$'
-                           THEN (we.canon_consequences->'automation'->>'host_profile_id')::int END) = :pid
-                    THEN 'host' ELSE 'guest' END AS role
-          FROM world_events we
-         WHERE we.deleted_at IS NULL AND (
-               COALESCE(we.source_profile_id,
-                 CASE WHEN we.canon_consequences->'automation'->>'host_profile_id' ~ '^[0-9]+$'
-                      THEN (we.canon_consequences->'automation'->>'host_profile_id')::int END) = :pid
-            OR EXISTS (
-                 SELECT 1 FROM jsonb_array_elements(
-                   CASE WHEN jsonb_typeof(we.canon_consequences->'automation'->'guest_profiles') = 'array'
-                        THEN we.canon_consequences->'automation'->'guest_profiles' ELSE '[]'::jsonb END) g
-                  WHERE COALESCE(g->>'profile_id', g->>'id') = :pidText))
-      )
-      SELECT m.id, m.show_id, m.name, m.role, m.event_date, m.event_time, m.venue_name, m.venue_location_id,
-             m.is_paid, m.payment_amount, m.canon_consequences->'automation'->'relationship_goals' AS goals,
-             e.id AS episode_id, e.episode_number, e.title AS episode_title
-        FROM mine m
-        LEFT JOIN LATERAL (
-          SELECT ep.id, ep.episode_number, ep.title FROM episodes ep
-           WHERE ep.deleted_at IS NULL AND (ep.id = m.used_in_episode_id
-              OR ep.id IN (SELECT eb.episode_id FROM episode_briefs eb WHERE eb.event_id = m.id AND eb.deleted_at IS NULL))
-           ORDER BY ep.episode_number NULLS LAST LIMIT 1
-        ) e ON true
-       ORDER BY e.episode_number NULLS LAST, m.created_at`,
-    { replacements: { pid: profileId, pidText: String(profileId) } });
+    // What each event is for comes with it (services/characterEvents).
+    const events = await require('../services/characterEvents').eventsForProfile(sequelize, profileId);
 
     const [[profile]] = await sequelize.query(
       'SELECT id, home_location_id, lala_relationship FROM social_profiles WHERE id = :pid',
@@ -296,6 +268,8 @@ router.get('/characters/:id/appearances', requireAuth, async (req, res) => {
         id: ev.id, show_id: ev.show_id, name: ev.name, role: ev.role, event_date: ev.event_date, event_time: ev.event_time,
         venue_name: ev.venue_name, venue_location_id: ev.venue_location_id,
         is_paid: Boolean(ev.is_paid), payment_amount: ev.payment_amount,
+        event_type: ev.event_type || null, description: ev.description || null, theme: ev.theme || null,
+        dress_code: ev.dress_code || null, stakes: ev.narrative_stakes || null, host_brand: ev.host_brand || null,
         goals: Array.isArray(ev.goals) ? ev.goals.filter((g) => g && g.label).map((g) => ({ slot: g.slot || null, label: g.label })) : [],
         episode: ev.episode_id ? { id: ev.episode_id, episode_number: ev.episode_number, title: ev.episode_title } : null,
       })),
