@@ -15,6 +15,7 @@
  */
 
 const Bull = require('bull');
+const { claimRow } = require('../services/generationClaimService');
 const { redisConfig } = require('../config/redis');
 
 const MAX_REFINEMENT_PASSES = 3;
@@ -119,16 +120,37 @@ function registerWorker() {
       throw new Error(`Angle ${angleId} or Set ${sceneSetId} not found`);
     }
 
+    // A pass refines the picture it was queued for: one regenerated since
+    // (its Generate) is not overwritten (audit, 2026-10-15).
+    if (job.data.attempt != null && (angle.generation_attempt || 0) !== job.data.attempt) {
+      console.log(`[RefinementQueue] Pass ${pass} for ${angle.angle_name} dropped: the picture changed since it was queued`);
+      return { pass, status: 'skipped', reason: 'picture changed' };
+    }
+    // One generation of an angle at a time, as the routes claim it: a Generate
+    // clicked while this pass waited is not raced and paid for twice.
+    if (!(await claimRow(SceneAngle.sequelize, 'angle', angle.id))) {
+      console.log(`[RefinementQueue] Pass ${pass} for ${angle.angle_name} dropped: already being generated`);
+      return { pass, status: 'skipped', reason: 'already generating' };
+    }
+
     console.log(`[RefinementQueue] Pass ${pass}: regenerating ${angle.angle_name}`);
     job.progress(10);
 
     // Run regeneration with refined prompt
-    const result = await sceneGenService.regenerateAngleRefined(
-      angle,
-      set,
-      artifactCategories,
-      { SceneAngle, SceneSet }
-    );
+    let result;
+    try {
+      result = await sceneGenService.regenerateAngleRefined(
+        angle,
+        set,
+        artifactCategories,
+        { SceneAngle, SceneSet }
+      );
+    } catch (err) {
+      // Refused before its generation began: the claim is released.
+      await SceneAngle.update({ generation_status: 'failed' }, { where: { id: angle.id, generation_status: 'generating' } })
+        .catch((updateErr) => console.error(`[RefinementQueue] Could not release angle ${angle.id}:`, updateErr.message));
+      throw err;
+    }
 
     job.progress(60);
 
@@ -157,11 +179,13 @@ function registerWorker() {
     const canImprove = result.qualityScore != null && refineFixes(nextCategories).length > 0;
     if (pass < MAX_REFINEMENT_PASSES && canImprove) {
       console.log(`[RefinementQueue] Quality low (${result.qualityScore}), queuing pass ${pass + 1}`);
+      const refined = await SceneAngle.findByPk(angleId, { attributes: ['generation_attempt'] });
       await addRefinementJob({
         angleId,
         sceneSetId,
         artifactCategories: nextCategories,
         pass: pass + 1,
+        attempt: refined?.generation_attempt || 0,
         qualityThreshold,
         runPostProcessing,
       });
@@ -195,16 +219,35 @@ function registerWorker() {
  * Add a refinement job to the queue.
  */
 async function addRefinementJob(data) {
+  const pass = data.pass || 1;
+  // One chain per picture: the job id names the angle, the pass and the
+  // picture (generation_attempt), so a second click while a pass waits gets
+  // that job back instead of a second paid chain (audit, 2026-10-15). A
+  // finished job with the id (kept for the queue's history) is replaced.
+  const jobId = data.attempt != null ? `refine-${data.angleId}-p${pass}-a${data.attempt}` : undefined;
+  if (jobId) {
+    const existing = await refinementQueue.getJob(jobId);
+    if (existing) {
+      const state = await existing.getState();
+      if (['waiting', 'active', 'delayed', 'paused'].includes(state)) {
+        console.log(`[RefinementQueue] Job ${jobId} already ${state}; not added again`);
+        existing.duplicate = true;
+        return existing;
+      }
+      await existing.remove();
+    }
+  }
   const job = await refinementQueue.add('refine-angle', {
     ...data,
-    pass: data.pass || 1,
+    pass,
     qualityThreshold: data.qualityThreshold || QUALITY_THRESHOLD,
     createdAt: new Date().toISOString(),
   }, {
     priority: data.priority || 0,
+    ...(jobId ? { jobId } : {}),
   });
 
-  console.log(`[RefinementQueue] Job ${job.id} added (angle: ${data.angleId}, pass: ${data.pass || 1})`);
+  console.log(`[RefinementQueue] Job ${job.id} added (angle: ${data.angleId}, pass: ${pass})`);
   return job;
 }
 
@@ -233,6 +276,7 @@ async function autoRefineIfNeeded(sceneAngle, sceneSet) {
     sceneSetId: sceneSet.id,
     artifactCategories: categories,
     pass: 1,
+    attempt: sceneAngle.generation_attempt || 0,
   });
 }
 

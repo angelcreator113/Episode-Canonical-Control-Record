@@ -57,7 +57,10 @@ describe('DressedAngles (S8, answer 2)', () => {
     render(<DressedAngles episodeId="ep-1" setId="set-1" />);
     const front = await screen.findByTestId('dressed-angle-a-front');
     const file = new File(['x'], 'dressed.jpg', { type: 'image/jpeg' });
-    fireEvent.change(within(front).getByLabelText('Upload the dressed Front steps'), { target: { files: [file] } });
+    // A focusable button picks the file for its angle.
+    const button = within(front).getByRole('button', { name: 'Upload the dressed Front steps' });
+    fireEvent.click(button);
+    fireEvent.change(screen.getByTestId('dressed-angles-file'), { target: { files: [file] } });
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/episode-brief/ep-1/dressed-angles/a-front/upload', expect.any(FormData), expect.anything()));
   });
 

@@ -2697,14 +2697,15 @@ router.post('/world/:showId/events/:eventId/look/generate', requireAuth, aiRateL
 // An event's look from an uploaded image (Evoni, 2026-10-15): one image
 // field (image or images), JPEG, PNG or WebP, up to 10 MB; scene_set_id
 // chooses the set when the venue has several (answer 3).
-const lookUpload = require('multer')({
+// A refused file is a 400 or 413 with its reason, not a 500 (audit, 2026-10-15).
+const lookUpload = require('../middleware/uploadOrRefuse').uploadOrRefuse(require('multer')({
   storage: require('multer').memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) cb(null, true);
     else cb(new Error('Only JPEG, PNG, and WebP images are allowed'));
   },
-}).fields([{ name: 'image', maxCount: 1 }, { name: 'images', maxCount: 1 }]);
+}).fields([{ name: 'image', maxCount: 1 }, { name: 'images', maxCount: 1 }]), { label: 'Event look upload' });
 
 router.post('/world/:showId/events/:eventId/look/upload', requireAuth, lookUpload, async (req, res) => {
   try {

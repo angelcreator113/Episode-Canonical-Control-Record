@@ -52,6 +52,8 @@ describe('the shape of a stored still', () => {
     expect(await crop('https://s3.example/base.png', 'WIDE', 'set-1', 'a1', 'p', { frame: strip })).toBeNull();
     expect(axios.get).not.toHaveBeenCalledWith('https://s3.example/base.png', expect.anything());
     const view = { left: 0, top: 0.2, width: 0.6, height: 0.6 };
-    expect(await crop('https://s3.example/base.png', 'WIDE', 'set-1', 'a1', 'p', { frame: view })).toMatch(/crop-\d+\.png$/);
+    // Kept, and stored as every still is (sceneImageAudit3.test.js).
+    expect(await crop('https://s3.example/base.png', 'WIDE', 'set-1', 'a1', 'p', { frame: view })).toMatch(/stills\/\d+-angle-a1-crop\.jpg$/);
+    expect(mockResize).toHaveBeenCalledWith(1920, 1080, { fit: 'cover', position: 'center' });
   });
 });

@@ -82,7 +82,7 @@ async function loadPoster(db, characterId) {
   return { character, profile, voice };
 }
 
-function buildPrompt({ character, profile, voice, label, context, known = null }) {
+function buildPrompt({ character, profile, voice, label, context, known = null, hosting = '' }) {
   const { BANNED_PHRASES } = require('./pulseVoices');
   const examples = (voice.examples_json || []).slice(0, 8).map((e) => `- ${e.text}`).join('\n') || '(none yet)';
   return `You write one post on The Pulse, LalaVerse's social network, as ${profile.display_name || character.display_name} (@${profile.handle}).
@@ -95,7 +95,7 @@ ${examples}
 When: ${label || 'now'}.
 What happened: ${context.about || 'an ordinary day; post about whatever they would.'}
 ${knowsLine(known)}
-
+${hostingLine(hosting)}
 ${PRIVATE_RULE}
 ${JSON.stringify(privateOf(character))}
 
@@ -109,6 +109,28 @@ Answer with JSON only:
 {"text": "the post", "hashtag": "#OneTag or null", "reveals_story": true or false (does it reveal a secret or a plot turn?)}`;
 }
 
+/**
+ * The events this character hosts and what each is for (services/
+ * characterEvents; Evoni, 2026-10-15). A host knows their own event before
+ * it happens; a post that names one before its episode still goes to
+ * Review (pulseGate future_event).
+ */
+const hostingLine = (hosting) => (hosting
+  ? `Events they host:\n${hosting}\nThey may build up to an event they host (planning it, looking forward to it). Never say what happens at it before it happens.\n`
+  : '');
+
+/** The prompt lines for the events this Feed profile hosts; '' when none or unreadable. */
+async function hostedEventLines(db, profileId) {
+  const { eventsForProfile, eventsPromptLines } = require('./characterEvents');
+  try {
+    const hosted = (await eventsForProfile(db.sequelize, profileId)).filter((ev) => ev.role === 'host');
+    return eventsPromptLines(hosted, { max: 4 });
+  } catch (err) {
+    console.error('[PulseDrafter] could not read the events they host:', err.message);
+    return '';
+  }
+}
+
 /** What the poster knows by now (Task #2982; spec §6), for the prompt. */
 const knowsLine = (known) => (known
   ? `Events they know about by now: ${known}. Name no other event.`
@@ -120,6 +142,7 @@ async function draftPost(db, { showId, characterId, moment, context = {}, reques
   const clock = require('./storyClock');
   const at = Number.isInteger(moment) ? moment : await clock.presentOrder(db, showId);
   const known = await require('./pulseKnowledge').knowledgeLine(db, showId, profile.id, at);
+  const hosting = await hostedEventLines(db, profile.id);
   // One automated request per drafting call (Task #3031); the caller names the kind and its job.
   await require('./pulseRequests').take(db, { showId, lane: 'automated', kind: request.kind || 'post', jobId: request.jobId || null });
   let message;
@@ -127,7 +150,7 @@ async function draftPost(db, { showId, characterId, moment, context = {}, reques
     try {
       message = await getClient().messages.create({
         model, max_tokens: 600,
-        messages: [{ role: 'user', content: buildPrompt({ character, profile, voice, label: clock.label(at), context, known }) }],
+        messages: [{ role: 'user', content: buildPrompt({ character, profile, voice, label: clock.label(at), context, known, hosting }) }],
       });
       break;
     } catch (modelErr) {
@@ -250,7 +273,7 @@ async function draftCommentAndRoute(db, args) {
 }
 
 /** One item's block in a batch prompt: who writes, their voice, what they know, their private mood. */
-function itemBlock(n, { character, profile, voice, known, extra = '' }, exampleCount) {
+function itemBlock(n, { character, profile, voice, known, hosting = '', extra = '' }, exampleCount) {
   const examples = (voice.examples_json || []).slice(0, exampleCount).map((e) => `- ${e.text}`).join('\n') || '(none yet)';
   return `### ${n}. ${profile.display_name || character.display_name} (@${profile.handle})
 Voice:
@@ -258,7 +281,7 @@ ${JSON.stringify(voice.habits_json || {}, null, 2)}
 Things they really wrote (match these):
 ${examples}
 ${extra}${knowsLine(known)}
-${PRIVATE_RULE}
+${hostingLine(hosting)}${PRIVATE_RULE}
 ${JSON.stringify(privateOf(character))}`;
 }
 
@@ -372,7 +395,10 @@ async function draftPostBatch(db, { showId, items, moment, context = {}, request
   const at = Number.isInteger(moment) ? moment : await clock.presentOrder(db, showId);
   const knowledge = require('./pulseKnowledge');
   const { entries, failed } = await loadEntries(db, items);
-  for (const e of entries) e.known = await knowledge.knowledgeLine(db, showId, e.profile.id, at);
+  for (const e of entries) {
+    e.known = await knowledge.knowledgeLine(db, showId, e.profile.id, at);
+    e.hosting = await hostedEventLines(db, e.profile.id);
+  }
   if (!entries.length) return { drafted: [], failed };
   await require('./pulseRequests').take(db, { showId, lane: 'automated', kind: request.kind || 'posts', jobId: request.jobId || null });
   const parsed = parseBatch(await askBatch(buildPostBatchPrompt(entries, { label: clock.label(at), about: context.about }), 500 * entries.length), entries.length);
@@ -488,6 +514,6 @@ async function draftCommentsAndRoute(db, args) {
 }
 
 module.exports = {
-  MODELS, BATCH_MAX, knowsLine, privateOf, PRIVATE_RULE, draftPost, draftAndRoute, draftComment, draftCommentAndRoute, release, DraftError,
+  MODELS, BATCH_MAX, knowsLine, hostingLine, privateOf, PRIVATE_RULE, draftPost, draftAndRoute, draftComment, draftCommentAndRoute, release, DraftError,
   buildPostBatchPrompt, buildCommentBatchPrompt, parseBatch, draftBatch, draftPostBatch, draftCommentBatch, draftPostsAndRoute, draftCommentsAndRoute,
 };

@@ -9,6 +9,7 @@ const { requireAuth } = require('../middleware/auth');
 const { authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { validateUUIDParam, validateUUID } = require('../middleware/requestValidation');
+const { uploadOrRefuse: sharedUploadOrRefuse } = require('../middleware/uploadOrRefuse');
 const Anthropic          = require('@anthropic-ai/sdk');
 const sceneGenService    = require('../services/sceneGenerationService');
 const { noteBaseChanged, writeReview } = require('../services/baseDescriptionService');
@@ -100,20 +101,8 @@ const upload = multer({
   },
 });
 
-/**
- * The upload middleware with its refusals answered as the person's mistake:
- * 413 for a file over the limit, 400 for a file that is not an image or a
- * malformed upload. Before (audit, 2026-10-15) they reached Express's
- * error handler as 500s.
- */
-const uploadOrRefuse = (middleware) => (req, res, next) => middleware(req, res, (err) => {
-  if (!err) return next();
-  console.error('Scene Sets upload refused:', err.code || '', err.message);
-  if (err.code === 'LIMIT_FILE_SIZE') {
-    return res.status(413).json({ success: false, error: 'The image is larger than 10 MB', code: 'FILE_TOO_LARGE' });
-  }
-  return res.status(400).json({ success: false, error: err.message || 'The upload could not be read', code: 'BAD_FILE' });
-});
+// Refusals as 400/413, not 500 (middleware/uploadOrRefuse).
+const uploadOrRefuse = (middleware) => sharedUploadOrRefuse(middleware, { label: 'Scene Sets upload' });
 
 const uploadSceneSetImages = uploadOrRefuse(upload.fields([
   { name: 'image', maxCount: 1 },
@@ -124,38 +113,31 @@ const uploadSceneSetImages = uploadOrRefuse(upload.fields([
  * One paid generation at a time for a set's base or an angle (audit,
  * 2026-10-15: a double click started and billed two). Claims the row by
  * marking it generating in one statement, unless it is generating already;
- * a claim older than GENERATION_CLAIM_STALE_MINUTES (a run that died) can
- * be taken again, as the page treats it (hasLiveGeneration). Answers 409
+ * a claim older than the shared stale window (generationClaimService; a
+ * run that died) can be taken again, as the page treats it
+ * (hasLiveGeneration). Answers 409
  * ALREADY_GENERATING and returns false when the row is taken.
  */
-const GENERATION_CLAIM_STALE_MINUTES = 15;
-const CLAIM_TABLES = Object.freeze({ set: 'scene_sets', angle: 'scene_angles' });
+const generationClaim = require('../services/generationClaimService');
 /**
- * A row being generated now (claimed within GENERATION_CLAIM_STALE_MINUTES):
- * an upload, a promote or a re-analysis would be overwritten by the run, or
+ * A row being generated now (claimed within the shared stale window): an
+ * upload, a promote or a re-analysis would be overwritten by the run, or
  * free its claim for a second paid one (audit, 2026-10-15). Answers 409
  * ALREADY_GENERATING and returns true when it is.
  */
 function refuseWhileGenerating(res, row, what) {
-  // Model instances name it updatedAt; raw rows updated_at.
-  const updatedAt = row?.updatedAt || row?.updated_at;
-  const recent = updatedAt && Date.now() - new Date(updatedAt).getTime() < GENERATION_CLAIM_STALE_MINUTES * 60 * 1000;
-  if (row?.generation_status !== 'generating' || !recent) return false;
+  if (!generationClaim.isLiveGeneration(row)) return false;
   res.status(409).json({ success: false, code: 'ALREADY_GENERATING', error: `${what} is being generated. Wait for it to finish.` });
   return true;
 }
 
 const SCENE_TYPES = Object.freeze(['HOME_BASE', 'CLOSET', 'EVENT_LOCATION', 'TRANSITION', 'OTHER']);
+/** null when v is a list of ids; otherwise the 400 reason (a bad id was a database cast error, 500). */
+const idListError = (name, v) => ((!Array.isArray(v) || v.some((id) => typeof id !== 'string' || !validateUUID(id)))
+  ? `${name} must be a list of ids` : null);
 
 async function claimGeneration(res, kind, id, what) {
-  const [rows] = await SceneSet.sequelize.query(
-    `UPDATE ${CLAIM_TABLES[kind]} SET generation_status = 'generating', updated_at = NOW()
-      WHERE id = :id
-        AND (generation_status IS DISTINCT FROM 'generating'
-             OR updated_at < NOW() - make_interval(mins => :stale))
-      RETURNING id`,
-    { replacements: { id, stale: GENERATION_CLAIM_STALE_MINUTES } });
-  if (rows.length) return true;
+  if (await generationClaim.claimRow(SceneSet.sequelize, kind, id)) return true;
   res.status(409).json({ success: false, code: 'ALREADY_GENERATING', error: `${what} is already being generated. Wait for it to finish.` });
   return false;
 }
@@ -455,6 +437,16 @@ router.post('/', requireAuth, async (req, res) => {
     if (!name || !scene_type) {
       return res.status(400).json({ success: false, error: 'name and scene_type are required' });
     }
+    // Refused here with their reason: the database refused them as a 500.
+    if (!SCENE_TYPES.includes(scene_type)) {
+      return res.status(400).json({ success: false, error: `scene_type must be one of ${SCENE_TYPES.join(', ')}` });
+    }
+    if (episode_ids != null && idListError('episode_ids', episode_ids)) {
+      return res.status(400).json({ success: false, error: idListError('episode_ids', episode_ids) });
+    }
+    if (world_location_id && !validateUUID(world_location_id)) {
+      return res.status(400).json({ success: false, error: 'world_location_id must be a World Location id' });
+    }
     if (base_model != null && !sceneGenService.isBaseModelKey(base_model)) {
       return res.status(400).json({ success: false, error: `base_model must be one of ${Object.keys(sceneGenService.SCENE_BASE_MODELS).join(', ')} (or null for the default)` });
     }
@@ -508,6 +500,19 @@ router.post('/', requireAuth, async (req, res) => {
     res.status(201).json({ success: true, data: set });
   } catch (err) {
     console.error('Scene Sets POST / error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── GET /artifact-categories  — list all artifact categories ────────────────
+// Above GET /:id: registered after it, every request was a 400 from the id
+// check (audit, 2026-10-15).
+
+router.get('/artifact-categories', requireAuth, async (req, res) => {
+  try {
+    res.json({ success: true, data: artifactService.ARTIFACT_CATEGORIES });
+  } catch (err) {
+    console.error('Scene Sets GET /artifact-categories error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -732,6 +737,15 @@ Return ONLY the refined description paragraph.`,
 
 router.post('/:id/learn-location', validateUUIDParam('id'), requireAuth, async (req, res) => {
   try {
+    // A parent must be an existing World Location: any value was written
+    // after the knowledge entry was made, and a bad one was a 500.
+    const parentId = req.body?.parent_location_id || null;
+    if (parentId) {
+      if (!validateUUID(parentId)) return res.status(400).json({ success: false, error: 'parent_location_id must be a World Location id' });
+      const [parentRows] = await SceneSet.sequelize.query('SELECT id FROM world_locations WHERE id = :id AND deleted_at IS NULL',
+        { replacements: { id: parentId } });
+      if (!parentRows.length) return res.status(400).json({ success: false, error: 'The parent World Location was not found' });
+    }
     const set = await SceneSet.findByPk(req.params.id, {
       include: [
         { model: SceneAngle, as: 'angles' },
@@ -800,10 +814,9 @@ router.post('/:id/learn-location', validateUUIDParam('id'), requireAuth, async (
       });
     }
 
-    // Link to parent location if specified
-    const { parent_location_id } = req.body;
-    if (parent_location_id && worldLoc) {
-      await worldLoc.update({ parent_location_id });
+    // Link to parent location if specified (checked above); never itself.
+    if (parentId && worldLoc && String(parentId) !== String(worldLoc.id)) {
+      await worldLoc.update({ parent_location_id: parentId });
     }
 
     res.json({
@@ -889,7 +902,8 @@ router.delete('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => 
 
 // ─── POST /:id/upload-base  — upload a custom base image ─────────────────────
 
-router.post('/:id/upload-base', validateUUIDParam('id'), requireAuth, uploadSceneSetImages, async (req, res) => {
+// Rate-limited: an upload runs the paid base analysis and style lock.
+router.post('/:id/upload-base', validateUUIDParam('id'), requireAuth, aiRateLimiter, uploadSceneSetImages, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -929,7 +943,7 @@ router.post('/:id/upload-base', validateUUIDParam('id'), requireAuth, uploadScen
     // Clean up old base image from S3 (best effort), unless an angle or an
     // approved base still shows it (deleteOldBaseImage).
     if (set.base_still_url) {
-      await sceneGenService.deleteOldBaseImage(set.base_still_url, SceneSet.sequelize);
+      await sceneGenService.deleteOldBaseImage(set.base_still_url, SceneSet.sequelize, { setId: set.id });
     }
 
     await set.update({
@@ -1557,6 +1571,9 @@ router.post('/:id/angles/:angleId/generate-video', validateUUIDParam('id'), requ
       scene_set_id: set.id,
       scene_angle_id: angle.id,
       payload: {},
+      // One attempt: a retry after a billed Runway job (a poll timeout, a
+      // failed S3 store) paid for the video again (audit, 2026-10-15).
+      max_attempts: 1,
     });
 
     // Note: angle stays 'complete' (still visible) while video generates in background
@@ -1637,8 +1654,8 @@ router.patch('/:id/angles/reorder', validateUUIDParam('id'), requireAuth, async 
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
 
     const { order } = req.body; // [{ id: 'uuid', sort_order: 0 }, ...]
-    if (!Array.isArray(order)) {
-      return res.status(400).json({ success: false, error: 'order must be an array of { id, sort_order }' });
+    if (!Array.isArray(order) || order.some((item) => item?.id && !validateUUID(item.id))) {
+      return res.status(400).json({ success: false, error: 'order must be an array of { id, sort_order } with angle ids' });
     }
 
     for (const item of order) {
@@ -1732,17 +1749,6 @@ router.delete('/:id/angles', validateUUIDParam('id'), requireAuth, async (req, r
     res.json({ success: true, message: `Deleted ${count} angles` });
   } catch (err) {
     console.error('Scene Sets DELETE /:id/angles error:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// ─── GET /artifact-categories  — list all artifact categories ────────────────
-
-router.get('/artifact-categories', requireAuth, async (req, res) => {
-  try {
-    res.json({ success: true, data: artifactService.ARTIFACT_CATEGORIES });
-  } catch (err) {
-    console.error('Scene Sets GET /artifact-categories error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -1915,11 +1921,13 @@ router.post('/:id/angles/:angleId/auto-refine', validateUUIDParam('id'), require
       sceneSetId: set.id,
       artifactCategories: categories,
       pass: 1,
+      // The picture this chain refines (one chain per picture).
+      attempt: angle.generation_attempt || 0,
       qualityThreshold: req.body.qualityThreshold || refinementQueue.QUALITY_THRESHOLD,
       runPostProcessing: req.body.runPostProcessing !== false,
     });
 
-    res.json({ success: true, data: { jobId: job.id, pass: 1, maxPasses: refinementQueue.MAX_REFINEMENT_PASSES } });
+    res.json({ success: true, data: { jobId: job.id, pass: 1, maxPasses: refinementQueue.MAX_REFINEMENT_PASSES, ...(job.duplicate ? { existing: true } : {}) } });
   } catch (err) {
     console.error('Scene Sets POST /:id/angles/:angleId/auto-refine error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -2282,6 +2290,7 @@ router.patch('/:id/cover-angle', validateUUIDParam('id'), requireAuth, async (re
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
 
     const { angle_id } = req.body;
+    if (angle_id && !validateUUID(angle_id)) return res.status(400).json({ success: false, error: 'angle_id must be an angle id' });
 
     // Allow null to clear cover
     if (angle_id) {
@@ -2492,6 +2501,16 @@ router.post('/:id/episodes', validateUUIDParam('id'), requireAuth, async (req, r
     const { episode_ids } = req.body;
     if (!Array.isArray(episode_ids) || episode_ids.length === 0) {
       return res.status(400).json({ success: false, error: 'episode_ids array is required' });
+    }
+    if (idListError('episode_ids', episode_ids)) return res.status(400).json({ success: false, error: idListError('episode_ids', episode_ids) });
+    // Each episode exists and, for a set of a show, is that show's (audit,
+    // 2026-10-15: any show's episode was linked; a bad id was a 500).
+    const found = await Episode.findAll({ where: { id: episode_ids }, attributes: ['id', 'show_id'] });
+    if (found.length !== new Set(episode_ids).size) {
+      return res.status(400).json({ success: false, error: 'An episode was not found' });
+    }
+    if (set.show_id && found.some((ep) => ep.show_id && String(ep.show_id) !== String(set.show_id))) {
+      return res.status(400).json({ success: false, error: 'An episode belongs to another show' });
     }
 
     const results = [];
@@ -2830,17 +2849,23 @@ ${existingLabels.length > 0 ? `ALREADY HAVE these angles — do NOT suggest dupl
 
     const suggestedAngles = JSON.parse(match[0]);
 
-    // Filter out any that duplicate existing labels
-    const newAngles = suggestedAngles.filter(a => {
-      const label = (a.label || '').toUpperCase().replace(/[^A-Z_]/g, '');
-      return !existingLabels.includes(label);
+    // A label the column holds (STRING(50)), never empty (an all-digit
+    // label was saved empty; a long one threw after the paid call), and no
+    // label twice: not one the set has, nor one this reply repeats.
+    const cleanLabel = (raw) => String(raw || '').toUpperCase().replace(/[^A-Z_]/g, '').slice(0, 50) || 'OTHER';
+    const seen = new Set(existingLabels);
+    const newAngles = (Array.isArray(suggestedAngles) ? suggestedAngles : []).filter((a) => {
+      const label = cleanLabel(a?.label);
+      if (seen.has(label)) return false;
+      seen.add(label);
+      return true;
     });
 
     const created = await SceneAngle.bulkCreate(
       newAngles.map((a, idx) => ({
         scene_set_id: set.id,
-        angle_label: (a.label || 'OTHER').toUpperCase().replace(/[^A-Z_]/g, ''),
-        angle_name: a.name || `Angle ${existingCount + idx + 1}`,
+        angle_label: cleanLabel(a.label),
+        angle_name: String(a.name || `Angle ${existingCount + idx + 1}`).slice(0, 255),
         angle_description: a.description || '',
         camera_direction: a.camera_direction || '',
         generation_status: 'pending',
@@ -2932,7 +2957,9 @@ router.post('/:id/generate-all-angles', validateUUIDParam('id'), requireAuth, ai
     const where = rawIds
       ? { scene_set_id: set.id, id: rawIds, generation_status: ['pending', 'failed'] }
       : { scene_set_id: set.id, generation_status: 'pending' };
-    const eligible = await SceneAngle.findAll({ where, order: [['sort_order', 'ASC']] });
+    // Zones before the extras made from their pictures (generationOrder).
+    const eligible = require('../services/sceneGenerationService').generationOrder(
+      await SceneAngle.findAll({ where, order: [['sort_order', 'ASC']] }));
     let pendingAngles = eligible.slice(0, MAX_BATCH);
     const remaining = eligible.length - pendingAngles.length;
 
@@ -3052,10 +3079,17 @@ router.post('/:id/mood-variants', validateUUIDParam('id'), requireAuth, async (r
     }
 
     const variants = await sceneGenService.generateMoodVariants(sourceUrl, set.id, sourceLabel, moods || null);
+    if (Object.keys(variants).length === 0) {
+      return res.status(400).json({ success: false, error: 'No mood variant could be made from this image.' });
+    }
 
-    // Store mood variants in visual_language
-    const vl = set.visual_language || {};
-    vl.mood_variants = { ...(vl.mood_variants || {}), [sourceLabel]: variants };
+    // Store mood variants in visual_language. A new object: the stored one
+    // changed in place compared equal to itself, so nothing was saved
+    // (audit, 2026-10-15). The variants of each source are merged, so one
+    // mood made after another keeps the first.
+    const vl = { ...(set.visual_language || {}) };
+    const before = vl.mood_variants || {};
+    vl.mood_variants = { ...before, [sourceLabel]: { ...(before[sourceLabel] || {}), ...variants } };
     await set.update({ visual_language: vl });
 
     res.json({

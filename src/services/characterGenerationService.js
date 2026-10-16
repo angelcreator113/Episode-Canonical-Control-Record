@@ -356,12 +356,18 @@ function characterContext(character, feedProfile = null) {
   return known;
 }
 
+/** The events they host or attend, as prompt lines, added to what is known (services/characterEvents). */
+function withEvents(known, events) {
+  const lines = require('./characterEvents').eventsPromptLines(events);
+  return lines ? { ...known, events_they_host_or_attend: lines } : known;
+}
+
 /**
  * generateMissingInterior
  * Asks for the missing fields of an existing character, built from what is
  * there. Returns the column values to write; writes nothing itself.
  */
-async function generateMissingInterior({ character, feedProfile = null, fields }) {
+async function generateMissingInterior({ character, feedProfile = null, events = [], fields }) {
   const name = character.display_name || character.selected_name || 'this character';
   const vibe = character.prose_overview || character.description || feedProfile?.content_persona || feedProfile?.bio || 'not written yet';
   const role = character.role_label || character.role_type || 'supporting';
@@ -369,7 +375,7 @@ async function generateMissingInterior({ character, feedProfile = null, fields }
   const worldString = 'World: LalaVerse. A contemporary world where identity, social media, and commerce intersect.';
   const generated = await generateInteriorArchitecture({
     name, vibe, role, worldString, age,
-    known: characterContext(character, feedProfile),
+    known: withEvents(characterContext(character, feedProfile), events),
     only: fields.map((f) => (f === 'selected_name' ? 'real_name' : f)),
   });
   return interiorUpdates(generated, fields);

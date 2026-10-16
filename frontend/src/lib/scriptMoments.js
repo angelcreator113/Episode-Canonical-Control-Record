@@ -12,9 +12,12 @@
  * /episodes/:id/overlays), so the line shows that screen's picture.
  */
 
-import { beatNumberForLabel, BEAT_SPLIT, HAS_BEAT_HEADER } from './beatLabelNumber';
+import { headerNumber, BEAT_SPLIT, HAS_BEAT_HEADER, normalizeBeatHeaders } from './beatLabelNumber';
+import { speakerLine } from './scriptSpeaker';
 
-const UI_LINE = /^\s*\[UI:\s*([A-Za-z_]+)\s*(.*?)\s*\]\s*$/;
+// `[ui:open closet]` is a moment too (Script tab re-audit, 2026-10-15: it was
+// hidden on the tab, yet counted in the runtime and the export).
+const UI_LINE = /^\s*\[UI:\s*([A-Za-z_]+)\s*(.*?)\s*\]\s*$/i;
 
 /** The UI line's verb and target, or null for any other line. */
 export function parseMoment(line) {
@@ -310,13 +313,13 @@ export const EXPECTED_ON_SCREEN = {
  */
 const CLOSET_CANON = Number(Object.keys(EXPECTED_ON_SCREEN).find((n) => EXPECTED_ON_SCREEN[n].action === 'CLOSET_OPEN'));
 export function closetBeat(scriptText) {
-  const script = String(scriptText || '');
+  const script = normalizeBeatHeaders(scriptText || '');
   if (!HAS_BEAT_HEADER.test(script)) return null;
   const sections = script.split(BEAT_SPLIT).filter((s) => /^\s*##\s*BEAT:/i.test(s));
   const beats = sections.map((section, i) => {
     const [header, ...lines] = section.split('\n');
     const label = (header.match(/##\s*BEAT:\s*(.+)/i)?.[1] || '').trim();
-    return { number: beatNumberForLabel(label) || i + 1, lines };
+    return { number: headerNumber(label) || i + 1, lines };
   });
   const opens = beats.find((b) => b.lines.some((l) => {
     const m = parseMoment(l);
@@ -337,14 +340,18 @@ export function hasPhoneMoment(lines = [], on = {}) {
   return beatOnScreen(lines, on).used.some((u) => PHONE_KINDS.has(u.kind));
 }
 
-/** Who speaks in a beat, in the order they first speak ("Me" is Prime). */
+/**
+ * Who speaks in a beat, in the order they first speak ("Me" is Prime,
+ * "LALA" is Lala), by the tab's own speaker rule (lib/scriptSpeaker.js;
+ * re-audit 2, 2026-10-15: `Note:` and `Location:` were people here, and
+ * `Lala (V.O.)` and `Mary Jane` were missed).
+ */
 export function beatSpeakers(lines = []) {
   const seen = [];
   for (const line of lines) {
-    const m = String(line || '').match(/^\s*([A-Z][A-Za-z]+):\s*\S/);
-    if (!m) continue;
-    const who = m[1] === 'Me' ? 'Prime' : m[1];
-    if (!seen.includes(who)) seen.push(who);
+    const sp = speakerLine(line);
+    if (!sp?.words || seen.includes(sp.speaker)) continue;
+    seen.push(sp.speaker);
   }
   return seen;
 }
