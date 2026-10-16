@@ -94,6 +94,14 @@ describe('Front zone the base frames whole', () => {
     expect(sceneGen.zoneIsBase({ ...front, angle_kind: null }, { base_still_url: BASE, scene_spec: spec({ left: 0, top: 0, width: 1, height: 1 }) })).toBe(false);
   });
 
+  // Fourth audit: a whole-picture frame written for another zone made this
+  // zone the base picture.
+  test('a whole-picture frame written for another zone is not this zone', () => {
+    const contract = (kind) => ({ _meta: { base_still_url: BASE }, camera_contracts: [{ angle: 'FRONT', kind, frame: { left: 0, top: 0, width: 1, height: 1 } }], objects: [] });
+    expect(sceneGen.zoneIsBase(front, { base_still_url: BASE, scene_spec: contract('back') })).toBe(false);
+    expect(sceneGen.zoneIsBase(front, { base_still_url: BASE, scene_spec: contract('front') })).toBe(true);
+  });
+
   test('generateZone stores the base as the zone\'s picture and clears the old one\'s copies', async () => {
     jest.spyOn(console, 'log').mockImplementation(() => {});
     const SceneAngle = { update: jest.fn(async () => [1]) };

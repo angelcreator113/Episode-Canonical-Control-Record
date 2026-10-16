@@ -33,7 +33,6 @@ const shouldSkip =
 const uuid = () => crypto.randomUUID();
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { replacements }))[0];
-const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
 
 (shouldSkip ? describe.skip : describe)('Scene Sets HIGH fixes (fourth audit)', () => {
   let token;
@@ -144,7 +143,9 @@ const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
     const set = await makeSet();
     const inside = await angle(set.id, { angle_label: 'WIDE', angle_kind: 'inside', still_image_url: 'https://x/base.jpg', quality_review: { from_base: { url: 'https://x/base.jpg', source: 'base' } } });
     const promoted = await angle(set.id, { angle_label: 'CLOSE', angle_name: 'Close', still_image_url: 'https://x/base.jpg' });
-    const res = await api('post', `/${set.id}/upload-base`).attach('image', PNG, { filename: 'b.png', contentType: 'image/png' });
+    // A real picture: an uploaded base is read and made 1920x1080 (fourth audit).
+    const picture = await require('sharp')({ create: { width: 1280, height: 720, channels: 3, background: '#ccc' } }).png().toBuffer();
+    const res = await api('post', `/${set.id}/upload-base`).attach('image', picture, { filename: 'b.png', contentType: 'image/png' });
     expect(res.status).toBe(200);
     const newBase = res.body.data.stillUrl;
     const [insideRow] = await rows('SELECT still_image_url, quality_review FROM scene_angles WHERE id = :id', { id: inside.id });

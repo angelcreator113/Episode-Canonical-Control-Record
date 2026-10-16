@@ -18,7 +18,7 @@ const axios = require('axios');
 const sceneGen = require('../../../src/services/sceneGenerationService');
 
 describe('an angle video', () => {
-  const models = () => ({ SceneAngle: { update: jest.fn(async () => [1]) }, SceneSet: { increment: jest.fn() } });
+  const models = (kept = 1) => ({ SceneAngle: { update: jest.fn(async () => [kept]), increment: jest.fn() }, SceneSet: { increment: jest.fn() } });
   const angle = { id: 'a1', angle_name: 'Wide', angle_label: 'WIDE', still_image_url: 'https://bucket.example/a1.jpg', generation_cost: 0.04 };
   beforeEach(() => {
     jest.spyOn(console, 'log').mockImplementation(() => {});
@@ -35,8 +35,30 @@ describe('an angle video', () => {
     const out = await sceneGen.generateAngleVideo(angle, { id: 's1', name: 'Loft' }, m);
     expect(mockRun.mock.calls[0][0]).toMatchObject({ model: 'gen3a_turbo', provider: 'runway' });
     expect(out.videoUrl).toMatch(/scene-sets\/s1\/angles\/a1\/video-\d+\.mp4$/);
-    expect(m.SceneAngle.update.mock.calls[0][0]).toMatchObject({ generation_cost: 0.04 });
+    expect(m.SceneAngle.update.mock.calls[0][0]).toEqual({ video_clip_url: out.videoUrl });
+    expect(m.SceneAngle.increment).not.toHaveBeenCalled();
     expect(m.SceneSet.increment).not.toHaveBeenCalled();
+  });
+
+  // Fourth audit: a video finishing set a still run in progress "complete",
+  // and kept a clip of a picture since replaced.
+  test('kept only while its still is the angle\'s picture; never sets the status', async () => {
+    mockRun.mockImplementation(async (plan) => {
+      plan.onLogged({ usageLogId: 7, costUsd: 0.25 });
+      return { status: 'SUCCEEDED', outputUrl: 'https://runway.example/v.mp4' };
+    });
+    const m = models(1);
+    await sceneGen.generateAngleVideo(angle, { id: 's1' }, m);
+    const [values, opts] = m.SceneAngle.update.mock.calls[0];
+    expect(values).not.toHaveProperty('generation_status');
+    expect(opts.where).toEqual({ id: 'a1', still_image_url: 'https://bucket.example/a1.jpg' });
+    expect(m.SceneAngle.increment).toHaveBeenCalledWith('generation_cost', { by: 0.25, where: { id: 'a1' } });
+
+    const replaced = models(0);
+    await expect(sceneGen.generateAngleVideo(angle, { id: 's1' }, replaced)).rejects.toMatchObject({ code: 'STILL_CHANGED' });
+    // The spend is still counted.
+    expect(replaced.SceneSet.increment).toHaveBeenCalledWith('generation_cost', { by: 0.25, where: { id: 's1' } });
+    mockRun.mockReset();
   });
 
   test('a budget refusal starts no Runway job', async () => {

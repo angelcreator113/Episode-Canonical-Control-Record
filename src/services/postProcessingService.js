@@ -359,7 +359,9 @@ async function storeBufferInS3(buffer, setId, angleId, assetType, contentType) {
             : contentType.includes('mp4') ? 'mp4'
             : 'bin';
 
-  const s3Key = `scene-sets/${setId}/angles/${angleId || 'base'}/${assetType}.${ext}`;
+  // A new key each run: a fixed key with a one-year cache kept showing the
+  // old enhancement after a re-run (fourth audit, 2026-10-15).
+  const s3Key = `scene-sets/${setId}/angles/${angleId || 'base'}/${assetType}-${Date.now()}.${ext}`;
 
   await s3.send(new PutObjectCommand({
     Bucket: S3_BUCKET,

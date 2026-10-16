@@ -14,13 +14,13 @@ vi.mock('../services/api', () => ({
 import apiClient from '../services/api';
 import SceneSetsTab from './SceneSetsTab';
 
-const angle = (id, madeFrom) => ({
+const angle = (id, madeFrom, extra = {}) => ({
   id, angle_label: id.toUpperCase(), angle_name: id, generation_status: 'complete', still_image_url: `https://x/${id}.jpg`,
-  quality_review: madeFrom ? { made_from_base: madeFrom } : {},
+  quality_review: { ...(madeFrom ? { made_from_base: madeFrom } : {}), ...extra },
 });
 const sets = () => [{
   id: 'set-1', name: 'Atelier', scene_type: 'HOME_BASE', generation_status: 'complete', base_still_url: 'https://x/new-base.jpg',
-  angles: [angle('old', 'https://x/old-base.jpg'), angle('fresh', 'https://x/new-base.jpg'), angle('unknown', null)],
+  angles: [angle('old', 'https://x/old-base.jpg'), angle('fresh', 'https://x/new-base.jpg'), angle('unknown', null), angle('edited', 'https://x/new-base.jpg', { stale: { reason: 'edited', fields: ['angle_description'] } })],
 }];
 
 describe('SceneSetsTab: views made from an older base', () => {
@@ -37,5 +37,14 @@ describe('SceneSetsTab: views made from an older base', () => {
     expect(screen.getByTestId('angle-old-base-old').textContent).toMatch(/Made from an older base/);
     expect(screen.queryByTestId('angle-old-base-fresh')).toBeNull();
     expect(screen.queryByTestId('angle-old-base-unknown')).toBeNull();
+  });
+
+  test('a view edited since its picture is marked; the others are not', async () => {
+    render(<MemoryRouter initialEntries={['/shows/show-1/world?tab=scene-sets']}><SceneSetsTab /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByTestId('scene-set-open-set-1')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('scene-set-open-set-1'));
+    expect(screen.getByTestId('angle-edited-stale-edited').textContent).toMatch(/Edited since this picture/);
+    expect(screen.queryByTestId('angle-edited-stale-fresh')).toBeNull();
+    expect(screen.queryByTestId('angle-edited-stale-old')).toBeNull();
   });
 });
