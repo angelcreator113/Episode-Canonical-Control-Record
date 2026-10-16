@@ -3,7 +3,7 @@
 // one beat on the page and another on the server.
 import { describe, test, expect } from 'vitest';
 import { createRequire } from 'node:module';
-import { beatNumberForLabel, LABEL_NUMBERS, BEAT_SPLIT, normalizeBeatHeaders } from './beatLabelNumber';
+import { beatNumberForLabel, LABEL_NUMBERS, BEAT_SPLIT, normalizeBeatHeaders, headerNumber } from './beatLabelNumber';
 
 const require = createRequire(import.meta.url);
 const server = require('../../../src/utils/beatLabelNumber.js');
@@ -46,3 +46,19 @@ describe('normalizeBeatHeaders', () => {
     expect('## BEAT: 1\nx\n##\nBEAT: tail'.split(BEAT_SPLIT)).toHaveLength(1);
   });
 });
+
+// Re-audit 2 (2026-10-15).
+describe('odd spaces, marks and numbers past 14', () => {
+  const odd = '\uFEFF## BEAT: 1\nx\u2028\u00a0## BEAT:\u00a05 · Reveal\ny\n##\u000bBEAT: 6\nz';
+  test('a byte-order mark, Unicode line breaks and odd spaces are written plainly, the same on both sides', () => {
+    expect(normalizeBeatHeaders(odd)).toBe('## BEAT: 1\nx\n## BEAT: 5 · Reveal\ny\n## BEAT: 6\nz');
+    expect(normalizeBeatHeaders(odd)).toBe(server.normalizeBeatHeaders(odd));
+  });
+  test('a written number past 14 is the beat\'s own, on both sides', () => {
+    expect(headerNumber('15 · Extra')).toBe(15);
+    expect(server.headerNumber('15 · Extra')).toBe(15);
+    expect(headerNumber('Bonus')).toBeNull();
+    expect(headerNumber('TRANSFORMATION')).toBe(8);
+  });
+});
+

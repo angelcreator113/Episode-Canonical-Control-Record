@@ -20,12 +20,13 @@
  *   screen".
  */
 
-const { beatNumberForLabel, normalizeBeatHeaders } = require('./beatLabelNumber');
+const { headerNumber, normalizeBeatHeaders } = require('./beatLabelNumber');
 
 const BEAT_COUNT = 14;
 const CLOSET_CANON = 8;
 const WEAR_LINE = /^\s*\[WEAR:\s*([^\]\s]+)\s*\]\s*$/i;
-const UI_LINE = /^\s*\[UI:\s*([A-Za-z_]+)\s*(.*?)\s*\]\s*$/;
+// `[ui:open closet]` is a moment too, as the Script tab reads it (re-audit 2).
+const UI_LINE = /^\s*\[UI:\s*([A-Za-z_]+)\s*(.*?)\s*\]\s*$/i;
 
 const nameKey = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
 const normKey = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -43,7 +44,7 @@ function scriptBeats(scriptText) {
       .map((section, i) => {
         const lines = section.split('\n').filter((l) => l.trim());
         const label = ((lines[0] || '').match(/##\s*BEAT:\s*(.+)/i)?.[1] || '').trim();
-        return { number: beatNumberForLabel(label) || i + 1, lines: lines.slice(1) };
+        return { number: headerNumber(label) || i + 1, lines: lines.slice(1) };
       });
   }
   const lines = text.split('\n').filter((l) => l.trim());

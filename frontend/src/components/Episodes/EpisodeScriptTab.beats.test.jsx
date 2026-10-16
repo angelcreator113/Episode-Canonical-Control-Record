@@ -23,8 +23,10 @@ describe('parseScriptIntoBeats', () => {
     expect(beats.map((b) => [b.number, b.name])).toEqual([[1, 'Opening Ritual'], [2, 'Login Sequence']]);
   });
 
-  test('a number outside 1-14 is not a canonical beat and keeps its position', () => {
-    const beats = parseScriptIntoBeats('## BEAT: 99 · Extra\nx');
-    expect(beats[0]).toMatchObject({ number: 1, rawLabel: '99 · Extra' });
+  test('a number outside 1-14 is not a canonical beat; it is its own number, not its place', () => {
+    // Re-audit 2 (2026-10-15): numbered by its place, a 15th beat moved up
+    // took a locked beat's number. A number past 14 can't be locked.
+    const beats = parseScriptIntoBeats('## BEAT: 99 · Extra\nx', [1]);
+    expect(beats[0]).toMatchObject({ number: 99, name: 'Extra', rawLabel: '99 · Extra', approved: false });
   });
 });

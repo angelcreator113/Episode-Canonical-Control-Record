@@ -12,7 +12,7 @@ import { moveBeat, moveLine, dropIndex, replaceBeat, appendLine, insertLine } fr
 import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers, phoneCheck, messageLine, closetBeat, wearFlags, uncuedPieces, lastGettingReadyIndex, todoModeAt, deliveredAt, dealCueFlags, TODO_MODE_LABELS } from '../../lib/scriptMoments';
 import { isScreen, isIcon, isProduction } from '../../lib/overlayUtils';
 import { draftLine, lalaLine, lalaLineSlots } from '../../lib/lalaLineDraft';
-import { beatNumberForLabel, BEAT_SPLIT, HAS_BEAT_HEADER, normalizeBeatHeaders } from '../../lib/beatLabelNumber';
+import { headerNumber, BEAT_SPLIT, HAS_BEAT_HEADER, normalizeBeatHeaders } from '../../lib/beatLabelNumber';
 import { beatImage, beatImageLabel } from '../BeatPlan/BeatPlanParts';
 import { beatSeconds, scriptSeconds, formatRuntime } from '../../lib/scriptRuntime';
 import { scriptHealth } from '../../lib/scriptHealth';
@@ -88,10 +88,12 @@ export function parseScriptIntoBeats(text, lockedBeats = []) {
       const beatLabel = beatMatch?.[1]?.trim() || `Beat ${i + 1}`;
       // A number, or a canonical beat's name (`## BEAT: TRANSFORMATION`, as
       // the skeleton writes it; lib/beatLabelNumber.js), else its place.
-      const named = beatNumberForLabel(beatLabel);
-      const canon = named ? BEAT_NAMES[named - 1] : null;
-      const info = canon || BEAT_NAMES[i] || { number: i + 1, name: beatLabel, icon: '📌', color: 'var(--text-secondary)' };
-      const number = canon ? canon.number : i + 1;
+      // A number past 14 is the beat's own (re-audit 2, lib/beatLabelNumber.js headerNumber).
+      const named = headerNumber(beatLabel);
+      const canon = named && named <= BEAT_NAMES.length ? BEAT_NAMES[named - 1] : null;
+      const own = named && !canon ? { number: named, name: beatLabel.replace(/^\d+\s*(?:[·:.\-–—]\s*)?/, '') || `Beat ${named}`, icon: '📌', color: 'var(--text-secondary)' } : null;
+      const info = canon || own || BEAT_NAMES[i] || { number: i + 1, name: beatLabel, icon: '📌', color: 'var(--text-secondary)' };
+      const number = named || i + 1;
       // The id follows the beat, not its place, so a moved beat stays open.
       const n = (seen.get(number) || 0) + 1; seen.set(number, n);
       return { id: n === 1 ? `beat-${number}` : `beat-${number}-${n}`, number, name: info.name, icon: info.icon, color: info.color, rawLabel: beatLabel, lines: lines.slice(1).filter(l => l.trim()), approved: locked.has(number), raw: section };
@@ -166,7 +168,7 @@ export function withBeatHeaders(scriptText, lockedBeats = []) {
     if (!m) return line;
     place += 1;
     const label = m[1].trim();
-    if (beatNumberForLabel(label) || place > BEAT_NAMES.length) return line;
+    if (headerNumber(label)) return line;
     return `## BEAT: ${place}${label ? ` · ${label}` : ''}`;
   }).join('\n');
   return numbered === scriptText ? scriptText : numbered;

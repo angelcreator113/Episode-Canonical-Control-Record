@@ -84,5 +84,22 @@ describe('scriptBeatLocks', () => {
     expect(keepLockedBeats('## BEAT: 1 · Opening Ritual\nChanged\n\n## BEAT: 2 · Login Sequence\nNew', crlf, [1]).changed).toEqual([1]);
     expect(splitScriptBeats('**## BEAT: 1 · Opening Ritual**\nx\n### BEAT: 2\ny').beats.map((b) => b.number)).toEqual([1, 2]);
   });
+
+  // Re-audit 2 (2026-10-15).
+  test('a beat numbered only by its place is not a copy of the locked beat it lands on', () => {
+    const fourteen = Array.from({ length: 14 }, (_, i) => `## BEAT: ${i + 1}\nline ${i + 1}`);
+    const prev = [...fourteen, '## BEAT: Extra\nextra line'].join('\n\n');
+    const moved = ['## BEAT: Extra\nextra line', ...fourteen].join('\n\n');
+    const out = keepLockedBeats(moved, prev, [1]);
+    expect(out.script).toContain('extra line');
+    expect(out.script.match(/line 1\b/g)).toHaveLength(1);
+  });
+
+  test('a number past 14 is the beat\'s own, and odd spaces in a header still make a beat', () => {
+    expect(splitScriptBeats('## BEAT: 15 · Extra\nx').beats[0].number).toBe(15);
+    expect(splitScriptBeats('\uFEFF## BEAT: 5\ny').beats[0].number).toBe(5);
+    const prev = '## BEAT: 1\nLala: "keep me"\n\u00a0## BEAT: 2\nLala: "and me"';
+    expect(keepLockedBeats('## BEAT: 1\nLala: "regen"\n## BEAT: 2\nLala: "regen 2"', prev, [1]).script).toContain('keep me');
+  });
 });
 

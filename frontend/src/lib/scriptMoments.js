@@ -12,7 +12,7 @@
  * /episodes/:id/overlays), so the line shows that screen's picture.
  */
 
-import { beatNumberForLabel, BEAT_SPLIT, HAS_BEAT_HEADER, normalizeBeatHeaders } from './beatLabelNumber';
+import { headerNumber, BEAT_SPLIT, HAS_BEAT_HEADER, normalizeBeatHeaders } from './beatLabelNumber';
 
 const UI_LINE = /^\s*\[UI:\s*([A-Za-z_]+)\s*(.*?)\s*\]\s*$/;
 
@@ -316,7 +316,7 @@ export function closetBeat(scriptText) {
   const beats = sections.map((section, i) => {
     const [header, ...lines] = section.split('\n');
     const label = (header.match(/##\s*BEAT:\s*(.+)/i)?.[1] || '').trim();
-    return { number: beatNumberForLabel(label) || i + 1, lines };
+    return { number: headerNumber(label) || i + 1, lines };
   });
   const opens = beats.find((b) => b.lines.some((l) => {
     const m = parseMoment(l);

@@ -16,7 +16,7 @@
  * Pure; no I/O.
  */
 
-const { beatNumberForLabel, normalizeBeatHeaders } = require('./beatLabelNumber');
+const { headerNumber, normalizeBeatHeaders } = require('./beatLabelNumber');
 
 const BEAT_COUNT = 14;
 const HEADER_LINE_RE = /^\s*##\s*BEAT:\s*(.*)$/i;
@@ -31,7 +31,7 @@ function splitScriptBeats(script) {
     const m = line.match(HEADER_LINE_RE);
     if (m) {
       // A header's number, or the canonical beat its name names, else its place.
-      const number = beatNumberForLabel(m[1]) || beats.length + 1;
+      const number = headerNumber(m[1]) || beats.length + 1;
       current = { number, lines: [line] };
       beats.push(current);
     } else if (current) {
@@ -67,7 +67,7 @@ function normalizeLockedBeats(value) {
 function withNumberedHeader(text, number) {
   const [header, ...rest] = String(text).split('\n');
   const m = header.match(HEADER_LINE_RE);
-  if (!m || beatNumberForLabel(m[1])) return text;
+  if (!m || headerNumber(m[1])) return text;
   const label = m[1].trim();
   return [`## BEAT: ${number}${label ? ` · ${label}` : ''}`, ...rest].join('\n');
 }
@@ -101,7 +101,13 @@ function keepLockedBeats(nextScript, prevScript, lockedBeats) {
   for (const n of toKeep) {
     let differs = false;
     let placed = null;
-    const at = beats.map((b, i) => (b.number === n ? i : -1)).filter((i) => i >= 0);
+    // A copy is a beat whose header names n, or that is word for word an
+    // approved copy. A beat numbered n only by its place is not: it is
+    // another beat that moved there (re-audit 2: a 15th beat moved up took
+    // the lock, and its text was replaced by the approved beat's).
+    const olds = prevCopies.get(n).flatMap((o) => [o.text, withNumberedHeader(o.text, n)]);
+    const names = (b) => headerNumber((b.text.split('\n')[0].match(HEADER_LINE_RE) || [])[1]) === n;
+    const at = beats.map((b, i) => (b.number === n && (names(b) || olds.includes(b.text)) ? i : -1)).filter((i) => i >= 0);
     prevCopies.get(n).forEach((old, k) => {
       const kept = { number: n, text: withNumberedHeader(old.text, n) };
       if (k < at.length) {
@@ -130,7 +136,7 @@ function keepLockedBeats(nextScript, prevScript, lockedBeats) {
   return { script: preamble ? `${preamble}\n\n${body}` : body, kept: toKeep, changed };
 }
 
-module.exports = { splitScriptBeats, normalizeLockedBeats, keepLockedBeats, BEAT_COUNT };
+module.exports = { splitScriptBeats, normalizeLockedBeats, keepLockedBeats, withNumberedHeader, BEAT_COUNT };
 
 /**
  * For a writer about to replace an episode's whole script: the script to

@@ -115,3 +115,10 @@ test('Markdown-dressed headers and Windows line ends are beats', () => {
   expect(scriptBeats('**## BEAT: 8 · Transformation Loop**\r\nLala: on\r\n### BEAT: 9\r\nx').map((b) => [b.number, b.lines])).toEqual([[8, ['Lala: on']], [9, ['x']]]);
   expect(scriptBeats('Lala: "say ## BEAT: 3 here"\nMe: hi')[0].number).toBe(1);
 });
+
+// Re-audit 2 (2026-10-15): a lowercase [ui:] line is a moment here too.
+test('a lowercase ui line opens the closet', () => {
+  const { closetIndex } = require('../../../src/utils/scriptWear');
+  const beats = scriptBeats('## BEAT: 3\nx\n## BEAT: 5\n[ui:open closet]\n## BEAT: 8\ny');
+  expect(closetIndex(beats)).toBe(1);
+});

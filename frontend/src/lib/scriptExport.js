@@ -18,7 +18,7 @@
  */
 import { beatName } from './canonicalBeats';
 import { parseMoment, resolveMoment, messageOf, verbLabel, deviceLabel } from './scriptMoments';
-import { beatNumberForLabel, normalizeBeatHeaders } from './beatLabelNumber';
+import { headerNumber, normalizeBeatHeaders } from './beatLabelNumber';
 
 const BEAT_HEADER = /^\s*##\s*BEAT:\s*(.*)$/i;
 const TAG_LINE = /^\s*\[\s*([A-Za-z_]+)\s*:\s*([^\]]*)\]?\s*$/;
@@ -106,12 +106,12 @@ export function scriptSections(scriptText) {
     const h = line.match(BEAT_HEADER);
     if (h) {
       const label = h[1].trim();
-      const m = label.match(/^(\d{1,2})\b\s*(?:[·:.\-–—]\s*)?(.*)$/);
-      // A number, or a canonical beat's name (`## BEAT: TRANSFORMATION`), as the tab reads it.
-      const n = beatNumberForLabel(label);
-      const canon = n != null;
-      const number = canon ? n : beats.length + 1;
-      const name = (m && canon && m[2].trim()) || (canon ? beatName(n) : (beats.length < 14 ? beatName(beats.length + 1) : label)) || `Beat ${number}`;
+      const m = label.match(/^(\d{1,3})\b\s*(?:[·:.\-–—]\s*)?(.*)$/);
+      // A number (of any size), or a canonical beat's name (`## BEAT: TRANSFORMATION`), as the tab reads it.
+      const n = headerNumber(label);
+      const canon = n != null && n <= 14;
+      const number = n != null ? n : beats.length + 1;
+      const name = (m && n != null && m[2].trim()) || (canon ? beatName(n) : (n == null && beats.length < 14 ? beatName(beats.length + 1) : label)) || `Beat ${number}`;
       beats.push({ number, name, label, lines: [] });
     } else if (line.trim()) {
       (beats.length ? beats[beats.length - 1].lines : preamble).push(line);
