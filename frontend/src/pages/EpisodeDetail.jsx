@@ -109,6 +109,12 @@ const EpisodeDetail = () => {
   // and its edits go with it. The Script tab reports whether it has any.
   const scriptDirtyRef = useRef(false);
   const handleScriptDirty = useCallback((dirty) => { scriptDirtyRef.current = dirty; }, []);
+  // Leaving the page by a button asks as a tab change does (re-audit 2:
+  // "Back to Show" and "Edit Episode" left with no word).
+  const leaveTo = useCallback((to) => {
+    if (scriptDirtyRef.current && !window.confirm('The script has unsaved changes. Leave without saving?')) return;
+    navigate(to);
+  }, [navigate]);
   const openTab = useCallback((tab) => {
     if (scriptDirtyRef.current && tab !== 'scripts'
       && !window.confirm('The script has unsaved changes. Leave without saving?')) return;
@@ -556,7 +562,7 @@ const EpisodeDetail = () => {
       return {
         title: 'Publish your episode',
         description: 'Everything looks good! Ready to publish?',
-        action: () => navigate(`/episodes/${episode.id}/edit`),
+        action: () => leaveTo(`/episodes/${episode.id}/edit`),
         buttonText: 'Update Status'
       };
     }
@@ -588,7 +594,7 @@ const EpisodeDetail = () => {
     }
     
     if (episode.status !== 'published' && primaryAction?.title !== 'Publish your episode') {
-      steps.push({ title: 'Publish Episode', status: 'pending', action: () => navigate(`/episodes/${episode.id}/edit`) });
+      steps.push({ title: 'Publish Episode', status: 'pending', action: () => leaveTo(`/episodes/${episode.id}/edit`) });
     } else if (episode.status === 'published') {
       steps.push({ title: 'Publish Episode', status: 'complete' });
     }
@@ -630,7 +636,7 @@ const EpisodeDetail = () => {
       {/* S9 (b): collapses to the title and navigation while scrolling. */}
       <div ref={headerRef} className={`ed-header-new${headerCompact ? ' is-compact' : ''}`} data-testid="ed-header">
         <div className="ed-header-left">
-          <button onClick={() => navigate(episode?.show_id || episode?.showId ? `/shows/${episode.show_id || episode.showId}` : '/episodes')} className="ed-back-btn">
+          <button onClick={() => leaveTo(episode?.show_id || episode?.showId ? `/shows/${episode.show_id || episode.showId}` : '/episodes')} className="ed-back-btn">
             ← Back to Show
           </button>
           <div className="ed-header-info">
@@ -729,7 +735,7 @@ const EpisodeDetail = () => {
               <div className="ed-dropdown">
                 <button
                   onClick={() => {
-                    navigate(`/episodes/${episode.id}/edit`);
+                    leaveTo(`/episodes/${episode.id}/edit`);
                     setShowMoreActions(false);
                   }}
                   className="ed-dropdown-item"
