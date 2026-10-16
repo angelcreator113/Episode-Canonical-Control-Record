@@ -123,7 +123,7 @@ async function processJob(job) {
         // Step 2: Generate all angles sequentially
         const angleResults = [];
         const freshSet = await SceneSet.findByPk(set.id);
-        for (const angle of (set.angles || [])) {
+        for (const angle of sceneGenService.generationOrder(set.angles)) {
           try {
             const freshAngle = await SceneAngle.findByPk(angle.id);
             await sceneGenService.generateAngle(freshAngle, freshSet, models);
