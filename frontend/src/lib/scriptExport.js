@@ -18,12 +18,11 @@
  */
 import { beatName } from './canonicalBeats';
 import { parseMoment, resolveMoment, messageOf, verbLabel, deviceLabel } from './scriptMoments';
-import { beatNumberForLabel } from './beatLabelNumber';
+import { headerNumber, normalizeBeatHeaders } from './beatLabelNumber';
+import { speakerLine, unquote } from './scriptSpeaker';
 
 const BEAT_HEADER = /^\s*##\s*BEAT:\s*(.*)$/i;
 const TAG_LINE = /^\s*\[\s*([A-Za-z_]+)\s*:\s*([^\]]*)\]?\s*$/;
-const DIALOGUE = /^(Me|Prime|Lala|Kelli|Guest|[A-Z][a-z]+):\s*(.+)$/;
-const QUOTES = /^["“”]+|["“”]+$/g;
 
 // Generic last words a target carries ("InviteLetterOverlay"), left off its name.
 const GENERIC_TAIL = new Set(['overlay', 'icon', 'screen', 'window', 'panel', 'app']);
@@ -80,13 +79,15 @@ export function readLine(line, on = null) {
     return { type: 'tag', tag: name, value, raw: t };
   }
   if (/^\(.*\)$/.test(t)) return { type: 'action', text: t.slice(1, -1).trim() };
-  const d = t.match(DIALOGUE);
-  if (d) {
-    let words = d[2].trim();
+  // The Script tab's speaker rule (lib/scriptSpeaker.js): `Lala (V.O.):`
+  // is Lala, with (V.O.) after her name; `Note:` is not a person.
+  const d = speakerLine(t);
+  if (d && d.words) {
+    let words = d.words;
     let paren = null;
     const p = words.match(/^(\([^)]*\))\s*(.*)$/);
     if (p && p[2]) { paren = p[1]; words = p[2]; }
-    return { type: 'dialogue', speaker: d[1] === 'Me' ? 'Prime' : d[1], paren, text: words.replace(QUOTES, '').trim() };
+    return { type: 'dialogue', speaker: d.speaker, ext: d.note, paren, text: unquote(words) };
   }
   return { type: 'narration', text: t };
 }
@@ -99,19 +100,19 @@ export function readLine(line, on = null) {
  * Returns { preamble: string[], beats: [{ number, name, label, lines }] }.
  */
 export function scriptSections(scriptText) {
-  const lines = String(scriptText || '').split(/\r?\n/);
+  const lines = normalizeBeatHeaders(scriptText || '').split('\n');
   const preamble = [];
   const beats = [];
   for (const line of lines) {
     const h = line.match(BEAT_HEADER);
     if (h) {
       const label = h[1].trim();
-      const m = label.match(/^(\d{1,2})\b\s*(?:[·:.\-–—]\s*)?(.*)$/);
-      // A number, or a canonical beat's name (`## BEAT: TRANSFORMATION`), as the tab reads it.
-      const n = beatNumberForLabel(label);
-      const canon = n != null;
-      const number = canon ? n : beats.length + 1;
-      const name = (m && canon && m[2].trim()) || (canon ? beatName(n) : (beats.length < 14 ? beatName(beats.length + 1) : label)) || `Beat ${number}`;
+      const m = label.match(/^(\d{1,3})\b\s*(?:[·:.\-–—]\s*)?(.*)$/);
+      // A number (of any size), or a canonical beat's name (`## BEAT: TRANSFORMATION`), as the tab reads it.
+      const n = headerNumber(label);
+      const canon = n != null && n <= 14;
+      const number = n != null ? n : beats.length + 1;
+      const name = (m && n != null && m[2].trim()) || (canon ? beatName(n) : (n == null && beats.length < 14 ? beatName(beats.length + 1) : label)) || `Beat ${number}`;
       beats.push({ number, name, label, lines: [] });
     } else if (line.trim()) {
       (beats.length ? beats[beats.length - 1].lines : preamble).push(line);
@@ -145,7 +146,7 @@ function fountainAction(text) {
 
 function fountainElement(r) {
   switch (r.type) {
-    case 'dialogue': return [r.speaker.toUpperCase(), ...(r.paren ? [r.paren] : []), r.text].join('\n');
+    case 'dialogue': return [`${r.speaker.toUpperCase()}${r.ext ? ` ${r.ext.toUpperCase()}` : ''}`, ...(r.paren ? [r.paren] : []), r.text].join('\n');
     case 'action': case 'narration': case 'moment': return fountainAction(r.text);
     case 'transition': return `> ${r.text.replace(/:\s*$/, '').toUpperCase()}:`;
     case 'tag': return `[[${r.tag}${r.value ? `: ${r.value.replace(/\]\]/g, '] ]')}` : ''}]]`;
@@ -187,7 +188,7 @@ export function toPlainText(scriptText, { title = '' } = {}) {
   if (name) out.push(`${name}\n${'='.repeat(name.length)}`);
   const body = (lines) => lines.map((l) => readLine(l)).filter(Boolean).map((r) => {
     switch (r.type) {
-      case 'dialogue': return `${r.speaker.toUpperCase()}\n${r.paren ? `  ${r.paren}\n` : ''}  ${r.text}`;
+      case 'dialogue': return `${r.speaker.toUpperCase()}${r.ext ? ` ${r.ext.toUpperCase()}` : ''}\n${r.paren ? `  ${r.paren}\n` : ''}  ${r.text}`;
       case 'action': return `(${r.text})`;
       case 'moment': return `[${r.text}]`;
       case 'transition': return `${r.text.replace(/:\s*$/, '').toUpperCase()}:`;

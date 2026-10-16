@@ -48,6 +48,8 @@ async function countUses(sequelize, setId, { episodeId = null, transaction } = {
   return { locations, beats, events, defaults, scenes, total: locations + beats + events + defaults + scenes };
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 async function liveSet(sequelize, id, transaction) {
   const [rows] = await sequelize.query('SELECT id, name, show_id FROM scene_sets WHERE id = :id AND deleted_at IS NULL',
     { replacements: { id }, transaction });
@@ -62,7 +64,16 @@ async function liveSet(sequelize, id, transaction) {
  */
 async function moveUses(sequelize, fromId, toId, { episodeId = null, transaction } = {}) {
   if (!toId || toId === fromId) throw new SceneSetUsesError('Choose a different scene set as the replacement');
-  if (!(await liveSet(sequelize, toId, transaction))) throw new SceneSetUsesError('The replacement scene set was not found, or it has been removed', 400, 'BAD_REPLACEMENT');
+  // A malformed id is a 400 with its reason, not a database cast error (500).
+  if (!UUID_RE.test(String(toId))) throw new SceneSetUsesError('The replacement must be a scene set id', 400, 'BAD_REPLACEMENT');
+  const to = await liveSet(sequelize, toId, transaction);
+  if (!to) throw new SceneSetUsesError('The replacement scene set was not found, or it has been removed', 400, 'BAD_REPLACEMENT');
+  // One show's beats, episode links, events and defaults are not moved onto
+  // another show's set (audit, 2026-10-15). A set of no show is shared.
+  const [[from]] = await sequelize.query('SELECT show_id FROM scene_sets WHERE id = :fromId', { replacements: { fromId }, transaction });
+  if (from?.show_id && to.show_id && String(from.show_id) !== String(to.show_id)) {
+    throw new SceneSetUsesError(`"${to.name}" belongs to another show; choose a set of this show, or one shared by all shows`, 400, 'BAD_REPLACEMENT');
+  }
   const r = { fromId, toId, episodeId };
   const ep = episodeId ? ' AND episode_id = :episodeId' : '';
   const exec = async (sql) => {
