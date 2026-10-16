@@ -132,9 +132,53 @@ function refuseWhileGenerating(res, row, what) {
 }
 
 const SCENE_TYPES = Object.freeze(['HOME_BASE', 'CLOSET', 'EVENT_LOCATION', 'TRANSITION', 'OTHER']);
+// A refused budget (the image budget or the Claude budget, code
+// AI_BUDGET_EXCEEDED) is a 429 with its reason; anything else is a 500
+// (fourth audit, 2026-10-15: budget refusals read as server errors).
+const sendFail = (res, err) => (isBudgetError(err)
+  ? res.status(429).json({ success: false, code: err.code, error: err.message })
+  : res.status(500).json({ success: false, error: err.message }));
 /** null when v is a list of ids; otherwise the 400 reason (a bad id was a database cast error, 500). */
 const idListError = (name, v) => ((!Array.isArray(v) || v.some((id) => typeof id !== 'string' || !validateUUID(id)))
   ? `${name} must be a list of ids` : null);
+
+/**
+ * A set's text fields within their columns, and its tag lists lists of
+ * short text: a longer or wrong-typed value was a database error, a 500
+ * (fourth audit, 2026-10-15). null when the fields are fine, else the reason.
+ */
+const TEXT_LIMITS = Object.freeze({
+  name: 255, base_runway_model: 255, time_of_day: 20, season: 20,
+  canonical_description: 20000, negative_prompt: 5000, style_reference_url: 2048, base_still_url: 2048,
+});
+function fieldsError(fields) {
+  if (fields.name !== undefined && !String(fields.name ?? '').trim()) return 'name cannot be empty';
+  for (const [key, max] of Object.entries(TEXT_LIMITS)) {
+    const v = fields[key];
+    if (v == null) continue;
+    if (typeof v !== 'string') return `${key} must be text`;
+    if (v.length > max) return `${key} is ${max} characters at most`;
+  }
+  for (const key of ['mood_tags', 'aesthetic_tags']) {
+    const v = fields[key];
+    if (v == null) continue;
+    if (!Array.isArray(v) || v.length > 50 || v.some((t) => typeof t !== 'string' || t.length > 100)) {
+      return `${key} must be a list of up to 50 tags of 100 characters at most`;
+    }
+  }
+  return null;
+}
+
+/**
+ * Episodes to link to a set: each exists and, for a set of a show, is that
+ * show's. null when they are fine, else the 400 reason.
+ */
+async function episodesError(episodeIds, showId) {
+  const found = await Episode.findAll({ where: { id: episodeIds }, attributes: ['id', 'show_id'] });
+  if (found.length !== new Set(episodeIds).size) return 'An episode was not found';
+  if (showId && found.some((ep) => ep.show_id && String(ep.show_id) !== String(showId))) return 'An episode belongs to another show';
+  return null;
+}
 
 async function claimGeneration(res, kind, id, what) {
   if (await generationClaim.claimRow(SceneSet.sequelize, kind, id)) return true;
@@ -299,7 +343,7 @@ Return ONLY the description paragraph, no labels or formatting.`,
     res.json({ success: true, description });
   } catch (err) {
     console.error('AI describe error:', err);
-    res.status(500).json({ error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -332,7 +376,7 @@ router.get('/base-models', requireAuth, (req, res) => {
     res.json({ success: true, models, default_model: sceneGenService.defaultBaseModel() });
   } catch (err) {
     console.error('Scene Sets GET /base-models error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -395,7 +439,7 @@ router.get('/model-comparison', requireAuth, async (req, res) => {
     res.json({ success: true, groups });
   } catch (err) {
     console.error('Scene Sets GET /model-comparison error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -408,7 +452,7 @@ router.get('/model-comparison/:group', validateUUIDParam('group'), requireAuth, 
     res.json({ success: true, data });
   } catch (err) {
     console.error('Scene Sets GET /model-comparison/:group error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -447,6 +491,15 @@ router.post('/', requireAuth, async (req, res) => {
     if (world_location_id && !validateUUID(world_location_id)) {
       return res.status(400).json({ success: false, error: 'world_location_id must be a World Location id' });
     }
+    for (const [key, value] of Object.entries({ show_id, universe_id })) {
+      if (value && (typeof value !== 'string' || !validateUUID(value))) return res.status(400).json({ success: false, error: `${key} must be an id` });
+    }
+    const badField = fieldsError(req.body);
+    if (badField) return res.status(400).json({ success: false, error: badField });
+    if (show_id) {
+      const [shows] = await SceneSet.sequelize.query('SELECT id FROM shows WHERE id = :id AND deleted_at IS NULL', { replacements: { id: show_id } });
+      if (!shows.length) return res.status(400).json({ success: false, error: 'show_id must be an existing show' });
+    }
     if (base_model != null && !sceneGenService.isBaseModelKey(base_model)) {
       return res.status(400).json({ success: false, error: `base_model must be one of ${Object.keys(sceneGenService.SCENE_BASE_MODELS).join(', ')} (or null for the default)` });
     }
@@ -455,6 +508,12 @@ router.post('/', requireAuth, async (req, res) => {
     // it: the show given, else a linked episode's, else its universe's only show.
     const { resolveSetShowId } = require('../services/sceneSetUsesService');
     const resolvedShowId = await resolveSetShowId(SceneSet.sequelize, { show_id, episode_ids, universe_id });
+    // The episodes exist and are the set's show's (fourth audit, 2026-10-15:
+    // POST /:id/episodes checked them; creating a set with them did not).
+    if (Array.isArray(episode_ids) && episode_ids.length) {
+      const badEpisodes = await episodesError(episode_ids, resolvedShowId);
+      if (badEpisodes) return res.status(400).json({ success: false, error: badEpisodes });
+    }
 
     const createFields = {
       name,
@@ -500,7 +559,7 @@ router.post('/', requireAuth, async (req, res) => {
     res.status(201).json({ success: true, data: set });
   } catch (err) {
     console.error('Scene Sets POST / error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -513,7 +572,7 @@ router.get('/artifact-categories', requireAuth, async (req, res) => {
     res.json({ success: true, data: artifactService.ARTIFACT_CATEGORIES });
   } catch (err) {
     console.error('Scene Sets GET /artifact-categories error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -540,7 +599,7 @@ router.get('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => {
     res.json({ success: true, data });
   } catch (err) {
     console.error('Scene Sets GET /:id error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -566,6 +625,13 @@ router.put('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
     }
     // Values the database refuses are the request's mistake (400), not a 500.
+    const badField = fieldsError(updates);
+    if (badField) return res.status(400).json({ success: false, error: badField });
+    if (req.body.room_properties !== undefined
+      && (!req.body.room_properties || typeof req.body.room_properties !== 'object' || Array.isArray(req.body.room_properties)
+        || JSON.stringify(req.body.room_properties).length > 20000)) {
+      return res.status(400).json({ success: false, error: 'room_properties must be an object' });
+    }
     if (updates.scene_type !== undefined && !SCENE_TYPES.includes(updates.scene_type)) {
       return res.status(400).json({ success: false, error: `scene_type must be one of ${SCENE_TYPES.join(', ')}` });
     }
@@ -596,6 +662,18 @@ router.put('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => {
         const [shows] = await SceneSet.sequelize.query('SELECT id FROM shows WHERE id = :id AND deleted_at IS NULL',
           { replacements: { id: updates.show_id } }).catch((err) => { console.error('Scene Sets PUT show lookup failed:', err.message); return [[]]; });
         if (!shows.length) return res.status(400).json({ success: false, error: 'show_id must be an existing show' });
+        // Not into this show while another show uses it (fourth audit,
+        // 2026-10-15): its episodes would point at a set of a show not theirs.
+        if (String(updates.show_id) !== String(set.show_id || '')) {
+          const { otherShowUses } = require('../services/sceneSetUsesService');
+          const uses = await otherShowUses(SceneSet.sequelize, set.id, updates.show_id);
+          if (uses > 0) {
+            return res.status(409).json({
+              success: false, code: 'USED_BY_ANOTHER_SHOW',
+              error: `"${set.name}" is used by another show (${uses} place${uses === 1 ? '' : 's'}): it cannot move to this show. Make a copy for this show, or leave it with no show to share it.`,
+            });
+          }
+        }
       }
     }
 
@@ -610,32 +688,33 @@ router.put('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => {
       if (refusal) return res.status(refusal.status).json({ success: false, error: refusal.error });
     }
 
-    // Handle room_properties — stored in visual_language JSONB
-    if (req.body.room_properties) {
-      const vl = set.visual_language || {};
-      updates.visual_language = {
-        ...vl,
-        room_properties: req.body.room_properties,
-        room_properties_manual: true, // prevent auto-extraction from overwriting
-      };
-    }
-
     const previousBaseUrl = set.base_still_url;
     await set.update(updates);
+
+    // visual_language keys are changed in the database, one key at a time:
+    // the set read above may be stale, and writing it back whole dropped
+    // what an analysis or a generation wrote meanwhile (fourth audit).
+    const mergeVisualLanguage = async (sql, replacements = {}) => {
+      const [[row]] = await SceneSet.sequelize.query(
+        `UPDATE scene_sets SET visual_language = ${sql}, updated_at = NOW() WHERE id = :id RETURNING visual_language`,
+        { replacements: { id: set.id, ...replacements } });
+      if (row) set.setDataValue('visual_language', row.visual_language);
+    };
+    // room_properties, with room_properties_manual so auto-extraction does not overwrite them.
+    if (req.body.room_properties) {
+      await mergeVisualLanguage(
+        `COALESCE(visual_language, '{}'::jsonb) || jsonb_build_object('room_properties', CAST(:rp AS jsonb), 'room_properties_manual', true)`,
+        { rp: JSON.stringify(req.body.room_properties) });
+    }
 
     // If description changed, regenerate the base prompt and invalidate image analysis cache
     if (updates.canonical_description) {
       const sceneGenService = require('../services/sceneGenerationService');
       const newPrompt = sceneGenService.buildPrompt(set);
-      const vl = set.visual_language || {};
-      const vlUpdates = { ...vl };
-      // Invalidate image analysis so it re-extracts from the new description context
-      if (vlUpdates.image_analysis) {
-        delete vlUpdates.image_analysis;
-      }
-      // A saved description answers a description review.
-      delete vlUpdates.description_review;
-      await set.update({ base_runway_prompt: newPrompt, visual_language: vlUpdates });
+      // Invalidate image analysis so it re-extracts from the new description
+      // context; a saved description answers a description review.
+      await mergeVisualLanguage(`COALESCE(visual_language, '{}'::jsonb) - 'image_analysis' - 'description_review'`);
+      await set.update({ base_runway_prompt: newPrompt });
     } else if (updates.base_still_url && updates.base_still_url !== previousBaseUrl) {
       await noteBaseChanged(SceneSet.sequelize, set.id, { origin: 'replaced', baseUrl: updates.base_still_url });
     }
@@ -643,7 +722,7 @@ router.put('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => {
     res.json({ success: true, data: set });
   } catch (err) {
     console.error('Scene Sets PUT /:id error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -680,7 +759,7 @@ router.post('/:id/description-review', validateUUIDParam('id'), requireAuth, asy
     res.json({ success: true, data: { canonical_description: fresh.canonical_description, visual_language: fresh.visual_language } });
   } catch (err) {
     console.error('Scene Sets POST /:id/description-review error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -729,7 +808,7 @@ Return ONLY the refined description paragraph.`,
     res.json({ success: true, refined });
   } catch (err) {
     console.error('Refine description error:', err);
-    res.status(500).json({ error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -827,7 +906,7 @@ router.post('/:id/learn-location', validateUUIDParam('id'), requireAuth, async (
     });
   } catch (err) {
     console.error('Learn location error:', err);
-    res.status(500).json({ error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -851,7 +930,7 @@ router.get('/:id/uses', validateUUIDParam('id'), requireAuth, async (req, res) =
     res.json({ success: true, data: await countUses(SceneSet.sequelize, set.id) });
   } catch (err) {
     console.error('Scene Sets GET /:id/uses error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -896,7 +975,7 @@ router.delete('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => 
     res.json({ success: true, message: 'Scene set deleted', uses_left: uses, links_dropped: linksDropped });
   } catch (err) {
     console.error('Scene Sets DELETE /:id error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -1015,7 +1094,7 @@ Return ONLY JSON.` },
     }
   } catch (err) {
     console.error('Scene Sets POST /:id/upload-base error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -1118,7 +1197,7 @@ Return ONLY the JSON object, no other text.` },
     });
   } catch (err) {
     console.error('Scene Sets POST /:id/analyze-image error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -1183,7 +1262,7 @@ router.post('/:id/generate-base', validateUUIDParam('id'), requireAuth, aiRateLi
     }
   } catch (err) {
     console.error('Scene Sets POST /:id/generate-base error:', err);
-    if (!res.headersSent) res.status(500).json({ success: false, error: err.message });
+    if (!res.headersSent) sendFail(res, err);
   }
 });
 
@@ -1379,7 +1458,7 @@ Return raw JSON only, no markdown or explanation.`;
     res.json({ success: true, data: suggestions });
   } catch (err) {
     console.error('Scene Sets POST /:id/suggest-angles error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -1414,7 +1493,7 @@ Write a concise camera placement and framing direction (1-2 sentences). Describe
     res.json({ success: true, data: { camera_direction: direction } });
   } catch (err) {
     console.error('Scene Sets POST /:id/ai-camera-direction error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -1483,7 +1562,7 @@ router.post('/:id/angles', validateUUIDParam('id'), requireAuth, async (req, res
     res.status(201).json({ success: true, data: angle });
   } catch (err) {
     console.error('Scene Sets POST /:id/angles error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -1536,7 +1615,7 @@ router.post('/:id/angles/:angleId/generate', validateUUIDParam('id'), requireAut
     }
   } catch (err) {
     console.error('Scene Sets POST /:id/angles/:angleId/generate error:', err);
-    if (!res.headersSent) res.status(500).json({ success: false, error: err.message });
+    if (!res.headersSent) sendFail(res, err);
   }
 });
 
@@ -1583,7 +1662,7 @@ router.post('/:id/angles/:angleId/generate-video', validateUUIDParam('id'), requ
     res.status(202).json({ success: true, data: { jobId: job.id, status: 'queued' } });
   } catch (err) {
     console.error('Scene Sets POST /:id/angles/:angleId/generate-video error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -1599,7 +1678,7 @@ router.delete('/:id/angles/:angleId', validateUUIDParam('id'), requireAuth, vali
     res.json({ success: true, message: 'Angle deleted' });
   } catch (err) {
     console.error('Scene Sets DELETE /:id/angles/:angleId error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -1643,7 +1722,7 @@ router.post('/:id/angles/:angleId/upload', validateUUIDParam('id'), requireAuth,
     res.json({ success: true, data: angle });
   } catch (err) {
     console.error('Scene Sets POST /:id/angles/:angleId/upload error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -1677,7 +1756,7 @@ router.patch('/:id/angles/reorder', validateUUIDParam('id'), requireAuth, async 
     res.json({ success: true, data: angles });
   } catch (err) {
     console.error('Scene Sets PATCH /:id/angles/reorder error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -1738,7 +1817,7 @@ router.patch('/:id/angles/:angleId', validateUUIDParam('id'), requireAuth, valid
     res.json({ success: true, data: angle, image_stale: Boolean(shotChanged && angle.still_image_url) });
   } catch (err) {
     console.error('Scene Sets PATCH /:id/angles/:angleId error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -1748,11 +1827,17 @@ router.delete('/:id/angles', validateUUIDParam('id'), requireAuth, async (req, r
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    // Not while the base or an angle is being generated: the run would write
+    // into angles that are gone, and its cost is spent (fourth audit).
+    if (refuseWhileGenerating(res, set, `The base of "${set.name}"`)) return;
+    const angles = await SceneAngle.findAll({ where: { scene_set_id: set.id } });
+    const busy = angles.find((a) => generationClaim.isLiveGeneration(a));
+    if (busy && refuseWhileGenerating(res, busy, `The angle "${busy.angle_name || busy.angle_label}"`)) return;
     const count = await SceneAngle.destroy({ where: { scene_set_id: set.id } });
     res.json({ success: true, message: `Deleted ${count} angles` });
   } catch (err) {
     console.error('Scene Sets DELETE /:id/angles error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -1781,7 +1866,7 @@ router.post('/:id/angles/:angleId/review', validateUUIDParam('id'), requireAuth,
     res.json({ success: true, data: { review, refinedPromptSuffix: review.refinedPromptSuffix } });
   } catch (err) {
     console.error('Scene Sets POST /:id/angles/:angleId/review error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -1807,7 +1892,7 @@ router.post('/:id/angles/:angleId/analyze', validateUUIDParam('id'), requireAuth
     res.json({ success: true, data: analysis });
   } catch (err) {
     console.error('Scene Sets POST /:id/angles/:angleId/analyze error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -1866,7 +1951,8 @@ router.post('/:id/angles/:angleId/regenerate', validateUUIDParam('id'), requireA
 
 // ─── POST /:id/angles/:angleId/post-process  — run post-processing pipeline ─
 
-router.post('/:id/angles/:angleId/post-process', validateUUIDParam('id'), requireAuth, validateUUIDParam('angleId'), async (req, res) => {
+// Rate-limited: it uploads to Cloudinary, a paid service (fourth audit).
+router.post('/:id/angles/:angleId/post-process', validateUUIDParam('id'), requireAuth, aiRateLimiter, validateUUIDParam('angleId'), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -1880,20 +1966,16 @@ router.post('/:id/angles/:angleId/post-process', validateUUIDParam('id'), requir
       return res.status(400).json({ success: false, error: 'No generated assets to post-process' });
     }
 
-    const options = {
-      skipSharp: req.body.skipSharp || false,
-      skipCloudinary: req.body.skipCloudinary || false,
-      skipFFmpeg: req.body.skipFFmpeg || false,
-      sharpOptions: req.body.sharpOptions || {},
-      cloudinarySettings: req.body.cloudinarySettings || {},
-      ffmpegOptions: req.body.ffmpegOptions || {},
-    };
+    // Only the known options, each a number in its range or a boolean: the
+    // FFmpeg values go into its filter graph (fourth audit, 2026-10-15).
+    const { options, error: optionsError } = postProcessService.readPostProcessOptions(req.body);
+    if (optionsError) return res.status(400).json({ success: false, error: optionsError });
 
     const result = await postProcessService.processAngleAssets(angle, set, { SceneAngle }, options);
     res.json({ success: true, data: result });
   } catch (err) {
     console.error('Scene Sets POST /:id/angles/:angleId/post-process error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -1939,7 +2021,7 @@ router.post('/:id/angles/:angleId/auto-refine', validateUUIDParam('id'), require
     res.json({ success: true, data: { jobId: job.id, pass: 1, maxPasses: refinementQueue.MAX_REFINEMENT_PASSES, ...(job.duplicate ? { existing: true } : {}) } });
   } catch (err) {
     console.error('Scene Sets POST /:id/angles/:angleId/auto-refine error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -1951,7 +2033,7 @@ router.get('/refinement-queue/stats', requireAuth, async (req, res) => {
     res.json({ success: true, data: stats });
   } catch (err) {
     console.error('Scene Sets GET /refinement-queue/stats error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -1978,7 +2060,7 @@ router.get('/refinement-queue/jobs/:jobId', requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('Scene Sets GET /refinement-queue/jobs/:jobId error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -2005,7 +2087,7 @@ router.get('/by-type/:sceneType', requireAuth, async (req, res) => {
     res.json({ success: true, count: sets.length, data: sets });
   } catch (err) {
     console.error('Scene Sets GET /by-type/:sceneType error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -2055,7 +2137,7 @@ router.get('/for-beat/:beatNumber', requireAuth, async (req, res) => {
     res.json({ success: true, beat: beatNumber, count: sets.length, data: sets });
   } catch (err) {
     console.error('Scene Sets GET /for-beat/:beatNumber error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -2148,7 +2230,7 @@ router.post('/:id/brief', validateUUIDParam('id'), requireAuth, async (req, res)
     });
   } catch (err) {
     console.error('Scene Sets POST /:id/brief error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -2185,7 +2267,7 @@ router.get('/:id/preview-prompt', validateUUIDParam('id'), requireAuth, async (r
     });
   } catch (err) {
     console.error('Scene Sets GET /:id/preview-prompt error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -2229,7 +2311,7 @@ router.post('/:id/cascade-regenerate', validateUUIDParam('id'), requireAuth, aiR
     res.status(202).json({ success: true, data: { jobId: job.id, status: 'queued' } });
   } catch (err) {
     console.error('Scene Sets POST /:id/cascade-regenerate error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -2253,7 +2335,7 @@ router.get('/jobs/set/:setId', requireAuth, validateUUIDParam('setId'), async (r
   } catch (err) {
     if (err.message?.includes('does not exist')) return res.json({ success: true, data: [] });
     console.error('Scene Sets GET /jobs/set/:setId error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -2290,7 +2372,7 @@ router.get('/jobs/:jobId', requireAuth, validateUUIDParam('jobId'), async (req, 
       return res.status(404).json({ success: false, error: 'Job not found — table may not exist' });
     }
     console.error('Scene Sets GET /jobs/:jobId error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -2317,7 +2399,7 @@ router.patch('/:id/cover-angle', validateUUIDParam('id'), requireAuth, async (re
     res.json({ success: true, data: set });
   } catch (err) {
     console.error('Scene Sets PATCH /:id/cover-angle error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -2338,7 +2420,7 @@ router.post('/:id/approve-base', validateUUIDParam('id'), requireAuth, async (re
     res.json({ success: true, data: { approved_base: result.location } });
   } catch (err) {
     console.error('Scene Sets POST /:id/approve-base error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -2351,7 +2433,7 @@ router.delete('/:id/approve-base', validateUUIDParam('id'), requireAuth, async (
     res.json({ success: true, data: { unapproved: result.location } });
   } catch (err) {
     console.error('Scene Sets DELETE /:id/approve-base error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -2364,7 +2446,7 @@ const lookVariantError = (res, err, label) => {
   const { LookVariantError } = require('../services/locationLookVariantService');
   if (err instanceof LookVariantError) return res.status(err.status).json({ success: false, code: err.code, error: err.message });
   console.error(`Scene Sets ${label} error:`, err);
-  return res.status(500).json({ success: false, error: err.message });
+  return sendFail(res, err);
 };
 const variantUpload = multer({
   storage: multer.memoryStorage(),
@@ -2516,7 +2598,7 @@ router.post('/:id/promote-to-base', validateUUIDParam('id'), requireAuth, async 
     });
   } catch (err) {
     console.error('Scene Sets POST /:id/promote-to-base error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -2534,13 +2616,8 @@ router.post('/:id/episodes', validateUUIDParam('id'), requireAuth, async (req, r
     if (idListError('episode_ids', episode_ids)) return res.status(400).json({ success: false, error: idListError('episode_ids', episode_ids) });
     // Each episode exists and, for a set of a show, is that show's (audit,
     // 2026-10-15: any show's episode was linked; a bad id was a 500).
-    const found = await Episode.findAll({ where: { id: episode_ids }, attributes: ['id', 'show_id'] });
-    if (found.length !== new Set(episode_ids).size) {
-      return res.status(400).json({ success: false, error: 'An episode was not found' });
-    }
-    if (set.show_id && found.some((ep) => ep.show_id && String(ep.show_id) !== String(set.show_id))) {
-      return res.status(400).json({ success: false, error: 'An episode belongs to another show' });
-    }
+    const badEpisodes = await episodesError(episode_ids, set.show_id);
+    if (badEpisodes) return res.status(400).json({ success: false, error: badEpisodes });
 
     const results = [];
     for (const episodeId of episode_ids) {
@@ -2566,7 +2643,7 @@ router.post('/:id/episodes', validateUUIDParam('id'), requireAuth, async (req, r
     res.json({ success: true, data: episodes });
   } catch (err) {
     console.error('Scene Sets POST /:id/episodes error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -2584,7 +2661,7 @@ router.delete('/:id/episodes/:episodeId', validateUUIDParam('id'), requireAuth, 
     res.json({ success: true });
   } catch (err) {
     console.error('Scene Sets DELETE /:id/episodes/:episodeId error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -2604,7 +2681,7 @@ router.get('/:id/spec', validateUUIDParam('id'), requireAuth, async (req, res) =
     res.json({ success: true, data: spec });
   } catch (err) {
     console.error('GET /:id/spec error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -2634,6 +2711,7 @@ router.post('/:id/spec/generate', validateUUIDParam('id'), requireAuth, aiRateLi
     });
   } catch (err) {
     console.error('POST /:id/spec/generate error:', err.message, err.stack?.slice(0, 500));
+    if (isBudgetError(err)) return sendFail(res, err);
     res.status(500).json({ success: false, error: `Spec generation failed: ${err.message}` });
   }
 });
@@ -2659,7 +2737,7 @@ router.put('/:id/spec', validateUUIDParam('id'), requireAuth, async (req, res) =
     res.json({ success: true, data: saved });
   } catch (err) {
     console.error('PUT /:id/spec error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -2680,12 +2758,13 @@ router.patch('/:id/spec', validateUUIDParam('id'), requireAuth, async (req, res)
     res.json({ success: true, data: merged });
   } catch (err) {
     console.error('PATCH /:id/spec error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
 // POST /api/v1/scene-sets/:id/spec/validate-angle - Validate a generated angle against spec
-router.post('/:id/spec/validate-angle', validateUUIDParam('id'), requireAuth, async (req, res) => {
+// A paid Claude Vision call: rate-limited (fourth audit).
+router.post('/:id/spec/validate-angle', validateUUIDParam('id'), requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -2693,15 +2772,22 @@ router.post('/:id/spec/validate-angle', validateUUIDParam('id'), requireAuth, as
     if (!spec) return res.status(400).json({ success: false, error: 'No scene spec — generate one first' });
 
     const { image_url, angle_label } = req.body;
-    if (!image_url || !angle_label) {
+    if (!image_url || !angle_label || typeof image_url !== 'string' || typeof angle_label !== 'string') {
       return res.status(400).json({ success: false, error: 'image_url and angle_label are required' });
+    }
+    // One of this set's own pictures: any URL was sent to Claude Vision,
+    // paid for on this set's behalf (fourth audit, 2026-10-15).
+    const angles = await SceneAngle.findAll({ where: { scene_set_id: set.id }, attributes: ['still_image_url', 'enhanced_still_url'] });
+    const own = new Set([set.base_still_url, ...angles.flatMap((a) => [a.still_image_url, a.enhanced_still_url])].filter(Boolean));
+    if (!own.has(image_url)) {
+      return res.status(400).json({ success: false, error: "image_url must be one of this set's pictures" });
     }
 
     const result = await sceneSpecService.validateAngleAgainstSpec(image_url, spec, angle_label);
     res.json({ success: true, data: result });
   } catch (err) {
     console.error('POST /:id/spec/validate-angle error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -2798,7 +2884,7 @@ router.post('/:id/spec/create-angles', validateUUIDParam('id'), requireAuth, asy
     });
   } catch (err) {
     console.error('POST /:id/spec/create-angles error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -2910,6 +2996,7 @@ ${existingLabels.length > 0 ? `ALREADY HAVE these angles — do NOT suggest dupl
     // No fallback: bedroom angles (BED, VANITY …) were added to any set,
     // a venue's or an exterior's included, again on every click, and
     // reported as a success (audit, 2026-10-15). The failure is said.
+    if (isBudgetError(err)) return sendFail(res, err);
     res.status(500).json({ success: false, error: `Could not suggest angles: ${err?.message || 'unknown error'}` });
   }
 });
@@ -2958,7 +3045,7 @@ Return ONLY JSON.` },
     res.json({ success: true, data: styleData });
   } catch (err) {
     console.error('Style lock error:', err);
-    res.status(500).json({ error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -3045,7 +3132,7 @@ router.post('/:id/generate-all-angles', validateUUIDParam('id'), requireAuth, ai
     console.log(`[BatchGen] Completed batch generation for scene set: ${set.name}`);
   } catch (err) {
     console.error('Batch generate error:', err);
-    if (!res.headersSent) res.status(500).json({ error: err.message });
+    if (!res.headersSent) sendFail(res, err);
   }
 });
 
@@ -3084,7 +3171,7 @@ router.post('/:id/time-variants', validateUUIDParam('id'), requireAuth, async (r
     res.json({ success: true, created: createdAngles.length, angles: createdAngles });
   } catch (err) {
     console.error('Time variants error:', err);
-    res.status(500).json({ error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -3132,7 +3219,7 @@ router.post('/:id/mood-variants', validateUUIDParam('id'), requireAuth, async (r
     });
   } catch (err) {
     console.error('Mood variants error:', err);
-    res.status(500).json({ error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -3226,7 +3313,7 @@ router.post('/:id/apply-template', validateUUIDParam('id'), requireAuth, async (
     res.json({ success: true, created: createdAngles.length, angles: createdAngles });
   } catch (err) {
     console.error('Apply template error:', err);
-    res.status(500).json({ error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -3278,7 +3365,7 @@ router.get('/:id/wardrobe-match', validateUUIDParam('id'), requireAuth, async (r
     res.json({ success: true, event: { name: event.name, dress_code: event.dress_code, keywords }, matches });
   } catch (err) {
     console.error('Wardrobe match error:', err);
-    res.status(500).json({ error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -3314,7 +3401,7 @@ router.post('/:id/season-variants', validateUUIDParam('id'), requireAuth, async 
     res.json({ success: true, created: createdAngles.length, angles: createdAngles });
   } catch (err) {
     console.error('Season variants error:', err);
-    res.status(500).json({ error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -3335,7 +3422,7 @@ router.patch('/:id/angles/:angleId/favorite', validateUUIDParam('id'), requireAu
     res.json({ success: true, favorited: review.favorited });
   } catch (err) {
     console.error('Scene Sets PATCH /:id/angles/:angleId/favorite error:', err);
-    res.status(500).json({ error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -3373,7 +3460,7 @@ router.patch('/:id/angles/:angleId/reject', validateUUIDParam('id'), requireAuth
     res.json({ success: true, message: 'Angle rejected — ready to regenerate', history_count: history.length });
   } catch (err) {
     console.error('Scene Sets PATCH /:id/angles/:angleId/reject error:', err);
-    res.status(500).json({ error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -3401,7 +3488,7 @@ router.get('/:id/angles/:angleId/history', validateUUIDParam('id'), requireAuth,
     res.json({ success: true, current, history, total: history.length + (current ? 1 : 0) });
   } catch (err) {
     console.error('Scene Sets GET /:id/angles/:angleId/history error:', err);
-    res.status(500).json({ error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -3445,7 +3532,7 @@ router.get('/episode/:episodeId/filmstrip', requireAuth, validateUUIDParam('epis
     res.json({ success: true, filmstrip, covered: filmstrip.filter(f => f.has_scene).length });
   } catch (err) {
     console.error('Filmstrip error:', err);
-    res.status(500).json({ error: err.message });
+    sendFail(res, err);
   }
 });
 
@@ -3475,7 +3562,7 @@ router.get('/:id/comparison', validateUUIDParam('id'), requireAuth, async (req, 
     res.json({ success: true, base_image: set.base_still_url, comparisons });
   } catch (err) {
     console.error('Scene Sets GET /:id/comparison error:', err);
-    res.status(500).json({ error: err.message });
+    sendFail(res, err);
   }
 });
 

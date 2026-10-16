@@ -2588,6 +2588,18 @@ router.get('/world/:showId/events/:eventId/episode-locations', requireAuth, asyn
 //   PUT  .../venue-look         body { venue_look } — Evoni's edit
 //   POST .../venue-look/draft   "Draft from event details" (Haiku); keeps
 //                               every part she edited (Q8)
+// The ids of an event look request are ids: a bad show, event or set id is
+// a 400 with its reason, not a database cast error (fourth audit, 2026-10-15).
+const lookIds = (req, res, next) => {
+  const { validateUUID } = require('../middleware/requestValidation');
+  for (const [name, value] of [['showId', req.params.showId], ['eventId', req.params.eventId], ['scene_set_id', req.body?.scene_set_id]]) {
+    if (value != null && value !== '' && (typeof value !== 'string' || !validateUUID(value))) {
+      return res.status(400).json({ success: false, code: 'BAD_ID', error: `${name} must be an id` });
+    }
+  }
+  return next();
+};
+
 const sendVenueLookError = (res, err, label) => {
   const { VenueLookError } = require('../services/venueLookService');
   if (err instanceof VenueLookError) return res.status(err.status).json({ success: false, code: err.code, error: err.message });
@@ -2595,7 +2607,7 @@ const sendVenueLookError = (res, err, label) => {
   return res.status(500).json({ success: false, error: err.message });
 };
 
-router.get('/world/:showId/events/:eventId/venue-look', requireAuth, async (req, res) => {
+router.get('/world/:showId/events/:eventId/venue-look', requireAuth, lookIds, async (req, res) => {
   try {
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
@@ -2607,7 +2619,7 @@ router.get('/world/:showId/events/:eventId/venue-look', requireAuth, async (req,
   }
 });
 
-router.put('/world/:showId/events/:eventId/venue-look', requireAuth, async (req, res) => {
+router.put('/world/:showId/events/:eventId/venue-look', requireAuth, lookIds, async (req, res) => {
   try {
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
@@ -2621,7 +2633,7 @@ router.put('/world/:showId/events/:eventId/venue-look', requireAuth, async (req,
   }
 });
 
-router.post('/world/:showId/events/:eventId/venue-look/draft', requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/world/:showId/events/:eventId/venue-look/draft', requireAuth, aiRateLimiter, lookIds, async (req, res) => {
   try {
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
@@ -2650,7 +2662,7 @@ const sendLookImageError = (res, err, label) => {
   return res.status(500).json({ success: false, error: err.message });
 };
 
-router.get('/world/:showId/events/:eventId/look', requireAuth, async (req, res) => {
+router.get('/world/:showId/events/:eventId/look', requireAuth, lookIds, async (req, res) => {
   try {
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
@@ -2662,7 +2674,7 @@ router.get('/world/:showId/events/:eventId/look', requireAuth, async (req, res) 
   }
 });
 
-router.post('/world/:showId/events/:eventId/look/brief', requireAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/look/brief', requireAuth, lookIds, async (req, res) => {
   try {
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
@@ -2677,7 +2689,7 @@ router.post('/world/:showId/events/:eventId/look/brief', requireAuth, async (req
   }
 });
 
-router.post('/world/:showId/events/:eventId/look/generate', requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/world/:showId/events/:eventId/look/generate', requireAuth, aiRateLimiter, lookIds, async (req, res) => {
   try {
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
@@ -2707,7 +2719,7 @@ const lookUpload = require('../middleware/uploadOrRefuse').uploadOrRefuse(requir
   },
 }).fields([{ name: 'image', maxCount: 1 }, { name: 'images', maxCount: 1 }]), { label: 'Event look upload' });
 
-router.post('/world/:showId/events/:eventId/look/upload', requireAuth, lookUpload, async (req, res) => {
+router.post('/world/:showId/events/:eventId/look/upload', requireAuth, lookUpload, lookIds, async (req, res) => {
   try {
     const file = [...(req.files?.images || []), ...(req.files?.image || [])][0];
     if (!file) return res.status(400).json({ success: false, error: 'No image file provided' });

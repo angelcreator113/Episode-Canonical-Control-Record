@@ -136,7 +136,11 @@ async function removeBackground(imageUrl, sceneId) {
   try {
     console.log('[ObjectGen] Removing background using remove.bg...');
 
-    const response = await axios.post(
+    // Budget-checked and logged like every image call (fourth audit,
+    // 2026-10-15: remove.bg was paid with no budget check). remove.bg has
+    // no rate in RATE_TABLE, so the call is logged unpriced.
+    const { runImageCall } = require('./imageCostService');
+    const response = await runImageCall({ model: 'remove.bg', provider: 'removebg' }, () => axios.post(
       'https://api.remove.bg/v1.0/removebg',
       {
         image_url: imageUrl,
@@ -151,7 +155,7 @@ async function removeBackground(imageUrl, sceneId) {
         responseType: 'arraybuffer',
         timeout: 45000,
       }
-    );
+    ));
 
     // Store result in S3
     const ts = Date.now();
