@@ -121,7 +121,7 @@ async function getLalaFeedProfile(models, showId, { allFriends = false, at } = {
     home_city: readLalaHome(show?.metadata)?.city || null,
     career: tier ? { tier, label: CAREER_TIERS[tier].label } : null,
     friends: await friendsOf(sequelize, profile?.id, allFriends ? FRIENDS_ALL : FRIENDS_SHOWN,
-      Number.isInteger(at) ? [...(await require('./pulseReveals').revealsAt(models, showId, at, { lalaProfileId: profile?.id })).hiddenProfiles] : []),
+      Number.isInteger(at) ? [...(await require('./pulseReveals').revealsAt(models, showId, at, { lalaProfileId: profile?.id })).unmetProfiles] : []),
   };
 }
 

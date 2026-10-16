@@ -9,7 +9,8 @@
  *
  * Who reacts: the poster's connections in social_profile_relationships
  * (either direction), then the profiles most relevant to Lala, up to
- * `limit`; the caller may pick the reactors instead (reactor_ids).
+ * `limit`; the caller may pick the reactors instead (reactor_ids). On
+ * Lala's own posts, only those she has met by then reply (withoutUnmet).
  * The AI call is one Claude message (claude-sonnet-4-6, two attempts),
  * logged and budget-gated by aiCostTracker's client patch.
  */
@@ -36,6 +37,21 @@ function getClient() {
 }
 
 /** The characters who would react to this post, with why. */
+/**
+ * Replies to Lala's own posts wait until she has met the replier, even a
+ * public figure she knows of (Evoni, 2026-10-16; services/pulseReveals).
+ * The reactors without those she has not met by the reply's moment.
+ */
+async function withoutUnmet(models, post, reactors) {
+  if (!post.show_id || !post.social_profile_id || !reactors.length || !models.sequelize) return reactors;
+  const lalaId = await require('./lalaFeedProfile').lalaProfileId(models.sequelize);
+  if (lalaId == null || Number(post.social_profile_id) !== Number(lalaId)) return reactors;
+  const at = await require('./storyClock').commentOrder(models, post);
+  if (!Number.isInteger(at)) return reactors;
+  const { unmetProfiles } = await require('./pulseReveals').revealsAt(models, post.show_id, at, { lalaProfileId: lalaId });
+  return reactors.filter((r) => !unmetProfiles.has(Number(r.profile.id)));
+}
+
 async function pickReactors(models, post, { limit = DEFAULT_LIMIT } = {}) {
   const { SocialProfile, SocialProfileRelationship } = models;
   if (!SocialProfile) return [];
@@ -73,7 +89,7 @@ async function pickReactors(models, post, { limit = DEFAULT_LIMIT } = {}) {
     });
     for (const p of more) picked.push({ profile: p, relationship: null });
   }
-  return picked;
+  return withoutUnmet(models, post, picked);
 }
 
 function buildPrompt(post, reactors, brainBlock = null) {
@@ -111,11 +127,12 @@ async function draftReactions(models, postId, { reactorIds = null, limit = DEFAU
   let reactors;
   if (Array.isArray(reactorIds) && reactorIds.length > 0) {
     const profiles = await SocialProfile.findAll({ where: { id: { [Op.in]: reactorIds } }, attributes: VOICE_ATTRIBUTES });
-    reactors = reactorIds.map((id) => profiles.find((p) => String(p.id) === String(id))).filter(Boolean).map((profile) => ({ profile, relationship: null }));
+    reactors = await withoutUnmet(models, post,
+      reactorIds.map((id) => profiles.find((p) => String(p.id) === String(id))).filter(Boolean).map((profile) => ({ profile, relationship: null })));
   } else {
     reactors = await pickReactors(models, post, { limit });
   }
-  if (reactors.length === 0) throw new DraftError(409, 'No characters to react: generate social profiles first');
+  if (reactors.length === 0) throw new DraftError(409, 'No characters to react: generate social profiles first, and on Lala\'s posts only those she has met reply');
 
   // The comments are canon too: the Show Bible's always-true rules (2026-10-06).
   const brain = await loadBrainContext(models, { showId: post.show_id || null, limit: 15, label: 'FeedComments' });

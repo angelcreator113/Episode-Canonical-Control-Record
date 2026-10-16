@@ -171,8 +171,9 @@ async function suggestBeats(db, storylineId) {
   if (!storyline) throw new StorylineError(404, 'Storyline not found');
   const clock = require('./storyClock');
   const present = await clock.presentOrder(db, storyline.show_id);
-  // Storylines are ongoing relationships: suggestions use Alive characters (Evoni, 2026-10-12).
-  const people = (await require('./pulseVoices').eligible(db, storyline.show_id, { stage: 'alive' })).filter((c) => c.voice);
+  // Storylines are ongoing relationships: suggestions use Alive characters (Evoni, 2026-10-12)
+  // Lala has met; a public figure she only knows of waits for the meeting (Evoni, 2026-10-16).
+  const people = (await require('./pulseVoices').eligible(db, storyline.show_id, { stage: 'alive', met: true })).filter((c) => c.voice);
   if (!people.length) throw new StorylineError(400, 'No Alive character has a Voice Profile yet. Build one in Voices.');
   const byHandle = new Map(people.map((c) => [String(c.profile.handle).toLowerCase(), Number(c.profile.id)]));
   const [episodes] = await db.sequelize.query(
