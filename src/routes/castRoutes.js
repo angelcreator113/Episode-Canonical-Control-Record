@@ -14,6 +14,8 @@
  *   DELETE /api/v1/cast/characters/:id/permanent    delete an archived one for good
  *   GET    /api/v1/cast/characters/:id/appearances  where the character shows up (the
  *                                                  character page's "Where they show up")
+ *   GET    /api/v1/cast/characters/:id/story-trail their Pulse posts, and the short
+ *                                                  stories and chapters they are in
  *   GET    /api/v1/cast/characters/:id/places       their home, closet and other places
  *                                                  (#3228), with each set's picture
  *   POST   /api/v1/cast/characters/:id/places/share { scene_set_id, caption? }: a draft
@@ -215,6 +217,26 @@ router.delete('/characters/:id/permanent', requireAuth, async (req, res) => {
     return res.json({ success: true, id: character.id, deleted: true });
   } catch (err) {
     console.error('[Cast] DELETE /characters/:id/permanent error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Their story trail (services/characterStoryTrail; Evoni, 2026-10-16): their
+ * latest Pulse posts, and the short stories and book chapters they are in.
+ */
+router.get('/characters/:id/story-trail', requireAuth, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const { RegistryCharacter, sequelize } = getModels();
+    const character = await RegistryCharacter.findByPk(req.params.id, {
+      attributes: ['id', 'feed_profile_id', 'display_name', 'selected_name', 'character_key'],
+    });
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+    const trail = await require('../services/characterStoryTrail').storyTrailOf(sequelize, character);
+    return res.json({ success: true, ...trail });
+  } catch (err) {
+    console.error('[Cast] GET /characters/:id/story-trail error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
