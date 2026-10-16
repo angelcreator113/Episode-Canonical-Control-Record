@@ -7,7 +7,7 @@ import { fetchAllPages } from '../lib/fetchAllPages';
 import { isAppPath } from '../utils/sceneSets';
 import EventLookImage from '../components/EventPackage/EventLookImage';
 import DressedAngles from '../components/SceneSets/DressedAngles';
-import CharacterHomes, { notifyCharacterPlacesChanged } from '../components/SceneSets/CharacterHomes';
+import CharacterHomes, { notifyCharacterPlacesChanged, useLalaHomeFill } from '../components/SceneSets/CharacterHomes';
 import LookVariants from '../components/SceneSets/LookVariants';
 import './SceneSetsTab.css';
 import { BaseModelSelect } from '../components/SceneModelComparison';
@@ -1139,6 +1139,9 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
   // keyboard work in it at once.
   const workspaceRef = useRef(null);
   const workspaceOpen = showDetails || showPromptEditor || showAddAngle;
+  // Opening a set fills in what the show already knows about Lala's home
+  // (her as the lead, a World Location for her home and closet sets).
+  useLalaHomeFill(workspaceOpen ? set.show_id : null, { onToast, onDefaultsChanged, onFilled: onRefresh });
   useEffect(() => { if (workspaceOpen) workspaceRef.current?.focus(); }, [workspaceOpen]);
   const [savingPrompt, setSavingPrompt] = useState(false);
   const [showPromptPreview, setShowPromptPreview] = useState(false);
