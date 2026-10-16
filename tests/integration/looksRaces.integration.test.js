@@ -189,6 +189,31 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect((await dressed.episodeLooks(sequelize, episodeId)).get(set)).toMatchObject({ image_url: 'https://x/good.jpg' });
   });
 
+  it('a failed re-run of a stale look keeps it stale; of an uploaded look, keeps it uploaded', async () => {
+    // Fourth audit (2026-10-15): the claim wrote the new brief and
+    // source = 'generated' before the run had an image.
+    const { loc, set } = await approvedVenue();
+    const episodeId = uuid();
+    const ev = await event(loc, set, { episodeId });
+    jest.spyOn(sceneGen, 'generateDressedStill').mockResolvedValueOnce({ stillUrl: 'https://x/old-room.jpg', cost: 0.04 });
+    await (await looks.startLook(models, { showId: show, eventId: ev })).run();
+    await run(`UPDATE world_locations SET approved_base_image_url = 'https://x/new-everyday.jpg' WHERE id = :loc`, { loc });
+    await run(`UPDATE scene_sets SET base_still_url = 'https://x/new-everyday.jpg' WHERE id = :set`, { set });
+    expect((await dressed.episodeLooks(sequelize, episodeId)).get(set)).toBeUndefined();
+    sceneGen.generateDressedStill.mockRejectedValueOnce(new Error('Kontext refused'));
+    await (await looks.startLook(models, { showId: show, eventId: ev })).run();
+    expect(await lookOf(ev)).toMatchObject({ status: 'complete', image_url: 'https://x/old-room.jpg', error: 'Kontext refused' });
+    // Still made from the old base: not used, and the list says stale.
+    expect((await dressed.episodeLooks(sequelize, episodeId)).get(set)).toBeUndefined();
+    expect((await looks.looksForSets(sequelize, [set])).get(set)[0]).toMatchObject({ stale: true });
+
+    const ev2 = await event(loc, set);
+    await looks.uploadLook(models, { showId: show, eventId: ev2, storeImage: async () => 'https://x/mine.jpg' });
+    sceneGen.generateDressedStill.mockRejectedValueOnce(new Error('Kontext refused'));
+    await (await looks.startLook(models, { showId: show, eventId: ev2 })).run();
+    expect(await lookOf(ev2)).toMatchObject({ status: 'complete', source: 'uploaded', image_url: 'https://x/mine.jpg' });
+  });
+
   it('a dressed angle re-run keeps its previous image until it has a new one; stuck, it keeps it', async () => {
     const { loc, set } = await approvedVenue();
     const ev = await event(loc, set);

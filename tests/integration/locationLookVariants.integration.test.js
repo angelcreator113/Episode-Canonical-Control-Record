@@ -187,6 +187,26 @@ const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
     expect(list.body.data.time.find((s) => s.value === 'evening').variant).toMatchObject({ status: 'complete', image_url: 'https://x/evening.jpg' });
   });
 
+  it('a failed re-run keeps an uploaded variant uploaded, and a stale one stale', async () => {
+    // Fourth audit (2026-10-15): the claim rewrote source and source image first.
+    const { loc, set } = await everyday();
+    await run(`INSERT INTO location_look_variants (world_location_id, scene_set_id, kind, value, status, source, image_url, created_at, updated_at)
+               VALUES (:loc, :set, 'time', 'afternoon', 'complete', 'uploaded', 'https://x/mine.jpg', NOW(), NOW())`, { loc, set });
+    await run(`INSERT INTO location_look_variants (world_location_id, scene_set_id, kind, value, status, source, source_image_url, image_url, created_at, updated_at)
+               VALUES (:loc, :set, 'time', 'golden_hour', 'complete', 'generated', 'https://x/older-everyday.jpg', 'https://x/gold.jpg', NOW(), NOW())`, { loc, set });
+    jest.spyOn(sceneGen, 'generateDressedStill').mockRejectedValue(new Error('Kontext refused'));
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    for (const value of ['afternoon', 'golden_hour']) {
+      await auth(request(app).post(url(set, `/time/${value}/generate`))).send({});
+      const end = Date.now() + 5000;
+      while ((await variant(loc, 'time', value))?.status === 'generating' && Date.now() < end) await new Promise((r) => setTimeout(r, 10));
+    }
+    expect(await variant(loc, 'time', 'afternoon')).toMatchObject({ status: 'complete', source: 'uploaded', image_url: 'https://x/mine.jpg' });
+    expect(await variant(loc, 'time', 'golden_hour')).toMatchObject({ source_image_url: 'https://x/older-everyday.jpg' });
+    const slot = (await auth(request(app).get(url(set)))).body.data.time.find((s) => s.value === 'golden_hour').variant;
+    expect(slot.stale).toBe(true);
+  });
+
   it('a generated time variant of an everyday look since replaced is listed as stale', async () => {
     const { loc, set } = await everyday();
     await run(`INSERT INTO location_look_variants (world_location_id, scene_set_id, kind, value, status, source, source_image_url, image_url, created_at, updated_at)
