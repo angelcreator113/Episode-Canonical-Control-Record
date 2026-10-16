@@ -6,14 +6,16 @@
  */
 import { useReducer, useEffect, useCallback, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { House, GitBranch, Users, Share2, Sprout, List, Search } from 'lucide-react';
 import apiClient from '../services/api';
+import { findLala } from '../lib/theCast';
 import './RelationshipEngine.css';
 
 import {
-  WebView, TreeView, FamilyView, CandidateView, ListView,
+  WebView, TreeView, FamilyView, CandidateView, ListView, ProfileView,
   Inspector, AddModal, GenModal,
-  Btn, LFBtn, Spinner, useToast,
-  API, T, LAYER, TENSION, cname, clayer, initials, roleColor,
+  Btn, Spinner, useToast,
+  API, T, LAYER, cname, clayer, initials, roleColor,
 } from '../components/RelationshipEngine';
 
 /* ── Track 3 module-scope helpers (Pattern D) ────────────────────────── */
@@ -22,6 +24,32 @@ import {
 // CP6 CharacterTherapy + CP7 Home + CP8 StoryProposer also have it).
 export const listRegistriesApi = () =>
   apiClient.get(`${API}/character-registry/registries`);
+
+// Lala's world: her LalaVerse feed profiles, every page of them (the
+// Characters page reads the same list; lib/theCast.js).
+export const listLalaverseProfilesApi = (page) =>
+  apiClient.get(`${API}/social-profiles?feed_layer=lalaverse&limit=100&page=${page}`);
+
+/**
+ * The cast this page works with (Evoni, 2026-10-16: "only use the 6 cast
+ * members we have outside of Lala"; "Lala does have a feed profile and she
+ * will"): the registry characters a live LalaVerse feed profile names, and
+ * Lala. No old-system character is in it.
+ */
+export async function loadCastIds() {
+  const ids = new Set();
+  for (let page = 1; page <= 10; page += 1) {
+    const r = await listLalaverseProfilesApi(page);
+    const batch = r.data?.profiles || [];
+    batch.forEach(p => {
+      if (p && p.status !== 'archived' && p.registry_character_id) ids.add(String(p.registry_character_id));
+    });
+    if (batch.length < 100) break;
+  }
+  return ids;
+}
+
+const inCast = (cast, r) => cast.has(String(r.character_id_a)) && cast.has(String(r.character_id_b));
 
 export const fetchRelationshipTree = (regId) =>
   apiClient.get(`${API}/relationships/tree/${regId}`);
@@ -59,7 +87,8 @@ const initial = {
   layers:   {},
   regs:     [],
   reg:      null,
-  tab:      'tree',
+  cast:     null,       // Set of cast character ids, once loaded
+  tab:      'overview',
   lf:       'all',
   selChar:  null,
   selRel:   null,
@@ -111,42 +140,73 @@ export default function RelationshipEngine() {
     }
   }, [location.state, toast]);
 
-  /* ── Load registries ───────────────────────────────────────────────── */
+  /* ── Load the cast and the registries that hold it ────────────────── */
   useEffect(() => {
     (async () => {
       try {
-        const r = await listRegistriesApi();
+        const [cast, r] = await Promise.all([loadCastIds(), listRegistriesApi()]);
         const d = r.data;
-        const list = d?.registries || d || [];
-        if (list.length) dispatch({ type: 'SET', payload: { regs: list, reg: list[0] } });
-      } catch { /* non-critical */ }
+        const all = d?.registries || d || [];
+        // Only registries holding a cast member; the one holding most is
+        // where new relationships and seeds are made.
+        const held = reg => (reg.characters || []).filter(c => cast.has(String(c.id))).length;
+        const ranked = [...all].sort((a, b) => held(b) - held(a));
+        // Lala is always in it: the one in the registry holding most of the
+        // cast (each registry can hold its own Lala; one is enough).
+        const lala = ranked.map(reg => findLala(reg.characters)).find(Boolean);
+        if (lala) cast.add(String(lala.id));
+        const list = ranked.filter(reg => held(reg) > 0);
+        if (!list.length) {
+          dispatch({ type: 'TREE_LOADED', payload: { cast, regs: [], reg: null, chars: [], rels: [], layers: {}, cands: [] } });
+          return;
+        }
+        dispatch({ type: 'SET', payload: { cast, regs: list, reg: list[0] } });
+      } catch (err) {
+        console.error('[RelationshipEngine] cast load failed:', err);
+        dispatch({ type: 'ERROR', msg: err.message || "Could not load the people in Lala's world." });
+      }
     })();
   }, []);
 
-  /* ── Fetch tree when registry changes ─────────────────────────────── */
+  /* ── Fetch the cast's characters and relationships ─────────────────── */
   const fetchTree = useCallback(async () => {
-    if (!s.reg) return;
+    if (!s.reg || !s.cast) return;
     dispatch({ type: 'SET', payload: { loading: true, error: null } });
     try {
-      const [treeR, pendR] = await Promise.all([
-        fetchRelationshipTree(s.reg.id),
+      const [trees, pendR] = await Promise.all([
+        Promise.all(s.regs.map(reg => fetchRelationshipTree(reg.id))),
         fetchPendingRelationships(),
       ]);
-      const tree = treeR.data;
+      const cast = s.cast;
+      const chars = [];
+      const rels = new Map();
+      const layers = {};
+      trees.forEach(({ data: tree }) => {
+        (tree.characters || []).forEach(c => {
+          if (cast.has(String(c.id)) && !chars.some(x => x.id === c.id)) chars.push(c);
+        });
+        (tree.relationships || []).forEach(r => { if (inCast(cast, r)) rels.set(r.id, r); });
+        Object.entries(tree.layers || {}).forEach(([k, cs]) => {
+          layers[k] = [...(layers[k] || []), ...cs.filter(c => cast.has(String(c.id)) && !(layers[k] || []).some(x => x.id === c.id))];
+        });
+      });
+      // Lala first: the page is about her world.
+      const lala = findLala(chars);
+      if (lala) chars.sort((a, b) => (b === lala) - (a === lala));
       const pend = pendR.data;
       dispatch({
         type: 'TREE_LOADED',
         payload: {
-          chars:  tree.characters || [],
-          rels:   tree.relationships || [],
-          layers: tree.layers || {},
-          cands:  pend.candidates || pend || [],
+          chars,
+          rels:   [...rels.values()],
+          layers,
+          cands:  (pend.candidates || pend || []).filter(c => inCast(cast, c)),
         },
       });
     } catch (err) {
       dispatch({ type: 'ERROR', msg: err.message || 'Failed to load relationships. Check your connection and try again.' });
     }
-  }, [s.reg]);
+  }, [s.reg, s.regs, s.cast]);
 
   useEffect(() => { fetchTree(); }, [fetchTree]);
 
@@ -206,7 +266,8 @@ export default function RelationshipEngine() {
     try {
       const r = await generateRelationships({ registry_id: s.reg?.id, focus_character_id: focusId });
       const d = r.data;
-      dispatch({ type: 'SET', payload: { cands: d.candidates || d || [], genning: false, genOpen: false, tab: 'candidates' } });
+      const fresh = (d.candidates || d || []).filter(c => !s.cast || inCast(s.cast, c));
+      dispatch({ type: 'SET', payload: { cands: fresh, genning: false, genOpen: false, tab: 'candidates' } });
       toast('Seeds generated', 'success');
     } catch (err) {
       dispatch({ type: 'SET', payload: { genning: false } });
@@ -263,8 +324,15 @@ export default function RelationshipEngine() {
     return m;
   }, [s.layers]);
 
+  const roleTypes = useMemo(() => {
+    const n = {};
+    s.chars.forEach(c => { if (c.role_type) n[c.role_type] = (n[c.role_type] || 0) + 1; });
+    return Object.entries(n).sort();
+  }, [s.chars]);
+
   const filtChars = useMemo(() => {
-    let list = s.lf === 'all' ? s.chars : s.chars.filter(c => clayer(c) === s.lf);
+    // The type filter is the role type (every cast member is in Lala's world).
+    let list = s.lf === 'all' ? s.chars : s.chars.filter(c => c.role_type === s.lf);
     if (charSearch.trim()) {
       const q = charSearch.toLowerCase();
       list = list.filter(c => cname(c).toLowerCase().includes(q) || (c.role_type || '').toLowerCase().includes(q));
@@ -303,12 +371,21 @@ export default function RelationshipEngine() {
   }, [s.rels]);
 
   const tabs = [
-    { key: 'tree',       label: 'Tree',       icon: '◇' },
-    { key: 'family',     label: 'Family',     icon: '⬡' },
-    { key: 'web',        label: 'Web',        icon: '◎' },
-    { key: 'candidates', label: 'Seeds',      icon: '◈', badge: s.cands.length || null },
-    { key: 'list',       label: 'List',        icon: '≡' },
+    { key: 'overview',   label: 'Overview',   Icon: House },
+    { key: 'tree',       label: 'Tree',       Icon: GitBranch },
+    { key: 'family',     label: 'Family',     Icon: Users },
+    { key: 'web',        label: 'Web',        Icon: Share2 },
+    { key: 'candidates', label: 'Seeds',      Icon: Sprout, badge: s.cands.length || null },
+    { key: 'list',       label: 'List',       Icon: List },
   ];
+  const setTab = tab => dispatch({ type: 'SET', payload: { tab } });
+
+  /* Overview profiles the selected character, else Lala, else the first protagonist */
+  const profileChar = s.selChar
+    || findLala(s.chars)
+    || s.chars.find(c => c.role_type === 'protagonist')
+    || s.chars[0]
+    || null;
 
   const subline =
     s.tab === 'candidates' ? `${s.cands.length} pending` :
@@ -342,26 +419,30 @@ export default function RelationshipEngine() {
       {/* ── TOP BAR ──────────────────────────────────────────────── */}
       <header className="re-header" role="banner">
         <div className="re-header-left">
-          <span className="re-wordmark">Relationship Engine</span>
-          <span className="re-badge">v2</span>
+          <span className="re-brand">LalaVerse</span>
+          <div className="re-title-block">
+            <h1 className="re-wordmark">Relationship Engine</h1>
+            <div className="re-tagline">People · Connections · Stories · Consequences</div>
+          </div>
         </div>
 
-        {/* tab rail */}
-        <nav className="re-tab-rail" role="tablist" aria-label="View tabs">
-          {tabs.map(t => (
-            <button key={t.key} role="tab" aria-selected={s.tab === t.key}
-              className={`cg-tab-btn ${s.tab === t.key ? 'is-active' : ''}`}
-              onClick={() => dispatch({ type: 'SET', payload: { tab: t.key } })}>
-              <span>{t.icon}</span> {t.label}
-              {t.badge && <span className="cg-tab-count">{t.badge}</span>}
-            </button>
-          ))}
-        </nav>
-
-        <div className="re-header-actions">
-          <Btn variant="ghost" onClick={exportRelationships} title="Export relationships as JSON">↓ Export</Btn>
-          <Btn variant="outline" onClick={() => dispatch({ type: 'SET', payload: { genOpen: true } })}>◈ Generate</Btn>
-          <Btn variant="primary" onClick={() => dispatch({ type: 'SET', payload: { addOpen: true } })}>+ Add</Btn>
+        <div className="re-header-tools">
+          <label className="re-search">
+            <Search size={18} aria-hidden />
+            <input
+              value={charSearch}
+              onChange={e => setCharSearch(e.target.value)}
+              placeholder="Search people…"
+              aria-label="Search characters"
+            />
+          </label>
+          <select className="re-layer-select" value={s.lf} aria-label="Filter by type"
+            onChange={e => dispatch({ type: 'SET', payload: { lf: e.target.value } })}>
+            <option value="all">All Types ({s.chars.length})</option>
+            {roleTypes.map(([k, n]) => (
+              <option key={k} value={k}>{k.charAt(0).toUpperCase() + k.slice(1)} ({n})</option>
+            ))}
+          </select>
         </div>
       </header>
 
@@ -406,37 +487,22 @@ export default function RelationshipEngine() {
       )}
       <div className="re-body">
         {/* LEFT SIDEBAR */}
-        {s.tab !== 'web' && (
-          <aside className="re-sidebar" role="navigation" aria-label="Characters">
-            {/* search */}
-            <div className="re-sidebar-section" style={{ padding: '0 12px 8px' }}>
-              <input
-                value={charSearch}
-                onChange={e => setCharSearch(e.target.value)}
-                placeholder="Search characters…"
-                style={{
-                  width: '100%', padding: '7px 10px', fontSize: 12,
-                  border: `1px solid ${T.border}`, borderRadius: 6,
-                  background: T.surface, color: T.text, outline: 'none',
-                  boxSizing: 'border-box',
-                }}
-              />
-            </div>
-            {/* layer filter */}
-            <div className="re-sidebar-section">
-              <div className="re-label">Layers</div>
-              <LFBtn active={s.lf === 'all'} onClick={() => dispatch({ type: 'SET', payload: { lf: 'all' } })} count={s.chars.length}>
-                All Characters
-              </LFBtn>
-              {Object.entries(LAYER).map(([k, v]) => (
-                <LFBtn key={k} active={s.lf === k}
-                  onClick={() => dispatch({ type: 'SET', payload: { lf: k } })}
-                  count={(s.layers[k] || []).length} dot={v.color}>
-                  {v.label}
-                </LFBtn>
-              ))}
-            </div>
+        <aside className="re-sidebar" aria-label="Views and characters">
+          <nav className="re-nav" role="tablist" aria-label="View tabs">
+            {tabs.map(t => (
+              <button key={t.key} role="tab" aria-selected={s.tab === t.key}
+                className={`re-nav-btn ${s.tab === t.key ? 'is-active' : ''}`}
+                onClick={() => setTab(t.key)}>
+                <t.Icon size={20} aria-hidden />
+                <span className="re-nav-label">{t.label}</span>
+                {t.badge && <span className="cg-tab-count">{t.badge}</span>}
+              </button>
+            ))}
+          </nav>
+          {s.tab !== 'web' && (
+            <>
             <div className="re-sidebar-divider" />
+            <div className="re-label re-sidebar-heading">People</div>
             {/* character list */}
             <div className="re-sidebar-chars">
               {filtChars.length === 0 && (
@@ -446,12 +512,13 @@ export default function RelationshipEngine() {
                 const lk = layerMap[c.id];
                 const lc = lk && LAYER[lk];
                 const rc = roleColor(c.role_type);
-                const act = s.selChar?.id === c.id;
+                const act = (s.tab === 'overview' ? profileChar?.id : s.selChar?.id) === c.id;
                 return (
                   <button key={c.id}
                     className={`cg-world-card ${act ? 'is-active' : ''}`}
                     onClick={() => {
-                      dispatch({ type: 'SET', payload: { selChar: s.selChar?.id === c.id ? null : c, selRel: null, panel: false } });
+                      const keep = s.tab === 'overview' || s.selChar?.id !== c.id;
+                      dispatch({ type: 'SET', payload: { selChar: keep ? c : null, selRel: null, panel: false } });
                     }}
                     aria-pressed={act}
                     aria-label={`${cname(c)}, ${c.role_type || 'unknown role'}`}>
@@ -460,19 +527,21 @@ export default function RelationshipEngine() {
                     </div>
                     <div className="re-char-info">
                       <div className="re-char-name">{cname(c)}</div>
-                      <div className="re-char-role">{c.role_type || '—'}</div>
+                      <div className="re-char-role">{findLala([c]) ? 'protagonist' : (c.role_type || '—')}</div>
                     </div>
                     {lc && <span className="re-char-layer-dot" style={{ background: lc.color }} />}
                   </button>
                 );
               })}
             </div>
-          </aside>
-        )}
+            </>
+          )}
+        </aside>
 
         {/* CENTER CANVAS */}
         <main className="re-canvas" role="main">
           {/* sub-header */}
+          {s.tab !== 'overview' && (
           <div className="re-sub-header">
             <div>
               <span className="re-sub-title">
@@ -501,14 +570,25 @@ export default function RelationshipEngine() {
                   {s.genFam ? 'Generating…' : '⬡ Auto-Generate Family'}
                 </Btn>
               )}
+              <Btn variant="ghost" onClick={exportRelationships} title="Export relationships as JSON">↓ Export</Btn>
+              <Btn variant="outline" onClick={() => dispatch({ type: 'SET', payload: { genOpen: true } })}>◈ Generate</Btn>
+              <Btn variant="primary" onClick={() => dispatch({ type: 'SET', payload: { addOpen: true } })}>+ Add</Btn>
             </div>
           </div>
+          )}
 
           {/* view */}
-          <div className="re-view">
-            {s.tab === 'web'        ? <WebView navigate={navigate} /> :
+          <div className={`re-view ${s.tab === 'overview' ? 'is-overview' : ''}`}>
+            {s.tab === 'web'        ? <WebView navigate={navigate} castKeys={s.chars.map(c => c.character_key)} /> :
              s.loading              ? <Spinner /> :
-             s.tab === 'tree'       ? <TreeView chars={filtChars} rels={filtRels} layers={s.layers} lf={s.lf} selChar={s.selChar} onRelClick={r => dispatch({ type: 'SET', payload: { selRel: r, panel: true } })} onCharClick={c => dispatch({ type: 'SET', payload: { selChar: c } })} /> :
+             s.tab === 'overview'   ? <ProfileView char={profileChar} chars={s.chars} rels={s.rels} cands={s.cands}
+                                        onSelectChar={c => dispatch({ type: 'SET', payload: { selChar: c, selRel: null, panel: false } })}
+                                        onRelClick={r => dispatch({ type: 'SET', payload: { selRel: r, panel: true } })}
+                                        onAdd={() => dispatch({ type: 'SET', payload: { addOpen: true } })}
+                                        onGenerate={() => dispatch({ type: 'SET', payload: { genOpen: true } })}
+                                        onExport={exportRelationships}
+                                        onTab={setTab} /> :
+             s.tab === 'tree'       ? <TreeView chars={filtChars} rels={filtRels} layers={s.layers} lf="all" selChar={s.selChar} onRelClick={r => dispatch({ type: 'SET', payload: { selRel: r, panel: true } })} onCharClick={c => dispatch({ type: 'SET', payload: { selChar: c } })} /> :
              s.tab === 'family'     ? <FamilyView data={s.famData} genning={s.genFam} onGenerate={genFamFn} onUpdateRole={updateFamRole} onRelClick={r => dispatch({ type: 'SET', payload: { selRel: r, panel: true } })} /> :
              s.tab === 'candidates' ? <CandidateView cands={s.cands} onConfirm={confirm} onDismiss={dismiss} busy={!!s.busy} /> :
                                       <ListView rels={filtRels} onSelect={r => dispatch({ type: 'SET', payload: { selRel: r, panel: true } })} />
@@ -517,7 +597,7 @@ export default function RelationshipEngine() {
         </main>
 
         {/* RIGHT INSPECTOR */}
-        {s.tab !== 'web' && (
+        {s.tab !== 'web' && (s.tab !== 'overview' || s.panel) && (
           <aside className="re-inspector-panel">
             {s.panel && s.selRel
               ? <Inspector rel={s.selRel}

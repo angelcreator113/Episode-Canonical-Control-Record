@@ -2314,6 +2314,9 @@ router.post('/characters/:id/deep-profile/generate', requireAuth, aiRateLimiter,
       ? `\n\nIMPORTANT — MINOR SAFEGUARD: This character is a minor (age ${character.age}). Do NOT generate the "sexuality_and_desire" dimension. Instead, set it to: { "note": "Dimension deferred — character is a minor." }\n`
       : '';
 
+    // Their facts (Character Consistency Engine step 5): class_and_money and ambition agree with them.
+    const { factsForCharacter, factsPromptBlock } = require('../services/characterFacts');
+    const factsBlock = factsPromptBlock(await factsForCharacter(db, character));
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 6000,
@@ -2321,7 +2324,7 @@ router.post('/characters/:id/deep-profile/generate', requireAuth, aiRateLimiter,
 
 Here is everything currently known about this character:
 ${JSON.stringify(cleanDossier, null, 2)}
-
+${factsBlock ? `\n${factsBlock}\n` : ''}
 ${filledDims.length > 0 ? `EXISTING deep_profile dimensions (do NOT overwrite — only fill empty dimensions):\n${JSON.stringify(existing, null, 2)}` : ''}
 ${minorSexualityRule}
 Generate the deep_profile. Infer what you can from the existing data. Use null for fields you genuinely cannot infer — do NOT fabricate generic filler. Every non-null field should be specific to THIS person.
@@ -2524,6 +2527,7 @@ router.post('/characters/:id/deep-profile/accept', requireAuth, async (req, res)
  * Body: { ids: [1,2,3] }
  */
 router.post('/characters/bulk-deep-profile', requireAuth, async (req, res) => {
+  const { factsForCharacter, factsPromptBlock } = require('../services/characterFacts');
   const { ids } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) {
     return res.status(400).json({ error: 'ids array required' });
@@ -2566,12 +2570,13 @@ router.post('/characters/bulk-deep-profile', requireAuth, async (req, res) => {
         voice_signature: character.voice_signature, living_context: character.living_context,
       })) { if (v !== null && v !== undefined && v !== '') dossier[k] = v; }
 
+      const factsBlock = factsPromptBlock(await factsForCharacter(db, character));
       const response = await anthropic.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 6000,
         system: `You are generating a 14-dimension deep character anthropology.
 Character data: ${JSON.stringify(dossier, null, 2)}
-${filledDims.length > 0 ? `Existing (do NOT overwrite): ${JSON.stringify(existing, null, 2)}` : ''}
+${factsBlock ? `${factsBlock}\n` : ''}${filledDims.length > 0 ? `Existing (do NOT overwrite): ${JSON.stringify(existing, null, 2)}` : ''}
 Return ONLY a JSON object with 14 dimensions: life_stage, the_body, class_and_money, religion_and_meaning, race_and_culture, sexuality_and_desire, family_architecture, friendship_and_loyalty, ambition_and_identity, habits_and_rituals, speech_and_silence, grief_and_loss, politics_and_justice, the_unseen. Use null for fields you cannot infer. Be specific to THIS character.`,
         messages: [{ role: 'user', content: `Generate deep_profile for ${dossier.name || 'this character'}.` }],
       });
@@ -2661,6 +2666,9 @@ router.post('/characters/:id/writer-paragraph/generate', requireAuth, aiRateLimi
     const Anthropic = require('@anthropic-ai/sdk');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+    // Their facts (Character Consistency Engine step 5): the portrait agrees with them.
+    const { factsForCharacter, factsPromptBlock } = require('../services/characterFacts');
+    const factsBlock = factsPromptBlock(await factsForCharacter(db, character));
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 2000,
@@ -2668,7 +2676,7 @@ router.post('/characters/:id/writer-paragraph/generate', requireAuth, aiRateLimi
 
 CHARACTER REGISTRY DATA:
 ${JSON.stringify(charData, null, 2)}
-
+${factsBlock ? `\n${factsBlock}\n` : ''}
 ${hasProfile ? `DEEP PROFILE (14-dimension anthropology):\n${JSON.stringify(dp, null, 2)}` : 'No deep profile available — work only with registry data.'}
 
 Write a single, flowing paragraph (200–400 words) that captures who this person IS — not a list of traits but a lived-in portrait. Write it as a writer's reference paragraph, the kind of text a novelist pins above their desk. Include specific sensory details, behavioral tells, contradictions, and emotional textures. Do NOT use bullet points, headers, or labels. Write prose.`,
@@ -2695,6 +2703,7 @@ Write a single, flowing paragraph (200–400 words) that captures who this perso
  * Body: { ids: [1,2,3] }
  */
 router.post('/characters/bulk-writer-paragraph', requireAuth, async (req, res) => {
+  const { factsForCharacter, factsPromptBlock } = require('../services/characterFacts');
   const { ids } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) {
     return res.status(400).json({ error: 'ids array required' });
@@ -2733,12 +2742,13 @@ router.post('/characters/bulk-writer-paragraph', requireAuth, async (req, res) =
         return v && typeof v === 'object' && Object.values(v).some(fv => fv !== null && fv !== undefined && fv !== '');
       });
 
+      const factsBlock = factsPromptBlock(await factsForCharacter(db, character));
       const response = await anthropic.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 2000,
         system: `You are writing a rich, literary character paragraph for a writer's reference.
 CHARACTER: ${JSON.stringify(charData, null, 2)}
-${hasProfile ? `DEEP PROFILE:\n${JSON.stringify(dp, null, 2)}` : ''}
+${factsBlock ? `${factsBlock}\n` : ''}${hasProfile ? `DEEP PROFILE:\n${JSON.stringify(dp, null, 2)}` : ''}
 Write a single flowing paragraph (200–400 words) capturing who this person IS — a writer's reference portrait with sensory details, behavioral tells, contradictions, emotional textures. Prose only, no lists or headers.`,
         messages: [{ role: 'user', content: `Write the writer paragraph for ${charData.name || 'this character'}.` }],
       });

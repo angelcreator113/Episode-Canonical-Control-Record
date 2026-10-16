@@ -50,6 +50,12 @@ export const unmarkIntentionalApi = (id, flagId) =>
   apiClient.delete(`${API_URL}/cast/characters/${id}/check/intentional/${flagId}`);
 export const generatePostsApi = (id, body) =>
   apiClient.post(`${API_URL}/cast/characters/${id}/posts/generate`, body);
+export const getTypologyApi = (id) =>
+  apiClient.get(`${API_URL}/cast/characters/${id}/typology`);
+export const putTypologyApi = (id, body) =>
+  apiClient.put(`${API_URL}/cast/characters/${id}/typology`, body);
+export const suggestTypologyApi = (id) =>
+  apiClient.post(`${API_URL}/cast/characters/${id}/typology/suggest`);
 export const getStoryTrailApi = (id) =>
   apiClient.get(`${API_URL}/cast/characters/${id}/story-trail`);
 export const getPlacesApi = (id) =>
@@ -672,6 +678,145 @@ export function ProfileCheck({ characterId }) {
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * Their type (Character Consistency Engine step 6a; services/characterTypology):
+ * the Enneagram type their inner life grows from, an optional MBTI dial for
+ * how they phrase things, and why. "Suggest a type" reads their writing and
+ * proposes one; nothing is saved until you choose it.
+ */
+const ENNEAGRAM_NAMES = {
+  1: 'The Reformer', 2: 'The Helper', 3: 'The Achiever', 4: 'The Individualist', 5: 'The Investigator',
+  6: 'The Loyalist', 7: 'The Enthusiast', 8: 'The Challenger', 9: 'The Peacemaker',
+};
+const MBTI_TYPES = ['INTJ', 'INTP', 'ENTJ', 'ENTP', 'INFJ', 'INFP', 'ENFJ', 'ENFP', 'ISTJ', 'ISFJ', 'ESTJ', 'ESFJ', 'ISTP', 'ISFP', 'ESTP', 'ESFP'];
+const wingsOf = (type) => [type === 1 ? 9 : type - 1, type === 9 ? 1 : type + 1];
+const formOf = (t) => ({
+  type: t?.enneagram?.type ? String(t.enneagram.type) : '', wing: t?.enneagram?.wing ? String(t.enneagram.wing) : '',
+  mbti: t?.mbti || '', why: t?.why || '',
+});
+
+export function TheirType({ character }) {
+  const id = character.id;
+  const [data, setData] = useState(null);
+  const [form, setForm] = useState(null);
+  const [suggestion, setSuggestion] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let live = true;
+    getTypologyApi(id)
+      .then((res) => { if (live) setData(res.data); })
+      .catch((err) => {
+        console.error('[CharacterProfilePage] typology load failed:', err);
+        if (live) setData({ error: err.response?.data?.error || 'Could not load their type.' });
+      });
+    return () => { live = false; };
+  }, [id]);
+
+  const act = async (label, fn) => {
+    setBusy(label);
+    setError(null);
+    try { await fn(); } catch (err) {
+      console.error(`[CharacterProfilePage] typology ${label} failed:`, err);
+      setError(err.response?.data?.error || `Could not ${label}.`);
+    } finally { setBusy(null); }
+  };
+  const save = (e) => {
+    e.preventDefault();
+    return act('save', async () => {
+      const res = await putTypologyApi(id, {
+        enneagram: { type: Number(form.type), wing: form.wing ? Number(form.wing) : null },
+        mbti: form.mbti || null, why: form.why.trim() || null,
+      });
+      setData(res.data);
+      setForm(null);
+      setSuggestion(null);
+    });
+  };
+  const clear = () => act('clear', async () => {
+    const res = await putTypologyApi(id, { clear: true });
+    setData(res.data);
+    setForm(null);
+  });
+  const suggest = () => act('suggest a type', async () => {
+    const res = await suggestTypologyApi(id);
+    setSuggestion(res.data);
+  });
+
+  const typology = data?.typology;
+  const type = Number(form?.type) || null;
+  return (
+    <section className="ch-card" aria-labelledby="ch-type" data-testid="ch-type">
+      <div className="ch-card-head">
+        <h2 id="ch-type" className="ch-h2">Their type</h2>
+        <span className="ch-note">The root their inner life grows from</span>
+      </div>
+      {!data ? <p className="ch-note">Loading…</p>
+        : data.error ? <p className="ch-note is-error" role="alert">{data.error}</p>
+        : !form && (
+          <>
+            {typology ? (
+              <div className="ch-type-now">
+                <p className="ch-type-label"><b>Enneagram {data.label}</b>{typology.mbti && <> · MBTI {typology.mbti}</>}</p>
+                {typology.why && <p className="ch-note">{typology.why}</p>}
+              </div>
+            ) : <p className="ch-note">No type set yet. Generated inner life is built without one.</p>}
+            <span className="ch-facts-row">
+              <button type="button" className="ch-btn-soft" onClick={() => setForm(formOf(typology))}>{typology ? 'Change' : 'Set their type'}</button>
+              <button type="button" className="ch-btn-soft" disabled={Boolean(busy)} onClick={suggest}>{busy === 'suggest a type' ? 'Reading…' : 'Suggest a type from their writing'}</button>
+              {typology && <button type="button" className="ch-btn-chip" disabled={Boolean(busy)} onClick={clear}>Clear</button>}
+            </span>
+          </>
+        )}
+      {suggestion && !form && (
+        <div className="ch-type-suggest" data-testid="ch-type-suggest">
+          <p><b>Suggested: Enneagram {suggestion.label}</b>{suggestion.suggestion?.mbti && <> · MBTI {suggestion.suggestion.mbti}</>}</p>
+          {suggestion.suggestion?.why && <p className="ch-note">{suggestion.suggestion.why}</p>}
+          <span className="ch-facts-row">
+            <button type="button" className="ch-btn" onClick={() => { setForm(formOf(suggestion.suggestion)); }}>Use this</button>
+            <button type="button" className="ch-btn-soft" onClick={() => setSuggestion(null)}>Dismiss</button>
+          </span>
+        </div>
+      )}
+      {form && (
+        <form className="ch-type-form" onSubmit={save}>
+          <label className="ch-gen-field">
+            <span>Enneagram type</span>
+            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value, wing: '' })} required>
+              <option value="">Choose…</option>
+              {Object.entries(ENNEAGRAM_NAMES).map(([n, name]) => <option key={n} value={n}>{n} · {name}</option>)}
+            </select>
+          </label>
+          <label className="ch-gen-field">
+            <span>Wing</span>
+            <select value={form.wing} onChange={(e) => setForm({ ...form, wing: e.target.value })} disabled={!type}>
+              <option value="">None</option>
+              {type && wingsOf(type).map((w) => <option key={w} value={w}>{type}w{w} · {ENNEAGRAM_NAMES[w]}</option>)}
+            </select>
+          </label>
+          <label className="ch-gen-field">
+            <span>MBTI (how they phrase things only)</span>
+            <select value={form.mbti} onChange={(e) => setForm({ ...form, mbti: e.target.value })}>
+              <option value="">None</option>
+              {MBTI_TYPES.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </label>
+          <label className="ch-gen-field">
+            <span>Why this type</span>
+            <textarea rows={2} maxLength={1000} value={form.why} onChange={(e) => setForm({ ...form, why: e.target.value })} />
+          </label>
+          <span className="ch-facts-row">
+            <button type="submit" className="ch-btn" disabled={Boolean(busy) || !form.type}>{busy === 'save' ? 'Saving…' : 'Save type'}</button>
+            <button type="button" className="ch-btn-soft" onClick={() => setForm(null)}>Cancel</button>
+          </span>
+        </form>
+      )}
+      {error && <p className="ch-note is-error" role="alert">{error}</p>}
+    </section>
   );
 }
 
@@ -1779,6 +1924,7 @@ export default function CharacterProfilePage() {
 
       <div className="ch-panel">
         {activeTab === 'overview' && <TabOverview character={character} appearances={appearances} feedProfile={feedProfile} onSaved={onSaved} onFeedSaved={onFeedSaved} gen={gen} />}
+        {activeTab === 'inner' && <TheirType character={character} />}
         {activeTab === 'inner' && (
           <div className="ch-card">
             <TabInterior character={character} gen={gen} />

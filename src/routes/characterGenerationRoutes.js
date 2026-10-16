@@ -205,13 +205,16 @@ router.post('/confirm-feed', async (req, res) => {
     const character = await RegistryCharacter.findByPk(character_id);
     if (!character) return res.status(404).json({ error: 'Character not found' });
 
-    // Map follower_range to a number
-    const _followerMap = {
-      'nano':  5000,
-      'micro': 50000,
-      'mid':   250000,
-      'macro': 1000000,
-    };
+    // The proposal's follower count (Character Consistency Engine step 5c):
+    // a whole number, which becomes their starting count in the follower
+    // ledger once the profile is made. An older proposal's tier word
+    // ("micro", follower_range) gives the tier only; no count is invented.
+    const proposedCount = Number.isInteger(Number(feed_proposal.follower_count)) && Number(feed_proposal.follower_count) > 0
+      ? Number(feed_proposal.follower_count) : null;
+    const { formatCount } = require('../services/characterFacts');
+    const tierWord = String(feed_proposal.follower_range || '').toLowerCase().split(/[\s(]/)[0];
+    const startTier = proposedCount ? require('../services/pulseAudience').tierFor(proposedCount).key
+      : (['emerging', 'nano', 'micro', 'mid', 'macro', 'mega'].includes(tierWord) ? tierWord : null);
 
     const layer = FEED_LAYERS.includes(feed_layer || feed_proposal.feed_layer) ? (feed_layer || feed_proposal.feed_layer) : 'real_world';
     // A LalaVerse profile's Society archetype, the least used (fix-list item 26).
@@ -228,7 +231,8 @@ router.post('/confirm-feed', async (req, res) => {
         : (feed_proposal.platform && feed_proposal.platform !== PULSE ? feed_proposal.platform : 'instagram'),
       vibe_sentence:   feed_proposal.bio || '',
       current_state:   feed_proposal.starting_state || 'rising',
-      follower_count_approx: feed_proposal.follower_range || 'micro',
+      follower_count_approx: proposedCount ? formatCount(proposedCount) : null,
+      follower_tier:   startTier,
       status:          'generated',
       auto_generated:  true,
       // The layer asked for (it always took the default: wiring map,
@@ -258,6 +262,20 @@ router.post('/confirm-feed', async (req, res) => {
       social_presence:  true,
       depth_level:      'active',  // having a Feed profile moves them to Active
     });
+
+    // Their starting count goes in the follower ledger (services/characterFacts setFacts):
+    // the one place a follower count lives. Without a show it stays on the profile only.
+    if (proposedCount) {
+      try {
+        await require('../services/characterFacts').setFacts(models, {
+          character, feedProfile: profile,
+          body: { followers: { count: proposedCount, reason: 'Proposed with the character and confirmed on their Feed profile.' } },
+          by: String(req.user?.email || req.user?.id || 'confirm-feed').slice(0, 255),
+        });
+      } catch (ledgerErr) {
+        console.error('[characterGenerationRoutes] /confirm-feed: the starting count could not be written to the ledger:', ledgerErr.message);
+      }
+    }
 
     // Create a CharacterEntanglement — the character is their own identity anchor
     if (models.CharacterEntanglement) {

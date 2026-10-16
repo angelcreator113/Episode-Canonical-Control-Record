@@ -558,6 +558,22 @@ describe('PostProcessingService', () => {
       expect(mockS3Send).toHaveBeenCalled();
     });
 
+    // Fourth audit: a fixed key with a one-year cache kept showing the old
+    // enhancement after a re-run.
+    it('stores each run of the enhanced still under a new key', async () => {
+      const run = async () => {
+        mockS3Send.mockClear();
+        await processAngleAssets(mockSceneAngle, mockSceneSet, mockModels, { skipCloudinary: true, skipFFmpeg: true });
+        return mockS3Send.mock.calls[0][0].Key;
+      };
+      const nowSpy = jest.spyOn(Date, 'now').mockReturnValueOnce(1000).mockReturnValueOnce(2000);
+      const first = await run();
+      const second = await run();
+      nowSpy.mockRestore();
+      expect(first).toMatch(/^scene-sets\/.+\/angles\/angle-123\/.+-1000\.\w+$/);
+      expect(second).not.toBe(first);
+    });
+
     it('should update model with enhanced URLs on completion', async () => {
       await processAngleAssets(mockSceneAngle, mockSceneSet, mockModels, {
         skipSharp: true,

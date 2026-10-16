@@ -6,12 +6,13 @@
  */
 const mockSend = jest.fn(async () => ({}));
 const mockResize = jest.fn();
+const mockSize = { width: 1920, height: 1080 };
 jest.mock('sharp', () => jest.fn(() => {
   const chain = {
     resize: (...args) => { mockResize(...args); return chain; },
     jpeg: () => chain, png: () => chain, extract: () => chain,
     toBuffer: async () => Buffer.from('jpeg'),
-    metadata: async () => ({ width: 1024, height: 576 }),
+    metadata: async () => ({ ...mockSize }),
   };
   return chain;
 }));
@@ -55,5 +56,30 @@ describe('the shape of a stored still', () => {
     // Kept, and stored as every still is (sceneImageAudit3.test.js).
     expect(await crop('https://s3.example/base.png', 'WIDE', 'set-1', 'a1', 'p', { frame: view })).toMatch(/stills\/\d+-angle-a1-crop\.jpg$/);
     expect(mockResize).toHaveBeenCalledWith(1920, 1080, { fit: 'cover', position: 'center' });
+  });
+
+  // Fourth audit: a crop with too few real pixels came out soft.
+  test('a frame with too few real pixels is generated, not cropped', async () => {
+    const crop = sceneGen.cropAndOutpaint;
+    const view = { left: 0, top: 0.2, width: 0.6, height: 0.6 };
+    // A Flux base drawn 1024x576, stored upscaled to 1920x1080: 614 real pixels wide.
+    expect(await crop('https://s3.example/base.png', 'WIDE', 'set-1', 'a1', 'p', { frame: view, nativeWidth: 1024 })).toBeNull();
+    // A small picture, read as it is.
+    Object.assign(mockSize, { width: 1024, height: 576 });
+    try {
+      expect(await crop('https://s3.example/base.png', 'WIDE', 'set-1', 'a1', 'p', { frame: view })).toBeNull();
+    } finally {
+      Object.assign(mockSize, { width: 1920, height: 1080 });
+    }
+    // Drawn at full size: kept.
+    expect(await crop('https://s3.example/base.png', 'WIDE', 'set-1', 'a1', 'p', { frame: view, nativeWidth: 1920 })).toMatch(/-crop\.jpg$/);
+  });
+
+  test('the estimate reads the base\'s drawn size the same way', () => {
+    const { cropHasPixels } = sceneGen;
+    const view = { width: 0.6, height: 0.6 };
+    expect(cropHasPixels(view, { base_generation: { width: 1024, height: 576 } })).toBe(false);
+    expect(cropHasPixels(view, { base_generation: JSON.stringify({ width: 1920, height: 1080 }) })).toBe(true);
+    expect(cropHasPixels(view, {})).toBe(true);
   });
 });
