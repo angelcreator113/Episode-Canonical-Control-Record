@@ -28,6 +28,7 @@ import ConditionRow from './phone-editor/ConditionRow';
 import api from '../services/api';
 import PhoneFrame from './phone/PhoneFrame';
 import { getScreenImageStyle } from './phone/phoneStyle';
+import { atHandle } from '../pages/feed/feedConstants';
 
 const ZONE_COLORS = ['#e8a0b4', '#b8a9d4', '#7ab3d4', '#a8d5a2', '#c9a84c', '#6bba9a', '#e06060', '#b89060'];
 
@@ -603,7 +604,7 @@ function ZoneConfigPanel({ zone, profiles, profilesLoading, events = [], eventsL
                 >
                   <option value="">— Select profile —</option>
                   {profiles.map(p => (
-                    <option key={p.id} value={p.id}>@{p.handle} — {p.display_name || p.creator_name}</option>
+                    <option key={p.id} value={p.id}>{atHandle(p.handle)} — {p.display_name || p.creator_name}</option>
                   ))}
                 </select>
               )}
@@ -680,7 +681,7 @@ function ZoneConfigPanel({ zone, profiles, profilesLoading, events = [], eventsL
                   >
                     <option value="">— No inviter shown —</option>
                     {profiles.map(p => (
-                      <option key={p.id} value={p.id}>@{p.handle} — {p.display_name || p.creator_name}</option>
+                      <option key={p.id} value={p.id}>{atHandle(p.handle)} — {p.display_name || p.creator_name}</option>
                     ))}
                   </select>
                 )}

@@ -19,6 +19,7 @@ import { BEATS, beatName } from '../../lib/canonicalBeats';
 import { postOrder, storyLabel } from '../../lib/storyClock';
 import { posterOf, whenLabel, initial, toneOf } from '../../lib/pulsePosts';
 import RevealPicker from './RevealPicker';
+import { atHandle } from '../../pages/feed/feedConstants';
 import { PinAsExample } from './PulseVoices';
 import './PulseReviewPost.css';
 
@@ -84,7 +85,7 @@ export function Reactions({ post, onChange }) {
           {drafts.map((c) => (
             <li key={c.id}>
               <Tile name={c.handle} tone={toneOf(c.handle)} />
-              <span><span className="prv-badge">draft</span> <b>@{c.handle}</b> {c.text}{c.voice_note && <em className="prv-voice"> · {c.voice_note}</em>}</span>
+              <span><span className="prv-badge">draft</span> <b>{atHandle(c.handle)}</b> {c.text}{c.voice_note && <em className="prv-voice"> · {c.voice_note}</em>}</span>
               <button type="button" className="prv-mini prv-approve" onClick={() => approve(c)} disabled={busy}>approve</button>
               <button type="button" className="prv-mini" onClick={() => remove(c)} disabled={busy}>delete</button>
             </li>
@@ -96,7 +97,7 @@ export function Reactions({ post, onChange }) {
         {reactors.length > 0 && (
           <span className="prv-reactors-pick" role="group" aria-label="Who reacts">
             {reactors.map((r) => (
-              <label key={r.id}><input type="checkbox" checked={picked?.has(r.id) ?? true} onChange={() => toggle(r.id)} /> @{r.handle}{r.relationship ? ` (${r.relationship.replace(/_/g, ' ')})` : ''}</label>
+              <label key={r.id}><input type="checkbox" checked={picked?.has(r.id) ?? true} onChange={() => toggle(r.id)} /> {atHandle(r.handle)}{r.relationship ? ` (${r.relationship.replace(/_/g, ' ')})` : ''}</label>
             ))}
           </span>
         )}

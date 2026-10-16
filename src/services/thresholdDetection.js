@@ -81,13 +81,6 @@ const WOUND_THRESHOLDS = {
     nature:    'Creates from genuine love of the work. Unaware of her effect on others.',
     type:      'mirror',
   },
-  the_almost_mentor: {
-    primary:   { dimension: 'shame', level: 6 },
-    secondary: { dimension: 'fear', level: 7 },
-    wound:     'They were never fully saved by anyone either. They built it alone.',
-    nature:    'Moves toward their own orbit. Warmth is real but attention is scarce.',
-    type:      'shadow',
-  },
   the_witness: {
     primary:   { dimension: 'grief', level: 7 },
     secondary: { dimension: 'longing', level: 6 },
@@ -235,7 +228,6 @@ RULES:
     justawoman:             'I did everything right this week. I don\'t understand why that\'s not enough.',
     lala:                   'I keep feeling like I learned something I can\'t remember learning.',
     the_comparison_creator: 'Someone used my work as an example of what to do. I don\'t know why that made me feel worse.',
-    the_almost_mentor:      'I saw someone who reminded me of her. I walked the other direction.',
     the_witness:            'I\'ve seen this before. I know how it ends. I don\'t know what to do with knowing.',
     reyna_voss:             'I found out what they actually budgeted. Again. Different client. Same number.',
     solene_beaumont:        'I got dressed this morning and didn\'t recognize any of it as mine.',

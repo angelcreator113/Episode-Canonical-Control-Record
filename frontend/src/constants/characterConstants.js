@@ -20,10 +20,14 @@ export const ROLE_COLORS = {
   special:     '#5ec0b8',
 };
 
-/** Human-readable labels */
+/**
+ * Human-readable labels. 'pressure' is Pressure, not Antagonist (Evoni,
+ * 2026-10-16): David, Carolyn and Ms. Caldwell are pressure and are not
+ * villains ("David cannot be villainized", characterAppearanceRules).
+ */
 export const ROLE_LABELS = {
   protagonist: 'Protagonist',
-  pressure:    'Antagonist',
+  pressure:    'Pressure',
   mirror:      'Mirror',
   support:     'Supporting',
   shadow:      'Shadow',
@@ -43,7 +47,7 @@ export const ROLE_ICONS = {
 /** Dropdown / select options array */
 export const ROLE_OPTIONS = [
   { value: 'protagonist', label: 'Protagonist' },
-  { value: 'pressure',    label: 'Antagonist' },
+  { value: 'pressure',    label: 'Pressure' },
   { value: 'mirror',      label: 'Mirror' },
   { value: 'support',     label: 'Supporting' },
   { value: 'shadow',      label: 'Shadow' },
