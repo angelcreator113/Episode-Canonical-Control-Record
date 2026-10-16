@@ -1451,6 +1451,12 @@ a.ch-trail-text:hover { text-decoration: underline; }
 .ch-check-what { overflow-wrap: anywhere; }
 .ch-check-excerpt { font-size: 12px; color: var(--text-secondary); font-style: italic; overflow-wrap: anywhere; }
 .ch-check-intentional summary { cursor: pointer; font-size: 13px; font-weight: 700; }
+.ch-type-now { display: grid; gap: 4px; }
+.ch-type-label { margin: 0; overflow-wrap: anywhere; }
+.ch-type-suggest { display: grid; gap: 6px; margin-top: 12px; padding: 12px; border-radius: 12px; background: var(--surface-subtle, var(--lala-parchment-2)); }
+.ch-type-suggest p { margin: 0; overflow-wrap: anywhere; }
+.ch-type-form { display: grid; gap: 10px; }
+.ch-type-form select { justify-self: start; }
 .ch-gen { display: grid; gap: 8px; border-top: 1px solid var(--lala-lavender-line); padding-top: 12px; margin-top: 12px; }
 .ch-gen > .ch-btn { justify-self: start; }
 .ch-gen-field { display: grid; gap: 4px; font-size: 13px; }

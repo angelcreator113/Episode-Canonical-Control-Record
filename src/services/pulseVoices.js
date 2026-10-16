@@ -157,12 +157,12 @@ function getClient() {
   return client;
 }
 
-function buildPrompt(source, factsBlock = '') {
+function buildPrompt(source, factsBlock = '', dial = '') {
   return `You describe how a character writes on a social network, as concrete habits a writer can copy.
 Use only this public face of the character. Do not invent private feelings.
 
 ${JSON.stringify(source, null, 2)}
-${factsBlock ? `\n${factsBlock}\nTheir topics and phrases stay inside these facts.\n` : ''}
+${factsBlock ? `\n${factsBlock}\nTheir topics and phrases stay inside these facts.\n` : ''}${dial ? `\n${dial}\n` : ''}
 Answer with JSON only, in this shape:
 {
   "case": "lowercase" | "sentence" | "mixed" | "caps for emphasis",
@@ -192,7 +192,7 @@ async function buildVoice(db, characterId, { lane = 'manual', jobId = null } = {
   let message;
   for (const model of MODELS) {
     try {
-      message = await getClient().messages.create({ model, max_tokens: 800, messages: [{ role: 'user', content: buildPrompt(source, factsBlock) }] });
+      message = await getClient().messages.create({ model, max_tokens: 800, messages: [{ role: 'user', content: buildPrompt(source, factsBlock, require('./characterTypology').voiceDial(character.typology)) }] });
       break;
     } catch (modelErr) {
       console.warn(`[PulseVoices] building with ${model} failed:`, modelErr.message);

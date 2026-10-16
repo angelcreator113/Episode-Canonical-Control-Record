@@ -140,6 +140,22 @@ function refuseWhileGenerating(res, row, what) {
   return true;
 }
 
+/**
+ * An angle whose video is queued or being made: a new still would be
+ * replaced under the clip, which moves the old one (fourth audit). Answers
+ * 409 VIDEO_IN_PROGRESS and returns true when it is.
+ */
+async function refuseWhileVideoRuns(res, angle) {
+  if (!GenerationJob) return false;
+  await ensureGenerationJobsTable();
+  const running = await GenerationJob.findOne({
+    where: { job_type: 'generate_angle_video', scene_angle_id: angle.id, status: ['queued', 'processing'] },
+  });
+  if (!running) return false;
+  res.status(409).json({ success: false, code: 'VIDEO_IN_PROGRESS', error: `The video of "${angle.angle_name || angle.angle_label}" is being made from its picture. Wait for it to finish.` });
+  return true;
+}
+
 const SCENE_TYPES = Object.freeze(['HOME_BASE', 'CLOSET', 'EVENT_LOCATION', 'TRANSITION', 'OTHER']);
 // A refused budget (the image budget or the Claude budget, code
 // AI_BUDGET_EXCEEDED) is a 429 with its reason; anything else is a 500
@@ -1038,20 +1054,41 @@ router.post('/:id/upload-base', validateUUIDParam('id'), requireAuth, aiRateLimi
     ].filter(Boolean);
     if (uploaded.length === 0) return res.status(400).json({ success: false, error: 'No image file provided' });
 
+    // An uploaded base is made the shape every still is: turned upright
+    // (EXIF), 16:9 at 1920x1080 around its most detailed part, as a JPEG.
+    // Stored as given, a portrait photo became a base whose crops were thin
+    // bands beside 16:9 angles (fourth audit, 2026-10-15). A picture under
+    // 640x360 is too small to be a base.
+    const sharp = require('sharp');
+    const normalised = [];
+    for (const file of uploaded) {
+      let meta;
+      try {
+        meta = await sharp(file.buffer).rotate().metadata();
+      } catch (err) {
+        console.error('Scene Sets upload-base: not a readable image:', err.message);
+        return res.status(400).json({ success: false, error: `${file.originalname || 'The file'} is not a readable image` });
+      }
+      if ((meta.width || 0) < 640 || (meta.height || 0) < 360) {
+        return res.status(400).json({ success: false, error: `${file.originalname || 'The image'} is ${meta.width}x${meta.height}: a base needs at least 640x360` });
+      }
+      normalised.push(await sharp(file.buffer).rotate()
+        .resize(1920, 1080, { fit: 'cover', position: sharp.strategy.attention })
+        .jpeg({ quality: 92 })
+        .toBuffer());
+    }
+
     const uploadedUrls = [];
     for (let i = 0; i < uploaded.length; i += 1) {
       const file = uploaded[i];
-      const ext = file.mimetype === 'image/png' ? 'png'
-                : file.mimetype === 'image/webp' ? 'webp'
-                : 'jpg';
       const ts = Date.now();
-      const s3Key = `scene-sets/${set.id}/angles/base/still-${ts}-${i}.${ext}`;
+      const s3Key = `scene-sets/${set.id}/angles/base/still-${ts}-${i}.jpg`;
 
       await s3.send(new PutObjectCommand({
         Bucket: S3_BUCKET,
         Key: s3Key,
-        Body: file.buffer,
-        ContentType: file.mimetype,
+        Body: normalised[i],
+        ContentType: 'image/jpeg',
         CacheControl: 'max-age=31536000',
       }));
 
@@ -1068,6 +1105,13 @@ router.post('/:id/upload-base', validateUUIDParam('id'), requireAuth, aiRateLimi
       base_still_url: primaryUrl,
       base_runway_seed: `uploaded-${Date.now()}`,
       generation_status: 'complete',
+      // The base is this upload now: its size is the crops' measure, not the
+      // last generated base's (cropHasPixels).
+      // Merged: a model comparison copy is found by its comparison_group.
+      base_generation: {
+        ...(typeof set.base_generation === 'object' && set.base_generation ? set.base_generation : {}),
+        source: 'uploaded', width: 1920, height: 1080, uploaded_at: new Date().toISOString(),
+      },
     });
     // The angles that are the base picture show the new one; then the old
     // image is deleted (best effort) unless an angle or an approved base
@@ -1638,6 +1682,8 @@ router.post('/:id/angles/:angleId/generate', validateUUIDParam('id'), requireAut
       return res.status(409).json({ success: false, code: 'NO_BASE', error: 'Generate or upload this set\'s base first: each zone is made from it, so the zones read as one place.' });
     }
 
+    if (await refuseWhileVideoRuns(res, angle)) return;
+
     // Mark as generating: one generation of an angle at a time.
     if (!(await claimGeneration(res, 'angle', angle.id, `"${angle.angle_name || angle.angle_label}"`))) return;
 
@@ -1674,6 +1720,10 @@ router.post('/:id/angles/:angleId/generate-video', validateUUIDParam('id'), requ
       where: { id: req.params.angleId, scene_set_id: set.id },
     });
     if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
+    // Not while its picture (or the base it falls back to) is being made:
+    // the clip would move the picture being replaced (fourth audit).
+    if (refuseWhileGenerating(res, angle, `"${angle.angle_name || angle.angle_label}"`)) return;
+    if (!angle.still_image_url && refuseWhileGenerating(res, set, `The base of "${set.name}"`)) return;
 
     if (!angle.still_image_url && !set.base_still_url) {
       return res.status(400).json({
@@ -1857,8 +1907,25 @@ router.patch('/:id/angles/:angleId', validateUUIDParam('id'), requireAuth, valid
     const shotChanged = updates.angle_label !== undefined && shotKey(updates.angle_label) !== shotKey(angle.angle_label);
     if (shotChanged && updates.camera_direction === undefined) updates.camera_direction = null;
 
+    // An edit to what the picture shows leaves the still behind it. The flag
+    // is kept on the angle (the response alone was lost on reload) and is
+    // cleared when the angle is generated again (fourth audit). A rename is
+    // not a new picture.
+    const sameText = (a, b) => String(a ?? '').trim() === String(b ?? '').trim();
+    const staleFields = [];
+    if (shotChanged) staleFields.push('angle_label');
+    for (const key of ['angle_description', 'camera_direction', 'angle_kind', 'zone_angle_id']) {
+      if (updates[key] !== undefined && !sameText(updates[key], angle[key])) staleFields.push(key);
+    }
+    const imageStale = Boolean(angle.still_image_url) && staleFields.length > 0;
+    if (imageStale) {
+      const review = { ...(angle.quality_review || {}) };
+      delete review.from_base;
+      updates.quality_review = { ...review, stale: { reason: 'edited', fields: staleFields, at: new Date().toISOString() } };
+    }
+
     await angle.update(updates);
-    res.json({ success: true, data: angle, image_stale: Boolean(shotChanged && angle.still_image_url) });
+    res.json({ success: true, data: angle, image_stale: imageStale });
   } catch (err) {
     console.error('Scene Sets PATCH /:id/angles/:angleId error:', err);
     sendFail(res, err);
@@ -1973,6 +2040,7 @@ router.post('/:id/angles/:angleId/regenerate', validateUUIDParam('id'), requireA
     if (require('../services/artifactDetectionService').refineFixes(categories).length === 0) {
       return res.status(400).json({ success: false, code: 'NO_FIXES', error: `No fix is known for ${categories.join(', ')}. Generate the angle again instead.` });
     }
+    if (await refuseWhileVideoRuns(res, angle)) return;
     // One generation of an angle at a time (a double click paid twice).
     if (!(await claimGeneration(res, 'angle', angle.id, `"${angle.angle_name || angle.angle_label}"`))) return;
     claimed = angle.id;
@@ -2328,29 +2396,38 @@ router.post('/:id/cascade-regenerate', validateUUIDParam('id'), requireAuth, aiR
     const briefEvent = await readBriefEvent(req.body?.event_id, set);
     if (briefEvent.error) return res.status(briefEvent.status).json({ success: false, error: briefEvent.error });
 
-    // Optionally update the description first
-    if (req.body.canonical_description !== undefined) {
-      await set.update({ canonical_description: req.body.canonical_description });
-    }
-
-    // Mark as generating: one regeneration of the set at a time.
+    // Mark as generating: one regeneration of the set at a time. The claim
+    // comes first: a refused regeneration (409) saved the new description
+    // anyway, without the pictures made from it (fourth audit, 2026-10-15).
+    const statusBefore = set.generation_status && set.generation_status !== 'generating' ? set.generation_status : (set.base_still_url ? 'complete' : 'pending');
     if (!(await claimGeneration(res, 'set', set.id, `"${set.name}"`))) return;
 
-    await ensureGenerationJobsTable();
-    // S2: the base takes the overrides; its angles inherit them from the
-    // base's brief. S3: likewise the event chosen on the brief.
-    const payload = { force: true };
-    if (briefOverrides.value) payload.overrides = briefOverrides.value;
-    if (briefEvent.value !== undefined) payload.event_id = briefEvent.value;
-    const job = await GenerationJob.create({
-      job_type: 'cascade_regenerate',
-      scene_set_id: set.id,
-      payload,
-      // One attempt: a retry (a failure after the paid base, or a worker
-      // restart mid-run) paid for the base and every angle again (fourth
-      // audit, 2026-10-15).
-      max_attempts: 1,
-    });
+    let job;
+    try {
+      if (req.body.canonical_description !== undefined) {
+        await set.update({ canonical_description: req.body.canonical_description });
+      }
+      await ensureGenerationJobsTable();
+      // S2: the base takes the overrides; its angles inherit them from the
+      // base's brief. S3: likewise the event chosen on the brief.
+      const payload = { force: true };
+      if (briefOverrides.value) payload.overrides = briefOverrides.value;
+      if (briefEvent.value !== undefined) payload.event_id = briefEvent.value;
+      job = await GenerationJob.create({
+        job_type: 'cascade_regenerate',
+        scene_set_id: set.id,
+        payload,
+        // One attempt: a retry (a failure after the paid base, or a worker
+        // restart mid-run) paid for the base and every angle again (fourth
+        // audit, 2026-10-15).
+        max_attempts: 1,
+      });
+    } catch (queueErr) {
+      // Nothing was queued: the set is not left generating.
+      await SceneSet.update({ generation_status: statusBefore }, { where: { id: set.id, generation_status: 'generating' } })
+        .catch((releaseErr) => console.error('Scene Sets cascade: could not release the set:', releaseErr.message));
+      throw queueErr;
+    }
 
     res.status(202).json({ success: true, data: { jobId: job.id, status: 'queued' } });
   } catch (err) {

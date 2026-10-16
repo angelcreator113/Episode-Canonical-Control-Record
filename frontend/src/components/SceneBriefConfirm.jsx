@@ -118,6 +118,18 @@ export default function SceneBriefConfirm({ setId, angleId = null, title, note =
 
   useEffect(() => { load(null, eventId); }, [load, eventId]);
 
+  // Escape cancels, as the backdrop does: the workspace leaves Escape to a
+  // window open over it, and the brief had no handler (fourth audit).
+  useEffect(() => {
+    const onKey = (e) => {
+      // Escape inside one of the brief's own fields leaves that edit to it.
+      if (e.key !== 'Escape' || e.defaultPrevented || ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target?.tagName)) return;
+      onCancel?.();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onCancel]);
+
   useEffect(() => {
     if (!isBase || !showId) return undefined;
     let live = true;

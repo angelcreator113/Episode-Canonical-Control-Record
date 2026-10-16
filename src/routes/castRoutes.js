@@ -26,6 +26,11 @@
  *                                                  against their facts (services/characterConsistency)
  *   POST   /api/v1/cast/characters/:id/check/intentional        { flag_id, note? }: ADMIN
  *   DELETE /api/v1/cast/characters/:id/check/intentional/:flagId  unmark it: ADMIN
+ *   GET    /api/v1/cast/characters/:id/typology     their typology seed (Enneagram type and
+ *                                                  wing, MBTI, why) and its label
+ *   PUT    /api/v1/cast/characters/:id/typology     set it (ADMIN), or { clear: true }
+ *   POST   /api/v1/cast/characters/:id/typology/suggest  one AI call that reads their
+ *                                                  writing and proposes one; saves nothing (ADMIN)
  *   POST   /api/v1/cast/characters/:id/posts/generate  { count?, about? }: ADMIN; drafts
  *                                                  their Pulse posts for Review, each
  *                                                  load-bearing or ambient (services/characterPosts)
@@ -345,6 +350,71 @@ async function markIntentional(req, res, on) {
 }
 router.post('/characters/:id/check/intentional', requireAuth, authorize(['ADMIN']), (req, res) => markIntentional(req, res, true));
 router.delete('/characters/:id/check/intentional/:flagId', requireAuth, authorize(['ADMIN']), (req, res) => markIntentional(req, res, false));
+
+/**
+ * Their typology seed (Character Consistency Engine step 6a;
+ * services/characterTypology): the root their inner life grows from.
+ */
+const typologyOut = (typology) => {
+  const { typologyLabel } = require('../services/characterTypology');
+  return { typology: typology || null, label: typologyLabel(typology) || null };
+};
+
+router.get('/characters/:id/typology', requireAuth, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const character = await getModels().RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+    return res.json({ success: true, ...typologyOut(character.typology) });
+  } catch (err) {
+    console.error('[Cast] GET /characters/:id/typology error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.put('/characters/:id/typology', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const character = await getModels().RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+    const { normalizeTypology, TypologyError } = require('../services/characterTypology');
+    let next = null;
+    if (!req.body?.clear) {
+      try {
+        next = normalizeTypology(req.body || {}, { by: String(req.user?.email || req.user?.id || 'admin').slice(0, 255) });
+      } catch (err) {
+        if (err instanceof TypologyError) return res.status(err.status).json({ success: false, error: err.message });
+        throw err;
+      }
+    }
+    await character.update({ typology: next });
+    return res.json({ success: true, ...typologyOut(next) });
+  } catch (err) {
+    console.error('[Cast] PUT /characters/:id/typology error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/characters/:id/typology/suggest', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const db = getModels();
+    const character = await db.RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+    const { suggestTypology, TypologyError } = require('../services/characterTypology');
+    const { factsForCharacter, factsPromptBlock } = require('../services/characterFacts');
+    try {
+      const suggestion = await suggestTypology(character, { factsBlock: factsPromptBlock(await factsForCharacter(db, character)) });
+      return res.json({ success: true, suggestion, ...typologyOut(suggestion) });
+    } catch (err) {
+      if (err instanceof TypologyError) return res.status(err.status).json({ success: false, error: err.message });
+      throw err;
+    }
+  } catch (err) {
+    console.error('[Cast] POST /characters/:id/typology/suggest error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 /**
  * Generate Posts (Character Consistency Engine step 4): drafts their Pulse

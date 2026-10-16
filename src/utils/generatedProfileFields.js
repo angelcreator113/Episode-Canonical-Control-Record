@@ -10,6 +10,10 @@
  * of them (content_category, follower_tier, age_range, geographic_base,
  * platform_metrics, revenue_streams, ...), which reached only full_profile,
  * so a bulk-made creator fell out of the Feed's category filter.
+ *
+ * The follower count and tier are made to agree (Character Consistency
+ * Engine step 5c): the tier from the count, and the same label in
+ * full_profile and the primary platform presence.
  */
 
 const {
@@ -17,11 +21,14 @@ const {
 } = require('./fitToModel');
 
 function generatedProfileFields(generated = {}) {
+  // The count and the tier agree, and so do full_profile and the primary
+  // platform presence (services/characterFacts agreeingFollowers; it sets them on `generated`).
+  const followers = require('../services/characterFacts').agreeingFollowers(generated, sanitizeEnum(generated.follower_tier, VALID_FOLLOWER_TIERS, 'mid'));
   return {
     display_name:          generated.display_name,
     creator_name:          generated.creator_name || null,
-    follower_tier:         sanitizeEnum(generated.follower_tier, VALID_FOLLOWER_TIERS, 'mid'),
-    follower_count_approx: generated.follower_count_approx,
+    follower_tier:         followers.follower_tier,
+    follower_count_approx: followers.follower_count_approx,
     content_category:      generated.content_category,
     archetype:             sanitizeEnum(generated.archetype, VALID_ARCHETYPES, 'polished_curator'),
     content_persona:       generated.content_persona,

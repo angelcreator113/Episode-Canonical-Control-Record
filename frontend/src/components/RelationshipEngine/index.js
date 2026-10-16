@@ -6,5 +6,6 @@ export { default as ListView } from './ListView';
 export { default as Inspector } from './Inspector';
 export { default as AddModal } from './AddModal';
 export { default as GenModal } from './GenModal';
+export { default as ProfileView } from './ProfileView';
 export { Btn, LFBtn, Spinner, Pill, useToast } from './primitives';
 export * from './tokens';
