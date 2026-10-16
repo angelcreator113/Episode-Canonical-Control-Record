@@ -73,6 +73,25 @@ describe('LookVariants', () => {
     expect(screen.getByAltText('Evening').getAttribute('src')).toBe('https://x/evening.jpg');
   });
 
+  // Audit 2026-10-15: a failed re-run keeps the previous image (complete,
+  // with its error); a variant of an old everyday look is marked.
+  test('a failed re-run says so, not "ready", and keeps its image; an old one is marked', async () => {
+    state = { ...state, time: slots(TIMES, TIME_LABELS, {
+      evening: { status: 'generating', image_url: 'https://x/evening.jpg' },
+      night: { status: 'complete', source: 'generated', image_url: 'https://x/night.jpg', stale: true },
+    }) };
+    const { onToast } = renderIt();
+    await screen.findByTestId('look-variants');
+    expect(screen.getByTestId('look-variant-stale-time-night')).toBeTruthy();
+    state = { ...state, time: slots(TIMES, TIME_LABELS, {
+      evening: { status: 'complete', source: 'generated', image_url: 'https://x/evening.jpg', error: 'Kontext refused' },
+    }) };
+    await waitFor(() => expect(onToast).toHaveBeenCalledWith('Evening could not be generated: Kontext refused', 'error'));
+    expect(onToast).not.toHaveBeenCalledWith('Evening is ready');
+    expect(screen.getByAltText('Evening').getAttribute('src')).toBe('https://x/evening.jpg');
+    expect(screen.getByTestId('look-variant-time-evening').textContent).toMatch(/Last try failed/);
+  });
+
   test('upload sends the image to its slot; remove empties it', async () => {
     vi.mocked(api.post).mockResolvedValue({ data: { success: true } });
     vi.mocked(api.delete).mockResolvedValue({ data: { success: true } });

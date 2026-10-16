@@ -97,6 +97,10 @@ async function sourceImage(sequelize, set, kind) {
   return { url: front.url, angleId: front.id };
 }
 
+// A failed or stuck run on a slot that already had an image keeps that
+// image in use, with the error beside it (audit, 2026-10-15).
+const KEEP_PREVIOUS_IMAGE = `CASE WHEN image_url IS NOT NULL THEN 'complete' ELSE 'failed' END`;
+
 const isStuck = (row) => row?.status === 'generating' && row.updated_at && Date.now() - new Date(row.updated_at).getTime() > STUCK_AFTER_MS;
 
 /**
@@ -107,15 +111,15 @@ const isStuck = (row) => row?.status === 'generating' && row.updated_at && Date.
 async function listVariants(sequelize, setId) {
   const set = await loadEveryday(sequelize, setId);
   const [rows] = await sequelize.query(
-    `SELECT id, kind, value, status, source, image_url, error, cost_usd, generated_at, updated_at
+    `SELECT id, kind, value, status, source, source_image_url, image_url, error, cost_usd, generated_at, updated_at
        FROM location_look_variants WHERE scene_set_id = :setId AND deleted_at IS NULL`,
     { replacements: { setId: set.id } });
   for (const row of rows.filter(isStuck)) {
     console.warn(`[LookVariants] ${row.kind} ${row.value} for location ${set.world_location_id} stuck; marked failed`);
     await sequelize.query(
-      `UPDATE location_look_variants SET status = 'failed', error = :error, updated_at = NOW() WHERE id = :id AND status = 'generating'`,
+      `UPDATE location_look_variants SET status = ${KEEP_PREVIOUS_IMAGE}, error = :error, updated_at = NOW() WHERE id = :id AND status = 'generating'`,
       { replacements: { id: row.id, error: STUCK_REASON } });
-    row.status = 'failed';
+    row.status = row.image_url ? 'complete' : 'failed';
     row.error = STUCK_REASON;
   }
   const slot = (kind) => KINDS[kind].map((value) => {
@@ -126,6 +130,9 @@ async function listVariants(sequelize, setId) {
       variant: row ? {
         id: row.id, status: row.status, source: row.source, image_url: row.image_url, error: row.error,
         cost_usd: row.cost_usd == null ? null : Number(row.cost_usd), generated_at: row.generated_at,
+        // A generated time variant of an everyday look since replaced: the
+        // beat picker does not use it (lookVariantPicking.variantsForSets).
+        stale: kind === 'time' && row.source === 'generated' && row.source_image_url !== set.approved_base_image_url,
       } : null,
     };
   });
@@ -189,7 +196,7 @@ async function startVariant(sequelize, { setId, kind, value }) {
     } catch (err) {
       console.error(`[LookVariants] ${kind} ${value} for "${set.name}" failed:`, err.message);
       await sequelize.query(
-        `UPDATE location_look_variants SET status = 'failed', error = :error, updated_at = NOW() WHERE ${ownRun}`,
+        `UPDATE location_look_variants SET status = ${KEEP_PREVIOUS_IMAGE}, error = :error, updated_at = NOW() WHERE ${ownRun}`,
         { replacements: { id: row.id, error: String(err.message || err).slice(0, 500) } });
     }
   };
