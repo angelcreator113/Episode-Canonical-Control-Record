@@ -1993,6 +1993,15 @@ router.post('/characters/:id/interior/generate', requireAuth, aiRateLimiter, asy
         console.error('[CharacterRegistry] interior: feed profile load failed:', fpErr.message);
       }
     }
+    // The events they host or attend, and what each is for (services/characterEvents).
+    let events = [];
+    if (character.feed_profile_id && typeof db.sequelize?.query === 'function') {
+      try {
+        events = await require('../services/characterEvents').eventsForProfile(db.sequelize, character.feed_profile_id);
+      } catch (evErr) {
+        console.error('[CharacterRegistry] interior: events load failed:', evErr.message);
+      }
+    }
 
     const plain = character.toJSON ? character.toJSON() : character;
     // A real name the feed profile already has is theirs: copied, not invented.
@@ -2001,7 +2010,7 @@ router.post('/characters/:id/interior/generate', requireAuth, aiRateLimiter, asy
     const toAsk = missing.filter((f) => !(f in known));
     const updates = {
       ...known,
-      ...(toAsk.length ? await gen.generateMissingInterior({ character: plain, feedProfile, fields: toAsk }) : {}),
+      ...(toAsk.length ? await gen.generateMissingInterior({ character: plain, feedProfile, events, fields: toAsk }) : {}),
     };
     if (Object.keys(updates).length === 0) {
       return res.status(502).json({ error: 'The writer came back with nothing usable. Try again.' });
