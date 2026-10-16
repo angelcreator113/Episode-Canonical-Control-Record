@@ -54,12 +54,15 @@ export const CHARACTER_APPEARANCE_RULES = {
   the_husband: {
     name:            'The Husband',
     archetype:       'GROUNDING FORCE',
-    appearance_mode: 'Interior Monologue Only',
+    // When and how David appears is not decided yet (Evoni, 2026-10-16: "since
+    // I have not started writing, I don't know when he is going to appear").
+    // Until she decides, the chapter's own notes decide; nothing here forbids
+    // or invents his presence.
+    appearance_mode: 'Not decided yet — follow the chapter',
     color:           '#7B5EA7',
     rules: [
-      'NEVER speaks on the page directly. He has no dialogue. No quoted speech.',
-      'Lives entirely in JustAWoman\'s interior monologue.',
-      'His presence is felt through what she anticipates, avoids, or translates.',
+      'When and how he appears is not decided yet. Follow the chapter\'s own notes and plan: if they put him in the scene or give him a line, write it; if they do not, do not invent a scene with him.',
+      'When he is not in the scene, his presence is felt through what she anticipates, avoids, or translates.',
       'He is kind. Present. Proud of her attempts. But cannot share the hunger.',
       'He means "protect." She hears "quit." The gap between those two is the character.',
       'His love has a ceiling — and she knows it, even when she doesn\'t say it.',
@@ -67,7 +70,6 @@ export const CHARACTER_APPEARANCE_RULES = {
     ],
     what_he_cannot_do: [
       'He cannot be villainized. He is not the problem. He is kind.',
-      'He cannot speak, appear physically, or be quoted directly.',
       'He cannot understand the hunger. That is the permanent condition, not a temporary misunderstanding.',
     ],
     how_he_enters: 'He enters through anticipation ("she almost told him, then didn\'t"), through absence ("she closed the laptop before he came in"), through translation ("he\'d call it a phase — she called it a pivot").',
@@ -192,6 +194,7 @@ ${c.what_he_cannot_do || c.what_she_cannot_do || c.what_they_cannot_do
 ${c.how_he_enters || c.how_she_enters ? `  HOW THEY ENTER: ${c.how_he_enters || c.how_she_enters}` : ''}`
   ).join('\n\n')}
 
-Breaking these rules breaks the book's structure. The Husband never speaks aloud.
-Nia Vale never appears in person. Lala is one thought, not a presence.`;
+Breaking these rules breaks the book's structure. How the Husband appears is
+not decided yet: follow the chapter's notes. Nia Vale never appears in person.
+Lala is one thought, not a presence.`;
 }

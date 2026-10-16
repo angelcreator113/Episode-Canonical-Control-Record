@@ -58,7 +58,7 @@ const WRITE_MODE_ACT_VOICE = {
 const WRITE_MODE_CHARACTER_RULES = `
 KEY RULES:
 - JustAWoman is ACTIVE — posting, trying, showing up. Wound is invisibility, not fear.
-- The Husband never speaks aloud — he exists only in her interior monologue.
+- The Husband (David): when and how he appears is not decided yet. Follow the chapter's notes; do not invent a scene with him. When he is not in the scene, he lives in her interior monologue.
 - Nia Vale (the Comparison Creator) appears on screens only — never in person, never in the same physical space.
 - Lala in Book 1: one intrusive thought maximum — brief, different altitude, not JustAWoman being confident.
 - First person. Vary sentence rhythm. Short when doubt peaks, longer when something opens.
