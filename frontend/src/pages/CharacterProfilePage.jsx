@@ -46,6 +46,8 @@ export const getCheckApi = (id) =>
   apiClient.get(`${API_URL}/cast/characters/${id}/check`);
 export const markIntentionalApi = (id, flagId, note) =>
   apiClient.post(`${API_URL}/cast/characters/${id}/check/intentional`, { flag_id: flagId, note });
+export const fixFlagApi = (id, flagId, text) =>
+  apiClient.post(`${API_URL}/cast/characters/${id}/check/fix`, text === undefined ? { flag_id: flagId } : { flag_id: flagId, text });
 export const unmarkIntentionalApi = (id, flagId) =>
   apiClient.delete(`${API_URL}/cast/characters/${id}/check/intentional/${flagId}`);
 export const generatePostsApi = (id, body) =>
@@ -598,9 +600,10 @@ export function TheirFacts({ character, onFeedSaved }) {
 
 /**
  * The consistency check (Character Consistency Engine step 3): every place
- * the narrator's text disagrees with their facts. Flag-only: it never edits.
- * What they post and author-only notes are not checked (a gap there is the
- * mask). A flag can be marked intentional and stays listed as such.
+ * the narrator's text disagrees with their facts. The check never edits;
+ * each finding can be fixed (the suggested wording, or Evoni's own), or
+ * marked intentional and listed as such. What they post and author-only
+ * notes are not checked (a gap there is the mask).
  */
 const CHECK_LABELS = {
   followers: 'Followers', account_status: 'Account status', handle: 'Handle',
@@ -611,6 +614,8 @@ export function ProfileCheck({ characterId }) {
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [editing, setEditing] = useState(null); // { id, text }
+  const [saving, setSaving] = useState(null);
 
   const run = async () => {
     setBusy(true);
@@ -635,6 +640,20 @@ export function ProfileCheck({ characterId }) {
       setError(err.response?.data?.error || 'Could not save that.');
     }
   };
+  const fix = async (flag, text) => {
+    setSaving(flag.id);
+    setError(null);
+    try {
+      const res = await fixFlagApi(characterId, flag.id, text);
+      setResult(res.data);
+      setEditing(null);
+    } catch (err) {
+      console.error('[CharacterProfilePage] fixing a flag failed:', err);
+      setError(err.response?.data?.error || 'Could not fix that.');
+    } finally {
+      setSaving(null);
+    }
+  };
 
   return (
     <div className="ch-check" data-testid="ch-check">
@@ -656,8 +675,29 @@ export function ProfileCheck({ characterId }) {
                   <span className="ch-check-excerpt">{f.excerpt}</span>
                   <span className="ch-facts-row">
                     <span className="ch-chip is-plain">{CHECK_LABELS[f.check] || f.check}</span>
+                    {f.fix != null && (
+                      <button type="button" className="ch-btn-chip is-primary" disabled={saving === f.id} onClick={() => fix(f)}>
+                        {saving === f.id ? 'Fixing…' : `Fix: “${f.fix}”`}
+                      </button>
+                    )}
+                    {f.editable && editing?.id !== f.id && (
+                      <button type="button" className="ch-btn-chip" onClick={() => setEditing({ id: f.id, text: f.text })}>Edit the text</button>
+                    )}
                     <button type="button" className="ch-btn-chip" onClick={() => mark(f, true)}>It&rsquo;s intentional</button>
                   </span>
+                  {editing?.id === f.id && (
+                    <span className="ch-check-edit">
+                      <label className="ch-check-edit-label" htmlFor={`ch-check-edit-${f.id}`}>{f.field_label}</label>
+                      <textarea className="ch-textarea" id={`ch-check-edit-${f.id}`} rows={5} value={editing.text}
+                        onChange={(e) => setEditing({ id: f.id, text: e.target.value })} />
+                      <span className="ch-facts-row">
+                        <button type="button" className="ch-btn-chip is-primary" disabled={saving === f.id || !editing.text.trim()} onClick={() => fix(f, editing.text)}>
+                          {saving === f.id ? 'Saving…' : 'Save'}
+                        </button>
+                        <button type="button" className="ch-btn-chip" onClick={() => setEditing(null)}>Cancel</button>
+                      </span>
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>

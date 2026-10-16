@@ -4,7 +4,8 @@
  * The consistency checker (Character Consistency Engine, step 3; Evoni,
  * 2026-10-16: "yes start step 3"). Flag-only: it reads a character's profile
  * and reports every place the narrator's text disagrees with their facts
- * (services/characterFacts). It never edits anything.
+ * (services/characterFacts). The check itself never edits anything; a
+ * flag is fixed only when Evoni asks (applyFix, below).
  *
  * Every text field is in one of three zones:
  *   narrator  what is true about them: checked
@@ -28,7 +29,17 @@
  * intentional (canon_facts.intentional, the spec's #10) stays listed as
  * intentional, never as a bug.
  *
+ * Only the primary platform presence's followers are a copy of the follower
+ * fact; another presence (a private or second account) has its own audience.
+ *
  *   checkCharacter(db, { character, feedProfile }) → { flags, intentional, checked, skipped }
+ *     each flag carries `fix` (what `found` becomes to agree with the facts,
+ *     or null when only Evoni can say), `editable` (its field is text she can
+ *     rewrite) and, when editable, `text` (the field's whole text).
+ *   applyFix(db, { character, feedProfile }, flagId, { text? }) → the check after
+ *     with no text, puts `fix` in place of `found`; with text, saves it as the
+ *     field's whole text (Evoni, 2026-10-16: "I have no way of correcting
+ *     these findings").
  */
 
 const crypto = require('crypto');
@@ -111,9 +122,9 @@ const WORD_NUMBERS = {
   eleven: 11, twelve: 12, fifteen: 15, twenty: 20, thirty: 30, forty: 40, fifty: 50, hundred: 100, half: 0.5,
 };
 const SCALE = { k: 1e3, thousand: 1e3, m: 1e6, mil: 1e6, million: 1e6, b: 1e9, billion: 1e9 };
-const COUNT_RE = /\b(\d[\d,]*(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|hundred|half)(?:\s+a)?\s*(k|m|b|mil|thousand|million|billion)?\b[\s\w-]{0,24}?\bfollowers?\b/gi;
+const COUNT_RE = /\b(\d[\d,]*(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|hundred|half)(?:\s+a)?\s*(k|m|b|mil|thousand|million|billion)?\b[\s\w-]{0,24}?\bfollowers?\b/dgi;
 
-/** [{ count, match, index }] for every "N followers" in the text. */
+/** [{ count, match, index, number }] for every "N followers" in the text; `number` is the match's leading count ("4K"). */
 function followerMentions(text) {
   const out = [];
   for (const m of text.matchAll(COUNT_RE)) {
@@ -124,7 +135,8 @@ function followerMentions(text) {
     const count = Math.round(base * scale);
     if (!m[2] && !/\d/.test(raw)) continue; // "a follower", "two followers": not a count claim
     if (count < 10) continue;
-    out.push({ count, match: m[0].trim(), index: m.index });
+    const end = (m.indices[2] || m.indices[1])[1];
+    out.push({ count, match: m[0].trim(), index: m.index, number: m[0].slice(0, end - m.index) });
   }
   return out;
 }
@@ -156,7 +168,9 @@ async function checkCharacter(db, { character, feedProfile = null }) {
   const leaves = leavesOf(character, feedProfile);
   const flags = [];
   const skipped = { mask: 0, author: 0 };
-  const add = (f) => flags.push({ ...f, id: idOf(f.check, f.field, f.found) });
+  const add = (f, { fix = null, text = null } = {}) => flags.push({
+    ...f, id: idOf(f.check, f.field, f.found), fix, editable: text !== null, ...(text !== null ? { text } : {}),
+  });
 
   for (const leaf of leaves) {
     if (leaf.zone !== 'narrator') { skipped[leaf.zone] += 1; continue; }
@@ -168,7 +182,8 @@ async function checkCharacter(db, { character, feedProfile = null }) {
         const off = Math.abs(m.count - facts.followers.count) / Math.max(facts.followers.count, 1);
         if (off > 0.1) {
           add({ check: 'followers', field, field_label: labelOf(leaf.path), found: m.match,
-            expected: `${facts.followers.label} followers`, excerpt: excerpt(leaf.text, m.index, m.match.length) });
+            expected: `${facts.followers.label} followers`, excerpt: excerpt(leaf.text, m.index, m.match.length) },
+          { fix: `${facts.followers.label}${m.match.slice(m.number.length)}`, text: leaf.text });
         }
       }
     }
@@ -177,14 +192,16 @@ async function checkCharacter(db, { character, feedProfile = null }) {
         const m = re.exec(leaf.text);
         if (m && status !== facts.account_status) {
           add({ check: 'account_status', field, field_label: labelOf(leaf.path), found: m[0],
-            expected: `account status "${facts.account_status.replace(/_/g, ' ')}"`, excerpt: excerpt(leaf.text, m.index, m[0].length) });
+            expected: `account status "${facts.account_status.replace(/_/g, ' ')}"`, excerpt: excerpt(leaf.text, m.index, m[0].length) },
+          { text: leaf.text });
         }
       }
     }
     if (/@@\w/.test(leaf.text)) {
       const i = leaf.text.indexOf('@@');
-      add({ check: 'handle', field, field_label: labelOf(leaf.path), found: leaf.text.slice(i, i + 30).split(/\s/)[0],
-        expected: facts.handle || 'one @', excerpt: excerpt(leaf.text, i, 2) });
+      const found = leaf.text.slice(i, i + 30).split(/\s/)[0];
+      add({ check: 'handle', field, field_label: labelOf(leaf.path), found,
+        expected: facts.handle || 'one @', excerpt: excerpt(leaf.text, i, 2) }, { fix: found.replace(/^@+/, '@'), text: leaf.text });
     }
     if (facts.affordability && !undecided.has('income')) {
       const have = TIER_ORDER.indexOf(facts.affordability.key);
@@ -193,25 +210,26 @@ async function checkCharacter(db, { character, feedProfile = null }) {
         if (m && TIER_ORDER.indexOf(need) > have) {
           add({ check: 'affordability', field, field_label: labelOf(leaf.path), found: m[0],
             expected: `what ${facts.affordability.label.toLowerCase()} affords (${facts.affordability.yearly.toLocaleString('en-US')} a year)`,
-            excerpt: excerpt(leaf.text, m.index, m[0].length) });
+            excerpt: excerpt(leaf.text, m.index, m[0].length) }, { text: leaf.text });
           break;
         }
       }
     }
   }
 
-  // Stored copies of the count: the generated profile's text and each platform's.
+  // Stored copies of the count: the generated profile's and the primary platform's.
   if (facts.followers && !undecided.has('followers') && feedProfile) {
     const { parseApprox } = require('./pulseFollowers');
+    const { primaryPresenceKey } = require('./characterFacts');
     const copies = [['feed.full_profile.follower_count_approx', 'Generated profile › follower count', feedProfile.full_profile?.follower_count_approx]];
-    const presences = feedProfile.platform_presences && typeof feedProfile.platform_presences === 'object' ? feedProfile.platform_presences : {};
-    for (const [platform, pres] of Object.entries(presences)) {
-      if (pres && pres.followers != null) copies.push([`feed.platform_presences.${platform}.followers`, `Platforms › ${platform} › followers`, String(pres.followers)]);
-    }
+    const primary = primaryPresenceKey(feedProfile.platform_presences, feedProfile.platform);
+    const pres = primary ? feedProfile.platform_presences[primary] : null;
+    if (pres && pres.followers != null) copies.push([`feed.platform_presences.${primary}.followers`, `Platforms › ${primary} › followers`, String(pres.followers)]);
     for (const [field, label, value] of copies) {
       const n = typeof value === 'string' ? parseApprox(value) : null;
       if (n && Math.abs(n - facts.followers.count) / Math.max(facts.followers.count, 1) > 0.1) {
-        add({ check: 'followers', field, field_label: label, found: value, expected: `${facts.followers.label} followers`, excerpt: `${label}: ${value}` });
+        add({ check: 'followers', field, field_label: label, found: value, expected: `${facts.followers.label} followers`, excerpt: `${label}: ${value}` },
+          { fix: facts.followers.label });
       }
     }
   }
@@ -223,7 +241,7 @@ async function checkCharacter(db, { character, feedProfile = null }) {
   const social = feedProfile?.display_name && String(feedProfile.display_name).trim();
   if (own && social && own.toLowerCase() !== social.toLowerCase()) {
     add({ check: 'social_name', field: 'character.display_name', field_label: 'Social media name', found: own,
-      expected: `the feed profile's "${social}"`, excerpt: `Character record: "${own}" · Feed profile: "${social}"` });
+      expected: `the feed profile's "${social}"`, excerpt: `Character record: "${own}" · Feed profile: "${social}"` }, { fix: social });
   }
 
   // One flag per id (the same sentence copied into two places is two flags; the same match twice in one field is one).
@@ -249,4 +267,49 @@ function withIntentional(canonFacts, id, { note = null, on = true } = {}) {
   return next;
 }
 
-module.exports = { checkCharacter, withIntentional, followerMentions, zoneOf, leavesOf };
+class FixError extends Error {
+  constructor(status, message) { super(message); this.status = status; }
+}
+const TEXT_MAX = 20000;
+
+/** The value at a dotted path ('a.0.b') inside a JSON value. */
+const valueAt = (root, parts) => parts.reduce((v, k) => (v === null || v === undefined ? undefined : v[k]), root);
+
+/**
+ * Fixes one open flag, found again by id so nothing stale is written. With
+ * no text it puts the flag's `fix` in place of `found`; with text it saves
+ * the text as the field's whole text. Writes only that one field.
+ */
+async function applyFix(db, { character, feedProfile = null }, flagId, { text = undefined } = {}) {
+  const before = await checkCharacter(db, { character, feedProfile });
+  const flag = before.flags.find((f) => f.id === flagId);
+  if (!flag) throw new FixError(404, 'That finding is no longer there. Check again.');
+  const [source, top, ...rest] = flag.field.split('.');
+  const record = source === 'feed' ? feedProfile : character;
+  if (!record) throw new FixError(409, 'They have no feed profile.');
+  const current = rest.length ? valueAt(record[top], rest) : record[top];
+  if (current === undefined || current === null) throw new FixError(409, 'That field is empty now. Check again.');
+  let next;
+  if (text !== undefined) {
+    if (!flag.editable) throw new FixError(400, 'That one is changed on the fact sheet, not here.');
+    if (typeof text !== 'string' || !text.trim()) throw new FixError(400, 'Write the new text.');
+    if (text.length > TEXT_MAX) throw new FixError(400, `Keep it under ${TEXT_MAX.toLocaleString('en-US')} characters.`);
+    next = text;
+  } else {
+    if (flag.fix === null) throw new FixError(400, 'There is no single right wording for this one: edit it instead.');
+    const s = String(current);
+    if (!s.includes(flag.found)) throw new FixError(409, 'That text has changed. Check again.');
+    next = s.replace(flag.found, flag.fix);
+  }
+  if (rest.length) {
+    const root = JSON.parse(JSON.stringify(record[top]));
+    const parent = valueAt(root, rest.slice(0, -1));
+    parent[rest[rest.length - 1]] = next;
+    await record.update({ [top]: root });
+  } else {
+    await record.update({ [top]: next });
+  }
+  return checkCharacter(db, { character, feedProfile });
+}
+
+module.exports = { checkCharacter, withIntentional, applyFix, FixError, followerMentions, zoneOf, leavesOf };
