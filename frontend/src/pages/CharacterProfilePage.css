@@ -1300,6 +1300,7 @@
 .ch-chip.is-blue { background: var(--info-bg); color: var(--info-text); }
 .ch-chip.is-green { background: var(--success-bg); color: var(--success-text); }
 .ch-chip.is-plain { background: none; color: var(--accent-dark); }
+.ch-chip.is-warn { background: var(--warning-bg); color: var(--warning-text); }
 
 .ch-alive { flex: 0 1 270px; display: flex; flex-direction: column; gap: 10px; }
 .ch-kicker { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
@@ -1411,3 +1412,14 @@ a.ch-show:hover .ch-show-text strong { text-decoration: underline; }
 .ch-place-img { width: 96px; height: 72px; object-fit: cover; border-radius: 12px; background: var(--lala-lavender-soft); }
 .ch-place-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .ch-place-text strong { font-size: 14px; color: var(--text-primary); overflow-wrap: anywhere; }
+
+/* Their story: Pulse posts, stories, chapters (TheirStory) */
+.ch-trail { display: flex; flex-direction: column; gap: 6px; }
+.ch-trail-h { margin: 0; font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
+.ch-trail-h span { font-weight: 400; text-transform: none; letter-spacing: 0; }
+.ch-trail-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ch-trail-list li { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 10px; background: var(--surface-subtle, var(--lala-parchment-2)); min-width: 0; }
+.ch-trail-text { font-size: 14px; line-height: 1.45; color: var(--text-primary); overflow-wrap: anywhere; }
+a.ch-trail-text { font-weight: 600; text-decoration: none; }
+a.ch-trail-text:hover { text-decoration: underline; }
+.ch-trail-meta { font-size: 12px; color: var(--text-secondary); }

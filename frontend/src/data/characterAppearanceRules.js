@@ -77,20 +77,24 @@ export const CHARACTER_APPEARANCE_RULES = {
 
   the_comparison_creator: {
     name:            'The Comparison Creator (Nia Vale)',
-    archetype:       'ALTERNATE TIMELINE',
+    // Cast B (Evoni, 2026-10-15/16): Nia Vale is the escalation mirror, the
+    // one engine.js's BOOK1_ECOSYSTEM describes. The old Comparison Creator
+    // text ("the timeline JustAWoman abandoned", "consistent", "cannot be
+    // mean") belonged to the retired Cast A character.
+    archetype:       'ESCALATION MIRROR',
     appearance_mode: 'Screens Only — Never In Person',
     color:           '#B85C38',
     rules: [
       'ONLY appears on screens — phone, laptop, tablet. Never in person. Never in the same physical space.',
-      'She is NOT a villain. Same content lane as JustAWoman, more extreme, less restrained: the escalation mirror.',
+      'She is NOT a villain. Same content lane as JustAWoman, more extreme, less restrained, less concerned with perception.',
       'The comparison is JustAWoman\'s — Nia never asked for it.',
-      'She represents the timeline JustAWoman abandoned. Creates regret, not jealousy.',
-      'She is consistent. Consistency is the thing that cuts — not cruelty.',
-      'When she stumbles or pivots, something shifts in JustAWoman too.',
+      'What she has that JustAWoman doesn\'t: no hesitation, no internal negotiation, no need to remain respectable. What she lacks: control, containment, long-term structure.',
+      'Her key scene: she goes fully explicit on a live, intentionally. JustAWoman watches every minute and does not look away. She does not think "I would never do that." She thinks "I could."',
+      'After it, JustAWoman becomes quieter and more aware of her own restraint. She does not spiral. She adjusts.',
     ],
     what_she_cannot_do: [
       'She cannot appear in person — not at an event, not in a café, never.',
-      'She cannot be mean, fake, or antagonistic.',
+      'She cannot be written as a cautionary tale or punished for escalating. Her choices are intentional, not sloppy.',
       'She cannot be aware of JustAWoman\'s feelings about her.',
     ],
     how_she_enters: 'She enters through a scroll, a notification, a thumbnail. JustAWoman finds her — Nia doesn\'t come looking.',
@@ -113,26 +117,6 @@ export const CHARACTER_APPEARANCE_RULES = {
       'She cannot appear in every chapter — scarcity is her power.',
       'She cannot be harsh or judgmental, even when reflecting the pattern.',
     ],
-  },
-
-  the_almost_mentor: {
-    name:            'The Almost-Mentor',
-    archetype:       'MOMENTARY CATALYST',
-    appearance_mode: 'One Appearance Only — Then Tracked Absence',
-    color:           '#8B6914',
-    rules: [
-      'Appears ONCE, meaningfully. Then disappears back into their own success.',
-      'Not malicious. Just busy. Nobody is coming to save you — that is the lesson.',
-      'Their absence teaches more than their presence.',
-      'After they disappear, the system tracks the absence. The disappearance reverberates 3–4 chapters later.',
-      'The author must make a deliberate choice: when does the absence land?',
-    ],
-    what_they_cannot_do: [
-      'They cannot appear a second time as a mentor. One appearance only.',
-      'They cannot be villainized for disappearing — they are simply busy.',
-      'Their disappearance cannot be resolved with a callback or return. The lesson is the lack.',
-    ],
-    absence_tracking: 'Once they appear and vanish, the absence must be acknowledged in the prose within 3–4 chapters. JustAWoman should feel the silence where the guidance was.',
   },
 
   the_digital_products_customer: {

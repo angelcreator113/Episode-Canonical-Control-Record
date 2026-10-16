@@ -126,14 +126,6 @@ const WOUND_PATTERNS = {
     ],
     echo: 'She has been someone\'s measuring stick before. She is tired of it.',
   },
-  the_almost_mentor: {
-    wound:    'They were never fully saved by anyone either. They built it alone.',
-    patterns: [
-      'need you', 'help me', 'don\'t leave', 'stay', 'where were you',
-      'you disappeared', 'i needed you', 'show me', 'teach me',
-    ],
-    echo: 'They wanted someone to stay for them once too.',
-  },
   the_witness: {
     wound:    'She has watched people she loves repeat the same cycle her whole life.',
     patterns: [

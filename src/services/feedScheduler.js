@@ -591,23 +591,8 @@ async function generateAndSaveProfile(db, spark, layer) {
     return null;
   }
 
-  const characterContext = layer === 'lalaverse'
-    ? {
-        name: 'Lala',
-        description: 'A digital persona living in the LalaVerse — a constructed reality she believes is real.',
-        wound: 'She does not know she was built. The world feels complete.',
-        goal: 'To build her brand and find her place.',
-        audience: 'her followers',
-        detail: 'She navigates creator culture in a world that mirrors ours but is not ours.',
-      }
-    : {
-        name: 'JustAWoman',
-        description: 'A Black woman, mother, wife, content creator in fashion/beauty/lifestyle.',
-        wound: 'She does everything right and the right room has not found her yet.',
-        goal: 'To be legendary.',
-        audience: 'Besties',
-        detail: 'She posts for women. Men show up with their wallets and something in her responds.\nShe watches certain creators alone, at night, and does not tell her husband.',
-      };
+  // Lala for The Pulse, JustAWoman for her real-world feed (utils/protagonistContexts).
+  const characterContext = require('../utils/protagonistContexts').protagonistFor(layer);
 
   // LalaVerse profiles follow the Show Bible (2026-10-06); JustAWoman's do not.
   let brain = NO_BRAIN;
