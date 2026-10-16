@@ -13,7 +13,9 @@ const router = express.Router();
 // 5th cumulative instance after worldStudio.js @ CP3 + universe.js @ CP6 +
 // franchiseBrainRoutes.js @ CP7 + socialProfileRoutes.js @ CP8). 3 GETs are
 // timeline catalog reads (no req.user consumption); 3 handlers are Tier 1.
-const { optionalAuth, requireAuth, authorize } = require('../middleware/auth');
+const { optionalAuth, requireAuth } = require('../middleware/auth');
+// Setting a draft's release time is an admin's (step 6c, services/postRelease).
+const { authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { statusWhere, isLive, LOCKED_MESSAGE } = require('../services/feedPostStatus');
 const { draftReactions, pickReactors, recountComments, DraftError, COMMENT_LOCKED } = require('../services/feedCommentDrafter');
