@@ -46,10 +46,14 @@ describe('Step 3 CP7 — memories cluster Tier 1 sweep + AI POST PROMOTE', () =>
     });
   });
 
-  describe('engine.js — 11 AI POSTs PROMOTE shape', () => {
+  describe('engine.js — 8 AI POSTs PROMOTE shape', () => {
     const SRC = readSrc('engine.js');
+    // The 50-chapter arc routes (/generate-story-tasks, /generate-story-tasks-stream,
+    // /generate-next-chapter) were retired 2026-10-16.
+    test('the retired arc routes are gone', () => {
+      expect(SRC).not.toMatch(/router\.(get|post)\('\/(generate-story-tasks|generate-next-chapter|story-engine-tasks)/);
+    });
     ['/generate-living-state', '/generate-character-arc', '/generate-relationship-web',
-     '/generate-story-tasks', '/generate-story-tasks-stream', '/generate-next-chapter',
      '/generate-story', '/revise-story', '/check-story-consistency',
      '/extract-story-memories', '/story-engine-update-registry'].forEach((route) => {
       test(`POST ${route} → requireAuth + aiRateLimiter`, () => {
