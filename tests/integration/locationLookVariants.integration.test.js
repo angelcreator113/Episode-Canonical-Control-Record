@@ -170,6 +170,34 @@ const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
     expect((await variant(loc, 'time', 'morning')).status).toBe('failed');
   });
 
+  it('a failed re-run keeps the previous image in use, with the error; a stuck one too', async () => {
+    const { loc, set } = await everyday();
+    await run(`INSERT INTO location_look_variants (world_location_id, scene_set_id, kind, value, status, source, source_image_url, image_url, created_at, updated_at)
+               VALUES (:loc, :set, 'time', 'evening', 'complete', 'generated', 'https://x/everyday.jpg', 'https://x/evening.jpg', NOW(), NOW())`, { loc, set });
+    jest.spyOn(sceneGen, 'generateDressedStill').mockRejectedValue(new Error('Kontext refused'));
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    await auth(request(app).post(url(set, '/time/evening/generate'))).send({});
+    const end = Date.now() + 5000;
+    while ((await variant(loc, 'time', 'evening'))?.status === 'generating' && Date.now() < end) await new Promise((r) => setTimeout(r, 10));
+    expect(await variant(loc, 'time', 'evening')).toMatchObject({ status: 'complete', image_url: 'https://x/evening.jpg', error: 'Kontext refused' });
+
+    await run(`UPDATE location_look_variants SET status = 'generating', updated_at = NOW() - INTERVAL '11 minutes'
+                WHERE world_location_id = :loc AND kind = 'time' AND value = 'evening'`, { loc });
+    const list = await auth(request(app).get(url(set)));
+    expect(list.body.data.time.find((s) => s.value === 'evening').variant).toMatchObject({ status: 'complete', image_url: 'https://x/evening.jpg' });
+  });
+
+  it('a generated time variant of an everyday look since replaced is listed as stale', async () => {
+    const { loc, set } = await everyday();
+    await run(`INSERT INTO location_look_variants (world_location_id, scene_set_id, kind, value, status, source, source_image_url, image_url, created_at, updated_at)
+               VALUES (:loc, :set, 'time', 'night', 'complete', 'generated', 'https://x/everyday.jpg', 'https://x/night.jpg', NOW(), NOW())`, { loc, set });
+    const slot = async () => (await auth(request(app).get(url(set)))).body.data.time.find((s) => s.value === 'night').variant;
+    expect((await slot()).stale).toBe(false);
+    await run(`UPDATE world_locations SET approved_base_image_url = 'https://x/new-everyday.jpg' WHERE id = :loc`, { loc });
+    await run(`UPDATE scene_sets SET base_still_url = 'https://x/new-everyday.jpg' WHERE id = :set`, { set });
+    expect((await slot()).stale).toBe(true);
+  });
+
   it('a second Generate while one runs is refused; an upload made meanwhile is never overwritten', async () => {
     const { loc, set } = await everyday();
     let finish;
