@@ -37,6 +37,9 @@ export const getCharacterEntanglementsApi = (id) =>
   apiClient.get(`${API_URL}/entanglements/characters/${id}/entanglements`);
 // Their places (home, closet, other; #3228) with pictures, and sharing one
 // on The Pulse as a draft (castRoutes, services/characterPlaceShare).
+// Their Pulse posts, and the short stories and chapters they are in (routes/castRoutes.js).
+export const getStoryTrailApi = (id) =>
+  apiClient.get(`${API_URL}/cast/characters/${id}/story-trail`);
 export const getPlacesApi = (id) =>
   apiClient.get(`${API_URL}/cast/characters/${id}/places`);
 export const sharePlaceApi = (id, sceneSetId) =>
@@ -399,6 +402,89 @@ function TheirNames({ character, feedProfile, onSaved, onFeedSaved, gen }) {
 const PLACE_LABEL = { home: 'Home', closet: 'Closet' };
 const PULSE_REVIEW = '/admin?tab=pulse&sub=review';
 
+const STORY_FORMATS = { short_story: 'Short story', social_fiction: 'Social fiction', snippet: 'Snippet', recap: 'Recap' };
+const shortText = (t, n = 160) => (t && t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t || '');
+
+/**
+ * Their story (Evoni, 2026-10-16): what they posted on The Pulse, and the
+ * short stories and book chapters they are in (services/characterStoryTrail).
+ */
+export function TheirStory({ character }) {
+  const [trail, setTrail] = useState(null);
+  const id = character.id;
+  useEffect(() => {
+    let live = true;
+    getStoryTrailApi(id)
+      .then((res) => { if (live) setTrail(res.data || {}); })
+      .catch((err) => {
+        console.error('[CharacterProfilePage] story trail load failed:', err);
+        if (live) setTrail({ error: err.response?.data?.error || 'Could not load their story.' });
+      });
+    return () => { live = false; };
+  }, [id]);
+
+  const posts = trail?.posts || [];
+  const stories = trail?.stories || [];
+  const chapters = trail?.chapters || [];
+  const counts = trail?.post_counts || { live: 0, draft: 0 };
+  const empty = trail && !trail.error && posts.length === 0 && stories.length === 0 && chapters.length === 0;
+
+  return (
+    <section className="ch-card" aria-labelledby="ch-story" data-testid="ch-story">
+      <div className="ch-card-head">
+        <h2 id="ch-story" className="ch-h2">Their story</h2>
+        <span className="ch-note">What they posted, and the stories and chapters they are in</span>
+      </div>
+      {!trail ? <p className="ch-note">Loading…</p>
+        : trail.error ? <p className="ch-note" role="alert">{trail.error}</p>
+        : empty ? <p className="ch-note">Nothing yet: no Pulse posts, stories or chapters.</p>
+        : (
+          <>
+            {posts.length > 0 && (
+              <div className="ch-trail">
+                <h3 className="ch-trail-h">On The Pulse <span>{counts.live} posted{counts.draft ? `, ${counts.draft} draft${counts.draft === 1 ? '' : 's'}` : ''}</span></h3>
+                <ul className="ch-trail-list">
+                  {posts.map((p) => (
+                    <li key={p.id}>
+                      <span className="ch-trail-text">{shortText(p.text)}</span>
+                      <span className="ch-trail-meta">{[p.status === 'draft' ? 'Draft' : null, p.episode_number != null ? `Episode ${p.episode_number}` : null].filter(Boolean).join(' · ')}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {stories.length > 0 && (
+              <div className="ch-trail">
+                <h3 className="ch-trail-h">Stories</h3>
+                <ul className="ch-trail-list">
+                  {stories.map((st) => (
+                    <li key={st.id}>
+                      <Link to={st.show_id ? `/stories?show=${st.show_id}` : '/stories'} className="ch-trail-text">{st.title || 'Untitled'}</Link>
+                      <span className="ch-trail-meta">{[STORY_FORMATS[st.format] || st.format, st.episode_number != null ? `Episode ${st.episode_number}` : null, st.status].filter(Boolean).join(' · ')}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {chapters.length > 0 && (
+              <div className="ch-trail">
+                <h3 className="ch-trail-h">Chapters</h3>
+                <ul className="ch-trail-list">
+                  {chapters.map((c) => (
+                    <li key={c.id}>
+                      <Link to={`/chapter/${c.book_id}/${c.id}`} className="ch-trail-text">{c.title || `Chapter ${c.chapter_number ?? ''}`.trim()}</Link>
+                      <span className="ch-trail-meta">{[c.book_title, c.written ? null : 'not written yet'].filter(Boolean).join(' · ')}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
+        )}
+    </section>
+  );
+}
+
 /**
  * Their places: home, closet and others (the character homes of #3228),
  * each with its everyday picture, and "Share to The Pulse", which makes a
@@ -519,6 +605,7 @@ function TabOverview({ character, appearances, feedProfile, onSaved, onFeedSaved
         <TheirNames character={character} feedProfile={feedProfile} onSaved={onSaved} onFeedSaved={onFeedSaved} gen={gen} />
         <WhoTheyAre character={character} onSaved={onSaved} />
         <WhereTheyShowUp appearances={appearances} feedProfile={feedProfile} />
+        <TheirStory character={character} />
       </div>
       <div className="ch-col">
         <TheirVoice character={character} feedProfile={feedProfile} />
