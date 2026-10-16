@@ -6,8 +6,8 @@
  * written to see deleted rows too:
  *   - POST /admin/reset-character-stats: Show list ("List ALL shows"; the raw
  *     SELECT it replaced in 081e0d989 had no deleted_at predicate).
- *   - POST /generate-next-chapter: StorytellerStory approved-story lookup and
- *     StoryTaskArc lookup (908f93090). StoryTaskArc is not paranoid (#1841).
+ *   (POST /generate-next-chapter's StorytellerStory and StoryTaskArc lookups
+ *   were the other two; that route was retired 2026-10-16.)
  *
  * No database: the real models are loaded with the app's define on a
  * Sequelize instance whose query() is stubbed to record the generated SQL,
@@ -49,7 +49,7 @@ jest.mock('../../../src/middleware/auth', () => ({
 jest.mock('../../../src/middleware/aiRateLimiter', () => ({
   aiRateLimiter: (req, res, next) => next(),
 }));
-// Stop generate-next-chapter at the model call; no network.
+// No route here calls the model; this keeps any import from reaching the network.
 jest.mock('@anthropic-ai/sdk', () => jest.fn().mockImplementation(() => ({
   messages: { create: async () => { throw new Error('stop before AI call'); } },
 })));
@@ -85,25 +85,5 @@ describe('former .unscoped() calls generate SQL with no deleted_at predicate', (
     const list = captured.filter((sql) => /FROM "shows"/.test(sql));
     expect(list).toHaveLength(1);
     expect(list[0]).not.toMatch(/deleted_at/);
-  });
-
-  it('generate-next-chapter reads stories (and the task arc) with no deleted_at predicate', async () => {
-    const router = require('../../../src/routes/memories/engine');
-    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    await handler(router, '/generate-next-chapter')(
-      { body: { characterKey: 'just-a-woman' } }, fakeRes()
-    );
-    errSpy.mockRestore();
-    warnSpy.mockRestore();
-
-    const stories = captured.filter((sql) => /FROM "storyteller_stories"/.test(sql));
-    expect(stories).toHaveLength(1);
-    expect(stories[0]).toMatch(/"status" = 'approved'/);
-    expect(stories[0]).not.toMatch(/deleted_at/);
-
-    const arcs = captured.filter((sql) => /FROM "story_task_arcs"/.test(sql));
-    expect(arcs).toHaveLength(1);
-    expect(arcs[0]).not.toMatch(/deleted_at/);
   });
 });
