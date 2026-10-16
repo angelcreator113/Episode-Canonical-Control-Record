@@ -74,14 +74,14 @@ export const CHARACTER_APPEARANCE_RULES = {
   },
 
   the_comparison_creator: {
-    name:            'The Comparison Creator (Chloe)',
+    name:            'The Comparison Creator (Nia Vale)',
     archetype:       'ALTERNATE TIMELINE',
     appearance_mode: 'Screens Only — Never In Person',
     color:           '#B85C38',
     rules: [
       'ONLY appears on screens — phone, laptop, tablet. Never in person. Never in the same physical space.',
-      'She is NOT a villain. Genuinely successful, likable, supportive.',
-      'The comparison is JustAWoman\'s — Chloe never asked for it.',
+      'She is NOT a villain. Same content lane as JustAWoman, more extreme, less restrained: the escalation mirror.',
+      'The comparison is JustAWoman\'s — Nia never asked for it.',
       'She represents the timeline JustAWoman abandoned. Creates regret, not jealousy.',
       'She is consistent. Consistency is the thing that cuts — not cruelty.',
       'When she stumbles or pivots, something shifts in JustAWoman too.',
@@ -91,7 +91,7 @@ export const CHARACTER_APPEARANCE_RULES = {
       'She cannot be mean, fake, or antagonistic.',
       'She cannot be aware of JustAWoman\'s feelings about her.',
     ],
-    how_she_enters: 'She enters through a scroll, a notification, a thumbnail. JustAWoman finds her — Chloe doesn\'t come looking.',
+    how_she_enters: 'She enters through a scroll, a notification, a thumbnail. JustAWoman finds her — Nia doesn\'t come looking.',
   },
 
   the_witness: {
@@ -193,5 +193,5 @@ ${c.how_he_enters || c.how_she_enters ? `  HOW THEY ENTER: ${c.how_he_enters || 
   ).join('\n\n')}
 
 Breaking these rules breaks the book's structure. The Husband never speaks aloud.
-Chloe never appears in person. Lala is one thought, not a presence.`;
+Nia Vale never appears in person. Lala is one thought, not a presence.`;
 }
