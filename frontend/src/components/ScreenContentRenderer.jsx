@@ -20,6 +20,7 @@ import { RELATIONSHIP_POST_TYPE, parseRelationship } from '../lib/feedRelationsh
 import { pulseFeedUrl } from '../lib/pulsePosts';
 import { getSlotForCategory } from '../lib/wardrobeSlots';
 import { storyLabel } from '../lib/storyClock';
+import { atHandle, followersOf } from '../pages/feed/feedConstants';
 import PhoneMapView from './phone/PhoneMapView';
 import PieceImage from './Wardrobe/PieceImage';
 // The Event Package paper, for Lala's Shopping list on the phone (Task #3179).
@@ -375,7 +376,7 @@ export function PulseMessagesRenderer({ showId, storyAt = null, config = {} }) {
   const me = data?.profile_id ?? null;
   const threads = Array.isArray(data?.threads) ? data.threads : [];
   const otherOf = (t) => (t.profiles || []).find((p) => Number(p.id) !== Number(me)) || {};
-  const nameOf = (p) => p.display_name || (p.handle ? `@${p.handle}` : 'someone');
+  const nameOf = (p) => p.display_name || (p.handle ? `${atHandle(p.handle)}` : 'someone');
   const wanted = String(config.handle || '').replace(/^@/, '').toLowerCase();
   const thread = wanted ? threads.find((t) => String(otherOf(t).handle || '').toLowerCase() === wanted) : null;
   const header = (
@@ -448,7 +449,7 @@ export function SinglePostRenderer({ config }) {
         <div style={{ width: 16, height: 16, borderRadius: '50%', background: 'linear-gradient(135deg, #e8a0b4, #b8a9d4)', flexShrink: 0 }} />
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 9, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{who}</div>
-          {handle && <div style={{ fontSize: 7, color: 'rgba(255,255,255,0.55)' }}>@{handle}</div>}
+          {handle && <div style={{ fontSize: 7, color: 'rgba(255,255,255,0.55)' }}>{atHandle(handle)}</div>}
         </div>
         {post.status === 'draft' && <span style={{ marginLeft: 'auto', fontSize: 7, fontWeight: 700, padding: '1px 4px', borderRadius: 3, border: '1px dashed rgba(255,255,255,0.6)' }}>DRAFT</span>}
       </div>
@@ -463,7 +464,7 @@ export function SinglePostRenderer({ config }) {
       {comments.length > 0 && (
         <div style={{ marginTop: 3, borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 2 }}>
           {comments.map((c, i) => (
-            <div key={c.id || i} style={{ fontSize: 7, color: 'rgba(255,255,255,0.7)', lineHeight: 1.3 }}>{typeof c === 'string' ? c : <><b style={{ color: '#fff' }}>{c.handle ? `@${c.handle} ` : ''}</b>{c.text || c.comment || ''}</>}</div>
+            <div key={c.id || i} style={{ fontSize: 7, color: 'rgba(255,255,255,0.7)', lineHeight: 1.3 }}>{typeof c === 'string' ? c : <><b style={{ color: '#fff' }}>{c.handle ? `${atHandle(c.handle)} ` : ''}</b>{c.text || c.comment || ''}</>}</div>
           ))}
         </div>
       )}
@@ -490,7 +491,7 @@ function ProfileHeaderRenderer({ showId, config }) {
         {profile.display_name || profile.handle}
       </div>
       <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.6)', textAlign: 'center' }}>
-        @{profile.handle}
+        {atHandle(profile.handle)}
       </div>
       {profile.vibe_sentence && (
         <div style={{ fontSize: 7, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginTop: 2, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
@@ -513,7 +514,7 @@ function ProfileStatsRenderer({ showId, config }) {
 
   const stats = [
     { label: 'Posts', value: profile.platform_metrics?.total_posts || '—' },
-    { label: 'Followers', value: profile.follower_count_approx || '—' },
+    { label: 'Followers', value: followersOf(profile) || '—' },
     { label: 'Following', value: profile.platform_metrics?.following || '—' },
   ];
 
@@ -1504,7 +1505,7 @@ function EventInviteRenderer({ showId, config }) {
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: 7, color: 'rgba(255,255,255,0.6)', lineHeight: 1 }}>INVITES YOU</div>
             <div style={{ fontSize: 8, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              @{host.handle}
+              {atHandle(host.handle)}
             </div>
           </div>
         </div>

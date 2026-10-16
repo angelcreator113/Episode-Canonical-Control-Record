@@ -34,6 +34,7 @@ import PulseNumbersWaiting from './PulseNumbersWaiting';
 import PulseClosenessWaiting from './PulseClosenessWaiting';
 import PulseDmsWaiting, { DmThread, StartConversation, draftsIn } from './PulseDmsWaiting';
 import PulseEpisodeFollowers, { FOLLOWER_CAUSES } from './PulseEpisodeFollowers';
+import { atHandle } from '../../pages/feed/feedConstants';
 
 const LIMIT = 50;
 const list = (r) => (Array.isArray(r?.data?.data) ? r.data.data : []);
@@ -76,7 +77,7 @@ function PendingComment({ comment, onChange }) {
   };
   return (
     <li className="prv-pending" data-testid="prv-pending-comment">
-      <span><b>@{comment.handle}</b> “{comment.text}”{comment.post?.poster_handle ? <span className="prv-muted"> on @{comment.post.poster_handle}'s post</span> : null}</span>
+      <span><b>{atHandle(comment.handle)}</b> “{comment.text}”{comment.post?.poster_handle ? <span className="prv-muted"> on {atHandle(comment.post.poster_handle)}'s post</span> : null}</span>
       <span className="prv-actions">
         <button type="button" className="prv-btn" disabled={busy}
           onClick={() => act('Approve', () => api.patch(`/api/v1/feed-posts/comments/${comment.id}`, { status: 'live' }))}>Approve</button>

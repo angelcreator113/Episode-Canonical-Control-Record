@@ -11,6 +11,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
+import { atHandle } from '../../pages/feed/feedConstants';
 
 const REVIEW = '/admin?tab=pulse&sub=review';
 const REVEAL_WORDS = { post: 'Post', image: 'Image', event: 'Event', character: 'Character' };
@@ -62,7 +63,7 @@ function MomentRow({ m }) {
           ))}
           {m.posts.map((p) => (
             <li key={`p-${p.id}`}>
-              <span className="pulse-cal-kind">{p.status === 'draft' ? 'Draft' : 'Post'}</span> @{p.poster_handle}{p.text ? `: ${p.text}` : ''}
+              <span className="pulse-cal-kind">{p.status === 'draft' ? 'Draft' : 'Post'}</span> {atHandle(p.poster_handle)}{p.text ? `: ${p.text}` : ''}
             </li>
           ))}
           {m.reveals.map((r) => (

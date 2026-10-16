@@ -74,22 +74,54 @@ function guardJustAWomanRecord(req, res, next) {
   }).catch(next);
 }
 
+/**
+ * A crossed creator's author notes. parasocial_function and what_it_costs_her
+ * say what the profile does to JustAWoman, not what the character wants or
+ * carries, so they are not the character's core_desire / core_wound (Evoni,
+ * 2026-10-16; the inner-life generator reads core_* as canon). On her
+ * real-world feed they become author notes; on The Pulse there are none.
+ * Both stay on the feed profile either way.
+ */
+function crossedWriterNotes(profile) {
+  if (profile.feed_layer !== 'real_world') return null;
+  return [profile.parasocial_function && `What they are to JustAWoman: ${profile.parasocial_function}`,
+    profile.what_it_costs_her && `What it costs her: ${profile.what_it_costs_her}`].filter(Boolean).join('\n') || null;
+}
+
 // ── LalaVerse city culture ───────────────────────────────────────────────────
 // The five DREAM cities (utils/feedCities). A profile that still has an old
 // city is read as its DREAM city (feedCity), so the old texts are gone.
 const CITY_CULTURE = DREAM_CITY_CULTURE;
 
 // ── Generation prompt ─────────────────────────────────────────────────────────
-function buildGenerationPrompt(handle, platform, vibe_sentence, characterContext, advancedContext) {
-  // Default to JustAWoman (Book 1) if no character context provided
-  const ctx = characterContext || {
-    name: 'JustAWoman',
-    description: 'A Black woman, mother, wife, content creator in fashion/beauty/lifestyle.',
-    wound: 'She does everything right and the right room has not found her yet.',
-    goal: 'To be legendary.',
-    audience: 'Besties',
-    detail: 'She posts for women. Men show up with their wallets and something in her responds.\nShe watches certain creators alone, at night, and does not tell her husband.',
-  };
+// Examples in the prompt, by world: The Pulse has no Instagram, OnlyFans or
+// Houston (utils/pulsePlatform), so a LalaVerse profile is shown LalaVerse
+// examples (Evoni, 2026-10-16). A layer-less profile is JustAWoman's feed.
+const PROMPT_EXAMPLES = {
+  real_world: {
+    geo: "'Houston, TX' or 'South London' or 'Atlanta metro'",
+    cluster: "'Atlanta mommy influencer circuit' or 'LA beauty creator scene' or 'DMV lifestyle'",
+    revenue: "'Brand deals (Fashion Nova, lip gloss brands)', 'OnlyFans ($25/month tier)', 'Amazon storefront', 'YouTube AdSense (~$2k/month)'",
+    brand: 'Fashion Nova',
+    locations: '"e.g. Atlanta", "Houston", "Lagos"',
+    cadence: "'3-4 TikToks/day, stories every 2 hours, goes live Thursdays at 10pm'",
+  },
+  lalaverse: {
+    geo: "'Dazzle District' or 'Echo Park' or 'Maverick Harbor' (a LalaVerse city)",
+    cluster: "'the Radiance Row soft-luxury circle' or 'Echo Park night creators'",
+    revenue: "'Brand deals (a Dazzle District boutique)', 'PlayRoom subscription ($25/month tier)', 'Pulse storefront', 'paid Pulse lives'",
+    brand: 'a Dazzle District boutique',
+    locations: '"e.g. Dazzle District", "Echo Park", "Ascent Tower"',
+    cadence: "'3-4 Pulse videos/day, Pulse stories every 2 hours, goes live Thursdays at 10pm'",
+  },
+};
+
+function buildGenerationPrompt(handle, platform, vibe_sentence, characterContext, advancedContext, layer = null) {
+  // The protagonist of this feed: the caller's character, else Lala on The
+  // Pulse and JustAWoman on her real-world feed (utils/protagonistContexts).
+  const world = (layer || characterContext?.feed_layer) === 'lalaverse' || platform === PULSE ? 'lalaverse' : 'real_world';
+  const ctx = require('../utils/protagonistContexts').protagonistFor(world, characterContext);
+  const ex = PROMPT_EXAMPLES[world];
 
   const adv = advancedContext || {};
   const advancedHints = [];
@@ -115,7 +147,7 @@ THE CREATOR SPARK:
 Handle: ${handle}
 Platform: ${platformLabel(platform)}
 Vibe: ${vibe_sentence}${advBlock}
-${platform === PULSE ? pulsePromptRules('lalaverse') : ''}
+${world === 'lalaverse' ? pulsePromptRules('lalaverse') : ''}
 Generate a COMPLETE, psychologically specific social profile with realistic metrics.
 This is ADULT LITERARY FICTION. Write real content — explicit if the character warrants it. Do not sanitize.
 The persona vs. real signal gap is where the character lives. Find it.
@@ -131,13 +163,13 @@ IMPORTANT:
 Respond ONLY in valid JSON:
 {
   "display_name": "How their name appears on the platform",
-  "creator_name": "Their real full name — the actual person behind the handle. e.g. 'Jessica Chen', 'Marcus Rivera'. Every creator has a real name.",
+  "creator_name": "Their real full name — the actual person behind the handle. e.g. 'Jessica Chen', 'Andre Wells'. Every creator has a real name.",
 
   "follower_tier": "emerging|nano|micro|mid|macro|mega (under 1k, 1k–10k, 10k–50k, 50k–250k, 250k–1M, 1M+)",
   "follower_count_approx": "e.g. 2.3k or 47k or 1.2M — realistic for this creator type on this platform",
   "influencer_tier_detail": "Nuanced tier analysis — where they sit relative to their niche, trajectory within their tier, why they're at this level. 2-3 sentences.",
 
-  "post_frequency": "Specific posting cadence — e.g. '3-4 TikToks/day, stories every 2 hours, goes live Thursdays at 10pm'",
+  "post_frequency": "Specific posting cadence — e.g. ${ex.cadence}",
   "engagement_rate": "Realistic engagement rate as percentage — e.g. '4.2% (high for macro tier)' or '12% (typical micro creator with tight community)'",
   "platform_metrics": {
     "avg_views": "e.g. 45k per video",
@@ -152,8 +184,8 @@ Respond ONLY in valid JSON:
   "content_category": "primary content category",
   "archetype": "polished_curator|messy_transparent|soft_life|explicitly_paid|overnight_rise|cautionary|the_peer|the_watcher|chaos_creator|community_builder",
 
-  "geographic_base": "Specific city and state/region — e.g. 'Houston, TX' or 'South London' or 'Atlanta metro'",
-  "geographic_cluster": "The creator scene they're part of — e.g. 'Atlanta mommy influencer circuit' or 'LA beauty creator scene' or 'DMV lifestyle'",
+  "geographic_base": "Specific city${world === 'lalaverse' ? ' of the LalaVerse' : ' and state/region'} — e.g. ${ex.geo}",
+  "geographic_cluster": "The creator scene they're part of — e.g. ${ex.cluster}",
   "age_range": "Estimated age range — e.g. 'mid-20s' or 'early 30s' or '28'",
   "relationship_status": "Current relationship status — be specific and messy if relevant. e.g. 'single mom, co-parenting with baby daddy who has a new girl' or 'married but the husband is never in content' or 'situationship with another creator she won't name'",
 
@@ -169,9 +201,9 @@ Respond ONLY in valid JSON:
     "vibe_tags": ["e.g. clean girl", "soft luxury", "unbothered"]
   },
 
-  "revenue_streams": ["List each revenue source — e.g. 'Brand deals (Fashion Nova, lip gloss brands)', 'OnlyFans ($25/month tier)', 'Amazon storefront', 'YouTube AdSense (~$2k/month)'"],
+  "revenue_streams": ["List each revenue source — e.g. ${ex.revenue}"],
   "brand_partnerships": [
-    { "brand": "e.g. Fashion Nova", "type": "paid post", "visible": true },
+    { "brand": "e.g. ${ex.brand}", "type": "paid post", "visible": true },
     { "brand": "e.g. unnamed hair company", "type": "gifted/barter", "visible": false }
   ],
 
@@ -179,7 +211,7 @@ Respond ONLY in valid JSON:
     "primary_age": "e.g. 18-34",
     "gender_split": "e.g. 78% women, 18% men, 4% other",
     "psychographic": "Who actually watches — e.g. 'women who want her life but can't admit it' or 'men who think they have a chance'",
-    "top_audience_locations": ["e.g. Atlanta", "Houston", "Lagos"]
+    "top_audience_locations": [${ex.locations}]
   },
 
   "known_associates": [
@@ -253,7 +285,7 @@ Respond ONLY in valid JSON:
   "book_relevance": ["How they feed into the story arc", "Potential future role"],
 
   "world_exists": true or false,
-  "crossing_trigger": "What story event would cause this creator to cross into ${ctx.name}'s real world.",
+  "crossing_trigger": "What story event would cause this creator to cross into ${ctx.name}'s ${world === 'lalaverse' ? 'life off the feed' : 'real world'}.",
   "crossing_mechanism": "How they would actually enter — DM, comment section, mutual connection, physical location, brand event."
 }`;
 }
@@ -367,7 +399,7 @@ router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
     }
 
     // Build prompt — inject LalaVerse city culture context when applicable
-    let prompt = buildGenerationPrompt(handle, platform, vibe_sentence, character_context, advanced_context);
+    let prompt = buildGenerationPrompt(handle, platform, vibe_sentence, character_context, advanced_context, layer);
     if (layer === 'lalaverse' && lalaCity) {
       prompt += `\n\nLALAVERSE CONTEXT:
 This creator lives in ${lalaCity.replace(/_/g, ' ')} — ${CITY_CULTURE[lalaCity] || ''}
@@ -1653,8 +1685,7 @@ router.post('/:id/cross', requireAuth, guardJustAWomanRecord, async (req, res) =
           icon: '\uD83D\uDCF1',
           role_type: 'pressure',
           status: 'accepted',
-          core_desire: profile.parasocial_function || null,
-          core_wound: profile.what_it_costs_her || null,
+          writer_notes: crossedWriterNotes(profile),
           description: `${isPulseLayer(profile.feed_layer) ? 'Creator on The Pulse' : `Social media creator (${platformLabel(profile.platform)})`}. ${profile.content_persona || ''}`.trim(),
           personality: profile.real_signal || null,
           metadata: {
@@ -1821,7 +1852,7 @@ router.post('/:id/regenerate', requireAuth, aiRateLimiter, guardJustAWomanRecord
     const advanced_context = req.body.advanced_context || null;
 
     const layer = profile.feed_layer || 'real_world';
-    let prompt = buildGenerationPrompt(handle, platform, vibe_sentence, character_context, advanced_context);
+    let prompt = buildGenerationPrompt(handle, platform, vibe_sentence, character_context, advanced_context, layer);
     // An old city reads as its DREAM city (utils/feedCities).
     const lalaCity = layer === 'lalaverse' ? feedCity(profile.city) : null;
     if (lalaCity) {
@@ -1951,8 +1982,7 @@ router.post('/:id/crossing-preview', requireAuth, async (req, res) => {
       icon: '\uD83D\uDCF1',
       role_type: 'pressure',
       status: 'accepted',
-      core_desire: profile.parasocial_function || null,
-      core_wound: profile.what_it_costs_her || null,
+      writer_notes: crossedWriterNotes(profile),
       description: `${isPulseLayer(profile.feed_layer) ? 'Creator on The Pulse' : `Social media creator (${platformLabel(profile.platform)})`}. ${profile.content_persona || ''}`.trim(),
       personality: profile.real_signal || null,
       metadata: {

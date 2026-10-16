@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import {
-  C, ARCHETYPE_LABELS, FEED_STATE_CONFIG, PROTAGONISTS, fp, lalaClass, platformLabel,
+  C, ARCHETYPE_LABELS, FEED_STATE_CONFIG, PROTAGONISTS, fp, lalaClass, platformLabel, followersOf,
 } from './feedConstants';
 
 function Spinner() {
@@ -42,7 +42,7 @@ export default function FeedViewContent({
                             <span style={{fontSize:14,fontWeight:700,color:C.ink,cursor:'pointer'}} onClick={()=>selectProfile(p)}>{p.creator_name||d.creator_name||p.display_name||d.display_name||p.handle}</span>
                             {sc&&<span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:8,background:sc.bg,color:sc.color}}>{sc.label}</span>}
                           </div>
-                          <div style={{fontSize:12,color:C.inkLight}}>{p.handle} · {platformLabel(p.platform)}{(p.creator_name||d.creator_name)&&(p.display_name||d.display_name)&&(p.creator_name||d.creator_name)!==(p.display_name||d.display_name)?` · ${p.display_name||d.display_name}`:''} · {p.follower_count_approx||d.follower_count_approx}{feedLayer==='lalaverse'&&p.feed_layer==='real_world'&&<span style={{marginLeft:6,fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:C.blueLight,color:C.blue}}>◈ Following</span>}</div>
+                          <div style={{fontSize:12,color:C.inkLight}}>{p.handle} · {platformLabel(p.platform)}{(p.creator_name||d.creator_name)&&(p.display_name||d.display_name)&&(p.creator_name||d.creator_name)!==(p.display_name||d.display_name)?` · ${p.display_name||d.display_name}`:''} · {followersOf(p)}{feedLayer==='lalaverse'&&p.feed_layer==='real_world'&&<span style={{marginLeft:6,fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:C.blueLight,color:C.blue}}>◈ Following</span>}</div>
                         </div>
                         <span style={{fontSize:10,fontWeight:700,color:score>=7?C.lavender:score>=4?C.blue:C.inkLight}}>✦{score}</span>
                       </div>

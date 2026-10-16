@@ -5,6 +5,7 @@ import { Heart, MessageCircle, Share2, Wand2, Trash2, ArrowLeft,
   BarChart3, Eye, Activity, Link2 } from 'lucide-react';
 import api from '../services/api';
 import './FeedTimelinePage.css';
+import { atHandle } from './feed/feedConstants';
 
 const TIMELINE_LABELS = {
   before_episode: 'Before Episode',
@@ -51,7 +52,7 @@ function FeedPostCard({ post, onDelete }) {
             {post.poster_creator_name || post.poster_display_name || post.poster_handle}
           </span>
           <span className="feed-post-handle">
-            @{post.poster_handle}{post.poster_creator_name && post.poster_display_name && post.poster_display_name !== post.poster_creator_name ? ` · ${post.poster_display_name}` : ''}
+            {atHandle(post.poster_handle)}{post.poster_creator_name && post.poster_display_name && post.poster_display_name !== post.poster_creator_name ? ` · ${post.poster_display_name}` : ''}
           </span>
           <span className="feed-post-platform">{post.poster_platform}</span>
         </div>
@@ -155,7 +156,7 @@ function FeedPostCard({ post, onDelete }) {
         <div className="feed-post-comments">
           {post.sample_comments.slice(0, 3).map((c, i) => (
             <div key={i} className={`feed-comment ${c.is_lala ? 'lala-comment' : ''}`}>
-              <span className="feed-comment-handle">@{c.handle}</span>
+              <span className="feed-comment-handle">{atHandle(c.handle)}</span>
               <span className="feed-comment-text">{c.text}</span>
               {c.likes > 0 && <span className="feed-comment-likes">{c.likes}</span>}
             </div>

@@ -195,6 +195,15 @@ export function profileName(p) {
   const d = fp(p);
   return p?.display_name || d.display_name || p?.registry_character_name || '';
 }
+/**
+ * A profile's follower count, from one place (Evoni, 2026-10-16: one source
+ * for the number on screen). The column follower_count_approx wins; the
+ * generated full_profile copy is the fallback. Every screen reads it here,
+ * so the Pulse card and the character page show the same number.
+ */
+export function followersOf(p) {
+  return p?.follower_count_approx || fp(p).follower_count_approx || '';
+}
 export function atHandle(handle) {
   const h = String(handle || '').trim().replace(/^@+/, '');
   return h ? `@${h}` : '';

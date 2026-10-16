@@ -229,6 +229,26 @@ const OFF_VERBS = new Set(['HIDE', 'REMOVE', 'CLOSE']);
  * is when the beat ends. Taking it away takes its screens with it, and a
  * phone screen opened while it is not on screen is listed in phoneDownAt.
  */
+// The show's own rule (Evoni, 2026-10-16): Lala's phone is on screen from
+// the moment the Start button is clicked in the Opening Ritual (beat 1) until
+// she travels to the event (beat 10, Event Travel); a script does not write
+// [UI:SHOW phone] for it. Clicking or showing the Start button brings it up.
+export const PHONE_UP_FROM_BEAT = 2;
+export const PHONE_UP_UNTIL_BEAT = 10;
+const isStartButton = (moment) => /^start(button)?$/.test(normKey(moment?.target)) && ['CLICK', 'TAP', 'SELECT', 'DISPLAY', 'SHOW'].includes(moment?.verb);
+
+/**
+ * Whether the phone is on screen as a beat starts: always from beat 2 through
+ * beat 10 (the show's rule above), down from beat 11 on unless the script
+ * brings it back, and otherwise as the beat before left it (`carried`).
+ */
+export function phoneUpAtBeat(beatNumber, carried = false, prevNumber = null) {
+  const n = Number(beatNumber);
+  if (n >= PHONE_UP_FROM_BEAT && n <= PHONE_UP_UNTIL_BEAT) return true;
+  if (n > PHONE_UP_UNTIL_BEAT && (prevNumber === null || Number(prevNumber) <= PHONE_UP_UNTIL_BEAT)) return false;
+  return carried;
+}
+
 export function beatOnScreen(lines = [], on = {}, { phoneUp = false } = {}) {
   const showing = new Map(); // name -> kind, in the order they came on
   if (phoneUp) showing.set(PHONE_NAME, 'device');
@@ -242,6 +262,8 @@ export function beatOnScreen(lines = [], on = {}, { phoneUp = false } = {}) {
     const shown = resolveMoment(moment, on);
     const name = shown ? shown.name : moment.target;
     if (shown && !used.has(name)) used.set(name, shown);
+    // The Start button brings the phone up (the show's rule above).
+    if (isStartButton(moment) && !up) { up = true; showing.set(PHONE_NAME, 'device'); }
     if (shown?.kind === 'icon') {
       // Tapping an icon (Task #2801) opens its screen on the phone.
       if (!up) phoneDownAt.push(i);
@@ -367,8 +389,13 @@ export function beatSpeakers(lines = []) {
  * every screen; else it names where the icon actually is. A tap on
  * something that is not an icon on the phone, and any moment whose target
  * matches no screen or overlay (or one with no picture yet), is listed as
- * not made yet. Returns { moments, taps: [{ i, name, ok, why }], missing: [{ i, name }], endAt },
+ * not made yet. Returns { moments, taps: [{ i, name, ok, why, on, onName }], missing: [{ i, name }], endAt },
  * endAt being the screen the beat leaves the phone on (the next beat's startAt).
+ *
+ * Closing the screen that shows goes back to the one before it, the phone's
+ * own Back, or home when there is none; the phone going away and coming
+ * back starts at home (script phone paths, 2026-10-16: a [UI:CLOSE Bank
+ * Page] left the check on Bank Page, so the next tap was flagged).
  */
 export function phoneCheck(lines = [], on = {}, { startAt = null } = {}) {
   const screens = on.screens || [];
@@ -376,6 +403,8 @@ export function phoneCheck(lines = [], on = {}, { startAt = null } = {}) {
   const home = screens.find((s) => s.is_home) || null;
   const nameOf = (id) => byId.get(id)?.name || id || 'the phone';
   let at = startAt || home?.id || null;
+  const trail = [];
+  const go = (id) => { if (at && at !== id) trail.push(at); at = id; };
   const taps = [];
   const missing = [];
   let moments = 0;
@@ -390,15 +419,17 @@ export function phoneCheck(lines = [], on = {}, { startAt = null } = {}) {
       const icon = (on.icons || []).find((ic) => ic.name === shown.name) || null;
       const everywhere = icon?.onName === 'Every screen';
       const ok = !icon || everywhere || !at || icon.on === at;
-      taps.push({ i, name: shown.name, ok, why: ok ? null : `${shown.name} is on ${icon.onName || nameOf(icon.on)}, but the phone shows ${nameOf(at)}` });
-      if (icon?.opens) at = icon.opens;
+      taps.push({ i, name: shown.name, ok, why: ok ? null : `${shown.name} is on ${icon.onName || nameOf(icon.on)}, but the phone shows ${nameOf(at)}`, on: icon?.on || null, onName: icon?.onName || null });
+      if (icon?.opens) go(icon.opens);
       return;
     }
     if (!shown) { if (!OFF_VERBS.has(moment.verb)) missing.push({ i, name: target }); return; }
-    if (shown.kind === 'device') { if (!DEVICE_ON.has(moment.verb)) at = home?.id || null; return; }
+    if (shown.kind === 'device') { if (!DEVICE_ON.has(moment.verb)) { at = home?.id || null; trail.length = 0; } return; }
     if (shown.kind === 'phone') {
       const screen = screens.find((s) => (s.name || s.id) === shown.name);
-      if (screen && !OFF_VERBS.has(moment.verb)) at = screen.id;
+      if (!screen) return;
+      if (!OFF_VERBS.has(moment.verb)) go(screen.id);
+      else if (screen.id === at) at = trail.pop() || home?.id || null;
       return;
     }
     if (shown.kind === 'overlay' && !shown.url && !OFF_VERBS.has(moment.verb)) missing.push({ i, name: shown.name });

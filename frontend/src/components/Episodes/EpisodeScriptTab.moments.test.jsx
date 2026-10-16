@@ -177,6 +177,7 @@ describe('Script tab: what is on screen in each beat', () => {
   });
 
   test('overlays stay on screen together until hidden, and build the scene (Task #2793)', async () => {
+    // Beat 4: Lala's phone is up from the Start button to Event Travel (the show's rule, Evoni 2026-10-16).
     const script = '## BEAT: 4 · Interruption Pulse 1\n[UI:DISPLAY lower_third]\nLala: Mail!\n[UI:DISPLAY look_sculpted_dress]\n[UI:CLICK MailIcon]\n[UI:HIDE lower_third]\n[UI:OPEN closet]';
     render(<MemoryRouter><EpisodeScriptTab episode={{ id: 'ep-1', show_id: 'show-1', script_content: script, script_locked_beats: [] }} show={{ id: 'show-1' }} /></MemoryRouter>);
     await waitFor(() => expect(screen.getByTestId('script-build-4')).toBeTruthy());
@@ -185,16 +186,16 @@ describe('Script tab: what is on screen in each beat', () => {
       ['Shows Lower Third', 'Shows Sculpted Dress', 'Taps Mail', 'Hides Lower Third', 'Opens Closet'],
     );
     expect(cards.map((c) => c.querySelector('[data-testid=script-moment-with]')?.textContent || '')).toEqual([
-      '',
-      'With: Lower Third',
-      'With: Lower Third, Sculpted Dress',
-      'With: Sculpted Dress, Mail',
+      "With: Lala's phone",
+      "With: Lala's phone, Lower Third",
+      "With: Lala's phone, Lower Third, Sculpted Dress",
+      "With: Lala's phone, Sculpted Dress, Mail",
       // The phone shows one screen at a time: Closet replaces Mail.
-      'With: Sculpted Dress',
+      "With: Lala's phone, Sculpted Dress",
     ]);
     const build = screen.getByTestId('script-build-4');
     expect([...build.querySelectorAll('.esp-build-item span')].map((n) => n.textContent)).toEqual(
-      ['Scene', 'Lower Third', 'Sculpted Dress', 'Mail', 'Closet'],
+      ['Scene', "Lala's phone", 'Lower Third', 'Sculpted Dress', 'Mail', 'Closet'],
     );
   });
 });
