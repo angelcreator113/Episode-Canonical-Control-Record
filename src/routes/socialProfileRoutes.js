@@ -1875,7 +1875,7 @@ Career position relative to Lala: ${profile.career_pressure || 'level'}.`;
     if (brain.block) prompt += `\n${brain.block}`;
     // Their facts (Character Consistency Engine step 5; services/characterFacts):
     // the regenerated profile states them, and a decided follower count is kept.
-    const { factsForProfile, factsPromptBlock, isDecided } = require('../services/characterFacts');
+    const { factsForProfile, factsPromptBlock, isDecided, agreeingFollowers } = require('../services/characterFacts');
     const facts = await factsForProfile(db, profile);
     const factsBlock = factsPromptBlock(facts);
     if (factsBlock) {
@@ -1909,6 +1909,9 @@ Career position relative to Lala: ${profile.career_pressure || 'level'}.`;
       // Not decided yet: the answer's count is not taken as canon; what was there stays.
       generated.follower_count_approx = profile.follower_count_approx;
       generated.follower_tier = profile.follower_tier;
+    } else {
+      // No fact: the answer's count and tier at least agree with each other (step 5c).
+      agreeingFollowers(generated, sanitizeEnum(generated.follower_tier, VALID_FOLLOWER_TIERS, 'mid'));
     }
 
     // Sanitize ENUM fields to prevent DB insert failures from AI variations

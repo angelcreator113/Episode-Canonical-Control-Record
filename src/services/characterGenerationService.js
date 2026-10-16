@@ -468,7 +468,7 @@ Return JSON only:
   "bio": "their bio — 1-2 sentences in their voice",
   "vibe_tags": ["3-5 aesthetic/content tags"],
   "starting_state": "rising OR peaking OR plateauing",
-  "follower_range": "nano (1k-10k) OR micro (10k-100k) OR mid (100k-500k) OR macro (500k+)",
+  "follower_count": a whole number of followers fitting who they are now (emerging under 1,000; nano 1,000-9,999; micro 10,000-49,999; mid 50,000-249,999; macro 250,000-999,999; mega 1,000,000+),
   "content_posture": "what they post about — their performed self",
   "gap_from_deep_profile": "one sentence describing the gap between who they perform and who they actually are"
 }`;
