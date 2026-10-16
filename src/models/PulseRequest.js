@@ -12,7 +12,7 @@ module.exports = (sequelize, DataTypes) => {
     id:      { type: DataTypes.UUID, primaryKey: true, defaultValue: DataTypes.UUIDV4 },
     show_id: { type: DataTypes.UUID, allowNull: false, references: { model: 'shows', key: 'id' } },
     lane:    { type: DataTypes.STRING(10), allowNull: false },   // automated | manual
-    kind:    { type: DataTypes.STRING(20), allowNull: false },   // event | ambient | comment | storyline | dm | voice | suggestions | reactions | redraft
+    kind:    { type: DataTypes.STRING(20), allowNull: false },   // event | ambient | comment | storyline | dm | voice | suggestions | reactions | redraft | character_posts
     job_id:  { type: DataTypes.UUID, allowNull: true },
   }, {
     sequelize, modelName: 'PulseRequest',

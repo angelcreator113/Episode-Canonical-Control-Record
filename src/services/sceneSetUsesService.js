@@ -48,6 +48,34 @@ async function countUses(sequelize, setId, { episodeId = null, transaction } = {
   return { locations, beats, events, defaults, scenes, total: locations + beats + events + defaults + scenes };
 }
 
+/**
+ * Uses of a set by shows other than showId: episode locations, plan beats
+ * and scene rows of another show's episodes, another show's events, and
+ * another show's home or closet default. A set another show uses is not
+ * moved to this one (fourth audit, 2026-10-15: a shared set moved, and the
+ * other show's episodes then pointed at a set of a show not theirs).
+ */
+async function otherShowUses(sequelize, setId, showId, { transaction } = {}) {
+  const [[row]] = await sequelize.query(
+    `SELECT
+       (SELECT COUNT(*) FROM scene_set_episodes x JOIN episodes e ON e.id = x.episode_id
+         WHERE x.scene_set_id = :setId AND x.deleted_at IS NULL AND e.deleted_at IS NULL
+           AND e.show_id IS NOT NULL AND e.show_id <> :showId)
+     + (SELECT COUNT(*) FROM scene_plans x JOIN episodes e ON e.id = x.episode_id
+         WHERE x.scene_set_id = :setId AND x.deleted_at IS NULL AND e.deleted_at IS NULL
+           AND e.show_id IS NOT NULL AND e.show_id <> :showId)
+     + (SELECT COUNT(*) FROM scenes x JOIN episodes e ON e.id = x.episode_id
+         WHERE x.scene_set_id = :setId AND x.deleted_at IS NULL AND e.deleted_at IS NULL
+           AND e.show_id IS NOT NULL AND e.show_id <> :showId)
+     + (SELECT COUNT(*) FROM world_events w
+         WHERE w.scene_set_id = :setId AND w.deleted_at IS NULL AND w.show_id IS NOT NULL AND w.show_id <> :showId)
+     + (SELECT COUNT(*) FROM shows s, jsonb_each_text(COALESCE(s.metadata::jsonb->'scene_defaults', '{}'::jsonb)) d
+         WHERE s.id <> :showId AND s.deleted_at IS NULL AND d.key IN ('home_set_id', 'closet_set_id') AND d.value = CAST(:setId AS text))
+       AS n`,
+    { replacements: { setId, showId }, transaction });
+  return Number(row?.n || 0);
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 async function liveSet(sequelize, id, transaction) {
@@ -193,6 +221,7 @@ async function moveRemovedSetsForEpisode(sequelize, episodeId, moves) {
 
 module.exports = {
   SceneSetUsesError,
+  otherShowUses,
   countUses,
   moveUses,
   resolveSetShowId,

@@ -4185,6 +4185,14 @@
 .scene-sets-ws-empty { font-size: 12px; color: var(--text-secondary); text-align: center; padding: 16px; margin: 0; }
 /* Five workspace tabs scroll sideways on a phone rather than clip. */
 .scene-sets-modal-tabs { overflow-x: auto; scrollbar-width: none; }
+/* The header, the handoff line and the tab bar never shrink: a scrolling
+   tab bar may shrink to nothing in the dialog's column, so a long tab (the
+   Advanced spec) squeezed the tabs out of view (Evoni, 2026-10-16: "when i
+   click advance my other tabs disappear"). Only the body scrolls. */
+.scene-sets-modal-header,
+.scene-sets-modal-handoff,
+.scene-sets-modal-tabs { flex-shrink: 0; }
+.scene-sets-modal-body { min-height: 0; }
 .scene-sets-modal-tabs .scene-sets-modal-tab { flex-shrink: 0; white-space: nowrap; }
 
 /* The set's World Location (Details & Usage). */

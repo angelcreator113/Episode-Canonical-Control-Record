@@ -185,6 +185,12 @@ async function ffmpegEnhanceVideo(videoUrl, options = {}) {
     gamma_b: _gamma_b = 0.97,
   } = options;
 
+  // The values go into the filter graph: numbers only, whatever the caller
+  // (readPostProcessOptions checks the request; fourth audit, 2026-10-15).
+  for (const [key, value] of Object.entries({ brightness, contrast, saturation })) {
+    if (!Number.isFinite(value)) throw new Error(`FFmpeg ${key} must be a number`);
+  }
+
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'scene-postproc-'));
   const inputPath = path.join(tmpDir, 'input.mp4');
   const outputPath = path.join(tmpDir, 'output.mp4');
@@ -366,7 +372,56 @@ async function storeBufferInS3(buffer, setId, angleId, assetType, contentType) {
   return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
 }
 
+/**
+ * The post-processing options a request may set (fourth audit, 2026-10-15:
+ * the body's options went to Sharp, Cloudinary and the FFmpeg filter graph
+ * as given, so text in a number reached FFmpeg's filters and a huge width
+ * reached Sharp). Only these keys, each a number in its range or a
+ * boolean; anything else is refused. Returns { options } or { error }.
+ */
+const OPTION_RULES = Object.freeze({
+  sharpOptions: {
+    targetWidth: [256, 3840], targetHeight: [144, 2160],
+    sharpenSigma: [0, 10], sharpenFlat: [0, 10], sharpenJagged: [0, 10], jpegQuality: [50, 100],
+  },
+  cloudinarySettings: {
+    improve: 'boolean', saturation: [-100, 100], vibrance: [-100, 100], contrast: [-100, 100], sharpen: [0, 2000], warmth: [0, 100],
+  },
+  ffmpegOptions: {
+    colorGrade: 'boolean', sharpen: 'boolean', vignette: 'boolean',
+    brightness: [-1, 1], contrast: [0, 3], saturation: [0, 3],
+  },
+});
+
+function readPostProcessOptions(body) {
+  const b = body && typeof body === 'object' ? body : {};
+  const options = {};
+  for (const flag of ['skipSharp', 'skipCloudinary', 'skipFFmpeg']) {
+    if (b[flag] != null && typeof b[flag] !== 'boolean') return { error: `${flag} must be true or false` };
+    options[flag] = b[flag] === true;
+  }
+  for (const [group, rules] of Object.entries(OPTION_RULES)) {
+    const given = b[group];
+    if (given == null) { options[group] = {}; continue; }
+    if (typeof given !== 'object' || Array.isArray(given)) return { error: `${group} must be an object` };
+    const out = {};
+    for (const [key, value] of Object.entries(given)) {
+      const rule = rules[key];
+      if (!rule) return { error: `${group}.${key} is not an option` };
+      if (rule === 'boolean') {
+        if (typeof value !== 'boolean') return { error: `${group}.${key} must be true or false` };
+      } else if (typeof value !== 'number' || !Number.isFinite(value) || value < rule[0] || value > rule[1]) {
+        return { error: `${group}.${key} must be a number from ${rule[0]} to ${rule[1]}` };
+      }
+      out[key] = value;
+    }
+    options[group] = out;
+  }
+  return { options };
+}
+
 module.exports = {
+  readPostProcessOptions,
   sharpEnhanceStill,
   cloudinaryEnhanceStill,
   ffmpegEnhanceVideo,

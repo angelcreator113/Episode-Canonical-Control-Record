@@ -18,7 +18,8 @@
  *   automated  the queue's event, ambient, comment and storyline drafts, and
  *              a new Active character's voice build (Task #3070)
  *   manual     what Evoni starts: DMs, draft reactions, redraft, building a
- *              voice, storyline beat suggestions
+ *              voice, storyline beat suggestions, a character's posts from
+ *              their page (services/characterPosts)
  *
  * One request is one drafting call, however many items it drafts and
  * whichever model of the two-attempt loop answers. The quality gate

@@ -1441,3 +1441,18 @@ a.ch-trail-text:hover { text-decoration: underline; }
 @media (max-width: 480px) {
   .ch-fact { grid-template-columns: 1fr; gap: 2px; }
 }
+
+/* The consistency check (Character Consistency Engine step 3) */
+.ch-check { display: grid; gap: 8px; border-top: 1px solid var(--lala-lavender-line); padding-top: 12px; }
+.ch-check > .ch-btn-soft { justify-self: start; }
+.ch-check-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.ch-check-list li { display: grid; gap: 4px; padding: 10px 12px; border-radius: 12px; background: var(--warning-bg); }
+.ch-check-intentional .ch-check-list li { background: var(--surface-subtle, var(--lala-parchment-2)); }
+.ch-check-what { overflow-wrap: anywhere; }
+.ch-check-excerpt { font-size: 12px; color: var(--text-secondary); font-style: italic; overflow-wrap: anywhere; }
+.ch-check-intentional summary { cursor: pointer; font-size: 13px; font-weight: 700; }
+.ch-gen { display: grid; gap: 8px; border-top: 1px solid var(--lala-lavender-line); padding-top: 12px; margin-top: 12px; }
+.ch-gen > .ch-btn { justify-self: start; }
+.ch-gen-field { display: grid; gap: 4px; font-size: 13px; }
+.ch-gen-field select, .ch-gen-field textarea { font: inherit; padding: 6px 8px; min-height: 40px; border: 1px solid var(--lala-lavender-line); border-radius: 10px; background: var(--surface-card); color: var(--text-primary); max-width: 100%; box-sizing: border-box; }
+.ch-gen-field select { justify-self: start; }

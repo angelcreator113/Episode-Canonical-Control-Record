@@ -735,6 +735,18 @@ router.post('/:id/character-places', requireAuth, async (req, res) => {
   }
 });
 
+// Lala's home filled in from what the show knows: Lala as the lead when
+// none was ever chosen, and a World Location for her home and closet sets
+// (characterPlacesService.fillLalaHome). Only empty fields are filled.
+router.post('/:id/character-places/fill', requireAuth, async (req, res) => {
+  try {
+    const { fillLalaHome } = require('../services/characterPlacesService');
+    return res.json({ success: true, data: await fillLalaHome(getShow().sequelize, req.params.id) });
+  } catch (err) {
+    return characterPlacesError(res, err, 'POST /shows/:id/character-places/fill');
+  }
+});
+
 router.post('/:id/character-places/unlink', requireAuth, async (req, res) => {
   try {
     const { unlinkPlace } = require('../services/characterPlacesService');
