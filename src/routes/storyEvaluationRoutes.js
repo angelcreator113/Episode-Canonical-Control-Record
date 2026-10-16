@@ -84,24 +84,31 @@ const VOICE_DEEP_HINTS_BASE = {
   voice_c: 'Lean into sexuality/desire, sensory signatures, habits/rituals, the unseen, comfort rituals. The body, warmth, what intimacy costs.',
 };
 
-// Build dynamic deep hints from actual character dossier wounds/desires
+// Build dynamic deep hints from actual character dossier wounds/desires.
+// deepNote reads either deep-profile shape (utils/deepProfile): the older
+// notes, or the v2 dimension text that inner-life generation writes.
+const { deepNote } = require('../utils/deepProfile');
 function buildDynamicDeepHints(dossiers, voiceKey) {
   const base = VOICE_DEEP_HINTS_BASE[voiceKey] || '';
   if (!dossiers?.length) return base;
   const charSpecific = dossiers.map(d => {
     const parts = [];
+    const note = (label, key, field) => {
+      const v = deepNote(d.deep_profile, key, field);
+      if (v) parts.push(`${label}: "${v}"`);
+    };
     if (voiceKey === 'voice_a') {
-      if (d.deep_profile?.grief_and_loss?.the_unprocessed_loss) parts.push(`unprocessed loss: "${d.deep_profile.grief_and_loss.the_unprocessed_loss}"`);
-      if (d.deep_profile?.family_architecture?.parent_wounds) parts.push(`parent wounds: "${d.deep_profile.family_architecture.parent_wounds}"`);
+      note('unprocessed loss', 'grief_loss', 'the_unprocessed_loss');
+      note('parent wounds', 'family_architecture', 'parent_wounds');
       if (d.core_wound) parts.push(`core wound: "${d.core_wound}"`);
     } else if (voiceKey === 'voice_b') {
-      if (d.deep_profile?.ambition_and_identity?.what_they_gave_up) parts.push(`what they gave up: "${d.deep_profile.ambition_and_identity.what_they_gave_up}"`);
-      if (d.deep_profile?.class_and_money?.money_wound) parts.push(`money wound: "${d.deep_profile.class_and_money.money_wound}"`);
+      note('what they gave up', 'ambition_identity', 'what_they_gave_up');
+      note('money wound', 'class_money', 'money_wound');
       if (d.living_context?.active_pressures) parts.push(`active pressure: "${d.living_context.active_pressures}"`);
     } else if (voiceKey === 'voice_c') {
-      if (d.deep_profile?.sexuality_and_desire?.the_pattern) parts.push(`desire pattern: "${d.deep_profile.sexuality_and_desire.the_pattern}"`);
-      if (d.deep_profile?.the_body?.sensory_signature) parts.push(`sensory signature: "${d.deep_profile.the_body.sensory_signature}"`);
-      if (d.deep_profile?.habits_and_rituals?.comfort_ritual) parts.push(`comfort ritual: "${d.deep_profile.habits_and_rituals.comfort_ritual}"`);
+      note('desire pattern', 'sexuality_desire', 'the_pattern');
+      note('sensory signature', 'the_body', 'sensory_signature');
+      note('comfort ritual', 'habits_rituals', 'comfort_ritual');
     }
     return parts.length ? `  ${d.display_name || d.character_key}: ${parts.join('; ')}` : null;
   }).filter(Boolean);
@@ -1789,3 +1796,4 @@ Only include characters and dimensions where the scene reveals something new.`,
 
 module.exports = router;
 module.exports.loadFranchiseConstraints = loadFranchiseConstraints;
+module.exports.buildDynamicDeepHints = buildDynamicDeepHints;

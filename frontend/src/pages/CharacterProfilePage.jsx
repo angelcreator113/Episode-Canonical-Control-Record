@@ -20,7 +20,7 @@ import { platformLabel } from './feed/feedConstants';
 import apiClient from '../services/api';
 import { ROLE_LABELS } from '../constants/characterConstants';
 import { findLala } from '../lib/theCast';
-import { DEPTH_STEPS, depthOf, depthLevelOf, cityLabel, archetypeOf, showUpRows, withLala, voiceOf } from '../lib/characterPage';
+import { DEPTH_STEPS, depthOf, depthLevelOf, cityOf, archetypeOf, showUpRows, withLala, voiceOf } from '../lib/characterPage';
 import './CharacterProfilePage.css';
 
 // ─── Track 6 CP9 module-scope helpers (Pattern F prophylactic — Api suffix) ───
@@ -1279,7 +1279,7 @@ export default function CharacterProfilePage() {
   // Inner life shows its own note for the same run.
   const deepenNote = gen.note?.key === 'all' && activeTab !== 'inner' ? gen.note : null;
   const handle = feedProfile?.handle ? `@${feedProfile.handle.replace(/^@/, '')}` : null;
-  const city = cityLabel(feedProfile?.city);
+  const { label: city, differs: cityDiffers } = cityOf(character, feedProfile);
   const archetype = archetypeOf(feedProfile);
   const firstEpisode = appearances?.episodes?.[0];
   const role = roleOf(character);
@@ -1297,6 +1297,12 @@ export default function CharacterProfilePage() {
           <div className="ch-chips">
             {archetype && <span className="ch-chip">{archetype}</span>}
             {character.feed_profile_id && <span className="ch-chip is-blue">Feed profile</span>}
+            {cityDiffers && (
+              <span className="ch-chip is-warn" data-testid="ch-city-differs"
+                title="Their feed profile and their character record name different cities. Change one so they agree.">
+                City differs: feed says {cityDiffers.feed}, character says {cityDiffers.own}
+              </span>
+            )}
             {firstEpisode && <span className="ch-chip is-green">In Episode {firstEpisode.episode_number ?? '?'}</span>}
             <span className="ch-chip is-plain">{step.label}</span>
           </div>
