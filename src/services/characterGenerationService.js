@@ -223,7 +223,7 @@ const INTERIOR_MODELS = ['claude-sonnet-4-6'];
  * deepened), so the interior grows out of it rather than from a bare spark.
  * `only` limits the answer to those keys.
  */
-async function generateInteriorArchitecture({ name, vibe, role, worldString, bookString, castString, age, known = null, only = null }) {
+async function generateInteriorArchitecture({ name, vibe, role, worldString, bookString, castString, age, known = null, only = null, factsBlock = '' }) {
   const isMinor = age != null && age < 18;
   const minorRule = isMinor
     ? `\nIMPORTANT — MINOR SAFEGUARD: This character is a minor (age ${age}). Do NOT generate "sexuality_desire" content. Set it to: "Dimension deferred — character is a minor."\n`
@@ -239,7 +239,7 @@ async function generateInteriorArchitecture({ name, vibe, role, worldString, boo
   const userMessage = `${worldString}
 ${bookString || ''}
 ${castString || ''}
-${minorRule}${knownBlock}${onlyRule}
+${minorRule}${knownBlock}${factsBlock ? `\n${factsBlock}\n` : ''}${onlyRule}
 Character: ${name}
 Vibe: ${vibe}
 Role in story: ${role}`;
@@ -389,9 +389,11 @@ function withEvents(known, events) {
 /**
  * generateMissingInterior
  * Asks for the missing fields of an existing character, built from what is
- * there. Returns the column values to write; writes nothing itself.
+ * there and from their facts (factsBlock: services/characterFacts
+ * factsPromptBlock; money, lifestyle and status prose must agree with it).
+ * Returns the column values to write; writes nothing itself.
  */
-async function generateMissingInterior({ character, feedProfile = null, events = [], fields }) {
+async function generateMissingInterior({ character, feedProfile = null, events = [], fields, factsBlock = '' }) {
   const name = character.display_name || character.selected_name || 'this character';
   const vibe = character.prose_overview || character.description || feedProfile?.content_persona || feedProfile?.bio || 'not written yet';
   const role = character.role_label || character.role_type || 'supporting';
@@ -401,6 +403,7 @@ async function generateMissingInterior({ character, feedProfile = null, events =
     name, vibe, role, worldString, age,
     known: withEvents(characterContext(character, feedProfile), events),
     only: fields.map((f) => (f === 'selected_name' ? 'real_name' : f)),
+    factsBlock,
   });
   return interiorUpdates(generated, fields);
 }
