@@ -548,10 +548,11 @@ function estimateAngleCost(sceneAngle, sceneSet) {
     const e = imageGen.estimateGenerationCost({ size: 'landscape' });
     return { usd: e.usd, priced: e.priced, model: e.model, base_model: 'flux-dev', method: 'text_to_image' };
   }
-  if (isInsideBaseShot(sceneAngle) || zoneIsBase(sceneAngle, sceneSet)) return { usd: 0, priced: true, model: 'base', base_model: 'base', method: 'base' };
+  const own = ownCamera(sceneAngle, null, specFitsBase(sceneSet.scene_spec, sceneSet.base_still_url) ? sceneSet.scene_spec : null);
+  if (!own && (isInsideBaseShot(sceneAngle) || zoneIsBase(sceneAngle, sceneSet))) return { usd: 0, priced: true, model: 'base', base_model: 'base', method: 'base' };
   const onZone = String(sceneAngle?.angle_kind || '').toLowerCase() === 'extra' && sceneAngle.zone_angle_id;
   const frame = !onZone && specFitsBase(sceneSet.scene_spec, sceneSet.base_still_url)
-    ? cropFrame(sceneSet.scene_spec, sceneAngle?.angle_label || 'WIDE') : null;
+    && !own ? cropFrame(sceneSet.scene_spec, sceneAngle?.angle_label || 'WIDE') : null;
   if (frame && frame.width >= MIN_PURE_CROP_FRACTION && frame.height >= MIN_PURE_CROP_FRACTION) {
     return { usd: 0, priced: true, model: 'crop', base_model: 'crop', method: 'crop' };
   }
@@ -863,6 +864,31 @@ async function imageStillUsed(sequelize, url, { setId = null } = {}) {
   }
 }
 
+/**
+ * After a set's base changes, the angles that are the base picture itself
+ * (useBaseAsAngle: an Inside base shot, a zone the base frames whole, marked
+ * quality_review.from_base) show the new base. They kept the old room's
+ * URL, out of step with the base (fourth audit, 2026-10-15). An angle
+ * whose own picture became the base (a promote) is not one of them.
+ */
+async function repointBaseAngles(sequelize, setId, oldUrl, newUrl) {
+  if (!sequelize || !setId || !oldUrl || !newUrl || oldUrl === newUrl) return 0;
+  try {
+    const [, meta] = await sequelize.query(
+      `UPDATE scene_angles
+          SET still_image_url = :newUrl,
+              quality_review = jsonb_set(quality_review, '{from_base,url}', to_jsonb(CAST(:newUrl AS text))),
+              enhanced_still_url = NULL, enhanced_video_url = NULL, video_clip_url = NULL, updated_at = NOW()
+        WHERE scene_set_id = :setId AND still_image_url = :oldUrl AND deleted_at IS NULL
+          AND quality_review -> 'from_base' IS NOT NULL`,
+      { replacements: { setId, oldUrl, newUrl } });
+    return typeof meta?.rowCount === 'number' ? meta.rowCount : 0;
+  } catch (err) {
+    console.error(`[SceneGen] could not move the base angles of set ${setId} to the new base:`, err.message);
+    return 0;
+  }
+}
+
 async function deleteOldBaseImage(url, sequelize, { setId = null } = {}) {
   if (!url) return;
   if (await imageStillUsed(sequelize, url, { setId })) {
@@ -964,11 +990,6 @@ async function generateBaseScene(sceneSet, models, options = {}) {
       throw new ApprovedBaseError({ ...lateRefusal, error: `${lateRefusal.error} It was approved while the new picture was being made, so the new picture was not kept.` });
     }
 
-    // Clean up old base still from S3 (best-effort), unless something
-    // still shows it.
-    if (sceneSet.base_still_url) {
-      await deleteOldBaseImage(sceneSet.base_still_url, briefDb(models), { setId: sceneSet.id });
-    }
 
     console.log(`[SceneGen] Still complete (${modelKey}); cost ${cost == null ? 'unpriced' : `$${cost}`}`);
 
@@ -998,6 +1019,13 @@ async function generateBaseScene(sceneSet, models, options = {}) {
       generation_cost: typeof cost === 'number' ? Math.round((previousCost + cost) * 1e4) / 1e4 : previousCost,
       base_generation: baseGeneration,
     }, { where: { id: sceneSet.id } });
+    await repointBaseAngles(briefDb(models), sceneSet.id, sceneSet.base_still_url, stillUrl);
+    // Clean up old base still from S3 (best-effort), unless something
+    // still shows it; after the new base is saved, so a failed save never
+    // leaves the set pointing at a deleted file.
+    if (sceneSet.base_still_url) {
+      await deleteOldBaseImage(sceneSet.base_still_url, briefDb(models), { setId: sceneSet.id });
+    }
     // A description the analysis wrote for the old base is rewritten by the
     // new base's analysis (baseDescriptionService); the person's own, which
     // this base was made from, is left as it is.
@@ -1300,7 +1328,7 @@ Return ONLY JSON.` },
 // recorded as a perfect 100, which hid every failed check.
 const uncheckedConsistency = (reason) => ({ checked: false, score: null, issues: [], pass: null, reason });
 
-async function checkAngleConsistency(baseImageUrl, angleImageUrl, angleName) {
+async function checkAngleConsistency(baseImageUrl, angleImageUrl, angleName, { shot = null, partShot = false } = {}) {
   if (!process.env.ANTHROPIC_API_KEY) return uncheckedConsistency('ANTHROPIC_API_KEY not configured');
 
   try {
@@ -1314,7 +1342,9 @@ async function checkAngleConsistency(baseImageUrl, angleImageUrl, angleName) {
         content: [
           { type: 'image', source: { type: 'url', url: baseImageUrl } },
           { type: 'image', source: { type: 'url', url: angleImageUrl } },
-          { type: 'text', text: `These two images should be the SAME room photographed from different camera angles. Compare them and check if the second image preserved the room's identity.
+          { type: 'text', text: `These two images should be the SAME room photographed from different camera angles. Compare them and check if the second image preserved the room's identity.${shot ? `
+The second image is meant to be this shot: ${shot}` : ''}${partShot ? `
+It shows only part of the room by design. Judge only what is in its frame (walls, materials, colours and the objects you can see); do not mark it down for objects outside the frame or for the closer framing.` : ''}
 
 Return JSON:
 {
@@ -1969,13 +1999,31 @@ const FRESH_QUALITY = Object.freeze({
 });
 function freshQualityReview(sceneAngle) {
   const review = { ...(sceneAngle.quality_review || {}) };
-  for (const k of ['base_consistency', 'spec_validation', 'from_base', 'zone_reference']) delete review[k];
+  for (const k of ['base_consistency', 'spec_validation', 'from_base', 'zone_reference', 'made_from_base']) delete review[k];
   return review;
 }
 
 /** An Inside angle: a view of the set's base room. */
 function isInside(sceneAngle) {
   return String(sceneAngle?.angle_kind || '').toLowerCase() === 'inside';
+}
+
+/**
+ * True when the angle names its own camera: a camera direction, or a Camera
+ * line overridden for it. Such an angle is generated: the base picture (an
+ * Inside WIDE), a whole-picture zone or a crop of the spec's frame for its
+ * label is a different shot (fourth audit, 2026-10-15: "looking back at the
+ * door" came back as the base; a Night WIDE as a free daytime crop).
+ */
+function ownCamera(sceneAngle, overrides = null, spec = null) {
+  const camera = overrides && typeof overrides === 'object' ? String(overrides.camera || '').trim() : '';
+  if (camera) return true;
+  const direction = String(sceneAngle?.camera_direction || '').trim();
+  if (!direction) return false;
+  // An angle made from the spec carries its contract's own description,
+  // which is that frame's shot: not a camera of its own.
+  const contract = spec ? sceneSpecService.findContract(spec, sceneAngle.angle_label || 'WIDE') : null;
+  return !(contract && String(contract.description || '').trim() === direction);
 }
 
 /** An Inside angle whose label names no framing of its own (WIDE): the base picture itself. */
@@ -2095,7 +2143,7 @@ async function generateZone(sceneAngle, sceneSet, models, options = {}) {
   const reference = await zoneReferenceImage(sceneSet, sequelize);
   if (!reference) throw noBaseError();
   // The set's own base picture is this zone's view; a refine asks for a new one.
-  if (!options.refine && reference.url === sceneSet.base_still_url && zoneIsBase(sceneAngle, sceneSet)) {
+  if (!options.refine && !ownCamera(sceneAngle, options.overrides, sceneSet.scene_spec) && reference.url === sceneSet.base_still_url && zoneIsBase(sceneAngle, sceneSet)) {
     return useBaseAsAngle(sceneAngle, sceneSet, models, reference);
   }
 
@@ -2115,6 +2163,7 @@ async function generateZone(sceneAngle, sceneSet, models, options = {}) {
     const totalCost = costs.value();
     const qualityReview = freshQualityReview(sceneAngle);
     qualityReview.zone_reference = { url: reference.url, source: reference.source, model: SCENE_DRESSING_MODEL.key };
+    if (sceneSet.base_still_url) qualityReview.made_from_base = sceneSet.base_still_url;
     await SceneAngle.update({
       still_image_url: stillUrl,
       video_clip_url: null,
@@ -2144,7 +2193,7 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
   if (isInside(sceneAngle)) {
     const reference = await zoneReferenceImage(sceneSet, briefDb(models));
     if (!reference) throw noBaseError();
-    if (isInsideBaseShot(sceneAngle) && !options.refine) return useBaseAsAngle(sceneAngle, sceneSet, models, reference);
+    if (isInsideBaseShot(sceneAngle) && !options.refine && !ownCamera(sceneAngle, options.overrides, sceneSet.scene_spec)) return useBaseAsAngle(sceneAngle, sceneSet, models, reference);
   }
 
   const angleLabel = sceneAngle.angle_label || 'WIDE';
@@ -2221,7 +2270,7 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
     // without one the angle is generated.
     // A refine asks for a new picture without the flagged problems, and a
     // framing on a zone is made from the zone's picture: neither is a crop.
-    const frame = (options.refine || zoneAngle) ? null : cropFrame(sceneSet.scene_spec, angleLabel);
+    const frame = (options.refine || zoneAngle || ownCamera(sceneAngle, options.overrides, sceneSet.scene_spec)) ? null : cropFrame(sceneSet.scene_spec, angleLabel);
     if (referenceImageForEdit && frame) {
       stillUrl = await cropAndOutpaint(
         referenceImageForEdit, angleLabel, sceneSet.id, sceneAngle.id, prompt,
@@ -2297,12 +2346,19 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
 
     let consistencyCheck = null;
     if (referenceImageForEdit && stillUrl && !usedCropOutpaint) {
-      consistencyCheck = await checkAngleConsistency(referenceImageForEdit, stillUrl, sceneAngle.angle_name);
+      // The checker is told the shot: told only "the same room", it marked a
+      // close-up down for the furniture outside its frame, and the retry
+      // ("keep every object in position") pulled it back to the whole room,
+      // so a CLOSE card showed the room (fourth audit, 2026-10-15). A shot
+      // of part of the room is checked, not retried.
+      const partShot = brief?.furnished === 'part';
+      const shot = (brief?.lines || []).find((l) => l.key === 'camera')?.text || null;
+      consistencyCheck = await checkAngleConsistency(referenceImageForEdit, stillUrl, sceneAngle.angle_name, { shot, partShot });
       let retryCount = 0;
 
       // Only a check that ran and scored low retries: one that could not run
       // is no evidence the angle drifted.
-      while (consistencyCheck?.checked && consistencyCheck.score < CONSISTENCY_MIN_SCORE && retryCount < CONSISTENCY_MAX_RETRIES) {
+      while (!partShot && consistencyCheck?.checked && consistencyCheck.score < CONSISTENCY_MIN_SCORE && retryCount < CONSISTENCY_MAX_RETRIES) {
         retryCount += 1;
         console.warn(`[SceneGen] Consistency score ${consistencyCheck.score} below ${CONSISTENCY_MIN_SCORE} for ${angleLabel}; retrying (${retryCount}/${CONSISTENCY_MAX_RETRIES})`);
 
@@ -2313,7 +2369,7 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
         });
 
         const retryUrl = await downloadAndStoreStill(retryImageUrl, sceneSet.id, sceneAngle.id);
-        const retryCheck = await checkAngleConsistency(referenceImageForEdit, retryUrl, sceneAngle.angle_name);
+        const retryCheck = await checkAngleConsistency(referenceImageForEdit, retryUrl, sceneAngle.angle_name, { shot, partShot });
         // The better of the two is kept: a retry that scored worse replaced
         // the first image (audit, 2026-10-15).
         if (!retryCheck?.checked || retryCheck.score >= consistencyCheck.score) {
@@ -2342,6 +2398,10 @@ async function generateAngle(sceneAngle, sceneSet, models, options = {}) {
     }
 
     const qualityReview = freshQualityReview(sceneAngle);
+    // The base this picture was made from (not for a framing on a zone,
+    // made from the zone's picture): after a new base the page marks it
+    // made from an older base (fourth audit, 2026-10-15).
+    if (!zoneAngle && sceneSet.base_still_url) qualityReview.made_from_base = sceneSet.base_still_url;
     if (consistencyCheck) {
       qualityReview.base_consistency = {
         checked: Boolean(consistencyCheck.checked),
@@ -2542,6 +2602,8 @@ module.exports = {
   specFitsBase,
   zoneOf,
   zoneIsBase,
+  ownCamera,
+  repointBaseAngles,
   generationOrder,
   widenToStillShape,
   deleteOldBaseImage,
