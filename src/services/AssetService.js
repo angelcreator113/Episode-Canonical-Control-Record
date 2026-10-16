@@ -11,6 +11,7 @@ const sharp = require('sharp');
 const { models } = require('../models');
 const { Asset, AssetLabel } = models;
 const { processImage } = require('./ImageProcessingService');
+const { runImageCall, isBudgetError } = require('./imageCostService');
 
 // Configure AWS SDK v3 with credential chain
 let s3Client = null;
@@ -750,7 +751,8 @@ class AssetService {
           });
 
           console.log(`📤 Trying RunwayML API...`);
-          const runwayResponse = await axios.post(
+          // Budget-checked and logged like every image call (fourth audit).
+          const runwayResponse = await runImageCall({ model: 'remove-background', provider: 'runway' }, () => axios.post(
             'https://api.runwayml.com/v1/remove-background',
             formData,
             {
@@ -761,10 +763,12 @@ class AssetService {
               responseType: 'arraybuffer',
               timeout: 30000,
             }
-          );
+          ));
           processedImageBuffer = Buffer.from(runwayResponse.data);
           console.log(`✅ RunwayML processing successful`);
         } catch (runwayError) {
+          // A budget refusal is not a provider failure: no paid fallback.
+          if (isBudgetError(runwayError)) throw runwayError;
           console.warn('⚠️ RunwayML failed:', runwayError.message);
           if (runwayError.response) {
             console.warn(
@@ -797,7 +801,7 @@ class AssetService {
           applyRemoveBgParams(formData, asset.asset_type);
 
           console.log(`📤 Using remove.bg API as fallback...`);
-          const removebgResponse = await axios.post(
+          const removebgResponse = await runImageCall({ model: 'remove.bg', provider: 'removebg' }, () => axios.post(
             'https://api.remove.bg/v1.0/removebg',
             formData,
             {
@@ -808,10 +812,11 @@ class AssetService {
               responseType: 'arraybuffer',
               timeout: 30000,
             }
-          );
+          ));
           processedImageBuffer = Buffer.from(removebgResponse.data);
           console.log(`✅ remove.bg processing successful`);
         } catch (removebgError) {
+          if (isBudgetError(removebgError)) throw removebgError;
           console.error('❌ remove.bg failed:', removebgError.message);
           if (removebgError.response) {
             console.error(

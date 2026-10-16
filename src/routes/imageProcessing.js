@@ -14,6 +14,7 @@ const router = express.Router();
 const FormData = require('form-data');
 const fetch = require('node-fetch');
 const { models } = require('../models');
+const { isBudgetError } = require('../services/imageCostService');
 const s3Service = require('../services/S3Service');
 const { requireAuth } = require('../middleware/auth');
 
@@ -88,13 +89,15 @@ router.post('/:id/remove-background', requireAuth, async (req, res) => {
 
       console.log('📤 Calling Remove.bg API with URL:', sourceUrl.substring(0, 60));
 
-      const removeBgResponse = await fetch('https://api.remove.bg/v1.0/removebg', {
+      // Budget-checked and logged like every image call (fourth audit).
+      const { runImageCall } = require('../services/imageCostService');
+      const removeBgResponse = await runImageCall({ model: 'remove.bg', provider: 'removebg' }, () => fetch('https://api.remove.bg/v1.0/removebg', {
         method: 'POST',
         headers: {
           'X-Api-Key': removeBgApiKey,
         },
         body: formData,
-      });
+      }));
 
       if (!removeBgResponse.ok) {
         const error = await removeBgResponse.text();
@@ -178,6 +181,8 @@ router.post('/:id/remove-background', requireAuth, async (req, res) => {
       || error?.message === 'REMOVEBG_API_KEY not configured'
       || error?.message === 'Runway ML API key not configured. Set RUNWAY_ML_API_KEY in .env';
 
+    // A refused budget is a 429 with its reason, not a 500 (fourth audit).
+    if (isBudgetError(error)) return res.status(429).json({ status: 'ERROR', code: error.code, message: error.message });
     res.status(isRemoveBgConfigError ? 503 : 500).json({
       status: 'ERROR',
       message: isRemoveBgConfigError

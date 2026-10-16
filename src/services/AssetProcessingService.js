@@ -1,7 +1,7 @@
 const axios = require('axios');
 const AWS = require('aws-sdk');
 const sharp = require('sharp');
-const { logger } = require('../middleware/auditLog');
+const { runImageCall, isBudgetError } = require('./imageCostService');
 
 const s3 = new AWS.S3({
   region: process.env.AWS_REGION || 'us-east-1',
@@ -56,7 +56,7 @@ class AssetProcessingService {
         provider,
       };
     } catch (error) {
-      logger.error('Asset processing failed', { error: error.message, assetUrl });
+      console.error('Asset processing failed', { error: error.message, assetUrl });
       throw error;
     }
   }
@@ -88,7 +88,8 @@ class AssetProcessingService {
         throw new Error('RUNWAY_API_KEY not configured');
       }
 
-      const response = await axios.post(
+      // Budget-checked and logged like every image call (fourth audit).
+      const response = await runImageCall({ model: 'remove-background', provider: 'runway' }, () => axios.post(
         'https://api.runwayml.com/v1/remove-background',
         {
           image_url: assetUrl,
@@ -100,11 +101,12 @@ class AssetProcessingService {
           },
           timeout: 30000, // 30 second timeout
         }
-      );
+      ));
 
       return response.data.output_url;
     } catch (error) {
-      logger.error('Runway background removal failed', { error: error.message });
+      if (isBudgetError(error)) throw error;
+      console.error('Runway background removal failed', { error: error.message });
       throw new Error(`Runway processing failed: ${error.message}`);
     }
   }
@@ -120,7 +122,7 @@ class AssetProcessingService {
         throw new Error('REMOVEBG_API_KEY not configured');
       }
 
-      const response = await axios.post(
+      const response = await runImageCall({ model: 'remove.bg', provider: 'removebg' }, () => axios.post(
         'https://api.remove.bg/v1.0/removebg',
         {
           image_url: assetUrl,
@@ -134,7 +136,7 @@ class AssetProcessingService {
           responseType: 'arraybuffer',
           timeout: 30000,
         }
-      );
+      ));
 
       // Upload processed image to S3
       const buffer = Buffer.from(response.data);
@@ -151,7 +153,8 @@ class AssetProcessingService {
 
       return `https://${process.env.S3_BUCKET}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${key}`;
     } catch (error) {
-      logger.error('Remove.bg processing failed', { error: error.message });
+      if (isBudgetError(error)) throw error;
+      console.error('Remove.bg processing failed', { error: error.message });
       throw new Error(`Remove.bg processing failed: ${error.message}`);
     }
   }
@@ -193,7 +196,7 @@ class AssetProcessingService {
 
       return `https://${process.env.S3_BUCKET}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${key}`;
     } catch (error) {
-      logger.error('Skin smoothing failed', { error: error.message });
+      console.error('Skin smoothing failed', { error: error.message });
       throw new Error(`Skin smoothing failed: ${error.message}`);
     }
   }
@@ -233,7 +236,7 @@ class AssetProcessingService {
 
       return `https://${process.env.S3_BUCKET}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${key}`;
     } catch (error) {
-      logger.error('Auto enhance failed', { error: error.message });
+      console.error('Auto enhance failed', { error: error.message });
       throw new Error(`Auto enhance failed: ${error.message}`);
     }
   }
@@ -278,7 +281,7 @@ class AssetProcessingService {
 
       return `https://${process.env.S3_BUCKET}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${key}`;
     } catch (error) {
-      logger.error('Failed to save processed asset', {
+      console.error('Failed to save processed asset', {
         error: error.message,
         templateId,
         assetId,

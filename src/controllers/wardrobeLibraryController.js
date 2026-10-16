@@ -199,11 +199,14 @@ module.exports = {
             formData.append('image_url', imageUrl);
             formData.append('size', 'auto');
 
-            const bgRes = await fetch('https://api.remove.bg/v1.0/removebg', {
+            // Budget-checked and logged (fourth audit); a refusal skips the
+            // removal, as a failure does.
+            const { runImageCall } = require('../services/imageCostService');
+            const bgRes = await runImageCall({ model: 'remove.bg', provider: 'removebg' }, () => fetch('https://api.remove.bg/v1.0/removebg', {
               method: 'POST',
               headers: { 'X-Api-Key': removeBgApiKey },
               body: formData,
-            });
+            }));
 
             if (!bgRes.ok) { console.warn('[wardrobe] Remove.bg failed:', bgRes.status); return; }
 

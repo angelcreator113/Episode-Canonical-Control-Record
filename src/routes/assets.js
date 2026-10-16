@@ -13,6 +13,7 @@ const express = require('express');
 const multer = require('multer');
 const AssetService = require('../services/AssetService');
 const { models } = require('../models');
+const { isBudgetError } = require('../services/imageCostService');
 const { requireAuth, authorize, optionalAuth } = require('../middleware/auth');
 const { validateAssetUpload, validateUUIDParam } = require('../middleware/requestValidation');
 
@@ -1019,6 +1020,8 @@ router.put('/:id/process', requireAuth, async (req, res) => {
     if (error.message.includes('Asset not found')) {
       return res.status(404).json({ error: 'Asset not found' });
     }
+    // A refused budget is a 429 with its reason, not a 500 (fourth audit).
+    if (isBudgetError(error)) return res.status(429).json({ error: error.message, code: error.code });
     res.status(500).json({
       error: 'Failed to process asset',
       message: error.message,
@@ -1042,6 +1045,7 @@ router.post('/:id/process-background', validateUUIDParam('id'), requireAuth, asy
     });
   } catch (error) {
     console.error('Background processing failed:', error);
+    if (isBudgetError(error)) return res.status(429).json({ error: error.message, code: error.code });
     res.status(500).json({
       error: 'Background processing failed',
       message: error.message,
@@ -1308,6 +1312,7 @@ router.post('/process', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Asset processing failed:', error);
+    if (isBudgetError(error)) return res.status(429).json({ status: 'ERROR', code: error.code, error: error.message });
     res.status(500).json({
       status: 'ERROR',
       error: 'Asset processing failed',

@@ -5,7 +5,7 @@ const { Op } = require('sequelize');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
 const wardrobeImageService = require('../services/wardrobeImageService');
-const { isBudgetError } = require('../services/imageCostService');
+const { isBudgetError, runImageCall } = require('../services/imageCostService');
 const { applyRemoveBgParams } = require('../services/removeBgParams');
 const { linkEpisodeWardrobe } = require('../services/episodeWardrobeLinks');
 
@@ -341,7 +341,10 @@ module.exports = {
             });
             applyRemoveBgParams(fd, resolvedCategory);
 
-            const bgRes = await axios.post(
+            // Budget-checked and logged like every image call (fourth
+            // audit: remove.bg was paid with no budget check); a refusal
+            // skips the removal, as a failure does.
+            const bgRes = await runImageCall({ model: 'remove.bg', provider: 'removebg' }, () => axios.post(
               'https://api.remove.bg/v1.0/removebg',
               fd,
               {
@@ -349,7 +352,7 @@ module.exports = {
                 responseType: 'arraybuffer',
                 timeout: 60000,
               }
-            );
+            ));
 
             const processedKey = `wardrobe/${character}/${bgUuid()}-nobg.png`;
             await s3Client.send(new PutObjectCommand({
@@ -1113,24 +1116,25 @@ module.exports = {
       if (removeBgApiKey) {
         console.log(`📤 Sending to remove.bg API for wardrobe item ${id}...`);
         try {
-          runwayResponse = await axios.post('https://api.remove.bg/v1.0/removebg', formData, {
+          runwayResponse = await runImageCall({ model: 'remove.bg', provider: 'removebg' }, () => axios.post('https://api.remove.bg/v1.0/removebg', formData, {
             headers: {
               ...formData.getHeaders(),
               'X-Api-Key': removeBgApiKey,
             },
             responseType: 'arraybuffer',
             timeout: 60000, // 60 second timeout for large images
-          });
+          }));
         } catch (error) {
           console.error('remove.bg failed:', error.message);
-          if (!runwayApiKey) throw error;
+          // A budget refusal is not a provider failure: no paid fallback.
+          if (!runwayApiKey || isBudgetError(error)) throw error;
         }
       }
 
       // Fallback to RunwayML if remove.bg failed or not configured
       if (!runwayResponse && runwayApiKey) {
         console.log(`📤 Sending to RunwayML API for wardrobe item ${id}...`);
-        runwayResponse = await axios.post(
+        runwayResponse = await runImageCall({ model: 'remove-background', provider: 'runway' }, () => axios.post(
           'https://api.runwayml.com/v1/remove-background',
           formData,
           {
@@ -1141,7 +1145,7 @@ module.exports = {
             responseType: 'arraybuffer',
             timeout: 60000, // 60 second timeout
           }
-        );
+        ));
       }
 
       // Upload processed image to S3 (add _processed to filename)
@@ -1178,6 +1182,8 @@ module.exports = {
       if (error.response) {
         console.error('RunwayML API error:', error.response.status, error.response.data);
       }
+      // A refused budget is a 429 with its reason, not a 500 (fourth audit).
+      if (isBudgetError(error)) return res.status(429).json({ error: error.message, code: error.code });
       res.status(500).json({
         error: 'Failed to remove background',
         message: error.message,

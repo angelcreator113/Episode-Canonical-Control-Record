@@ -39,18 +39,21 @@ class RunwayMLService {
       const formData = new FormData();
       formData.append('image', imageBuffer, 'image.jpg');
 
-      const response = await axios.post(`${this.baseUrl}/remove-background`, formData, {
+      // Budget-checked and logged like every image call (fourth audit).
+      const { runImageCall } = require('./imageCostService');
+      const response = await runImageCall({ model: 'remove-background', provider: 'runway' }, () => axios.post(`${this.baseUrl}/remove-background`, formData, {
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
           ...formData.getHeaders(),
         },
         responseType: 'arraybuffer',
         timeout: this.timeout,
-      });
+      }));
 
       console.log('✅ Background removal complete');
       return Buffer.from(response.data);
     } catch (error) {
+      if (require('./imageCostService').isBudgetError(error)) throw error;
       console.error('❌ Runway ML background removal failed:', error.message);
       throw new Error(`Background removal failed: ${error.message}`);
     }
