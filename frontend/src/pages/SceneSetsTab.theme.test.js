@@ -131,7 +131,8 @@ describe('Scene Sets component theme', () => {
     expect(jsx).toMatch(/background: obj\.category === 'signature' \? 'var\(--lala-gold\)' : obj\.category === 'anchor' \? 'var\(--primary\)' : obj\.category === 'character' \? 'var\(--accent\)' : obj\.category === 'lighting' \? 'var\(--warning\)' : 'var\(--text-secondary\)'/);
     expect(jsx).toMatch(/background: 'var\(--accent-subtle\)', border: '1px solid var\(--accent\)', borderRadius: 6, fontSize: 10, color: 'var\(--text-primary\)'/);
     expect(jsx).toMatch(/role="alert" style=\{\{ fontSize: 10, color: 'var\(--accent-dark\)' \}\}/);
-    expect(jsx).toMatch(/color: isCurrent \? 'var\(--text-primary\)' : 'var\(--text-secondary\)'/);
+    // The upload step (the setup panel's only step since the fourth audit).
+    expect(jsx).toMatch(/<Loader size=\{12\} className="spin" style=\{\{ color: 'var\(--lala-gold-text\)' \}\} \/>\s*<span style=\{\{ fontSize: 11, color: 'var\(--text-primary\)', fontWeight: 600 \}\}>Uploading image<\/span>/);
     expect(jsx).toMatch(/background: 'var\(--success-bg\)', color: 'var\(--success-text\)'/);
     expect(jsx).toMatch(/background: 'var\(--warning-bg\)', color: 'var\(--warning-text\)'/);
     expect(jsx).toMatch(/background: 'var\(--danger-bg\)', color: 'var\(--danger-text\)'/);

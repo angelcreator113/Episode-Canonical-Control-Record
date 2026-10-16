@@ -271,4 +271,16 @@ describe('a brief that is not a scene set\'s: venue generation (S5)', () => {
     fireEvent.click(screen.getByTestId('sbc-confirm'));
     expect(onConfirm).toHaveBeenCalledWith({ architecture: '' }, {});
   });
+
+  test('Escape cancels the brief; Escape inside one of its fields does not (fourth audit)', async () => {
+    const onCancel = vi.fn();
+    render(<SceneBriefConfirm setId="set-1" title="t" onConfirm={() => {}} onCancel={onCancel} />);
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(onCancel).not.toHaveBeenCalled();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    input.remove();
+  });
 });

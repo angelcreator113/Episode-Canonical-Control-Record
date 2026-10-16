@@ -228,4 +228,18 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(brief.status).toBe(400);
     expect(brief.body.error).toMatch(/scene_set_id must be an id/);
   });
+
+  it('cascade: a refused regenerate (already generating) leaves the description as it was', async () => {
+    const set = await makeSet({ canonical_description: 'Old words.', generation_status: 'generating' });
+    const refused = await api('post', `/${set.id}/cascade-regenerate`).send({ canonical_description: 'New words.' });
+    expect(refused.status).toBe(409);
+    expect((await rows('SELECT canonical_description FROM scene_sets WHERE id = :id', { id: set.id }))[0].canonical_description).toBe('Old words.');
+
+    await set.update({ generation_status: 'complete' });
+    const queued = await api('post', `/${set.id}/cascade-regenerate`).send({ canonical_description: 'New words.' });
+    expect(queued.status).toBe(202);
+    expect((await rows('SELECT canonical_description, generation_status FROM scene_sets WHERE id = :id', { id: set.id }))[0])
+      .toEqual({ canonical_description: 'New words.', generation_status: 'generating' });
+    await run('DELETE FROM generation_jobs WHERE scene_set_id = :id', { id: set.id });
+  });
 });
