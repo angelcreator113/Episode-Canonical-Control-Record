@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { TENSION, LALA_CONN, cname, initials, roleColor } from './tokens';
 import { Pill } from './primitives';
+import { findLala } from '../../lib/theCast';
 
 /* tension → closeness score (0 = strained, 100 = close) */
 const CLOSENESS = { calm: 95, healing: 70, simmering: 45, volatile: 20, fractured: 5 };
@@ -105,6 +106,9 @@ export default function ProfileView({
     );
   }
 
+  // Lala is the show's Protagonist whatever her stored role (lib/theCast.js).
+  const isLala = findLala([char]) === char;
+  const roleType = isLala ? 'protagonist' : char.role_type;
   const lalaRel = mine.find(r => r.lala_connection && r.lala_connection !== 'none');
   const lalaLabel = lalaRel ? LALA_CONN.find(l => l.v === lalaRel.lala_connection)?.l : null;
   const statusWord = stats.closeness == null ? 'No tension recorded'
@@ -115,7 +119,7 @@ export default function ProfileView({
     { label: 'Core Belief',        value: char.core_belief },
     { label: 'Pressure',           value: char.pressure_type },
     { label: 'Emotional Function', value: char.emotional_function },
-    { label: 'Relationship With Lala', value: lalaLabel },
+    ...(isLala ? [] : [{ label: 'Relationship With Lala', value: lalaLabel }]),
   ];
 
   return (
@@ -130,7 +134,7 @@ export default function ProfileView({
           <div className="rp-hero-body">
             <h2 className="rp-name">{cname(char)}</h2>
             <div className="rp-chips">
-              {char.role_type && <span className="rp-chip">{char.role_type}</span>}
+              {roleType && <span className="rp-chip">{roleType}</span>}
               {char.role_label && <span className="rp-chip">{char.role_label}</span>}
               {char.display_name && char.display_name !== cname(char) && <span className="rp-chip rp-chip-handle">{char.display_name}</span>}
               {char.status && <span className="rp-chip">{char.status}</span>}

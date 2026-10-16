@@ -8,6 +8,7 @@ import { useReducer, useEffect, useCallback, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { House, GitBranch, Users, Share2, Sprout, List, Search } from 'lucide-react';
 import apiClient from '../services/api';
+import { findLala } from '../lib/theCast';
 import './RelationshipEngine.css';
 
 import {
@@ -31,9 +32,9 @@ export const listLalaverseProfilesApi = (page) =>
 
 /**
  * The cast this page works with (Evoni, 2026-10-16: "only use the 6 cast
- * members we have outside of Lala"): the registry characters a live
- * LalaVerse feed profile names. Lala has no feed profile, so she is not in
- * it, and neither is any old-system character.
+ * members we have outside of Lala"; "Lala does have a feed profile and she
+ * will"): the registry characters a live LalaVerse feed profile names, and
+ * Lala. No old-system character is in it.
  */
 export async function loadCastIds() {
   const ids = new Set();
@@ -149,7 +150,12 @@ export default function RelationshipEngine() {
         // Only registries holding a cast member; the one holding most is
         // where new relationships and seeds are made.
         const held = reg => (reg.characters || []).filter(c => cast.has(String(c.id))).length;
-        const list = all.filter(reg => held(reg) > 0).sort((a, b) => held(b) - held(a));
+        const ranked = [...all].sort((a, b) => held(b) - held(a));
+        // Lala is always in it: the one in the registry holding most of the
+        // cast (each registry can hold its own Lala; one is enough).
+        const lala = ranked.map(reg => findLala(reg.characters)).find(Boolean);
+        if (lala) cast.add(String(lala.id));
+        const list = ranked.filter(reg => held(reg) > 0);
         if (!list.length) {
           dispatch({ type: 'TREE_LOADED', payload: { cast, regs: [], reg: null, chars: [], rels: [], layers: {}, cands: [] } });
           return;
@@ -184,6 +190,9 @@ export default function RelationshipEngine() {
           layers[k] = [...(layers[k] || []), ...cs.filter(c => cast.has(String(c.id)) && !(layers[k] || []).some(x => x.id === c.id))];
         });
       });
+      // Lala first: the page is about her world.
+      const lala = findLala(chars);
+      if (lala) chars.sort((a, b) => (b === lala) - (a === lala));
       const pend = pendR.data;
       dispatch({
         type: 'TREE_LOADED',
@@ -371,8 +380,9 @@ export default function RelationshipEngine() {
   ];
   const setTab = tab => dispatch({ type: 'SET', payload: { tab } });
 
-  /* Overview profiles the selected character, else the first protagonist */
+  /* Overview profiles the selected character, else Lala, else the first protagonist */
   const profileChar = s.selChar
+    || findLala(s.chars)
     || s.chars.find(c => c.role_type === 'protagonist')
     || s.chars[0]
     || null;
@@ -517,7 +527,7 @@ export default function RelationshipEngine() {
                     </div>
                     <div className="re-char-info">
                       <div className="re-char-name">{cname(c)}</div>
-                      <div className="re-char-role">{c.role_type || '—'}</div>
+                      <div className="re-char-role">{findLala([c]) ? 'protagonist' : (c.role_type || '—')}</div>
                     </div>
                     {lc && <span className="re-char-layer-dot" style={{ background: lc.color }} />}
                   </button>
