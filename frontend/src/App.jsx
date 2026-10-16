@@ -39,7 +39,6 @@ const NewEpisodeRedirect = lazy(() => import('./pages/NewEpisodeRedirect'));
 const IconCueTimeline = lazy(() => import('./pages/IconCueTimeline'));
 const SearchResults = lazy(() => import('./pages/SearchResults'));
 const ThumbnailGallery = lazy(() => import('./pages/ThumbnailGallery'));
-const CompositionLibrary = lazy(() => import('./pages/CompositionLibrary'));
 const CompositionDetail = lazy(() => import('./pages/CompositionDetail'));
 const SceneLibrary = lazy(() => import('./pages/SceneLibrary'));
 const SceneDetail = lazy(() => import('./pages/SceneDetail'));
@@ -412,7 +411,6 @@ function AppContent() {
           <Route path="/template-studio/designer/:templateId" element={<TemplateDesigner />} />
           
           {/* Compositions */}
-          <Route path="/library" element={<CompositionLibrary />} />
           <Route path="/compositions/:id" element={<CompositionDetail />} />
           
           {/* Templates */}

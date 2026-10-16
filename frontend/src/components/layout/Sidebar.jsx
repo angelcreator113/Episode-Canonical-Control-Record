@@ -38,7 +38,6 @@ function buildNav() {
       items: [
         { icon: '🎬', label: 'Shows', route: '/shows', expandable: true },
         { icon: '⏱️', label: 'Timeline Editor', route: '/studio/timeline' },
-        { icon: '📦', label: 'Compositions', route: '/library' },
       ],
     },
     {
