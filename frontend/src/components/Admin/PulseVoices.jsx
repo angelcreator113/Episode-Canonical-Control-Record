@@ -163,7 +163,7 @@ function Examples({ voice, onChange }) {
   );
 }
 
-export function VoiceCard({ row, onVoice }) {
+export function VoiceCard({ row, onVoice, unmet = false, onReload = null }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [open, setOpen] = useState(false);
@@ -179,6 +179,19 @@ export function VoiceCard({ row, onVoice }) {
       setError(errorOf(err, yes ? 'Approving the voice failed.' : 'Withdrawing the approval failed.'));
     } finally { setBusy(false); }
   };
+  // A public figure Lala knows of before they meet (Evoni, 2026-10-16).
+  const setKnownOf = async (on) => {
+    setBusy(true); setError(null);
+    try {
+      await api.put(`/api/v1/pulse-voices/${row.registry_character_id}/known-of`, { known_of: on });
+      if (onReload) await onReload();
+    } catch (err) {
+      console.error('[PulseVoices] changing known-of failed:', err.response?.status || err.message);
+      setError(errorOf(err, 'Saving that failed.'));
+    } finally { setBusy(false); }
+  };
+  const meets = row.meets_in != null ? `Meets Lala in Episode ${row.meets_in}` : 'Meets Lala later in the story';
+  const knownOf = row.met === false && row.known_of;
   const build = async () => {
     if (row.voice?.status === 'edited' && !window.confirm('Rebuilding replaces your edits to the habits. The examples stay. Rebuild?')) return;
     if (row.voice?.approved_at && !window.confirm('A rebuilt voice needs your approval again before automated posting. Rebuild?')) return;
@@ -199,6 +212,12 @@ export function VoiceCard({ row, onVoice }) {
         <span className="pulse-voices-who">
           <b>{row.display_name}</b> <span className="pulse-voices-muted">{atHandle(row.handle)}</span>
           <span className="pulse-voices-muted" data-testid="pulse-voices-stage">{stageText(row.depth_level)}</span>
+          {unmet && <span className="pulse-voices-muted" data-testid="pulse-voices-meets">{meets}</span>}
+          {knownOf && (
+            <span className="pulse-voices-muted" data-testid="pulse-voices-known-of">
+              Known of: a public figure. {meets}; their public posts show before then. DMs, replies to Lala and relationship moves wait until they meet.
+            </span>
+          )}
           <span className={`pulse-voices-state pulse-voices-state-${state.tone}`} data-testid="pulse-voices-state">{state.label}</span>
           {approval && (
             <span className={`pulse-voices-state pulse-voices-state-${approval.approved ? 'ok' : 'stale'}`} data-testid="pulse-voices-approval">{approval.label}</span>
@@ -213,6 +232,12 @@ export function VoiceCard({ row, onVoice }) {
         )}
         {row.voice && approval.approved && (
           <button type="button" className="pulse-voices-link" disabled={busy} onClick={() => setApproved(false)}>Withdraw approval</button>
+        )}
+        {unmet && onReload && (
+          <button type="button" className="pulse-voices-link" disabled={busy} onClick={() => setKnownOf(true)}>Lala knows of them (public figure)</button>
+        )}
+        {knownOf && onReload && (
+          <button type="button" className="pulse-voices-link" disabled={busy} onClick={() => setKnownOf(false)}>Not a public figure</button>
         )}
         {row.voice && (
           <button type="button" className="pulse-voices-link" aria-expanded={open} onClick={() => setOpen((v) => !v)}>{open ? 'Hide voice' : 'Show voice'}</button>
@@ -265,21 +290,31 @@ export default function PulseVoices({ showId }) {
   }, [showId]);
   useEffect(() => { load(); }, [load]);
 
-  const onVoice = (characterId, voice, needsRebuild) => setData((d) => ({
-    ...d,
-    characters: d.characters.map((r) => (r.registry_character_id === characterId
-      ? { ...r, voice, ...(needsRebuild !== undefined ? { needs_rebuild: needsRebuild } : {}) } : r)),
-  }));
+  const onVoice = (characterId, voice, needsRebuild) => setData((d) => {
+    const update = (list) => (list || []).map((r) => (r.registry_character_id === characterId
+      ? { ...r, voice, ...(needsRebuild !== undefined ? { needs_rebuild: needsRebuild } : {}) } : r));
+    return { ...d, characters: update(d.characters), not_met: update(d.not_met) };
+  });
 
   if (error) return <p className="pulse-voices-error" role="alert">{error}</p>;
   if (!data) return <p className="pulse-voices-muted">Loading the voices…</p>;
   const rows = data.characters || [];
+  const notMet = data.not_met || [];
   return (
     <div className="pulse-voices" data-testid="pulse-voices">
-      <p className="pulse-voices-muted">Characters at the Active or Alive stage with a Feed profile, whom Lala has met. Active characters post; Alive characters also talk in DMs, move relationships and react to events. A voice is built from their public face only; private feelings never go in.</p>
+      <p className="pulse-voices-muted">Characters at the Active or Alive stage with a Feed profile, whom Lala has met or knows of (a public figure). Active characters post; Alive characters also talk in DMs, move relationships and react to events. A voice is built from their public face only; private feelings never go in.</p>
       {rows.length === 0
-        ? <p className="pulse-voices-muted" data-testid="pulse-voices-empty">No posting characters yet. A character posts once they reach the Active stage with a Feed profile.</p>
-        : <ul className="pulse-voices-list">{rows.map((r) => <VoiceCard key={r.registry_character_id} row={r} onVoice={onVoice} />)}</ul>}
+        ? <p className="pulse-voices-muted" data-testid="pulse-voices-empty">{notMet.length
+          ? 'No posting characters yet: Lala has not met anyone below at the story clock\'s present.'
+          : 'No posting characters yet. A character posts once they reach the Active stage with a Feed profile.'}</p>
+        : <ul className="pulse-voices-list">{rows.map((r) => <VoiceCard key={r.registry_character_id} row={r} onVoice={onVoice} onReload={load} />)}</ul>}
+      {notMet.length > 0 && (
+        <section className="pulse-voices-unmet" data-testid="pulse-voices-unmet" aria-labelledby="pulse-voices-unmet-h">
+          <h3 id="pulse-voices-unmet-h" className="pulse-voices-unmet-h">Lala hasn&rsquo;t met them yet ({notMet.length})</h3>
+          <p className="pulse-voices-muted">Build and approve their voice now. They post on their own only once Lala has met them; a character&rsquo;s page can still draft their posts for Review. A public figure Lala knows of can post in public before they meet.</p>
+          <ul className="pulse-voices-list">{notMet.map((r) => <VoiceCard key={r.registry_character_id} row={r} onVoice={onVoice} onReload={load} unmet />)}</ul>
+        </section>
+      )}
       <details className="pulse-voices-banned" data-testid="pulse-voices-banned">
         <summary>Phrases the gate rejects ({(data.banned_phrases || []).length})</summary>
         <p>{(data.banned_phrases || []).join(' · ')}</p>

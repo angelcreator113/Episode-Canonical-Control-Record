@@ -99,7 +99,8 @@ test('a call whose estimate would pass the cap is refused before it is made', as
   mockSum = jest.fn(async () => 49.99);
   const { tracker, client } = loadFresh();
   await tracker.refreshSpend();
-  await expect(client.messages.create(PARAMS)).rejects.toMatchObject({ status: 429 });
+  // The image budget's code too, so routes answer it as a 429 (fourth audit).
+  await expect(client.messages.create(PARAMS)).rejects.toMatchObject({ status: 429, code: 'AI_BUDGET_EXCEEDED' });
   expect(fetchCalls).toBe(0);
 });
 

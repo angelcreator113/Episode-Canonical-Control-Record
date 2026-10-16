@@ -20,7 +20,8 @@
  *                                           pairs in two queries (the
  *                                           Relationship Map, Task #3072)
  *   proposeFromPost(db, postId)             when a post or a comment goes live
- *     (between Alive characters and Lala only; Task #3030):
+ *     (between Alive characters and Lala only; Task #3030; a pair with Lala
+ *     only once she has met the other, Evoni, 2026-10-16):
  *     comment   a live comment on someone's post        NUDGE.comment
  *     mention   a live post that @mentions someone      NUDGE.mention
  *     ignored   a close tie's live post, IGNORE_AFTER   NUDGE.ignored
@@ -166,8 +167,19 @@ async function proposeFromPost(db, postId) {
     if (!aliveCache.has(n)) aliveCache.set(n, (await require('./pulseVoices').aliveProfiles(db, [n])).has(n));
     return aliveCache.get(n);
   };
+  // A pair with Lala moves only once she has met the other, even a public
+  // figure she knows of (Evoni, 2026-10-16); read once per post, at its moment.
+  let unmet = null;
+  const unmetByThen = async () => {
+    if (!unmet) unmet = (await require('./pulseReveals').revealsAt(db, post.show_id, at, { lalaProfileId })).unmetProfiles;
+    return unmet;
+  };
   const add = async (args) => {
     if (!(await takesPart(args.a)) || !(await takesPart(args.b))) return;
+    if (lalaProfileId != null && [Number(args.a), Number(args.b)].includes(Number(lalaProfileId))) {
+      const other = Number(args.a) === Number(lalaProfileId) ? Number(args.b) : Number(args.a);
+      if ((await unmetByThen()).has(other)) return;
+    }
     const row = await propose(db, { showId: post.show_id, lalaProfileId, ...args });
     if (row) made.push(row);
   };

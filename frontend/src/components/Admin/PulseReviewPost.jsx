@@ -234,6 +234,7 @@ export function PostCard({ post, onChange, showId }) {
           {' · '}<button type="button" className="prv-link-btn" onClick={() => setOpen((v) => !v)} aria-expanded={open}>Comment</button>
           {showId && <>{' · '}<button type="button" className="prv-link-btn" onClick={() => setBeatOpen((v) => !v)} aria-expanded={beatOpen}>Use in a beat</button></>}
           {post.narrative_function && <> · <span className="prv-fn">{post.narrative_function.replace(/_/g, ' ')}</span></>}
+          {post.post_weight && <> · <span className="prv-fn" title={post.post_weight_why || (post.post_weight === 'ambient' ? 'Flavor: can sit at any beat' : '')}>{post.post_weight === 'load_bearing' ? 'load-bearing' : 'ambient'}</span></>}
           {post.episode_id && <> · <Link to={`/episodes/${post.episode_id}`}>Episode</Link></>}
           {!isDeleted && post.social_profile_id && post.content_text && <>{' · '}<PinAsExample postId={post.id} /></>}
         </p>
@@ -274,7 +275,7 @@ export function PostCard({ post, onChange, showId }) {
   );
 }
 
-const REVIEW_LABELS = { lala: "Lala's post", about_lala: 'About Lala', reveals_story: 'Reveals story', gate: 'Flagged by the gate', dm: 'DM', storyline_payoff: "A storyline's payoff" };
+const REVIEW_LABELS = { lala: "Lala's post", about_lala: 'About Lala', reveals_story: 'Reveals story', gate: 'Flagged by the gate', dm: 'DM', storyline_payoff: "A storyline's payoff", on_request: "Asked for on their page" };
 const FLAG_LABELS = {
   banned_phrase: 'AI-sounding phrase', private_state: 'Quotes private feelings', unrevealed_character: 'Names someone Lala has not met',
   unrevealed_event: 'Names a hidden event', future_event: 'Names a later event', voice: 'Off voice',
