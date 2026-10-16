@@ -10,6 +10,7 @@
  */
 import React, { useState } from 'react';
 import api from '../../services/api';
+import { atHandle } from '../../pages/feed/feedConstants';
 
 export const CAUSE_LABELS = {
   comment: 'Commented',
@@ -61,7 +62,7 @@ export function ClosenessCard({ row, onChange }) {
       setError(err.response?.data?.error || `${label} failed.`);
     } finally { setBusy(false); }
   };
-  const name = (p, id) => (p?.handle ? `@${p.handle}` : `profile ${id}`);
+  const name = (p, id) => (p?.handle ? `${atHandle(p.handle)}` : `profile ${id}`);
   const source = row.source || {};
   return (
     <li className="prv-num" data-testid="prv-close">
@@ -75,7 +76,7 @@ export function ClosenessCard({ row, onChange }) {
         {row.label && <span className="prv-muted">{row.label}</span>}
       </p>
       {source.comment_text && <p className="prv-num-text">“{source.comment_text}”</p>}
-      {source.content_text && <p className="prv-num-text prv-muted">{source.poster_handle ? `@${source.poster_handle}: ` : ''}{source.content_text}</p>}
+      {source.content_text && <p className="prv-num-text prv-muted">{source.poster_handle ? `${atHandle(source.poster_handle)}: ` : ''}{source.content_text}</p>}
       {adjusting ? (
         <AdjustForm delta={row.delta} busy={busy} onCancel={() => setAdjusting(false)}
           onSubmit={(body) => decide('adjust', 'Adjust', body)} />

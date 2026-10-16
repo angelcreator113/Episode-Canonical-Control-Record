@@ -1300,6 +1300,7 @@
 .ch-chip.is-blue { background: var(--info-bg); color: var(--info-text); }
 .ch-chip.is-green { background: var(--success-bg); color: var(--success-text); }
 .ch-chip.is-plain { background: none; color: var(--accent-dark); }
+.ch-chip.is-warn { background: var(--warning-bg); color: var(--warning-text); }
 
 .ch-alive { flex: 0 1 270px; display: flex; flex-direction: column; gap: 10px; }
 .ch-kicker { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
@@ -1422,3 +1423,31 @@ a.ch-show:hover .ch-show-text strong { text-decoration: underline; }
 a.ch-trail-text { font-weight: 600; text-decoration: none; }
 a.ch-trail-text:hover { text-decoration: underline; }
 .ch-trail-meta { font-size: 12px; color: var(--text-secondary); }
+
+/* Their facts (Character Consistency Engine step 2) */
+.ch-facts { margin: 0; display: grid; gap: 8px; }
+.ch-fact { display: grid; grid-template-columns: minmax(110px, 34%) 1fr; gap: 10px; align-items: baseline; }
+.ch-fact dt { font-family: var(--font-mono, 'DM Mono', monospace); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
+.ch-fact dd { margin: 0; overflow-wrap: anywhere; }
+.ch-fact dd.is-undecided { font-style: italic; color: var(--text-muted); }
+.ch-facts-form { display: grid; gap: 10px; }
+.ch-facts-form label { display: grid; gap: 4px; font-size: 12px; font-weight: 700; color: var(--text-secondary); }
+.ch-facts-form input, .ch-facts-form select { min-height: 40px; padding: 6px 10px; border: 1px solid var(--lala-lavender-line); border-radius: 10px; font: inherit; font-weight: 400; background: var(--surface-card); color: var(--text-primary); min-width: 0; }
+.ch-facts-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.ch-facts-row > input { flex: 1 1 140px; }
+.ch-facts-undecided { border: 1px solid var(--lala-lavender-line); border-radius: 12px; padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.ch-facts-undecided legend { font-size: 12px; font-weight: 700; padding: 0 4px; }
+.ch-facts-undecided label { display: inline-flex; align-items: center; gap: 6px; font-weight: 400; }
+@media (max-width: 480px) {
+  .ch-fact { grid-template-columns: 1fr; gap: 2px; }
+}
+
+/* The consistency check (Character Consistency Engine step 3) */
+.ch-check { display: grid; gap: 8px; border-top: 1px solid var(--lala-lavender-line); padding-top: 12px; }
+.ch-check > .ch-btn-soft { justify-self: start; }
+.ch-check-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.ch-check-list li { display: grid; gap: 4px; padding: 10px 12px; border-radius: 12px; background: var(--warning-bg); }
+.ch-check-intentional .ch-check-list li { background: var(--surface-subtle, var(--lala-parchment-2)); }
+.ch-check-what { overflow-wrap: anywhere; }
+.ch-check-excerpt { font-size: 12px; color: var(--text-secondary); font-style: italic; overflow-wrap: anywhere; }
+.ch-check-intentional summary { cursor: pointer; font-size: 13px; font-weight: 700; }

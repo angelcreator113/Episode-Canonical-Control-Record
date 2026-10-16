@@ -11,7 +11,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
-import { platformLabel } from './feed/feedConstants';
+import { platformLabel, atHandle } from './feed/feedConstants';
 
 const STATE_COLORS = {
   rising:        { bg: '#f0faf4', text: '#2d7a4f', border: '#b8e8cc' },
@@ -354,7 +354,7 @@ function SelfPortraitPanel({ portrait, loading }) {
                       display: 'flex', gap: 6, alignItems: 'center',
                     }}>
                       <span style={{ width: 5, height: 5, borderRadius: '50%', background: DIMENSION_COLORS[dim] || '#ccc', flexShrink: 0 }} />
-                      @{p.handle}
+                      {atHandle(p.handle)}
                     </div>
                   ))}
                 </div>
@@ -384,7 +384,7 @@ function SelfPortraitPanel({ portrait, loading }) {
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ fontWeight: 600, fontSize: 12, color: '#333' }}>
-                          @{p.handle}
+                          {atHandle(p.handle)}
                         </span>
                         {proposedDim && (
                           <span style={{
@@ -453,7 +453,7 @@ function HotZonesPanel({ events, loading }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 13, color: '#2d1f28', fontFamily: "'Cormorant Garamond', Georgia, serif" }}>
                   {profile.display_name || profile.handle || 'Unknown'}
-                  {profile.handle && <span style={{ fontWeight: 400, fontSize: 11, color: '#b08090', marginLeft: 6 }}>@{profile.handle}</span>}
+                  {profile.handle && <span style={{ fontWeight: 400, fontSize: 11, color: '#b08090', marginLeft: 6 }}>{atHandle(profile.handle)}</span>}
                 </div>
                 <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>
                   {ev.affected_character_ids?.length || 0} characters flagged
@@ -606,7 +606,7 @@ function UndergroundPanel() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontSize: 14 }}>◎</span>
               <span style={{ fontWeight: 600, fontSize: 13, color: '#333' }}>
-                @{p.handle}
+                {atHandle(p.handle)}
               </span>
               <span style={{
                 fontSize: 9, fontWeight: 700, letterSpacing: '0.06em',

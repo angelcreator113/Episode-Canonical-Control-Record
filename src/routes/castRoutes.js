@@ -16,6 +16,16 @@
  *                                                  character page's "Where they show up")
  *   GET    /api/v1/cast/characters/:id/story-trail their Pulse posts, and the short
  *                                                  stories and chapters they are in
+ *   GET    /api/v1/cast/characters/:id/facts        their facts: handle, followers (the
+ *                                                  follower ledger), account status, income,
+ *                                                  occupation, possessions, affordability
+ *                                                  (services/characterFacts)
+ *   PUT    /api/v1/cast/characters/:id/facts        change them (ADMIN: followers write a
+ *                                                  follower-ledger row with a reason)
+ *   GET    /api/v1/cast/characters/:id/check        flag-only check of their profile's text
+ *                                                  against their facts (services/characterConsistency)
+ *   POST   /api/v1/cast/characters/:id/check/intentional        { flag_id, note? }: ADMIN
+ *   DELETE /api/v1/cast/characters/:id/check/intentional/:flagId  unmark it: ADMIN
  *   GET    /api/v1/cast/characters/:id/places       their home, closet and other places
  *                                                  (#3228), with each set's picture
  *   POST   /api/v1/cast/characters/:id/places/share { scene_set_id, caption? }: a draft
@@ -39,7 +49,7 @@
  */
 
 const express = require('express');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -240,6 +250,97 @@ router.get('/characters/:id/story-trail', requireAuth, async (req, res) => {
     return res.status(500).json({ success: false, error: err.message });
   }
 });
+
+/** The character and its feed profile, for the facts routes; null when missing. */
+async function characterWithFeed(db, id) {
+  const character = await db.RegistryCharacter.findByPk(id);
+  if (!character) return null;
+  const feedProfile = character.feed_profile_id && db.SocialProfile ? await db.SocialProfile.findByPk(character.feed_profile_id) : null;
+  return { character, feedProfile };
+}
+
+/**
+ * Their facts (Character Consistency Engine step 2; services/characterFacts):
+ * the hard, checkable values, each from the one place it lives.
+ */
+router.get('/characters/:id/facts', requireAuth, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const db = getModels();
+    const found = await characterWithFeed(db, req.params.id);
+    if (!found) return res.status(404).json({ success: false, error: 'Character not found' });
+    const facts = await require('../services/characterFacts').factsOf(db, found);
+    return res.json({ success: true, facts });
+  } catch (err) {
+    console.error('[Cast] GET /characters/:id/facts error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.put('/characters/:id/facts', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const db = getModels();
+    const found = await characterWithFeed(db, req.params.id);
+    if (!found) return res.status(404).json({ success: false, error: 'Character not found' });
+    const { setFacts, FactsError } = require('../services/characterFacts');
+    try {
+      const facts = await setFacts(db, { ...found, body: req.body || {}, by: String(req.user?.email || req.user?.id || 'admin').slice(0, 255) });
+      return res.json({ success: true, facts });
+    } catch (err) {
+      if (err instanceof FactsError) return res.status(err.status).json({ success: false, error: err.message });
+      throw err;
+    }
+  } catch (err) {
+    console.error('[Cast] PUT /characters/:id/facts error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * The consistency check (Character Consistency Engine step 3): every place
+ * the narrator's text disagrees with their facts. Flag-only; it never edits.
+ * What they post (the mask) and author-only notes are not checked.
+ */
+router.get('/characters/:id/check', requireAuth, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const db = getModels();
+    const found = await characterWithFeed(db, req.params.id);
+    if (!found) return res.status(404).json({ success: false, error: 'Character not found' });
+    const result = await require('../services/characterConsistency').checkCharacter(db, found);
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('[Cast] GET /characters/:id/check error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/** Marks a flag intentional (the spec's #10), or unmarks it; the flag stays listed as intentional. */
+async function markIntentional(req, res, on) {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const db = getModels();
+    const character = await db.RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+    const { withIntentional } = require('../services/characterConsistency');
+    const id = on ? req.body?.flag_id : req.params.flagId;
+    let next;
+    try {
+      next = withIntentional(character.canon_facts, id, { note: req.body?.note, on });
+    } catch (err) {
+      if (err.status === 400) return res.status(400).json({ success: false, error: err.message });
+      throw err;
+    }
+    await character.update({ canon_facts: next });
+    return res.json({ success: true, intentional: next.intentional });
+  } catch (err) {
+    console.error(`[Cast] ${on ? 'POST' : 'DELETE'} /characters/:id/check/intentional error:`, err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+}
+router.post('/characters/:id/check/intentional', requireAuth, authorize(['ADMIN']), (req, res) => markIntentional(req, res, true));
+router.delete('/characters/:id/check/intentional/:flagId', requireAuth, authorize(['ADMIN']), (req, res) => markIntentional(req, res, false));
 
 /**
  * Where a character shows up, through its feed profile: the events it

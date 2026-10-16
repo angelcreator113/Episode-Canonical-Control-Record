@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import api from '../../services/api';
 import './EventFeedDashboard.css';
+import { atHandle } from './feedConstants';
 
 const VIRAL_TIER_CONFIG = {
   nano:  { label: 'Micro-viral', color: '#22c55e', icon: TrendingUp },
@@ -72,7 +73,7 @@ function ViralPostCard({ post }) {
         </div>
         <div>
           {post.poster_creator_name && <span className="efd-viral-name" style={{ fontWeight: 700, fontSize: 13, display: 'block' }}>{post.poster_creator_name}</span>}
-          <span className="efd-viral-handle">@{post.poster_handle}</span>
+          <span className="efd-viral-handle">{atHandle(post.poster_handle)}</span>
           <span className="efd-viral-platform">{post.poster_platform}</span>
         </div>
         <span className="efd-sentiment-badge" style={{ background: sentimentCfg.bg, color: sentimentCfg.color }}>

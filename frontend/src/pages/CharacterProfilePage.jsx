@@ -16,11 +16,11 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { Sparkles, ArrowRight } from 'lucide-react';
 import { API_URL } from '../config/api';
 import CharacterDepthPanel from '../components/CharacterDepthPanel';
-import { platformLabel } from './feed/feedConstants';
+import { platformLabel, atHandle, followersOf } from './feed/feedConstants';
 import apiClient from '../services/api';
 import { ROLE_LABELS } from '../constants/characterConstants';
 import { findLala } from '../lib/theCast';
-import { DEPTH_STEPS, depthOf, depthLevelOf, cityLabel, archetypeOf, showUpRows, withLala, voiceOf } from '../lib/characterPage';
+import { DEPTH_STEPS, depthOf, depthLevelOf, cityOf, archetypeOf, showUpRows, withLala, voiceOf } from '../lib/characterPage';
 import './CharacterProfilePage.css';
 
 // ─── Track 6 CP9 module-scope helpers (Pattern F prophylactic — Api suffix) ───
@@ -38,6 +38,16 @@ export const getCharacterEntanglementsApi = (id) =>
 // Their places (home, closet, other; #3228) with pictures, and sharing one
 // on The Pulse as a draft (castRoutes, services/characterPlaceShare).
 // Their Pulse posts, and the short stories and chapters they are in (routes/castRoutes.js).
+export const getFactsApi = (id) =>
+  apiClient.get(`${API_URL}/cast/characters/${id}/facts`);
+export const putFactsApi = (id, body) =>
+  apiClient.put(`${API_URL}/cast/characters/${id}/facts`, body);
+export const getCheckApi = (id) =>
+  apiClient.get(`${API_URL}/cast/characters/${id}/check`);
+export const markIntentionalApi = (id, flagId, note) =>
+  apiClient.post(`${API_URL}/cast/characters/${id}/check/intentional`, { flag_id: flagId, note });
+export const unmarkIntentionalApi = (id, flagId) =>
+  apiClient.delete(`${API_URL}/cast/characters/${id}/check/intentional/${flagId}`);
 export const getStoryTrailApi = (id) =>
   apiClient.get(`${API_URL}/cast/characters/${id}/story-trail`);
 export const getPlacesApi = (id) =>
@@ -73,6 +83,8 @@ const STATE_CONFIG = {
   controversial: { label: 'Controversial', color: '#d47a3a', bg: '#fdf3ee' },
   cancelled:     { label: 'Cancelled',     color: '#c44',    bg: '#fdf0f0' },
   gone_dark:     { label: 'Gone Dark',     color: '#555',    bg: '#eee' },
+  reinventing:   { label: 'Reinventing',   color: '#7ab3d4', bg: '#eef5fb' },
+  posthumous:    { label: 'Posthumous',    color: '#555',    bg: '#eee' },
   rebuilding:    { label: 'Rebuilding',    color: '#7ab3d4', bg: '#eef5fb' },
   crossed:       { label: 'Crossed',       color: '#d4789a', bg: '#fdf0f4' },
 };
@@ -402,6 +414,265 @@ function TheirNames({ character, feedProfile, onSaved, onFeedSaved, gen }) {
 const PLACE_LABEL = { home: 'Home', closet: 'Closet' };
 const PULSE_REVIEW = '/admin?tab=pulse&sub=review';
 
+/**
+ * Their facts (Character Consistency Engine step 2; services/characterFacts):
+ * the hard values every profile section must agree with. Followers come from
+ * the follower ledger; changing them writes a ledger row with a reason. A
+ * fact marked "Not decided yet" is left for Evoni: generators must not
+ * invent it.
+ */
+const FACT_LABELS = {
+  handle: 'Handle', followers: 'Followers', account_status: 'Account status',
+  income: 'Income', occupation: 'Occupation', major_possessions: 'Major possessions',
+};
+const ACCOUNT_STATUS_OPTIONS = ['rising', 'peaking', 'plateauing', 'controversial', 'cancelled', 'reinventing', 'gone_dark', 'posthumous'];
+const words = (s) => (s ? String(s).replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()) : '');
+const money = (n) => (Number.isFinite(Number(n)) && n !== null && n !== '' ? `$${Number(n).toLocaleString('en-US')}` : null);
+
+function factText(facts, key) {
+  if (facts.undecided.includes(key)) return 'Not decided yet';
+  switch (key) {
+    case 'handle': return facts.handle;
+    case 'followers': return facts.followers ? `${facts.followers.label}${facts.followers.source === 'estimate' ? ' (estimate, not in the follower ledger yet)' : ''}` : null;
+    case 'account_status': return facts.account_status ? words(facts.account_status) : null;
+    case 'income': {
+      const i = facts.income;
+      if (!i || (i.amount == null && !i.source)) return null;
+      return [money(i.amount) && `${money(i.amount)}${i.cadence ? ` ${i.cadence.replace('_', ' ')}` : ''}`, i.source].filter(Boolean).join(' · ');
+    }
+    case 'occupation': return facts.occupation;
+    case 'major_possessions': return facts.major_possessions.length ? facts.major_possessions.join(', ') : null;
+    default: return null;
+  }
+}
+
+export function TheirFacts({ character, onFeedSaved }) {
+  const [facts, setFacts] = useState(null);
+  const [form, setForm] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(null);
+  const id = character.id;
+
+  useEffect(() => {
+    let live = true;
+    getFactsApi(id)
+      .then((res) => { if (live) setFacts(res.data?.facts || null); })
+      .catch((err) => {
+        console.error('[CharacterProfilePage] facts load failed:', err);
+        if (live) setFacts({ error: err.response?.data?.error || 'Could not load their facts.' });
+      });
+    return () => { live = false; };
+  }, [id]);
+
+  const startEdit = () => {
+    setNote(null);
+    setForm({
+      handle: facts.handle || '',
+      followers: facts.followers?.count ?? '',
+      followers_reason: '',
+      account_status: facts.account_status || '',
+      income_amount: facts.income?.amount ?? '',
+      income_cadence: facts.income?.cadence || 'per_year',
+      income_source: facts.income?.source || '',
+      occupation: facts.occupation || '',
+      major_possessions: facts.major_possessions.join(', '),
+      undecided: [...facts.undecided],
+    });
+  };
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const toggleUndecided = (k) => setForm((f) => ({
+    ...f, undecided: f.undecided.includes(k) ? f.undecided.filter((x) => x !== k) : [...f.undecided, k],
+  }));
+
+  const save = async () => {
+    const body = {
+      income: { amount: form.income_amount === '' ? null : Number(form.income_amount), cadence: form.income_cadence, source: form.income_source },
+      occupation: form.occupation,
+      major_possessions: form.major_possessions.split(',').map((x) => x.trim()).filter(Boolean),
+      undecided: form.undecided,
+    };
+    if (facts.feed_linked) {
+      if (form.handle !== (facts.handle || '')) body.handle = form.handle;
+      if ((form.account_status || null) !== (facts.account_status || null)) body.account_status = form.account_status || null;
+      if (form.followers !== '' && Number(form.followers) !== facts.followers?.count) {
+        body.followers = { count: Number(form.followers), reason: form.followers_reason };
+      }
+    }
+    setBusy(true);
+    try {
+      const res = await putFactsApi(id, body);
+      const next = res.data?.facts;
+      setFacts(next);
+      setForm(null);
+      setNote({ kind: 'ok', text: 'Saved.' });
+      if (onFeedSaved && next) {
+        onFeedSaved({ handle: next.handle, current_state: next.account_status, ...(next.followers ? { follower_count_approx: next.followers.label } : {}) });
+      }
+    } catch (err) {
+      console.error('[CharacterProfilePage] facts save failed:', err);
+      setNote({ kind: 'error', text: err.response?.data?.error || 'Could not save their facts.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const feedKeys = ['handle', 'followers', 'account_status'];
+  return (
+    <section className="ch-card" aria-labelledby="ch-facts" data-testid="ch-facts">
+      <div className="ch-card-head">
+        <h2 id="ch-facts" className="ch-h2">Their facts</h2>
+        <span className="ch-note">The values every part of their profile must agree with</span>
+      </div>
+      {!facts ? <p className="ch-note">Loading…</p>
+        : facts.error ? <p className="ch-note" role="alert">{facts.error}</p>
+        : !form ? (
+          <>
+            <dl className="ch-facts">
+              {Object.keys(FACT_LABELS).map((key) => (
+                <div key={key} className="ch-fact">
+                  <dt>{FACT_LABELS[key]}</dt>
+                  <dd className={facts.undecided.includes(key) ? 'is-undecided' : ''}>{factText(facts, key) || <span className="ch-note">Not set</span>}</dd>
+                </div>
+              ))}
+              <div className="ch-fact">
+                <dt>Can afford</dt>
+                <dd>{facts.affordability ? `${facts.affordability.label} (${money(facts.affordability.yearly)} a year)` : <span className="ch-note">Set their income</span>}</dd>
+              </div>
+            </dl>
+            <button type="button" className="ch-btn-soft" onClick={startEdit}>Edit facts</button>
+          </>
+        ) : (
+          <form className="ch-facts-form" onSubmit={(e) => { e.preventDefault(); save(); }}>
+            {facts.feed_linked ? (
+              <>
+                <label>Handle<input value={form.handle} onChange={set('handle')} placeholder="@handle" /></label>
+                <label>Followers<input type="number" min="0" step="1" value={form.followers} onChange={set('followers')} /></label>
+                {form.followers !== '' && Number(form.followers) !== facts.followers?.count && (
+                  <label>Why the followers changed<input value={form.followers_reason} onChange={set('followers_reason')} placeholder="One line, for the follower ledger" /></label>
+                )}
+                <label>Account status
+                  <select value={form.account_status} onChange={set('account_status')}>
+                    <option value="">Not set</option>
+                    {ACCOUNT_STATUS_OPTIONS.map((s) => <option key={s} value={s}>{words(s)}</option>)}
+                  </select>
+                </label>
+              </>
+            ) : <p className="ch-note">No feed profile yet, so no handle, followers or account status.</p>}
+            <label>Income
+              <span className="ch-facts-row">
+                <input type="number" min="0" value={form.income_amount} onChange={set('income_amount')} placeholder="Amount" />
+                <select value={form.income_cadence} onChange={set('income_cadence')}>
+                  <option value="per_year">a year</option>
+                  <option value="per_month">a month</option>
+                </select>
+              </span>
+            </label>
+            <label>Where the money comes from<input value={form.income_source} onChange={set('income_source')} placeholder="Brand deals, PlayRoom, a salary…" /></label>
+            <label>Occupation<input value={form.occupation} onChange={set('occupation')} /></label>
+            <label>Major possessions<input value={form.major_possessions} onChange={set('major_possessions')} placeholder="Separate with commas" /></label>
+            <fieldset className="ch-facts-undecided">
+              <legend>Not decided yet</legend>
+              {Object.keys(FACT_LABELS).filter((k) => facts.feed_linked || !feedKeys.includes(k)).map((k) => (
+                <label key={k}><input type="checkbox" aria-label={`${FACT_LABELS[k]}: not decided yet`} checked={form.undecided.includes(k)} onChange={() => toggleUndecided(k)} /> {FACT_LABELS[k]}</label>
+              ))}
+            </fieldset>
+            <span className="ch-facts-row">
+              <button type="submit" className="ch-btn" disabled={busy}>{busy ? 'Saving…' : 'Save facts'}</button>
+              <button type="button" className="ch-btn-soft" disabled={busy} onClick={() => setForm(null)}>Cancel</button>
+            </span>
+          </form>
+        )}
+      {note && <p className={note.kind === 'error' ? 'ch-note is-error' : 'ch-note'} role={note.kind === 'error' ? 'alert' : 'status'}>{note.text}</p>}
+      {facts && !facts.error && !form && <ProfileCheck characterId={id} />}
+    </section>
+  );
+}
+
+/**
+ * The consistency check (Character Consistency Engine step 3): every place
+ * the narrator's text disagrees with their facts. Flag-only: it never edits.
+ * What they post and author-only notes are not checked (a gap there is the
+ * mask). A flag can be marked intentional and stays listed as such.
+ */
+const CHECK_LABELS = {
+  followers: 'Followers', account_status: 'Account status', handle: 'Handle',
+  social_name: 'Social media name', affordability: 'Can afford',
+};
+
+export function ProfileCheck({ characterId }) {
+  const [result, setResult] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await getCheckApi(characterId);
+      setResult(res.data);
+    } catch (err) {
+      console.error('[CharacterProfilePage] profile check failed:', err);
+      setError(err.response?.data?.error || 'Could not check their profile.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const mark = async (flag, on) => {
+    try {
+      if (on) await markIntentionalApi(characterId, flag.id, null);
+      else await unmarkIntentionalApi(characterId, flag.id);
+      await run();
+    } catch (err) {
+      console.error('[CharacterProfilePage] marking a flag failed:', err);
+      setError(err.response?.data?.error || 'Could not save that.');
+    }
+  };
+
+  return (
+    <div className="ch-check" data-testid="ch-check">
+      <button type="button" className="ch-btn-soft" disabled={busy} onClick={run}>
+        {busy ? 'Checking…' : result ? 'Check again' : 'Check their profile against these facts'}
+      </button>
+      {error && <p className="ch-note is-error" role="alert">{error}</p>}
+      {result && (
+        <>
+          <p className="ch-note">
+            {result.flags.length === 0 ? 'Everything agrees with their facts.' : `${result.flags.length} place${result.flags.length === 1 ? '' : 's'} disagree${result.flags.length === 1 ? 's' : ''} with their facts.`}
+            {' '}Checked {result.checked} text field{result.checked === 1 ? '' : 's'}; what they post ({result.skipped.mask}) and author-only notes ({result.skipped.author}) are not checked.
+          </p>
+          {result.flags.length > 0 && (
+            <ul className="ch-check-list">
+              {result.flags.map((f) => (
+                <li key={f.id}>
+                  <span className="ch-check-what"><b>{f.field_label}</b> says &ldquo;{f.found}&rdquo;; the facts say {f.expected}.</span>
+                  <span className="ch-check-excerpt">{f.excerpt}</span>
+                  <span className="ch-facts-row">
+                    <span className="ch-chip is-plain">{CHECK_LABELS[f.check] || f.check}</span>
+                    <button type="button" className="ch-btn-chip" onClick={() => mark(f, true)}>It&rsquo;s intentional</button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {result.intentional.length > 0 && (
+            <details className="ch-check-intentional">
+              <summary>{result.intentional.length} marked intentional</summary>
+              <ul className="ch-check-list">
+                {result.intentional.map((f) => (
+                  <li key={f.id}>
+                    <span className="ch-check-what"><b>{f.field_label}</b>: &ldquo;{f.found}&rdquo;</span>
+                    <button type="button" className="ch-btn-chip" onClick={() => mark(f, false)}>Not intentional</button>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 const STORY_FORMATS = { short_story: 'Short story', social_fiction: 'Social fiction', snippet: 'Snippet', recap: 'Recap' };
 const shortText = (t, n = 160) => (t && t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t || '');
 
@@ -603,6 +874,7 @@ function TabOverview({ character, appearances, feedProfile, onSaved, onFeedSaved
     <div className="ch-overview">
       <div className="ch-col">
         <TheirNames character={character} feedProfile={feedProfile} onSaved={onSaved} onFeedSaved={onFeedSaved} gen={gen} />
+        <TheirFacts character={character} onFeedSaved={onFeedSaved} />
         <WhoTheyAre character={character} onSaved={onSaved} />
         <WhereTheyShowUp appearances={appearances} feedProfile={feedProfile} />
         <TheirStory character={character} />
@@ -900,9 +1172,11 @@ function TabOnline({ character, feedProfile, appearances }) {
       {/* Social presence indicator */}
       <section className="cp-section">
         <h3 className="cp-section-title">Social Presence</h3>
-        {/* A matched feed profile is a social presence; Match never set the flag. */}
+        {/* Whether they are on the feed at all, not how their account is
+            doing: that is the status on their account card (current_state).
+            It said "Active" beside "Gone Dark" (Evoni, 2026-10-16). */}
         <span className={`cp-social-toggle ${character.social_presence || character.feed_profile_id ? 'cp-social-on' : 'cp-social-off'}`}>
-          {character.social_presence || character.feed_profile_id ? 'Active' : 'None'}
+          {character.social_presence || character.feed_profile_id ? 'On the feed' : 'Not on the feed'}
         </span>
       </section>
 
@@ -926,7 +1200,7 @@ function TabOnline({ character, feedProfile, appearances }) {
                   {(feedProfile.handle || feedProfile.display_name || '?')[0].toUpperCase()}
                 </div>
                 <div className="cp-feed-identity">
-                  <span className="cp-feed-handle">@{feedProfile.handle}</span>
+                  <span className="cp-feed-handle">{atHandle(feedProfile.handle)}</span>
                   <span className="cp-feed-display">{feedProfile.display_name}</span>
                   <span className="cp-feed-platform">{platformLabel(feedProfile.platform)}</span>
                   {feedProfile.registry_character_id && (
@@ -961,7 +1235,7 @@ function TabOnline({ character, feedProfile, appearances }) {
               <div className="cp-feed-stats">
                 <div className="cp-feed-stat">
                   <span className="cp-stat-num">
-                    {feedProfile.follower_count?.toLocaleString() || feedProfile.follower_count_approx || '\u2014'}
+                    {followersOf(feedProfile) || '\u2014'}
                   </span>
                   <span className="cp-stat-label">followers</span>
                 </div>
@@ -1366,7 +1640,7 @@ export default function CharacterProfilePage() {
   // Inner life shows its own note for the same run.
   const deepenNote = gen.note?.key === 'all' && activeTab !== 'inner' ? gen.note : null;
   const handle = feedProfile?.handle ? `@${feedProfile.handle.replace(/^@/, '')}` : null;
-  const city = cityLabel(feedProfile?.city);
+  const { label: city, differs: cityDiffers } = cityOf(character, feedProfile);
   const archetype = archetypeOf(feedProfile);
   const firstEpisode = appearances?.episodes?.[0];
   const role = roleOf(character);
@@ -1384,6 +1658,12 @@ export default function CharacterProfilePage() {
           <div className="ch-chips">
             {archetype && <span className="ch-chip">{archetype}</span>}
             {character.feed_profile_id && <span className="ch-chip is-blue">Feed profile</span>}
+            {cityDiffers && (
+              <span className="ch-chip is-warn" data-testid="ch-city-differs"
+                title="Their feed profile and their character record name different cities. Change one so they agree.">
+                City differs: feed says {cityDiffers.feed}, character says {cityDiffers.own}
+              </span>
+            )}
             {firstEpisode && <span className="ch-chip is-green">In Episode {firstEpisode.episode_number ?? '?'}</span>}
             <span className="ch-chip is-plain">{step.label}</span>
           </div>

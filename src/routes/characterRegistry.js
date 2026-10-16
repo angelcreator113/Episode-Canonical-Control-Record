@@ -7,6 +7,7 @@
 'use strict';
 
 const express = require('express');
+const { SECTION_SCHEMAS } = require('../utils/characterSectionSchemas');
 const router = express.Router();
 
 const { requireAuth, userInGroup } = require('../middleware/auth');
@@ -1439,15 +1440,8 @@ router.post('/characters/:id/backfill-sections', requireAuth, async (req, res) =
     if (hasData(character.deep_profile))       known.deep_profile_summary = character.deep_profile;
     if (hasData(character.relationships_map))  known.relationships_map = character.relationships_map;
 
-    const sectionSchemas = {
-      career_status: `{ "profession": "their job title", "career_goal": "what success means to them", "reputation_level": "how the world sees their career", "brand_relationships": "professional tasks, affiliations", "financial_status": "their industry/financial reality", "public_recognition": "who or what opposes them professionally", "ongoing_arc": "their career wound or ongoing professional tension" }`,
-      aesthetic_dna: `{ "era_aesthetic": "how they dress — style era/vibe", "color_palette": "their visual color world", "signature_silhouette": "how they look — specific physical details", "signature_accessories": "the object always near them", "glam_energy": "how a room changes when they enter", "visual_evolution_notes": "how their look has changed over time" }`,
-      voice_signature: `{ "speech_pattern": "how they speak — rhythm, vocabulary, register", "vocabulary_tone": "a sentence that could only be theirs", "catchphrases": "their tell — what they do when lying or hiding", "internal_monologue_style": "what they never say directly — always approaches sideways", "emotional_reactivity": "what silence means for them" }`,
-      story_presence: `{ "appears_in_books": "which books/worlds", "appears_in_shows": "which shows", "appears_in_series": "which series", "current_story_status": "what triggers their entrance into a story", "unresolved_threads": "story types they're suited for", "future_potential": "Yes or No — can they introduce new characters" }`,
-      evolution_tracking: `{ "version_history": "what just happened — recent event that changed something", "era_changes": "where they are in their arc right now", "personality_shifts": "what they are avoiding — the thing they know they need to face" }`,
-      living_context: `{ "active_pressures": "what is pressing on them right now", "support_network": "who holds them up and what it costs", "home_environment": "what daily domestic life looks like", "relationship_to_deadlines": "how they relate to time pressure", "financial_reality": "actual financial situation — specific", "current_season": "the emotional season they are in" }`,
-      relationships_map: `{ "allies": "names and nature of alliances — who has their back and why", "rivals": "names and nature of rivalries — professional or personal", "mentors": "who shaped them — living or dead, present or absent", "love_interests": "current or past — who they wanted or want", "business_partners": "professional relationships that matter", "dynamic_notes": "the most important tension or unresolved dynamic" }`,
-    };
+    // One meaning per field, shared by every generator (utils/characterSectionSchemas).
+    const sectionSchemas = SECTION_SCHEMAS;
 
     const sectionsToFill = emptySections.map(s => `"${s}": ${sectionSchemas[s]}`).join(',\n');
 
@@ -1861,27 +1855,27 @@ router.post('/characters/:id/generate-section', requireAuth, async (req, res) =>
       // JSONB section regeneration (overwrites existing)
       career_status: {
         prompt: `Generate career and professional status for ${charName}. Be specific to their world and ambitions.`,
-        schema: `{ "profession": "their job title", "career_goal": "what success means to them", "reputation_level": "how the world sees their career", "brand_relationships": "professional affiliations", "financial_status": "their financial reality", "public_recognition": "level of public awareness", "ongoing_arc": "current career tension" }`,
+        schema: SECTION_SCHEMAS.career_status,
         apply: (generated) => { character.career_status = generated; return ['career_status']; },
       },
       aesthetic_dna: {
         prompt: `Generate aesthetic DNA for ${charName}. Define their visual identity and style.`,
-        schema: `{ "era_aesthetic": "style era/vibe", "color_palette": "their visual color world", "signature_silhouette": "specific physical style details", "signature_accessories": "the object always near them", "glam_energy": "how a room changes when they enter", "visual_evolution_notes": "how their look has changed" }`,
+        schema: SECTION_SCHEMAS.aesthetic_dna,
         apply: (generated) => { character.aesthetic_dna = generated; return ['aesthetic_dna']; },
       },
       voice_signature: {
         prompt: `Generate voice profile for ${charName}. Define how they speak and communicate.`,
-        schema: `{ "speech_pattern": "how they speak — rhythm, vocabulary, register", "vocabulary_tone": "a sentence that could only be theirs", "catchphrases": "recurring phrases or verbal tics", "internal_monologue_style": "how their inner voice sounds", "emotional_reactivity": "how they respond when emotions hit" }`,
+        schema: SECTION_SCHEMAS.voice_signature,
         apply: (generated) => { character.voice_signature = generated; return ['voice_signature']; },
       },
       story_presence: {
         prompt: `Generate story presence data for ${charName}. Define how they exist in the narrative.`,
-        schema: `{ "appears_in_books": "which books/worlds", "appears_in_shows": "which shows", "appears_in_series": "which series", "current_story_status": "what triggers their entrance", "unresolved_threads": "story types they're suited for", "future_potential": "can they introduce new characters" }`,
+        schema: SECTION_SCHEMAS.story_presence,
         apply: (generated) => { character.story_presence = generated; return ['story_presence']; },
       },
       relationships_map: {
         prompt: `Generate relationships map for ${charName}. Define their social network and key dynamics.`,
-        schema: `{ "allies": "names and nature of alliances", "rivals": "names and nature of rivalries", "mentors": "who shaped them", "love_interests": "current or past", "business_partners": "professional relationships", "dynamic_notes": "the most important tension" }`,
+        schema: SECTION_SCHEMAS.relationships_map,
         apply: (generated) => { character.relationships_map = generated; return ['relationships_map']; },
       },
     };
@@ -2063,14 +2057,8 @@ router.post('/registries/:registryId/backfill-all', requireAuth, async (req, res
       'signature_trait','emotional_baseline','pressure_type','pressure_quote',
       'character_archetype','writer_notes','ethnicity','gender',
     ];
-    const sectionSchemas = {
-      career_status: `{ "profession": "their job title", "career_goal": "what success means to them", "reputation_level": "how the world sees their career", "brand_relationships": "professional affiliations", "financial_status": "their financial reality", "public_recognition": "public perception", "ongoing_arc": "their career tension" }`,
-      aesthetic_dna: `{ "era_aesthetic": "how they dress", "color_palette": "their visual color world", "signature_silhouette": "physical details", "signature_accessories": "the object always near them", "glam_energy": "how a room changes when they enter", "visual_evolution_notes": "how their look has changed" }`,
-      voice_signature: `{ "speech_pattern": "how they speak", "vocabulary_tone": "a sentence that could only be theirs", "catchphrases": "their tell when lying or hiding", "internal_monologue_style": "what they never say directly", "emotional_reactivity": "what silence means for them" }`,
-      story_presence: `{ "appears_in_books": "which books/worlds", "appears_in_shows": "which shows", "appears_in_series": "which series", "current_story_status": "story entrance trigger", "unresolved_threads": "story types they suit", "future_potential": "can they introduce new characters" }`,
-      evolution_tracking: `{ "version_history": "recent event that changed something", "era_changes": "where they are in their arc", "personality_shifts": "what they are avoiding" }`,
-      living_context: `{ "active_pressures": "what presses on them now", "support_network": "who holds them up", "home_environment": "daily domestic life", "relationship_to_deadlines": "how they relate to time pressure", "financial_reality": "actual financial situation", "current_season": "emotional season" }`,
-    };
+    // One meaning per field, shared by every generator (utils/characterSectionSchemas).
+    const sectionSchemas = SECTION_SCHEMAS;
 
     const Anthropic = require('@anthropic-ai/sdk');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
