@@ -326,14 +326,6 @@ const BOOK1_NODES = [
     bio: 'The paying man. Pays for access and treats her body as product. Offers reduction, which she experiences as a specific kind of freedom. She is not confused; she chooses it.',
   },
   {
-    id: 'jade',
-    label: 'Jade',
-    role_type: 'shadow',
-    world_exists: false,
-    group: 'online',
-    bio: 'The Almost-Mentor. Former high-level position at the bank JustAWoman has used since adulthood — that institutional credibility is the trust bridge. Creates content teaching women to run an online business. JustAWoman has purchased her coaching course and coaching for clients. Purely transactional — Jade does not know JustAWoman personally.',
-  },
-  {
     id: 'lala',
     label: 'Lala',
     role_type: 'special',
@@ -399,18 +391,6 @@ const BOOK1_EDGES = [
     to_feels: 'Desire, stripped of context.',
     strength: 4,
     note: 'Shadow. Appears by story 15; his pressure builds through the crisis.',
-  },
-  {
-    from: 'justawoman',
-    to: 'jade',
-    direction: 'one_way',
-    type: 'transactional',
-    from_knows: 'Online business coach. Former high-level position at her bank — that institutional credibility is why JustAWoman trusted her enough to buy. Teaches women to run online businesses.',
-    to_knows: null,
-    from_feels: 'Trust (bank-backed). Influenced by her direction. Has purchased her course and coaching for clients.',
-    to_feels: null,
-    strength: 3,
-    note: 'The trust bridge is the bank connection — not personal relationship. Jade does not know JustAWoman exists.',
   },
   {
     from: 'justawoman',
@@ -669,7 +649,7 @@ router.post('/generate-relationship-web', requireAuth, aiRateLimiter, async (req
       system: `You are analyzing a manuscript to identify how character relationships are expressed in the actual text.
 You have a baseline relationship graph. Your job is to identify any edges where the manuscript reveals something specific about the relationship that should update from_knows, to_knows, from_feels, or to_feels.
 
-Characters (use these ids for from/to): justawoman, david, elias (son, 9), zion (son, 5), the-witness, nia-vale (the Comparison Creator), marcus (the paying man, never a son), jade, lala.
+Characters (use these ids for from/to): justawoman, david, elias (son, 9), zion (son, 5), the-witness, nia-vale (the Comparison Creator), marcus (the paying man, never a son), lala.
 
 Return ONLY a JSON array of edge updates. Each update: { from, to, from_knows_update, from_feels_update }
 Only include edges where the manuscript reveals something specific. Omit edges with no new information.
@@ -974,44 +954,6 @@ const CHARACTER_DNA = {
       friends: 'Competitors she monitors, not confides in',
     },
   },
-  'the-almost-mentor': {
-    display_name: 'The Almost-Mentor',
-    role_type: 'shadow',
-    job: 'Offers guidance that always comes with a price. She sees JustAWoman\'s potential and wants to own a piece of it.',
-    desire_line: 'To shape someone else\'s success and call it generosity.',
-    fear_line: 'That she is only relevant when she is needed — and she can feel the need fading.',
-    wound: 'She built something real once and watched someone else take credit. Now she only invests where she can control the outcome.',
-    strengths: ['Authority', 'Precision', 'Financial literacy', 'Systems thinking', 'Credibility'],
-    job_antagonist: 'Former protégés who outgrew her and no longer answer her calls.',
-    personal_antagonist: 'The question of whether she left her career because she was ready or because she was afraid.',
-    recurring_object: 'Her phone — the DMs are always strategic.',
-    world: 'book-1',
-    domains: {
-      career: 'Online coaching, course creation, the business of teaching business',
-      romantic: 'Irrelevant to her function in the story',
-      family: 'Irrelevant to her function in the story',
-      friends: 'Professional network she keeps at a distance from her personal life',
-    },
-  },
-  lala: {
-    display_name: 'Lala',
-    role_type: 'special',
-    job: 'Content creator in LalaVerse. Fashion game world. Building a career she doesn\'t fully understand the origin of.',
-    desire_line: 'To build something that feels entirely hers.',
-    fear_line: 'That the confidence she operates from isn\'t earned and one day someone will notice.',
-    wound: 'Confidence without context. She doesn\'t know where her boldness came from.',
-    strengths: ['Confidence', 'Creativity', 'Instinct', 'Boldness', 'Style'],
-    job_antagonist: 'The established LalaVerse creators who treat newcomers as threats and gatekeep access.',
-    personal_antagonist: 'The nagging sense that her best moves aren\'t original — that she\'s following a playbook she\'s never read.',
-    recurring_object: 'Her ring light. The circle of it. The way it makes everything look intentional.',
-    world: 'lalaverse',
-    domains: {
-      career: 'Fashion content, LalaVerse brand deals, creator politics',
-      romantic: 'To be developed across stories',
-      family: 'No family context yet — this is part of what makes her different from JustAWoman',
-      friends: 'Other LalaVerse creators — alliances that are strategic before they are genuine',
-    },
-  },
 };
 
 // ─── Map DB character_keys for cross-referencing ──────────────────────────────
@@ -1019,8 +961,8 @@ const SE_DB_KEY_MAP = {
   'just-a-woman': ['just-a-woman'],
   'the-husband':  ['the-husband'],
   'the-witness':  ['the-witness'],
-  'the-comparison-creator': ['the-comparison-creator'],
-  'the-almost-mentor': ['the-almost-mentor'],
+  // Seeded as 'comparison-creator' (characterRegistry seed-book1); the map calls her 'nia-vale'.
+  'the-comparison-creator': ['the-comparison-creator', 'comparison-creator', 'nia-vale'],
   lala:           ['lala'],
 };
 
@@ -1059,7 +1001,6 @@ THE DIGITAL / SOCIAL LAYER:
 THE BRIDGE ZONE (Danger / Disruption):
 - Liam Sullivan — creative director, real-world viable alternative, not fantasy. Special character.
 - David Morgan — investment banking MD, intellectual equal who recognizes her exhaustion. Special character.
-- The Almost-Mentor — offers guidance that always comes with a price. Shadow character.
 
 ───────────────────────────────────────────
 THE ALGORITHM (Environmental Pressure System)

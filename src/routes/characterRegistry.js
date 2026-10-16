@@ -56,6 +56,9 @@ const WORLDS = ['book-1', 'lalaverse', 'series-2'];
  * used to default to 'book-1', so Lala's-world characters read as Book 1.
  * Canon (Evoni, 2026-10-15): JustAWoman lives in her world and writes Lala's.
  */
+/** Lala's species (docs/CANON.md: a sentient fashion game and AI character JustAWoman created). */
+const LALA_SPECIES = 'sentient AI';
+
 function worldForNewCharacter(body, registry) {
   const asked = body?.world || body?.layer;
   if (WORLDS.includes(asked)) return asked;
@@ -1005,7 +1008,7 @@ router.post('/registries/:id/seed-book1', requireAuth, async (req, res) => {
         icon: '👁',
         display_name: 'The Witness',
         selected_name: 'The Witness',
-        role_type: 'support',
+        role_type: 'mirror', // a mirror everywhere else (BOOK1_NODES, CHARACTER_DNA, the relationship map)
         role_label: 'Continuity / Pattern Holder',
         appearance_mode: 'brief',
         core_belief: 'Is this pattern a character flaw or creative searching?',
@@ -1013,20 +1016,6 @@ router.post('/registries/:id/seed-book1', requireAuth, async (req, res) => {
         personality: 'Patient, observant, non-judgmental. Sees patterns others miss.',
         status: 'draft',
         sort_order: 3,
-      },
-      {
-        character_key: 'the-almost-mentor',
-        icon: '🎭',
-        display_name: 'The Almost-Mentor',
-        selected_name: 'The Almost-Mentor',
-        role_type: 'shadow',
-        role_label: 'Momentary Catalyst / False Rescue',
-        appearance_mode: 'composite',
-        core_belief: 'Do I need someone to believe in me before I believe in myself?',
-        description: 'Appears when JustAWoman is most desperate for external validation. Offers just enough to create hope, then disappears.',
-        personality: 'Charismatic, promising, ultimately absent. Creates dependency then withdraws.',
-        status: 'draft',
-        sort_order: 4,
       },
       {
         character_key: 'the-digital-products-customer',
@@ -1049,6 +1038,8 @@ router.post('/registries/:id/seed-book1', requireAuth, async (req, res) => {
         selected_name: 'Lala',
         role_type: 'special',
         role_label: 'Creative Self / World Container',
+        // Canon (docs/CANON.md): a sentient fashion game and AI character, not human.
+        species: LALA_SPECIES,
         appearance_mode: 'on_page',
         core_belief: 'What happens when the world I built becomes its own kind of control?',
         description: 'Being built by JustAWoman. One intrusive thought in Book 1. Proto-voice — styled, confident, brief. Arrives as tonal rupture, not a character entering.',
