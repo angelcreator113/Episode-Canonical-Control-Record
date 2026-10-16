@@ -133,6 +133,8 @@ export default function LookVariants({ setId, onToast, pollMs = POLL_MS }) {
   };
 
   const remove = async (kind, slot) => {
+    // A generated variant was paid for: one click no longer deletes it.
+    if (!window.confirm(`Remove ${slot.label}? Its image is deleted; making it again costs another generation.`)) return;
     setBusy(`${kind}:${slot.value}`);
     try {
       await api.delete(`${base}/${kind}/${slot.value}`);

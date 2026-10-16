@@ -102,8 +102,14 @@ describe('LookVariants', () => {
     expect(posts(`${BASE}/season/winter/upload`)[0][1].get('image').name).toBe('w.png');
     await waitFor(() => expect(onToast).toHaveBeenCalledWith('Uploaded'));
 
+    // A paid image is removed only after a confirm (audit, 2026-10-15).
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    fireEvent.click(screen.getByTestId('look-variant-remove-time-morning'));
+    expect(confirmSpy.mock.calls[0][0]).toMatch(/^Remove Morning\?/);
+    expect(api.delete).not.toHaveBeenCalled();
     fireEvent.click(screen.getByTestId('look-variant-remove-time-morning'));
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith(`${BASE}/time/morning`));
+    confirmSpy.mockRestore();
   });
 
   test('a refusal is shown', async () => {
