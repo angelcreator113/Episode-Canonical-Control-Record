@@ -96,6 +96,10 @@ module.exports = (sequelize) => {
     // When Evoni changed the text of this AI draft (Task #3070, migration 20261013040000);
     // on approval its text becomes an "edit" example of the poster's voice.
     edited_at: { type: DataTypes.DATE, allowNull: true },
+    // A drafted post's weight (migration 20261016150000, services/characterPosts.js):
+    // 'load_bearing' (the story reacts to it) or 'ambient' (flavor, any beat); why, for load-bearing.
+    post_weight: { type: DataTypes.STRING(16), allowNull: true, validate: { isIn: [['load_bearing', 'ambient']] } },
+    post_weight_why: { type: DataTypes.TEXT, allowNull: true },
   }, {
     tableName: 'feed_posts',
     timestamps: true,
