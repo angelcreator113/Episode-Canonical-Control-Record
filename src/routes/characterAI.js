@@ -225,6 +225,10 @@ function formatCharacterBlock(character, factsBlock = '') {
   if (c.pressure_type) parts.push(`Pressure Type: ${c.pressure_type}`);
   if (c.pressure_quote) parts.push(`Pressure Quote: "${c.pressure_quote}"`);
   if (c.appearance_mode) parts.push(`Appearance Mode: ${c.appearance_mode}`);
+  // Their typology seed and voice dial (step 6a; services/characterTypology).
+  const { seedBlock, voiceDial } = require('../services/characterTypology');
+  if (seedBlock(c.typology)) parts.push(`\n${seedBlock(c.typology)}`);
+  if (voiceDial(c.typology)) parts.push(voiceDial(c.typology));
 
   // JSONB fields
   const vSig = c.voice_signature;

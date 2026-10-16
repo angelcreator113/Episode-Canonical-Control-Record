@@ -97,6 +97,10 @@ function buildCharacterContext(character) {
   sections.push(`Role: ${c.role_type || 'unknown'}`);
   if (c.subtitle) sections.push(`Subtitle: ${c.subtitle}`);
 
+  // The typology seed the depth grows from (step 6a; services/characterTypology).
+  const seed = require('../services/characterTypology').seedBlock(c.typology);
+  if (seed) sections.push(seed);
+
   // Core psychology
   if (c.core_wound) sections.push(`Core Wound: ${c.core_wound}`);
   if (c.core_desire) sections.push(`Core Desire: ${c.core_desire}`);
