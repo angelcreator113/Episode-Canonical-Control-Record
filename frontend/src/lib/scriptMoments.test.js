@@ -3,7 +3,7 @@
  * and find the phone screen or overlay they name.
  */
 import { describe, test, expect } from 'vitest';
-import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, phoneIcons, EXPECTED_ON_SCREEN, closetBeat, hasPhoneMoment, beatSpeakers, phoneCheck } from './scriptMoments';
+import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, phoneIcons, EXPECTED_ON_SCREEN, closetBeat, hasPhoneMoment, beatSpeakers, phoneCheck, phoneUpAtBeat } from './scriptMoments';
 
 const SCREENS = [
   { id: 'closet', name: 'Closet', url: 'https://x/closet.png' },
@@ -179,10 +179,18 @@ describe("the open beat's phone check (Task #2884)", () => {
   });
   test('a tap on an icon that is not on the screen showing says where it is', () => {
     const r = phoneCheck(['[UI:CLICK Reply]'], on);
-    expect(r.taps).toEqual([{ i: 0, name: 'Reply', ok: false, why: 'Reply is on Mail, but the phone shows Home' }]);
+    expect(r.taps).toEqual([expect.objectContaining({ i: 0, name: 'Reply', ok: false, why: 'Reply is on Mail, but the phone shows Home', onName: 'Mail' })]);
   });
   test('opening a screen by name moves the phone there', () => {
     expect(phoneCheck(['[UI:OPEN Mail]', '[UI:CLICK Reply]'], on).taps[0].ok).toBe(true);
+  });
+  test('closing the screen that shows goes back to the one before it, or home', () => {
+    // Script phone paths (2026-10-16): CLOSE left the check on the closed screen.
+    expect(phoneCheck(['[UI:CLICK Mail]', '[UI:CLICK Reply]', '[UI:CLOSE Reply]', '[UI:CLICK Reply]'], on).taps.map((t) => t.ok)).toEqual([true, true, true]);
+    const back = phoneCheck(['[UI:OPEN Mail]', '[UI:CLOSE Mail]', '[UI:CLICK Mail]'], on);
+    expect(back.taps[0].ok).toBe(true);
+    expect(back.endAt).toBe('mail');
+    expect(phoneCheck(['[UI:OPEN Mail]', '[UI:CLOSE Mail]'], on, { startAt: 'mail' }).endAt).toBe('home');
   });
   test('what is not made yet: an unknown tap, an unknown screen, an overlay with no picture', () => {
     const r = phoneCheck(['[UI:CLICK Wallet]', '[UI:OPEN Closet]', '[UI:DISPLAY Invitation]', '[UI:DISPLAY Show Title]', '[UI:HIDE Something]'], on);
@@ -214,3 +222,19 @@ test('beatSpeakers reads speakers as the tab does', () => {
   expect(beatSpeakers(['LALA: hi', 'Note: x', 'Lala (V.O.): y', 'Mary Jane: z', 'Location: the gala', 'Me: go'])).toEqual(['Lala', 'Mary Jane', 'Prime']);
 });
 
+
+// The show's rule (Evoni, 2026-10-16): the phone is on screen from the Start
+// button (beat 1) until Event Travel (beat 10).
+describe('the phone from the Start button to Event Travel', () => {
+  test('phoneUpAtBeat', () => {
+    expect(phoneUpAtBeat(1, false)).toBe(false);
+    expect(phoneUpAtBeat(2, false, 1)).toBe(true);
+    expect(phoneUpAtBeat(10, false, 9)).toBe(true);
+    expect(phoneUpAtBeat(11, true, 10)).toBe(false);
+    expect(phoneUpAtBeat(12, true, 11)).toBe(true);
+  });
+  test('the Start button brings the phone up in beat 1', () => {
+    expect(beatOnScreen(['[UI:DISPLAY Show Main Title]', '[UI:DISPLAY Start button]'], {}).phoneUpAtEnd).toBe(true);
+    expect(beatOnScreen(['[UI:DISPLAY Show Main Title]'], {}).phoneUpAtEnd).toBe(false);
+  });
+});

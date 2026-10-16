@@ -69,6 +69,9 @@ async function generateEpisodeFeedPosts(episodeId, showId, models) {
       where: {
         series_id: null,
         status: ['generated', 'finalized', 'crossed'],
+        // Lala's episode is posted about on The Pulse, by LalaVerse people
+        // only: JustAWoman's real-world feed is another world (docs/CANON.md).
+        feed_layer: 'lalaverse',
       },
       attributes: ['id', 'handle', 'display_name', 'creator_name', 'platform', 'vibe_sentence',
                    'archetype', 'posting_voice', 'follow_motivation', 'follow_emotion',

@@ -117,6 +117,7 @@ THE PULSE (LalaVerse rule):
 - Every creator posts on The Pulse. A post format is a Pulse post, Pulse story, Pulse video or Pulse live.
 - A creator may also keep a private Pulse account (close friends or an alt). That is where a hidden life lives.
 - Adult content (subscriptions, explicit content) is sold on The PlayRoom, the LalaVerse's adult platform. A creator who does adult content has a PlayRoom account; their public face is on The Pulse.
+- Nobody in the LalaVerse knows JustAWoman exists, and Lala does not know she was made (docs/CANON.md). Never name JustAWoman, and never say Lala was built, created or is a game character.
 `;
 }
 

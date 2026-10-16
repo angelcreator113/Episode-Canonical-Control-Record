@@ -525,7 +525,7 @@ VENTURE AWARENESS:
 CHARACTER APPEARANCE RULES:
 - If character rules are provided, EVERY character entrance must respect their architectural constraints.
 - Do not describe a character appearing in a way that violates their mode or rules.
-- The Almost-Mentor is voice-only in Book 1. Digital Products Customer appears only through products/content.
+- The Digital Products Customer appears only through products/content.
 
 BOOK QUESTION AWARENESS:
 - If a book question direction is set (toward/holding/away), let it inform the emotional undertow of the draft.
