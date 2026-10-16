@@ -40,7 +40,7 @@ export default function useScriptDraft({ episodeId, scriptText, savedScript, del
   const [offer, setOffer] = useState(() => {
     const draft = readDraft(episodeId);
     if (!draft || draft.text === savedScript) return null;
-    return { text: draft.text, at: draft.at || null, baseChanged: typeof draft.base === 'string' && draft.base !== savedScript };
+    return { text: draft.text, at: draft.at || null, base: typeof draft.base === 'string' ? draft.base : null };
   });
 
   // The write still waiting for its pause in typing; the tab closing
@@ -58,5 +58,8 @@ export default function useScriptDraft({ episodeId, scriptText, savedScript, del
   useEffect(() => () => { pending.current?.(); }, []);
 
   const discard = () => setOffer(null);
-  return { offer, discard };
+  // Whether the saved script has changed since the draft was kept, against
+  // the saved script as it is now (re-audit 2: read once, it missed a newer
+  // script the tab took after opening).
+  return { offer: offer ? { ...offer, baseChanged: offer.base !== null && offer.base !== savedScript } : null, discard };
 }

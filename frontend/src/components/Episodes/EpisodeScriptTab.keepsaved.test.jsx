@@ -136,3 +136,82 @@ describe('saving', () => {
     expect(screen.getByRole('button', { name: 'Beat view' })).toBeTruthy();
   });
 });
+
+// Re-audit 2 (2026-10-15).
+describe('after the tab opened', () => {
+  test('a newer script the page gets is shown while nothing was edited', async () => {
+    const NEW = '## BEAT: 1 · Opening Ritual\nLala: Landed after you came back.';
+    const view = renderTab();
+    view.rerender(
+      <MemoryRouter>
+        <EpisodeScriptTab episode={{ id: 'ep-1', show_id: 'show-1', script_content: NEW, script_locked_beats: [] }} show={{ id: 'show-1' }} />
+        <a href="/elsewhere" data-testid="out">Elsewhere</a>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByTestId('script-beat-1').textContent).toContain('Landed after you came back.'));
+    expect(screen.queryByTestId('script-savebar')).toBeNull();
+  });
+
+  test('a script without headers: "Use it" works after another beat is edited', async () => {
+    const plain = Array.from({ length: 14 }, (_, i) => `Lala: line ${i + 1}`).join('\n');
+    const reply = deferred();
+    vi.mocked(api.post).mockReturnValue(reply.promise);
+    renderTab({}, plain);
+    fireEvent.click(screen.getByTestId('script-beat-5').querySelector('.esp-beat-head'));
+    fireEvent.click(screen.getByTestId('script-regen-beat-5'));
+    fireEvent.click(screen.getByTestId('script-beat-2').querySelector('.esp-beat-head'));
+    fireEvent.click(within(screen.getByTestId('script-beat-2')).getByText('"line 2"'));
+    const box = screen.getByRole('textbox', { name: 'Edit line' });
+    fireEvent.change(box, { target: { value: 'Lala: line two, edited' } });
+    fireEvent.click(within(box.closest('.esp-line-edit')).getByRole('button', { name: 'Save' }));
+    await act(async () => { reply.resolve({ data: { beat: '## BEAT: 5 · Reveal\nLala: a fresh reveal' } }); });
+    fireEvent.click(screen.getByTestId('script-beat-5').querySelector('.esp-beat-head'));
+    fireEvent.click(await screen.findByTestId('script-proposal-accept'));
+    const text = openRaw().value;
+    expect(text).toContain('a fresh reveal');
+    expect(text).toContain('line two, edited');
+  });
+
+  test('a kept draft asks before replacing a newer saved script', async () => {
+    window.localStorage.setItem('esp-draft-ep-1', JSON.stringify({ text: `${SCRIPT}\nLala: kept`, base: SCRIPT, at: Date.now() }));
+    const NEW = '## BEAT: 1 · Opening Ritual\nLala: Newer saved script.';
+    vi.mocked(api.get).mockImplementation(async (url) => (url === '/api/v1/episodes/ep-1'
+      ? { data: { data: { script_content: NEW, script_locked_beats: [] } } } : { data: { data: [] } }));
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderTab();
+    await waitFor(() => expect(screen.getByTestId('script-beat-1').textContent).toContain('Newer saved script.'));
+    expect(screen.getByTestId('script-draft').textContent).toContain('The saved script has changed since.');
+    fireEvent.click(screen.getByTestId('script-draft-restore'));
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('script-beat-1').textContent).toContain('Newer saved script.');
+  });
+
+  test('Ctrl/Cmd+S in a line while a save runs saves the line once that save ends', async () => {
+    const first = deferred();
+    vi.mocked(api.put).mockReturnValueOnce(first.promise).mockImplementation(async (url, body) => ({ data: { data: { script_content: body.script_content } } }));
+    renderTab();
+    typeRaw(`${SCRIPT}\nLala: B.`);
+    fireEvent.click(screen.getByTestId('script-savebar-save'));
+    fireEvent.click(screen.getByRole('button', { name: 'Beat view' }));
+    fireEvent.click(within(screen.getByTestId('script-beat-1')).getByText(/Hi besties\./));
+    const box = screen.getByRole('textbox', { name: 'Edit line' });
+    fireEvent.change(box, { target: { value: 'Lala: second save.' } });
+    fireEvent.keyDown(box, { key: 's', ctrlKey: true });
+    await act(async () => { first.resolve({ data: { data: { script_content: `${SCRIPT}\nLala: B.` } } }); });
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(api.put).mock.calls[1][1].script_content).toContain('Lala: second save.');
+  });
+
+  test('a rewrite that lands during a new script is not kept', async () => {
+    const rewrite = deferred();
+    vi.mocked(api.post).mockImplementation((url) => (url.endsWith('/rewrite-line') ? rewrite.promise : new Promise(() => {})));
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderTab();
+    fireEvent.click(within(screen.getByTestId('script-beat-1')).getByRole('button', { name: '✦ Rewrite' }));
+    fireEvent.click(screen.getByTestId('script-regenerate'));
+    await act(async () => { rewrite.resolve({ data: { rewrittenLine: 'Hey, gorgeous.' } }); });
+    expect(await screen.findByText(/A new script was written while the line was being rewritten/)).toBeTruthy();
+    expect(screen.queryByTestId('script-proposal-accept')).toBeNull();
+  });
+});
+

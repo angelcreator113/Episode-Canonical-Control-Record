@@ -224,4 +224,17 @@ describe('EpisodeDetail: the Script tab keeps its work', () => {
       expect((await screen.findByTestId('script-text')).textContent).toBe('Saved script');
     } finally { confirm.mockRestore(); }
   });
+
+  test('"Back to Show" asks first while the script has unsaved edits', async () => {
+    // Re-audit 2 (2026-10-15): a button that leaves the page asks as a tab does.
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    try {
+      renderAt('/episodes/ep-1?tab=scripts');
+      fireEvent.click(await screen.findByTestId('script-edit'));
+      fireEvent.click(document.querySelector('.ed-back-btn'));
+      expect(confirm).toHaveBeenCalledWith('The script has unsaved changes. Leave without saving?');
+      expect(where()).toBe('/episodes/ep-1?tab=scripts');
+    } finally { confirm.mockRestore(); }
+  });
 });
+
