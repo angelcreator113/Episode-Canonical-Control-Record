@@ -140,6 +140,42 @@ const ORIGINAL = script(beat(1, 'Opening Ritual', 'Prime: "Hey besties"'), beat(
     expect(res.body.script).toContain('## BEAT: 1');
   });
 
+  // Script tab re-audit (2026-10-15).
+  test('a first draft too short to be a script is not saved over the script', async () => {
+    const before = (await stored()).script_content;
+    generateGroundedScript.mockRejectedValueOnce(Object.assign(new Error('The writer sent back 0 of the 14 beats, too few to finish; nothing was saved. Try again.'), { code: 'DRAFT_INCOMPLETE' }));
+    const res = await auth(request(app).post(`/api/v1/episode-brief/${ep}/generate-script`)).send({ showId: show, confirmOverwrite: true });
+    expect(res.status).toBe(422);
+    expect(res.body).toMatchObject({ saved: false, code: 'SCRIPT_DRAFT_INCOMPLETE' });
+    expect((await stored()).script_content).toBe(before);
+  });
+
+  test('nothing is written for a brief whose episode is gone', async () => {
+    const gone = uuid();
+    await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, created_at, updated_at, deleted_at)
+               VALUES (:gone, :show, 'Gone', 2, 'draft', NOW(), NOW(), NOW())`, { gone, show });
+    await run(`INSERT INTO episode_briefs (id, episode_id, status, created_at, updated_at) VALUES (:id, :gone, 'draft', NOW(), NOW())`, { id: uuid(), gone });
+    try {
+      generateGroundedScript.mockClear();
+      const res = await auth(request(app).post(`/api/v1/episode-brief/${gone}/generate-script`)).send({ showId: show });
+      expect(res.status).toBe(404);
+      expect(generateGroundedScript).not.toHaveBeenCalled();
+      const one = await auth(request(app).post(`/api/v1/episode-brief/${gone}/regenerate-beat`)).send({ showId: show, beatNumber: 3, script: '' });
+      expect(one.status).toBe(404);
+    } finally {
+      await run(`DELETE FROM episode_briefs WHERE episode_id = :gone`, { gone });
+      await run(`DELETE FROM episodes WHERE id = :gone`, { gone });
+    }
+  });
+
+  test('clearing the script keeps the locked beats', async () => {
+    const res = await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: null });
+    expect(res.status).toBe(200);
+    expect(res.body.locked_beats_kept).toEqual([1, 2, 3]);
+    expect((await stored()).script_content).toContain('Lala: "Logging in"');
+    expect((await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: 42 })).status).toBe(400);
+  });
+
   test('unlocking lets Save change the beat again', async () => {
     expect((await locks({ locked_beats: [] })).body.data.script_locked_beats).toEqual([]);
     const { script_content: current } = await stored();

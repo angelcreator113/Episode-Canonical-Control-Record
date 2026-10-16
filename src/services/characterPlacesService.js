@@ -116,7 +116,8 @@ async function assertCharacter(sequelize, showId, characterId) {
  * closet live in the show's scene defaults, so a change of lead moves
  * them with the people: the old lead's become her own places
  * (character_places), the new lead's own home and closet become the
- * defaults (empty when she has none). One transaction; the metadata keys
+ * defaults (empty when she has none). A show with no lead before keeps its
+ * defaults for the first lead, except where she has her own. One transaction; the metadata keys
  * are merged in the database, so another key written meanwhile is kept.
  */
 async function setLead(sequelize, { showId, characterId }) {
@@ -129,10 +130,16 @@ async function setLead(sequelize, { showId, characterId }) {
   await sequelize.transaction(async (transaction) => {
     const [[locked]] = await sequelize.query('SELECT metadata FROM shows WHERE id = :showId FOR UPDATE', { replacements: { showId }, transaction });
     const defaults = readSceneDefaults(parseMetadata(locked.metadata));
-    const nextDefaults = { home_set_id: null, closet_set_id: null };
+    // With no lead before, the show's home and closet were nobody's: the
+    // first lead takes them, and only her own home or closet replaces one.
+    const nextDefaults = oldLead ? { home_set_id: null, closet_set_id: null } : { ...defaults };
     if (oldLead) {
       for (const [role, key] of Object.entries(LEAD_DEFAULT_KEY)) {
         if (!defaults[key]) continue;
+        // A character has one row per set: a home that is also the closet
+        // stays her home (the closet's row replaced its role, audit
+        // 2026-10-15).
+        if (role === 'closet' && String(defaults.closet_set_id) === String(defaults.home_set_id)) continue;
         await sequelize.query(
           `INSERT INTO character_places (id, registry_character_id, scene_set_id, role, created_at, updated_at)
            VALUES (gen_random_uuid(), :characterId, :setId, :role, NOW(), NOW())
@@ -178,7 +185,7 @@ async function linkPlace(sequelize, { showId, characterId, sceneSetId, role, lab
   if (set.show_id && String(set.show_id) !== String(showId)) throw new CharacterPlacesError(`"${set.name}" belongs to another show`);
 
   if (String(show.metadata.lead_character_id || '') === String(characterId) && SINGLE.has(role)) {
-    await saveSceneDefaults(sequelize, { showId, body: { [LEAD_DEFAULT_KEY[role]]: set.id } });
+    await saveSceneDefaults(sequelize, { showId, body: { [LEAD_DEFAULT_KEY[role]]: set.id }, leadCharacterId: characterId });
     return listPlaces(sequelize, showId);
   }
   await sequelize.transaction(async (transaction) => {
@@ -206,7 +213,7 @@ async function unlinkPlace(sequelize, { showId, characterId, sceneSetId, role })
   if (String(show.metadata.lead_character_id || '') === String(characterId) && SINGLE.has(role)) {
     const key = LEAD_DEFAULT_KEY[role];
     if (String(readSceneDefaults(show.metadata)[key] || '') === String(sceneSetId)) {
-      await saveSceneDefaults(sequelize, { showId, body: { [key]: null } });
+      await saveSceneDefaults(sequelize, { showId, body: { [key]: null }, leadCharacterId: characterId });
     }
     return listPlaces(sequelize, showId);
   }

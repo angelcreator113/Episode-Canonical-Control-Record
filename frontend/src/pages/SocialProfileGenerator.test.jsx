@@ -47,7 +47,6 @@ import {
   // Listing
   fetchProfiles,
   fetchProfileDetail,
-  fetchJustAWomanProfile,
   // Lifecycle (Api-suffix)
   generateProfileApi,
   autofillDraftApi,
@@ -102,14 +101,6 @@ describe('SocialProfileGenerator — Track 3 module-scope helpers', () => {
       vi.mocked(apiClient.get).mockResolvedValue({ data: { profile: { id: 'p-1' } } });
       await fetchProfileDetail('p-1');
       expect(apiClient.get).toHaveBeenCalledWith('/api/v1/social-profiles/p-1');
-    });
-
-    test('fetchJustAWomanProfile GET on lalaverse search', async () => {
-      vi.mocked(apiClient.get).mockResolvedValue({ data: { profiles: [] } });
-      await fetchJustAWomanProfile();
-      expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/social-profiles?feed_layer=lalaverse&search=justawoman&limit=1'
-      );
     });
   });
 
