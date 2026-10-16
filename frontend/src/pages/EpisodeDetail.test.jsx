@@ -143,22 +143,23 @@ describe('EpisodeDetail — Track 6 CP14 module-scope helpers', () => {
     expect(screen.queryByTestId('episode-checklist')).toBeNull();
   });
 
-  // Task #1905: Start Episode sends ?tab=assets, Open Episode ?tab=overview.
-  // The default above (#1531's Checklist) is unchanged for a bare URL.
-  test('?tab=assets (Start Episode) lands on Production -> Assets', async () => {
-    renderEpisodeDetail('/episodes/ep-1?tab=assets');
+  // Evoni, 2026-10-16: the asset manager is Assets → Files (it was
+  // Production → Assets); ?tab=files opens it. The default (#1531's
+  // Checklist) is unchanged for a bare URL.
+  test('?tab=files lands on Assets -> Files', async () => {
+    renderEpisodeDetail('/episodes/ep-1?tab=files');
 
     await waitFor(() => expect(screen.getByTestId('episode-assets')).toBeTruthy());
     expect(screen.queryByTestId('episode-checklist')).toBeNull();
     expect(screen.queryByTestId('episode-overview')).toBeNull();
-    expect(screen.getByTitle('Production').className).toContain('ed-tab-active');
+    expect(screen.getByTitle('Assets').className).toContain('ed-tab-active');
   });
 
-  test('the Checklist is still reachable from Assets via its Production sub-tab', async () => {
-    renderEpisodeDetail('/episodes/ep-1?tab=assets');
+  test('the Checklist is still reachable from Files via the Production tab', async () => {
+    renderEpisodeDetail('/episodes/ep-1?tab=files');
     await waitFor(() => expect(screen.getByTestId('episode-assets')).toBeTruthy());
 
-    fireEvent.click(screen.getByRole('button', { name: 'Checklist' }));
+    fireEvent.click(screen.getByTitle('Production'));
 
     await waitFor(() => expect(screen.getByTestId('episode-checklist')).toBeTruthy());
     expect(screen.queryByTestId('episode-assets')).toBeNull();

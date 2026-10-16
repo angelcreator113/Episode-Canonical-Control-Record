@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
 import useScrolledPast from '../hooks/useScrolledPast';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Compass, Sparkles, PenLine, CalendarDays, Crown } from 'lucide-react';
+import { Compass, Sparkles, PenLine, CalendarDays, Crown, Shirt } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/ToastContainer';
 import episodeService from '../services/episodeService';
@@ -55,7 +55,7 @@ import './EpisodeDetail.css';
 // - listEpisodeLibraryScenesApi reused 4× (mount + 3 reload-after-mutation)
 // - reorderEpisodeLibrarySceneApi reused 2× (Promise.all pair on drag-reorder)
 // The main tabs' icons (Evoni's Episode mock, 2026-10-05).
-const TAB_ICONS = { overview: Sparkles, scripts: PenLine, production: CalendarDays, results: Crown };
+const TAB_ICONS = { overview: Sparkles, assets: Shirt, scripts: PenLine, production: CalendarDays, results: Crown };
 
 export const listEpisodeLibraryScenesApi = (epId) =>
   api.get(`/api/v1/episodes/${epId}/library-scenes`).then((r) => r.data);
@@ -385,7 +385,7 @@ const EpisodeDetail = () => {
   // to activeTab 'production' / sub 'wardrobe', so the old
   // `activeTab !== 'wardrobe'` gate never let this run (Task #1906).
   useEffect(() => {
-    if (!episode || tabKey !== 'production.wardrobe') return;
+    if (!episode || tabKey !== 'assets.wardrobe') return;
     const showId = episode.show_id || episode.showId;
     if (!showId) return;
 
@@ -799,7 +799,8 @@ const EpisodeDetail = () => {
         {/* Sub-tabs */}
         {(() => {
           const currentTab = EP_TABS.find(t => t.key === activeTab);
-          if (!currentTab?.subs) return null;
+          // A tab with one sub-tab (Production → Checklist) needs no row.
+          if (!currentTab?.subs || currentTab.subs.length < 2) return null;
           return (
             // One line per label; a row wider than the screen scrolls sideways
             // (Evoni, 2026-10-05: "Production Checklist" wrapped onto two
@@ -854,7 +855,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Assets Tab */}
-        {tabKey === 'production.assets' && (
+        {tabKey === 'assets.files' && (
           episode.show ? (
             <EpisodeAssetsTab episode={episode} show={episode.show} />
           ) : (
@@ -878,7 +879,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Scenes Tab */}
-        {tabKey === 'production.scenes' && (
+        {tabKey === 'assets.scenes' && (
           <EpisodeScenesTab
             episode={episode}
             sourceEvent={sourceEvent}
@@ -887,7 +888,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Wardrobe Tab */}
-        {tabKey === 'production.wardrobe' && (
+        {tabKey === 'assets.wardrobe' && (
           <div>
             {/* Unified wardrobe — event picker + outfit builder, for this
                 episode's own events only (Task #3107) */}
@@ -966,7 +967,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Style Page (was Lookbook) — the style sheet as its own editor (Task #2876) */}
-        {tabKey === 'production.lookbook' && (
+        {tabKey === 'assets.lookbook' && (
           <EpisodeStylePage episode={episode} onOpenTab={openTab} />
         )}
 
@@ -990,17 +991,17 @@ const EpisodeDetail = () => {
             it; same phone.start handler and overlay), what is on the phone,
             the deferred beat-requirements notice, and missions as a section
             (EpisodePhoneMissionsTab, unchanged toggles + MissionEditor). */}
-        {tabKey === 'production.phone' && (
+        {tabKey === 'assets.phone' && (
           <EpisodeLalasPhoneTab episode={episode} onPreview={phone.start} previewError={phone.error} />
         )}
 
         {/* Money Tab — Episode Money, Phase A (#2278): read-only, from the ledger */}
-        {tabKey === 'production.money' && (
+        {tabKey === 'assets.money' && (
           <EpisodeMoneyTab episode={episode} showId={episode?.show_id || episode?.showId} />
         )}
 
         {/* Overlays Tab — P15: every on-screen piece of the episode */}
-        {tabKey === 'production.overlays' && (
+        {tabKey === 'assets.overlays' && (
           <EpisodeOverlaysTab
             episode={episode}
             showId={episode?.show_id || episode?.showId}

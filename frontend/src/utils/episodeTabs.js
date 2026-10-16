@@ -10,12 +10,11 @@
 // bands instead of living on its own tab.
 export const EP_TABS = [
   { key: 'overview', icon: '📋', label: 'Overview' },
-  { key: 'scripts', icon: '📝', label: 'Script' },
-  // Evoni's Episode mock (2026-10-05): the checklist hub first, then the
-  // pieces it tracks in its order; Assets, which the mock leaves out, stays
-  // as the last pill (her ruling).
-  { key: 'production', icon: '🎬', label: 'Production', subs: [
-    { key: 'checklist', label: 'Checklist' },
+  // Evoni, 2026-10-16: the episode's pieces get their own top tab, next to
+  // Overview: Scenes, Wardrobe, Style Page, Phone, Overlays, Money, and the
+  // asset manager as Files (it was Production → Assets; key 'files', and
+  // ?tab=assets now opens this tab).
+  { key: 'assets', icon: '🎨', label: 'Assets', subs: [
     { key: 'scenes', label: 'Scenes' },
     { key: 'wardrobe', label: 'Wardrobe' },
     // The Style Page (was Lookbook; Task #2876): the style sheet as its
@@ -25,7 +24,13 @@ export const EP_TABS = [
     // P15: every on-screen piece of the episode.
     { key: 'overlays', label: 'Overlays' },
     { key: 'money', label: 'Money' },
-    { key: 'assets', label: 'Assets' },
+    { key: 'files', label: 'Files' },
+  ]},
+  { key: 'scripts', icon: '📝', label: 'Script' },
+  // Production is the checklist hub (Evoni's Episode mock, 2026-10-05); one
+  // sub-tab, so the page shows no sub-tab row for it.
+  { key: 'production', icon: '🎬', label: 'Production', subs: [
+    { key: 'checklist', label: 'Checklist' },
   ]},
   // Evoni's Episode mock (2026-10-05): Results is one page, its Summary;
   // Evaluation, Story and Distribution stay (her ruling).
