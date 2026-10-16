@@ -72,6 +72,9 @@ async function episodeLooks(sequelize, episodeId) {
 
 const STUCK_AFTER_MS = 10 * 60 * 1000;
 const STUCK_REASON = 'The generation did not finish within 10 minutes. Try again.';
+// A failed or stuck run on an angle that already had an image keeps that
+// image in use, with the error beside it (audit, 2026-10-15).
+const KEEP_PREVIOUS_IMAGE = `CASE WHEN image_url IS NOT NULL THEN 'complete' ELSE 'failed' END`;
 
 /** The looks' dressed angles: Map<`${look_id}:${scene_angle_id}`, row>. */
 async function lookAngles(sequelize, lookIds) {
@@ -82,7 +85,7 @@ async function lookAngles(sequelize, lookIds) {
   // hung call) is marked failed, so the beat stops waiting on it (audit,
   // 2026-10-15: nothing ever released it).
   await sequelize.query(
-    `UPDATE scene_set_look_angles SET status = 'failed', error = :reason, updated_at = NOW()
+    `UPDATE scene_set_look_angles SET status = ${KEEP_PREVIOUS_IMAGE}, error = :reason, updated_at = NOW()
       WHERE look_id IN (:ids) AND status = 'generating' AND deleted_at IS NULL
         AND updated_at < NOW() - make_interval(secs => :stuck)`,
     { replacements: { ids, reason: STUCK_REASON, stuck: STUCK_AFTER_MS / 1000 } });
@@ -170,7 +173,11 @@ async function upsertRow(sequelize, { lookId, angleId, status, imageUrl = null, 
      VALUES (gen_random_uuid(), :lookId, :angleId, :status, :imageUrl, :source, CAST(:brief AS jsonb), :estimate, NULL,
              CASE WHEN :status = 'complete' THEN NOW() ELSE NULL END, NOW(), NOW())
      ON CONFLICT (look_id, scene_angle_id) WHERE deleted_at IS NULL
-     DO UPDATE SET status = EXCLUDED.status, image_url = EXCLUDED.image_url, source = EXCLUDED.source, brief = EXCLUDED.brief,
+     DO UPDATE SET status = EXCLUDED.status,
+                   -- A new run keeps the previous image until it has one
+                   -- (audit, 2026-10-15: a failed re-run erased it).
+                   image_url = COALESCE(EXCLUDED.image_url, scene_set_look_angles.image_url),
+                   source = EXCLUDED.source, brief = EXCLUDED.brief,
                    estimate_usd = EXCLUDED.estimate_usd, cost_usd = NULL, error = NULL,
                    generated_at = EXCLUDED.generated_at, updated_at = NOW()
        ${idle}
@@ -206,7 +213,7 @@ async function startDressedAngle(sequelize, args) {
     } catch (err) {
       console.error(`[DressedAngle] ${plan.angle.angle_name || plan.angle.angle_label} on "${plan.set.name}" failed:`, err.message);
       await sequelize.query(
-        `UPDATE scene_set_look_angles SET status = 'failed', error = :error, updated_at = NOW() WHERE ${OWN_ANGLE_RUN}`,
+        `UPDATE scene_set_look_angles SET status = ${KEEP_PREVIOUS_IMAGE}, error = :error, updated_at = NOW() WHERE ${OWN_ANGLE_RUN}`,
         { replacements: { id: rowId, error: String(err.message || err).slice(0, 500) } });
     }
   };

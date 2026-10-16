@@ -5255,3 +5255,4 @@
   .wm-from-show-list li { grid-template-columns: 1fr 1fr 1fr; }
   .wm-from-show-list li span:first-child { grid-column: 1 / -1; }
 }
+.wm-from-show-transfer { margin-top: 10px; }

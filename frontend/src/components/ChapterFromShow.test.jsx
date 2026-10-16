@@ -18,6 +18,7 @@ const LEDGER = {
     { id: 'e2', episode_number: 2, title: 'The Brunch', short_story: null, chapter: null },
   ],
   owed: { short_stories: 1, beat11: 0, chapters: 1 },
+  transfer: null,
 };
 
 let linked;
@@ -78,4 +79,13 @@ test('a failure is shown, not swallowed', async () => {
   fireEvent.click(await screen.findByText('Write this chapter from the episode'));
   expect((await screen.findByRole('alert')).textContent).toBe('AI rate limit exceeded');
   expect(screen.getByText(/no short story yet/)).toBeTruthy();
+});
+
+test('sets the episode of the consciousness transfer for the show', async () => {
+  renderIt();
+  const select = await screen.findByLabelText('The consciousness transfer happens in');
+  expect(select.value).toBe('');
+  expect(screen.getByText('Until it is set, no chapter carries the Lala bleed.')).toBeTruthy();
+  fireEvent.change(select, { target: { value: 'e2' } });
+  await waitFor(() => expect(apiClient.put).toHaveBeenCalledWith('/api/v1/book-from-show/shows/s1/transfer', { episode_id: 'e2' }));
 });

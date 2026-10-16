@@ -509,6 +509,10 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
     }
 
     const episodeForGuard = await Episode.findByPk(episodeId);
+    // Script tab re-audit (2026-10-15): a brief can outlive its episode (a
+    // deleted episode keeps its brief and its row, deleted_at set); nothing
+    // is written for it.
+    if (!episodeForGuard || episodeForGuard.deleted_at) return res.status(404).json({ error: 'Episode not found' });
     if (scriptOverwriteBlocked(episodeForGuard?.script_content, req.body)) {
       console.warn(`[ScriptGen] Refused overwrite for episode ${episodeId}: existing script_content present, no confirmOverwrite flag.`);
       return res.status(409).json(scriptOverwriteRefusalBody());
@@ -531,7 +535,17 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
         .map((b) => ({ ...b, text: withNumberedHeader(b.text, b.number) }))
       : [];
     // The writer returns the script with its coverage (utils/scriptCoverage.js).
-    const written = await generateGroundedScript(episodeId, showId, models, { lockedBeats });
+    // A first draft with too few beats (a refusal, an empty reply) is not
+    // saved over the script (Script tab re-audit, 2026-10-15). 422, not 502:
+    // the page waits out a 502 as a timed-out gateway.
+    let written;
+    try {
+      written = await generateGroundedScript(episodeId, showId, models, { lockedBeats });
+    } catch (genErr) {
+      if (genErr.code !== 'DRAFT_INCOMPLETE') throw genErr;
+      console.error(`[ScriptGen] Episode ${episodeId}: ${genErr.message}`);
+      return res.status(422).json({ success: false, saved: false, code: 'SCRIPT_DRAFT_INCOMPLETE', error: genErr.message });
+    }
     const generated = typeof written === 'string' ? written : written?.script || '';
     // Writing the script takes minutes, and the page can approve a beat or
     // save while it runs (Script tab audit, 2026-10-15). The locks kept are
@@ -620,7 +634,8 @@ router.post('/:episodeId/regenerate-beat', requireAuth, aiRateLimiter, async (re
     const brief = await EpisodeBrief.findOne({ where: { episode_id: episodeId } });
     if (!brief) return res.status(400).json({ error: 'Episode Brief not found. Create the Brief first.' });
     const episode = await Episode.findByPk(episodeId);
-    if (!episode) return res.status(404).json({ error: 'Episode not found' });
+    // A deleted episode keeps its row (deleted_at set); nothing is written for it.
+    if (!episode || episode.deleted_at) return res.status(404).json({ error: 'Episode not found' });
     const { normalizeLockedBeats } = require('../utils/scriptBeatLocks');
     if (normalizeLockedBeats(episode.script_locked_beats).includes(beatNumber)) {
       return res.status(409).json({ error: `Beat ${beatNumber} is locked. Unlock it to regenerate it.`, code: 'BEAT_LOCKED' });
@@ -631,7 +646,7 @@ router.post('/:episodeId/regenerate-beat', requireAuth, aiRateLimiter, async (re
     // Ask for a change (Script tab audit, 2026-10-15): optional, a string only, at most 300 characters.
     const instruction = typeof req.body.instruction === 'string' ? req.body.instruction.trim().slice(0, 300) : '';
     const beat = await generateGroundedBeat(episodeId, showId, models, { beatNumber, currentScript: script, instruction });
-    if (!beat) return res.status(502).json({ error: 'The writer sent back no lines for this beat; try again.' });
+    if (!beat) return res.status(502).json({ error: 'The writer did not send back this beat; try again.' });
     return res.json({ success: true, beatNumber, beat });
   } catch (err) {
     console.error('[RegenerateBeat] Error:', err.message);
