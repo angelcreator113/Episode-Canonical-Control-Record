@@ -12,7 +12,7 @@
 
 const axios = require('axios');
 const Replicate = require('replicate');
-const { trackReplicate, isBudgetError } = require('./imageCostService');
+const { trackReplicate, isBudgetError, runImageCall } = require('./imageCostService');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const sharp = require('sharp');
 const { v4: uuidv4 } = require('uuid');
@@ -385,7 +385,8 @@ async function removeBackgroundFromReference(referenceUrl, entityId) {
         format: 'png',
       };
 
-    const response = await axios.post(
+    // Budget-checked and logged like every image call (fourth audit).
+    const response = await runImageCall({ model: 'remove.bg', provider: 'removebg' }, () => axios.post(
       'https://api.remove.bg/v1.0/removebg',
       requestBody,
       {
@@ -395,7 +396,7 @@ async function removeBackgroundFromReference(referenceUrl, entityId) {
         responseType: 'arraybuffer',
         timeout: 45000,
       }
-    );
+    ));
 
     const ts = Date.now();
     const uid = uuidv4().slice(0, 8);
