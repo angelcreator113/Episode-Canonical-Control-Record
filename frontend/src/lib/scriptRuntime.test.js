@@ -49,3 +49,13 @@ describe('formatRuntime', () => {
     expect(formatRuntime(-3)).toBe('~0s');
   });
 });
+
+// Script tab re-audit (2026-10-15): the tab's speaker rule (lib/scriptSpeaker.js).
+describe('who speaks, as the Script tab reads it', () => {
+  test('a V.O. line is timed as spoken words, a Note: as an action', () => {
+    const thirty = Array.from({ length: 30 }, () => 'word').join(' ');
+    expect(lineSeconds(`Lala (V.O.): "${thirty}"`)).toBe(lineSeconds(`Lala: "${thirty}"`));
+    expect(lineSeconds(`Mary Jane: "${thirty}"`)).toBe(lineSeconds(`Lala: "${thirty}"`));
+    expect(lineSeconds('Note: remember the lighting')).toBe(lineSeconds('(She sits.)'));
+  });
+});

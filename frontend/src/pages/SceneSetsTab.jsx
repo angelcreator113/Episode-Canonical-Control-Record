@@ -500,8 +500,6 @@ export const suggestAnglesFromImageApi = (setId, formData) =>
   apiClient.post(`${API_BASE}/scene-sets/${setId}/suggest-angles-from-image`, formData);
 export const getAiCameraDirectionApi = (setId, payload) =>
   apiClient.post(`${API_BASE}/scene-sets/${setId}/ai-camera-direction`, payload);
-export const getMoodVariantsApi = (setId) =>
-  apiClient.get(`${API_BASE}/scene-sets/${setId}/mood-variants`);
 export const generateMoodVariantsApi = (setId, payload) =>
   apiClient.post(`${API_BASE}/scene-sets/${setId}/mood-variants`, payload);
 export const getComparisonApi = (setId) =>
@@ -510,8 +508,6 @@ export const getWardrobeMatchApi = (setId) =>
   apiClient.get(`${API_BASE}/scene-sets/${setId}/wardrobe-match`);
 
 // Episode association
-export const listSceneSetEpisodesApi = (setId) =>
-  apiClient.get(`${API_BASE}/scene-sets/${setId}/episodes`);
 export const unlinkEpisodeFromSceneSetApi = (setId, episodeId) =>
   apiClient.delete(`${API_BASE}/scene-sets/${setId}/episodes/${episodeId}`);
 
@@ -2227,6 +2223,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                             <div className="scene-sets-angle-row-info">
                               <div className="scene-sets-angle-row-label">{a.angle_label}</div>
                               <div className="scene-sets-angle-row-name">{a.angle_name}</div>
+                              {/* Made from a base since replaced: the view shows the old room. */}
+                              {isComplete && a.quality_review?.made_from_base && set.base_still_url && a.quality_review.made_from_base !== set.base_still_url && (
+                                <div className="scene-sets-angle-row-stale" data-testid={`angle-old-base-${a.id}`}>Made from an older base: generate it again</div>
+                              )}
                             </div>
                             <div className="scene-sets-angle-row-status">
                               {isComplete && (() => {
@@ -3677,14 +3677,13 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
 
   const handleLinkEpisodes = async (set, episodeIds) => {
     try {
-      await listSceneSetEpisodesApi; // helper exists; using POST helper below for link action
-      // The link endpoint shares the same /episodes path but is a POST (link), not a GET (list).
-      // Migration: use a POST helper rather than the read helper.
       await apiClient.post(`${API_BASE}/scene-sets/${set.id}/episodes`, { episode_ids: episodeIds });
       showToast(`Linked ${episodeIds.length} episode(s)`);
       fetchSets();
-    } catch {
-      showToast('Failed to link episodes', 'error');
+    } catch (err) {
+      // The server's reason (another show's episode, one not found).
+      console.error('[SceneSets] link episodes failed:', err);
+      showToast(err.response?.data?.error || 'Failed to link episodes', 'error');
     }
   };
 

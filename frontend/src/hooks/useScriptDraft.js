@@ -5,7 +5,7 @@
 // edits the saved script doesn't have, it offers them back. Browser storage
 // can be missing or blocked, so every read and write is guarded, and the
 // page works without it.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const keyOf = (episodeId) => `esp-draft-${episodeId}`;
 
@@ -40,18 +40,26 @@ export default function useScriptDraft({ episodeId, scriptText, savedScript, del
   const [offer, setOffer] = useState(() => {
     const draft = readDraft(episodeId);
     if (!draft || draft.text === savedScript) return null;
-    return { text: draft.text, at: draft.at || null, baseChanged: typeof draft.base === 'string' && draft.base !== savedScript };
+    return { text: draft.text, at: draft.at || null, base: typeof draft.base === 'string' ? draft.base : null };
   });
 
+  // The write still waiting for its pause in typing; the tab closing
+  // (another page, Back) writes it at once (Script tab re-audit, 2026-10-15:
+  // the last edits before leaving were lost).
+  const pending = useRef(null);
   useEffect(() => {
     // The kept copy stays as it is until its offer is answered.
-    if (!episodeId || offer) return undefined;
-    const t = setTimeout(() => {
-      writeDraft(episodeId, scriptText !== savedScript ? { text: scriptText, base: savedScript, at: Date.now() } : null);
-    }, delay);
+    if (!episodeId || offer) { pending.current = null; return undefined; }
+    const write = () => { pending.current = null; writeDraft(episodeId, scriptText !== savedScript ? { text: scriptText, base: savedScript, at: Date.now() } : null); };
+    pending.current = write;
+    const t = setTimeout(write, delay);
     return () => clearTimeout(t);
   }, [episodeId, scriptText, savedScript, offer, delay]);
+  useEffect(() => () => { pending.current?.(); }, []);
 
   const discard = () => setOffer(null);
-  return { offer, discard };
+  // Whether the saved script has changed since the draft was kept, against
+  // the saved script as it is now (re-audit 2: read once, it missed a newer
+  // script the tab took after opening).
+  return { offer: offer ? { ...offer, baseChanged: offer.base !== null && offer.base !== savedScript } : null, discard };
 }
