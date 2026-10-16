@@ -12,6 +12,7 @@ const { generateImageUrl } = require('./imageGenerationService');
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { runImageCall } = require('./imageCostService');
 
 const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET;
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
@@ -181,11 +182,13 @@ async function generateOverlay(overlayType, showId, options = {}) {
   let bgRemoved = false;
   if (!skipBgRemoval && process.env.REMOVEBG_API_KEY) {
     try {
-      const bgRes = await axios.post(
+      // Budget-checked and logged (fourth audit); a refusal keeps the
+      // picture with its background, as a failure does.
+      const bgRes = await runImageCall({ model: 'remove.bg', provider: 'removebg' }, () => axios.post(
         'https://api.remove.bg/v1.0/removebg',
         { image_url: imageUrl, size: 'auto', format: 'png' },
         { headers: { 'X-Api-Key': process.env.REMOVEBG_API_KEY }, responseType: 'arraybuffer', timeout: 45000 }
-      );
+      ));
       buffer = Buffer.from(bgRes.data);
       bgRemoved = true;
     } catch (bgErr) {
@@ -224,11 +227,12 @@ async function removeBackgroundFromAsset(assetId, models, { showId } = {}) {
   const sourceUrl = asset.s3_url_processed || asset.s3_url_raw;
   if (!sourceUrl) throw new Error('Asset has no image URL');
 
-  const bgRes = await axios.post(
+  // Budget-checked and logged like every image call (fourth audit).
+  const bgRes = await runImageCall({ model: 'remove.bg', provider: 'removebg' }, () => axios.post(
     'https://api.remove.bg/v1.0/removebg',
     { image_url: sourceUrl, size: 'auto', format: 'png' },
     { headers: { 'X-Api-Key': process.env.REMOVEBG_API_KEY }, responseType: 'arraybuffer', timeout: 45000 }
-  );
+  ));
   const buffer = Buffer.from(bgRes.data);
 
   const meta = typeof asset.metadata === 'string' ? JSON.parse(asset.metadata) : (asset.metadata || {});

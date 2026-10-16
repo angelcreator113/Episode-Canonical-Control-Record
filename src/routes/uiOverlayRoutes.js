@@ -298,7 +298,7 @@ router.post('/:showId/remove-bg/:assetId', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[UIOverlay] remove-bg error:', err.message);
     if (err.message === 'Asset not found') return res.status(404).json({ success: false, error: 'No overlay image with that id in this show' });
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(isBudgetError(err) ? 429 : 500).json({ success: false, error: err.message });
   }
 });
 
