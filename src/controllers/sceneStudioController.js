@@ -1223,12 +1223,11 @@ exports.generateSceneSetObject = async (req, res) => {
       return res.status(400).json({ success: false, error: 'prompt is required' });
     }
 
-    // Scene sets have show_id directly
-    let showId = null;
-    try {
-      const sceneSet = await SceneSet.findByPk(id, { attributes: ['id', 'show_id'] });
-      showId = sceneSet?.show_id || null;
-    } catch { /* non-critical */ }
+    // Scene sets have show_id directly. A set that does not exist is a 404
+    // before the two paid images, not a charge (audit, 2026-10-15).
+    const sceneSet = await SceneSet.findByPk(id, { attributes: ['id', 'show_id'] });
+    if (!sceneSet) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    const showId = sceneSet.show_id || null;
 
     const options = await objectGenerationService.generateObject(prompt.trim(), {
       sceneId: id,
@@ -1348,6 +1347,14 @@ exports.regenerateSceneSetBackground = async (req, res) => {
       strength: 0.45,
       userId: req.user?.id || null,
     });
+
+    // S6: the base may have been approved while the restyle ran; the
+    // approved picture stays and the restyle is not kept.
+    const lateRefusal = result.restyled_url ? await approvedBaseService.baseReplaceRefusal(sequelize, id) : null;
+    if (lateRefusal) {
+      console.warn(`Scene Studio regenerateBackground: ${id} approved during restyle; restyle not kept (${result.restyled_url})`);
+      return res.status(lateRefusal.status).json({ success: false, error: `${lateRefusal.error} It was approved while the restyle ran, so the restyle was not kept.`, approved_base_of: lateRefusal.approved_base_of });
+    }
 
     if (result.restyled_url) {
       await SceneSet.update(

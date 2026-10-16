@@ -392,7 +392,7 @@ router.post('/social/:id/detect-lala', requireAuth, aiRateLimiter, async (req, r
 
     const lalaPrompt = `You are the Lala Emergence Detection Engine for Prime Studios.
 
-Analyze this social media content for signs of "Lala" — the alter ego / emergent persona within JustAWoman.
+Analyze this social media content for signs of "Lala" in JustAWoman's voice. Canon: Lala is the sentient AI fashion game character JustAWoman created (she is not an alter ego); JustAWoman pours so much of herself into Lala that her consciousness transfers. Before that, Lala's register can surface in JustAWoman's own content.
 
 Lala emerges when:
 - Third-person self-reference ("She needs to stop pretending")

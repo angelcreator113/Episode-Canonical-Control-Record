@@ -263,6 +263,11 @@ Return ONLY valid JSON. No markdown fences.`;
 });
 
 // ─── Canonical Book 1 Relationship Data ──────────────────────────────────────
+// Cast B (Evoni, 2026-10-15): the Book 1 ecosystem (BOOK1_ECOSYSTEM below)
+// and the Book 1 registry. Sons Elias (9) and Zion (5); Marcus is the paying
+// man, never a son; the Comparison Creator is Nia Vale; the Witness is
+// unnamed. Labels match the registry's display names, so the map links
+// these entries to the database characters by name.
 const BOOK1_NODES = [
   {
     id: 'justawoman',
@@ -270,7 +275,7 @@ const BOOK1_NODES = [
     role_type: 'special',
     world_exists: true,
     group: 'real_world',
-    bio: 'Content creator. Mother of Marcus (7), Miles (5), Noah (3). Married to David. Posts fashion, beauty, makeup consistently. Wound: invisibility while trying.',
+    bio: 'Content creator. Mother of Elias (9) and Zion (5). Married to David. Posts fashion, beauty, makeup consistently. Wound: invisibility while trying.',
   },
   {
     id: 'david',
@@ -281,44 +286,44 @@ const BOOK1_NODES = [
     bio: 'The Husband. Works Monday–Friday, 6am–5pm, sometimes later. Supportive but concerned about the investment before the returns arrive. His concern lands as doubt.',
   },
   {
-    id: 'marcus',
-    label: 'Marcus',
+    id: 'elias',
+    label: 'Elias',
     role_type: 'support',
     world_exists: true,
     group: 'real_world',
-    bio: 'Oldest son. Age 7. Part of the real life JustAWoman is building around.',
+    bio: 'Older son. Age 9. The quiet witness: sees more than he says.',
   },
   {
-    id: 'miles',
-    label: 'Miles',
+    id: 'zion',
+    label: 'Zion',
     role_type: 'support',
     world_exists: true,
     group: 'real_world',
-    bio: 'Middle son. Age 5.',
+    bio: 'Younger son. Age 5. The loud anchor: pulls her back into the present.',
   },
   {
-    id: 'noah',
-    label: 'Noah',
-    role_type: 'support',
-    world_exists: true,
-    group: 'real_world',
-    bio: 'Youngest son. Age 3.',
-  },
-  {
-    id: 'dana',
-    label: 'Dana',
-    role_type: 'support',
+    id: 'the-witness',
+    label: 'The Witness',
+    role_type: 'mirror',
     world_exists: false,
     group: 'real_world',
-    bio: 'The Witness. Real friend. Has her own up-and-down social media journey. JustAWoman processes her content ideas and creative journey with Dana. A peer, not a mentor.',
+    bio: 'Memory keeper. Not a character who acts; a character who remembers. Unnamed.',
   },
   {
-    id: 'chloe',
-    label: 'Chloe',
+    id: 'nia-vale',
+    label: 'Nia Vale',
     role_type: 'mirror',
     world_exists: false,
     group: 'online',
-    bio: 'The Comparison Creator. Lifestyle content creator (JustAWoman thinks she does makeup — that misread matters). Married, no children. Extremely consistent, high quality videos, goes live with her audience. Great influencer. Does not know JustAWoman exists.',
+    bio: 'The Comparison Creator. Same content lane as JustAWoman, more extreme, less restrained. Goes fully explicit on a live, intentionally. The escalation mirror. Exists in her feed, algorithmically adjacent.',
+  },
+  {
+    id: 'marcus',
+    label: 'Marcus',
+    role_type: 'shadow',
+    world_exists: false,
+    group: 'online',
+    bio: 'The paying man. Pays for access and treats her body as product. Offers reduction, which she experiences as a specific kind of freedom. She is not confused; she chooses it.',
   },
   {
     id: 'jade',
@@ -338,6 +343,11 @@ const BOOK1_NODES = [
   },
 ];
 
+const familial = (from, to, fromKnows, fromFeels, toKnows, toFeels, strength, note = null) => ({
+  from, to, direction: 'two_way', type: 'familial',
+  from_knows: fromKnows, to_knows: toKnows, from_feels: fromFeels, to_feels: toFeels, strength, note,
+});
+
 const BOOK1_EDGES = [
   {
     from: 'justawoman',
@@ -351,65 +361,44 @@ const BOOK1_EDGES = [
     strength: 5,
     note: 'Core real-world tension. His arc runs through the entire franchise.',
   },
+  familial('justawoman', 'elias', 'Her older son. 9 years old. Notices more than he should.', 'Love. Also: the constraint. Two boys while building a career.', 'His mom.', 'She is mom.', 3,
+    'The boys together are the real-life weight JustAWoman carries while creating.'),
+  familial('justawoman', 'zion', 'Her younger son. 5 years old. The loudest pull back to the present.', 'Love and constraint — the youngest creates the most immediate pull.', 'His mom.', 'She is mom.', 3),
+  {
+    from: 'justawoman',
+    to: 'the-witness',
+    direction: 'two_way',
+    type: 'support',
+    from_knows: 'Someone who remembers what she was like before.',
+    to_knows: 'Remembers. Does not act on it.',
+    from_feels: 'Seen, sometimes more than she wants to be.',
+    to_feels: null,
+    strength: 3,
+    note: 'The Witness is a memory keeper, not an actor. Unnamed.',
+  },
+  {
+    from: 'justawoman',
+    to: 'nia-vale',
+    direction: 'one_way',
+    type: 'mirror',
+    from_knows: 'Same lane, no hesitation. Watches her numbers, her reach, her lives.',
+    to_knows: null,
+    from_feels: 'Comparison that becomes a question: how far would I go?',
+    to_feels: null,
+    strength: 4,
+    note: 'The escalation mirror. Her key scene (the live) lands between stories 28-35.',
+  },
   {
     from: 'justawoman',
     to: 'marcus',
     direction: 'two_way',
-    type: 'familial',
-    from_knows: 'Her oldest. 7 years old. Part of the real life she is building around.',
-    to_knows: 'His mom. Present in his daily life.',
-    from_feels: 'Love. Also: the constraint. Three boys under 8 while building a career.',
-    to_feels: 'She is mom.',
-    strength: 3,
-    note: 'The boys collectively represent the real-life weight JustAWoman carries while creating.',
-  },
-  {
-    from: 'justawoman',
-    to: 'miles',
-    direction: 'two_way',
-    type: 'familial',
-    from_knows: 'Middle son. 5 years old.',
-    to_knows: 'His mom.',
-    from_feels: 'Love and constraint.',
-    to_feels: 'She is mom.',
-    strength: 3,
-    note: null,
-  },
-  {
-    from: 'justawoman',
-    to: 'noah',
-    direction: 'two_way',
-    type: 'familial',
-    from_knows: 'Youngest. 3 years old. Most demanding of her presence.',
-    to_knows: 'His mom.',
-    from_feels: 'Love and constraint — the youngest creates the most immediate pull.',
-    to_feels: 'She is mom.',
-    strength: 3,
-    note: null,
-  },
-  {
-    from: 'justawoman',
-    to: 'dana',
-    direction: 'two_way',
-    type: 'support',
-    from_knows: 'Her friend. Has her own social media journey — up and down. Someone JustAWoman can process out loud with. Peer, not mentor.',
-    to_knows: 'JustAWoman is building something. Watches the journey. Has her own version of the same struggle.',
-    from_feels: 'Trust. Comfort. The relief of someone who gets it without explanation.',
-    to_feels: 'Supportive. Invested in JustAWoman\'s success. Also navigating her own.',
+    type: 'transactional',
+    from_knows: 'He pays for access. She knows exactly what this is.',
+    to_knows: 'A body he pays for. Nothing more, by design.',
+    from_feels: 'Reduction as a specific kind of freedom. She chooses it.',
+    to_feels: 'Desire, stripped of context.',
     strength: 4,
-    note: 'The Witness. Peers on the same journey — that\'s what makes Dana valuable and limited at the same time.',
-  },
-  {
-    from: 'justawoman',
-    to: 'chloe',
-    direction: 'one_way',
-    type: 'mirror',
-    from_knows: 'Follows her online. Loves her content. Perceives her as a makeup creator — but Chloe actually does lifestyle content. That misread is the story.',
-    to_knows: null,
-    from_feels: 'Admiration shading into comparison spiral. Measuring herself against a version of Chloe that isn\'t quite real.',
-    to_feels: null,
-    strength: 4,
-    note: 'misread — JustAWoman is comparing herself in the wrong lane. Chloe never asked for the comparison.',
+    note: 'Shadow. Appears by story 15; his pressure builds through the crisis.',
   },
   {
     from: 'justawoman',
@@ -433,44 +422,10 @@ const BOOK1_EDGES = [
     from_feels: 'Creative ownership. Also: Lala is who JustAWoman would be with no constraints — no kids, no husband-approval friction, no "what will people think." Lala is her times ten.',
     to_feels: null,
     strength: 5,
-    note: 'franchise_hinge — this is the most important relationship in the entire franchise. One-way now. The arrow reverses after the consciousness transfer.',
+    note: 'franchise_hinge — this is the most important relationship in the entire franchise. One-way now. JustAWoman pours so much of herself into Lala that her consciousness transfers; Lala still does not know.',
   },
-  {
-    from: 'david',
-    to: 'marcus',
-    direction: 'two_way',
-    type: 'familial',
-    from_knows: 'His oldest son.',
-    to_knows: 'His dad.',
-    from_feels: 'Father. Provider.',
-    to_feels: 'Dad.',
-    strength: 2,
-    note: null,
-  },
-  {
-    from: 'david',
-    to: 'miles',
-    direction: 'two_way',
-    type: 'familial',
-    from_knows: 'His middle son.',
-    to_knows: 'His dad.',
-    from_feels: 'Father.',
-    to_feels: 'Dad.',
-    strength: 2,
-    note: null,
-  },
-  {
-    from: 'david',
-    to: 'noah',
-    direction: 'two_way',
-    type: 'familial',
-    from_knows: 'His youngest.',
-    to_knows: 'His dad.',
-    from_feels: 'Father.',
-    to_feels: 'Dad.',
-    strength: 2,
-    note: null,
-  },
+  familial('david', 'elias', 'His older son.', 'Father. Provider.', 'His dad.', 'Dad.', 2),
+  familial('david', 'zion', 'His younger son.', 'Father.', 'His dad.', 'Dad.', 2),
 ];
 
 // ─── GET /relationship-map — dynamically built from registry_characters ──────
@@ -714,7 +669,7 @@ router.post('/generate-relationship-web', requireAuth, aiRateLimiter, async (req
       system: `You are analyzing a manuscript to identify how character relationships are expressed in the actual text.
 You have a baseline relationship graph. Your job is to identify any edges where the manuscript reveals something specific about the relationship that should update from_knows, to_knows, from_feels, or to_feels.
 
-Characters: JustAWoman, David, Marcus, Miles, Noah, Dana, Chloe, Jade, Lala.
+Characters (use these ids for from/to): justawoman, david, elias (son, 9), zion (son, 5), the-witness, nia-vale (the Comparison Creator), marcus (the paying man, never a son), jade, lala.
 
 Return ONLY a JSON array of edge updates. Each update: { from, to, from_knows_update, from_feels_update }
 Only include edges where the manuscript reveals something specific. Omit edges with no new information.
@@ -1238,8 +1193,8 @@ Stakes escalate naturally: approximately 1 level per 5 stories.
 - 9: Lala. The container she built for her confidence. If it breaks before she understands what it was, she loses both.
 - 10: Everything she has been. The woman at the dinner table and the woman men open their wallets for are the same woman. They are about to find out if that is survivable.
 
-BLEED — STORY 47:
-At story 47, Lala's register bleeds through JustAWoman's voice. This is NOT Lala speaking. It is Lala's frequency appearing in JustAWoman's narration — styled, confident, unbothered, slightly uncanny. Like a door left open. The story brief for story 47 MUST flag: "bleed_active: true".
+BLEED — AFTER THE TRANSFER:
+The bleed follows the consciousness transfer: it comes in the first story after the transfer, and the transfer is not placed yet. So set "bleed_active": false on every story unless the brief says the transfer has happened; then only the first story after it gets "bleed_active": true. In that story Lala's register bleeds through JustAWoman's voice as ONE intrusive thought, once. This is NOT Lala speaking. It is Lala's frequency appearing in JustAWoman's narration — styled, confident, unbothered, slightly uncanny. Like a door left open.
 
 NARRATIVE SPINE (design this FIRST, then build all 50 stories around it):
 Before generating individual story briefs, you MUST design a narrative spine — the throughline that makes 50 stories feel like ONE story.
@@ -1261,7 +1216,7 @@ ARC PHASES:
 - Stories 1-10: ESTABLISHMENT — who she is, her rhythms, her world. Introduce the ecosystem. The Algorithm begins shaping her feed quietly.
 - Stories 11-25: PRESSURE — obstacles hit harder, strengths used against her. The Algorithm's loop tightens. Marcus enters. Nia appears in her feed. The escalation loop begins forming.
 - Stories 26-40: CRISIS — something load-bearing breaks. The escalation loop is fully operational. Nia's live happens. David's silence has weight. The gap between domestic and digital becomes structural.
-- Stories 41-50: INTEGRATION — she comes out different. The loop breaks or she breaks. Lala emerges (story 47 bleed). The rearrangement.
+- Stories 41-50: INTEGRATION — she comes out different. The loop breaks or she breaks. The rearrangement. (The Lala bleed follows the transfer, not a story number.)
 
 STORY TYPES (rotate: internal, collision, wrong_win):
 - internal: single character facing obstacle alone, psychological
@@ -1271,7 +1226,7 @@ STORY TYPES (rotate: internal, collision, wrong_win):
 RULES:
 - Every story must include all four domains: career, romantic, family, friends
 - Every story has a concrete TASK the character is trying to complete (creates the clock)
-- The task must be specific and real — not "work on content" but "film a 90-second reel before Noah wakes up"
+- The task must be specific and real — not "work on content" but "film a 90-second reel before Zion wakes up"
 - Obstacles come from character DNA — specifically from strengths being used against her
 - Stories 1-50 feel like a journey: story 1 and story 50 are recognizably the same person but shifted
 - Adult themes: real marriage tension, financial stress, sexuality, exhaustion, ambition, loneliness
@@ -2723,7 +2678,7 @@ Every situation must have exactly one tone assigned.
 7. LALA — cooler. More precise. Slightly uncanny.
    Lala's register bleeding through JustAWoman's narrative.
    The reader notices before she does.
-   ONLY USE IN CHAPTERS 41-50.
+   ONLY AS ONE INTRUSIVE THOUGHT, IN THE FIRST CHAPTER AFTER THE CONSCIOUSNESS TRANSFER (EVONI, 2026-10-15; THE TRANSFER IS NOT PLACED YET, SO NO CHAPTER IS THE BLEED CHAPTER UNLESS THE BRIEF SAYS THE TRANSFER HAS HAPPENED).
 
 8. MOM — tender, sometimes exhausted, specific.
    Her child says something that stops her.
@@ -2879,7 +2834,7 @@ Marcus: Present but she is changing the terms.
 David: Something is different. He doesn't know what yet.
 The Algorithm: Still present but she is no longer responding to it the same way. The loop is loosening.
 Nia Vale: Aftermath. JustAWoman has adjusted. The mirror still exists but she has moved past it.
-Lala tone: Begins bleeding through in Chapter 47.
+Lala tone: One intrusive thought, in the first chapter after the consciousness transfer (Evoni, 2026-10-15; the transfer is not placed yet, so no chapter is the bleed chapter unless the brief says the transfer has happened); nowhere else.
 What integrates: the dinner table version and the screen version are the same woman.
 She is finding out if that is survivable.
 
@@ -3002,7 +2957,7 @@ REQUIREMENTS:
 - Nia Vale first appears in feed between Chapters 15-20, key live scene lands between Chapters 28-35
 - The escalation loop (Algorithm → Nia → Marcus) should be fully active by Chapter 28
 - Crisis chapters (26-40) should never be loud — controlled tension only
-- Chapter 47 must include the Lala bleed
+- No chapter carries the Lala bleed unless the brief says the consciousness transfer has happened; then only the first chapter after it
 - Integration chapters should feel earned, not resolved
 
 Return JSON array only. 50 briefs. No preamble.`;
@@ -3630,7 +3585,7 @@ PHASE REQUIREMENTS FOR ${phase.toUpperCase()}:
 ${phase === 'establishment' ? '- Heavy domestic + ambitious tones. Light digital. No reckoning yet.\n- Marcus does not appear until Chapter 3 minimum (Phase 1 only).\n- Establish her routine, world, wound, wanting.' :
   phase === 'pressure' ? '- More digital + friction. Watching intensifies.\n- Marcus transitions from Phase 1 to Phase 2 around Chapters 14-16.\n- David\'s emotional labor becomes subtly visible.\n- The gap between real and online life has edges now.' :
   phase === 'crisis' ? '- Heavy friction + reckoning. Digital feels uncanny.\n- Marcus fully Phase 3 — constant, repetitive, body-focused.\n- Nothing breaks dramatically. Everything shifts permanently.\n- Controlled tension only — never loud.' :
-  '- She is living as the uncontained version.\n- Marcus present but she is changing the terms.\n- Lala tone bleeds through starting Chapter 47.\n- Integration feels earned, not resolved.'}
+  '- She is living as the uncontained version.\n- Marcus present but she is changing the terms.\n- One intrusive Lala thought, only in the first chapter after the consciousness transfer (not placed yet).\n- Integration feels earned, not resolved.'}
 
 Return a single JSON object (NOT an array). No preamble. No markdown fences. No trailing text.
 

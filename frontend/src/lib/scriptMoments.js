@@ -12,7 +12,7 @@
  * /episodes/:id/overlays), so the line shows that screen's picture.
  */
 
-import { beatNumberForLabel, BEAT_SPLIT, HAS_BEAT_HEADER } from './beatLabelNumber';
+import { headerNumber, BEAT_SPLIT, HAS_BEAT_HEADER, normalizeBeatHeaders } from './beatLabelNumber';
 
 const UI_LINE = /^\s*\[UI:\s*([A-Za-z_]+)\s*(.*?)\s*\]\s*$/;
 
@@ -310,13 +310,13 @@ export const EXPECTED_ON_SCREEN = {
  */
 const CLOSET_CANON = Number(Object.keys(EXPECTED_ON_SCREEN).find((n) => EXPECTED_ON_SCREEN[n].action === 'CLOSET_OPEN'));
 export function closetBeat(scriptText) {
-  const script = String(scriptText || '');
+  const script = normalizeBeatHeaders(scriptText || '');
   if (!HAS_BEAT_HEADER.test(script)) return null;
   const sections = script.split(BEAT_SPLIT).filter((s) => /^\s*##\s*BEAT:/i.test(s));
   const beats = sections.map((section, i) => {
     const [header, ...lines] = section.split('\n');
     const label = (header.match(/##\s*BEAT:\s*(.+)/i)?.[1] || '').trim();
-    return { number: beatNumberForLabel(label) || i + 1, lines };
+    return { number: headerNumber(label) || i + 1, lines };
   });
   const opens = beats.find((b) => b.lines.some((l) => {
     const m = parseMoment(l);

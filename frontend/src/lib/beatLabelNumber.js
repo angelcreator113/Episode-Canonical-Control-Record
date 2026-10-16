@@ -43,6 +43,31 @@ export function beatNumberForLabel(label) {
 }
 
 // A beat header starts its line, as the server reads it
-// (src/utils/scriptBeatLocks.js): "## BEAT:" inside a line is not a header.
-export const BEAT_SPLIT = /(?=^[ \t]*##\s*BEAT:)/im;
-export const HAS_BEAT_HEADER = /^[ \t]*##\s*BEAT:/im;
+// (src/utils/scriptBeatLocks.js): "## BEAT:" inside a line is not a header,
+// and a header is one line.
+export const BEAT_SPLIT = /(?=^[ \t]*##[ \t]*BEAT:)/im;
+export const HAS_BEAT_HEADER = /^[ \t]*##[ \t]*BEAT:/im;
+
+// Script tab re-audit (2026-10-15): a pasted script can have Windows line
+// ends, or headers in Markdown dress (`**## BEAT: 3**`, `### BEAT: 3`). The
+// tab read them one way and the server another (or not at all), so a lock
+// was not kept and the checklist found no beats. Both sides read the script
+// through this first; src/utils/beatLabelNumber.js has the same rule.
+// Re-audit 2 (2026-10-15): a byte-order mark, Unicode line breaks and odd
+// spaces in a header (no-break, tab-like) read one way on each side, so they
+// are written plainly too.
+const HEADER_VARIANT = /^[^\S\n]*(\*\*|__)?[^\S\n]*(#{2,3})[^\S\n]*BEAT[^\S\n]*:[^\S\n]*(.*?)[^\S\n]*(?:\*\*|__)?[^\S\n]*$/gim;
+const ODD_SPACE = /[^\S\n \t]/;
+export function normalizeBeatHeaders(text) {
+  return String(text ?? '').replace(/^\uFEFF/, '').replace(/\r\n?|[\u2028\u2029\u0085]/g, '\n')
+    .replace(HEADER_VARIANT, (line, bold, hashes, label) => (bold || hashes.length === 3 || ODD_SPACE.test(line) ? `## BEAT: ${label}` : line));
+}
+
+// The number a header gives its beat: its own leading number, of any size
+// (`## BEAT: 15 · Extra` is beat 15, so a move can't make it a locked 14),
+// or the canonical beat its name names; null when it names neither, and the
+// beat is numbered by its place (re-audit 2, 2026-10-15).
+export function headerNumber(label) {
+  const n = Number((String(label || '').trim().match(/^(\d{1,3})\b/) || [])[1]);
+  return n >= 1 ? n : beatNumberForLabel(label);
+}

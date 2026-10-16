@@ -170,6 +170,54 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect((await places(s.id)).body.data.characters.find((c) => c.id === marcus).places.map((p) => p.scene_set_id)).toEqual([penthouse]);
   });
 
+  it('the first lead keeps the show\'s home and closet, except where she has her own', async () => {
+    const s = await show();
+    const lala = await s.character('Lala');
+    const loft = await s.set('Loft');
+    const closet = await s.set('Closet');
+    const studio = await s.set('Studio');
+    await run(`UPDATE shows SET metadata = :m WHERE id = :id`,
+      { id: s.id, m: JSON.stringify({ scene_defaults: { home_set_id: loft, closet_set_id: closet } }) });
+    await link(s.id, { character_id: lala, scene_set_id: studio, role: 'home' });
+
+    const res = await auth(request(app).put(`/api/v1/shows/${s.id}/lead-character`)).send({ character_id: lala });
+    expect(res.status).toBe(200);
+    const m = await defaults(s.id);
+    expect(m.lead_character_id).toBe(lala);
+    // Her own home replaces the show's; the show's closet becomes hers.
+    expect(m.scene_defaults).toEqual({ home_set_id: studio, closet_set_id: closet });
+  });
+
+  it('an old lead whose home is also her closet keeps it as her home', async () => {
+    const s = await show();
+    const lala = await s.character('Lala');
+    const marcus = await s.character('Marcus');
+    const loft = await s.set('Loft');
+    await auth(request(app).put(`/api/v1/shows/${s.id}/lead-character`)).send({ character_id: lala });
+    await link(s.id, { character_id: lala, scene_set_id: loft, role: 'home' });
+    await link(s.id, { character_id: lala, scene_set_id: loft, role: 'closet' });
+    expect((await defaults(s.id)).scene_defaults).toEqual({ home_set_id: loft, closet_set_id: loft });
+    await auth(request(app).put(`/api/v1/shows/${s.id}/lead-character`)).send({ character_id: marcus });
+    expect(await rows('SELECT role FROM character_places WHERE registry_character_id = :lala AND deleted_at IS NULL', { lala })).toEqual([{ role: 'home' }]);
+  });
+
+  it('saving the lead\'s home merges into the show\'s metadata and is refused when the lead changed meanwhile', async () => {
+    const { saveSceneDefaults } = require('../../src/services/episodeLocationsService');
+    const s = await show();
+    const lala = await s.character('Lala');
+    const marcus = await s.character('Marcus');
+    const loft = await s.set('Loft');
+    await auth(request(app).put(`/api/v1/shows/${s.id}/lead-character`)).send({ character_id: lala });
+    await run(`UPDATE shows SET metadata = (metadata::jsonb || '{"other_key": 1}'::jsonb)::json WHERE id = :id`, { id: s.id });
+    await saveSceneDefaults(sequelize, { showId: s.id, body: { home_set_id: loft }, leadCharacterId: lala });
+    expect(await defaults(s.id)).toMatchObject({ lead_character_id: lala, other_key: 1, scene_defaults: { home_set_id: loft } });
+    // A save made for a lead who is no longer the lead (here Marcus, read
+    // before the lead changed) is refused, not written over the new lead.
+    await expect(saveSceneDefaults(sequelize, { showId: s.id, body: { home_set_id: null }, leadCharacterId: marcus }))
+      .rejects.toMatchObject({ status: 409, code: 'LEAD_CHANGED' });
+    expect((await defaults(s.id)).scene_defaults.home_set_id).toBe(loft);
+  });
+
   it('a malformed id is a 400, not a server error', async () => {
     const s = await show();
     const jade = await s.character('Jade');
