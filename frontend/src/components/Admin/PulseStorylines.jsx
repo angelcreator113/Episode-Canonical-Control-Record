@@ -17,6 +17,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import api from '../../services/api';
 import { useReveals } from './PulseRevealContext';
 import { storyMoments, storyLabel } from '../../lib/storyClock';
+import { atHandle } from '../../pages/feed/feedConstants';
 
 const KIND_WORDS = { plant: 'Plant', build: 'Build', payoff: 'Payoff' };
 const STATUS_WORDS = { planned: 'Planned', running: 'Running', paid_off: 'Paid off', dropped: 'Dropped' };
@@ -59,7 +60,7 @@ function BeatForm({ initial = null, moments, people, busy, onSubmit, onCancel, s
       <label>Who posts
         <select value={form.poster_profile_id} onChange={set('poster_profile_id')}>
           <option value="">Choose a character</option>
-          {people.map((c) => <option key={c.registry_character_id} value={c.social_profile_id}>{c.display_name} (@{c.handle})</option>)}
+          {people.map((c) => <option key={c.registry_character_id} value={c.social_profile_id}>{c.display_name} ({atHandle(c.handle)})</option>)}
         </select>
       </label>
       <label className="pulse-story-wide">What the post does
@@ -126,7 +127,7 @@ export function StorylineCard({ line, threads, moments, people, onChange }) {
             <li key={b.id} className="pulse-story-beat" data-testid="pulse-story-beat">
               <span className="pulse-story-when">{b.label || storyLabel(b.story_order)}</span>
               <span className={`pulse-story-kind pulse-story-kind-${b.kind}`}>{KIND_WORDS[b.kind] || b.kind}</span>
-              <span className="pulse-story-what">@{b.handle}: {b.brief}</span>
+              <span className="pulse-story-what">{atHandle(b.handle)}: {b.brief}</span>
               <span className="pulse-story-state">{beatState(b)}</span>
               {b.status === 'planned' && open && (
                 <button type="button" className="pulse-link-btn" disabled={busy}
@@ -152,7 +153,7 @@ export function StorylineCard({ line, threads, moments, people, onChange }) {
             <ol>
               {suggestions.map((s, i) => (
                 <li key={`${s.kind}-${s.story_order}-${i}`} data-testid="pulse-story-suggestion">
-                  <span>{storyLabel(s.story_order)} · {KIND_WORDS[s.kind]} · @{s.handle}: {s.brief}</span>
+                  <span>{storyLabel(s.story_order)} · {KIND_WORDS[s.kind]} · {atHandle(s.handle)}: {s.brief}</span>
                   <span className="pulse-story-actions">
                     <button type="button" className="pulse-btn" disabled={busy} onClick={() => keep(s, i)}>Keep</button>
                     <button type="button" className="pulse-link-btn" disabled={busy} onClick={() => setSuggestions((list) => list.filter((_, j) => j !== i))}>Bin</button>

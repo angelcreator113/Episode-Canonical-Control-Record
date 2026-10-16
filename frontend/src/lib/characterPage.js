@@ -54,6 +54,20 @@ const CITY_LABELS = {
 };
 export const cityLabel = (city) => CITY_LABELS[city] || (city ? String(city).replace(/_/g, ' ') : null);
 
+/**
+ * Their city, one answer (Evoni, 2026-10-16: one meaning per field). The
+ * feed profile's city and the character's current_city are two columns that
+ * are never synced; the page showed only the feed's. Now it shows the feed's
+ * city, else the character's, and `differs` names both when they disagree.
+ * 'outside_lalaverse' (registryDemographics) is not a city.
+ */
+export function cityOf(character, feedProfile) {
+  const feed = cityLabel(feedProfile?.city);
+  const own = character?.current_city && character.current_city !== 'outside_lalaverse' ? cityLabel(character.current_city) : null;
+  const differs = feed && own && feed.toLowerCase() !== own.toLowerCase() ? { feed, own } : null;
+  return { label: feed || own || null, differs };
+}
+
 const words = (s) => {
   const t = String(s || '').replace(/_/g, ' ').trim();
   return t ? t.charAt(0).toUpperCase() + t.slice(1) : null;
@@ -182,7 +196,9 @@ export function voiceOf(character, feedProfile) {
     habit: feedProfile?.posting_voice || vs.speech_pattern || null,
     phrase: text(vs.catchphrases) || vs.vocabulary_tone || null,
     innerVoice: vs.internal_monologue_style || null,
-    neverSays: (speech && typeof speech === 'object' ? speech.what_they_never_say_directly : null) || null,
+    // The older deep profile has a "never say directly" note; the v2 one
+    // (inner-life generation) is one text for the whole speech dimension.
+    neverSays: (speech && typeof speech === 'object' ? speech.what_they_never_say_directly : text(speech)) || null,
   };
   return Object.values(voice).some(Boolean) ? voice : null;
 }

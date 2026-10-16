@@ -1,5 +1,5 @@
 import React from 'react';
-import { C, ARCHETYPE_LABELS, STATUS_LABELS, STATUS_COLORS, FEED_STATE_CONFIG, fp, lalaClass, profileName, atHandle, platformLabel } from './feedConstants';
+import { C, ARCHETYPE_LABELS, STATUS_LABELS, STATUS_COLORS, FEED_STATE_CONFIG, fp, lalaClass, profileName, atHandle, platformLabel, followersOf } from './feedConstants';
 
 export default function ProfileCard({ profile: p, selected, feedLayer, bulkMode, isChecked, onSelect, onToggle, chooseHost, onHostEvent, hosting }) {
   const d = fp(p);
@@ -62,7 +62,7 @@ export default function ProfileCard({ profile: p, selected, feedLayer, bulkMode,
           </div>
         )}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 11, color: C.inkLight }}>{p.follower_count_approx || d.follower_count_approx || '—'}</span>
+          <span style={{ fontSize: 11, color: C.inkLight }}>{followersOf(p) || '—'}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {p.followers?.length > 0 && (
               <div style={{ display: 'flex', gap: 3 }}>

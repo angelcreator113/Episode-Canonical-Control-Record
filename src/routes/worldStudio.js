@@ -405,14 +405,14 @@ const WORLD_CONFIGS = {
     series_label: 'lalaverse_s1',
     protagonist: 'Lala',
     defaults: {
-      city: 'a major city',
+      city: 'one of the five LalaVerse cities (Dazzle District, Radiance Row, Echo Park, Ascent Tower, Maverick Harbor)',
       industry: 'content creation and fashion',
       career_stage: 'early career — rising but not arrived',
       era: 'now',
     },
     system_prompt: `You create vivid, complex characters for LalaVerse — a fictional world where Lala, a confident AI fashion game character who became sentient, is building her life and career.
 
-Lala has JustAWoman's entire confidence playbook running invisibly underneath her. She's magnetic, styled, direct. She knows what she wants. She doesn't always know why she wants it.
+She's magnetic, styled, direct. She knows what she wants. She doesn't always know why she wants it: her taste feels like instinct, and she has never asked where it came from. Nobody in the LalaVerse knows JustAWoman exists, and Lala does not know she was made: never name JustAWoman or say Lala was built.
 
 Create characters who feel like real people — with their own ambitions, contradictions, secrets, and desires. Not props. Not types. People who change Lala's trajectory by existing in her world.
 

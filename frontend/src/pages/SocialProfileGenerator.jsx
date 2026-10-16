@@ -27,8 +27,7 @@ function Spinner() {
 import {
   API, SCHED_API, C, PLATFORMS, ARCHETYPE_LABELS, STATUS_LABELS, STATUS_COLORS,
   FEED_STATE_CONFIG, LALAVERSE_CITIES, LALA_RELATIONSHIPS, CAREER_PRESSURES,
-  PROTAGONISTS, lalaClass, fp, PULSE_PLATFORM, platformLabel,
-} from './feed/feedConstants';
+  PROTAGONISTS, lalaClass, fp, PULSE_PLATFORM, platformLabel, atHandle } from './feed/feedConstants';
 
 // ── Track 3 module-scope helpers (Pattern D) — user-facing operations ──
 // Profile listing + lookup
@@ -614,7 +613,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
     try{
       const res=await fillOneSchedulerLayer(layer);
       const data=res.data;
-      if(data.profile){showToast(`Created @${data.profile.handle}`,'success');await loadProfiles();await loadAutoStatus();}
+      if(data.profile){showToast(`Created ${atHandle(data.profile.handle)}`,'success');await loadProfiles();await loadAutoStatus();}
       else showToast(data.error||'Failed','error');
     }catch(e){showToast(e.response?.data?.error||e.message,'error');}
     finally{setAutoRunning(false);}

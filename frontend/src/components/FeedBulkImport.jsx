@@ -5,6 +5,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import apiClient from '../services/api';
+import { atHandle } from '../pages/feed/feedConstants';
 
 const API = '/api/v1/social-profiles';
 
@@ -526,7 +527,7 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
                 <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '200px', overflowY: 'auto' }}>
                   {progress.results.map((r, i) => (
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: C.bg, border: `1px solid ${r.status === 'success' ? C.green + '33' : C.red + '33'}`, borderRadius: '6px', animation: 'fadeSlideIn 0.3s ease' }}>
-                      <span style={{ fontFamily: 'monospace', fontSize: '11px', color: r.status === 'success' ? C.green : C.red }}>@{r.handle}</span>
+                      <span style={{ fontFamily: 'monospace', fontSize: '11px', color: r.status === 'success' ? C.green : C.red }}>{atHandle(r.handle)}</span>
                       <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                         <ErrorBadge result={r} />
                         <span style={{ fontSize: '10px', color: r.status === 'success' ? C.green : C.red }}>
