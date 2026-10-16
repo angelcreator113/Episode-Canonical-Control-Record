@@ -153,16 +153,34 @@ const keyOf = (type, id, kind) => `${type}:${kind || ''}:${id}`;
  * kind) gives 'revealed' | 'teaser' | 'hidden'; teaserOf(type, id, kind) a
  * teaser's { style, url } (its image cut from the full one, Task #3034; url
  * null when there is none, and then no image is shown); hiddenIds(type, kind) the ids
- * hidden then, teaserIds(type, kind) those in teaser; hiddenProfiles the Feed profiles Lala has not met by then (a
- * set character reveal, else the derived episode, met during it), never
- * Lala herself. With no moment (Director view) everything is revealed.
+ * hidden then, teaserIds(type, kind) those in teaser.
+ *
+ * unmetProfiles: the Feed profiles Lala has not met by then (a set character
+ * reveal, else the derived episode, met during it), never Lala herself. DMs
+ * with Lala, reactions to her posts and storylines wait for the meeting.
+ * hiddenProfiles: the unmet ones whose posts Lala cannot see yet: all of
+ * them but the public figures she knows of (social_profiles.lala_knows_of;
+ * Evoni, 2026-10-16: "Maren's a public figure with 2M followers. Lala should
+ * be able to see her public posts before they meet"), who post in public
+ * before the meeting. With no moment (Director view) everything is revealed.
  */
+/** Which of these Feed profiles are public figures Lala knows of, as a Set of numbers. */
+async function knownOf(db, profileIds) {
+  if (!profileIds.length) return new Set();
+  const [rows] = await db.sequelize.query(
+    'SELECT id FROM social_profiles WHERE id IN (:ids) AND lala_knows_of = true',
+    { replacements: { ids: profileIds } });
+  return new Set(rows.map((r) => Number(r.id)));
+}
+
 async function revealsAt(db, showId, at, { lalaProfileId = null } = {}) {
   const view = {
     at,
     states: new Map(),
     teasers: new Map(),
+    unmetProfiles: new Set(),
     hiddenProfiles: new Set(),
+    knownOfProfiles: new Set(),
     stateOf(type, id, kind) { return this.states.get(keyOf(type, id, kind)) || 'revealed'; },
     teaserOf(type, id, kind) { return this.teasers.get(keyOf(type, id, kind)) || null; },
     hiddenIds(type, kind) { return this.idsIn(type, kind, 'hidden'); },
@@ -188,14 +206,29 @@ async function revealsAt(db, showId, at, { lalaProfileId = null } = {}) {
   for (const [profileId, met] of derived) {
     if (setCharacters.has(profileId)) continue;
     const order = orderOf(met.episode_number, 'during_episode');
-    if (!(Number.isInteger(order) && order <= at)) view.hiddenProfiles.add(profileId);
+    if (!(Number.isInteger(order) && order <= at)) view.unmetProfiles.add(profileId);
   }
-  for (const [profileId, state] of setCharacters) if (state !== 'revealed') view.hiddenProfiles.add(profileId);
-  if (lalaProfileId) view.hiddenProfiles.delete(Number(lalaProfileId));
+  for (const [profileId, state] of setCharacters) if (state !== 'revealed') view.unmetProfiles.add(profileId);
+  if (lalaProfileId) view.unmetProfiles.delete(Number(lalaProfileId));
+  view.knownOfProfiles = await knownOf(db, [...view.unmetProfiles]);
+  for (const id of view.unmetProfiles) if (!view.knownOfProfiles.has(id)) view.hiddenProfiles.add(id);
   return view;
+}
+
+/**
+ * Whether Lala has met this Feed profile by the story moment `at` (the
+ * present when not an integer): DMs with Lala, replies to her posts and
+ * relationship moves with her wait for it. Lala has always met herself.
+ */
+async function hasMetLala(db, showId, profileId, at = null) {
+  const lalaId = await require('./lalaFeedProfile').lalaProfileId(db.sequelize);
+  if (lalaId != null && Number(profileId) === Number(lalaId)) return true;
+  const moment = Number.isInteger(at) ? at : await require('./storyClock').presentOrder(db, showId);
+  const view = await revealsAt(db, showId, moment, { lalaProfileId: lalaId });
+  return !view.unmetProfiles.has(Number(profileId));
 }
 
 module.exports = {
   ITEM_TYPES, IMAGE_KINDS, MODES, MOMENTS, MOMENT_PHASES,
-  episodeNumberOf, resolveOrder, resolveOrders, stateAt, metLala, revealsAt,
+  episodeNumberOf, resolveOrder, resolveOrders, stateAt, metLala, revealsAt, knownOf, hasMetLala,
 };

@@ -43,7 +43,7 @@ const REQUIRE_AUTH_COUNTS = {
   'sceneTemplates.js': 6,      // 1 import + 5 handlers
   'sceneLibrary.js': 6,        // 1 import + 5 handlers (3 ex-authenticateToken + 2 ex-bare)
   'sceneProposeRoute.js': 7,   // 1 import + 6 handlers (1 with aiRateLimiter)
-  'sceneSetRoutes.js': 85,     // 1 import + 77 handlers (13 with aiRateLimiter); +4 Task #2396 (base-models, model-comparison x3); +1 S2 POST /:id/brief; +2 S6 POST/DELETE /:id/approve-base; +1 D1 GET /:id/uses; +1 POST /:id/description-review; +5 look variants (GET, estimate, generate, upload, DELETE; 2026-10-15)
+  'sceneSetRoutes.js': 87,     // 1 import + 77 handlers (13 with aiRateLimiter); +4 Task #2396 (base-models, model-comparison x3); +1 S2 POST /:id/brief; +2 S6 POST/DELETE /:id/approve-base; +1 D1 GET /:id/uses; +1 POST /:id/description-review; +5 look variants (GET, estimate, generate, upload, DELETE; 2026-10-15); +2 GET /:id/version-options and PUT /:id/version (everyday sets and event versions, 2026-10-16)
   'sceneLinks.js': 5,          // 1 import + 4 handlers
 };
 
@@ -202,13 +202,13 @@ describe('Step 3 CP4 — Scene cluster pure Tier 1 sweep + AI POST reference mod
   });
 
   describe('CP4 zone aggregate consumer counts', () => {
-    test('CP4 zone contains 146 total requireAuth references across 6 files (6 imports + 133 handlers; +4 Task #2396; +1 S2 POST /:id/brief; +2 S6 approve-base; +1 D1 GET /:id/uses; +1 POST /:id/description-review; +5 look variants)', () => {
+    test('CP4 zone contains 148 total requireAuth references across 6 files (6 imports + 133 handlers; +4 Task #2396; +1 S2 POST /:id/brief; +2 S6 approve-base; +1 D1 GET /:id/uses; +1 POST /:id/description-review; +5 look variants; +2 event versions)', () => {
       const total = CP4_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(146);
+      expect(total).toBe(148);
     });
 
     test('CP4 zone contains 29 total aiRateLimiter references (4 import-line matches + 25 handler invocations; +7 re-audit 2026-10-15; +1 upload-base, third audit; +2 post-process and validate-angle, fourth audit)', () => {

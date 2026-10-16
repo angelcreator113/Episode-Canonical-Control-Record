@@ -11,7 +11,9 @@
  *   enqueueMessage(db, { threadId, senderProfileId?, at? })
  *     queues a `dm` job (pulseQueue, under the daily draft cap); the sender
  *     defaults to whoever did not write the last message. Never calls AI.
- *     The sender must be Alive, or Lala (Task #3030); else a 409.
+ *     The sender must be Alive, or Lala (Task #3030); else a 409. A
+ *     conversation with Lala waits until she has met the other one, even a
+ *     public figure she knows of (Evoni, 2026-10-16); else a 409.
  *   draftMessage(db, { threadId, senderProfileId, at })
  *     one Sonnet call in the sender's Voice Profile: the conversation so far,
  *     the topic, the story moment, the events the sender knows by then
@@ -81,6 +83,22 @@ async function assertMaySend(db, profileId) {
   }
 }
 
+/**
+ * A conversation with Lala waits until she has met the other one (Evoni,
+ * 2026-10-16), even a public figure she knows of; a DmError when not yet.
+ * Conversations between two other characters are not held back.
+ */
+async function assertMetLala(db, showId, a, b, at = null) {
+  const lalaId = await require('./lalaFeedProfile').lalaProfileId(db.sequelize);
+  if (lalaId == null) return;
+  const pair = [Number(a), Number(b)];
+  if (!pair.includes(Number(lalaId))) return;
+  const other = pair.find((id) => id !== Number(lalaId));
+  if (await require('./pulseReveals').hasMetLala(db, showId, other, at)) return;
+  const [[profile]] = await db.sequelize.query('SELECT handle FROM social_profiles WHERE id = :id', { replacements: { id: other } });
+  throw new DmError(409, `Lala has not met @${String(profile?.handle || other).replace(/^@+/, '')} yet: their conversation waits until they meet.`);
+}
+
 /** Queues the next message of a thread. Returns the job. */
 async function enqueueMessage(db, { threadId, senderProfileId = null, at = null }) {
   const thread = await db.PulseDmThread.findByPk(threadId);
@@ -94,6 +112,7 @@ async function enqueueMessage(db, { threadId, senderProfileId = null, at = null 
     sender = pair.find((id) => id !== Number(last.sender_profile_id));
   }
   await assertMaySend(db, sender);
+  await assertMetLala(db, thread.show_id, pair[0], pair[1], at);
   // Refuse now rather than queue a message today's manual requests cannot draft (Task #3031).
   await require('./pulseRequests').assertRoom(db, thread.show_id, 'manual');
   return require('./pulseQueue').enqueue(db, {
@@ -113,6 +132,7 @@ async function enqueueMessage(db, { threadId, senderProfileId = null, at = null 
 async function startConversation(db, { showId, a, b, at = 0, topic = null, senderProfileId, messageAt = null }) {
   if (![Number(a), Number(b)].includes(Number(senderProfileId))) throw new DmError(400, 'The sender must be one of the two in the conversation.');
   await assertMaySend(db, senderProfileId);
+  await assertMetLala(db, showId, a, b, Number.isInteger(messageAt) ? messageAt : at);
   await require('./pulseRequests').assertRoom(db, showId, 'manual');
   const [x, y] = pairOf(a, b);
   const existed = await db.PulseDmThread.findOne({ where: { show_id: showId, profile_a_id: x, profile_b_id: y } });

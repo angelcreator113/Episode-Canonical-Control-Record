@@ -66,6 +66,8 @@ module.exports = (sequelize, DataTypes) => {
     // The six count tiers (utils/followerTiers, services/pulseAudience; Evoni, 2026-10-13, Task #3106: generation and scoring use them; migration 20261013110000 set each from its count).
     follower_tier:         { type: DataTypes.ENUM('emerging','nano','micro','mid','macro','mega'), allowNull: true },
     follower_count_approx: { type: DataTypes.STRING(50), allowNull: true },
+    // A public figure Lala knows of before they meet: their public posts show (migration 20261016160000, services/pulseReveals).
+    lala_knows_of: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     content_category:      { type: DataTypes.STRING(100), allowNull: true },
     archetype:             { type: DataTypes.ENUM('polished_curator','messy_transparent','soft_life','explicitly_paid','overnight_rise','cautionary','the_peer','the_watcher','chaos_creator','community_builder'), allowNull: true },
     // The Society tab's archetype, by name (services/societyArchetypes; fix-list item 26): a new LalaVerse profile's; NULL for real-world profiles and older ones.

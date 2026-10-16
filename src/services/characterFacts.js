@@ -193,5 +193,5 @@ async function setFacts(db, { character, feedProfile = null, showId = null, body
 
 module.exports = {
   FACT_KEYS, ACCOUNT_STATUSES, INCOME_CADENCES, AFFORDABILITY, FactsError,
-  formatCount, affordabilityOf, yearlyIncome, factsOf, setFacts, nextCanonFacts,
+  formatCount, affordabilityOf, yearlyIncome, factsOf, setFacts, nextCanonFacts, showIdFor,
 };

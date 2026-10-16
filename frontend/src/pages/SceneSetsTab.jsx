@@ -7,6 +7,7 @@ import { fetchAllPages } from '../lib/fetchAllPages';
 import { isAppPath } from '../utils/sceneSets';
 import EventLookImage from '../components/EventPackage/EventLookImage';
 import DressedAngles from '../components/SceneSets/DressedAngles';
+import SetVersionChooser from '../components/SceneSets/SetVersionChooser';
 import CharacterHomes, { notifyCharacterPlacesChanged, useLalaHomeFill } from '../components/SceneSets/CharacterHomes';
 import LookVariants from '../components/SceneSets/LookVariants';
 import './SceneSetsTab.css';
@@ -1497,6 +1498,17 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
           </div>
           <div className="scene-sets-card-meta-line">
             {eventLookCount > 0 && <span className="scene-sets-meta-chip" data-testid={`scene-set-event-looks-count-${set.id}`}><Sparkles size={9} /> {eventLookCount} event look{eventLookCount !== 1 ? 's' : ''}</span>}
+            {/* Everyday set or event version (2026-10-16). */}
+            {set.version_of && (
+              <span className="scene-sets-meta-chip is-version" title={`Event version of ${set.version_of.name}`} data-testid={`scene-set-version-chip-${set.id}`}>
+                Event{set.version_event ? `: ${set.version_event.name}` : ' version'} · of {set.version_of.name}
+              </span>
+            )}
+            {!set.version_of && (set.event_versions || []).length > 0 && (
+              <span className="scene-sets-meta-chip is-version" data-testid={`scene-set-version-chip-${set.id}`}>
+                Everyday · {set.event_versions.length} event version{set.event_versions.length !== 1 ? 's' : ''}
+              </span>
+            )}
           </div>
           {cardStatus && (
             <div className={`scene-sets-card-status is-${cardStatus.tone}`} data-testid={`scene-set-status-${set.id}`}>
@@ -1639,6 +1651,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                 {/* ═══ OVERVIEW TAB ═══ */}
                 {activeModalTab === 'details' && !showAddAngle && (
                   <div className="scene-sets-modal-section">
+                    {/* 2026-10-16: the everyday set, or an event version of one. */}
+                    <SetVersionChooser set={set} onToast={showToast} onSaved={() => onRefresh?.()} />
                     <BaseModelSelect
                       set={set}
                       onSaved={() => { showToast('Base model saved'); onRefresh?.(); }}
