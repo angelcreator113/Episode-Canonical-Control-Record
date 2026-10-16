@@ -82,3 +82,30 @@ describe('lines', () => {
     expect(within(beat).getByText('"Hi."')).toBeTruthy();
   });
 });
+
+// Script tab re-audit (2026-10-15).
+describe('pasted and name-only headers', () => {
+  test('Windows line ends and Markdown-dressed headers are beats', () => {
+    const beats = parseScriptIntoBeats('**## BEAT: 1 · Opening Ritual**\r\nLala: "Hi"\r\n\r\n### BEAT: 2 · Login Sequence\r\nLala: "Two"', [2]);
+    expect(beats.map((b) => [b.number, b.lines, b.approved])).toEqual([[1, ['Lala: "Hi"'], false], [2, ['Lala: "Two"'], true]]);
+  });
+
+  test('a header that names no beat gets its number written in, so a move keeps its lock', () => {
+    const script = '## BEAT: 1 · Opening Ritual\nA\n\n## BEAT: Bonus Scene\nBONUS\n\n## BEAT: Extra\nEXTRA';
+    const numbered = withBeatHeaders(script, [2]);
+    expect(numbered).toBe('## BEAT: 1 · Opening Ritual\nA\n\n## BEAT: 2 · Bonus Scene\nBONUS\n\n## BEAT: 3 · Extra\nEXTRA');
+    expect(withBeatHeaders(numbered, [2])).toBe(numbered);
+  });
+
+  test('moving a beat past an approved name-only beat leaves that beat approved', () => {
+    vi.mocked(api.put).mockResolvedValue({ data: { data: {} } });
+    render(
+      <MemoryRouter><EpisodeScriptTab episode={{ id: 'ep-1', show_id: 'show-1', script_content: '## BEAT: 1 · Opening Ritual\nLala: A\n\n## BEAT: Bonus Scene\nLala: BONUS\n\n## BEAT: Extra\nLala: EXTRA', script_locked_beats: [2] }} show={{ id: 'show-1' }} /></MemoryRouter>,
+    );
+    fireEvent.click(screen.getByTestId('script-beat-3').querySelector('.esp-beat-head'));
+    fireEvent.click(screen.getByTestId('script-beat-up-3'));
+    const text = raw();
+    expect(text).toBe('## BEAT: 1 · Opening Ritual\nLala: A\n\n## BEAT: 3 · Extra\nLala: EXTRA\n\n## BEAT: 2 · Bonus Scene\nLala: BONUS');
+    expect(parseScriptIntoBeats(text, [2]).find((b) => b.approved).lines).toEqual(['Lala: BONUS']);
+  });
+});

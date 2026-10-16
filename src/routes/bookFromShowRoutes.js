@@ -20,6 +20,14 @@
  *        nothing is saved
  *   POST /api/v1/book-from-show/chapters/:id/check-against-story
  *        where the chapter's draft contradicts the short story
+ *   GET  /api/v1/book-from-show/shows/:showId/transfer
+ *   PUT  /api/v1/book-from-show/shows/:showId/transfer      { episode_id | null }
+ *        the episode in which JustAWoman's consciousness transfers into Lala
+ *        (shows.metadata.consciousness_transfer; Evoni, 2026-10-15: "not
+ *        decided yet"). The chapter writer places the Lala bleed in the
+ *        first chapter after it, and writes none before it is set.
+ *   GET  /api/v1/book-from-show/episodes/:episodeId/beat11  the episode's beat 11
+ *        piece, for the Scene Planner's beat 11
  *   GET  /api/v1/book-from-show/stories/:storyId/beat11-excerpt
  *   POST /api/v1/book-from-show/stories/:storyId/beat11-excerpt
  *        cuts the short story's beat 11 piece and saves it
@@ -35,6 +43,7 @@ const express = require('express');
 const Anthropic = require('@anthropic-ai/sdk');
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
+const { EPISODE_EVENT_ID_SQL } = require('../utils/episodeEventSql');
 
 const router = express.Router();
 const MODELS = ['claude-sonnet-4-6'];
@@ -49,7 +58,7 @@ const getDb = (req) => req.app.locals.db || require('../models');
 const CANON = `CANON (docs/CANON.md):
 - JustAWoman lives in her world (the real one) and writes Lala's world. She created Lala, a sentient fashion game and AI character. Lala does not know JustAWoman exists.
 - Book 1 cast (JustAWoman's world): her husband David; her sons Elias (9, the quiet witness) and Zion (5, the loud anchor); Marcus, the paying man (never a son); Nia Vale, the Comparison Creator; the Witness, unnamed.
-- The Lala bleed (one intrusive thought) comes only after the consciousness transfer, which has not happened yet. Write no bleed.`;
+- JustAWoman pours so much of herself into Lala that her consciousness transfers into Lala. The Lala bleed (one intrusive thought, once, not Lala speaking) comes in the first chapter after the transfer.`;
 
 /** Asks the first model that answers; returns the text. */
 async function ask({ models = MODELS, system, prompt, maxTokens }) {
@@ -148,7 +157,8 @@ router.get('/books/:bookId/ledger', requireAuth, async (req, res) => {
       beat11: episodes.filter((e) => e.short_story && !e.short_story.has_beat11).length,
       chapters: episodes.filter((e) => !e.chapter || !e.chapter.written).length,
     };
-    return res.json({ success: true, book: { id: book.id, title: book.title }, show_id: showId, episodes, owed });
+    const transfer = await transferOf(sequelize, showId);
+    return res.json({ success: true, book: { id: book.id, title: book.title }, show_id: showId, episodes, owed, transfer });
   } catch (err) {
     console.error('[book-from-show] GET ledger error:', err);
     return res.status(500).json({ success: false, error: err.message });
@@ -209,7 +219,59 @@ router.put('/chapters/:id/episode', requireAuth, async (req, res) => {
 
 // ── Write the chapter from its episode ──────────────────────────────────────
 
-function chapterPrompt({ chapter, episode, story, before }) {
+/** The transfer episode of a show: { episode_id, episode_number, title } or null. */
+async function transferOf(sequelize, showId) {
+  if (!showId) return null;
+  const [[row]] = await sequelize.query(
+    `SELECT e.id AS episode_id, e.episode_number, e.title
+       FROM shows s
+       JOIN episodes e ON e.deleted_at IS NULL
+        AND e.id::text = (s.metadata::jsonb -> 'consciousness_transfer' ->> 'episode_id')
+      WHERE s.id = :showId`, { replacements: { showId } });
+  return row || null;
+}
+
+/**
+ * Where this chapter stands to the transfer:
+ *   'unset'   no transfer episode yet: no bleed
+ *   'before'  its episode is the transfer episode or earlier: no bleed
+ *   'bleed'   the first chapter of this book after the transfer: the bleed
+ *   'after'   a later chapter: the bleed already came
+ */
+async function bleedStateOf(sequelize, { transfer, episode, bookId }) {
+  if (!transfer || transfer.episode_number == null || episode.episode_number == null) return 'unset';
+  if (episode.episode_number <= transfer.episode_number) return 'before';
+  const [[first]] = await sequelize.query(
+    `SELECT MIN(e.episode_number) AS n
+       FROM storyteller_chapters c JOIN episodes e ON e.id = c.episode_id AND e.deleted_at IS NULL
+      WHERE c.book_id = :bookId AND c.deleted_at IS NULL AND e.episode_number > :t`,
+    { replacements: { bookId, t: transfer.episode_number } });
+  return first?.n == null || Number(first.n) >= Number(episode.episode_number) ? 'bleed' : 'after';
+}
+
+const BLEED_LINES = {
+  unset: 'THE LALA BLEED: the consciousness transfer is not placed yet. Write no bleed.',
+  before: 'THE LALA BLEED: the consciousness transfer has not happened yet at this point. Write no bleed.',
+  bleed: 'THE LALA BLEED: this is the first chapter after the consciousness transfer. Include the bleed: ONE intrusive thought, once — Lala\'s register (styled, confident, unbothered, slightly uncanny) surfacing in JustAWoman\'s narration. Not Lala speaking. JustAWoman does not understand it.',
+  after: 'THE LALA BLEED: it already came in an earlier chapter. Write no bleed.',
+};
+
+/**
+ * What the LalaVerse said on The Pulse about the episode and its event (live
+ * posts only). The episode's event is the one rule (utils/episodeEventSql).
+ */
+async function pulseAbout(sequelize, episodeId) {
+  const [rows] = await sequelize.query(
+    `SELECT fp.poster_handle, fp.poster_display_name, fp.content_text
+       FROM feed_posts fp
+      WHERE fp.deleted_at IS NULL AND fp.status = 'live' AND COALESCE(BTRIM(fp.content_text), '') <> ''
+        AND (fp.episode_id = :episodeId OR fp.event_id = ${EPISODE_EVENT_ID_SQL})
+      ORDER BY fp.story_order NULLS LAST, fp.created_at
+      LIMIT 12`, { replacements: { episodeId } });
+  return rows.map((r) => `- @${String(r.poster_handle || '').replace(/^@/, '')}: ${clip(String(r.content_text).replace(/\s+/g, ' '), 280)}`).join('\n');
+}
+
+function chapterPrompt({ chapter, episode, story, before, pulse = '', bleed = 'unset' }) {
   return `${CANON}
 
 You are writing a chapter of JustAWoman's book. The book follows the show, Styling Adventures with Lala:
@@ -223,7 +285,9 @@ THE EPISODE: Episode ${episode.episode_number ?? '?'}: "${episode.title || 'Unti
 
 THE SHORT STORY (what the reader already knows):
 ${story ? clip(story.content, STORY_LIMIT) : '(not written yet: work from the episode alone)'}
-${before ? `\nTHE END OF THE CHAPTER BEFORE (for continuity):\n${before}\n` : ''}
+${pulse ? `\nWHAT THE LALAVERSE SAID ON THE PULSE (JustAWoman sees it; she may react to it):\n${pulse}\n` : ''}${before ? `\nTHE END OF THE CHAPTER BEFORE (for continuity):\n${before}\n` : ''}
+${BLEED_LINES[bleed] || BLEED_LINES.unset}
+
 THIS CHAPTER: "${chapter.title || `Chapter ${chapter.chapter_number || ''}`.trim()}"
 
 Answer with the chapter's prose only: no title, no notes. About 1,800 to 2,500 words.`;
@@ -247,9 +311,13 @@ router.post('/chapters/:id/write-from-episode', requireAuth, aiRateLimiter, asyn
       { replacements: { bookId: chapter.book_id, id: chapter.id, order: chapter.sort_order ?? chapter.chapter_number ?? 0 } });
     const before = prev?.draft_prose ? prev.draft_prose.trim().slice(-1500) : '';
 
-    const prose = await ask({ prompt: chapterPrompt({ chapter, episode, story, before }), maxTokens: 5000 });
+    const pulse = await pulseAbout(sequelize, episode.id);
+    const transfer = await transferOf(sequelize, episode.show_id);
+    const bleed = await bleedStateOf(sequelize, { transfer, episode, bookId: chapter.book_id });
+
+    const prose = await ask({ prompt: chapterPrompt({ chapter, episode, story, before, pulse, bleed }), maxTokens: 5000 });
     if (!prose) return res.status(502).json({ success: false, error: 'The draft came back empty. Try again.' });
-    return res.json({ success: true, prose, used_short_story: Boolean(story), saved: false });
+    return res.json({ success: true, prose, used_short_story: Boolean(story), used_pulse_posts: pulse ? pulse.split('\n').length : 0, bleed, saved: false });
   } catch (err) {
     console.error('[book-from-show] write-from-episode error:', err);
     return res.status(500).json({ success: false, error: err.message });
@@ -302,6 +370,48 @@ An empty list when there are none.`,
   }
 });
 
+// ── The consciousness transfer ──────────────────────────────────────────────
+
+router.get('/shows/:showId/transfer', requireAuth, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.showId)) return res.status(400).json({ success: false, error: 'showId must be a UUID' });
+    const { sequelize } = getDb(req);
+    return res.json({ success: true, transfer: await transferOf(sequelize, req.params.showId) });
+  } catch (err) {
+    console.error('[book-from-show] GET transfer error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.put('/shows/:showId/transfer', requireAuth, async (req, res) => {
+  try {
+    const { showId } = req.params;
+    if (!UUID_RE.test(showId)) return res.status(400).json({ success: false, error: 'showId must be a UUID' });
+    const episodeId = req.body?.episode_id ?? null;
+    if (episodeId !== null && !UUID_RE.test(String(episodeId))) {
+      return res.status(400).json({ success: false, error: 'episode_id must be an episode id or null' });
+    }
+    const { sequelize } = getDb(req);
+    const [[show]] = await sequelize.query('SELECT id FROM shows WHERE id = :showId AND deleted_at IS NULL', { replacements: { showId } });
+    if (!show) return res.status(404).json({ success: false, error: 'Show not found' });
+    if (episodeId) {
+      const episode = await episodeRow(sequelize, episodeId);
+      if (!episode || episode.show_id !== showId) return res.status(404).json({ success: false, error: 'That episode is not in this show.' });
+    }
+    const value = episodeId ? JSON.stringify({ episode_id: episodeId, set_at: new Date().toISOString() }) : null;
+    await sequelize.query(
+      `UPDATE shows SET metadata = (CASE WHEN CAST(:value AS text) IS NULL
+                                         THEN COALESCE(metadata::jsonb, '{}'::jsonb) - 'consciousness_transfer'
+                                         ELSE COALESCE(metadata::jsonb, '{}'::jsonb) || jsonb_build_object('consciousness_transfer', CAST(:value AS jsonb)) END)::json,
+                        updated_at = NOW()
+        WHERE id = :showId`, { replacements: { showId, value } });
+    return res.json({ success: true, transfer: await transferOf(sequelize, showId) });
+  } catch (err) {
+    console.error('[book-from-show] PUT transfer error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── The beat 11 excerpt ─────────────────────────────────────────────────────
 
 async function shortStoryById(sequelize, id) {
@@ -318,6 +428,19 @@ async function saveExcerpt(sequelize, id, excerpt) {
       WHERE id = :id`,
     { replacements: { id, excerpt: JSON.stringify(excerpt) } });
 }
+
+// The episode's beat 11 piece, for the Scene Planner's beat 11 (production).
+router.get('/episodes/:episodeId/beat11', requireAuth, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.episodeId)) return res.status(400).json({ success: false, error: 'episodeId must be a UUID' });
+    const { sequelize } = getDb(req);
+    const story = await shortStoryOf(sequelize, req.params.episodeId);
+    return res.json({ success: true, story_id: story?.id || null, excerpt: story?.metadata?.beat11_excerpt || null });
+  } catch (err) {
+    console.error('[book-from-show] GET episode beat11 error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 router.get('/stories/:storyId/beat11-excerpt', requireAuth, async (req, res) => {
   try {
