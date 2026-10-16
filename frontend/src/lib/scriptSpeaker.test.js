@@ -23,3 +23,8 @@ test('unquote takes off one pair of quotes, and leaves a quote inside', () => {
   expect(unquote('“Curly”')).toBe('Curly');
   expect(unquote('"Hello," she said.')).toBe('"Hello," she said.');
 });
+
+test('a capital in any language starts a name (re-audit 2)', () => {
+  expect(speakerLine('Émile: oui')?.speaker).toBe('Émile');
+});
+

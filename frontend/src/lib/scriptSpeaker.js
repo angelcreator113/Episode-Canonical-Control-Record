@@ -11,7 +11,8 @@ const KNOWN = { me: 'Prime', prime: 'Prime', lala: 'Lala', kelli: 'Kelli', guest
 
 // A name (one or two capitalised words, any letters), an optional note in
 // parentheses, a colon, the words.
-const SPEAKER_LINE = /^(Me|Prime|Lala|Kelli|Guest|[A-Z][\p{L}'’.-]*(?: [A-Z][\p{L}'’.-]*)?)\s*(\([^)]*\))?\s*:\s*(.*)$/u;
+// `\p{Lu}`: a capital in any language (`Émile:`; re-audit 2).
+const SPEAKER_LINE = /^(Me|Prime|Lala|Kelli|Guest|\p{Lu}[\p{L}'’.-]*(?: \p{Lu}[\p{L}'’.-]*)?)\s*(\([^)]*\))?\s*:\s*(.*)$/u;
 
 /**
  * A speaker's line as { speaker, label, note, prefix, words }, or null when

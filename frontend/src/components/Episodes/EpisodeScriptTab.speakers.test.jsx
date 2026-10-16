@@ -33,6 +33,13 @@ describe('rewrittenLine', () => {
     expect(rewrittenLine('Mary Jane: "Hi"', 'Hello')).toBe('Mary Jane: "Hello"');
     expect(rewrittenLine('JustAWoman: "Hi"', 'Hello')).toBe('JustAWoman: "Hello"');
   });
+  test('a direction stays, another lead-in is words, and a bare label gets its space', () => {
+    // Re-audit 2 (2026-10-15).
+    expect(rewrittenLine('Lala: (softly) "I love it."', 'I adore it.')).toBe('Lala: (softly) "I adore it."');
+    expect(rewrittenLine('Lala: "Hi."', "Listen: I'm not going.")).toBe('Lala: "Listen: I\'m not going."');
+    expect(rewrittenLine('Me:', 'Okay then.')).toBe('Me: Okay then.');
+  });
+
   test('a reply that repeats the speaker, or quotes inside, is read for its words', () => {
     expect(rewrittenLine('Lala: "Hi"', 'Lala (whisper): "Hello"')).toBe('Lala: "Hello"');
     expect(rewrittenLine('Lala: Hi', '"Hello," she said.')).toBe('Lala: "Hello," she said.');
@@ -86,3 +93,16 @@ describe('writing waits', () => {
     expect(await screen.findByText('Wait for the new script before adding to it.')).toBeTruthy();
   });
 });
+
+describe('moving a line being edited', () => {
+  test('Move waits for the typed words to be saved', () => {
+    renderTab('## BEAT: 1 · Opening Ritual\nLala: first\nLala: second');
+    fireEvent.click(within(screen.getByTestId('script-beat-1')).getByText('"first"'));
+    const box = screen.getByRole('textbox', { name: 'Edit line' });
+    expect(screen.getByRole('button', { name: 'Move line down' }).disabled).toBe(false);
+    fireEvent.change(box, { target: { value: 'Lala: first, rewritten by hand' } });
+    expect(screen.getByRole('button', { name: 'Move line down' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Move line down' }).title).toBe('Save the line first');
+  });
+});
+

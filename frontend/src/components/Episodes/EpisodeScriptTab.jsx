@@ -197,13 +197,21 @@ function parseLine(line) {
  * kept, the new words inside. Null when nothing came back or nothing changed.
  */
 export function rewrittenLine(original, words) {
-  // The reply may repeat the speaker (`Lala (whisper): "…"`); only its words count.
-  const reply = String(words || '').trim();
-  const text = unquote(speakerLine(reply)?.words ?? reply);
-  if (!text) return null;
   const from = speakerLine(original);
-  const quoted = from ? /^["“]/.test(from.words) : false;
-  const next = from ? `${from.prefix}${quoted ? `"${text}"` : text}` : text;
+  // The reply may repeat the line's own speaker (`Lala (whisper): "…"`); only
+  // its words count. Another lead-in ("Listen: …") is part of the words
+  // (re-audit 2, 2026-10-15).
+  const reply = String(words || '').trim();
+  const again = speakerLine(reply);
+  const text = unquote(again && from && again.speaker === from.speaker ? again.words : reply);
+  if (!text) return null;
+  if (!from) return text === String(original || '').trim() ? null : text;
+  // A direction before the words, `(softly)`, stays with the speaker.
+  const direction = (from.words.match(/^(\([^)]*\))\s*/) || [])[0] || '';
+  const said = from.words.slice(direction.length);
+  const quoted = /^["“]/.test(said);
+  const prefix = /\s$/.test(from.prefix) ? from.prefix : `${from.prefix} `;
+  const next = `${prefix}${direction}${quoted ? `"${text}"` : text}`;
   return next.trim() === String(original || '').trim() ? null : next;
 }
 
@@ -233,8 +241,9 @@ function ScriptLine({ line, beatId, beatNumber = null, lineIndex, onEdit, onDele
         {/* Moving without dragging (touch screens, keyboards). */}
         <span className="esp-move esp-move--end">
           {/* Past the next line shown, not a hidden [STAT:] line (Script tab re-audit, 2026-10-15). */}
-          <button type="button" className="esp-move-btn" aria-label="Move line up" disabled={prevLine === null} onClick={() => { onMoveLine(beatId, lineIndex, prevLine); setEditing(false); }}><ArrowUp size={14} aria-hidden="true" /></button>
-          <button type="button" className="esp-move-btn" aria-label="Move line down" disabled={nextLine === null} onClick={() => { onMoveLine(beatId, lineIndex, nextLine); setEditing(false); }}><ArrowDown size={14} aria-hidden="true" /></button>
+          {/* Typed words go in with Save first (re-audit 2: a move threw them away). */}
+          <button type="button" className="esp-move-btn" aria-label="Move line up" title={editText !== lineStr ? 'Save the line first' : undefined} disabled={prevLine === null || editText !== lineStr} onClick={() => { if (onMoveLine(beatId, lineIndex, prevLine) !== false) setEditing(false); }}><ArrowUp size={14} aria-hidden="true" /></button>
+          <button type="button" className="esp-move-btn" aria-label="Move line down" title={editText !== lineStr ? 'Save the line first' : undefined} disabled={nextLine === null || editText !== lineStr} onClick={() => { if (onMoveLine(beatId, lineIndex, nextLine) !== false) setEditing(false); }}><ArrowDown size={14} aria-hidden="true" /></button>
         </span>
       </div>
     </div>
@@ -1031,7 +1040,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   };
   const handleMoveLine = (beatId, from, to) => {
     const at = beats.findIndex(b => b.id === beatId);
-    if (busy || at < 0 || beats[at].approved) return;
+    if (busy) { flash('Wait for the new script before editing it.', 'error'); return false; }
+    if (at < 0 || beats[at].approved) return false;
     const base = withBeatHeaders(scriptText, lockedBeats);
     const next = moveLine(base, at, from, to);
     if (next !== base) { setScriptText(next); }

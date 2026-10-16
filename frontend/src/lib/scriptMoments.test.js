@@ -208,3 +208,9 @@ describe('phoneCheck carries the screen between beats (Script tab audit, 2026-10
 test('a lowercase ui line is a moment', () => {
   expect(parseMoment('[ui:OPEN closet]')).toEqual({ verb: 'OPEN', target: 'closet' });
 });
+
+// Re-audit 2 (2026-10-15): who speaks, by the tab's own rule.
+test('beatSpeakers reads speakers as the tab does', () => {
+  expect(beatSpeakers(['LALA: hi', 'Note: x', 'Lala (V.O.): y', 'Mary Jane: z', 'Location: the gala', 'Me: go'])).toEqual(['Lala', 'Mary Jane', 'Prime']);
+});
+

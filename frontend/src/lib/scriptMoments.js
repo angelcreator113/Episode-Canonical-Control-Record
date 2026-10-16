@@ -13,6 +13,7 @@
  */
 
 import { beatNumberForLabel, BEAT_SPLIT, HAS_BEAT_HEADER } from './beatLabelNumber';
+import { speakerLine } from './scriptSpeaker';
 
 // `[ui:open closet]` is a moment too (Script tab re-audit, 2026-10-15: it was
 // hidden on the tab, yet counted in the runtime and the export).
@@ -339,14 +340,18 @@ export function hasPhoneMoment(lines = [], on = {}) {
   return beatOnScreen(lines, on).used.some((u) => PHONE_KINDS.has(u.kind));
 }
 
-/** Who speaks in a beat, in the order they first speak ("Me" is Prime). */
+/**
+ * Who speaks in a beat, in the order they first speak ("Me" is Prime,
+ * "LALA" is Lala), by the tab's own speaker rule (lib/scriptSpeaker.js;
+ * re-audit 2, 2026-10-15: `Note:` and `Location:` were people here, and
+ * `Lala (V.O.)` and `Mary Jane` were missed).
+ */
 export function beatSpeakers(lines = []) {
   const seen = [];
   for (const line of lines) {
-    const m = String(line || '').match(/^\s*([A-Z][A-Za-z]+):\s*\S/);
-    if (!m) continue;
-    const who = m[1] === 'Me' ? 'Prime' : m[1];
-    if (!seen.includes(who)) seen.push(who);
+    const sp = speakerLine(line);
+    if (!sp?.words || seen.includes(sp.speaker)) continue;
+    seen.push(sp.speaker);
   }
   return seen;
 }
