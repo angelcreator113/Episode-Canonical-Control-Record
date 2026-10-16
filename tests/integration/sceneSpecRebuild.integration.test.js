@@ -111,4 +111,20 @@ describe('validateSpecCandidate', () => {
     expect(again.body.data.zones).toEqual([{ id: 'zone-3' }]);
     expect((await saved()).previous.zones).toEqual([{ id: 'zone-new' }]);
   });
+
+  test('a build from a copy older than the stored analysis keeps what the analysis wrote', async () => {
+    // An angle that waited on the base analysis builds from a copy taken
+    // before it finished (audit, 2026-10-15): the whole-object write dropped
+    // the stored room properties and style lock.
+    const { buildSceneSpec } = require('../../src/services/sceneSpecService');
+    const stale = (await models.SceneSet.findByPk(setId)).get({ plain: true });
+    await run(`UPDATE scene_sets SET visual_language = visual_language || CAST(:patch AS jsonb) WHERE id = :id`,
+      { id: setId, patch: JSON.stringify({ room_properties: { room_size: 'large' }, locked: true }) });
+    replies.queue = [GOOD];
+    await buildSceneSpec(stale, models.SceneSet, { force: true });
+    const vl = (await models.SceneSet.findByPk(setId)).visual_language;
+    expect(vl).toMatchObject({ room_properties: { room_size: 'large' }, locked: true, palette: ['gold'] });
+    expect(vl.scene_spec_previous.zones).toEqual([{ id: 'zone-3' }]);
+    expect(vl.scene_spec).toBeUndefined();
+  });
 });

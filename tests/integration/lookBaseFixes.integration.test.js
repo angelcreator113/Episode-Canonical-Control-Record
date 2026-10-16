@@ -3,7 +3,7 @@
  * from production logs; docs/EVENT_EPISODE_FLOW.md §8(hh) L7-L9):
  *   1. The Place section stayed on "Generating…" after a base-only run. The
  *      base's status is read as done or failed, every failure keeps its
- *      reason, and a run stuck for 10 minutes is marked failed.
+ *      reason, and a run stuck for 15 minutes is marked failed.
  *   2. The image analysis after the base still ran "for undefined" and
  *      failed ("WHERE parameter "id" has invalid "undefined" value"): it now
  *      gets the scene set's id.
@@ -196,22 +196,24 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(got.body.data.scene_set.error).toContain('fal: prompt rejected');
   });
 
-  it('bug 1: a base or look stuck generating for 10 minutes is marked failed when read; a recent one is left', async () => {
+  it('bug 1: a base or look stuck generating for 15 minutes is marked failed when read; a recent one is left', async () => {
+    // The Scene Sets claim's window (generationClaimService): a base run at
+    // minute 11 is still live there, so it is not failed here either.
     const stuck = await venue();
-    await run(`UPDATE scene_sets SET generation_status = 'generating', updated_at = NOW() - INTERVAL '11 minutes' WHERE id = :id`, { id: stuck.set });
+    await run(`UPDATE scene_sets SET generation_status = 'generating', updated_at = NOW() - INTERVAL '16 minutes' WHERE id = :id`, { id: stuck.set });
     let got = await auth(request(app).get(url(stuck.ev)));
-    expect(got.body.data.scene_set).toMatchObject({ generation_status: 'failed', error: 'Timed out: no image after 10 minutes' });
+    expect(got.body.data.scene_set).toMatchObject({ generation_status: 'failed', error: 'Timed out: no image after 15 minutes' });
 
     const recent = await venue();
-    await run(`UPDATE scene_sets SET generation_status = 'generating', updated_at = NOW() - INTERVAL '1 minute' WHERE id = :id`, { id: recent.set });
+    await run(`UPDATE scene_sets SET generation_status = 'generating', updated_at = NOW() - INTERVAL '11 minutes' WHERE id = :id`, { id: recent.set });
     got = await auth(request(app).get(url(recent.ev)));
     expect(got.body.data.scene_set.generation_status).toBe('generating');
 
     const lookStuck = await venue();
     await run(`INSERT INTO scene_set_looks (id, scene_set_id, event_id, status, created_at, updated_at)
-               VALUES (gen_random_uuid(), :set, :ev, 'generating', NOW() - INTERVAL '12 minutes', NOW() - INTERVAL '12 minutes')`,
+               VALUES (gen_random_uuid(), :set, :ev, 'generating', NOW() - INTERVAL '16 minutes', NOW() - INTERVAL '16 minutes')`,
     { set: lookStuck.set, ev: lookStuck.ev });
     got = await auth(request(app).get(url(lookStuck.ev)));
-    expect(got.body.data.look).toMatchObject({ status: 'failed', error: 'Timed out: no image after 10 minutes' });
+    expect(got.body.data.look).toMatchObject({ status: 'failed', error: 'Timed out: no image after 15 minutes' });
   });
 });
