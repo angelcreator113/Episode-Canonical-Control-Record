@@ -1,46 +1,33 @@
 // ============================================================================
-// UNIT TESTS — manuscript-export.js (Step 3 CP9, D12 lock)
+// UNIT TESTS — manuscript-export.js: the memoir downloads need sign-in
 // ============================================================================
-// 3 handlers — Tier 4 PUBLIC throughout with F-Auth-3 polymorphic factory
-// preserved verbatim per D12 (9th cumulative §5.21 instance):
-//   - GET /book/:bookId/meta — optionalAuth({ degradeOnInfraFailure: true })
-//   - GET /book/:bookId/docx — optionalAuth({ degradeOnInfraFailure: true })
-//   - GET /book/:bookId/pdf  — optionalAuth({ degradeOnInfraFailure: true })
-// First Tier 4 disposition with explicit degrade flag preserved.
+// Step 3 CP9 (D12) made the three GETs public (optionalAuth with
+// degradeOnInfraFailure). Evoni, 2026-10-15: anyone with the link must not be
+// able to download the memoir without signing in. They take requireAuth.
+//   - GET /book/:bookId/meta
+//   - GET /book/:bookId/docx
+//   - GET /book/:bookId/pdf
 
 const fs = require('fs');
 const path = require('path');
 
 const SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'routes', 'manuscript-export.js'), 'utf8');
 
-describe('Step 3 CP9 — manuscript-export.js Tier 4 PUBLIC + F-Auth-3 factory preserved', () => {
-  test('imports optionalAuth (no requireAuth — pure Tier 4 file)', () => {
-    expect(SRC).toMatch(/const\s*\{\s*optionalAuth\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
+describe('manuscript-export.js: sign-in required', () => {
+  test('imports requireAuth, not optionalAuth', () => {
+    expect(SRC).toMatch(/const\s*\{\s*requireAuth\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
+    expect(SRC).not.toMatch(/optionalAuth/);
   });
 
-  test('comment block documents §5.21 9th cumulative instance + F-Auth-3 polymorphic factory preservation', () => {
-    expect(SRC).toMatch(/§5\.21|mixed Tier 1\+4/);
-    expect(SRC).toMatch(/9th cumulative instance/);
-    expect(SRC).toMatch(/polymorphic factory/);
+  test.each(['meta', 'docx', 'pdf'])('GET /book/:bookId/%s requires sign-in', (kind) => {
+    expect(SRC).toMatch(new RegExp(`router\\.get\\('/book/:bookId/${kind}',\\s*requireAuth,\\s*async`));
   });
 
-  describe('Tier 4 PUBLIC GETs (3 manuscript-rendering endpoints — D12)', () => {
-    test('GET /book/:bookId/meta uses optionalAuth({ degradeOnInfraFailure: true })', () => {
-      expect(SRC).toMatch(/router\.get\('\/book\/:bookId\/meta',\s*optionalAuth\(\s*\{\s*degradeOnInfraFailure:\s*true\s*\}\s*\),\s*async/);
-    });
-    test('GET /book/:bookId/docx uses optionalAuth({ degradeOnInfraFailure: true })', () => {
-      expect(SRC).toMatch(/router\.get\('\/book\/:bookId\/docx',\s*optionalAuth\(\s*\{\s*degradeOnInfraFailure:\s*true\s*\}\s*\),\s*async/);
-    });
-    test('GET /book/:bookId/pdf uses optionalAuth({ degradeOnInfraFailure: true })', () => {
-      expect(SRC).toMatch(/router\.get\('\/book\/:bookId\/pdf',\s*optionalAuth\(\s*\{\s*degradeOnInfraFailure:\s*true\s*\}\s*\),\s*async/);
-    });
-  });
-
-  test('no requireAuth references (Tier 4 PUBLIC throughout per D12)', () => {
-    expect(SRC).not.toMatch(/\brequireAuth\b/);
+  test('no PUBLIC route is left', () => {
+    expect(SRC).not.toMatch(/\/\/\s*PUBLIC:/);
   });
 
   test('no aiRateLimiter (no AI POSTs — manuscript export is rendering-only)', () => {
-    expect(SRC).not.toMatch(/\baiRateLimiter\b/);
+    expect(SRC).not.toMatch(/aiRateLimiter/);
   });
 });
