@@ -472,6 +472,7 @@ export default function StoryEvaluationEngine() {
   const [chapters, setChapters] = useState([]); // [{ id, title, book_id }]
   const [chapterSearch, setChapterSearch] = useState('');
   const [books, setBooks] = useState([]);
+  const [pickerError, setPickerError] = useState(null); // books or chapters failed to load
   const [selectedBookId, setSelectedBookId] = useState('');
 
   // Timer
@@ -1290,7 +1291,10 @@ export default function StoryEvaluationEngine() {
       const res = await listBooksApi();
       const data = res.data;
       setBooks(data?.books || data || []);
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.error('[StoryEvaluation] books load failed:', err);
+      setPickerError('Could not load your books. You can still paste a chapter id.');
+    }
   }, []);
 
   const fetchChapters = useCallback(async (bookId) => {
@@ -1302,7 +1306,11 @@ export default function StoryEvaluationEngine() {
       const data = res.data;
       const ch = bookId ? (data?.book?.chapters || data?.chapters || []) : (data?.chapters || data || []);
       setChapters(ch);
-    } catch { /* chapters endpoint may not exist */ }
+      setPickerError((e) => (e?.includes('chapters') ? null : e));
+    } catch (err) {
+      console.error('[StoryEvaluation] chapters load failed:', err);
+      setPickerError('Could not load your chapters. You can still paste a chapter id.');
+    }
   }, []);
 
   useEffect(() => { fetchBooks(); fetchChapters(); }, [fetchBooks, fetchChapters]);
@@ -1880,6 +1888,9 @@ export default function StoryEvaluationEngine() {
                 Selecting a chapter lets the AI use arc metadata and continuity from that chapter during generation.
                 You can also set this later in the Write-Back step.
               </div>
+              {pickerError && (
+                <div role="alert" style={{ fontSize: 11, color: T.red, marginBottom: 8 }}>{pickerError}</div>
+              )}
               {chapters.length > 0 ? (
                 <div>
                   <input
@@ -2589,6 +2600,9 @@ export default function StoryEvaluationEngine() {
             )}
 
             <SectionCard title="Write-Back Target">
+              {pickerError && (
+                <div role="alert" style={{ fontSize: 11, color: T.red, marginBottom: 8 }}>{pickerError}</div>
+              )}
               {/* Book selector */}
               {books.length > 0 && (
                 <div style={{ marginBottom: 10 }}>

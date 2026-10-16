@@ -163,6 +163,7 @@ export default function MemoryBankView({ bookId, showId }) {
   const [data, setData]               = useState(null);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState(null);
+  const [actionError, setActionError] = useState(null); // a confirm/dismiss/save/protect that failed
   const [selectedId, setSelectedId]   = useState(null);
   const [expandedTypes, setExpandedTypes] = useState(() => new Set(TYPE_ORDER));
   const [activeFilter, setActiveFilter]   = useState('all');
@@ -194,6 +195,7 @@ export default function MemoryBankView({ bookId, showId }) {
       setLoading(true);
       const result = await apiFetch(`/books/${bookId}/memories/pending`);
       setData(result);
+      setError(null);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -303,9 +305,11 @@ export default function MemoryBankView({ bookId, showId }) {
     const charId = characterId || confirmCharId;
     if (!charId) {
       console.error('Confirm failed: no character selected');
+      setActionError('Choose a character before confirming.');
       return;
     }
     setSaving(true);
+    setActionError(null);
     try {
       await apiFetch(`/memories/${memoryId}/confirm`, {
         method: 'POST',
@@ -315,6 +319,7 @@ export default function MemoryBankView({ bookId, showId }) {
       await load();
     } catch (err) {
       console.error('Confirm failed:', err);
+      setActionError(`Could not confirm the memory: ${err.message}`);
     } finally {
       setSaving(false);
     }
@@ -324,12 +329,14 @@ export default function MemoryBankView({ bookId, showId }) {
     if (saving) return;
     if (!window.confirm('Dismiss this memory? This cannot be undone.')) return;
     setSaving(true);
+    setActionError(null);
     try {
       await apiFetch(`/memories/${memoryId}/dismiss`, { method: 'POST' });
       if (selectedId === memoryId) setSelectedId(null);
       await load();
     } catch (err) {
       console.error('Dismiss failed:', err);
+      setActionError(`Could not dismiss the memory: ${err.message}`);
     } finally {
       setSaving(false);
     }
@@ -338,6 +345,7 @@ export default function MemoryBankView({ bookId, showId }) {
   const handleSaveEdit = async () => {
     if (!selected || saving) return;
     setSaving(true);
+    setActionError(null);
     try {
       await apiFetch(`/memories/${selected.id}`, {
         method: 'PUT',
@@ -347,6 +355,7 @@ export default function MemoryBankView({ bookId, showId }) {
       await load();
     } catch (err) {
       console.error('Save failed:', err);
+      setActionError(`Could not save your edit: ${err.message}`);
     } finally {
       setSaving(false);
     }
@@ -355,6 +364,7 @@ export default function MemoryBankView({ bookId, showId }) {
   const handleProtect = async (memoryId) => {
     if (saving) return;
     setSaving(true);
+    setActionError(null);
     try {
       await apiFetch(`/memories/${memoryId}`, {
         method: 'PUT',
@@ -363,6 +373,7 @@ export default function MemoryBankView({ bookId, showId }) {
       await load();
     } catch (err) {
       console.error('Protect failed:', err);
+      setActionError(`Could not protect the memory: ${err.message}`);
     } finally {
       setSaving(false);
     }
@@ -428,7 +439,8 @@ export default function MemoryBankView({ bookId, showId }) {
     return (
       <div className="mb-root">
         <div className="mb-error">
-          <p className="mb-error-text">{error}</p>
+          <p className="mb-error-text" role="alert">{error}</p>
+          <button className="mb-extract-btn" onClick={load}>Try again</button>
         </div>
       </div>
     );
@@ -480,6 +492,7 @@ export default function MemoryBankView({ bookId, showId }) {
           {extracting ? '…' : '◇ Extract'}
         </button>
         {extractMsg && <div className="mb-extract-msg">{extractMsg}</div>}
+        {actionError && <div className="mb-extract-msg" role="alert">{actionError}</div>}
       </div>
 
       {/* ── Filter Bar ── */}
