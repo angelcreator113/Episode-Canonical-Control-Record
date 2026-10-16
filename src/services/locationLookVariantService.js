@@ -174,30 +174,36 @@ async function startVariant(sequelize, { setId, kind, value }) {
     `INSERT INTO location_look_variants (id, world_location_id, scene_set_id, kind, value, status, source, source_image_url, source_angle_id, prompt, estimate_usd, error, created_at, updated_at)
      VALUES (gen_random_uuid(), :loc, :setId, :kind, :value, 'generating', 'generated', :src, :angleId, :prompt, :estimate, NULL, NOW(), NOW())
      ON CONFLICT (scene_set_id, kind, value) WHERE deleted_at IS NULL
-     DO UPDATE SET status = 'generating', source = 'generated', source_image_url = EXCLUDED.source_image_url,
-                   source_angle_id = EXCLUDED.source_angle_id, prompt = EXCLUDED.prompt,
-                   estimate_usd = EXCLUDED.estimate_usd, error = NULL, updated_at = NOW()
+     -- The slot's source and source image stay those of its current image
+     -- until this run has one: a failed run that kept the old image had
+     -- already named it made from the new everyday look, so a stale variant
+     -- was used again and an uploaded one became generated (audit, 2026-10-15).
+     DO UPDATE SET status = 'generating', estimate_usd = EXCLUDED.estimate_usd, error = NULL, updated_at = NOW()
        WHERE location_look_variants.status <> 'generating'
           OR location_look_variants.updated_at < NOW() - INTERVAL '10 minutes'
-     RETURNING id`,
+     RETURNING id, updated_at::text AS claimed_at`,
     { replacements: { loc: set.world_location_id, setId: set.id, kind, value, src: plan.source_image_url, angleId: plan.source_angle_id, prompt: plan.prompt, estimate: plan.estimate?.usd ?? null } });
   if (!row) throw new LookVariantError(`${LABELS[value]} is already being generated`, 409, 'VARIANT_GENERATING');
   // The run's result lands only on its own generation: an upload, a removal
   // or a newer run made meanwhile is never overwritten.
-  const ownRun = `id = :id AND status = 'generating' AND source = 'generated' AND deleted_at IS NULL`;
+  // Its row is still generating since this run claimed it (the claim's own
+  // updated_at, exact as text).
+  const ownRun = `id = :id AND status = 'generating' AND updated_at = CAST(:claimedAt AS timestamptz) AND deleted_at IS NULL`;
   const run = async () => {
     try {
       const sceneGen = require('./sceneGenerationService');
       const out = await sceneGen.generateDressedStill(set, plan.prompt, plan.source_image_url, { suffix: `variant-${kind}-${value}` });
       await sequelize.query(
-        `UPDATE location_look_variants SET status = 'complete', image_url = :url, cost_usd = :cost, generated_at = NOW(), updated_at = NOW()
+        `UPDATE location_look_variants SET status = 'complete', image_url = :url, source = 'generated',
+                source_image_url = :src, source_angle_id = :angleId, prompt = :prompt,
+                cost_usd = :cost, generated_at = NOW(), updated_at = NOW()
           WHERE ${ownRun}`,
-        { replacements: { id: row.id, url: out.stillUrl, cost: out.cost } });
+        { replacements: { id: row.id, claimedAt: row.claimed_at, url: out.stillUrl, cost: out.cost, src: plan.source_image_url, angleId: plan.source_angle_id, prompt: plan.prompt } });
     } catch (err) {
       console.error(`[LookVariants] ${kind} ${value} for "${set.name}" failed:`, err.message);
       await sequelize.query(
         `UPDATE location_look_variants SET status = ${KEEP_PREVIOUS_IMAGE}, error = :error, updated_at = NOW() WHERE ${ownRun}`,
-        { replacements: { id: row.id, error: String(err.message || err).slice(0, 500) } });
+        { replacements: { id: row.id, claimedAt: row.claimed_at, error: String(err.message || err).slice(0, 500) } });
     }
   };
   return { result: { variant_id: row.id, kind, value, status: 'generating' }, run };

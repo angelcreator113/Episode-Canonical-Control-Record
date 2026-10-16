@@ -45,15 +45,22 @@ export default function TextureReviewPage() {
   const [texture, setTexture]  = useState(null);
   const [loading, setLoading]  = useState(true);
   const [saving, setSaving]    = useState(false);
+  const [loadError, setLoadError] = useState(null);
+  const [actionError, setActionError] = useState(null);
 
   useEffect(() => {
     getTextureLayerApi(characterKey, storyNumber)
       .then(res => { setTexture(res.data?.texture || null); setLoading(false); })
-      .catch(() => setLoading(false));
+      .catch((err) => {
+        console.error('[TextureReview] load failed:', err);
+        setLoadError(err.response?.data?.error || 'Could not load this texture.');
+        setLoading(false);
+      });
   }, [characterKey, storyNumber]);
 
   const confirmLayer = async (layer) => {
     setSaving(true);
+    setActionError(null);
     const fieldMap = {
       inner_thought:  'inner_thought_confirmed',
       conflict:       'conflict_confirmed',
@@ -68,28 +75,42 @@ export default function TextureReviewPage() {
         fields: [fieldMap[layer]],
       });
       setTexture(res.data?.texture);
-    } catch { /* keep prior state on failure */ }
+    } catch (err) {
+      console.error('[TextureReview] confirm failed:', err);
+      setActionError(`Could not confirm ${LAYER_LABELS[layer] || layer}.`);
+    }
     setSaving(false);
   };
 
   const confirmAll = async () => {
     setSaving(true);
+    setActionError(null);
     try {
       const res = await confirmTextureLayerApi(storyNumber, { character_key: characterKey, fields: 'all' });
       setTexture(res.data?.texture);
-    } catch { /* keep prior state on failure */ }
+    } catch (err) {
+      console.error('[TextureReview] confirm all failed:', err);
+      setActionError('Could not confirm the layers.');
+    }
     setSaving(false);
   };
 
   const regenerateLayer = async (layer) => {
+    setActionError(null);
     try {
       await regenerateTextureLayerApi(storyNumber, layer, { character_key: characterKey });
       // Re-fetch texture after clearing
       try {
         const fresh = await getTextureLayerApi(characterKey, storyNumber);
         setTexture(fresh.data?.texture);
-      } catch { /* refetch failed; leave UI as-is */ }
-    } catch { /* regenerate failed; leave UI as-is */ }
+      } catch (err) {
+        console.error('[TextureReview] refetch failed:', err);
+        setActionError('Regenerated, but could not reload the texture. Refresh the page.');
+      }
+    } catch (err) {
+      console.error('[TextureReview] regenerate failed:', err);
+      setActionError(`Could not regenerate ${LAYER_LABELS[layer] || layer}.`);
+    }
   };
 
   if (loading) return (
@@ -101,7 +122,7 @@ export default function TextureReviewPage() {
   if (!texture) return (
     <div className="ws-empty">
       <div className="ws-empty-icon">&#9678;</div>
-      <div className="ws-empty-title">No texture found for Story {storyNumber}</div>
+      <div className="ws-empty-title" role={loadError ? 'alert' : undefined}>{loadError || `No texture found for Story ${storyNumber}`}</div>
       <button className="ws-btn ws-btn-ghost" onClick={() => navigate(-1)}>Back</button>
     </div>
   );
@@ -281,6 +302,10 @@ export default function TextureReviewPage() {
           )}
         </div>
       </div>
+
+      {actionError && (
+        <div role="alert" style={{ color: '#b3261e', fontSize: 13, marginBottom: 16 }}>{actionError}</div>
+      )}
 
       {/* Amber's notes */}
       {texture.amber_notes?.length > 0 && (
