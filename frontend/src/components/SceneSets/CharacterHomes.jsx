@@ -29,12 +29,51 @@ export function notifyCharacterPlacesChanged(showId, next = undefined) {
   else cache.delete(showId);
   window.dispatchEvent(new CustomEvent(CHANGED, { detail: { showId } }));
 }
+// Lala's home filled in once per show per visit (fill_pending: Lala as the
+// lead when none was ever chosen, a World Location for her home and closet
+// sets; Evoni, 2026-10-16). A failed fill is not retried until the page reloads.
+const fillTried = new Set();
+export function clearFillTried() { fillTried.clear(); }
 function readPlaces(showId, fresh = false) {
   if (fresh || !cache.has(showId)) {
     cache.set(showId, api.get(`/api/v1/shows/${showId}/character-places`).then((res) => res.data?.data || null)
       .catch((err) => { cache.delete(showId); throw err; }));
   }
   return cache.get(showId);
+}
+
+/**
+ * What the show already knows, filled in when a set's workspace opens: Lala
+ * as the lead when none was ever chosen, a World Location for her home and
+ * closet sets (POST /shows/:id/character-places/fill), with a toast saying
+ * what was filled. Once per show per visit; showId null does nothing.
+ */
+export function useLalaHomeFill(showId, { onToast, onDefaultsChanged, onFilled } = {}) {
+  useEffect(() => {
+    if (!showId || fillTried.has(String(showId))) return undefined;
+    let live = true;
+    (async () => {
+      try {
+        const places = await readPlaces(showId);
+        if (!live || !places?.fill_pending || fillTried.has(String(showId))) return;
+        fillTried.add(String(showId));
+        const res = await api.post(`/api/v1/shows/${showId}/character-places/fill`);
+        const out = res.data?.data;
+        if (!out) return;
+        if (out.data) notifyCharacterPlacesChanged(showId, out.data);
+        if (out.lead_set) onDefaultsChanged?.(showId);
+        const lead = out.data?.characters?.find((c) => c.is_lead);
+        const said = [];
+        if (out.lead_set && lead) said.push(`${lead.name} is the show's lead`);
+        if (out.placed?.length) said.push(`${out.placed.map((p) => p.scene_set_name).join(', ')} placed in Lala's home`);
+        if (out.lead_set || out.placed?.length) onFilled?.(out);
+        if (said.length) onToast?.(`${said.join('; ')}.`);
+      } catch (err) {
+        console.error('[CharacterHomes] fill failed:', err);
+      }
+    })();
+    return () => { live = false; };
+  }, [showId, onToast, onDefaultsChanged, onFilled]);
 }
 
 export default function CharacterHomes({ set, onToast, onDefaultsChanged }) {
@@ -53,6 +92,7 @@ export default function CharacterHomes({ set, onToast, onDefaultsChanged }) {
   }, [showId]);
 
   useEffect(() => { if (showId) load(); }, [showId, load]);
+
   useEffect(() => {
     const onChanged = (e) => { if (String(e.detail?.showId) === String(showId)) load(); };
     window.addEventListener(CHANGED, onChanged);
@@ -148,7 +188,10 @@ export default function CharacterHomes({ set, onToast, onDefaultsChanged }) {
       {open && (
         <div className="ch-form" data-testid={`character-homes-form-${set.id}`}>
           {data.characters.length === 0 ? (
-            <span className="ch-none">This show has no characters in its registry yet.</span>
+            <span className="ch-none" data-testid={`character-homes-empty-${set.id}`}>
+              No characters to link: this show has no character registry with people in it yet.
+              Add them on the <a href="/character-registry">Characters</a> page.
+            </span>
           ) : (
             <>
               <select aria-label="Character" value={form.character_id} onChange={(e) => setForm((f) => ({ ...f, character_id: e.target.value }))}>
