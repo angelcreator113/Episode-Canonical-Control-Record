@@ -15,7 +15,7 @@
  */
 
 const Bull = require('bull');
-const { claimRow } = require('../services/generationClaimService');
+const { claimRow, isLiveGeneration } = require('../services/generationClaimService');
 const { redisConfig } = require('../config/redis');
 
 const MAX_REFINEMENT_PASSES = 3;
@@ -125,6 +125,12 @@ function registerWorker() {
     if (job.data.attempt != null && (angle.generation_attempt || 0) !== job.data.attempt) {
       console.log(`[RefinementQueue] Pass ${pass} for ${angle.angle_name} dropped: the picture changed since it was queued`);
       return { pass, status: 'skipped', reason: 'picture changed' };
+    }
+    // Not while the set's base is being made: the pass would refine from
+    // the old base, then the base be replaced (fourth audit, 2026-10-15).
+    if (isLiveGeneration(set)) {
+      console.log(`[RefinementQueue] Pass ${pass} for ${angle.angle_name} dropped: the base is being generated`);
+      return { pass, status: 'skipped', reason: 'base generating' };
     }
     // One generation of an angle at a time, as the routes claim it: a Generate
     // clicked while this pass waited is not raced and paid for twice.

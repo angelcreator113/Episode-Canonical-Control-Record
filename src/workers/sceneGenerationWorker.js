@@ -253,6 +253,10 @@ async function recoverStuckJobs() {
           error: 'Worker restarted mid-job (max attempts reached)',
           completed_at: new Date(),
         });
+        // An abandoned cascade releases its set's claim, as a failed one does.
+        if (job.job_type === 'cascade_regenerate' && job.scene_set_id) {
+          await SceneSet.update({ generation_status: 'failed' }, { where: { id: job.scene_set_id, generation_status: 'generating' } });
+        }
         console.log(`💀 [GenWorker] Abandoned stuck job ${job.id} — max attempts exhausted`);
       }
     }

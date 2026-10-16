@@ -130,10 +130,30 @@ describe('crops, retries and the source picture', () => {
       return { content: [{ text: images === 2 ? JSON.stringify({ score: scores.shift(), issues: [] }) : 'no' }] };
     });
     const set = { id: 's2', base_still_url: base, scene_spec: null, visual_language: { image_analysis: { source_url: base, version: 7, image_type: 'room_photo' } } };
-    const result = await sceneGen.generateAngle({ id: 'a2', angle_label: 'VANITY', angle_name: 'Vanity' }, set, { SceneAngle, SceneSet });
+    // A shot of the room (DOORWAY): a part shot is not retried (below).
+    const result = await sceneGen.generateAngle({ id: 'a2', angle_label: 'DOORWAY', angle_name: 'Doorway' }, set, { SceneAngle, SceneSet });
     expect(imageGen.generateImageFromImage).toHaveBeenCalledTimes(2);
     expect(lastUpdate().quality_review.base_consistency.score).toBe(55);
     expect(result.stillUrl).toBe(lastUpdate().still_image_url);
+  });
+
+  test('a shot of part of the room is checked against its shot, and not retried toward the whole room', async () => {
+    // Fourth audit (2026-10-15): told only "the same room", the check marked
+    // a close-up down for furniture outside its frame and the retry pulled
+    // it back to the whole room.
+    process.env.ANTHROPIC_API_KEY = 'k';
+    const prompts = [];
+    mockCreate.mockImplementation(async ({ messages }) => {
+      const images = messages[0].content.filter((c) => c.type === 'image').length;
+      if (images === 2) prompts.push(messages[0].content.find((c) => c.type === 'text').text);
+      return { content: [{ text: images === 2 ? JSON.stringify({ score: 40, issues: ['bed missing'] }) : 'no' }] };
+    });
+    const set = { id: 's4', base_still_url: base, scene_spec: null, visual_language: { image_analysis: { source_url: base, version: 7, image_type: 'room_photo' } } };
+    await sceneGen.generateAngle({ id: 'a4', angle_label: 'VANITY', angle_name: 'Vanity' }, set, { SceneAngle, SceneSet });
+    expect(imageGen.generateImageFromImage).toHaveBeenCalledTimes(1);
+    expect(prompts[0]).toMatch(/meant to be this shot: Camera at the vanity/);
+    expect(prompts[0]).toMatch(/only part of the room by design/);
+    expect(lastUpdate().quality_review.base_consistency.score).toBe(40);
   });
 
   test('a mood-board base is not edited: the angle is drawn from the prompt', async () => {

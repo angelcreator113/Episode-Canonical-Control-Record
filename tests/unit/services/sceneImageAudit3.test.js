@@ -121,3 +121,27 @@ describe('generation order', () => {
     expect(sceneGen.generationOrder(undefined)).toEqual([]);
   });
 });
+
+describe('an angle that names its own camera (fourth audit)', () => {
+  const frameSpec = (label, description = 'The vanity wall.') => ({
+    _meta: { base_still_url: BASE },
+    camera_contracts: [{ angle: label, description, frame: { left: 0.2, top: 0.2, width: 0.6, height: 0.6 } }],
+    objects: [],
+  });
+
+  test('is generated, not the base picture or a free crop; the spec\'s own description is not one', () => {
+    const set = { base_still_url: BASE, scene_spec: frameSpec('VANITY') };
+    expect(sceneGen.estimateAngleCost({ angle_label: 'VANITY' }, set).method).toBe('crop');
+    // The contract's own description (a spec-made angle): still a crop.
+    expect(sceneGen.estimateAngleCost({ angle_label: 'VANITY', camera_direction: 'The vanity wall.' }, set).method).toBe('crop');
+    expect(sceneGen.estimateAngleCost({ angle_label: 'VANITY', camera_direction: 'Low, from the bed, at night' }, set).method).toBe('edit');
+    const inside = { angle_label: 'WIDE', angle_kind: 'inside' };
+    expect(sceneGen.estimateAngleCost(inside, { base_still_url: BASE }).method).toBe('base');
+    expect(sceneGen.estimateAngleCost({ ...inside, camera_direction: 'Looking back at the door' }, { base_still_url: BASE }).method).toBe('edit');
+  });
+
+  test('ownCamera: a Camera override counts; an empty direction does not', () => {
+    expect(sceneGen.ownCamera({ angle_label: 'WIDE' }, { camera: 'Low angle' })).toBe(true);
+    expect(sceneGen.ownCamera({ angle_label: 'WIDE', camera_direction: '  ' })).toBe(false);
+  });
+});
