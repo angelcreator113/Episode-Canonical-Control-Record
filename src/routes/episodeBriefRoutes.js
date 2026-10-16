@@ -526,10 +526,13 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
     // unlocked beats; each locked one comes back word for word. The writer
     // reads the locked beats so the new ones fit around them (Evoni,
     // 2026-10-09: "If I regenerate does the script read the previous?").
-    const { scriptKeepingLocks, splitScriptBeats, normalizeLockedBeats } = require('../utils/scriptBeatLocks');
+    const { scriptKeepingLocks, splitScriptBeats, normalizeLockedBeats, withNumberedHeader } = require('../utils/scriptBeatLocks');
     const lockedNumbers = normalizeLockedBeats(episodeForGuard?.script_locked_beats);
     const lockedBeats = lockedNumbers.length
       ? splitScriptBeats(episodeForGuard?.script_content).beats.filter((b, i, all) => lockedNumbers.includes(b.number) && all.findIndex((x) => x.number === b.number) === i)
+        // With its number written in, so the writer reads it as that beat
+        // and not by its place (re-audit 2: it was saved twice).
+        .map((b) => ({ ...b, text: withNumberedHeader(b.text, b.number) }))
       : [];
     // The writer returns the script with its coverage (utils/scriptCoverage.js).
     // A first draft with too few beats (a refusal, an empty reply) is not
