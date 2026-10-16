@@ -7,6 +7,8 @@
  */
 
 const { Scene, SceneSet, SceneAngle, SceneAsset, Asset, SceneObjectVariant, sequelize } = require('../models');
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const { v4: uuidv4, validate: uuidValidate } = require('uuid');
 const objectGenerationService = require('../services/objectGenerationService');
 const depthEstimationService = require('../services/depthEstimationService');
@@ -905,6 +907,17 @@ exports.saveSceneSetCanvas = async (req, res) => {
     }
 
     if (Array.isArray(objects)) {
+      // An object's angle is one of this set's: another set's angle was
+      // accepted (audit, 2026-10-15), and a malformed id was a 500.
+      const angleIds = [...new Set(objects.filter((o) => o.scene_angle_id).map((o) => String(o.scene_angle_id)))];
+      if (angleIds.length > 0) {
+        const bad = angleIds.some((aid) => !UUID_RE.test(aid));
+        const ownAngles = bad ? [] : await SceneAngle.findAll({ where: { id: angleIds, scene_set_id: id }, attributes: ['id'], transaction });
+        if (bad || ownAngles.length !== angleIds.length) {
+          await transaction.rollback();
+          return res.status(400).json({ success: false, error: 'scene_angle_id must be an angle of this scene set' });
+        }
+      }
       // Validate asset_ids exist for objects that reference them
       const assetIds = [...new Set(objects.filter((o) => o.asset_id).map((o) => o.asset_id))];
       if (assetIds.length > 0) {
@@ -1027,6 +1040,12 @@ exports.addSceneSetObject = async (req, res) => {
     const sceneSet = await SceneSet.findByPk(id);
     if (!sceneSet) {
       return res.status(404).json({ success: false, error: 'Scene set not found' });
+    }
+    // The object's angle is one of this set's (audit, 2026-10-15).
+    if (scene_angle_id) {
+      const own = UUID_RE.test(String(scene_angle_id))
+        && await SceneAngle.findOne({ where: { id: scene_angle_id, scene_set_id: id }, attributes: ['id'] });
+      if (!own) return res.status(400).json({ success: false, error: 'scene_angle_id must be an angle of this scene set' });
     }
 
     const maxLayer = await SceneAsset.max('layer_order', { where: { scene_set_id: id } });
