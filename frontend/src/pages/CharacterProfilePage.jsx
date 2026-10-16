@@ -13,7 +13,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { Sparkles, ArrowRight } from 'lucide-react';
+import {
+  Sparkles, ArrowRight, LayoutDashboard, Heart, Mic, Users, Globe2, ImagePlus, Trash2,
+  BarChart3, CalendarDays, Download, Link2,
+} from 'lucide-react';
 import { API_URL } from '../config/api';
 import CharacterDepthPanel from '../components/CharacterDepthPanel';
 import { platformLabel, atHandle, followersOf } from './feed/feedConstants';
@@ -72,6 +75,14 @@ export const updateSocialProfileApi = (profileId, payload) =>
   apiClient.put(`${API_URL}/social-profiles/${profileId}`, payload);
 export const getSocialProfileApi = (profileId) =>
   apiClient.get(`${API_URL}/social-profiles/${profileId}`);
+// Their profile and cover photos (routes/characterRegistry.js POST/DELETE photo?kind=).
+export const uploadPhotoApi = (id, kind, file) => {
+  const form = new FormData();
+  form.append('image', file);
+  return apiClient.post(`${API_URL}/character-registry/characters/${id}/photo?kind=${kind}`, form);
+};
+export const removePhotoApi = (id, kind) =>
+  apiClient.delete(`${API_URL}/character-registry/characters/${id}/photo?kind=${kind}`);
 export const getAppearancesApi = (id) =>
   apiClient.get(`${API_URL}/cast/characters/${id}/appearances`);
 // Promote a ghost (a name in their family tree) to a sparked character.
@@ -100,11 +111,11 @@ const STATE_CONFIG = {
 };
 
 const TABS = [
-  { id: 'overview',    label: 'Overview' },
-  { id: 'inner',       label: 'Inner life' },
-  { id: 'voice',       label: 'Voice & feed' },
-  { id: 'connections', label: 'Connections' },
-  { id: 'world',       label: 'In the world' },
+  { id: 'overview',    label: 'Overview',     icon: LayoutDashboard },
+  { id: 'inner',       label: 'Inner life',   icon: Heart },
+  { id: 'voice',       label: 'Voice & feed', icon: Mic },
+  { id: 'connections', label: 'Connections',  icon: Users },
+  { id: 'world',       label: 'In the world', icon: Globe2 },
 ];
 
 const DIMENSION_KEYS = [
@@ -1132,22 +1143,195 @@ function TheirPlaces({ character }) {
   );
 }
 
-function TabOverview({ character, appearances, feedProfile, onSaved, onFeedSaved, gen }) {
+function TabOverview({ character, appearances, feedProfile, relationships, entanglements, onSaved, onFeedSaved, gen, openTab }) {
   return (
     <div className="ch-overview">
       <div className="ch-col">
         <TheirNames character={character} feedProfile={feedProfile} onSaved={onSaved} onFeedSaved={onFeedSaved} gen={gen} />
         <TheirFacts character={character} onFeedSaved={onFeedSaved} />
-        <WhoTheyAre character={character} onSaved={onSaved} />
-        <WhereTheyShowUp appearances={appearances} feedProfile={feedProfile} />
+        <ProfileImages character={character} onSaved={onSaved} />
         <TheirStory character={character} />
+      </div>
+      <div className="ch-col">
+        <WhoTheyAre character={character} onSaved={onSaved} />
+        <TheirStats feedProfile={feedProfile} appearances={appearances} relationships={relationships} entanglements={entanglements} />
+        <WhereTheyShowUp appearances={appearances} feedProfile={feedProfile} />
+        <TheirEvents appearances={appearances} />
       </div>
       <div className="ch-col">
         <TheirVoice character={character} feedProfile={feedProfile} />
         <WithLala appearances={appearances} />
+        <ConnectionsCard relationships={relationships} entanglements={entanglements} openTab={openTab} />
         <TheirPlaces character={character} />
       </div>
     </div>
+  );
+}
+
+/* ── Profile images: their portrait and cover (POST/DELETE …/photo?kind=) ───── */
+const PHOTO_KINDS = [
+  { kind: 'portrait', field: 'portrait_url', label: 'Profile photo' },
+  { kind: 'cover',    field: 'cover_url',    label: 'Cover photo' },
+];
+
+export function ProfileImages({ character, onSaved }) {
+  const [busy, setBusy] = useState(null);
+  const [note, setNote] = useState(null);
+  const upload = async (kind, field, file) => {
+    if (!file) return;
+    setBusy(kind); setNote(null);
+    try {
+      const res = await uploadPhotoApi(character.id, kind, file);
+      onSaved({ [field]: res.data?.[field] || null });
+      setNote({ text: kind === 'portrait' ? 'Profile photo updated.' : 'Cover photo updated.' });
+    } catch (err) {
+      console.error('[CharacterProfilePage] photo upload failed:', err);
+      setNote({ error: true, text: err.response?.data?.error || err.message || 'Upload failed.' });
+    } finally { setBusy(null); }
+  };
+  const remove = async (kind, field) => {
+    setBusy(kind); setNote(null);
+    try {
+      await removePhotoApi(character.id, kind);
+      onSaved({ [field]: null });
+    } catch (err) {
+      console.error('[CharacterProfilePage] photo remove failed:', err);
+      setNote({ error: true, text: err.response?.data?.error || err.message || 'Remove failed.' });
+    } finally { setBusy(null); }
+  };
+  return (
+    <section className="ch-card" aria-labelledby="ch-images" data-testid="ch-images">
+      <h2 id="ch-images" className="ch-kicker is-pink"><ImagePlus size={16} aria-hidden /> Profile images</h2>
+      <div className="ch-photos">
+        {PHOTO_KINDS.map(({ kind, field, label }) => {
+          const url = character[field];
+          return (
+            <figure key={kind} className={`ch-photo is-${kind}`}>
+              <div className="ch-photo-frame">
+                {url ? <img src={url} alt={`${label} of ${character.display_name || 'this character'}`} /> : <span className="ch-photo-empty">No {label.toLowerCase()} yet</span>}
+              </div>
+              <figcaption className="ch-photo-actions">
+                <label className={`ch-btn-chip ch-photo-pick${busy ? ' is-busy' : ''}`}>
+                  {busy === kind ? 'Uploading…' : url ? 'Replace' : 'Add photo'}
+                  <input type="file" accept="image/*" className="ch-visually-hidden" disabled={!!busy}
+                    aria-label={`${url ? 'Replace' : 'Add'} ${label.toLowerCase()}`}
+                    onChange={(e) => { upload(kind, field, e.target.files?.[0]); e.target.value = ''; }} />
+                </label>
+                {url && (
+                  <button type="button" className="ch-icon-btn" disabled={!!busy} aria-label={`Remove ${label.toLowerCase()}`}
+                    onClick={() => remove(kind, field)}><Trash2 size={15} aria-hidden /></button>
+                )}
+              </figcaption>
+            </figure>
+          );
+        })}
+      </div>
+      {note && <p className={`ch-note${note.error ? ' is-error' : ''}`} role={note.error ? 'alert' : 'status'}>{note.text}</p>}
+    </section>
+  );
+}
+
+/* ── Stats: counts the page already loads, nothing invented ─────────────────── */
+export function TheirStats({ feedProfile, appearances, relationships, entanglements }) {
+  const ties = listOf(relationships).length + listOf(entanglements).length;
+  const followers = feedProfile ? followersOf(feedProfile) : '';
+  const stats = [
+    { key: 'followers', label: 'Followers', value: followers || '—', icon: Users, tone: 'pink' },
+    { key: 'posts', label: 'Posts', value: appearances?.feed?.posts ?? (appearances ? 0 : '…'), icon: Sparkles, tone: 'lavender' },
+    { key: 'episodes', label: 'Episodes', value: appearances ? (appearances.episodes || []).length : '…', icon: BarChart3, tone: 'gold' },
+    { key: 'events', label: 'Events', value: appearances ? (appearances.events || []).length : '…', icon: CalendarDays, tone: 'green' },
+    { key: 'ties', label: 'Connections', value: ties, icon: Link2, tone: 'blue' },
+  ];
+  return (
+    <section className="ch-card" aria-labelledby="ch-stats" data-testid="ch-stats">
+      <h2 id="ch-stats" className="ch-kicker is-pink"><BarChart3 size={16} aria-hidden /> Stats &amp; influence</h2>
+      <ul className="ch-stats">
+        {stats.map(({ key, label, value, icon: Icon, tone }) => (
+          <li key={key} className={`ch-stat is-${tone}`}>
+            <span className="ch-stat-ring"><Icon size={20} aria-hidden /></span>
+            <strong className="ch-stat-value">{value}</strong>
+            <span className="ch-stat-label">{label}</span>
+          </li>
+        ))}
+      </ul>
+      {!feedProfile && <p className="ch-note">Followers and posts come from their feed profile.</p>}
+    </section>
+  );
+}
+
+/* ── Their events: the ones they host or attend (cast appearances) ──────────── */
+export function TheirEvents({ appearances }) {
+  const events = appearances?.events || [];
+  return (
+    <section className="ch-card" aria-labelledby="ch-events" data-testid="ch-events">
+      <h2 id="ch-events" className="ch-kicker is-pink"><CalendarDays size={16} aria-hidden /> Their events</h2>
+      {!appearances ? <p className="ch-note">Loading…</p>
+        : events.length === 0 ? <p className="ch-note">No events yet: they host or attend none.</p> : (
+          <ul className="ch-events">
+            {events.slice(0, 4).map((ev) => (
+              <li key={ev.id}>
+                <Link className="ch-event" to={`/shows/${ev.show_id}/events/${ev.id}`}>
+                  <span className="ch-event-badge"><CalendarDays size={20} aria-hidden /></span>
+                  <span className="ch-event-text">
+                    <strong>{ev.name}</strong>
+                    <span className="ch-event-meta">
+                      {[ev.event_date, ev.venue_name].filter(Boolean).join(' · ') || 'No date yet'}
+                    </span>
+                    <span className="ch-event-meta">
+                      {ev.role === 'host' ? 'Hosting' : 'Guest'}{ev.episode ? ` · Episode ${ev.episode.episode_number ?? '?'}` : ''}
+                    </span>
+                  </span>
+                  <ArrowRight size={16} aria-hidden className="ch-show-go" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+    </section>
+  );
+}
+
+/* ── Connections on the Overview: their closest ties, the full list a tab away ─ */
+const TENSION_SCORE = { calm: 90, healing: 70, simmering: 45, volatile: 25, fractured: 10 };
+// An API that answers with an object where a list belongs counts as none.
+const listOf = (v) => (Array.isArray(v) ? v : []);
+
+export function ConnectionsCard({ relationships: rels, entanglements: ents, openTab }) {
+  const relationships = listOf(rels);
+  const entanglements = listOf(ents);
+  const rows = relationships.slice(0, 4);
+  const total = relationships.length + entanglements.length;
+  return (
+    <section className="ch-card" aria-labelledby="ch-ties" data-testid="ch-ties">
+      <div className="ch-card-head">
+        <h2 id="ch-ties" className="ch-kicker is-pink"><Users size={16} aria-hidden /> Their people</h2>
+        {total > 0 && <button type="button" className="ch-link" onClick={() => openTab('connections')}>See all {total}</button>}
+      </div>
+      {rows.length === 0 ? (
+        <p className="ch-note">{entanglements.length ? `${entanglements.length} feed tie${entanglements.length === 1 ? '' : 's'}, no relationships yet.` : 'No relationships yet.'}</p>
+      ) : (
+        <ul className="ch-ties">
+          {rows.map((r) => {
+            const who = r.related_name || r.character_b_name || r.character_a_name || 'Someone';
+            const score = TENSION_SCORE[r.tension_state];
+            return (
+              <li key={r.id} className="ch-tie">
+                <span className="ch-tie-avatar" aria-hidden="true">{who.charAt(0).toUpperCase()}</span>
+                <span className="ch-tie-text">
+                  <strong>{who}</strong>
+                  <span>{[r.relationship_type, r.tension_state].filter(Boolean).join(' · ') || 'Connected'}</span>
+                </span>
+                {score !== undefined && (
+                  <span className="ch-tie-meter" role="img" aria-label={`${r.tension_state}: ${score >= 60 ? 'close' : score >= 35 ? 'mixed' : 'strained'}`}>
+                    <span style={{ width: `${score}%` }} />
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -1910,8 +2094,11 @@ export default function CharacterProfilePage() {
 
   return (
     <div className="ch-page">
-      <header className="ch-hero">
-        <div className="ch-avatar" aria-hidden="true">{name.charAt(0).toUpperCase()}</div>
+      <header className={`ch-hero${character.cover_url ? ' has-cover' : ''}`}>
+        {character.cover_url && <img className="ch-hero-cover" src={character.cover_url} alt="" aria-hidden="true" />}
+        <div className="ch-avatar" aria-hidden="true">
+          {character.portrait_url ? <img src={character.portrait_url} alt="" /> : name.charAt(0).toUpperCase()}
+        </div>
         <div className="ch-hero-text">
           <Link to="/character-registry" className="ch-back">&larr; The cast</Link>
           <h1 className="ch-name">{name}</h1>
@@ -1949,7 +2136,7 @@ export default function CharacterProfilePage() {
             </button>
           )}
           {deepenNote && <p className={`ch-note${deepenNote.error ? ' is-error' : ''}`} role="status">{deepenNote.text}</p>}
-          <button type="button" className="ch-link" onClick={exportJson}>Export</button>
+          <button type="button" className="ch-link" onClick={exportJson}><Download size={14} aria-hidden /> Export</button>
         </div>
       </header>
 
@@ -1957,13 +2144,13 @@ export default function CharacterProfilePage() {
         {TABS.map((tab) => (
           <button key={tab.id} type="button" className={`ch-tab${activeTab === tab.id ? ' is-on' : ''}`}
             aria-pressed={activeTab === tab.id} onClick={() => setActiveTab(tab.id)}>
-            {tab.label}
+            <tab.icon size={17} aria-hidden />{tab.label}
           </button>
         ))}
       </nav>
 
       <div className="ch-panel">
-        {activeTab === 'overview' && <TabOverview character={character} appearances={appearances} feedProfile={feedProfile} onSaved={onSaved} onFeedSaved={onFeedSaved} gen={gen} />}
+        {activeTab === 'overview' && <TabOverview character={character} appearances={appearances} feedProfile={feedProfile} relationships={relationships} entanglements={entanglements} onSaved={onSaved} onFeedSaved={onFeedSaved} gen={gen} openTab={setActiveTab} />}
         {activeTab === 'inner' && <TheirType character={character} />}
         {activeTab === 'inner' && (
           <div className="ch-card">

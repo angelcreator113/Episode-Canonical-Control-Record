@@ -59,7 +59,7 @@ describe('SceneSetsTab Looks row (L9)', () => {
     });
     renderRow({
       id: 'set-4', base_approved: false, looks: [],
-      events: [{ id: 'ev-1', name: 'Velour Gala', show_id: 'show-1', used_in_episode_id: 'ep-1', is_episode_event: true, look: null }],
+      events: [{ id: 'ev-1', name: 'Velour Gala', show_id: 'show-1', used_in_episode_id: 'ep-1', episode_id: 'ep-1', is_episode_event: true, look: null }],
     }, { focusZone: 'look:ev-1' });
     const block = await screen.findByTestId('scene-set-event-ev-1');
     expect(block.classList.contains('is-zone-focus')).toBe(true);
@@ -75,11 +75,39 @@ describe('SceneSetsTab Looks row (L9)', () => {
     });
     renderRow({
       id: 'set-5', base_approved: false, looks: [],
-      events: [{ id: 'ev-2', name: 'After party', show_id: 'show-1', used_in_episode_id: 'ep-1', is_episode_event: false, look: null }],
+      events: [{
+        id: 'ev-2', name: 'After party', show_id: 'show-1', used_in_episode_id: 'ep-1', episode_id: 'ep-1', is_episode_event: false,
+        episode_event: { id: 'ev-1', name: 'Velour Gala', show_id: 'show-1' }, other_events: [], look: null,
+      }],
     });
-    expect(await screen.findByTestId('scene-set-event-not-episode-ev-2')).toBeTruthy();
+    // Evoni, 2026-10-16: the note names the episode's event, with a link.
+    const note = await screen.findByTestId('scene-set-event-not-episode-ev-2');
+    expect(within(note).getByRole('link', { name: 'Velour Gala' }).getAttribute('href')).toBe('/shows/show-1/events/ev-1');
     await new Promise((r) => setTimeout(r, 0));
     expect(vi.mocked(api.get).mock.calls.map(([u]) => u).some((u) => u.includes('dressed-angles'))).toBe(false);
+  });
+
+  // Evoni, 2026-10-16: an episode made from several events dresses its own
+  // event's look, and names the others, each a link to its event.
+  test('the episode\'s event dresses its look and names the episode\'s other events', async () => {
+    vi.mocked(api.get).mockReset();
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url.endsWith('/look')) return { data: { success: true, data: { scene_set: { id: 'set-7', name: 'Hall' }, approved_base: null, look: null, editable: true } } };
+      if (url === '/api/v1/episode-brief/ep-9/dressed-angles?scene_set_id=set-7') return { data: { data: { look: null, angles: [] } } };
+      return { data: {} };
+    });
+    renderRow({
+      id: 'set-7', base_approved: false, looks: [],
+      // Named by the episode's brief, not stamped with it.
+      events: [{
+        id: 'ev-9', name: 'Gala', show_id: 'show-1', used_in_episode_id: null, episode_id: 'ep-9', is_episode_event: true, episode_event: null,
+        other_events: [{ id: 'ev-10', name: 'After party', show_id: 'show-1' }, { id: 'ev-11', name: 'Brunch', show_id: 'show-1' }], look: null,
+      }],
+    });
+    const others = await screen.findByTestId('scene-set-event-others-ev-9');
+    expect(others.textContent).toBe('Also in this episode: After party, Brunch');
+    expect(within(others).getByRole('link', { name: 'Brunch' }).getAttribute('href')).toBe('/shows/show-1/events/ev-11');
+    await waitFor(() => expect(vi.mocked(api.get).mock.calls.map(([u]) => u)).toContain('/api/v1/episode-brief/ep-9/dressed-angles?scene_set_id=set-7'));
   });
 
   test('a look being made again, or whose last try failed, keeps its picture and says so (fourth audit)', async () => {

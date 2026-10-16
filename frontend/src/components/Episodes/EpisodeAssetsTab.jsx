@@ -50,7 +50,7 @@ const ITEM_ICONS = {
 export function venueFixTarget({ event, episode, showId } = {}) {
   if (!event || !showId) return null;
   if (event.scene_set_id) {
-    const from = episode?.id ? `/episodes/${episode.id}?tab=assets` : null;
+    const from = episode?.id ? `/episodes/${episode.id}?tab=files` : null;
     return { label: 'Open in Scene Sets', url: sceneSetPath(showId, event.scene_set_id, { from, fromLabel: episode?.title || 'the episode assets', need: 'Venue image' }) };
   }
   return { label: 'Event Panel', url: `/shows/${showId}/world?tab=events` };

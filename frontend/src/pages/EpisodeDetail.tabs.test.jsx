@@ -142,7 +142,7 @@ describe('EpisodeDetail: the tab is the URL (LINK-04)', () => {
     fireEvent.click(screen.getByTestId('back'));
     expect(where()).toBe('/episodes/ep-1?tab=money');
     await waitFor(() => expect(moneyBody()).toBeTruthy());
-    expect(activeMain()).toBe('Production');
+    expect(activeMain()).toBe('Assets');
     expect(screen.queryByTestId('episode-overview')).toBeNull();
 
     fireEvent.click(screen.getByTestId('forward'));
@@ -151,19 +151,22 @@ describe('EpisodeDetail: the tab is the URL (LINK-04)', () => {
   });
 
   test('a sub-tab click is in the URL, and a tab change keeps the other parameters', async () => {
-    renderAt('/episodes/ep-1?tab=assets&from=%2Fshows%2Fshow-1%2Fworld');
+    renderAt('/episodes/ep-1?tab=files&from=%2Fshows%2Fshow-1%2Fworld');
     expect(await screen.findByTestId('episode-assets')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Checklist' }));
-    expect(where()).toBe('/episodes/ep-1?tab=checklist&from=%2Fshows%2Fshow-1%2Fworld');
+    fireEvent.click(screen.getByRole('button', { name: 'Money' }));
+    expect(where()).toBe('/episodes/ep-1?tab=money&from=%2Fshows%2Fshow-1%2Fworld');
+    await waitFor(() => expect(moneyBody()).toBeTruthy());
+    fireEvent.click(screen.getByTitle('Production'));
+    expect(where()).toBe('/episodes/ep-1?tab=production&from=%2Fshows%2Fshow-1%2Fworld');
     expect(await screen.findByTestId('episode-checklist')).toBeTruthy();
   });
 
-  test('Ctrl+2 opens Production → Wardrobe, in the URL; no ?tab= is the checklist; an unknown tab has a body', async () => {
+  test('Ctrl+2 opens Assets → Wardrobe, in the URL; no ?tab= is the checklist; an unknown tab has a body', async () => {
     renderAt('/episodes/ep-1');
     expect(await screen.findByTestId('episode-checklist')).toBeTruthy();
     fireEvent.keyDown(window, { key: '2', ctrlKey: true });
     expect(where()).toBe('/episodes/ep-1?tab=wardrobe');
-    await waitFor(() => expect(activeMain()).toBe('Production'));
+    await waitFor(() => expect(activeMain()).toBe('Assets'));
     // The Wardrobe body loads a lazy panel (the style sheet, Task #2814);
     // the checklist stays on screen until it arrives.
     await waitFor(() => expect(screen.queryByTestId('episode-checklist')).toBeNull());

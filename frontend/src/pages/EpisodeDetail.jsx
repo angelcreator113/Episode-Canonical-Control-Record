@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
 import useScrolledPast from '../hooks/useScrolledPast';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Compass, Sparkles, PenLine, CalendarDays, Crown } from 'lucide-react';
+import { Compass, Sparkles, PenLine, CalendarDays, Crown, Shirt, ChevronLeft, ChevronRight } from 'lucide-react';
+import { STATUS_LABEL } from '../lib/episodePipeline';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/ToastContainer';
 import episodeService from '../services/episodeService';
@@ -55,10 +56,13 @@ import './EpisodeDetail.css';
 // - listEpisodeLibraryScenesApi reused 4× (mount + 3 reload-after-mutation)
 // - reorderEpisodeLibrarySceneApi reused 2× (Promise.all pair on drag-reorder)
 // The main tabs' icons (Evoni's Episode mock, 2026-10-05).
-const TAB_ICONS = { overview: Sparkles, scripts: PenLine, production: CalendarDays, results: Crown };
+const TAB_ICONS = { overview: Sparkles, assets: Shirt, scripts: PenLine, production: CalendarDays, results: Crown };
 
 export const listEpisodeLibraryScenesApi = (epId) =>
   api.get(`/api/v1/episodes/${epId}/library-scenes`).then((r) => r.data);
+// The show's episodes in order, for the header's previous/next switcher.
+export const listShowEpisodesApi = (showId) =>
+  api.get(`/api/v1/episodes?show_id=${showId}&limit=500&sort=episode_number:ASC`).then((r) => r.data?.data || []);
 export const listWorldEventsApi = (showId) =>
   api.get(`/api/v1/world/${showId}/events`).then((r) => r.data);
 // Lala's ledger balance for the header chip: the same /balance the Dashboard
@@ -353,6 +357,52 @@ const EpisodeDetail = () => {
   }, [episode?.id, episode?.evaluation_status]);
 
   // Handle episode updates from Overview tab
+  // The header's previous/next switcher: the show's episodes by number.
+  const [showEpisodes, setShowEpisodes] = useState([]);
+  const switchShowId = episode?.show_id || episode?.showId;
+  useEffect(() => {
+    if (!switchShowId) return undefined;
+    let cancelled = false;
+    // Through a promise, so a failure of any kind lands in the catch.
+    Promise.resolve().then(() => listShowEpisodesApi(switchShowId))
+      .then((list) => {
+        if (cancelled) return;
+        const num = (e) => Number(e.episode_number ?? e.episodeNumber ?? Infinity);
+        setShowEpisodes([...(Array.isArray(list) ? list : [])].sort((a, b) => num(a) - num(b)));
+      })
+      .catch((err) => { console.error('[EpisodeDetail] show episodes load failed:', err); if (!cancelled) setShowEpisodes([]); });
+    return () => { cancelled = true; };
+  }, [switchShowId]);
+  const episodeIndex = showEpisodes.findIndex((e) => e.id === episode?.id);
+  const prevEpisode = episodeIndex > 0 ? showEpisodes[episodeIndex - 1] : null;
+  const nextEpisode = episodeIndex >= 0 && episodeIndex < showEpisodes.length - 1 ? showEpisodes[episodeIndex + 1] : null;
+  // Same tab on the other episode; unsaved script edits ask first.
+  const goToEpisode = (ep) => {
+    if (!ep) return;
+    leaveTo(`/episodes/${ep.id}${tabParam ? `?tab=${encodeURIComponent(tabParam)}` : ''}`);
+  };
+
+  // The header's status dropdown: the pipeline's statuses (lib/episodePipeline),
+  // plus the episode's own when it is something else, so nothing is lost.
+  const [statusSaving, setStatusSaving] = useState(false);
+  const changeStatus = async (next) => {
+    const prev = episode.status;
+    if (!next || next === prev) return;
+    setStatusSaving(true);
+    setEpisode((e) => ({ ...e, status: next }));
+    try {
+      await episodeService.updateEpisode(episode.id, { status: next });
+      setShowEpisodes((list) => list.map((e) => (e.id === episode.id ? { ...e, status: next } : e)));
+      toast?.showSuccess?.(`Status: ${STATUS_LABEL[next] || next}`);
+    } catch (err) {
+      console.error('Error updating episode status:', err);
+      setEpisode((e) => ({ ...e, status: prev }));
+      toast?.showError?.('The status could not be saved.');
+    } finally {
+      setStatusSaving(false);
+    }
+  };
+
   const handleUpdateEpisode = async (updates) => {
     try {
       await episodeService.updateEpisode(episode.id, updates);
@@ -385,7 +435,7 @@ const EpisodeDetail = () => {
   // to activeTab 'production' / sub 'wardrobe', so the old
   // `activeTab !== 'wardrobe'` gate never let this run (Task #1906).
   useEffect(() => {
-    if (!episode || tabKey !== 'production.wardrobe') return;
+    if (!episode || tabKey !== 'assets.wardrobe') return;
     const showId = episode.show_id || episode.showId;
     if (!showId) return;
 
@@ -643,9 +693,21 @@ const EpisodeDetail = () => {
             <h1 className="ed-header-title">{episode.title || episode.episodeTitle || 'Untitled Episode'}</h1>
             <div className="ed-header-meta">
               {(episode.episode_number || episode.episodeNumber) && (
-                <span className="ed-meta-item">
+                <span className="ed-meta-item ed-ep-switch" data-testid="ed-ep-switch">
+                  <button type="button" className="ed-ep-step" disabled={!prevEpisode}
+                    onClick={() => goToEpisode(prevEpisode)}
+                    aria-label={prevEpisode ? `Previous episode: ${prevEpisode.episode_number ?? ''} ${prevEpisode.title || ''}`.trim() : 'No previous episode'}
+                    title={prevEpisode ? `Episode ${prevEpisode.episode_number ?? '?'}: ${prevEpisode.title || 'Untitled'}` : undefined}>
+                    <ChevronLeft size={16} aria-hidden="true" />
+                  </button>
                   <span className="ed-meta-label">Episode</span>
                   <span className="ed-meta-value">{episode.episode_number || episode.episodeNumber}</span>
+                  <button type="button" className="ed-ep-step" disabled={!nextEpisode}
+                    onClick={() => goToEpisode(nextEpisode)}
+                    aria-label={nextEpisode ? `Next episode: ${nextEpisode.episode_number ?? ''} ${nextEpisode.title || ''}`.trim() : 'No next episode'}
+                    title={nextEpisode ? `Episode ${nextEpisode.episode_number ?? '?'}: ${nextEpisode.title || 'Untitled'}` : undefined}>
+                    <ChevronRight size={16} aria-hidden="true" />
+                  </button>
                 </span>
               )}
               {episode.show && (
@@ -657,9 +719,14 @@ const EpisodeDetail = () => {
                   <span className="ed-show-name">{episode.show.name}</span>
                 </Link>
               )}
-              <span className={`ed-status-badge ed-status-${episode.status?.toLowerCase() || 'draft'}`}>
-                {episode.status || 'Draft'}
-              </span>
+              <label className={`ed-status-select ed-status-${episode.status?.toLowerCase() || 'draft'}`}>
+                <span className="ed-visually-hidden">Status</span>
+                <select data-testid="ed-status" value={episode.status || 'draft'} disabled={statusSaving}
+                  onChange={(e) => changeStatus(e.target.value)} aria-label="Episode status">
+                  {Object.entries(STATUS_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  {episode.status && !STATUS_LABEL[episode.status] && <option value={episode.status}>{episode.status}</option>}
+                </select>
+              </label>
               <span className="ed-working-badge" title="Studio tools (Timeline, Scene Composer) will open this episode">
                 Working Episode
               </span>
@@ -799,7 +866,8 @@ const EpisodeDetail = () => {
         {/* Sub-tabs */}
         {(() => {
           const currentTab = EP_TABS.find(t => t.key === activeTab);
-          if (!currentTab?.subs) return null;
+          // A tab with one sub-tab (Production → Checklist) needs no row.
+          if (!currentTab?.subs || currentTab.subs.length < 2) return null;
           return (
             // One line per label; a row wider than the screen scrolls sideways
             // (Evoni, 2026-10-05: "Production Checklist" wrapped onto two
@@ -854,7 +922,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Assets Tab */}
-        {tabKey === 'production.assets' && (
+        {tabKey === 'assets.files' && (
           episode.show ? (
             <EpisodeAssetsTab episode={episode} show={episode.show} />
           ) : (
@@ -878,7 +946,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Scenes Tab */}
-        {tabKey === 'production.scenes' && (
+        {tabKey === 'assets.scenes' && (
           <EpisodeScenesTab
             episode={episode}
             sourceEvent={sourceEvent}
@@ -887,7 +955,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Wardrobe Tab */}
-        {tabKey === 'production.wardrobe' && (
+        {tabKey === 'assets.wardrobe' && (
           <div>
             {/* Unified wardrobe — event picker + outfit builder, for this
                 episode's own events only (Task #3107) */}
@@ -966,7 +1034,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Style Page (was Lookbook) — the style sheet as its own editor (Task #2876) */}
-        {tabKey === 'production.lookbook' && (
+        {tabKey === 'assets.lookbook' && (
           <EpisodeStylePage episode={episode} onOpenTab={openTab} />
         )}
 
@@ -990,17 +1058,17 @@ const EpisodeDetail = () => {
             it; same phone.start handler and overlay), what is on the phone,
             the deferred beat-requirements notice, and missions as a section
             (EpisodePhoneMissionsTab, unchanged toggles + MissionEditor). */}
-        {tabKey === 'production.phone' && (
+        {tabKey === 'assets.phone' && (
           <EpisodeLalasPhoneTab episode={episode} onPreview={phone.start} previewError={phone.error} />
         )}
 
         {/* Money Tab — Episode Money, Phase A (#2278): read-only, from the ledger */}
-        {tabKey === 'production.money' && (
+        {tabKey === 'assets.money' && (
           <EpisodeMoneyTab episode={episode} showId={episode?.show_id || episode?.showId} />
         )}
 
         {/* Overlays Tab — P15: every on-screen piece of the episode */}
-        {tabKey === 'production.overlays' && (
+        {tabKey === 'assets.overlays' && (
           <EpisodeOverlaysTab
             episode={episode}
             showId={episode?.show_id || episode?.showId}

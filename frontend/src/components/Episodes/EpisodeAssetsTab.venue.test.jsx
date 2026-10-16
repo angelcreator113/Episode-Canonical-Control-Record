@@ -10,10 +10,10 @@ import { venueFixTarget } from './EpisodeAssetsTab';
 const episode = { id: 'ep-1', title: 'Gala Night' };
 
 describe('venueFixTarget', () => {
-  test('the event\'s set opens in Scene Sets, carrying the assets tab back', () => {
+  test('the event\'s set opens in Scene Sets, carrying the Files tab back', () => {
     expect(venueFixTarget({ event: { id: 'ev-1', scene_set_id: 'set-9' }, episode, showId: 'show-1' })).toEqual({
       label: 'Open in Scene Sets',
-      url: '/shows/show-1/world?tab=scene-sets&set=set-9&from=%2Fepisodes%2Fep-1%3Ftab%3Dassets&fromLabel=Gala%20Night&need=Venue%20image',
+      url: '/shows/show-1/world?tab=scene-sets&set=set-9&from=%2Fepisodes%2Fep-1%3Ftab%3Dfiles&fromLabel=Gala%20Night&need=Venue%20image',
     });
   });
 

@@ -38,14 +38,12 @@ function buildNav() {
       items: [
         { icon: '🎬', label: 'Shows', route: '/shows', expandable: true },
         { icon: '⏱️', label: 'Timeline Editor', route: '/studio/timeline' },
-        { icon: '📦', label: 'Compositions', route: '/library' },
       ],
     },
     {
       zone: 'LIBRARY',
       items: [
         { icon: '🗃️', label: 'Assets', route: '/assets' },
-        { icon: '🏞️', label: 'Scene Clips', route: '/scene-library' },
         { icon: '🧩', label: 'Templates', route: '/template-studio' },
         { icon: '📱', label: "Lala's Phone", route: '/phone-hub' },
       ],

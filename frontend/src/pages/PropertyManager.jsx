@@ -154,8 +154,8 @@ export default function PropertyManager() {
                             )}
                             <div style={{ fontWeight: 600, fontSize: 12 }}>{room.name}</div>
                             <div style={{ fontSize: 10, color: '#888' }}>{room.location_type}</div>
-                            {sceneSet && (
-                              <button onClick={() => navigate(`/scene-library`)} style={{ marginTop: 6, padding: '3px 8px', borderRadius: 4, border: '1px solid #ddd', background: '#fff', fontSize: 10, cursor: 'pointer' }}>
+                            {sceneSet?.show_id && (
+                              <button onClick={() => navigate(`/shows/${sceneSet.show_id}/world?tab=scene-sets`)} style={{ marginTop: 6, padding: '3px 8px', borderRadius: 4, border: '1px solid #ddd', background: '#fff', fontSize: 10, cursor: 'pointer' }}>
                                 Open in Scene Studio
                               </button>
                             )}
