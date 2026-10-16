@@ -94,10 +94,10 @@ describe('ThumbnailGallery', () => {
 });
 
 describe('ThumbnailGallery: the way back (audit LINK-02)', () => {
-  test('links back to the episode\'s Assets tab', async () => {
+  test('links back to the episode\'s Files tab', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { data: [] } });
     renderAt('ep-1');
     const back = await screen.findByTestId('thumbnail-back-to-episode');
-    expect(back.getAttribute('href')).toBe('/episodes/ep-1?tab=assets');
+    expect(back.getAttribute('href')).toBe('/episodes/ep-1?tab=files');
   });
 });

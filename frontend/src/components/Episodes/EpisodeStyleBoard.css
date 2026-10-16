@@ -1,0 +1,155 @@
+/* EpisodeStyleBoard — the Overview's Episode Style board (Evoni's mock,
+   2026-10-16). Pink-and-gold glass cards, matching the other redesigned
+   pages. Tokens only (EpisodeStyleBoard.theme.test.js): no hex, no rgb. */
+
+.esb {
+  display: flex; flex-direction: column; gap: 14px; margin-bottom: 18px; padding: 14px; border-radius: 22px;
+  background: linear-gradient(165deg, var(--accent-subtle) 0%, var(--lala-lavender-soft) 60%, var(--lala-parchment) 100%);
+  border: 1.5px solid var(--lala-gold-line);
+}
+.esb *, .esb *::before, .esb *::after { box-sizing: border-box; }
+.esb button:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 2px; }
+
+.esb-row { display: grid; gap: 14px; align-items: stretch; }
+.esb-row-top { grid-template-columns: minmax(0, 2.7fr) minmax(0, 1.1fr) minmax(0, 1.2fr) minmax(0, 1fr); }
+.esb-row-mid { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 2fr); }
+.esb-row-bottom { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1.2fr); }
+
+.esb-card {
+  display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 14px 16px; border-radius: 18px;
+  background: var(--surface-card); color: var(--text-primary);
+  border: 1.5px solid var(--lala-gold-line); box-shadow: var(--shadow-sm);
+}
+.esb-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.esb-card-title {
+  display: inline-flex; align-items: center; gap: 8px; margin: 0;
+  font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-dark);
+}
+.esb-count { font-size: 12px; font-weight: 700; color: var(--lala-gold-text); white-space: nowrap; }
+.esb-note { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+.esb-muted { display: inline-flex; align-items: center; gap: 4px; color: var(--text-secondary); font-size: 12px; }
+.esb-empty { padding: 8px; text-align: center; font-size: 12px; font-weight: 600; color: var(--lala-lavender-text); }
+.esb-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.esb-frame {
+  display: grid; place-items: center; overflow: hidden; border-radius: 14px; min-height: 0;
+  border: 1.5px solid var(--lala-gold-line);
+  background: linear-gradient(160deg, var(--lala-lavender-soft), var(--accent-subtle));
+}
+.esb-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* Episode & event */
+.esb-event-body { display: grid; grid-template-columns: minmax(96px, 0.55fr) minmax(0, 1.45fr); gap: 12px; align-items: start; }
+.esb-event-img { aspect-ratio: 4 / 5; }
+.esb-fields { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.esb-field { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 8px; align-items: center; }
+.esb-field dt { font-size: 12px; font-weight: 700; color: var(--accent-dark); }
+.esb-field dd {
+  margin: 0; padding: 5px 10px; border-radius: 10px; font-size: 13px; overflow-wrap: anywhere;
+  background: var(--accent-subtle); color: var(--text-primary);
+}
+.esb-fields.is-compact .esb-field { grid-template-columns: 56px minmax(0, 1fr); }
+
+/* Dress code */
+.esb-dress-img { aspect-ratio: 16 / 10; }
+.esb-dress-text { margin: 0; font-size: 14px; font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; }
+.esb-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.esb-chip {
+  padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  background: var(--lala-lavender-soft); color: var(--lala-lavender-text);
+}
+
+/* Style goals */
+.esb-goals { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.esb-goals li { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); }
+.esb-goals li.is-done { color: var(--text-primary); }
+.esb-check {
+  display: grid; place-items: center; width: 22px; height: 22px; flex-shrink: 0; border-radius: 7px;
+  border: 1.5px solid var(--lala-gold-line); background: var(--surface-card); color: var(--accent-dark);
+}
+.esb-goals li.is-done .esb-check { background: var(--accent-subtle); border-color: var(--accent); }
+.esb-link {
+  align-self: flex-start; margin-top: auto; padding: 0; border: none; background: none; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 700; color: var(--lala-lavender-text);
+}
+.esb-link:hover { text-decoration: underline; }
+
+/* Rewards */
+.esb-rewards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.esb-rewards li {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-radius: 12px;
+  background: var(--lala-gold-soft); color: var(--lala-gold-text); font-size: 13px; font-weight: 600;
+}
+.esb-rewards li span { display: inline-flex; align-items: center; gap: 5px; }
+.esb-rewards strong { font-family: var(--font-prose); font-size: 16px; color: var(--text-primary); }
+
+/* Mood board */
+.esb-mood-grid { display: grid; grid-template-columns: 2fr 1fr 1fr; grid-auto-rows: 70px; gap: 8px; }
+.esb-mood-grid .esb-frame.is-big { grid-row: span 2; }
+.esb-mood-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.esb-swatches { display: flex; gap: 6px; align-items: center; }
+.esb-swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--surface-card); box-shadow: var(--shadow-sm); }
+.esb-btn {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 14px; border-radius: 999px; cursor: pointer;
+  border: 1.5px solid var(--lala-gold-line); background: var(--accent-subtle); color: var(--accent-dark);
+  font: inherit; font-size: 13px; font-weight: 700;
+}
+
+/* Inspiration */
+.esb-inspo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.esb-inspo-grid .esb-frame { aspect-ratio: 1; }
+
+/* Wardrobe slots */
+.esb-slots { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.esb-slot {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; padding: 0; cursor: pointer;
+  border: none; background: none; font: inherit; color: var(--text-primary);
+}
+.esb-slot-img {
+  display: grid; place-items: center; width: 100%; aspect-ratio: 3 / 5; overflow: hidden; border-radius: 12px;
+  border: 1.5px dashed var(--lala-gold-line); background: var(--accent-subtle); color: var(--accent-dark);
+}
+.esb-slot.is-filled .esb-slot-img { border-style: solid; background: var(--surface-card); }
+.esb-slot.is-required:not(.is-filled) .esb-slot-img { border-color: var(--accent); }
+.esb-slot-img img { width: 100%; height: 100%; object-fit: cover; }
+.esb-slot-label { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--accent-dark); }
+
+/* The look */
+.esb-pill { padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--lala-gold-soft); color: var(--lala-gold-text); }
+.esb-pill.is-on { background: var(--success-bg); color: var(--success-text); }
+.esb-look { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.esb-look li { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; }
+.esb-look li > span:last-child { overflow-wrap: anywhere; }
+.esb-look-img {
+  display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0; overflow: hidden; border-radius: 10px;
+  border: 1px solid var(--lala-gold-line); background: var(--accent-subtle); color: var(--accent-dark);
+}
+.esb-look-img img { width: 100%; height: 100%; object-fit: cover; }
+
+/* Style notes */
+.esb-notes { display: flex; flex-direction: column; gap: 8px; }
+.esb-tagline { margin: 0; font-family: var(--font-prose); font-size: 16px; font-style: italic; color: var(--accent-dark); }
+
+/* Quick tools */
+.esb-tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.esb-tool {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px; border-radius: 14px; cursor: pointer;
+  border: 1.5px solid var(--lala-gold-line); background: var(--surface-card); color: var(--accent-dark);
+  font: inherit; font-size: 12px; font-weight: 700;
+}
+.esb-tool:hover { box-shadow: var(--shadow-md); }
+
+@media (max-width: 1280px) {
+  .esb-row-top { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .esb-row-mid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .esb-slots-card { grid-column: 1 / -1; }
+  .esb-row-bottom { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .esb { padding: 10px; }
+  .esb-row-top, .esb-row-mid, .esb-row-bottom { grid-template-columns: minmax(0, 1fr); }
+  .esb-event-body { grid-template-columns: minmax(0, 1fr); }
+  .esb-event-img { aspect-ratio: 16 / 10; }
+  .esb-slots { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .esb-field { grid-template-columns: 84px minmax(0, 1fr); }
+}

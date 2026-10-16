@@ -120,14 +120,25 @@ describe('Episode header and tabs (redesign part 1)', () => {
     await waitFor(() => expect(screen.getByTestId('ed-production-left').textContent).toBe('1 left'));
   });
 
-  test('the pills run Checklist, Scenes, Wardrobe, Style Page, Phone, Overlays, Money, Assets; the chosen one is marked', async () => {
-    renderAt('/episodes/ep-1?tab=checklist');
+  // Evoni, 2026-10-16: the episode's pieces sit under Assets; Production is
+  // the checklist alone, with no pill row.
+  test('the Assets pills run Scenes, Wardrobe, Style Page, Phone, Overlays, Money, Files; the chosen one is marked', async () => {
+    renderAt('/episodes/ep-1?tab=wardrobe');
     const row = await screen.findByTestId('ed-subtabs');
-    expect([...row.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Checklist', 'Scenes', 'Wardrobe', 'Style Page', 'Phone', 'Overlays', 'Money', 'Assets']);
+    expect([...row.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Scenes', 'Wardrobe', 'Style Page', 'Phone', 'Overlays', 'Money', 'Files']);
     const chosen = row.querySelector('[aria-current="page"]');
-    expect(chosen.textContent).toBe('Checklist');
+    expect(chosen.textContent).toBe('Wardrobe');
     expect(chosen.className).toContain('is-active');
-    expect(screen.getByTitle('Production').getAttribute('aria-current')).toBe('page');
+    expect(screen.getByTitle('Assets').getAttribute('aria-current')).toBe('page');
+  });
+
+  test('the main tabs run Overview, Assets, Script, Production, Results; Production has no pill row', async () => {
+    renderAt('/episodes/ep-1?tab=checklist');
+    await waitFor(() => expect(screen.getByTitle('Production').getAttribute('aria-current')).toBe('page'));
+    expect(['Overview', 'Assets', 'Script', 'Production', 'Results'].map((t) => screen.getByTitle(t).getAttribute('title'))).toEqual(['Overview', 'Assets', 'Script', 'Production', 'Results']);
+    const tabs = [...document.querySelectorAll('.ed-tabs-modern .ed-tab')].map((b) => b.getAttribute('title'));
+    expect(tabs).toEqual(['Overview', 'Assets', 'Script', 'Production', 'Results']);
+    expect(screen.queryByTestId('ed-subtabs')).toBeNull();
   });
 
   test('the balance chip reads in coins', async () => {

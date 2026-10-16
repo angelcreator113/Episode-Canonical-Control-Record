@@ -4,7 +4,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   LayoutGrid, Image as ImageIcon, MapPin, Shirt, Armchair, AppWindow, Layers,
   Music, Sparkles, Paperclip, Search, UploadCloud, List, ChevronRight,
-  Clapperboard, LayoutTemplate, MoreVertical, Trash2, Tv, X, FileAudio,
+  LayoutTemplate, MoreVertical, Trash2, Tv, X, FileAudio,
 } from 'lucide-react';
 import { activeShowId } from '../utils/activeShow';
 import { assetService } from '../services/assetService';
@@ -378,7 +378,6 @@ function AssetLibrary({ embedded = false }) {
           <div className="al-rail-divider" />
           <div className="al-rail-heading">Elsewhere in the studio</div>
           <nav className="al-rail-nav">
-            <Link className="al-rail-btn" to="/scene-library"><Clapperboard size={20} aria-hidden /><span className="al-rail-label">Scene Clips</span></Link>
             <Link className="al-rail-btn" to="/template-studio"><LayoutTemplate size={20} aria-hidden /><span className="al-rail-label">Templates</span></Link>
           </nav>
         </aside>

@@ -897,17 +897,6 @@
   }
 }
 
-/* --- DiagnosticPage enhancement --- */
-@media (max-width: 480px) {
-  .diagnostic-page {
-    padding: 0.75rem;
-  }
-
-  .diagnostic-page .card {
-    padding: 1rem;
-  }
-}
-
 
 /* ============================================================
    9. TABLES — Responsive table handling

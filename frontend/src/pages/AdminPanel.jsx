@@ -11,7 +11,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Wallet, BarChart3, Coins, Map as MapIcon, Palette, Stethoscope, Trash2, ChevronRight } from 'lucide-react';
+import { Wallet, BarChart3, Coins, Map as MapIcon, Palette, Trash2, ChevronRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { isAdmin } from '../utils/authGroups';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -43,8 +43,6 @@ const ADMIN_TOOLS = [
     desc: 'Audits navigation: sidebar and route alignment, dead links, orphan pages.' },
   { route: '/design-agent', label: 'Design Agent', Icon: Palette,
     desc: 'Audits design: responsive breakpoints, tokens, consistency, accessibility.' },
-  { route: '/diagnostics', label: 'Diagnostics', Icon: Stethoscope,
-    desc: 'Tests the API endpoints to find what is failing.' },
   { route: '/recycle-bin', label: 'Recycle Bin', Icon: Trash2,
     desc: 'Restores soft-deleted items, grouped by type.' },
 ];

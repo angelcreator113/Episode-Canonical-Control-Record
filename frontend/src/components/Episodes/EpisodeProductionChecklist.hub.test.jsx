@@ -65,7 +65,7 @@ describe('Checklist hub', () => {
     expect(screen.getByTestId('checklist-section-wardrobe').textContent).not.toMatch(/Beat \d/);
   });
 
-  test('the Overlays card: the title overlay and placed overlays, opening Production → Overlays', async () => {
+  test('the Overlays card: the title overlay and placed overlays, opening Assets → Overlays', async () => {
     vi.mocked(api.get).mockImplementation(async (url) => {
       if (url === '/api/v1/episodes/ep-1/timeline/placements') return { data: { data: [{ id: 'p1' }] } };
       return { data: {} };
@@ -79,8 +79,8 @@ describe('Checklist hub', () => {
     expect(within(card).getByText('Overlays placed on the video')).toBeTruthy();
     fireEvent.click(within(card).getByRole('button', { name: 'Open Overlays' }));
     expect(onOpenTab).toHaveBeenCalledWith('overlays');
-    // Social & Content now opens Assets, where its social tasks are.
-    expect(within(screen.getByTestId('checklist-section-social')).getByRole('button', { name: 'Open Assets' })).toBeTruthy();
+    // Social & Content opens Assets → Files, where its social tasks are.
+    expect(within(screen.getByTestId('checklist-section-social')).getByRole('button', { name: 'Open Files' })).toBeTruthy();
   });
 
   test('a complete card says so and opens where it is worked on', async () => {

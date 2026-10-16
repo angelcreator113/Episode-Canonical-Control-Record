@@ -128,11 +128,11 @@ describe('EpisodeDetail — Money tab and balance chip (#2278)', () => {
 
   // Evoni's Episode mock (2026-10-05) orders the pills Checklist, Scenes,
   // Wardrobe, Phone, Overlays, Money, with Assets last.
-  test('Production lists Money after Overlays and before Assets', async () => {
-    renderEpisodeDetail('/episodes/ep-1?tab=assets');
+  test('Assets lists Money after Overlays and before Files', async () => {
+    renderEpisodeDetail('/episodes/ep-1?tab=files');
     await waitFor(() => expect(screen.getByTestId('episode-assets')).toBeTruthy());
 
-    const labels = ['Overlays', 'Money', 'Assets'].map((name) => screen.getByRole('button', { name }));
+    const labels = ['Overlays', 'Money', 'Files'].map((name) => screen.getByRole('button', { name }));
     const order = (a, b) => a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING;
     expect(order(labels[0], labels[1])).toBeTruthy();
     expect(order(labels[1], labels[2])).toBeTruthy();
@@ -157,12 +157,12 @@ describe('EpisodeDetail — Money tab and balance chip (#2278)', () => {
     expect((await screen.findByTestId('ed-balance-chip')).textContent).toBe('Coins unavailable');
   });
 
-  test('the chip opens Production → Money', async () => {
+  test('the chip opens Assets → Money', async () => {
     renderEpisodeDetail('/episodes/ep-1?tab=overview');
     fireEvent.click(await screen.findByTestId('ed-balance-chip'));
 
     expect(await screen.findByText('This episode has no source event, and nothing has posted.')).toBeTruthy();
-    expect(screen.getByTitle('Production').className).toContain('ed-tab-active');
+    expect(screen.getByTitle('Assets').className).toContain('ed-tab-active');
   });
 
   test('?tab=money lands on the Money tab', async () => {

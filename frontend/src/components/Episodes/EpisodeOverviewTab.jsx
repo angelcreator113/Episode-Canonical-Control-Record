@@ -8,6 +8,7 @@ import SceneSuggestionReview from '../episode/SceneSuggestionReview';
 import TimelinePlacementsSection from '../episode/TimelinePlacementsSection';
 import EpisodeTeaserSection from './EpisodeTeaserSection';
 import EpisodeMoneyCard from './EpisodeMoneyCard';
+import EpisodeStyleBoard from './EpisodeStyleBoard';
 import { NextStepBanner, OverviewTiles, StoryBriefCard, FromEventCard } from './EpisodeOverviewSummary';
 import { episodePlanning } from '../../utils/episodePlanning';
 import { resolveEventVenueAndDate } from '../../utils/eventReadiness';
@@ -517,6 +518,11 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
       )}
 
       <NextStepBanner step={step} onOpenTab={onOpenTab} />
+      {/* The Episode Style board (Evoni's mock, 2026-10-16): event, dress
+          code, goals, rewards, mood board, wardrobe slots, look, notes. The
+          tiles, brief and bands below stay as they were. */}
+      <EpisodeStyleBoard episode={episode} source={source} linkedEvents={linkedEvents}
+        outfit={outfit} money={money} onOpenTab={onOpenTab} />
       <OverviewTiles tiles={tiles} onOpenTab={onOpenTab} />
       <div className="eos-grid">
         <StoryBriefCard

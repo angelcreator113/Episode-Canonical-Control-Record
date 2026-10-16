@@ -64,7 +64,7 @@ export const SECTION_GUIDE = {
   lookbook: { text: "The episode's style sheet, ready x of 12, and its status (Draft or Approved).", open: { label: 'Open Style Page', tab: 'lookbook' } },
   overlays: { text: 'Screens Lala looks at during the episode.', open: { label: 'Open Phone', tab: 'phone' } },
   onscreen: { text: 'What sits on top of the video: the title overlay and the overlays placed on the timeline.', open: { label: 'Open Overlays', tab: 'overlays' } },
-  social: { text: 'The social checklist and the episode title.', open: { label: 'Open Assets', tab: 'assets' } },
+  social: { text: 'The social checklist and the episode title.', open: { label: 'Open Files', tab: 'files' } },
   intelligence: { text: "Lala's state and the Show Brain the script reads.", open: null },
 };
 

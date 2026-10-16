@@ -157,9 +157,10 @@ describe('CharacterRegistryPage: the cast', () => {
   });
   afterEach(() => confirm.mockRestore());
 
-  const ready = async () => { renderAt(); await waitFor(() => expect(screen.getByRole('button', { name: 'Kept (1)' }).disabled).toBe(false)); };
+  // Ready once the episode counts are in (the gold stat stops reading "–").
+  const ready = async () => { renderAt(); await waitFor(() => expect(screen.getByText('in an episode').previousSibling.textContent).toBe('1')); };
 
-  test('Lala, her world and the old system, each in its place, with episode counts', async () => {
+  test('Lala and her world, with episode counts', async () => {
     await ready();
     expect(api.get).toHaveBeenCalledWith('/api/v1/cast/review?registry_id=reg-sal');
     // Lala is the Protagonist though her stored role is 'special' (Task 3199): no warning.
@@ -170,12 +171,29 @@ describe('CharacterRegistryPage: the cast', () => {
     expect(people.textContent).toContain('The peer');
     expect(people.textContent).toContain('In 1 episode');
     expect(people.querySelector('a').getAttribute('href')).toBe('/character/sable');
-    const old = screen.getByTestId('cast-old');
-    expect(old.textContent).not.toContain('STUDIO BY SABLE');
-    expect(old.textContent).not.toContain('Kim');
-    expect(old.textContent.match(/Two "Jade"s/g)).toHaveLength(2);
-    expect(old.textContent).toContain('No episodes');
-    expect(screen.getByText('reviewed').previousSibling.textContent).toBe('3');
+    expect(screen.getByText('in her world').previousSibling.textContent).toBe('2');
+    expect(screen.getByText('with a character').previousSibling.textContent).toBe('1');
+  });
+
+  // Evoni, 2026-10-16: "get rid of the old system stuff". The section is off
+  // the page; its characters are not deleted, and nothing here archives.
+  test('the old system is off the page: no section, no old characters, no review or archive actions', async () => {
+    await ready();
+    expect(screen.queryByText('From the old system')).toBeNull();
+    expect(screen.queryByTestId('cast-old')).toBeNull();
+    expect(screen.queryByTestId('cast-archived')).toBeNull();
+    // Archived ones are nowhere; live ones no feed profile names are listed plainly.
+    for (const name of ['Marcus Chen', 'Nico']) expect(screen.queryByText(name)).toBeNull();
+    const more = screen.getByTestId('cast-more');
+    expect(more.textContent).toContain('Eva');
+    expect(more.textContent).toContain('Kim');
+    expect(more.textContent).not.toContain('STUDIO BY SABLE');
+    expect(more.textContent).not.toContain('Lala');
+    expect(more.querySelector('a').getAttribute('href')).toMatch(/^\/character\//);
+    for (const label of ['Keep', 'Archive', 'Match to feed person', 'Bring back', 'Delete permanently']) {
+      expect(screen.queryByRole('button', { name: label })).toBeNull();
+    }
+    expect(api.delete).not.toHaveBeenCalled();
   });
 
   test('"Create character" shows only on a feed person with none, crosses them for the active show, and the chip clears (Task 3201)', async () => {
@@ -222,58 +240,6 @@ describe('CharacterRegistryPage: the cast', () => {
     renderAt();
     const flag = await screen.findByTestId('cast-other-protagonists');
     expect(flag.textContent).toBe("Lala is the show's one Protagonist. Also tagged Protagonist: JustAWoman.");
-  });
-
-  test('Keep moves a character to Kept; Back to review undoes it', async () => {
-    await ready();
-    fireEvent.click(within(screen.getByText('Eva').closest('li')).getByRole('button', { name: 'Keep' }));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/cast/characters/eva/keep', { kept: true }));
-    fireEvent.click(screen.getByRole('button', { name: 'Kept (1)' }));
-    const kept = screen.getByTestId('cast-kept');
-    expect(kept.textContent).toContain('Kim');
-    fireEvent.click(within(kept).getByRole('button', { name: 'Back to review' }));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/cast/characters/kim/keep', { kept: false }));
-  });
-
-  test('Match to feed person offers the feed people with no character and links the one chosen', async () => {
-    await ready();
-    fireEvent.click(within(screen.getByText('Eva').closest('li')).getByRole('button', { name: 'Match to feed person' }));
-    const pick = screen.getByLabelText('Feed person for Eva');
-    expect([...pick.options].map((o) => o.textContent)).toEqual(['Choose a feed person…', 'slowsift (@slowsift)']);
-    fireEvent.change(pick, { target: { value: '8' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Match' }));
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/cast/characters/eva/feed-profile', { feed_profile_id: 8 }));
-  });
-
-  test('Archived lists them; Bring back restores; Delete permanently asks, and is off while an episode uses one', async () => {
-    await ready();
-    fireEvent.click(screen.getByRole('button', { name: 'Archived (2)' }));
-    const rows = screen.getByTestId('cast-archived');
-    expect(rows.textContent).toContain('Marcus Chen');
-    expect(within(screen.getByText('Nico').closest('li')).getByRole('button', { name: 'Delete permanently' }).disabled).toBe(true);
-    expect(screen.getByText('Nico').closest('li').textContent).toContain('2 episodes');
-    const marcus = screen.getByText('Marcus Chen').closest('li');
-    fireEvent.click(within(marcus).getByRole('button', { name: 'Bring back' }));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/cast/characters/gone/restore'));
-    const del = () => within(screen.getByText('Marcus Chen').closest('li')).getByRole('button', { name: 'Delete permanently' });
-    await waitFor(() => expect(del().disabled).toBe(false));
-    fireEvent.click(del());
-    await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/api/v1/cast/characters/gone/permanent'));
-    expect(confirm.mock.calls.at(-1)[0]).toContain('cannot be undone');
-  });
-
-  test('Archive asks first, then soft-deletes; Archive selected sends the chosen ones; a no archives nothing', async () => {
-    await ready();
-    confirm.mockReturnValueOnce(false);
-    fireEvent.click(within(screen.getByText('Jade').closest('li')).getByRole('button', { name: 'Archive' }));
-    expect(api.delete).not.toHaveBeenCalled();
-    fireEvent.click(within(screen.getByText('Jade').closest('li')).getByRole('button', { name: 'Archive' }));
-    await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/api/v1/character-registry/characters/j2'));
-    expect(confirm.mock.calls.at(-1)[0]).toContain('Archive Jade?');
-    fireEvent.click(screen.getByLabelText('Select Jade'));
-    fireEvent.click(screen.getByLabelText('Select Jade (Business Coach)'));
-    fireEvent.click(screen.getByRole('button', { name: 'Archive selected (2)' }));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/character-registry/characters/bulk-delete', { ids: ['j2', 'j1'] }));
   });
 });
 

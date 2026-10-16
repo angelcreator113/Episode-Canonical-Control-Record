@@ -10,7 +10,7 @@
  */
 
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 
 vi.mock('../contexts/AuthContext', () => ({
@@ -126,7 +126,9 @@ describe('EpisodeDetail — Production → Wardrobe (Task #1906)', () => {
     renderAt('/episodes/ep-1?tab=wardrobe');
 
     await waitFor(() => expect(screen.getByText('STYLING FOR EVENT')).toBeTruthy());
-    const options = screen.getAllByRole('option').map((o) => o.textContent);
+    // The event picker's options (the header's status dropdown has its own).
+    const picker = screen.getAllByRole('combobox').find((el) => el.getAttribute('data-testid') !== 'ed-status');
+    const options = within(picker).getAllByRole('option').map((o) => o.textContent);
     expect(options).toEqual([
       'Maison Belle Gala — Black tie (Prestige 8)',
       'Morning Brunch — Casual (Prestige 3)',

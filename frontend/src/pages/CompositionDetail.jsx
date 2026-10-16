@@ -143,7 +143,7 @@ export default function CompositionDetail() {
       <div className="composition-detail">
         <div className="composition-detail__error">
           <h2>❌ {error || 'Composition not found'}</h2>
-          <button onClick={() => navigate('/library')}>Back to Library</button>
+          <button onClick={() => navigate(-1)}>Back</button>
         </div>
       </div>
     );
@@ -167,9 +167,9 @@ export default function CompositionDetail() {
       <div className="composition-detail__header">
         <button 
           className="composition-detail__back-btn"
-          onClick={() => navigate('/library')}
+          onClick={() => navigate(-1)}
         >
-          ← Back to Library
+          ← Back
         </button>
 
         <div className="composition-detail__header-content">

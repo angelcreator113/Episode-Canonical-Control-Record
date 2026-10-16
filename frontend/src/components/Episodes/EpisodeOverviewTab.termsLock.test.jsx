@@ -46,7 +46,9 @@ describe('EpisodeOverviewTab and the terms lock', () => {
 
     expect((await screen.findByRole('alert')).textContent).toBe(`Could not unlink the event: ${LOCKED}`);
     expect(api.put).toHaveBeenCalledWith('/api/v1/world/show-1/events/ev-1', { used_in_episode_id: null });
-    expect(screen.getByText('The Gala')).toBeTruthy();
+    // Still linked: the Events card still lists it with its Unlink button
+    // (the Style board above also names the event, so not by text alone).
+    expect(screen.getByTitle('Unlink event from this episode')).toBeTruthy();
   });
 
   test('a successful unlink shows no error', async () => {
@@ -55,7 +57,8 @@ describe('EpisodeOverviewTab and the terms lock', () => {
     renderTab();
     fireEvent.click(await screen.findByTitle('Unlink event from this episode'));
 
-    await vi.waitFor(() => expect(screen.queryByText('The Gala')).toBeNull());
+    await vi.waitFor(() => expect(screen.queryByTitle('Unlink event from this episode')).toBeNull());
+    expect(screen.queryByText('The Gala')).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
