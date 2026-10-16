@@ -2117,7 +2117,7 @@
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.85);
-  z-index: 9999;
+  z-index: 10030;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2151,10 +2151,17 @@
 }
 
 .scene-sets-lightbox-close {
+  /* Inside the box: above it, the box's overflow clipped it (fourth audit). */
   position: absolute;
-  top: -40px;
-  right: 0;
-  background: none;
+  top: 8px;
+  right: 8px;
+  min-width: 36px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 50%;
   border: none;
   color: var(--text-inverse);
   cursor: pointer;
@@ -2214,11 +2221,12 @@
 
 .scene-sets-lightbox-info {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 12px;
   color: var(--text-inverse);
-  max-width: 600px;
+  max-width: min(600px, 100%);
 }
 
 .scene-sets-lightbox-counter {
@@ -2354,7 +2362,7 @@
 @media (max-width: 600px) {
   .scene-sets-lightbox-nav { width: 36px; height: 36px; margin: 0 4px; }
   .scene-sets-lightbox-img,
-  .scene-sets-lightbox-video { max-width: calc(95vw - 88px); max-height: 60vh; }
+  .scene-sets-lightbox-video { max-width: calc(90vw - 88px); max-height: 60vh; }
 }
 
 /* ── Regenerate Button (lightbox) ──────────────────────────────────────── */
@@ -2843,9 +2851,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  /* One stacking scale (fourth audit, 2026-10-15: this later rule set the
+     workspace to 1000, under the card menu, and the dialogs opened from it
+     stacked with it by DOM order): workspace 10000, a dialog opened from it
+     10020 (.is-child), the lightbox 10030, the scene brief 10050, toasts
+     10100. */
+  z-index: 10000;
   animation: scene-sets-modal-fadein 0.15s ease;
 }
+.scene-sets-modal-backdrop.is-child { z-index: 10020; }
 
 @keyframes scene-sets-modal-fadein {
   from { opacity: 0; }
@@ -4105,7 +4119,7 @@
 /* D1 (Evoni, 2026-10-02): deleting a set in use asks for a replacement. */
 .scene-sets-delete-backdrop {
   position: fixed; inset: 0; background: rgba(44, 44, 44, 0.35);
-  display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 1000;
+  display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 10020;
 }
 .scene-sets-delete-dialog {
   background: var(--surface-bg); border-radius: 10px; padding: 16px; width: 100%; max-width: 440px;

@@ -18,4 +18,19 @@ describe('the set workspace layout', () => {
     expect(css).toMatch(/\.scene-sets-modal-body \{ min-height: 0; \}/);
     expect(css).toMatch(/\.scene-sets-modal-body \{\s*flex: 1;\s*overflow-y: auto;/);
   });
+
+  test('one stacking scale: workspace 10000, its dialogs above it, the lightbox above those (fourth audit)', () => {
+    const backdrops = [...css.matchAll(/\.scene-sets-modal-backdrop \{[^}]*z-index: (\d+);/g)].map((m) => Number(m[1]));
+    expect(backdrops).toEqual([10000, 10000]);
+    expect(css).toMatch(/\.scene-sets-modal-backdrop\.is-child \{ z-index: 10020; \}/);
+    expect(css).toMatch(/\.scene-sets-lightbox-overlay \{[^}]*z-index: 10030;/);
+    expect(css).toMatch(/\.scene-sets-delete-backdrop \{[^}]*z-index: 10020;/);
+  });
+
+  test('the lightbox close sits inside the box, and the box fits 375px (fourth audit)', () => {
+    expect(css).toMatch(/\.scene-sets-lightbox-close \{[^}]*top: 8px;[^}]*right: 8px;/);
+    expect(css).not.toMatch(/\.scene-sets-lightbox-close \{[^}]*top: -40px/);
+    expect(css).toMatch(/\.scene-sets-lightbox-info \{[^}]*flex-wrap: wrap;/);
+    expect(css).toMatch(/\.scene-sets-lightbox-video \{ max-width: calc\(90vw - 88px\); max-height: 60vh; \}/);
+  });
 });
