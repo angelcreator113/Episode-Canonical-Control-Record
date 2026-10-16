@@ -1475,6 +1475,10 @@ router.post('/characters/:id/backfill-sections', requireAuth, async (req, res) =
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const allFieldsToFill = [sectionsToFill, essenceToFill, demoToFill].filter(Boolean).join(',\n');
+    // Their facts (Character Consistency Engine step 5): the sections quote them, never invent them.
+    const { factsForCharacter, factsPromptBlock, holdToFacts } = require('../services/characterFacts');
+    const facts = await factsForCharacter(db, character);
+    const factsBlock = factsPromptBlock(facts);
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
@@ -1483,7 +1487,7 @@ router.post('/characters/:id/backfill-sections', requireAuth, async (req, res) =
 
 Here is everything currently known about this character:
 ${JSON.stringify(known, null, 2)}
-
+${factsBlock ? `\n${factsBlock}\n` : ''}
 Generate ONLY the following empty fields. Infer from existing data. Be specific to THIS character — no generic filler. Use null for fields you truly cannot infer.
 ${essenceFields.length ? 'For essence fields (core_fear, core_wound, mask_persona, etc.): return a single string value, not an object.' : ''}
 
@@ -1507,7 +1511,7 @@ ${allFieldsToFill}
       if (generated[section] && typeof generated[section] === 'object') {
         // Clean nulls
         const clean = {};
-        for (const [k, v] of Object.entries(generated[section])) {
+        for (const [k, v] of Object.entries(holdToFacts(section, generated[section], facts))) {
           clean[k] = (v === null || v === undefined) ? '' : v;
         }
         proposed[section] = clean;
@@ -1597,7 +1601,7 @@ ${allFieldsToFill}
         const threadResp = await anthropic.messages.create({
           model: 'claude-sonnet-4-6',
           max_tokens: 1500,
-          system: `Generate 2-4 plot threads for this character based on their profile. Each thread should be a specific unresolved situation.\n\nCharacter: ${JSON.stringify(known, null, 2)}\n\nReturn ONLY valid JSON array:\n[\n  { "thread": "specific unresolved situation", "status": "open", "activation_condition": "what would bring this thread into a story" }\n]`,
+          system: `Generate 2-4 plot threads for this character based on their profile. Each thread should be a specific unresolved situation.\n\nCharacter: ${JSON.stringify(known, null, 2)}\n${factsBlock ? `\n${factsBlock}\n` : ''}\nReturn ONLY valid JSON array:\n[\n  { "thread": "specific unresolved situation", "status": "open", "activation_condition": "what would bring this thread into a story" }\n]`,
           messages: [{ role: 'user', content: `Generate plot threads for ${known.display_name || 'this character'}.` }],
         });
         const ptRaw = extractAIText(threadResp);
@@ -1885,6 +1889,11 @@ router.post('/characters/:id/generate-section', requireAuth, async (req, res) =>
       return res.status(400).json({ error: `Unknown section: ${section}. Valid: ${Object.keys(sectionConfigs).join(', ')}` });
     }
 
+    // Their facts (Character Consistency Engine step 5): the section quotes them, never invents them.
+    const { factsForCharacter, factsPromptBlock, holdToFacts } = require('../services/characterFacts');
+    const facts = await factsForCharacter(db, character);
+    const factsBlock = factsPromptBlock(facts);
+
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 3000,
@@ -1892,7 +1901,7 @@ router.post('/characters/:id/generate-section', requireAuth, async (req, res) =>
 
 Here is everything currently known about this character:
 ${JSON.stringify(known, null, 2)}
-
+${factsBlock ? `\n${factsBlock}\n` : ''}
 Generate the requested section. Be specific to THIS character — no generic filler. Use null for fields you truly cannot infer.
 
 Return ONLY valid JSON matching this schema:
@@ -1905,7 +1914,7 @@ ${config.schema}`,
     if (!jsonMatch) return res.status(500).json({ error: 'Failed to parse AI response' });
     const generated = JSON.parse(jsonMatch[0]);
 
-    const updated = config.apply(generated);
+    const updated = config.apply(holdToFacts(section, generated, facts));
     await character.save();
 
     for (const [key, value] of extraFieldsSets) {
@@ -1993,9 +2002,12 @@ router.post('/characters/:id/interior/generate', requireAuth, aiRateLimiter, asy
     const known = {};
     if (missing.includes('selected_name') && feedProfile?.creator_name) known.selected_name = feedProfile.creator_name;
     const toAsk = missing.filter((f) => !(f in known));
+    // Their facts: what the new prose may say about followers, status, money and possessions.
+    const { factsForCharacter, factsPromptBlock } = require('../services/characterFacts');
+    const factsBlock = factsPromptBlock(await factsForCharacter(db, character, feedProfile));
     const updates = {
       ...known,
-      ...(toAsk.length ? await gen.generateMissingInterior({ character: plain, feedProfile, events, fields: toAsk }) : {}),
+      ...(toAsk.length ? await gen.generateMissingInterior({ character: plain, feedProfile, events, fields: toAsk, factsBlock }) : {}),
     };
     if (Object.keys(updates).length === 0) {
       return res.status(502).json({ error: 'The writer came back with nothing usable. Try again.' });
@@ -2063,6 +2075,7 @@ router.post('/registries/:registryId/backfill-all', requireAuth, async (req, res
     const Anthropic = require('@anthropic-ai/sdk');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const results = [];
+    const { factsForCharacter, factsPromptBlock, holdToFacts } = require('../services/characterFacts');
 
     for (const character of chars) {
       const emptySections = [];
@@ -2088,12 +2101,15 @@ router.post('/registries/:registryId/backfill-all', requireAuth, async (req, res
       if (hasData(character.deep_profile))       known.deep_profile_summary = character.deep_profile;
 
       const sectionsToFill = emptySections.map(s => `"${s}": ${sectionSchemas[s]}`).join(',\n');
+      // Their facts (Character Consistency Engine step 5): the sections quote them, never invent them.
+      const facts = await factsForCharacter(db, character);
+      const factsBlock = factsPromptBlock(facts);
 
       try {
         const response = await anthropic.messages.create({
           model: 'claude-sonnet-4-6',
           max_tokens: 4000,
-          system: `You are filling in missing profile sections for an existing character in the LalaVerse franchise.\n\nHere is everything currently known about this character:\n${JSON.stringify(known, null, 2)}\n\nGenerate ONLY the following empty sections. Infer from existing data. Be specific to THIS character — no generic filler. Use null for fields you truly cannot infer.\n\nReturn ONLY valid JSON with these keys:\n{\n${sectionsToFill}\n}`,
+          system: `You are filling in missing profile sections for an existing character in the LalaVerse franchise.\n\nHere is everything currently known about this character:\n${JSON.stringify(known, null, 2)}\n${factsBlock ? `\n${factsBlock}\n` : ''}\nGenerate ONLY the following empty sections. Infer from existing data. Be specific to THIS character — no generic filler. Use null for fields you truly cannot infer.\n\nReturn ONLY valid JSON with these keys:\n{\n${sectionsToFill}\n}`,
           messages: [{ role: 'user', content: `Fill in the missing sections for ${known.display_name || 'this character'}.` }],
         });
 
@@ -2109,7 +2125,7 @@ router.post('/registries/:registryId/backfill-all', requireAuth, async (req, res
         for (const section of emptySections) {
           if (generated[section] && typeof generated[section] === 'object') {
             const clean = {};
-            for (const [k, v] of Object.entries(generated[section])) {
+            for (const [k, v] of Object.entries(holdToFacts(section, generated[section], facts))) {
               clean[k] = (v === null || v === undefined) ? '' : v;
             }
             updateData[section] = clean;
@@ -2166,7 +2182,7 @@ router.post('/registries/:registryId/backfill-all', requireAuth, async (req, res
             const threadResp = await anthropic.messages.create({
               model: 'claude-sonnet-4-6',
               max_tokens: 1500,
-              system: `Generate 2-4 plot threads for this character based on their profile. Each thread should be a specific unresolved situation.\n\nCharacter: ${JSON.stringify(known, null, 2)}\n\nReturn ONLY valid JSON array:\n[\n  { "thread": "specific unresolved situation", "status": "open", "activation_condition": "what would bring this thread into a story" }\n]`,
+              system: `Generate 2-4 plot threads for this character based on their profile. Each thread should be a specific unresolved situation.\n\nCharacter: ${JSON.stringify(known, null, 2)}\n${factsBlock ? `\n${factsBlock}\n` : ''}\nReturn ONLY valid JSON array:\n[\n  { "thread": "specific unresolved situation", "status": "open", "activation_condition": "what would bring this thread into a story" }\n]`,
               messages: [{ role: 'user', content: `Generate plot threads for ${known.display_name || 'this character'}.` }],
             });
             const ptRaw = extractAIText(threadResp);
