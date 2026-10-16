@@ -6,14 +6,15 @@
  */
 import { useReducer, useEffect, useCallback, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { House, GitBranch, Users, Share2, Sprout, List, Search } from 'lucide-react';
 import apiClient from '../services/api';
 import './RelationshipEngine.css';
 
 import {
-  WebView, TreeView, FamilyView, CandidateView, ListView,
+  WebView, TreeView, FamilyView, CandidateView, ListView, ProfileView,
   Inspector, AddModal, GenModal,
-  Btn, LFBtn, Spinner, useToast,
-  API, T, LAYER, TENSION, cname, clayer, initials, roleColor,
+  Btn, Spinner, useToast,
+  API, T, LAYER, cname, clayer, initials, roleColor,
 } from '../components/RelationshipEngine';
 
 /* ── Track 3 module-scope helpers (Pattern D) ────────────────────────── */
@@ -59,7 +60,7 @@ const initial = {
   layers:   {},
   regs:     [],
   reg:      null,
-  tab:      'tree',
+  tab:      'overview',
   lf:       'all',
   selChar:  null,
   selRel:   null,
@@ -303,12 +304,20 @@ export default function RelationshipEngine() {
   }, [s.rels]);
 
   const tabs = [
-    { key: 'tree',       label: 'Tree',       icon: '◇' },
-    { key: 'family',     label: 'Family',     icon: '⬡' },
-    { key: 'web',        label: 'Web',        icon: '◎' },
-    { key: 'candidates', label: 'Seeds',      icon: '◈', badge: s.cands.length || null },
-    { key: 'list',       label: 'List',        icon: '≡' },
+    { key: 'overview',   label: 'Overview',   Icon: House },
+    { key: 'tree',       label: 'Tree',       Icon: GitBranch },
+    { key: 'family',     label: 'Family',     Icon: Users },
+    { key: 'web',        label: 'Web',        Icon: Share2 },
+    { key: 'candidates', label: 'Seeds',      Icon: Sprout, badge: s.cands.length || null },
+    { key: 'list',       label: 'List',       Icon: List },
   ];
+  const setTab = tab => dispatch({ type: 'SET', payload: { tab } });
+
+  /* Overview profiles the selected character, else the first protagonist */
+  const profileChar = s.selChar
+    || s.chars.find(c => c.role_type === 'protagonist')
+    || s.chars[0]
+    || null;
 
   const subline =
     s.tab === 'candidates' ? `${s.cands.length} pending` :
@@ -342,26 +351,30 @@ export default function RelationshipEngine() {
       {/* ── TOP BAR ──────────────────────────────────────────────── */}
       <header className="re-header" role="banner">
         <div className="re-header-left">
-          <span className="re-wordmark">Relationship Engine</span>
-          <span className="re-badge">v2</span>
+          <span className="re-brand">LalaVerse</span>
+          <div className="re-title-block">
+            <h1 className="re-wordmark">Relationship Engine</h1>
+            <div className="re-tagline">People · Connections · Stories · Consequences</div>
+          </div>
         </div>
 
-        {/* tab rail */}
-        <nav className="re-tab-rail" role="tablist" aria-label="View tabs">
-          {tabs.map(t => (
-            <button key={t.key} role="tab" aria-selected={s.tab === t.key}
-              className={`cg-tab-btn ${s.tab === t.key ? 'is-active' : ''}`}
-              onClick={() => dispatch({ type: 'SET', payload: { tab: t.key } })}>
-              <span>{t.icon}</span> {t.label}
-              {t.badge && <span className="cg-tab-count">{t.badge}</span>}
-            </button>
-          ))}
-        </nav>
-
-        <div className="re-header-actions">
-          <Btn variant="ghost" onClick={exportRelationships} title="Export relationships as JSON">↓ Export</Btn>
-          <Btn variant="outline" onClick={() => dispatch({ type: 'SET', payload: { genOpen: true } })}>◈ Generate</Btn>
-          <Btn variant="primary" onClick={() => dispatch({ type: 'SET', payload: { addOpen: true } })}>+ Add</Btn>
+        <div className="re-header-tools">
+          <label className="re-search">
+            <Search size={18} aria-hidden />
+            <input
+              value={charSearch}
+              onChange={e => setCharSearch(e.target.value)}
+              placeholder="Search people…"
+              aria-label="Search characters"
+            />
+          </label>
+          <select className="re-layer-select" value={s.lf} aria-label="Filter by layer"
+            onChange={e => dispatch({ type: 'SET', payload: { lf: e.target.value } })}>
+            <option value="all">All Layers ({s.chars.length})</option>
+            {Object.entries(LAYER).map(([k, v]) => (
+              <option key={k} value={k}>{v.label} ({(s.layers[k] || []).length})</option>
+            ))}
+          </select>
         </div>
       </header>
 
@@ -406,37 +419,22 @@ export default function RelationshipEngine() {
       )}
       <div className="re-body">
         {/* LEFT SIDEBAR */}
-        {s.tab !== 'web' && (
-          <aside className="re-sidebar" role="navigation" aria-label="Characters">
-            {/* search */}
-            <div className="re-sidebar-section" style={{ padding: '0 12px 8px' }}>
-              <input
-                value={charSearch}
-                onChange={e => setCharSearch(e.target.value)}
-                placeholder="Search characters…"
-                style={{
-                  width: '100%', padding: '7px 10px', fontSize: 12,
-                  border: `1px solid ${T.border}`, borderRadius: 6,
-                  background: T.surface, color: T.text, outline: 'none',
-                  boxSizing: 'border-box',
-                }}
-              />
-            </div>
-            {/* layer filter */}
-            <div className="re-sidebar-section">
-              <div className="re-label">Layers</div>
-              <LFBtn active={s.lf === 'all'} onClick={() => dispatch({ type: 'SET', payload: { lf: 'all' } })} count={s.chars.length}>
-                All Characters
-              </LFBtn>
-              {Object.entries(LAYER).map(([k, v]) => (
-                <LFBtn key={k} active={s.lf === k}
-                  onClick={() => dispatch({ type: 'SET', payload: { lf: k } })}
-                  count={(s.layers[k] || []).length} dot={v.color}>
-                  {v.label}
-                </LFBtn>
-              ))}
-            </div>
+        <aside className="re-sidebar" aria-label="Views and characters">
+          <nav className="re-nav" role="tablist" aria-label="View tabs">
+            {tabs.map(t => (
+              <button key={t.key} role="tab" aria-selected={s.tab === t.key}
+                className={`re-nav-btn ${s.tab === t.key ? 'is-active' : ''}`}
+                onClick={() => setTab(t.key)}>
+                <t.Icon size={20} aria-hidden />
+                <span className="re-nav-label">{t.label}</span>
+                {t.badge && <span className="cg-tab-count">{t.badge}</span>}
+              </button>
+            ))}
+          </nav>
+          {s.tab !== 'web' && (
+            <>
             <div className="re-sidebar-divider" />
+            <div className="re-label re-sidebar-heading">People</div>
             {/* character list */}
             <div className="re-sidebar-chars">
               {filtChars.length === 0 && (
@@ -446,12 +444,13 @@ export default function RelationshipEngine() {
                 const lk = layerMap[c.id];
                 const lc = lk && LAYER[lk];
                 const rc = roleColor(c.role_type);
-                const act = s.selChar?.id === c.id;
+                const act = (s.tab === 'overview' ? profileChar?.id : s.selChar?.id) === c.id;
                 return (
                   <button key={c.id}
                     className={`cg-world-card ${act ? 'is-active' : ''}`}
                     onClick={() => {
-                      dispatch({ type: 'SET', payload: { selChar: s.selChar?.id === c.id ? null : c, selRel: null, panel: false } });
+                      const keep = s.tab === 'overview' || s.selChar?.id !== c.id;
+                      dispatch({ type: 'SET', payload: { selChar: keep ? c : null, selRel: null, panel: false } });
                     }}
                     aria-pressed={act}
                     aria-label={`${cname(c)}, ${c.role_type || 'unknown role'}`}>
@@ -467,12 +466,14 @@ export default function RelationshipEngine() {
                 );
               })}
             </div>
-          </aside>
-        )}
+            </>
+          )}
+        </aside>
 
         {/* CENTER CANVAS */}
         <main className="re-canvas" role="main">
           {/* sub-header */}
+          {s.tab !== 'overview' && (
           <div className="re-sub-header">
             <div>
               <span className="re-sub-title">
@@ -501,13 +502,24 @@ export default function RelationshipEngine() {
                   {s.genFam ? 'Generating…' : '⬡ Auto-Generate Family'}
                 </Btn>
               )}
+              <Btn variant="ghost" onClick={exportRelationships} title="Export relationships as JSON">↓ Export</Btn>
+              <Btn variant="outline" onClick={() => dispatch({ type: 'SET', payload: { genOpen: true } })}>◈ Generate</Btn>
+              <Btn variant="primary" onClick={() => dispatch({ type: 'SET', payload: { addOpen: true } })}>+ Add</Btn>
             </div>
           </div>
+          )}
 
           {/* view */}
-          <div className="re-view">
+          <div className={`re-view ${s.tab === 'overview' ? 'is-overview' : ''}`}>
             {s.tab === 'web'        ? <WebView navigate={navigate} /> :
              s.loading              ? <Spinner /> :
+             s.tab === 'overview'   ? <ProfileView char={profileChar} chars={s.chars} rels={s.rels} cands={s.cands}
+                                        onSelectChar={c => dispatch({ type: 'SET', payload: { selChar: c, selRel: null, panel: false } })}
+                                        onRelClick={r => dispatch({ type: 'SET', payload: { selRel: r, panel: true } })}
+                                        onAdd={() => dispatch({ type: 'SET', payload: { addOpen: true } })}
+                                        onGenerate={() => dispatch({ type: 'SET', payload: { genOpen: true } })}
+                                        onExport={exportRelationships}
+                                        onTab={setTab} /> :
              s.tab === 'tree'       ? <TreeView chars={filtChars} rels={filtRels} layers={s.layers} lf={s.lf} selChar={s.selChar} onRelClick={r => dispatch({ type: 'SET', payload: { selRel: r, panel: true } })} onCharClick={c => dispatch({ type: 'SET', payload: { selChar: c } })} /> :
              s.tab === 'family'     ? <FamilyView data={s.famData} genning={s.genFam} onGenerate={genFamFn} onUpdateRole={updateFamRole} onRelClick={r => dispatch({ type: 'SET', payload: { selRel: r, panel: true } })} /> :
              s.tab === 'candidates' ? <CandidateView cands={s.cands} onConfirm={confirm} onDismiss={dismiss} busy={!!s.busy} /> :
@@ -517,7 +529,7 @@ export default function RelationshipEngine() {
         </main>
 
         {/* RIGHT INSPECTOR */}
-        {s.tab !== 'web' && (
+        {s.tab !== 'web' && (s.tab !== 'overview' || s.panel) && (
           <aside className="re-inspector-panel">
             {s.panel && s.selRel
               ? <Inspector rel={s.selRel}

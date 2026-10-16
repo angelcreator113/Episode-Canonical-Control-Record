@@ -1,0 +1,259 @@
+/**
+ * ProfileView — character-centred overview for the Relationship Engine
+ * Prime Studios · LalaVerse
+ *
+ * Every number here is derived from the confirmed relationships and the
+ * pending seeds already loaded by the page; nothing is invented.
+ */
+import { useMemo } from 'react';
+import {
+  Heart, ChevronRight, Plus, Sparkles, GitBranch, Download,
+  Users, Flame, HeartHandshake, Sprout, Link2, BookOpen, Activity,
+} from 'lucide-react';
+import { TENSION, LAYER, LALA_CONN, cname, clayer, initials, roleColor } from './tokens';
+import { Pill } from './primitives';
+
+/* tension → closeness score (0 = strained, 100 = close) */
+const CLOSENESS = { calm: 95, healing: 70, simmering: 45, volatile: 20, fractured: 5 };
+
+const otherSide = (r, id) => (r.character_id_a === id
+  ? { id: r.character_id_b, name: r.character_b_selected || r.character_b_name }
+  : { id: r.character_id_a, name: r.character_a_selected || r.character_a_name });
+
+function Avatar({ char, name, size = 'md' }) {
+  const label = char ? cname(char) : (name || '?');
+  const color = char ? roleColor(char.role_type) : undefined;
+  return (
+    <span className={`rp-avatar rp-avatar-${size}`} style={{ color }}>
+      {char?.portrait_url
+        ? <img src={char.portrait_url} alt="" />
+        : initials(label)}
+    </span>
+  );
+}
+
+function Card({ icon: Icon, title, action, onAction, children, className = '' }) {
+  return (
+    <section className={`rp-card ${className}`}>
+      <header className="rp-card-head">
+        <h3 className="rp-card-title">{Icon && <Icon size={18} aria-hidden />}{title}</h3>
+        {action && <button type="button" className="rp-viewall" onClick={onAction}>{action}</button>}
+      </header>
+      {children}
+    </section>
+  );
+}
+
+export default function ProfileView({
+  char, chars, rels, cands,
+  onSelectChar, onRelClick, onAdd, onGenerate, onExport, onTab,
+}) {
+  const charById = useMemo(() => {
+    const m = {};
+    chars.forEach(c => { m[c.id] = c; });
+    return m;
+  }, [chars]);
+
+  const mine = useMemo(() => (char
+    ? rels
+      .filter(r => r.character_id_a === char.id || r.character_id_b === char.id)
+      .sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0))
+    : []), [rels, char]);
+
+  const seeds = useMemo(() => (char
+    ? cands.filter(c => c.character_id_a === char.id || c.character_id_b === char.id)
+    : []), [cands, char]);
+
+  const stats = useMemo(() => {
+    const scored = mine.filter(r => r.tension_state in CLOSENESS);
+    const closeness = scored.length
+      ? Math.round(scored.reduce((n, r) => n + CLOSENESS[r.tension_state], 0) / scored.length)
+      : null;
+    const count = pred => mine.filter(pred).length;
+    return {
+      closeness,
+      scored: scored.length,
+      tiles: [
+        { key: 'calm',     label: 'Calm',     icon: HeartHandshake, tone: 'rose',
+          n: count(r => r.tension_state === 'calm' || r.tension_state === 'healing') },
+        { key: 'family',   label: 'Family',   icon: Users,          tone: 'orchid',
+          n: count(r => r.is_blood_relation || r.family_role || r.relationship_type === 'familial') },
+        { key: 'romantic', label: 'Romantic', icon: Heart,          tone: 'teal',
+          n: count(r => r.is_romantic || r.relationship_type === 'romantic') },
+        { key: 'tension',  label: 'Tension',  icon: Flame,          tone: 'gold',
+          n: count(r => ['simmering', 'volatile', 'fractured'].includes(r.tension_state)) },
+      ],
+    };
+  }, [mine]);
+
+  const connections = useMemo(() => {
+    const seen = new Map();
+    mine.forEach(r => {
+      const o = otherSide(r, char.id);
+      if (!seen.has(o.id)) seen.set(o.id, { ...o, char: charById[o.id], rel: r });
+    });
+    return [...seen.values()];
+  }, [mine, char, charById]);
+
+  if (!char) {
+    return (
+      <div className="re-empty" role="status">
+        <div className="re-empty-icon"><Users size={32} aria-hidden /></div>
+        <div className="re-empty-title">No characters yet</div>
+        <div className="re-empty-desc">Add characters to this registry to see their relationships here</div>
+      </div>
+    );
+  }
+
+  const layer = LAYER[clayer(char)];
+  const lalaRel = mine.find(r => r.lala_connection && r.lala_connection !== 'none');
+  const lalaLabel = lalaRel ? LALA_CONN.find(l => l.v === lalaRel.lala_connection)?.l : null;
+  const statusWord = stats.closeness == null ? 'No tension recorded'
+    : stats.closeness >= 67 ? 'Close' : stats.closeness >= 34 ? 'Neutral' : 'Strained';
+
+  const about = [
+    { label: 'Role',               value: char.role_label },
+    { label: 'Core Belief',        value: char.core_belief },
+    { label: 'Pressure',           value: char.pressure_type },
+    { label: 'Emotional Function', value: char.emotional_function },
+    { label: 'Relationship With Lala', value: lalaLabel },
+  ];
+
+  return (
+    <div className="rp-grid">
+      {/* ── LEFT / CENTRE COLUMN ─────────────────────────────────── */}
+      <div className="rp-col">
+        <section className="rp-card rp-hero">
+          <div className="rp-portrait">
+            <Avatar char={char} size="xl" />
+            <span className="rp-portrait-heart"><Heart size={18} fill="currentColor" aria-hidden /></span>
+          </div>
+          <div className="rp-hero-body">
+            <h2 className="rp-name">{cname(char)}</h2>
+            <div className="rp-chips">
+              {char.role_type && <span className="rp-chip">{char.role_type}</span>}
+              {char.role_label && <span className="rp-chip">{char.role_label}</span>}
+              {layer && <span className="rp-chip"><span className="rp-dot" style={{ background: layer.color }} />{layer.label}</span>}
+              {char.status && <span className="rp-chip">{char.status}</span>}
+            </div>
+            <p className="rp-bio">{char.description || char.personality || 'No description yet.'}</p>
+          </div>
+        </section>
+
+        <Card icon={BookOpen} title="About">
+          <dl className="rp-about">
+            {about.map(f => (
+              <div key={f.label} className="rp-about-row">
+                <dt>{f.label}</dt>
+                <dd>{f.value || <span className="rp-muted">—</span>}</dd>
+              </div>
+            ))}
+          </dl>
+        </Card>
+
+        <Card icon={Activity} title="Recent Relationships"
+          action={mine.length ? 'View All' : null} onAction={() => onTab('list')}>
+          {mine.length === 0
+            ? <p className="rp-muted rp-pad">No confirmed relationships yet.</p>
+            : (
+              <ul className="rp-rows">
+                {mine.slice(0, 5).map(r => {
+                  const o = otherSide(r, char.id);
+                  const tc = r.tension_state && TENSION[r.tension_state];
+                  return (
+                    <li key={r.id}>
+                      <button type="button" className="rp-row" onClick={() => onRelClick(r)}>
+                        <Avatar char={charById[o.id]} name={o.name} size="sm" />
+                        <span className="rp-row-text">
+                          <span className="rp-row-title">{o.name}</span>
+                          <span className="rp-row-sub">{[r.relationship_type, r.connection_mode, r.status].filter(Boolean).join(' · ')}</span>
+                        </span>
+                        {tc && <Pill color={tc.color} bg={tc.bg}>{r.tension_state}</Pill>}
+                        <ChevronRight size={18} aria-hidden className="rp-chev" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+        </Card>
+      </div>
+
+      {/* ── RIGHT COLUMN ─────────────────────────────────────────── */}
+      <div className="rp-col">
+        <Card icon={Heart} title="Relationship Status">
+          <div className="rp-meter" role="meter" aria-valuemin={0} aria-valuemax={100}
+            aria-valuenow={stats.closeness ?? undefined} aria-label={`Overall: ${statusWord}`}>
+            <span className="rp-meter-fill" style={{ width: `${stats.closeness ?? 0}%` }} />
+          </div>
+          <div className="rp-meter-scale"><span>Strained</span><span>Neutral</span><span>Close</span></div>
+          <p className="rp-meter-note">
+            {stats.closeness == null
+              ? 'Set a tension state on a relationship to see this.'
+              : `${statusWord} · averaged over ${stats.scored} relationship${stats.scored === 1 ? '' : 's'}`}
+          </p>
+          <div className="rp-tiles">
+            {stats.tiles.map(t => (
+              <div key={t.key} className={`rp-tile is-${t.tone}`}>
+                <t.icon size={22} aria-hidden />
+                <span className="rp-tile-label">{t.label}</span>
+                <span className="rp-tile-n">{t.n}</span>
+                <span className="rp-tile-bar"><span style={{ width: mine.length ? `${(t.n / mine.length) * 100}%` : 0 }} /></span>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card icon={Link2} title="Connections"
+          action={connections.length > 4 ? 'View All' : null} onAction={() => onTab('tree')}>
+          {connections.length === 0
+            ? <p className="rp-muted rp-pad">No connections yet.</p>
+            : (
+              <div className="rp-conn-grid">
+                {connections.slice(0, 8).map(c => (
+                  <button key={c.id} type="button" className="rp-conn"
+                    onClick={() => c.char && onSelectChar(c.char)}
+                    title={`${c.name} — ${c.rel.relationship_type || 'connected'}`}>
+                    <Avatar char={c.char} name={c.name} size="lg" />
+                    <span className="rp-conn-name">{c.name}</span>
+                    <span className="rp-conn-type">{c.rel.relationship_type}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+        </Card>
+
+        <Card icon={Sprout} title="Pending Seeds"
+          action={seeds.length ? 'View All' : null} onAction={() => onTab('candidates')}>
+          {seeds.length === 0
+            ? <p className="rp-muted rp-pad">No pending seeds for {cname(char)}.</p>
+            : (
+              <ul className="rp-rows">
+                {seeds.slice(0, 3).map(sd => {
+                  const o = otherSide(sd, char.id);
+                  return (
+                    <li key={sd.id} className="rp-row is-static">
+                      <span className="rp-seed-icon"><Sparkles size={16} aria-hidden /></span>
+                      <span className="rp-row-text">
+                        <span className="rp-row-title">{o.name}</span>
+                        <span className="rp-row-sub">{sd.relationship_type}{sd.situation ? ` · ${sd.situation}` : ''}</span>
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+        </Card>
+
+        <Card title="Actions" icon={Sparkles}>
+          <div className="rp-actions">
+            <button type="button" className="rp-action" onClick={onAdd}><Plus size={22} aria-hidden />Add Relationship</button>
+            <button type="button" className="rp-action" onClick={onGenerate}><Sparkles size={22} aria-hidden />Generate Seeds</button>
+            <button type="button" className="rp-action" onClick={() => onTab('tree')}><GitBranch size={22} aria-hidden />View in Tree</button>
+            <button type="button" className="rp-action" onClick={onExport}><Download size={22} aria-hidden />Export</button>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
