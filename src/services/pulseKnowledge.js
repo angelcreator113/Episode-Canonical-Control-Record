@@ -41,6 +41,12 @@ const CLOSE_LINE = 0.7;
  * rule, the host and the Event Package's Guests (utils/eventAttendees,
  * Task #3082).
  */
+function hostProfileId(row) {
+  const organizer = require('../utils/eventOrganizer').eventCreatorOrganizer(row);
+  const id = organizer ? Number(organizer.profileId) : NaN;
+  return Number.isInteger(id) ? id : null;
+}
+
 async function showEvents(db, showId) {
   const { eventAttendees } = require('../utils/eventAttendees');
   const [rows] = await db.sequelize.query(
@@ -54,6 +60,8 @@ async function showEvents(db, showId) {
     name: r.name,
     episode_number: r.episode_number == null ? null : Number(r.episode_number),
     guests: eventAttendees(r),
+    // The organizer's Feed profile (utils/eventOrganizer), or null for a brand.
+    host_profile_id: hostProfileId(r),
   }));
 }
 

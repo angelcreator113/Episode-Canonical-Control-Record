@@ -31,7 +31,7 @@ const answer = (text) => ({ content: [{ type: 'text', text }] });
   const TAG = crypto.randomUUID().slice(0, 8);
   const ids = {
     show: crypto.randomUUID(), ep1: crypto.randomUUID(), ep2: crypto.randomUUID(), story: crypto.randomUUID(),
-    book: crypto.randomUUID(), ch1: crypto.randomUUID(), ch2: crypto.randomUUID(),
+    book: crypto.randomUUID(), ch1: crypto.randomUUID(), ch2: crypto.randomUUID(), post: crypto.randomUUID(), draftPost: crypto.randomUUID(),
   };
   const app = express();
   app.use(express.json());
@@ -45,6 +45,10 @@ const answer = (text) => ({ content: [{ type: 'text', text }] });
                (:ep1, :show, 'The Gala', 1, 'draft', NOW(), NOW()), (:ep2, :show, 'The Brunch', 2, 'draft', NOW(), NOW())`, ids);
     await run(`INSERT INTO stories (id, show_id, episode_id, title, content, word_count, format, source_type, status, created_at, updated_at)
                VALUES (:story, :show, :ep1, 'The Gala', 'Lala arrived late. The lights went out at nine. Nobody saw who took the necklace.', 16, 'short_story', 'episode', 'draft', NOW(), NOW())`, ids);
+    // What the LalaVerse said about episode 1: one live post, one draft (not read).
+    await run(`INSERT INTO feed_posts (id, show_id, episode_id, poster_handle, content_text, status, created_at, updated_at) VALUES
+               (:post, :show, :ep1, 'velvet', 'Who turned the lights off?? #VelvetHour', 'live', NOW(), NOW()),
+               (:draftPost, :show, :ep1, 'velvet', 'DRAFT: not out yet', 'draft', NOW(), NOW())`, ids);
     await run(`INSERT INTO storyteller_books (id, title, show_id, status, created_at, updated_at) VALUES (:book, :title, :show, 'draft', NOW(), NOW())`,
       { ...ids, title: `Before Lala ${TAG}` });
     await run(`INSERT INTO storyteller_chapters (id, book_id, chapter_number, sort_order, title, draft_prose, created_at, updated_at) VALUES
@@ -53,6 +57,7 @@ const answer = (text) => ({ content: [{ type: 'text', text }] });
   });
 
   afterAll(async () => {
+    await run('DELETE FROM feed_posts WHERE id IN (:post, :draftPost)', ids);
     await run('DELETE FROM storyteller_chapters WHERE book_id = :book', ids);
     await run('DELETE FROM storyteller_books WHERE id = :book', ids);
     await run('DELETE FROM stories WHERE id = :story', ids);
@@ -97,6 +102,10 @@ const answer = (text) => ({ content: [{ type: 'text', text }] });
     expect(prompt).toContain('Nobody saw who took the necklace.');
     expect(prompt).toContain('I built the gala in my head before Zion woke up.');   // the chapter before
     expect(prompt).toContain("JustAWoman's first person");
+    expect(prompt).toContain('- @velvet: Who turned the lights off?? #VelvetHour');   // the Pulse, live posts only
+    expect(prompt).not.toContain('DRAFT: not out yet');
+    expect(prompt).toContain('the consciousness transfer is not placed yet. Write no bleed.');
+    expect(res.body).toMatchObject({ used_pulse_posts: 1, bleed: 'unset' });
     const [[ch]] = await run('SELECT draft_prose FROM storyteller_chapters WHERE id = :ch2', ids);
     expect(ch.draft_prose).toBeNull();
   });
@@ -122,6 +131,36 @@ const answer = (text) => ({ content: [{ type: 'text', text }] });
     expect(row.metadata.beat11_excerpt.text).toBe('At nine, the lights went out.');
     const ledger = await request(app).get(`${api}/books/${ids.book}/ledger`);
     expect(ledger.body.owed.beat11).toBe(0);
+  });
+
+  it('the transfer episode places the Lala bleed in the first chapter after it', async () => {
+    expect((await request(app).get(`${api}/shows/${ids.show}/transfer`)).body.transfer).toBeNull();
+    const set = await request(app).put(`${api}/shows/${ids.show}/transfer`).send({ episode_id: ids.ep1 });
+    expect(set.status).toBe(200);
+    expect(set.body.transfer).toMatchObject({ episode_id: ids.ep1, episode_number: 1 });
+    expect((await request(app).get(`${api}/books/${ids.book}/ledger`)).body.transfer).toMatchObject({ episode_id: ids.ep1 });
+
+    // ch2 is episode 1's chapter: the transfer episode itself, no bleed yet.
+    mockCreate.mockResolvedValue(answer('prose'));
+    expect((await request(app).post(`${api}/chapters/${ids.ch2}/write-from-episode`)).body.bleed).toBe('before');
+    // ch1 is episode 2's chapter: the first after the transfer.
+    await request(app).put(`${api}/chapters/${ids.ch1}/episode`).send({ episode_id: ids.ep2 });
+    const first = await request(app).post(`${api}/chapters/${ids.ch1}/write-from-episode`);
+    expect(first.body.bleed).toBe('bleed');
+    expect(mockCreate.mock.calls[1][0].messages[0].content).toContain('this is the first chapter after the consciousness transfer. Include the bleed: ONE intrusive thought, once');
+
+    // An episode of another show is refused; null clears it.
+    expect((await request(app).put(`${api}/shows/${ids.show}/transfer`).send({ episode_id: crypto.randomUUID() })).status).toBe(404);
+    const cleared = await request(app).put(`${api}/shows/${ids.show}/transfer`).send({ episode_id: null });
+    expect(cleared.body.transfer).toBeNull();
+    expect((await request(app).post(`${api}/chapters/${ids.ch1}/write-from-episode`)).body.bleed).toBe('unset');
+    await request(app).put(`${api}/chapters/${ids.ch1}/episode`).send({ episode_id: null });
+  });
+
+  it('the Scene Planner reads the episode\'s beat 11 piece', async () => {
+    const res = await request(app).get(`${api}/episodes/${ids.ep1}/beat11`);
+    expect(res.body).toMatchObject({ story_id: ids.story, excerpt: { text: 'At nine, the lights went out.' } });
+    expect((await request(app).get(`${api}/episodes/${ids.ep2}/beat11`)).body).toMatchObject({ story_id: null, excerpt: null });
   });
 
   it('refuses what it cannot do', async () => {
