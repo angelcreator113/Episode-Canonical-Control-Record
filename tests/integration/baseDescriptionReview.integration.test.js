@@ -34,7 +34,8 @@ jest.mock('sharp', () => {
     c.metadata = async () => ({ width: 1920, height: 1080 });
     return c;
   };
-  return jest.fn(() => chain());
+  // An uploaded base is cropped around its most detailed part (sharp.strategy).
+  return Object.assign(jest.fn(() => chain()), { strategy: { attention: 16 } });
 });
 
 const crypto = require('crypto');
