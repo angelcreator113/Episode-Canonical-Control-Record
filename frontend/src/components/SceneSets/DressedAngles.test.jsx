@@ -125,4 +125,10 @@ describe('DressedAngles (S8, answer 2)', () => {
     expect(screen.getByTestId('dressed-angle-a-front')).toBeTruthy();
     expect(screen.queryByTestId('dressed-angles-load-failed')).toBeNull();
   });
+
+  test('a dressed angle kept after a failed run says the last try failed (fourth audit)', async () => {
+    data.angles[1].dressed = { status: 'complete', image_url: 'https://x/i-dressed.jpg', error: 'Provider timeout' };
+    render(<DressedAngles episodeId="ep-1" setId="set-1" />);
+    expect((await screen.findByTestId('dressed-angle-status-a-inside')).textContent).toBe('Dressed · last try failed: Provider timeout');
+  });
 });

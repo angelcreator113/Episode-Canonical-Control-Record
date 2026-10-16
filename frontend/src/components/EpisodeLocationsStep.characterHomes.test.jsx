@@ -70,4 +70,11 @@ describe('EpisodeLocationsStep: character homes', () => {
     expect(screen.getByText('Home')).toBeTruthy();
     expect(screen.queryByTestId('els-character-homes')).toBeNull();
   });
+
+  test("a default home whose set was deleted says so; a closet with no default reads as before (fourth audit)", async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { data: { lead_character_id: null, characters: [] } } });
+    renderIt({ initial: [], missing: ['home', 'closet'], removed: ['home'] });
+    expect((await screen.findByTestId('els-missing-home')).textContent).toBe("The show's default home was removed from Scene Sets: choose another.");
+    expect(screen.getByTestId('els-missing-closet').textContent).toBe('No saved default: choose one.');
+  });
 });

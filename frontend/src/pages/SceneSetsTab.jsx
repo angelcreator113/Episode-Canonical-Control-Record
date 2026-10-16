@@ -36,7 +36,7 @@ export const getSceneSetUsesApi = (setId) => apiClient.get(`${API_BASE}/scene-se
 // beats or locations use asks for a replacement set and moves every use ...
 // to it; deleting without a replacement shows how many uses will be left
 // pointing at a removed set."
-const USE_WORDS = [['locations', 'episode location'], ['beats', 'beat'], ['events', 'event'], ['defaults', 'show default'], ['scenes', 'scene']];
+const USE_WORDS = [['locations', 'episode location'], ['beats', 'beat'], ['events', 'event'], ['defaults', 'show default'], ['scenes', 'scene'], ['homes', 'character place']];
 // The library's status filter, and the card's status line: one progress
 // state per set, from its main background and its views.
 export const SET_PROGRESS_LABELS = {
@@ -973,7 +973,9 @@ export function LooksRow({ set, focusZone = null, onToast, onRefresh }) {
         )}
         {looks.map((l) => (
           <figure key={l.id} className="scene-sets-look" data-testid={`scene-set-look-${l.id}`}>
-            {l.status === 'complete' && l.image_url
+            {/* A look being made again, or whose last run failed, keeps
+                its picture in use (fourth audit): the picture shows. */}
+            {l.image_url
               ? <img src={l.image_url} alt="" />
               : <span className="scene-sets-look-empty">{l.status === 'failed' ? 'Failed' : 'Generating…'}</span>}
             <figcaption>
@@ -981,6 +983,10 @@ export function LooksRow({ set, focusZone = null, onToast, onRefresh }) {
               {/* The beat picker does not use a look made from an old
                   everyday look (episodeLooks), so the row says so. */}
               {l.status === 'complete' && l.stale && <span className="scene-sets-look-stale" data-testid={`scene-set-look-stale-${l.id}`}> · old everyday look</span>}
+              {l.image_url && l.status === 'generating' && <span className="scene-sets-look-stale" data-testid={`scene-set-look-regenerating-${l.id}`}> · making it again…</span>}
+              {l.image_url && l.error && l.status !== 'generating' && (
+                <span className="scene-sets-look-stale" data-testid={`scene-set-look-error-${l.id}`}> · last try failed: {l.error}</span>
+              )}
             </figcaption>
           </figure>
         ))}
@@ -993,7 +999,12 @@ export function LooksRow({ set, focusZone = null, onToast, onRefresh }) {
           <Link className="scene-sets-event-look-name" to={`/shows/${ev.show_id}/events/${ev.id}`}>{ev.name}</Link>
           {/* A look made or uploaded here shows in the row above (onRefresh). */}
           <EventLookImage showId={ev.show_id} eventId={ev.id} canGenerate onToast={onToast} onSaved={onRefresh} />
-          {ev.used_in_episode_id && <DressedAngles episodeId={ev.used_in_episode_id} setId={set.id} onToast={onToast} />}
+          {/* The episode dresses its own event's look: an episode made from
+              several events showed its first event's look here (fourth audit). */}
+          {ev.used_in_episode_id && ev.is_episode_event && <DressedAngles episodeId={ev.used_in_episode_id} setId={set.id} onToast={onToast} />}
+          {ev.used_in_episode_id && !ev.is_episode_event && (
+            <p className="scene-sets-ws-empty" data-testid={`scene-set-event-not-episode-${ev.id}`}>Its episode is made from another event: that event's look is dressed.</p>
+          )}
         </div>
       ))}
     </div>

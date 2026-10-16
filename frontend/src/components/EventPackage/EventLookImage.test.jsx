@@ -243,4 +243,10 @@ describe('EventLookImage in the Place (S8): status only', () => {
     expect(await screen.findByText("Choose the event's scene set, then make its look in Scene Sets.")).toBeTruthy();
     expect(screen.queryByTestId('event-look-open')).toBeNull();
   });
+
+  test("says when the event's venue changed since its set was chosen (fourth audit)", async () => {
+    lookState = { ...lookState, venue_changed: true };
+    renderIt();
+    expect((await screen.findByTestId('event-look-venue-changed')).textContent).toMatch(/venue changed/);
+  });
 });
