@@ -14,6 +14,7 @@ const { v4: uuidv4 } = require('uuid');
 const Anthropic = require('@anthropic-ai/sdk');
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 const { LINKED_CHARACTER_JOIN } = require('../utils/registryLink');
+const { pulsePromptRules } = require('../utils/pulsePlatform');
 
 function getClient() {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -23,19 +24,19 @@ const FORMAT_SPECS = {
   short_story: {
     name: 'Short Story',
     wordRange: '2000-3000',
-    tone: 'Literary fiction. Cinematic prose. Fashion-forward but emotionally grounded. Think Candace Bushnell meets Instagram age.',
+    tone: 'Literary fiction. Cinematic prose. Fashion-forward but emotionally grounded. Think Candace Bushnell meets the age of The Pulse.',
     structure: 'Opening hook → rising tension → climax at event → aftermath → final image. No chapters, continuous prose with scene breaks (***)',
   },
   social_fiction: {
     name: 'Social Fiction',
     wordRange: '800-1500',
-    tone: 'Told entirely through social media artifacts: IG captions, DMs, story screenshots, comment threads, notifications. The story emerges from the digital breadcrumbs.',
+    tone: 'Told entirely through The Pulse: Pulse posts and captions, DMs, Pulse stories, comment threads, notifications. The story emerges from the digital breadcrumbs.',
     structure: 'Series of social media posts/messages. Each "post" is a self-contained moment. Use @handles, hashtags, likes/comments as storytelling devices.',
   },
   snippet: {
     name: 'Snippet',
     wordRange: '400-600',
-    tone: 'Punchy, atmospheric. A single scene that captures the essence. Could be an IG caption, a TikTok voiceover, or a Substack teaser.',
+    tone: 'Punchy, atmospheric. A single scene that captures the essence. Could be a Pulse caption, a Pulse video voiceover, or a teaser.',
     structure: 'One continuous paragraph or very short scene. No scene breaks. Ends with a hook.',
   },
   recap: {
@@ -45,6 +46,30 @@ const FORMAT_SPECS = {
     structure: 'Casual recap with key moments highlighted. Reference outfit, drama, outcome. End with teaser for next episode.',
   },
 };
+
+/**
+ * Canon for every story of Lala's world (docs/CANON.md; Evoni, 2026-10-15).
+ * Lala is a sentient fashion game and AI character JustAWoman created, and
+ * she does not know. JustAWoman is the player and host, outside Lala's world:
+ * the script's JustAWoman segments (the opening ritual, the login, her picks
+ * in the closet) never appear in Lala's story; Lala lives her choices as her
+ * own. The LalaVerse's one social app is The Pulse (utils/pulsePlatform).
+ * The recap is the one format told to the viewer, so it may name the show.
+ */
+function CANON_RULES(format) {
+  const inWorld = format !== 'recap';
+  return [
+    '- Lala does not know she was built, that she is in a show or a game, or that JustAWoman exists. Her world feels complete and real to her.',
+    '- JustAWoman (the player and host) is outside Lala\'s world. Never put her, her life or her family in the story. The script\'s JustAWoman parts (the opening ritual, the login, her choices) are not scenes: Lala lives those choices as her own.',
+    pulsePromptRules('lalaverse').trim(),
+    inWorld
+      ? '- Stay in the world: nothing about a show, an episode, a game, filming, a player or a studio.'
+      : '- This recap speaks to the viewer, so it may name the show and the episode; it still never says Lala knows she is in one.',
+    format === 'short_story'
+      ? '- At the event, give one vivid moment that leaves a question hanging (who, what, why) before the story answers it. A short animated piece of it plays in the episode at beat 11 (Event Outcome).'
+      : '',
+  ].filter(Boolean).join('\n');
+}
 
 /**
  * Generate a prose story from an episode.
@@ -162,6 +187,7 @@ ${scriptExcerpt}
 
 FRANCHISE RULES:
 - Lala is the protagonist. She's ambitious, fashion-obsessed, financially aware, and navigating the creator economy.
+${CANON_RULES(format)}
 - The LalaVerse feels real but heightened — luxury fantasy grounded in real emotional stakes.
 - Fashion choices have consequences. What you wear is strategy, not vanity.
 - Every character has their own agenda. No one is purely good or evil.
@@ -258,4 +284,5 @@ module.exports = {
   generateEpisodeStory,
   getStories,
   FORMAT_SPECS,
+  CANON_RULES,
 };
