@@ -846,13 +846,17 @@ async function storeBufferInS3(buffer, setId, angleId, assetType, contentType) {
  * everyday look. Deleting it left those pointing at a removed file (audit,
  * 2026-10-15). A check that cannot run keeps the file.
  */
-async function imageStillUsed(sequelize, url) {
+async function imageStillUsed(sequelize, url, { setId = null } = {}) {
   if (!sequelize) return true;
   try {
+    // Another set whose base is the same picture (a base_still_url edited
+    // to point at it) still shows it too (audit, 2026-10-15).
     const [[row]] = await sequelize.query(
       `SELECT (EXISTS (SELECT 1 FROM scene_angles WHERE still_image_url = :url AND deleted_at IS NULL)
-            OR EXISTS (SELECT 1 FROM world_locations WHERE approved_base_image_url = :url AND deleted_at IS NULL)) AS used`,
-      { replacements: { url } });
+            OR EXISTS (SELECT 1 FROM world_locations WHERE approved_base_image_url = :url AND deleted_at IS NULL)
+            OR EXISTS (SELECT 1 FROM scene_sets WHERE base_still_url = :url AND deleted_at IS NULL
+                         AND id IS DISTINCT FROM CAST(:setId AS uuid))) AS used`,
+      { replacements: { url, setId } });
     return Boolean(row?.used);
   } catch (err) {
     console.warn(`[SceneGen] could not check whether ${url} is still used; it is kept: ${err.message}`);
@@ -885,10 +889,10 @@ async function repointBaseAngles(sequelize, setId, oldUrl, newUrl) {
   }
 }
 
-async function deleteOldBaseImage(url, sequelize) {
+async function deleteOldBaseImage(url, sequelize, { setId = null } = {}) {
   if (!url) return;
-  if (await imageStillUsed(sequelize, url)) {
-    console.log(`[SceneGen] Old base image kept: an angle or an approved base still shows it (${url})`);
+  if (await imageStillUsed(sequelize, url, { setId })) {
+    console.log(`[SceneGen] Old base image kept: an angle, an approved base or another set still shows it (${url})`);
     return;
   }
   await deleteOldS3Asset(url);
@@ -1020,7 +1024,7 @@ async function generateBaseScene(sceneSet, models, options = {}) {
     // still shows it; after the new base is saved, so a failed save never
     // leaves the set pointing at a deleted file.
     if (sceneSet.base_still_url) {
-      await deleteOldBaseImage(sceneSet.base_still_url, briefDb(models));
+      await deleteOldBaseImage(sceneSet.base_still_url, briefDb(models), { setId: sceneSet.id });
     }
     // A description the analysis wrote for the old base is rewritten by the
     // new base's analysis (baseDescriptionService); the person's own, which

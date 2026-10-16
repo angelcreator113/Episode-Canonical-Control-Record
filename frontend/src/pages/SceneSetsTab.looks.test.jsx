@@ -38,6 +38,11 @@ describe('SceneSetsTab Looks row (L9)', () => {
     expect(screen.getByTestId('scene-set-look-l3').textContent).toBe('FailedMixer');
   });
 
+  test('a look made from an old everyday look says the episode does not use it', () => {
+    renderRow({ id: 'set-5', base_approved: false, looks: [{ id: 'l5', event_id: 'ev-5', event_show_id: 'show-1', event_name: 'Gala', status: 'complete', image_url: 'https://x/l5.jpg', stale: true }] });
+    expect(screen.getByTestId('scene-set-look-stale-l5').textContent).toBe(' · old everyday look');
+  });
+
   test('a set with no approved base and no looks shows no row', () => {
     const { container } = renderRow({ id: 'set-3', base_approved: false, looks: [] });
     expect(container.innerHTML).toBe('');

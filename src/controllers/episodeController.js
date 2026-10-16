@@ -544,6 +544,15 @@ module.exports = {
     // locked beat. It is put back as it was, and the response names it so
     // the Script tab shows what was kept.
     let lockedKept = [];
+    // Script tab re-audit (2026-10-15): clearing the script (null) goes
+    // through the same lock-keeping and version history as any save; any
+    // other non-text value is refused.
+    if (updateData.script_content === null && String(oldValues.script_content || '').trim()) {
+      updateData.script_content = '';
+    }
+    if (updateData.script_content !== undefined && updateData.script_content !== null && typeof updateData.script_content !== 'string') {
+      return res.status(400).json({ error: 'script_content must be text' });
+    }
     if (typeof updateData.script_content === 'string') {
       const { scriptKeepingLocks } = require('../utils/scriptBeatLocks');
       const locks = scriptKeepingLocks(oldValues, updateData.script_content);
