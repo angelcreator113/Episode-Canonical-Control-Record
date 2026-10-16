@@ -1582,7 +1582,7 @@
   font-weight: 600;
   text-transform: capitalize;
 }
-.rp-dot { width: 8px; height: 8px; border-radius: 50%; }
+.rp-chip-handle { text-transform: none; }
 .rp-bio {
   margin: 0;
   padding: 12px 14px;

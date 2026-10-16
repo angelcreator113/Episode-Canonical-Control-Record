@@ -33,6 +33,7 @@ vi.mock('../components/RelationshipEngine', () => ({
 import apiClient from '../services/api';
 import {
   fetchRelationshipTree,
+  loadCastIds,
   fetchPendingRelationships,
   fetchFamilyTree,
   confirmRelationship,
@@ -145,5 +146,33 @@ describe('RelationshipEngine — Track 3 helpers', () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: { registries: [] } });
     await listRegistriesApi();
     expect(apiClient.get).toHaveBeenCalledWith('/api/v1/character-registry/registries');
+  });
+});
+
+describe('RelationshipEngine — the cast (Lala\'s world only)', () => {
+  beforeEach(() => {
+    Object.values(apiClient).forEach((fn) => fn?.mockReset?.());
+  });
+
+  test('loadCastIds keeps live LalaVerse profiles that name a character', async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({ data: { profiles: [
+      { id: 'p1', registry_character_id: 'c1', status: 'active' },
+      { id: 'p2', registry_character_id: 'c2', status: 'archived' },
+      { id: 'p3', registry_character_id: null, status: 'active' },
+      { id: 'p4', registry_character_id: 'c4' },
+    ] } });
+    const ids = await loadCastIds();
+    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/social-profiles?feed_layer=lalaverse&limit=100&page=1');
+    expect([...ids].sort()).toEqual(['c1', 'c4']);
+  });
+
+  test('loadCastIds reads every page', async () => {
+    const full = Array.from({ length: 100 }, (_, i) => ({ id: `p${i}`, registry_character_id: `c${i}` }));
+    vi.mocked(apiClient.get)
+      .mockResolvedValueOnce({ data: { profiles: full } })
+      .mockResolvedValueOnce({ data: { profiles: [{ id: 'last', registry_character_id: 'c-last' }] } });
+    const ids = await loadCastIds();
+    expect(apiClient.get).toHaveBeenCalledTimes(2);
+    expect(ids.size).toBe(101);
   });
 });

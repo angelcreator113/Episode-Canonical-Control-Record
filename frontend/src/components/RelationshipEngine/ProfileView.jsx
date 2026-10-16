@@ -10,7 +10,7 @@ import {
   Heart, ChevronRight, Plus, Sparkles, GitBranch, Download,
   Users, Flame, HeartHandshake, Sprout, Link2, BookOpen, Activity,
 } from 'lucide-react';
-import { TENSION, LAYER, LALA_CONN, cname, clayer, initials, roleColor } from './tokens';
+import { TENSION, LALA_CONN, cname, initials, roleColor } from './tokens';
 import { Pill } from './primitives';
 
 /* tension → closeness score (0 = strained, 100 = close) */
@@ -99,13 +99,12 @@ export default function ProfileView({
     return (
       <div className="re-empty" role="status">
         <div className="re-empty-icon"><Users size={32} aria-hidden /></div>
-        <div className="re-empty-title">No characters yet</div>
-        <div className="re-empty-desc">Add characters to this registry to see their relationships here</div>
+        <div className="re-empty-title">No one in Lala's world yet</div>
+        <div className="re-empty-desc">The people here are Lala's feed profiles that have a character. Link one on the Characters page.</div>
       </div>
     );
   }
 
-  const layer = LAYER[clayer(char)];
   const lalaRel = mine.find(r => r.lala_connection && r.lala_connection !== 'none');
   const lalaLabel = lalaRel ? LALA_CONN.find(l => l.v === lalaRel.lala_connection)?.l : null;
   const statusWord = stats.closeness == null ? 'No tension recorded'
@@ -133,7 +132,7 @@ export default function ProfileView({
             <div className="rp-chips">
               {char.role_type && <span className="rp-chip">{char.role_type}</span>}
               {char.role_label && <span className="rp-chip">{char.role_label}</span>}
-              {layer && <span className="rp-chip"><span className="rp-dot" style={{ background: layer.color }} />{layer.label}</span>}
+              {char.display_name && char.display_name !== cname(char) && <span className="rp-chip rp-chip-handle">{char.display_name}</span>}
               {char.status && <span className="rp-chip">{char.status}</span>}
             </div>
             <p className="rp-bio">{char.description || char.personality || 'No description yet.'}</p>

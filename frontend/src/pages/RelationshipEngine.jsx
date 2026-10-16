@@ -24,6 +24,32 @@ import {
 export const listRegistriesApi = () =>
   apiClient.get(`${API}/character-registry/registries`);
 
+// Lala's world: her LalaVerse feed profiles, every page of them (the
+// Characters page reads the same list; lib/theCast.js).
+export const listLalaverseProfilesApi = (page) =>
+  apiClient.get(`${API}/social-profiles?feed_layer=lalaverse&limit=100&page=${page}`);
+
+/**
+ * The cast this page works with (Evoni, 2026-10-16: "only use the 6 cast
+ * members we have outside of Lala"): the registry characters a live
+ * LalaVerse feed profile names. Lala has no feed profile, so she is not in
+ * it, and neither is any old-system character.
+ */
+export async function loadCastIds() {
+  const ids = new Set();
+  for (let page = 1; page <= 10; page += 1) {
+    const r = await listLalaverseProfilesApi(page);
+    const batch = r.data?.profiles || [];
+    batch.forEach(p => {
+      if (p && p.status !== 'archived' && p.registry_character_id) ids.add(String(p.registry_character_id));
+    });
+    if (batch.length < 100) break;
+  }
+  return ids;
+}
+
+const inCast = (cast, r) => cast.has(String(r.character_id_a)) && cast.has(String(r.character_id_b));
+
 export const fetchRelationshipTree = (regId) =>
   apiClient.get(`${API}/relationships/tree/${regId}`);
 export const fetchPendingRelationships = () =>
@@ -60,6 +86,7 @@ const initial = {
   layers:   {},
   regs:     [],
   reg:      null,
+  cast:     null,       // Set of cast character ids, once loaded
   tab:      'overview',
   lf:       'all',
   selChar:  null,
@@ -112,42 +139,65 @@ export default function RelationshipEngine() {
     }
   }, [location.state, toast]);
 
-  /* ── Load registries ───────────────────────────────────────────────── */
+  /* ── Load the cast and the registries that hold it ────────────────── */
   useEffect(() => {
     (async () => {
       try {
-        const r = await listRegistriesApi();
+        const [cast, r] = await Promise.all([loadCastIds(), listRegistriesApi()]);
         const d = r.data;
-        const list = d?.registries || d || [];
-        if (list.length) dispatch({ type: 'SET', payload: { regs: list, reg: list[0] } });
-      } catch { /* non-critical */ }
+        const all = d?.registries || d || [];
+        // Only registries holding a cast member; the one holding most is
+        // where new relationships and seeds are made.
+        const held = reg => (reg.characters || []).filter(c => cast.has(String(c.id))).length;
+        const list = all.filter(reg => held(reg) > 0).sort((a, b) => held(b) - held(a));
+        if (!list.length) {
+          dispatch({ type: 'TREE_LOADED', payload: { cast, regs: [], reg: null, chars: [], rels: [], layers: {}, cands: [] } });
+          return;
+        }
+        dispatch({ type: 'SET', payload: { cast, regs: list, reg: list[0] } });
+      } catch (err) {
+        console.error('[RelationshipEngine] cast load failed:', err);
+        dispatch({ type: 'ERROR', msg: err.message || "Could not load the people in Lala's world." });
+      }
     })();
   }, []);
 
-  /* ── Fetch tree when registry changes ─────────────────────────────── */
+  /* ── Fetch the cast's characters and relationships ─────────────────── */
   const fetchTree = useCallback(async () => {
-    if (!s.reg) return;
+    if (!s.reg || !s.cast) return;
     dispatch({ type: 'SET', payload: { loading: true, error: null } });
     try {
-      const [treeR, pendR] = await Promise.all([
-        fetchRelationshipTree(s.reg.id),
+      const [trees, pendR] = await Promise.all([
+        Promise.all(s.regs.map(reg => fetchRelationshipTree(reg.id))),
         fetchPendingRelationships(),
       ]);
-      const tree = treeR.data;
+      const cast = s.cast;
+      const chars = [];
+      const rels = new Map();
+      const layers = {};
+      trees.forEach(({ data: tree }) => {
+        (tree.characters || []).forEach(c => {
+          if (cast.has(String(c.id)) && !chars.some(x => x.id === c.id)) chars.push(c);
+        });
+        (tree.relationships || []).forEach(r => { if (inCast(cast, r)) rels.set(r.id, r); });
+        Object.entries(tree.layers || {}).forEach(([k, cs]) => {
+          layers[k] = [...(layers[k] || []), ...cs.filter(c => cast.has(String(c.id)) && !(layers[k] || []).some(x => x.id === c.id))];
+        });
+      });
       const pend = pendR.data;
       dispatch({
         type: 'TREE_LOADED',
         payload: {
-          chars:  tree.characters || [],
-          rels:   tree.relationships || [],
-          layers: tree.layers || {},
-          cands:  pend.candidates || pend || [],
+          chars,
+          rels:   [...rels.values()],
+          layers,
+          cands:  (pend.candidates || pend || []).filter(c => inCast(cast, c)),
         },
       });
     } catch (err) {
       dispatch({ type: 'ERROR', msg: err.message || 'Failed to load relationships. Check your connection and try again.' });
     }
-  }, [s.reg]);
+  }, [s.reg, s.regs, s.cast]);
 
   useEffect(() => { fetchTree(); }, [fetchTree]);
 
@@ -207,7 +257,8 @@ export default function RelationshipEngine() {
     try {
       const r = await generateRelationships({ registry_id: s.reg?.id, focus_character_id: focusId });
       const d = r.data;
-      dispatch({ type: 'SET', payload: { cands: d.candidates || d || [], genning: false, genOpen: false, tab: 'candidates' } });
+      const fresh = (d.candidates || d || []).filter(c => !s.cast || inCast(s.cast, c));
+      dispatch({ type: 'SET', payload: { cands: fresh, genning: false, genOpen: false, tab: 'candidates' } });
       toast('Seeds generated', 'success');
     } catch (err) {
       dispatch({ type: 'SET', payload: { genning: false } });
@@ -264,8 +315,15 @@ export default function RelationshipEngine() {
     return m;
   }, [s.layers]);
 
+  const roleTypes = useMemo(() => {
+    const n = {};
+    s.chars.forEach(c => { if (c.role_type) n[c.role_type] = (n[c.role_type] || 0) + 1; });
+    return Object.entries(n).sort();
+  }, [s.chars]);
+
   const filtChars = useMemo(() => {
-    let list = s.lf === 'all' ? s.chars : s.chars.filter(c => clayer(c) === s.lf);
+    // The type filter is the role type (every cast member is in Lala's world).
+    let list = s.lf === 'all' ? s.chars : s.chars.filter(c => c.role_type === s.lf);
     if (charSearch.trim()) {
       const q = charSearch.toLowerCase();
       list = list.filter(c => cname(c).toLowerCase().includes(q) || (c.role_type || '').toLowerCase().includes(q));
@@ -368,11 +426,11 @@ export default function RelationshipEngine() {
               aria-label="Search characters"
             />
           </label>
-          <select className="re-layer-select" value={s.lf} aria-label="Filter by layer"
+          <select className="re-layer-select" value={s.lf} aria-label="Filter by type"
             onChange={e => dispatch({ type: 'SET', payload: { lf: e.target.value } })}>
-            <option value="all">All Layers ({s.chars.length})</option>
-            {Object.entries(LAYER).map(([k, v]) => (
-              <option key={k} value={k}>{v.label} ({(s.layers[k] || []).length})</option>
+            <option value="all">All Types ({s.chars.length})</option>
+            {roleTypes.map(([k, n]) => (
+              <option key={k} value={k}>{k.charAt(0).toUpperCase() + k.slice(1)} ({n})</option>
             ))}
           </select>
         </div>
@@ -511,7 +569,7 @@ export default function RelationshipEngine() {
 
           {/* view */}
           <div className={`re-view ${s.tab === 'overview' ? 'is-overview' : ''}`}>
-            {s.tab === 'web'        ? <WebView navigate={navigate} /> :
+            {s.tab === 'web'        ? <WebView navigate={navigate} castKeys={s.chars.map(c => c.character_key)} /> :
              s.loading              ? <Spinner /> :
              s.tab === 'overview'   ? <ProfileView char={profileChar} chars={s.chars} rels={s.rels} cands={s.cands}
                                         onSelectChar={c => dispatch({ type: 'SET', payload: { selChar: c, selRel: null, panel: false } })}
@@ -520,7 +578,7 @@ export default function RelationshipEngine() {
                                         onGenerate={() => dispatch({ type: 'SET', payload: { genOpen: true } })}
                                         onExport={exportRelationships}
                                         onTab={setTab} /> :
-             s.tab === 'tree'       ? <TreeView chars={filtChars} rels={filtRels} layers={s.layers} lf={s.lf} selChar={s.selChar} onRelClick={r => dispatch({ type: 'SET', payload: { selRel: r, panel: true } })} onCharClick={c => dispatch({ type: 'SET', payload: { selChar: c } })} /> :
+             s.tab === 'tree'       ? <TreeView chars={filtChars} rels={filtRels} layers={s.layers} lf="all" selChar={s.selChar} onRelClick={r => dispatch({ type: 'SET', payload: { selRel: r, panel: true } })} onCharClick={c => dispatch({ type: 'SET', payload: { selChar: c } })} /> :
              s.tab === 'family'     ? <FamilyView data={s.famData} genning={s.genFam} onGenerate={genFamFn} onUpdateRole={updateFamRole} onRelClick={r => dispatch({ type: 'SET', payload: { selRel: r, panel: true } })} /> :
              s.tab === 'candidates' ? <CandidateView cands={s.cands} onConfirm={confirm} onDismiss={dismiss} busy={!!s.busy} /> :
                                       <ListView rels={filtRels} onSelect={r => dispatch({ type: 'SET', payload: { selRel: r, panel: true } })} />
