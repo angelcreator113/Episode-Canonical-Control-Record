@@ -74,8 +74,6 @@ StorytellerBook	setting	missing-column
 StorytellerBook	stakes	missing-column
 StorytellerBook	theme	missing-column
 StorytellerBook	tone	missing-column
-StorytellerChapter	chapter_template	missing-column
-StorytellerChapter	sections	missing-column
 Thumbnail	isPrimary	missing-column
 Thumbnail	platformUploadStatus	missing-column
 Thumbnail	platformUrls	missing-column
