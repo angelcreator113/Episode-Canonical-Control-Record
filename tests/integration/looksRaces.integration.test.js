@@ -169,5 +169,34 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect((await dressed.episodeLooks(sequelize, episodeId)).get(set)).toMatchObject({ image_url: 'https://x/look.jpg' });
     await run(`UPDATE world_locations SET approved_base_image_url = 'https://x/new-everyday.jpg' WHERE id = :loc`, { loc });
     expect((await dressed.episodeLooks(sequelize, episodeId)).get(set)).toBeUndefined();
+    // The lists say so, as the episode does (audit, 2026-10-15).
+    expect((await looks.looksForSets(sequelize, [set])).get(set)[0]).toMatchObject({ stale: true });
+    expect((await looks.eventLook(sequelize, { showId: show, eventId: ev })).look).toMatchObject({ stale: true });
+  });
+
+  it('a failed re-run keeps the previous look in use, with the error', async () => {
+    const { loc, set } = await approvedVenue();
+    const episodeId = uuid();
+    const ev = await event(loc, set, { episodeId });
+    jest.spyOn(sceneGen, 'generateDressedStill').mockResolvedValueOnce({ stillUrl: 'https://x/good.jpg', cost: 0.04 });
+    await (await looks.startLook(models, { showId: show, eventId: ev })).run();
+    expect(await lookOf(ev)).toMatchObject({ status: 'complete', image_url: 'https://x/good.jpg' });
+    expect((await looks.looksForSets(sequelize, [set])).get(set)[0]).toMatchObject({ stale: false });
+
+    sceneGen.generateDressedStill.mockRejectedValueOnce(new Error('Kontext refused'));
+    await (await looks.startLook(models, { showId: show, eventId: ev })).run();
+    expect(await lookOf(ev)).toMatchObject({ status: 'complete', image_url: 'https://x/good.jpg', error: 'Kontext refused' });
+    expect((await dressed.episodeLooks(sequelize, episodeId)).get(set)).toMatchObject({ image_url: 'https://x/good.jpg' });
+  });
+
+  it('a dressed angle re-run keeps its previous image until it has a new one; stuck, it keeps it', async () => {
+    const { loc, set } = await approvedVenue();
+    const ev = await event(loc, set);
+    const { look } = await looks.uploadLook(models, { showId: show, eventId: ev, storeImage: async () => 'https://x/l.jpg' });
+    const angle = uuid();
+    await run(`INSERT INTO scene_set_look_angles (id, look_id, scene_angle_id, status, image_url, source, created_at, updated_at)
+               VALUES (gen_random_uuid(), :look, :angle, 'generating', 'https://x/old-dressed.jpg', 'generated', NOW(), NOW() - INTERVAL '20 minutes')`, { look: look.id, angle });
+    const map = await dressed.lookAngles(sequelize, [look.id]);
+    expect(map.get(`${look.id}:${angle}`)).toMatchObject({ status: 'complete', image_url: 'https://x/old-dressed.jpg' });
   });
 });

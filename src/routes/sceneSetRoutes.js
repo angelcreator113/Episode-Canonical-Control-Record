@@ -124,23 +124,20 @@ const uploadSceneSetImages = uploadOrRefuse(upload.fields([
  * One paid generation at a time for a set's base or an angle (audit,
  * 2026-10-15: a double click started and billed two). Claims the row by
  * marking it generating in one statement, unless it is generating already;
- * a claim older than GENERATION_CLAIM_STALE_MINUTES (a run that died) can
- * be taken again, as the page treats it (hasLiveGeneration). Answers 409
+ * a claim older than the shared stale window (generationClaimService; a
+ * run that died) can be taken again, as the page treats it
+ * (hasLiveGeneration). Answers 409
  * ALREADY_GENERATING and returns false when the row is taken.
  */
-const GENERATION_CLAIM_STALE_MINUTES = 15;
-const CLAIM_TABLES = Object.freeze({ set: 'scene_sets', angle: 'scene_angles' });
+const generationClaim = require('../services/generationClaimService');
 /**
- * A row being generated now (claimed within GENERATION_CLAIM_STALE_MINUTES):
- * an upload, a promote or a re-analysis would be overwritten by the run, or
+ * A row being generated now (claimed within the shared stale window): an
+ * upload, a promote or a re-analysis would be overwritten by the run, or
  * free its claim for a second paid one (audit, 2026-10-15). Answers 409
  * ALREADY_GENERATING and returns true when it is.
  */
 function refuseWhileGenerating(res, row, what) {
-  // Model instances name it updatedAt; raw rows updated_at.
-  const updatedAt = row?.updatedAt || row?.updated_at;
-  const recent = updatedAt && Date.now() - new Date(updatedAt).getTime() < GENERATION_CLAIM_STALE_MINUTES * 60 * 1000;
-  if (row?.generation_status !== 'generating' || !recent) return false;
+  if (!generationClaim.isLiveGeneration(row)) return false;
   res.status(409).json({ success: false, code: 'ALREADY_GENERATING', error: `${what} is being generated. Wait for it to finish.` });
   return true;
 }
@@ -148,14 +145,7 @@ function refuseWhileGenerating(res, row, what) {
 const SCENE_TYPES = Object.freeze(['HOME_BASE', 'CLOSET', 'EVENT_LOCATION', 'TRANSITION', 'OTHER']);
 
 async function claimGeneration(res, kind, id, what) {
-  const [rows] = await SceneSet.sequelize.query(
-    `UPDATE ${CLAIM_TABLES[kind]} SET generation_status = 'generating', updated_at = NOW()
-      WHERE id = :id
-        AND (generation_status IS DISTINCT FROM 'generating'
-             OR updated_at < NOW() - make_interval(mins => :stale))
-      RETURNING id`,
-    { replacements: { id, stale: GENERATION_CLAIM_STALE_MINUTES } });
-  if (rows.length) return true;
+  if (await generationClaim.claimRow(SceneSet.sequelize, kind, id)) return true;
   res.status(409).json({ success: false, code: 'ALREADY_GENERATING', error: `${what} is already being generated. Wait for it to finish.` });
   return false;
 }
@@ -889,7 +879,8 @@ router.delete('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => 
 
 // ─── POST /:id/upload-base  — upload a custom base image ─────────────────────
 
-router.post('/:id/upload-base', validateUUIDParam('id'), requireAuth, uploadSceneSetImages, async (req, res) => {
+// Rate-limited: an upload runs the paid base analysis and style lock.
+router.post('/:id/upload-base', validateUUIDParam('id'), requireAuth, aiRateLimiter, uploadSceneSetImages, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -1557,6 +1548,9 @@ router.post('/:id/angles/:angleId/generate-video', validateUUIDParam('id'), requ
       scene_set_id: set.id,
       scene_angle_id: angle.id,
       payload: {},
+      // One attempt: a retry after a billed Runway job (a poll timeout, a
+      // failed S3 store) paid for the video again (audit, 2026-10-15).
+      max_attempts: 1,
     });
 
     // Note: angle stays 'complete' (still visible) while video generates in background
@@ -1915,11 +1909,13 @@ router.post('/:id/angles/:angleId/auto-refine', validateUUIDParam('id'), require
       sceneSetId: set.id,
       artifactCategories: categories,
       pass: 1,
+      // The picture this chain refines (one chain per picture).
+      attempt: angle.generation_attempt || 0,
       qualityThreshold: req.body.qualityThreshold || refinementQueue.QUALITY_THRESHOLD,
       runPostProcessing: req.body.runPostProcessing !== false,
     });
 
-    res.json({ success: true, data: { jobId: job.id, pass: 1, maxPasses: refinementQueue.MAX_REFINEMENT_PASSES } });
+    res.json({ success: true, data: { jobId: job.id, pass: 1, maxPasses: refinementQueue.MAX_REFINEMENT_PASSES, ...(job.duplicate ? { existing: true } : {}) } });
   } catch (err) {
     console.error('Scene Sets POST /:id/angles/:angleId/auto-refine error:', err);
     res.status(500).json({ success: false, error: err.message });
