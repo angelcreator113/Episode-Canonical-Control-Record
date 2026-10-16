@@ -39,7 +39,7 @@ class DressedAngleError extends Error {
 async function episodeEvent(sequelize, episodeId) {
   if (!episodeId) return null;
   const [[event]] = await sequelize.query(
-    `SELECT id, show_id, name FROM world_events
+    `SELECT id, show_id, name, venue_location_id, canon_consequences FROM world_events
       WHERE id = ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL}`,
     { replacements: { episodeId } });
   return event || null;
@@ -61,11 +61,21 @@ async function episodeLooks(sequelize, episodeId) {
        LEFT JOIN world_locations l
          ON l.id = COALESCE(NULLIF(sl.brief->>'world_location_id', '')::uuid, s.world_location_id)
         AND l.deleted_at IS NULL
-      WHERE sl.event_id = :eventId AND sl.status = 'complete' AND sl.image_url IS NOT NULL AND sl.deleted_at IS NULL
+      -- A look being made again keeps its image in use until the new one is
+      -- in: the episode lost its look for the whole run (fourth audit).
+      WHERE sl.event_id = :eventId AND sl.status IN ('complete', 'generating') AND sl.image_url IS NOT NULL AND sl.deleted_at IS NULL
         AND (sl.source <> 'generated'
              OR sl.brief->'approved_base'->>'image_url' IS NULL
-             OR sl.brief->'approved_base'->>'image_url' = l.approved_base_image_url)`,
-    { replacements: { eventId: event.id } });
+             OR sl.brief->'approved_base'->>'image_url' = l.approved_base_image_url
+             -- An accepted episode keeps the look it was accepted with: its
+             -- Place is locked, so the look could not be made again (fourth audit).
+             OR EXISTS (SELECT 1 FROM episodes ep WHERE ep.id = :episodeId AND ep.deleted_at IS NULL AND ep.evaluation_status = 'accepted'))
+        -- A look made at another venue than the event's is not the event's
+        -- place any more: the event's venue changed (fourth audit).
+        AND (CAST(:venueId AS uuid) IS NULL
+             OR COALESCE(NULLIF(sl.brief->>'world_location_id', '')::uuid, s.world_location_id) IS NULL
+             OR COALESCE(NULLIF(sl.brief->>'world_location_id', '')::uuid, s.world_location_id) = CAST(:venueId AS uuid))`,
+    { replacements: { eventId: event.id, episodeId, venueId: require('./venueGenerationService').venueLocationId(event) } });
   for (const r of rows) out.set(r.scene_set_id, { id: r.id, image_url: r.image_url, event_id: r.event_id });
   return out;
 }

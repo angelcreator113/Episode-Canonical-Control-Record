@@ -123,7 +123,10 @@ async function proposeLocations(sequelize, { showId, event, transaction }) {
     .filter((l, i, all) => all.findIndex((x) => x.scene_set_id === l.scene_set_id) === i)
     .map((l) => ({ ...l, name: null, scene_set: setSummary(sets.get(l.scene_set_id)) }));
   const have = new Set(locations.map((l) => l.role));
-  return { locations, missing: ['event', 'home', 'closet'].filter((r) => !have.has(r)), defaults };
+  // A default home or closet whose set was deleted: the step says so, not
+  // just "no saved default" (fourth audit, 2026-10-15).
+  const removed = wanted.filter((l) => l.role !== 'event' && !sets.has(l.scene_set_id)).map((l) => l.role);
+  return { locations, missing: ['event', 'home', 'closet'].filter((r) => !have.has(r)), removed, defaults };
 }
 
 // cover_image_url: the image of the set's library cover view (chosen in

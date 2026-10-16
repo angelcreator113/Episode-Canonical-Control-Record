@@ -98,7 +98,11 @@ const otherShows = (set, event) => Boolean(set?.show_id && event?.show_id && Str
 async function resolveLookSet(sequelize, event, chosenSetId = null) {
   const venueId = venueLocationId(event);
   const own = await liveSet(sequelize, event.scene_set_id);
-  if (own && !otherShows(own, event)) return { kind: 'set', set: own, link: false };
+  // The event's own set, unless it is at another venue than the event's:
+  // after the venue changed, the look was made on the old venue's set
+  // (fourth audit, 2026-10-15). A set with no location stays the event's.
+  const atOtherVenue = Boolean(own?.world_location_id && venueId && String(own.world_location_id) !== String(venueId));
+  if (own && !otherShows(own, event) && !atOtherVenue) return { kind: 'set', set: own, link: false };
   const sets = await venueSets(sequelize, venueId, event.show_id);
   if (chosenSetId) {
     const chosen = sets.find((s) => String(s.id) === String(chosenSetId));
@@ -395,6 +399,10 @@ async function eventLook(sequelize, { showId, eventId }) {
     },
     approved_base: approvedOf(location),
     look: look || null,
+    // The event's set is at another venue than the event's (its venue
+    // changed): the next look is made at the new venue (fourth audit).
+    venue_changed: Boolean(set.world_location_id && venueLocationId(event)
+      && String(set.world_location_id) !== String(venueLocationId(event))),
     editable,
   };
 }
@@ -432,6 +440,10 @@ async function eventsForSets(sequelize, setIds) {
   if (!ids.length) return bySet;
   const [rows] = await sequelize.query(
     `SELECT e.id, e.name, e.show_id, e.used_in_episode_id, e.scene_set_id,
+            -- Whether the episode's event is this one: an episode made from
+            -- several events dresses its own event's look only (fourth audit).
+            (e.used_in_episode_id IS NOT NULL
+              AND ${require('../utils/episodeEventSql').episodeEventIdSql('e.used_in_episode_id')} = e.id) AS is_episode_event,
             l.id AS look_id, l.status AS look_status, l.image_url AS look_image_url
        FROM world_events e
        LEFT JOIN scene_set_looks l ON l.event_id = e.id AND l.scene_set_id = e.scene_set_id AND l.deleted_at IS NULL
@@ -441,7 +453,7 @@ async function eventsForSets(sequelize, setIds) {
   for (const r of rows) {
     if (!bySet.has(r.scene_set_id)) bySet.set(r.scene_set_id, []);
     bySet.get(r.scene_set_id).push({
-      id: r.id, name: r.name, show_id: r.show_id, used_in_episode_id: r.used_in_episode_id,
+      id: r.id, name: r.name, show_id: r.show_id, used_in_episode_id: r.used_in_episode_id, is_episode_event: Boolean(r.is_episode_event),
       look: r.look_id ? { id: r.look_id, status: r.look_status, image_url: r.look_image_url } : null,
     });
   }

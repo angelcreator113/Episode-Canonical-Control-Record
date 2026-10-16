@@ -38,7 +38,10 @@ export default function DressedAngles({ episodeId, setId, onToast, pollMs = POLL
     for (const a of next?.angles || []) {
       if (!isGenerating(before.get(a.id) || {})) continue;
       const name = a.name || a.label;
-      if (a.dressed?.status === 'complete') toastRef.current?.(`${name} is dressed`);
+      // A failed run on an angle that had a picture keeps it (complete) with
+      // its error: it is a failure, not a success (fourth audit).
+      if (a.dressed?.status === 'complete' && a.dressed.error) toastRef.current?.(`${name} could not be dressed again: ${a.dressed.error}`, 'error');
+      if (a.dressed?.status === 'complete' && !a.dressed.error) toastRef.current?.(`${name} is dressed`);
       if (a.dressed?.status === 'failed') toastRef.current?.(`${name} could not be dressed${a.dressed.error ? `: ${a.dressed.error}` : ''}`, 'error');
     }
   };
@@ -137,7 +140,7 @@ export default function DressedAngles({ episodeId, setId, onToast, pollMs = POLL
               <span className="dressed-angles-status" data-testid={`dressed-angle-status-${a.id}`}>
                 {status === 'generating' && <span className="dressed-angles-spin" aria-hidden="true" />}
                 {status === 'generating' ? 'Dressing…'
-                  : status === 'complete' ? 'Dressed'
+                  : status === 'complete' ? (a.dressed.error ? `Dressed · last try failed: ${a.dressed.error}` : 'Dressed')
                     : status === 'failed' ? `Failed${a.dressed.error ? `: ${a.dressed.error}` : ''}`
                       : status || 'Not dressed yet'}
               </span>

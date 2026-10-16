@@ -81,7 +81,7 @@ describe('the other readers', () => {
   });
 
   test('the interior generator is given their events', () => {
-    expect(read('routes', 'characterRegistry.js')).toMatch(/generateMissingInterior\(\{ character: plain, feedProfile, events, fields: toAsk \}\)/);
+    expect(read('routes', 'characterRegistry.js')).toMatch(/generateMissingInterior\(\{ character: plain, feedProfile, events, fields: toAsk(, factsBlock)? \}\)/);
     expect(read('services', 'characterGenerationService.js')).toMatch(/known: withEvents\(characterContext\(character, feedProfile\), events\)/);
   });
 

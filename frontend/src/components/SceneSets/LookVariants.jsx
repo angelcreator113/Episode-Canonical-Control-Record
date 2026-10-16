@@ -177,7 +177,7 @@ export default function LookVariants({ setId, onToast, pollMs = POLL_MS }) {
         {v?.status === 'failed' && <span className="lv-error" title={v.error || ''}>Failed</span>}
         {v?.status === 'complete' && v.error && <span className="lv-error" title={v.error}>Last try failed</span>}
         {v?.status === 'complete' && v.stale && (
-          <span className="lv-error" title="Made from an old everyday look: beats don't use it" data-testid={`look-variant-stale-${kind}-${slot.value}`}>Old</span>
+          <span className="lv-error" title={kind === 'season' ? "Made from an old Front view: beats don't use it" : "Made from an old everyday look: beats don't use it"} data-testid={`look-variant-stale-${kind}-${slot.value}`}>Old</span>
         )}
         {v?.status !== 'generating' && (
           <span className="lv-actions">
