@@ -92,7 +92,11 @@ section (`shows.metadata.consciousness_transfer`). The chapter writer
 (`bleedStateOf` in `src/routes/bookFromShowRoutes.js`) then puts the bleed in
 the book's first chapter whose episode comes after it. The Story Engine's
 50-chapter plan is not tied to episodes, so it does not read the setting; it
-flags no bleed unless a brief says the transfer happened.
+flags no bleed unless a brief says the transfer happened. The book's plan is
+now made from the episodes instead: "Plan the next chapters" on This week's
+episode (`/this-week`; `POST /books/:bookId/plan` in
+`src/routes/bookFromShowRoutes.js`) plans a chapter for each episode that
+still owes one, and marks the bleed on the first chapter after the transfer.
 
 ## The show and the Pulse around the book
 

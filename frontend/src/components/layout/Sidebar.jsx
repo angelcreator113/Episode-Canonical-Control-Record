@@ -55,11 +55,16 @@ function buildNav() {
       items: [
         { icon: '✍️', label: 'Stories', route: '/stories',
           children: [
-            { icon: '🧱', label: 'Structure', route: '/story-engine' },
+            // The book follows the show: one episode through episode, short story, beat 11, chapter.
+            { icon: '📺', label: "This week's episode", route: '/this-week' },
+            // "Structure" (/story-engine) only redirected to Stories; the book's
+            // plan is now "Plan the next chapters" on This week's episode.
             { icon: '🧵', label: 'Threads', route: '/story-threads' },
             // Story Calendar: the novel's dates. The cultural calendar is Culture &
             // Events; the production schedule is Producer Mode's Season Plan (IA-04).
             { icon: '📅', label: 'Story Calendar', route: '/story-calendar' },
+            // Story Evaluation: write a scene three ways, judge, write back to a chapter.
+            { icon: '⚖️', label: 'Story Evaluation', route: '/story-evaluation' },
           ],
         },
         { icon: '👥', label: 'Characters', route: '/character-registry?view=world' },
@@ -134,7 +139,7 @@ function Sidebar({ isOpen, onClose }) {
 
   // Auto-expand Stories sub-nav
   useEffect(() => {
-    if (['/story-engine', '/scene-proposer', '/assembler', '/continuity', '/narrative-control'].some(p => location.pathname.startsWith(p))) {
+    if (['/this-week', '/story-engine', '/scene-proposer', '/assembler', '/continuity', '/narrative-control'].some(p => location.pathname.startsWith(p))) {
       setStoriesOpen(true);
     }
   }, [location.pathname]);

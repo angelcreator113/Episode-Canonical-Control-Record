@@ -163,31 +163,34 @@ async function dressedAngleBrief(sequelize, args) {
 }
 
 async function upsertRow(sequelize, { lookId, angleId, status, imageUrl = null, source, brief = null, estimate = null }) {
-  // A generation does not replace a run still going (a double click paid
-  // twice); an upload always wins.
-  const idle = status === 'generating'
-    ? `WHERE scene_set_look_angles.status <> 'generating' OR scene_set_look_angles.updated_at < NOW() - make_interval(secs => ${STUCK_AFTER_MS / 1000})`
-    : '';
+  const generating = status === 'generating';
+  // A run claims the row: it does not replace a run still going (a double
+  // click paid twice), and the row keeps its current image, source, brief
+  // and cost until the run has its own image; a failed run that kept the
+  // old image had already named it generated from the new look (audit,
+  // 2026-10-15). An upload always wins and replaces all of it.
+  const onConflict = generating
+    ? `DO UPDATE SET status = 'generating', estimate_usd = EXCLUDED.estimate_usd, error = NULL, updated_at = NOW()
+       WHERE scene_set_look_angles.status <> 'generating' OR scene_set_look_angles.updated_at < NOW() - make_interval(secs => ${STUCK_AFTER_MS / 1000})`
+    : `DO UPDATE SET status = EXCLUDED.status, image_url = EXCLUDED.image_url, source = EXCLUDED.source, brief = EXCLUDED.brief,
+                     estimate_usd = EXCLUDED.estimate_usd, cost_usd = NULL, error = NULL,
+                     generated_at = EXCLUDED.generated_at, updated_at = NOW()`;
   const [[row]] = await sequelize.query(
     `INSERT INTO scene_set_look_angles (id, look_id, scene_angle_id, status, image_url, source, brief, estimate_usd, error, generated_at, created_at, updated_at)
      VALUES (gen_random_uuid(), :lookId, :angleId, :status, :imageUrl, :source, CAST(:brief AS jsonb), :estimate, NULL,
              CASE WHEN :status = 'complete' THEN NOW() ELSE NULL END, NOW(), NOW())
      ON CONFLICT (look_id, scene_angle_id) WHERE deleted_at IS NULL
-     DO UPDATE SET status = EXCLUDED.status,
-                   -- A new run keeps the previous image until it has one
-                   -- (audit, 2026-10-15: a failed re-run erased it).
-                   image_url = COALESCE(EXCLUDED.image_url, scene_set_look_angles.image_url),
-                   source = EXCLUDED.source, brief = EXCLUDED.brief,
-                   estimate_usd = EXCLUDED.estimate_usd, cost_usd = NULL, error = NULL,
-                   generated_at = EXCLUDED.generated_at, updated_at = NOW()
-       ${idle}
-     RETURNING id`,
+     ${onConflict}
+     RETURNING id, updated_at::text AS claimed_at`,
     { replacements: { lookId, angleId, status, imageUrl, source, brief: brief ? JSON.stringify(brief) : null, estimate } });
   if (!row) throw new DressedAngleError('This dressed angle is already being generated. Wait for it to finish.', 409, 'ANGLE_GENERATING');
-  return row.id;
+  return row;
 }
 
-const OWN_ANGLE_RUN = `id = :id AND status = 'generating' AND source = 'generated' AND deleted_at IS NULL`;
+// This run's row: still generating since this run claimed it (the claim's
+// own updated_at, exact as text). An upload, a sweep or a newer run
+// changes it, and the late result is not kept.
+const OWN_ANGLE_RUN = `id = :id AND status = 'generating' AND updated_at = CAST(:claimedAt AS timestamptz) AND deleted_at IS NULL`;
 
 /**
  * "Generate angle" on a beat at the look's set, after the cost was
@@ -197,24 +200,26 @@ const OWN_ANGLE_RUN = `id = :id AND status = 'generating' AND source = 'generate
 async function startDressedAngle(sequelize, args) {
   if (!process.env.FAL_KEY) throw new DressedAngleError('A dressed angle uses Flux Kontext, which needs FAL_KEY, which is not configured.', 503, 'PROVIDER_NOT_CONFIGURED');
   const plan = await planDressedAngle(sequelize, args);
-  const rowId = await upsertRow(sequelize, {
+  const claim = await upsertRow(sequelize, {
     lookId: plan.look.id, angleId: plan.angle.id, status: 'generating', source: 'generated',
     brief: plan.brief, estimate: plan.estimate?.usd ?? null,
   });
+  const rowId = claim.id;
   const run = async () => {
     const sceneGen = require('./sceneGenerationService');
     try {
       const out = await sceneGen.generateDressedStill(plan.set, plan.prompt, plan.look.image_url, { suffix: `look-angle-${rowId}` });
       // Only this run's row: an upload since is kept (audit, 2026-10-15).
       await sequelize.query(
-        `UPDATE scene_set_look_angles SET status = 'complete', image_url = :url, cost_usd = :cost, generated_at = NOW(), updated_at = NOW()
+        `UPDATE scene_set_look_angles SET status = 'complete', image_url = :url, source = 'generated', brief = CAST(:brief AS jsonb),
+                cost_usd = :cost, generated_at = NOW(), updated_at = NOW()
           WHERE ${OWN_ANGLE_RUN}`,
-        { replacements: { id: rowId, url: out.stillUrl, cost: out.cost } });
+        { replacements: { id: rowId, claimedAt: claim.claimed_at, url: out.stillUrl, cost: out.cost, brief: JSON.stringify(plan.brief) } });
     } catch (err) {
       console.error(`[DressedAngle] ${plan.angle.angle_name || plan.angle.angle_label} on "${plan.set.name}" failed:`, err.message);
       await sequelize.query(
         `UPDATE scene_set_look_angles SET status = ${KEEP_PREVIOUS_IMAGE}, error = :error, updated_at = NOW() WHERE ${OWN_ANGLE_RUN}`,
-        { replacements: { id: rowId, error: String(err.message || err).slice(0, 500) } });
+        { replacements: { id: rowId, claimedAt: claim.claimed_at, error: String(err.message || err).slice(0, 500) } });
     }
   };
   return { result: { id: rowId, status: 'generating', look_id: plan.look.id, angle_id: plan.angle.id }, run };
@@ -223,7 +228,7 @@ async function startDressedAngle(sequelize, args) {
 /** "Upload image" on a beat at the look's set: the image is the dressed angle. */
 async function saveUploadedDressedAngle(sequelize, { episodeId, angleId, imageUrl }) {
   const { angle, look } = await resolveTarget(sequelize, { episodeId, angleId });
-  const id = await upsertRow(sequelize, { lookId: look.id, angleId: angle.id, status: 'complete', imageUrl, source: 'uploaded' });
+  const { id } = await upsertRow(sequelize, { lookId: look.id, angleId: angle.id, status: 'complete', imageUrl, source: 'uploaded' });
   return { id, status: 'complete', image_url: imageUrl, look_id: look.id, angle_id: angle.id };
 }
 

@@ -4,32 +4,25 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import apiClient from '../services/api';
-
-const API = import.meta.env.VITE_API_URL || '';
+import { API_URL } from '../config/api';
 
 // ─── Track 6 CP9 module-scope helpers (Pattern F prophylactic — Api suffix) ───
 // 5 helpers covering 5 fetch sites on /writing-rhythm/* and /multi-product/*.
-// URL COMPOSITION NOTE: API='' default (no '/api/v1' prefix) preserved
-// verbatim from pre-migration code per v2.15 §9.11 "bugs surface, don't
-// fix" discipline. If the relative-path shape is a pre-existing bug, it
-// is the original code's bug — surfaced for Step 3 audit, NOT corrected
-// at this layer. The helper preserves exact pre-migration URL shape;
-// build-time VITE_API_URL override (or Vite dev proxy) is the only
-// mechanism that would have made the original work, and the helper
-// inherits that same dependency.
+// The routes are mounted under /api/v1 (routes/upgradeRoutes); the old
+// empty base sent them to /writing-rhythm/* and every call 404'd.
 // METHOD VERIFICATION: surface report flagged updateContentStatus as
 // PUT-or-PATCH; actual backend contract is PATCH (verified at line 192
 // of pre-migration code). Helper uses PATCH per source.
 export const getWritingRhythmStatsApi = () =>
-  apiClient.get(`${API}/writing-rhythm/stats`);
+  apiClient.get(`${API_URL}/writing-rhythm/stats`);
 export const getMultiProductAllApi = () =>
-  apiClient.get(`${API}/multi-product/all`);
+  apiClient.get(`${API_URL}/multi-product/all`);
 export const logWritingRhythmApi = (payload) =>
-  apiClient.post(`${API}/writing-rhythm/log`, payload);
+  apiClient.post(`${API_URL}/writing-rhythm/log`, payload);
 export const setWritingRhythmGoalApi = (payload) =>
-  apiClient.patch(`${API}/writing-rhythm/goal`, payload);
+  apiClient.patch(`${API_URL}/writing-rhythm/goal`, payload);
 export const updateMultiProductStatusApi = (id, payload) =>
-  apiClient.patch(`${API}/multi-product/${id}/status`, payload);
+  apiClient.patch(`${API_URL}/multi-product/${id}/status`, payload);
 
 const C = {
   bg: '#f7f4ef',
@@ -142,9 +135,10 @@ export default function WritingRhythm() {
   const loadAll = useCallback(async () => {
     try {
       const [statsRes, contentRes] = await Promise.all([
-        getWritingRhythmStatsApi().catch(() => null),
-        getMultiProductAllApi().catch(() => null),
+        getWritingRhythmStatsApi().catch((err) => { console.error('[WritingRhythm] stats load failed:', err); return null; }),
+        getMultiProductAllApi().catch((err) => { console.error('[WritingRhythm] content load failed:', err); return null; }),
       ]);
+      if (!statsRes && !contentRes) showToast('Could not load your writing rhythm.', 'error');
       if (statsRes) {
         const data = statsRes.data;
         setStats(data);

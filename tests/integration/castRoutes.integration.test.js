@@ -129,6 +129,39 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(none.body).toMatchObject({ linked: false, events: [], episodes: [], place: null, feed: null });
   });
 
+  it('their story trail: their posts, and the stories and chapters of their episodes or naming them', async () => {
+    const story = crypto.randomUUID(); const named = crypto.randomUUID(); const book = crypto.randomUUID(); const chapter = crypto.randomUUID();
+    await run(`INSERT INTO stories (id, title, format, source_type, status, show_id, episode_id, content, created_at, updated_at)
+               VALUES (:story, 'Cast story', 'short_story', 'manual', 'draft', :show, :ep, 'The night.', NOW(), NOW()),
+                      (:named, 'Named story', 'snippet', 'manual', 'draft', NULL, NULL, :text, NOW(), NOW())`,
+    { ...ids, story, named, text: `Then Guest ${TAG} walked in.` });
+    await run('INSERT INTO storyteller_books (id, title, created_at, updated_at) VALUES (:book, :title, NOW(), NOW())', { book, title: `Book ${TAG}` });
+    await run(`INSERT INTO storyteller_chapters (id, book_id, chapter_number, title, episode_id, created_at, updated_at)
+               VALUES (:chapter, :book, 1, 'Cast chapter', :ep, NOW(), NOW())`, { ...ids, chapter, book });
+    try {
+      expect((await request(app).get(`/api/v1/cast/characters/${ids.host}/story-trail`)).status).toBe(401);
+      expect((await request(app).get('/api/v1/cast/characters/nope/story-trail').set('Authorization', auth())).status).toBe(400);
+
+      const res = await request(app).get(`/api/v1/cast/characters/${ids.host}/story-trail`).set('Authorization', auth());
+      expect(res.status).toBe(200);
+      expect(res.body.posts.map((p) => p.id)).toEqual([ids.post]);
+      expect(res.body.post_counts.live + res.body.post_counts.draft).toBe(1);
+      expect(res.body.stories).toEqual([expect.objectContaining({ id: story, title: 'Cast story', show_id: ids.show, episode_number: 1 })]);
+      expect(res.body.chapters).toEqual([{ id: chapter, book_id: book, title: 'Cast chapter', chapter_number: 1, book_title: `Book ${TAG}`, written: false }]);
+
+      // The guest's episode is the same; the snippet names them too.
+      const guest = await request(app).get(`/api/v1/cast/characters/${ids.guest}/story-trail`).set('Authorization', auth());
+      expect(guest.body.stories.map((s) => s.id).sort()).toEqual([story, named].sort());
+
+      const none = await request(app).get(`/api/v1/cast/characters/${ids.old}/story-trail`).set('Authorization', auth());
+      expect(none.body).toMatchObject({ posts: [], stories: [], chapters: [] });
+    } finally {
+      await run('DELETE FROM storyteller_chapters WHERE id = :chapter', { chapter });
+      await run('DELETE FROM storyteller_books WHERE id = :book', { book });
+      await run('DELETE FROM stories WHERE id IN (:s)', { s: [story, named] });
+    }
+  });
+
   it('Keep marks a character kept, and back to review', async () => {
     const keep = await request(app).post(`/api/v1/cast/characters/${ids.old}/keep`).set('Authorization', auth()).send({ kept: true });
     expect(keep.status).toBe(200);

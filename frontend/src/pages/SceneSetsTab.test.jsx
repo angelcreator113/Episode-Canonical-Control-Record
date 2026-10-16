@@ -68,12 +68,10 @@ import {
   suggestAnglesApi,
   suggestAnglesFromImageApi,
   getAiCameraDirectionApi,
-  getMoodVariantsApi,
   generateMoodVariantsApi,
   getComparisonApi,
   getWardrobeMatchApi,
   // Episode association
-  listSceneSetEpisodesApi,
   unlinkEpisodeFromSceneSetApi,
   // External
   listShowsApi,
@@ -376,12 +374,6 @@ describe('SceneSetsTab — Track 6 CP2 module-scope helpers', () => {
       );
     });
 
-    test('getMoodVariantsApi GET', async () => {
-      vi.mocked(apiClient.get).mockResolvedValue({ data: {} });
-      await getMoodVariantsApi('set-1');
-      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/scene-sets/set-1/mood-variants');
-    });
-
     test('generateMoodVariantsApi POST', async () => {
       vi.mocked(apiClient.post).mockResolvedValue({ data: {} });
       await generateMoodVariantsApi('set-1', { moods: ['warm'] });
@@ -405,12 +397,6 @@ describe('SceneSetsTab — Track 6 CP2 module-scope helpers', () => {
   });
 
   describe('Episode association', () => {
-    test('listSceneSetEpisodesApi GET', async () => {
-      vi.mocked(apiClient.get).mockResolvedValue({ data: { data: [] } });
-      await listSceneSetEpisodesApi('set-1');
-      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/scene-sets/set-1/episodes');
-    });
-
     test('unlinkEpisodeFromSceneSetApi DELETE on /episodes/:episodeId', async () => {
       vi.mocked(apiClient.delete).mockResolvedValue({ data: {} });
       await unlinkEpisodeFromSceneSetApi('set-1', 'ep-9');

@@ -58,7 +58,7 @@ async function generateFullCharacter({ spark, worldContext, bookContext, existin
   // Build the world context string
   const worldString = worldContext
     ? `World: ${worldContext.name}. ${worldContext.description || ''}. Tone: ${worldContext.tone || 'contemporary realism'}.`
-    : 'World: LalaVerse. A contemporary world where identity, social media, and commerce intersect.';
+    : WORLD_LINES.lalaverse;
 
   const bookString = bookContext
     ? `Book: ${bookContext.title}. This character belongs to this narrative moment.`
@@ -88,7 +88,8 @@ async function generateFullCharacter({ spark, worldContext, bookContext, existin
       name, vibe, role, worldString,
       interior: interiorArchitecture,
       // Lala's world (the default) has one social app, The Pulse.
-      onPulse: !worldContext || /lala/i.test(worldContext.name || ''),
+      // "Before Lala" is JustAWoman's world, not Lala's.
+      onPulse: !worldContext || (/lala/i.test(worldContext.name || '') && !/before lala|book\s*1/i.test(worldContext.name || '')),
     });
   }
 
@@ -332,11 +333,34 @@ function interiorUpdates(generated, fields) {
   return updates;
 }
 
+/**
+ * The world line for a character's prompts (docs/CANON.md, "The two worlds").
+ * Their `world` decides it; with none saved, their feed profile's layer does.
+ * JustAWoman's world is ours (real places, real apps); Lala's world is the
+ * LalaVerse, and nothing written from inside it names JustAWoman or says Lala
+ * was made. Before 2026-10-16 every character was told "World: LalaVerse".
+ */
+const WORLD_LINES = {
+  'book-1': "World: JustAWoman's world, our real world (Before Lala, Book 1). Real places, real apps, real money. The LalaVerse is only the game JustAWoman is building; this character does not live in it.",
+  lalaverse: "World: the LalaVerse, Lala's world. A contemporary world where identity, social media, and commerce intersect; its social app is The Pulse. From inside it, nobody knows JustAWoman exists or that Lala was made: never name JustAWoman or say Lala was built.",
+  'series-2': "World: the LalaVerse (series 2). A contemporary world where identity, social media, and commerce intersect; its social app is The Pulse.",
+};
+function worldOf(character, feedProfile = null) {
+  if (WORLD_LINES[character?.world]) return character.world;
+  if (feedProfile?.feed_layer === 'real_world') return 'book-1';
+  if (feedProfile?.feed_layer) return 'lalaverse';
+  return null;
+}
+function worldLineFor(character, feedProfile = null) {
+  const world = worldOf(character, feedProfile);
+  return world ? WORLD_LINES[world] : 'World: not set. Keep to what is known about this character; do not place them in a world.';
+}
+
 /** What the character already is, for the prompt. Empty values are left out. */
 function characterContext(character, feedProfile = null) {
   const known = {};
   const fields = [
-    'display_name', 'selected_name', 'role_type', 'role_label', 'description', 'prose_overview',
+    'display_name', 'selected_name', 'world', 'role_type', 'role_label', 'description', 'prose_overview',
     'core_belief', 'core_wound', 'core_desire', 'core_fear', 'hidden_want', 'mask_persona',
     'truth_persona', 'personality', 'signature_trait', 'emotional_baseline', 'pressure_type',
     'pressure_quote', 'character_archetype', 'writer_notes', 'gender', 'pronouns', 'age',
@@ -372,7 +396,7 @@ async function generateMissingInterior({ character, feedProfile = null, events =
   const vibe = character.prose_overview || character.description || feedProfile?.content_persona || feedProfile?.bio || 'not written yet';
   const role = character.role_label || character.role_type || 'supporting';
   const age = Number.isInteger(character.age) ? character.age : null;
-  const worldString = 'World: LalaVerse. A contemporary world where identity, social media, and commerce intersect.';
+  const worldString = worldLineFor(character, feedProfile);
   const generated = await generateInteriorArchitecture({
     name, vibe, role, worldString, age,
     known: withEvents(characterContext(character, feedProfile), events),
@@ -603,6 +627,7 @@ function calculateDepthLevel(character) {
 module.exports = {
   generateFullCharacter,
   generateInteriorArchitecture,
+  worldLineFor,
   generateMissingInterior,
   missingInteriorFields,
   interiorUpdates,
