@@ -3428,3 +3428,28 @@
   .ed-page .ed-tab-label { font-size: 14px; display: inline; }
   .ed-subpills { margin: 10px 0 0; }
 }
+
+/* ── Header: the previous/next switcher and the status dropdown (Evoni's
+   Episode Style mock, 2026-10-16). Tokens only. ── */
+.ed-page .ed-ep-switch {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px; border-radius: 999px;
+  border: 1px solid var(--lala-gold-line); background: var(--surface-card); color: var(--text-primary);
+}
+.ed-page .ed-ep-step {
+  display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0; border-radius: 50%; cursor: pointer;
+  border: none; background: var(--accent-subtle); color: var(--accent-dark);
+}
+.ed-page .ed-ep-step:hover:not(:disabled) { background: var(--accent-light); }
+.ed-page .ed-ep-step:disabled { opacity: 0.4; cursor: default; }
+.ed-page .ed-ep-step:focus-visible, .ed-page .ed-status-select select:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 2px; }
+.ed-page .ed-status-select { display: inline-flex; align-items: center; }
+.ed-page .ed-status-select select {
+  min-height: 30px; padding: 3px 28px 3px 12px; border-radius: 999px; cursor: pointer;
+  border: 1.5px solid var(--lala-gold-line); background: var(--lala-gold-soft); color: var(--lala-gold-text);
+  font: inherit; font-size: var(--text-sm); font-weight: 700;
+}
+.ed-page .ed-status-select select:disabled { opacity: 0.6; cursor: progress; }
+.ed-page .ed-status-select.ed-status-published select,
+.ed-page .ed-status-select.ed-status-scheduled select { background: var(--success-bg); color: var(--success-text); }
+.ed-page .ed-status-select.ed-status-archived select { background: var(--lala-parchment-2); color: var(--text-primary); }
+.ed-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

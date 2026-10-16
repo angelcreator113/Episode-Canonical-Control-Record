@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
 import useScrolledPast from '../hooks/useScrolledPast';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Compass, Sparkles, PenLine, CalendarDays, Crown, Shirt } from 'lucide-react';
+import { Compass, Sparkles, PenLine, CalendarDays, Crown, Shirt, ChevronLeft, ChevronRight } from 'lucide-react';
+import { STATUS_LABEL } from '../lib/episodePipeline';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/ToastContainer';
 import episodeService from '../services/episodeService';
@@ -59,6 +60,9 @@ const TAB_ICONS = { overview: Sparkles, assets: Shirt, scripts: PenLine, product
 
 export const listEpisodeLibraryScenesApi = (epId) =>
   api.get(`/api/v1/episodes/${epId}/library-scenes`).then((r) => r.data);
+// The show's episodes in order, for the header's previous/next switcher.
+export const listShowEpisodesApi = (showId) =>
+  api.get(`/api/v1/episodes?show_id=${showId}&limit=500&sort=episode_number:ASC`).then((r) => r.data?.data || []);
 export const listWorldEventsApi = (showId) =>
   api.get(`/api/v1/world/${showId}/events`).then((r) => r.data);
 // Lala's ledger balance for the header chip: the same /balance the Dashboard
@@ -353,6 +357,52 @@ const EpisodeDetail = () => {
   }, [episode?.id, episode?.evaluation_status]);
 
   // Handle episode updates from Overview tab
+  // The header's previous/next switcher: the show's episodes by number.
+  const [showEpisodes, setShowEpisodes] = useState([]);
+  const switchShowId = episode?.show_id || episode?.showId;
+  useEffect(() => {
+    if (!switchShowId) return undefined;
+    let cancelled = false;
+    // Through a promise, so a failure of any kind lands in the catch.
+    Promise.resolve().then(() => listShowEpisodesApi(switchShowId))
+      .then((list) => {
+        if (cancelled) return;
+        const num = (e) => Number(e.episode_number ?? e.episodeNumber ?? Infinity);
+        setShowEpisodes([...(Array.isArray(list) ? list : [])].sort((a, b) => num(a) - num(b)));
+      })
+      .catch((err) => { console.error('[EpisodeDetail] show episodes load failed:', err); if (!cancelled) setShowEpisodes([]); });
+    return () => { cancelled = true; };
+  }, [switchShowId]);
+  const episodeIndex = showEpisodes.findIndex((e) => e.id === episode?.id);
+  const prevEpisode = episodeIndex > 0 ? showEpisodes[episodeIndex - 1] : null;
+  const nextEpisode = episodeIndex >= 0 && episodeIndex < showEpisodes.length - 1 ? showEpisodes[episodeIndex + 1] : null;
+  // Same tab on the other episode; unsaved script edits ask first.
+  const goToEpisode = (ep) => {
+    if (!ep) return;
+    leaveTo(`/episodes/${ep.id}${tabParam ? `?tab=${encodeURIComponent(tabParam)}` : ''}`);
+  };
+
+  // The header's status dropdown: the pipeline's statuses (lib/episodePipeline),
+  // plus the episode's own when it is something else, so nothing is lost.
+  const [statusSaving, setStatusSaving] = useState(false);
+  const changeStatus = async (next) => {
+    const prev = episode.status;
+    if (!next || next === prev) return;
+    setStatusSaving(true);
+    setEpisode((e) => ({ ...e, status: next }));
+    try {
+      await episodeService.updateEpisode(episode.id, { status: next });
+      setShowEpisodes((list) => list.map((e) => (e.id === episode.id ? { ...e, status: next } : e)));
+      toast?.showSuccess?.(`Status: ${STATUS_LABEL[next] || next}`);
+    } catch (err) {
+      console.error('Error updating episode status:', err);
+      setEpisode((e) => ({ ...e, status: prev }));
+      toast?.showError?.('The status could not be saved.');
+    } finally {
+      setStatusSaving(false);
+    }
+  };
+
   const handleUpdateEpisode = async (updates) => {
     try {
       await episodeService.updateEpisode(episode.id, updates);
@@ -643,9 +693,21 @@ const EpisodeDetail = () => {
             <h1 className="ed-header-title">{episode.title || episode.episodeTitle || 'Untitled Episode'}</h1>
             <div className="ed-header-meta">
               {(episode.episode_number || episode.episodeNumber) && (
-                <span className="ed-meta-item">
+                <span className="ed-meta-item ed-ep-switch" data-testid="ed-ep-switch">
+                  <button type="button" className="ed-ep-step" disabled={!prevEpisode}
+                    onClick={() => goToEpisode(prevEpisode)}
+                    aria-label={prevEpisode ? `Previous episode: ${prevEpisode.episode_number ?? ''} ${prevEpisode.title || ''}`.trim() : 'No previous episode'}
+                    title={prevEpisode ? `Episode ${prevEpisode.episode_number ?? '?'}: ${prevEpisode.title || 'Untitled'}` : undefined}>
+                    <ChevronLeft size={16} aria-hidden="true" />
+                  </button>
                   <span className="ed-meta-label">Episode</span>
                   <span className="ed-meta-value">{episode.episode_number || episode.episodeNumber}</span>
+                  <button type="button" className="ed-ep-step" disabled={!nextEpisode}
+                    onClick={() => goToEpisode(nextEpisode)}
+                    aria-label={nextEpisode ? `Next episode: ${nextEpisode.episode_number ?? ''} ${nextEpisode.title || ''}`.trim() : 'No next episode'}
+                    title={nextEpisode ? `Episode ${nextEpisode.episode_number ?? '?'}: ${nextEpisode.title || 'Untitled'}` : undefined}>
+                    <ChevronRight size={16} aria-hidden="true" />
+                  </button>
                 </span>
               )}
               {episode.show && (
@@ -657,9 +719,14 @@ const EpisodeDetail = () => {
                   <span className="ed-show-name">{episode.show.name}</span>
                 </Link>
               )}
-              <span className={`ed-status-badge ed-status-${episode.status?.toLowerCase() || 'draft'}`}>
-                {episode.status || 'Draft'}
-              </span>
+              <label className={`ed-status-select ed-status-${episode.status?.toLowerCase() || 'draft'}`}>
+                <span className="ed-visually-hidden">Status</span>
+                <select data-testid="ed-status" value={episode.status || 'draft'} disabled={statusSaving}
+                  onChange={(e) => changeStatus(e.target.value)} aria-label="Episode status">
+                  {Object.entries(STATUS_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  {episode.status && !STATUS_LABEL[episode.status] && <option value={episode.status}>{episode.status}</option>}
+                </select>
+              </label>
               <span className="ed-working-badge" title="Studio tools (Timeline, Scene Composer) will open this episode">
                 Working Episode
               </span>
