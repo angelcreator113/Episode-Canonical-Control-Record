@@ -5,6 +5,8 @@
  * beat by, not a timeline; the edit decides the real length.
  */
 
+import { speakerLine } from './scriptSpeaker';
+
 const WORDS_PER_MINUTE = 150;
 const ACTION_SECONDS = 3;
 const MOMENT_SECONDS = 2;
@@ -17,7 +19,7 @@ const TRANSITION_TAG = /^\[TRANSITION\s*:/i;
 const UI_TAG = /^\[UI\s*:/i;
 const ANY_TAG = /^\[[A-Z_]+\s*:.*\]$/i;
 // The same speaker labels the Script tab's line parser reads.
-const DIALOGUE = /^(Me|Prime|Lala|Kelli|Guest|[A-Z][a-z]+):\s*(.+)$/;
+// Who speaks: the Script tab's rule (lib/scriptSpeaker.js).
 
 const spokenWords = (text) => String(text || '')
   .replace(/\([^)]*\)/g, ' ') // an aside in the line is acted, not spoken
@@ -35,8 +37,8 @@ export function lineSeconds(line) {
   // Any other bracket tag ([EVENT:], [LOCATION:]…) is a note, not screen time.
   if (ANY_TAG.test(t)) return 0;
   if (/^\(.*\)$/.test(t)) return ACTION_SECONDS;
-  const m = t.match(DIALOGUE);
-  if (m) return (spokenWords(m[2]) / WORDS_PER_MINUTE) * 60;
+  const m = speakerLine(t);
+  if (m && m.words) return (spokenWords(m.words) / WORDS_PER_MINUTE) * 60;
   // Plain narration reads as a stage direction.
   return ACTION_SECONDS;
 }
