@@ -42,7 +42,20 @@ function ChangeInScenes({ episodeId, className }) {
   return <Link className={className} to={scenesPath(episodeId)}>Change in Scenes →</Link>;
 }
 
-function BeatCard({ beat, index, episodeId }) {
+// Beat 11 (Event Outcome) plays an animated piece of the episode's short
+// story (Evoni, 2026-10-15; docs/CANON.md). Cut on the Stories page.
+function Beat11Piece({ beat, piece }) {
+  if (beat.beat_number !== 11 || !piece?.text) return null;
+  return (
+    <div className="scene-planner-beat11" data-testid="beat11-piece">
+      <p className="scene-planner-beat11-label">From the short story · for animation</p>
+      <p className="scene-planner-beat11-text">{piece.text}</p>
+      {piece.why && <p className="scene-planner-beat11-why">Leaves them asking: {piece.why}</p>}
+    </div>
+  );
+}
+
+function BeatCard({ beat, index, episodeId, beat11 }) {
   return (
     <div className={`scene-planner-card ${beat.locked ? 'locked' : ''}`} data-testid={`beat-card-${beat.beat_number}`}>
       <div className="scene-planner-card-image">
@@ -74,6 +87,8 @@ function BeatCard({ beat, index, episodeId }) {
           <p className="scene-planner-card-intent">{beat.emotional_intent}</p>
         )}
 
+        <Beat11Piece beat={beat} piece={beat11} />
+
         <BeatStatus beat={beat} />
 
         <div className="scene-planner-card-actions">
@@ -86,7 +101,7 @@ function BeatCard({ beat, index, episodeId }) {
 
 // ─── BEAT ROW ─────────────────────────────────────────────────────────────────
 
-function BeatRow({ beat, index, episodeId }) {
+function BeatRow({ beat, index, episodeId, beat11 }) {
   return (
     <div className={`scene-planner-row ${beat.locked ? 'locked' : ''}`}>
       <div className="scene-planner-row-number">{index + 1}</div>
@@ -113,6 +128,7 @@ function BeatRow({ beat, index, episodeId }) {
 
       <div className="scene-planner-row-intent">
         <p>{beat.emotional_intent || '—'}</p>
+        <Beat11Piece beat={beat} piece={beat11} />
         <BeatStatus beat={beat} />
       </div>
 
@@ -213,6 +229,7 @@ export default function ScenePlannerPage() {
   const [generating, setGenerating] = useState(false);
   const [toast, setToast] = useState(null);
   const [locations, setLocations] = useState({ locations: [], show_id: null });
+  const [beat11, setBeat11] = useState(null);   // the short story's beat 11 piece
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -233,6 +250,14 @@ export default function ScenePlannerPage() {
       showToast('Failed to load the beat plan', 'error');
     } finally {
       setLoading(false);
+    }
+    // The short story's beat 11 piece (book-from-show); a failed read
+    // leaves beat 11 without it.
+    try {
+      const res = await api.get(`/api/v1/book-from-show/episodes/${episodeId}/beat11`);
+      setBeat11(res.data?.excerpt || null);
+    } catch (err) {
+      console.error('[BeatPlan] beat 11 piece load failed:', err);
     }
     // The episode's locations (L11), for the strip; a failed
     // read leaves the page without them.
@@ -340,13 +365,13 @@ export default function ScenePlannerPage() {
         view === 'storyboard' ? (
           <div className="scene-planner-storyboard">
             {plan.map((beat, i) => (
-              <BeatCard key={beat.id || i} beat={beat} index={i} episodeId={episodeId} />
+              <BeatCard key={beat.id || i} beat={beat} index={i} episodeId={episodeId} beat11={beat11} />
             ))}
           </div>
         ) : (
           <div className="scene-planner-list">
             {plan.map((beat, i) => (
-              <BeatRow key={beat.id || i} beat={beat} index={i} episodeId={episodeId} />
+              <BeatRow key={beat.id || i} beat={beat} index={i} episodeId={episodeId} beat11={beat11} />
             ))}
           </div>
         )

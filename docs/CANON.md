@@ -80,6 +80,24 @@ first chapter after the consciousness transfer, not at a fixed chapter
 number. Until the transfer is placed, no chapter carries it. (The Story
 Engine used to put it in chapter 47 of its 50-chapter plan.)
 
+The transfer episode is set once, per show, in Write Mode's "From the show"
+section (`shows.metadata.consciousness_transfer`). The chapter writer
+(`bleedStateOf` in `src/routes/bookFromShowRoutes.js`) then puts the bleed in
+the book's first chapter whose episode comes after it. The Story Engine's
+50-chapter plan is not tied to episodes, so it does not read the setting; it
+flags no bleed unless a brief says the transfer happened.
+
+## The show and the Pulse around the book
+
+- Beat 11's piece of the short story shows on that episode's Scene Planner,
+  beat 11, marked for animation (`Beat11Piece` in
+  `frontend/src/pages/ScenePlannerPage.jsx`).
+- A chapter written from its episode is shown what the LalaVerse said on
+  The Pulse about it (live posts only), so JustAWoman can react to it.
+- An event's host may post about it once it is announced, without Review
+  for naming an event that has not happened yet (`hostAnnouncing` in
+  `src/services/pulseGate.js`). Everyone else's mention still goes to Review.
+
 ## No JustAWoman in the LalaVerse
 
 Lala does not know JustAWoman exists, so JustAWoman has no LalaVerse
