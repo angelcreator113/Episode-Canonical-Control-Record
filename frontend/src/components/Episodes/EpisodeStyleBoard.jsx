@@ -16,6 +16,7 @@ import {
   Wind, Hand, Footprints, NotebookPen, WandSparkles, Plus, Check, Palette, Clapperboard, Coins,
 } from 'lucide-react';
 import { lookbookApi } from '../../lib/lookbookApi';
+import { atHandle } from '../../pages/feed/feedConstants';
 import { resolveEventVenueAndDate } from '../../utils/eventReadiness';
 import { gameSlotFor } from '../../lib/closetGrouping';
 import { coinsAfterPlan } from '../../lib/episodeOverview';
@@ -129,7 +130,7 @@ export default function EpisodeStyleBoard({ episode, source, linkedEvents = [], 
     ['Venue', place.venueName],
     ['Date & time', when],
     ['Host', ev?.host || ev?.host_brand],
-    ['Attendees', guests.length ? `${guests.length} · ${guests.slice(0, 3).map((g) => g.display_name || (g.handle ? `@${g.handle}` : null)).filter(Boolean).join(', ')}` : null],
+    ['Attendees', guests.length ? `${guests.length} · ${guests.slice(0, 3).map((g) => g.display_name || (atHandle(g.handle) || null)).filter(Boolean).join(', ')}` : null],
     ['Dress code', ev?.dress_code],
   ];
 
