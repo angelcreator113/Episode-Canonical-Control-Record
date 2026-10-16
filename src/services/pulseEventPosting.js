@@ -30,6 +30,14 @@
  *     on, from Admin › Engine (manual) whatever the switch. Never calls AI.
  *   episodesWithoutPosts(db, showId)
  *     completed episodes with no event posts queued, for Admin › Engine.
+ *   episodesWithDraftEvents(db, showId)   (Character Consistency Engine
+ *     step 6b; Evoni, 2026-10-16: "button per episode")
+ *     episodes not completed yet whose event is attached, with no event
+ *     posts queued: their posts can be drafted now (enqueueForEpisode with
+ *     early), so they exist before the script. An early job's drafts always
+ *     wait in Review ('event_draft'), whatever the gate says: the event is
+ *     not live until its episode is completed. Completion does not queue them
+ *     again (one event job per episode).
  *   registerHandlers()
  *     event   → pulseDrafter.draftPostsAndRoute: one request drafts every
  *               poster's post (Task #3032), each gated on its own; then one
@@ -200,7 +208,7 @@ const EVENT_JOBS_SQL = () => `SELECT 1 FROM pulse_jobs j
  * queues only while PULSE_ENGINE_ENABLED is on; `manual` (Admin › Engine,
  * Task #3049) queues whatever the switch, and the jobs wait for the worker.
  */
-async function enqueueForEpisode(db, { showId, episodeId, manual = false }) {
+async function enqueueForEpisode(db, { showId, episodeId, manual = false, early = false }) {
   if (!manual && process.env.PULSE_ENGINE_ENABLED !== 'true') return [];
   const [[done]] = await db.sequelize.query(
     `SELECT COUNT(*)::int AS n FROM episodes e WHERE e.id::text = :episodeId AND e.show_id = :showId AND EXISTS (${EVENT_JOBS_SQL()})`,
@@ -217,6 +225,7 @@ async function enqueueForEpisode(db, { showId, episodeId, manual = false }) {
       payload: {
         episode_id: String(episodeId), event_id: plan.eventId, posters: batch.map((x) => x.characterId), moment: plan.order,
         about: plan.about, scores: batch.map((x) => x.score), posters_all: plan.posters.map((x) => x.characterId),
+        ...(early ? { early: true } : {}),
       },
     }));
   }
@@ -236,6 +245,24 @@ async function episodesWithoutPosts(db, showId, { limit = 10 } = {}) {
       ORDER BY e.episode_number DESC NULLS LAST, e.updated_at DESC LIMIT :limit`,
     { replacements: { showId, limit } });
   return rows.map((r) => ({ id: r.id, episode_number: r.episode_number, title: r.title || null }));
+}
+
+/**
+ * Episodes not completed yet (evaluation not accepted) that have an event
+ * attached (utils/episodeEventSql) and no event posts queued, newest first,
+ * each with its event's name: their posts can be drafted before the script
+ * (step 6b). For Admin › Engine.
+ */
+async function episodesWithDraftEvents(db, showId, { limit = 10 } = {}) {
+  const { episodeEventIdSql } = require('../utils/episodeEventSql');
+  const [rows] = await db.sequelize.query(
+    `SELECT e.id, e.episode_number, e.title, we.name AS event_name, we.id AS event_id FROM episodes e
+       JOIN world_events we ON we.id = ${episodeEventIdSql('e.id')} AND we.deleted_at IS NULL
+      WHERE e.show_id = :showId AND e.deleted_at IS NULL AND e.evaluation_status IS DISTINCT FROM 'accepted'
+        AND NOT EXISTS (${EVENT_JOBS_SQL()})
+      ORDER BY e.episode_number ASC NULLS LAST, e.updated_at DESC LIMIT :limit`,
+    { replacements: { showId, limit } });
+  return rows.map((r) => ({ id: r.id, episode_number: r.episode_number, title: r.title || null, event_id: r.event_id, event_name: r.event_name || null }));
 }
 
 /** The characters a job names: a batch (Task #3032), or the one a job queued before it named. */
@@ -262,6 +289,8 @@ async function handleEvent(db, job) {
     showId: job.show_id, items: ready.map((characterId) => ({ characterId })), moment: p.moment,
     context: { about: p.about, episode_id: p.episode_id || null, event_id: p.event_id || null },
     request: { kind: 'event', jobId: job.id },
+    // Drafted before its episode is completed (step 6b): the event is not live yet, so every draft waits.
+    alwaysReview: p.early ? ['event_draft'] : [],
   });
   // One comment job per new post: its poster's commenters' replies in one
   // request (Task #3072); the episode's posters never comment. A job queued
@@ -295,5 +324,5 @@ function registerHandlers() {
 
 module.exports = {
   CLOSENESS, TEMPERAMENT, MAX_POSTERS, MAX_COMMENTERS, POST_LINE, COMMENT_LINE,
-  seeded, scoreOf, commentScoreOf, pick, closenessTo, whoPosts, commentersFor, enqueueForEpisode, episodesWithoutPosts, handleEvent, handleComment, registerHandlers,
+  seeded, scoreOf, commentScoreOf, pick, closenessTo, whoPosts, commentersFor, enqueueForEpisode, episodesWithoutPosts, episodesWithDraftEvents, handleEvent, handleComment, registerHandlers,
 };
