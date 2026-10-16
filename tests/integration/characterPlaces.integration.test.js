@@ -253,4 +253,94 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     // Once the show has a registry of its own, only its own count.
     expect((await places(other.id)).body.data.characters.map((c) => c.id)).not.toContain(lala);
   });
+  describe("Lala's home, filled in from what the show knows", () => {
+    // Evoni, 2026-10-16: "if this is lalas home then we know the world location ... fill those in automatically".
+    const fill = (showId) => auth(request(app).post(`/api/v1/shows/${showId}/character-places/fill`));
+    const lalaShow = async ({ home = { address: `${crypto.randomUUID().slice(0, 6)} Olddy Paveway Ln`, neighbourhood: 'Echo Park', city: 'Echo Park' } } = {}) => {
+      const s = await show();
+      const lala = uuid();
+      const [[reg]] = await sequelize.query('SELECT id FROM character_registries WHERE show_id = :id', { replacements: { id: s.id } });
+      await run(`INSERT INTO registry_characters (id, registry_id, character_key, display_name, created_at, updated_at)
+                 VALUES (:lala, :reg, 'lala', 'Lala', NOW(), NOW())`, { lala, reg: reg.id });
+      const bedroom = await s.set("Lala's bedroom");
+      const closet = await s.set('Closet');
+      await run(`UPDATE shows SET metadata = CAST(:m AS json) WHERE id = :id`,
+        { id: s.id, m: JSON.stringify({ lala_home: home, scene_defaults: { home_set_id: bedroom, closet_set_id: closet } }) });
+      return { ...s, lala, bedroom, closet, home };
+    };
+    const setLoc = async (id) => (await rows('SELECT world_location_id FROM scene_sets WHERE id = :id', { id }))[0].world_location_id;
+    const loc = async (id) => (await rows('SELECT * FROM world_locations WHERE id = :id', { id }))[0];
+
+    it('a show that never chose a lead takes Lala; her home and closet get rooms inside "Lala\'s home", inside her city', async () => {
+      // The city of the DREAM seed (a test database may have none yet).
+      await run(`INSERT INTO world_locations (id, name, location_type, created_at, updated_at)
+                 SELECT gen_random_uuid(), 'Echo Park', 'city', NOW(), NOW()
+                  WHERE NOT EXISTS (SELECT 1 FROM world_locations WHERE location_type = 'city' AND LOWER(name) = 'echo park' AND deleted_at IS NULL)`);
+      const s = await lalaShow();
+      expect((await places(s.id)).body.data.fill_pending).toBe(true);
+
+      const res = await fill(s.id);
+      expect(res.status).toBe(200);
+      expect(res.body.data.lead_set).toBe(true);
+      expect(res.body.data.data.lead_character_id).toBe(s.lala);
+      expect(res.body.data.placed.map((p) => p.scene_set_id).sort()).toEqual([s.bedroom, s.closet].sort());
+      // The lead keeps the show's home and closet.
+      expect((await defaults(s.id)).scene_defaults).toEqual({ home_set_id: s.bedroom, closet_set_id: s.closet });
+
+      const room = await loc(await setLoc(s.bedroom));
+      expect(room).toMatchObject({ name: "Lala's bedroom", location_type: 'interior', street_address: s.home.address, city: 'Echo Park' });
+      const house = await loc(room.parent_location_id);
+      expect(house).toMatchObject({ name: "Lala's home", street_address: s.home.address, city: 'Echo Park' });
+      const [[oldestCity]] = await sequelize.query(`SELECT id FROM world_locations WHERE location_type = 'city' AND LOWER(name) = 'echo park' AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 1`);
+      expect(house.parent_location_id).toBe(oldestCity.id);
+      // The closet is its own room in the same house (one approved base per location).
+      const closetRoom = await loc(await setLoc(s.closet));
+      expect(closetRoom.id).not.toBe(room.id);
+      expect(closetRoom.parent_location_id).toBe(house.id);
+
+      // Nothing is left to fill; a second fill changes nothing.
+      expect((await places(s.id)).body.data.fill_pending).toBe(false);
+      const again = await fill(s.id);
+      expect(again.body.data).toMatchObject({ lead_set: false, placed: [] });
+    });
+
+    it('uses the location already at her address; keeps a location already chosen', async () => {
+      const s = await lalaShow();
+      const [[house]] = await sequelize.query(
+        `INSERT INTO world_locations (id, name, location_type, street_address, created_at, updated_at)
+         VALUES (gen_random_uuid(), 'The house', 'interior', :a, NOW(), NOW()) RETURNING id`, { replacements: { a: s.home.address.toUpperCase() } });
+      const [[chosen]] = await sequelize.query(
+        `INSERT INTO world_locations (id, name, location_type, created_at, updated_at) VALUES (gen_random_uuid(), 'Chosen', 'interior', NOW(), NOW()) RETURNING id`);
+      await run('UPDATE scene_sets SET world_location_id = :l WHERE id = :id', { l: chosen.id, id: s.closet });
+
+      const res = await fill(s.id);
+      expect(res.body.data.placed.map((p) => p.scene_set_id)).toEqual([s.bedroom]);
+      expect((await loc(await setLoc(s.bedroom))).parent_location_id).toBe(house.id);
+      expect(await setLoc(s.closet)).toBe(chosen.id);
+    });
+
+    it('a lead set to None stays None; a lead who is not Lala gets no Lala home', async () => {
+      const none = await lalaShow();
+      expect((await auth(request(app).put(`/api/v1/shows/${none.id}/lead-character`)).send({ character_id: none.lala })).status).toBe(200);
+      expect((await auth(request(app).put(`/api/v1/shows/${none.id}/lead-character`)).send({ character_id: null })).status).toBe(200);
+      expect((await places(none.id)).body.data.fill_pending).toBe(false);
+      expect((await fill(none.id)).body.data).toMatchObject({ lead_set: false, placed: [] });
+      expect((await defaults(none.id)).lead_character_id).toBeNull();
+
+      const other = await lalaShow();
+      const jade = await other.character('Jade');
+      expect((await auth(request(app).put(`/api/v1/shows/${other.id}/lead-character`)).send({ character_id: jade })).status).toBe(200);
+      expect((await places(other.id)).body.data.fill_pending).toBe(false);
+      expect((await fill(other.id)).body.data.placed).toEqual([]);
+      expect(await setLoc(other.bedroom)).toBeNull();
+    });
+
+    it('a show with no home stored sets the lead only', async () => {
+      const s = await lalaShow();
+      await run(`UPDATE shows SET metadata = (metadata::jsonb - 'lala_home')::json WHERE id = :id`, { id: s.id });
+      const res = await fill(s.id);
+      expect(res.body.data).toMatchObject({ lead_set: true, placed: [] });
+      expect(await setLoc(s.bedroom)).toBeNull();
+    });
+  });
 });
