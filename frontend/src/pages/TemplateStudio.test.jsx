@@ -97,3 +97,34 @@ describe('TemplateStudio — Track 6 CP10 module-scope helpers', () => {
     });
   });
 });
+
+import { roleLabel, slotBox, orientationOf, formatLabel } from './TemplateStudio';
+
+describe('TemplateStudio — preview helpers', () => {
+  test('roleLabel drops the role family and title-cases the rest', () => {
+    expect(roleLabel('CHAR.HOST.PRIMARY')).toBe('Host Primary');
+    expect(roleLabel('TEXT.TITLE')).toBe('Title');
+    expect(roleLabel('BACKGROUND')).toBe('Background');
+    expect(roleLabel('')).toBe('Slot');
+  });
+
+  test('slotBox reads the flat and the nested slot shapes', () => {
+    expect(slotBox({ x: 10, y: 20, width: 300, height: 400, layer: 2 }))
+      .toEqual({ x: 10, y: 20, width: 300, height: 400, layer: 2 });
+    expect(slotBox({ position: { x: 5, y: 6, width: 7, height: 8 }, z_index: 3 }))
+      .toEqual({ x: 5, y: 6, width: 7, height: 8, layer: 3 });
+  });
+
+  test('orientationOf reads canvas_config', () => {
+    expect(orientationOf({ canvas_config: { width: 1920, height: 1080 } })).toBe('landscape');
+    expect(orientationOf({ canvas_config: { width: 1080, height: 1920 } })).toBe('portrait');
+    expect(orientationOf({ canvas_config: { width: 1080, height: 1080 } })).toBe('square');
+    expect(orientationOf({})).toBe(null);
+  });
+
+  test('formatLabel names known formats and tidies unknown ones', () => {
+    expect(formatLabel('YOUTUBE')).toBe('YouTube');
+    expect(formatLabel('instagram_story')).toBe('Instagram Story');
+    expect(formatLabel('PINTEREST_PIN')).toBe('Pinterest Pin');
+  });
+});
