@@ -321,28 +321,51 @@ async function generateGroundedBeat(episodeId, showId, models, { beatNumber, cur
 // - the closing hook is the brief's (`hook`) when it has one: the career
 //   block's beat 14 line tells it through her career, not instead of it.
 // A block that fails to render is left out (logged), never the whole script.
+// Each block renders on its own: one that fails is logged and left out,
+// never the rest (re-audit 2, 2026-10-15: one guest's bad JSON dropped her
+// career, money and stats together). Returns { text, career, stats }: what
+// rendered, so the rules and the fallback stats read only what is there.
 function storyContext(story, { hasSeason = false, hook = '' } = {}) {
-  if (!story) return '';
-  try {
-    const { storyContextBlocks, financialContextText } = require('./episodeScriptWriterService');
-    const balance = story.financial?.balance;
-    const told = {
-      ...story,
-      characterState: story.characterState && balance != null ? { ...story.characterState, coins: balance } : story.characterState,
-      arcPhase: hasSeason ? null : story.arcPhase,
-    };
-    let career = careerBlock(story.career);
-    if (career && hook) career = career.replace(/^- Beat 14: .*$/m, `- Beat 14: end on the forward hook, "${hook}", told through her career: a follow-up offer, a goal still open, or what this deal could lead to.`);
-    const blocks = [
-      story.financial ? `═══ FINANCIAL CONTEXT ═══\n${financialContextText(story.financial)}` : '',
-      career,
-      storyContextBlocks(told, { withSeason: false }),
-    ].filter(Boolean);
-    return blocks.length ? `\n${blocks.join('\n\n')}\n` : '';
-  } catch (err) {
-    console.error('[ScriptGen] story blocks failed (non-blocking):', err.message);
-    return '';
+  const none = { text: '', career: false, stats: false };
+  if (!story) return none;
+  const { storyContextBlocks, financialContextText } = require('./episodeScriptWriterService');
+  const block = (name, render) => {
+    try { return render() || ''; } catch (err) { console.error(`[ScriptGen] story block "${name}" failed (non-blocking):`, err.message); return ''; }
+  };
+  const balance = story.financial?.balance;
+  const told = {
+    ...story,
+    characterState: story.characterState && balance != null ? { ...story.characterState, coins: balance } : story.characterState,
+    arcPhase: hasSeason ? null : story.arcPhase,
+  };
+  const financial = story.financial ? block('financial', () => `═══ FINANCIAL CONTEXT ═══\n${financialContextText(story.financial)}`) : '';
+  // A function, so a `$` in the hook is written as it is.
+  const career = block('career', () => {
+    const text = careerBlock(story.career);
+    return text && hook ? text.replace(/^- Beat 14: .*$/m, () => `- Beat 14: end on the forward hook, "${hook}", told through her career: a follow-up offer, a goal still open, or what this deal could lead to.`) : text;
+  });
+  // The guests are the block most likely to hold bad data; without them the
+  // rest (her stats, the last episode, the arc) still goes in.
+  let rest = block('story', () => storyContextBlocks(told, { withSeason: false }));
+  if (!rest && (told.socialProfiles || []).length) rest = block('story without guests', () => storyContextBlocks({ ...told, socialProfiles: [] }, { withSeason: false }));
+  const blocks = [financial, career, rest].filter(Boolean);
+  return {
+    text: blocks.length ? `\n${blocks.join('\n\n')}\n` : '',
+    career: !!career,
+    stats: rest.includes("═══ LALA'S STATS ═══"),
+  };
+}
+
+// The world snapshot's states for LALA'S STATE, with her coins the ledger's
+// balance when it is known (re-audit 2: it gave a second number).
+function snapshotStates(states, balance) {
+  if (balance == null || !states || typeof states !== 'object') return states;
+  const out = { ...states };
+  if ('coins' in out) out.coins = balance;
+  for (const key of Object.keys(out)) {
+    if (/lala/i.test(key) && out[key] && typeof out[key] === 'object' && 'coins' in out[key]) out[key] = { ...out[key], coins: balance };
   }
+  return out;
 }
 
 // A10: every season story purpose, primary first, each with its thread.
@@ -433,10 +456,11 @@ function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrob
   // Her numbers come from LALA'S STATS when the story read has them; the
   // world snapshot is the fallback, given whole (a 200-character cut broke
   // it mid-object).
-  const statsContext = story?.characterState ? ''
-    : lalaStats?.character_states ? JSON.stringify(lalaStats.character_states).slice(0, 1500)
-    : 'Stats not loaded';
   const hook = typeof brief?.forward_hook === 'string' ? brief.forward_hook.trim() : '';
+  const told = storyContext(story, { hasSeason: !!seasonContext?.label, hook });
+  const statsContext = told.stats ? ''
+    : lalaStats?.character_states ? JSON.stringify(snapshotStates(lalaStats.character_states, story?.financial?.balance)).slice(0, 1500)
+    : 'Stats not loaded';
   const people = (story?.socialProfiles || []).length > 0;
 
   // Group Show Brain laws by category for structured injection
@@ -476,7 +500,7 @@ ${seasonPurposeLines(seasonContext)}
 ═══ EVENT ═══
 ${eventContext}
 
-${statsContext ? `═══ LALA'S STATE ═══\n${statsContext}\n` : ''}${storyContext(story, { hasSeason: !!seasonContext?.label, hook })}
+${statsContext ? `═══ LALA'S STATE ═══\n${statsContext}\n` : ''}${told.text}
 ═══ WARDROBE ═══
 ${wardrobeContext}
 ${outfitScore ? `\n═══ LOCKED OUTFIT ═══\nLala is wearing ${outfitScore.count} pieces for this event:\n${outfitScore.items.map(i => `- ${i.name} (${i.clothing_category}, ${i.tier})${i.id ? ` [WEAR: ${i.id}]` : ''}`).join('\n')}\nBeat 8 (Transformation): Reference these SPECIFIC items by name as Lala gets dressed. Right after the line where she puts a piece on, write that piece's [WEAR: id] line exactly as shown above, once per piece.\nBeat 11 (Event Outcome): Her outfit choice affects how the event goes — she is wearing what she chose.` : ''}
@@ -514,7 +538,7 @@ RULES:
 3. Lala's lines are ALWAYS short and punchy — max 2-3 sentences
 4. Community engagement: ask audience to react in comments at least twice
 5. A change to her stats appears only as a [STAT:] tag; she may say her coin balance in her own words when she checks it
-${!only || only.beat.number === 14 ? `6. ${only ? 'This beat ends' : 'Beat 14 ends'} on ${hook ? `the forward hook: "${hook}"` : 'a forward hook seeding the next episode'}\n` : ''}${story?.career && careerBlock(story.career) ? "7. Lala's career is on the page: name the deal, what she owes and what she wants from the event in the beats the CAREER block gives them, in her words, never as a list\n" : ''}
+${!only || only.beat.number === 14 ? `6. ${only ? 'This beat ends' : 'Beat 14 ends'} on ${hook ? `the forward hook: "${hook}"` : 'a forward hook seeding the next episode'}\n` : ''}${told.career ? "7. Lala's career is on the page: name the deal, what she owes and what she wants from the event in the beats the CAREER block gives them, in her words, never as a list\n" : ''}
 ${only ? `═══ THE SCRIPT AS IT STANDS ═══
 ${only.currentScript.trim() || '(empty)'}
 

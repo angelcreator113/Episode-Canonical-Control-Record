@@ -100,10 +100,33 @@ describe("the Script tab's writer prompt", () => {
     expect(await promptFor(story())).toContain('Story rule: keep it real');
   });
 
-  test('a story block that fails to render leaves the rest of the prompt', async () => {
-    const prompt = await promptFor(story({ socialProfiles: [{ handle: 'x', platform: 'ig', depth_level: 'active', therapy_emotional_state: '{not json' }] }));
+  test('a story block that fails to render leaves only itself out', async () => {
+    // Re-audit 2 (2026-10-15): one guest's bad JSON dropped her career, money and stats too.
+    const prompt = await promptFor(story({ socialProfiles: [{ handle: 'x', platform: 'ig', depth_level: 'active', core_wound: 'old', therapy_emotional_state: '{not json' }] }));
     expect(prompt).toContain('═══ SCENE PLAN — 14 BEATS ═══');
-    expect(console.error).toHaveBeenCalledWith('[ScriptGen] story blocks failed (non-blocking):', expect.any(String));
+    expect(prompt).toContain("═══ LALA'S CAREER IN THIS EPISODE ═══");
+    expect(prompt).toContain('═══ FINANCIAL CONTEXT ═══');
+    expect(prompt).toContain("═══ LALA'S STATS ═══");
+    expect(prompt).not.toContain('═══ CHARACTERS AT THE EVENT ═══');
+    expect(prompt).toContain("7. Lala's career is on the page");
+    expect(console.error).toHaveBeenCalledWith('[ScriptGen] story block "story" failed (non-blocking):', expect.any(String));
+  });
+
+  test('a hook with $ in it is written as it is', async () => {
+    loaded(story());
+    const create = jest.fn(async () => ({ content: [{ text: FULL }] }));
+    mockAnthropic(create);
+    const m = models();
+    m.EpisodeBrief.findOne = async () => ({ forward_hook: "Lala's $$ problem and the $& deal" });
+    const { generateGroundedScript } = require('../../../src/services/groundedScriptGeneratorService');
+    await generateGroundedScript('ep1', 'show-1', m);
+    expect(create.mock.calls[0][0].messages[0].content).toContain(`- Beat 14: end on the forward hook, "Lala's $$ problem and the $& deal", told through her career`);
+  });
+
+  test('without her stats row, the world snapshot gives the ledger balance', async () => {
+    const prompt = await promptFor(story({ characterState: null }));
+    expect(prompt).toContain("═══ LALA'S STATE ═══");
+    expect(prompt).toContain('{"lala":{"coins":420}}');
   });
 
   test('a one-beat rewrite is told about one beat, and the hook only for beat 14', async () => {
