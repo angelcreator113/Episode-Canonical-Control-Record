@@ -23,7 +23,7 @@ const SCRIPT = [
 
 describe('readLine', () => {
   test('dialogue loses its straight and curly quotes; Me is Prime', () => {
-    expect(readLine('Lala: "Hi there"')).toEqual({ type: 'dialogue', speaker: 'Lala', paren: null, text: 'Hi there' });
+    expect(readLine('Lala: "Hi there"')).toEqual({ type: 'dialogue', speaker: 'Lala', ext: null, paren: null, text: 'Hi there' });
     expect(readLine('Me: “Curly”')).toMatchObject({ speaker: 'Prime', text: 'Curly' });
   });
   test('a leading parenthetical is kept apart from the words', () => {
@@ -131,3 +131,18 @@ describe('named beat headers (Script tab audit, 2026-10-15)', () => {
     expect(beats.map((b) => [b.number, b.name])).toEqual([[1, 'Opening Ritual'], [8, 'Transformation Loop']]);
   });
 });
+
+// Script tab re-audit (2026-10-15): the tab's speaker rule (lib/scriptSpeaker.js).
+describe('who speaks, as the Script tab reads it', () => {
+  test('V.O., two-word and inner-capital names speak; Note: does not', () => {
+    expect(readLine('Lala (V.O.): "I need this."')).toMatchObject({ type: 'dialogue', speaker: 'Lala', ext: '(V.O.)', text: 'I need this.' });
+    expect(readLine('Mary Jane: "Hi"')).toMatchObject({ type: 'dialogue', speaker: 'Mary Jane' });
+    expect(readLine('JustAWoman: "Hi"')).toMatchObject({ type: 'dialogue', speaker: 'JustAWoman' });
+    expect(readLine('LALA: "Hi"')).toMatchObject({ type: 'dialogue', speaker: 'Lala' });
+    expect(readLine('Note: remember the lighting')).toEqual({ type: 'narration', text: 'Note: remember the lighting' });
+  });
+  test('the Fountain character carries the V.O.', () => {
+    expect(toFountain('## BEAT: 1 · Opening Ritual\nLala (V.O.): "Hi"')).toContain('LALA (V.O.)\nHi');
+  });
+});
+
