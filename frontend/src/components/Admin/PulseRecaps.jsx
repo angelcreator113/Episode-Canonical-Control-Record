@@ -13,10 +13,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
+import { atHandle } from '../../pages/feed/feedConstants';
 
 const STATUS_WORDS = { draft: 'Draft', published: 'Published', dropped: 'Dropped' };
 const errorOf = (err, fallback) => err.response?.data?.error || fallback;
-const who = (p) => p.poster_display_name || `@${p.poster_handle}`;
+const who = (p) => p.poster_display_name || `${atHandle(p.poster_handle)}`;
 const count = (n) => Number(n || 0).toLocaleString('en-US');
 
 /** "28 Sep" for a week's Monday. */

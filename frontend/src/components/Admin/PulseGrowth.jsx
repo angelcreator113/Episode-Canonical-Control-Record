@@ -15,6 +15,7 @@ import { Link } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import api from '../../services/api';
 import { tierLabel } from '../../lib/pulseAudience';
+import { atHandle } from '../../pages/feed/feedConstants';
 
 const fmt = (n) => (Number.isFinite(Number(n)) ? Number(n).toLocaleString('en-US') : '—');
 const signed = (n) => `${Number(n) > 0 ? '+' : Number(n) < 0 ? '−' : ''}${fmt(Math.abs(Number(n)))}`;
@@ -177,8 +178,8 @@ export default function PulseGrowth({ showId, chartWidth }) {
     <div className="pulse-growth" data-testid="pulse-growth">
       <p className="pulse-growth-summary" data-testid="pulse-growth-summary">
         {latest
-          ? <>@{data.profile.handle} has <b>{fmt(latest.count)}</b> followers{tier ? ` · ${tier}` : ''}{data.start?.status === 'accepted' && line.length > 1 ? `, ${signed(latest.count - data.start.count)} since her start` : ''}.</>
-          : <>No accepted follower count for @{data.profile.handle} yet.</>}
+          ? <>{atHandle(data.profile.handle)} has <b>{fmt(latest.count)}</b> followers{tier ? ` · ${tier}` : ''}{data.start?.status === 'accepted' && line.length > 1 ? `, ${signed(latest.count - data.start.count)} since her start` : ''}.</>
+          : <>No accepted follower count for {atHandle(data.profile.handle)} yet.</>}
         {projection.length > 0 && <> {projection.length === 1 ? 'One episode change waits' : `${projection.length} episode changes wait`} in <Link to={REVIEW}>Review</Link>.</>}
       </p>
       <StartCard start={data.start} showId={showId} onChange={load} />

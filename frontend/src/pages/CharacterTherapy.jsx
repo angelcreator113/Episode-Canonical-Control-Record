@@ -41,7 +41,6 @@ const CHARACTER_NATURES = {
   justawoman:              { icon: '◈', label: 'JustaWoman',              defense: 'Deflection through competence' },
   lala:                    { icon: '◉', label: 'LaLa',                    defense: 'Controlled presentation' },
   the_comparison_creator:  { icon: '◊', label: 'The Comparison Creator',  defense: 'Weaponized comparison' },
-  the_almost_mentor:       { icon: '○', label: 'The Almost Mentor',       defense: 'Strategic disappearance' },
   the_witness:             { icon: '◌', label: 'The Witness',             defense: 'Strategic silence' },
 };
 

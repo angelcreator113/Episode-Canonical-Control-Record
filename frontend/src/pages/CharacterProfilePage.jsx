@@ -16,11 +16,11 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { Sparkles, ArrowRight } from 'lucide-react';
 import { API_URL } from '../config/api';
 import CharacterDepthPanel from '../components/CharacterDepthPanel';
-import { platformLabel } from './feed/feedConstants';
+import { platformLabel, atHandle, followersOf } from './feed/feedConstants';
 import apiClient from '../services/api';
 import { ROLE_LABELS } from '../constants/characterConstants';
 import { findLala } from '../lib/theCast';
-import { DEPTH_STEPS, depthOf, depthLevelOf, cityLabel, archetypeOf, showUpRows, withLala, voiceOf } from '../lib/characterPage';
+import { DEPTH_STEPS, depthOf, depthLevelOf, cityOf, archetypeOf, showUpRows, withLala, voiceOf } from '../lib/characterPage';
 import './CharacterProfilePage.css';
 
 // ─── Track 6 CP9 module-scope helpers (Pattern F prophylactic — Api suffix) ───
@@ -85,6 +85,8 @@ const STATE_CONFIG = {
   controversial: { label: 'Controversial', color: '#d47a3a', bg: '#fdf3ee' },
   cancelled:     { label: 'Cancelled',     color: '#c44',    bg: '#fdf0f0' },
   gone_dark:     { label: 'Gone Dark',     color: '#555',    bg: '#eee' },
+  reinventing:   { label: 'Reinventing',   color: '#7ab3d4', bg: '#eef5fb' },
+  posthumous:    { label: 'Posthumous',    color: '#555',    bg: '#eee' },
   rebuilding:    { label: 'Rebuilding',    color: '#7ab3d4', bg: '#eef5fb' },
   crossed:       { label: 'Crossed',       color: '#d4789a', bg: '#fdf0f4' },
 };
@@ -1248,9 +1250,11 @@ function TabOnline({ character, feedProfile, appearances }) {
       {/* Social presence indicator */}
       <section className="cp-section">
         <h3 className="cp-section-title">Social Presence</h3>
-        {/* A matched feed profile is a social presence; Match never set the flag. */}
+        {/* Whether they are on the feed at all, not how their account is
+            doing: that is the status on their account card (current_state).
+            It said "Active" beside "Gone Dark" (Evoni, 2026-10-16). */}
         <span className={`cp-social-toggle ${character.social_presence || character.feed_profile_id ? 'cp-social-on' : 'cp-social-off'}`}>
-          {character.social_presence || character.feed_profile_id ? 'Active' : 'None'}
+          {character.social_presence || character.feed_profile_id ? 'On the feed' : 'Not on the feed'}
         </span>
       </section>
 
@@ -1274,7 +1278,7 @@ function TabOnline({ character, feedProfile, appearances }) {
                   {(feedProfile.handle || feedProfile.display_name || '?')[0].toUpperCase()}
                 </div>
                 <div className="cp-feed-identity">
-                  <span className="cp-feed-handle">@{feedProfile.handle}</span>
+                  <span className="cp-feed-handle">{atHandle(feedProfile.handle)}</span>
                   <span className="cp-feed-display">{feedProfile.display_name}</span>
                   <span className="cp-feed-platform">{platformLabel(feedProfile.platform)}</span>
                   {feedProfile.registry_character_id && (
@@ -1309,7 +1313,7 @@ function TabOnline({ character, feedProfile, appearances }) {
               <div className="cp-feed-stats">
                 <div className="cp-feed-stat">
                   <span className="cp-stat-num">
-                    {feedProfile.follower_count?.toLocaleString() || feedProfile.follower_count_approx || '\u2014'}
+                    {followersOf(feedProfile) || '\u2014'}
                   </span>
                   <span className="cp-stat-label">followers</span>
                 </div>
@@ -1714,7 +1718,7 @@ export default function CharacterProfilePage() {
   // Inner life shows its own note for the same run.
   const deepenNote = gen.note?.key === 'all' && activeTab !== 'inner' ? gen.note : null;
   const handle = feedProfile?.handle ? `@${feedProfile.handle.replace(/^@/, '')}` : null;
-  const city = cityLabel(feedProfile?.city);
+  const { label: city, differs: cityDiffers } = cityOf(character, feedProfile);
   const archetype = archetypeOf(feedProfile);
   const firstEpisode = appearances?.episodes?.[0];
   const role = roleOf(character);
@@ -1732,6 +1736,12 @@ export default function CharacterProfilePage() {
           <div className="ch-chips">
             {archetype && <span className="ch-chip">{archetype}</span>}
             {character.feed_profile_id && <span className="ch-chip is-blue">Feed profile</span>}
+            {cityDiffers && (
+              <span className="ch-chip is-warn" data-testid="ch-city-differs"
+                title="Their feed profile and their character record name different cities. Change one so they agree.">
+                City differs: feed says {cityDiffers.feed}, character says {cityDiffers.own}
+              </span>
+            )}
             {firstEpisode && <span className="ch-chip is-green">In Episode {firstEpisode.episode_number ?? '?'}</span>}
             <span className="ch-chip is-plain">{step.label}</span>
           </div>

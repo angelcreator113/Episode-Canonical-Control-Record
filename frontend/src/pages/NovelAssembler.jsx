@@ -32,9 +32,8 @@ export const deleteAssemblyApi = (assemblyId) =>
 const CHARACTERS = {
   justawoman: { display_name: 'JustAWoman', icon: '♛', color: '#9a7d1e' },
   david:      { display_name: 'David',      icon: '◈', color: '#c0392b' },
-  dana:       { display_name: 'Dana',       icon: '◉', color: '#0d9668' },
-  chloe:      { display_name: 'Chloe',      icon: '◎', color: '#7c3aed' },
-  jade:       { display_name: 'Jade',       icon: '◆', color: '#546678' },
+  // Cast B (Evoni, 2026-10-15): Dana and Chloe are retired; Nia Vale is the Comparison Creator.
+  nia_vale:   { display_name: 'Nia Vale',   icon: '◎', color: '#7c3aed' },
   lala:       { display_name: 'Lala',        icon: '✦', color: '#d63384' },
 };
 

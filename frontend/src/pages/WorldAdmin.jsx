@@ -60,6 +60,7 @@ import { fetchAllEpisodes, fetchAllSceneSets, partialNote } from '../lib/fetchAl
 import CareerBrands from '../components/Career/CareerBrands';
 import './WorldAdmin.css';
 import '../styles/wardrobe-backdrop.css';
+import { atHandle } from './feed/feedConstants';
 
 // Track 6 CP13 module-scope helpers — page structural shape, file-local
 // `api` import style preserved (file already partial-migrated at line 6306).
@@ -3281,7 +3282,7 @@ The revised event should feel like a completely different experience from the si
                             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>{opp.name}</div>
                             <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 4, display: 'flex', gap: 6 }}>
                               <span>{opp.opportunity_type?.replace(/_/g, ' ')}</span>
-                              {opp.connector_handle && <span>via @{opp.connector_handle}</span>}
+                              {opp.connector_handle && <span>via {atHandle(opp.connector_handle)}</span>}
                               {opp.prestige && <span>⭐ {opp.prestige}</span>}
                             </div>
                             {opp.narrative_stakes && <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6, lineHeight: 1.3 }}>{typeof opp.narrative_stakes === 'string' ? opp.narrative_stakes.slice(0, 100) : ''}</div>}

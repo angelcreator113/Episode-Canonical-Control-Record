@@ -152,7 +152,7 @@ async function generateSingleProfile(creator, { db, seriesId, characterContext, 
   // A LalaVerse creator follows the Show Bible, as /generate's does; a
   // real-world (JustAWoman's Feed) one does not.
   const brain = lalaverse ? await loadBrainContext(db, { label: 'bulk-generate' }) : { block: null, ids: [] };
-  const prompt = buildGenerationPrompt(creator.handle, creator.platform, creator.vibe_sentence, characterContext)
+  const prompt = buildGenerationPrompt(creator.handle, creator.platform, creator.vibe_sentence, characterContext, null, feedLayer)
     + (lalaverse ? lalaverseContext(creator) : '')
     + societyArchetypeMenu(societyList)
     + (brain.block ? `\n${brain.block}` : '');
@@ -164,7 +164,9 @@ async function generateSingleProfile(creator, { db, seriesId, characterContext, 
     aiRes = await Promise.race([
       client.messages.create({
         model: 'claude-sonnet-4-6',
-        max_tokens: 3000,
+        // The same ~60-field profile as /generate, which needs 6000; at 3000
+        // long profiles were cut off and failed to parse.
+        max_tokens: 6000,
         messages: [{ role: 'user', content: prompt }],
       }),
       new Promise((_, reject) => {

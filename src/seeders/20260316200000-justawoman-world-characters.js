@@ -459,7 +459,7 @@ module.exports = {
         first_language: 'English',
         hometown: 'Lithonia, GA',
         current_city: 'outside_lalaverse',
-        city_migration_history: 'Grew up in Lithonia. Moved to current suburb three years ago for more space when Noah was born.',
+        city_migration_history: 'Grew up in Lithonia. Moved to current suburb a year ago for more space when her youngest, Malik, was born.',
         class_origin: 'working_class',
         current_class: 'lower_middle',
         class_mobility_direction: 'volatile',

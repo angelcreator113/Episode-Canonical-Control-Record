@@ -104,3 +104,49 @@ describe('scriptHealth', () => {
     expect(rows.find((r) => r.key === 'saved').text).toBe('Generated but not saved: Save keeps it.');
   });
 });
+
+// Script phone paths (Evoni, 2026-10-16): a tap the phone can't make from
+// where it is, fixed from its row or all at once.
+describe('phone paths', () => {
+  const PHONE = [
+    { id: 'homepage', name: 'Homepage', category: 'phone', is_home: true, screen_links: [{ label: 'Messages Icon', target: 'messages_page' }, { label: 'Closet Icon', target: 'closet' }] },
+    { id: 'messages_page', name: 'Messages Page', category: 'phone' },
+    { id: 'closet', name: 'closet', category: 'phone' },
+  ];
+  const PATHS = '## BEAT: 3 · Welcome\n[UI:OPEN closet]\nMe: "The closet."\n\n## BEAT: 4 · Interruption Pulse 1\n[UI:CLICK Messages Icon]\n\n## BEAT: 5 · Reveal\n[UI:CLICK Messages Icon]';
+  beforeEach(() => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/ui-overlays/show-1/frame') return { data: { frame_url: null } };
+      if (url.startsWith('/api/v1/ui-overlays/show-1')) return { data: { data: PHONE } };
+      return { data: { data: [] } };
+    });
+  });
+  const raw = () => { fireEvent.click(screen.getByRole('button', { name: 'Raw editor' })); return screen.getByRole('textbox', { name: 'Raw script' }).value; };
+
+  test('"Go home first" fixes its beat', async () => {
+    renderTab(PATHS);
+    const fix = await screen.findByTestId('script-health-fix-phone-beat-4');
+    expect(fix.textContent).toBe('Go home first');
+    fireEvent.click(fix);
+    expect(await screen.findByText(/Added 1 phone step/)).toBeTruthy();
+    expect(raw()).toContain('## BEAT: 4 · Interruption Pulse 1\n[UI:OPEN Homepage]\n[UI:CLICK Messages Icon]');
+  });
+
+  test('Fix all fixes every beat, and the rows clear', async () => {
+    renderTab(PATHS);
+    fireEvent.click(await screen.findByTestId('script-health-fix-all'));
+    await waitFor(() => expect(screen.queryByTestId('script-health-fix-all')).toBeNull());
+    expect(screen.queryByTestId('script-health-phone-beat-4')).toBeNull();
+    expect(screen.queryByTestId('script-health-phone-beat-5')).toBeNull();
+    expect(raw().match(/\[UI:OPEN Homepage\]/g)).toHaveLength(2);
+  });
+
+  test('an approved beat offers no fix, and Fix all leaves it as it is', async () => {
+    renderTab(PATHS, [4]);
+    await screen.findByTestId('script-health-fix-phone-beat-5');
+    expect(screen.getByTestId('script-health-phone-beat-4')).toBeTruthy();
+    expect(screen.queryByTestId('script-health-fix-phone-beat-4')).toBeNull();
+    fireEvent.click(screen.getByTestId('script-health-fix-phone-beat-5'));
+    expect(raw()).toContain('## BEAT: 4 · Interruption Pulse 1\n[UI:CLICK Messages Icon]');
+  });
+});

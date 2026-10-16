@@ -68,7 +68,21 @@ Evoni, 2026-10-15. JustAWoman's world:
   `src/routes/memories/engine.js`.
 
 Retired: the sons Marcus (7), Miles (5) and Noah (3); Dana as the Witness;
-Chloe as the Comparison Creator.
+Chloe as the Comparison Creator. Jade, the Almost-Mentor, is deleted
+(Evoni, 2026-10-16): she is out of the seed, the relationship map, the
+Story Engine's character DNA, the appearance rules and the therapy
+profiles.
+
+The `pressure` role is labelled **Pressure**, not Antagonist (2026-10-16):
+David is pressure and cannot be villainized. Lala's species is
+`sentient AI`, not human.
+
+**David's appearance is not decided** (Evoni, 2026-10-16: "since I have
+not started writing, I don't know when he is going to appear"). The
+writing tools no longer forbid him to speak or appear in person; they
+follow the chapter's own notes and do not invent scenes with him. The old
+characters, David among them, were deleted from the registry and will come
+back as new records.
 
 ## The Lala bleed
 
