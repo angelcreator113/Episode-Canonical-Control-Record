@@ -38,7 +38,6 @@ const ROUTE_LABELS = {
   'analytics': 'Analytics',
   'decisions': 'Decisions',
   'admin': 'Admin',
-  'diagnostics': 'Diagnostics',
   'episodes': 'Episodes',
   'export': 'Export',
   'edit': 'Edit',

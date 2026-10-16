@@ -64,7 +64,6 @@ function WorldHubRedirect({ tab }) {
   return <Navigate to={hubTarget(tab, search)} replace />;
 }
 const TemplateDesigner = lazy(() => import('./pages/TemplateDesigner'));
-const DiagnosticPage = lazy(() => import('./pages/DiagnosticPage'));
 const DecisionAnalyticsDashboard = lazy(() => import('./pages/DecisionAnalyticsDashboard'));
 const TimelineEditor = lazy(() => import('./pages/TimelineEditor'));
 const BeatGeneration = lazy(() => import('./pages/BeatGeneration'));
@@ -542,7 +541,6 @@ function AppContent() {
           <Route path="/admin/audit" element={<AuditLog />} />
           
           {/* Diagnostics */}
-          <Route path="/diagnostics" element={<DiagnosticPage />} />
 
           {/* Amber Command Center */}
           <Route path="/amber" element={<AmberCommandCenter />} />
