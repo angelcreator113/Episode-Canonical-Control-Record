@@ -130,6 +130,22 @@ describe('the Voices tab', () => {
     await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(1));
   });
 
+  test('those Lala has not met yet are listed apart, with when they meet, and their voice can be built', async () => {
+    const maren = { registry_character_id: 'c3', display_name: 'Maren', depth_level: 'alive', handle: '@slowsift', social_profile_id: 5, voice: null, needs_rebuild: true, meets_in: 1 };
+    vi.mocked(api.get).mockResolvedValue({ data: { ...DATA, characters: [], not_met: [maren, { ...maren, registry_character_id: 'c4', display_name: 'Later', meets_in: null }] } });
+    vi.mocked(api.post).mockResolvedValue({ data: { voice: { ...VOICE, id: 'v3', registry_character_id: 'c3' } } });
+    render(<PulseVoices showId="show-1" />);
+    expect((await screen.findByTestId('pulse-voices-empty')).textContent).toMatch(/Lala has not met anyone below/);
+    const group = screen.getByTestId('pulse-voices-unmet');
+    expect(within(group).getByRole('heading').textContent).toBe('Lala hasn’t met them yet (2)');
+    const [card, later] = within(group).getAllByTestId('pulse-voices-card');
+    expect(within(card).getByTestId('pulse-voices-meets').textContent).toBe('Meets Lala in Episode 1');
+    expect(within(later).getByTestId('pulse-voices-meets').textContent).toBe('Meets Lala later in the story');
+    fireEvent.click(within(card).getByRole('button', { name: 'Build voice' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/pulse-voices/c3/build'));
+    expect(await within(card).findByTestId('pulse-voices-approval')).toBeTruthy();
+  });
+
   test('empty, and a failed read', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { ...DATA, characters: [] } });
     const { unmount } = render(<PulseVoices showId="show-1" />);

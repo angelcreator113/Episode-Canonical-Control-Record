@@ -8,9 +8,12 @@
  *
  *   BANNED_PHRASES            the shared list of AI-sounding phrases no
  *                             post may use; findBanned(text) finds them
- *   eligible(db, showId, { stage })  revealed characters at the stage
- *                             (active: Active or Alive; alive: Alive) with
- *                             a Feed profile, each with their voice or none
+ *   eligible(db, showId, { stage, includeUnmet })  revealed characters at
+ *                             the stage (active: Active or Alive; alive:
+ *                             Alive) with a Feed profile, each with their
+ *                             voice or none; includeUnmet also returns those
+ *                             Lala has not met yet (met: false, meets_in: the
+ *                             episode she meets them in), for Voices only
  *   aliveProfiles(db, ids)    which of these Feed profiles are Alive
  *   voiceSource(character, profile)  the public face a voice is built
  *                             from; sourceHash() fingerprints it
@@ -261,7 +264,7 @@ function needsRebuild(voice, source) {
  * hidden from Lala at the story moment `at` (default the present; services/pulseReveals.js).
  * Each with their voice (or null) and whether it needs a rebuild.
  */
-async function eligible(db, showId, { at, stage = 'active' } = {}) {
+async function eligible(db, showId, { at, stage = 'active', includeUnmet = false } = {}) {
   const { sequelize } = db;
   const [rows] = await sequelize.query(
     `SELECT rc.id FROM registry_characters rc JOIN character_registries cr ON cr.id = rc.registry_id
@@ -277,17 +280,23 @@ async function eligible(db, showId, { at, stage = 'active' } = {}) {
   const profileOf = new Map(profiles.map((p) => [Number(p.id), p]));
   const moment = Number.isInteger(at) ? at : await require('./storyClock').presentOrder(db, showId);
   const lalaId = await require('./lalaFeedProfile').lalaProfileId(sequelize);
-  const { hiddenProfiles } = await require('./pulseReveals').revealsAt(db, showId, moment, { lalaProfileId: lalaId });
+  const reveals = require('./pulseReveals');
+  const { hiddenProfiles } = await reveals.revealsAt(db, showId, moment, { lalaProfileId: lalaId });
+  const meeting = includeUnmet && hiddenProfiles.size ? await reveals.metLala(db, showId) : new Map();
   const voices = await db.PulseVoice.findAll({ where: { registry_character_id: characters.map((c) => c.id) } });
   const voiceOf = new Map(voices.map((v) => [v.registry_character_id, v]));
   const byName = new Map(rows.map((r, i) => [r.id, i]));
   return characters
-    .filter((c) => profileOf.has(Number(c.feed_profile_id)) && !hiddenProfiles.has(Number(c.feed_profile_id)))
+    .filter((c) => profileOf.has(Number(c.feed_profile_id)) && (includeUnmet || !hiddenProfiles.has(Number(c.feed_profile_id))))
     .sort((a, b) => byName.get(a.id) - byName.get(b.id))
     .map((c) => {
       const profile = profileOf.get(Number(c.feed_profile_id));
       const voice = voiceOf.get(c.id) || null;
-      return { character: c, profile, voice, needs_rebuild: needsRebuild(voice, voiceSource(c.toJSON(), profile)) };
+      const met = !hiddenProfiles.has(Number(c.feed_profile_id));
+      return {
+        character: c, profile, voice, needs_rebuild: needsRebuild(voice, voiceSource(c.toJSON(), profile)),
+        ...(includeUnmet ? { met, meets_in: met ? null : meeting.get(Number(c.feed_profile_id))?.episode_number ?? null } : {}),
+      };
     });
 }
 

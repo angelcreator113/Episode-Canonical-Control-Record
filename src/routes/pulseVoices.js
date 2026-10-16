@@ -4,8 +4,11 @@
  * Mounted at /api/v1/pulse-voices.
  *
  *   GET    /?show_id=                 the show's posting characters, each
- *                                     with their voice or none, and the
- *                                     banned phrases (requireAuth)
+ *                                     with their voice or none; not_met:
+ *                                     those Lala has not met yet, whose
+ *                                     voices can be built and approved now
+ *                                     (they post on their own only once
+ *                                     met); and the banned phrases (requireAuth)
  *   POST   /:characterId/build        builds or rebuilds a voice: one AI
  *                                     call (requireAuth + ADMIN + aiRateLimiter)
  *   PUT    /:id { habits }            Evoni's edit of the habits (ADMIN);
@@ -59,20 +62,23 @@ router.get('/', requireAuth, async (req, res) => {
     const showId = String(req.query.show_id || '');
     if (!UUID_RE.test(showId)) return res.status(400).json({ success: false, error: 'show_id must be a show id (UUID).' });
     const { eligible, BANNED_PHRASES } = require('../services/pulseVoices');
-    const rows = await eligible(getModels(), showId);
+    const rows = await eligible(getModels(), showId, { includeUnmet: true });
+    const row = ({ character, profile, voice, needs_rebuild: needsRebuild, meets_in: meetsIn }) => ({
+      registry_character_id: character.id,
+      display_name: character.selected_name || character.display_name,
+      depth_level: character.depth_level,
+      portrait_url: character.portrait_url || null,
+      social_profile_id: Number(profile.id),
+      handle: profile.handle,
+      voice: shape(voice),
+      needs_rebuild: needsRebuild,
+      meets_in: meetsIn ?? null,
+    });
     return res.json({
       success: true,
       banned_phrases: BANNED_PHRASES,
-      characters: rows.map(({ character, profile, voice, needs_rebuild: needsRebuild }) => ({
-        registry_character_id: character.id,
-        display_name: character.selected_name || character.display_name,
-        depth_level: character.depth_level,
-        portrait_url: character.portrait_url || null,
-        social_profile_id: Number(profile.id),
-        handle: profile.handle,
-        voice: shape(voice),
-        needs_rebuild: needsRebuild,
-      })),
+      characters: rows.filter((r) => r.met).map(row),
+      not_met: rows.filter((r) => !r.met).map(row),
     });
   } catch (err) {
     console.error('[PulseVoices] GET error:', err);
