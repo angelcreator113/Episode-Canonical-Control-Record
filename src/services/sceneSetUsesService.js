@@ -45,7 +45,10 @@ async function countUses(sequelize, setId, { episodeId = null, transaction } = {
   const defaults = episodeId ? 0 : await q(
     `SELECT COUNT(*) n FROM shows s, jsonb_each_text(COALESCE(s.metadata::jsonb->'scene_defaults', '{}'::jsonb)) d
       WHERE d.key IN ('home_set_id', 'closet_set_id') AND d.value = CAST(:setId AS text)`);
-  return { locations, beats, events, defaults, scenes, total: locations + beats + events + defaults + scenes };
+  // A character's home, closet or other place (character_places): deleting
+  // it silently dropped the place (fourth audit, 2026-10-15).
+  const homes = episodeId ? 0 : await q('SELECT COUNT(*) n FROM character_places WHERE scene_set_id = :setId AND deleted_at IS NULL');
+  return { locations, beats, events, defaults, scenes, homes, total: locations + beats + events + defaults + scenes + homes };
 }
 
 /**
@@ -134,7 +137,18 @@ async function moveUses(sequelize, fromId, toId, { episodeId = null, transaction
                               WHERE keep.scene_set_id = :toId AND keep.episode_id = old.episode_id AND keep.deleted_at IS NULL)`);
   const locations = await exec(`UPDATE scene_set_episodes SET scene_set_id = :toId, updated_at = NOW() WHERE scene_set_id = :fromId AND deleted_at IS NULL${ep}`);
   const beats = await exec(`UPDATE scene_plans SET scene_set_id = :toId, updated_at = NOW() WHERE scene_set_id = :fromId AND deleted_at IS NULL${ep}`);
-  const events = await exec(`UPDATE world_events SET scene_set_id = :toId, updated_at = NOW() WHERE scene_set_id = :fromId AND deleted_at IS NULL${episodeId ? ' AND used_in_episode_id = :episodeId' : ''}`);
+  const eventScope = `scene_set_id = :fromId AND deleted_at IS NULL${episodeId ? ' AND used_in_episode_id = :episodeId' : ''}`;
+  // The events' looks go with them, unless the event already has a look on
+  // the replacement: left on the old set, the paid look was unreachable
+  // (fourth audit, 2026-10-15). A look's dressed angles are its own rows and
+  // follow it. The look's brief keeps the venue it was made at, so the
+  // stale check still reads the right approved base.
+  const looks = await exec(`UPDATE scene_set_looks old SET scene_set_id = :toId, updated_at = NOW()
+                              WHERE old.scene_set_id = :fromId AND old.deleted_at IS NULL
+                                AND old.event_id IN (SELECT id FROM world_events WHERE ${eventScope})
+                                AND NOT EXISTS (SELECT 1 FROM scene_set_looks keep
+                                                 WHERE keep.scene_set_id = :toId AND keep.event_id = old.event_id AND keep.deleted_at IS NULL)`);
+  const events = await exec(`UPDATE world_events SET scene_set_id = :toId, updated_at = NOW() WHERE ${eventScope}`);
   const scenes = await exec(`UPDATE scenes SET scene_set_id = :toId, updated_at = NOW() WHERE scene_set_id = :fromId AND deleted_at IS NULL${ep}`);
   let defaults = 0;
   if (!episodeId) {
@@ -144,7 +158,18 @@ async function moveUses(sequelize, fromId, toId, { episodeId = null, transaction
                                WHERE metadata::jsonb->'scene_defaults'->>'${key}' = CAST(:fromId AS text)`);
     }
   }
-  return { locations, beats, events, defaults, scenes };
+  // Characters' places move too; a character who already has the
+  // replacement keeps that row, and the old one is removed (one row per
+  // character and set, index character_places_unique).
+  let homes = 0;
+  if (!episodeId) {
+    await exec(`UPDATE character_places old SET deleted_at = NOW(), updated_at = NOW()
+                 WHERE old.scene_set_id = :fromId AND old.deleted_at IS NULL
+                   AND EXISTS (SELECT 1 FROM character_places keep WHERE keep.scene_set_id = :toId
+                                AND keep.registry_character_id = old.registry_character_id AND keep.deleted_at IS NULL)`);
+    homes = await exec('UPDATE character_places SET scene_set_id = :toId, updated_at = NOW() WHERE scene_set_id = :fromId AND deleted_at IS NULL');
+  }
+  return { locations, beats, events, defaults, scenes, homes, looks };
 }
 
 /**

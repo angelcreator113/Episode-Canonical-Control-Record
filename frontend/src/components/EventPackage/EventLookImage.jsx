@@ -242,6 +242,11 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
           )}
         </figure>
       )}
+      {state?.venue_changed && (
+        <p className="ell-error" data-testid="event-look-venue-changed">
+          The event's venue changed: this look is at the old venue, and episodes don't use it. Make the look again for the new venue.
+        </p>
+      )}
       {!generating && (look?.status === 'failed' || (lookReady && look.error)) && (
         <p className="ell-error" data-testid="event-look-failed">The last try failed{look.error ? `: ${look.error}` : ''}.</p>
       )}

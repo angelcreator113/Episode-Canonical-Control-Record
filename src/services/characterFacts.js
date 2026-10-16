@@ -21,6 +21,23 @@
  *   factsOf(db, { character, feedProfile, showId })
  *   setFacts(db, { character, feedProfile, showId, body, by })
  *   formatCount(n), affordabilityOf(income), FACT_KEYS
+ *
+ * For the generators (Character Consistency Engine step 5, the spec's
+ * Piece 2: "prose generates FROM the facts"):
+ *   factsPromptBlock(facts)          the FACTS block every generator puts in
+ *                                    its prompt: the decided facts, to state
+ *                                    exactly or not at all, and the facts not
+ *                                    decided yet, never to state; '' when none
+ *   isDecided(facts, key)            the fact is set and not marked undecided
+ *   factsForCharacter(db, character, feedProfile?)   factsOf with the feed
+ *                                    profile loaded when not given; null when
+ *                                    it cannot be read (a context loader)
+ *   factsForProfile(db, profile)     the same from a feed profile, through
+ *                                    its registry character; null with none
+ *   holdToFacts(section, value, facts)   a generated section with the fields a
+ *                                    fact decides set from it (profession,
+ *                                    follower tier) and those a fact leaves
+ *                                    undecided cleared (FACT_FIELDS)
  */
 
 const FACT_KEYS = Object.freeze(['handle', 'followers', 'account_status', 'income', 'occupation', 'major_possessions']);
@@ -191,7 +208,102 @@ async function setFacts(db, { character, feedProfile = null, showId = null, body
   return factsOf(db, { character, feedProfile, showId: show });
 }
 
+const STATUS_WORDS = {
+  rising: 'rising', peaking: 'at its peak', plateauing: 'plateaued', controversial: 'controversial',
+  cancelled: 'cancelled (their audience turned on them)', reinventing: 'reinventing itself',
+  gone_dark: 'gone dark (they stopped posting)', posthumous: 'posthumous (they have died)',
+};
+
+/** Whether a fact is set and not marked "not decided yet". */
+function isDecided(facts, key) {
+  if (!facts || (facts.undecided || []).includes(key)) return false;
+  if (key === 'followers') return Boolean(facts.followers);
+  if (key === 'income') return facts.income?.amount != null;
+  if (key === 'major_possessions') return (facts.major_possessions || []).length > 0;
+  return Boolean(facts[key]);
+}
+
+/**
+ * The FACTS block for a generator's prompt: the decided facts, which any
+ * text it writes states exactly or not at all, and the facts not decided
+ * yet, which it never states, implies or invents (the spec's #14). '' when
+ * there is nothing decided and nothing undecided.
+ */
+function factsPromptBlock(facts) {
+  if (!facts) return '';
+  const lines = [];
+  if (facts.handle) lines.push(`- handle: ${facts.handle}`);
+  if (isDecided(facts, 'followers')) lines.push(`- followers: ${facts.followers.label} (${facts.followers.count.toLocaleString('en-US')})`);
+  if (isDecided(facts, 'account_status')) lines.push(`- account status: ${STATUS_WORDS[facts.account_status] || facts.account_status}`);
+  if (isDecided(facts, 'occupation')) lines.push(`- what they do: ${facts.occupation}`);
+  if (isDecided(facts, 'income')) {
+    lines.push(`- income: ${facts.income.amount.toLocaleString('en-US')} ${facts.income.cadence === 'per_month' ? 'a month' : 'a year'}${facts.income.source ? ` from ${facts.income.source}` : ''}`);
+  }
+  if (isDecided(facts, 'major_possessions')) lines.push(`- what they own: ${facts.major_possessions.join('; ')}`);
+  if (facts.affordability && isDecided(facts, 'income')) {
+    lines.push(`- what they can afford: ${facts.affordability.label}. No home, car, purchase or lifestyle in your writing goes beyond that.`);
+  }
+  const notYet = (facts.undecided || []).map((k) => k.replace(/_/g, ' '));
+  if (!lines.length && !notYet.length) return '';
+  return [
+    'FACTS (canon, the one source of truth). Where your writing mentions one of these, it states it exactly as given. Never invent, round or change a number, status, income, job or thing they own:',
+    ...(lines.length ? lines : ['- (none decided yet)']),
+    ...(notYet.length ? [`NOT DECIDED YET: ${notYet.join(', ')}. Never state, imply or invent these.`] : []),
+  ].join('\n');
+}
+
+/**
+ * The generated registry fields each fact decides, by section. A decided fact
+ * sets its field; an undecided one clears it (the generator may not make it
+ * canon). Prose fields (financial_status) keep the generator's words, which
+ * the FACTS block told to agree with the facts.
+ */
+const FACT_FIELDS = Object.freeze({
+  career_status: { profession: 'occupation', financial_status: 'income' },
+  living_context: { financial_reality: 'income' },
+  demographics: { follower_tier: 'followers' },
+});
+
+function holdToFacts(section, value, facts) {
+  const fields = FACT_FIELDS[section];
+  if (!fields || !facts || !value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const out = { ...value };
+  for (const [field, key] of Object.entries(fields)) {
+    if (!(field in out)) continue;
+    if ((facts.undecided || []).includes(key)) out[field] = null;
+    else if (key === 'occupation' && isDecided(facts, key)) out[field] = facts.occupation;
+    else if (key === 'followers' && isDecided(facts, key)) out[field] = require('./pulseAudience').tierFor(facts.followers.count).key;
+  }
+  return out;
+}
+
+/** factsOf, loading the feed profile when not given; null when it cannot be read. */
+async function factsForCharacter(db, character, feedProfile) {
+  if (!character) return null;
+  try {
+    const fp = feedProfile !== undefined ? feedProfile
+      : (character.feed_profile_id && db.SocialProfile ? await db.SocialProfile.findByPk(character.feed_profile_id) : null);
+    return await factsOf(db, { character, feedProfile: fp || null });
+  } catch (err) {
+    console.error('[characterFacts] the facts could not be read:', err.message);
+    return null;
+  }
+}
+
+/** The facts of the registry character a feed profile belongs to; null with none, or when unreadable. */
+async function factsForProfile(db, profile) {
+  if (!profile || !db.RegistryCharacter) return null;
+  try {
+    const character = await db.RegistryCharacter.findOne({ where: { feed_profile_id: profile.id }, order: [['updated_at', 'DESC']] });
+    return character ? await factsOf(db, { character, feedProfile: profile }) : null;
+  } catch (err) {
+    console.error('[characterFacts] the profile\'s facts could not be read:', err.message);
+    return null;
+  }
+}
+
 module.exports = {
   FACT_KEYS, ACCOUNT_STATUSES, INCOME_CADENCES, AFFORDABILITY, FactsError,
   formatCount, affordabilityOf, yearlyIncome, factsOf, setFacts, nextCanonFacts, showIdFor,
+  isDecided, factsPromptBlock, factsForCharacter, factsForProfile, holdToFacts, FACT_FIELDS, STATUS_WORDS,
 };

@@ -4,11 +4,19 @@
  * Mounted at /api/v1/pulse-voices.
  *
  *   GET    /?show_id=                 the show's posting characters, each
- *                                     with their voice or none; not_met:
- *                                     those Lala has not met yet, whose
- *                                     voices can be built and approved now
- *                                     (they post on their own only once
- *                                     met); and the banned phrases (requireAuth)
+ *                                     with their voice or none (a public
+ *                                     figure Lala knows of but has not met:
+ *                                     met false, known_of true); not_met:
+ *                                     those Lala has not met and does not
+ *                                     know of, whose voices can be built and
+ *                                     approved now (they post on their own
+ *                                     only once met); and the banned phrases
+ *                                     (requireAuth)
+ *   PUT    /:characterId/known-of { known_of }  Lala knows of them before
+ *                                     they meet (a public figure): their
+ *                                     public posts show; DMs, replies to
+ *                                     Lala and relationship moves still wait
+ *                                     for the meeting (ADMIN)
  *   POST   /:characterId/build        builds or rebuilds a voice: one AI
  *                                     call (requireAuth + ADMIN + aiRateLimiter)
  *   PUT    /:id { habits }            Evoni's edit of the habits (ADMIN);
@@ -63,7 +71,7 @@ router.get('/', requireAuth, async (req, res) => {
     if (!UUID_RE.test(showId)) return res.status(400).json({ success: false, error: 'show_id must be a show id (UUID).' });
     const { eligible, BANNED_PHRASES } = require('../services/pulseVoices');
     const rows = await eligible(getModels(), showId, { includeUnmet: true });
-    const row = ({ character, profile, voice, needs_rebuild: needsRebuild, meets_in: meetsIn }) => ({
+    const row = ({ character, profile, voice, needs_rebuild: needsRebuild, met, known_of: knownOf, meets_in: meetsIn }) => ({
       registry_character_id: character.id,
       display_name: character.selected_name || character.display_name,
       depth_level: character.depth_level,
@@ -72,13 +80,15 @@ router.get('/', requireAuth, async (req, res) => {
       handle: profile.handle,
       voice: shape(voice),
       needs_rebuild: needsRebuild,
+      met,
+      known_of: knownOf,
       meets_in: meetsIn ?? null,
     });
     return res.json({
       success: true,
       banned_phrases: BANNED_PHRASES,
-      characters: rows.filter((r) => r.met).map(row),
-      not_met: rows.filter((r) => !r.met).map(row),
+      characters: rows.filter((r) => r.visible).map(row),
+      not_met: rows.filter((r) => !r.visible).map(row),
     });
   } catch (err) {
     console.error('[PulseVoices] GET error:', err);
@@ -106,6 +116,25 @@ router.post('/pin', requireAuth, authorize(['ADMIN']), async (req, res) => {
   } catch (err) {
     if (sendKnown(res, err)) return undefined;
     console.error('[PulseVoices] pin error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.put('/:characterId/known-of', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.characterId)) return res.status(404).json({ success: false, error: 'Character not found' });
+    if (typeof req.body?.known_of !== 'boolean') return res.status(400).json({ success: false, error: 'known_of must be true or false.' });
+    const db = getModels();
+    const character = await db.RegistryCharacter.findByPk(req.params.characterId);
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+    if (!character.feed_profile_id) return res.status(409).json({ success: false, error: `${character.display_name} has no Feed profile.` });
+    const [, meta] = await db.sequelize.query(
+      'UPDATE social_profiles SET lala_knows_of = :on, updated_at = NOW() WHERE id = :id AND deleted_at IS NULL',
+      { replacements: { on: req.body.known_of, id: character.feed_profile_id } });
+    if (!meta?.rowCount) return res.status(409).json({ success: false, error: `${character.display_name}'s Feed profile is gone.` });
+    return res.json({ success: true, known_of: req.body.known_of });
+  } catch (err) {
+    console.error('[PulseVoices] known-of error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

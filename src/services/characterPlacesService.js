@@ -146,8 +146,11 @@ async function setLead(sequelize, { showId, characterId }) {
     const defaults = readSceneDefaults(parseMetadata(locked.metadata));
     // With no lead before, the show's home and closet were nobody's: the
     // first lead takes them, and only her own home or closet replaces one.
-    const nextDefaults = oldLead ? { home_set_id: null, closet_set_id: null } : { ...defaults };
-    if (oldLead) {
+    // Clearing the lead (None) keeps them as the show's, for the next lead:
+    // they were wiped, and new episodes had no Home or Closet (fourth audit).
+    const handOver = Boolean(oldLead && next);
+    const nextDefaults = handOver ? { home_set_id: null, closet_set_id: null } : { ...defaults };
+    if (handOver) {
       for (const [role, key] of Object.entries(LEAD_DEFAULT_KEY)) {
         if (!defaults[key]) continue;
         // A character has one row per set: a home that is also the closet

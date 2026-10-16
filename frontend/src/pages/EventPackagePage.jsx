@@ -2145,6 +2145,7 @@ export default function EventPackagePage() {
           confirmLabel="Start Episode"
           initial={locationsStep.locations}
           missing={locationsStep.missing}
+          removed={locationsStep.removed || []}
           eventLook={locationsStep.event_look}
           angleGaps={locationsStep.angle_gaps}
           busy={starting}

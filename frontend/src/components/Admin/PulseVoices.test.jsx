@@ -146,6 +146,23 @@ describe('the Voices tab', () => {
     expect(await within(card).findByTestId('pulse-voices-approval')).toBeTruthy();
   });
 
+  test('known of: a public figure posts before the meeting; the toggle saves and reloads', async () => {
+    const maren = { registry_character_id: 'c3', display_name: 'Maren', depth_level: 'alive', handle: '@slowsift', social_profile_id: 5, voice: null, needs_rebuild: true, meets_in: 1 };
+    vi.mocked(api.get)
+      .mockResolvedValueOnce({ data: { ...DATA, characters: [], not_met: [{ ...maren, met: false, known_of: false }] } })
+      .mockResolvedValue({ data: { ...DATA, characters: [{ ...maren, met: false, known_of: true }], not_met: [] } });
+    vi.mocked(api.put).mockResolvedValue({ data: { success: true, known_of: true } });
+    render(<PulseVoices showId="show-1" />);
+    const group = await screen.findByTestId('pulse-voices-unmet');
+    fireEvent.click(within(group).getByRole('button', { name: 'Lala knows of them (public figure)' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/pulse-voices/c3/known-of', { known_of: true }));
+    const line = await screen.findByTestId('pulse-voices-known-of');
+    expect(line.textContent).toMatch(/Meets Lala in Episode 1; their public posts show before then\. DMs, replies to Lala and relationship moves wait/);
+    expect(screen.queryByTestId('pulse-voices-unmet')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Not a public figure' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/pulse-voices/c3/known-of', { known_of: false }));
+  });
+
   test('empty, and a failed read', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { ...DATA, characters: [] } });
     const { unmount } = render(<PulseVoices showId="show-1" />);

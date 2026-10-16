@@ -69,6 +69,8 @@ module.exports = (sequelize) => {
     universe_id: { type: DataTypes.UUID, allowNull: true },
     show_id: { type: DataTypes.UUID, allowNull: true },
     world_location_id: { type: DataTypes.UUID, allowNull: true },
+    // An event version of this everyday set (migration 20261016150000); null: everyday.
+    version_of_set_id: { type: DataTypes.UUID, allowNull: true },
     name: { type: DataTypes.STRING, allowNull: false },
     scene_type: {
       type: DataTypes.ENUM('HOME_BASE', 'CLOSET', 'EVENT_LOCATION', 'TRANSITION', 'OTHER'),

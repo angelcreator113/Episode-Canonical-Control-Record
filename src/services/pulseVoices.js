@@ -157,12 +157,12 @@ function getClient() {
   return client;
 }
 
-function buildPrompt(source) {
+function buildPrompt(source, factsBlock = '') {
   return `You describe how a character writes on a social network, as concrete habits a writer can copy.
 Use only this public face of the character. Do not invent private feelings.
 
 ${JSON.stringify(source, null, 2)}
-
+${factsBlock ? `\n${factsBlock}\nTheir topics and phrases stay inside these facts.\n` : ''}
 Answer with JSON only, in this shape:
 {
   "case": "lowercase" | "sentence" | "mixed" | "caps for emphasis",
@@ -186,10 +186,13 @@ async function buildVoice(db, characterId, { lane = 'manual', jobId = null } = {
   const [[registry]] = await db.sequelize.query('SELECT show_id FROM character_registries WHERE id = :id', { replacements: { id: character.registry_id } });
   if (!registry?.show_id) throw new VoiceError(409, 'This character\'s registry belongs to no show.');
   await require('./pulseRequests').take(db, { showId: registry.show_id, lane, kind: 'voice', jobId });
+  // Their facts (Character Consistency Engine step 5): no topic invents a follower count, money or status.
+  const { factsForCharacter, factsPromptBlock } = require('./characterFacts');
+  const factsBlock = factsPromptBlock(await factsForCharacter(db, character));
   let message;
   for (const model of MODELS) {
     try {
-      message = await getClient().messages.create({ model, max_tokens: 800, messages: [{ role: 'user', content: buildPrompt(source) }] });
+      message = await getClient().messages.create({ model, max_tokens: 800, messages: [{ role: 'user', content: buildPrompt(source, factsBlock) }] });
       break;
     } catch (modelErr) {
       console.warn(`[PulseVoices] building with ${model} failed:`, modelErr.message);
@@ -261,10 +264,12 @@ function needsRebuild(voice, source) {
 
 /**
  * The show's posting characters: active/alive, with a Feed profile, and not
- * hidden from Lala at the story moment `at` (default the present; services/pulseReveals.js).
- * Each with their voice (or null) and whether it needs a rebuild.
+ * hidden from Lala at the story moment `at` (default the present; services/pulseReveals.js):
+ * met, or a public figure she knows of (posts in public before the meeting).
+ * With met: true, only those she has met (event reactions, storylines: they
+ * involve her). Each with their voice (or null) and whether it needs a rebuild.
  */
-async function eligible(db, showId, { at, stage = 'active', includeUnmet = false } = {}) {
+async function eligible(db, showId, { at, stage = 'active', includeUnmet = false, met: metOnly = false } = {}) {
   const { sequelize } = db;
   const [rows] = await sequelize.query(
     `SELECT rc.id FROM registry_characters rc JOIN character_registries cr ON cr.id = rc.registry_id
@@ -281,21 +286,26 @@ async function eligible(db, showId, { at, stage = 'active', includeUnmet = false
   const moment = Number.isInteger(at) ? at : await require('./storyClock').presentOrder(db, showId);
   const lalaId = await require('./lalaFeedProfile').lalaProfileId(sequelize);
   const reveals = require('./pulseReveals');
-  const { hiddenProfiles } = await reveals.revealsAt(db, showId, moment, { lalaProfileId: lalaId });
-  const meeting = includeUnmet && hiddenProfiles.size ? await reveals.metLala(db, showId) : new Map();
+  const { hiddenProfiles, unmetProfiles, knownOfProfiles } = await reveals.revealsAt(db, showId, moment, { lalaProfileId: lalaId });
+  const meeting = includeUnmet && unmetProfiles.size ? await reveals.metLala(db, showId) : new Map();
+  const leftOut = metOnly ? unmetProfiles : hiddenProfiles;
   const voices = await db.PulseVoice.findAll({ where: { registry_character_id: characters.map((c) => c.id) } });
   const voiceOf = new Map(voices.map((v) => [v.registry_character_id, v]));
   const byName = new Map(rows.map((r, i) => [r.id, i]));
   return characters
-    .filter((c) => profileOf.has(Number(c.feed_profile_id)) && (includeUnmet || !hiddenProfiles.has(Number(c.feed_profile_id))))
+    .filter((c) => profileOf.has(Number(c.feed_profile_id)) && (includeUnmet || !leftOut.has(Number(c.feed_profile_id))))
     .sort((a, b) => byName.get(a.id) - byName.get(b.id))
     .map((c) => {
       const profile = profileOf.get(Number(c.feed_profile_id));
       const voice = voiceOf.get(c.id) || null;
-      const met = !hiddenProfiles.has(Number(c.feed_profile_id));
+      const pid = Number(c.feed_profile_id);
+      const met = !unmetProfiles.has(pid);
       return {
         character: c, profile, voice, needs_rebuild: needsRebuild(voice, voiceSource(c.toJSON(), profile)),
-        ...(includeUnmet ? { met, meets_in: met ? null : meeting.get(Number(c.feed_profile_id))?.episode_number ?? null } : {}),
+        ...(includeUnmet ? {
+          met, known_of: knownOfProfiles.has(pid), visible: !hiddenProfiles.has(pid),
+          meets_in: met ? null : meeting.get(pid)?.episode_number ?? null,
+        } : {}),
       };
     });
 }

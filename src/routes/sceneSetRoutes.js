@@ -76,6 +76,15 @@ async function withApprovals(sets) {
   } catch (err) {
     console.warn('[SceneSets] looks not read:', err.message);
   }
+  // Everyday sets and their event versions (2026-10-16): version_of and its
+  // event for a version, event_versions for an everyday set.
+  try {
+    const { versionsForSets } = require('../services/sceneSetVersionService');
+    const versions = await versionsForSets(SceneSet.sequelize, out);
+    out = out.map((x) => ({ ...x, ...(versions.get(x.id) || { version_of: null, version_event: null, event_versions: [] }) }));
+  } catch (err) {
+    console.warn('[SceneSets] event versions not read:', err.message);
+  }
   return out;
 }
 
@@ -723,6 +732,41 @@ router.put('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Scene Sets PUT /:id error:', err);
     sendFail(res, err);
+  }
+});
+
+// ─── Everyday set or event version (Evoni, 2026-10-16) ─────────────────────
+// GET  /:id/version-options  { everyday_sets, events } for the chooser
+// PUT  /:id/version          { everyday_set_id: null } makes the set everyday;
+//                            { everyday_set_id, event_id } makes it that
+//                            everyday set's version for that event
+//                            (sceneSetVersionService).
+const sendVersionError = (res, err, label) => {
+  const { SceneSetVersionError } = require('../services/sceneSetVersionService');
+  if (err instanceof SceneSetVersionError) return res.status(err.status).json({ success: false, code: err.code, error: err.message });
+  console.error(`${label} error:`, err);
+  return res.status(500).json({ success: false, error: err.message });
+};
+
+router.get('/:id/version-options', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const { versionOptions } = require('../services/sceneSetVersionService');
+    return res.json({ success: true, data: await versionOptions(SceneSet.sequelize, req.params.id) });
+  } catch (err) {
+    return sendVersionError(res, err, 'Scene Sets GET /:id/version-options');
+  }
+});
+
+router.put('/:id/version', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const { makeEventVersion, makeEveryday } = require('../services/sceneSetVersionService');
+    const b = req.body || {};
+    const data = b.everyday_set_id == null || b.everyday_set_id === ''
+      ? await makeEveryday(SceneSet.sequelize, req.params.id)
+      : await makeEventVersion(SceneSet.sequelize, { setId: req.params.id, everydaySetId: b.everyday_set_id, eventId: b.event_id });
+    return res.json({ success: true, data });
+  } catch (err) {
+    return sendVersionError(res, err, 'Scene Sets PUT /:id/version');
   }
 });
 

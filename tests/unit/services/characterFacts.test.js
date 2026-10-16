@@ -44,3 +44,51 @@ describe('nextCanonFacts', () => {
     expect(() => nextCanonFacts({}, { major_possessions: 'a car' })).toThrow(/list/);
   });
 });
+
+describe('the FACTS block and the guard (step 5: generators read the facts)', () => {
+  const { factsPromptBlock, isDecided, holdToFacts } = require('../../../src/services/characterFacts');
+  const FACTS = {
+    handle: '@slowsift', followers: { count: 2000000, label: '2M' }, account_status: 'gone_dark',
+    income: { amount: 9000, cadence: 'per_month', source: 'brand deals' }, occupation: 'Slow-fashion creator',
+    major_possessions: ['a linen studio'], affordability: { key: 'comfortable', label: 'Comfortable' }, undecided: [],
+  };
+
+  test('states each decided fact exactly, with what they can afford', () => {
+    const block = factsPromptBlock(FACTS);
+    expect(block).toMatch(/^FACTS \(canon, the one source of truth\)/);
+    expect(block).toContain('- handle: @slowsift');
+    expect(block).toContain('- followers: 2M (2,000,000)');
+    expect(block).toContain('- account status: gone dark (they stopped posting)');
+    expect(block).toContain('- what they do: Slow-fashion creator');
+    expect(block).toContain('- income: 9,000 a month from brand deals');
+    expect(block).toContain('- what they own: a linen studio');
+    expect(block).toContain('- what they can afford: Comfortable.');
+    expect(block).not.toContain('NOT DECIDED YET');
+  });
+
+  test('an undecided fact is left out and named; nothing at all is no block', () => {
+    const block = factsPromptBlock({ ...FACTS, undecided: ['income', 'followers'] });
+    expect(block).not.toContain('2M');
+    expect(block).not.toContain('- income:');
+    expect(block).not.toContain('can afford');
+    expect(block).toContain('NOT DECIDED YET: income, followers. Never state, imply or invent these.');
+    expect(factsPromptBlock({ undecided: [] })).toBe('');
+    expect(factsPromptBlock(null)).toBe('');
+    expect(isDecided(FACTS, 'followers')).toBe(true);
+    expect(isDecided({ ...FACTS, undecided: ['followers'] }, 'followers')).toBe(false);
+    expect(isDecided({ ...FACTS, major_possessions: [] }, 'major_possessions')).toBe(false);
+  });
+
+  test('the guard sets what a fact decides and clears what it leaves undecided', () => {
+    expect(holdToFacts('career_status', { profession: 'Model', financial_status: 'rich', career_goal: 'x' }, FACTS))
+      .toEqual({ profession: 'Slow-fashion creator', financial_status: 'rich', career_goal: 'x' });
+    expect(holdToFacts('career_status', { profession: 'Model', financial_status: 'rich' }, { ...FACTS, undecided: ['income', 'occupation'] }))
+      .toEqual({ profession: null, financial_status: null });
+    expect(holdToFacts('demographics', { follower_tier: 'micro', age: 30 }, FACTS)).toEqual({ follower_tier: 'mega', age: 30 });
+    expect(holdToFacts('living_context', { financial_reality: 'loaded' }, { ...FACTS, undecided: ['income'] })).toEqual({ financial_reality: null });
+    // Untouched: other sections, fields not in the answer, no facts.
+    expect(holdToFacts('aesthetic_dna', { palette: 'linen' }, FACTS)).toEqual({ palette: 'linen' });
+    expect(holdToFacts('career_status', { career_goal: 'x' }, FACTS)).toEqual({ career_goal: 'x' });
+    expect(holdToFacts('career_status', { profession: 'Model' }, null)).toEqual({ profession: 'Model' });
+  });
+});
