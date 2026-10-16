@@ -515,5 +515,5 @@ async function draftCommentsAndRoute(db, args) {
 
 module.exports = {
   MODELS, BATCH_MAX, knowsLine, hostingLine, privateOf, PRIVATE_RULE, draftPost, draftAndRoute, draftComment, draftCommentAndRoute, release, DraftError,
-  buildPostBatchPrompt, buildCommentBatchPrompt, parseBatch, draftBatch, draftPostBatch, draftCommentBatch, draftPostsAndRoute, draftCommentsAndRoute,
+  buildPostBatchPrompt, buildCommentBatchPrompt, parseBatch, askBatch, hostedEventLines, draftBatch, draftPostBatch, draftCommentBatch, draftPostsAndRoute, draftCommentsAndRoute,
 };
