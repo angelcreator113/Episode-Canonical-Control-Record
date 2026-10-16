@@ -13,6 +13,7 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import api from '../../services/api';
+import { atHandle } from '../../pages/feed/feedConstants';
 
 const CASES = ['lowercase', 'sentence', 'mixed', 'caps for emphasis'];
 const EMOJI = ['never', 'rarely', 'sometimes', 'often'];
@@ -196,7 +197,7 @@ export function VoiceCard({ row, onVoice }) {
       <div className="pulse-voices-head">
         {row.portrait_url ? <img className="pulse-voices-photo" src={row.portrait_url} alt="" /> : <span className="pulse-voices-photo pulse-voices-initial" aria-hidden="true">{(row.display_name || '?')[0]}</span>}
         <span className="pulse-voices-who">
-          <b>{row.display_name}</b> <span className="pulse-voices-muted">@{row.handle}</span>
+          <b>{row.display_name}</b> <span className="pulse-voices-muted">{atHandle(row.handle)}</span>
           <span className="pulse-voices-muted" data-testid="pulse-voices-stage">{stageText(row.depth_level)}</span>
           <span className={`pulse-voices-state pulse-voices-state-${state.tone}`} data-testid="pulse-voices-state">{state.label}</span>
           {approval && (
@@ -235,7 +236,7 @@ export function PinAsExample({ postId }) {
     setState({ busy: true });
     try {
       const res = await api.post('/api/v1/pulse-voices/pin', { post_id: postId });
-      setState({ done: `Pinned to @${res.data.handle}'s voice.` });
+      setState({ done: `Pinned to ${atHandle(res.data.handle)}'s voice.` });
     } catch (err) {
       console.error('[PulseVoices] pinning the post failed:', err.response?.status || err.message);
       setState({ error: errorOf(err, 'Pinning failed.') });

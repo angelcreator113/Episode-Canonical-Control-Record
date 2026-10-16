@@ -13,6 +13,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import PublicSiteLayout from '../components/site/PublicSiteLayout';
+import { atHandle } from './feed/feedConstants';
 
 export const PUBLIC_RECAPS_URL = '/api/v1/public/recaps';
 
@@ -100,7 +101,7 @@ export default function PublicRecap() {
               <ol className="site-recap__posts">
                 {recap.posts.map((p, i) => (
                   <li key={i} className="site-recap__post" data-testid="site-recap-post">
-                    <p className="site-recap__who"><b>{p.poster_display_name || `@${p.poster_handle}`}</b> <span>@{p.poster_handle}</span>{p.moment ? <span> · {p.moment}</span> : null}</p>
+                    <p className="site-recap__who"><b>{p.poster_display_name || `${atHandle(p.poster_handle)}`}</b> <span>{atHandle(p.poster_handle)}</span>{p.moment ? <span> · {p.moment}</span> : null}</p>
                     {p.content_text && <p className="site-recap__text">{p.content_text}</p>}
                     {p.image?.url && <img className="site-recap__image" src={p.image.url} alt={p.image.alt || ''} loading="lazy" data-testid="site-recap-image" />}
                     <p className="site-recap__numbers">{count(p.likes)} likes · {count(p.comments_count)} comments</p>
