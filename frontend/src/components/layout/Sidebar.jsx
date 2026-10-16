@@ -55,6 +55,8 @@ function buildNav() {
       items: [
         { icon: '✍️', label: 'Stories', route: '/stories',
           children: [
+            // The book follows the show: one episode through episode, short story, beat 11, chapter.
+            { icon: '📺', label: "This week's episode", route: '/this-week' },
             { icon: '🧱', label: 'Structure', route: '/story-engine' },
             { icon: '🧵', label: 'Threads', route: '/story-threads' },
             // Story Calendar: the novel's dates. The cultural calendar is Culture &
@@ -134,7 +136,7 @@ function Sidebar({ isOpen, onClose }) {
 
   // Auto-expand Stories sub-nav
   useEffect(() => {
-    if (['/story-engine', '/scene-proposer', '/assembler', '/continuity', '/narrative-control'].some(p => location.pathname.startsWith(p))) {
+    if (['/this-week', '/story-engine', '/scene-proposer', '/assembler', '/continuity', '/narrative-control'].some(p => location.pathname.startsWith(p))) {
       setStoriesOpen(true);
     }
   }, [location.pathname]);
