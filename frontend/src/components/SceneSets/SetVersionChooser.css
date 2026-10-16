@@ -1,0 +1,12 @@
+/* Everyday set or event version (2026-10-16). Wraps at 375px. */
+.sv { display: grid; gap: 6px; margin: 0 0 14px; padding: 10px 12px; border: 1px solid var(--lala-parchment-3); border-radius: 8px; background: var(--surface-card); }
+.sv-label { font-family: 'DM Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-secondary); }
+.sv-now { font-size: 13px; color: var(--text-primary); overflow-wrap: anywhere; }
+.sv-versions { font-size: 11px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.sv-modes { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; }
+.sv-modes label { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; cursor: pointer; }
+.sv-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; }
+.sv-form select { min-height: 32px; font-size: 12px; max-width: 100%; flex: 1 1 160px; min-width: 0; }
+.sv-btn { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 2px 10px; border: 1px solid var(--lala-gold); border-radius: 4px; background: var(--surface-card); color: var(--lala-gold-text); font-size: 12px; cursor: pointer; }
+.sv-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.sv-hint { font-size: 11px; color: var(--text-secondary); line-height: 1.4; }
