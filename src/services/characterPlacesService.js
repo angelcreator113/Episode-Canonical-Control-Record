@@ -47,18 +47,31 @@ function assertIds(ids) {
 
 async function loadShow(sequelize, showId) {
   assertIds({ show: showId });
-  const [[show]] = await sequelize.query('SELECT id, metadata FROM shows WHERE id = :showId AND deleted_at IS NULL', { replacements: { showId } });
+  const [[show]] = await sequelize.query('SELECT id, metadata, universe_id FROM shows WHERE id = :showId AND deleted_at IS NULL', { replacements: { showId } });
   if (!show) throw new CharacterPlacesError('Show not found', 404, 'SHOW_NOT_FOUND');
   return { ...show, metadata: parseMetadata(show.metadata) };
 }
 
-/** The show's characters: those in its registries, by name. */
+/**
+ * The show's characters, by name: those in its registries. A show none of
+ * whose registries names it uses the registries that name no show, as The
+ * Cast does (chooseRegistry). Nothing sets a registry's show after it is
+ * made, so a show's cast is often in one of those, and the Link a character
+ * list was empty (Evoni, 2026-10-16: "im not able to link characters").
+ */
 async function showCharacters(sequelize, showId) {
   const [rows] = await sequelize.query(
-    `SELECT c.id, COALESCE(NULLIF(c.selected_name, ''), c.display_name) AS name, c.role_type
+    `WITH own AS (
+       SELECT id FROM character_registries WHERE show_id = :showId AND deleted_at IS NULL
+     ), regs AS (
+       SELECT id FROM own
+       UNION ALL
+       SELECT id FROM character_registries
+        WHERE show_id IS NULL AND deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM own)
+     )
+     SELECT c.id, COALESCE(NULLIF(c.selected_name, ''), c.display_name) AS name, c.role_type, c.character_key
        FROM registry_characters c
-       JOIN character_registries r ON r.id = c.registry_id AND r.deleted_at IS NULL
-      WHERE r.show_id = :showId AND c.deleted_at IS NULL
+      WHERE c.registry_id IN (SELECT id FROM regs) AND c.deleted_at IS NULL
       ORDER BY name ASC`,
     { replacements: { showId } });
   return rows;
@@ -94,6 +107,7 @@ async function listPlaces(sequelize, showId) {
   }
   return {
     lead_character_id: leadId,
+    fill_pending: await lalaHomeFillPending(sequelize, show, characters),
     characters: characters.map((c) => {
       const isLead = String(c.id) === String(leadId);
       const own = rows.filter((r) => String(r.registry_character_id) === String(c.id))
@@ -225,6 +239,116 @@ async function unlinkPlace(sequelize, { showId, characterId, sceneSetId, role })
 }
 
 /**
+ * Lala's home, filled in from what the show already knows (Evoni,
+ * 2026-10-16: "if this is lalas home then we know the world location...
+ * fill those in automatically").
+ *   - A show that never chose a lead (no lead_character_id key; a lead set
+ *     to None stays None) takes Lala, the registry's 'lala' character, as
+ *     its lead. setLead keeps the show's home and closet as hers.
+ *   - With Lala the lead and her home stored (shows.metadata.lala_home),
+ *     her home and closet sets that have no World Location get one: a
+ *     location of their own (one approved base each, S6) inside "Lala's
+ *     home", the location at her street address, inside her DREAM city.
+ *     "Lala's home" is made once, when no location has the address.
+ * Only empty fields are filled; a location already chosen is kept.
+ */
+const isLala = (c) => String(c?.character_key || '').trim().toLowerCase() === 'lala'
+  || String(c?.name || '').trim().toLowerCase() === 'lala';
+const findLala = (characters) => characters.find((c) => String(c.character_key || '').trim().toLowerCase() === 'lala')
+  || characters.find(isLala) || null;
+const leadNeverChosen = (metadata) => !Object.prototype.hasOwnProperty.call(metadata || {}, 'lead_character_id');
+
+/** The lead's home and closet sets with no World Location, when Lala's home can place them. */
+async function unplacedLalaSets(sequelize, show, characters, transaction = null) {
+  const { readLalaHome } = require('../utils/lalaHome');
+  const lead = characters.find((c) => String(c.id) === String(show.metadata.lead_character_id || ''));
+  if (!lead || !isLala(lead) || !readLalaHome(show.metadata)) return [];
+  const ids = [...new Set(Object.values(readSceneDefaults(show.metadata)).filter(Boolean))];
+  if (!ids.length) return [];
+  const [sets] = await sequelize.query(
+    `SELECT id, name, scene_type FROM scene_sets
+      WHERE id IN (:ids) AND deleted_at IS NULL AND world_location_id IS NULL`,
+    { replacements: { ids }, transaction });
+  return sets;
+}
+
+async function lalaHomeFillPending(sequelize, show, characters) {
+  if (leadNeverChosen(show.metadata) && findLala(characters)) return true;
+  return (await unplacedLalaSets(sequelize, show, characters)).length > 0;
+}
+
+/** Returns { lead_set, placed: [{ scene_set_id, scene_set_name, world_location_id }], data }. */
+async function fillLalaHome(sequelize, showId) {
+  const { readLalaHome, dreamCityName } = require('../utils/lalaHome');
+  let show = await loadShow(sequelize, showId);
+  const characters = await showCharacters(sequelize, showId);
+  let leadSet = false;
+  const lala = findLala(characters);
+  if (leadNeverChosen(show.metadata) && lala) {
+    await setLead(sequelize, { showId, characterId: lala.id });
+    leadSet = true;
+    show = await loadShow(sequelize, showId);
+  }
+  const placed = [];
+  await sequelize.transaction(async (transaction) => {
+    // One fill per show at a time, so "Lala's home" is made once.
+    await sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))', { replacements: { key: `lala-home:${showId}` }, transaction });
+    const sets = await unplacedLalaSets(sequelize, show, characters, transaction);
+    if (!sets.length) return;
+    const home = readLalaHome(show.metadata);
+    const city = dreamCityName(home.city) || home.city;
+    const universeId = show.universe_id || null;
+    const [[cityRow]] = await sequelize.query(
+      `SELECT id FROM world_locations WHERE location_type = 'city' AND LOWER(name) = LOWER(:city) AND deleted_at IS NULL
+        ORDER BY created_at ASC LIMIT 1`, { replacements: { city }, transaction });
+    let houseId = null;
+    if (home.address) {
+      const [[house]] = await sequelize.query(
+        `SELECT id FROM world_locations WHERE LOWER(TRIM(street_address)) = LOWER(TRIM(:address)) AND deleted_at IS NULL
+          ORDER BY (parent_location_id IS NULL), created_at ASC LIMIT 1`, { replacements: { address: home.address }, transaction });
+      houseId = house?.id || null;
+    }
+    if (!houseId) {
+      const [[house]] = await sequelize.query(
+        `INSERT INTO world_locations (id, universe_id, name, description, location_type, narrative_role, parent_location_id,
+                                      street_address, city, district, sensory_details, associated_characters, metadata, created_at, updated_at)
+         VALUES (gen_random_uuid(), :universeId, 'Lala''s home', :description, 'interior', 'sanctuary', :parentId,
+                 :address, :city, :district, '{}', CAST(:characters AS jsonb), CAST(:metadata AS jsonb), NOW(), NOW())
+         RETURNING id`,
+        { replacements: {
+          universeId, parentId: cityRow?.id || null, address: home.address || null, city, district: home.neighbourhood || null,
+          description: `Lala's home${home.address ? `, ${home.address}` : ''}, ${city}.`,
+          characters: JSON.stringify(['lala']), metadata: JSON.stringify({ source: 'lala_home' }),
+        }, transaction });
+      houseId = house.id;
+    }
+    for (const set of sets) {
+      const [[room]] = await sequelize.query(
+        `INSERT INTO world_locations (id, universe_id, name, location_type, narrative_role, parent_location_id,
+                                      street_address, city, district, sensory_details, associated_characters, metadata, created_at, updated_at)
+         VALUES (gen_random_uuid(), :universeId, :name, 'interior', 'sanctuary', :houseId,
+                 :address, :city, :district, '{}', CAST(:characters AS jsonb), CAST(:metadata AS jsonb), NOW(), NOW())
+         RETURNING id`,
+        { replacements: {
+          universeId, name: set.name, houseId, address: home.address || null, city, district: home.neighbourhood || null,
+          characters: JSON.stringify(['lala']), metadata: JSON.stringify({ source: 'lala_home', scene_set_id: set.id }),
+        }, transaction });
+      const [, meta] = await sequelize.query(
+        `UPDATE scene_sets SET world_location_id = :roomId, updated_at = NOW()
+          WHERE id = :setId AND world_location_id IS NULL AND deleted_at IS NULL`,
+        { replacements: { roomId: room.id, setId: set.id }, transaction });
+      if (meta?.rowCount === 0) {
+        // Placed meanwhile: the room just made is not needed.
+        await sequelize.query('DELETE FROM world_locations WHERE id = :id', { replacements: { id: room.id }, transaction });
+        continue;
+      }
+      placed.push({ scene_set_id: set.id, scene_set_name: set.name, world_location_id: room.id });
+    }
+  });
+  return { lead_set: leadSet, placed, data: await listPlaces(sequelize, showId) };
+}
+
+/**
  * The other characters' homes, for the Episode Locations step's quick add:
  * [{ character_id, character_name, scene_set_id, name, scene_set }].
  * The lead's home is the step's Home row already.
@@ -249,4 +373,5 @@ module.exports = {
   linkPlace,
   unlinkPlace,
   characterHomes,
+  fillLalaHome,
 };
