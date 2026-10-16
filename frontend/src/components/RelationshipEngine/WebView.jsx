@@ -2,7 +2,7 @@
  * WebView — D3 force-directed relationship graph
  * Prime Studios · LalaVerse
  */
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import * as d3 from 'd3';
 import apiClient from '../../services/api';
 import { T, EDGE_COLOR, NODE_R, roleColor, initials } from './tokens';
@@ -147,7 +147,7 @@ function useD3(svgRef, nodes, edges, onNodeClick, onEdgeHover, lastDrag, focusId
 /* ═══════════════════════════════════════════════════════════════════════
    WebView
    ═══════════════════════════════════════════════════════════════════════ */
-export default function WebView({ navigate }) {
+export default function WebView({ navigate, castKeys = null }) {
   const svgRef   = useRef(null);
   const lastDrag = useRef(0);
 
@@ -158,7 +158,6 @@ export default function WebView({ navigate }) {
   const [sel, setSel]   = useState(null);
   const [hovE, setHovE] = useState(null);
   const [tip, setTip]   = useState(null);
-  const [filt, setFilt] = useState('all');
 
   /* fetch data */
   useEffect(() => {
@@ -167,7 +166,14 @@ export default function WebView({ navigate }) {
       setWl(true);
       try {
         const d = await getRelationshipMapApi();
-        if (!cancelled) { setNds(d.nodes || []); setEds(d.edges || []); }
+        if (!cancelled) {
+          // Only the cast: the map also carries the old Book 1 seed people.
+          const keep = castKeys && new Set(castKeys);
+          const nodes = (d.nodes || []).filter(n => !keep || keep.has(n.id));
+          const ids = new Set(nodes.map(n => n.id));
+          setNds(nodes);
+          setEds((d.edges || []).filter(e => ids.has(e.from) && ids.has(e.to)));
+        }
       } catch {
         if (!cancelled) setErr('Could not load relationship data.');
       } finally {
@@ -175,7 +181,7 @@ export default function WebView({ navigate }) {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [castKeys?.join('|')]);
 
   const onNodeClick = useCallback(n => {
     if (Date.now() - lastDrag.current < 200) return;
@@ -186,33 +192,15 @@ export default function WebView({ navigate }) {
     if (ev) setTip({ x: ev.clientX, y: ev.clientY });
   }, []);
 
-  const vn = useMemo(() => filt === 'all' ? nds : nds.filter(n => n.group === filt), [nds, filt]);
-  const ve = useMemo(() => {
-    const ids = new Set(vn.map(n => n.id));
-    return eds.filter(e => ids.has(e.from) && ids.has(e.to));
-  }, [eds, vn]);
-
-  useD3(svgRef, vn, ve, onNodeClick, onEdgeHover, lastDrag, sel?.id);
+  useD3(svgRef, nds, eds, onNodeClick, onEdgeHover, lastDrag, sel?.id);
 
   if (wl) return <Spinner />;
-
-  const filters = ['all', 'real_world', 'online', 'created'];
-  const filterLabel = { all: 'All', real_world: 'Real World', online: 'Online', created: 'Created' };
 
   return (
     <div className="re-webview" role="region" aria-label="Relationship web graph">
       {/* filter bar */}
       <div className="re-webview-bar">
-        <span className="re-webview-stats">{nds.length} nodes · {eds.length} edges</span>
-        <div className="re-webview-filters" role="tablist" aria-label="Filter by group">
-          {filters.map(f => (
-            <button key={f} role="tab" aria-selected={filt === f}
-              className={`re-webview-filter ${filt === f ? 'is-active' : ''}`}
-              onClick={() => setFilt(f)}>
-              {filterLabel[f]}
-            </button>
-          ))}
-        </div>
+        <span className="re-webview-stats">{nds.length} people · {eds.length} connections</span>
       </div>
 
       {/* graph */}
@@ -220,12 +208,6 @@ export default function WebView({ navigate }) {
         {err && <div className="re-webview-error" role="alert">{err}</div>}
         <svg ref={svgRef} className="rw-svg" aria-label="Relationship force graph"
           onClick={() => { setSel(null); setHovE(null); }} />
-
-        {/* hinge note */}
-        <div className="re-webview-hinge">
-          <span className="re-webview-hinge-dot" />
-          JustAWoman → Lala is one-way. Lala doesn't know she was built.
-        </div>
 
         {/* node info panel */}
         {sel && (

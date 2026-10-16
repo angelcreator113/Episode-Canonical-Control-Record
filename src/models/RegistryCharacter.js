@@ -299,6 +299,14 @@ module.exports = (sequelize) => {
       allowNull: true,
     },
 
+    // Their typology seed (Character Consistency Engine step 6a; migration
+    // 20261016170000, services/characterTypology): { enneagram: { type, wing },
+    // mbti, why, set_by, set_at }. The inner life grows from it.
+    typology: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+
     /* ── Therapy Dilemma Profile fields ── */
     therapy_primary_defense: {
       type: DataTypes.TEXT,

@@ -157,12 +157,12 @@ function getClient() {
   return client;
 }
 
-function buildPrompt(source) {
+function buildPrompt(source, factsBlock = '', dial = '') {
   return `You describe how a character writes on a social network, as concrete habits a writer can copy.
 Use only this public face of the character. Do not invent private feelings.
 
 ${JSON.stringify(source, null, 2)}
-
+${factsBlock ? `\n${factsBlock}\nTheir topics and phrases stay inside these facts.\n` : ''}${dial ? `\n${dial}\n` : ''}
 Answer with JSON only, in this shape:
 {
   "case": "lowercase" | "sentence" | "mixed" | "caps for emphasis",
@@ -186,10 +186,13 @@ async function buildVoice(db, characterId, { lane = 'manual', jobId = null } = {
   const [[registry]] = await db.sequelize.query('SELECT show_id FROM character_registries WHERE id = :id', { replacements: { id: character.registry_id } });
   if (!registry?.show_id) throw new VoiceError(409, 'This character\'s registry belongs to no show.');
   await require('./pulseRequests').take(db, { showId: registry.show_id, lane, kind: 'voice', jobId });
+  // Their facts (Character Consistency Engine step 5): no topic invents a follower count, money or status.
+  const { factsForCharacter, factsPromptBlock } = require('./characterFacts');
+  const factsBlock = factsPromptBlock(await factsForCharacter(db, character));
   let message;
   for (const model of MODELS) {
     try {
-      message = await getClient().messages.create({ model, max_tokens: 800, messages: [{ role: 'user', content: buildPrompt(source) }] });
+      message = await getClient().messages.create({ model, max_tokens: 800, messages: [{ role: 'user', content: buildPrompt(source, factsBlock, require('./characterTypology').voiceDial(character.typology)) }] });
       break;
     } catch (modelErr) {
       console.warn(`[PulseVoices] building with ${model} failed:`, modelErr.message);

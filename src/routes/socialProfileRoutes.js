@@ -1873,6 +1873,14 @@ Career position relative to Lala: ${profile.career_pressure || 'level'}.`;
       ? await loadBrainContext(db, { showId: profile.show_id || null, label: 'SocialProfiles' })
       : { block: null, ids: [] };
     if (brain.block) prompt += `\n${brain.block}`;
+    // Their facts (Character Consistency Engine step 5; services/characterFacts):
+    // the regenerated profile states them, and a decided follower count is kept.
+    const { factsForProfile, factsPromptBlock, isDecided, agreeingFollowers } = require('../services/characterFacts');
+    const facts = await factsForProfile(db, profile);
+    const factsBlock = factsPromptBlock(facts);
+    if (factsBlock) {
+      prompt += `\n\n${factsBlock}${isDecided(facts, 'followers') ? `\nfollower_count_approx is "${facts.followers.label}".` : ''}`;
+    }
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
@@ -1891,6 +1899,19 @@ Career position relative to Lala: ${profile.career_pressure || 'level'}.`;
       generated = JSON.parse(rawText.replace(/```json|```/g, '').trim());
     } catch {
       return res.status(500).json({ error: 'Regeneration failed to parse. Try again.' });
+    }
+
+    // A decided follower count is the facts', whatever the answer says.
+    if (isDecided(facts, 'followers')) {
+      generated.follower_count_approx = facts.followers.label;
+      generated.follower_tier = require('../services/pulseAudience').tierFor(facts.followers.count).key;
+    } else if ((facts?.undecided || []).includes('followers')) {
+      // Not decided yet: the answer's count is not taken as canon; what was there stays.
+      generated.follower_count_approx = profile.follower_count_approx;
+      generated.follower_tier = profile.follower_tier;
+    } else {
+      // No fact: the answer's count and tier at least agree with each other (step 5c).
+      agreeingFollowers(generated, sanitizeEnum(generated.follower_tier, VALID_FOLLOWER_TIERS, 'mid'));
     }
 
     // Sanitize ENUM fields to prevent DB insert failures from AI variations

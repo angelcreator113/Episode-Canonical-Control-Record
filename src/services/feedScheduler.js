@@ -722,7 +722,10 @@ Return ONLY valid JSON with these fields:
   }
 
   // Sanitize ENUM fields to prevent DB insert failures from AI variations
-  const safeFollowerTier = sanitizeEnum(generated.follower_tier || spark.follower_tier, VALID_FOLLOWER_TIERS, 'mid');
+  // The count and the tier agree, as do full_profile and the primary platform
+  // presence (Character Consistency Engine step 5c; services/characterFacts).
+  const followers = require('./characterFacts').agreeingFollowers(generated, sanitizeEnum(generated.follower_tier || spark.follower_tier, VALID_FOLLOWER_TIERS, 'mid'));
+  const safeFollowerTier = followers.follower_tier;
   const safeArchetype = sanitizeEnum(generated.archetype || spark.archetype, VALID_ARCHETYPES, 'polished_curator');
   const safeTrajectory = sanitizeEnum(generated.current_trajectory, VALID_TRAJECTORIES, 'rising');
 
@@ -750,7 +753,7 @@ Return ONLY valid JSON with these fields:
     full_profile:          generated,
     display_name:          asText(generated.display_name),
     follower_tier:         safeFollowerTier,
-    follower_count_approx: asText(generated.follower_count_approx),
+    follower_count_approx: followers.follower_count_approx,
     content_category:      asText(generated.content_category),
     archetype:             safeArchetype,
     society_archetype:     society ? society.name : null,

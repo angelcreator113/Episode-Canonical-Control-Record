@@ -753,7 +753,8 @@ function ArtifactReviewModal({ angle, setId, onClose, onSubmit }) {
     try {
       await submitAngleReviewApi(setId, angle.id, { categories: selected, notes: notes.trim() || null });
       onSubmit('review');
-    } catch {
+    } catch (err) {
+      console.error('[SceneSets] submitAngleReviewApi failed:', err);
       onSubmit('error');
     } finally {
       setSubmitting(false);
@@ -772,7 +773,8 @@ function ArtifactReviewModal({ angle, setId, onClose, onSubmit }) {
       await submitAngleReviewApi(setId, angle.id, { categories: selected, notes: notes.trim() || null });
       await regenerateAngleApi(setId, angle.id, { categories: selected, overrides });
       onSubmit('regenerate');
-    } catch {
+    } catch (err) {
+      console.error('[SceneSets] regenerateAngleApi failed:', err);
       onSubmit('error');
     } finally {
       setSubmitting(false);
@@ -780,7 +782,7 @@ function ArtifactReviewModal({ angle, setId, onClose, onSubmit }) {
   };
 
   return (
-    <div className="scene-sets-modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="scene-sets-modal-backdrop is-child" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="scene-sets-artifact-modal">
         <div className="scene-sets-artifact-modal-header">
           <h3>Quality Review: {angle.angle_name}</h3>
@@ -1094,7 +1096,6 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
 
   // Selected angle for detail panel — initializes to cover_angle_id if set
   const [selectedAngleId, setSelectedAngleId] = useState(set.cover_angle_id || null);
-  const selectedAngle = selectedAngleId ? sortedAngles.find(a => a.id === selectedAngleId) : null;
   // Card hero always shows the base image — angle images only in detail panel
   const heroImageRaw = useMemo(
     () => set.base_still_url || null,
@@ -1104,7 +1105,27 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
   // The card shows the library cover (a view chosen for browsing), else the main background.
   const cardImageRaw = libraryCoverUrl(set);
   const cardImage = useMemo(() => cardImageRaw ? bustUrl(cardImageRaw) : null, [cardImageRaw, bustUrl]);
+  // The lightbox opens on the picture clicked (its URL), or false when closed:
+  // it opened on the last angle viewed or the cover, even from the main
+  // background (fourth audit, 2026-10-15).
   const [showBaseLightbox, setShowBaseLightbox] = useState(false);
+  // The gallery: the base first, then every angle with a picture. Made once
+  // per change: rebuilt each render, it reset the lightbox on every poll.
+  const galleryImages = useMemo(() => {
+    const out = [];
+    if (set.base_still_url) out.push({ src: bustUrl(set.base_still_url), label: 'BASE', thumbSrc: bustUrl(set.base_still_url) });
+    sortedAngles.forEach((a) => {
+      if (!a.still_image_url) return;
+      out.push({
+        src: bustUrl(a.still_image_url),
+        label: a.angle_label || a.angle_name,
+        thumbSrc: bustUrl(a.still_image_url),
+        videoUrl: a.video_clip_url ? bustUrl(a.video_clip_url) : null,
+        angleId: a.id,
+      });
+    });
+    return out;
+  }, [set.base_still_url, sortedAngles, bustUrl]);
   const [showDetails, setShowDetails] = useState(false);
   // S8 (Evoni, 2026-10-02): "landing on the exact set and zone": the focused
   // set opens its panel on the angles, the zone (an angle id or a zone kind)
@@ -1188,8 +1209,17 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
   const [comparison, setComparison] = useState(null);
   // The event dress code's matches in the wardrobe (GET /scene-sets/:id/wardrobe-match).
   const [wardrobeMatch, setWardrobeMatch] = useState(null);
+  // Escape closes Wardrobe Match and Comparison: the workspace leaves Escape
+  // to a window open over it, and these had none (fourth audit, 2026-10-15).
+  useEffect(() => {
+    if (!wardrobeMatch && !comparison) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') { setWardrobeMatch(null); setComparison(null); } };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [wardrobeMatch, comparison]);
   const [seeding, setSeeding] = useState(false);
   const [editingDesc, setEditingDesc] = useState(false);
+  const [savingDesc, setSavingDesc] = useState(false);
   const [descDraft, setDescDraft] = useState('');
   const [descRefining, setDescRefining] = useState(false);
   // Building the spec (audit SCENE-04): one request, the real elapsed time,
@@ -1312,6 +1342,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
       if (onToast) onToast(stale ? `Renamed to "${trimmed}". Regenerate this angle so its picture matches the new label.` : `Renamed to "${trimmed}"`);
       if (onRefresh) await onRefresh();
     } catch (err) {
+      console.error('[SceneSets] updateAngleApi failed:', err);
       if (onToast) onToast(err?.response?.data?.error || 'Rename failed', 'error');
     }
     setEditingAngleId(null);
@@ -1344,6 +1375,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
       setSuggestions(json.data || []);
       setSelectedSuggestions((json.data || []).map((_, i) => i));
     } catch (err) {
+      console.error('[SceneSets] suggestAnglesApi failed:', err);
       if (onToast) onToast(err.response?.data?.error || 'Failed to get AI suggestions', 'error');
       setSuggestions([]);
     }
@@ -1401,7 +1433,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
       {/* ── Hero Preview ─────────────────────────────────────── */}
       <div
         className={`scene-sets-card-preview${cardImage ? ' has-image' : ''}`}
-        onDoubleClick={() => { if (cardImage) setShowBaseLightbox(true); }}
+        onDoubleClick={() => { if (cardImage) setShowBaseLightbox(cardImage); }}
         title={cardImage ? 'Double-click to view full size' : undefined}
       >
         {cardImage ? (
@@ -1570,6 +1602,9 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                 // brief or another dialog open over the workspace, it is
                 // theirs (the event is not stopped, so their own handlers run).
                 if (e.key !== 'Escape' || editingName || overlayAboveWorkspace(workspaceRef.current)) return;
+                // Escape in a field cancels that field's edit, not the whole
+                // workspace: it closed the window and lost the draft (fourth audit).
+                if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target?.tagName)) return;
                 setShowDetails(false); setShowPromptEditor(false); setShowAddAngle(false);
               }}
             >
@@ -1693,7 +1728,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                           className="scene-sets-desc-textarea"
                           value={descDraft}
                           onChange={e => setDescDraft(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Escape' && !savingDesc) setEditingDesc(false); }}
                           rows={6}
+                          aria-label="Description"
+                          data-testid={`scene-set-desc-textarea-${set.id}`}
                         />
                         <div className="scene-sets-desc-editor-actions">
                           <button className="scene-sets-ai-desc-btn" disabled={descRefining} onClick={async () => {
@@ -1702,21 +1740,33 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                               const r = await refineSceneDescriptionApi(set.id, { draft: descDraft });
                               const d = r.data;
                               if (d.refined) setDescDraft(d.refined);
-                            } catch { showToast('Refine failed', 'error'); }
+                            } catch (err) {
+                              console.error('[SceneSets] description refine failed:', err);
+                              showToast(err.response?.data?.error || 'Refine failed', 'error');
+                            }
                             setDescRefining(false);
                           }}>
                             {descRefining ? <Loader size={10} className="spin" /> : <Sparkles size={10} />} AI Refine (keep visuals)
                           </button>
-                          <button className="scene-sets-btn-generate" onClick={async () => {
+                          <button className="scene-sets-btn-generate" disabled={savingDesc} data-testid={`scene-set-desc-save-${set.id}`} onClick={async () => {
+                            // One save at a time; the reason when it fails; the
+                            // list reread so the card has the new text (fourth audit).
+                            setSavingDesc(true);
                             try {
                               await updateSceneSetApi(set.id, { canonical_description: descDraft });
                               setLocalDesc(descDraft);
                               setDescReview(null);
                               showToast('Description saved');
                               setEditingDesc(false);
-                            } catch { showToast('Save failed', 'error'); }
+                              onRefresh?.();
+                            } catch (err) {
+                              console.error('[SceneSets] description save failed:', err);
+                              showToast(err.response?.data?.error || 'Save failed', 'error');
+                            } finally {
+                              setSavingDesc(false);
+                            }
                           }}>
-                            <Save size={10} /> Save
+                            {savingDesc ? <Loader size={10} className="spin" /> : <Save size={10} />} Save
                           </button>
                           {/* The new description goes with the regenerate (the cascade saves it with the base). */}
                           {set.base_still_url && !set.base_approved && (
@@ -1756,11 +1806,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                       <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Analysis</div>
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button className="scene-sets-btn-generate" onClick={async () => {
-                          try { const r = await getComparisonApi(set.id); setComparison(r.data); } catch (err) { showToast(err.response?.data?.error || 'Comparison failed', 'error'); }
+                          try { const r = await getComparisonApi(set.id); setComparison(r.data); } catch (err) { console.error('[SceneSets] getComparisonApi failed:', err); showToast(err.response?.data?.error || 'Comparison failed', 'error'); }
                         }}><Eye size={11} /> Side-by-Side Compare</button>
 
                         <button className="scene-sets-btn-generate" onClick={async () => {
-                          try { const r = await getWardrobeMatchApi(set.id); setWardrobeMatch(r.data); } catch (err) { showToast(err.response?.data?.error || 'Wardrobe match failed', 'error'); }
+                          try { const r = await getWardrobeMatchApi(set.id); setWardrobeMatch(r.data); } catch (err) { console.error('[SceneSets] getWardrobeMatchApi failed:', err); showToast(err.response?.data?.error || 'Wardrobe match failed', 'error'); }
                         }}><Heart size={11} /> Wardrobe Match</button>
                       </div>
                     </div>
@@ -1953,7 +2003,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                     <div className="scene-sets-ws-main" data-testid={`scene-set-main-bg-${set.id}`}>
                       <div className="scene-sets-ws-main-preview">
                         {heroImage
-                          ? <img src={heroImage} alt={set.name} onClick={() => setShowBaseLightbox(true)} title="View full size" />
+                          ? <img src={heroImage} alt={set.name} onClick={() => setShowBaseLightbox(heroImage)} title="View full size" />
                           : <span className="scene-sets-ws-main-empty"><ImageIcon size={22} strokeWidth={1.2} /> No main background yet</span>}
                       </div>
                       <div className="scene-sets-ws-main-info">
@@ -1972,7 +2022,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                         <div className="scene-sets-ws-main-actions">
                           {/* S6: an approved base is not replaced until it is un-approved. */}
                           {!set.base_approved && (
-                            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isGenerating}
+                            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isGenerating || specStage === 'uploading'}
                               className={hasBase ? 'scene-sets-btn-details' : 'scene-sets-btn-generate'}
                               {...(hasBase ? { 'data-testid': `scene-set-replace-base-${set.id}` } : {})}>
                               <Upload size={12} /> {hasBase ? 'Replace' : 'Upload image'}
@@ -2009,30 +2059,13 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                       </div>
                     )}
 
-                    {/* ── Pipeline Progress Panel — shows during upload+spec+angles flow ── */}
-                    {specStage && specStage !== 'done' && (
-                      <div style={{ marginTop: 8, padding: '10px 12px', background: 'var(--surface-bg)', borderRadius: 8, border: '1px solid var(--lala-parchment-3)' }}>
-                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: 'var(--lala-gold-text)', marginBottom: 8, letterSpacing: '0.5px' }}>Setting up scene</div>
-                        {[
-                          { key: 'uploading', label: 'Uploading image', icon: Upload },
-                          { key: 'building_spec', label: 'Analyzing room — objects, zones, layout', icon: FileText },
-                          { key: 'creating_angles', label: 'Creating camera angles from spec', icon: Camera },
-                        ].map((step) => {
-                          const stages = ['uploading', 'building_spec', 'creating_angles'];
-                          const currentIdx = stages.indexOf(specStage);
-                          const stepIdx = stages.indexOf(step.key);
-                          const isDone = stepIdx < currentIdx;
-                          const isCurrent = stepIdx === currentIdx;
-                          const Icon = step.icon;
-                          return (
-                            <div key={step.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', opacity: isDone ? 0.5 : isCurrent ? 1 : 0.3 }}>
-                              <div style={{ width: 18, display: 'flex', justifyContent: 'center' }}>
-                                {isDone ? <CheckCircle2 size={12} style={{ color: 'var(--success-text)' }} /> : isCurrent ? <Loader size={12} className="spin" style={{ color: 'var(--lala-gold-text)' }} /> : <Icon size={12} style={{ color: 'var(--text-faint)' }} />}
-                              </div>
-                              <span style={{ fontSize: 11, color: isCurrent ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: isCurrent ? 600 : 400 }}>{step.label}</span>
-                            </div>
-                          );
-                        })}
+                    {/* The upload in progress. The spec and angles are separate steps
+                        below now (DJ bug 5); the panel listed them as running
+                        while nothing ran them (fourth audit, 2026-10-15). */}
+                    {specStage === 'uploading' && (
+                      <div data-testid={`scene-set-uploading-${set.id}`} style={{ marginTop: 8, padding: '10px 12px', background: 'var(--surface-bg)', borderRadius: 8, border: '1px solid var(--lala-parchment-3)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Loader size={12} className="spin" style={{ color: 'var(--lala-gold-text)' }} />
+                        <span style={{ fontSize: 11, color: 'var(--text-primary)', fontWeight: 600 }}>Uploading image</span>
                       </div>
                     )}
 
@@ -2115,9 +2148,14 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                                 const r = await createAnglesFromSpecApi(set.id, {});
                                 const outcome = createAnglesOutcome(r.data);
                                 showToast(outcome.text, outcome.tone === 'error' ? 'error' : undefined);
-                                // The views that were made stay, so the set is reread either way.
-                                if ((r.data?.data?.created?.length || r.data?.data?.angles_created) && onRefresh) await onRefresh();
-                              } catch (e) { showToast(e.response?.data?.error || e.message, 'error'); }
+                                // The set is reread whatever the outcome: a partial or
+                                // refused result left Step 2 as it was (fourth audit).
+                                if (onRefresh) await onRefresh();
+                              } catch (e) {
+                                console.error('[SceneSets] create angles from spec failed:', e);
+                                showToast(e.response?.data?.error || e.message, 'error');
+                                if (onRefresh) await onRefresh();
+                              }
                               setSeeding(false);
                             }} disabled={seeding || buildingSpec} className="scene-sets-btn-generate" style={{ width: '100%' }}>
                               {cameraContractCount === 0
@@ -2223,7 +2261,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                               // The new angles show now, not after a reload (audit, 2026-10-15).
                               onRefresh?.();
                             } else showToast(d.error || 'Failed', 'error');
-                          } catch (e) { showToast(e.response?.data?.error || e.message, 'error'); }
+                          } catch (e) { console.error('[SceneSets] suggestAnglesFromImageApi failed:', e); showToast(e.response?.data?.error || e.message, 'error'); }
                           setSeeding(false);
                         }}>
                           {seeding ? <Loader size={11} className="spin" /> : <Plus size={11} />} Suggest More
@@ -2241,7 +2279,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                           <div key={a.id} data-angle-id={a.id} className={`scene-sets-angle-row${isComplete ? ' complete' : ''}${isFailed ? ' failed' : ''}${zoneMatches(a) ? ' is-zone-focus' : ''}`}>
                             <div className="scene-sets-angle-row-thumb">
                               {isComplete ? (
-                                <img src={bustUrl(a.still_image_url)} alt={a.angle_label} onClick={() => { setSelectedAngleId(a.id); setShowBaseLightbox(true); }} />
+                                <img src={bustUrl(a.still_image_url)} alt={a.angle_label} onClick={() => { setSelectedAngleId(a.id); setShowBaseLightbox(bustUrl(a.still_image_url)); }} />
                               ) : isGen ? (
                                 <div className="scene-sets-angle-row-placeholder"><Loader size={12} className="spin" /></div>
                               ) : (
@@ -2626,7 +2664,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button className="scene-sets-btn-generate" disabled={toolsAction === 'locking_style'} onClick={async () => {
                           setToolsAction('locking_style');
-                          try { const r = await lockSceneStyleApi(set.id); const d = r.data; if (d.success) showToast(`Style locked: ${d.data.design_style || 'done'}`); } catch (e) { showToast(e.response?.data?.error || e.message, 'error'); } finally { setToolsAction(null); }
+                          try { const r = await lockSceneStyleApi(set.id); const d = r.data; if (d.success) showToast(`Style locked: ${d.data.design_style || 'done'}`); } catch (e) { console.error('[SceneSets] lockSceneStyleApi failed:', e); showToast(e.response?.data?.error || e.message, 'error'); } finally { setToolsAction(null); }
                         }}><Lock size={11} /> {toolsAction === 'locking_style' ? 'Analyzing...' : 'Lock Style DNA'}</button>
                       </div>
                       {set.visual_language?.locked && (
@@ -2651,7 +2689,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                             const r = await learnSceneLocationApi(set.id);
                             const d = r.data;
                             if (d.success) showToast(d.message || 'Location learned');
-                          } catch (e) { showToast(e.response?.data?.error || e.message, 'error'); }
+                          } catch (e) { console.error('[SceneSets] learnSceneLocationApi failed:', e); showToast(e.response?.data?.error || e.message, 'error'); }
                           setToolsAction(null);
                         }}>
                           <Sparkles size={11} /> {toolsAction === 'learning' ? 'Teaching...' : 'Teach Show Brain'}
@@ -2875,29 +2913,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
 
       {/* ── Lightboxes (portaled) ─────────────────────────── */}
       {showBaseLightbox && (() => {
-        // Build gallery: base image first, then all angles with stills
-        const galleryImages = [];
-        if (set.base_still_url) {
-          galleryImages.push({ src: bustUrl(set.base_still_url), label: 'BASE', thumbSrc: bustUrl(set.base_still_url) });
-        }
-        sortedAngles.forEach(a => {
-          if (a.still_image_url) {
-            galleryImages.push({
-              src: bustUrl(a.still_image_url),
-              label: a.angle_label || a.angle_name,
-              thumbSrc: bustUrl(a.still_image_url),
-              videoUrl: a.video_clip_url ? bustUrl(a.video_clip_url) : null,
-              angleId: a.id,
-            });
-          }
-        });
         if (galleryImages.length === 0) return null;
-        // Find initial index: match selected angle or hero
-        let startIdx = 0;
-        if (selectedAngle?.still_image_url) {
-          const found = galleryImages.findIndex(g => g.src === bustUrl(selectedAngle.still_image_url));
-          if (found >= 0) startIdx = found;
-        }
+        // The picture clicked; else the first (the base).
+        const found = galleryImages.findIndex(g => g.src === showBaseLightbox);
+        const startIdx = found >= 0 ? found : 0;
         return <ImageLightbox images={galleryImages} initialIndex={startIdx} onClose={() => setShowBaseLightbox(false)} onDeleteAngle={(angleId) => onDeleteSingleAngle(set, angleId)} setId={set.id}
           onPromoteToBase={set.base_approved ? null : (img) => { showToast(`${img.label} is now the main background`); onRefresh?.(); }}
           onPromoteError={(msg) => showToast(msg, 'error')}
@@ -2918,8 +2937,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
 
       {/* Wardrobe Match Modal (card-level) */}
       {wardrobeMatch && createPortal(
-        <div className="scene-sets-modal-backdrop" onClick={() => setWardrobeMatch(null)}>
-          <div className="scene-sets-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
+        <div className="scene-sets-modal-backdrop is-child" onClick={() => setWardrobeMatch(null)}>
+          <div className="scene-sets-modal" role="dialog" aria-modal="true" aria-label="Wardrobe Match" data-testid={`scene-set-wardrobe-match-${set.id}`} onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
             <div className="scene-sets-modal-header">
               <h3 className="scene-sets-modal-title">Wardrobe Match</h3>
               <button className="scene-sets-modal-close" aria-label="Close" onClick={() => setWardrobeMatch(null)}><X size={16} /></button>
@@ -2950,8 +2969,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
 
       {/* Comparison Modal (card-level) */}
       {comparison && createPortal(
-        <div className="scene-sets-modal-backdrop" onClick={() => setComparison(null)}>
-          <div className="scene-sets-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 900 }}>
+        <div className="scene-sets-modal-backdrop is-child" onClick={() => setComparison(null)}>
+          <div className="scene-sets-modal" role="dialog" aria-modal="true" aria-label="Side-by-Side Comparison" data-testid={`scene-set-comparison-${set.id}`} onClick={e => e.stopPropagation()} style={{ maxWidth: 900 }}>
             <div className="scene-sets-modal-header">
               <h3 className="scene-sets-modal-title">Side-by-Side Comparison</h3>
               <button className="scene-sets-modal-close" aria-label="Close" onClick={() => setComparison(null)}><X size={16} /></button>
@@ -3047,7 +3066,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
   const [error, setError] = useState(null);
   const [generatingIds, setGeneratingIds] = useState(new Set());
   const [generationProgressMap, setGenerationProgressMap] = useState({});
-  const [specStageMap, setSpecStageMap] = useState({}); // { [setId]: 'uploading' | 'building_spec' | 'creating_angles' | null }
+  const [specStageMap, setSpecStageMap] = useState({}); // { [setId]: 'uploading' | null }
 
   // Helpers to manage multi-set generation tracking
   const startGenerating = useCallback((id) => {
@@ -3111,9 +3130,17 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
   // links (degraded). Neither is an empty library.
   const [loadError, setLoadError] = useState(null);
   const [degraded, setDegraded] = useState(null);
+  // The page's loops (job and status polls) stop when it is left, and a
+  // list read answered after a newer one is dropped (fourth audit,
+  // 2026-10-15: an All shows read landing last showed other shows' sets).
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  const fetchSeq = useRef(0);
   const fetchSets = useCallback(async () => {
+    const mine = ++fetchSeq.current;
     try {
       const res = await listSceneSetsApi(scopedRef.current ? `show_id=${encodeURIComponent(pageShowId)}` : undefined);
+      if (mine !== fetchSeq.current || !alive.current) return;
       setSets(res.data?.data || []);
       setScopeCounts(res.data?.counts || null);
       setDegraded(res.data?.degraded || null);
@@ -3121,12 +3148,13 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       initialLoadDone.current = true;
     } catch (err) {
       console.error('[SceneSetsTab] scene sets load failed:', err.response?.status || err.message);
+      if (mine !== fetchSeq.current || !alive.current) return;
       const reason = err.response?.data?.error || '';
       // The first read failing leaves nothing to show; a later one keeps
       // what loaded before and says the refresh failed.
       setLoadError(`${initialLoadDone.current ? 'Could not refresh the scene sets; showing what loaded before.' : 'Could not load the scene sets.'}${reason ? ` ${reason}.` : ''}`);
     } finally {
-      setLoading(false);
+      if (mine === fetchSeq.current && alive.current) setLoading(false);
     }
   }, [pageShowId]);
 
@@ -3183,15 +3211,21 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
     }
   }, []);
 
+  // The linked set is scrolled to once, when its card first appears: every
+  // list refresh (the 5s poll while anything generates) scrolled back to it
+  // (fourth audit, 2026-10-15).
+  const scrolledFor = useRef(null);
   useEffect(() => {
-    if (!focusSetId || loading || !/^[\w-]+$/.test(focusSetId)) return;
+    if (!focusSetId || loading || !/^[\w-]+$/.test(focusSetId) || scrolledFor.current === focusSetId) return;
     const el = document.querySelector(`[data-scene-set-id="${focusSetId}"]`);
-    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (!el) return;
+    scrolledFor.current = focusSetId;
+    if (typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }, [focusSetId, loading, sets]);
 
   // Fetch shows for selectors
   useEffect(() => {
-    listShowsApi().then(r => setAllShows(r.data?.data || [])).catch(() => {});
+    listShowsApi().then(r => setAllShows(r.data?.data || [])).catch((err) => { console.error('[SceneSets] listShowsApi failed:', err); });
   }, []);
 
   const loadEpisodesForShow = useCallback(async (showId) => {
@@ -3201,7 +3235,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         const otherShows = prev.filter(ep => ep.show_id !== showId);
         return [...otherShows, ...(res.data?.data || [])];
       });
-    } catch { /* silent */ }
+    } catch (err) { console.error('[SceneSets] listEpisodesByShowApi failed:', err); /* silent */ }
   }, []);
 
   // Auto-poll while a generation is in progress (one touched in the last 15
@@ -3213,11 +3247,14 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
   }, [sets, fetchSets]);
 
   // Poll a job until it completes or fails; returns the final job data
-  const pollJob = useCallback(async (jobId) => {
-    const maxPolls = 60; // 60 * 3s = 3 min max
+  // maxPolls: 3s each. A cascade (base and every angle) runs longer than 3
+  // minutes: it passes more, and its timeout is "still running", not a
+  // failure (fourth audit). A left page stops polling (cancelled).
+  const pollJob = useCallback(async (jobId, { maxPolls = 60 } = {}) => {
     let consecutiveErrors = 0;
     for (let i = 0; i < maxPolls; i++) {
       await new Promise(r => setTimeout(r, 3000));
+      if (!alive.current) return { status: 'cancelled' };
       try {
         const res = await getSceneSetJobApi(jobId);
         const job = res.data?.data;
@@ -3236,18 +3273,19 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         if (consecutiveErrors >= 5) return { status: 'failed', error: status ? 'Too many errors' : 'Network error' };
       }
     }
-    return { status: 'failed', error: 'Polling timed out' };
+    return { status: 'timeout', error: 'Polling timed out' };
   }, []);
 
   const pollSetStatus = useCallback(async (setId, field = 'generation_status', maxPolls = 30) => {
     for (let i = 0; i < maxPolls; i++) {
       await new Promise(r => setTimeout(r, 4000));
+      if (!alive.current) return 'cancelled';
       try {
         const r = await getSceneSetApi(setId);
         const d = r.data;
         if (d.data?.[field] === 'complete') return 'completed';
         if (d.data?.[field] === 'failed') return 'failed';
-      } catch { /* retry */ }
+      } catch (err) { console.error('[SceneSets] getSceneSetApi failed:', err); /* retry */ }
     }
     return 'timeout';
   }, []);
@@ -3319,16 +3357,19 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       if (json.data?.jobId) {
         showToast('Base generation queued...');
         const job = await pollJob(json.data.jobId);
+        if (job.status === 'cancelled') return; // the page was left
         if (job.status === 'completed') showToast(`Base generated for "${set.name}"`);
         else showToast(job.error || 'Base generation failed', 'error');
       } else {
         showToast('Generating base — this may take 30-60s...');
         const status = await pollSetStatus(set.id);
+        if (status === 'cancelled') return; // the page was left
         if (status === 'completed') showToast(`Base generated for "${set.name}"`);
         else showToast('Base generation failed or timed out', 'error');
       }
       await fetchSets();
     } catch (err) {
+      console.error('[SceneSets] runGenerateBase failed:', err);
       showToast(err.message || 'Generation failed', 'error');
     } finally {
       stopGenerating(set.id);
@@ -3349,16 +3390,19 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       if (json.data?.jobId) {
         showToast('Regeneration queued...');
         const job = await pollJob(json.data.jobId);
+        if (job.status === 'cancelled') return; // the page was left
         if (job.status === 'completed') showToast('Base image regenerated!');
         else showToast(job.error || 'Regeneration failed', 'error');
       } else {
         showToast('Regenerating base — this may take 30-60s...');
         const status = await pollSetStatus(set.id);
+        if (status === 'cancelled') return; // the page was left
         if (status === 'completed') showToast('Base image regenerated!');
         else showToast('Regeneration failed or timed out', 'error');
       }
       await fetchSets();
     } catch (err) {
+      console.error('[SceneSets] runRegenerateBase failed:', err);
       showToast(err.message || 'Regeneration failed', 'error');
     } finally {
       stopGenerating(set.id);
@@ -3370,7 +3414,8 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       await updateSceneSetApi(set.id, { canonical_description: newDescription });
       showToast('Prompt updated');
       fetchSets();
-    } catch {
+    } catch (err) {
+      console.error('[SceneSets] handleUpdatePrompt failed:', err);
       showToast('Failed to update prompt', 'error');
     }
   };
@@ -3378,7 +3423,12 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
   // DJ bug 5 (Evoni, 2026-10-02): an upload only replaces the base image
   // (S6: never an approved one); no generation call, no Scene Spec, no
   // angles made from it. The server's upload-base keeps its own analysis.
+  // One base upload per set at a time: a second Replace during a slow
+  // upload raced the first for which base won (fourth audit, 2026-10-15).
+  const uploadInFlight = useRef(new Set());
   const handleUploadBase = async (set, files) => {
+    if (uploadInFlight.current.has(set.id)) return;
+    uploadInFlight.current.add(set.id);
     const setStage = (stage) => setSpecStageMap(prev => ({ ...prev, [set.id]: stage }));
     setStage('uploading');
     try {
@@ -3394,8 +3444,10 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       await fetchSets();
       showToast('Base image replaced');
     } catch (err) {
+      console.error('[SceneSets] base upload failed:', err);
       showToast(err.message || 'Upload failed', 'error');
     } finally {
+      uploadInFlight.current.delete(set.id);
       setStage(null);
     }
   };
@@ -3410,7 +3462,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
           showToast(checkData.message || 'No image generation API key configured', 'error');
           return;
         }
-      } catch { /* proceed anyway */ }
+      } catch (err) { console.error('[SceneSets] getGenerationCheckApi failed:', err); /* proceed anyway */ }
 
       let json;
       try {
@@ -3427,6 +3479,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         // Legacy job-based flow: poll for completion
         showToast(`Generating "${angle.angle_name}" — queued`);
         const job = await pollJob(json.data.jobId);
+        if (job.status === 'cancelled') return; // the page was left
         if (job.status === 'completed') {
           showToast(`"${angle.angle_name}" generated!`);
         } else {
@@ -3439,6 +3492,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         let finished = false;
         for (let i = 0; i < maxPolls; i++) {
           await new Promise(r => setTimeout(r, 4000));
+          if (!alive.current) return;
           try {
             const checkRes = await getSceneSetApi(set.id);
             const checkJson = checkRes.data;
@@ -3497,6 +3551,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       let finished = false;
       for (let poll = 0; poll < maxPolls; poll++) {
         await new Promise(r => setTimeout(r, 5000));
+        if (!alive.current) return;
         try {
           const checkRes = await getSceneSetApi(set.id);
           const checkJson = checkRes.data;
@@ -3544,9 +3599,10 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       if (!finished) showToast('Still generating after 10 minutes; the page will show the angles when they finish.', 'error');
       fetchSets();
     } catch (err) {
+      console.error('[SceneSets] runGenerateAll failed:', err);
       showToast(err?.response?.data?.error || err?.message || 'Generation failed', 'error');
     } finally {
-      setTimeout(() => stopGenerating(set.id), 3000);
+      setTimeout(() => { if (alive.current) stopGenerating(set.id); }, 3000);
     }
   };
 
@@ -3564,7 +3620,8 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         try {
           await generateAngleApi(set.id, targets[i].id);
           progressAngles[i].status = 'generating';
-        } catch {
+        } catch (err) {
+          console.error('[SceneSets] generateAngleApi failed:', err);
           progressAngles[i].status = 'failed';
         }
         setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles] }));
@@ -3576,6 +3633,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       const maxPolls = 60;
       for (let poll = 0; poll < maxPolls; poll++) {
         await new Promise(r => setTimeout(r, 4000));
+        if (!alive.current) return;
         try {
           const checkRes = await getSceneSetApi(set.id);
           const checkJson = checkRes.data;
@@ -3592,7 +3650,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
           }
           setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
           if (allDone) break;
-        } catch { /* retry */ }
+        } catch (err) { console.error('[SceneSets] handleRetryFailed poll failed:', err); /* retry */ }
       }
 
       if (failed === 0) {
@@ -3602,9 +3660,10 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       }
       fetchSets();
     } catch (err) {
+      console.error('[SceneSets] handleRetryFailed failed:', err);
       showToast(err?.message || 'Retry failed', 'error');
     } finally {
-      setTimeout(() => stopGenerating(set.id), 3000);
+      setTimeout(() => { if (alive.current) stopGenerating(set.id); }, 3000);
     }
   };
 
@@ -3702,7 +3761,8 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       await setCoverAngleApi(set.id, { angle_id: angleId });
       showToast(angleId ? 'Cover image set' : 'Cover image cleared');
       fetchSets();
-    } catch {
+    } catch (err) {
+      console.error('[SceneSets] handleSetCoverAngle failed:', err);
       showToast('Failed to set cover image', 'error');
     }
   };
@@ -3724,7 +3784,8 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       await unlinkEpisodeFromSceneSetApi(set.id, episodeId);
       showToast('Episode unlinked');
       fetchSets();
-    } catch {
+    } catch (err) {
+      console.error('[SceneSets] handleUnlinkEpisode failed:', err);
       showToast('Failed to unlink episode', 'error');
     }
   };
@@ -3801,7 +3862,8 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
     try {
       const res = await previewPromptApi(set.id);
       return res.data?.data || null;
-    } catch {
+    } catch (err) {
+      console.error('[SceneSets] previewPromptApi failed:', err);
       showToast('Failed to load prompt preview', 'error');
       return null;
     }
@@ -3846,6 +3908,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       showToast('Angle image uploaded');
       await fetchSets();
     } catch (err) {
+      console.error('[SceneSets] handleUploadAngleImage failed:', err);
       showToast(err.message || 'Failed to upload angle image', 'error');
     }
   };
@@ -3867,15 +3930,21 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       }
       onSaved?.();
       showToast('Cascade regeneration queued...');
-      const job = await pollJob(json.data.jobId);
+      // Up to 15 minutes (the shared stale window); after that it is still
+      // running as far as the page knows, and the 5s list poll shows it.
+      const job = await pollJob(json.data.jobId, { maxPolls: 300 });
+      if (job.status === 'cancelled') return;
       if (job.status === 'completed') {
         const { successfulAngles, totalAngles } = job.result || {};
         showToast(`Base + ${successfulAngles || 0}/${totalAngles || 0} angles regenerated!`);
+      } else if (job.status === 'timeout') {
+        showToast('Still regenerating after 15 minutes; the page will show the pictures when they finish.');
       } else {
         showToast(job.error || 'Cascade regeneration failed', 'error');
       }
       fetchSets();
     } catch (err) {
+      console.error('[SceneSets] runCascadeRegenerate failed:', err);
       showToast(err.message || 'Cascade regeneration failed', 'error');
     } finally {
       stopGenerating(set.id);
@@ -3899,7 +3968,8 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
     try {
       await reorderAnglesApi(set.id, { order: newOrder });
       fetchSets();
-    } catch {
+    } catch (err) {
+      console.error('[SceneSets] handleReorderAngle failed:', err);
       showToast('Failed to reorder angles', 'error');
     }
   };
@@ -4246,7 +4316,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
 
       {/* Angle History Modal */}
       {angleHistory && createPortal(
-        <div className="scene-sets-modal-backdrop" onClick={() => setAngleHistory(null)}>
+        <div className="scene-sets-modal-backdrop is-child" onClick={() => setAngleHistory(null)}>
           <div className="scene-sets-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 600 }}>
             <div className="scene-sets-modal-header">
               <h3 className="scene-sets-modal-title">Generation History — {angleHistory.angle?.angle_name}</h3>

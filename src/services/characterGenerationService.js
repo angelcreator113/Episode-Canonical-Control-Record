@@ -223,7 +223,7 @@ const INTERIOR_MODELS = ['claude-sonnet-4-6'];
  * deepened), so the interior grows out of it rather than from a bare spark.
  * `only` limits the answer to those keys.
  */
-async function generateInteriorArchitecture({ name, vibe, role, worldString, bookString, castString, age, known = null, only = null }) {
+async function generateInteriorArchitecture({ name, vibe, role, worldString, bookString, castString, age, known = null, only = null, factsBlock = '', seed = '' }) {
   const isMinor = age != null && age < 18;
   const minorRule = isMinor
     ? `\nIMPORTANT — MINOR SAFEGUARD: This character is a minor (age ${age}). Do NOT generate "sexuality_desire" content. Set it to: "Dimension deferred — character is a minor."\n`
@@ -239,7 +239,7 @@ async function generateInteriorArchitecture({ name, vibe, role, worldString, boo
   const userMessage = `${worldString}
 ${bookString || ''}
 ${castString || ''}
-${minorRule}${knownBlock}${onlyRule}
+${minorRule}${knownBlock}${seed ? `\n${seed}\n` : ''}${factsBlock ? `\n${factsBlock}\n` : ''}${onlyRule}
 Character: ${name}
 Vibe: ${vibe}
 Role in story: ${role}`;
@@ -389,9 +389,13 @@ function withEvents(known, events) {
 /**
  * generateMissingInterior
  * Asks for the missing fields of an existing character, built from what is
- * there. Returns the column values to write; writes nothing itself.
+ * there and from their facts (factsBlock: services/characterFacts
+ * factsPromptBlock; money, lifestyle and status prose must agree with it).
+ * Returns the column values to write; writes nothing itself.
  */
-async function generateMissingInterior({ character, feedProfile = null, events = [], fields }) {
+async function generateMissingInterior({ character, feedProfile = null, events = [], fields, factsBlock = '' }) {
+  // Their typology seed: the root the inner life grows from (step 6a; services/characterTypology).
+  const seed = require('./characterTypology').seedBlock(character.typology);
   const name = character.display_name || character.selected_name || 'this character';
   const vibe = character.prose_overview || character.description || feedProfile?.content_persona || feedProfile?.bio || 'not written yet';
   const role = character.role_label || character.role_type || 'supporting';
@@ -401,6 +405,8 @@ async function generateMissingInterior({ character, feedProfile = null, events =
     name, vibe, role, worldString, age,
     known: withEvents(characterContext(character, feedProfile), events),
     only: fields.map((f) => (f === 'selected_name' ? 'real_name' : f)),
+    factsBlock,
+    seed,
   });
   return interiorUpdates(generated, fields);
 }
@@ -465,7 +471,7 @@ Return JSON only:
   "bio": "their bio — 1-2 sentences in their voice",
   "vibe_tags": ["3-5 aesthetic/content tags"],
   "starting_state": "rising OR peaking OR plateauing",
-  "follower_range": "nano (1k-10k) OR micro (10k-100k) OR mid (100k-500k) OR macro (500k+)",
+  "follower_count": a whole number of followers fitting who they are now (emerging under 1,000; nano 1,000-9,999; micro 10,000-49,999; mid 50,000-249,999; macro 250,000-999,999; mega 1,000,000+),
   "content_posture": "what they post about — their performed self",
   "gap_from_deep_profile": "one sentence describing the gap between who they perform and who they actually are"
 }`;

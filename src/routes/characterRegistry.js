@@ -1475,6 +1475,10 @@ router.post('/characters/:id/backfill-sections', requireAuth, async (req, res) =
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const allFieldsToFill = [sectionsToFill, essenceToFill, demoToFill].filter(Boolean).join(',\n');
+    // Their facts (Character Consistency Engine step 5): the sections quote them, never invent them.
+    const { factsForCharacter, factsPromptBlock, holdToFacts } = require('../services/characterFacts');
+    const facts = await factsForCharacter(db, character);
+    const factsBlock = factsPromptBlock(facts);
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
@@ -1483,7 +1487,7 @@ router.post('/characters/:id/backfill-sections', requireAuth, async (req, res) =
 
 Here is everything currently known about this character:
 ${JSON.stringify(known, null, 2)}
-
+${factsBlock ? `\n${factsBlock}\n` : ''}
 Generate ONLY the following empty fields. Infer from existing data. Be specific to THIS character — no generic filler. Use null for fields you truly cannot infer.
 ${essenceFields.length ? 'For essence fields (core_fear, core_wound, mask_persona, etc.): return a single string value, not an object.' : ''}
 
@@ -1507,7 +1511,7 @@ ${allFieldsToFill}
       if (generated[section] && typeof generated[section] === 'object') {
         // Clean nulls
         const clean = {};
-        for (const [k, v] of Object.entries(generated[section])) {
+        for (const [k, v] of Object.entries(holdToFacts(section, generated[section], facts))) {
           clean[k] = (v === null || v === undefined) ? '' : v;
         }
         proposed[section] = clean;
@@ -1597,7 +1601,7 @@ ${allFieldsToFill}
         const threadResp = await anthropic.messages.create({
           model: 'claude-sonnet-4-6',
           max_tokens: 1500,
-          system: `Generate 2-4 plot threads for this character based on their profile. Each thread should be a specific unresolved situation.\n\nCharacter: ${JSON.stringify(known, null, 2)}\n\nReturn ONLY valid JSON array:\n[\n  { "thread": "specific unresolved situation", "status": "open", "activation_condition": "what would bring this thread into a story" }\n]`,
+          system: `Generate 2-4 plot threads for this character based on their profile. Each thread should be a specific unresolved situation.\n\nCharacter: ${JSON.stringify(known, null, 2)}\n${factsBlock ? `\n${factsBlock}\n` : ''}\nReturn ONLY valid JSON array:\n[\n  { "thread": "specific unresolved situation", "status": "open", "activation_condition": "what would bring this thread into a story" }\n]`,
           messages: [{ role: 'user', content: `Generate plot threads for ${known.display_name || 'this character'}.` }],
         });
         const ptRaw = extractAIText(threadResp);
@@ -1885,6 +1889,11 @@ router.post('/characters/:id/generate-section', requireAuth, async (req, res) =>
       return res.status(400).json({ error: `Unknown section: ${section}. Valid: ${Object.keys(sectionConfigs).join(', ')}` });
     }
 
+    // Their facts (Character Consistency Engine step 5): the section quotes them, never invents them.
+    const { factsForCharacter, factsPromptBlock, holdToFacts } = require('../services/characterFacts');
+    const facts = await factsForCharacter(db, character);
+    const factsBlock = factsPromptBlock(facts);
+
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 3000,
@@ -1892,7 +1901,7 @@ router.post('/characters/:id/generate-section', requireAuth, async (req, res) =>
 
 Here is everything currently known about this character:
 ${JSON.stringify(known, null, 2)}
-
+${factsBlock ? `\n${factsBlock}\n` : ''}
 Generate the requested section. Be specific to THIS character — no generic filler. Use null for fields you truly cannot infer.
 
 Return ONLY valid JSON matching this schema:
@@ -1905,7 +1914,7 @@ ${config.schema}`,
     if (!jsonMatch) return res.status(500).json({ error: 'Failed to parse AI response' });
     const generated = JSON.parse(jsonMatch[0]);
 
-    const updated = config.apply(generated);
+    const updated = config.apply(holdToFacts(section, generated, facts));
     await character.save();
 
     for (const [key, value] of extraFieldsSets) {
@@ -1993,9 +2002,12 @@ router.post('/characters/:id/interior/generate', requireAuth, aiRateLimiter, asy
     const known = {};
     if (missing.includes('selected_name') && feedProfile?.creator_name) known.selected_name = feedProfile.creator_name;
     const toAsk = missing.filter((f) => !(f in known));
+    // Their facts: what the new prose may say about followers, status, money and possessions.
+    const { factsForCharacter, factsPromptBlock } = require('../services/characterFacts');
+    const factsBlock = factsPromptBlock(await factsForCharacter(db, character, feedProfile));
     const updates = {
       ...known,
-      ...(toAsk.length ? await gen.generateMissingInterior({ character: plain, feedProfile, events, fields: toAsk }) : {}),
+      ...(toAsk.length ? await gen.generateMissingInterior({ character: plain, feedProfile, events, fields: toAsk, factsBlock }) : {}),
     };
     if (Object.keys(updates).length === 0) {
       return res.status(502).json({ error: 'The writer came back with nothing usable. Try again.' });
@@ -2063,6 +2075,7 @@ router.post('/registries/:registryId/backfill-all', requireAuth, async (req, res
     const Anthropic = require('@anthropic-ai/sdk');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const results = [];
+    const { factsForCharacter, factsPromptBlock, holdToFacts } = require('../services/characterFacts');
 
     for (const character of chars) {
       const emptySections = [];
@@ -2088,12 +2101,15 @@ router.post('/registries/:registryId/backfill-all', requireAuth, async (req, res
       if (hasData(character.deep_profile))       known.deep_profile_summary = character.deep_profile;
 
       const sectionsToFill = emptySections.map(s => `"${s}": ${sectionSchemas[s]}`).join(',\n');
+      // Their facts (Character Consistency Engine step 5): the sections quote them, never invent them.
+      const facts = await factsForCharacter(db, character);
+      const factsBlock = factsPromptBlock(facts);
 
       try {
         const response = await anthropic.messages.create({
           model: 'claude-sonnet-4-6',
           max_tokens: 4000,
-          system: `You are filling in missing profile sections for an existing character in the LalaVerse franchise.\n\nHere is everything currently known about this character:\n${JSON.stringify(known, null, 2)}\n\nGenerate ONLY the following empty sections. Infer from existing data. Be specific to THIS character — no generic filler. Use null for fields you truly cannot infer.\n\nReturn ONLY valid JSON with these keys:\n{\n${sectionsToFill}\n}`,
+          system: `You are filling in missing profile sections for an existing character in the LalaVerse franchise.\n\nHere is everything currently known about this character:\n${JSON.stringify(known, null, 2)}\n${factsBlock ? `\n${factsBlock}\n` : ''}\nGenerate ONLY the following empty sections. Infer from existing data. Be specific to THIS character — no generic filler. Use null for fields you truly cannot infer.\n\nReturn ONLY valid JSON with these keys:\n{\n${sectionsToFill}\n}`,
           messages: [{ role: 'user', content: `Fill in the missing sections for ${known.display_name || 'this character'}.` }],
         });
 
@@ -2109,7 +2125,7 @@ router.post('/registries/:registryId/backfill-all', requireAuth, async (req, res
         for (const section of emptySections) {
           if (generated[section] && typeof generated[section] === 'object') {
             const clean = {};
-            for (const [k, v] of Object.entries(generated[section])) {
+            for (const [k, v] of Object.entries(holdToFacts(section, generated[section], facts))) {
               clean[k] = (v === null || v === undefined) ? '' : v;
             }
             updateData[section] = clean;
@@ -2166,7 +2182,7 @@ router.post('/registries/:registryId/backfill-all', requireAuth, async (req, res
             const threadResp = await anthropic.messages.create({
               model: 'claude-sonnet-4-6',
               max_tokens: 1500,
-              system: `Generate 2-4 plot threads for this character based on their profile. Each thread should be a specific unresolved situation.\n\nCharacter: ${JSON.stringify(known, null, 2)}\n\nReturn ONLY valid JSON array:\n[\n  { "thread": "specific unresolved situation", "status": "open", "activation_condition": "what would bring this thread into a story" }\n]`,
+              system: `Generate 2-4 plot threads for this character based on their profile. Each thread should be a specific unresolved situation.\n\nCharacter: ${JSON.stringify(known, null, 2)}\n${factsBlock ? `\n${factsBlock}\n` : ''}\nReturn ONLY valid JSON array:\n[\n  { "thread": "specific unresolved situation", "status": "open", "activation_condition": "what would bring this thread into a story" }\n]`,
               messages: [{ role: 'user', content: `Generate plot threads for ${known.display_name || 'this character'}.` }],
             });
             const ptRaw = extractAIText(threadResp);
@@ -2298,6 +2314,9 @@ router.post('/characters/:id/deep-profile/generate', requireAuth, aiRateLimiter,
       ? `\n\nIMPORTANT — MINOR SAFEGUARD: This character is a minor (age ${character.age}). Do NOT generate the "sexuality_and_desire" dimension. Instead, set it to: { "note": "Dimension deferred — character is a minor." }\n`
       : '';
 
+    // Their facts (Character Consistency Engine step 5): class_and_money and ambition agree with them.
+    const { factsForCharacter, factsPromptBlock } = require('../services/characterFacts');
+    const factsBlock = factsPromptBlock(await factsForCharacter(db, character));
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 6000,
@@ -2305,7 +2324,7 @@ router.post('/characters/:id/deep-profile/generate', requireAuth, aiRateLimiter,
 
 Here is everything currently known about this character:
 ${JSON.stringify(cleanDossier, null, 2)}
-
+${factsBlock ? `\n${factsBlock}\n` : ''}
 ${filledDims.length > 0 ? `EXISTING deep_profile dimensions (do NOT overwrite — only fill empty dimensions):\n${JSON.stringify(existing, null, 2)}` : ''}
 ${minorSexualityRule}
 Generate the deep_profile. Infer what you can from the existing data. Use null for fields you genuinely cannot infer — do NOT fabricate generic filler. Every non-null field should be specific to THIS person.
@@ -2508,6 +2527,7 @@ router.post('/characters/:id/deep-profile/accept', requireAuth, async (req, res)
  * Body: { ids: [1,2,3] }
  */
 router.post('/characters/bulk-deep-profile', requireAuth, async (req, res) => {
+  const { factsForCharacter, factsPromptBlock } = require('../services/characterFacts');
   const { ids } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) {
     return res.status(400).json({ error: 'ids array required' });
@@ -2550,12 +2570,13 @@ router.post('/characters/bulk-deep-profile', requireAuth, async (req, res) => {
         voice_signature: character.voice_signature, living_context: character.living_context,
       })) { if (v !== null && v !== undefined && v !== '') dossier[k] = v; }
 
+      const factsBlock = factsPromptBlock(await factsForCharacter(db, character));
       const response = await anthropic.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 6000,
         system: `You are generating a 14-dimension deep character anthropology.
 Character data: ${JSON.stringify(dossier, null, 2)}
-${filledDims.length > 0 ? `Existing (do NOT overwrite): ${JSON.stringify(existing, null, 2)}` : ''}
+${factsBlock ? `${factsBlock}\n` : ''}${filledDims.length > 0 ? `Existing (do NOT overwrite): ${JSON.stringify(existing, null, 2)}` : ''}
 Return ONLY a JSON object with 14 dimensions: life_stage, the_body, class_and_money, religion_and_meaning, race_and_culture, sexuality_and_desire, family_architecture, friendship_and_loyalty, ambition_and_identity, habits_and_rituals, speech_and_silence, grief_and_loss, politics_and_justice, the_unseen. Use null for fields you cannot infer. Be specific to THIS character.`,
         messages: [{ role: 'user', content: `Generate deep_profile for ${dossier.name || 'this character'}.` }],
       });
@@ -2645,6 +2666,9 @@ router.post('/characters/:id/writer-paragraph/generate', requireAuth, aiRateLimi
     const Anthropic = require('@anthropic-ai/sdk');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+    // Their facts (Character Consistency Engine step 5): the portrait agrees with them.
+    const { factsForCharacter, factsPromptBlock } = require('../services/characterFacts');
+    const factsBlock = factsPromptBlock(await factsForCharacter(db, character));
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 2000,
@@ -2652,7 +2676,7 @@ router.post('/characters/:id/writer-paragraph/generate', requireAuth, aiRateLimi
 
 CHARACTER REGISTRY DATA:
 ${JSON.stringify(charData, null, 2)}
-
+${factsBlock ? `\n${factsBlock}\n` : ''}
 ${hasProfile ? `DEEP PROFILE (14-dimension anthropology):\n${JSON.stringify(dp, null, 2)}` : 'No deep profile available — work only with registry data.'}
 
 Write a single, flowing paragraph (200–400 words) that captures who this person IS — not a list of traits but a lived-in portrait. Write it as a writer's reference paragraph, the kind of text a novelist pins above their desk. Include specific sensory details, behavioral tells, contradictions, and emotional textures. Do NOT use bullet points, headers, or labels. Write prose.`,
@@ -2679,6 +2703,7 @@ Write a single, flowing paragraph (200–400 words) that captures who this perso
  * Body: { ids: [1,2,3] }
  */
 router.post('/characters/bulk-writer-paragraph', requireAuth, async (req, res) => {
+  const { factsForCharacter, factsPromptBlock } = require('../services/characterFacts');
   const { ids } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) {
     return res.status(400).json({ error: 'ids array required' });
@@ -2717,12 +2742,13 @@ router.post('/characters/bulk-writer-paragraph', requireAuth, async (req, res) =
         return v && typeof v === 'object' && Object.values(v).some(fv => fv !== null && fv !== undefined && fv !== '');
       });
 
+      const factsBlock = factsPromptBlock(await factsForCharacter(db, character));
       const response = await anthropic.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 2000,
         system: `You are writing a rich, literary character paragraph for a writer's reference.
 CHARACTER: ${JSON.stringify(charData, null, 2)}
-${hasProfile ? `DEEP PROFILE:\n${JSON.stringify(dp, null, 2)}` : ''}
+${factsBlock ? `${factsBlock}\n` : ''}${hasProfile ? `DEEP PROFILE:\n${JSON.stringify(dp, null, 2)}` : ''}
 Write a single flowing paragraph (200–400 words) capturing who this person IS — a writer's reference portrait with sensory details, behavioral tells, contradictions, emotional textures. Prose only, no lists or headers.`,
         messages: [{ role: 'user', content: `Write the writer paragraph for ${charData.name || 'this character'}.` }],
       });

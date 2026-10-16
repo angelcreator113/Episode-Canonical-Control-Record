@@ -97,6 +97,10 @@ function buildCharacterContext(character) {
   sections.push(`Role: ${c.role_type || 'unknown'}`);
   if (c.subtitle) sections.push(`Subtitle: ${c.subtitle}`);
 
+  // The typology seed the depth grows from (step 6a; services/characterTypology).
+  const seed = require('../services/characterTypology').seedBlock(c.typology);
+  if (seed) sections.push(seed);
+
   // Core psychology
   if (c.core_wound) sections.push(`Core Wound: ${c.core_wound}`);
   if (c.core_desire) sections.push(`Core Desire: ${c.core_desire}`);
@@ -181,6 +185,16 @@ async function eventsSection(character) {
     console.error('[character-depth] could not read their events:', err.message);
     return '';
   }
+}
+
+/**
+ * Their facts (Character Consistency Engine step 5; services/characterFacts):
+ * the money and status dimensions agree with them; '' when none.
+ */
+async function factsSection(character) {
+  const { factsForCharacter, factsPromptBlock } = require('../services/characterFacts');
+  const block = factsPromptBlock(await factsForCharacter(db, character));
+  return block ? `\n\n${block}` : '';
 }
 
 function buildDimensionPrompt(dimension, fields) {
@@ -314,7 +328,7 @@ router.post('/:charId/generate', requireAuth, aiRateLimiter, async (req, res) =>
       return res.status(404).json({ success: false, error: 'Character not found' });
     }
 
-    const context = buildCharacterContext(character) + await eventsSection(character);
+    const context = buildCharacterContext(character) + await eventsSection(character) + await factsSection(character);
     const userMessage = `Here is the character dossier:\n\n${context}\n\nGenerate ALL 10 depth dimensions. Return a single JSON object with all de_ fields.`;
 
     const raw = await callClaude(SYSTEM_PROMPT, userMessage, DEEP_MODEL, 8000);
@@ -364,7 +378,7 @@ router.post('/:charId/generate/:dimension', requireAuth, aiRateLimiter, async (r
       return res.status(404).json({ success: false, error: 'Character not found' });
     }
 
-    const context = buildCharacterContext(character) + await eventsSection(character);
+    const context = buildCharacterContext(character) + await eventsSection(character) + await factsSection(character);
     const dimPrompt = buildDimensionPrompt(dimension, fields);
     const userMessage = `Here is the character dossier:\n\n${context}\n\n${dimPrompt}`;
 
