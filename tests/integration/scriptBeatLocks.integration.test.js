@@ -160,6 +160,8 @@ const ORIGINAL = script(beat(1, 'Opening Ritual', 'Prime: "Hey besties"'), beat(
       const res = await auth(request(app).post(`/api/v1/episode-brief/${gone}/generate-script`)).send({ showId: show });
       expect(res.status).toBe(404);
       expect(generateGroundedScript).not.toHaveBeenCalled();
+      const one = await auth(request(app).post(`/api/v1/episode-brief/${gone}/regenerate-beat`)).send({ showId: show, beatNumber: 3, script: '' });
+      expect(one.status).toBe(404);
     } finally {
       await run(`DELETE FROM episode_briefs WHERE episode_id = :gone`, { gone });
       await run(`DELETE FROM episodes WHERE id = :gone`, { gone });

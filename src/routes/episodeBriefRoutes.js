@@ -631,7 +631,8 @@ router.post('/:episodeId/regenerate-beat', requireAuth, aiRateLimiter, async (re
     const brief = await EpisodeBrief.findOne({ where: { episode_id: episodeId } });
     if (!brief) return res.status(400).json({ error: 'Episode Brief not found. Create the Brief first.' });
     const episode = await Episode.findByPk(episodeId);
-    if (!episode) return res.status(404).json({ error: 'Episode not found' });
+    // A deleted episode keeps its row (deleted_at set); nothing is written for it.
+    if (!episode || episode.deleted_at) return res.status(404).json({ error: 'Episode not found' });
     const { normalizeLockedBeats } = require('../utils/scriptBeatLocks');
     if (normalizeLockedBeats(episode.script_locked_beats).includes(beatNumber)) {
       return res.status(409).json({ error: `Beat ${beatNumber} is locked. Unlock it to regenerate it.`, code: 'BEAT_LOCKED' });

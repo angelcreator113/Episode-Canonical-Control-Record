@@ -252,8 +252,13 @@ async function generateGroundedScript(episodeId, showId, models, { lockedBeats =
   const { splitScriptBeats } = require('../utils/scriptBeatLocks');
 
   const drafted = splitScriptBeats(script).beats.map((b) => b.number);
-  const found = new Set([...drafted, ...locked].filter((n) => CANONICAL_BEATS.some((c) => c.number === n))).size;
-  if (found < MIN_DRAFT_BEATS) {
+  const isCanon = (n) => CANONICAL_BEATS.some((c) => c.number === n);
+  const found = new Set([...drafted, ...locked].filter(isCanon)).size;
+  // Approved beats count toward the 14, but a reply with none of the
+  // unapproved beats is not a draft either (re-audit 2, 2026-10-15: with 9
+  // approved, a refusal passed and was saved at the top of the script).
+  const wrote = drafted.filter((n) => isCanon(n) && !locked.has(n)).length;
+  if (found < MIN_DRAFT_BEATS || (wrote === 0 && locked.size < CANONICAL_BEATS.length)) {
     console.error(`[ScriptGen] Episode ${episodeId}: first draft has ${found} of ${CANONICAL_BEATS.length} beats${draft.cut ? ' (cut off)' : ''}; not saved`);
     throw new DraftIncompleteError(found);
   }
@@ -290,8 +295,11 @@ async function generateGroundedScript(episodeId, showId, models, { lockedBeats =
     const isMissing = byBeat.get(n).some((g) => g.kind === 'beat');
     const next = isMissing ? insertBeatByNumber(script, n, text) : replaceBeatByNumber(script, n, text);
     if (next === script) continue;
+    // A beat that did not come back, or the half-written last one, always
+    // goes in (re-audit 2: a missing phone beat without its [UI:] line left
+    // as many gaps as before, and was thrown away).
     const isCut = byBeat.get(n).some((g) => g.kind === 'cut');
-    if (!isCut && gapsIn(next) >= gapsIn(script)) {
+    if (!isMissing && !isCut && gapsIn(next) >= gapsIn(script)) {
       console.warn(`[ScriptGen] Episode ${episodeId}: the rewrite of beat ${n} covered nothing more; the beat stays as written`);
       continue;
     }
@@ -321,7 +329,9 @@ function coverageFacts(inputs) {
 // this beat (Script tab re-audit, 2026-10-15): it has only other beats'
 // headers, or no line of a script (a speaker's line, an action in
 // parentheses, a [cue]), as a refusal has none.
-const SCRIPT_LINE = /^\s*(?:\[|\(|[\p{L}][\p{L}\p{M}'’. -]{0,40}(?:\s*\([^)]*\))?\s*:)/u;
+// A speaker's line needs words after the colon, and a speaker who is not a
+// lead-in ("Sure. Here is the beat:", "Note: …" were taken for beats; re-audit 2).
+const SCRIPT_LINE = /^\s*(?:\[|\(|(?!(?:note|notes|sure|here|okay|ok|certainly|this|that|i)\b)[\p{L}][\p{L}\p{M}'’. -]{0,40}(?:\s*\([^)]*\))?\s*:\s*\S)/iu;
 function beatFromReply(reply, beatNumber) {
   const canon = CANONICAL_BEATS.find((b) => b.number === beatNumber);
   if (!canon) return null;

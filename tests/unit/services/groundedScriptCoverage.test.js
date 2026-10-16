@@ -163,4 +163,30 @@ describe("the Script tab's writer", () => {
     expect(out.coverage.fixed_beats).toEqual([]);
     expect(out.coverage.missing.map((g) => g.target).sort((a, b) => a - b)).toEqual([8, 12]);
   });
+
+  // Re-audit 2 (2026-10-15).
+  test('a missing phone beat goes back even without its phone line, and is asked for one', async () => {
+    const cut = draft.replace(/## BEAT: 10[^#]*/, '').trimEnd();
+    const create = jest.fn(async (call) => whenBeat(10, beat(10, 'Event Travel', 'Me: off to the gala'))(call)
+      || whenBeat(8, beat(8, 'Transformation Loop', '[UI:OPEN Closet]', `[WEAR: ${PIECE}]`))(call)
+      || whenBeat(12, beat(12, 'Deliverable Creation', '[UI:OPEN Camera]', 'Lala: my TikTok outfit reveal'))(call)
+      || reply(cut));
+    mockAnthropic(create);
+    const { generateGroundedScript } = require('../../../src/services/groundedScriptGeneratorService');
+    const out = await generateGroundedScript('ep1', 'show-1', models());
+    const ask = create.mock.calls.map((c) => c[0].messages[0].content).find((p) => p.includes('Write ONLY beat 10 again'));
+    expect(ask).toContain('at least one [UI:VERB Target] line');
+    expect(out.script).toContain('Me: off to the gala');
+    expect(out.coverage.fixed_beats).toContain(10);
+  });
+
+  test('with nine beats approved, a reply with none of the others is refused', async () => {
+    const create = jest.fn(async () => reply("I'm sorry, I can't help write this script."));
+    mockAnthropic(create);
+    const { generateGroundedScript } = require('../../../src/services/groundedScriptGeneratorService');
+    const lockedBeats = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({ number: n, text: beat(n, NAMES[n - 1], 'Me: approved') }));
+    await expect(generateGroundedScript('ep1', 'show-1', models(), { lockedBeats })).rejects.toMatchObject({ code: 'DRAFT_INCOMPLETE' });
+    expect(create).toHaveBeenCalledTimes(1);
+  });
 });
+

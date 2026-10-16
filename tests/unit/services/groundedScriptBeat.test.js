@@ -40,6 +40,9 @@ describe('beatFromReply', () => {
     // Script tab re-audit (2026-10-15).
     expect(beatFromReply('## BEAT: 9 · Reminder/Deadline\nMe: nine', 8)).toBeNull();
     expect(beatFromReply("I'm sorry, I can't write that beat.", 8)).toBeNull();
+    // Re-audit 2: a lead-in with a colon is not a speaker's line.
+    expect(beatFromReply('Sure. Here is the beat:\nShe walks in and the room turns.', 8)).toBeNull();
+    expect(beatFromReply('Note: the beat already covers this.', 8)).toBeNull();
     expect(beatFromReply('(She opens the closet.)', 8)).toBe(`${beatHeader(CANONICAL_BEATS[7])}\n(She opens the closet.)`);
     expect(beatFromReply('Lala (V.O.): "this one"', 8)).toBe(`${beatHeader(CANONICAL_BEATS[7])}\nLala (V.O.): "this one"`);
   });
