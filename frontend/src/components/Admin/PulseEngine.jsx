@@ -74,6 +74,21 @@ export default function PulseEngine({ showId }) {
     } finally { setBusy(false); }
   };
 
+  // Draft an episode's event posts before it is completed (step 6b): they all wait in Review.
+  const draftEarly = async (episode) => {
+    setBusy(true); setError(null); setNote(null);
+    try {
+      const res = await api.post(`/api/v1/pulse-engine/episodes/${episode.id}/draft-event`, { show_id: showId });
+      apply(res.data);
+      setNote(res.data.queued
+        ? `Drafting ${res.data.posts} post${res.data.posts === 1 ? '' : 's'} about ${episode.event_name || 'its event'} for ${episodeName(episode)}. They wait in Review.`
+        : res.data.message || 'No one would post about it.');
+    } catch (err) {
+      console.error('[PulseEngine] drafting the event posts failed:', err.response?.status || err.message);
+      setError(err.response?.data?.error || 'Drafting the event posts failed.');
+    } finally { setBusy(false); }
+  };
+
   if (!state) return error ? <p className="pulse-engine-error" role="alert">{error}</p> : <p className="pulse-engine-muted">Loading the engine…</p>;
 
   const { settings } = state;
@@ -135,6 +150,23 @@ export default function PulseEngine({ showId }) {
               <li key={e.id}>
                 <span>{episodeName(e)}</span>
                 <button type="button" className="pulse-engine-btn" disabled={busy} onClick={() => queuePosts(e)}>Queue its posts</button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {state.episodes_with_draft_events?.length > 0 && (
+        <section className="pulse-engine-card" aria-label="Events not yet in a completed episode" data-testid="pulse-engine-draft-events">
+          <h3>Events coming up</h3>
+          <p className="pulse-engine-muted">
+            Their episode isn't complete yet. Draft the event's posts now so the script can use them; every draft waits in Review,
+            and completing the episode won't queue them again.
+          </p>
+          <ul className="pulse-engine-jobs">
+            {state.episodes_with_draft_events.map((e) => (
+              <li key={e.id}>
+                <span>{episodeName(e)}{e.event_name ? ` · ${e.event_name}` : ''}</span>
+                <button type="button" className="pulse-engine-btn" disabled={busy} onClick={() => draftEarly(e)}>Draft this event's posts now</button>
               </li>
             ))}
           </ul>

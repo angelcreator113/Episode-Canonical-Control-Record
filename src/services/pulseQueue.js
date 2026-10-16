@@ -120,6 +120,8 @@ async function stateOf(db, showId, now = new Date()) {
   return {
     settings,
     episodes_without_posts: await require('./pulseEventPosting').episodesWithoutPosts(db, showId),
+    // Episodes not completed yet whose event is attached: posts can be drafted now (step 6b).
+    episodes_with_draft_events: await require('./pulseEventPosting').episodesWithDraftEvents(db, showId),
     requests_today: requests,
     drafts_today: await draftsToday(db, showId, now),
     worker_enabled: process.env.PULSE_ENGINE_ENABLED === 'true',

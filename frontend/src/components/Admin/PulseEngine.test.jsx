@@ -32,6 +32,19 @@ beforeEach(() => {
 });
 
 describe('the Engine tab', () => {
+  test('an episode not completed yet, with its event, can have its event posts drafted now (step 6b)', async () => {
+    const coming = { id: 'ep-1', episode_number: 1, title: 'The Swap', event_id: 'ev-1', event_name: 'Linen swap' };
+    vi.mocked(api.get).mockResolvedValue({ data: { ...STATE, episodes_with_draft_events: [coming] } });
+    vi.mocked(api.post).mockResolvedValue({ data: { ...STATE, episodes_with_draft_events: [], queued: 1, posts: 2 } });
+    render(<PulseEngine showId="show-1" />);
+    const card = await screen.findByTestId('pulse-engine-draft-events');
+    expect(within(card).getByText('Episode 1, The Swap · Linen swap')).toBeTruthy();
+    fireEvent.click(within(card).getByText("Draft this event's posts now"));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/pulse-engine/episodes/ep-1/draft-event', { show_id: 'show-1' }));
+    expect((await screen.findByTestId('pulse-engine-note')).textContent).toBe('Drafting 2 posts about Linen swap for Episode 1, The Swap. They wait in Review.');
+    expect(screen.queryByTestId('pulse-engine-draft-events')).toBeNull();
+  });
+
   test('a completed episode without posts can be queued from Engine, and then leaves the list (Task 3049)', async () => {
     const waiting = { id: 'ep-9', episode_number: 9, title: 'The After Party' };
     vi.mocked(api.get).mockResolvedValue({ data: { ...STATE, episodes_without_posts: [waiting] } });
