@@ -442,7 +442,11 @@ describe('generateGroundedScript (src/services/groundedScriptGeneratorService.js
     const Wardrobe = schemaChecked('Wardrobe', {
       findAll: async () => [{ name: 'Silk Gown', clothing_category: 'dress' }],
     });
-    const create = jest.fn(async () => ({ content: [{ text: 'SCRIPT' }] }));
+    // A first draft with every beat (one with too few is refused).
+    const { CANONICAL_BEATS } = require('../../../src/constants/canonicalBeats');
+    const { beatHeader } = require('../../../src/utils/canonicalScriptBeats');
+    const full = CANONICAL_BEATS.map((b) => `${beatHeader(b)}\nMe: hi`).join('\n\n');
+    const create = jest.fn(async () => ({ content: [{ text: full }] }));
     mockAnthropic(create);
     const { generateGroundedScript } = require('../../../src/services/groundedScriptGeneratorService');
     const models = {
