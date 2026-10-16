@@ -48,23 +48,33 @@ describe("Script tab: Lala's phone itself on screen", () => {
   });
 
   test('the phone stays up into the next beat, builds its scene, and a screen with no phone is flagged', async () => {
-    renderTab('## BEAT: 4 · Interruption Pulse 1\n[UI:OPEN closet]\n[UI:SHOW phone]\n\n## BEAT: 5 · Reveal\n[UI:OPEN closet]\n[UI:HIDE phone]\n\n## BEAT: 6 · Strategic Reaction\n[UI:OPEN closet]');
-    // Beat 4: the closet opens before the phone is up.
+    // After Event Travel (beat 10) the script brings the phone up itself
+    // (the show's rule, Evoni 2026-10-16: it is up from the Start button to Event Travel).
+    renderTab('## BEAT: 11 · Event Outcome\n[UI:OPEN closet]\n[UI:SHOW phone]\n\n## BEAT: 12 · Deliverable Creation\n[UI:OPEN closet]\n[UI:HIDE phone]\n\n## BEAT: 13 · Recap Panel\n[UI:OPEN closet]');
+    // Beat 11: the closet opens before the phone is up.
+    await waitFor(() => expect(within(screen.getByTestId('script-beat-11')).getAllByTestId('script-moment')[0].querySelector('.esp-moment-thumb img')).toBeTruthy());
+    const beat11 = within(screen.getByTestId('script-beat-11')).getAllByTestId('script-moment');
+    expect(within(beat11[0]).getByTestId('script-moment-phone-down')).toBeTruthy();
+    expect(within(beat11[1]).queryByTestId('script-moment-phone-down')).toBeNull();
+
+    // Beat 12: the phone carried in, so the closet is fine, and it builds the scene.
+    fireEvent.click(screen.getByTestId('script-beat-12').querySelector('.esp-beat-head'));
+    const beat12 = within(screen.getByTestId('script-beat-12')).getAllByTestId('script-moment');
+    expect(within(beat12[0]).queryByTestId('script-moment-phone-down')).toBeNull();
+    expect(beat12[0].textContent).toContain("With: Lala's phone");
+    expect([...screen.getByTestId('script-build-12').querySelectorAll('.esp-build-item span')].map((n) => n.textContent)).toEqual(["Lala's phone", 'Closet']);
+    expect(beat12[1].textContent).toContain('Goes away');
+
+    // Beat 13: the phone went away in beat 12.
+    fireEvent.click(screen.getByTestId('script-beat-13').querySelector('.esp-beat-head'));
+    expect(within(screen.getByTestId('script-beat-13')).getByTestId('script-moment-phone-down')).toBeTruthy();
+  });
+
+  test('from the Start button to Event Travel the phone is up without a line for it', async () => {
+    renderTab('## BEAT: 4 · Interruption Pulse 1\n[UI:OPEN closet]');
     await waitFor(() => expect(within(screen.getByTestId('script-beat-4')).getAllByTestId('script-moment')[0].querySelector('.esp-moment-thumb img')).toBeTruthy());
     const beat4 = within(screen.getByTestId('script-beat-4')).getAllByTestId('script-moment');
-    expect(within(beat4[0]).getByTestId('script-moment-phone-down')).toBeTruthy();
-    expect(within(beat4[1]).queryByTestId('script-moment-phone-down')).toBeNull();
-
-    // Beat 5: the phone carried in, so the closet is fine, and it builds the scene.
-    fireEvent.click(screen.getByTestId('script-beat-5').querySelector('.esp-beat-head'));
-    const beat5 = within(screen.getByTestId('script-beat-5')).getAllByTestId('script-moment');
-    expect(within(beat5[0]).queryByTestId('script-moment-phone-down')).toBeNull();
-    expect(beat5[0].textContent).toContain("With: Lala's phone");
-    expect([...screen.getByTestId('script-build-5').querySelectorAll('.esp-build-item span')].map((n) => n.textContent)).toEqual(["Lala's phone", 'Closet']);
-    expect(beat5[1].textContent).toContain('Goes away');
-
-    // Beat 6: the phone went away in beat 5.
-    fireEvent.click(screen.getByTestId('script-beat-6').querySelector('.esp-beat-head'));
-    expect(within(screen.getByTestId('script-beat-6')).getByTestId('script-moment-phone-down')).toBeTruthy();
+    expect(within(beat4[0]).queryByTestId('script-moment-phone-down')).toBeNull();
+    expect(beat4[0].textContent).toContain("With: Lala's phone");
   });
 });
