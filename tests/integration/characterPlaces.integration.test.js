@@ -225,4 +225,32 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect((await link(s.id, { character_id: jade, scene_set_id: 'nope', role: 'home' })).status).toBe(400);
     expect((await auth(request(app).put(`/api/v1/shows/${s.id}/lead-character`)).send({ character_id: 'nope' })).status).toBe(400);
   });
+
+  it('a show with no registry of its own uses the registries that name no show, and can link from them', async () => {
+    // 2026-10-16: nothing sets a registry's show after it is made, so the
+    // cast often sits in a registry with no show and the list was empty.
+    const id = uuid();
+    await run(`INSERT INTO shows (id, name, slug, metadata, created_at, updated_at) VALUES (:id, :name, :slug, '{}', NOW(), NOW())`,
+      { id, name: `Unassigned ${id.slice(0, 8)}`, slug: `unassigned-${id.slice(0, 8)}` });
+    const loose = uuid();
+    await run(`INSERT INTO character_registries (id, title, show_id, created_at, updated_at) VALUES (:loose, 'LalaVerse', NULL, NOW(), NOW())`, { loose });
+    const lala = uuid();
+    await run(`INSERT INTO registry_characters (id, registry_id, character_key, display_name, created_at, updated_at)
+               VALUES (:lala, :loose, :key, 'Lala', NOW(), NOW())`, { lala, loose, key: `lala-${lala.slice(0, 6)}` });
+    const other = await show();
+    const rival = await other.character('Rival');
+    const sid = uuid();
+    await run(`INSERT INTO scene_sets (id, name, scene_type, show_id, generation_status, created_at, updated_at)
+               VALUES (:sid, 'Bedroom', 'HOME_BASE', :id, 'pending', NOW(), NOW())`, { sid, id });
+
+    const listed = (await places(id)).body.data.characters.map((c) => c.id);
+    expect(listed).toContain(lala);
+    expect(listed).not.toContain(rival);
+    const res = await link(id, { character_id: lala, scene_set_id: sid, role: 'other', label: 'Bedroom' });
+    expect(res.status).toBe(200);
+    // Another show's character is still refused.
+    expect((await link(id, { character_id: rival, scene_set_id: sid, role: 'home' })).status).toBe(404);
+    // Once the show has a registry of its own, only its own count.
+    expect((await places(other.id)).body.data.characters.map((c) => c.id)).not.toContain(lala);
+  });
 });

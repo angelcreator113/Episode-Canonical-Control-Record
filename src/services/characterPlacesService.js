@@ -52,13 +52,26 @@ async function loadShow(sequelize, showId) {
   return { ...show, metadata: parseMetadata(show.metadata) };
 }
 
-/** The show's characters: those in its registries, by name. */
+/**
+ * The show's characters, by name: those in its registries. A show none of
+ * whose registries names it uses the registries that name no show, as The
+ * Cast does (chooseRegistry). Nothing sets a registry's show after it is
+ * made, so a show's cast is often in one of those, and the Link a character
+ * list was empty (Evoni, 2026-10-16: "im not able to link characters").
+ */
 async function showCharacters(sequelize, showId) {
   const [rows] = await sequelize.query(
-    `SELECT c.id, COALESCE(NULLIF(c.selected_name, ''), c.display_name) AS name, c.role_type
+    `WITH own AS (
+       SELECT id FROM character_registries WHERE show_id = :showId AND deleted_at IS NULL
+     ), regs AS (
+       SELECT id FROM own
+       UNION ALL
+       SELECT id FROM character_registries
+        WHERE show_id IS NULL AND deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM own)
+     )
+     SELECT c.id, COALESCE(NULLIF(c.selected_name, ''), c.display_name) AS name, c.role_type
        FROM registry_characters c
-       JOIN character_registries r ON r.id = c.registry_id AND r.deleted_at IS NULL
-      WHERE r.show_id = :showId AND c.deleted_at IS NULL
+      WHERE c.registry_id IN (SELECT id FROM regs) AND c.deleted_at IS NULL
       ORDER BY name ASC`,
     { replacements: { showId } });
   return rows;

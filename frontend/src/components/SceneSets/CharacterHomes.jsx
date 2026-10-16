@@ -148,7 +148,10 @@ export default function CharacterHomes({ set, onToast, onDefaultsChanged }) {
       {open && (
         <div className="ch-form" data-testid={`character-homes-form-${set.id}`}>
           {data.characters.length === 0 ? (
-            <span className="ch-none">This show has no characters in its registry yet.</span>
+            <span className="ch-none" data-testid={`character-homes-empty-${set.id}`}>
+              No characters to link: this show has no character registry with people in it yet.
+              Add them on the <a href="/character-registry">Characters</a> page.
+            </span>
           ) : (
             <>
               <select aria-label="Character" value={form.character_id} onChange={(e) => setForm((f) => ({ ...f, character_id: e.target.value }))}>
