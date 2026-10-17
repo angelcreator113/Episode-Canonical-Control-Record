@@ -163,6 +163,26 @@ describe('the Voices tab', () => {
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/pulse-voices/c3/known-of', { known_of: false }));
   });
 
+  test('those on the feed below Active are listed with their stage; Make Active moves them up and reloads', async () => {
+    const maren = { registry_character_id: 'c3', display_name: 'Maren', depth_level: 'breathing', handle: '@slowsift' };
+    vi.mocked(api.get)
+      .mockResolvedValueOnce({ data: { ...DATA, characters: [], not_met: [], not_posting: [maren, { ...maren, registry_character_id: 'c4', display_name: 'Unset', depth_level: null, handle: 'unset' }] } })
+      .mockResolvedValue({ data: { ...DATA, not_posting: [] } });
+    vi.mocked(api.put).mockResolvedValue({ data: { success: true } });
+    render(<MemoryRouter><PulseVoices showId="show-1" /></MemoryRouter>);
+    expect((await screen.findByTestId('pulse-voices-empty')).textContent).toMatch(/not at the Active stage\. Make one Active to build their voice/);
+    const group = screen.getByTestId('pulse-voices-below');
+    expect(within(group).getByRole('heading').textContent).toBe('On the feed, not posting yet (2)');
+    const [row, unset] = within(group).getAllByTestId('pulse-voices-below-row');
+    expect(row.textContent).toMatch(/Maren.*@slowsift.*Stage: Breathing/);
+    expect(unset.textContent).toMatch(/Stage: not set/);
+    expect(within(row).getByRole('link', { name: 'Open their page' }).getAttribute('href')).toBe('/character/c3');
+    fireEvent.click(within(row).getByRole('button', { name: 'Make Active' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/character-registry/characters/c3', { depth_level: 'active' }));
+    await waitFor(() => expect(screen.queryByTestId('pulse-voices-below')).toBeNull());
+    expect(screen.getAllByTestId('pulse-voices-card')).toHaveLength(2);
+  });
+
   test('empty, and a failed read', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { ...DATA, characters: [] } });
     const { unmount } = render(<PulseVoices showId="show-1" />);

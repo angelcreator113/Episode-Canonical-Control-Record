@@ -72,12 +72,16 @@ const generatePrompt = () => mockCreate.mock.calls.map(([arg]) => arg.messages[0
     await run(`INSERT INTO feed_posts (id, show_id, poster_handle, social_profile_id, content_text, status, created_at, updated_at)
                VALUES (:id, :show, :h, :pid, 'Retook this eleven times. Still beautiful.', 'live', NOW(), NOW())`,
     { id: crypto.randomUUID(), show: ids.show, h: `maren${TAG}`, pid: pids.maren });
+    await run(`INSERT INTO world_events (id, show_id, name, event_type, status, source_profile_id, event_date, created_at, updated_at)
+               VALUES (:id, :show, 'Linen Swap', 'invite', 'ready', :pid, '2026-11-12', NOW(), NOW())`,
+    { id: crypto.randomUUID(), show: ids.show, pid: pids.maren });
   });
 
   beforeEach(() => mockCreate.mockReset());
 
   afterAll(async () => {
     await run('DELETE FROM pulse_requests WHERE show_id = :show', ids);
+    await run('DELETE FROM world_events WHERE show_id = :show', ids);
     await run('DELETE FROM feed_posts WHERE show_id = :show', ids);
     await run('DELETE FROM pulse_voices WHERE registry_character_id IN (:char, :novoice)', ids);
     await run('DELETE FROM registry_characters WHERE registry_id = :reg', ids);
@@ -124,6 +128,26 @@ const generatePrompt = () => mockCreate.mock.calls.map(([arg]) => arg.messages[0
     const [, privateBlock] = prompt.split('PRIVATE (');
     expect(privateBlock).toContain('Worthless without achievement.');
     expect(prompt.split('PRIVATE (')[0]).not.toContain('Worthless without achievement.');
+  });
+
+  it('ideas come from their own story, with no AI call, and say when they cannot post yet', async () => {
+    const ideas = (id) => request(app).get(`/api/v1/cast/characters/${id}/posts/ideas`).set('Authorization', `Bearer ${editor}`);
+    const res = await ideas(ids.char);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ready: true, blocker: null });
+    expect(res.body.ideas.map((i) => i.key)).toEqual([expect.stringMatching(/^event:/), 'status', 'work', 'mask', 'ordinary']);
+    const [event, status, work, mask, ordinary] = res.body.ideas;
+    expect(event).toMatchObject({ label: 'Before Linen Swap' });
+    expect(event.about).toMatch(/The days before Linen Swap \(2026-11-12\), which Maren is hosting/);
+    expect(status.label).toBe('At the top');
+    expect(work.about).toBe('Maren at work as Slow-fashion creator: a small moment from the day.');
+    expect(mask.about).not.toContain('Worthless');
+    expect(ordinary.about).toBe('');
+    expect(mockCreate).not.toHaveBeenCalled();
+    const none = await ideas(ids.novoice);
+    expect(none.body.ready).toBe(false);
+    expect(none.body.blocker).toMatch(/No Voice has no Voice Profile yet, and one is built only from the Active stage\. .*Make Active/);
+    expect((await ideas(crypto.randomUUID())).status).toBe(404);
   });
 
   it('refuses an editor, a bad count, a character with no Voice Profile, and a dead account', async () => {

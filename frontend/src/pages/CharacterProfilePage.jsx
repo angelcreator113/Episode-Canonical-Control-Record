@@ -54,6 +54,8 @@ export const fixFlagApi = (id, flagId, text) =>
   apiClient.post(`${API_URL}/cast/characters/${id}/check/fix`, text === undefined ? { flag_id: flagId } : { flag_id: flagId, text });
 export const unmarkIntentionalApi = (id, flagId) =>
   apiClient.delete(`${API_URL}/cast/characters/${id}/check/intentional/${flagId}`);
+export const postIdeasApi = (id) =>
+  apiClient.get(`${API_URL}/cast/characters/${id}/posts/ideas`);
 export const generatePostsApi = (id, body) =>
   apiClient.post(`${API_URL}/cast/characters/${id}/posts/generate`, body);
 export const getTypologyApi = (id) =>
@@ -963,7 +965,9 @@ export function TheirStory({ character }) {
  * Generate Posts (Character Consistency Engine step 4): drafts their Pulse
  * posts from their voice, mask, facts and events (services/characterPosts).
  * Every draft waits in Review; nothing posts from here. Each is load-bearing
- * (the story reacts to it) or ambient (flavor, any beat).
+ * (the story reacts to it) or ambient (flavor, any beat). Ideas from their
+ * own story fill "What is happening" with one tap (Evoni, 2026-10-17: "now
+ * im just sitting here wondering what to say").
  */
 const WEIGHT_LABELS = { load_bearing: 'Load-bearing', ambient: 'Ambient' };
 
@@ -973,6 +977,21 @@ export function GeneratePosts({ characterId, onDrafted }) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [ideas, setIdeas] = useState(null); // { ready, blocker, ideas }
+  const [picked, setPicked] = useState(null);
+
+  useEffect(() => {
+    let live = true;
+    postIdeasApi(characterId)
+      .then((res) => { if (live) setIdeas(res.data); })
+      .catch((err) => { console.error('[CharacterProfilePage] post ideas failed:', err); if (live) setIdeas({ ready: true, blocker: null, ideas: [] }); });
+    return () => { live = false; };
+  }, [characterId]);
+
+  const pick = (idea) => {
+    setPicked(idea.key);
+    setAbout(idea.about);
+  };
 
   const run = async (e) => {
     e.preventDefault();
@@ -996,6 +1015,20 @@ export function GeneratePosts({ characterId, onDrafted }) {
     <form className="ch-gen" onSubmit={run} data-testid="ch-gen">
       <h3 className="ch-trail-h">Draft posts</h3>
       <p className="ch-note">Drafts in their voice, from their facts and the events they know about. They wait in Review; nothing posts until you approve it.</p>
+      {ideas?.blocker && <p className="ch-note is-error" role="alert">{ideas.blocker}</p>}
+      {ideas?.ideas?.length > 0 && (
+        <div className="ch-gen-ideas">
+          <span className="ch-gen-ideas-h">Not sure what to say? Pick one:</span>
+          <span className="ch-facts-row">
+            {ideas.ideas.map((idea) => (
+              <button key={idea.key} type="button" className={picked === idea.key ? 'ch-btn-chip is-picked' : 'ch-btn-chip'}
+                aria-pressed={picked === idea.key} onClick={() => pick(idea)} disabled={busy}>
+                {idea.label}
+              </button>
+            ))}
+          </span>
+        </div>
+      )}
       <label className="ch-gen-field">
         <span>How many</span>
         <select value={count} onChange={(e) => setCount(e.target.value)} disabled={busy}>
@@ -1004,10 +1037,10 @@ export function GeneratePosts({ characterId, onDrafted }) {
       </label>
       <label className="ch-gen-field">
         <span>What is happening (optional)</span>
-        <textarea rows={2} maxLength={500} value={about} onChange={(e) => setAbout(e.target.value)} disabled={busy}
-          placeholder="Leave empty for an ordinary stretch" />
+        <textarea rows={3} maxLength={500} value={about} onChange={(e) => { setAbout(e.target.value); setPicked(null); }} disabled={busy}
+          placeholder="Pick an idea above, or write one line, like “the week before the linen swap”. Leave it empty for everyday posts." />
       </label>
-      <button type="submit" className="ch-btn" disabled={busy}>{busy ? 'Drafting…' : 'Draft posts for Review'}</button>
+      <button type="submit" className="ch-btn" disabled={busy || ideas?.ready === false}>{busy ? 'Drafting…' : 'Draft posts for Review'}</button>
       {error && <p className="ch-note is-error" role="alert">{error}</p>}
       {result && (
         <div role="status">

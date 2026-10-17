@@ -310,6 +310,24 @@ async function eligible(db, showId, { at, stage = 'active', includeUnmet = false
     });
 }
 
+/**
+ * The show's characters who are on the feed but below the Active stage, so
+ * they neither post nor appear among the voices (Evoni, 2026-10-17: "i have
+ * no way of choosing a characters voice"). [{ id, display_name,
+ * depth_level, handle }], by name.
+ */
+async function notPosting(db, showId) {
+  const [rows] = await db.sequelize.query(
+    `SELECT rc.id, COALESCE(rc.selected_name, rc.display_name) AS display_name, rc.depth_level::text AS depth_level, sp.handle
+       FROM registry_characters rc
+       JOIN character_registries cr ON cr.id = rc.registry_id
+       JOIN social_profiles sp ON sp.id = rc.feed_profile_id AND sp.deleted_at IS NULL
+      WHERE cr.show_id = :showId AND rc.deleted_at IS NULL AND cr.deleted_at IS NULL
+        AND (rc.depth_level IS NULL OR rc.depth_level::text NOT IN (:stages))
+      ORDER BY 2`, { replacements: { showId, stages: ACTIVE_STAGES } });
+  return rows;
+}
+
 /** The Feed profiles among `profileIds` whose registry character is Alive, as a Set of numbers. */
 async function aliveProfiles(db, profileIds) {
   const ids = [...new Set((profileIds || []).map(Number).filter(Number.isInteger))];
@@ -428,7 +446,7 @@ async function removeExample(voice, exampleId) {
 }
 
 module.exports = {
-  BANNED_PHRASES, POSTING_STAGES, ACTIVE_STAGES, ALIVE_STAGES, MAX_EXAMPLES, TEMPERAMENTS, aliveProfiles,
+  notPosting, BANNED_PHRASES, POSTING_STAGES, ACTIVE_STAGES, ALIVE_STAGES, MAX_EXAMPLES, TEMPERAMENTS, aliveProfiles,
   findBanned, voiceSource, sourceHash, normalizeHabits, needsRebuild, eligible, buildVoice, addExample, removeExample, VoiceError,
   isApproved, approveVoice, unapproveVoice, automationBlocker,
   MAX_EDIT_EXAMPLES, learnFromEdit, queueVoiceBuilds, handleVoiceJob, registerHandlers, startScheduler, stopScheduler,

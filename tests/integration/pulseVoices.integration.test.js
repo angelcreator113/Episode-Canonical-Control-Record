@@ -82,6 +82,8 @@ const reply = (obj) => ({ content: [{ type: 'text', text: `Here you go:\n${JSON.
     // Lala has not met "hidden" yet: listed apart, so the voice can be built before the meeting.
     expect(res.body.not_met.map((x) => x.display_name)).toEqual(['hidden']);
     expect(res.body.not_met[0]).toMatchObject({ depth_level: 'alive', voice: null, meets_in: null });
+    // On the feed below Active: listed so they can be moved up; no feed, not listed.
+    expect(res.body.not_posting).toEqual([{ registry_character_id: c.sparked, display_name: 'sparked', depth_level: 'sparked', handle: `sparked-${tag}` }]);
     expect(res.body.banned_phrases).toContain('delve');
   });
 
@@ -181,5 +183,13 @@ const reply = (obj) => ({ content: [{ type: 'text', text: `Here you go:\n${JSON.
     expect(noVoice.status).toBe(409);
     expect(noVoice.body.error).toBe(`@nia-${tag} has no Voice Profile yet. Build it in Voices first.`);
     await run('DELETE FROM feed_posts WHERE id IN (:postId, :otherId)', { postId, otherId });
+  });
+
+  test('Make Active (the registry edit) moves one up from not posting to the posting characters', async () => {
+    const put = await as(admin, request(app).put(`/api/v1/character-registry/characters/${c.sparked}`)).send({ depth_level: 'active' });
+    expect(put.status).toBe(200);
+    const res = await as(editor, request(app).get(`/api/v1/pulse-voices?show_id=${ids.show}`));
+    expect(res.body.not_posting).toEqual([]);
+    expect(res.body.characters.map((x) => x.display_name)).toContain('sparked');
   });
 });
