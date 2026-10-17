@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
@@ -71,6 +71,24 @@ describe('GeneratePosts', () => {
     page();
     expect((await screen.findByRole('alert')).textContent).toMatch(/no Voice Profile/);
     expect(screen.getByText('Draft posts for Review').disabled).toBe(true);
+  });
+
+  test('Make Active, then Build their voice, right here; then drafting is open', async () => {
+    api.get
+      .mockResolvedValueOnce({ data: { success: true, ready: false, next: 'make_active', blocker: 'Maren has no Voice Profile yet, and one is built only from the Active stage. Make them Active, then build it.', ideas: [] } })
+      .mockResolvedValueOnce({ data: { success: true, ready: false, next: 'build_voice', blocker: 'Maren has no Voice Profile yet: their posts are written in it. Build it here.', ideas: [] } })
+      .mockResolvedValue({ data: { success: true, ready: true, next: null, blocker: null, ideas: [] } });
+    api.put = vi.fn().mockResolvedValue({ data: { success: true } });
+    api.post.mockResolvedValue({ data: { success: true } });
+    page();
+    fireEvent.click(await screen.findByText('Make Active'));
+    expect(await screen.findByText('Build their voice')).toBeTruthy();
+    expect(api.put).toHaveBeenCalledWith('/api/v1/character-registry/characters/c1', { depth_level: 'active' });
+    expect(screen.getByText('Draft posts for Review').disabled).toBe(true);
+    fireEvent.click(screen.getByText('Build their voice'));
+    await waitFor(() => expect(screen.getByText('Draft posts for Review').disabled).toBe(false));
+    expect(api.post).toHaveBeenCalledWith('/api/v1/pulse-voices/c1/build');
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   test('shows the refusal (no Voice Profile)', async () => {

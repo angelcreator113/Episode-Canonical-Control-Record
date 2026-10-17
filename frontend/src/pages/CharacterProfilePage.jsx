@@ -55,6 +55,10 @@ export const unmarkIntentionalApi = (id, flagId) =>
   apiClient.delete(`${API_URL}/cast/characters/${id}/check/intentional/${flagId}`);
 export const postIdeasApi = (id) =>
   apiClient.get(`${API_URL}/cast/characters/${id}/posts/ideas`);
+export const makeActiveApi = (id) =>
+  apiClient.put(`${API_URL}/character-registry/characters/${id}`, { depth_level: 'active' });
+export const buildVoiceApi = (id) =>
+  apiClient.post(`${API_URL}/pulse-voices/${id}/build`);
 export const generatePostsApi = (id, body) =>
   apiClient.post(`${API_URL}/cast/characters/${id}/posts/generate`, body);
 export const getTypologyApi = (id) =>
@@ -974,16 +978,37 @@ export function GeneratePosts({ characterId, onDrafted }) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
-  const [ideas, setIdeas] = useState(null); // { ready, blocker, ideas }
+  const [ideas, setIdeas] = useState(null); // { ready, blocker, next, ideas }
   const [picked, setPicked] = useState(null);
+  const [stepping, setStepping] = useState(false);
 
-  useEffect(() => {
-    let live = true;
-    postIdeasApi(characterId)
-      .then((res) => { if (live) setIdeas(res.data); })
-      .catch((err) => { console.error('[CharacterProfilePage] post ideas failed:', err); if (live) setIdeas({ ready: true, blocker: null, ideas: [] }); });
-    return () => { live = false; };
+  const loadIdeas = useCallback(async () => {
+    try {
+      const res = await postIdeasApi(characterId);
+      setIdeas(res.data);
+    } catch (err) {
+      console.error('[CharacterProfilePage] post ideas failed:', err);
+      setIdeas({ ready: true, blocker: null, next: null, ideas: [] });
+    }
   }, [characterId]);
+  useEffect(() => { loadIdeas(); }, [loadIdeas]);
+
+  // The step that unblocks drafting, taken here (Evoni, 2026-10-17): Make
+  // Active, then Build their voice (one manual Pulse request).
+  const step = async () => {
+    setStepping(true);
+    setError(null);
+    try {
+      if (ideas?.next === 'make_active') await makeActiveApi(characterId);
+      else await buildVoiceApi(characterId);
+      await loadIdeas();
+    } catch (err) {
+      console.error('[CharacterProfilePage] unblocking their posts failed:', err);
+      setError(err.response?.data?.error || 'Could not do that.');
+    } finally {
+      setStepping(false);
+    }
+  };
 
   const pick = (idea) => {
     setPicked(idea.key);
@@ -1013,6 +1038,13 @@ export function GeneratePosts({ characterId, onDrafted }) {
       <h3 className="ch-trail-h">Draft posts</h3>
       <p className="ch-note">Drafts in their voice, from their facts and the events they know about. They wait in Review; nothing posts until you approve it.</p>
       {ideas?.blocker && <p className="ch-note is-error" role="alert">{ideas.blocker}</p>}
+      {ideas?.next && (
+        <button type="button" className="ch-btn-soft" disabled={stepping} onClick={step}>
+          {ideas.next === 'make_active'
+            ? (stepping ? 'Moving…' : 'Make Active')
+            : (stepping ? 'Building their voice…' : 'Build their voice')}
+        </button>
+      )}
       {ideas?.ideas?.length > 0 && (
         <div className="ch-gen-ideas">
           <span className="ch-gen-ideas-h">Not sure what to say? Pick one:</span>
