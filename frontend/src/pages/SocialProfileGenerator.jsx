@@ -219,6 +219,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
   const [templateName,setTemplateName] = useState('');
   // LalaVerse Feed layer
   const [feedLayer,setFeedLayer] = useState(defaultFeedLayer || 'real_world');
+  // Lala's feed has no platform filter (everyone is on The Pulse): drop one picked on the other feed.
+  useEffect(()=>{ if(feedLayer==='lalaverse') setFilterPlatforms([]); },[feedLayer]);
   const [lvCity,setLvCity]       = useState('');
   const [lvRelationship,setLvRelationship] = useState('mutual_unaware');
   const [lvPressure,setLvPressure] = useState('level');
@@ -1193,8 +1195,9 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
                     })}
                   </div>
                 </div>
-                {/* Platforms */}
-                <div>
+                {/* Platforms: real apps on JustAWoman's feed only. On Lala's feed
+                    everyone is on The Pulse (Evoni, 2026-10-17), so there is nothing to filter. */}
+                {feedLayer !== 'lalaverse' && <div>
                   <label style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:0.5}}>Platform</label>
                   <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:4}}>
                     {['instagram','tiktok','youtube','twitter','onlyfans'].map(p=>{
@@ -1202,7 +1205,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
                       return <button key={p} onClick={()=>setFilterPlatforms(prev=>active?prev.filter(x=>x!==p):[...prev,p])} style={{padding:'4px 10px',borderRadius:12,fontSize:11,fontWeight:600,cursor:'pointer',transition:'all 0.15s',background:active?C.blueLight:'transparent',color:active?C.blue:C.inkLight,border:`1.5px solid ${active?C.blue:C.border}`,textTransform:'capitalize'}}>{p}</button>;
                     })}
                   </div>
-                </div>
+                </div>}
                 {/* Category + Relevance + Adult Content row */}
                 <div style={{display:'flex',gap:12,flexWrap:'wrap',alignItems:'flex-end'}}>
                   <div style={{display:'flex',flexDirection:'column',gap:3}}>

@@ -412,3 +412,42 @@ export function deepProfileWith(dp, key, draft) {
   if (value === null) delete next[key]; else next[key] = value;
   return Object.keys(next).length ? next : null;
 }
+
+// ── Generate All: what it would fill, before anything is saved (step 3) ────
+
+export const INTERIOR_LABELS = {
+  selected_name: 'Real name', want_architecture: 'Wants', wound: 'Wound', the_mask: 'The mask', living_state: 'Living state',
+  triggers: 'Triggers', blind_spot: 'Blind spot', change_capacity: 'Change capacity', self_narrative: 'Self-narrative',
+  operative_cosmology: 'Cosmology', foreclosed_possibility: 'Foreclosed possibility', experience_of_joy: 'Joy',
+  time_orientation: 'Time', dilemma: 'Central dilemma', deep_profile: 'Deep profile',
+};
+
+const asText = (v) => (typeof v === 'string' ? v : Array.isArray(v) ? v.map(asText).join(' · ') : v && typeof v === 'object' ? JSON.stringify(v) : String(v ?? ''));
+
+/** A proposed value as [label, text] lines: one line for text, one per part for a record. */
+export function proposalLines(field, value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return Object.entries(value).filter(([, v]) => isFilled(v))
+      .map(([k, v]) => [field === 'deep_profile' ? dimensionLabel(k) : k.replace(/_/g, ' '), asText(v)]);
+  }
+  if (Array.isArray(value)) return value.filter(isFilled).map((v) => ['', asText(v)]);
+  const text = field === 'time_orientation' ? String(value).replace(/_/g, ' ') : asText(value);
+  return text.trim() ? [['', text]] : [];
+}
+
+/**
+ * The preview as rows to look over: what it would write in each field, and
+ * whether to keep it by default. A field already written is never replaced
+ * (the server writes only into empty fields), so it is shown and left out;
+ * a field with unsaved edits in an open editor is left out unless ticked.
+ */
+export function reviewRows(character, proposed, editing = []) {
+  return Object.entries(proposed || {}).map(([field, value]) => {
+    const written = isFilled(field === 'dilemma' ? (character?.dilemma || character?.extra_fields?.dilemma) : character?.[field]);
+    const unsaved = editing.includes(field);
+    return {
+      field, label: INTERIOR_LABELS[field] || field.replace(/_/g, ' '), lines: proposalLines(field, value),
+      written, unsaved, keep: !written && !unsaved,
+    };
+  });
+}

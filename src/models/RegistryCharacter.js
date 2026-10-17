@@ -310,6 +310,14 @@ module.exports = (sequelize) => {
       allowNull: true,
     },
 
+    // Their appearance (Evoni, 2026-10-17; migration 20261018020000,
+    // services/characterAppearance): how they look, written down, and the
+    // portraits generated from it ({ summary, face, hair, ..., portraits }).
+    appearance: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+
     /* ── Therapy Dilemma Profile fields ── */
     therapy_primary_defense: {
       type: DataTypes.TEXT,

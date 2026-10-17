@@ -50,6 +50,14 @@
  *                                                  against their facts (services/characterConsistency)
  *   POST   /api/v1/cast/characters/:id/check/intentional        { flag_id, note? }: ADMIN
  *   DELETE /api/v1/cast/characters/:id/check/intentional/:flagId  unmark it: ADMIN
+ *   GET    /api/v1/cast/characters/:id/appearance   how they look and their portraits
+ *   PUT    /api/v1/cast/characters/:id/appearance   the written look (ADMIN)
+ *   POST   /api/v1/cast/characters/:id/appearance/suggest      one AI call proposes it
+ *                                                  from their character file (ADMIN)
+ *   POST   /api/v1/cast/characters/:id/appearance/portrait     one generated portrait from
+ *                                                  the saved look (ADMIN, budget-gated)
+ *   POST   /api/v1/cast/characters/:id/appearance/portrait/use { url }: it becomes their
+ *                                                  profile photo (ADMIN)
  *   GET    /api/v1/cast/characters/:id/typology     their typology seed (Enneagram type and
  *                                                  wing, MBTI, why) and its label
  *   PUT    /api/v1/cast/characters/:id/typology     set it (ADMIN), or { clear: true }
@@ -75,7 +83,7 @@
  *   POST   /api/v1/cast/characters/:id/places/share { scene_set_id, caption? }: a draft
  *                                                  Pulse post of that place from their
  *                                                  feed profile (services/characterPlaceShare)
- *   POST   /api/v1/cast/characters/:id/places/describe { scene_set_id }: one AI
+ *   POST   /api/v1/cast/characters/:id/places/describe { scene_set_id, role? }: one AI
  *                                                  call that writes the place's description
  *                                                  from their profile; saves nothing
  *                                                  (services/placeDescriptionService)
@@ -542,6 +550,88 @@ const typologyOut = (typology) => {
   return { typology: typology || null, label: typologyLabel(typology) || null };
 };
 
+// ── Appearance (Evoni, 2026-10-17: "we need an appearance tab and a
+// generator"; "yes to the portrait images"; services/characterAppearance) ──
+const appearanceOut = (character) => {
+  const { appearanceLines } = require('../services/characterAppearance');
+  const appearance = character.appearance || null;
+  return { appearance, lines: appearanceLines(appearance), portrait_url: character.portrait_url || null };
+};
+const appearanceError = (res, err, what) => {
+  const { AppearanceError } = require('../services/characterAppearance');
+  if (err instanceof AppearanceError) return res.status(err.status).json({ success: false, error: err.message });
+  if (require('../services/imageCostService').isBudgetError(err)) return res.status(429).json({ success: false, error: err.message, code: err.code });
+  console.error(`[Cast] ${what} error:`, err);
+  return res.status(500).json({ success: false, error: err.message });
+};
+
+// GET their appearance: how they look and the portraits made from it.
+router.get('/characters/:id/appearance', requireAuth, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const character = await getModels().RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+    const { estimateGenerationCost } = require('../services/imageGenerationService');
+    return res.json({ success: true, ...appearanceOut(character), portrait_cost: estimateGenerationCost({ size: 'portrait' }).usd ?? null });
+  } catch (err) {
+    return appearanceError(res, err, 'GET /characters/:id/appearance');
+  }
+});
+
+// PUT their appearance (ADMIN): the written look; their portraits are kept.
+router.put('/characters/:id/appearance', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const character = await getModels().RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+    const { normalizeAppearance } = require('../services/characterAppearance');
+    const next = normalizeAppearance(req.body || {}, { by: String(req.user?.email || req.user?.id || 'admin').slice(0, 255) });
+    await character.update({ appearance: { ...next, portraits: character.appearance?.portraits || [] } });
+    return res.json({ success: true, ...appearanceOut(character) });
+  } catch (err) {
+    return appearanceError(res, err, 'PUT /characters/:id/appearance');
+  }
+});
+
+// POST suggest (ADMIN, one AI call): their look read from their character file; saves nothing.
+router.post('/characters/:id/appearance/suggest', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const db = getModels();
+    const found = await characterWithFeed(db, req.params.id);
+    if (!found) return res.status(404).json({ success: false, error: 'Character not found' });
+    return res.json({ success: true, ...(await require('../services/characterAppearance').suggestAppearance(db, found)) });
+  } catch (err) {
+    return appearanceError(res, err, 'POST /characters/:id/appearance/suggest');
+  }
+});
+
+// POST portrait (ADMIN, one image, budget-gated): a portrait from their saved look.
+router.post('/characters/:id/appearance/portrait', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const character = await getModels().RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+    const made = await require('../services/characterAppearance').generatePortrait(getModels(), character);
+    return res.json({ success: true, ...made, ...appearanceOut(character) });
+  } catch (err) {
+    return appearanceError(res, err, 'POST /characters/:id/appearance/portrait');
+  }
+});
+
+// POST portrait/use { url } (ADMIN): one of their portraits becomes their profile photo.
+router.post('/characters/:id/appearance/portrait/use', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const character = await getModels().RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+    await require('../services/characterAppearance').usePortrait(character, String(req.body?.url || ''));
+    return res.json({ success: true, ...appearanceOut(character) });
+  } catch (err) {
+    return appearanceError(res, err, 'POST /characters/:id/appearance/portrait/use');
+  }
+});
+
 router.get('/characters/:id/typology', requireAuth, async (req, res) => {
   try {
     if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
@@ -834,10 +924,11 @@ router.post('/characters/:id/places/share', requireAuth, async (req, res) => {
 router.post('/characters/:id/places/describe', requireAuth, aiRateLimiter, async (req, res) => {
   const { describePlace, PlaceDescriptionError } = require('../services/placeDescriptionService');
   try {
-    const data = await describePlace(getModels(), { characterId: req.params.id, sceneSetId: req.body?.scene_set_id });
+    const data = await describePlace(getModels(), { characterId: req.params.id, sceneSetId: req.body?.scene_set_id, role: req.body?.role || null });
     return res.json({ success: true, data });
   } catch (err) {
-    if (err instanceof PlaceDescriptionError) return res.status(err.status).json({ success: false, code: err.code, error: err.message });
+    const { PlaceShareError } = require('../services/characterPlaceShare');
+    if (err instanceof PlaceDescriptionError || err instanceof PlaceShareError) return res.status(err.status).json({ success: false, code: err.code, error: err.message });
     console.error('[cast] POST characters/:id/places/describe error:', err);
     if (err?.code === 'AI_BUDGET_EXCEEDED') return res.status(429).json({ success: false, code: err.code, error: err.message });
     return res.status(500).json({ success: false, error: err.message });

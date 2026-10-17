@@ -52,7 +52,10 @@ function generateSocialLeverage(profile) {
   if (platformCount > 2) {
     parts.push(`active across ${platformCount} platforms with different personas on each`);
   } else if (platformCount === 2) {
-    const plats = Object.keys(presences).join(' and ');
+    // The Pulse's names for a LalaVerse profile's accounts ("The Pulse and
+    // a private Pulse account"), never a real app (utils/pulsePlatform).
+    const { platformLabel } = require('../utils/pulsePlatform');
+    const plats = Object.keys(presences).map(platformLabel).join(' and ');
     parts.push(`dual presence on ${plats}`);
   }
 
@@ -119,7 +122,11 @@ async function syncProfileToRegistry(profile, models) {
     social_presence: true,
     follower_tier: p.follower_tier,
     celebrity_tier: p.celebrity_tier || 'accessible',
-    platform_presences: p.platform_presences || {},
+    // A LalaVerse profile's accounts are The Pulse's (pulse, pulse_private,
+    // playroom), whatever an older copy held (utils/pulsePlatform).
+    platform_presences: require('../utils/pulsePlatform').isPulseLayer(p.feed_layer)
+      ? require('../utils/pulsePlatform').toPulsePresences(p).platform_presences
+      : (p.platform_presences || {}),
     public_persona: p.public_persona || p.content_persona || null,
     private_reality: p.private_reality || p.real_signal || null,
     primary_income_source: p.primary_income_source || null,

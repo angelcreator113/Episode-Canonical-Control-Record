@@ -15,10 +15,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
   Sparkles, ArrowRight, LayoutDashboard, Heart, Mic, Users, Globe2, ImagePlus, Trash2,
-  BarChart3, CalendarDays, Download, Link2, MapPin,
+  BarChart3, CalendarDays, Download, Link2, MapPin, Palette,
 } from 'lucide-react';
 import CharacterPlacesTab from '../components/CharacterPlaces/CharacterPlacesTab';
 import KnownFor from '../components/Cast/KnownFor';
+import CharacterAppearanceTab from '../components/CharacterAppearance/CharacterAppearanceTab';
 import { API_URL } from '../config/api';
 import InnerLifeWorkspace from '../components/InnerLife/InnerLifeWorkspace';
 import { dimensionOf as dimension, dimensionText } from '../lib/innerLifeSections';
@@ -111,6 +112,11 @@ export const draftProseApi = (id) =>
 // no fields means everything missing. Never overwrites what is there.
 export const generateInteriorApi = (id, fields) =>
   apiClient.post(`${API_URL}/character-registry/characters/${id}/interior/generate`, fields ? { fields } : {});
+// Generate All as a preview (nothing written), then the values kept (step 3).
+export const previewInteriorApi = (id) =>
+  apiClient.post(`${API_URL}/character-registry/characters/${id}/interior/generate`, { preview: true });
+export const applyInteriorApi = (id, values) =>
+  apiClient.post(`${API_URL}/character-registry/characters/${id}/interior/apply`, { values });
 
 /* ── Config ──────────────────────────────────────────────────────────────────── */
 
@@ -130,6 +136,8 @@ const STATE_CONFIG = {
 const TABS = [
   { id: 'overview',    label: 'Overview',     icon: LayoutDashboard },
   { id: 'inner',       label: 'Inner life',   icon: Heart },
+  // Evoni, 2026-10-17: how they look, a generator for it, and portraits.
+  { id: 'appearance',  label: 'Appearance',   icon: Palette },
   { id: 'voice',       label: 'Voice & feed', icon: Mic },
   { id: 'connections', label: 'Connections',  icon: Users },
   { id: 'world',       label: 'In the world', icon: Globe2 },
@@ -190,12 +198,21 @@ const FIELD_LABELS = {
 
 /**
  * Generating the inner life. One at a time: `busy` is the key of the run
- * (its fields joined, or 'all'); `note` says what came of the last one.
+ * (its fields joined, 'all' or 'apply'); `note` says what came of the last
+ * one. run(fields) fills one empty part and saves it. Everything at once
+ * (Evoni, 2026-10-17, step 3) is a preview first: preview() puts what it
+ * would fill in `review`, nothing saved; apply(values) saves the values
+ * kept, into fields still empty; discard() drops it.
  */
 function useInteriorGenerate(character, onSaved) {
   const [busy, setBusy] = useState(null);
   const [note, setNote] = useState(null);
+  const [review, setReview] = useState(null);
   const id = character?.id;
+  const failed = (key, err, what) => {
+    console.error(`[CharacterProfilePage] ${what} failed:`, err);
+    setNote({ key, error: true, text: err.response?.data?.error || err.message || 'Could not generate it.' });
+  };
   const run = useCallback(async (fields = null) => {
     const key = fields ? fields.join(',') : 'all';
     setBusy(key); setNote(null);
@@ -207,11 +224,38 @@ function useInteriorGenerate(character, onSaved) {
         ? `Filled in: ${filled.map((f) => FIELD_LABELS[f] || f).join(', ')}.`
         : (message || 'Nothing new came back.') });
     } catch (err) {
-      console.error('[CharacterProfilePage] generate inner life failed:', err);
-      setNote({ key, error: true, text: err.response?.data?.error || err.message || 'Could not generate it.' });
+      failed(key, err, 'generate inner life');
     } finally { setBusy(null); }
   }, [id, onSaved]);
-  return { busy, note, run, locked: character?.status === 'finalized' };
+  const preview = useCallback(async () => {
+    setBusy('all'); setNote(null); setReview(null);
+    try {
+      const res = await previewInteriorApi(id);
+      const proposed = res.data?.proposed || {};
+      if (Object.keys(proposed).length) setReview({ proposed });
+      else setNote({ key: 'all', text: res.data?.message || 'Nothing is missing.' });
+    } catch (err) {
+      failed('all', err, 'preview inner life');
+    } finally { setBusy(null); }
+  }, [id]);
+  const apply = useCallback(async (values) => {
+    setBusy('apply'); setNote(null);
+    try {
+      const res = await applyInteriorApi(id, values);
+      const { filled = [], skipped = [], character: updated } = res.data || {};
+      if (updated) onSaved(updated);
+      setReview(null);
+      const name = (f) => FIELD_LABELS[f] || f;
+      setNote({ key: 'all', text: [
+        filled.length ? `Filled in: ${filled.map(name).join(', ')}.` : 'Nothing was saved.',
+        skipped.length ? `Not saved, already written or not usable: ${skipped.map(name).join(', ')}.` : '',
+      ].filter(Boolean).join(' ') });
+    } catch (err) {
+      failed('all', err, 'save generated inner life');
+    } finally { setBusy(null); }
+  }, [id, onSaved]);
+  const discard = useCallback(() => setReview(null), []);
+  return { busy, note, run, preview, apply, discard, review, locked: character?.status === 'finalized' };
 }
 
 /* ── Overview ────────────────────────────────────────────────────────────────── */
@@ -2147,8 +2191,8 @@ export default function CharacterProfilePage() {
           </ol>
           {next && (
             <button type="button" className="ch-btn-deepen" disabled={!!gen.busy || gen.locked}
-              title="Fills in the missing inner life from who they already are"
-              onClick={() => { setActiveTab('inner'); gen.run(); }}>
+              title="Drafts the missing inner life from who they already are, for you to look over before it is saved"
+              onClick={() => { setActiveTab('inner'); gen.preview(); }}>
               {gen.busy === 'all' ? 'Deepening… (about a minute)' : <>&uarr; Deepen to {next.label}</>}
             </button>
           )}
@@ -2185,6 +2229,7 @@ export default function CharacterProfilePage() {
         {activeTab === 'connections' && <div className="ch-card"><TabConnections character={character} relationships={relationships} entanglements={entanglements} /></div>}
         {activeTab === 'world' && <div className="ch-card"><TabWorld character={character} onSaved={onSaved} gen={gen} /></div>}
         {activeTab === 'places' && <div className="ch-card"><CharacterPlacesTab key={character.id} character={character} /></div>}
+        {activeTab === 'appearance' && <CharacterAppearanceTab key={character.id} character={character} onPortraitChanged={(url) => onSaved({ portrait_url: url })} />}
       </div>
     </div>
   );

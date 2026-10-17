@@ -7,7 +7,7 @@
  * price range"). Their Home, Closet and Place of work cards on the Places
  * tab get "Write from their profile".
  *
- *   describePlace(db, { characterId, sceneSetId, client? })
+ *   describePlace(db, { characterId, sceneSetId, role?, client? })
  *     → { description, used: [{ label, value }], missing: [label],
  *         current: the set's description now, role }
  *
@@ -27,6 +27,12 @@
  * (lifestyle_reality, lifestyle_gap) is described as both: the corner they
  * film in, and the rest as it really is. Always on; with no gap, one honest
  * place.
+ *
+ * The set must be one of their places (characterPlaceShare
+ * placesForCharacter, the list the tab shows): its role is the place's, so
+ * the lead's home and closet, which are the show's defaults, are a home and
+ * a closet whatever the set's type. `role` picks between two places that are
+ * the same set (the lead's home that is also her closet). Sixth audit.
  *
  * Nothing is saved here: the tab shows the text next to the set's own and
  * saves it with PUT /scene-sets/:id when Evoni chooses it.
@@ -65,6 +71,36 @@ const CLASS_WORDS = {
   upper_middle: 'upper middle class', wealthy: 'wealthy', ultra_wealthy: 'ultra wealthy',
 };
 const classWord = (v) => CLASS_WORDS[v] || words(v);
+const GAP_DIRECTION_WORDS = { up: 'moving up', down: 'moving down' };
+
+/**
+ * A JSON field as text, field by field: "colour palette: blush, gold; era
+ * aesthetic: 90s". Empty values are left out, so a field with nothing in it
+ * is '' (sixth audit: aesthetic_dna with every key null was "used").
+ */
+function fieldsText(value, max = CLIP) {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') {
+    const t = value.trim();
+    if (!t.startsWith('{') && !t.startsWith('[')) return clip(t, max);
+    try { return fieldsText(JSON.parse(t), max); } catch (err) {
+      console.error('[placeDescription] a stored field is not JSON:', err.message);
+      return clip(t, max);
+    }
+  }
+  const flat = (v) => {
+    if (v === null || v === undefined || v === '' || v === false) return '';
+    if (Array.isArray(v)) return v.map(flat).filter(Boolean).join(', ');
+    if (typeof v === 'object') {
+      return Object.entries(v).map(([k, x]) => {
+        const t = flat(x);
+        return t ? `${words(k)}: ${t}` : '';
+      }).filter(Boolean).join('; ');
+    }
+    return String(v).trim();
+  };
+  return clip(flat(value), max);
+}
 
 /**
  * The gap between the lifestyle they show and the one they live, or null
@@ -81,36 +117,45 @@ function gapOf(fp) {
 }
 
 /** The place, the character and everything the description is written from. */
-async function gather(db, { characterId, sceneSetId }) {
+async function gather(db, { characterId, sceneSetId, role: askedRole = null }) {
   const { validateUUID } = require('../middleware/requestValidation');
   if (!validateUUID(String(characterId || ''))) throw new PlaceDescriptionError(400, 'id must be a character id (UUID)');
   if (!validateUUID(String(sceneSetId || ''))) throw new PlaceDescriptionError(400, 'scene_set_id must be a scene set id (UUID)');
 
   const character = await db.RegistryCharacter.findByPk(characterId);
   if (!character) throw new PlaceDescriptionError(404, 'Character not found', 'CHARACTER_NOT_FOUND');
+  const { placesForCharacter } = require('./characterPlaceShare');
+  const { places } = await placesForCharacter(db.sequelize, characterId);
+  const theirs = places.filter((p) => String(p.scene_set_id) === String(sceneSetId));
+  const mine = theirs.find((p) => p.role === askedRole) || theirs[0];
+  if (!mine) throw new PlaceDescriptionError(404, 'That set is not one of their places', 'PLACE_NOT_FOUND');
+  const role = mine.role;
   const [[place]] = await db.sequelize.query(
-    `SELECT ss.id, ss.name, ss.scene_type, ss.canonical_description, ss.world_location_id, cp.role
-       FROM scene_sets ss
-       LEFT JOIN character_places cp ON cp.scene_set_id = ss.id AND cp.registry_character_id = :characterId AND cp.deleted_at IS NULL
-      WHERE ss.id = :sceneSetId AND ss.deleted_at IS NULL`,
-    { replacements: { characterId, sceneSetId } });
+    `SELECT id, name, scene_type, canonical_description, world_location_id
+       FROM scene_sets WHERE id = :sceneSetId AND deleted_at IS NULL`,
+    { replacements: { sceneSetId } });
   if (!place) throw new PlaceDescriptionError(404, 'Scene set not found', 'SCENE_SET_NOT_FOUND');
-  // The lead's home and closet are the show's defaults, not character_places
-  // rows (characterPlacesService): a set they link that way is read by type.
-  const role = place.role || (place.scene_type === 'CLOSET' ? 'closet' : place.scene_type === 'HOME_BASE' ? 'home' : 'other');
 
   const { loadCharacterFile } = require('./characterFile');
   const file = await loadCharacterFile(db, { character });
   const fp = file.feedProfile;
 
   let location = null;
-  const locationId = place.world_location_id || (role === 'home' ? fp?.home_location_id : null);
+  // A closet is in the home: with no location of its own, the home's.
+  const locationId = place.world_location_id || (role === 'home' || role === 'closet' ? fp?.home_location_id : null);
   if (locationId) {
     try {
-      const [[row]] = await db.sequelize.query(
-        `SELECT name, description, city, district, street_address, property_type, location_type, style_guide
-           FROM world_locations WHERE id = :id AND deleted_at IS NULL`, { replacements: { id: locationId } });
-      location = row || null;
+      const read = async (id) => (await db.sequelize.query(
+        `SELECT name, description, city, district, street_address, property_type, location_type, style_guide, parent_location_id
+           FROM world_locations WHERE id = :id AND deleted_at IS NULL`, { replacements: { id } }))[0][0] || null;
+      location = await read(locationId);
+      // Its style guide over its building's, as the Scene Brief reads it.
+      if (location) {
+        const parent = location.parent_location_id ? await read(location.parent_location_id) : null;
+        const json = (v) => (typeof v === 'string' ? JSON.parse(v) : v || {});
+        location.style_guide = require('./propertyService').getEffectiveStyleGuide(
+          { style_guide: json(location.style_guide) }, parent ? { style_guide: json(parent.style_guide) } : null);
+      }
     } catch (err) {
       console.error('[placeDescription] the location could not be read:', err.message);
     }
@@ -127,26 +172,32 @@ function readings({ character: c, file, fp, place, location }) {
     if (value) used.push({ label, value });
     else if (needed) missing.push(label);
   };
-  const cityKey = fp?.city ? String(fp.city) : null;
+  const { feedCity } = require('../utils/feedCities');
+  // An old city name is read as its DREAM city (feedCity), as the Feed does.
+  const cityKey = fp?.city ? feedCity(fp.city) : null;
   const cityName = cityKey ? require('../utils/lalaHome').dreamCityName(cityKey) : null;
-  add('City', cityName || (cityKey ? words(cityKey) : ''));
+  add('City', cityName || '');
+  const lived = place.role === 'home' || place.role === 'closet';
   const where = location
     ? [location.name, location.district, location.street_address, location.property_type && words(location.property_type)].filter(Boolean).join(', ')
     : '';
-  add(place.role === 'home' ? 'Home location' : 'Location', where, place.role === 'home');
-  const range = file.facts?.home_price_range;
-  const rangeSet = range && !(file.facts.undecided || []).includes('home_price_range');
-  add('Home price range', rangeSet ? range.label : '', place.role !== 'work');
+  add(lived ? 'Home location' : 'Location', where, lived);
+  const { isDecided } = require('./characterFacts');
+  const rangeSet = isDecided(file.facts, 'home_price_range');
+  // The home's price is the home's and the closet's, not a place of work's.
+  if (lived) add('Home price range', rangeSet ? file.facts.home_price_range.label : '');
   const origin = c?.de_money_origin_class;
   const now = c?.de_money_current_class;
   add('Class', origin || now ? [origin && `grew up ${classWord(origin)}`, now && `now ${classWord(now)}`].filter(Boolean).join(', ') : '');
-  if (file.facts?.occupation) add('Occupation', file.facts.occupation, false);
-  if (file.facts?.affordability) add('Can afford', file.facts.affordability.label, false);
-  add('Style', clip(c?.aesthetic_dna, 200));
-  add('Current life', clip(c?.living_context, 200), place.role === 'home');
-  const gap = (place.role === 'home' || place.role === 'closet') ? gapOf(fp) : null;
+  // Only decided facts are "used": the prompt tells the model never to state
+  // an undecided one.
+  if (isDecided(file.facts, 'occupation')) add('Occupation', file.facts.occupation, false);
+  if (file.facts?.affordability && isDecided(file.facts, 'income')) add('Can afford', file.facts.affordability.label, false);
+  add('Style', fieldsText(c?.aesthetic_dna, 200));
+  add('Current life', fieldsText(c?.living_context, 200), place.role === 'home');
+  const gap = lived ? gapOf(fp) : null;
   if (gap) add('Shown vs real', `${words(gap.kind)} gap`, false);
-  return { used, missing, gap, cityName, cityCulture: cityKey ? DREAM_CITY_CULTURE[cityKey] || null : null, rangeSet };
+  return { used, missing, gap, lived, cityName, cityCulture: cityKey ? DREAM_CITY_CULTURE[cityKey] || null : null, rangeSet };
 }
 
 function buildPrompt(ctx, read) {
@@ -158,20 +209,20 @@ function buildPrompt(ctx, read) {
     `You are the production designer for "Styling Adventures with Lala", set in the LalaVerse. Write the description of ${name}'s ${what}, the scene set "${place.name}". It is used to generate images of the place, and it is the description every scene there is written from.`,
     characterFileBlock(file),
     read.cityName ? `THEIR CITY: ${read.cityName}.${read.cityCulture ? ` ${read.cityCulture}` : ''} The building and the street outside the windows belong to this city.` : '',
-    location ? `THE LOCATION ON THE MAP: ${[location.name, location.district && `district ${location.district}`, location.street_address, location.property_type && `a ${words(location.property_type)}`, location.city].filter(Boolean).join(', ')}.${location.description ? ` ${clip(location.description)}` : ''}${clip(location.style_guide) ? ` Style guide: ${clip(location.style_guide)}` : ''}` : '',
-    c?.de_money_origin_class || c?.de_money_current_class ? `CLASS: grew up ${classWord(c.de_money_origin_class) || 'unknown'}; now ${classWord(c.de_money_current_class) || 'unknown'}${c.de_class_gap_direction ? ` (moving ${c.de_class_gap_direction})` : ''}. Show it in what they kept, what they bought new, and what they still cannot let go of.` : '',
-    clip(c?.aesthetic_dna) ? `THEIR STYLE: ${clip(c.aesthetic_dna)}` : '',
-    clip(c?.living_context) ? `THEIR LIFE NOW: ${clip(c.living_context)}` : '',
+    location ? `THE LOCATION ON THE MAP: ${[location.name, location.district && `district ${location.district}`, location.street_address, location.property_type && `a ${words(location.property_type)}`, location.city].filter(Boolean).join(', ')}.${location.description ? ` ${clip(location.description)}` : ''}${fieldsText(location.style_guide) ? ` Style guide: ${fieldsText(location.style_guide)}` : ''}` : '',
+    c?.de_money_origin_class || c?.de_money_current_class ? `CLASS: grew up ${classWord(c.de_money_origin_class) || 'unknown'}; now ${classWord(c.de_money_current_class) || 'unknown'}${GAP_DIRECTION_WORDS[c.de_class_gap_direction] ? ` (${GAP_DIRECTION_WORDS[c.de_class_gap_direction]})` : ''}. Show it in their taste: what they kept, what they bought new, and what they still cannot let go of.${read.rangeSet && read.lived ? ' Class shapes taste, not price: what the home costs is their home price range.' : ''}` : '',
+    fieldsText(c?.aesthetic_dna) ? `THEIR STYLE: ${fieldsText(c.aesthetic_dna)}` : '',
+    fieldsText(c?.living_context) ? `THEIR LIFE NOW: ${fieldsText(c.living_context)}` : '',
     read.gap ? `THE GAP (draw both, it is the point of the place): what they show the world is "${read.gap.claim || 'a lifestyle beyond their real one'}"; what is true is "${read.gap.reality || 'not what they show'}" (gap: ${words(read.gap.kind)}). Describe the one corner they film in, staged to look like what they show, and the rest of the ${what} as it really is. Name the corner so its angle can be found.${read.gap.kind === 'reversed' ? ' Here it is reversed: the filmed corner is plainer than the rest of the place.' : ''}` : '',
     place.canonical_description ? `THE DESCRIPTION IT HAS NOW (keep what agrees with the profile; change what does not): ${clip(place.canonical_description, 1200)}` : '',
-    `Write 4 to 6 sentences: the room's size and shape; wall colours and flooring; key furniture with materials and where it stands; light and its sources; the signature things that make it theirs; the view from the windows; who else lives here, if the profile says so. Stay inside their price range and class: nothing costs more or less than the profile allows. Use only what the profile gives; where it gives nothing, keep it plain rather than invent a detail about them. Return only the description, no labels or formatting.`,
+    `Write 4 to 6 sentences: the room's size and shape; wall colours and flooring; key furniture with materials and where it stands; light and its sources; the signature things that make it theirs; the view from the windows${place.role === 'home' ? '; who else lives here, if the profile says so' : ''}.${read.lived ? (read.rangeSet ? ' What the place costs is their home price range: nothing in it costs more or less.' : ' Keep what it costs within what the profile says they can afford.') : ` It is a ${what}, not their home: it costs what such a place costs, not what their home does; their own things in it fit their means.`} Use only what the profile gives; where it gives nothing, keep it plain rather than invent a detail about them. Return only the description, no labels or formatting.`,
   ];
   return parts.filter(Boolean).join('\n\n');
 }
 
-async function describePlace(db, { characterId, sceneSetId, client: injected = null }) {
+async function describePlace(db, { characterId, sceneSetId, role = null, client: injected = null }) {
   if (!injected && !process.env.ANTHROPIC_API_KEY) throw new PlaceDescriptionError(503, 'ANTHROPIC_API_KEY not configured', 'AI_UNAVAILABLE');
-  const ctx = await gather(db, { characterId, sceneSetId });
+  const ctx = await gather(db, { characterId, sceneSetId, role });
   const read = readings(ctx);
   const prompt = buildPrompt(ctx, read);
   const ai = injected || getClient();
@@ -197,4 +248,4 @@ async function describePlace(db, { characterId, sceneSetId, client: injected = n
   };
 }
 
-module.exports = { describePlace, gapOf, PlaceDescriptionError, _buildPrompt: buildPrompt, _readings: readings };
+module.exports = { describePlace, gapOf, fieldsText, PlaceDescriptionError, _buildPrompt: buildPrompt, _readings: readings };
