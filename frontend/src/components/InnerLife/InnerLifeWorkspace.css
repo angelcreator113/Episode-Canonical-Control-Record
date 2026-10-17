@@ -19,6 +19,27 @@
   border-radius: 14px; background: var(--lala-gold-soft); border: 1px solid var(--lala-gold-line);
 }
 
+/* Generate All: the draft to look over (step 3) */
+.il-review {
+  display: flex; flex-direction: column; gap: 12px; padding: 16px 18px;
+  border-radius: 16px; background: var(--lala-gold-soft); border: 1px solid var(--lala-gold-line);
+}
+.il-review-head { display: flex; flex-direction: column; gap: 4px; }
+.il-review-title { margin: 0; font-family: 'Lora', serif; font-size: 18px; font-weight: 700; color: var(--text-primary); }
+.il-review-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.il-review-row {
+  display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 12px;
+  background: var(--surface-card); border: 1px solid var(--lala-gold-line);
+}
+.il-review-row.is-written { border-style: dashed; background: var(--lala-gold-soft); }
+.il-review-pick { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: pointer; }
+.il-review-pick input { width: 18px; height: 18px; accent-color: var(--accent-dark); }
+.il-review-label { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+.il-review-pick .il-badge { margin-left: 0; }
+.il-review-lines { margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.il-review-lines dt { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--lala-gold-text); }
+.il-review-lines dd { margin: 0; font-family: 'Lora', serif; font-size: 14px; line-height: 1.55; color: var(--text-primary); overflow-wrap: anywhere; }
+
 /* A section */
 .il-section { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .il-section-head { display: flex; flex-direction: column; gap: 4px; }

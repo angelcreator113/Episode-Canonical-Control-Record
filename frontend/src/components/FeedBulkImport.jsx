@@ -14,8 +14,8 @@ const API = '/api/v1/social-profiles';
 // raw fetch sites (job history GET + CSV parse POST).
 export const listFeedBulkJobsApi = () =>
   apiClient.get(`${API}/bulk/jobs`).then((r) => r.data);
-export const parseFeedBulkCsvApi = (text) =>
-  apiClient.post(`${API}/bulk/parse-csv`, { text }).then((r) => r.data);
+export const parseFeedBulkCsvApi = (text, feedLayer = 'real_world') =>
+  apiClient.post(`${API}/bulk/parse-csv`, { text, feed_layer: feedLayer }).then((r) => r.data);
 
 const C = {
   bg: '#ffffff', surface: '#f7f6f9', surfaceHigh: '#eeedf2',
@@ -43,6 +43,18 @@ const CSV_PLACEHOLDER = `handle,platform,vibe
 mollymeannn,tiktok,does makeup but something is breaking down
 thesoftlifequeen,instagram,luxury everything never explains how
 overnight.era,tiktok,400k in 6 months nothing she did was different`;
+
+// Lala's feed: everyone is on The Pulse, so a line is just @handle | vibe
+// (Evoni, 2026-10-17: "lalaverse social media is The Pulse").
+const PULSE_PASTE_PLACEHOLDER = `@mollymeannn | does makeup but something is breaking down
+@thesoftlifequeen | luxury everything, never explains how
+@overnight.era | 400k in 6 months, nothing she did was different
+@justlikeher_ | same niche same size, now pulling ahead`;
+
+const PULSE_CSV_PLACEHOLDER = `handle,vibe
+mollymeannn,does makeup but something is breaking down
+thesoftlifequeen,luxury everything never explains how
+overnight.era,400k in 6 months nothing she did was different`;
 
 const STORAGE_KEY = 'feed_bulk_import_draft';
 
@@ -202,7 +214,7 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
     try {
       const res  = await fetchWithRetry(`${API}/bulk/parse-paste`, {
         method: 'POST',
-        body: JSON.stringify({ text: pasteText }),
+        body: JSON.stringify({ text: pasteText, feed_layer: feedLayer || 'real_world' }),
       });
       const data = await res.json();
       setCandidates(data.creators || []);
@@ -218,7 +230,7 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
     try {
       let data;
       try {
-        data = await parseFeedBulkCsvApi(csvText);
+        data = await parseFeedBulkCsvApi(csvText, feedLayer || 'real_world');
       } catch (httpErr) {
         throw new Error(httpErr.response?.data?.error || 'Parse failed');
       }
@@ -240,6 +252,7 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
       for (const file of files) {
         const fd = new FormData();
         fd.append('file', file);
+        fd.append('feed_layer', feedLayer || 'real_world');
         const res = await fetchWithRetry(`${API}/bulk/parse-file`, {
           method: 'POST', body: fd,
         });
@@ -667,7 +680,7 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
               <textarea
                 value={pasteText}
                 onChange={e => setPasteText(e.target.value)}
-                placeholder={PASTE_PLACEHOLDER}
+                placeholder={feedLayer === 'lalaverse' ? PULSE_PASTE_PLACEHOLDER : PASTE_PLACEHOLDER}
                 rows={8}
                 autoComplete="off"
                 autoCorrect="off"
@@ -710,7 +723,7 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
               <textarea
                 value={csvText}
                 onChange={e => setCsvText(e.target.value)}
-                placeholder={CSV_PLACEHOLDER}
+                placeholder={feedLayer === 'lalaverse' ? PULSE_CSV_PLACEHOLDER : CSV_PLACEHOLDER}
                 rows={8}
                 autoComplete="off"
                 autoCorrect="off"

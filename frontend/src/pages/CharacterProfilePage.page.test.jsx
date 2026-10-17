@@ -59,7 +59,7 @@ describe('the character page', () => {
     expect(screen.getByRole('button', { name: '↑ Deepen to Alive' })).toBeTruthy();
     expect(screen.getByRole('link', { name: '← The cast' }).getAttribute('href')).toBe('/character-registry');
     expect(screen.getAllByRole('button', { pressed: undefined }).filter((b) => b.className.includes('ch-tab')).map((b) => b.textContent))
-      .toEqual(['Overview', 'Inner life', 'Voice & feed', 'Connections', 'In the world', 'Places']);
+      .toEqual(['Overview', 'Inner life', 'Appearance', 'Voice & feed', 'Connections', 'In the world', 'Places']);
   });
 
   test('Overview: where they show up, their voice, and with Lala', async () => {
@@ -127,15 +127,26 @@ describe('the character page', () => {
     expect(screen.queryByText('Wound not written yet.')).toBeNull();
   });
 
-  test('Deepen fills in everything missing, on the Inner life tab', async () => {
-    vi.mocked(api.post).mockResolvedValue({ data: { success: true, filled: ['want_architecture'], character: { ...CHARACTER, want_architecture: { surface_want: 'To be stocked', real_want: 'To be chosen', forbidden_want: 'To quit' } } } });
+  test('Deepen drafts everything missing on the Inner life tab, and saves what is kept', async () => {
+    const want = { surface_want: 'To be stocked', real_want: 'To be chosen', forbidden_want: 'To quit' };
+    vi.mocked(api.post).mockImplementation(async (url, body) => {
+      if (url.endsWith('/interior/generate')) return { data: { success: true, preview: true, proposed: { want_architecture: want, experience_of_joy: 'Fittings' } } };
+      return { data: { success: true, filled: ['want_architecture'], skipped: [], character: { ...CHARACTER, want_architecture: body.values.want_architecture } } };
+    });
     renderIt();
     await waitFor(() => expect(screen.getAllByText('In Episode 1')).toHaveLength(2));
     fireEvent.click(screen.getByRole('button', { name: '↑ Deepen to Alive' }));
-    await waitFor(() => expect(screen.getByText('To be chosen')).toBeTruthy());
-    expect(api.post).toHaveBeenCalledWith('/api/v1/character-registry/characters/c1/interior/generate', {});
+    await waitFor(() => expect(screen.getByTestId('il-review')).toBeTruthy());
+    expect(api.post).toHaveBeenCalledWith('/api/v1/character-registry/characters/c1/interior/generate', { preview: true });
     expect(screen.getByRole('button', { name: 'Inner life' }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByText('Filled in: want.')).toBeTruthy();
+    // Nothing saved yet.
+    expect(api.post).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('checkbox', { name: /Joy/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save 1 of 2' }));
+    await waitFor(() => expect(screen.getByText('Filled in: want.')).toBeTruthy());
+    expect(api.post).toHaveBeenLastCalledWith('/api/v1/character-registry/characters/c1/interior/apply', { values: { want_architecture: want } });
+    expect(screen.queryByTestId('il-review')).toBeNull();
+    expect(screen.getByText('To be chosen')).toBeTruthy();
   });
 
   test('a failed Generate says why', async () => {

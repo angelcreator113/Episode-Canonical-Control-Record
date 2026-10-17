@@ -16,7 +16,8 @@
  *       { character, feedProfile, facts, typology, inner, mask, behind,
  *         relationships, events, recentPosts }
  *   characterFileBlock(file)   the prompt block: facts (characterFacts
- *     factsPromptBlock), the typology seed, then each part under a heading
+ *     factsPromptBlock), the typology seed, how they look (their appearance,
+ *     services/characterAppearance; public, so in publicOnly too), then each part under a heading
  *     that says which zone it belongs to: the inner life (author-only), the
  *     mask (what they show, true or not), behind it (what is actually
  *     true), the people in their life, their events, their latest posts.
@@ -115,10 +116,14 @@ function characterFileBlock(file, { publicOnly = false } = {}) {
   if (!file || (!file.character && !file.feedProfile)) return '';
   const { factsPromptBlock } = require('./characterFacts');
   const { seedBlock } = require('./characterTypology');
-  const name = file.character?.display_name || file.feedProfile?.display_name || null;
+  // Their chosen name, as the tab and every generator's instruction name them
+  // (sixth audit: "Sable's home" over "THE CHARACTER FILE for The Rival").
+  const name = file.character?.selected_name || file.character?.display_name || file.feedProfile?.display_name || null;
   const sections = [
     file.facts ? factsPromptBlock(file.facts) : '',
     publicOnly ? '' : seedBlock(file.typology),
+    file.character?.appearance && require('./characterAppearance').appearanceLines(file.character.appearance)
+      ? `HOW THEY LOOK (their appearance; anything written about how they look agrees with it):\n${require('./characterAppearance').appearanceLines(file.character.appearance)}` : '',
     !publicOnly && Object.keys(file.inner).length ? `INNER LIFE (author-only: it drives them; they never say it outright):\n${lines(file.inner)}` : '',
     Object.keys(file.mask).length ? `THE MASK (what they show the world, true or not; their public voice comes from here):\n${lines(file.mask)}` : '',
     !publicOnly && Object.keys(file.behind).length ? `BEHIND THE MASK (what is actually true; the public does not see it, and a gap between this and the mask is intentional, not an error):\n${lines(file.behind)}` : '',
