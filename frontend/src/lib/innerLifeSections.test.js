@@ -6,7 +6,7 @@
 import { describe, test, expect } from 'vitest';
 import {
   SECTIONS, getAt, draftOf, saveOf, filledCount, sectionProgress, summaryOf, applySuggestion,
-  DIMENSION_KEYS, dimensionLabel, dimensionOf, dimensionText, searchDimensions, dimensionDraft, deepProfileWith,
+  reviewRows, proposalLines, DIMENSION_KEYS, dimensionLabel, dimensionOf, dimensionText, searchDimensions, dimensionDraft, deepProfileWith,
 } from './innerLifeSections';
 
 const subject = (key) => SECTIONS.flatMap((s) => s.subjects).find((s) => s.key === key);
@@ -184,5 +184,27 @@ describe('the deep profile', () => {
     const draft = dimensionDraft(dp, 'the_body');
     expect(draft).toEqual({ parts: [['posture', 'Upright'], ['stress_location', 'Jaw']] });
     expect(deepProfileWith(dp, 'the_body', { parts: [['posture', 'Slouched'], ['stress_location', '']] })).toEqual({ the_body: { posture: 'Slouched' } });
+  });
+});
+
+describe('Generate All\u2019s review', () => {
+  test('each proposed field, what it would write, and whether to keep it', () => {
+    const character = { wound: { description: 'Kept' }, extra_fields: { dilemma: { option_a: 'Stay' } } };
+    const rows = reviewRows(character, {
+      wound: { description: 'Drafted' }, experience_of_joy: 'Fittings', dilemma: { option_a: 'Go' }, the_mask: { description: 'Calm' },
+    }, ['the_mask']);
+    expect(rows.map((r) => [r.field, r.label, r.written, r.unsaved, r.keep])).toEqual([
+      ['wound', 'Wound', true, false, false],
+      ['experience_of_joy', 'Joy', false, false, true],
+      ['dilemma', 'Central dilemma', true, false, false],
+      ['the_mask', 'The mask', false, true, false],
+    ]);
+  });
+
+  test('records read part by part, lists item by item, times in words', () => {
+    expect(proposalLines('want_architecture', { real_want: 'Love', forbidden_want: '' })).toEqual([['real want', 'Love']]);
+    expect(proposalLines('deep_profile', { class_money: 'Old' })).toEqual([['Class & Money', 'Old']]);
+    expect(proposalLines('triggers', ['A', 'B'])).toEqual([['', 'A'], ['', 'B']]);
+    expect(proposalLines('time_orientation', 'future_oriented')).toEqual([['', 'future oriented']]);
   });
 });

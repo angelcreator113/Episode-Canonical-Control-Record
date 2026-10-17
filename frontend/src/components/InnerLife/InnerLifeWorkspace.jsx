@@ -6,10 +6,15 @@
  * Engine for a draft, which fills only empty fields and saves nothing until
  * Save. The blind spot and the narrative gap are for the author (admin) only.
  *
+ * Fill in everything missing (step 3) drafts first: a review lists what it
+ * would write in each field, already-written fields are never replaced, and
+ * a field with unsaved edits in the open editor is left out unless ticked.
+ * The open editor keeps its words whatever is saved.
+ *
  * Props: character, gen (useInteriorGenerate), onSaved(patch), typeCard (the
  * Their type card, shown at the top of Core psychology).
  */
-import { useContext, useMemo, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Sparkles, Search, Pencil } from 'lucide-react';
 import AuthContext from '../../contexts/AuthContext';
 import { isAdmin } from '../../utils/authGroups';
@@ -17,7 +22,7 @@ import apiClient from '../../services/api';
 import { API_URL } from '../../config/api';
 import {
   SECTIONS, DEEP_PROFILE, FORECLOSURE_CATEGORIES, draftOf, saveOf, filledCount, sectionProgress, summaryOf, applySuggestion,
-  DIMENSION_KEYS, dimensionLabel, dimensionOf, dimensionText, searchDimensions, dimensionDraft, deepProfileWith,
+  DIMENSION_KEYS, dimensionLabel, dimensionOf, dimensionText, searchDimensions, dimensionDraft, deepProfileWith, reviewRows,
 } from '../../lib/innerLifeSections';
 import './InnerLifeWorkspace.css';
 
@@ -105,13 +110,17 @@ function Field({ fd, value, onChange }) {
   );
 }
 
-function SubjectEditor({ character, subject, isAuthor, onSaved, onClose }) {
+function SubjectEditor({ character, subject, isAuthor, onSaved, onClose, onPending }) {
   const [form, setForm] = useState(() => draftOf(character, subject, isAuthor));
   const [busy, setBusy] = useState(null);
   const [note, setNote] = useState(null);
   const changes = saveOf(character, subject, form, isAuthor);
   const dirty = Object.keys(changes).length > 0;
   const fields = subject.fields.filter((fd) => isAuthor || !fd.authorOnly);
+  // The columns with unsaved words, for Generate All's review.
+  const pendingKey = Object.keys(changes).sort().join(',');
+  useEffect(() => { onPending(pendingKey ? pendingKey.split(',') : []); }, [pendingKey, onPending]);
+  useEffect(() => () => onPending([]), [onPending]);
 
   const save = async () => {
     setBusy('save'); setNote(null);
@@ -162,7 +171,7 @@ function SubjectEditor({ character, subject, isAuthor, onSaved, onClose }) {
 
 /* ── A subject ───────────────────────────────────────────────────────────── */
 
-function Subject({ character, subject, isAuthor, locked, gen, editing, setEditing, onSaved }) {
+function Subject({ character, subject, isAuthor, locked, gen, editing, setEditing, onSaved, onPending }) {
   const { filled, total } = filledCount(character, subject, isAuthor);
   const summary = summaryOf(character, subject, isAuthor);
   const isOpen = editing === subject.key;
@@ -181,7 +190,7 @@ function Subject({ character, subject, isAuthor, locked, gen, editing, setEditin
         )}
       </header>
       {isOpen ? (
-        <SubjectEditor character={character} subject={subject} isAuthor={isAuthor} onSaved={onSaved} onClose={() => setEditing(null)} />
+        <SubjectEditor character={character} subject={subject} isAuthor={isAuthor} onSaved={onSaved} onClose={() => setEditing(null)} onPending={onPending} />
       ) : filled === 0 ? (
         <div className="cp-empty-state il-empty">
           <p className="cp-empty-label">{subject.label} not written yet.</p>
@@ -207,12 +216,14 @@ function Subject({ character, subject, isAuthor, locked, gen, editing, setEditin
 
 /* ── The Deep profile ────────────────────────────────────────────────────── */
 
-function DimensionEditor({ character, dimKey, onSaved, onClose }) {
+function DimensionEditor({ character, dimKey, onSaved, onClose, onPending }) {
   const [draft, setDraft] = useState(() => dimensionDraft(character.deep_profile, dimKey));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const before = JSON.stringify(dimensionDraft(character.deep_profile, dimKey));
   const dirty = JSON.stringify(draft) !== before;
+  useEffect(() => { onPending(dirty ? ['deep_profile'] : []); }, [dirty, onPending]);
+  useEffect(() => () => onPending([]), [onPending]);
   const save = async (e) => {
     e.preventDefault();
     setBusy(true); setError(null);
@@ -249,7 +260,7 @@ function DimensionEditor({ character, dimKey, onSaved, onClose }) {
   );
 }
 
-function DeepProfile({ character, locked, gen, editing, setEditing, onSaved }) {
+function DeepProfile({ character, locked, gen, editing, setEditing, onSaved, onPending }) {
   const dp = character.deep_profile;
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(null);
@@ -297,13 +308,55 @@ function DeepProfile({ character, locked, gen, editing, setEditing, onSaved }) {
                 )}
               </div>
               {editing === `dp:${key}` ? (
-                <DimensionEditor character={character} dimKey={key} onSaved={onSaved} onClose={() => setEditing(null)} />
+                <DimensionEditor character={character} dimKey={key} onSaved={onSaved} onClose={() => setEditing(null)} onPending={onPending} />
               ) : isOpen && text && <p className="il-text il-dim-text">{text}</p>}
             </li>
           );
         })}
       </ul>
     </div>
+  );
+}
+
+/* ── Generate All: look it over before it is saved ───────────────────────── */
+
+function Review({ character, gen, pending }) {
+  const rows = useMemo(() => reviewRows(character, gen.review.proposed, pending), [character, gen.review, pending]);
+  const [keep, setKeep] = useState(() => Object.fromEntries(rows.map((r) => [r.field, r.keep])));
+  const chosen = rows.filter((r) => keep[r.field] && !r.written);
+  const save = () => gen.apply(Object.fromEntries(chosen.map((r) => [r.field, gen.review.proposed[r.field]])));
+  return (
+    <section className="il-review" aria-labelledby="il-review-h" data-testid="il-review">
+      <header className="il-review-head">
+        <h3 id="il-review-h" className="il-review-title">Look it over before it is saved</h3>
+        <p className="il-note">Drafted from who they already are. Nothing is saved until you press Save. Anything already written is never replaced, and any editor you have open keeps its words.</p>
+      </header>
+      <ul className="il-review-list">
+        {rows.map((r) => (
+          <li key={r.field} className={`il-review-row${r.written ? ' is-written' : ''}`}>
+            <label className="il-review-pick">
+              <input type="checkbox" checked={!!keep[r.field] && !r.written} disabled={r.written || gen.busy === 'apply'}
+                onChange={(e) => setKeep((k) => ({ ...k, [r.field]: e.target.checked }))} />
+              <span className="il-review-label">{r.label}</span>
+              {r.written && <span className="il-badge is-gold">Already written · kept as is</span>}
+              {r.unsaved && <span className="il-badge">You have unsaved edits here</span>}
+            </label>
+            {r.unsaved && <p className="il-note">Your edits stay in the editor. Tick this to save the draft into the parts that are empty now; when you save the editor, your words win.</p>}
+            <dl className="il-review-lines">
+              {r.lines.map(([k, text], i) => (
+                <div key={i}>{k && <dt>{k}</dt>}<dd>{text}</dd></div>
+              ))}
+            </dl>
+          </li>
+        ))}
+      </ul>
+      <div className="il-actions">
+        <button type="button" className="il-btn" disabled={!chosen.length || gen.busy === 'apply'} onClick={save}>
+          {gen.busy === 'apply' ? 'Saving…' : `Save ${chosen.length} of ${rows.length}`}
+        </button>
+        <button type="button" className="il-btn-soft" disabled={gen.busy === 'apply'} onClick={gen.discard}>Discard the draft</button>
+      </div>
+    </section>
   );
 }
 
@@ -315,6 +368,8 @@ export default function InnerLifeWorkspace({ character, gen, onSaved, typeCard =
   const locked = character.status === 'finalized';
   const [sectionKey, setSectionKey] = useState('core');
   const [editing, setEditing] = useState(null);
+  const [pending, setPendingState] = useState([]);
+  const setPending = useCallback((cols) => setPendingState((prev) => (prev.join(',') === cols.join(',') ? prev : cols)), []);
   const section = SECTIONS.find((s) => s.key === sectionKey);
   const allNote = gen.note?.key === 'all' ? gen.note : null;
 
@@ -343,12 +398,16 @@ export default function InnerLifeWorkspace({ character, gen, onSaved, typeCard =
         ))}
       </nav>
 
-      {missing > 0 && !gen.locked && (
+      {gen.review && !gen.locked ? (
+        <Review key={Object.keys(gen.review.proposed).join(',')} character={character} gen={gen} pending={pending} />
+      ) : (missing > 0 || allNote) && !gen.locked && (
         <div className="il-fill">
-          <p className="il-note">{missing} {missing === 1 ? 'part' : 'parts'} of their inner life {missing === 1 ? 'is' : 'are'} empty. Fill them in from who they already are; nothing written is changed.</p>
-          <button type="button" className="il-btn" disabled={!!gen.busy} onClick={() => gen.run()}>
-            {gen.busy === 'all' ? 'Filling in… (about a minute)' : 'Fill in everything missing'}
-          </button>
+          {missing > 0 && <p className="il-note">{missing} {missing === 1 ? 'part' : 'parts'} of their inner life {missing === 1 ? 'is' : 'are'} empty. Draft them from who they already are; you look them over before anything is saved.</p>}
+          {missing > 0 && (
+            <button type="button" className="il-btn" disabled={!!gen.busy} onClick={() => gen.preview()}>
+              {gen.busy === 'all' ? 'Drafting… (about a minute)' : 'Fill in everything missing'}
+            </button>
+          )}
           {allNote && <p className={`il-note${allNote.error ? ' is-error' : ''}`} role="status">{allNote.text}</p>}
         </div>
       )}
@@ -363,7 +422,7 @@ export default function InnerLifeWorkspace({ character, gen, onSaved, typeCard =
           <div className="il-subjects">
             {section.subjects.filter((s) => isAuthor || !s.authorOnly).map((s) => (
               <Subject key={s.key} character={character} subject={s} isAuthor={isAuthor} locked={locked} gen={gen}
-                editing={editing} setEditing={setEditing} onSaved={onSaved} />
+                editing={editing} setEditing={setEditing} onSaved={onSaved} onPending={setPending} />
             ))}
           </div>
         </section>
@@ -373,7 +432,7 @@ export default function InnerLifeWorkspace({ character, gen, onSaved, typeCard =
             <h3 id="il-h-deep" className="il-section-title">{DEEP_PROFILE.label}</h3>
             <p className="il-about">{DEEP_PROFILE.about}</p>
           </header>
-          <DeepProfile character={character} locked={locked} gen={gen} editing={editing} setEditing={setEditing} onSaved={onSaved} />
+          <DeepProfile character={character} locked={locked} gen={gen} editing={editing} setEditing={setEditing} onSaved={onSaved} onPending={setPending} />
         </section>
       )}
 

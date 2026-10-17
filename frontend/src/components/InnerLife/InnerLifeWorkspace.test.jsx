@@ -23,16 +23,21 @@ const CHARACTER = {
   change_capacity: { mobility: 'conditionally_open', armor_type: 'Wit' },
   deep_profile: { the_body: 'Tall, and she hides it.', grief_loss: { father: 'In winter' } },
 };
-const gen = (more = {}) => ({ busy: null, note: null, run: vi.fn(), locked: false, ...more });
+const gen = (more = {}) => ({ busy: null, note: null, review: null, run: vi.fn(), preview: vi.fn(), apply: vi.fn(), discard: vi.fn(), locked: false, ...more });
 const ADMIN = { user: { groups: ['admin'] } };
 
 function renderIt({ character = CHARACTER, auth = ADMIN, g = gen(), onSaved = vi.fn() } = {}) {
-  render(
+  const view = render(
     <AuthContext.Provider value={auth}>
       <InnerLifeWorkspace character={character} gen={g} onSaved={onSaved} typeCard={<div data-testid="type-card" />} />
     </AuthContext.Provider>,
   );
-  return { g, onSaved };
+  const rerender = (next) => view.rerender(
+    <AuthContext.Provider value={auth}>
+      <InnerLifeWorkspace character={character} gen={next} onSaved={onSaved} typeCard={<div data-testid="type-card" />} />
+    </AuthContext.Provider>,
+  );
+  return { g, onSaved, rerender };
 }
 
 beforeEach(() => {
@@ -165,5 +170,56 @@ describe('the deep profile', () => {
     fireEvent.click(screen.getByRole('button', { name: /Deep profile/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Edit The Unseen' }));
     expect(screen.getByRole('form', { name: 'Edit The Unseen' })).toBeTruthy();
+  });
+});
+
+describe('Fill in everything missing (step 3)', () => {
+  const PROPOSED = {
+    wound: { description: 'A drafted wound' },
+    experience_of_joy: 'Fittings at dawn',
+    the_mask: { description: 'A drafted mask' },
+  };
+
+  test('drafts first: nothing is saved until Save', () => {
+    const { g } = renderIt({ character: { ...CHARACTER, the_mask: null } });
+    fireEvent.click(screen.getByRole('button', { name: 'Fill in everything missing' }));
+    expect(g.preview).toHaveBeenCalled();
+    expect(g.run).not.toHaveBeenCalled();
+  });
+
+  test('the review shows what it would write; written fields are kept, and Save sends only what is ticked', () => {
+    const g = gen({ review: { proposed: PROPOSED } });
+    renderIt({ character: { ...CHARACTER, the_mask: null }, g });
+    const review = screen.getByTestId('il-review');
+    expect(within(review).getByText('A drafted wound')).toBeTruthy();
+    expect(within(review).getByText('Already written · kept as is')).toBeTruthy();
+    const wound = within(review).getByRole('checkbox', { name: /Wound/ });
+    expect(wound.checked).toBe(false);
+    expect(wound.disabled).toBe(true);
+    fireEvent.click(within(review).getByRole('checkbox', { name: /The mask/ }));
+    fireEvent.click(within(review).getByRole('button', { name: 'Save 1 of 3' }));
+    expect(g.apply).toHaveBeenCalledWith({ experience_of_joy: 'Fittings at dawn' });
+  });
+
+  test('unsaved edits: the open editor keeps its words, and that field is left out unless ticked', () => {
+    const character = { ...CHARACTER, the_mask: null };
+    const { rerender } = renderIt({ character });
+    fireEvent.click(screen.getByRole('button', { name: 'Edit The mask' }));
+    fireEvent.change(screen.getByLabelText('The mask they wear'), { target: { value: 'My own words' } });
+    const g = gen({ review: { proposed: PROPOSED } });
+    rerender(g);
+    const review = screen.getByTestId('il-review');
+    expect(within(review).getByText('You have unsaved edits here')).toBeTruthy();
+    expect(within(review).getByRole('checkbox', { name: /The mask/ }).checked).toBe(false);
+    expect(screen.getByLabelText('The mask they wear').value).toBe('My own words');
+    fireEvent.click(within(review).getByRole('button', { name: 'Save 1 of 3' }));
+    expect(g.apply).toHaveBeenCalledWith({ experience_of_joy: 'Fittings at dawn' });
+  });
+
+  test('Discard drops the draft', () => {
+    const g = gen({ review: { proposed: PROPOSED } });
+    renderIt({ g });
+    fireEvent.click(screen.getByRole('button', { name: 'Discard the draft' }));
+    expect(g.discard).toHaveBeenCalled();
   });
 });
