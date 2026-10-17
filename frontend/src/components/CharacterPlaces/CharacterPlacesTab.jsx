@@ -278,9 +278,11 @@ function HostedEvents({ character, showId, onNote }) {
   };
 
   const hostedIds = new Set((events || []).map((e) => String(e.id)));
-  // Who else hosts an event: a brand, or another creator (fifth audit: never replaced by a click).
-  const otherHost = (e) => String(e.host_brand || '').trim()
-    || (e.source_profile_id != null && Number(e.source_profile_id) !== Number(character.feed_profile_id) ? 'someone else' : '');
+  // Another creator hosting an event is never replaced by a click (fifth
+  // audit); a brand's event they co-host, the brand staying (Evoni,
+  // 2026-10-17: "let them co-host brand events").
+  const otherHost = (e) => (e.source_profile_id != null && Number(e.source_profile_id) !== Number(character.feed_profile_id) ? 'someone else' : '');
+  const brandOf = (e) => String(e.host_brand || '').trim();
   const offered = (all || []).filter((e) => !hostedIds.has(String(e.id)));
   const open = offered.filter((e) => !otherHost(e));
   const taken = offered.length - open.length;
@@ -297,7 +299,7 @@ function HostedEvents({ character, showId, onNote }) {
             <article key={ev.id} className="cpl-event" data-testid={`hosted-event-${ev.id}`}>
               <div className="cpl-event-head">
                 <Link to={`/shows/${ev.show_id}/events/${ev.id}`} className="cpl-event-name">{ev.name}</Link>
-                <span className="cpl-note">{[ev.event_date, ev.venue_name].filter(Boolean).join(' · ')}</span>
+                <span className="cpl-note">{[ev.event_date, ev.venue_name, ev.host_brand && `co-hosting with ${ev.host_brand}`].filter(Boolean).join(' · ')}</span>
                 <button type="button" className="cpl-btn is-soft is-small" disabled={busy === ev.id} onClick={() => stop(ev)} data-testid={`hosted-event-stop-${ev.id}`}>
                   Not hosting
                 </button>
@@ -314,7 +316,7 @@ function HostedEvents({ character, showId, onNote }) {
               <select className="cpl-input" aria-label="Event they host" value={choice} onChange={(e) => setChoice(e.target.value)} data-testid="hosted-event-select">
                 <option value="">{all ? 'Choose an event…' : 'Loading…'}</option>
                 {/* An event someone else hosts is shown, not offered (fifth audit). */}
-                {open.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+                {open.map((e) => <option key={e.id} value={e.id}>{e.name}{brandOf(e) ? ` (co-host with ${brandOf(e)})` : ''}</option>)}
                 {taken > 0 && (
                   <optgroup label="Already hosted by someone else">
                     {offered.filter((e) => otherHost(e)).map((e) => (
@@ -330,8 +332,8 @@ function HostedEvents({ character, showId, onNote }) {
               {all && (
                 <p className="cpl-note cpl-row-note" data-testid="hosted-event-note">
                   {open.length === 0
-                    ? `Every event already has a host${taken ? ` (${taken} hosted by a brand or another creator)` : ''}. Create a new event in Producer Mode, or free one up on the event's page.`
-                    : taken > 0 ? `${taken} more ${taken === 1 ? 'event is' : 'events are'} hosted by a brand or another creator, so ${taken === 1 ? 'it is' : 'they are'} listed but can't be chosen.` : null}
+                    ? `Every event already has a host${taken ? ` (${taken} hosted by another creator)` : ''}. Create a new event in Producer Mode, or free one up on the event's page.`
+                    : taken > 0 ? `${taken} more ${taken === 1 ? 'event is' : 'events are'} hosted by another creator, so ${taken === 1 ? 'it is' : 'they are'} listed but can't be chosen. A brand's event they co-host with the brand.` : null}
                 </p>
               )}
             </div>

@@ -107,7 +107,7 @@ describe('CharacterPlacesTab', () => {
     expect(vi.mocked(api.post).mock.calls.map((c) => c[0])).not.toContain('/api/v1/shows/show-1/character-places');
   });
 
-  test('a set already one of their places is shown but not offered; an event another host has is not offered', async () => {
+  test('a set already one of their places is shown but not offered; an event another creator hosts is not offered; a brand\'s is co-hosted', async () => {
     vi.mocked(api.get).mockImplementation(async (url) => {
       if (url === '/api/v1/cast/characters/c-1/places') return { data: { success: true, show_id: 'show-1', places } };
       if (url === '/api/v1/cast/characters/c-1/appearances') return { data: { success: true, events: [] } };
@@ -123,23 +123,23 @@ describe('CharacterPlacesTab', () => {
     fireEvent.click(await screen.findByTestId('hosted-event-add'));
     const select = screen.getByTestId('hosted-event-select');
     await waitFor(() => expect(within(select).getByText(/Launch/)).toBeTruthy());
-    expect(within(select).getByText('Launch (hosted by Maison Belle)').disabled).toBe(true);
+    expect(within(select).getByText('Launch (co-host with Maison Belle)').disabled).toBe(false);
     expect(within(select).getByText('Brunch (hosted by someone else)').disabled).toBe(true);
     expect(within(select).getByText('Gala').disabled).toBe(false);
     // 2026-10-17 ("something is wrong with the drop down"): it says why.
-    expect(screen.getByTestId('hosted-event-note').textContent).toBe("2 more events are hosted by a brand or another creator, so they are listed but can't be chosen.");
+    expect(screen.getByTestId('hosted-event-note').textContent).toBe("1 more event is hosted by another creator, so it is listed but can't be chosen. A brand's event they co-host with the brand.");
   });
 
   test('when every event already has a host, it says so and what to do', async () => {
     vi.mocked(api.get).mockImplementation(async (url) => {
       if (url === '/api/v1/cast/characters/c-1/places') return { data: { success: true, show_id: 'show-1', places } };
       if (url === '/api/v1/cast/characters/c-1/appearances') return { data: { success: true, events: [] } };
-      if (url === '/api/v1/world/show-1/events') return { data: { success: true, events: [{ id: 'ev-5', name: 'Launch', host_brand: 'Maison Belle' }] } };
+      if (url === '/api/v1/world/show-1/events') return { data: { success: true, events: [{ id: 'ev-5', name: 'Launch', source_profile_id: 99 }] } };
       return { data: {} };
     });
     renderIt();
     fireEvent.click(await screen.findByTestId('hosted-event-add'));
-    expect((await screen.findByTestId('hosted-event-note')).textContent).toMatch(/^Every event already has a host \(1 hosted by a brand or another creator\)/);
+    expect((await screen.findByTestId('hosted-event-note')).textContent).toMatch(/^Every event already has a host \(1 hosted by another creator\)/);
   });
 
   // Evoni, 2026-10-17: "when I'm uploading a scene and then I'm uploading the
