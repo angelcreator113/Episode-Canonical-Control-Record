@@ -388,6 +388,15 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
   // 15. Designed intent from brief — SLAY/PASS/SAFE/FAIL direction
   context.designedIntent = context.brief?.designed_intent || null;
 
+  // 16. The Pulse around the episode (Character Consistency Engine step 7;
+  // services/scriptPulsePosts): posts feed the script.
+  context.pulsePosts = [];
+  try {
+    context.pulsePosts = await require('./scriptPulsePosts').scriptPulsePosts(models, episodeId, showId);
+  } catch (err) {
+    console.error('[ScriptWriter] Pulse posts failed (non-blocking):', err.message);
+  }
+
   return context;
 }
 
@@ -507,7 +516,9 @@ function storyContextBlocks(context, { withSeason = true } = {}) {
     charBlock = `═══ LALA'S STATS ═══\n🪙 ${cs.coins} coins | ⭐ ${cs.reputation}/10 rep | 🤝 ${cs.brand_trust}/10 trust | 📣 ${cs.influence}/10 influence | 😰 ${cs.stress}/10 stress\nSCRIPT DIRECTIVE: Use the exact coin number in Lala's internal monologue when she checks her balance.\n`;
   }
 
-  return [socialBlock, taskBlock, prevBlock, arcBlock, intentBlock, charBlock].filter(Boolean).join('\n');
+  const pulseBlock = require('./scriptPulsePosts').pulseScriptBlock(context.pulsePosts);
+
+  return [socialBlock, pulseBlock, taskBlock, prevBlock, arcBlock, intentBlock, charBlock].filter(Boolean).join('\n');
 }
 
 // Lala's money for the prompt: pressure, balance, the episode so far, and
