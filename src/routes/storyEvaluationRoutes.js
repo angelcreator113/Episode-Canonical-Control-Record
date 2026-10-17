@@ -165,69 +165,63 @@ ${scene_brief}
 Write a 2500–3500 word scene. Adult literary fiction — explicit language, sexuality, and conflict permitted. Close third person. End on a shift, not a resolution. Return ONLY the prose — no meta commentary, no title.`;
 }
 
-// ── Character depth knowledge classification ─────────────────────────────────
-// CHARACTER_KNOWLEDGE → injected into all 3 generation agents (A, B, C)
-// AUTHOR_KNOWLEDGE_ONLY → injected into evaluation agent + author layer ONLY
-const _CHARACTER_KNOWLEDGE_FIELDS = [
-  'body_relationship', 'body_history', 'body_currency', 'body_control_pattern',
-  'money_behavior_pattern', 'money_behavior_note',
-  'time_orientation_v2', 'time_orientation_note',
-  'change_capacity_v2', 'change_conditions', 'change_blocker',
-  'circumstance_advantages', 'circumstance_disadvantages',
-  'luck_belief', 'luck_belief_vs_stated',
-  'self_narrative',
-  'operative_cosmology_v2', 'cosmology_vs_stated_religion',
-  'joy_source', 'joy_accessibility', 'joy_vs_ambition',
-];
+// ── Character depth knowledge (character knowledge, safe for voice generation) ─
+// Read from each idea's one home since the depth fields were merged (2026-10-17;
+// migration 20261017240000, services/characterDepthFields). Author-only parts
+// (blind spot, the actual narrative gap, foreclosure) are never added here.
+// Notes the merge archived from the retired v1 set are kept in the block.
+const ARCHIVED_CHARACTER_NOTES = {
+  money_behavior_note: 'Money note', time_orientation_note: 'Time note', luck_belief_vs_stated: 'Luck gap',
+  body_relationship: 'Body relationship', body_currency: 'Body as currency', body_control_pattern: 'Body control pattern',
+  joy_vs_ambition: 'Joy vs ambition', joy_accessibility: 'Joy accessibility', operative_cosmology_v2: 'Operative cosmology (older)',
+};
 
-const _AUTHOR_KNOWLEDGE_ONLY_FIELDS = [
-  'blind_spot',
-  'blind_spot_category',
-  'blind_spot_visible_to',
-  'actual_narrative',
-  'narrative_gap_type',
-  'foreclosed_category',
-  'foreclosure_origin',
-  'foreclosure_vs_stated_want',
-];
-
-// ── Helper: build depth lines for character block (character knowledge only) ─
 function buildDepthLines(d) {
+  const { changeCapacityOf } = require('../services/characterDepthFields');
   const lines = [];
-  if (d.body_relationship) lines.push(`  Body relationship: ${d.body_relationship}`);
-  if (d.body_history) lines.push(`  Body history (depth): ${d.body_history}`);
-  if (d.body_currency) lines.push(`  Body as currency: ${d.body_currency}`);
-  if (d.body_control_pattern) lines.push(`  Body control pattern: ${d.body_control_pattern}`);
-  if (d.money_behavior_pattern) lines.push(`  Money pattern: ${d.money_behavior_pattern}`);
-  if (d.money_behavior_note) lines.push(`  Money note: ${d.money_behavior_note}`);
-  if (d.time_orientation_v2) lines.push(`  Time orientation: ${d.time_orientation_v2}`);
-  if (d.time_orientation_note) lines.push(`  Time note: ${d.time_orientation_note}`);
-  if (d.change_capacity_v2) lines.push(`  Change capacity: ${d.change_capacity_v2}`);
-  if (d.change_conditions) lines.push(`  Change conditions: ${d.change_conditions}`);
-  if (d.change_blocker) lines.push(`  Change blocker: ${d.change_blocker}`);
-  if (d.circumstance_advantages) lines.push(`  Unchosen advantages: ${d.circumstance_advantages}`);
-  if (d.circumstance_disadvantages) lines.push(`  Unchosen obstacles: ${d.circumstance_disadvantages}`);
-  if (d.luck_belief) lines.push(`  Luck belief: ${d.luck_belief}`);
-  if (d.luck_belief_vs_stated) lines.push(`  Luck gap: ${d.luck_belief_vs_stated}`);
-  if (d.self_narrative) lines.push(`  Self-narrative: ${d.self_narrative}`);
-  if (d.operative_cosmology_v2) lines.push(`  Operative cosmology: ${d.operative_cosmology_v2}`);
-  if (d.cosmology_vs_stated_religion) lines.push(`  Cosmology gap: ${d.cosmology_vs_stated_religion}`);
-  if (d.joy_source) lines.push(`  Joy source: ${d.joy_source}`);
-  if (d.joy_accessibility) lines.push(`  Joy accessibility: ${d.joy_accessibility}`);
-  if (d.joy_vs_ambition) lines.push(`  Joy vs ambition: ${d.joy_vs_ambition}`);
+  const add = (label, v) => { if (v !== null && v !== undefined && String(v).trim() !== '') lines.push(`  ${label}: ${v}`); };
+  add('Body relationship', d.de_body_relationship);
+  add('Body history (depth)', d.de_body_history);
+  add('Money pattern', d.de_money_behavior);
+  add('Time orientation', d.time_orientation);
+  add('Time wound', d.de_time_wound);
+  const change = changeCapacityOf(d.change_capacity);
+  add('Change capacity', change.level || change.summary);
+  add('Change conditions', change.condition);
+  add('Change blocker', change.blocker);
+  add('Unchosen advantages', d.de_circumstance_advantages);
+  add('Unchosen obstacles', d.de_circumstance_disadvantages);
+  add('Luck belief', d.de_world_belief);
+  add('Self-narrative', d.self_narrative);
+  add('Operative cosmology', d.de_operative_cosmology || d.operative_cosmology);
+  add('Cosmology gap', d.de_cosmology_conflict);
+  add('Joy source', d.de_joy_trigger);
+  const archived = (d.extra_fields && d.extra_fields.depth_archive) || {};
+  for (const [key, label] of Object.entries(ARCHIVED_CHARACTER_NOTES)) add(label, archived[key]);
   return lines;
 }
 
 // ── Helper: build author-knowledge lines (evaluation agent only) ─────────────
+// From each idea's one home; a story saved before the merge keeps its own
+// dossier with the older names, and the archived older notes still count.
+const ARCHIVED_AUTHOR_NOTES = {
+  actual_narrative: 'ACTUAL NARRATIVE', narrative_gap_type: 'Narrative gap type',
+  foreclosed_category: 'FORECLOSED POSSIBILITY', foreclosure_origin: 'Foreclosure origin',
+  foreclosure_vs_stated_want: 'Foreclosure vs stated want',
+};
 function buildAuthorKnowledgeLines(d) {
   const lines = [];
-  if (d.blind_spot) lines.push(`  BLIND SPOT: ${d.blind_spot}`);
-  if (d.blind_spot_category) lines.push(`  Blind spot category: ${d.blind_spot_category}`);
-  if (d.actual_narrative) lines.push(`  ACTUAL NARRATIVE: ${d.actual_narrative}`);
-  if (d.narrative_gap_type) lines.push(`  Narrative gap type: ${d.narrative_gap_type}`);
-  if (d.foreclosed_category) lines.push(`  FORECLOSED POSSIBILITY: ${d.foreclosed_category}`);
-  if (d.foreclosure_origin) lines.push(`  Foreclosure origin: ${d.foreclosure_origin}`);
-  if (d.foreclosure_vs_stated_want) lines.push(`  Foreclosure vs stated want: ${d.foreclosure_vs_stated_want}`);
+  const add = (label, v) => {
+    if (v === null || v === undefined || (typeof v === 'string' && v.trim() === '')) return;
+    lines.push(`  ${label}: ${typeof v === 'object' ? JSON.stringify(v) : v}`);
+  };
+  add('BLIND SPOT', d.blind_spot);
+  add('Blind spot category', d.de_blind_spot_category || d.blind_spot_category);
+  add('ACTUAL NARRATIVE GAP', d.de_actual_narrative_gap);
+  add('FORECLOSED POSSIBILITY', d.foreclosed_possibility);
+  add('Foreclosure origins', d.de_foreclosure_origins);
+  const archived = (d.extra_fields && d.extra_fields.depth_archive) || {};
+  for (const [key, label] of Object.entries(ARCHIVED_AUTHOR_NOTES)) add(label, d[key] || archived[key]);
   return lines;
 }
 
@@ -356,23 +350,23 @@ async function fetchSceneContext(characterKeys, registryId) {
       'emotional_baseline', 'aesthetic_dna', 'voice_signature', 'story_presence',
       'evolution_tracking', 'career_status',
       'living_context', 'personality_matrix', 'deep_profile',
-      // Depth engine fields — character knowledge
-      'body_relationship', 'body_history', 'body_currency', 'body_control_pattern',
-      'money_behavior_pattern', 'money_behavior_note',
-      'time_orientation_v2', 'time_orientation_note',
-      'change_capacity_v2', 'change_conditions', 'change_blocker',
-      'circumstance_advantages', 'circumstance_disadvantages',
-      'luck_belief', 'luck_belief_vs_stated',
-      'self_narrative', 'operative_cosmology_v2', 'cosmology_vs_stated_religion',
-      'joy_source', 'joy_accessibility', 'joy_vs_ambition',
-      // Depth engine fields — author knowledge (for evaluation agent only)
-      'blind_spot', 'blind_spot_category', 'blind_spot_visible_to',
-      'actual_narrative', 'narrative_gap_type',
-      'foreclosed_category', 'foreclosure_origin', 'foreclosure_vs_stated_want',
+      // Depth fields, each from its one home (buildDepthLines); character knowledge only
+      'de_body_relationship', 'de_body_history', 'de_money_behavior',
+      'time_orientation', 'de_time_wound', 'change_capacity',
+      'de_circumstance_advantages', 'de_circumstance_disadvantages', 'de_world_belief',
+      'self_narrative', 'operative_cosmology', 'de_operative_cosmology', 'de_cosmology_conflict',
+      'de_joy_trigger', 'extra_fields',
+      // Author knowledge (the evaluation agent only; buildAuthorKnowledgeLines)
+      'blind_spot', 'de_blind_spot_category', 'blind_spot_visible_to', 'de_actual_narrative_gap',
+      'foreclosed_possibility', 'de_foreclosure_origins',
     ],
   });
 
-  const dossiers = chars.map(c => c.toJSON());
+  // Of extra_fields, only the merge's archive goes into the dossier saved with the story.
+  const dossiers = chars.map((c) => {
+    const { extra_fields: extra, ...json } = c.toJSON();
+    return extra?.depth_archive ? { ...json, extra_fields: { depth_archive: extra.depth_archive } } : json;
+  });
   if (!dossiers.length) return { dossiers: [], charBlocks: '' };
 
   // Fetch all relationship edges between characters in the scene

@@ -1690,20 +1690,12 @@ function TabInterior({ character, gen }) {
           <h3 className="cp-section-title">Interior Architecture</h3>
           <div className="cp-interior-grid">
             {[
-              { label: 'Change Capacity',        value: character.change_capacity
-                ? (typeof character.change_capacity === 'string'
-                  ? character.change_capacity
-                  // The generator writes { mobility, conditions_for_change, armor_type }.
-                  : [character.change_capacity.mobility,
-                    character.change_capacity.conditions_for_change && `Would change if: ${character.change_capacity.conditions_for_change}`,
-                    character.change_capacity.armor_type && `Armor: ${character.change_capacity.armor_type}`,
-                    character.change_capacity.description].filter(Boolean).join(' · ') || null)
-                : null },
+              { label: 'Change Capacity',        value: changeCapacityText(character.change_capacity) },
               { label: 'Self-Narrative',          value: character.self_narrative },
               { label: 'Operative Cosmology',     value: character.operative_cosmology },
               { label: 'Foreclosed Possibility',  value: character.foreclosed_possibility },
               { label: 'Experience of Joy',       value: character.experience_of_joy },
-              { label: 'Time Orientation',        value: character.time_orientation?.replace?.(/_/g, ' ') || character.time_orientation },
+              { label: 'Time Orientation',        value: words(character.time_orientation) },
             ].filter(f => f.value).map(f => (
               <div key={f.label} className="cp-interior-field">
                 <span className="cp-meta-label">{f.label}</span>
@@ -1713,8 +1705,45 @@ function TabInterior({ character, gen }) {
           </div>
         </section>
       )}
+
+      {/* What the merge of the depth fields kept aside (2026-10-17): a value
+          that differed from the one kept, or had no place in the new lists. */}
+      {archivedDepth(character).length > 0 && (
+        <details className="cp-section cp-archived" data-testid="cp-depth-archive">
+          <summary className="cp-section-title">Kept from retired fields ({archivedDepth(character).length})</summary>
+          <p className="cp-archived-hint">When the inner life fields were merged into one place, these values differed from the one kept, or had no place in the new lists. Copy anything you want into its section.</p>
+          <ul className="cp-archived-list">
+            {archivedDepth(character).map(([key, value]) => (
+              <li key={key}><span className="cp-meta-label">{words(key.replace(/^de_/, ''))}</span> {typeof value === 'object' ? JSON.stringify(value) : String(value)}</li>
+            ))}
+          </ul>
+        </details>
+      )}
     </div>
   );
+}
+
+/* Inner life display helpers (the one-home merge, 2026-10-17). */
+/** change_capacity as one line: its level, score, what would change them, and the rest. */
+export function changeCapacityText(cc) {
+  if (!cc) return null;
+  if (typeof cc === 'string') return cc;
+  return [
+    words(cc.mobility),
+    Number.isFinite(Number(cc.score)) && cc.score !== null && cc.score !== '' ? `${cc.score}/100` : null,
+    cc.conditions_for_change && `Would change if: ${cc.conditions_for_change}`,
+    cc.blocker && `Blocked by: ${cc.blocker}`,
+    cc.armor_type && `Armor: ${cc.armor_type}`,
+    cc.witness && `Witness: ${cc.witness}`,
+    cc.arc_function && `Arc: ${words(cc.arc_function)}`,
+    cc.description,
+  ].filter(Boolean).join(' · ') || null;
+}
+
+/** The values the merge kept aside, as [field, value] pairs. */
+export function archivedDepth(character) {
+  const archive = character?.extra_fields?.depth_archive;
+  return archive && typeof archive === 'object' ? Object.entries(archive).filter(([, v]) => v !== null && v !== '') : [];
 }
 
 /* ── Tab 3: Connections ──────────────────────────────────────────────────────── */
@@ -2076,7 +2105,7 @@ function TabWorld({ character, onSaved, gen }) {
         <section className="cp-section">
           <h3 className="cp-section-title">Time Orientation</h3>
           <span className="cp-time-badge">
-            {character.time_orientation.replace?.(/_/g, ' ') || character.time_orientation}
+            {words(character.time_orientation)}
           </span>
         </section>
       )}

@@ -60,7 +60,7 @@ Given this character's psychological profile, generate their follow profile — 
 **Self-Narrative:** ${character.self_narrative || character.de_self_narrative_origin || 'unknown'}
 **Operative Cosmology:** ${character.operative_cosmology || character.de_operative_cosmology || 'unknown'}
 **Forbidden Joy:** ${character.de_forbidden_joy || 'unknown'}
-**Change Capacity:** ${character.de_change_capacity || 'unknown'}
+**Change Capacity:** ${require('./characterDepthFields').readDepthField(character.toJSON ? character.toJSON() : character, 'de_change_capacity') || 'unknown'}
 
 **Relationship Status:** ${character.relationship_status || 'unknown'}
 **Class Origin → Current:** ${character.class_origin || character.de_money_origin_class || '?'} → ${character.current_class || character.de_money_current_class || '?'}

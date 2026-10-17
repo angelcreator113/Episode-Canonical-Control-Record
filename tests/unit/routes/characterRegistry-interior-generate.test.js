@@ -117,7 +117,8 @@ describe('interiorUpdates', () => {
       extra: 'never asked for',
     }, ['time_orientation', 'triggers', 'blind_spot', 'wound', 'self_narrative', 'dilemma']);
     expect(out).toEqual({
-      time_orientation: 'future_obsessed',
+      // An old name takes its new one (the five times since the depth merge, 2026-10-17).
+      time_orientation: 'future_oriented',
       triggers: ['being ignored'],
       self_narrative: 'she earned this',
       dilemma: { central_tension: 'x' },

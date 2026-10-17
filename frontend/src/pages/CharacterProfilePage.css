@@ -1624,3 +1624,9 @@ a.ch-trail-text:hover { text-decoration: underline; }
   .ch-alive { flex: 1 1 auto; width: 100%; }
   .ch-photos { grid-template-columns: 1fr 1fr; }
 }
+
+/* Inner life: what the merge of the depth fields kept aside (2026-10-17). */
+.cp-archived summary { cursor: pointer; }
+.cp-archived-hint { margin: 0.5rem 0; font-size: var(--text-sm); color: var(--text-secondary); }
+.cp-archived-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.cp-archived-list li { font-size: var(--text-sm); color: var(--text-primary); overflow-wrap: anywhere; }
