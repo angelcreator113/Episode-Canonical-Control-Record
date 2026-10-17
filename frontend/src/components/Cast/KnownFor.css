@@ -10,3 +10,5 @@
 .kf-suggestion { padding: 8px 12px; border-radius: 8px; background: var(--lala-parchment, #FAF7F0); font-size: 13px; line-height: 1.5; }
 .kf-suggestion p { margin: 0; }
 .kf-tension { margin-top: 4px !important; color: var(--lala-gold, #B8962E); }
+.kf-select textarea { font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 6px; border: 1px solid rgba(184, 150, 46, 0.4); max-width: 100%; }
+.kf > .kf-tension { margin: 0; font-size: 13px; line-height: 1.5; color: var(--lala-gold, #B8962E); }
