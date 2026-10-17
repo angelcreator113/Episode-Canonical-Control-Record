@@ -93,6 +93,8 @@ async function automatedRoom(db, showId, now = new Date()) {
 
 /** Queues each planned beat whose moment has come, once, within today's automated requests. Returns the jobs. */
 async function queueDueBeats(db, showId, now = new Date()) {
+  // Storyline posts switched off in Admin › Engine (2026-10-17): the beats wait, planned.
+  if (!(await require('./pulseQueue').kindEnabled(db, showId, 'storyline'))) return [];
   const { Op } = require('sequelize');
   const present = await require('./storyClock').presentOrder(db, showId);
   const live = await db.PulseStoryline.findAll({ where: { show_id: showId, status: { [Op.in]: ['planned', 'running'] } }, attributes: ['id'], raw: true });

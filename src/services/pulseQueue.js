@@ -31,7 +31,17 @@
  */
 
 const KINDS = ['event', 'ambient', 'comment', 'dm', 'storyline', 'voice'];   // dm: Task #2984; storyline: Task #2989; voice: Task #3070
-const DEFAULTS = { automated_requests: 5, manual_requests: 15, ambient_enabled: false };
+const DEFAULTS = {
+  automated_requests: 5, manual_requests: 15, ambient_enabled: false,
+  // Evoni's Engine mock (2026-10-17): each automated kind can be switched off; all start on.
+  events_enabled: true, comments_enabled: true, storylines_enabled: true, voices_enabled: true,
+};
+// The switch each automated job kind answers to, where it is queued and when
+// a queued job comes up. Ambient keeps its own switch, read where it is
+// planned (services/pulseAmbient), as before.
+const SWITCHES = { event: 'events_enabled', comment: 'comments_enabled', storyline: 'storylines_enabled', voice: 'voices_enabled' };
+const SWITCH_LABELS = { event: 'Event posts', comment: 'Comment posts', storyline: 'Storyline posts', voice: 'Voice building' };
+const SWITCH_WAIT_MS = 60 * 60 * 1000;   // a switched-off kind's queued job looks again in an hour
 const MAX_CAP = 100;   // requests a day, per lane
 const BACKOFF_MS = 60 * 1000;            // 1, 4, 9 minutes …
 const STALE_MS = 15 * 60 * 1000;         // a job running this long was lost
@@ -60,27 +70,44 @@ async function settingsOf(db, showId) {
   if (!row) throw new QueueError(404, 'Show not found');
   const saved = row.engine && typeof row.engine === 'object' ? row.engine : {};
   const limit = (key) => (Number.isInteger(saved[key]) && saved[key] >= 0 && saved[key] <= MAX_CAP ? saved[key] : DEFAULTS[key]);
+  const flag = (key) => (typeof saved[key] === 'boolean' ? saved[key] : DEFAULTS[key]);
   return {
     automated_requests: limit('automated_requests'),
     manual_requests: limit('manual_requests'),
-    ambient_enabled: typeof saved.ambient_enabled === 'boolean' ? saved.ambient_enabled : DEFAULTS.ambient_enabled,
+    ambient_enabled: flag('ambient_enabled'),
+    events_enabled: flag('events_enabled'),
+    comments_enabled: flag('comments_enabled'),
+    storylines_enabled: flag('storylines_enabled'),
+    voices_enabled: flag('voices_enabled'),
   };
 }
 
+/** Whether the show's engine may queue or run this kind on its own (a switch in Admin › Engine). */
+async function kindEnabled(db, showId, kind) {
+  const key = SWITCHES[kind];
+  if (!key) return true;
+  return Boolean((await settingsOf(db, showId))[key]);
+}
+
 /** Saves the settings given (others kept), only under metadata.pulse_engine. */
-async function saveSettings(db, showId, { automated_requests: automated, manual_requests: manual, ambient_enabled: ambient } = {}) {
+const FLAGS = ['ambient_enabled', 'events_enabled', 'comments_enabled', 'storylines_enabled', 'voices_enabled'];
+
+async function saveSettings(db, showId, fields = {}) {
+  const { automated_requests: automated, manual_requests: manual } = fields;
   const current = await settingsOf(db, showId);
   for (const [lane, value] of [['automated', automated], ['manual', manual]]) {
     if (value !== undefined && (!Number.isInteger(value) || value < 0 || value > MAX_CAP)) {
       throw new QueueError(400, `The ${lane} requests a day must be a whole number from 0 to ${MAX_CAP}.`);
     }
   }
-  if (ambient !== undefined && typeof ambient !== 'boolean') throw new QueueError(400, 'ambient_enabled must be true or false.');
+  for (const key of FLAGS) {
+    if (fields[key] !== undefined && typeof fields[key] !== 'boolean') throw new QueueError(400, `${key} must be true or false.`);
+  }
   const next = {
     ...current,
     ...(automated !== undefined ? { automated_requests: automated } : {}),
     ...(manual !== undefined ? { manual_requests: manual } : {}),
-    ...(ambient !== undefined ? { ambient_enabled: ambient } : {}),
+    ...Object.fromEntries(FLAGS.filter((key) => fields[key] !== undefined).map((key) => [key, fields[key]])),
   };
   // One statement on the one key: other metadata (pulse_cover, …) is never rewritten.
   await db.sequelize.query(
@@ -117,19 +144,34 @@ async function stateOf(db, showId, now = new Date()) {
   const settings = await settingsOf(db, showId);
   const requests = await require('./pulseRequests').usedToday(db, showId, now);
   const jobs = await db.PulseJob.findAll({ where: { show_id: showId }, order: [['created_at', 'DESC']], limit: 20 });
+  const { Op } = require('sequelize');
+  const waiting = await db.PulseJob.findAll({
+    where: { show_id: showId, status: { [Op.in]: ['queued', 'running'] } }, order: [['run_after', 'ASC'], ['created_at', 'ASC']], limit: 20,
+  });
+  const [[counts]] = await db.sequelize.query(
+    `SELECT COUNT(*) FILTER (WHERE status IN ('queued', 'running'))::int AS waiting,
+            COUNT(*) FILTER (WHERE status = 'done' AND finished_at >= :since)::int AS done_today
+       FROM pulse_jobs WHERE show_id = :showId AND deleted_at IS NULL`,
+    { replacements: { showId, since: startOfUtcDay(now) } });
+  const shapeJob = (j) => ({
+    id: j.id, kind: j.kind, status: j.status, attempts: j.attempts, error: j.error,
+    run_after: j.run_after, started_at: j.started_at, finished_at: j.finished_at,
+    drafts: Array.isArray(j.draft_ids) ? j.draft_ids.length : 0, created_at: j.created_at,
+  });
   return {
     settings,
     episodes_without_posts: await require('./pulseEventPosting').episodesWithoutPosts(db, showId),
     // Episodes not completed yet whose event is attached: posts can be drafted now (step 6b).
     episodes_with_draft_events: await require('./pulseEventPosting').episodesWithDraftEvents(db, showId),
     requests_today: requests,
+    // Today's requests by what they drafted (Evoni's Engine mock, 2026-10-17).
+    requests_by_kind: await require('./pulseRequests').usedTodayByKind(db, showId, now),
     drafts_today: await draftsToday(db, showId, now),
+    jobs_waiting: counts?.waiting ?? 0,
+    jobs_done_today: counts?.done_today ?? 0,
     worker_enabled: process.env.PULSE_ENGINE_ENABLED === 'true',
-    jobs: jobs.map((j) => ({
-      id: j.id, kind: j.kind, status: j.status, attempts: j.attempts, error: j.error,
-      run_after: j.run_after, started_at: j.started_at, finished_at: j.finished_at,
-      drafts: Array.isArray(j.draft_ids) ? j.draft_ids.length : 0, created_at: j.created_at,
-    })),
+    queue: waiting.map(shapeJob),
+    jobs: jobs.map(shapeJob),
   };
 }
 
@@ -166,6 +208,17 @@ async function runOne(db, { now = new Date() } = {}) {
   if (!job) return null;
   const finish = (fields) => job.update({ finished_at: new Date(), ...fields });
   try {
+    // A kind switched off in Admin › Engine waits, queued, until it is on
+    // again (an hour at a time; not an attempt). Evoni's own requests (an
+    // episode's posts queued or drafted from Engine) carry manual and run.
+    if (!job.payload_json?.manual && !(await kindEnabled(db, job.show_id, job.kind))) {
+      await job.update({
+        status: 'queued', started_at: null, attempts: Math.max(0, job.attempts - 1),
+        run_after: new Date(now.getTime() + SWITCH_WAIT_MS),
+        error: `Waiting: ${SWITCH_LABELS[job.kind]} are switched off in Admin › The Pulse › Engine.`,
+      });
+      return job;
+    }
     const handler = handlers.get(job.kind);
     if (!handler) {
       await finish({ status: 'failed', error: `No handler for ${job.kind} jobs yet.` });
@@ -241,5 +294,5 @@ function stop() {
 
 module.exports = {
   KINDS, DEFAULTS, MAX_CAP, BACKOFF_MS, STALE_MS, WAIT_ON_CAP, CAP_WAIT_MS,
-  register, unregister, settingsOf, saveSettings, enqueue, draftsToday, stateOf, requeueStale, claimNext, runOne, tick, start, stop, QueueError,
+  SWITCHES, register, unregister, settingsOf, kindEnabled, saveSettings, enqueue, draftsToday, stateOf, requeueStale, claimNext, runOne, tick, start, stop, QueueError,
 };
