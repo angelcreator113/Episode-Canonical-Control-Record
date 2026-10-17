@@ -49,6 +49,15 @@ const ACTIVE_STAGES = ['active', 'alive'];   // a voice, and posting
 const ALIVE_STAGES = ['alive'];             // also DMs, closeness, event reactions
 const POSTING_STAGES = ACTIVE_STAGES;
 const stagesFor = (stage) => (stage === 'alive' ? ALIVE_STAGES : ACTIVE_STAGES);
+
+/**
+ * A character belongs to the show when their registry does, or, for a
+ * registry with no show, when their feed profile has a follower count in
+ * the show (characterFacts.showIdFor; Evoni, 2026-10-17: a character who
+ * posts from her page but appeared nowhere in Voices).
+ */
+const IN_SHOW_SQL = `(cr.show_id = :showId OR (cr.show_id IS NULL AND EXISTS (
+  SELECT 1 FROM pulse_followers pf WHERE pf.social_profile_id = rc.feed_profile_id AND pf.show_id = :showId AND pf.deleted_at IS NULL)))`;
 const MAX_EXAMPLES = 20;
 const MAX_EDIT_EXAMPLES = 8;   // Evoni's edits kept as examples, newest first (Task #3070)
 const TICK_MS = 60 * 60 * 1000;
@@ -183,9 +192,9 @@ async function buildVoice(db, characterId, { lane = 'manual', jobId = null } = {
   const source = voiceSource(character.toJSON(), profile);
   // Building (or rebuilding) a voice is one request (Task #3031): manual from
   // Voices, automated when the queue builds it at Active (Task #3070).
-  const [[registry]] = await db.sequelize.query('SELECT show_id FROM character_registries WHERE id = :id', { replacements: { id: character.registry_id } });
-  if (!registry?.show_id) throw new VoiceError(409, 'This character\'s registry belongs to no show.');
-  await require('./pulseRequests').take(db, { showId: registry.show_id, lane, kind: 'voice', jobId });
+  const showId = await require('./characterFacts').showIdFor(db, character, { id: profile.id });
+  if (!showId) throw new VoiceError(409, 'This character\'s registry belongs to no show, and their feed profile has no follower count in one yet.');
+  await require('./pulseRequests').take(db, { showId, lane, kind: 'voice', jobId });
   // Their facts (Character Consistency Engine step 5): no topic invents a follower count, money or status.
   const { factsForCharacter, factsPromptBlock } = require('./characterFacts');
   const factsBlock = factsPromptBlock(await factsForCharacter(db, character));
@@ -273,7 +282,7 @@ async function eligible(db, showId, { at, stage = 'active', includeUnmet = false
   const { sequelize } = db;
   const [rows] = await sequelize.query(
     `SELECT rc.id FROM registry_characters rc JOIN character_registries cr ON cr.id = rc.registry_id
-      WHERE cr.show_id = :showId AND rc.deleted_at IS NULL AND cr.deleted_at IS NULL
+      WHERE ${IN_SHOW_SQL} AND rc.deleted_at IS NULL AND cr.deleted_at IS NULL
         AND rc.depth_level::text IN (:stages) AND rc.feed_profile_id IS NOT NULL
       ORDER BY rc.display_name`, { replacements: { showId, stages: stagesFor(stage) } });
   if (!rows.length) return [];
@@ -322,7 +331,7 @@ async function notPosting(db, showId) {
        FROM registry_characters rc
        JOIN character_registries cr ON cr.id = rc.registry_id
        JOIN social_profiles sp ON sp.id = rc.feed_profile_id AND sp.deleted_at IS NULL
-      WHERE cr.show_id = :showId AND rc.deleted_at IS NULL AND cr.deleted_at IS NULL
+      WHERE ${IN_SHOW_SQL} AND rc.deleted_at IS NULL AND cr.deleted_at IS NULL
         AND (rc.depth_level IS NULL OR rc.depth_level::text NOT IN (:stages))
       ORDER BY 2`, { replacements: { showId, stages: ACTIVE_STAGES } });
   return rows;
