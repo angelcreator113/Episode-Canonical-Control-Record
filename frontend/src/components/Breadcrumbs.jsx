@@ -29,6 +29,7 @@ const ROUTE_LABELS = {
   'wardrobe': 'Wardrobe',
   'wardrobe-library': 'Wardrobe Library',
   'template-studio': 'Template Studio',
+  'youtube': 'YouTube Thumbnails',
   'assets': 'Asset Library',
   'settings': 'Settings',
   'world-studio': 'World Studio',

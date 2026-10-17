@@ -64,6 +64,7 @@ function WorldHubRedirect({ tab }) {
   return <Navigate to={hubTarget(tab, search)} replace />;
 }
 const TemplateDesigner = lazy(() => import('./pages/TemplateDesigner'));
+const YouTubeThumbnailStudio = lazy(() => import('./pages/YouTubeThumbnailStudio'));
 const DecisionAnalyticsDashboard = lazy(() => import('./pages/DecisionAnalyticsDashboard'));
 const TimelineEditor = lazy(() => import('./pages/TimelineEditor'));
 const BeatGeneration = lazy(() => import('./pages/BeatGeneration'));
@@ -402,6 +403,7 @@ function AppContent() {
               (audit LINK-02): it opens that episode's Thumbnail Gallery. */}
           <Route path="/episodes/:episodeId/composer" element={<EpisodeComposerRedirect />} />
           <Route path="/template-studio" element={<TemplateStudio />} />
+          <Route path="/template-studio/youtube" element={<YouTubeThumbnailStudio />} />
           <Route path="/template-studio/designer" element={<TemplateDesigner />} />
           <Route path="/template-studio/designer/:templateId" element={<TemplateDesigner />} />
           

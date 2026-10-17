@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   LayoutGrid, CheckCircle2, PenLine, Archive, Lock, Search, Plus, Copy, Send,
-  Trash2, ImageIcon, Layers, Maximize2, ChevronLeft, ChevronRight,
+  Trash2, ImageIcon, Layers, Maximize2, ChevronLeft, ChevronRight, Youtube,
 } from 'lucide-react';
 import apiClient from '../services/api';
 import './TemplateStudio.css';
@@ -353,6 +353,7 @@ function TemplateStudio() {
           <div className="ts-rail-divider" />
           <div className="ts-rail-heading">Elsewhere in the studio</div>
           <nav className="ts-rail-nav">
+            <Link className="ts-rail-btn" to="/template-studio/youtube" data-testid="ts-youtube-link"><Youtube size={20} aria-hidden /><span className="ts-rail-label">YouTube thumbnails</span></Link>
             <Link className="ts-rail-btn" to="/assets"><ImageIcon size={20} aria-hidden /><span className="ts-rail-label">Asset Library</span></Link>
           </nav>
         </aside>

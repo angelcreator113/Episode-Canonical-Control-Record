@@ -1,0 +1,121 @@
+/**
+ * Templates › YouTube thumbnails (Evoni, 2026-10-17): an episode opens with
+ * its show's style and its own words; changes re-render the preview; Save
+ * stores the episode's thumbnail; Save style keeps the show's look; an
+ * upload goes with the render.
+ */
+import { vi, describe, beforeEach, test, expect } from 'vitest';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+
+vi.mock('../lib/youtubeThumbnailsApi', async () => {
+  const actual = await vi.importActual('../lib/youtubeThumbnailsApi');
+  return {
+    ...actual,
+    youtubeThumbnailsApi: { sources: vi.fn(), render: vi.fn(), save: vi.fn(), saveStyle: vi.fn(), shows: vi.fn(), episodes: vi.fn() },
+  };
+});
+
+import { youtubeThumbnailsApi, episodeWords, renderForm } from '../lib/youtubeThumbnailsApi';
+import YouTubeThumbnailStudio from './YouTubeThumbnailStudio';
+
+const SOURCES = {
+  episode: { id: 'ep-1', title: 'Studio by Sable', episode_number: 1 },
+  show: { id: 'show-1', name: 'Styling Adventures' },
+  style: { layout: 'lala-right', accent: '#B8962E', textColor: '#FFFFFF', dim: 0.3, lalaUrl: 'https://b.s3.amazonaws.com/lala2.png' },
+  backgrounds: [{ url: 'https://b.s3.amazonaws.com/wide.jpg', label: 'Bedroom · Wide' }, { url: 'https://b.s3.amazonaws.com/cover.jpg', label: 'Show cover' }],
+  cutouts: [{ id: 'a1', url: 'https://b.s3.amazonaws.com/lala1.png', label: 'Lala 1' }, { id: 'a2', url: 'https://b.s3.amazonaws.com/lala2.png', label: 'Lala 2' }],
+};
+
+const renderPage = (entry = '/template-studio/youtube?show=show-1&episode=ep-1') => render(
+  <MemoryRouter initialEntries={[entry]}><YouTubeThumbnailStudio /></MemoryRouter>,
+);
+const lastSpec = () => youtubeThumbnailsApi.render.mock.calls.at(-1)[0];
+
+describe('helpers', () => {
+  test('episode words and the request form', () => {
+    expect(episodeWords({ title: 'T', episode_number: 3 }, { name: 'S' })).toEqual({ title: 'T', kicker: 'S', badge: 'EP 3' });
+    expect(episodeWords({}, null)).toEqual({ title: '', kicker: '', badge: '' });
+    const f = new File(['x'], 'bg.png', { type: 'image/png' });
+    const form = renderForm({ title: 'T' }, { background: f });
+    expect(JSON.parse(form.get('spec'))).toEqual({ title: 'T' });
+    expect(form.get('background')).toBe(f);
+    expect(form.get('lala')).toBeNull();
+  });
+});
+
+describe('YouTubeThumbnailStudio', () => {
+  beforeEach(() => {
+    Object.values(youtubeThumbnailsApi).forEach((fn) => fn.mockReset());
+    youtubeThumbnailsApi.shows.mockResolvedValue([{ id: 'show-1', name: 'Styling Adventures' }]);
+    youtubeThumbnailsApi.episodes.mockResolvedValue([{ id: 'ep-1', episode_number: 1, title: 'Studio by Sable' }]);
+    youtubeThumbnailsApi.sources.mockResolvedValue(SOURCES);
+    youtubeThumbnailsApi.render.mockResolvedValue(new Blob(['png'], { type: 'image/png' }));
+    globalThis.URL.createObjectURL = vi.fn(() => 'blob:preview');
+    globalThis.URL.revokeObjectURL = vi.fn();
+  });
+
+  test('opens on the episode with the show\'s style, its words and its first picture; the preview renders', async () => {
+    renderPage();
+    await waitFor(() => expect(youtubeThumbnailsApi.render).toHaveBeenCalled(), { timeout: 2000 });
+    expect(lastSpec()).toMatchObject({
+      layout: 'lala-right', accent: '#B8962E', title: 'Studio by Sable', kicker: 'Styling Adventures', badge: 'EP 1',
+      backgroundUrl: 'https://b.s3.amazonaws.com/wide.jpg', lalaUrl: 'https://b.s3.amazonaws.com/lala2.png',
+    });
+    expect((await screen.findByTestId('yts-preview')).getAttribute('src')).toBe('blob:preview');
+    expect(screen.getByLabelText('Title').value).toBe('Studio by Sable');
+  });
+
+  test('a change re-renders with it: title, layout, picture, accent', async () => {
+    renderPage();
+    await waitFor(() => expect(youtubeThumbnailsApi.render).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'The Atelier' } });
+    fireEvent.click(screen.getByRole('button', { name: /Title only/ }));
+    fireEvent.click(within(screen.getByTestId('yts-backgrounds')).getByTitle('Show cover'));
+    fireEvent.click(screen.getByRole('button', { name: 'Accent #A46EE0' }));
+    await waitFor(() => expect(lastSpec()).toMatchObject({ title: 'The Atelier', layout: 'center', backgroundUrl: 'https://b.s3.amazonaws.com/cover.jpg', accent: '#A46EE0' }), { timeout: 2000 });
+    expect(screen.queryByTestId('yts-lala')).toBeNull();
+  });
+
+  test('an uploaded background goes with the render', async () => {
+    renderPage();
+    await waitFor(() => expect(youtubeThumbnailsApi.render).toHaveBeenCalled(), { timeout: 2000 });
+    const file = new File(['x'], 'mine.jpg', { type: 'image/jpeg' });
+    fireEvent.change(screen.getByTestId('yts-backgrounds-input'), { target: { files: [file] } });
+    await waitFor(() => expect(youtubeThumbnailsApi.render.mock.calls.at(-1)[1]).toMatchObject({ background: file }), { timeout: 2000 });
+    expect(within(screen.getByTestId('yts-backgrounds')).getByText('mine.jpg')).toBeTruthy();
+  });
+
+  test('Save stores it as the episode\'s thumbnail and links to the gallery', async () => {
+    youtubeThumbnailsApi.save.mockResolvedValue({ id: 7, url: 'https://b.s3.amazonaws.com/t.png' });
+    renderPage();
+    fireEvent.click(await screen.findByTestId('yts-save'));
+    await waitFor(() => expect(youtubeThumbnailsApi.save).toHaveBeenCalledWith('ep-1', expect.objectContaining({ title: 'Studio by Sable' }), { background: null, lala: null }));
+    expect(await screen.findByText("Saved as the episode's thumbnail.")).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Open the thumbnail gallery' }).getAttribute('href')).toBe('/thumbnails/ep-1');
+  });
+
+  test('Save style keeps the layout, colours and Lala for the show', async () => {
+    youtubeThumbnailsApi.saveStyle.mockResolvedValue({});
+    renderPage();
+    fireEvent.click(await screen.findByTestId('yts-save-style'));
+    await waitFor(() => expect(youtubeThumbnailsApi.saveStyle).toHaveBeenCalledWith('show-1', {
+      layout: 'lala-right', accent: '#B8962E', textColor: '#FFFFFF', dim: 0.3, lalaUrl: 'https://b.s3.amazonaws.com/lala2.png',
+    }));
+    expect(await screen.findByText(/Style saved for Styling Adventures/)).toBeTruthy();
+  });
+
+  test('a refused save says why', async () => {
+    youtubeThumbnailsApi.save.mockRejectedValue({ response: { data: { error: 'The background is not an image we can read' } } });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    renderPage();
+    fireEvent.click(await screen.findByTestId('yts-save'));
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'The background is not an image we can read');
+  });
+
+  test('with no episode chosen it asks for one', async () => {
+    renderPage('/template-studio/youtube');
+    expect(await screen.findByText('Choose a show and an episode to make its thumbnail.')).toBeTruthy();
+    expect(youtubeThumbnailsApi.sources).not.toHaveBeenCalled();
+  });
+});
