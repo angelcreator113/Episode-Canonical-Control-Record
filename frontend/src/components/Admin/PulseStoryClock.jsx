@@ -8,12 +8,14 @@
  * same reads The Pulse makes with ?at=, so the story clock and reveals apply
  * (hidden items absent, teasers in place of their images). "Open in The Pulse" goes to
  * /pulse?at=<order>, which only admins can use.
- * Styles: styles/AdminPanel.css (pulse-clock-*) and, for the preview,
- * pages/SocialMediaPage.css (pl-*).
+ * Since Evoni's Story Clock mock (2026-10-17) this preview is the second
+ * view; the first is the day planner (PulseStoryPlanner).
+ * Styles: styles/AdminPanel.css (pulse-clock-*), PulseStoryClock.css (sc-*,
+ * sp-*) and, for the preview, pages/SocialMediaPage.css (pl-*).
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, ExternalLink, Loader2 } from 'lucide-react';
+import { CalendarClock, CalendarDays, ChevronLeft, ChevronRight, Clock, ExternalLink, History, Loader2, Plus } from 'lucide-react';
 import api from '../../services/api';
 import { useReveals } from './PulseRevealContext';
 import { storyMoments, presentOrder } from '../../lib/storyClock';
@@ -22,7 +24,10 @@ import PulsePost from '../Pulse/PulsePost';
 import { pulseFeedUrl } from '../../lib/pulsePosts';
 import { CitiesCard, UpcomingCard, LatestFitCard } from '../Pulse/PulseSides';
 import { FirstLook } from '../Pulse/PulseReveal';
+import PulseStoryPlanner from './PulseStoryPlanner';
+import { addDays, plannerDayOf } from '../../lib/storyPlanner';
 import '../../pages/SocialMediaPage.css';
+import './PulseStoryClock.css';
 
 const PREVIEW_POSTS = 20;
 const list = (r) => (Array.isArray(r?.data?.data) ? r.data.data : []);
@@ -65,7 +70,8 @@ function usePulseAt(showId, at) {
   return { view, error };
 }
 
-export default function PulseStoryClock() {
+/** The Pulse at a story moment: the scrubber and Lala's view then (Task 2941). */
+export function StoryMomentPreview() {
   const ctx = useReveals();
   const showId = ctx?.showId;
   const episodes = ctx?.episodes || [];
@@ -90,8 +96,8 @@ export default function PulseStoryClock() {
   const loading = !view || view.at !== at;
 
   return (
-    <section className="pulse-clock" aria-labelledby="pulse-clock-heading" data-testid="pulse-clock">
-      <h3 id="pulse-clock-heading">Story clock</h3>
+    <section className="pulse-clock sc-preview" aria-labelledby="pulse-clock-heading" data-testid="pulse-clock">
+      <h3 id="pulse-clock-heading">The Pulse at a story moment</h3>
       <p className="pulse-hint">Pick a story moment to see The Pulse exactly as Lala's audience saw it then: hidden items are left out and teasers show in place of their images.</p>
       {ctx.loadError && <p className="pulse-error" role="alert">{ctx.loadError}</p>}
       <div className="pulse-clock-controls">
@@ -141,5 +147,67 @@ export default function PulseStoryClock() {
         )}
       </div>
     </section>
+  );
+}
+
+const VIEWS = [
+  { key: 'planner', label: 'Day planner', Icon: CalendarClock },
+  { key: 'moment', label: 'The Pulse at a story moment', Icon: History },
+];
+const dayLabel = (day) => new Date(`${day}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+
+/**
+ * Story Clock (Evoni's mock, 2026-10-17): the day planner (PulseStoryPlanner,
+ * by the clock time posts go out), with the date and Add story; or The
+ * Pulse at a story moment (StoryMomentPreview), kept as the second view.
+ */
+export default function PulseStoryClock({ now = new Date() }) {
+  const ctx = useReveals();
+  const [view, setView] = useState('planner');
+  const [day, setDay] = useState(() => plannerDayOf(now));
+  const [addKey, setAddKey] = useState(0);
+  if (!ctx) return null;
+  const today = plannerDayOf(now);
+  return (
+    <div className="sc" data-testid="story-clock">
+      <section className="sp-card sc-head" aria-labelledby="sc-heading">
+        <span className="sc-head-icon" aria-hidden="true"><Clock size={24} /></span>
+        <div className="sc-head-text">
+          <h3 id="sc-heading">Story Clock</h3>
+          <p className="sp-hint">{view === 'planner'
+            ? "Plan what happens in Lala's world through the day. Posts go out on The Pulse at their times."
+            : 'See The Pulse exactly as Lala\'s audience saw it at any story moment.'}</p>
+        </div>
+        {view === 'planner' && (
+          <button type="button" className="sp-btn is-primary" onClick={() => setAddKey((k) => k + 1)} data-testid="sc-add">
+            <Plus size={18} aria-hidden="true" />Add story
+          </button>
+        )}
+        <div className="sc-bar">
+          <div className="sc-views" role="tablist" aria-label="Story Clock views">
+            {VIEWS.map(({ key, label, Icon }) => (
+              <button key={key} type="button" role="tab" aria-selected={view === key} className={view === key ? 'sc-view is-active' : 'sc-view'} onClick={() => setView(key)}>
+                <Icon size={16} aria-hidden="true" />{label}
+              </button>
+            ))}
+          </div>
+          {view === 'planner' && (
+            <div className="sc-date" role="group" aria-label="Day">
+              <button type="button" className="sp-icon-btn" aria-label="The day before" onClick={() => setDay((d) => addDays(d, -1))}><ChevronLeft size={18} aria-hidden="true" /></button>
+              <label className="sc-date-pick">
+                <CalendarDays size={16} aria-hidden="true" />
+                <span data-testid="sc-day">{dayLabel(day)}</span>
+                <input type="date" value={day} aria-label="Pick a day" onChange={(e) => { if (e.target.value) setDay(e.target.value); }} />
+              </label>
+              <button type="button" className="sp-icon-btn" aria-label="The day after" onClick={() => setDay((d) => addDays(d, 1))}><ChevronRight size={18} aria-hidden="true" /></button>
+              {day !== today && <button type="button" className="sc-today" onClick={() => setDay(today)}>Today</button>}
+            </div>
+          )}
+        </div>
+      </section>
+      {view === 'planner'
+        ? <PulseStoryPlanner showId={ctx.showId} day={day} addKey={addKey} />
+        : <div className="sp-card"><StoryMomentPreview /></div>}
+    </div>
   );
 }
