@@ -66,4 +66,16 @@ describe('CharacterAppearanceTab', () => {
     fireEvent.click(await screen.findByText('Make a portrait'));
     expect((await screen.findByRole('alert')).textContent).toBe('Today\'s image budget is spent.');
   });
+
+  test('Remove drops a portrait; removing their profile photo clears it', async () => {
+    const onPortraitChanged = vi.fn();
+    api.get.mockResolvedValue({ data: { appearance: { ...LOOK, portraits: [{ url: 'https://x/black.jpg' }] }, portrait_url: 'https://x/black.jpg', portrait_cost: 0.04 } });
+    api.post.mockResolvedValue({ data: { appearance: { ...LOOK, portraits: [] }, portrait_url: null } });
+    render(<CharacterAppearanceTab character={CHAR} onPortraitChanged={onPortraitChanged} />);
+    const tile = await screen.findByTestId('cap-portrait');
+    fireEvent.click(within(tile).getByRole('button', { name: 'Remove this portrait (their profile photo)' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/cast/characters/c1/appearance/portrait/remove', { url: 'https://x/black.jpg' }));
+    await waitFor(() => expect(screen.queryByTestId('cap-portrait')).toBeNull());
+    expect(onPortraitChanged).toHaveBeenCalledWith(null);
+  });
 });
