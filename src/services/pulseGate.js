@@ -131,7 +131,10 @@ async function laneOf(db, post) {
     const profile = await db.SocialProfile.findByPk(post.social_profile_id, { attributes: ['id', 'society_archetype'] });
     if (!profile?.society_archetype) return null;
     const { loadSocietyArchetypes, matchSocietyArchetype } = require('./societyArchetypes');
-    return matchSocietyArchetype(await loadSocietyArchetypes(db), profile.society_archetype) || { name: profile.society_archetype };
+    const lane = matchSocietyArchetype(await loadSocietyArchetypes(db), profile.society_archetype) || { name: profile.society_archetype };
+    // Their content mix (idea 3): a post fits when it is one of their pillars.
+    const pillars = await require('./contentPillars').pillarsFor(db, lane.name);
+    return pillars.length ? { ...lane, pillars } : lane;
   } catch (err) {
     console.error('[PulseGate] the poster\'s content type could not be read; the lane is not checked:', err.message);
     return null;
@@ -145,7 +148,7 @@ async function laneOf(db, post) {
 async function voiceScore(voice, text, lane = null) {
   const examples = (voice?.examples_json || []).slice(0, 6).map((e) => `- ${e.text}`).join('\n') || '(none)';
   const laneAsk = lane?.name
-    ? `\n\nThey are known on The Pulse as ${lane.name}${lane.content ? ` (what they post: ${lane.content})` : ''}. Also say whether this post fits that: "in" when it does, or when something in it explains stepping outside it (an event, news, a reply, a moment in their life); "off" only when it reads like a different kind of creator wrote it.`
+    ? `\n\nThey are known on The Pulse as ${lane.name}${lane.content ? ` (what they post: ${lane.content})` : ''}.${lane.pillars?.length ? ` Their content mix: ${lane.pillars.map((pl) => pl.name).join(', ')}.` : ''} Also say whether this post fits that: "in" when it does, or when something in it explains stepping outside it (an event, news, a reply, a moment in their life); "off" only when it reads like a different kind of creator wrote it.`
     : '';
   const prompt = `Score how well this social post matches the character's voice, from 0 (nothing like them) to 1 (exactly them).
 Voice habits: ${JSON.stringify(voice?.habits_json || {})}
