@@ -187,7 +187,10 @@ async function gatherCharacterContext(characterId) {
 
   // 4. Their facts (Character Consistency Engine step 5; services/characterFacts).
   const { factsForCharacter, factsPromptBlock } = require('../services/characterFacts');
-  const factsBlock = factsPromptBlock(await factsForCharacter(db, character));
+  // What they are known for on The Pulse against their job, a hook for the
+  // scene (services/characterContentType; Evoni's idea 1, 2026-10-17).
+  const contentHook = await require('../services/characterContentType').contentHookFor(db, character);
+  const factsBlock = [factsPromptBlock(await factsForCharacter(db, character)), contentHook].filter(Boolean).join('\n\n');
 
   return {
     character,

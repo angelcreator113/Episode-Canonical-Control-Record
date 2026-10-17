@@ -326,7 +326,7 @@ function checkRateLimit(req, res) {
 const { findHandleHolder, handleTakenBody, normaliseHandle, escapeLike } = require('../utils/socialProfileHandle');
 const { loadBrainContext, recordRuleUse } = require('../services/brainRules');
 const {
-  loadSocietyArchetypes, matchSocietyArchetype, assignSocietyArchetype,
+  loadSocietyArchetypes, matchSocietyArchetype, assignSocietyArchetype, societyArchetypeCounts,
   societyArchetypeLine, societyArchetypeMenu,
 } = require('../services/societyArchetypes');
 const { linkedCharacter, withRegistryLinks } = require('../utils/registryLink');
@@ -415,7 +415,8 @@ Lala does not know she was built. The world she lives in feels complete and self
     // A LalaVerse creator gets the Society archetype that fits this spark
     // best, from Evoni's list (fix-list item 26).
     const societyList = layer === 'lalaverse' ? await loadSocietyArchetypes(db) : [];
-    prompt += societyArchetypeMenu(societyList);
+    // With the Feed's counts, so a new creator keeps the Feed's range (idea 6).
+    prompt += societyArchetypeMenu(societyList, societyList.length ? await societyArchetypeCounts(db) : null);
     // A LalaVerse creator follows the Show Bible (2026-10-06); a real-world
     // (JustAWoman's Feed) one does not.
     const brain = layer === 'lalaverse'
@@ -1872,7 +1873,9 @@ Career position relative to Lala: ${profile.career_pressure || 'level'}.`;
     const keptSociety = layer === 'lalaverse' && profile.society_archetype
       ? (matchSocietyArchetype(societyList, profile.society_archetype) || { name: profile.society_archetype })
       : null;
-    prompt += keptSociety ? societyArchetypeLine(keptSociety) : societyArchetypeMenu(societyList);
+    prompt += keptSociety
+      ? societyArchetypeLine(keptSociety)
+      : societyArchetypeMenu(societyList, societyList.length ? await societyArchetypeCounts(db) : null);
     const brain = layer === 'lalaverse'
       ? await loadBrainContext(db, { showId: profile.show_id || null, label: 'SocialProfiles' })
       : { block: null, ids: [] };

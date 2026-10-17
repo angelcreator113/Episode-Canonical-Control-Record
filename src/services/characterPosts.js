@@ -24,7 +24,11 @@
  *     why, for load-bearing. Each runs through the quality gate and is kept
  *     as a DRAFT for Review: nothing is released, whatever the gate says
  *     ('on_request' is always among its review reasons).
- *     Returns { show_id, drafted: [{ post, weight, why, review }], failed }.
+ *     With a content type, the batch keeps their content mix
+ *     (services/contentPillars): each post is the pillar furthest below its
+ *     share, unless Evoni said what is happening; each draft records its
+ *     pillar in gate_json.pillar.
+ *     Returns { show_id, drafted: [{ post, weight, why, review, pillar }], failed }.
  *
  *   postIdeas(db, characterId)
  *     what to post about, read from their own story with no AI call (Evoni,
@@ -109,7 +113,21 @@ function woundOf(character) {
   return out;
 }
 
-function buildPrompt({ character, profile, voice, facts, mask, wound, known, hosting, recent, label, about, count, contentType = null }) {
+/**
+ * Their content mix (services/contentPillars; Evoni's idea 3, 2026-10-17):
+ * the pillars, and the plan for this batch (each post the pillar furthest
+ * below its share) unless Evoni said what is happening.
+ */
+function mixLines(pillars, plan, count) {
+  if (!pillars?.length) return '';
+  const { pillarsLine } = require('./contentPillars');
+  const planned = plan?.length === count
+    ? `\nThis batch keeps the mix: ${plan.map((pl, i) => `post ${i + 1} is a ${pl.name} post`).join('; ')}.`
+    : '\nFrame each post as one of these pillars, whichever fits what is happening.';
+  return `\n${pillarsLine(pillars)}${planned}\n`;
+}
+
+function buildPrompt({ character, profile, voice, facts, mask, wound, known, hosting, recent, label, about, count, contentType = null, pillars = [], plan = [] }) {
   const { BANNED_PHRASES } = require('./pulseVoices');
   const examples = (voice.examples_json || []).slice(0, 8).map((e) => `- ${e.text}`).join('\n') || '(none yet)';
   const name = profile.display_name || character.display_name;
@@ -125,7 +143,7 @@ ${recent.length ? recent.map((t) => `- ${clip(t, 200)}`).join('\n') : '(none yet
 
 How they present themselves (their posts come from this face, true or not):
 ${mask}
-${contentType ? `\n${require('./characterContentType').contentTypeBlock(contentType, facts.occupation && !(facts.undecided || []).includes('occupation') ? facts.occupation : null)}\n` : ''}
+${contentType ? `\n${require('./characterContentType').contentTypeBlock(contentType, facts.occupation && !(facts.undecided || []).includes('occupation') ? facts.occupation : null)}\n` : ''}${mixLines(pillars, plan, count)}
 ${factsLines(facts)}
 
 When: ${label || 'now'}.
@@ -147,7 +165,7 @@ Rules:
 - The length and style this person really posts.
 
 Answer with JSON only, one entry per post, numbered 1 to ${count}:
-{"items": [{"n": 1, "text": "the post", "hashtag": "#OneTag or null", "weight": "load_bearing or ambient", "why": "for load_bearing: what in the story reacts to it", "reveals_story": true or false}]}`;
+{"items": [{"n": 1, "text": "the post", "hashtag": "#OneTag or null", "weight": "load_bearing or ambient", "why": "for load_bearing: what in the story reacts to it", "reveals_story": true or false${pillars.length ? ', "pillar": "the pillar from their content mix, its name exactly"' : ''}}]}`;
 }
 
 /** The character, their feed profile and Voice Profile, or a PostsError. */
@@ -183,9 +201,13 @@ async function generatePosts(db, { characterId, count = DEFAULT_COUNT, about = n
       ORDER BY created_at DESC LIMIT 6`, { replacements: { pid: feedProfile.id } });
 
   const { current: contentType } = await require('./characterContentType').contentTypeOf(db, { feedProfile });
+  const mix = require('./contentPillars');
+  const pillars = contentType ? await mix.pillarsFor(db, contentType.name) : [];
+  // With nothing asked for, each post is the pillar furthest below its share.
+  const plan = pillars.length && !what ? mix.planPillars(pillars, await mix.recentPillarCounts(db, feedProfile.id), n) : [];
   const prompt = buildPrompt({
     character, profile: feedProfile, voice, facts, mask: maskLines(character, feedProfile), wound: woundOf(character),
-    known, hosting, recent: recentRows.map((r) => r.content_text), label: clock.label(at), about: what, count: n, contentType,
+    known, hosting, recent: recentRows.map((r) => r.content_text), label: clock.label(at), about: what, count: n, contentType, pillars, plan,
   });
   await require('./pulseRequests').take(db, { showId, lane: 'manual', kind: 'character_posts' });
   const parsed = parseBatch(await askBatch(prompt, 500 * n), n);
@@ -212,8 +234,10 @@ async function generatePosts(db, { characterId, count = DEFAULT_COUNT, about = n
     const gate = await gateApi.check(db, post, { voice, privateState, lalaProfileId });
     const review = gateApi.reviewReasons(post, gate, { lalaProfileId, revealsStory: got.reveals_story === true });
     review.push('on_request');
-    await post.update({ gate_json: { ...gate, review, checked_at: new Date().toISOString() } });
-    drafted.push({ post, weight, why, review });
+    // The pillar it is, so the next batch keeps the mix: the answer's, else the plan's.
+    const pillar = (mix.matchPillar(pillars, got.pillar) || plan[i - 1] || null)?.name || null;
+    await post.update({ gate_json: { ...gate, review, ...(pillar ? { pillar } : {}), checked_at: new Date().toISOString() } });
+    drafted.push({ post, weight, why, review, pillar });
   }
   return { show_id: showId, drafted, failed };
 }
@@ -290,8 +314,15 @@ async function postIdeas(db, characterId) {
   }
   if (feedProfile?.society_archetype) {
     const { loadSocietyArchetypes, matchSocietyArchetype } = require('./societyArchetypes');
-    const known = matchSocietyArchetype(await loadSocietyArchetypes(db), feedProfile.society_archetype);
-    add('known_for', `What they're known for`, `A post in ${name}'s usual lane as ${feedProfile.society_archetype}${known?.content ? `: ${known.content.charAt(0).toLowerCase()}${known.content.slice(1)}` : ''}. The kind of post their audience follows them for.`);
+    const mix = require('./contentPillars');
+    const [nextPillar] = mix.planPillars(await mix.pillarsFor(db, feedProfile.society_archetype), await mix.recentPillarCounts(db, feedProfile.id), 1);
+    if (nextPillar) {
+      // The pillar furthest below its share of their posts (idea 3).
+      add('known_for', `Next in their mix: ${nextPillar.name}`, `A ${nextPillar.name} post, the kind ${name} makes as ${feedProfile.society_archetype}${nextPillar.example ? ` (for example: ${nextPillar.example})` : ''}.`);
+    } else {
+      const known = matchSocietyArchetype(await loadSocietyArchetypes(db), feedProfile.society_archetype);
+      add('known_for', `What they're known for`, `A post in ${name}'s usual lane as ${feedProfile.society_archetype}${known?.content ? `: ${known.content.charAt(0).toLowerCase()}${known.content.slice(1)}` : ''}. The kind of post their audience follows them for.`);
+    }
   }
   if (facts?.occupation && !undecided.has('occupation')) {
     add('work', 'A day at work', `${name} at work as ${facts.occupation}: a small moment from the day.`);
@@ -309,4 +340,4 @@ async function postIdeas(db, characterId) {
   return { ready: !blocker, blocker, next, ...extra, ideas };
 }
 
-module.exports = { postIdeas, generatePosts, buildPrompt, factsLines, maskLines, woundOf, PostsError, DraftError, DEFAULT_COUNT, STATUS_LINES };
+module.exports = { postIdeas, generatePosts, buildPrompt, mixLines, factsLines, maskLines, woundOf, PostsError, DraftError, DEFAULT_COUNT, STATUS_LINES };

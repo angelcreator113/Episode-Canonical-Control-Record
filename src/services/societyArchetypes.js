@@ -25,6 +25,11 @@
  *     least used;
  *   - regenerate keeps one the profile already has.
  *
+ * Balance (Evoni's idea 6, 2026-10-17): societyBalance says which types
+ * crowd the Feed and which nobody posts as; the AI's menu (generate, bulk
+ * generate, regenerate, and the content-type suggestions) carries the counts
+ * and leans toward the less used when two fit about equally well.
+ *
  * Fail-soft: an archetype never blocks a profile. A read that fails logs and
  * falls back (the defaults, or no counts).
  */
@@ -154,10 +159,58 @@ function societyArchetypeLine(a) {
   return `\n\nSOCIETY ARCHETYPE: ${a.name}, ${NOT_THE_TEN}. Write the creator as this archetype.${more ? ` ${more}` : ''}`;
 }
 
-/** The list for the AI to choose from, for a profile from Evoni's own spark. */
-function societyArchetypeMenu(list) {
+// A type is crowded when it has at least CROWDED_MIN profiles and more than
+// CROWDED_TIMES its even share of the Feed (Evoni's idea 6, 2026-10-17:
+// "warn when one type crowds the Feed, or when a type no one posts as leaves
+// a gap in the world").
+const CROWDED_MIN = 3;
+const CROWDED_TIMES = 2;
+
+/**
+ * The Feed's balance across the list: { total, crowded: [{ name, count,
+ * share }], empty: [name] }. share is a whole percent; names off the list
+ * count toward the total only.
+ */
+/** Counts by compared name (case, a leading "The", punctuation). */
+function countsByKey(counts) {
+  const used = new Map();
+  for (const [name, n] of Object.entries(counts || {})) {
+    const key = nameKey(name);
+    if (key) used.set(key, (used.get(key) || 0) + (Number(n) || 0));
+  }
+  return used;
+}
+
+function societyBalance(list, counts = {}) {
+  const used = countsByKey(counts);
+  const total = [...used.values()].reduce((a, b) => a + b, 0);
+  const rows = (list || []).map((a) => ({ name: a.name, count: used.get(nameKey(a.name)) || 0 }));
+  const even = rows.length ? total / rows.length : 0;
+  const crowded = rows
+    .filter((r) => r.count >= CROWDED_MIN && r.count > CROWDED_TIMES * even)
+    .sort((a, b) => b.count - a.count)
+    .map((r) => ({ ...r, share: Math.round((100 * r.count) / total) }));
+  return { total, crowded, empty: rows.filter((r) => !r.count).map((r) => r.name) };
+}
+
+/**
+ * The list for the AI to choose from, for a profile from Evoni's own spark.
+ * With the Feed's counts, each line says how many have it, crowded ones are
+ * marked, and the AI is told to keep the Feed's range.
+ */
+function societyArchetypeMenu(list, counts = null) {
   if (!list?.length) return '';
-  return `\n\nSOCIETY ARCHETYPE: ${NOT_THE_TEN}. Choose the one below that fits this creator best, write the creator as it, and add "society_archetype" to the JSON with its name exactly as written here:\n${list.map((a) => `- ${menuLine(a)}`).join('\n')}`;
+  const balance = counts ? societyBalance(list, counts) : null;
+  if (!balance?.total) {
+    return `\n\nSOCIETY ARCHETYPE: ${NOT_THE_TEN}. Choose the one below that fits this creator best, write the creator as it, and add "society_archetype" to the JSON with its name exactly as written here:\n${list.map((a) => `- ${menuLine(a)}`).join('\n')}`;
+  }
+  const crowded = new Set(balance.crowded.map((c) => nameKey(c.name)));
+  const used = countsByKey(counts);
+  const line = (a) => {
+    const n = used.get(nameKey(a.name)) || 0;
+    return `- ${menuLine(a)} [${n ? `${n} on the Feed` : 'nobody on the Feed yet'}${crowded.has(nameKey(a.name)) ? ', CROWDED' : ''}]`;
+  };
+  return `\n\nSOCIETY ARCHETYPE: ${NOT_THE_TEN}. Choose the one below that fits this creator best, write the creator as it, and add "society_archetype" to the JSON with its name exactly as written here. The Feed needs range: when two fit about equally well, choose the one with fewer on the Feed, and choose one marked CROWDED only when it plainly fits best:\n${list.map(line).join('\n')}`;
 }
 
 /** The scheduler's sparks, one archetype each, in order. */
@@ -179,4 +232,7 @@ module.exports = {
   societyArchetypeLine,
   societyArchetypeMenu,
   societySparkBlock,
+  societyBalance,
+  CROWDED_MIN,
+  CROWDED_TIMES,
 };

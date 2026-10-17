@@ -4492,21 +4492,22 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
       {/* Career Goals: part of the Season Plan, below the arc. */}
       {activeTab === 'episodes' && subTab === 'season' && (
         <div style={S.content}>
-          {/* In the Producer Mode look (2026-10-07): the prose title and its line; the tools wrap on a phone. */}
+          {/* Folded under the season (Evoni, 2026-10-17); Seed 24 goals only before there are any. */}
+          <details className="wa-season-fold" data-testid="career-goals-fold">
+          <summary className="wa-season-fold-summary">Career Goals <span className="wa-season-fold-meta">{goals.filter((g) => g.status === 'active').length} active · {goals.filter((g) => g.status === 'completed').length} complete</span></summary>
           <div className="wa-goals-head">
             <div>
-              <h2 className="wa-results-title">Career Goals</h2>
               <p className="wa-results-line">What Lala is working toward this season. Each goal tracks one of her stats to a target.</p>
             </div>
             <div className="wa-goals-tools">
               <button onClick={syncGoals} className="wa-goal-btn">Sync from stats</button>
               <button onClick={loadSuggestions} className="wa-goal-btn">Suggest events</button>
-              <button onClick={async () => {
+              {goals.length === 0 && <button onClick={async () => {
                 try {
                   const res = await api.post(`/api/v1/world/${showId}/goals/seed`, { activate_tier: 1 });
                   if (res.data.success) { setSuccessMsg(`Seeded ${res.data.created} goals! (${res.data.skipped} already existed)`); loadData(); }
                 } catch (err) { setError(err.response?.data?.error || err.message); }
-              }} className="wa-goal-btn">Seed 24 goals</button>
+              }} className="wa-goal-btn">Seed 24 goals</button>}
               <button onClick={() => { setGoalForm({ title: '', type: 'secondary', target_metric: 'reputation', target_value: 10, icon: '🎯', color: '', description: '' }); setEditingGoal('new'); }} style={S.primaryBtn}>+ New Goal</button>
             </div>
           </div>
@@ -4648,6 +4649,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
           )}
           {/* Brands worked with, with a per-brand hide (Task #3181). */}
           <CareerBrands showId={showId} />
+          </details>
         </div>
       )}
 
@@ -7847,7 +7849,40 @@ function SeasonTab({ showId, api, S, episodes, events = [], setToast }) {
 
       <PlanningInsights insights={insights} S={S} />
 
-      {/* Phase Cards */}
+      {/* Narrative Debt */}
+      {debt.length > 0 && (
+        <div style={S.card}>
+          <h3 style={{ ...S.cardTitle, margin: '0 0 12px', color: 'var(--danger-text)' }}>
+            Narrative Debt ({debt.length})
+          </h3>
+          <p style={{ ...S.muted, marginBottom: 12 }}>
+            Failed goals that carry emotional weight. These feed into AI-generated scripts, feed posts, and event stakes.
+          </p>
+          {debt.map((d, i) => (
+            <div key={i} style={{
+              padding: '10px 14px', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
+              borderRadius: 8, marginBottom: 8,
+            }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--danger-text)', marginBottom: 4 }}>
+                {d.goal_title} <span style={{ fontWeight: 400, fontSize: 11 }}>({d.achieved}/{d.target} {d.target_metric})</span>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--danger-text)', fontStyle: 'italic' }}>
+                {d.narrative_weight}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--danger-text)', marginTop: 4 }}>
+                From Phase: {d.phase} &middot; Affects: {(d.affects || []).join(', ')}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* The phases and the season's history, folded (Evoni, 2026-10-17: one
+          long scroll before). Advancing a phase lives at the roadmap's phase
+          boundary, the only place it applies; the always-shown Phase Controls
+          card and its separate warning are gone. */}
+      <details className="wa-season-fold" data-testid="season-phases-fold">
+        <summary className="wa-season-fold-summary">Phases and history <span className="wa-season-fold-meta">{phases.length} phases{log.length ? ` · ${log.length} log entries` : ''}</span></summary>
       <div style={{ display: 'grid', gap: 12 }}>
         {phases.map(phase => {
           const statusCfg = PHASE_STATUS_COLORS[phase.status] || PHASE_STATUS_COLORS.upcoming;
@@ -7926,76 +7961,6 @@ function SeasonTab({ showId, api, S, episodes, events = [], setToast }) {
         })}
       </div>
 
-      {/* Phase Controls */}
-      <div style={S.card}>
-        <h3 style={{ ...S.cardTitle, margin: '0 0 12px' }}>Phase Controls</h3>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button onClick={handleAdvance} disabled={advancing} style={S.primaryBtn}>
-            {advancing ? 'Advancing...' : `Advance to Phase ${arc.current_phase + 1}`}
-          </button>
-        </div>
-        <p style={{ ...S.muted, marginTop: 8, fontSize: 11 }}>
-          Advancing will finalize current phase goals and activate the next phase. You&apos;ll get a warning if goals are incomplete.
-        </p>
-      </div>
-
-      {/* Warning Modal */}
-      {warning && (
-        <div style={{ ...S.card, borderColor: 'var(--warning)', borderWidth: 2, borderStyle: 'solid', background: 'var(--warning-bg)' }}>
-          <h3 style={{ ...S.cardTitle, margin: '0 0 8px', color: 'var(--warning-text)' }}>⚠️ Advance Warning</h3>
-          <p style={{ fontSize: 13, color: 'var(--warning-text)', margin: '0 0 12px', lineHeight: 1.5 }}>
-            {warning.warning}
-          </p>
-          {warning.goal_status?.goals?.filter(g => g.status === 'active' || g.type === 'primary').length > 0 && (
-            <div style={{ marginBottom: 12 }}>
-              {warning.goal_status.goals.filter(g => g.status !== 'completed').map((g, i) => (
-                <div key={i} style={{ padding: '6px 10px', background: 'var(--surface-card)', borderRadius: 6, marginBottom: 4, fontSize: 12, color: 'var(--warning-text)' }}>
-                  {g.icon} <strong>{g.title}</strong> — {g.current_value}/{g.target_value} {g.target_metric}
-                  {g.type === 'primary' && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'var(--danger-text)' }}>PRIMARY</span>}
-                </div>
-              ))}
-            </div>
-          )}
-          <p style={{ fontSize: 11, color: 'var(--warning-text)', margin: '0 0 12px' }}>
-            Advancing will mark incomplete goals as <strong>narrative debt</strong> — emotional weight that affects scripts, feed, and events.
-          </p>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={handleConfirmAdvance} disabled={advancing} style={{ ...S.primaryBtn, background: 'var(--warning-text)' }}>
-              {advancing ? 'Advancing...' : 'Advance Anyway'}
-            </button>
-            <button onClick={() => setWarning(null)} style={S.secBtn}>Cancel</button>
-          </div>
-        </div>
-      )}
-
-      {/* Narrative Debt */}
-      {debt.length > 0 && (
-        <div style={S.card}>
-          <h3 style={{ ...S.cardTitle, margin: '0 0 12px', color: 'var(--danger-text)' }}>
-            Narrative Debt ({debt.length})
-          </h3>
-          <p style={{ ...S.muted, marginBottom: 12 }}>
-            Failed goals that carry emotional weight. These feed into AI-generated scripts, feed posts, and event stakes.
-          </p>
-          {debt.map((d, i) => (
-            <div key={i} style={{
-              padding: '10px 14px', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
-              borderRadius: 8, marginBottom: 8,
-            }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--danger-text)', marginBottom: 4 }}>
-                {d.goal_title} <span style={{ fontWeight: 400, fontSize: 11 }}>({d.achieved}/{d.target} {d.target_metric})</span>
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--danger-text)', fontStyle: 'italic' }}>
-                {d.narrative_weight}
-              </div>
-              <div style={{ fontSize: 10, color: 'var(--danger-text)', marginTop: 4 }}>
-                From Phase: {d.phase} &middot; Affects: {(d.affects || []).join(', ')}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* Progression Log */}
       {log.length > 0 && (
         <div style={S.card}>
@@ -8022,6 +7987,7 @@ function SeasonTab({ showId, api, S, episodes, events = [], setToast }) {
           ))}
         </div>
       )}
+      </details>
     </div>
   );
 }

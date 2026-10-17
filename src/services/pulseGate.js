@@ -7,7 +7,7 @@
  * anything else goes to Review"; docs/reads/2026-10-12-pulse-posting-read.md
  * §3, §7).
  *
- *   check(db, post, { voice, privateState })  →  { pass, voice, flags }
+ *   check(db, post, { voice, privateState, checkLane })  →  { pass, voice, flags }
  *     voice             a 0–1 score of the draft against the Voice Profile
  *                       and its examples (one Haiku call); below
  *                       VOICE_PASS is a flag
@@ -23,6 +23,13 @@
  *       doesnt_know         an event the poster could not know about at the
  *                           post's moment: not there, not told by a close
  *                           tie, never posted (pulseKnowledge; spec §6)
+ *     off_lane            the same Haiku call reads the post against what the
+ *                         poster is known for on The Pulse (their content type,
+ *                         services/characterContentType) and flags a post that
+ *                         reads like a different kind of creator wrote it, with
+ *                         nothing in it to explain the step outside (Evoni,
+ *                         2026-10-17: off-lane on purpose is fine, never by
+ *                         accident; Review is where she decides)
  *   reviewReasons(post, gate, { lalaProfileId, revealsStory })  why it goes
  *                       to Review: lala, about_lala, reveals_story, gate
  *
@@ -115,18 +122,43 @@ async function canonFlags(db, post, { privateState = null, lalaProfileId } = {})
   return flags;
 }
 
-/** The draft's voice match, 0–1, against the voice and its examples. */
-async function voiceScore(voice, text) {
+const LANES = ['in', 'off'];
+
+/** The poster's content type ({ name, content }) from their feed profile, else null. */
+async function laneOf(db, post) {
+  if (!post?.social_profile_id || !db?.SocialProfile) return null;
+  try {
+    const profile = await db.SocialProfile.findByPk(post.social_profile_id, { attributes: ['id', 'society_archetype'] });
+    if (!profile?.society_archetype) return null;
+    const { loadSocietyArchetypes, matchSocietyArchetype } = require('./societyArchetypes');
+    const lane = matchSocietyArchetype(await loadSocietyArchetypes(db), profile.society_archetype) || { name: profile.society_archetype };
+    // Their content mix (idea 3): a post fits when it is one of their pillars.
+    const pillars = await require('./contentPillars').pillarsFor(db, lane.name);
+    return pillars.length ? { ...lane, pillars } : lane;
+  } catch (err) {
+    console.error('[PulseGate] the poster\'s content type could not be read; the lane is not checked:', err.message);
+    return null;
+  }
+}
+
+/**
+ * The draft's voice match, 0–1, against the voice and its examples; with
+ * their content type (lane), also whether the post fits it.
+ */
+async function voiceScore(voice, text, lane = null) {
   const examples = (voice?.examples_json || []).slice(0, 6).map((e) => `- ${e.text}`).join('\n') || '(none)';
+  const laneAsk = lane?.name
+    ? `\n\nThey are known on The Pulse as ${lane.name}${lane.content ? ` (what they post: ${lane.content})` : ''}.${lane.pillars?.length ? ` Their content mix: ${lane.pillars.map((pl) => pl.name).join(', ')}.` : ''} Also say whether this post fits that: "in" when it does, or when something in it explains stepping outside it (an event, news, a reply, a moment in their life); "off" only when it reads like a different kind of creator wrote it.`
+    : '';
   const prompt = `Score how well this social post matches the character's voice, from 0 (nothing like them) to 1 (exactly them).
 Voice habits: ${JSON.stringify(voice?.habits_json || {})}
 Posts in their voice:
-${examples}
+${examples}${laneAsk}
 
 Post to score:
 ${text}
 
-Answer with JSON only: {"score": 0.0, "why": "one short line"}`;
+Answer with JSON only: {"score": 0.0, "why": "one short line"${lane?.name ? ', "lane": "in" or "off", "lane_why": "one short line"' : ''}}`;
   let message;
   for (const model of MODELS) {
     try {
@@ -142,7 +174,12 @@ Answer with JSON only: {"score": 0.0, "why": "one short line"}`;
     const match = raw.match(/\{[\s\S]*\}/);
     const parsed = JSON.parse(match ? match[0] : raw);
     const score = Number(parsed.score);
-    return { score: Number.isFinite(score) ? Math.max(0, Math.min(1, Math.round(score * 100) / 100)) : 0, why: String(parsed.why || '').slice(0, 200) };
+    const out = { score: Number.isFinite(score) ? Math.max(0, Math.min(1, Math.round(score * 100) / 100)) : 0, why: String(parsed.why || '').slice(0, 200) };
+    if (lane?.name && LANES.includes(parsed.lane)) {
+      out.lane = parsed.lane;
+      out.lane_why = String(parsed.lane_why || '').slice(0, 200);
+    }
+    return out;
   } catch (parseErr) {
     console.error('[PulseGate] could not read the voice score:', parseErr.message);
     return { score: 0, why: 'The voice score could not be read.' };
@@ -162,11 +199,14 @@ function hostAnnouncing(ev, post, at, orderOf) {
   return at >= orderOf(ev.episode_number, 'announced');
 }
 
-async function check(db, post, { voice = null, privateState = null, lalaProfileId } = {}) {
+async function check(db, post, { voice = null, privateState = null, lalaProfileId, checkLane = true } = {}) {
   const flags = await canonFlags(db, post, { privateState, lalaProfileId });
-  const scored = await voiceScore(voice, post.content_text || '');
+  // A DM is not content: it is never held to their lane.
+  const lane = checkLane ? await laneOf(db, post) : null;
+  const scored = await voiceScore(voice, post.content_text || '', lane);
   if (scored.score < VOICE_PASS) flags.push({ code: 'voice', detail: `Voice match ${scored.score} (below ${VOICE_PASS}).` });
-  return { pass: flags.length === 0, voice: scored.score, voice_why: scored.why, flags };
+  if (scored.lane === 'off') flags.push({ code: 'off_lane', detail: `Off what they are known for (${lane.name})${scored.lane_why ? `: ${scored.lane_why}` : '.'}` });
+  return { pass: flags.length === 0, voice: scored.score, voice_why: scored.why, ...(scored.lane ? { lane: scored.lane, lane_why: scored.lane_why } : {}), flags };
 }
 
 /**
@@ -188,4 +228,4 @@ function reviewReasons(post, gate, { lalaProfileId = null, revealsStory = false 
 }
 
 module.exports = {
-  hostAnnouncing, VOICE_PASS, MIN_PRIVATE, mentions, privateLeaks, canonFlags, voiceScore, check, reviewReasons };
+  hostAnnouncing, VOICE_PASS, MIN_PRIVATE, mentions, privateLeaks, canonFlags, voiceScore, laneOf, check, reviewReasons };

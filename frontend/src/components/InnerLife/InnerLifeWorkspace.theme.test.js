@@ -26,11 +26,11 @@ describe('The Inner life workspace theme', () => {
     for (const r of pairs) expect(contrast(t(r.fg), t(r.bg)), r.sel).toBeGreaterThanOrEqual(4.5);
   });
 
-  test('text with no fill of its own reads on white, the hover washes and the gold soft', () => {
+  test('text with no fill of its own reads on white, the washes, the gold soft and the unmarked red', () => {
     const colours = new Set(rules.filter((r) => r.fg && !r.bg && r.fg !== '--text-inverse').map((r) => r.fg));
     expect(colours.size).toBeGreaterThan(3);
     for (const fg of colours) {
-      for (const bg of ['--surface-card', '--accent-subtle', '--lala-gold-soft']) {
+      for (const bg of ['--surface-card', '--accent-subtle', '--lala-gold-soft', '--danger-bg']) {
         expect(contrast(t(fg), t(bg)), `${fg} on ${bg}`).toBeGreaterThanOrEqual(4.5);
       }
     }
