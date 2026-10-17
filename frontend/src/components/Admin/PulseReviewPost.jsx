@@ -189,15 +189,33 @@ export function BeatPicker({ post, showId }) {
  */
 const releaseWhen = (at) => new Date(at).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 /** A datetime-local value an hour from now, as a starting point. */
-const inAnHour = () => {
-  const d = new Date(Date.now() + 60 * 60 * 1000);
+const localInput = (d) => {
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
+const inAnHour = () => localInput(new Date(Date.now() + 60 * 60 * 1000));
 
+// Schedule… opens with the time the story suggests (Evoni, 2026-10-17:
+// "doesn't the system know a better time ... and then I can just make
+// adjustments"; services/postRelease suggestReleaseTime), and why; she
+// schedules it as it is or changes it first.
 export function ReleaseTime({ post, busy, act }) {
   const [picking, setPicking] = useState(false);
   const [when, setWhen] = useState(inAnHour);
+  const [why, setWhy] = useState(null);
+  const pick = async () => {
+    setPicking(true);
+    setWhy(null);
+    try {
+      const res = await api.get(`/api/v1/feed-posts/${post.id}/release-time/suggest?tz_offset=${new Date().getTimezoneOffset()}`);
+      if (res.data?.at) {
+        setWhen(localInput(new Date(res.data.at)));
+        setWhy(res.data.why || null);
+      }
+    } catch (err) {
+      console.error('[PulseReviewPost] no suggested time:', err.response?.status || err.message);
+    }
+  };
   const setTime = (body, label) => act(label, () => api.put(`/api/v1/feed-posts/${post.id}/release-time`, body));
   const state = post.release_state;
   return (
@@ -206,14 +224,15 @@ export function ReleaseTime({ post, busy, act }) {
       {state === 'held' && <span className="prv-badge">Held</span>}
       {picking ? (
         <>
-          <input type="datetime-local" aria-label="Release on" value={when} onChange={(e) => setWhen(e.target.value)} />
+          <input type="datetime-local" aria-label="Release on" value={when} onChange={(e) => { setWhen(e.target.value); setWhy(null); }} />
+          {why && <span className="prv-muted" data-testid="prv-release-why">Suggested: {why}</span>}
           <button type="button" className="prv-btn" disabled={busy || !when}
             onClick={() => { setPicking(false); setTime({ mode: 'schedule', at: new Date(when).toISOString() }, 'Schedule'); }}>Schedule</button>
           <button type="button" className="prv-link-btn" onClick={() => setPicking(false)}>Cancel</button>
         </>
       ) : (
         <>
-          <button type="button" className="prv-link-btn" disabled={busy} onClick={() => setPicking(true)}>{state === 'scheduled' ? 'Reschedule' : 'Schedule…'}</button>
+          <button type="button" className="prv-link-btn" disabled={busy} onClick={pick}>{state === 'scheduled' ? 'Reschedule' : 'Schedule…'}</button>
           {state !== 'held' && <button type="button" className="prv-link-btn" disabled={busy} onClick={() => setTime({ mode: 'hold' }, 'Hold')}>Hold</button>}
           {state && <button type="button" className="prv-link-btn" disabled={busy} onClick={() => setTime({ mode: 'clear' }, 'Clear the release time')}>{state === 'held' ? 'Stop holding' : 'Unschedule'}</button>}
         </>
