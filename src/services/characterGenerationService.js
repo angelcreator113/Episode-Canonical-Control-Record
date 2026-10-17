@@ -51,9 +51,23 @@ const _DEEP_PROFILE_DIMENSIONS = [
  *
  * Nothing is written to DB until author confirms.
  */
-async function generateFullCharacter({ spark, worldContext, bookContext, existingCharacters = [] }) {
+/**
+ * Whether a new character's social is The Pulse (Evoni, 2026-10-15 and
+ * 2026-10-17: "lalaverse social media is The Pulse"). Lala's world is the
+ * default; only JustAWoman's real world ("Before Lala", Book 1, or the
+ * real_world layer asked for) keeps real apps. A LalaVerse world whose name
+ * does not say "Lala" is still on The Pulse.
+ */
+function onPulseFor(worldContext, layer = null) {
+  if (layer) return layer === 'lalaverse';
+  const named = `${worldContext?.name || ''} ${worldContext?.description || ''}`;
+  return !/before lala|book\s*1\b|justawoman|just a woman|real[\s_-]?world/i.test(named);
+}
+
+async function generateFullCharacter({ spark, worldContext, bookContext, existingCharacters = [], layer = null }) {
   const { name, vibe, role } = spark;
   const age = spark.age || null;
+  const onPulse = onPulseFor(worldContext, layer);
 
   // Build the world context string
   const worldString = worldContext
@@ -76,7 +90,7 @@ async function generateFullCharacter({ spark, worldContext, bookContext, existin
     belongingMap,
   ] = await Promise.all([
     generateInteriorArchitecture({ name, vibe, role, worldString, bookString, castString, age }),
-    determinesSocialPresence({ name, vibe, role, worldString }),
+    determinesSocialPresence({ name, vibe, role, worldString, onPulse }),
     generateFamilyTree({ name, vibe, role, worldString }),
     generateBelongingMap({ name, vibe, role, worldString }),
   ]);
@@ -88,8 +102,7 @@ async function generateFullCharacter({ spark, worldContext, bookContext, existin
       name, vibe, role, worldString,
       interior: interiorArchitecture,
       // Lala's world (the default) has one social app, The Pulse.
-      // "Before Lala" is JustAWoman's world, not Lala's.
-      onPulse: !worldContext || (/lala/i.test(worldContext.name || '') && !/before lala|book\s*1/i.test(worldContext.name || '')),
+      onPulse,
     });
   }
 
@@ -415,20 +428,22 @@ async function generateMissingInterior({ character, feedProfile = null, events =
 // SOCIAL PRESENCE DECISION
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function determinesSocialPresence({ name, vibe, role, worldString }) {
+async function determinesSocialPresence({ name, vibe, role, worldString, onPulse = false }) {
   const prompt = `${worldString}
 
 Character: ${name}
 Vibe: ${vibe}
 Role: ${role}
 
-Does this character have a social media presence? Consider their role, age, class, ambition, aesthetic, and world context.
+${onPulse
+    ? 'Is this character on The Pulse (the LalaVerse\'s one social app; Instagram, TikTok, YouTube and the rest do not exist here)? Consider their role, age, class, ambition, aesthetic, and world context.'
+    : 'Does this character have a social media presence? Consider their role, age, class, ambition, aesthetic, and world context.'}
 
 Return JSON only:
 {
   "social_presence": true or false,
   "reason": "one sentence explaining why",
-  "inferred_platform": "instagram OR tiktok OR youtube OR twitter OR none",
+  "inferred_platform": "${onPulse ? 'pulse OR none' : 'instagram OR tiktok OR youtube OR twitter OR none'}",
   "inferred_handle_style": "brief description of what their handle would feel like"
 }`;
 
@@ -632,6 +647,7 @@ function calculateDepthLevel(character) {
 
 module.exports = {
   generateFullCharacter,
+  onPulseFor,
   generateInteriorArchitecture,
   worldLineFor,
   generateMissingInterior,

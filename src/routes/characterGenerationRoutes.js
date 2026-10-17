@@ -57,6 +57,8 @@ function getModels(req) {
 // ────────────────────────────────────────────────────────────────────────────
 router.post('/generate', aiRateLimiter, async (req, res) => {
   const { spark, world_id, book_id } = req.body;
+  // The feed it is for, when the caller knows it: 'lalaverse' (The Pulse) or 'real_world'.
+  const layer = FEED_LAYERS.includes(req.body.feed_layer) ? req.body.feed_layer : null;
 
   if (!spark?.name || !spark?.vibe) {
     return res.status(400).json({ error: 'spark.name and spark.vibe are required' });
@@ -93,6 +95,7 @@ router.post('/generate', aiRateLimiter, async (req, res) => {
       worldContext,
       bookContext,
       existingCharacters,
+      layer,
     });
 
     res.json({
