@@ -13,6 +13,10 @@
  * GET    /canvas        — nodes + edges formatted for SVG renderer; with
  *                          ?show_id=, each edge's Pulse closeness (read only)
  * POST   /:id/generate-ripples — generate caught-in-middle flags
+ * GET    /suggestions   — suggested pairs waiting for Evoni (services/pairSuggestions)
+ * POST   /suggestions   — { limit? }: new ones, by audience overlap and one AI call (ADMIN)
+ * POST   /suggestions/:key/keep    — { type?, why?, drama_level? }: make it a relationship (ADMIN)
+ * POST   /suggestions/:key/dismiss — never suggest this pair again (ADMIN)
  *
  * Since Task #3115 (Evoni, 2026-10-13: "go with (a)") the map reads and edits
  * social_profile_relationships, the table The Pulse reads for the kind of
@@ -24,7 +28,7 @@
 const express = require('express');
 const router  = express.Router();
 const { Op }  = require('sequelize');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 router.use(requireAuth);
@@ -97,6 +101,64 @@ function findTwin(SocialProfileRelationship, a, b, type, exceptId) {
 }
 
 // GET /
+// ── Suggested pairs (Evoni's idea 4, PR 2; services/pairSuggestions) ──────
+// Creators who share or compete for an audience but have no relationship
+// yet. Nothing is made until Evoni keeps one.
+const pairError = (res, err) => {
+  const { PairError } = require('../services/pairSuggestions');
+  if (err instanceof PairError) { res.status(err.status).json({ success: false, error: err.message }); return true; }
+  return false;
+};
+
+router.get('/suggestions', async (req, res) => {
+  try {
+    return res.json({ success: true, pairs: await require('../services/pairSuggestions').listPending(getModels(req)) });
+  } catch (err) {
+    console.error('[FeedRelationships] GET /suggestions error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/suggestions', authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  try {
+    const result = await require('../services/pairSuggestions').suggestPairs(getModels(req), { limit: req.body?.limit });
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('[FeedRelationships] POST /suggestions error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/suggestions/:key/keep', authorize(['ADMIN']), async (req, res) => {
+  try {
+    try {
+      const rel = await require('../services/pairSuggestions').keepPair(getModels(req), req.params.key, req.body || {});
+      return res.status(201).json({ success: true, relationship: rel });
+    } catch (err) {
+      if (pairError(res, err)) return undefined;
+      throw err;
+    }
+  } catch (err) {
+    console.error('[FeedRelationships] POST /suggestions/:key/keep error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/suggestions/:key/dismiss', authorize(['ADMIN']), async (req, res) => {
+  try {
+    try {
+      await require('../services/pairSuggestions').dismissPair(getModels(req), req.params.key);
+      return res.json({ success: true });
+    } catch (err) {
+      if (pairError(res, err)) return undefined;
+      throw err;
+    }
+  } catch (err) {
+    console.error('[FeedRelationships] POST /suggestions/:key/dismiss error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.get('/', async (req, res) => {
   const { SocialProfileRelationship, SocialProfile } = getModels(req);
   try {
