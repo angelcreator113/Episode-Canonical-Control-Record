@@ -910,3 +910,13 @@
 
 /* The queue's true counts under the cards: "Showing 10–18 of 214 matching · 250 events". */
 .wa-ev-range { margin: 12px 0 0; font-size: 12px; color: var(--lala-ink-muted); }
+
+/* Season Plan folds (Evoni, 2026-10-17): the phases and history, and Career Goals. */
+.wa-season-fold { border: 1px solid var(--accent-light); border-radius: 16px; background: var(--surface-card); padding: 0 16px; }
+.wa-season-fold[open] { padding-bottom: 16px; }
+.wa-season-fold > * + * { margin-top: 12px; }
+.wa-season-fold-summary {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-height: 52px; padding: 14px 0; cursor: pointer;
+  font-family: var(--font-prose); font-size: 20px; font-weight: 700; color: var(--text-primary);
+}
+.wa-season-fold-meta { font-family: var(--font-ui); font-size: 13px; font-weight: 500; color: var(--text-secondary); }
