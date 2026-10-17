@@ -80,7 +80,10 @@ async function loadCharacterFile(db, { character = null, feedProfile } = {}) {
   if (fp?.society_archetype) {
     file.contentType = await part('the content type', async () => {
       const { loadSocietyArchetypes, matchSocietyArchetype } = require('./societyArchetypes');
-      return matchSocietyArchetype(await loadSocietyArchetypes(db), fp.society_archetype) || { name: fp.society_archetype };
+      const type = matchSocietyArchetype(await loadSocietyArchetypes(db), fp.society_archetype) || { name: fp.society_archetype };
+      // Their content mix (idea 3, services/contentPillars).
+      const pillars = await require('./contentPillars').pillarsFor(db, type.name);
+      return pillars.length ? { ...type, pillars } : type;
     }, { name: fp.society_archetype });
   }
   for (const k of PROFILE_MASK_KEYS) if (clip(fp?.[k])) file.mask[k] = clip(fp[k]);

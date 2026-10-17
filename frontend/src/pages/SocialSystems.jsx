@@ -41,6 +41,7 @@ import useListEditor, { EditListsToggle, ItemActions, AddToList } from '../compo
 import BrainUpdate from '../components/BrainUpdate';
 import SocietySummary from '../components/Society/SocietySummary';
 import ContentTypeBatch from '../components/Society/ContentTypeBatch';
+import ContentMix from '../components/Society/ContentMix';
 import { ARCHETYPES, RELATIONSHIP_TYPES, ECONOMY_STREAMS, FASHION_TREND_STAGES, BEAUTY_TREND_STAGES, MOMENTUM_WAVES, INFLUENCE_FORCES, LEGACY_SIGNALS, INFLUENCER_DEFAULTS } from '../data/influencerData';
 import { CELEBRITY_HIERARCHY, ALGORITHM_FORCES, DRAMA_MECHANICS, GOSSIP_MEDIA, FAMOUS_CHARACTERS, CALENDAR_DEFAULTS } from '../data/calendarData';
 import { tabFromSearch } from '../utils/worldRedirects';
@@ -137,6 +138,21 @@ export default function SocialSystems({ embedded = false }) {
   // null while reading, false if the read failed.
   const [feed, setFeed] = useState(null);
 
+  // Each content type's mix (idea 3), read once the Archetypes tab opens:
+  // { [name]: { name, pillars, custom, has_default } }; null while reading.
+  const [mixes, setMixes] = useState(null);
+  useEffect(() => {
+    if (tab !== 'archetypes' || mixes !== null) return undefined;
+    let live = true;
+    api.get('/api/v1/cast/content-pillars')
+      .then((r) => { if (live) setMixes(Object.fromEntries((r.data?.types || []).map((t) => [t.name, t]))); })
+      .catch((err) => {
+        console.error('[Society] the content mixes could not be read:', err?.response?.status || err?.message);
+        if (live) setMixes({});
+      });
+    return () => { live = false; };
+  }, [tab, mixes]);
+
   useEffect(() => {
     if (tab !== 'archetypes' || feed !== null) return undefined;
     let live = true;
@@ -229,6 +245,12 @@ export default function SocialSystems({ embedded = false }) {
                         <p>{a.audience}</p>
                         <span className="ss-label">Narrative function</span>
                         <p className="ss-quote">{a.narrative}</p>
+                        {mixes && (
+                          <ContentMix
+                            type={mixes[a.name] || { name: a.name, pillars: [], custom: false, has_default: false }}
+                            onSaved={(t) => setMixes((m) => ({ ...m, [a.name]: { ...(m[a.name] || {}), ...t } }))}
+                          />
+                        )}
                       </div>
                     )}
                     {actions(SYSTEMS, 'ARCHETYPES', i, a, a.name, 'archetype')}
