@@ -32,3 +32,11 @@
 .cpl-angles .cpl-btn { justify-self: start; }
 .cpl-event-photos { display: grid; gap: 6px; padding-top: 8px; border-top: 1px solid var(--lala-pink-light); }
 .cpl-event-photos-title { font-size: 13px; font-weight: 700; color: var(--lala-pink-dark); }
+.cpl-describe { display: grid; gap: 6px; padding: 0 10px 10px; }
+.cpl-describe .cpl-btn { justify-self: start; }
+.cpl-describe-label { font-family: 'DM Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--lala-pink-dark); }
+.cpl-describe-text { width: 100%; box-sizing: border-box; font-family: 'Lora', serif; font-size: 13px; line-height: 1.5; resize: vertical; }
+.cpl-describe-used { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.cpl-describe-used li { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--lala-pink-light); color: var(--text-secondary); overflow-wrap: anywhere; }
+.cpl-describe-current { font-size: 12px; color: var(--text-secondary); }
+.cpl-describe-current p { margin: 4px 0 0; }
