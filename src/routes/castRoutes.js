@@ -5,6 +5,15 @@
  * 2026-10-08; frontend pages/CharacterRegistryPage). Its own file, not
  * routes/characterRegistry.js (F-Reg-2): each write here is one row.
  *
+ *   GET    /api/v1/cast/cross-check?registry_id=   contradictions between characters: a post
+ *                                                  putting someone at an event they were
+ *                                                  not at, or naming one they could not
+ *                                                  know; one character's text giving
+ *                                                  another the wrong follower count or
+ *                                                  status (flag-only; services/castCrossCheck)
+ *   GET    /api/v1/cast/flag-log?registry_id=      every flag the check has raised, resolved
+ *                                                  ones too, by check, field and character
+ *                                                  (services/flagLog)
  *   GET    /api/v1/cast/consistency?registry_id=   the cast rollout: each live character's
  *                                                  facts, check findings, voice and next
  *                                                  step (services/castConsistency; one id,
@@ -35,10 +44,20 @@
  *                                                  their character file: answers, gap or
  *                                                  contradiction; saves nothing (ADMIN;
  *                                                  services/characterPressure)
+ *   GET    /api/v1/cast/characters/:id/facts/history  when and why each fact changed, with
+ *                                                  the follower ledger (services/factHistory)
  *   GET    /api/v1/cast/characters/:id/check        flag-only check of their profile's text
  *                                                  against their facts (services/characterConsistency)
  *   POST   /api/v1/cast/characters/:id/check/intentional        { flag_id, note? }: ADMIN
  *   DELETE /api/v1/cast/characters/:id/check/intentional/:flagId  unmark it: ADMIN
+ *   GET    /api/v1/cast/characters/:id/appearance   how they look and their portraits
+ *   PUT    /api/v1/cast/characters/:id/appearance   the written look (ADMIN)
+ *   POST   /api/v1/cast/characters/:id/appearance/suggest      one AI call proposes it
+ *                                                  from their character file (ADMIN)
+ *   POST   /api/v1/cast/characters/:id/appearance/portrait     one generated portrait from
+ *                                                  the saved look (ADMIN, budget-gated)
+ *   POST   /api/v1/cast/characters/:id/appearance/portrait/use { url }: it becomes their
+ *                                                  profile photo (ADMIN)
  *   GET    /api/v1/cast/characters/:id/typology     their typology seed (Enneagram type and
  *                                                  wing, MBTI, why) and its label
  *   PUT    /api/v1/cast/characters/:id/typology     set it (ADMIN), or { clear: true }
@@ -160,6 +179,39 @@ router.get('/consistency', requireAuth, async (req, res) => {
     return res.json({ success: true, ...result });
   } catch (err) {
     console.error('[Cast] GET /consistency error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/v1/cast/cross-check?registry_id= (the spec's #2; Evoni, 2026-10-17):
+// contradictions between characters, flag-only (services/castCrossCheck).
+router.get('/cross-check', requireAuth, async (req, res) => {
+  try {
+    const ids = String(req.query.registry_id || '').split(',').map((s) => s.trim()).filter(Boolean);
+    if (!ids.length || ids.length > 20 || !ids.every((id) => UUID_RE.test(id))) {
+      return res.status(400).json({ success: false, error: 'registry_id must be one or more registry ids (UUIDs), comma-separated' });
+    }
+    const result = await require('../services/castCrossCheck').crossCheck(getModels(), ids);
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('[Cast] GET /cross-check error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/v1/cast/flag-log?registry_id= (the spec's #4; Evoni, 2026-10-17):
+// every flag the check has raised, resolved ones too, counted by check, by
+// field and by character: where the generators break most (services/flagLog).
+router.get('/flag-log', requireAuth, async (req, res) => {
+  try {
+    const ids = String(req.query.registry_id || '').split(',').map((s) => s.trim()).filter(Boolean);
+    if (!ids.length || ids.length > 20 || !ids.every((id) => UUID_RE.test(id))) {
+      return res.status(400).json({ success: false, error: 'registry_id must be one or more registry ids (UUIDs), comma-separated' });
+    }
+    const result = await require('../services/flagLog').flagLogSummary(getModels(), ids);
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('[Cast] GET /flag-log error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -345,6 +397,23 @@ router.put('/characters/:id/facts', requireAuth, authorize(['ADMIN']), async (re
  * filled out when I auto generate profiles?"): a proposal for the missing
  * facts only; the fact sheet opens with it, and she saves or changes it.
  */
+// GET /api/v1/cast/characters/:id/facts/history (the spec's #1; Evoni,
+// 2026-10-17): when and why each fact changed, with the follower ledger,
+// newest first (services/factHistory).
+router.get('/characters/:id/facts/history', requireAuth, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const db = getModels();
+    const found = await characterWithFeed(db, req.params.id);
+    if (!found) return res.status(404).json({ success: false, error: 'Character not found' });
+    const history = await require('../services/factHistory').factHistory(db, found);
+    return res.json({ success: true, history });
+  } catch (err) {
+    console.error('[Cast] GET /characters/:id/facts/history error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // POST /api/v1/cast/characters/:id/pressure-test (the spec's #6; Evoni,
 // 2026-10-17): hard questions answered from their own character file.
 router.post('/characters/:id/pressure-test', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
@@ -397,6 +466,7 @@ router.get('/characters/:id/check', requireAuth, async (req, res) => {
     const found = await characterWithFeed(db, req.params.id);
     if (!found) return res.status(404).json({ success: false, error: 'Character not found' });
     const result = await require('../services/characterConsistency').checkCharacter(db, found);
+    await require('../services/flagLog').logCheck(db, found.character, result);
     return res.json({ success: true, ...result });
   } catch (err) {
     console.error('[Cast] GET /characters/:id/check error:', err);
@@ -421,6 +491,7 @@ async function markIntentional(req, res, on) {
       throw err;
     }
     await character.update({ canon_facts: next });
+    await require('../services/flagLog').markIntentional(db, character.id, id, on);
     return res.json({ success: true, intentional: next.intentional });
   } catch (err) {
     console.error(`[Cast] ${on ? 'POST' : 'DELETE'} /characters/:id/check/intentional error:`, err);
@@ -446,6 +517,9 @@ router.post('/characters/:id/check/fix', requireAuth, authorize(['ADMIN']), asyn
     try {
       const text = req.body && 'text' in req.body ? req.body.text : undefined;
       const result = await applyFix(db, found, flagId, { text });
+      const flagLog = require('../services/flagLog');
+      await flagLog.markFixed(db, found.character.id, flagId);
+      await flagLog.logCheck(db, found.character, result);
       return res.json({ success: true, ...result });
     } catch (err) {
       if (err instanceof FixError) return res.status(err.status).json({ success: false, error: err.message });
@@ -466,6 +540,88 @@ const typologyOut = (typology) => {
   const { typologyLabel } = require('../services/characterTypology');
   return { typology: typology || null, label: typologyLabel(typology) || null };
 };
+
+// ── Appearance (Evoni, 2026-10-17: "we need an appearance tab and a
+// generator"; "yes to the portrait images"; services/characterAppearance) ──
+const appearanceOut = (character) => {
+  const { appearanceLines } = require('../services/characterAppearance');
+  const appearance = character.appearance || null;
+  return { appearance, lines: appearanceLines(appearance), portrait_url: character.portrait_url || null };
+};
+const appearanceError = (res, err, what) => {
+  const { AppearanceError } = require('../services/characterAppearance');
+  if (err instanceof AppearanceError) return res.status(err.status).json({ success: false, error: err.message });
+  if (require('../services/imageCostService').isBudgetError(err)) return res.status(429).json({ success: false, error: err.message, code: err.code });
+  console.error(`[Cast] ${what} error:`, err);
+  return res.status(500).json({ success: false, error: err.message });
+};
+
+// GET their appearance: how they look and the portraits made from it.
+router.get('/characters/:id/appearance', requireAuth, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const character = await getModels().RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+    const { estimateGenerationCost } = require('../services/imageGenerationService');
+    return res.json({ success: true, ...appearanceOut(character), portrait_cost: estimateGenerationCost({ size: 'portrait' }).usd ?? null });
+  } catch (err) {
+    return appearanceError(res, err, 'GET /characters/:id/appearance');
+  }
+});
+
+// PUT their appearance (ADMIN): the written look; their portraits are kept.
+router.put('/characters/:id/appearance', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const character = await getModels().RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+    const { normalizeAppearance } = require('../services/characterAppearance');
+    const next = normalizeAppearance(req.body || {}, { by: String(req.user?.email || req.user?.id || 'admin').slice(0, 255) });
+    await character.update({ appearance: { ...next, portraits: character.appearance?.portraits || [] } });
+    return res.json({ success: true, ...appearanceOut(character) });
+  } catch (err) {
+    return appearanceError(res, err, 'PUT /characters/:id/appearance');
+  }
+});
+
+// POST suggest (ADMIN, one AI call): their look read from their character file; saves nothing.
+router.post('/characters/:id/appearance/suggest', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const db = getModels();
+    const found = await characterWithFeed(db, req.params.id);
+    if (!found) return res.status(404).json({ success: false, error: 'Character not found' });
+    return res.json({ success: true, ...(await require('../services/characterAppearance').suggestAppearance(db, found)) });
+  } catch (err) {
+    return appearanceError(res, err, 'POST /characters/:id/appearance/suggest');
+  }
+});
+
+// POST portrait (ADMIN, one image, budget-gated): a portrait from their saved look.
+router.post('/characters/:id/appearance/portrait', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const character = await getModels().RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+    const made = await require('../services/characterAppearance').generatePortrait(getModels(), character);
+    return res.json({ success: true, ...made, ...appearanceOut(character) });
+  } catch (err) {
+    return appearanceError(res, err, 'POST /characters/:id/appearance/portrait');
+  }
+});
+
+// POST portrait/use { url } (ADMIN): one of their portraits becomes their profile photo.
+router.post('/characters/:id/appearance/portrait/use', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const character = await getModels().RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+    await require('../services/characterAppearance').usePortrait(character, String(req.body?.url || ''));
+    return res.json({ success: true, ...appearanceOut(character) });
+  } catch (err) {
+    return appearanceError(res, err, 'POST /characters/:id/appearance/portrait/use');
+  }
+});
 
 router.get('/characters/:id/typology', requireAuth, async (req, res) => {
   try {

@@ -38,6 +38,7 @@ const { PULSE, isPulseLayer } = require('../utils/pulsePlatform');
 const { fitRecordToModel, warnTruncated, logValueTooLong } = require('../utils/fitToModel');
 const { findHandleHolder, handleTakenBody } = require('../utils/socialProfileHandle');
 const { assignSocietyArchetype } = require('../services/societyArchetypes');
+const { withTwinsHome } = require('../services/characterDepthFields');
 
 router.use(requireAuth);
 // Every response from this router: author-only character fields for the admin group only
@@ -57,6 +58,8 @@ function getModels(req) {
 // ────────────────────────────────────────────────────────────────────────────
 router.post('/generate', aiRateLimiter, async (req, res) => {
   const { spark, world_id, book_id } = req.body;
+  // The feed it is for, when the caller knows it: 'lalaverse' (The Pulse) or 'real_world'.
+  const layer = FEED_LAYERS.includes(req.body.feed_layer) ? req.body.feed_layer : null;
 
   if (!spark?.name || !spark?.vibe) {
     return res.status(400).json({ error: 'spark.name and spark.vibe are required' });
@@ -93,6 +96,7 @@ router.post('/generate', aiRateLimiter, async (req, res) => {
       worldContext,
       bookContext,
       existingCharacters,
+      layer,
     });
 
     res.json({
@@ -146,9 +150,11 @@ router.post('/confirm', async (req, res) => {
         }
 
         // Auto-calculate depth level from the proposed data
-        const depth_level = calculateDepthLevel({ ...character.toJSON(), ...proposed });
+        // The Depth Engine's twins are saved in their homes (services/characterDepthFields).
+        const fields = withTwinsHome(character.toJSON(), proposed);
+        const depth_level = calculateDepthLevel({ ...character.toJSON(), ...fields });
 
-        await character.update({ ...proposed, depth_level }, { transaction });
+        await character.update({ ...fields, depth_level }, { transaction });
         return { character, depth_level, wasAlive };
       });
       if (!result) return res.status(404).json({ error: 'Character not found' });
@@ -170,10 +176,11 @@ router.post('/confirm', async (req, res) => {
     const registry = await CharacterRegistry.findByPk(registry_id);
     if (!registry) return res.status(404).json({ error: 'Registry not found' });
 
-    const depth_level = calculateDepthLevel(proposed);
+    const fields = withTwinsHome({}, proposed);
+    const depth_level = calculateDepthLevel(fields);
 
     const character = await RegistryCharacter.create({
-      ...proposed,
+      ...fields,
       registry_id,
       depth_level,
       status: 'accepted',  // keep status field populated for backwards compat

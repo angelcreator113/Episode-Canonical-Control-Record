@@ -10,6 +10,9 @@ const { DataTypes } = require('sequelize');
 
 /* ── Author-Only Fields (never returned to non-author clients) ── */
 const AUTHOR_ONLY_FIELDS = [
+  // The blind spot's home since the depth fields were merged (2026-10-17,
+  // services/characterDepthFields): author-only like the copy it replaced.
+  'blind_spot',
   'de_blind_spot',
   'de_blind_spot_evidence',
   'de_blind_spot_crack_condition',
@@ -307,6 +310,14 @@ module.exports = (sequelize) => {
       allowNull: true,
     },
 
+    // Their appearance (Evoni, 2026-10-17; migration 20261018020000,
+    // services/characterAppearance): how they look, written down, and the
+    // portraits generated from it ({ summary, face, hair, ..., portraits }).
+    appearance: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+
     /* ── Therapy Dilemma Profile fields ── */
     therapy_primary_defense: {
       type: DataTypes.TEXT,
@@ -371,9 +382,18 @@ module.exports = (sequelize) => {
       type: DataTypes.TEXT,
       allowNull: true,
     },
+    // The Depth Engine's five times since the merge (migration
+    // 20261017240000; services/characterDepthFields). The three old names
+    // stay in the type and are renamed on the way in.
     time_orientation: {
-      type: DataTypes.ENUM('past_anchored', 'future_obsessed', 'impulsive_present', 'waiting'),
+      type: DataTypes.ENUM(
+        'past_anchored', 'future_oriented', 'present_impulsive', 'perpetual_waiter', 'cyclical',
+        'future_obsessed', 'impulsive_present', 'waiting',
+      ),
       allowNull: true,
+      set(value) {
+        this.setDataValue('time_orientation', require('../services/characterDepthFields').normalizeTimeOrientation(value));
+      },
     },
     dilemma: {
       type: DataTypes.JSONB,
@@ -420,6 +440,9 @@ module.exports = (sequelize) => {
     },
 
     /* ── Character Depth Engine (Section 9–13) ── */
+    // ── The Depth Engine v1 set below is retired (2026-10-17): its values
+    // moved to their homes or extra_fields.depth_archive (migration
+    // 20261017240000). blind_spot_visible_to, with no twin, stays in use.
 
     // Body
     body_relationship: { type: DataTypes.TEXT, allowNull: true },
@@ -524,6 +547,9 @@ module.exports = (sequelize) => {
     joy_vs_ambition: { type: DataTypes.TEXT, allowNull: true },
 
     /* ── Character Depth Engine v2 (10 dimensions — de_ prefix) ── */
+    // de_blind_spot, de_time_orientation and the five de_change_* / de_arc_function
+    // fields are stored in blind_spot, time_orientation and change_capacity
+    // since 2026-10-17 (services/characterDepthFields); these columns stay empty.
     // NOTE: Using STRING instead of ENUM in the model for deployment safety.
     // The migration creates proper ENUM types in PostgreSQL.
     // Sequelize STRING is compatible with Postgres ENUM columns at query time.
