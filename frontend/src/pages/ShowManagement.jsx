@@ -1,55 +1,156 @@
 /**
- * Show Management Page
- * Create, edit, and manage shows
+ * My Shows — every show as a poster card (Evoni's mock, 2026-10-17).
+ * Pink-and-gold banner, four stats, status tabs, search and sort, and a
+ * card per show: the whole cover (never cropped) over a blurred copy of
+ * itself, status, episode count, last update, description, Open Show and
+ * a menu with Edit and Delete. Create and edit live at /shows/create and
+ * /shows/:id/edit.
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  Tv, PlayCircle, Clock, BarChart3, Crown, Search, ArrowUpDown,
+  Play, MoreHorizontal, Pencil, Trash2, CalendarDays, X,
+} from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { API_URL } from '../config/api';
 import apiClient from '../services/api';
-import './Shows.css';
+import './ShowManagement.css';
+
+// The Show model's statuses, in tab order. in_development reads as
+// "Coming Soon", as on the mock.
+export const STATUS_TABS = [
+  { key: 'all', label: 'All Shows' },
+  { key: 'active', label: 'Active' },
+  { key: 'in_development', label: 'Coming Soon' },
+  { key: 'archived', label: 'Archived' },
+  { key: 'cancelled', label: 'Cancelled' },
+];
+const STATUS_LABEL = {
+  active: 'Active', in_development: 'Coming Soon', archived: 'Archived', cancelled: 'Cancelled',
+};
+
+export const SORTS = [
+  { key: 'updated', label: 'Recently updated' },
+  { key: 'name', label: 'Name A–Z' },
+  { key: 'episodes', label: 'Most episodes' },
+];
+
+// The list route returns model rows (camelCase) or, on its raw-SQL
+// fallback, table rows (snake_case); read either.
+export const showFields = (s) => ({
+  id: s.id,
+  name: s.name || 'Untitled Show',
+  description: s.description || s.tagline || '',
+  status: s.status || 'active',
+  cover: s.coverImageUrl || s.cover_image_url || null,
+  color: s.color || null,
+  icon: s.icon || null,
+  episodes: Number(s.episodeCount ?? s.episode_count ?? 0) || 0,
+  updated: s.updatedAt || s.updated_at || null,
+});
+
+export const showStats = (shows) => ({
+  total: shows.length,
+  active: shows.filter((s) => s.status === 'active').length,
+  comingSoon: shows.filter((s) => s.status === 'in_development').length,
+  episodes: shows.reduce((n, s) => n + s.episodes, 0),
+});
+
+export function visibleShows(shows, { tab = 'all', query = '', sort = 'updated' } = {}) {
+  const q = query.trim().toLowerCase();
+  const list = shows.filter((s) => (tab === 'all' || s.status === tab)
+    && (!q || s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q)));
+  const time = (s) => (s.updated ? new Date(s.updated).getTime() || 0 : 0);
+  return [...list].sort((a, b) => {
+    if (sort === 'name') return a.name.localeCompare(b.name);
+    if (sort === 'episodes') return b.episodes - a.episodes || a.name.localeCompare(b.name);
+    return time(b) - time(a) || a.name.localeCompare(b.name);
+  });
+}
+
+const fmtDate = (d) => {
+  if (!d) return null;
+  const t = new Date(d);
+  return Number.isNaN(t.getTime()) ? null : t.toLocaleDateString();
+};
+
+function ShowCard({ show, onOpen, onEdit, onDelete }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const close = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false); };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [menuOpen]);
+
+  const updated = fmtDate(show.updated);
+  return (
+    <article className="sm-card" data-testid="sm-card">
+      <button type="button" className="sm-cover" onClick={onOpen} aria-label={`Open ${show.name}`}>
+        {show.cover ? (
+          <>
+            <span className="sm-cover-blur" style={{ backgroundImage: `url("${show.cover}")` }} aria-hidden />
+            <img className="sm-cover-img" src={show.cover} alt="" loading="lazy" />
+          </>
+        ) : (
+          <span className="sm-cover-empty" style={show.color ? { '--show': show.color } : undefined}>
+            {show.icon ? <span className="sm-cover-emoji" aria-hidden>{show.icon}</span> : <Tv size={44} aria-hidden />}
+          </span>
+        )}
+        <span className={`sm-status is-${show.status}`}>{STATUS_LABEL[show.status] || show.status}</span>
+      </button>
+      <div className="sm-card-body">
+        <h3 className="sm-card-name">{show.name}</h3>
+        <div className="sm-card-meta">
+          <span><PlayCircle size={15} aria-hidden /> {show.episodes} {show.episodes === 1 ? 'Episode' : 'Episodes'}</span>
+          {updated && <span><CalendarDays size={15} aria-hidden /> Updated {updated}</span>}
+        </div>
+        {show.description && <p className="sm-card-desc">{show.description}</p>}
+        <div className="sm-card-actions">
+          <button type="button" className="sm-btn-open" onClick={onOpen}><Play size={16} aria-hidden /> Open Show</button>
+          <div className="sm-menu-wrap" ref={menuRef}>
+            <button type="button" className="sm-btn-more" aria-label={`More for ${show.name}`} aria-haspopup="menu"
+              aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>
+              <MoreHorizontal size={20} aria-hidden />
+            </button>
+            {menuOpen && (
+              <div className="sm-menu" role="menu">
+                <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onEdit(); }}><Pencil size={15} aria-hidden /> Edit</button>
+                <button type="button" role="menuitem" className="is-danger" onClick={() => { setMenuOpen(false); onDelete(); }}><Trash2 size={15} aria-hidden /> Delete</button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
 
 const ShowManagement = () => {
   const navigate = useNavigate();
-  const { user, isAuthenticated, loading: authLoading } = useAuth();
-  const formRef = useRef(null);
-  
+  const { isAuthenticated, loading: authLoading } = useAuth();
+
   const [shows, setShows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [showForm, setShowForm] = useState(false);
-  const [editingShow, setEditingShow] = useState(null);
-  
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    icon: '📺',
-    color: '#667eea',
-    status: 'active',
-  });
+  const [tab, setTab] = useState('all');
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState('updated');
 
-  const [coverImage, setCoverImage] = useState(null);
-  const [coverImagePreview, setCoverImagePreview] = useState(null);
-  const [uploadingCover, setUploadingCover] = useState(false);
-
-  // Redirect if not authenticated
   useEffect(() => {
-    if (!isAuthenticated && !authLoading) {
-      navigate('/login', { replace: true });
-    }
+    if (!isAuthenticated && !authLoading) navigate('/login', { replace: true });
   }, [isAuthenticated, authLoading, navigate]);
-
-  // Load shows
-  useEffect(() => {
-    fetchShows();
-  }, []);
 
   const fetchShows = async () => {
     try {
       setLoading(true);
       const response = await apiClient.get(`${API_URL}/shows`);
-      setShows(response.data?.data || []);
+      const rows = response?.data?.data;
+      setShows(Array.isArray(rows) ? rows.map(showFields) : []);
       setError(null);
     } catch (err) {
       console.error('Error fetching shows:', err);
@@ -59,519 +160,110 @@ const ShowManagement = () => {
     }
   };
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value,
-    });
-  };
+  useEffect(() => { fetchShows(); }, []);
 
-  const resetForm = () => {
-    setFormData({
-      name: '',
-      description: '',
-      icon: '📺',
-      color: '#667eea',
-      status: 'active',
-    });
-    setEditingShow(null);
-    setShowForm(false);
-    setCoverImage(null);
-    setCoverImagePreview(null);
-  };
-
-  const handleCoverImageSelect = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setCoverImage(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setCoverImagePreview(reader.result);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const uploadCoverImage = async (showId) => {
-    if (!coverImage) return null;
-
-    const coverFormData = new FormData();
-    coverFormData.append('image', coverImage);
-
-    setUploadingCover(true);
-    try {
-      // FormData: apiClient request interceptor strips Content-Type and lets
-      // the browser set the multipart boundary header. Authorization still added.
-      const response = await apiClient.post(`${API_URL}/shows/${showId}/cover-image`, coverFormData);
-      return response.data?.data?.coverImageUrl;
-    } catch (err) {
-      console.error('Error uploading cover:', err);
-      throw err;
-    } finally {
-      setUploadingCover(false);
-    }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!formData.name.trim()) {
-      setError('Show name is required');
-      return;
-    }
-
+  const handleDelete = async (show) => {
+    if (!window.confirm(`Delete "${show.name}"? This cannot be undone.`)) return;
     try {
       setError(null);
-      
-      const url = editingShow
-        ? `${API_URL}/shows/${editingShow.id}`
-        : `${API_URL}/shows`;
-
-      let response;
-      try {
-        response = editingShow
-          ? await apiClient.put(url, formData)
-          : await apiClient.post(url, formData);
-      } catch (apiErr) {
-        const body = apiErr.response?.data;
-        throw new Error(body?.message || body?.error || 'Failed to save show');
-      }
-
-      const savedShow = response.data?.data;
-
-      // Upload cover image if provided
-      if (coverImage) {
-        try {
-          await uploadCoverImage(savedShow.id);
-        } catch (coverError) {
-          console.error('Cover upload failed:', coverError);
-          // Continue anyway - show was created
-        }
-      }
-
-      alert(`Show ${editingShow ? 'updated' : 'created'} successfully!`);
+      await apiClient.delete(`${API_URL}/shows/${show.id}`);
       await fetchShows();
-      resetForm();
-    } catch (err) {
-      console.error('Error saving show:', err);
-      setError(err.message || `Failed to ${editingShow ? 'update' : 'create'} show`);
-    }
-  };
-
-  const handleEdit = (show) => {
-    setEditingShow(show);
-    setFormData({
-      name: show.name,
-      description: show.description || '',
-      icon: show.icon || '📺',
-      color: show.color || '#667eea',
-      status: show.status || 'active',
-    });
-    setShowForm(true);
-  };
-
-  const handleDelete = async (showId) => {
-    if (!window.confirm('Are you sure you want to delete this show?')) return;
-
-    try {
-      setError(null);
-      const response = await apiClient.delete(`${API_URL}/shows/${showId}`).then(
-        (r) => ({ ok: true, data: r.data }),
-        (err) => ({ ok: false, status: err.response?.status, data: err.response?.data }),
-      );
-
-      if (!response.ok) throw new Error('Failed to delete show');
-
-      await fetchShows();
-      alert('Show deleted successfully!');
     } catch (err) {
       console.error('Error deleting show:', err);
-      setError(err.message || 'Failed to delete show');
+      const body = err?.response?.data;
+      setError(body?.message || body?.error || 'Failed to delete show');
     }
   };
 
-  if (authLoading || loading) {
-    return (
-      <div className="shows-page">
-        <div className="shows-container">
-          <div className="loading-state">
-            <div className="loading-spinner"></div>
-            <p className="loading-text">Loading shows...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const stats = useMemo(() => showStats(shows), [shows]);
+  const list = useMemo(() => visibleShows(shows, { tab, query, sort }), [shows, tab, query, sort]);
+  const counts = useMemo(() => {
+    const c = { all: shows.length };
+    shows.forEach((s) => { c[s.status] = (c[s.status] || 0) + 1; });
+    return c;
+  }, [shows]);
+
+  const STATS = [
+    { key: 'total', label: 'Total Shows', value: stats.total, Icon: Tv },
+    { key: 'active', label: 'Active Shows', value: stats.active, Icon: PlayCircle },
+    { key: 'soon', label: 'Coming Soon', value: stats.comingSoon, Icon: Clock },
+    { key: 'episodes', label: 'Total Episodes', value: stats.episodes, Icon: BarChart3 },
+  ];
 
   return (
-    <div className="shows-page">
-      <div className="shows-container">
-        {/* Header */}
-        <div className="shows-header">
-          <h1 className="shows-title">All Shows</h1>
-          <button
-            onClick={() => navigate('/shows/create')}
-            className="btn-create-show"
-          >
-            + Create Show
-          </button>
+    <div className="show-mgmt-page">
+      <header className="sm-banner">
+        <div className="sm-banner-text">
+          <h1 className="sm-title">My Shows</h1>
+          <p className="sm-kicker">Create · Produce · Manage · Grow</p>
         </div>
+        <button type="button" className="sm-btn-create" onClick={() => navigate('/shows/create')}>
+          <Crown size={18} aria-hidden /> Create New Show
+        </button>
+      </header>
 
-        {/* Error Message */}
-        {error && (
-          <div className="error-banner">
-            <div className="error-content">
-              <span className="error-icon">⚠️</span>
-              <span>{error}</span>
-            </div>
-            <button 
-              onClick={() => setError(null)}
-              className="error-close"
-            >
-              ✕
+      <section className="sm-stats" aria-label="Show totals">
+        {STATS.map(({ key, label, value, Icon }) => (
+          <div key={key} className="sm-stat" data-testid={`sm-stat-${key}`}>
+            <span className="sm-stat-icon"><Icon size={26} aria-hidden /></span>
+            <span className="sm-stat-text">
+              <span className="sm-stat-label">{label}</span>
+              <span className="sm-stat-value">{value}</span>
+            </span>
+          </div>
+        ))}
+      </section>
+
+      <div className="sm-toolbar">
+        <div className="sm-tabs" role="tablist" aria-label="Show status">
+          {STATUS_TABS.map((t) => (
+            <button key={t.key} type="button" role="tab" aria-selected={tab === t.key}
+              className={`sm-tab${tab === t.key ? ' is-active' : ''}`} onClick={() => setTab(t.key)}>
+              {t.label}{t.key !== 'all' && counts[t.key] ? <span className="sm-tab-count">{counts[t.key]}</span> : null}
             </button>
-          </div>
-        )}
-
-        {/* Summary Stats */}
-        {shows.length > 0 && (
-          <div className="shows-stats">
-            <div className="stat-card">
-              <div className="stat-label">Total Shows</div>
-              <div className="stat-value">{shows.length}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">Active</div>
-              <div className="stat-value">
-                {shows.filter(s => s.status === 'active').length}
-              </div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">Coming Soon</div>
-              <div className="stat-value">
-                {shows.filter(s => s.status === 'coming_soon').length}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Shows Grid */}
-        {!loading && shows.length === 0 && (
-          <div className="empty-shows">
-            <div className="empty-icon">📺</div>
-            <h3 className="empty-title">No shows yet</h3>
-            <p className="empty-message">
-              Create your first show to get started
-            </p>
-            <button
-              onClick={() => navigate('/shows/create')}
-              className="btn-create-show"
-            >
-              + Create First Show
-            </button>
-          </div>
-        )}
-
-        {!loading && shows.length > 0 && (
-          <div className="shows-grid">
-            {shows.map((show) => (
-              <div key={show.id} className="show-card">
-                {/* Poster (3:4 ratio) */}
-                <div className="show-poster">
-                  {show.coverImageUrl ? (
-                    <img
-                      src={show.coverImageUrl}
-                      alt={show.name}
-                      className="poster-image"
-                    />
-                  ) : (
-                    <div 
-                      className="poster-placeholder"
-                      style={{ background: show.color || '#6366f1' }}
-                    >
-                      <span className="poster-icon">
-                        {show.icon || '📺'}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Content */}
-                <div className="show-content">
-                  {/* Top Section */}
-                  <div className="show-header-section">
-                    <h3 className="show-name">{show.name}</h3>
-
-                    <div className="show-meta">
-                      <span className={`status-badge status-${show.status || 'active'}`}>
-                        {show.status === 'coming_soon' ? 'Coming Soon' : 
-                         show.status === 'active' ? 'Active' : 
-                         show.status || 'Active'}
-                      </span>
-                      <span className="meta-separator" style={{ color: '#64748b' }}>·</span>
-                      <span className="meta-item" style={{ color: '#1e293b' }}>
-                        {show.episodeCount || show.episode_count || 0} Episodes
-                      </span>
-                      <span className="meta-separator" style={{ color: '#64748b' }}>·</span>
-                      <span className="meta-item" style={{ color: '#1e293b' }}>
-                        {show.updatedAt ? `Updated ${new Date(show.updatedAt).toLocaleDateString()}` : ''}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="show-actions">
-                    <button
-                      onClick={() => {
-                        console.log('[Shows] Opening show:', show.name, 'ID:', show.id);
-                        navigate(`/shows/${show.id}`);
-                      }}
-                      className="action-btn action-primary"
-                    >
-                      Open
-                    </button>
-                    <button
-                      onClick={() => navigate(`/shows/${show.id}/edit`)}
-                      className="action-btn action-secondary"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (window.confirm(`Delete "${show.name}"? This cannot be undone.`)) {
-                          handleDelete(show.id);
-                        }
-                      }}
-                      className="action-btn action-danger"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Show Form */}
-        {showForm && (
-          <div ref={formRef} className="show-form-container">
-            <h2 className="form-title">
-              {editingShow ? '✏️ Edit Show' : '🆕 Create New Show'}
-            </h2>
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
-                <div>
-                  <label htmlFor="name" style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.5rem' }}>
-                    Show Name <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
-                  <input
-                    type="text"
-                    id="name"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    placeholder="e.g., Styling Adventures with Lala"
-                    required
-                    style={{
-                      width: '100%',
-                      padding: '0.65rem 0.875rem',
-                      fontSize: '0.95rem',
-                      border: '2px solid #e5e7eb',
-                      borderRadius: '8px',
-                      background: 'white'
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="icon" style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.5rem' }}>
-                    Icon (Emoji)
-                  </label>
-                  <input
-                    type="text"
-                    id="icon"
-                    name="icon"
-                    value={formData.icon}
-                    onChange={handleInputChange}
-                    placeholder="📺"
-                    maxLength={2}
-                    style={{
-                      width: '100%',
-                      padding: '0.65rem 0.875rem',
-                      fontSize: '0.95rem',
-                      border: '2px solid #e5e7eb',
-                      borderRadius: '8px',
-                      background: 'white'
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="description" style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.5rem' }}>
-                  Description
-                </label>
-                <textarea
-                  id="description"
-                  name="description"
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  placeholder="Describe what this show is about..."
-                  rows={2}
-                  style={{
-                    width: '100%',
-                    padding: '0.65rem 0.875rem',
-                    fontSize: '0.875rem',
-                    border: '2px solid #e5e7eb',
-                    borderRadius: '8px',
-                    background: 'white',
-                    fontFamily: 'inherit',
-                    resize: 'vertical'
-                  }}
-                />
-              </div>
-
-              {/* Cover Image Upload */}
-              <div>
-                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.5rem' }}>
-                  Cover Image (Portrait 2:3 ratio - like Netflix)
-                </label>
-                <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
-                  {coverImagePreview && (
-                    <div style={{ width: '150px', height: '225px', border: '2px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', flexShrink: 0 }}>
-                      <img src={coverImagePreview} alt="Cover preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    </div>
-                  )}
-                  <div style={{ flex: 1 }}>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleCoverImageSelect}
-                      id="coverImage"
-                      style={{ display: 'none' }}
-                    />
-                    <label
-                      htmlFor="coverImage"
-                      style={{
-                        display: 'inline-block',
-                        padding: '0.65rem 1.25rem',
-                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                        color: 'white',
-                        borderRadius: '8px',
-                        fontSize: '0.875rem',
-                        fontWeight: '600',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                        boxShadow: '0 2px 6px rgba(102, 126, 234, 0.3)'
-                      }}
-                    >
-                      📸 Choose Cover Image
-                    </label>
-                    <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.75rem', color: '#6b7280' }}>
-                      Recommended: 800x1200px (2:3 ratio). Max 10MB. JPG, PNG, or WebP.
-                    </p>
-                    {coverImage && (
-                      <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.85rem', color: '#10b981', fontWeight: '600' }}>
-                        ✓ {coverImage.name}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                <div>
-                  <label htmlFor="color" style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.5rem' }}>
-                    Theme Color
-                  </label>
-                  <input
-                    type="color"
-                    id="color"
-                    name="color"
-                    value={formData.color}
-                    onChange={handleInputChange}
-                    style={{
-                      width: '100%',
-                      height: '42px',
-                      padding: '0.25rem',
-                      border: '2px solid #e5e7eb',
-                      borderRadius: '8px',
-                      cursor: 'pointer'
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="status" style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.5rem' }}>
-                    Status
-                  </label>
-                  <select
-                    id="status"
-                    name="status"
-                    value={formData.status}
-                    onChange={handleInputChange}
-                    style={{
-                      width: '100%',
-                      padding: '0.65rem 0.875rem',
-                      fontSize: '0.95rem',
-                      border: '2px solid #e5e7eb',
-                      borderRadius: '8px',
-                      background: 'white',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <option value="active">Active</option>
-                    <option value="archived">Archived</option>
-                    <option value="coming_soon">Coming Soon</option>
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
-                <button 
-                  type="submit"
-                  disabled={uploadingCover}
-                  style={{
-                    flex: '1',
-                    padding: '0.75rem 1.5rem',
-                    background: uploadingCover ? '#9ca3af' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontSize: '1rem',
-                    fontWeight: '700',
-                    cursor: uploadingCover ? 'not-allowed' : 'pointer',
-                    boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)',
-                    transition: 'all 0.2s'
-                  }}
-                >
-                  {uploadingCover ? '⏳ Uploading...' : (editingShow ? '💾 Update Show' : '✨ Create Show')}
-                </button>
-                <button 
-                  type="button" 
-                  onClick={resetForm}
-                  style={{
-                    flex: '1',
-                    padding: '0.75rem 1.5rem',
-                    background: 'white',
-                    color: '#374151',
-                    border: '2px solid #d1d5db',
-                    borderRadius: '8px',
-                    fontSize: '1rem',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s'
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
+          ))}
+        </div>
+        <div className="sm-tools">
+          <label className="sm-search">
+            <Search size={18} aria-hidden />
+            <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search shows…" aria-label="Search shows" />
+          </label>
+          <label className="sm-sort">
+            <ArrowUpDown size={16} aria-hidden />
+            <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort shows">
+              {SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </select>
+          </label>
+        </div>
       </div>
+
+      {error && (
+        <div className="sm-error" role="alert">
+          <span>{error}</span>
+          <button type="button" onClick={() => setError(null)} aria-label="Dismiss"><X size={16} aria-hidden /></button>
+        </div>
+      )}
+
+      {(authLoading || loading) && shows.length === 0 ? (
+        <p className="sm-empty">Loading shows…</p>
+      ) : shows.length === 0 ? (
+        <div className="sm-empty">
+          <Tv size={40} aria-hidden />
+          <p>No shows yet. Create your first show to get started.</p>
+          <button type="button" className="sm-btn-create" onClick={() => navigate('/shows/create')}><Crown size={18} aria-hidden /> Create First Show</button>
+        </div>
+      ) : list.length === 0 ? (
+        <p className="sm-empty">No shows match.</p>
+      ) : (
+        <div className="sm-grid">
+          {list.map((show) => (
+            <ShowCard key={show.id} show={show}
+              onOpen={() => navigate(`/shows/${show.id}`)}
+              onEdit={() => navigate(`/shows/${show.id}/edit`)}
+              onDelete={() => handleDelete(show)} />
+          ))}
+        </div>
+      )}
     </div>
   );
 };

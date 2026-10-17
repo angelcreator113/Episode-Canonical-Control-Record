@@ -281,6 +281,14 @@
   object-fit: cover;
   background: #f6dbe7;
 }
+/* Overlays, frames and phone screens must show whole (Evoni, 2026-10-17):
+   fit inside the box instead of cropping to fill it. */
+.asset-library-page img.al-thumb,
+.asset-library-page video.al-thumb {
+  object-fit: contain;
+  padding: 6px;
+  box-sizing: border-box;
+}
 .asset-library-page .al-thumb-icon {
   display: grid;
   place-items: center;
