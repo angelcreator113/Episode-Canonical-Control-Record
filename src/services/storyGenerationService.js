@@ -15,6 +15,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 const { LINKED_CHARACTER_JOIN } = require('../utils/registryLink');
 const { pulsePromptRules } = require('../utils/pulsePlatform');
+const { storyBrief, BRIEF_COLUMNS } = require('./characterStoryBrief');
 
 function getClient() {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -124,10 +125,9 @@ async function generateEpisodeStory(episodeId, showId, sequelize, options = {}) 
       const [rows] = await sequelize.query(
         `SELECT sp.handle, sp.display_name, sp.creator_name, sp.archetype, sp.posting_voice,
                 rc.id as char_id, rc.display_name as char_name, rc.core_belief, rc.role_type, rc.depth_level,
-                rc.personality, rc.pressure_type,
-                rc.core_wound, rc.core_desire, rc.core_fear,
-                rc.mask_persona, rc.truth_persona, rc.therapy_primary_defense,
-                rc.signature_trait, rc.character_archetype
+                rc.personality, rc.pressure_type, rc.therapy_primary_defense,
+                rc.signature_trait, rc.character_archetype,
+                ${BRIEF_COLUMNS.map((col) => `rc.${col}`).join(', ')}
          FROM social_profiles sp
          ${LINKED_CHARACTER_JOIN}
          WHERE sp.id IN (:ids) AND sp.deleted_at IS NULL`,
@@ -163,10 +163,9 @@ async function generateEpisodeStory(episodeId, showId, sequelize, options = {}) 
     if (c.role_type) block += ` [${c.role_type}]`;
     if (c.depth_level) block += ` (depth: ${c.depth_level})`;
     if (c.core_belief) block += `\n    Believes: "${c.core_belief}"`;
-    if (c.core_wound) block += `\n    Wound: "${c.core_wound}"`;
-    if (c.core_desire) block += `\n    Desires: "${c.core_desire}"`;
-    if (c.core_fear) block += `\n    Fears: "${c.core_fear}"`;
-    if (c.mask_persona && c.truth_persona) block += `\n    Shows: ${c.mask_persona.slice(0, 50)} | Underneath: ${c.truth_persona.slice(0, 50)}`;
+    // What was happening beneath the episode (services/characterStoryBrief).
+    const brief = storyBrief(c, { layer: 'short_story' });
+    if (brief.lines.length) block += `\n    ${brief.lines.join('\n    ')}`;
     if (c.therapy_primary_defense) block += `\n    Defense mechanism: ${c.therapy_primary_defense}`;
     if (c.signature_trait) block += `\n    Signature trait: ${c.signature_trait}`;
     if (c.content_hook) block += `\n    ${c.content_hook}`;
