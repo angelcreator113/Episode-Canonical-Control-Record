@@ -81,7 +81,7 @@ describe('plannerApi', () => {
     const id = await plannerApi.savePost({ showId: 's1', post: null, form, characters: [{ value: '7', handle: 'sable', name: 'Sable', profileId: 7 }] });
     expect(id).toBe('new');
     expect(api.post).toHaveBeenCalledWith('/api/v1/feed-posts', expect.objectContaining({ show_id: 's1', content_text: 'notes, coffee', status: 'draft', tags: ['Notes'], poster_handle: 'sable', social_profile_id: 7 }));
-    expect(api.put).toHaveBeenCalledWith('/api/v1/feed-posts/new/release-time', { mode: 'schedule', at: new Date('2026-10-16T10:20').toISOString() });
+    expect(api.put).toHaveBeenCalledWith('/api/v1/feed-posts/new/release-time', { mode: 'schedule', at: new Date('2026-10-16T10:20').toISOString(), tz_offset: new Date().getTimezoneOffset(), anyway: false });
   });
 
   test('an existing draft: only what changed is saved; draft clears its release time; post now goes live', async () => {
@@ -96,6 +96,13 @@ describe('plannerApi', () => {
       ['/api/v1/feed-posts/p/tags', { tags: ['A', 'B'] }],
       ['/api/v1/feed-posts/p', { status: 'live' }],
     ]);
+  });
+
+  test('a time that breaks the story order throws its problems and the post id', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { data: { id: 'new' } } });
+    vi.mocked(api.put).mockRejectedValue({ response: { status: 409, data: { error: 'This time breaks the story order.', problems: ['Before its episode airs'] } } });
+    const form = { content_text: 'x', character: 'lala', date: '2026-10-16', time: '10:00', status: 'scheduled', tags: [] };
+    await expect(plannerApi.savePost({ showId: 's1', post: null, form })).rejects.toMatchObject({ problems: ['Before its episode airs'], postId: 'new' });
   });
 
   test('a live post: only its tags', async () => {

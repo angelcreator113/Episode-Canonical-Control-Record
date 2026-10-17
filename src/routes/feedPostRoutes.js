@@ -846,16 +846,60 @@ router.put('/:postId/tags', requireAuth, async (req, res) => {
   }
 });
 
-// PUT /api/v1/feed-posts/:postId/release-time { mode: 'schedule'|'hold'|'clear', at? }
+// GET /api/v1/feed-posts/release-plan?show_id=&tz_offset= (Evoni, 2026-10-17,
+// "schedule all"): every draft of the show with no release time, each at the
+// time the story suggests and inside its story-order guards. Nothing saved.
+router.get('/release-plan', requireAuth, async (req, res) => {
+  try {
+    const { planReleases, ReleaseError } = require('../services/postRelease');
+    try {
+      return res.json(await planReleases(require('../models'), { showId: req.query.show_id || null, tzOffset: Number(req.query.tz_offset) || 0 }));
+    } catch (err) {
+      if (err instanceof ReleaseError) return res.status(err.status).json({ error: err.message });
+      throw err;
+    }
+  } catch (err) {
+    console.error('[FeedPosts] release-plan error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/v1/feed-posts/release-plan { items: [{ post_id, at }], tz_offset?, anyway? }:
+// schedules the plan as she adjusted it. A time that breaks the story order
+// is skipped with its problems unless `anyway`.
+router.post('/release-plan', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const { scheduleAll, ReleaseError } = require('../services/postRelease');
+    try {
+      return res.json(await scheduleAll(require('../models'), req.body?.items, { tzOffset: Number(req.body?.tz_offset) || 0, anyway: req.body?.anyway === true }));
+    } catch (err) {
+      if (err instanceof ReleaseError) return res.status(err.status).json({ error: err.message });
+      throw err;
+    }
+  } catch (err) {
+    console.error('[FeedPosts] release-plan apply error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/v1/feed-posts/:postId/release-time { mode: 'schedule'|'hold'|'clear', at?, anyway?, tz_offset? }
 // (Character Consistency Engine step 6c, the two clocks; services/postRelease):
 // a draft's release time. Schedule: it goes live at `at` (the release timer);
 // hold: it waits until released; clear: an ordinary draft again. Its story
 // time does not change. Publishing now stays PUT /:postId { status: 'live' }.
+// A schedule that breaks the story order (services/postRelease guardsFor) is
+// a 409 with its problems until she sends anyway: true.
 router.put('/:postId/release-time', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
-    const { setReleaseTime, ReleaseError } = require('../services/postRelease');
-    const post = await require('../models').FeedPost.findByPk(req.params.postId);
+    const { setReleaseTime, checkReleaseTime, ReleaseError } = require('../services/postRelease');
+    const models = require('../models');
+    const post = await models.FeedPost.findByPk(req.params.postId);
     try {
+      // A time that breaks the story order waits for her "Schedule anyway".
+      if (req.body?.mode === 'schedule' && req.body?.at && !req.body?.anyway && post && post.status === 'draft' && !post.deleted_at) {
+        const problems = await checkReleaseTime(models, post, req.body.at, { tzOffset: Number(req.body?.tz_offset) || 0 });
+        if (problems.length) return res.status(409).json({ error: 'This time breaks the story order.', problems });
+      }
       await setReleaseTime(post, { mode: req.body?.mode, at: req.body?.at ?? null });
     } catch (err) {
       if (err instanceof ReleaseError) return res.status(err.status).json({ error: err.message });

@@ -53,3 +53,43 @@ describe('suggestTime', () => {
     expect(iso(late)).toBe('2030-03-11T12:00:00.000Z');
   });
 });
+
+const { problemsAt, fitTime, momentTime } = require('../../../src/services/postRelease');
+
+describe('story-order guards (pure)', () => {
+  const at = (s) => new Date(s);
+  const guards = {
+    notBefore: [{ at: at('2030-03-05T12:00:00Z'), why: 'it answers @kai\'s post, which goes out Tue 5 Mar, 12:00' }],
+    notAfter: [{ at: at('2030-03-10T00:00:00Z'), why: 'it is load-bearing, so it goes out before Episode 3 airs (Sun 10 Mar, 00:00)' }],
+    open: [],
+  };
+
+  test('problemsAt says what a time breaks; nothing inside the window', () => {
+    expect(problemsAt(guards, '2030-03-04T12:00:00Z')).toEqual(['Too early: it answers @kai\'s post, which goes out Tue 5 Mar, 12:00.']);
+    expect(problemsAt(guards, '2030-03-10T12:00:00Z')).toEqual(['Too late: it is load-bearing, so it goes out before Episode 3 airs (Sun 10 Mar, 00:00).']);
+    expect(problemsAt(guards, '2030-03-06T12:00:00Z')).toEqual([]);
+    expect(problemsAt({ notBefore: [], notAfter: [], open: ['it answers a post that is not scheduled yet'] }, '2030-03-06T12:00:00Z'))
+      .toEqual(['Check the order: it answers a post that is not scheduled yet.']);
+  });
+
+  test('fitTime moves an early time up to the earliest allowed', () => {
+    expect(fitTime(guards, at('2030-03-02T12:00:00Z'), NOW, 0).toISOString()).toBe('2030-03-05T12:00:00.000Z');
+  });
+
+  test('fitTime moves a late time to the last posting slot before the latest', () => {
+    expect(fitTime(guards, at('2030-03-10T21:00:00Z'), NOW, 0).toISOString()).toBe('2030-03-09T20:00:00.000Z');
+  });
+
+  test('fitTime leaves a time it cannot fix (the window is closed) for problemsAt to name', () => {
+    const closed = { notBefore: [{ at: at('2030-03-12T00:00:00Z'), why: 'x' }], notAfter: [{ at: at('2030-03-10T00:00:00Z'), why: 'y' }], open: [] };
+    const t = fitTime(closed, at('2030-03-04T12:00:00Z'), NOW, 0);
+    expect(problemsAt(closed, t).length).toBeGreaterThan(0);
+  });
+
+  test('momentTime: an episode moment in real time; during and after are when it airs', () => {
+    expect(momentTime(32, AIR, 0).toISOString()).toBe('2030-03-03T12:00:00.000Z');
+    expect(momentTime(35, AIR, 0).toISOString()).toBe('2030-03-10T00:00:00.000Z');
+    expect(momentTime(37, '2030-03-10T20:30:00Z', 0).toISOString()).toBe('2030-03-10T20:30:00.000Z');
+    expect(momentTime(32, null, 0)).toBeNull();
+  });
+});

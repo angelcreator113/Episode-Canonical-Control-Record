@@ -63,7 +63,7 @@ describe('the day planner', () => {
     fireEvent.keyDown(editor.getByLabelText('Add a tag'), { key: 'Enter' });
     fireEvent.change(editor.getByLabelText('Time'), { target: { value: '10:20' } });
     fireEvent.click(editor.getByRole('button', { name: 'Save changes' }));
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/feed-posts/p1/release-time', { mode: 'schedule', at: new Date('2026-10-16T10:20').toISOString() }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/feed-posts/p1/release-time', expect.objectContaining({ mode: 'schedule', at: new Date('2026-10-16T10:20').toISOString(), anyway: false })));
     expect(api.put).toHaveBeenCalledWith('/api/v1/feed-posts/p1', { content_text: 'this dress is almost there.' });
     expect(api.put).toHaveBeenCalledWith('/api/v1/feed-posts/p1/tags', { tags: ['Studio', 'Design Process'] });
     await waitFor(() => expect(screen.queryByTestId('sp-editor')).toBeNull());
@@ -91,6 +91,22 @@ describe('the day planner', () => {
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/feed-posts', expect.objectContaining({ poster_handle: 'sable', content_text: 'notes, coffee, and a lot of ideas.', status: 'draft' })));
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/feed-posts/new/release-time', expect.objectContaining({ mode: 'schedule' })));
   });
+});
+
+test('a time that breaks the story order: its problems, then Schedule anyway, without a second post', async () => {
+  vi.mocked(api.put).mockImplementation(async (url, body) => {
+    if (url.endsWith('/release-time') && !body.anyway) throw { response: { status: 409, data: { error: 'This time breaks the story order.', problems: ['Before its episode airs'] } } };
+    return { data: {} };
+  });
+  renderPlanner();
+  fireEvent.click(await screen.findByTestId('sp-add-to-slot'));
+  const editor = within(screen.getByTestId('sp-editor'));
+  fireEvent.change(editor.getByLabelText('Caption'), { target: { value: 'too early' } });
+  fireEvent.click(editor.getByRole('button', { name: 'Add story' }));
+  expect((await editor.findByTestId('sp-problems')).textContent).toContain('Before its episode airs');
+  fireEvent.click(editor.getByRole('button', { name: 'Schedule anyway' }));
+  await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/feed-posts/new/release-time', expect.objectContaining({ anyway: true })));
+  expect(api.post).toHaveBeenCalledTimes(1);
 });
 
 describe('Story Clock', () => {

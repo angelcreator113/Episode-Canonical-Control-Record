@@ -16,6 +16,7 @@ import {
   SLOTS, STATUS_LABELS, bySlot, clockLabel, firstSlot, formOf, plannerApi, slotOf, slotStart, slotTime, statusOf, whenOf,
 } from '../../lib/storyPlanner';
 import { posterOf } from '../../lib/pulsePosts';
+import { StoryProblems } from './PulseReviewPost';
 
 const SLOT_ICONS = {
   morning: Sunrise, 'on-the-go': Coffee, studio: Shirt, lunch: Utensils, shopping: ShoppingBag,
@@ -83,6 +84,9 @@ function Editor({ showId, post, day, slot, characters, onClose, onSaved }) {
   const [photo, setPhoto] = useState(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
+  const [problems, setProblems] = useState([]);
+  // A new story already created when its time was refused: saved again, not copied.
+  const [savedAs, setSavedAs] = useState(null);
   const fileRef = useRef(null);
   const boxRef = useRef(null);
   const live = post?.status === 'live';
@@ -99,13 +103,18 @@ function Editor({ showId, post, day, slot, characters, onClose, onSaved }) {
     try { preview = URL.createObjectURL(file); } catch (err) { console.error('[StoryPlanner] no preview for the photo:', err); }
     setPhoto({ file, preview, alt: '' });
   };
-  const save = async () => {
-    setBusy(true); setNote(null);
+  const save = async (anyway = false) => {
+    setBusy(true); setNote(null); setProblems([]);
+    const target = savedAs || post;
     try {
-      await plannerApi.savePost({ showId, post, form, characters, photo });
+      await plannerApi.savePost({ showId, post: target, form, characters, photo: savedAs ? null : photo, anyway });
       onSaved(form.status === 'draft' && !live ? 'Saved as a draft without a time: it waits in Review, not on the planner.' : null);
     } catch (err) {
       console.error('[StoryPlanner] save failed:', err?.response?.status || err?.message);
+      if (err?.problems) {
+        setProblems(err.problems);
+        if (!post && err.postId) setSavedAs({ id: err.postId, status: 'draft', content_text: form.content_text.trim(), tags: form.tags });
+      }
       setNote(errorText(err));
     } finally { setBusy(false); }
   };
@@ -177,8 +186,14 @@ function Editor({ showId, post, day, slot, characters, onClose, onSaved }) {
         <TagsField tags={form.tags} onChange={set('tags')} />
       </div>
       {note && <p className="sp-error" role="alert">{note}</p>}
+      {problems.length > 0 && (
+        <div className="sp-problems">
+          <StoryProblems problems={problems} testId="sp-problems" />
+          <button type="button" className="sp-btn" disabled={busy} onClick={() => save(true)}>Schedule anyway</button>
+        </div>
+      )}
       <div className="sp-editor-actions">
-        <button type="button" className="sp-btn is-primary" disabled={busy || !canSave} onClick={save}>
+        <button type="button" className="sp-btn is-primary" disabled={busy || !canSave} onClick={() => save(false)}>
           {busy && <Loader2 size={16} className="pulse-spin" aria-hidden="true" />}{post ? 'Save changes' : 'Add story'}
         </button>
         {post && <button type="button" className="sp-btn" disabled={busy} onClick={remove}><Trash2 size={16} aria-hidden="true" />Delete story</button>}

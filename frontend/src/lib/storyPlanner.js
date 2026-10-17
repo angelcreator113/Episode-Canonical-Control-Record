@@ -139,9 +139,10 @@ export const plannerApi = {
    * One edit, in order: create (as a draft) or save the words and tags, add
    * the photo, then set when it goes out: scheduled at the date and time,
    * held, an ordinary draft, or posted now. A live post keeps its words and
-   * time; only its tags change. Returns the post's id.
+   * time; only its tags change. Returns the post's id. A time that breaks
+   * the story order throws with `problems` and `postId`; `anyway` sends it.
    */
-  async savePost({ showId, post, form, characters = [], photo = null }) {
+  async savePost({ showId, post, form, characters = [], photo = null, anyway = false }) {
     let id = post?.id;
     const live = post?.status === 'live';
     if (!id) {
@@ -163,7 +164,20 @@ export const plannerApi = {
     const at = new Date(`${form.date}T${form.time}`);
     if (form.status === 'scheduled') {
       if (Number.isNaN(at.getTime())) throw new Error('Pick a date and a time.');
-      await api.put(`/api/v1/feed-posts/${id}/release-time`, { mode: 'schedule', at: at.toISOString() });
+      try {
+        await api.put(`/api/v1/feed-posts/${id}/release-time`, { mode: 'schedule', at: at.toISOString(), tz_offset: new Date().getTimezoneOffset(), anyway });
+      } catch (err) {
+        // A time that breaks the story order (services/postRelease): its
+        // problems, and the post's id so "Schedule anyway" saves it, not a copy.
+        const problems = err?.response?.status === 409 ? err.response.data?.problems : null;
+        if (Array.isArray(problems) && problems.length) {
+          const refused = new Error(err.response.data?.error || 'This time breaks the story order.');
+          refused.problems = problems;
+          refused.postId = id;
+          throw refused;
+        }
+        throw err;
+      }
     } else if (form.status === 'held') {
       if (post?.release_state !== 'held') await api.put(`/api/v1/feed-posts/${id}/release-time`, { mode: 'hold' });
     } else if (form.status === 'draft') {

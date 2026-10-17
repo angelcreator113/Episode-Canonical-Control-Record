@@ -93,6 +93,7 @@
 .sp-photo .sp-btn { min-height: 38px; padding: 6px 12px; font-size: 13px; }
 .sp-tag-box { display: flex; flex-direction: column; gap: 8px; padding: 8px; border-radius: 12px; border: 1px solid var(--lala-parchment-3); }
 .sp-tag-box input { min-height: 38px; border: none; padding: 4px 6px; }
+.sp-problems { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .sp-editor-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
 .sp-editor-actions .sp-btn { padding: 8px 12px; white-space: nowrap; }
 
