@@ -10,6 +10,7 @@ require('dotenv').config({ override: !process.env.ANTHROPIC_API_KEY });
 const _anthropic = new Anthropic();
 
 const db = require('../../models');
+const { storyBrief } = require('../../services/characterStoryBrief');
 const { RegistryCharacter } = db;
 
 function buildExtractionPrompt(lineContent, characterContext) {
@@ -160,12 +161,10 @@ async function getCharacterVoiceContext(characterId) {
     if (vs.internal_monologue_style) voiceBlock += `\nInternal monologue style: ${vs.internal_monologue_style}`;
     if (vs.emotional_reactivity) voiceBlock += `\nEmotional reactivity: ${vs.emotional_reactivity}`;
     if (vs.catchphrases?.length) voiceBlock += `\nCatchphrases: "${vs.catchphrases.join('", "')}"`;
-    if (char.mask_persona) voiceBlock += `\nPublic persona (mask): ${char.mask_persona}`;
-    if (char.truth_persona) voiceBlock += `\nPrivate truth: ${char.truth_persona}`;
     if (char.core_belief) voiceBlock += `\nCore belief: ${char.core_belief}`;
-    if (char.core_wound) voiceBlock += `\nCore wound: ${char.core_wound}`;
-    if (char.core_desire) voiceBlock += `\nCore desire: ${char.core_desire}`;
-    if (char.core_fear) voiceBlock += `\nCore fear: ${char.core_fear}`;
+    // Their inner life at the chapter book's depth (services/characterStoryBrief).
+    const brief = storyBrief(char, { layer: 'chapter' });
+    if (brief.lines.length) voiceBlock += `\n${brief.text}`;
 
     const charRules = `
 CHARACTER RULES for ${name}:

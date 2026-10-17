@@ -20,6 +20,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const crypto = require('crypto');
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 const { LINKED_CHARACTER_JOIN } = require('../utils/registryLink');
+const { storyBrief, BRIEF_COLUMNS } = require('./characterStoryBrief');
 const { latestWorldSnapshotForShow } = require('./worldSnapshotForShow');
 const { loadScriptCareer, careerBlock } = require('./scriptCareerService');
 const { episodeEventId } = require('../utils/episodeEventSql');
@@ -288,10 +289,9 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
                 rc.display_name as char_name, rc.core_belief, rc.pressure_type, rc.pressure_quote,
                 rc.role_type, rc.role_label, rc.appearance_mode, rc.depth_level,
                 rc.personality, rc.description as char_description,
-                rc.core_wound, rc.core_desire, rc.core_fear,
-                rc.mask_persona, rc.truth_persona, rc.character_archetype,
-                rc.therapy_primary_defense, rc.therapy_emotional_state,
-                rc.signature_trait, rc.emotional_baseline
+                rc.character_archetype, rc.therapy_primary_defense, rc.therapy_emotional_state,
+                rc.signature_trait, rc.emotional_baseline,
+                ${BRIEF_COLUMNS.map((col) => `rc.${col}`).join(', ')}
          FROM social_profiles sp
          ${LINKED_CHARACTER_JOIN}
          WHERE sp.id IN (:ids) AND sp.deleted_at IS NULL`,
@@ -421,7 +421,7 @@ function storyContextBlocks(context, { withSeason = true } = {}) {
       if (LALA_TIES[p.lala_relationship]) block += `\n  With Lala: ${LALA_TIES[p.lala_relationship]}`;
 
       // Character literary depth (from registry) + therapy + life simulation
-      if (p.core_belief || p.pressure_type || p.depth_level || p.core_wound) {
+      if (p.core_belief || p.pressure_type || p.depth_level || p.core_wound || p.wound || p.want_architecture) {
         block += `\n  ── CHARACTER DEPTH ──`;
         if (p.role_type) block += `\n  Role: ${p.role_type}${p.role_label ? ` — ${p.role_label}` : ''}`;
         if (p.character_archetype) block += `\n  Archetype: ${p.character_archetype}`;
@@ -429,13 +429,10 @@ function storyContextBlocks(context, { withSeason = true } = {}) {
         if (p.pressure_type) block += `\n  Pressure: ${p.pressure_type}${p.pressure_quote ? ` — "${p.pressure_quote}"` : ''}`;
         if (p.depth_level) block += `\n  Depth: ${p.depth_level} (${p.depth_level === 'sparked' ? 'surface only — keep dialogue simple' : p.depth_level === 'breathing' ? 'emerging complexity — hints of inner life' : p.depth_level === 'active' ? 'full inner world — internal monologue, contradictions' : 'fully alive — nuanced reactions, wound patterns visible'})`;
 
-        // Therapy data — psychological architecture
-        if (p.core_wound) block += `\n  ── THERAPY PROFILE ──`;
-        if (p.core_wound) block += `\n  Core Wound: "${p.core_wound}"`;
-        if (p.core_desire) block += `\n  Core Desire: "${p.core_desire}"`;
-        if (p.core_fear) block += `\n  Core Fear: "${p.core_fear}"`;
-        if (p.mask_persona) block += `\n  Mask (what they show): ${p.mask_persona}`;
-        if (p.truth_persona) block += `\n  Truth (what's underneath): ${p.truth_persona}`;
+        // Their inner life as the episode may use it: it shapes what they
+        // do and is never said (services/characterStoryBrief).
+        const brief = storyBrief(p, { layer: 'episode' });
+        if (brief.lines.length) block += `\n  ${brief.lines.join('\n  ')}`;
         if (p.therapy_primary_defense) block += `\n  Primary Defense: ${p.therapy_primary_defense}`;
         if (p.signature_trait) block += `\n  Signature Trait: ${p.signature_trait}`;
         if (p.emotional_baseline) block += `\n  Baseline: ${p.emotional_baseline}`;
@@ -453,7 +450,7 @@ function storyContextBlocks(context, { withSeason = true } = {}) {
         if (p.char_description) block += `\n  Character: ${p.char_description.slice(0, 150)}`;
       }
 
-      block += `\n  SCRIPT DIRECTIVE: When this character speaks, use THEIR voice. ${p.depth_level === 'alive' ? `Show their wound patterns and defense mechanisms in subtle behavior.${p.core_wound ? ` Their wound ("${p.core_wound.slice(0, 60)}") should bleed through in moments of pressure.` : ''}${p.mask_persona ? ` They present as ${p.mask_persona.slice(0, 40)} but underneath they are ${(p.truth_persona || 'different').slice(0, 40)}.` : ''}` : p.depth_level === 'active' ? `Include internal contradictions — what they say vs what they mean.${p.therapy_primary_defense ? ` Default defense: ${p.therapy_primary_defense}.` : ''}` : 'Keep them consistent with their archetype.'}`;
+      block += `\n  SCRIPT DIRECTIVE: When this character speaks, use THEIR voice. ${p.depth_level === 'alive' ? `Show their wound patterns and defense mechanisms in subtle behavior: under pressure the private truth shows in what they do, never in what anyone says about it.` : p.depth_level === 'active' ? `Include internal contradictions — what they say vs what they mean.${p.therapy_primary_defense ? ` Default defense: ${p.therapy_primary_defense}.` : ''}` : 'Keep them consistent with their archetype.'}`;
 
       return block;
     }).join('\n\n');
