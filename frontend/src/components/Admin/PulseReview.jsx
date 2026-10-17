@@ -2,6 +2,8 @@
  * Admin › The Pulse › Review (Task 2925; The Pulse spec §1, §4 Review): the
  * feed's director tools, out of Lala's view. Everything waiting for Evoni,
  * for one show:
+ *   Schedule all         every draft with no release time, at the time
+ *                        the story suggests (PulseScheduleAll)
  *   Lala's drafts        posts shared from The Pulse: Release, Edit, Delete
  *   Posts from episodes  drafted inside an episode: Approve, Edit, Discard
  *   Comments waiting     drafted reactions: Approve, Delete
@@ -30,6 +32,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import api from '../../services/api';
 import { PostCard, RequestPost } from './PulseReviewPost';
 import RevealPicker from './RevealPicker';
+import PulseScheduleAll from './PulseScheduleAll';
 import PulseNumbersWaiting from './PulseNumbersWaiting';
 import PulseClosenessWaiting from './PulseClosenessWaiting';
 import PulseDmsWaiting, { DmThread, StartConversation, draftsIn } from './PulseDmsWaiting';
@@ -147,6 +150,7 @@ export default function PulseReview({ showId, onCount }) {
 
   return (
     <div className="prv-review" data-testid="pulse-review">
+      <PulseScheduleAll showId={showId} drafts={data.wall.total + data.episode.total} onChange={load} />
       <Section title="Lala's drafts" count={data.wall.total} testId="prv-wall-drafts"
         empty="No drafts. What Lala shares on The Pulse waits here until you release it.">
         {data.wall.posts.map((p) => <PostCard key={p.id} post={p} showId={showId} onChange={load} />)}
