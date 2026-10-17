@@ -1443,6 +1443,13 @@ a.ch-trail-text:hover { text-decoration: underline; }
 }
 
 /* The consistency check (Character Consistency Engine step 3) */
+.ch-history { border-top: 1px solid var(--lala-lavender-line); padding-top: 12px; font-size: 13px; }
+.ch-history summary { cursor: pointer; font-weight: 700; color: var(--lala-lavender-text); min-height: 32px; }
+.ch-history-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.ch-history-list li { display: grid; gap: 2px; padding: 8px 10px; border-radius: 10px; background: var(--surface-card); border: 1px solid var(--lala-lavender-line); min-width: 0; }
+.ch-history-what { overflow-wrap: anywhere; }
+.ch-history-when { font-size: 12px; color: var(--text-secondary); }
+.ch-history-why { font-size: 12px; font-style: italic; color: var(--text-secondary); overflow-wrap: anywhere; }
 .ch-check { display: grid; gap: 8px; border-top: 1px solid var(--lala-lavender-line); padding-top: 12px; }
 .ch-check > .ch-btn-soft { justify-self: start; }
 .ch-check-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }

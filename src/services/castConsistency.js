@@ -61,6 +61,7 @@ async function overviewOf(db, character) {
   let intentional = null;
   try {
     const check = await require('./characterConsistency').checkCharacter(db, { character, feedProfile });
+    await require('./flagLog').logCheck(db, character, check);
     findings = check.flags.length;
     intentional = check.intentional.length;
   } catch (err) {

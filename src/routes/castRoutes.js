@@ -5,6 +5,9 @@
  * 2026-10-08; frontend pages/CharacterRegistryPage). Its own file, not
  * routes/characterRegistry.js (F-Reg-2): each write here is one row.
  *
+ *   GET    /api/v1/cast/flag-log?registry_id=      every flag the check has raised, resolved
+ *                                                  ones too, by check, field and character
+ *                                                  (services/flagLog)
  *   GET    /api/v1/cast/consistency?registry_id=   the cast rollout: each live character's
  *                                                  facts, check findings, voice and next
  *                                                  step (services/castConsistency; one id,
@@ -30,6 +33,8 @@
  *                                                  occupation, income and possessions from
  *                                                  what is written about them; saves nothing
  *                                                  (ADMIN; services/factsSuggest)
+ *   GET    /api/v1/cast/characters/:id/facts/history  when and why each fact changed, with
+ *                                                  the follower ledger (services/factHistory)
  *   GET    /api/v1/cast/characters/:id/check        flag-only check of their profile's text
  *                                                  against their facts (services/characterConsistency)
  *   POST   /api/v1/cast/characters/:id/check/intentional        { flag_id, note? }: ADMIN
@@ -151,6 +156,23 @@ router.get('/consistency', requireAuth, async (req, res) => {
     return res.json({ success: true, ...result });
   } catch (err) {
     console.error('[Cast] GET /consistency error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/v1/cast/flag-log?registry_id= (the spec's #4; Evoni, 2026-10-17):
+// every flag the check has raised, resolved ones too, counted by check, by
+// field and by character: where the generators break most (services/flagLog).
+router.get('/flag-log', requireAuth, async (req, res) => {
+  try {
+    const ids = String(req.query.registry_id || '').split(',').map((s) => s.trim()).filter(Boolean);
+    if (!ids.length || ids.length > 20 || !ids.every((id) => UUID_RE.test(id))) {
+      return res.status(400).json({ success: false, error: 'registry_id must be one or more registry ids (UUIDs), comma-separated' });
+    }
+    const result = await require('../services/flagLog').flagLogSummary(getModels(), ids);
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('[Cast] GET /flag-log error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -336,6 +358,23 @@ router.put('/characters/:id/facts', requireAuth, authorize(['ADMIN']), async (re
  * filled out when I auto generate profiles?"): a proposal for the missing
  * facts only; the fact sheet opens with it, and she saves or changes it.
  */
+// GET /api/v1/cast/characters/:id/facts/history (the spec's #1; Evoni,
+// 2026-10-17): when and why each fact changed, with the follower ledger,
+// newest first (services/factHistory).
+router.get('/characters/:id/facts/history', requireAuth, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const db = getModels();
+    const found = await characterWithFeed(db, req.params.id);
+    if (!found) return res.status(404).json({ success: false, error: 'Character not found' });
+    const history = await require('../services/factHistory').factHistory(db, found);
+    return res.json({ success: true, history });
+  } catch (err) {
+    console.error('[Cast] GET /characters/:id/facts/history error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.post('/characters/:id/facts/suggest', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
@@ -367,6 +406,7 @@ router.get('/characters/:id/check', requireAuth, async (req, res) => {
     const found = await characterWithFeed(db, req.params.id);
     if (!found) return res.status(404).json({ success: false, error: 'Character not found' });
     const result = await require('../services/characterConsistency').checkCharacter(db, found);
+    await require('../services/flagLog').logCheck(db, found.character, result);
     return res.json({ success: true, ...result });
   } catch (err) {
     console.error('[Cast] GET /characters/:id/check error:', err);
@@ -391,6 +431,7 @@ async function markIntentional(req, res, on) {
       throw err;
     }
     await character.update({ canon_facts: next });
+    await require('../services/flagLog').markIntentional(db, character.id, id, on);
     return res.json({ success: true, intentional: next.intentional });
   } catch (err) {
     console.error(`[Cast] ${on ? 'POST' : 'DELETE'} /characters/:id/check/intentional error:`, err);
@@ -416,6 +457,9 @@ router.post('/characters/:id/check/fix', requireAuth, authorize(['ADMIN']), asyn
     try {
       const text = req.body && 'text' in req.body ? req.body.text : undefined;
       const result = await applyFix(db, found, flagId, { text });
+      const flagLog = require('../services/flagLog');
+      await flagLog.markFixed(db, found.character.id, flagId);
+      await flagLog.logCheck(db, found.character, result);
       return res.json({ success: true, ...result });
     } catch (err) {
       if (err instanceof FixError) return res.status(err.status).json({ success: false, error: err.message });

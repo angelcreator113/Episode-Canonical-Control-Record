@@ -155,8 +155,10 @@ function nextCanonFacts(current, body) {
 
 /**
  * Applies the body's changes: { handle?, account_status?, followers?: { count,
- * reason }, income?, occupation?, major_possessions?, undecided? }. Returns
- * the facts after. Handle, status and followers need a feed profile.
+ * reason }, income?, occupation?, major_possessions?, undecided?, reason? }.
+ * Returns the facts after. Handle, status and followers need a feed
+ * profile. Each other fact that changed goes into the fact history with
+ * `reason` (services/factHistory); followers keep their own ledger.
  */
 async function setFacts(db, { character, feedProfile = null, showId = null, body = {}, by = null }) {
   const feedChanges = {};
@@ -202,6 +204,8 @@ async function setFacts(db, { character, feedProfile = null, showId = null, body
   const canon = nextCanonFacts(character.canon_facts, body);
 
   const show = showId || await showIdFor(db, character, feedProfile);
+  // What they were, for the fact history (services/factHistory, the spec's #1).
+  const before = await factsOf(db, { character, feedProfile, showId: show });
   await db.sequelize.transaction(async (transaction) => {
     if (followerTarget !== null && show) {
       const { countAt } = require('./pulseFollowers');
@@ -226,7 +230,9 @@ async function setFacts(db, { character, feedProfile = null, showId = null, body
     if (Object.keys(feedChanges).length) await feedProfile.update(feedChanges, { transaction });
     await character.update({ canon_facts: canon }, { transaction });
   });
-  return factsOf(db, { character, feedProfile, showId: show });
+  const after = await factsOf(db, { character, feedProfile, showId: show });
+  await require('./factHistory').recordFactChanges(db, { character, showId: show, before, after, reason: text(body.reason, 500) || null, by });
+  return after;
 }
 
 const STATUS_WORDS = {
