@@ -11,7 +11,6 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 vi.mock('../config/api', () => ({ API_URL: '/api/v1' }));
-vi.mock('../components/CharacterDepthPanel', () => ({ default: () => <div data-testid="depth-panel" /> }));
 
 import api from '../services/api';
 import CharacterProfilePage from './CharacterProfilePage';
@@ -104,8 +103,12 @@ describe('the character page', () => {
     renderIt();
     await waitFor(() => expect(screen.getAllByText('In Episode 1')).toHaveLength(2));
     fireEvent.click(screen.getByRole('button', { name: 'Inner life' }));
-    expect(screen.getByText('Want Architecture')).toBeTruthy();
-    expect(screen.getByTestId('depth-panel')).toBeTruthy();
+    // The workspace's five sections (step 2), not the old always-open panels.
+    for (const name of [/Core psychology/, /Emotional architecture/, /Personal history/, /Beliefs & behaviours/, /Deep profile/]) {
+      expect(screen.getByRole('button', { name })).toBeTruthy();
+    }
+    expect(screen.getByTestId('il-subject-wants')).toBeTruthy();
+    expect(screen.queryByTestId('depth-panel')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'In the world' }));
     fireEvent.change(screen.getByLabelText('World'), { target: { value: 'lalaverse' } });
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/character-registry/characters/c1', { world: 'lalaverse' }));
@@ -117,11 +120,11 @@ describe('the character page', () => {
     renderIt();
     await waitFor(() => expect(screen.getAllByText('In Episode 1')).toHaveLength(2));
     fireEvent.click(screen.getByRole('button', { name: 'Inner life' }));
-    const wound = screen.getByText('Wound not defined yet.').closest('.cp-empty-state');
+    const wound = screen.getByText('Wound not written yet.').closest('.cp-empty-state');
     fireEvent.click(wound.querySelector('button'));
     await waitFor(() => expect(screen.getByText('The shop that closed.')).toBeTruthy());
     expect(api.post).toHaveBeenCalledWith('/api/v1/character-registry/characters/c1/interior/generate', { fields: ['wound'] });
-    expect(screen.queryByText('Wound not defined yet.')).toBeNull();
+    expect(screen.queryByText('Wound not written yet.')).toBeNull();
   });
 
   test('Deepen fills in everything missing, on the Inner life tab', async () => {
@@ -152,6 +155,7 @@ describe('the character page', () => {
     renderIt();
     await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: 'Inner life' }));
+    fireEvent.click(screen.getByRole('button', { name: /Deep profile/ }));
     expect(screen.getByText('1/14 dimensions')).toBeTruthy();
     fireEvent.click(screen.getByText('The Body'));
     expect(screen.getByText('posture: Upright')).toBeTruthy();
