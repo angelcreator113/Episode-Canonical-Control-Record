@@ -17,13 +17,22 @@
  *   private   sent marked private: it shapes the writing and is never said
  *   unmarked  sent with no instruction to keep it private
  *
- *   WRITERS                  the writers, each { key, label, where, sources, shows, private, unmarked, note? }
+ *   WRITERS                  the writers, each { key, label, where, sources, shows, private, unmarked, note?, brief? }
+ *                            (brief: it reads the Character Story Brief; its sources call storyBrief)
  *   reachOf(character, isAuthor)   each writer with its fields' labels and values
  *   unreached(character, isAuthor) the inner life no writer reads, written first
  */
 import { SECTIONS } from './innerLifeSections';
 
 const CORE = ['core_wound', 'core_desire', 'core_fear'];
+
+// The Character Story Brief (services/characterStoryBrief, stage A): what
+// they show, and the private author truth a writer reads marked never-said.
+const BRIEF_SOURCE = 'src/services/characterStoryBrief.js';
+const BRIEF_SHOWS = ['mask_persona', 'the_mask'];
+const BRIEF_PRIVATE = ['want_architecture', 'hidden_want', 'core_desire', 'core_fear', 'core_wound', 'wound', 'truth_persona', 'dilemma',
+  'triggers', 'experience_of_joy', 'de_joy_trigger', 'de_forbidden_joy', 'change_capacity', 'time_orientation', 'self_narrative',
+  'operative_cosmology', 'de_operative_cosmology', 'foreclosed_possibility', 'living_state'];
 
 // A writer may read a field by its Depth Engine twin name (services/characterDepthFields
 // reads it from its home): change_capacity as de_change_capacity, and so on.
@@ -56,23 +65,24 @@ export const WRITERS = [
   },
   {
     key: 'episodes', label: 'Episode scripts and stories', where: 'An event’s episode script, and the episode story',
-    sources: ['src/services/episodeScriptWriterService.js', 'src/services/storyGenerationService.js'],
-    shows: ['mask_persona'], private: [], unmarked: [...CORE, 'truth_persona'],
+    sources: ['src/services/episodeScriptWriterService.js', 'src/services/storyGenerationService.js', BRIEF_SOURCE],
+    brief: true, shows: BRIEF_SHOWS, private: BRIEF_PRIVATE, unmarked: [],
+    note: 'The script reads it as the episode allows: behaviour only, never said. The episode story may let it surface beneath the scene, as hints.',
   },
   {
     key: 'scenes', label: 'Scenes from the storyteller', where: 'Three-voice scene writing',
-    sources: ['src/routes/storyEvaluationRoutes.js'],
-    shows: ['mask_persona', 'self_narrative'],
-    private: ['blind_spot'],
-    unmarked: [...CORE, 'hidden_want', 'truth_persona', 'deep_profile', 'time_orientation', 'change_capacity', 'operative_cosmology',
-      'de_operative_cosmology', 'de_cosmology_conflict', 'de_body_relationship', 'de_body_history', 'de_money_behavior', 'de_time_wound',
-      'de_circumstance_advantages', 'de_circumstance_disadvantages', 'de_world_belief', 'de_joy_trigger'],
-    note: 'The blind spot goes in as dramatic irony: the reader should sense it, the character never names it.',
+    sources: ['src/routes/storyEvaluationRoutes.js', BRIEF_SOURCE],
+    brief: true, shows: BRIEF_SHOWS,
+    private: [...BRIEF_PRIVATE, 'blind_spot'],
+    unmarked: ['deep_profile', 'de_cosmology_conflict', 'de_body_relationship', 'de_body_history', 'de_money_behavior', 'de_time_wound',
+      'de_circumstance_advantages', 'de_circumstance_disadvantages', 'de_world_belief'],
+    note: 'The blind spot goes in only when a scene asks for dramatic irony: the reader should sense it, the character never names it.',
   },
   {
     key: 'writemode', label: 'WriteMode and the Story Engine', where: 'Voice to story, continue, deepen, planning and Generate story',
-    sources: ['src/routes/memories/helpers.js', 'src/routes/memories/engine.js'],
-    shows: ['mask_persona'], private: [], unmarked: [...CORE, 'truth_persona'],
+    sources: ['src/routes/memories/helpers.js', 'src/routes/memories/engine.js', BRIEF_SOURCE],
+    brief: true, shows: BRIEF_SHOWS, private: BRIEF_PRIVATE, unmarked: [],
+    note: 'WriteMode reads it at the chapter book’s depth; the Story Engine at the short story’s. Nothing is stated outright until it is cleared to reveal.',
   },
   {
     key: 'texture', label: 'The texture layer', where: 'Texture added to a written scene',
