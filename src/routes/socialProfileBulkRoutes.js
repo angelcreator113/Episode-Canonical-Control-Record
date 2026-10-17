@@ -35,7 +35,7 @@ const {
   handleTakenMessage,
 } = require('../utils/socialProfileHandle');
 const {
-  loadSocietyArchetypes, matchSocietyArchetype, assignSocietyArchetype, societyArchetypeMenu,
+  loadSocietyArchetypes, matchSocietyArchetype, assignSocietyArchetype, societyArchetypeCounts, societyArchetypeMenu,
 } = require('../services/societyArchetypes');
 const { loadBrainContext, recordRuleUse } = require('../services/brainRules');
 const { DREAM_CITY_CULTURE, feedCity, randomFeedCity } = require('../utils/feedCities');
@@ -149,12 +149,13 @@ async function generateSingleProfile(creator, { db, seriesId, characterContext, 
   // Evoni's list (fix-list item 26).
   const lalaverse = feedLayer === 'lalaverse';
   const societyList = lalaverse ? await loadSocietyArchetypes(db) : [];
+  const societyCounts = lalaverse ? await societyArchetypeCounts(db) : null;
   // A LalaVerse creator follows the Show Bible, as /generate's does; a
   // real-world (JustAWoman's Feed) one does not.
   const brain = lalaverse ? await loadBrainContext(db, { label: 'bulk-generate' }) : { block: null, ids: [] };
   const prompt = buildGenerationPrompt(creator.handle, creator.platform, creator.vibe_sentence, characterContext, null, feedLayer)
     + (lalaverse ? lalaverseContext(creator) : '')
-    + societyArchetypeMenu(societyList)
+    + societyArchetypeMenu(societyList, societyCounts)
     + (brain.block ? `\n${brain.block}` : '');
   // Keep the timer handle and clear it once the race settles (Task #1859),
   // so no 120s timer outlives its profile and holds the event loop open.
