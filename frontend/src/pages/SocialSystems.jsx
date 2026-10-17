@@ -84,6 +84,25 @@ function feedNote(feed, counted) {
   return parts.join(' ');
 }
 
+/**
+ * The Feed's balance (Evoni's idea 6, 2026-10-17): which types crowd it and
+ * which nobody posts as. null until anyone has a type.
+ */
+function balanceNote(counted) {
+  const b = counted?.balance;
+  if (!b?.total) return null;
+  const parts = [];
+  if (b.crowded.length) {
+    parts.push(`Crowded: ${b.crowded.map((c) => `${c.name} (${c.count} of ${b.total}, ${c.share}%)`).join('; ')}.`);
+  }
+  if (b.empty.length) {
+    parts.push(`Nobody on the Feed is known as ${b.empty.length === 1 ? b.empty[0] : `${b.empty.slice(0, -1).join(', ')} or ${b.empty[b.empty.length - 1]}`} yet.`);
+  }
+  if (!parts.length) return 'The Feed is balanced: every type has someone and none crowds it.';
+  parts.push('New creators from the Feed get the least-used types first, and suggestions lean toward them when two fit.');
+  return parts.join(' ');
+}
+
 /** A row of stages joined by arrows (the trend engines); actions(s, i) is the item's edit controls. */
 function Stages({ items, meta, actions = () => null }) {
   return (
@@ -151,6 +170,7 @@ export default function SocialSystems({ embedded = false }) {
   ) : null);
   const archetypes = listOf(SYSTEMS, 'ARCHETYPES', ARCHETYPES);
   const counted = feed ? societyArchetypeCounts(feed, archetypes) : null;
+  const crowdedNames = new Set((counted?.balance.crowded || []).map((c) => c.name));
 
   return (
     <div className={`ss${embedded ? ' is-embedded' : ''}`}>
@@ -185,6 +205,7 @@ export default function SocialSystems({ embedded = false }) {
           <div className="ss-panel">
             <p className="ss-note">Every major creator tends to fall into one of these patterns. The tension between two archetypes in the same person is often the story. Open one for its effect on the audience and what it does in the story.</p>
             <p className="ss-note" data-testid="ss-arch-feed">{feedNote(feed, counted)}</p>
+            {balanceNote(counted) && <p className="ss-note ss-arch-balance" data-testid="ss-arch-balance">{balanceNote(counted)}</p>}
             {counted && <ContentTypeBatch unset={counted.unset} archetypes={archetypes} onApplied={recountFeed} />}
             <ul className="ss-grid">
               {archetypes.map((a, i) => {
@@ -195,7 +216,12 @@ export default function SocialSystems({ embedded = false }) {
                       <span className="ss-card-top"><span className="ss-num">{a.num}</span><span aria-hidden="true">{a.icon}</span></span>
                       <strong className="ss-card-title">{a.name}</strong>
                       <span className="ss-card-text">{a.content}</span>
-                      {counted && <span className="ss-chip-mini ss-arch-count" data-testid="ss-arch-count">{counted.count(a.name).toLocaleString()} in the Feed</span>}
+                      {counted && (
+                        <span
+                          className={`ss-chip-mini ss-arch-count${crowdedNames.has(a.name) ? ' is-crowded' : ''}${counted.balance.total && !counted.count(a.name) ? ' is-empty' : ''}`}
+                          data-testid="ss-arch-count"
+                        >{counted.count(a.name).toLocaleString()} in the Feed</span>
+                      )}
                     </button>
                     {open && (
                       <div className="ss-card-more">

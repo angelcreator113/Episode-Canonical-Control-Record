@@ -38,8 +38,9 @@ const nameKey = (v) => (typeof v === 'string' ? v : '').trim().toLowerCase().rep
 /**
  * The Society tab's archetypes (the list the page shows, Evoni's edits
  * included; fix-list item 26) with how many LalaVerse profiles carry each,
- * from the same composition: { count(name), unset, other }. unset is the
- * profiles made before they had one; other, names no longer on the list.
+ * from the same composition: { count(name), unset, other, balance }. unset
+ * is the profiles made before they had one; other, names no longer on the
+ * list; balance, which types crowd the Feed and which nobody has.
  */
 export function societyArchetypeCounts(composition, list) {
   const used = new Map();
@@ -49,11 +50,32 @@ export function societyArchetypeCounts(composition, list) {
   }
   const listed = new Set((list || []).map((a) => nameKey(a?.name)).filter(Boolean));
   const other = [...used].filter(([key]) => !listed.has(key)).reduce((n, [, v]) => n + v, 0);
+  const total = [...used.values()].reduce((a, b) => a + b, 0);
   return {
     count: (name) => used.get(nameKey(name)) || 0,
     unset: Number(composition?.society_archetype_unset) || 0,
     other,
+    balance: societyBalance(list, (name) => used.get(nameKey(name)) || 0, total),
   };
+}
+
+// src/services/societyArchetypes.js CROWDED_MIN / CROWDED_TIMES (idea 6,
+// 2026-10-17): crowded is at least 3 and more than twice the even share.
+const CROWDED_MIN = 3;
+const CROWDED_TIMES = 2;
+
+/**
+ * The Feed's balance across the list: { total, crowded: [{ name, count,
+ * share }], empty: [name] }, as the server's societyBalance reads it.
+ */
+export function societyBalance(list, countOf, total) {
+  const rows = (list || []).map((a) => ({ name: a.name, count: countOf(a.name) }));
+  const even = rows.length ? total / rows.length : 0;
+  const crowded = rows
+    .filter((r) => r.count >= CROWDED_MIN && r.count > CROWDED_TIMES * even)
+    .sort((a, b) => b.count - a.count)
+    .map((r) => ({ ...r, share: Math.round((100 * r.count) / total) }));
+  return { total, crowded, empty: rows.filter((r) => !r.count).map((r) => r.name) };
 }
 
 /** Trending topics as bars: [{ topic, posts, engagement, share }], most posts first. */
