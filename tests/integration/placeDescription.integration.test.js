@@ -36,7 +36,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
   const tag = uuid().slice(0, 8);
 
-  async function cast({ gap = true } = {}) {
+  async function cast({ gap = true, city = 'dazzle_district', facts = { home_price_range: 'modest' }, character = {} } = {}) {
     const showId = uuid();
     await run(`INSERT INTO shows (id, name, slug, metadata, created_at, updated_at) VALUES (:id, :name, :slug, '{}', NOW(), NOW())`,
       { id: showId, name: `Describe ${showId.slice(0, 8)}`, slug: `describe-${showId.slice(0, 8)}` });
@@ -47,23 +47,34 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
                VALUES (:locationId, 'The Vale Building', :slug, 'Silk Row', 'apartment', NOW(), NOW())`, { locationId, slug: `vale-${locationId.slice(0, 8)}` });
     const [{ id: pid }] = await rows(`INSERT INTO social_profiles (handle, platform, vibe_sentence, display_name, feed_layer, city, home_location_id,
         lifestyle_claim, lifestyle_reality, lifestyle_gap, created_at, updated_at)
-      VALUES (:handle, 'instagram', 'test', 'Sable', 'lalaverse', 'dazzle_district', :locationId, :claim, :reality, :gapKind, NOW(), NOW()) RETURNING id`, {
-      handle: `sable-${tag}-${uuid().slice(0, 4)}`, locationId,
+      VALUES (:handle, 'instagram', 'test', 'Sable', 'lalaverse', :city, :locationId, :claim, :reality, :gapKind, NOW(), NOW()) RETURNING id`, {
+      handle: `sable-${tag}-${uuid().slice(0, 4)}`, locationId, city,
       claim: gap ? 'penthouse luxury, designer everything' : null,
       reality: gap ? 'a one-bedroom rental, borrowed clothes' : null,
       gapKind: gap ? 'massive' : 'authentic',
     });
     const id = uuid();
     await run(`INSERT INTO registry_characters (id, registry_id, character_key, display_name, feed_profile_id,
-                 de_money_origin_class, de_money_current_class, canon_facts, created_at, updated_at)
-               VALUES (:id, :registry, :key, 'Sable', :pid, 'working_class', 'middle_class', :facts, NOW(), NOW())`,
-    { id, registry, key: `sable-${id.slice(0, 6)}`, pid, facts: JSON.stringify({ home_price_range: 'modest' }) });
+                 de_money_origin_class, de_money_current_class, de_class_gap_direction, aesthetic_dna, canon_facts, created_at, updated_at)
+               VALUES (:id, :registry, :key, 'Sable', :pid, 'working_class', 'middle_class', :direction, :dna, :facts, NOW(), NOW())`,
+    { id, registry, key: `sable-${id.slice(0, 6)}`, pid, facts: JSON.stringify(facts),
+      direction: character.direction || null, dna: character.dna ? JSON.stringify(character.dna) : null });
     const setId = uuid();
     await run(`INSERT INTO scene_sets (id, name, scene_type, show_id, canonical_description, generation_status, created_at, updated_at)
                VALUES (:setId, 'Sable''s Home', 'HOME_BASE', :showId, 'A bright loft.', 'pending', NOW(), NOW())`, { setId, showId });
     await run(`INSERT INTO character_places (id, registry_character_id, scene_set_id, role, created_at, updated_at)
                VALUES (:cp, :id, :setId, 'home', NOW(), NOW())`, { cp: uuid(), id, setId });
-    return { showId, id, pid, setId };
+    const addSet = async (name, sceneType, role = null) => {
+      const sid = uuid();
+      await run(`INSERT INTO scene_sets (id, name, scene_type, show_id, generation_status, created_at, updated_at)
+                 VALUES (:sid, :name, :sceneType, :showId, 'pending', NOW(), NOW())`, { sid, name, sceneType, showId });
+      if (role) {
+        await run(`INSERT INTO character_places (id, registry_character_id, scene_set_id, role, created_at, updated_at)
+                   VALUES (:cp, :id, :sid, :role, NOW(), NOW())`, { cp: uuid(), id, sid, role });
+      }
+      return sid;
+    };
+    return { showId, id, pid, setId, addSet };
   }
   const describeIt = (cid, setId) => auth(request(app).post(`/api/v1/cast/characters/${cid}/places/describe`)).send({ scene_set_id: setId });
 
@@ -131,6 +142,63 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(res.status).toBe(200);
     expect(res.body.data.gap).toBe(false);
     expect(mockCreate.mock.calls[0][0].messages[0].content).not.toMatch(/THE GAP/);
+  });
+
+  // Sixth audit (2026-10-17).
+  it('a set that is not one of their places is refused, even a home', async () => {
+    const { id, addSet } = await cast();
+    const someoneElses = await addSet('Lala\'s Bedroom', 'HOME_BASE');
+    const res = await describeIt(id, someoneElses);
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe('PLACE_NOT_FOUND');
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('the lead\'s home is a home whatever its type; her shared home and closet are each their own card', async () => {
+    const { showId, id, addSet } = await cast();
+    const shared = await addSet('The Loft', 'OTHER');
+    await run(`UPDATE shows SET metadata = :m WHERE id = :showId`,
+      { showId, m: JSON.stringify({ lead_character_id: id, scene_defaults: { home_set_id: shared, closet_set_id: shared } }) });
+    const home = await describeIt(id, shared);
+    expect(home.status).toBe(200);
+    expect(home.body.data.role).toBe('home');
+    expect(home.body.data.gap).toBe(true);
+    expect(home.body.data.used.map((u) => u.label)).toContain('Home location');
+    const closet = await auth(request(app).post(`/api/v1/cast/characters/${id}/places/describe`)).send({ scene_set_id: shared, role: 'closet' });
+    expect(closet.body.data.role).toBe('closet');
+    expect(mockCreate.mock.calls[1][0].messages[0].content).toMatch(/Sable's closet/);
+  });
+
+  it('reads JSON fields as text, leaves out empty ones, and reports only decided facts as used', async () => {
+    const { id, setId } = await cast({
+      city: 'nova_prime',
+      facts: { home_price_range: 'modest', occupation: 'DJ', income: { amount: 2000, cadence: 'per_month' }, undecided: ['occupation', 'income'] },
+      character: { direction: 'stable', dna: { era_aesthetic: null, color_palette: null } },
+    });
+    const res = await describeIt(id, setId);
+    const labels = res.body.data.used.map((u) => u.label);
+    expect(labels).not.toContain('Occupation');
+    expect(labels).not.toContain('Can afford');
+    expect(res.body.data.missing).toContain('Style');
+    expect(res.body.data.used.find((u) => u.label === 'City').value).toBe('Dazzle District');
+    const prompt = mockCreate.mock.calls[0][0].messages[0].content;
+    expect(prompt).toMatch(/THEIR CITY: Dazzle District\. Fashion capital/);
+    expect(prompt).not.toMatch(/moving stable|null|THEIR STYLE/);
+    expect(prompt).toMatch(/Class shapes taste, not price/);
+  });
+
+  it('a place of work is not held to the home\'s price, and asks for no home price range', async () => {
+    const { id, addSet } = await cast({ character: { dna: { color_palette: ['blush', 'gold'] } } });
+    const studio = await addSet('Studio', 'EVENT_LOCATION', 'work');
+    const res = await describeIt(id, studio);
+    expect(res.status).toBe(200);
+    expect(res.body.data.role).toBe('work');
+    expect(res.body.data.gap).toBe(false);
+    expect(res.body.data.missing).not.toContain('Home price range');
+    expect(res.body.data.used.find((u) => u.label === 'Style').value).toBe('color palette: blush, gold');
+    const prompt = mockCreate.mock.calls[0][0].messages[0].content;
+    expect(prompt).toMatch(/It is a place of work, not their home/);
+    expect(prompt).not.toMatch(/who else lives here/);
   });
 
   it('a bad id is a 400; an unknown set is a 404; no AI call', async () => {

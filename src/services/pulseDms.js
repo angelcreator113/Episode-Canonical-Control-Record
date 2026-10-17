@@ -237,7 +237,7 @@ async function draftMessage(db, { threadId, senderProfileId, at = null, jobId = 
     show_id: thread.show_id, social_profile_id: senderId, poster_handle: sender.profile.handle,
     content_text: text, trending_topic: null, story_order: order,
   };
-  const gate = await gateApi.check(db, asPost, { voice: sender.voice, privateState: require('./pulseDrafter').privateOf(sender.character), lalaProfileId });
+  const gate = await gateApi.check(db, asPost, { voice: sender.voice, privateState: require('./pulseDrafter').privateOf(sender.character), lalaProfileId, checkLane: false });
   // Every DM waits for Evoni (her ruling); the other reasons say what else to look at.
   const review = ['dm', ...gateApi.reviewReasons(asPost, gate, { lalaProfileId })];
   const row = await db.PulseDmMessage.create({

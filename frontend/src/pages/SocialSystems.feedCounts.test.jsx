@@ -7,7 +7,7 @@
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({
@@ -50,7 +50,7 @@ describe('the Archetypes sub-tab counts the LalaVerse Feed', () => {
     expect(within(card('The Rebel')).getByTestId('ss-arch-count').textContent).toBe('0 in the Feed');
     const note = screen.getByTestId('ss-arch-feed').textContent;
     expect(note).toContain('Each card counts the LalaVerse Feed profiles that have it.');
-    expect(note).toContain('40 profiles have none yet: made before the Feed used these. Regenerating a profile gives it one.');
+    expect(note).toContain("40 profiles have none yet: made before the Feed used these. Suggest theirs below, or set one on a character's page (Known for on The Pulse).");
     expect(note).toContain('2 profiles carry an archetype no longer in this list.');
     expect(api.get).toHaveBeenCalledWith(COMPOSITION);
   });
@@ -85,5 +85,66 @@ describe('the Archetypes sub-tab counts the LalaVerse Feed', () => {
     expect(screen.queryByTestId('ss-arch-count')).toBeNull();
     expect(spy).toHaveBeenCalledWith('[Society] the Feed profiles could not be counted:', 500);
     spy.mockRestore();
+  });
+
+  test('profiles with none: suggest theirs, change or untick any, save the rest, and the cards recount', async () => {
+    let composition = { society_archetypes: {}, society_archetype_unset: 3 };
+    vi.mocked(api.get).mockImplementation(async (url) => (url === COMPOSITION ? { data: composition } : { data: {} }));
+    vi.mocked(api.post).mockImplementation(async (url) => {
+      if (url === '/api/v1/cast/content-types/suggest-unset') {
+        return { data: { unset: 3, more: 0, failed: [], suggestions: [
+          { profile_id: 'p1', display_name: 'Sable', handle: '@studiobysable', name: 'The Trendsetter', why: 'Early looks.', differs_from_job: true, tension: 'A tailor known for trends she would never sew.' },
+          { profile_id: 'p2', display_name: 'Thrift', handle: '@thriftveil', name: 'The Archivist', why: 'Old pieces.', differs_from_job: false, tension: null },
+          { profile_id: 'p3', character_id: 'c3', display_name: 'Velvet', handle: '@velvetcore', name: 'The Rebel', why: 'Anti-trend.', differs_from_job: true, tension: 'A bank teller who posts riot fashion.' },
+        ] } };
+      }
+      if (url === '/api/v1/cast/content-types/apply') return { data: { saved: [{ profile_id: 'p1', name: 'The Rebel' }, { profile_id: 'p3', name: 'The Rebel', gap_saved: true }], skipped: [] } };
+      return { data: { data: UP_TO_DATE } };
+    });
+    renderPage();
+    const button = await screen.findByRole('button', { name: 'Suggest content types for the 3 with none' });
+    fireEvent.click(button);
+    await screen.findByText('Job vs content: A tailor known for trends she would never sew.');
+    fireEvent.change(screen.getByLabelText('Content type for Sable'), { target: { value: 'The Rebel' } });
+    fireEvent.click(screen.getByLabelText('Keep for Thrift'));
+    composition = { society_archetypes: { 'The Rebel': 2 }, society_archetype_unset: 1 };
+    fireEvent.click(screen.getByRole('button', { name: 'Save the ticked ones' }));
+    await screen.findByText('Saved 2 content types.');
+    // Sable's type was changed, so her job-vs-content line (about another
+    // type) is not kept; Velvet's suggestion is kept with hers.
+    expect(api.post).toHaveBeenCalledWith('/api/v1/cast/content-types/apply', { items: [
+      { profile_id: 'p1', name: 'The Rebel' },
+      { profile_id: 'p3', name: 'The Rebel', character_id: 'c3', gap: 'A bank teller who posts riot fashion.' },
+    ] });
+    await waitFor(() => expect(within(card('The Rebel')).getByTestId('ss-arch-count').textContent).toBe('2 in the Feed'));
+  });
+
+  test('the Feed\'s balance: a crowded type and the types nobody has are said, and their cards marked', async () => {
+    const page = { ARCHETYPES: [
+      { num: '01', name: 'The A', content: 'a' }, { num: '02', name: 'The B', content: 'b' },
+      { num: '03', name: 'The C', content: 'c' }, { num: '04', name: 'The D', content: 'd' },
+    ] };
+    serve({ composition: { society_archetypes: { 'The A': 6, 'The B': 2 }, society_archetype_unset: 0 }, page });
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('ss-arch-balance').textContent).toContain('Crowded: The A (6 of 8, 75%).'));
+    const note = screen.getByTestId('ss-arch-balance').textContent;
+    expect(note).toContain('Nobody on the Feed is known as The C or The D yet.');
+    expect(note).toContain('New creators from the Feed get the least-used types first');
+    expect(within(card('The A')).getByTestId('ss-arch-count').className).toContain('is-crowded');
+    expect(within(card('The C')).getByTestId('ss-arch-count').className).toContain('is-empty');
+    expect(within(card('The B')).getByTestId('ss-arch-count').className).not.toMatch(/is-crowded|is-empty/);
+  });
+
+  test('no balance note until anyone has a type; a balanced Feed is said so', async () => {
+    serve({ composition: { society_archetypes: {}, society_archetype_unset: 6 } });
+    const { unmount } = renderPage();
+    await waitFor(() => expect(screen.getAllByTestId('ss-arch-count')).toHaveLength(15));
+    expect(screen.queryByTestId('ss-arch-balance')).toBeNull();
+    unmount();
+
+    const page = { ARCHETYPES: [{ num: '01', name: 'The A', content: 'a' }, { num: '02', name: 'The B', content: 'b' }] };
+    serve({ composition: { society_archetypes: { 'The A': 1, 'The B': 1 } }, page });
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('ss-arch-balance').textContent).toBe('The Feed is balanced: every type has someone and none crowds it.'));
   });
 });
