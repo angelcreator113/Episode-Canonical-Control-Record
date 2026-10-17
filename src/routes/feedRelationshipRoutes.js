@@ -13,6 +13,13 @@
  * GET    /canvas        — nodes + edges formatted for SVG renderer; with
  *                          ?show_id=, each edge's Pulse closeness (read only)
  * POST   /:id/generate-ripples — generate caught-in-middle flags
+ * GET    /suggestions   — suggested pairs waiting for Evoni (services/pairSuggestions)
+ * POST   /suggestions   — { limit? }: new ones, by audience overlap and one AI call (ADMIN)
+ * POST   /suggestions/:key/keep    — { type?, why?, drama_level? }: make it a relationship (ADMIN)
+ * POST   /suggestions/:key/dismiss — never suggest this pair again (ADMIN)
+ * POST   /:id/storyline-seed — { show_id }: a title and premise for a Pulse
+ *                          storyline between the pair; nothing saved
+ *                          (services/pairStorylines; ADMIN)
  *
  * Since Task #3115 (Evoni, 2026-10-13: "go with (a)") the map reads and edits
  * social_profile_relationships, the table The Pulse reads for the kind of
@@ -24,7 +31,7 @@
 const express = require('express');
 const router  = express.Router();
 const { Op }  = require('sequelize');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 router.use(requireAuth);
@@ -97,6 +104,64 @@ function findTwin(SocialProfileRelationship, a, b, type, exceptId) {
 }
 
 // GET /
+// ── Suggested pairs (Evoni's idea 4, PR 2; services/pairSuggestions) ──────
+// Creators who share or compete for an audience but have no relationship
+// yet. Nothing is made until Evoni keeps one.
+const pairError = (res, err) => {
+  const { PairError } = require('../services/pairSuggestions');
+  if (err instanceof PairError) { res.status(err.status).json({ success: false, error: err.message }); return true; }
+  return false;
+};
+
+router.get('/suggestions', async (req, res) => {
+  try {
+    return res.json({ success: true, pairs: await require('../services/pairSuggestions').listPending(getModels(req)) });
+  } catch (err) {
+    console.error('[FeedRelationships] GET /suggestions error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/suggestions', authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  try {
+    const result = await require('../services/pairSuggestions').suggestPairs(getModels(req), { limit: req.body?.limit });
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('[FeedRelationships] POST /suggestions error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/suggestions/:key/keep', authorize(['ADMIN']), async (req, res) => {
+  try {
+    try {
+      const rel = await require('../services/pairSuggestions').keepPair(getModels(req), req.params.key, req.body || {});
+      return res.status(201).json({ success: true, relationship: rel });
+    } catch (err) {
+      if (pairError(res, err)) return undefined;
+      throw err;
+    }
+  } catch (err) {
+    console.error('[FeedRelationships] POST /suggestions/:key/keep error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/suggestions/:key/dismiss', authorize(['ADMIN']), async (req, res) => {
+  try {
+    try {
+      await require('../services/pairSuggestions').dismissPair(getModels(req), req.params.key);
+      return res.json({ success: true });
+    } catch (err) {
+      if (pairError(res, err)) return undefined;
+      throw err;
+    }
+  } catch (err) {
+    console.error('[FeedRelationships] POST /suggestions/:key/dismiss error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.get('/', async (req, res) => {
   const { SocialProfileRelationship, SocialProfile } = getModels(req);
   try {
@@ -278,6 +343,8 @@ router.get('/canvas', async (req, res) => {
         models, req.query.show_id, filteredRels.map(r => [r.influencer_a_id, r.influencer_b_id]), at);
     }
     const { pairOf } = require('../services/pulseCloseness');
+    // Lala's relationships follow the show's story: no storyline seed (decision c).
+    const lalaId = await require('../services/lalaFeedProfile').lalaProfileId(getModels(req).sequelize);
     const edges = filteredRels.map(r => ({
       id: r.id,
       source: r.influencer_a_id,
@@ -287,6 +354,7 @@ router.get('/canvas', async (req, res) => {
       is_conflict: r.is_conflict,
       style: EDGE_STYLES[r.relationship_type] || EDGE_STYLES.orbit,
       closeness: closeness ? (closeness.get(pairOf(r.influencer_a_id, r.influencer_b_id).join(':')) ?? null) : null,
+      seedable: lalaId == null || (Number(r.influencer_a_id) !== Number(lalaId) && Number(r.influencer_b_id) !== Number(lalaId)),
     }));
 
     res.json({ nodes: Array.from(nodeMap.values()), edges, author_mode: authorMode });
@@ -363,6 +431,23 @@ router.post('/:id/generate-ripples', aiRateLimiter, async (req, res) => {
   } catch (err) {
     console.error('[FeedRelationships] generate-ripples error:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /:id/storyline-seed — a Pulse storyline between a kept pair (Evoni's
+// idea 4, PR 3): one AI call, nothing saved; she starts it on The Pulse.
+router.post('/:id/storyline-seed', authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  try {
+    const seed = await require('../services/pairStorylines').seedStoryline(getModels(req), req.params.id, { showId: req.body?.show_id });
+    return res.json({ success: true, ...seed });
+  } catch (err) {
+    const { SeedError } = require('../services/pairStorylines');
+    // RequestCapError: today's manual requests are used.
+    if (err instanceof SeedError || err instanceof require('../services/pulseRequests').RequestCapError) {
+      return res.status(err.status).json({ success: false, error: err.message });
+    }
+    console.error('[FeedRelationships] POST /:id/storyline-seed error:', err);
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
