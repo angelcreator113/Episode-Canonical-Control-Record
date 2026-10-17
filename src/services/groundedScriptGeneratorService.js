@@ -46,8 +46,10 @@ const { beatHeader } = require('../utils/canonicalScriptBeats');
 const SPEAKS = {
   1: [true, false], 2: [true, true], 3: [true, false], 4: [true, true], 5: [true, true],
   6: [true, true], 7: [true, true], 8: [true, true], 9: [true, false], 10: [true, false],
-  11: [true, true], 12: [false, true], 13: [true, false], 14: [true, false],
+  11: [true, true], 12: [false, true], 13: [true, true], 14: [true, false],
 };
+// Beat 13: Lala says how the outcome feels (Evoni, 2026-10-17); the numbers
+// stay on the stat card, which she does not see.
 const BEAT_TEMPLATES = Object.fromEntries(CANONICAL_BEATS.map((b) => [b.number, {
   name: b.name, ui: b.screen_action, jawihp: SPEAKS[b.number][0], lala: SPEAKS[b.number][1],
 }]));
@@ -338,7 +340,11 @@ async function generateGroundedScript(episodeId, showId, models, { lockedBeats =
   if (fixedBeats.length || missing.length) {
     console.log(`[ScriptGen] Coverage for episode ${episodeId}: rewrote beats ${fixedBeats.join(', ') || 'none'}; still missing ${missing.length}`);
   }
-  return { script, coverage: { missing, fixed_beats: fixedBeats.sort((a, b) => a - b), phone_steps: phoneSteps }, facts };
+  // The story layers the show holds nothing for (utils/storyLayers.js): the
+  // writer kept them to this episode; the Script tab shows them.
+  let storyGaps = [];
+  try { storyGaps = require('../utils/storyLayers').storyLayers(inputs).gaps; } catch (err) { console.error('[ScriptGen] story gaps failed (non-blocking):', err.message); }
+  return { script, coverage: { missing, fixed_beats: fixedBeats.sort((a, b) => a - b), phone_steps: phoneSteps, story_gaps: storyGaps }, facts };
 }
 
 // What the coverage check needs from the writer's inputs.
@@ -464,6 +470,12 @@ function onScreenContext(onScreen = []) {
   return `\n═══ ON SCREEN ═══\n${screens.length ? `Screens: ${screens.join(', ')}\n` : ''}${icons.length ? `Icons: ${icons.join(', ')}\n` : ''}${overlays.length ? `Overlays: ${overlays.join(', ')}\n` : ''}`;
 }
 
+// The three story layers and what feeds each (utils/storyLayers.js; Evoni,
+// 2026-10-17). Left out, logged, when it cannot be built.
+function layersText(inputs) {
+  try { return require('../utils/storyLayers').storyLayers(inputs).text; } catch (err) { console.error('[ScriptGen] story layers failed (non-blocking):', err.message); return ''; }
+}
+
 function seasonPurposeLines(sc) {
   // A purpose may name only a thread; it then reads as continuing that thread.
   const list = (Array.isArray(sc?.story_purposes) ? sc.story_purposes : [])
@@ -488,6 +500,7 @@ function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrob
         const loc = b.sceneSet?.worldLocation;
         let entry = `${beatHeader(canon)}
   Purpose: ${canon.narrative_purpose}
+  Story job: ${canon.story_job}
   Location: ${b.sceneSet?.name || 'Not planned yet'}${b.sceneSet?.scene_type ? ` (${b.sceneSet.scene_type})` : ''}
   Angle: ${b.angle_label || ''} | Shot: ${b.shot_type || ''}
   Scene context: ${b.scene_context || b.sceneSet?.script_context || 'No description'}
@@ -585,7 +598,7 @@ ${statsContext ? `═══ LALA'S STATE ═══\n${statsContext}\n` : ''}${to
 ═══ WARDROBE ═══
 ${wardrobeContext}
 ${outfitScore ? `\n═══ LOCKED OUTFIT ═══\nLala is wearing ${outfitScore.count} pieces for this event:\n${outfitScore.items.map(i => `- ${i.name} (${i.clothing_category}, ${i.tier})${i.id ? ` [WEAR: ${i.id}]` : ''}`).join('\n')}\nBeat 8 (Transformation): Reference these SPECIFIC items by name as Lala gets dressed. Right after the line where she puts a piece on, write that piece's [WEAR: id] line exactly as shown above, once per piece.\nBeat 11 (Event Outcome): Her outfit choice affects how the event goes — she is wearing what she chose.` : ''}
-${onScreenContext(onScreen)}${phone ? require('../utils/phonePaths').phoneMapContext(phone) : ''}
+${onScreenContext(onScreen)}${phone ? require('../utils/phonePaths').phoneMapContext(phone) : ''}${layersText({ brief, eventData, seasonContext, story })}
 
 ═══ SCENE PLAN — 14 BEATS ═══
 ${beatContext}
