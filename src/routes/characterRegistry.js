@@ -1475,10 +1475,11 @@ router.post('/characters/:id/backfill-sections', requireAuth, async (req, res) =
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const allFieldsToFill = [sectionsToFill, essenceToFill, demoToFill].filter(Boolean).join(',\n');
-    // Their facts (Character Consistency Engine step 5): the sections quote them, never invent them.
-    const { factsForCharacter, factsPromptBlock, holdToFacts } = require('../services/characterFacts');
-    const facts = await factsForCharacter(db, character);
-    const factsBlock = factsPromptBlock(facts);
+    // Their character file (services/characterFile): the facts the sections
+    // quote, never invent, with their type, inner life, mask, people, events
+    // and latest posts, so this section agrees with what the others decided.
+    const { holdToFacts } = require('../services/characterFacts');
+    const { facts, block: factsBlock } = await require('../services/characterFile').characterFilePrompt(db, { character });
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
@@ -1889,10 +1890,10 @@ router.post('/characters/:id/generate-section', requireAuth, async (req, res) =>
       return res.status(400).json({ error: `Unknown section: ${section}. Valid: ${Object.keys(sectionConfigs).join(', ')}` });
     }
 
-    // Their facts (Character Consistency Engine step 5): the section quotes them, never invents them.
-    const { factsForCharacter, factsPromptBlock, holdToFacts } = require('../services/characterFacts');
-    const facts = await factsForCharacter(db, character);
-    const factsBlock = factsPromptBlock(facts);
+    // Their character file (services/characterFile): the facts the section
+    // quotes, never invents, with the rest of who they are.
+    const { holdToFacts } = require('../services/characterFacts');
+    const { facts, block: factsBlock } = await require('../services/characterFile').characterFilePrompt(db, { character });
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
@@ -2003,8 +2004,7 @@ router.post('/characters/:id/interior/generate', requireAuth, aiRateLimiter, asy
     if (missing.includes('selected_name') && feedProfile?.creator_name) known.selected_name = feedProfile.creator_name;
     const toAsk = missing.filter((f) => !(f in known));
     // Their facts: what the new prose may say about followers, status, money and possessions.
-    const { factsForCharacter, factsPromptBlock } = require('../services/characterFacts');
-    const factsBlock = factsPromptBlock(await factsForCharacter(db, character, feedProfile));
+    const { block: factsBlock } = await require('../services/characterFile').characterFilePrompt(db, { character, feedProfile: feedProfile || null });
     const updates = {
       ...known,
       ...(toAsk.length ? await gen.generateMissingInterior({ character: plain, feedProfile, events, fields: toAsk, factsBlock }) : {}),
@@ -2075,7 +2075,7 @@ router.post('/registries/:registryId/backfill-all', requireAuth, async (req, res
     const Anthropic = require('@anthropic-ai/sdk');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const results = [];
-    const { factsForCharacter, factsPromptBlock, holdToFacts } = require('../services/characterFacts');
+    const { holdToFacts } = require('../services/characterFacts');
 
     for (const character of chars) {
       const emptySections = [];
@@ -2101,9 +2101,8 @@ router.post('/registries/:registryId/backfill-all', requireAuth, async (req, res
       if (hasData(character.deep_profile))       known.deep_profile_summary = character.deep_profile;
 
       const sectionsToFill = emptySections.map(s => `"${s}": ${sectionSchemas[s]}`).join(',\n');
-      // Their facts (Character Consistency Engine step 5): the sections quote them, never invent them.
-      const facts = await factsForCharacter(db, character);
-      const factsBlock = factsPromptBlock(facts);
+      // Their character file (services/characterFile): facts, type, inner life, mask, people, events, posts.
+      const { facts, block: factsBlock } = await require('../services/characterFile').characterFilePrompt(db, { character });
 
       try {
         const response = await anthropic.messages.create({
@@ -2315,8 +2314,7 @@ router.post('/characters/:id/deep-profile/generate', requireAuth, aiRateLimiter,
       : '';
 
     // Their facts (Character Consistency Engine step 5): class_and_money and ambition agree with them.
-    const { factsForCharacter, factsPromptBlock } = require('../services/characterFacts');
-    const factsBlock = factsPromptBlock(await factsForCharacter(db, character));
+    const { block: factsBlock } = await require('../services/characterFile').characterFilePrompt(db, { character });
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 6000,
@@ -2527,7 +2525,6 @@ router.post('/characters/:id/deep-profile/accept', requireAuth, async (req, res)
  * Body: { ids: [1,2,3] }
  */
 router.post('/characters/bulk-deep-profile', requireAuth, async (req, res) => {
-  const { factsForCharacter, factsPromptBlock } = require('../services/characterFacts');
   const { ids } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) {
     return res.status(400).json({ error: 'ids array required' });
@@ -2570,7 +2567,7 @@ router.post('/characters/bulk-deep-profile', requireAuth, async (req, res) => {
         voice_signature: character.voice_signature, living_context: character.living_context,
       })) { if (v !== null && v !== undefined && v !== '') dossier[k] = v; }
 
-      const factsBlock = factsPromptBlock(await factsForCharacter(db, character));
+      const { block: factsBlock } = await require('../services/characterFile').characterFilePrompt(db, { character });
       const response = await anthropic.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 6000,
@@ -2667,8 +2664,7 @@ router.post('/characters/:id/writer-paragraph/generate', requireAuth, aiRateLimi
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     // Their facts (Character Consistency Engine step 5): the portrait agrees with them.
-    const { factsForCharacter, factsPromptBlock } = require('../services/characterFacts');
-    const factsBlock = factsPromptBlock(await factsForCharacter(db, character));
+    const { block: factsBlock } = await require('../services/characterFile').characterFilePrompt(db, { character });
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 2000,
@@ -2703,7 +2699,6 @@ Write a single, flowing paragraph (200–400 words) that captures who this perso
  * Body: { ids: [1,2,3] }
  */
 router.post('/characters/bulk-writer-paragraph', requireAuth, async (req, res) => {
-  const { factsForCharacter, factsPromptBlock } = require('../services/characterFacts');
   const { ids } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) {
     return res.status(400).json({ error: 'ids array required' });
@@ -2742,7 +2737,7 @@ router.post('/characters/bulk-writer-paragraph', requireAuth, async (req, res) =
         return v && typeof v === 'object' && Object.values(v).some(fv => fv !== null && fv !== undefined && fv !== '');
       });
 
-      const factsBlock = factsPromptBlock(await factsForCharacter(db, character));
+      const { block: factsBlock } = await require('../services/characterFile').characterFilePrompt(db, { character });
       const response = await anthropic.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 2000,

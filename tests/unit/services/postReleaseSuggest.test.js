@@ -93,3 +93,22 @@ describe('story-order guards (pure)', () => {
     expect(momentTime(32, null, 0)).toBeNull();
   });
 });
+
+describe('a poster\'s rhythm (pure)', () => {
+  test('her learned hours replace the default slots', () => {
+    const past = suggestTime({ order: null, now: NOW, rhythm: { slots: [9, 13, 21] } });
+    expect(iso(past)).toBe('2030-03-01T13:00:00.000Z');
+  });
+
+  test('the hour she settled on for a phase replaces its planned hour', () => {
+    expect(iso(suggestTime({ order: 32, airDate: AIR, now: NOW, rhythm: { phaseHours: { 2: 9 } } }))).toBe('2030-03-03T09:00:00.000Z');
+    // "As it airs" keeps its own time.
+    expect(iso(suggestTime({ order: 35, airDate: AIR, now: NOW, rhythm: { phaseHours: { 5: 9 } } }))).toBe('2030-03-10T19:00:00.000Z');
+  });
+
+  test('the gap: an oversharer posts closer together than a lurker', () => {
+    const taken = ['2030-03-08T18:00:00Z'];
+    expect(iso(suggestTime({ order: 31, airDate: AIR, now: NOW, taken, rhythm: { gapMs: 2 * 60 * 60 * 1000 } }))).toBe('2030-03-08T20:00:00.000Z');
+    expect(iso(suggestTime({ order: 31, airDate: AIR, now: NOW, taken, rhythm: { gapMs: 24 * 60 * 60 * 1000 } }))).toBe('2030-03-09T18:00:00.000Z');
+  });
+});

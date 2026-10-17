@@ -195,9 +195,10 @@ async function buildVoice(db, characterId, { lane = 'manual', jobId = null } = {
   const showId = await require('./characterFacts').showIdFor(db, character, { id: profile.id });
   if (!showId) throw new VoiceError(409, 'This character\'s registry belongs to no show, and their feed profile has no follower count in one yet.');
   await require('./pulseRequests').take(db, { showId, lane, kind: 'voice', jobId });
-  // Their facts (Character Consistency Engine step 5): no topic invents a follower count, money or status.
-  const { factsForCharacter, factsPromptBlock } = require('./characterFacts');
-  const factsBlock = factsPromptBlock(await factsForCharacter(db, character));
+  // Their character file, the public part (services/characterFile): no topic
+  // invents a follower count, money or status; the voice grows from their
+  // mask, events and latest posts. The voice is built from the public face only.
+  const { block: factsBlock } = await require('./characterFile').characterFilePrompt(db, { character, publicOnly: true });
   let message;
   for (const model of MODELS) {
     try {
