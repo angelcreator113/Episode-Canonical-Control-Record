@@ -352,13 +352,18 @@ router.post('/generate-chapter-draft', requireAuth, aiRateLimiter, async (req, r
       const chars = await RegistryCharacter.findAll({
         where: { id: chapter.characters_present },
       });
-      charactersText = chars.map(c => {
+      // What each is known for on The Pulse against their job: a hook for
+      // the scene (services/characterContentType; null when none).
+      const { contentHookFor } = require('../../services/characterContentType');
+      const hooks = await Promise.all(chars.map((c) => contentHookFor(db, c)));
+      charactersText = chars.map((c, i) => {
         const name = c.selected_name || c.display_name;
         return [
           `CHARACTER: ${name} (${c.role_type})`,
           c.description    && `  Role: ${c.description}`,
           c.core_belief    && `  Core belief: ${c.core_belief}`,
           c.pressure_type  && `  Pressure type: ${c.pressure_type}`,
+          hooks[i]         && `  ${hooks[i]}`,
         ].filter(Boolean).join('\n');
       }).join('\n\n');
     }

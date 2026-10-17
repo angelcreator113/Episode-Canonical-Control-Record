@@ -129,7 +129,11 @@ function characterFileBlock(file, { publicOnly = false } = {}) {
   const name = file.character?.selected_name || file.character?.display_name || file.feedProfile?.display_name || null;
   const sections = [
     file.facts ? factsPromptBlock(file.facts) : '',
-    file.contentType ? require('./characterContentType').contentTypeBlock(file.contentType, file.facts?.occupation && !(file.facts.undecided || []).includes('occupation') ? file.facts.occupation : null) : '',
+    file.contentType ? require('./characterContentType').contentTypeBlock(
+      file.contentType,
+      file.facts?.occupation && !(file.facts.undecided || []).includes('occupation') ? file.facts.occupation : null,
+      publicOnly ? null : require('./characterContentType').gapOf(file.character),
+    ) : '',
     publicOnly ? '' : seedBlock(file.typology),
     file.character?.appearance && require('./characterAppearance').appearanceLines(file.character.appearance)
       ? `HOW THEY LOOK (their appearance; anything written about how they look agrees with it):\n${require('./characterAppearance').appearanceLines(file.character.appearance)}` : '',

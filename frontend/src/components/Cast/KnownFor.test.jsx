@@ -40,7 +40,7 @@ describe('KnownFor', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await screen.findByText('Saved.');
-    expect(apiClient.put).toHaveBeenCalledWith(expect.stringContaining('/cast/characters/c1/content-type'), { name: 'The Entertainer' });
+    expect(apiClient.put).toHaveBeenCalledWith(expect.stringContaining('/cast/characters/c1/content-type'), { name: 'The Entertainer', gap: 'She jokes about the job wearing her down.' });
     expect(screen.getByText('The Entertainer')).toBeTruthy();
   });
 
@@ -52,7 +52,21 @@ describe('KnownFor', () => {
     fireEvent.change(screen.getByLabelText('Content type'), { target: { value: 'The Educator' } });
     expect(screen.getByText('Tutorials, explainers')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(apiClient.put).toHaveBeenCalledWith(expect.any(String), { name: 'The Educator' }));
+    await waitFor(() => expect(apiClient.put).toHaveBeenCalledWith(expect.any(String), { name: 'The Educator', gap: null }));
+  });
+
+  test('shows the job-vs-content gap, and edits it with the type (a story hook for the writers)', async () => {
+    apiClient.get.mockResolvedValue({ data: { ...base, current: LIST[0], gap: 'Jokes so nobody asks.' } });
+    apiClient.put.mockResolvedValue({ data: { ...base, current: LIST[0], gap: 'Jokes so nobody asks how she is.' } });
+    render(<KnownFor characterId="c1" />);
+    expect((await screen.findByTestId('kf-gap')).textContent).toBe('Job vs content: Jokes so nobody asks.');
+    fireEvent.click(screen.getByRole('button', { name: 'Change' }));
+    const box = screen.getByLabelText(/Job vs content: what the gap says about them/);
+    expect(box.value).toBe('Jokes so nobody asks.');
+    fireEvent.change(box, { target: { value: 'Jokes so nobody asks how she is.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(apiClient.put).toHaveBeenCalledWith(expect.any(String), { name: 'The Entertainer', gap: 'Jokes so nobody asks how she is.' }));
+    expect((await screen.findByTestId('kf-gap')).textContent).toBe('Job vs content: Jokes so nobody asks how she is.');
   });
 
   test('shows nothing for a character with no feed profile, and says why a suggestion failed', async () => {
