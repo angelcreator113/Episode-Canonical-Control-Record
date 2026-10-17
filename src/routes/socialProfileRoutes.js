@@ -1873,11 +1873,11 @@ Career position relative to Lala: ${profile.career_pressure || 'level'}.`;
       ? await loadBrainContext(db, { showId: profile.show_id || null, label: 'SocialProfiles' })
       : { block: null, ids: [] };
     if (brain.block) prompt += `\n${brain.block}`;
-    // Their facts (Character Consistency Engine step 5; services/characterFacts):
-    // the regenerated profile states them, and a decided follower count is kept.
-    const { factsForProfile, factsPromptBlock, isDecided, agreeingFollowers } = require('../services/characterFacts');
-    const facts = await factsForProfile(db, profile);
-    const factsBlock = factsPromptBlock(facts);
+    // Their character file (services/characterFile): the facts the regenerated
+    // profile states (a decided follower count is kept), and the registry
+    // character's type, inner life, people and events it grows from.
+    const { isDecided, agreeingFollowers } = require('../services/characterFacts');
+    const { facts, block: factsBlock } = await require('../services/characterFile').characterFilePrompt(db, { feedProfile: profile });
     if (factsBlock) {
       prompt += `\n\n${factsBlock}${isDecided(facts, 'followers') ? `\nfollower_count_approx is "${facts.followers.label}".` : ''}`;
     }

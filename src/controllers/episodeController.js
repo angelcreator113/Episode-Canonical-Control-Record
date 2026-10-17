@@ -576,6 +576,20 @@ module.exports = {
 
     await episode.update(updateData);
 
+    // A moved air date moves the episode's scheduled Pulse posts with it
+    // (services/postRelease shiftForAirDate); one that would land in the
+    // past is held. A failure here never fails the save.
+    let releaseShift = null;
+    if ('air_date' in updateData && oldValues.air_date && updateData.air_date && Number.isInteger(episode.episode_number)) {
+      try {
+        releaseShift = await require('../services/postRelease').shiftForAirDate(require('../models'), {
+          showId: episode.show_id, episodeNumber: episode.episode_number, from: oldValues.air_date, to: updateData.air_date,
+        });
+      } catch (err) {
+        console.error('[episodeController] scheduled posts could not follow the new air date:', err.message);
+      }
+    }
+
     // Publishing no longer puts the episode's draft feed posts live (Evoni,
     // 2026-10-11, Task #2749: "nothing reaches the Wall until approved").
     // They wait under the Feed page's Requests, "posts to approve", until
@@ -636,6 +650,7 @@ module.exports = {
       data: episode,
       message: 'Episode updated successfully',
       ...(lockedKept.length ? { locked_beats_kept: lockedKept } : {}),
+      ...(releaseShift && (releaseShift.shifted.length || releaseShift.held.length) ? { release_shift: releaseShift } : {}),
     });
   },
 
