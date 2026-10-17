@@ -48,6 +48,8 @@ export const putFactsApi = (id, body) =>
   apiClient.put(`${API_URL}/cast/characters/${id}/facts`, body);
 export const suggestFactsApi = (id) =>
   apiClient.post(`${API_URL}/cast/characters/${id}/facts/suggest`);
+export const pressureTestApi = (id) =>
+  apiClient.post(`${API_URL}/cast/characters/${id}/pressure-test`);
 export const getCheckApi = (id) =>
   apiClient.get(`${API_URL}/cast/characters/${id}/check`);
 export const markIntentionalApi = (id, flagId, note) =>
@@ -650,7 +652,75 @@ export function TheirFacts({ character, onFeedSaved }) {
         )}
       {note && <p className={note.kind === 'error' ? 'ch-note is-error' : 'ch-note'} role={note.kind === 'error' ? 'alert' : 'status'}>{note.text}</p>}
       {facts && !facts.error && !form && <ProfileCheck characterId={id} />}
+      {facts && !facts.error && !form && <PressureTest characterId={id} />}
     </section>
+  );
+}
+
+/**
+ * Pressure test (the spec's #6; Evoni, 2026-10-17: "yes start the pressure
+ * test"; services/characterPressure): the hard questions a fact-checker
+ * would ask, each answered from their own character file. A question the
+ * file answers holds; a gap is something nothing decides yet; a
+ * contradiction is two parts that disagree (the mask lying is never one).
+ * It reads; it never changes anything.
+ */
+const PRESSURE_VERDICTS = {
+  answers: { label: 'Holds', className: 'is-holds' },
+  gap: { label: 'Gap', className: 'is-gap' },
+  contradiction: { label: 'Contradiction', className: 'is-contradiction' },
+};
+const PRESSURE_SUMMARY = {
+  holds: 'They hold up: the file answers every question.',
+  gaps: 'No contradictions, but some questions have nothing written to answer them.',
+  fails: 'They don’t hold up yet: parts of their file disagree.',
+};
+
+export function PressureTest({ characterId }) {
+  const [result, setResult] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await pressureTestApi(characterId);
+      setResult(res.data);
+    } catch (err) {
+      console.error('[CharacterProfilePage] pressure test failed:', err);
+      setError(err.response?.data?.error || 'Could not run the pressure test.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="ch-pressure" data-testid="ch-pressure">
+      <button type="button" className="ch-btn-soft" disabled={busy} onClick={run}>
+        {busy ? 'Asking the hard questions…' : result ? 'Test again' : 'Pressure test: ask them the hard questions'}
+      </button>
+      {error && <p className="ch-note is-error" role="alert">{error}</p>}
+      {result && (
+        <>
+          <p className="ch-note" data-testid="ch-pressure-summary">
+            {PRESSURE_SUMMARY[result.verdict] || ''}
+            {' '}{result.summary.answers} hold, {result.summary.gaps} gap{result.summary.gaps === 1 ? '' : 's'}, {result.summary.contradictions} contradiction{result.summary.contradictions === 1 ? '' : 's'}.
+          </p>
+          <ul className="ch-pressure-list">
+            {result.questions.map((q) => (
+              <li key={q.question} className={`ch-pressure-item ${PRESSURE_VERDICTS[q.verdict]?.className || ''}`} data-testid="ch-pressure-item">
+                <span className="ch-facts-row">
+                  <span className={`ch-chip ch-pressure-verdict ${PRESSURE_VERDICTS[q.verdict]?.className || ''}`}>{PRESSURE_VERDICTS[q.verdict]?.label || q.verdict}</span>
+                  <b className="ch-pressure-q">{q.question}</b>
+                </span>
+                {q.answer && <span className="ch-pressure-answer">{q.answer}</span>}
+                {q.cites?.length > 0 && <span className="ch-pressure-cites">From: {q.cites.join(' · ')}</span>}
+                {q.fix && <span className="ch-pressure-fix">To fix: {q.fix}</span>}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
   );
 }
 
