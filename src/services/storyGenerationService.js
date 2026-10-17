@@ -123,7 +123,7 @@ async function generateEpisodeStory(episodeId, showId, sequelize, options = {}) 
       // on sp.registry_character_id compared an integer to a UUID and failed.
       const [rows] = await sequelize.query(
         `SELECT sp.handle, sp.display_name, sp.creator_name, sp.archetype, sp.posting_voice,
-                rc.display_name as char_name, rc.core_belief, rc.role_type, rc.depth_level,
+                rc.id as char_id, rc.display_name as char_name, rc.core_belief, rc.role_type, rc.depth_level,
                 rc.personality, rc.pressure_type,
                 rc.core_wound, rc.core_desire, rc.core_fear,
                 rc.mask_persona, rc.truth_persona, rc.therapy_primary_defense,
@@ -136,6 +136,21 @@ async function generateEpisodeStory(episodeId, showId, sequelize, options = {}) 
       characters = rows || [];
     }
   } catch { /* non-blocking */ }
+
+  // What each is known for on The Pulse against their job: a hook for the
+  // story (services/characterContentType; null when none).
+  if (characters.length) {
+    const db = require('../models');
+    const { contentHookFor } = require('./characterContentType');
+    await Promise.all(characters.map(async (c) => {
+      if (!c.char_id) return;
+      try {
+        c.content_hook = await contentHookFor(db, await db.RegistryCharacter.findByPk(c.char_id));
+      } catch (err) {
+        console.error('[StoryGeneration] the content hook could not be read:', err.message);
+      }
+    }));
+  }
 
   // Build the prompt
   const scriptExcerpt = episode.script_content ? episode.script_content.slice(0, 4000) : 'No script available';
@@ -154,6 +169,7 @@ async function generateEpisodeStory(episodeId, showId, sequelize, options = {}) 
     if (c.mask_persona && c.truth_persona) block += `\n    Shows: ${c.mask_persona.slice(0, 50)} | Underneath: ${c.truth_persona.slice(0, 50)}`;
     if (c.therapy_primary_defense) block += `\n    Defense mechanism: ${c.therapy_primary_defense}`;
     if (c.signature_trait) block += `\n    Signature trait: ${c.signature_trait}`;
+    if (c.content_hook) block += `\n    ${c.content_hook}`;
     return block;
   }).join('\n\n') || 'No character details';
 

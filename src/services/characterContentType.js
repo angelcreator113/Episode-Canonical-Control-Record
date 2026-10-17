@@ -17,12 +17,17 @@
  * the two is part of who they are, and the generators are told so.
  *
  *   contentTypeOf(db, { character, feedProfile })
- *     → { current, list, occupation, profile, differs }
+ *     → { current, list, occupation, gap, profile }
  *     current: the archetype ({ name, content, audience, narrative }) or
  *     { name } for a stored name no longer on the list; null when none.
- *   setContentType(db, { feedProfile, name })  name from the list, or null
- *     to clear. A ContentTypeError 409 with no feed profile, 400 for a name
- *     not on the list.
+ *   setContentType(db, { character, feedProfile, name, gap })  name from the
+ *     list, or null to clear (undefined leaves it). A ContentTypeError 409
+ *     with no feed profile, 400 for a name not on the list. gap: the line on
+ *     what the gap between their job and their content says about them
+ *     (the suggestion's tension, or Evoni's own words); kept on the
+ *     character's extra_fields.content_gap, null to clear, undefined leaves
+ *     it. It is a story hook (Evoni's idea 1, 2026-10-17).
+ *   gapOf(character)  that line, or null.
  *   suggestContentType(db, { character, feedProfile })
  *     → { suggestion: { name, why, differs_from_job, tension }, archetype }
  *     one Sonnet call over their character file and the list; nothing is
@@ -31,8 +36,13 @@
  *     profiles with no content type yet (the Society tab's "0 in the Feed"),
  *     at most BATCH_MAX, one at a time (profileIds: only these); nothing is
  *     saved. → { unset, suggestions, failed, more }
- *   applyContentTypes(db, items)  [{ profile_id, name }] → saved, skipped.
- *   contentTypeBlock(current, occupation)  the prompt section.
+ *   applyContentTypes(db, items)  [{ profile_id, name, character_id?, gap? }]
+ *     → saved, skipped.
+ *   contentTypeBlock(current, occupation, gap)  the prompt section (the
+ *     character file and the post prompt; gap only for author-side prompts).
+ *   contentHookFor(db, character)  the story writers' block: what they are
+ *     known for, their job, the gap, as a hook for scenes; null when they
+ *     have no content type (a context loader: inject it only when present).
  */
 
 const {
@@ -76,6 +86,14 @@ async function occupationOf(db, character, feedProfile) {
   }
 }
 
+const GAP_MAX = 600;
+
+/** The line on what the gap between their job and their content says about them, or null. */
+function gapOf(character) {
+  const v = plain(character)?.extra_fields?.content_gap;
+  return text(typeof v === 'string' ? v : v?.text, GAP_MAX) || null;
+}
+
 async function contentTypeOf(db, { character = null, feedProfile = null }) {
   const fp = plain(feedProfile);
   const list = await loadSocietyArchetypes(db);
@@ -84,24 +102,40 @@ async function contentTypeOf(db, { character = null, feedProfile = null }) {
     current,
     list,
     occupation: await occupationOf(db, character, feedProfile),
+    gap: gapOf(character),
     profile: fp ? { id: fp.id, handle: fp.handle || null, display_name: fp.display_name || null, feed_layer: fp.feed_layer || null } : null,
   };
 }
 
-async function setContentType(db, { feedProfile, name }) {
+/** Keep (or clear) the gap line on the character, beside their other extra fields. */
+async function saveGap(character, gap) {
+  const line = text(gap, GAP_MAX);
+  const extra = { ...(plain(character).extra_fields || {}) };
+  if (line) extra.content_gap = { text: line, set_at: new Date().toISOString() };
+  else delete extra.content_gap;
+  await character.update({ extra_fields: extra });
+}
+
+async function setContentType(db, { character = null, feedProfile, name, gap }) {
   if (!feedProfile) throw new ContentTypeError(409, 'They are not on the feed yet: match them to a feed person first. The content type is kept on their feed profile.');
-  let next = null;
-  if (name !== null && name !== undefined && name !== '') {
-    const found = matchSocietyArchetype(await loadSocietyArchetypes(db), name);
-    if (!found) throw new ContentTypeError(400, `"${text(name, 100)}" is not on the Society tab's list of content types.`);
-    next = found.name;
+  if (gap !== undefined && gap !== null && typeof gap !== 'string') throw new ContentTypeError(400, 'gap must be text, or null to clear it.');
+  if (gap !== undefined && !character) throw new ContentTypeError(409, 'The gap between their job and their content is kept on their character: this feed profile has none.');
+  let next = feedProfile.society_archetype || null;
+  if (name !== undefined) {
+    next = null;
+    if (name !== null && name !== '') {
+      const found = matchSocietyArchetype(await loadSocietyArchetypes(db), name);
+      if (!found) throw new ContentTypeError(400, `"${text(name, 100)}" is not on the Society tab's list of content types.`);
+      next = found.name;
+    }
+    await feedProfile.update({ society_archetype: next });
   }
-  await feedProfile.update({ society_archetype: next });
+  if (gap !== undefined) await saveGap(character, gap);
   return next;
 }
 
 /** The prompt section: what they are known for, next to what they do for work. */
-function contentTypeBlock(current, occupation = null) {
+function contentTypeBlock(current, occupation = null, gap = null) {
   if (!current?.name) return '';
   const more = [
     current.content && `What they post: ${sentence(current.content)}`,
@@ -111,7 +145,38 @@ function contentTypeBlock(current, occupation = null) {
   const job = occupation
     ? ` Their job is ${occupation}. What they post and what they do for work can differ: where they do, that gap is part of who they are, not an error. Their posts come from the content type, and the job shows only the way it would in this kind of content.`
     : '';
-  return `KNOWN FOR ON THE PULSE (their content type: what the LalaVerse knows them for, and what their posts are): ${current.name}.${more ? ` ${more}` : ''}${job}`;
+  const hook = gap ? ` What the gap between their job and their content says about them (author-side; let it show, never state it): ${sentence(gap)}` : '';
+  return `KNOWN FOR ON THE PULSE (their content type: what the LalaVerse knows them for, and what their posts are): ${current.name}.${more ? ` ${more}` : ''}${job}${hook}`;
+}
+
+/**
+ * The story writers' block (chapters, scenes, stories): what they are known
+ * for on The Pulse, what they do for work, and the gap between the two as a
+ * hook for scenes. null when they have no content type, or on a failed read
+ * (logged): the writer goes on without it.
+ */
+async function contentHookFor(db, character) {
+  const c = plain(character);
+  if (!c?.feed_profile_id || !db?.SocialProfile) return null;
+  try {
+    const feedProfile = await db.SocialProfile.findByPk(c.feed_profile_id);
+    if (!feedProfile?.society_archetype) return null;
+    const current = currentOf(await loadSocietyArchetypes(db), feedProfile.society_archetype);
+    const occupation = await occupationOf(db, character, feedProfile);
+    const gap = gapOf(c);
+    const name = c.selected_name || c.display_name || 'They';
+    return [
+      `${name} ON THE PULSE: known as ${current.name}${current.content ? ` (what they post: ${current.content.replace(/[.\s]+$/, '')})` : ''}.`,
+      occupation ? `By day: ${occupation}.` : '',
+      gap ? `The gap between the two: ${sentence(gap)}` : '',
+      occupation || gap
+        ? 'A story hook: let what they post and what they do for work rub against each other in scenes (how people at work see their posts, how their followers would see their job, what keeping both costs them, the moment the two meet). Show it; never explain it.'
+        : 'Let it show in how they move through scenes: what they notice, what they would post about this.',
+    ].filter(Boolean).join(' ');
+  } catch (err) {
+    console.error('[characterContentType] the content hook could not be read; writing without it:', err.message);
+    return null;
+  }
 }
 
 async function ask(prompt) {
@@ -207,7 +272,14 @@ async function applyContentTypes(db, items) {
     const fp = item?.profile_id ? await db.SocialProfile.findByPk(item.profile_id) : null;
     if (!fp) { skipped.push({ profile_id: item?.profile_id || null, error: 'profile not found' }); continue; }
     await fp.update({ society_archetype: archetype.name });
-    saved.push({ profile_id: fp.id, name: archetype.name });
+    let gapSaved = false;
+    if (typeof item.gap === 'string' && item.gap.trim() && db.RegistryCharacter) {
+      const character = item.character_id
+        ? await db.RegistryCharacter.findOne({ where: { id: item.character_id, feed_profile_id: fp.id } })
+        : await db.RegistryCharacter.findOne({ where: { feed_profile_id: fp.id }, order: [['updated_at', 'DESC']] });
+      if (character) { await saveGap(character, item.gap); gapSaved = true; }
+    }
+    saved.push({ profile_id: fp.id, name: archetype.name, gap_saved: gapSaved });
   }
   return { saved, skipped };
 }
@@ -220,5 +292,7 @@ module.exports = {
   suggestForUnset,
   applyContentTypes,
   contentTypeBlock,
+  contentHookFor,
+  gapOf,
   BATCH_MAX,
 };
