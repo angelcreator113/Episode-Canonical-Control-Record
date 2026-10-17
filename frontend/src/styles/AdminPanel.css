@@ -268,46 +268,7 @@
   }
 }
 
-/* Tabs: The Pulse, Website, Tools (Task #2913) */
-.admin-tabs {
-  display: flex;
-  gap: 0.25rem;
-  border-bottom: 1px solid var(--border);
-  margin: 1rem 0 1.5rem;
-  overflow-x: auto;
-}
-
-.admin-tab {
-  flex: 0 0 auto;
-  min-height: 44px;
-  padding: 0.5rem 1rem;
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: none;
-  font: inherit;
-  color: var(--secondary);
-  cursor: pointer;
-}
-
-.admin-tab.active {
-  color: var(--lala-ink, #2C2C2C);
-  border-bottom-color: var(--lala-gold, #B8962E);
-  font-weight: 600;
-}
-
-.admin-tab:focus-visible {
-  outline: 2px solid var(--lala-gold, #B8962E);
-  outline-offset: 2px;
-}
-
-.admin-pulse h2 {
-  margin-bottom: 0.5rem;
-}
-
-.admin-pulse-link {
-  color: var(--lala-gold-text, #7A6314);
-  font-weight: 600;
-}
+/* The Admin header and tabs: pages/AdminPulse.css (adm-*; Evoni's Admin mock, 2026-10-17). */
 
 /* Show settings tab (Task #2914) */
 .admin-show-switch {
@@ -329,43 +290,7 @@
   margin-bottom: 1rem;
 }
 
-/* Admin › The Pulse: Social Director sub-tabs and Uploads (Task #2919) */
-.admin-pulse-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-.pulse-subtabs {
-  display: flex;
-  gap: 0.25rem;
-  margin: 0.5rem 0 1.25rem;
-  overflow-x: auto;
-}
-
-.pulse-subtab {
-  flex: 0 0 auto;
-  min-height: 44px;
-  padding: 0.5rem 0.875rem;
-  border: 1px solid var(--lala-parchment-3);
-  border-radius: 999px;
-  background: var(--lala-surface);
-  font: inherit;
-  font-size: 0.875rem;
-  color: var(--lala-ink-muted);
-  cursor: pointer;
-}
-
-.pulse-subtab.active {
-  background: var(--lala-gold-soft);
-  border-color: var(--lala-gold-line);
-  color: var(--lala-ink);
-  font-weight: 600;
-}
-
-.pulse-subtab:focus-visible,
+/* Admin › The Pulse: Uploads (Task #2919); the Director's card and sub-tabs are pages/AdminPulse.css. */
 .pulse-btn:focus-visible,
 .pulse-add-spot:focus-visible {
   outline: 2px solid var(--lala-gold);
