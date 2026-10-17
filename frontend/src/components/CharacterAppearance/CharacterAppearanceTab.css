@@ -1,0 +1,22 @@
+/* A character's Appearance tab (2026-10-17): studio tokens only, one column at 375px. */
+.cap { display: grid; gap: 18px; }
+.cap-section { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--lala-lavender-line); border-radius: 16px; background: var(--surface-card); min-width: 0; }
+.cap-head { display: grid; gap: 2px; }
+.cap-title { margin: 0; font-family: 'Lora', serif; font-size: 18px; color: var(--text-primary); }
+.cap-sheet { margin: 0; display: grid; gap: 8px; }
+.cap-row { display: grid; grid-template-columns: minmax(110px, 180px) 1fr; gap: 8px; font-size: 14px; }
+.cap-row dt { color: var(--text-secondary); font-weight: 600; }
+.cap-row dd { margin: 0; color: var(--text-primary); overflow-wrap: anywhere; }
+.cap-why { margin: 0; font-size: 13px; font-style: italic; color: var(--text-secondary); overflow-wrap: anywhere; }
+.cap-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.cap-btn { min-height: 40px; display: inline-flex; align-items: center; gap: 6px; padding: 6px 16px; border-radius: 999px; border: none; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; background: var(--lala-lavender); color: var(--text-inverse); }
+.cap-btn:disabled, .cap-btn-soft:disabled { opacity: 0.6; cursor: default; }
+.cap-btn-soft { min-height: 40px; padding: 6px 16px; border-radius: 999px; border: 1px solid var(--lala-lavender-line); cursor: pointer; font: inherit; font-size: 13px; font-weight: 600; background: var(--surface-card); color: var(--lala-lavender-text); }
+.cap-form { display: grid; gap: 10px; }
+.cap-form label { display: grid; gap: 4px; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.cap-form input, .cap-form textarea { font: inherit; font-size: 16px; padding: 6px 10px; border: 1px solid var(--lala-lavender-line); border-radius: 8px; background: var(--surface-card); color: var(--text-primary); min-width: 0; }
+.cap-portraits { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+.cap-portrait { display: grid; gap: 6px; align-content: start; }
+.cap-portrait img { width: 100%; aspect-ratio: 9 / 16; object-fit: cover; border-radius: 12px; border: 1px solid var(--lala-lavender-line); }
+.cap-current { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 700; color: var(--success-text); }
+@media (max-width: 480px) { .cap-row { grid-template-columns: 1fr; gap: 2px; } }
