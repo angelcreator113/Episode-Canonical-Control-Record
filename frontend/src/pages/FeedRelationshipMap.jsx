@@ -3,6 +3,7 @@ import api from '../services/api';
 import useActiveShow from '../hooks/useActiveShow';
 import { platformLabel, atHandle } from './feed/feedConstants';
 import SuggestedPairs from '../components/SuggestedPairs/SuggestedPairs';
+import PairStoryline from '../components/SuggestedPairs/PairStoryline';
 
 /* ── Feed Relationship Map ──────────────────────────────────────────────────
  * SVG canvas showing influencer-to-influencer relationships.
@@ -123,6 +124,8 @@ export default function FeedRelationshipMap() {
   const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
   const [ripplesMsg, setRipplesMsg] = useState(null);
   const [generatingRipples, setGeneratingRipples] = useState(false);
+  // The relationship whose storyline seed is open (idea 4, PR 3).
+  const [storylineFor, setStorylineFor] = useState(null);
 
   // Create state
   const [profiles, setProfiles] = useState([]);
@@ -684,6 +687,21 @@ export default function FeedRelationshipMap() {
                         {Math.round(e.closeness * 100)}% close
                       </span>
                     )}
+                    {e.seedable && showId && (
+                      <button
+                        onClick={(ev) => { ev.stopPropagation(); setStorylineFor(e.id); }}
+                        title="Suggest a Pulse storyline between these two"
+                        aria-label={`Storyline with ${other?.handle ? atHandle(other.handle) : 'this creator'}`}
+                        style={{
+                          fontSize: 9, padding: '1px 6px', borderRadius: 4,
+                          border: '1px solid #B8962E44', background: '#FAF7F0',
+                          color: '#7a5f1a', cursor: 'pointer', fontWeight: 600,
+                          fontFamily: "'DM Sans', sans-serif",
+                        }}
+                      >
+                        Storyline
+                      </button>
+                    )}
                     {isConflict && (
                       <button
                         onClick={(ev) => { ev.stopPropagation(); generateRipples(e.id); }}
@@ -703,6 +721,9 @@ export default function FeedRelationshipMap() {
                 );
               })
             }
+            {storylineFor != null && edges.some(e => e.id === storylineFor && (e.source === selected.id || e.target === selected.id)) && (
+              <PairStoryline key={storylineFor} relationshipId={storylineFor} showId={showId} onClose={() => setStorylineFor(null)} />
+            )}
             {ripplesMsg && (
               <div style={{
                 marginTop: 8, padding: '8px 10px', borderRadius: 6,
