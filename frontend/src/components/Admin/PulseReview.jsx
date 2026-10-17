@@ -4,6 +4,8 @@
  * for one show:
  *   Schedule all         every draft with no release time, at the time
  *                        the story suggests (PulseScheduleAll)
+ *   Release calendar     scheduled drafts by day; drag one to another
+ *                        day (PulseReleaseCalendar)
  *   Lala's drafts        posts shared from The Pulse: Release, Edit, Delete
  *   Posts from episodes  drafted inside an episode: Approve, Edit, Discard
  *   Comments waiting     drafted reactions: Approve, Delete
@@ -29,10 +31,12 @@
  * Styles: PulseReviewPost.css.
  */
 import React, { useCallback, useEffect, useState } from 'react';
+import { ArrowRight, LayoutGrid, List, Search } from 'lucide-react';
 import api from '../../services/api';
 import { PostCard, RequestPost } from './PulseReviewPost';
 import RevealPicker from './RevealPicker';
 import PulseScheduleAll from './PulseScheduleAll';
+import PulseReleaseCalendar from './PulseReleaseCalendar';
 import PulseNumbersWaiting from './PulseNumbersWaiting';
 import PulseClosenessWaiting from './PulseClosenessWaiting';
 import PulseDmsWaiting, { DmThread, StartConversation, draftsIn } from './PulseDmsWaiting';
@@ -92,18 +96,72 @@ function PendingComment({ comment, onChange }) {
   );
 }
 
-function Section({ title, count, testId, empty, children }) {
+function Section({ title, count, testId, empty, intro, tools, children }) {
   return (
     <section className="prv-section" aria-label={title} data-testid={testId}>
-      <h3 className="prv-section-title">{title}{count !== undefined && <span className="prv-count"> ({count})</span>}</h3>
+      <div className="prv-section-head">
+        <h3 className="prv-section-title">{title}{count !== undefined && <span className="prv-count"> ({count})</span>}</h3>
+        {intro && <p className="prv-section-intro">{intro}</p>}
+      </div>
+      {count !== 0 && tools}
       {count === 0 ? <p className="prv-muted">{empty}</p> : children}
     </section>
+  );
+}
+
+// Lala's drafts: search, a filter, the order and list or grid (Evoni's Admin
+// mock, 2026-10-17). The first FIRST_DRAFTS show until "View all drafts".
+const DRAFT_FILTERS = [
+  { key: 'all', label: 'All content', test: () => true },
+  { key: 'photo', label: 'With a photo', test: (p) => !!(p.image_url || p.image_description) },
+  { key: 'engine', label: 'Engine drafts', test: (p) => !!p.gate_json },
+  { key: 'flagged', label: 'Flagged by the gate', test: (p) => p.gate_json?.pass === false },
+  { key: 'scheduled', label: 'Scheduled or held', test: (p) => !!p.release_state },
+];
+const FIRST_DRAFTS = 3;
+const postTime = (p) => new Date(p.posted_at || p.created_at || 0).getTime() || 0;
+
+/** Pure: the drafts the toolbar keeps, in its order. */
+export function filterDrafts(posts, { query = '', filter = 'all', sort = 'newest' } = {}) {
+  const q = query.trim().toLowerCase();
+  const keep = (DRAFT_FILTERS.find((f) => f.key === filter) || DRAFT_FILTERS[0]).test;
+  return posts
+    .filter(keep)
+    .filter((p) => !q || [p.content_text, p.poster_display_name, p.poster_handle, p.narrative_function, p.image_description]
+      .some((v) => typeof v === 'string' && v.toLowerCase().includes(q)))
+    .sort((a, b) => (sort === 'oldest' ? postTime(a) - postTime(b) : postTime(b) - postTime(a)));
+}
+
+function DraftTools({ view, setView, query, setQuery, filter, setFilter, sort, setSort }) {
+  return (
+    <div className="prv-tools" data-testid="prv-draft-tools">
+      <label className="prv-search">
+        <Search size={16} aria-hidden="true" />
+        <input type="search" aria-label="Search drafts" placeholder="Search posts, captions or tags…" value={query} onChange={(e) => setQuery(e.target.value)} />
+      </label>
+      <select aria-label="Show" value={filter} onChange={(e) => setFilter(e.target.value)} className="prv-tool-select">
+        {DRAFT_FILTERS.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
+      </select>
+      <select aria-label="Order" value={sort} onChange={(e) => setSort(e.target.value)} className="prv-tool-select">
+        <option value="newest">Newest</option>
+        <option value="oldest">Oldest</option>
+      </select>
+      <span className="prv-view" role="group" aria-label="View">
+        <button type="button" aria-pressed={view === 'grid'} aria-label="Grid" className={view === 'grid' ? 'is-on' : ''} onClick={() => setView('grid')}><LayoutGrid size={16} aria-hidden="true" /></button>
+        <button type="button" aria-pressed={view === 'list'} aria-label="List" className={view === 'list' ? 'is-on' : ''} onClick={() => setView('list')}><List size={16} aria-hidden="true" /></button>
+      </span>
+    </div>
   );
 }
 
 export default function PulseReview({ showId, onCount }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState('all');
+  const [sort, setSort] = useState('newest');
+  const [view, setView] = useState('list');
+  const [allDrafts, setAllDrafts] = useState(false);
 
   const load = useCallback(async () => {
     const id = encodeURIComponent(showId);
@@ -148,12 +206,28 @@ export default function PulseReview({ showId, onCount }) {
   if (error) return <p className="prv-error" role="alert">{error}</p>;
   if (!data) return <p className="prv-muted">Loading Review…</p>;
 
+  const kept = filterDrafts(data.wall.posts, { query, filter, sort });
+  const narrowed = kept.length !== data.wall.posts.length;
+  const shown = allDrafts || narrowed ? kept : kept.slice(0, FIRST_DRAFTS);
+
   return (
     <div className="prv-review" data-testid="pulse-review">
       <PulseScheduleAll showId={showId} drafts={data.wall.total + data.episode.total} onChange={load} />
+      <details className="prv-section" data-testid="prv-calendar-section">
+        <summary className="prv-section-title">Release calendar</summary>
+        <PulseReleaseCalendar showId={showId} refreshKey={data} onChange={load} />
+      </details>
       <Section title="Lala's drafts" count={data.wall.total} testId="prv-wall-drafts"
+        intro="Lala's posts, drafted by the engine or by hand. Review, edit and release them to The Pulse."
+        tools={<DraftTools {...{ view, setView, query, setQuery, filter, setFilter, sort, setSort }} />}
         empty="No drafts. What Lala shares on The Pulse waits here until you release it.">
-        {data.wall.posts.map((p) => <PostCard key={p.id} post={p} showId={showId} onChange={load} />)}
+        <div className={view === 'grid' ? 'prv-cards is-grid' : 'prv-cards'}>
+          {shown.map((p) => <PostCard key={p.id} post={p} showId={showId} onChange={load} />)}
+        </div>
+        {narrowed && kept.length === 0 && <p className="prv-muted">No drafts match.</p>}
+        {!allDrafts && !narrowed && kept.length > shown.length && (
+          <button type="button" className="prv-more" onClick={() => setAllDrafts(true)}>View all drafts ({kept.length}) <ArrowRight size={16} aria-hidden="true" /></button>
+        )}
         {data.wall.total > data.wall.posts.length && <p className="prv-muted">Showing {data.wall.posts.length} of {data.wall.total}.</p>}
       </Section>
       <Section title="Posts from episodes" count={data.episode.total} testId="prv-episode-posts"

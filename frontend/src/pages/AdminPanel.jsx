@@ -6,12 +6,13 @@
  * settings (the active show's settings, formerly /shows/:id/settings; Task
  * #2914) and Tools (the admin tools index — the doorway to the admin and diagnostic
  * pages, docs/SIDEBAR_PROPOSAL.md §5 — and the user roles table; Evoni,
- * 2026-10-11). ?tab= selects one; the default is The Pulse.
+ * 2026-10-11). ?tab= selects one; the default is The Pulse. The header,
+ * pill tabs and date follow Evoni's Admin mock (2026-10-17; AdminPulse.css).
  */
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Wallet, BarChart3, Coins, Map as MapIcon, Palette, Trash2, ChevronRight } from 'lucide-react';
+import { Wallet, BarChart3, Coins, Map as MapIcon, Palette, Trash2, ChevronRight, CalendarDays } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { isAdmin } from '../utils/authGroups';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -21,6 +22,7 @@ import ShowSettings from './ShowSettings';
 import AdminShowGate from '../components/Admin/AdminShowGate';
 import PulseDirector from './AdminPulse';
 import '../styles/AdminPanel.css';
+import './AdminPulse.css';
 
 // Admin's tabs, in order. The first is the default.
 export const TABS = [
@@ -29,6 +31,13 @@ export const TABS = [
   { key: 'show-settings', label: 'Show settings' },
   { key: 'tools', label: 'Tools' },
 ];
+// The header's initials and today's date (Evoni's Admin mock, 2026-10-17).
+export const initialsOf = (user) => {
+  const name = (user?.name || user?.email?.split('@')[0] || 'A').trim();
+  const parts = name.split(/[\s._-]+/).filter(Boolean);
+  return ((parts[0]?.[0] || '') + (parts.length > 1 ? parts[parts.length - 1][0] : (parts[0]?.[1] || ''))).toUpperCase() || 'A';
+};
+const todayLabel = (now = new Date()) => now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 const tabFrom = (value) => (TABS.some((t) => t.key === value) ? value : TABS[0].key);
 
 // Admin tools index — each entry is a route in App.jsx.
@@ -121,18 +130,20 @@ const AdminPanel = () => {
   }
 
   return (
-    <div className="admin-panel-page">
+    <div className="admin-panel-page adm">
       <div className="admin-container">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
-          <button 
-            onClick={() => navigate(-1)} 
-            className="btn-back"
-            style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem' }}
-          >
-            ← Back
-          </button>
-          <h1>Admin</h1>
-        </div>
+        <header className="adm-hero">
+          <div className="adm-hero-text">
+            <h1>Admin</h1>
+            <p className="adm-kicker">Manage · Monitor · Guide · Grow</p>
+          </div>
+          {user && (
+            <span className="adm-user" data-testid="adm-user">
+              <span className="adm-avatar" aria-hidden="true">{initialsOf(user)}</span>
+              <span className="adm-user-email">{user.email || user.name}</span>
+            </span>
+          )}
+        </header>
 
         {error && (
           <ErrorMessage
@@ -141,21 +152,24 @@ const AdminPanel = () => {
           />
         )}
 
-        <div className="admin-tabs" role="tablist" aria-label="Admin sections">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              role="tab"
-              id={`admin-tab-${t.key}`}
-              aria-selected={tab === t.key}
-              aria-controls={`admin-panel-${t.key}`}
-              className={tab === t.key ? 'admin-tab active' : 'admin-tab'}
-              onClick={() => selectTab(t.key)}
-            >
-              {t.label}
-            </button>
-          ))}
+        <div className="adm-bar">
+          <div className="adm-tabs" role="tablist" aria-label="Admin sections">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                role="tab"
+                id={`admin-tab-${t.key}`}
+                aria-selected={tab === t.key}
+                aria-controls={`admin-panel-${t.key}`}
+                className={tab === t.key ? 'adm-tab is-active' : 'adm-tab'}
+                onClick={() => selectTab(t.key)}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <span className="adm-date" data-testid="adm-date"><CalendarDays size={16} aria-hidden="true" />{todayLabel()}</span>
         </div>
 
         <div role="tabpanel" id={`admin-panel-${tab}`} aria-labelledby={`admin-tab-${tab}`} className="admin-tabpanel">

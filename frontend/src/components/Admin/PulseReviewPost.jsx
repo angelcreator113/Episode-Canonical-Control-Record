@@ -14,6 +14,7 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { Send } from 'lucide-react';
 import api from '../../services/api';
 import { BEATS, beatName } from '../../lib/canonicalBeats';
 import { postOrder, storyLabel } from '../../lib/storyClock';
@@ -302,10 +303,30 @@ export function PostCard({ post, onChange, showId }) {
   const legacy = records.length === 0 && Array.isArray(post.sample_comments) ? post.sample_comments : [];
   const likes = post.likes ?? 0;
   const commentsN = post.comments_count ?? records.length;
+  const story = storyLabel(postOrder(post));
+  const reveals = !isDeleted && (
+    <div className="prv-item-reveals">
+      <RevealPicker type="post" id={post.id} eventId={post.event_id || null} label={`${who.name}'s post`} imageUrl={post.image_url || null} />
+      {post.image_url && <RevealPicker type="image" kind="post_photo" id={post.id} eventId={post.event_id || null} label={`the photo on ${who.name}'s post`} imageUrl={post.image_url} />}
+    </div>
+  );
+  const hasSide = (isDraft || isDeleted) && !editing;
   return (
-    <article className="prv-item" data-testid="sm-post">
-      <Tile name={who.name} size="md" tone={who.handle === 'lala' ? 'l' : toneOf(who.handle)} />
+    <article className={`prv-item${post.image_url ? ' has-media' : ''}${hasSide ? ' has-side' : ''}`} data-testid="sm-post">
+      {post.image_url && (
+        <div className="prv-media">
+          <img className="prv-item-image" src={post.image_url} alt={post.image_description || ''} />
+        </div>
+      )}
       <div className="prv-item-body">
+        <p className="prv-item-head">
+          <Tile name={who.name} size="md" tone={who.handle === 'lala' ? 'l' : toneOf(who.handle)} />
+          <b className="prv-name">{who.name}</b>
+          <span className="prv-item-when">
+            {whenLabel(post.posted_at) || 'undated'}
+            {story && <> · <span className="prv-story" title="Story time: when this happens in Lala's world">{story}</span></>}
+          </span>
+        </p>
         {editing ? (
           <div className="prv-edit">
             <textarea aria-label="Edit the draft" rows={3} value={text} onChange={(e) => setText(e.target.value)} />
@@ -316,36 +337,20 @@ export function PostCard({ post, onChange, showId }) {
           </div>
         ) : (
         <p className="prv-item-text">
-          <b className="prv-name">{who.name}</b>{' '}
           {post.content_text}
           {post.image_description && !post.image_url && <span className="prv-album"> [photo: {post.image_description}]</span>}
         </p>
         )}
-        {post.image_url && <img className="prv-item-image" src={post.image_url} alt={post.image_description || ''} />}
-        <p className="prv-item-meta">
-          {isDeleted && <><span className="prv-badge">deleted</span> · </>}
-          {post.status === 'draft' && <><span className="prv-badge">draft</span> · </>}
-          <span>{whenLabel(post.posted_at) || 'undated'}</span>
-          {storyLabel(postOrder(post)) && <> · <span className="prv-story" title="Story time: when this happens in Lala's world">{storyLabel(postOrder(post))}</span></>}
-          {' · '}<button type="button" className="prv-link-btn" onClick={() => setOpen((v) => !v)} aria-expanded={open}>Comment</button>
-          {showId && <>{' · '}<button type="button" className="prv-link-btn" onClick={() => setBeatOpen((v) => !v)} aria-expanded={beatOpen}>Use in a beat</button></>}
-          {post.narrative_function && <> · <span className="prv-fn">{post.narrative_function.replace(/_/g, ' ')}</span></>}
-          {post.post_weight && <> · <span className="prv-fn" title={post.post_weight_why || (post.post_weight === 'ambient' ? 'Flavor: can sit at any beat' : '')}>{post.post_weight === 'load_bearing' ? 'load-bearing' : 'ambient'}</span></>}
-          {post.episode_id && <> · <Link to={`/episodes/${post.episode_id}`}>Episode</Link></>}
-          {!isDeleted && post.social_profile_id && post.content_text && <>{' · '}<PinAsExample postId={post.id} /></>}
+        <p className="prv-item-meta prv-tags">
+          {isDeleted && <span className="prv-badge">deleted</span>}
+          {post.status === 'draft' && <span className="prv-badge">draft</span>}
+          {post.narrative_function && <span className="prv-tag prv-fn">{post.narrative_function.replace(/_/g, ' ')}</span>}
+          <button type="button" className="prv-tag" onClick={() => setOpen((v) => !v)} aria-expanded={open}>Comment</button>
+          {showId && <button type="button" className="prv-tag" onClick={() => setBeatOpen((v) => !v)} aria-expanded={beatOpen}>Use in a beat</button>}
+          {post.post_weight && <span className="prv-tag prv-fn" title={post.post_weight_why || (post.post_weight === 'ambient' ? 'Flavor: can sit at any beat' : '')}>{post.post_weight === 'load_bearing' ? 'load-bearing' : 'ambient'}</span>}
+          {post.episode_id && <Link className="prv-tag" to={`/episodes/${post.episode_id}`}>Episode</Link>}
         </p>
-        {isDraft && <GateResult gate={post.gate_json} />}
-        {(isDraft || isDeleted) && !editing && (
-          <p className="prv-actions" data-testid="sm-post-actions">
-            {isDraft && <>
-              <button type="button" className="prv-btn" disabled={busy} onClick={release}>{post.release_state ? 'Release now' : 'Release'}</button>
-              <ReleaseTime post={post} busy={busy} act={act} />
-              <button type="button" className="prv-link-btn" disabled={busy} onClick={() => setEditing(true)}>Edit</button>
-              <button type="button" className="prv-link-btn" disabled={busy} onClick={remove}>Delete</button>
-            </>}
-            {isDeleted && <button type="button" className="prv-btn" disabled={busy} onClick={restore}>Restore</button>}
-          </p>
-        )}
+        {!isDeleted && post.social_profile_id && post.content_text && <p className="prv-item-pin"><PinAsExample postId={post.id} /></p>}
         {actionError && <p className="prv-error" role="alert">{actionError}</p>}
         {(likes > 0 || commentsN > 0) && (
           <p className="prv-item-likes">
@@ -365,9 +370,23 @@ export function PostCard({ post, onChange, showId }) {
         )}
         {open && <Reactions post={post} onChange={onChange} />}
         {beatOpen && showId && <BeatPicker post={post} showId={showId} />}
-        {!isDeleted && <RevealPicker type="post" id={post.id} eventId={post.event_id || null} label={`${who.name}'s post`} imageUrl={post.image_url || null} />}
-        {!isDeleted && post.image_url && <RevealPicker type="image" kind="post_photo" id={post.id} eventId={post.event_id || null} label={`the photo on ${who.name}'s post`} imageUrl={post.image_url} />}
+        {!hasSide && reveals}
       </div>
+      {hasSide && (
+        <aside className="prv-item-side" aria-label="Release">
+          {isDraft && <GateResult gate={post.gate_json} />}
+          <div className="prv-side-actions" data-testid="sm-post-actions">
+            {isDraft && <>
+              <button type="button" className="prv-btn prv-release-btn" disabled={busy} onClick={release}><Send size={16} aria-hidden="true" />{post.release_state ? 'Release now' : 'Release'}</button>
+              <ReleaseTime post={post} busy={busy} act={act} />
+              <button type="button" className="prv-link-btn" disabled={busy} onClick={() => setEditing(true)}>Edit</button>
+              <button type="button" className="prv-link-btn prv-danger" disabled={busy} onClick={remove}>Delete</button>
+            </>}
+            {isDeleted && <button type="button" className="prv-btn" disabled={busy} onClick={restore}>Restore</button>}
+          </div>
+          {reveals}
+        </aside>
+      )}
     </article>
   );
 }

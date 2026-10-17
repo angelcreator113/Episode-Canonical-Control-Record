@@ -1,18 +1,65 @@
 /* The feed's director tools (Task 2925): Admin › The Pulse › Review, and
-   The Pulse until its frame issue. Studio tokens only, no hex literals. */
-.prv-item { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--lala-parchment-2); font-size: 14px; line-height: 1.45; color: var(--text-primary); }
-.prv-item-body { min-width: 0; flex: 1; }
+   The Pulse until its frame issue. Studio tokens only, no hex literals.
+   Pink and gold since Evoni's Admin mock (2026-10-17). */
+/* A post card (Evoni's Admin mock, 2026-10-17): its picture, the words and
+   tags, and for a draft the release panel on the right. */
+.prv-item { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 18px 0; border-top: 1px solid var(--lala-parchment-3); font-size: 15px; line-height: 1.55; color: var(--text-primary); }
+.prv-cards > .prv-item:first-child { border-top: none; }
+.prv-item.has-media { grid-template-columns: minmax(0, 170px) minmax(0, 1fr); }
+.prv-item.has-side { grid-template-columns: minmax(0, 1fr) minmax(0, 220px); }
+.prv-item.has-media.has-side { grid-template-columns: minmax(0, 170px) minmax(0, 1fr) minmax(0, 220px); }
+.prv-media { align-self: start; aspect-ratio: 1 / 1; overflow: hidden; border-radius: 12px; border: 1px solid var(--lala-parchment-3); background: var(--lala-parchment-2); }
+.prv-media .prv-item-image { width: 100%; height: 100%; margin: 0; object-fit: cover; border: none; border-radius: 0; }
+.prv-item-body { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.prv-item-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0; }
+.prv-item-when { color: var(--text-secondary); font-size: 13px; }
 .prv-item-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.prv-name { color: var(--lala-lavender-text); }
+.prv-name { color: var(--accent-dark); font-size: 14px; letter-spacing: 0.04em; text-transform: uppercase; }
 .prv-album { color: var(--text-secondary); }
-.prv-item-image { max-width: 100%; margin: 6px 0; display: block; border-radius: 6px; border: 1px solid var(--lala-parchment-3); }
-.prv-item-meta { margin: 4px 0 0; color: var(--text-secondary); font-size: 12px; }
-.prv-item-meta a, .prv-link-btn { color: var(--lala-lavender-text); }
+.prv-item-image { max-width: 100%; display: block; }
+.prv-item-meta { margin: 0; color: var(--text-secondary); font-size: 12px; }
+.prv-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.prv-tag { display: inline-flex; align-items: center; min-height: 30px; padding: 2px 12px; border-radius: 999px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--text-secondary); font: inherit; font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer; }
+span.prv-tag { cursor: default; }
+button.prv-tag:hover, a.prv-tag:hover { border-color: var(--accent-light); color: var(--accent-dark); }
+.prv-tag[aria-expanded="true"] { border-color: var(--accent-dark); background: var(--accent-subtle); color: var(--accent-dark); }
+.prv-item-pin { margin: 0; font-size: 12px; }
+.prv-item-meta a, .prv-link-btn { color: var(--accent-dark); }
 .prv-link-btn { background: none; border: none; padding: 0; min-height: 32px; font: inherit; font-size: inherit; cursor: pointer; }
 .prv-link-btn:hover { text-decoration: underline; }
 .prv-fn { color: var(--text-secondary); }
 .prv-story { color: var(--lala-lavender-text); font-weight: 600; }
-.prv-item-likes { margin: 4px 0 0; padding: 2px 8px; background: var(--lala-parchment-2); color: var(--text-secondary); font-size: 12px; border-radius: 4px; }
+.prv-item-likes { margin: 0; padding: 2px 8px; background: var(--lala-parchment-2); color: var(--text-secondary); font-size: 12px; border-radius: 4px; }
+.prv-item-reveals { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+
+/* The release panel: the gate's note, Release, then the quieter choices */
+.prv-item-side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.prv-side-actions { display: flex; flex-direction: column; gap: 6px; }
+.prv-side-actions .prv-release { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+.prv-side-actions .prv-link-btn { width: 100%; min-height: 36px; padding: 4px 12px; border-radius: 10px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--accent-dark); font-size: 13px; font-weight: 600; text-align: left; }
+.prv-side-actions .prv-link-btn:hover { border-color: var(--accent-light); text-decoration: none; }
+.prv-side-actions .prv-danger { color: var(--danger-text); }
+.prv-release-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 42px; border-radius: 12px; box-shadow: var(--shadow-sm); }
+
+/* Lala's drafts: search, filter, order and the view */
+.prv-section-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
+.prv-section-intro { margin: 0; color: var(--text-secondary); font-size: 14px; }
+.prv-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 6px; }
+.prv-search { display: flex; align-items: center; gap: 8px; flex: 1 1 220px; min-height: 40px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--text-secondary); }
+.prv-search input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; color: var(--text-primary); font: inherit; font-size: 16px; }
+.prv-tool-select { min-height: 40px; padding: 4px 10px; border-radius: 12px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 14px; }
+.prv-view { display: inline-flex; gap: 4px; }
+.prv-view button { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--accent-dark); cursor: pointer; }
+.prv-view button.is-on { border-color: var(--accent-dark); background: var(--accent-dark); color: var(--text-inverse); }
+.prv-cards.is-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.prv-cards.is-grid > .prv-item { grid-template-columns: minmax(0, 1fr); padding: 14px; border: 1px solid var(--lala-parchment-3); border-radius: 14px; }
+.prv-more { display: inline-flex; align-items: center; gap: 8px; align-self: center; margin: 12px auto 0; min-height: 40px; padding: 6px 18px; border-radius: 12px; border: 1.5px solid var(--accent-light); background: var(--surface-card); color: var(--accent-dark); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.prv-section > .prv-more { display: flex; }
+
+@media (max-width: 760px) {
+  .prv-item.has-media, .prv-item.has-side, .prv-item.has-media.has-side { grid-template-columns: minmax(0, 1fr); }
+  .prv-media { max-width: 240px; }
+}
 
 /* Initial tiles */
 .prv-tile { display: inline-flex; align-items: center; justify-content: center; font-weight: 800; color: var(--text-primary); background: var(--lala-parchment-3); border-radius: 50%; flex-shrink: 0; }
@@ -47,7 +94,7 @@
 .prv-beat-select { flex: 1 1 140px; }
 
 /* Buttons, actions, editing, errors */
-.prv-btn { min-height: 36px; padding: 4px 14px; border-radius: 6px; border: 1px solid var(--lala-lavender-dark); background: var(--lala-lavender); color: var(--text-inverse); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.prv-btn { min-height: 36px; padding: 4px 14px; border-radius: 10px; border: 1px solid var(--accent-dark); background: var(--accent-dark); color: var(--text-inverse); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
 .prv-btn:disabled { opacity: 0.6; cursor: default; }
 .prv-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 6px 0 0; }
 .prv-release { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -62,13 +109,13 @@
 
 /* Admin › The Pulse › Review sections */
 .prv-review { display: flex; flex-direction: column; gap: 1.25rem; }
-.prv-section { background: var(--surface-card); border: 1px solid var(--lala-parchment-3); border-radius: 8px; padding: 0.875rem 1rem; }
-.prv-section-title { margin: 0 0 0.5rem; font-size: 1rem; }
+.prv-section { display: flex; flex-direction: column; background: var(--surface-card); border: 1px solid var(--lala-gold-line); border-radius: 16px; padding: 1rem 1.125rem; box-shadow: var(--shadow-xs); }
+.prv-section-title { margin: 0; font-family: var(--font-prose); font-size: 1.25rem; font-weight: 600; }
 .prv-count { color: var(--text-secondary); font-weight: 400; }
 .prv-plain { list-style: none; margin: 0; padding: 0; }
 .prv-pending { display: flex; flex-direction: column; gap: 4px; padding: 10px 0; border-top: 1px solid var(--lala-parchment-2); font-size: 14px; overflow-wrap: anywhere; }
 .prv-pending:first-child { border-top: none; }
-.prv-deleted { background: var(--surface-card); border: 1px solid var(--lala-parchment-3); border-radius: 8px; padding: 0.75rem 1rem; }
+.prv-deleted { background: var(--surface-card); border: 1px solid var(--lala-gold-line); border-radius: 16px; padding: 0.75rem 1rem; }
 .prv-deleted summary { min-height: 32px; cursor: pointer; font-weight: 600; }
 
 /* Numbers waiting (Task 2954): proposed likes and shares, why, and the four decisions */
@@ -96,7 +143,7 @@
 .prv-epf-field input { box-sizing: border-box; width: 100%; min-height: 40px; font: inherit; font-size: 16px; padding: 4px 8px; border: 1px solid var(--lala-parchment-3); border-radius: 4px; background: var(--surface-card); color: var(--text-primary); }
 
 /* The quality gate's result on an engine draft (Task 2969) */
-.prv-gate { margin: 6px 0 0; padding: 6px 10px; border-radius: 6px; font-size: 13px; border: 1px solid var(--lala-parchment-3); background: var(--lala-parchment-2); }
+.prv-gate { margin: 0; padding: 8px 12px; border-radius: 12px; font-size: 13px; border: 1px solid var(--lala-gold-line); background: var(--lala-gold-soft); color: var(--text-primary); }
 .prv-gate-flagged { border-color: var(--warning-border); background: var(--warning-bg); color: var(--warning-text); }
 .prv-gate-line { margin: 0; }
 .prv-gate-flags { margin: 4px 0 0; padding-left: 18px; }
@@ -119,3 +166,14 @@
 .prv-plan { margin: 0; padding: 0; list-style: none; }
 .prv-plan-item { display: flex; flex-direction: column; gap: 4px; padding: 8px 0; border-bottom: 1px solid var(--lala-parchment-2); font-size: 13px; }
 .prv-plan-text { color: var(--text-secondary); overflow-wrap: anywhere; }
+
+/* Release calendar (PulseReleaseCalendar): one row per day on a phone, a grid on wider screens */
+.prv-calendar { display: flex; flex-direction: column; gap: 8px; }
+.prv-calendar-days { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+.prv-calendar-day { display: flex; flex-direction: column; gap: 4px; min-height: 64px; padding: 6px 8px; border: 1px solid var(--lala-parchment-3); border-radius: 6px; background: var(--surface-card); font-size: 12px; }
+.prv-calendar-date { color: var(--text-secondary); font-weight: 700; }
+.prv-calendar-post { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 40px; padding: 4px 6px; text-align: left; font: inherit; font-size: 12px; color: var(--text-primary); background: var(--lala-lavender-soft); border: 1px solid var(--lala-lavender-line); border-radius: 4px; cursor: grab; }
+.prv-calendar-load { border-color: var(--warning-border); }
+.prv-calendar-picked { outline: 2px solid var(--lala-lavender); }
+.prv-calendar-text { color: var(--text-secondary); overflow-wrap: anywhere; }
+.prv-calendar-refused { display: flex; flex-direction: column; gap: 4px; }

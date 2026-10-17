@@ -6,6 +6,7 @@
 import React from 'react';
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import api from '../../services/api';
 import PulseCharactersCard from './PulseCharactersCard';
 
@@ -23,7 +24,7 @@ beforeEach(() => {
 
 describe('Uploads › Characters', () => {
   test('each character once, by name, with empty spots as "+ Add"', async () => {
-    render(<PulseCharactersCard />);
+    render(<MemoryRouter><PulseCharactersCard /></MemoryRouter>);
     await screen.findByTestId('pulse-character-c1');
     expect(api.get).toHaveBeenCalledWith('/api/v1/character-registry/registries?limit=100');
     const names = [...document.querySelectorAll('.pulse-character h4')].map((h) => h.textContent);
@@ -35,7 +36,7 @@ describe('Uploads › Characters', () => {
   });
 
   test('search narrows the list', async () => {
-    render(<PulseCharactersCard />);
+    render(<MemoryRouter><PulseCharactersCard /></MemoryRouter>);
     await screen.findByTestId('pulse-character-c1');
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'zar' } });
     expect(screen.queryByTestId('pulse-character-c1')).toBeNull();
@@ -47,7 +48,7 @@ describe('Uploads › Characters', () => {
   test('a cover uploads to that character; Remove clears the profile photo', async () => {
     vi.mocked(api.post).mockResolvedValue({ data: { success: true, cover_url: 'https://cdn/zara-cover.jpg' } });
     vi.mocked(api.delete).mockResolvedValue({ data: { success: true, portrait_url: null } });
-    render(<PulseCharactersCard />);
+    render(<MemoryRouter><PulseCharactersCard /></MemoryRouter>);
     await screen.findByTestId('pulse-character-c2');
 
     const file = new File(['x'], 'cover.png', { type: 'image/png' });
