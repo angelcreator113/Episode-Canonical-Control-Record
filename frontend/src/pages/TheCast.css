@@ -198,3 +198,15 @@
   .cast-chips { padding: 0 10px; }
   .cast-person-create { margin: 0 10px 10px; }
 }
+
+/* ── Facts & checks (the cast rollout; components/Cast/CastFacts) ── */
+.cast-facts-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.cast-facts-row { display: grid; gap: 6px; padding: 12px; border-radius: 14px; border: 1px solid var(--lala-lavender-line); background: var(--surface-card); color: var(--text-primary); min-width: 0; }
+.cast-facts-who a { color: var(--lala-lavender-text); text-decoration: none; }
+.cast-facts-who a:hover { text-decoration: underline; }
+.cast-facts-todo { display: grid; gap: 2px; font-size: 14px; overflow-wrap: anywhere; }
+.cast-facts-facts { display: flex; flex-wrap: wrap; gap: 6px; }
+.cast-facts-fact { padding: 2px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--lala-lavender-line); background: var(--surface-card); color: var(--text-secondary); }
+.cast-facts-fact.is-set { background: var(--success-bg); color: var(--success-text); }
+.cast-facts-fact.is-missing, .cast-facts-fact.is-estimate { background: var(--lala-gold-soft); color: var(--lala-gold-text); }
+.cast-facts-run { align-self: flex-start; }
