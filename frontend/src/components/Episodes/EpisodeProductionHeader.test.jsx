@@ -54,7 +54,7 @@ describe('EpisodeProductionHeader', () => {
     renderHeader({ onOpenTab });
     fireEvent.click(within(screen.getByTestId('eph-step-files')).getByRole('button'));
     expect(onOpenTab).toHaveBeenCalledWith('files');
-    expect(within(screen.getByTestId('eph-step-thumbnail')).getByRole('link').getAttribute('href')).toBe('/thumbnails/ep-1');
+    expect(within(screen.getByTestId('eph-step-thumbnail')).getByRole('link').getAttribute('href')).toBe('/template-studio/youtube?episode=ep-1');
     expect(within(screen.getByTestId('eph-step-edit')).getByRole('link').getAttribute('href')).toBe('/episodes/ep-1/timeline');
     await waitFor(() => expect(rawClipsApi.list).toHaveBeenCalledWith('ep-1'));
   });

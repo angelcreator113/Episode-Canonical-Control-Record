@@ -55,7 +55,8 @@ describe('Producer Mode show card and tab counts', () => {
     renderIt();
     const producing = await screen.findByRole('link', { name: 'Producing Episode 2' });
     expect(producing.getAttribute('href')).toBe('/episodes/ep-2');
-    expect(screen.getByText('Season 1')).toBeTruthy();
+    // The header's season chip (the Overview's season switcher also says Season 1).
+    expect(document.querySelector('.wa-chip-season').textContent).toBe('Season 1');
     await waitFor(() => expect(count('Episodes')).toBe('1'));
     expect(count('Events')).toBe('1');
     expect(count('Overview')).toBeNull();
