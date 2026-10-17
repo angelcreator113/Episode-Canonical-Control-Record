@@ -41,8 +41,13 @@ async function eventsForProfile(sequelize, profileId) {
     SELECT m.id, m.show_id, m.name, m.role, m.event_type, m.event_date, m.event_time, m.venue_name, m.venue_location_id,
            m.is_paid, m.payment_amount, m.description, m.theme, m.dress_code, m.narrative_stakes, m.host_brand,
            m.canon_consequences->'automation'->'relationship_goals' AS goals,
-           e.id AS episode_id, e.episode_number, e.title AS episode_title
+           e.id AS episode_id, e.episode_number, e.title AS episode_title,
+           -- The event's scene set (2026-10-17: the Places tab adds the event's
+           -- photos and angles there): its id, name, and the everyday set it is
+           -- an event version of, when it is one.
+           ss.id AS scene_set_id, ss.name AS scene_set_name, ss.version_of_set_id AS scene_set_version_of
       FROM mine m
+      LEFT JOIN scene_sets ss ON ss.id = m.scene_set_id AND ss.deleted_at IS NULL
       LEFT JOIN LATERAL (
         SELECT ep.id, ep.episode_number, ep.title FROM episodes ep
          WHERE ep.deleted_at IS NULL AND (ep.id = m.used_in_episode_id

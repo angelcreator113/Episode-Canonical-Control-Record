@@ -141,4 +141,20 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
                VALUES (:id, :registry, :key, 'Lone', :pid, NOW(), NOW())`, { id: loneId, registry, key: `lone-${loneId.slice(0, 6)}`, pid });
     expect((await host(loneId, await event('Open house'))).body.code).toBe('NO_SHOW');
   });
+
+  // 2026-10-17: the Places tab adds an event's photos and angles to its set,
+  // so each hosted event carries its scene set and whether it is a version.
+  it('a hosted event carries its scene set, its name, and the everyday set it is a version of', async () => {
+    const { showId, character, event } = await cast();
+    const sable = await character('Sable');
+    const ev = await event('Gala');
+    const everyday = uuid();
+    const dressed = uuid();
+    await run(`INSERT INTO scene_sets (id, name, scene_type, show_id, generation_status, created_at, updated_at) VALUES (:id, 'Studio', 'EVENT_LOCATION', :showId, 'complete', NOW(), NOW())`, { id: everyday, showId });
+    await run(`INSERT INTO scene_sets (id, name, scene_type, show_id, version_of_set_id, generation_status, created_at, updated_at) VALUES (:id, 'Gala photos', 'EVENT_LOCATION', :showId, :everyday, 'complete', NOW(), NOW())`, { id: dressed, showId, everyday });
+    await run('UPDATE world_events SET scene_set_id = :dressed WHERE id = :ev', { dressed, ev });
+    expect((await host(sable.id, ev)).status).toBe(200);
+    const res = await auth(request(app).get(`/api/v1/cast/characters/${sable.id}/appearances`));
+    expect(res.body.events.find((e) => e.id === ev)).toMatchObject({ scene_set_id: dressed, scene_set_name: 'Gala photos', scene_set_version_of: everyday });
+  });
 });

@@ -151,6 +151,10 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] }
     process.env.PULSE_ENGINE_ENABLED = 'false';
     expect(await posting.enqueueForEpisode(models, { showId: ids.show, episodeId: ids.ep })).toEqual([]);
     process.env.PULSE_ENGINE_ENABLED = 'true';
+    // Event posts switched off in Admin › Engine (2026-10-17): nothing at completion either.
+    await queue.saveSettings(models, ids.show, { events_enabled: false });
+    expect(await posting.enqueueForEpisode(models, { showId: ids.show, episodeId: ids.ep })).toEqual([]);
+    await queue.saveSettings(models, ids.show, { events_enabled: true });
     mockCreate.mockReset();
     const result = await completeEpisode(ids.ep, ids.show, sequelize);
     expect(result.pulse_posts_queued).toBe(1);

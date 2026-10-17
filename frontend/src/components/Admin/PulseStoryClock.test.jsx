@@ -12,7 +12,7 @@ import { MemoryRouter } from 'react-router-dom';
 vi.mock('../../services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 
 import api from '../../services/api';
-import PulseStoryClock from './PulseStoryClock';
+import { StoryMomentPreview as PulseStoryClock } from './PulseStoryClock';
 import { PulseRevealProvider } from './PulseRevealContext';
 import { storyMoments, presentOrder } from '../../lib/storyClock';
 

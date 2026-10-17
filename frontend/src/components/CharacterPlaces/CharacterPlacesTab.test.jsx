@@ -127,4 +127,77 @@ describe('CharacterPlacesTab', () => {
     expect(within(select).getByText('Brunch (hosted by someone else)').disabled).toBe(true);
     expect(within(select).getByText('Gala').disabled).toBe(false);
   });
+
+  // Evoni, 2026-10-17: "when I'm uploading a scene and then I'm uploading the
+  // angles that go with this scene, it is being uploaded as a whole completely
+  // different set ... when I'm trying to add angles to events, I'm not able to
+  // upload any images".
+  describe('photos and angles go into one set', () => {
+    const file = (n) => new File(['x'], n, { type: 'image/jpeg' });
+    const routeGets = (extra = {}) => vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/cast/characters/c-1/places') return { data: { success: true, show_id: 'show-1', places } };
+      if (url === '/api/v1/cast/characters/c-1/appearances') return { data: { success: true, events: extra.events || [] } };
+      if (url === '/api/v1/scene-sets/set-1') return { data: { success: true, data: { id: 'set-1', name: 'Studio', angles: [{ id: 'g1', angle_label: 'WIDE', angle_name: 'Wide', still_image_url: 'https://x/w.jpg' }] } } };
+      if (url === '/api/v1/scene-sets/set-ev') return { data: { success: true, data: { id: 'set-ev', name: 'Gala photos', angles: [] } } };
+      return { data: {} };
+    });
+    const posts = () => vi.mocked(api.post).mock.calls.map((c) => c[0]);
+
+    test('several photos make one set: the first its main photo, the others its angles', async () => {
+      routeGets();
+      vi.mocked(api.post).mockImplementation(async (url) => {
+        if (url === '/api/v1/scene-sets') return { data: { success: true, data: { id: 'set-new' } } };
+        if (url === '/api/v1/scene-sets/set-new/angles') return { data: { success: true, data: { id: `ang-${posts().length}` } } };
+        return { data: { success: true } };
+      });
+      renderIt();
+      await screen.findByTestId('places-role-home');
+      fireEvent.change(screen.getByTestId('place-upload-input-home'), { target: { files: [file('room.jpg'), file('desk.jpg'), file('window.jpg')] } });
+      await waitFor(() => expect(posts()).toContain('/api/v1/shows/show-1/character-places'));
+      expect(posts().filter((u) => u === '/api/v1/scene-sets')).toHaveLength(1);
+      expect(vi.mocked(api.post).mock.calls.find((c) => c[0] === '/api/v1/scene-sets/set-new/upload-base')[1].get('image').name).toBe('room.jpg');
+      expect(posts().filter((u) => u === '/api/v1/scene-sets/set-new/angles')).toHaveLength(2);
+      expect(posts().filter((u) => /\/scene-sets\/set-new\/angles\/ang-\d+\/upload$/.test(u))).toHaveLength(2);
+      expect((await screen.findByTestId('places-note')).textContent).toMatch(/with 2 angles/);
+    });
+
+    test("a place's angles show, and Add angles adds to that same set", async () => {
+      routeGets();
+      vi.mocked(api.post).mockImplementation(async (url) => (url === '/api/v1/scene-sets/set-1/angles'
+        ? { data: { success: true, data: { id: 'ang-9' } } } : { data: { success: true } }));
+      renderIt();
+      const grid = await screen.findByTestId('set-angles-set-1');
+      expect(grid.textContent).toMatch(/Angles · 1/);
+      fireEvent.change(screen.getByTestId('set-angles-input-set-1'), { target: { files: [file('mirror.jpg')] } });
+      await waitFor(() => expect(posts()).toContain('/api/v1/scene-sets/set-1/angles/ang-9/upload'));
+      expect(posts()).not.toContain('/api/v1/scene-sets');
+    });
+
+    test("a hosted event's photos are its place dressed for it: one set, linked as its event version", async () => {
+      routeGets({ events: [{ id: 'ev-1', show_id: 'show-1', name: 'Gala', role: 'host', scene_set_id: 'set-1', scene_set_name: 'Studio', scene_set_version_of: null }] });
+      vi.mocked(api.post).mockImplementation(async (url) => {
+        if (url === '/api/v1/scene-sets') return { data: { success: true, data: { id: 'set-ev' } } };
+        if (url === '/api/v1/scene-sets/set-ev/angles') return { data: { success: true, data: { id: 'ang-1' } } };
+        return { data: { success: true } };
+      });
+      vi.mocked(api.put).mockResolvedValue({ data: { success: true } });
+      renderIt();
+      expect((await screen.findByTestId('event-photos-angles-ev-1')).textContent).toMatch(/Studio dressed for this event/);
+      fireEvent.change(screen.getByTestId('event-photos-input-ev-1'), { target: { files: [file('stage.jpg'), file('bar.jpg')] } });
+      await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/scene-sets/set-ev/version', { everyday_set_id: 'set-1', event_id: 'ev-1' }));
+      expect(vi.mocked(api.post).mock.calls[0]).toEqual(['/api/v1/scene-sets', { name: 'Gala photos', scene_type: 'EVENT_LOCATION', show_id: 'show-1' }]);
+      expect(posts()).toContain('/api/v1/scene-sets/set-ev/angles/ang-1/upload');
+    });
+
+    test("an event with its own photos shows them with Add angles; one held nowhere says where to choose its place", async () => {
+      routeGets({ events: [
+        { id: 'ev-1', show_id: 'show-1', name: 'Gala', role: 'host', scene_set_id: 'set-ev', scene_set_name: 'Gala photos', scene_set_version_of: 'set-1' },
+        { id: 'ev-2', show_id: 'show-1', name: 'Brunch', role: 'host', scene_set_id: null },
+      ] });
+      renderIt();
+      expect(await screen.findByTestId('set-angles-set-ev')).toBeTruthy();
+      expect(screen.queryByTestId('event-photos-upload-ev-1')).toBeNull();
+      expect(screen.getByTestId('event-photos-no-place-ev-2').textContent).toMatch(/Choose where it is held/);
+    });
+  });
 });

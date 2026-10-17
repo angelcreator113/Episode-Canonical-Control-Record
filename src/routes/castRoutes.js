@@ -615,6 +615,8 @@ router.get('/characters/:id/appearances', requireAuth, async (req, res) => {
         dress_code: ev.dress_code || null, stakes: ev.narrative_stakes || null, host_brand: ev.host_brand || null,
         goals: Array.isArray(ev.goals) ? ev.goals.filter((g) => g && g.label).map((g) => ({ slot: g.slot || null, label: g.label })) : [],
         episode: ev.episode_id ? { id: ev.episode_id, episode_number: ev.episode_number, title: ev.episode_title } : null,
+        // Its scene set, for its photos and angles on the Places tab (2026-10-17).
+        scene_set_id: ev.scene_set_id || null, scene_set_name: ev.scene_set_name || null, scene_set_version_of: ev.scene_set_version_of || null,
       })),
       episodes,
       place,
