@@ -23,10 +23,13 @@
 const { timeOfDayFromEventTime, seasonFromDate } = require('./sceneBriefService');
 
 const TIMES = Object.freeze(['morning', 'afternoon', 'golden_hour', 'evening', 'night']);
-const LABELS = Object.freeze({
-  morning: 'Morning', afternoon: 'Afternoon', golden_hour: 'Golden hour', evening: 'Evening', night: 'Night',
-  spring: 'Spring', summer: 'Summer', fall: 'Fall', winter: 'Winter',
-});
+const { KINDS, LABELS } = require('./locationLookVariantService');
+// Evoni, 2026-10-17: the variant times are Morning, Golden hour and Night,
+// and the weather Winter and Rain. A beat's clock time still steps through
+// all five; an afternoon beat shows the everyday look itself (daylight), an
+// evening one the Night picture. A season other than winter shows the plain
+// Front view; rain is never read from a date.
+const VARIANT_TIME = Object.freeze({ morning: 'morning', afternoon: null, golden_hour: 'golden_hour', evening: 'night', night: 'night' });
 
 /** A beat's time of day from the event's: before (1-9) one step earlier, 10-12 the same, after (13-14) night. Pure. */
 function beatTimeOfDay(beatNumber, eventTime) {
@@ -79,6 +82,8 @@ async function variantsForSets(sequelize, setIds) {
           AND (v.kind <> 'season' OR v.source <> 'generated' OR a.still_image_url = v.source_image_url)`,
       { replacements: { ids } });
     for (const r of rows) {
+      // A hidden time or season (2026-10-17) is never used.
+      if (!KINDS[r.kind]?.includes(r.value)) continue;
       if (!out.has(r.set_id)) out.set(r.set_id, { time: new Map(), season: new Map() });
       const entry = out.get(r.set_id);
       if (r.kind === 'time') entry.time.set(r.value, r.image_url);
@@ -101,11 +106,11 @@ async function variantsForSets(sequelize, setIds) {
 function variantFor({ picture, angleKind, angleId = null, everyday, variants, beatNumber, moment }) {
   if (!picture || !everyday || !moment) return null;
   if (picture.source === 'base') {
-    const time = beatTimeOfDay(beatNumber, moment.time);
+    const time = VARIANT_TIME[beatTimeOfDay(beatNumber, moment.time)] || null;
     if (!time) return null;
     return { kind: 'time', value: time, label: LABELS[time], url: variants?.time.get(time) || null };
   }
-  if (picture.source === 'angle' && angleKind === 'front' && moment.season) {
+  if (picture.source === 'angle' && angleKind === 'front' && KINDS.season.includes(moment.season)) {
     // A season shows the Front view it was made from: another Front angle
     // (Establishing and Doorway are both Front) keeps its own picture.
     const season = moment.season;

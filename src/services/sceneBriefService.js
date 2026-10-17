@@ -186,6 +186,7 @@ const SEASON_TEXT = Object.freeze({
   summer: 'Summer.',
   fall: 'Autumn.',
   winter: 'Winter.',
+  rain: 'Rain, under an overcast sky.',
 });
 
 const ROOM_SIZE = { compact: 'compact', medium: 'medium-sized', spacious: 'spacious', grand: 'grand and expansive' };

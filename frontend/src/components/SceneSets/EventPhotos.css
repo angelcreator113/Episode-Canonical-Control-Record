@@ -1,0 +1,8 @@
+/* An event's photos from another set (2026-10-17). Wraps at 375px. */
+.evp-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; }
+.evp-form select { min-height: 32px; font-size: 12px; max-width: 100%; flex: 1 1 160px; min-width: 0; }
+.evp-btn { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 2px 10px; border: 1px solid var(--lala-gold); border-radius: 4px; background: var(--surface-card); color: var(--lala-gold-text); font-size: 12px; cursor: pointer; }
+.evp-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.evp-btn-plain { border-color: var(--lala-parchment-3); color: var(--text-secondary); }
+.evp-set { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; color: var(--text-primary); overflow-wrap: anywhere; }
+.evp-hint { font-size: 11px; color: var(--text-secondary); line-height: 1.4; }

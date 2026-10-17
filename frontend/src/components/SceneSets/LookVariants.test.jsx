@@ -16,10 +16,10 @@ import LookVariants from './LookVariants';
 
 const BASE = '/api/v1/scene-sets/set-1/look-variants';
 const slots = (values, labels, overrides = {}) => values.map((v, i) => ({ value: v, label: labels[i], variant: overrides[v] || null }));
-const TIMES = ['morning', 'afternoon', 'golden_hour', 'evening', 'night'];
-const TIME_LABELS = ['Morning', 'Afternoon', 'Golden hour', 'Evening', 'Night'];
-const SEASONS = ['spring', 'summer', 'fall', 'winter'];
-const SEASON_LABELS = ['Spring', 'Summer', 'Fall', 'Winter'];
+const TIMES = ['morning', 'golden_hour', 'night'];
+const TIME_LABELS = ['Morning', 'Golden hour', 'Night'];
+const SEASONS = ['winter', 'rain'];
+const SEASON_LABELS = ['Winter', 'Rain'];
 
 let state;
 const renderIt = () => {
@@ -47,49 +47,52 @@ describe('LookVariants', () => {
     for (const v of SEASONS) expect(screen.getByTestId(`look-variant-season-${v}`)).toBeTruthy();
     expect(screen.getByTestId('look-variant-time-morning').textContent).toMatch(/Morning · uploaded/);
     expect(screen.getByTestId('look-variants-no-front')).toBeTruthy();
+    // Evoni, 2026-10-17: the seasons became Weather.
+    expect(screen.getByText('Weather')).toBeTruthy();
+    expect(screen.queryByText(/^Seasons/)).toBeNull();
     expect(screen.getByTestId('look-variant-generate-season-winter').disabled).toBe(true);
     expect(screen.getByTestId('look-variant-upload-season-winter').disabled).toBe(false);
   });
 
   test('generate asks first with the cost, then generates and refreshes until ready', async () => {
     vi.mocked(api.post).mockImplementation(async (url) => {
-      if (url === `${BASE}/time/evening/estimate`) return { data: { data: { estimate: { usd: 0.04 } } } };
-      if (url === `${BASE}/time/evening/generate`) {
-        state = { ...state, time: slots(TIMES, TIME_LABELS, { evening: { status: 'generating' } }) };
+      if (url === `${BASE}/time/night/estimate`) return { data: { data: { estimate: { usd: 0.04 } } } };
+      if (url === `${BASE}/time/night/generate`) {
+        state = { ...state, time: slots(TIMES, TIME_LABELS, { night: { status: 'generating' } }) };
         return { data: { data: { status: 'generating' } } };
       }
       return { data: {} };
     });
     const { onToast } = renderIt();
-    fireEvent.click(await screen.findByTestId('look-variant-generate-time-evening'));
+    fireEvent.click(await screen.findByTestId('look-variant-generate-time-night'));
     const confirm = await screen.findByTestId('look-variant-confirm');
-    expect(confirm.textContent).toMatch(/Generate Evening — est\. \$0\.04\? A re-light of the everyday look\./);
-    expect(posts(`${BASE}/time/evening/generate`)).toHaveLength(0);
+    expect(confirm.textContent).toMatch(/Generate Night — est\. \$0\.04\? A re-light of the everyday look\./);
+    expect(posts(`${BASE}/time/night/generate`)).toHaveLength(0);
 
     fireEvent.click(screen.getByTestId('look-variant-confirm-yes'));
-    await waitFor(() => expect(posts(`${BASE}/time/evening/generate`)).toHaveLength(1));
-    state = { ...state, time: slots(TIMES, TIME_LABELS, { evening: { status: 'complete', source: 'generated', image_url: 'https://x/evening.jpg' } }) };
-    await waitFor(() => expect(onToast).toHaveBeenCalledWith('Evening is ready'));
-    expect(screen.getByAltText('Evening').getAttribute('src')).toBe('https://x/evening.jpg');
+    await waitFor(() => expect(posts(`${BASE}/time/night/generate`)).toHaveLength(1));
+    state = { ...state, time: slots(TIMES, TIME_LABELS, { night: { status: 'complete', source: 'generated', image_url: 'https://x/night.jpg' } }) };
+    await waitFor(() => expect(onToast).toHaveBeenCalledWith('Night is ready'));
+    expect(screen.getByAltText('Night').getAttribute('src')).toBe('https://x/night.jpg');
   });
 
   // Audit 2026-10-15: a failed re-run keeps the previous image (complete,
   // with its error); a variant of an old everyday look is marked.
   test('a failed re-run says so, not "ready", and keeps its image; an old one is marked', async () => {
     state = { ...state, time: slots(TIMES, TIME_LABELS, {
-      evening: { status: 'generating', image_url: 'https://x/evening.jpg' },
-      night: { status: 'complete', source: 'generated', image_url: 'https://x/night.jpg', stale: true },
+      night: { status: 'generating', image_url: 'https://x/night.jpg' },
+      golden_hour: { status: 'complete', source: 'generated', image_url: 'https://x/golden.jpg', stale: true },
     }) };
     const { onToast } = renderIt();
     await screen.findByTestId('look-variants');
-    expect(screen.getByTestId('look-variant-stale-time-night')).toBeTruthy();
+    expect(screen.getByTestId('look-variant-stale-time-golden_hour')).toBeTruthy();
     state = { ...state, time: slots(TIMES, TIME_LABELS, {
-      evening: { status: 'complete', source: 'generated', image_url: 'https://x/evening.jpg', error: 'Kontext refused' },
+      night: { status: 'complete', source: 'generated', image_url: 'https://x/night.jpg', error: 'Kontext refused' },
     }) };
-    await waitFor(() => expect(onToast).toHaveBeenCalledWith('Evening could not be generated: Kontext refused', 'error'));
-    expect(onToast).not.toHaveBeenCalledWith('Evening is ready');
-    expect(screen.getByAltText('Evening').getAttribute('src')).toBe('https://x/evening.jpg');
-    expect(screen.getByTestId('look-variant-time-evening').textContent).toMatch(/Last try failed/);
+    await waitFor(() => expect(onToast).toHaveBeenCalledWith('Night could not be generated: Kontext refused', 'error'));
+    expect(onToast).not.toHaveBeenCalledWith('Night is ready');
+    expect(screen.getByAltText('Night').getAttribute('src')).toBe('https://x/night.jpg');
+    expect(screen.getByTestId('look-variant-time-night').textContent).toMatch(/Last try failed/);
   });
 
   test('upload sends the image to its slot; remove empties it', async () => {

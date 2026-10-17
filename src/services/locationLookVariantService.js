@@ -23,13 +23,17 @@
 
 const { TIME_LIGHT, SEASON_TEXT, BRIEF_RULES } = require('./sceneBriefService');
 
+// Evoni, 2026-10-17: the times are Morning, Golden hour and Night; the
+// seasons became Weather, Winter and Rain. Afternoon, Evening, Spring, Summer
+// and Fall pictures already made are hidden, not deleted: their rows stay,
+// and nothing lists, makes or uses them.
 const KINDS = Object.freeze({
-  time: Object.freeze(['morning', 'afternoon', 'golden_hour', 'evening', 'night']),
-  season: Object.freeze(['spring', 'summer', 'fall', 'winter']),
+  time: Object.freeze(['morning', 'golden_hour', 'night']),
+  season: Object.freeze(['winter', 'rain']),
 });
 const LABELS = Object.freeze({
   morning: 'Morning', afternoon: 'Afternoon', golden_hour: 'Golden hour', evening: 'Evening', night: 'Night',
-  spring: 'Spring', summer: 'Summer', fall: 'Fall', winter: 'Winter',
+  spring: 'Spring', summer: 'Summer', fall: 'Fall', winter: 'Winter', rain: 'Rain',
 });
 const STUCK_AFTER_MS = 10 * 60 * 1000;
 const STUCK_REASON = 'Timed out: no image after 10 minutes';
@@ -43,7 +47,7 @@ class LookVariantError extends Error {
 }
 
 function readKindValue(kind, value) {
-  if (!KINDS[kind]) throw new LookVariantError('kind must be time or season', 400, 'BAD_KIND');
+  if (!KINDS[kind]) throw new LookVariantError('kind must be time or season (weather)', 400, 'BAD_KIND');
   if (!KINDS[kind].includes(value)) throw new LookVariantError(`${kind} must be one of ${KINDS[kind].join(', ')}`, 400, 'BAD_VALUE');
 }
 
@@ -55,7 +59,7 @@ function variantPrompt(kind, value) {
   readKindValue(kind, value);
   const keep = kind === 'time'
     ? 'The same place and the same view as the reference image, exactly: the same architecture, furniture, decor, objects and framing. Only the light and the time of day change: the sky, the daylight, the shadows and which lamps are lit.'
-    : `The same place and the same view as the reference image, exactly: the same building, architecture and framing. Only the season changes outside: the trees, plants, ground, sky and weather show ${LABELS[value].toLowerCase()}.`;
+    : `The same place and the same view as the reference image, exactly: the same building, architecture and framing. Only the weather changes outside: the trees, plants, ground, sky and weather show ${value === 'rain' ? 'rain falling, with wet ground and reflections' : LABELS[value].toLowerCase()}.`;
   const lead = kind === 'time' ? TIME_LIGHT[value] : SEASON_TEXT[value];
   return [lead, keep, 'Photorealistic.', ...BRIEF_RULES].join(' ');
 }
@@ -92,7 +96,7 @@ async function sourceImage(sequelize, set, kind) {
   if (kind === 'time') return { url: set.approved_base_image_url, angleId: null };
   const front = await frontView(sequelize, set.id);
   if (!front) {
-    throw new LookVariantError('Season variants show the outside: make this set\'s Front zone image first', 409, 'NO_FRONT_VIEW');
+    throw new LookVariantError('Weather variants show the outside: make this set\'s Front zone image first', 409, 'NO_FRONT_VIEW');
   }
   return { url: front.url, angleId: front.id };
 }

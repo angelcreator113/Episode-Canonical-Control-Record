@@ -258,15 +258,20 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
           The venue's base is waiting for your approval. Approve it in Scene Sets, then {canGenerate ? 'generate this look' : 'make this look there'}.
         </p>
       )}
-      {/* DJ bug 6: before the event's look exists, the venue's approved base,
-          which "Generate this look" dresses for this event. */}
+      {/* Before the event's look exists: not dressed yet, with the venue's
+          everyday look small beside it as what "Generate this look" starts
+          from. Shown full size it read as the event's own photo (Evoni,
+          2026-10-17). */}
       {!generating && !lookReady && approved?.image_url && (
-        <figure className="ell-figure" data-testid="event-look-approved-base">
-          <img src={approved.image_url} alt="The venue's everyday look" />
-          <figcaption className="ell-note">
-            The venue's everyday look.{locked ? '' : (canGenerate ? ' Generate this look to dress it for this event.' : " Make this event's look in Scene Sets.")}
-          </figcaption>
-        </figure>
+        <div className="ell-undressed" data-testid="event-look-approved-base">
+          <p className="ell-undressed-title" data-testid="event-look-not-dressed">Not dressed yet</p>
+          <figure className="ell-from">
+            <img src={approved.image_url} alt="The venue's everyday look" />
+            <figcaption className="ell-note">
+              Starting from the everyday look.{locked ? '' : (canGenerate ? ' Generate or upload this event\'s look.' : " Make this event's look in Scene Sets.")}
+            </figcaption>
+          </figure>
+        </div>
       )}
       {loadFailed && (
         <p className="ell-error" data-testid="event-look-load-failed">

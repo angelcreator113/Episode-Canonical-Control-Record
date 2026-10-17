@@ -102,15 +102,16 @@ const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
     const { set } = await everyday();
     const list = await auth(request(app).get(url(set)));
     expect(list.status).toBe(200);
-    expect(list.body.data.time.map((s) => s.value)).toEqual(['morning', 'afternoon', 'golden_hour', 'evening', 'night']);
-    expect(list.body.data.season.map((s) => s.label)).toEqual(['Spring', 'Summer', 'Fall', 'Winter']);
+    // Evoni, 2026-10-17: Morning, Golden hour, Night; the weather Winter and Rain.
+    expect(list.body.data.time.map((s) => s.value)).toEqual(['morning', 'golden_hour', 'night']);
+    expect(list.body.data.season.map((s) => s.label)).toEqual(['Winter', 'Rain']);
     expect(list.body.data.time.every((s) => s.variant === null)).toBe(true);
     expect(list.body.data.front_view_url).toBeNull();
 
-    const est = await auth(request(app).post(url(set, '/time/evening/estimate'))).send({});
+    const est = await auth(request(app).post(url(set, '/time/night/estimate'))).send({});
     expect(est.status).toBe(200);
     expect(est.body.data).toMatchObject({ source_image_url: 'https://x/everyday.jpg', estimate: { model: 'flux-kontext' } });
-    expect(est.body.data.prompt).toMatch(/^Evening/);
+    expect(est.body.data.prompt).toMatch(/^Night/);
 
     const season = await auth(request(app).post(url(set, '/season/winter/estimate'))).send({});
     expect(season.status).toBe(409);
@@ -145,19 +146,19 @@ const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
 
   it('upload stores her image, no cost, a season without a Front view included; remove empties the slot', async () => {
     const { loc, set } = await everyday();
-    const res = await auth(request(app).post(url(set, '/season/summer/upload'))).attach('image', PNG, { filename: 's.png', contentType: 'image/png' });
+    const res = await auth(request(app).post(url(set, '/season/rain/upload'))).attach('image', PNG, { filename: 's.png', contentType: 'image/png' });
     expect(res.status).toBe(200);
-    expect(res.body.data).toMatchObject({ kind: 'season', value: 'summer', status: 'complete', source: 'uploaded' });
-    expect(res.body.data.image_url).toMatch(new RegExp(`scene-sets/${set}/variants/season-summer-\\d+\\.png$`));
+    expect(res.body.data).toMatchObject({ kind: 'season', value: 'rain', status: 'complete', source: 'uploaded' });
+    expect(res.body.data.image_url).toMatch(new RegExp(`scene-sets/${set}/variants/season-rain-\\d+\\.png$`));
     expect(mockS3Send).toHaveBeenCalledTimes(1);
-    expect(Number((await variant(loc, 'season', 'summer')).cost_usd)).toBe(0);
+    expect(Number((await variant(loc, 'season', 'rain')).cost_usd)).toBe(0);
 
     const list = await auth(request(app).get(url(set)));
-    expect(list.body.data.season.find((s) => s.value === 'summer').variant).toMatchObject({ source: 'uploaded', status: 'complete' });
+    expect(list.body.data.season.find((s) => s.value === 'rain').variant).toMatchObject({ source: 'uploaded', status: 'complete' });
 
-    const del = await auth(request(app).delete(url(set, '/season/summer')));
+    const del = await auth(request(app).delete(url(set, '/season/rain')));
     expect(del.body.data).toEqual({ removed: true });
-    expect(await variant(loc, 'season', 'summer')).toBeUndefined();
+    expect(await variant(loc, 'season', 'rain')).toBeUndefined();
     expect((await auth(request(app).post(url(set, '/time/morning/upload')))).status).toBe(400);
   });
 
@@ -173,35 +174,35 @@ const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
   it('a failed re-run keeps the previous image in use, with the error; a stuck one too', async () => {
     const { loc, set } = await everyday();
     await run(`INSERT INTO location_look_variants (world_location_id, scene_set_id, kind, value, status, source, source_image_url, image_url, created_at, updated_at)
-               VALUES (:loc, :set, 'time', 'evening', 'complete', 'generated', 'https://x/everyday.jpg', 'https://x/evening.jpg', NOW(), NOW())`, { loc, set });
+               VALUES (:loc, :set, 'time', 'night', 'complete', 'generated', 'https://x/everyday.jpg', 'https://x/night.jpg', NOW(), NOW())`, { loc, set });
     jest.spyOn(sceneGen, 'generateDressedStill').mockRejectedValue(new Error('Kontext refused'));
     jest.spyOn(console, 'error').mockImplementation(() => {});
-    await auth(request(app).post(url(set, '/time/evening/generate'))).send({});
+    await auth(request(app).post(url(set, '/time/night/generate'))).send({});
     const end = Date.now() + 5000;
-    while ((await variant(loc, 'time', 'evening'))?.status === 'generating' && Date.now() < end) await new Promise((r) => setTimeout(r, 10));
-    expect(await variant(loc, 'time', 'evening')).toMatchObject({ status: 'complete', image_url: 'https://x/evening.jpg', error: 'Kontext refused' });
+    while ((await variant(loc, 'time', 'night'))?.status === 'generating' && Date.now() < end) await new Promise((r) => setTimeout(r, 10));
+    expect(await variant(loc, 'time', 'night')).toMatchObject({ status: 'complete', image_url: 'https://x/night.jpg', error: 'Kontext refused' });
 
     await run(`UPDATE location_look_variants SET status = 'generating', updated_at = NOW() - INTERVAL '11 minutes'
-                WHERE world_location_id = :loc AND kind = 'time' AND value = 'evening'`, { loc });
+                WHERE world_location_id = :loc AND kind = 'time' AND value = 'night'`, { loc });
     const list = await auth(request(app).get(url(set)));
-    expect(list.body.data.time.find((s) => s.value === 'evening').variant).toMatchObject({ status: 'complete', image_url: 'https://x/evening.jpg' });
+    expect(list.body.data.time.find((s) => s.value === 'night').variant).toMatchObject({ status: 'complete', image_url: 'https://x/night.jpg' });
   });
 
   it('a failed re-run keeps an uploaded variant uploaded, and a stale one stale', async () => {
     // Fourth audit (2026-10-15): the claim rewrote source and source image first.
     const { loc, set } = await everyday();
     await run(`INSERT INTO location_look_variants (world_location_id, scene_set_id, kind, value, status, source, image_url, created_at, updated_at)
-               VALUES (:loc, :set, 'time', 'afternoon', 'complete', 'uploaded', 'https://x/mine.jpg', NOW(), NOW())`, { loc, set });
+               VALUES (:loc, :set, 'time', 'morning', 'complete', 'uploaded', 'https://x/mine.jpg', NOW(), NOW())`, { loc, set });
     await run(`INSERT INTO location_look_variants (world_location_id, scene_set_id, kind, value, status, source, source_image_url, image_url, created_at, updated_at)
                VALUES (:loc, :set, 'time', 'golden_hour', 'complete', 'generated', 'https://x/older-everyday.jpg', 'https://x/gold.jpg', NOW(), NOW())`, { loc, set });
     jest.spyOn(sceneGen, 'generateDressedStill').mockRejectedValue(new Error('Kontext refused'));
     jest.spyOn(console, 'error').mockImplementation(() => {});
-    for (const value of ['afternoon', 'golden_hour']) {
+    for (const value of ['morning', 'golden_hour']) {
       await auth(request(app).post(url(set, `/time/${value}/generate`))).send({});
       const end = Date.now() + 5000;
       while ((await variant(loc, 'time', value))?.status === 'generating' && Date.now() < end) await new Promise((r) => setTimeout(r, 10));
     }
-    expect(await variant(loc, 'time', 'afternoon')).toMatchObject({ status: 'complete', source: 'uploaded', image_url: 'https://x/mine.jpg' });
+    expect(await variant(loc, 'time', 'morning')).toMatchObject({ status: 'complete', source: 'uploaded', image_url: 'https://x/mine.jpg' });
     expect(await variant(loc, 'time', 'golden_hour')).toMatchObject({ source_image_url: 'https://x/older-everyday.jpg' });
     const slot = (await auth(request(app).get(url(set)))).body.data.time.find((s) => s.value === 'golden_hour').variant;
     expect(slot.stale).toBe(true);
@@ -222,16 +223,16 @@ const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
     const { loc, set } = await everyday();
     let finish;
     jest.spyOn(sceneGen, 'generateDressedStill').mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
-    expect((await auth(request(app).post(url(set, '/time/evening/generate'))).send({})).status).toBe(202);
-    const again = await auth(request(app).post(url(set, '/time/evening/generate'))).send({});
+    expect((await auth(request(app).post(url(set, '/time/night/generate'))).send({})).status).toBe(202);
+    const again = await auth(request(app).post(url(set, '/time/night/generate'))).send({});
     expect(again.status).toBe(409);
     expect(again.body.code).toBe('VARIANT_GENERATING');
 
-    const up = await auth(request(app).post(url(set, '/time/evening/upload'))).attach('image', PNG, { filename: 'e.png', contentType: 'image/png' });
+    const up = await auth(request(app).post(url(set, '/time/night/upload'))).attach('image', PNG, { filename: 'e.png', contentType: 'image/png' });
     expect(up.status).toBe(200);
     finish({ stillUrl: 'https://x/late.jpg', cost: 0.04 });
     await new Promise((r) => setTimeout(r, 50));
-    expect(await variant(loc, 'time', 'evening')).toMatchObject({ status: 'complete', source: 'uploaded', image_url: up.body.data.image_url });
+    expect(await variant(loc, 'time', 'night')).toMatchObject({ status: 'complete', source: 'uploaded', image_url: up.body.data.image_url });
   });
 
   it('a new everyday look starts with none of the old one\'s variants', async () => {
@@ -244,6 +245,24 @@ const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
     const list = await auth(request(app).get(url(other)));
     expect(list.status).toBe(200);
     expect(list.body.data.time.every((s) => s.variant === null)).toBe(true);
+  });
+
+  // Evoni, 2026-10-17: Afternoon, Evening, Spring, Summer and Fall are no
+  // longer offered. A picture made before is hidden, not deleted, and not made.
+  it('an old Afternoon or Spring picture is kept but not listed, made or used', async () => {
+    const { loc, set } = await everyday();
+    await run(`INSERT INTO location_look_variants (id, world_location_id, scene_set_id, kind, value, status, source, image_url, created_at, updated_at)
+               VALUES (gen_random_uuid(), :loc, :set, 'time', 'afternoon', 'complete', 'uploaded', 'https://x/afternoon.jpg', NOW(), NOW()),
+                      (gen_random_uuid(), :loc, :set, 'season', 'spring', 'complete', 'uploaded', 'https://x/spring.jpg', NOW(), NOW())`, { loc, set });
+    const list = await auth(request(app).get(url(set)));
+    expect(list.body.data.time.map((s) => s.value)).not.toContain('afternoon');
+    expect(list.body.data.season.map((s) => s.value)).not.toContain('spring');
+    expect((await auth(request(app).post(url(set, '/time/afternoon/estimate'))).send({})).status).toBe(400);
+    expect((await variant(loc, 'time', 'afternoon')).image_url).toBe('https://x/afternoon.jpg');
+    const { variantsForSets } = require('../../src/services/lookVariantPicking');
+    const picked = (await variantsForSets(sequelize, [set])).get(set);
+    expect(picked?.time.has('afternoon') || false).toBe(false);
+    expect(picked?.season.has('spring') || false).toBe(false);
   });
 
   it('a refused file answers 400 with its reason', async () => {

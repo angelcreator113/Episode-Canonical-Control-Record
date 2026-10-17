@@ -17,7 +17,9 @@ import { LooksRow } from './SceneSetsTab';
 const renderRow = (set, props = {}) => render(<MemoryRouter><LooksRow set={set} {...props} /></MemoryRouter>);
 
 describe('SceneSetsTab Looks row (L9)', () => {
-  test('the approved base first, then one card per event, each linking to its event', () => {
+  // 2026-10-17: the everyday look sits above with its angles; looks whose
+  // events are not held here any more show under "Other looks made here".
+  test('a look whose event is not held here shows under Other looks, linking to its event', () => {
     renderRow({
       id: 'set-1', base_approved: true, base_still_url: 'https://x/base.jpg',
       looks: [
@@ -27,7 +29,8 @@ describe('SceneSetsTab Looks row (L9)', () => {
     });
     const row = screen.getByTestId('scene-set-looks-set-1');
     const figures = within(row).getAllByRole('figure');
-    expect(figures.map((f) => f.textContent)).toEqual(['Everyday look', 'Velour Gala', 'Generating…Garden Brunch']);
+    expect(figures.map((f) => f.textContent)).toEqual(['Velour Gala', 'Generating…Garden Brunch']);
+    expect(within(row).getByText('Other looks made here')).toBeTruthy();
     expect(within(row).getByText('Velour Gala').getAttribute('href')).toBe('/shows/show-1/events/ev-1');
     expect(screen.getByTestId('scene-set-look-l1').querySelector('img').getAttribute('src')).toBe('https://x/l1.jpg');
   });
@@ -36,6 +39,26 @@ describe('SceneSetsTab Looks row (L9)', () => {
     renderRow({ id: 'set-2', base_approved: false, looks: [{ id: 'l3', event_id: 'ev-3', event_show_id: 'show-1', event_name: 'Mixer', status: 'failed' }] });
     expect(screen.queryByTestId('scene-set-look-base-set-2')).toBeNull();
     expect(screen.getByTestId('scene-set-look-l3').textContent).toBe('FailedMixer');
+  });
+
+  // Evoni, 2026-10-17: an event whose photos are their own set is held here
+  // too, its card naming that set; an event card here can take another set.
+  test('an event using its own set of photos shows under Events held here, with that set', () => {
+    vi.mocked(api.get).mockResolvedValue({ data: {} });
+    renderRow({
+      id: 'set-8', show_id: 'show-1', base_approved: true, looks: [], events: [],
+      event_versions: [{ id: 'set-9', name: 'Studio, gala night', event: { id: 'ev-7', name: 'Wearable Experiments', show_id: 'show-1' } }],
+    });
+    const card = screen.getByTestId('scene-set-event-ev-7');
+    expect(within(card).getByText('Wearable Experiments').getAttribute('href')).toBe('/shows/show-1/events/ev-7');
+    expect(within(card).getByTestId('event-photos-open-set-9').textContent).toBe('Studio, gala night');
+    expect(within(card).getByTestId('event-photos-stop-set-9')).toBeTruthy();
+  });
+
+  test('an event held here can use photos from another set', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: {} });
+    renderRow({ id: 'set-8', show_id: 'show-1', looks: [], events: [{ id: 'ev-8', name: 'Brunch', show_id: 'show-1', look: null }] });
+    expect(await within(screen.getByTestId('scene-set-event-ev-8')).findByTestId('event-photos-use-ev-8')).toBeTruthy();
   });
 
   test('a look made from an old everyday look says the episode does not use it', () => {

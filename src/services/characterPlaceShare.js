@@ -67,10 +67,15 @@ async function placesForCharacter(sequelize, characterId) {
   const mine = characters.find((c) => String(c.id) === String(characterId));
   const places = mine?.places || [];
   const pictures = await setPictures(sequelize, places.map((p) => p.scene_set_id));
+  // The venue's own photo (2026-10-17), from each set's World Location.
+  const venuePhotos = await require('./venuePhotoService').venuePhotosFor(sequelize, [...pictures.values()].map((p) => p.world_location_id));
   return {
     show_id: character.show_id,
     is_lead: !!mine?.is_lead,
-    places: places.map((p) => ({ ...p, ...(pictures.get(String(p.scene_set_id)) || { image_url: null, everyday: false, world_location_id: null }) })),
+    places: places.map((p) => {
+      const picture = pictures.get(String(p.scene_set_id)) || { image_url: null, everyday: false, world_location_id: null };
+      return { ...p, ...picture, venue_photo_url: (picture.world_location_id && venuePhotos.get(String(picture.world_location_id))) || null };
+    }),
   };
 }
 
