@@ -611,6 +611,8 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
         // The show's rules fixed after writing (utils/scriptShowRules.js).
         voice_clicks: written.coverage?.voice_clicks || 0,
         reveal_fixed: !!written.coverage?.reveal_fixed,
+        // Story layers with nothing to draw on (utils/storyLayers.js).
+        story_gaps: written.coverage?.story_gaps || [],
       };
     }
     if (!saved) {
