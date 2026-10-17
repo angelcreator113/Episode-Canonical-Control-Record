@@ -38,6 +38,7 @@ const { RegistryCharacter, CharacterRegistry } = db;
 const anthropic = new Anthropic();
 const FAST_MODEL = 'claude-haiku-4-5-20251001';
 const DEEP_MODEL = 'claude-sonnet-4-6';
+const { depthView, depthUpdates } = require('../services/characterDepthFields');
 
 // ── All depth engine field names (de_ prefix) ──
 const DE_FIELDS = [
@@ -244,13 +245,8 @@ router.get('/:charId', requireAuth, async (req, res) => {
       return res.status(404).json({ success: false, error: 'Character not found' });
     }
 
-    const json = character.toJSON();
-
-    // Extract only de_ fields
-    const depth = {};
-    for (const field of DE_FIELDS) {
-      depth[field] = json[field] ?? null;
-    }
+    // The de_ fields; the merged ones read from their homes (services/characterDepthFields).
+    const depth = depthView(character.toJSON(), DE_FIELDS);
 
     // Author-only fields are stripped for non-admins by hideAuthorOnlyFieldsFromNonAdmins
     return res.json({
@@ -297,13 +293,10 @@ router.put('/:charId', requireAuth, async (req, res) => {
       return res.status(400).json({ success: false, error: 'No valid depth fields provided' });
     }
 
-    await character.update(updates);
+    // The merged fields are saved in their homes (services/characterDepthFields).
+    await character.update(depthUpdates(character.toJSON(), updates));
 
-    const json = character.toJSON();
-    const depth = {};
-    for (const field of DE_FIELDS) {
-      depth[field] = json[field] ?? null;
-    }
+    const depth = depthView(character.toJSON(), DE_FIELDS);
 
     return res.json({
       success: true,
@@ -445,13 +438,10 @@ router.post('/:charId/confirm', requireAuth, async (req, res) => {
       return res.status(400).json({ success: false, error: 'No valid depth fields in proposed object' });
     }
 
-    await character.update(updates);
+    // The merged fields are saved in their homes (services/characterDepthFields).
+    await character.update(depthUpdates(character.toJSON(), updates));
 
-    const json = character.toJSON();
-    const depth = {};
-    for (const field of DE_FIELDS) {
-      depth[field] = json[field] ?? null;
-    }
+    const depth = depthView(character.toJSON(), DE_FIELDS);
 
     return res.json({
       success: true,

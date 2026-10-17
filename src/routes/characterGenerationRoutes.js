@@ -38,6 +38,7 @@ const { PULSE, isPulseLayer } = require('../utils/pulsePlatform');
 const { fitRecordToModel, warnTruncated, logValueTooLong } = require('../utils/fitToModel');
 const { findHandleHolder, handleTakenBody } = require('../utils/socialProfileHandle');
 const { assignSocietyArchetype } = require('../services/societyArchetypes');
+const { withTwinsHome } = require('../services/characterDepthFields');
 
 router.use(requireAuth);
 // Every response from this router: author-only character fields for the admin group only
@@ -146,9 +147,11 @@ router.post('/confirm', async (req, res) => {
         }
 
         // Auto-calculate depth level from the proposed data
-        const depth_level = calculateDepthLevel({ ...character.toJSON(), ...proposed });
+        // The Depth Engine's twins are saved in their homes (services/characterDepthFields).
+        const fields = withTwinsHome(character.toJSON(), proposed);
+        const depth_level = calculateDepthLevel({ ...character.toJSON(), ...fields });
 
-        await character.update({ ...proposed, depth_level }, { transaction });
+        await character.update({ ...fields, depth_level }, { transaction });
         return { character, depth_level, wasAlive };
       });
       if (!result) return res.status(404).json({ error: 'Character not found' });
@@ -170,10 +173,11 @@ router.post('/confirm', async (req, res) => {
     const registry = await CharacterRegistry.findByPk(registry_id);
     if (!registry) return res.status(404).json({ error: 'Registry not found' });
 
-    const depth_level = calculateDepthLevel(proposed);
+    const fields = withTwinsHome({}, proposed);
+    const depth_level = calculateDepthLevel(fields);
 
     const character = await RegistryCharacter.create({
-      ...proposed,
+      ...fields,
       registry_id,
       depth_level,
       status: 'accepted',  // keep status field populated for backwards compat
