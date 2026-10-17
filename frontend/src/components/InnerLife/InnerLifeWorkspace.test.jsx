@@ -49,7 +49,7 @@ describe('the workspace', () => {
     renderIt();
     const nav = screen.getByRole('navigation', { name: 'Inner life sections' });
     expect(within(nav).getAllByRole('button').map((b) => b.textContent)).toEqual([
-      'Core psychology2/5', 'Emotional architecture2/4', 'Personal history0/4', 'Beliefs & behaviours0/2', 'Deep profile2/14', 'Where it goes',
+      'Core psychology2/5', 'Emotional architecture2/4', 'Personal history0/4', 'Beliefs & behaviours0/2', 'Deep profile2/14', 'Secrets', 'Where it goes',
     ]);
     expect(screen.getByTestId('type-card')).toBeTruthy();
     const wants = screen.getByTestId('il-subject-wants');

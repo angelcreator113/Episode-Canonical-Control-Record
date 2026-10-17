@@ -69,3 +69,44 @@ describe('storyBrief', () => {
     expect(storyBrief(row).text).toContain('- Who they are underneath: Underneath');
   });
 });
+
+// Stage B: the revelation budget. Each kept secret with who knows it and what
+// this layer may do with it; the ones a layer may reveal are cleared.
+describe('storyBrief with secrets', () => {
+  const RING = {
+    text: 'She sold her mother’s ring to pay for the launch', status: 'confirmed', state: 'hinted', where: 'episode 3',
+    permissions: { episode: 'hint', short_story: 'hint', chapter: 'reveal' }, known_by_people: [{ id: 'a', name: 'Mo' }],
+  };
+  const DEBT = { text: 'She owes the studio three months', status: 'confirmed', state: 'hidden', permissions: { episode: 'hidden' }, known_by_people: [] };
+  const SEEN = { text: 'She was fired once', status: 'confirmed', state: 'revealed', where: 'the finale', permissions: {}, known_by_people: [] };
+
+  test('each secret with its rule for the layer and who knows it', () => {
+    const { text } = storyBrief(MAREN, { layer: 'episode', secrets: [RING, DEBT] });
+    expect(text).toMatch(/^SECRETS \(only the people who know one/m);
+    expect(text).toContain('- She sold her mother’s ring to pay for the launch [HINT ONLY: show it in what they do; nobody explains it. Known to: Mo. Already hinted (episode 3).]');
+    expect(text).toContain('- She owes the studio three months [KEEP HIDDEN: nothing on the page points at it. No one else knows.]');
+    expect(text).toContain('CLEARED TO REVEAL: nothing yet. Keep every private truth as subtext.');
+  });
+
+  test('a layer that may reveal one clears it; a scene uses the chapter’s', () => {
+    for (const layer of ['chapter', 'scene']) {
+      const { lines } = storyBrief(MAREN, { layer, secrets: [RING] });
+      expect(lines.join('\n')).toContain('MAY BE REVEALED in this story');
+      const at = lines.findIndex((l) => l.startsWith('CLEARED TO REVEAL in this story'));
+      expect(at).toBeGreaterThan(0);
+      expect(lines[at + 1]).toBe('- She sold her mother’s ring to pay for the launch');
+    }
+    expect(storyBrief(MAREN, { layer: 'short_story', secrets: [RING] }).text).not.toContain('CLEARED TO REVEAL in this story');
+  });
+
+  test('revealed ones are what the audience knows; candidates and retired ones are left out', () => {
+    const { text } = storyBrief(MAREN, { secrets: [SEEN, { ...DEBT, status: 'candidate' }, { ...RING, status: 'retired' }] });
+    expect(text).toContain('ALREADY REVEALED (the audience knows these; characters who were not told still do not):\n- She was fired once (revealed the finale). No one else knows.');
+    expect(text).not.toContain('three months');
+    expect(text).not.toContain('ring');
+  });
+
+  test('a permission not set is hint only', () => {
+    expect(storyBrief(MAREN, { layer: 'chapter', secrets: [{ ...DEBT, permissions: {} }] }).text).toContain('[HINT ONLY');
+  });
+});

@@ -725,6 +725,11 @@ ${narrativeLines.short || ''}`,
     });
   }
 
+  // ── 17d. Draft the Episode Story Record (stage C) ──
+  // An AI call: not awaited; it drafts only when the episode has no record
+  // yet, and nothing counts until Evoni approves it.
+  require('./episodeStoryRecord').draftLater(sequelize, episodeId);
+
   // ── 18. Complete the linked opportunity (Task #1817) ──
   // Runs once per completion: the already-accepted early return above skips
   // it on repeat calls. Opportunity only — no goal cascade (step 17 above is
