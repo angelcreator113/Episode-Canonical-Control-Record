@@ -1,0 +1,98 @@
+/* EpisodeRawFootageTab — Assets → Files: raw clips in three lanes, Lala
+   (pink), JustAWoman (lavender), Guest (gold) (Evoni, 2026-10-17). Tokens
+   only (EpisodeRawFootageTab.theme.test.js): no hex, no rgb. */
+
+.erf { display: flex; flex-direction: column; gap: 14px; padding: 4px 0 24px; }
+.erf *, .erf *::before, .erf *::after { box-sizing: border-box; }
+.erf button:focus-visible, .erf select:focus-visible, .erf input:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 2px; }
+
+.erf-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.erf .erf-title { margin: 0; font-family: var(--font-prose); font-size: 26px; font-weight: 600; color: var(--text-primary); }
+.erf-sub { margin: 4px 0 0; max-width: 720px; font-size: 14px; line-height: 1.5; color: var(--text-secondary); }
+.erf-total { padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 700; background: var(--lala-gold-soft); color: var(--lala-gold-text); border: 1px solid var(--lala-gold-line); }
+
+.erf-alert { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--danger-border); background: var(--danger-bg); color: var(--danger-text); font-size: 14px; }
+.erf-note { margin: 0; padding: 14px 4px; font-size: 13px; color: var(--text-secondary); }
+
+.erf-lanes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: start; }
+
+/* A lane */
+.erf-lane { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 14px; border-radius: 18px; border: 1.5px solid var(--accent-light); background: var(--surface-card); box-shadow: var(--shadow-sm); }
+.erf-lane.is-justawoman { border-color: var(--lala-lavender-line); }
+.erf-lane.is-guest { border-color: var(--lala-gold-line); }
+.erf-lane-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-radius: 12px; background: var(--accent-subtle); color: var(--accent-dark); }
+.erf-lane.is-justawoman .erf-lane-head { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.erf-lane.is-guest .erf-lane-head { background: var(--lala-gold-soft); color: var(--lala-gold-text); }
+.erf .erf-lane-title { margin: 0; font-family: var(--font-prose); font-size: 19px; font-weight: 600; color: inherit; }
+.erf-lane-count { font-size: 12px; font-weight: 700; white-space: nowrap; }
+
+/* Drop zone */
+.erf-drop { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 12px; border-radius: 14px; border: 1.5px dashed var(--accent-light); background: var(--surface-card); color: var(--accent-dark); text-align: center; transition: background 0.15s; }
+.erf-lane.is-justawoman .erf-drop { border-color: var(--lala-lavender-light); color: var(--lala-lavender-text); }
+.erf-lane.is-guest .erf-drop { border-color: var(--lala-gold-line); color: var(--lala-gold-text); }
+.erf-drop.is-over { background: var(--accent-subtle); color: var(--accent-dark); }
+.erf-drop-text { margin: 0; font-size: 14px; font-weight: 600; }
+.erf-guest-input { width: 100%; min-height: 38px; padding: 6px 12px; border-radius: 10px; border: 1px solid var(--lala-gold-line); background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 14px; }
+.erf-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-primary); text-align: left; cursor: pointer; }
+.erf-check input { width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--accent-dark); }
+
+/* Buttons */
+.erf-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--accent-light); background: var(--surface-card); color: var(--accent-dark); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.erf-btn.is-primary { border-color: var(--accent-dark); background: var(--accent-dark); color: var(--text-inverse); }
+.erf-btn:disabled, .erf-icon-btn:disabled, .erf select:disabled { opacity: 0.55; cursor: not-allowed; }
+.erf-icon-btn { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--text-secondary); cursor: pointer; }
+.erf-icon-btn.is-danger { color: var(--danger-text); border-color: var(--danger-border); }
+
+/* Uploads in flight */
+.erf-uploads { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.erf-uploads li { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border-radius: 10px; background: var(--lala-parchment-2); color: var(--text-primary); }
+.erf-upload-name { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.erf-bar { display: block; height: 6px; border-radius: 3px; background: var(--lala-parchment-3); overflow: hidden; }
+.erf-bar span { display: block; height: 100%; border-radius: 3px; background: var(--accent-dark); transition: width 0.2s; }
+
+/* Clips */
+.erf-clips { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.erf-clip { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 10px; padding: 8px; border-radius: 14px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); }
+.erf-thumb { position: relative; display: grid; place-items: center; width: 112px; aspect-ratio: 9 / 12; padding: 0; overflow: hidden; border: none; border-radius: 10px; background: var(--lala-parchment-2); color: var(--text-secondary); cursor: pointer; }
+.erf-thumb img { width: 100%; height: 100%; object-fit: contain; }
+.erf-play { position: absolute; left: 6px; bottom: 6px; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--accent-dark); color: var(--text-inverse); }
+.erf-len { position: absolute; right: 6px; bottom: 6px; padding: 1px 6px; border-radius: 6px; font-size: 11px; font-weight: 700; background: var(--lala-ink); color: var(--text-inverse); }
+.erf-clip-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.erf-clip-name { margin: 0; font-size: 14px; font-weight: 700; color: var(--text-primary); overflow-wrap: anywhere; }
+.erf-guest { display: inline-flex; align-items: center; gap: 4px; margin: 0; font-size: 12px; font-weight: 600; color: var(--lala-gold-text); }
+.erf-meta { margin: 0; font-size: 12px; color: var(--text-secondary); }
+.erf-status { display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.erf-status.is-plain { background: var(--lala-parchment-2); color: var(--text-secondary); }
+.erf-status.is-wait { background: var(--warning-bg); color: var(--warning-text); }
+.erf-status.is-done { background: var(--success-bg); color: var(--success-text); }
+.erf-status.is-failed { background: var(--danger-bg); color: var(--danger-text); }
+.erf-error { margin: 0; font-size: 12px; color: var(--danger-text); overflow-wrap: anywhere; }
+.erf-spin { animation: erf-spin 1s linear infinite; }
+@keyframes erf-spin { to { transform: rotate(360deg); } }
+.erf-clip-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+.erf-green { display: inline-flex; align-items: center; gap: 6px; }
+.erf select { min-height: 36px; padding: 4px 8px; border-radius: 10px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 13px; }
+
+/* Player */
+.erf-modal { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px; background: color-mix(in srgb, var(--lala-ink) 72%, transparent); }
+.erf-modal-card { display: flex; flex-direction: column; gap: 10px; width: min(960px, 100%); max-height: calc(100vh - 32px); padding: 14px; border-radius: 18px; border: 1.5px solid var(--lala-gold-line); background: var(--surface-card); color: var(--text-primary); }
+.erf-modal-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.erf .erf-modal-title { margin: 0; font-size: 16px; font-weight: 700; color: var(--text-primary); overflow-wrap: anywhere; }
+.erf-toggle { display: inline-flex; align-self: flex-start; gap: 4px; padding: 3px; border-radius: 999px; border: 1px solid var(--accent-light); background: var(--surface-card); }
+.erf-toggle button { min-height: 32px; padding: 4px 14px; border: none; border-radius: 999px; background: var(--surface-card); color: var(--accent-dark); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.erf-toggle button.is-on { background: var(--accent-dark); color: var(--text-inverse); }
+.erf-player { display: grid; place-items: center; min-height: 200px; overflow: hidden; border-radius: 12px; background-color: var(--lala-ink); }
+.erf-player.is-checker {
+  background-color: var(--surface-card);
+  background-image: conic-gradient(var(--lala-parchment-3) 25%, var(--surface-card) 0 50%, var(--lala-parchment-3) 0 75%, var(--surface-card) 0);
+  background-size: 24px 24px;
+}
+.erf-player video { display: block; width: 100%; max-height: calc(100vh - 180px); }
+
+@media (max-width: 1100px) {
+  .erf-lanes { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 480px) {
+  .erf-clip { grid-template-columns: 88px minmax(0, 1fr); }
+  .erf-thumb { width: 88px; }
+}

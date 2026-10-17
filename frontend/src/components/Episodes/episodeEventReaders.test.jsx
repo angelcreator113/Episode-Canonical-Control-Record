@@ -1,7 +1,7 @@
 /**
  * The episode tabs find their event through GET /api/v1/episodes/:id/events
  * (Task #1906), never by scanning the show's whole event list for
- * used_in_episode_id. Covers the Production Checklist and Assets tab; the
+ * used_in_episode_id. Covers the Production Checklist; the
  * Wardrobe tab is covered in pages/EpisodeDetail.wardrobe.test.jsx.
  */
 
@@ -24,7 +24,6 @@ vi.mock('../../services/api', () => ({
 
 import api from '../../services/api';
 import EpisodeProductionChecklist from './EpisodeProductionChecklist';
-import EpisodeAssetsTab from './EpisodeAssetsTab';
 
 const EPISODE = { id: 'ep-1', show_id: 'show-1', title: 'Episode One' };
 
@@ -41,12 +40,6 @@ beforeEach(() => {
 describe('episode event readers (Task #1906)', () => {
   test('Production Checklist reads the episode\'s event from /episodes/:id/events', async () => {
     render(<MemoryRouter><EpisodeProductionChecklist episode={EPISODE} showId="show-1" /></MemoryRouter>);
-    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/v1/episodes/ep-1/events'));
-    expect(api.get).not.toHaveBeenCalledWith('/api/v1/world/show-1/events');
-  });
-
-  test('Assets tab reads the episode\'s event from /episodes/:id/events', async () => {
-    render(<MemoryRouter><EpisodeAssetsTab episode={EPISODE} show={{ id: 'show-1' }} /></MemoryRouter>);
     await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/v1/episodes/ep-1/events'));
     expect(api.get).not.toHaveBeenCalledWith('/api/v1/world/show-1/events');
   });

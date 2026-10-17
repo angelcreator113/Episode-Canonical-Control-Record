@@ -18,7 +18,8 @@ import SceneLibraryPicker from '../components/SceneLibraryPicker';
 // Lazy-loaded tab bodies — each becomes its own JS chunk that's only
 // fetched when the user clicks into the tab. PhonePreviewMode is lazy
 // because the player overlay only mounts when "Preview Phone" is clicked.
-const EpisodeAssetsTab = lazy(() => import('../components/Episodes/EpisodeAssetsTab'));
+const EpisodeRawFootageTab = lazy(() => import('../components/Episodes/EpisodeRawFootageTab'));
+const EpisodeTodoList = lazy(() => import('../components/Episodes/EpisodeTodoList'));
 const EpisodeLalasPhoneTab = lazy(() => import('../components/Episodes/EpisodeLalasPhoneTab'));
 const EpisodeStylePage = lazy(() => import('../components/Episodes/EpisodeStylePage'));
 const EpisodeScriptTab = lazy(() => import('../components/Episodes/EpisodeScriptTab'));
@@ -921,28 +922,9 @@ const EpisodeDetail = () => {
           />
         )}
 
-        {/* Assets Tab */}
+        {/* Files: the episode's raw video clips, by who is on camera (Evoni, 2026-10-17) */}
         {tabKey === 'assets.files' && (
-          episode.show ? (
-            <EpisodeAssetsTab episode={episode} show={episode.show} />
-          ) : (
-            <div className="ed-card">
-              <div className="ed-cardhead">
-                <h2 className="ed-cardtitle">🎨 Episode Assets</h2>
-              </div>
-              <div className="ed-cardbody">
-                <div style={{ textAlign: 'center', padding: '3rem' }}>
-                  <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📁</div>
-                  <p style={{ color: 'var(--text-secondary)' }}>
-                    This episode needs to be linked to a show to use the asset system.
-                  </p>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '1rem' }}>
-                    Please edit the episode and select a show.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )
+          <EpisodeRawFootageTab episode={episode} />
         )}
 
         {/* Scenes Tab */}
@@ -1069,11 +1051,19 @@ const EpisodeDetail = () => {
 
         {/* Overlays Tab — P15: every on-screen piece of the episode */}
         {tabKey === 'assets.overlays' && (
-          <EpisodeOverlaysTab
-            episode={episode}
-            showId={episode?.show_id || episode?.showId}
-            onChanged={bumpOverlays}
-          />
+          <>
+            <EpisodeOverlaysTab
+              episode={episode}
+              showId={episode?.show_id || episode?.showId}
+              onChanged={bumpOverlays}
+            />
+            {/* The on-screen to-do lists (moved from the old Files tab, 2026-10-17) */}
+            {(episode?.show_id || episode?.showId) && (
+              <section className="ed-todo-lists" aria-label="On-screen to-do lists">
+                <EpisodeTodoList episodeId={episode.id} showId={episode.show_id || episode.showId} />
+              </section>
+            )}
+          </>
         )}
 
         {/* Checklist Tab */}

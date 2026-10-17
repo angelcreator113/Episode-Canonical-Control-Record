@@ -3453,3 +3453,6 @@
 .ed-page .ed-status-select.ed-status-scheduled select { background: var(--success-bg); color: var(--success-text); }
 .ed-page .ed-status-select.ed-status-archived select { background: var(--lala-parchment-2); color: var(--text-primary); }
 .ed-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* Assets → Overlays: the on-screen to-do lists below the overlays (2026-10-17). */
+.ed-todo-lists { margin-top: 18px; }

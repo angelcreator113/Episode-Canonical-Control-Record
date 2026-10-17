@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 import SocialTaskBadge from '../SocialTaskBadge';
 import { isSocialTaskRequired } from '../../utils/socialTaskSource';
+import './EpisodeTodoList.css';
 
 // The wardrobe list wears the gold accent, the career list the lavender
 // (the Assets redesign, 2026-10-08): borders, check squares and the
 // progress fill take the list's colour; actions are always the lavender.
-// Styles in EpisodeAssetsTab.css (.etl-*).
+// Styles in EpisodeTodoList.css (.etl-*).
 
 /**
  * EpisodeTodoList
