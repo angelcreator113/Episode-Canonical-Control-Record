@@ -56,6 +56,21 @@ describe('Their facts', () => {
     expect(onFeedSaved).toHaveBeenCalledWith(expect.objectContaining({ follower_count_approx: '2.5M' }));
   });
 
+  test('the home price range is shown, and chosen in the form (2026-10-17)', async () => {
+    api.get.mockResolvedValue({ data: { facts: { ...FACTS, home_price_range: { key: 'modest', label: 'Modest ($1,500 to $3,000 a month)' } } } });
+    api.put.mockResolvedValue({ data: { facts: { ...FACTS, home_price_range: { key: 'luxury', label: 'Luxury ($15,000 to $50,000 a month)' } } } });
+    renderCard();
+    expect(await screen.findByText('Modest ($1,500 to $3,000 a month)')).toBeTruthy();
+    fireEvent.click(screen.getByText('Edit facts'));
+    const select = screen.getByTestId('ch-facts-home-price');
+    expect(select.value).toBe('modest');
+    fireEvent.change(select, { target: { value: 'luxury' } });
+    fireEvent.click(screen.getByText('Save facts'));
+    await screen.findByText('Saved.');
+    expect(api.put.mock.calls[0][1].home_price_range).toBe('luxury');
+    expect(screen.getByText('Luxury ($15,000 to $50,000 a month)')).toBeTruthy();
+  });
+
   test('a refused save says why', async () => {
     api.get.mockResolvedValue({ data: { facts: FACTS } });
     api.put.mockRejectedValue(Object.assign(new Error('x'), { response: { data: { error: 'A handle is one @ then letters' } } }));

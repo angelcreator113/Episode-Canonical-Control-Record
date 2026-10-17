@@ -50,6 +50,10 @@
  *   POST   /api/v1/cast/characters/:id/places/share { scene_set_id, caption? }: a draft
  *                                                  Pulse post of that place from their
  *                                                  feed profile (services/characterPlaceShare)
+ *   POST   /api/v1/cast/characters/:id/places/describe { scene_set_id }: one AI
+ *                                                  call that writes the place's description
+ *                                                  from their profile; saves nothing
+ *                                                  (services/placeDescriptionService)
  *
  * Archived is the registry's soft delete (registry_characters.deleted_at).
  *
@@ -632,6 +636,21 @@ router.post('/characters/:id/places/share', requireAuth, async (req, res) => {
     return res.status(201).json({ success: true, post });
   } catch (err) {
     return placeError(res, err, 'POST characters/:id/places/share');
+  }
+});
+
+// A place's description written from their profile (Evoni, 2026-10-17):
+// nothing is saved; placeDescriptionService holds what it reads.
+router.post('/characters/:id/places/describe', requireAuth, aiRateLimiter, async (req, res) => {
+  const { describePlace, PlaceDescriptionError } = require('../services/placeDescriptionService');
+  try {
+    const data = await describePlace(getModels(), { characterId: req.params.id, sceneSetId: req.body?.scene_set_id });
+    return res.json({ success: true, data });
+  } catch (err) {
+    if (err instanceof PlaceDescriptionError) return res.status(err.status).json({ success: false, code: err.code, error: err.message });
+    console.error('[cast] POST characters/:id/places/describe error:', err);
+    if (err?.code === 'AI_BUDGET_EXCEEDED') return res.status(429).json({ success: false, code: err.code, error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
