@@ -35,7 +35,13 @@ export default function ContentTypeBatch({ unset, archetypes, onApplied }) {
   const change = (i, patch) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
 
   const apply = async () => {
-    const items = rows.filter((r) => r.keep && r.choice).map((r) => ({ profile_id: r.profile_id, name: r.choice }));
+    // The job-vs-content line goes with it, kept on their character as a
+    // story hook, while the suggested type is kept (a changed type's line
+    // was about another type).
+    const items = rows.filter((r) => r.keep && r.choice).map((r) => ({
+      profile_id: r.profile_id, name: r.choice,
+      ...(r.tension && r.choice === r.name && r.character_id ? { character_id: r.character_id, gap: r.tension } : {}),
+    }));
     if (!items.length) { setNote({ kind: 'error', text: 'Tick at least one to save.' }); return; }
     setBusy('apply');
     setNote(null);
