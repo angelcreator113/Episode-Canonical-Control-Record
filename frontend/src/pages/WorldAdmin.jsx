@@ -20,6 +20,7 @@ import { getEpisodeAnchorEvent } from '../services/episodeEventsApi';
 import showService from '../services/showService';
 import { rememberShow } from '../utils/activeShow';
 import ShowEpisodesBoard from '../components/Show/ShowEpisodesBoard';
+import SeasonProposals from '../components/Show/SeasonProposals';
 import ShowOverview, { episodesInProduction, eventsNeedingAttention } from '../components/Show/ShowOverview';
 import { useLookDraft, LookBuilderPanel, RecentlyWorn } from '../components/Show/LookBuilder';
 import { LalaStatsCard, DecisionLogCard, StoryThreadsStrip, CastRow } from '../components/Show/CastContinuity';
@@ -7836,6 +7837,9 @@ function SeasonTab({ showId, api, S, episodes, events = [], setToast }) {
           </div>
         </div>
       </div>
+
+      {/* What the feed proposes for the season (2026-10-17); nothing changes until she accepts. */}
+      <SeasonProposals showId={showId} api={api} onApplied={loadArc} />
 
       {/* Roadmap — the season's 24 slots */}
       <SeasonRoadmap roadmap={roadmap} S={S} api={api} showId={showId} onChanged={loadRoadmap} setToast={setToast} onAdvance={handleAdvance} advancing={advancing}
