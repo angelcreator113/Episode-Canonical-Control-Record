@@ -64,6 +64,10 @@ vi.mock('../components/Episodes/EpisodeTodoList', () => ({
   default: () => <div data-testid="episode-todo-overlays">Episode to-do overlays</div>,
 }));
 
+vi.mock('../components/Episodes/EpisodeSceneWorkspace', () => ({
+  default: () => <div data-testid="episode-scenes">Scene workspace body</div>,
+}));
+
 vi.mock('../components/Episodes/EpisodeRawFootageTab', () => ({
   default: () => <div data-testid="episode-assets">Assets body</div>,
 }));
@@ -142,7 +146,7 @@ describe('EpisodeDetail: the tab is the URL (LINK-04)', () => {
     fireEvent.click(screen.getByTestId('back'));
     expect(where()).toBe('/episodes/ep-1?tab=money');
     await waitFor(() => expect(moneyBody()).toBeTruthy());
-    expect(activeMain()).toBe('Assets');
+    expect(activeMain()).toBe('Production');
     expect(screen.queryByTestId('episode-overview')).toBeNull();
 
     fireEvent.click(screen.getByTestId('forward'));
@@ -156,27 +160,32 @@ describe('EpisodeDetail: the tab is the URL (LINK-04)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Money' }));
     expect(where()).toBe('/episodes/ep-1?tab=money&from=%2Fshows%2Fshow-1%2Fworld');
     await waitFor(() => expect(moneyBody()).toBeTruthy());
+    fireEvent.click(screen.getByTitle('Overview'));
     fireEvent.click(screen.getByTitle('Production'));
     expect(where()).toBe('/episodes/ep-1?tab=production&from=%2Fshows%2Fshow-1%2Fworld');
-    expect(await screen.findByTestId('episode-checklist')).toBeTruthy();
+    expect(await screen.findByTestId('episode-scenes')).toBeTruthy();
   });
 
-  test('Ctrl+2 opens Assets → Wardrobe, in the URL; no ?tab= is the checklist; an unknown tab has a body', async () => {
+  // Evoni, 2026-10-17: the page opens on Production → Scenes.
+  test('Ctrl+2 opens Production → Wardrobe, in the URL; no ?tab= is Scenes; an unknown tab has a body', async () => {
     renderAt('/episodes/ep-1');
-    expect(await screen.findByTestId('episode-checklist')).toBeTruthy();
+    expect(await screen.findByTestId('episode-scenes')).toBeTruthy();
     fireEvent.keyDown(window, { key: '2', ctrlKey: true });
     expect(where()).toBe('/episodes/ep-1?tab=wardrobe');
-    await waitFor(() => expect(activeMain()).toBe('Assets'));
-    // The Wardrobe body loads a lazy panel (the style sheet, Task #2814);
-    // the checklist stays on screen until it arrives.
-    await waitFor(() => expect(screen.queryByTestId('episode-checklist')).toBeNull());
+    await waitFor(() => expect(activeMain()).toBe('Production'));
+    await waitFor(() => expect(screen.queryByTestId('episode-scenes')).toBeNull());
 
     fireEvent.click(screen.getByTestId('back'));
-    expect(await screen.findByTestId('episode-checklist')).toBeTruthy();
+    expect(await screen.findByTestId('episode-scenes')).toBeTruthy();
   });
 
-  test('?tab=nope lands on the checklist, not on an empty page', async () => {
+  test('?tab=nope lands on Scenes, not on an empty page', async () => {
     renderAt('/episodes/ep-1?tab=nope');
+    expect(await screen.findByTestId('episode-scenes')).toBeTruthy();
+  });
+
+  test('?tab=checklist still opens the checklist', async () => {
+    renderAt('/episodes/ep-1?tab=checklist');
     expect(await screen.findByTestId('episode-checklist')).toBeTruthy();
   });
 });

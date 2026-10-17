@@ -1,8 +1,8 @@
 /**
  * The Episode page's header and tabs (Evoni's Episode mock, 2026-10-05):
  * lucide icons, the Production tab's "N left" badge from the production
- * checks (and the checklist's re-checks), the Production pills in the
- * mock's order with Assets last, and the balance chip in coins.
+ * checks (and the checklist's re-checks), the Production pills in order
+ * (Evoni, 2026-10-17), and the balance chip in coins.
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
@@ -120,25 +120,24 @@ describe('Episode header and tabs (redesign part 1)', () => {
     await waitFor(() => expect(screen.getByTestId('ed-production-left').textContent).toBe('1 left'));
   });
 
-  // Evoni, 2026-10-16: the episode's pieces sit under Assets; Production is
-  // the checklist alone, with no pill row.
-  test('the Assets pills run Scenes, Wardrobe, Style Page, Phone, Overlays, Money, Files; the chosen one is marked', async () => {
+  // Evoni, 2026-10-17: Production is the workspace; the episode's pieces
+  // sit under it, the checklist last.
+  test('the Production pills run Scenes, Beat Plan, Files, Wardrobe, Style Page, Phone, Overlays, Money, Checklist; the chosen one is marked', async () => {
     renderAt('/episodes/ep-1?tab=wardrobe');
     const row = await screen.findByTestId('ed-subtabs');
-    expect([...row.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Scenes', 'Wardrobe', 'Style Page', 'Phone', 'Overlays', 'Money', 'Files']);
+    expect([...row.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Scenes', 'Beat Plan', 'Files', 'Wardrobe', 'Style Page', 'Phone', 'Overlays', 'Money', 'Checklist']);
     const chosen = row.querySelector('[aria-current="page"]');
     expect(chosen.textContent).toBe('Wardrobe');
     expect(chosen.className).toContain('is-active');
-    expect(screen.getByTitle('Assets').getAttribute('aria-current')).toBe('page');
+    expect(screen.getByTitle('Production').getAttribute('aria-current')).toBe('page');
   });
 
-  test('the main tabs run Overview, Assets, Script, Production, Results; Production has no pill row', async () => {
+  test('the main tabs run Overview, Script, Production, Results', async () => {
     renderAt('/episodes/ep-1?tab=checklist');
     await waitFor(() => expect(screen.getByTitle('Production').getAttribute('aria-current')).toBe('page'));
-    expect(['Overview', 'Assets', 'Script', 'Production', 'Results'].map((t) => screen.getByTitle(t).getAttribute('title'))).toEqual(['Overview', 'Assets', 'Script', 'Production', 'Results']);
     const tabs = [...document.querySelectorAll('.ed-tabs-modern .ed-tab')].map((b) => b.getAttribute('title'));
-    expect(tabs).toEqual(['Overview', 'Assets', 'Script', 'Production', 'Results']);
-    expect(screen.queryByTestId('ed-subtabs')).toBeNull();
+    expect(tabs).toEqual(['Overview', 'Script', 'Production', 'Results']);
+    expect(screen.queryByTitle('Assets')).toBeNull();
   });
 
   test('the balance chip reads in coins', async () => {

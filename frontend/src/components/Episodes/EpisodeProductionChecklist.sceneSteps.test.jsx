@@ -57,7 +57,7 @@ describe('EpisodeProductionChecklist: the scenes\' next step (S9 c)', () => {
     expect(next.textContent).toContain('Next: Add the missing images: beats 10 and 11');
     // Said once: the images row's own Open Scenes is the action.
     expect(screen.queryByTestId('checklist-scene-next-action')).toBeNull();
-    expect(screen.getAllByRole('button', { name: 'Open Scenes' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Open Beat Plan' })).toHaveLength(1);
     expect((await screen.findByTestId('check-note-scene_images')).textContent).toBe('1 ready · 2 need attention: beats 10, 11');
   });
 

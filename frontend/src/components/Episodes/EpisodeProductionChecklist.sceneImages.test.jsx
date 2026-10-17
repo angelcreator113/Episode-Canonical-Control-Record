@@ -37,7 +37,7 @@ describe('EpisodeProductionChecklist: "Scene images for every beat" (L5, Q21)', 
     const label = await item();
     expect(label.style.textDecoration).toBe('none');
     expect(label.textContent).not.toMatch(/required/i);
-    expect(screen.getByRole('button', { name: 'Open Scenes' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Open Beat Plan' })).toBeTruthy();
   });
 
   test('ticked when every beat has its image', async () => {

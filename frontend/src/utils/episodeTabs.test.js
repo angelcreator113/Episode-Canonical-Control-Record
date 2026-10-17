@@ -5,21 +5,24 @@ describe('resolveEpisodeTab (audit LINK-04)', () => {
   test('a main tab opens its first sub-tab; a sub-tab opens under its main tab', () => {
     expect(resolveEpisodeTab('overview')).toEqual({ main: 'overview', sub: null, key: 'overview' });
     expect(resolveEpisodeTab('scripts')).toEqual({ main: 'scripts', sub: null, key: 'scripts' });
-    expect(resolveEpisodeTab('production')).toEqual({ main: 'production', sub: 'checklist', key: 'production.checklist' });
-    // Evoni, 2026-10-16: Assets is a top tab; ?tab=assets opens it on Scenes.
-    expect(resolveEpisodeTab('assets')).toEqual({ main: 'assets', sub: 'scenes', key: 'assets.scenes' });
-    expect(resolveEpisodeTab('files')).toEqual({ main: 'assets', sub: 'files', key: 'assets.files' });
-    expect(resolveEpisodeTab('money')).toEqual({ main: 'assets', sub: 'money', key: 'assets.money' });
-    expect(resolveEpisodeTab('wardrobe')).toEqual({ main: 'assets', sub: 'wardrobe', key: 'assets.wardrobe' });
-    expect(resolveEpisodeTab('lookbook')).toEqual({ main: 'assets', sub: 'lookbook', key: 'assets.lookbook' });
+    // Evoni, 2026-10-17: Production is the workspace and opens on Scenes;
+    // the old Assets link lands there too.
+    expect(resolveEpisodeTab('production')).toEqual({ main: 'production', sub: 'scenes', key: 'production.scenes' });
+    expect(resolveEpisodeTab('assets')).toEqual({ main: 'production', sub: 'scenes', key: 'production.scenes' });
+    expect(resolveEpisodeTab('beatplan')).toEqual({ main: 'production', sub: 'beatplan', key: 'production.beatplan' });
+    expect(resolveEpisodeTab('checklist')).toEqual({ main: 'production', sub: 'checklist', key: 'production.checklist' });
+    expect(resolveEpisodeTab('files')).toEqual({ main: 'production', sub: 'files', key: 'production.files' });
+    expect(resolveEpisodeTab('money')).toEqual({ main: 'production', sub: 'money', key: 'production.money' });
+    expect(resolveEpisodeTab('wardrobe')).toEqual({ main: 'production', sub: 'wardrobe', key: 'production.wardrobe' });
+    expect(resolveEpisodeTab('lookbook')).toEqual({ main: 'production', sub: 'lookbook', key: 'production.lookbook' });
     expect(resolveEpisodeTab('results')).toEqual({ main: 'results', sub: 'summary', key: 'results.summary' });
     expect(resolveEpisodeTab('evaluation')).toEqual({ main: 'results', sub: 'evaluation', key: 'results.evaluation' });
     expect(resolveEpisodeTab('story')).toEqual({ main: 'results', sub: 'story', key: 'results.story' });
   });
 
   test('no tab, an unknown tab and the old brief link all land somewhere with a body', () => {
-    expect(resolveEpisodeTab(null)).toEqual({ main: 'production', sub: 'checklist', key: 'production.checklist' });
-    expect(resolveEpisodeTab('nope')).toEqual({ main: 'production', sub: 'checklist', key: 'production.checklist' });
+    expect(resolveEpisodeTab(null)).toEqual({ main: 'production', sub: 'scenes', key: 'production.scenes' });
+    expect(resolveEpisodeTab('nope')).toEqual({ main: 'production', sub: 'scenes', key: 'production.scenes' });
     expect(resolveEpisodeTab('brief')).toEqual({ main: 'overview', sub: null, key: 'overview' });
   });
 
@@ -37,21 +40,20 @@ describe('resolveEpisodeTab (audit LINK-04)', () => {
 });
 
 describe('the Style Page tab (was Lookbook; Tasks #2813, #2876)', () => {
-  test('sits between Wardrobe and Phone under Assets, keeping its key for links', () => {
-    const subs = EP_TABS.find((t) => t.key === 'assets').subs;
+  test('sits between Wardrobe and Phone under Production, keeping its key for links', () => {
+    const subs = EP_TABS.find((t) => t.key === 'production').subs;
     const keys = subs.map((s) => s.key);
     expect(keys.slice(keys.indexOf('wardrobe'), keys.indexOf('wardrobe') + 3)).toEqual(['wardrobe', 'lookbook', 'phone']);
     expect(subs.find((s) => s.key === 'lookbook').label).toBe('Style Page');
   });
 });
 
-// Evoni, 2026-10-16: Overview, Assets, Script, Production, Results; the
-// episode's pieces under Assets; Production is the checklist alone.
+// Evoni, 2026-10-17: Overview, Script, Production, Results; Production is
+// the workspace with the episode's pieces, the checklist last.
 describe('the tab layout', () => {
-  test('main tabs in order, Assets sub-tabs in order, Production the checklist', () => {
-    expect(EP_TABS.map((t) => t.label)).toEqual(['Overview', 'Assets', 'Script', 'Production', 'Results']);
-    expect(EP_TABS.find((t) => t.key === 'assets').subs.map((s) => s.label))
-      .toEqual(['Scenes', 'Wardrobe', 'Style Page', 'Phone', 'Overlays', 'Money', 'Files']);
-    expect(EP_TABS.find((t) => t.key === 'production').subs.map((s) => s.key)).toEqual(['checklist']);
+  test('main tabs in order, Production sub-tabs in order', () => {
+    expect(EP_TABS.map((t) => t.label)).toEqual(['Overview', 'Script', 'Production', 'Results']);
+    expect(EP_TABS.find((t) => t.key === 'production').subs.map((s) => s.label))
+      .toEqual(['Scenes', 'Beat Plan', 'Files', 'Wardrobe', 'Style Page', 'Phone', 'Overlays', 'Money', 'Checklist']);
   });
 });
