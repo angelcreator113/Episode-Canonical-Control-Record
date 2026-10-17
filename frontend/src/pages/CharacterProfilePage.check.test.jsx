@@ -1,6 +1,7 @@
 /**
  * The consistency check on the character page (Character Consistency Engine
- * step 3; Evoni, 2026-10-16): flag-only, with "It's intentional".
+ * step 3; Evoni, 2026-10-16): flag-only, with "Fix", "Edit the text" and
+ * "It's intentional".
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
@@ -43,6 +44,41 @@ describe('ProfileCheck', () => {
     expect(await screen.findByText('1 marked intentional')).toBeTruthy();
     expect(screen.getByText(/Everything agrees with their facts./)).toBeTruthy();
     expect(api.post).toHaveBeenCalledWith('/api/v1/cast/characters/c1/check/intentional', { flag_id: FLAG.id, note: null });
+  });
+
+  test('"Fix" puts the suggested wording in place and shows the check after', async () => {
+    const flag = { ...FLAG, fix: '2M followers', editable: true, text: FLAG.excerpt };
+    api.get.mockResolvedValue(result([flag]));
+    api.post.mockResolvedValue(result([]));
+    render(<ProfileCheck characterId="c1" />);
+    fireEvent.click(screen.getByText('Check their profile against these facts'));
+    fireEvent.click(await screen.findByText('Fix: “2M followers”'));
+    expect(await screen.findByText(/Everything agrees with their facts./)).toBeTruthy();
+    expect(api.post).toHaveBeenCalledWith('/api/v1/cast/characters/c1/check/fix', { flag_id: FLAG.id });
+  });
+
+  test('"Edit the text" opens the whole field and saves her own wording', async () => {
+    const flag = { ...FLAG, fix: null, editable: true, text: 'A slow-fashion creator with 1.2M followers.' };
+    api.get.mockResolvedValue(result([flag]));
+    api.post.mockResolvedValue(result([]));
+    render(<ProfileCheck characterId="c1" />);
+    fireEvent.click(screen.getByText('Check their profile against these facts'));
+    expect(screen.queryByText(/^Fix:/)).toBeNull();
+    fireEvent.click(await screen.findByText('Edit the text'));
+    const box = screen.getByLabelText('Description');
+    expect(box.value).toBe(flag.text);
+    fireEvent.change(box, { target: { value: 'A slow-fashion creator who stopped posting.' } });
+    fireEvent.click(screen.getByText('Save'));
+    expect(await screen.findByText(/Everything agrees with their facts./)).toBeTruthy();
+    expect(api.post).toHaveBeenCalledWith('/api/v1/cast/characters/c1/check/fix', { flag_id: FLAG.id, text: 'A slow-fashion creator who stopped posting.' });
+  });
+
+  test('a stored copy has a fix but no text to edit', async () => {
+    api.get.mockResolvedValue(result([{ ...FLAG, fix: '2M', editable: false }]));
+    render(<ProfileCheck characterId="c1" />);
+    fireEvent.click(screen.getByText('Check their profile against these facts'));
+    expect(await screen.findByText('Fix: “2M”')).toBeTruthy();
+    expect(screen.queryByText('Edit the text')).toBeNull();
   });
 
   test('a failed check says so', async () => {

@@ -349,6 +349,34 @@ async function markIntentional(req, res, on) {
   }
 }
 router.post('/characters/:id/check/intentional', requireAuth, authorize(['ADMIN']), (req, res) => markIntentional(req, res, true));
+
+/**
+ * Fixes one finding (Evoni, 2026-10-16: "I have no way of correcting these
+ * findings"): { flag_id } puts the suggested fix in place, { flag_id, text }
+ * saves her own wording as the field's whole text. Returns the check after.
+ */
+router.post('/characters/:id/check/fix', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const flagId = req.body?.flag_id;
+    if (!/^[0-9a-f]{12}$/.test(String(flagId))) return res.status(400).json({ success: false, error: 'flag_id must be a flag id.' });
+    const db = getModels();
+    const found = await characterWithFeed(db, req.params.id);
+    if (!found) return res.status(404).json({ success: false, error: 'Character not found' });
+    const { applyFix, FixError } = require('../services/characterConsistency');
+    try {
+      const text = req.body && 'text' in req.body ? req.body.text : undefined;
+      const result = await applyFix(db, found, flagId, { text });
+      return res.json({ success: true, ...result });
+    } catch (err) {
+      if (err instanceof FixError) return res.status(err.status).json({ success: false, error: err.message });
+      throw err;
+    }
+  } catch (err) {
+    console.error('[Cast] POST /characters/:id/check/fix error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
 router.delete('/characters/:id/check/intentional/:flagId', requireAuth, authorize(['ADMIN']), (req, res) => markIntentional(req, res, false));
 
 /**

@@ -5,7 +5,10 @@
  * 2026-10-16): flag-only, narrator text against the facts; the mask and
  * author-only notes are never flagged.
  */
-jest.mock('../../../src/services/characterFacts', () => ({ factsOf: jest.fn() }));
+jest.mock('../../../src/services/characterFacts', () => ({
+  factsOf: jest.fn(),
+  primaryPresenceKey: jest.requireActual('../../../src/services/characterFacts').primaryPresenceKey,
+}));
 const { factsOf } = require('../../../src/services/characterFacts');
 const { checkCharacter, followerMentions, withIntentional, zoneOf } = require('../../../src/services/characterConsistency');
 
@@ -37,6 +40,10 @@ describe('followerMentions', () => {
     ['her 47k followers', 47000], ['half a million followers', 500000],
   ])('%s', (text, count) => {
     expect(followerMentions(text).map((m) => m.count)).toEqual([count]);
+  });
+  test('each mention keeps its leading count, so a fix can swap only the number', () => {
+    expect(followerMentions('Quiet deletion. 4K followers abandoned; later four million loyal followers.').map((m) => [m.match, m.number]))
+      .toEqual([['4K followers', '4K'], ['four million loyal followers', 'four million']]);
   });
   test('"a follower" and "two followers" are not count claims', () => {
     expect(followerMentions('a follower wrote in; two followers left')).toEqual([]);

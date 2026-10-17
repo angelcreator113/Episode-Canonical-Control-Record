@@ -182,7 +182,22 @@ async function setFacts(db, { character, feedProfile = null, showId = null, body
     const count = Number(body.followers?.count);
     if (!Number.isInteger(count) || count < 0) throw new FactsError(400, 'Followers must be a whole number of 0 or more.');
     followerTarget = count;
-    feedChanges.follower_count_approx = formatCount(count);
+    // The count's stored copies agree with it: the label, the tier, the
+    // generated profile's copy and the primary platform's (the drift the
+    // consistency check found on Maren: facts 2M, copies still 1.2M).
+    const label = formatCount(count);
+    const tier = require('./pulseAudience').tierFor(count).key;
+    feedChanges.follower_count_approx = label;
+    feedChanges.follower_tier = tier;
+    if (feedProfile.full_profile && typeof feedProfile.full_profile === 'object') {
+      feedChanges.full_profile = { ...feedProfile.full_profile, follower_count_approx: label, follower_tier: tier };
+    }
+    const primary = primaryPresenceKey(feedProfile.platform_presences, feedProfile.platform);
+    if (primary) {
+      const presences = JSON.parse(JSON.stringify(feedProfile.platform_presences));
+      presences[primary].followers = label;
+      feedChanges.platform_presences = presences;
+    }
   }
   const canon = nextCanonFacts(character.canon_facts, body);
 
@@ -284,6 +299,18 @@ function holdToFacts(section, value, facts) {
 }
 
 /**
+ * The key of the platform presence the follower fact is about: the one
+ * marked is_primary, else the one named for the profile's platform, else
+ * the first. Another presence (a private or second account) has its own
+ * audience. Null when there is none.
+ */
+function primaryPresenceKey(presences, platform = null) {
+  if (!presences || typeof presences !== 'object' || Array.isArray(presences)) return null;
+  const keys = Object.keys(presences).filter((k) => presences[k] && typeof presences[k] === 'object');
+  return keys.find((k) => presences[k].is_primary === true) || (platform && keys.includes(platform) ? platform : null) || keys[0] || null;
+}
+
+/**
  * A newly generated profile has no facts yet, but its own numbers must agree
  * (the spec's "1.2M vs 2M" drift starts here). Sets, on `generated` itself
  * (so full_profile keeps the same values), follower_count_approx to the
@@ -306,9 +333,8 @@ function agreeingFollowers(generated, fallbackTier = 'mid') {
   g.follower_tier = out.follower_tier;
   const presences = g.platform_presences && typeof g.platform_presences === 'object' ? g.platform_presences : null;
   if (presences && out.follower_count_approx) {
-    const entries = Object.entries(presences).filter(([, v]) => v && typeof v === 'object');
-    const primary = entries.find(([, v]) => v.is_primary === true) || entries[0];
-    if (primary) primary[1].followers = out.follower_count_approx;
+    const primary = primaryPresenceKey(presences, g.platform);
+    if (primary) presences[primary].followers = out.follower_count_approx;
   }
   return out;
 }
@@ -341,5 +367,5 @@ async function factsForProfile(db, profile) {
 module.exports = {
   FACT_KEYS, ACCOUNT_STATUSES, INCOME_CADENCES, AFFORDABILITY, FactsError,
   formatCount, affordabilityOf, yearlyIncome, factsOf, setFacts, nextCanonFacts, showIdFor,
-  isDecided, factsPromptBlock, factsForCharacter, factsForProfile, holdToFacts, agreeingFollowers, FACT_FIELDS, STATUS_WORDS,
+  isDecided, factsPromptBlock, factsForCharacter, factsForProfile, holdToFacts, agreeingFollowers, primaryPresenceKey, FACT_FIELDS, STATUS_WORDS,
 };
