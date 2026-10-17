@@ -5,6 +5,12 @@
  * 2026-10-08; frontend pages/CharacterRegistryPage). Its own file, not
  * routes/characterRegistry.js (F-Reg-2): each write here is one row.
  *
+ *   GET    /api/v1/cast/cross-check?registry_id=   contradictions between characters: a post
+ *                                                  putting someone at an event they were
+ *                                                  not at, or naming one they could not
+ *                                                  know; one character's text giving
+ *                                                  another the wrong follower count or
+ *                                                  status (flag-only; services/castCrossCheck)
  *   GET    /api/v1/cast/consistency?registry_id=   the cast rollout: each live character's
  *                                                  facts, check findings, voice and next
  *                                                  step (services/castConsistency; one id,
@@ -151,6 +157,22 @@ router.get('/consistency', requireAuth, async (req, res) => {
     return res.json({ success: true, ...result });
   } catch (err) {
     console.error('[Cast] GET /consistency error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/v1/cast/cross-check?registry_id= (the spec's #2; Evoni, 2026-10-17):
+// contradictions between characters, flag-only (services/castCrossCheck).
+router.get('/cross-check', requireAuth, async (req, res) => {
+  try {
+    const ids = String(req.query.registry_id || '').split(',').map((s) => s.trim()).filter(Boolean);
+    if (!ids.length || ids.length > 20 || !ids.every((id) => UUID_RE.test(id))) {
+      return res.status(400).json({ success: false, error: 'registry_id must be one or more registry ids (UUIDs), comma-separated' });
+    }
+    const result = await require('../services/castCrossCheck').crossCheck(getModels(), ids);
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('[Cast] GET /cross-check error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
