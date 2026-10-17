@@ -29,7 +29,7 @@ const ROLES = Object.freeze([
 const errorText = (err, fallback) => err?.response?.data?.error || fallback;
 
 /** One role's places: their sets, and pick or upload another. */
-function RoleSection({ spec, places, character, showId, sets, loadSets, onChanged, onNote }) {
+function RoleSection({ spec, places, linked, character, showId, sets, loadSets, onSetsStale, onChanged, onNote }) {
   const [picking, setPicking] = useState(false);
   const [choice, setChoice] = useState('');
   const [busy, setBusy] = useState(null);
@@ -56,21 +56,32 @@ function RoleSection({ spec, places, character, showId, sets, loadSets, onChange
     } finally { setBusy(null); }
   };
   // Upload photos: a new scene set from the first photo, linked as this place.
+  // When the photo or the link fails, the new set is deleted again: each try
+  // left an empty set behind (fifth audit).
   const upload = async (file) => {
     if (!file) return;
     setBusy('upload');
+    let setId = null;
     try {
       const created = await api.post('/api/v1/scene-sets', { name: `${name}'s ${spec.label}`, scene_type: spec.sceneType, show_id: showId });
-      const setId = created.data?.data?.id;
+      setId = created.data?.data?.id;
       if (!setId) throw new Error('The scene set was not made');
       const form = new FormData();
       form.append('image', file);
       await api.post(`/api/v1/scene-sets/${setId}/upload-base`, form);
       await link(setId);
       onNote({ text: `${spec.label} made from your photo` });
+      onSetsStale();
       onChanged();
     } catch (err) {
       console.error('[CharacterPlacesTab] upload failed:', err);
+      if (setId) {
+        try {
+          await api.delete(`/api/v1/scene-sets/${setId}`);
+        } catch (cleanupErr) {
+          console.error('[CharacterPlacesTab] the new set was not removed:', cleanupErr);
+        }
+      }
       onNote({ error: true, text: errorText(err, 'Could not make the set from that photo') });
     } finally { setBusy(null); }
   };
@@ -115,7 +126,13 @@ function RoleSection({ spec, places, character, showId, sets, loadSets, onChange
           <select className="cpl-input" aria-label={`Their ${spec.label.toLowerCase()} set`} value={choice} onChange={(e) => setChoice(e.target.value)}
             data-testid={`place-pick-select-${spec.role}`}>
             <option value="">{sets ? 'Choose a scene set…' : 'Loading…'}</option>
-            {(sets || []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {/* A set already one of their places is shown, not offered: picking
+                it moved it from that role without a word (fifth audit). */}
+            {(sets || []).map((s) => (
+              <option key={s.id} value={s.id} disabled={linked.has(String(s.id))}>
+                {s.name}{linked.has(String(s.id)) ? ` (their ${linked.get(String(s.id))})` : ''}
+              </option>
+            ))}
           </select>
           <button type="button" className="cpl-btn" disabled={!choice || busy === 'pick'} onClick={pick} data-testid={`place-pick-save-${spec.role}`}>
             {busy === 'pick' ? 'Saving…' : `Make it their ${spec.label.toLowerCase()}`}
@@ -221,7 +238,12 @@ function HostedEvents({ character, showId, onNote }) {
             <div className="cpl-row">
               <select className="cpl-input" aria-label="Event they host" value={choice} onChange={(e) => setChoice(e.target.value)} data-testid="hosted-event-select">
                 <option value="">{all ? 'Choose an event…' : 'Loading…'}</option>
-                {(all || []).filter((e) => !hostedIds.has(String(e.id))).map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+                {/* An event someone else hosts is shown, not offered (fifth audit). */}
+                {(all || []).filter((e) => !hostedIds.has(String(e.id))).map((e) => {
+                  const other = String(e.host_brand || '').trim()
+                    || (e.source_profile_id != null && Number(e.source_profile_id) !== Number(character.feed_profile_id) ? 'someone else' : '');
+                  return <option key={e.id} value={e.id} disabled={Boolean(other)}>{e.name}{other ? ` (hosted by ${other})` : ''}</option>;
+                })}
               </select>
               <button type="button" className="cpl-btn" disabled={!choice || busy === 'add'} onClick={add} data-testid="hosted-event-add-save">
                 {busy === 'add' ? 'Saving…' : 'They host it'}
@@ -273,11 +295,13 @@ export default function CharacterPlacesTab({ character }) {
   if (!data.show_id) return <p className="cpl-note">Not in a show&rsquo;s cast yet, so no places to set.</p>;
 
   const places = data.places || [];
+  const roleLabel = (role) => (ROLES.find((r) => r.role === role)?.label || 'place').toLowerCase();
+  const linked = new Map(places.map((p) => [String(p.scene_set_id), roleLabel(p.role)]));
   return (
     <div className="cpl" data-testid="character-places-tab">
       {ROLES.map((spec) => (
-        <RoleSection key={spec.role} spec={spec} places={places.filter((p) => p.role === spec.role)} character={character}
-          showId={data.show_id} sets={sets} loadSets={loadSets} onChanged={load} onNote={setNote} />
+        <RoleSection key={spec.role} spec={spec} places={places.filter((p) => p.role === spec.role)} linked={linked} character={character}
+          showId={data.show_id} sets={sets} loadSets={loadSets} onSetsStale={() => setSets(null)} onChanged={load} onNote={setNote} />
       ))}
       <HostedEvents character={character} showId={data.show_id} onNote={setNote} />
       {note && <p className={`cpl-note${note.error ? ' is-error' : ''}`} role="status" data-testid="places-note">{note.text}</p>}

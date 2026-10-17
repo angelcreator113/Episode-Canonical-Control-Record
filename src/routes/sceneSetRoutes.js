@@ -4,7 +4,7 @@ const express = require('express');
 const router  = express.Router();
 const { Op }  = require('sequelize');
 const multer  = require('multer');
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { requireAuth } = require('../middleware/auth');
 const { authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
@@ -1046,14 +1046,34 @@ router.delete('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => 
 // Evoni, 2026-10-17: "the venue has its own photo", apart from the set's
 // main photo. Kept on the set's World Location (venuePhotoService). No
 // image model is called, so no rate limit or budget applies.
-router.post('/:id/venue-photo', validateUUIDParam('id'), requireAuth, uploadSceneSetImages, async (req, res) => {
+// One photo per request (fifth audit: the shared field took 20 files, each
+// buffered, for one used).
+const uploadVenuePhoto = uploadOrRefuse(upload.single('image'));
+
+/** Removes a stored venue photo (best effort): replaced or removed ones stayed in the bucket (fifth audit). */
+async function deleteStoredPhoto(url) {
+  const host = `${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/`;
+  const at = url ? url.indexOf(host) : -1;
+  if (at === -1) return;
+  try {
+    await s3.send(new DeleteObjectCommand({ Bucket: S3_BUCKET, Key: decodeURIComponent(url.slice(at + host.length)) }));
+  } catch (err) {
+    console.warn('[SceneSets] old venue photo not deleted:', err.message);
+  }
+}
+
+router.post('/:id/venue-photo', validateUUIDParam('id'), requireAuth, uploadVenuePhoto, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
     if (!set.world_location_id) {
       return res.status(409).json({ success: false, code: 'NO_LOCATION', error: 'Link this set to its World Location first: the venue photo belongs to the venue.' });
     }
-    const file = (req.files?.image || req.files?.images || [])[0];
+    // The location is checked before anything is stored (fifth audit).
+    const [[location]] = await SceneSet.sequelize.query('SELECT id FROM world_locations WHERE id = :id AND deleted_at IS NULL',
+      { replacements: { id: set.world_location_id } });
+    if (!location) return res.status(404).json({ success: false, error: 'World Location not found' });
+    const file = req.file;
     if (!file) return res.status(400).json({ success: false, error: 'No image file provided' });
     // Turned upright (EXIF) and kept whole, at most 1920 wide, as a JPEG: a
     // street photo is not cropped to the stills' 16:9.
@@ -1070,7 +1090,11 @@ router.post('/:id/venue-photo', validateUUIDParam('id'), requireAuth, uploadScen
     const url = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${key}`;
     const { writeVenuePhoto } = require('../services/venuePhotoService');
     const written = await writeVenuePhoto(SceneSet.sequelize, set.world_location_id, url);
-    if (!written.found) return res.status(404).json({ success: false, error: 'World Location not found' });
+    if (!written.found) {
+      await deleteStoredPhoto(url);
+      return res.status(404).json({ success: false, error: 'World Location not found' });
+    }
+    if (written.previous && written.previous !== url) await deleteStoredPhoto(written.previous);
     res.json({ success: true, data: { world_location_id: set.world_location_id, venue_photo_url: url } });
   } catch (err) {
     console.error('Scene Sets POST /:id/venue-photo error:', err);
@@ -1086,6 +1110,7 @@ router.delete('/:id/venue-photo', validateUUIDParam('id'), requireAuth, async (r
     const { writeVenuePhoto } = require('../services/venuePhotoService');
     const written = await writeVenuePhoto(SceneSet.sequelize, set.world_location_id, null);
     if (!written.found) return res.status(404).json({ success: false, error: 'World Location not found' });
+    if (written.previous) await deleteStoredPhoto(written.previous);
     res.json({ success: true, data: { world_location_id: set.world_location_id, venue_photo_url: null } });
   } catch (err) {
     console.error('Scene Sets DELETE /:id/venue-photo error:', err);

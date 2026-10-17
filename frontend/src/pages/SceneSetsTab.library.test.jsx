@@ -88,6 +88,8 @@ describe('SceneSetsTab: the library', () => {
     expect(screen.getByTestId('scene-set-main-tag-set-1').textContent).toBe('Main background');
     fireEvent.click(screen.getByTestId('scene-set-main-next-set-1'));
     expect(screen.getByTestId('scene-set-main-tag-set-1').textContent).toBe('WIDE');
+    // Fifth audit: approving and replacing act on the main background, whichever view shows.
+    expect(screen.getByTestId('scene-set-main-viewnote-set-1').textContent).toMatch(/act on the main background/);
     fireEvent.click(screen.getByTestId('scene-set-main-prev-set-1'));
     expect(screen.getByTestId('scene-set-main-tag-set-1').textContent).toBe('Main background');
     expect(screen.getByTestId('scene-set-angles-head-set-1').textContent).toMatch(/Angles 1\/2/);

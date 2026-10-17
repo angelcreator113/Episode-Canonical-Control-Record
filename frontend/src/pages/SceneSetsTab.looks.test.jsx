@@ -55,6 +55,16 @@ describe('SceneSetsTab Looks row (L9)', () => {
     expect(within(card).getByTestId('event-photos-stop-set-9')).toBeTruthy();
   });
 
+  // Fifth audit: an event version whose event moved elsewhere was hidden.
+  test('event photos with no event still show, with what can be done', () => {
+    vi.mocked(api.get).mockResolvedValue({ data: {} });
+    renderRow({ id: 'set-8', show_id: 'show-1', looks: [], events: [], event_versions: [{ id: 'set-9', name: 'Old gala photos', event: null }] });
+    const card = screen.getByTestId('scene-set-lone-version-set-9');
+    expect(card.textContent).toMatch(/Event photos with no event/);
+    expect(within(card).getByTestId('event-photos-own-set-9')).toBeTruthy();
+    expect(within(card).queryByTestId('event-photos-stop-set-9')).toBeNull();
+  });
+
   test('an event held here can use photos from another set', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: {} });
     renderRow({ id: 'set-8', show_id: 'show-1', looks: [], events: [{ id: 'ev-8', name: 'Brunch', show_id: 'show-1', look: null }] });
