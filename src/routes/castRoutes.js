@@ -72,6 +72,11 @@
  *                                                  character file; saves nothing (ADMIN)
  *   POST   /api/v1/cast/content-types/suggest-unset  { limit?, profile_ids? }: suggestions for LalaVerse
  *                                                  feed profiles with none; saves nothing (ADMIN)
+ *   GET    /api/v1/cast/content-pillars          each content type's mix: pillars with
+ *                                                  shares and an example (services/contentPillars)
+ *   PUT    /api/v1/cast/content-pillars          { name, pillars } or { name, pillars: null }
+ *                                                  to go back to the default (ADMIN)
+ *   POST   /api/v1/cast/content-pillars/suggest  { name }: one AI call; saves nothing (ADMIN)
  *   POST   /api/v1/cast/content-types/apply      { items: [{ profile_id, name, character_id?, gap? }] } (ADMIN)
  *   GET    /api/v1/cast/characters/:id/posts/ideas  what to post about, from their own
  *                                                  story (no AI call), and whether
@@ -765,6 +770,53 @@ router.post('/content-types/suggest-unset', requireAuth, authorize(['ADMIN']), a
     return res.json({ success: true, ...result });
   } catch (err) {
     console.error('[Cast] POST /content-types/suggest-unset error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// The content mix (services/contentPillars; Evoni's idea 3, 2026-10-17):
+// each content type's pillars, their shares and an example.
+const pillarsError = (res, err) => {
+  const { PillarsError } = require('../services/contentPillars');
+  if (err instanceof PillarsError) { res.status(err.status).json({ success: false, error: err.message }); return true; }
+  return false;
+};
+
+router.get('/content-pillars', requireAuth, async (req, res) => {
+  try {
+    return res.json({ success: true, types: await require('../services/contentPillars').listPillars(getModels()) });
+  } catch (err) {
+    console.error('[Cast] GET /content-pillars error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.put('/content-pillars', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const body = req.body || {};
+    try {
+      const pillars = await require('../services/contentPillars').savePillars(getModels(), body.name, body.pillars === undefined ? null : body.pillars);
+      return res.json({ success: true, name: body.name, pillars });
+    } catch (err) {
+      if (pillarsError(res, err)) return undefined;
+      throw err;
+    }
+  } catch (err) {
+    console.error('[Cast] PUT /content-pillars error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/content-pillars/suggest', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  try {
+    try {
+      return res.json({ success: true, ...(await require('../services/contentPillars').suggestPillars(getModels(), req.body?.name)) });
+    } catch (err) {
+      if (pillarsError(res, err)) return undefined;
+      throw err;
+    }
+  } catch (err) {
+    console.error('[Cast] POST /content-pillars/suggest error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

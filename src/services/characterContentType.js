@@ -145,8 +145,9 @@ function contentTypeBlock(current, occupation = null, gap = null) {
   const job = occupation
     ? ` Their job is ${occupation}. What they post and what they do for work can differ: where they do, that gap is part of who they are, not an error. Their posts come from the content type, and the job shows only the way it would in this kind of content.`
     : '';
+  const mix = current.pillars?.length ? ` ${require('./contentPillars').pillarsLine(current.pillars)}` : '';
   const hook = gap ? ` What the gap between their job and their content says about them (author-side; let it show, never state it): ${sentence(gap)}` : '';
-  return `KNOWN FOR ON THE PULSE (their content type: what the LalaVerse knows them for, and what their posts are): ${current.name}.${more ? ` ${more}` : ''}${job}${hook}`;
+  return `KNOWN FOR ON THE PULSE (their content type: what the LalaVerse knows them for, and what their posts are): ${current.name}.${more ? ` ${more}` : ''}${mix}${job}${hook}`;
 }
 
 /**
