@@ -84,7 +84,7 @@ describe('EpisodeSceneWorkspace', () => {
     expect(within(details).getByText('Home Base')).toBeTruthy();
     expect(within(details).getByText('Establishing')).toBeTruthy();
     expect(within(details).getByText('0:22')).toBeTruthy();
-    expect(within(details).getByDisplayValue('Talk to camera')).toBeTruthy();
+    expect(await within(details).findByDisplayValue('Talk to camera')).toBeTruthy();
   });
 
   test('a scene with no clip shows its picture and points to Files', async () => {
