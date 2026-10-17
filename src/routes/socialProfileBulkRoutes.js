@@ -63,6 +63,20 @@ function getModels() {
 
 const PLATFORMS = ['tiktok','instagram','youtube','twitter','onlyfans','twitch','substack','multi'];
 
+// The platform a parsed row gets: on the LalaVerse feed, always The Pulse
+// (Evoni, 2026-10-17: "lalaverse social media is The Pulse"); otherwise the
+// row's own real app, or Instagram when it names none.
+const layerOf = (req) => (isPulseLayer(req.body?.feed_layer || req.query?.feed_layer) ? 'lalaverse' : 'real_world');
+const platformFor = (raw, layer) => {
+  if (isPulseLayer(layer)) return PULSE;
+  const p = String(raw || '').toLowerCase().trim();
+  return PLATFORMS.includes(p) ? p : 'instagram';
+};
+// What the AI extractor asks for: no platform on the LalaVerse feed.
+const extractPlatformLine = (layer) => (isPulseLayer(layer)
+  ? '- (no platform: in the LalaVerse everyone is on The Pulse; never name Instagram, TikTok, YouTube or any real app)'
+  : `- platform (best guess from: ${PLATFORMS.join(', ')}) — default to "instagram" if unclear`);
+
 // ── SSE client registry for real-time streaming (#1) ─────────────────────────
 const jobSSEClients = new Map(); // jobId → Set<res>
 
@@ -323,6 +337,7 @@ async function runWithConcurrency(tasks, concurrency) {
 // ── POST /parse-paste ────────────────────────────────────────────────────────
 router.post('/parse-paste', requireAuth, aiRateLimiter, async (req, res) => {
   try {
+    const layer = layerOf(req);
     const { text } = req.body;
     if (!text || !text.trim()) return res.status(400).json({ error: 'No text provided' });
 
@@ -335,17 +350,17 @@ router.post('/parse-paste', requireAuth, aiRateLimiter, async (req, res) => {
       const parts = line.split('|').map(s => s.trim());
       if (parts.length >= 3) {
         const handle   = parts[0].replace(/^@/, '');
-        const platform = parts[1].toLowerCase();
+        const platform = isPulseLayer(layer) ? PULSE : parts[1].toLowerCase();
         const vibe     = parts.slice(2).join(' | ');
-        if (!PLATFORMS.includes(platform)) {
+        if (!isPulseLayer(layer) && !PLATFORMS.includes(platform)) {
           errors.push({ line, reason: `Unknown platform: ${parts[1]}` });
           continue;
         }
         creators.push({ handle, platform, vibe_sentence: vibe });
       } else if (parts.length === 2) {
-        // handle | vibe — default to instagram
+        // handle | vibe — The Pulse on the LalaVerse feed, else Instagram
         const handle = parts[0].replace(/^@/, '');
-        creators.push({ handle, platform: 'instagram', vibe_sentence: parts[1] });
+        creators.push({ handle, platform: platformFor(null, layer), vibe_sentence: parts[1] });
       } else {
         errors.push({ line, reason: 'Could not parse — expected @handle | platform | vibe' });
       }
@@ -362,11 +377,11 @@ router.post('/parse-paste', requireAuth, aiRateLimiter, async (req, res) => {
             content: `Extract every social media creator or person mention from the following pasted text.
 For each creator/person found, extract:
 - handle (username, @handle, or invent a plausible one from their name)
-- platform (best guess from: ${PLATFORMS.join(', ')}) — default to "instagram" if unclear
+${extractPlatformLine(layer)}
 - vibe_sentence (one-line description of who they are / what they do based on the text)
 
 Return ONLY a valid JSON array:
-[{"handle":"username","platform":"instagram","vibe_sentence":"..."}]
+[{"handle":"username",${isPulseLayer(layer) ? '' : '"platform":"instagram",'}"vibe_sentence":"..."}]
 
 If no creators can be found, return an empty array: []
 
@@ -381,7 +396,7 @@ ${text.slice(0, 20000)}`,
           const aiCreators = JSON.parse(match[0].replace(/,\s*([\]}])/g, '$1'));
           creators.push(...aiCreators.map(c => ({
             ...c,
-            platform: PLATFORMS.includes(c.platform) ? c.platform : 'instagram',
+            platform: platformFor(c.platform, layer),
           })));
         }
         // Clear structured parse errors since we fell back to AI
@@ -401,6 +416,7 @@ ${text.slice(0, 20000)}`,
 // ── POST /parse-csv — CSV/TSV spreadsheet import (#3) ────────────────────────
 router.post('/parse-csv', requireAuth, aiRateLimiter, async (req, res) => {
   try {
+    const layer = layerOf(req);
     const { text, column_map } = req.body;
     if (!text || !text.trim()) return res.status(400).json({ error: 'No CSV data provided' });
 
@@ -446,8 +462,7 @@ router.post('/parse-csv', requireAuth, aiRateLimiter, async (req, res) => {
       const handle = (fields[handleIdx] || '').replace(/^@/, '').trim();
       if (!handle) { errors.push({ line: lines[i], reason: 'Empty handle' }); continue; }
 
-      let platform = platformIdx >= 0 ? (fields[platformIdx] || '').toLowerCase().trim() : 'instagram';
-      if (!PLATFORMS.includes(platform)) platform = 'instagram';
+      const platform = platformFor(platformIdx >= 0 ? fields[platformIdx] : null, layer);
 
       const vibe = vibeIdx >= 0 ? (fields[vibeIdx] || '').trim() : '';
 
@@ -469,6 +484,7 @@ router.post('/parse-csv', requireAuth, aiRateLimiter, async (req, res) => {
 // ── POST /parse-file ─────────────────────────────────────────────────────────
 router.post('/parse-file', requireAuth, aiRateLimiter, upload.single('file'), async (req, res) => {
   try {
+    const layer = layerOf(req);
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
     const ext  = path.extname(req.file.originalname).toLowerCase();
@@ -503,8 +519,7 @@ router.post('/parse-file', requireAuth, aiRateLimiter, upload.single('file'), as
         fields.push(current.trim());
         const handle = (fields[handleIdx] || '').replace(/^@/, '').trim();
         if (!handle) continue;
-        let platform = platformIdx >= 0 ? (fields[platformIdx] || '').toLowerCase().trim() : 'instagram';
-        if (!PLATFORMS.includes(platform)) platform = 'instagram';
+        const platform = platformFor(platformIdx >= 0 ? fields[platformIdx] : null, layer);
         const vibe = vibeIdx >= 0 ? (fields[vibeIdx] || '').trim() : '';
         creators.push({ handle, platform, vibe_sentence: vibe || `Imported from ${req.file.originalname} row ${i}` });
       }
@@ -562,13 +577,13 @@ router.post('/parse-file', requireAuth, aiRateLimiter, upload.single('file'), as
             content: `Extract every social media creator, person, or character mention from the following text.
 For each one found, extract:
 - handle (username or name used — if no handle given, invent a plausible one from name/description)
-- platform (best guess from: ${PLATFORMS.join(', ')}) — default to "instagram" if unclear
+${extractPlatformLine(layer)}
 - vibe_sentence (one-line description of who they are / what they do)
 - source_text (the text that informed your extraction)
 
 Be thorough — extract EVERY person or creator mentioned, even brief mentions.
 Return ONLY a valid JSON array:
-[{"handle":"username","platform":"instagram","vibe_sentence":"...","source_text":"..."}]
+[{"handle":"username",${isPulseLayer(layer) ? '' : '"platform":"instagram",'}"vibe_sentence":"...","source_text":"..."}]
 
 If none found, return: []
 
@@ -583,7 +598,7 @@ ${chunks[i]}`,
           let chunkCreators = JSON.parse(match[0].replace(/,\s*([\]}])/g, '$1'));
           chunkCreators = chunkCreators.map(c => ({
             ...c,
-            platform: PLATFORMS.includes(c.platform) ? c.platform : 'instagram',
+            platform: platformFor(c.platform, layer),
           }));
           allCreators.push(...chunkCreators);
         }
