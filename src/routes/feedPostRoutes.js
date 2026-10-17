@@ -864,6 +864,25 @@ router.get('/release-plan', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/v1/feed-posts/release-calendar?show_id=&from=&to= (Evoni,
+// 2026-10-17): the show's scheduled drafts by release time, for the release
+// calendar; moving one is PUT /:postId/release-time.
+router.get('/release-calendar', requireAuth, async (req, res) => {
+  try {
+    const { releaseCalendar, ReleaseError } = require('../services/postRelease');
+    try {
+      const posts = await releaseCalendar(require('../models'), { showId: req.query.show_id || null, from: req.query.from || new Date(), to: req.query.to || null });
+      return res.json({ posts });
+    } catch (err) {
+      if (err instanceof ReleaseError) return res.status(err.status).json({ error: err.message });
+      throw err;
+    }
+  } catch (err) {
+    console.error('[FeedPosts] release-calendar error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/v1/feed-posts/release-plan { items: [{ post_id, at }], tz_offset?, anyway? }:
 // schedules the plan as she adjusted it. A time that breaks the story order
 // is skipped with its problems unless `anyway`.
@@ -901,6 +920,8 @@ router.put('/:postId/release-time', requireAuth, authorize(['ADMIN']), async (re
         if (problems.length) return res.status(409).json({ error: 'This time breaks the story order.', problems });
       }
       await setReleaseTime(post, { mode: req.body?.mode, at: req.body?.at ?? null });
+      // The hour she chose teaches the suggestions her own posting hours.
+      if (req.body?.mode === 'schedule') await require('../services/postRelease').learnReleaseTime(models, post, req.body.at, { tzOffset: Number(req.body?.tz_offset) || 0 });
     } catch (err) {
       if (err instanceof ReleaseError) return res.status(err.status).json({ error: err.message });
       throw err;
