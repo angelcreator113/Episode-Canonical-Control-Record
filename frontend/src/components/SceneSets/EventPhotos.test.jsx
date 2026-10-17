@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../../services/api', () => ({
@@ -61,5 +61,34 @@ describe('EventPhotos', () => {
     render(<MemoryRouter><EventPhotosSet photosSet={{ id: 'set-9', name: 'Gala night' }} showId="show-1" everyday={{ id: 'set-1', name: 'Studio' }} event={event} /></MemoryRouter>);
     expect(screen.getByTestId('event-photos-set-row-set-9').textContent).toMatch(/These are the photos for Wearable Experiments at Studio\./);
     expect(screen.getByTestId('event-photos-everyday-set-9').getAttribute('href')).toContain('set-1');
+  });
+
+  // Fifth audit.
+  test('a set that would be refused says why and is not offered; a locked event says so', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { data: {
+      everyday_sets: [{ id: 'a', name: 'Loft', has_versions: true }, { id: 'b', name: 'Hall', used_by: [{ id: 'ev-9', name: 'Brunch' }] }, { id: 'c', name: 'Night', used_by: [{ id: 'ev-1', name: 'Wearable Experiments' }] }],
+      events: [{ id: 'ev-1', locked: false }],
+    } } });
+    render(<MemoryRouter><UsePhotosFromSet set={set} event={event} /></MemoryRouter>);
+    fireEvent.click(screen.getByTestId('event-photos-use-ev-1'));
+    const select = await screen.findByTestId('event-photos-set-ev-1');
+    expect(within(select).getByText('Loft (it has event versions)').disabled).toBe(true);
+    expect(within(select).getByText('Hall (used by Brunch)').disabled).toBe(true);
+    expect(within(select).getByText('Night').disabled).toBe(false);
+  });
+
+  test('a locked event offers no sets', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { data: { everyday_sets: [{ id: 'c', name: 'Night' }], events: [{ id: 'ev-1', locked: true }] } } });
+    render(<MemoryRouter><UsePhotosFromSet set={set} event={event} /></MemoryRouter>);
+    fireEvent.click(screen.getByTestId('event-photos-use-ev-1'));
+    expect((await screen.findByTestId('event-photos-locked-ev-1')).textContent).toMatch(/locked/);
+    expect(screen.queryByTestId('event-photos-set-ev-1')).toBeNull();
+  });
+
+  test('make it its own set keeps the event on it', async () => {
+    vi.mocked(api.put).mockResolvedValue({ data: { success: true } });
+    render(<MemoryRouter><EventPhotosSet photosSet={{ id: 'set-9', name: 'Gala night' }} showId="show-1" event={event} /></MemoryRouter>);
+    fireEvent.click(screen.getByTestId('event-photos-own-set-9'));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/scene-sets/set-9/version', { everyday_set_id: null }));
   });
 });

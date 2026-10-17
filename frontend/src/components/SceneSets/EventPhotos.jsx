@@ -21,6 +21,14 @@ export function UsePhotosFromSet({ set, event, onToast, onSaved }) {
   const [chosen, setChosen] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [locked, setLocked] = useState(false);
+  // Why a set would be refused, shown before a try (fifth audit): one with
+  // event versions of its own, or one another event is held at.
+  const refusal = (o) => {
+    if (o.has_versions) return 'it has event versions';
+    const others = (o.used_by || []).filter((e) => String(e.id) !== String(event.id));
+    return others.length ? `used by ${others.map((e) => e.name).join(', ')}` : null;
+  };
 
   const start = async () => {
     setOpen(true);
@@ -28,7 +36,9 @@ export function UsePhotosFromSet({ set, event, onToast, onSaved }) {
     if (options) return;
     try {
       const res = await api.get(`/api/v1/scene-sets/${set.id}/version-options`);
-      setOptions(res.data?.data?.everyday_sets || []);
+      const data = res.data?.data || {};
+      setOptions(data.everyday_sets || []);
+      setLocked(Boolean((data.events || []).find((e) => String(e.id) === String(event.id))?.locked));
     } catch (err) {
       console.error('[EventPhotos] options failed:', err);
       setError(err.response?.data?.error || 'Could not load the sets');
@@ -43,6 +53,7 @@ export function UsePhotosFromSet({ set, event, onToast, onSaved }) {
       const name = options.find((o) => String(o.id) === String(chosen))?.name || 'That set';
       onToast?.(`${name} is now ${event.name}'s photos`);
       setOpen(false);
+      setOptions(null);
       onSaved?.();
     } catch (err) {
       console.error('[EventPhotos] link failed:', err);
@@ -61,12 +72,17 @@ export function UsePhotosFromSet({ set, event, onToast, onSaved }) {
   }
   return (
     <div className="evp-form" data-testid={`event-photos-form-${event.id}`}>
-      {options ? (
+      {options && locked ? (
+        <span className="evp-hint" data-testid={`event-photos-locked-${event.id}`}>Its episode is accepted: the event's place is locked.</span>
+      ) : options ? (
         <>
           <select aria-label="Set with this event's photos" value={chosen} disabled={busy} onChange={(e) => setChosen(e.target.value)}
             data-testid={`event-photos-set-${event.id}`}>
             <option value="">Choose the set…</option>
-            {options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+            {options.map((o) => {
+              const why = refusal(o);
+              return <option key={o.id} value={o.id} disabled={Boolean(why)}>{o.name}{why ? ` (${why})` : ''}</option>;
+            })}
           </select>
           <button type="button" className="evp-btn" disabled={busy || !chosen} onClick={save} data-testid={`event-photos-save-${event.id}`}>Use these photos</button>
         </>
@@ -86,12 +102,15 @@ export function UsePhotosFromSet({ set, event, onToast, onSaved }) {
 export function EventPhotosSet({ photosSet, showId, everyday = null, event = null, onToast, onSaved }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const stop = async () => {
+  // keep: the set becomes its own place and the event stays on it (the old
+  // chooser's "Everyday", fifth audit); else the event returns to the
+  // everyday place.
+  const stop = async (keep = false) => {
     setBusy(true);
     setError(null);
     try {
-      await api.put(`/api/v1/scene-sets/${photosSet.id}/version`, { everyday_set_id: null, return_event: true });
-      onToast?.(event ? `${event.name} uses the everyday place again` : `${photosSet.name} is its own set again`);
+      await api.put(`/api/v1/scene-sets/${photosSet.id}/version`, keep ? { everyday_set_id: null } : { everyday_set_id: null, return_event: true });
+      onToast?.(keep || !event ? `${photosSet.name} is its own set` : `${event.name} uses the everyday place again`);
       onSaved?.();
     } catch (err) {
       console.error('[EventPhotos] unlink failed:', err);
@@ -113,8 +132,14 @@ export function EventPhotosSet({ photosSet, showId, everyday = null, event = nul
           <Link to={sceneSetPath(showId, photosSet.id)} data-testid={`event-photos-open-${photosSet.id}`}>{photosSet.name}</Link>
         </span>
       )}
-      <button type="button" className="evp-btn evp-btn-plain" disabled={busy} onClick={stop} data-testid={`event-photos-stop-${photosSet.id}`}>
-        Stop using these photos
+      {event && (
+        <button type="button" className="evp-btn evp-btn-plain" disabled={busy} onClick={() => stop(false)} data-testid={`event-photos-stop-${photosSet.id}`}>
+          Stop using these photos
+        </button>
+      )}
+      <button type="button" className="evp-btn evp-btn-plain" disabled={busy} onClick={() => stop(true)} data-testid={`event-photos-own-${photosSet.id}`}
+        title={event ? `${photosSet.name} becomes a place of its own; ${event.name} stays on it` : `${photosSet.name} becomes a place of its own`}>
+        Make it its own set
       </button>
       {error && <span className="evp-hint" role="alert">{error}</span>}
     </div>

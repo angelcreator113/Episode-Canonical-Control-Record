@@ -134,7 +134,7 @@ const generatePrompt = () => mockCreate.mock.calls.map(([arg]) => arg.messages[0
     const ideas = (id) => request(app).get(`/api/v1/cast/characters/${id}/posts/ideas`).set('Authorization', `Bearer ${editor}`);
     const res = await ideas(ids.char);
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ ready: true, blocker: null });
+    expect(res.body).toMatchObject({ ready: true, blocker: null, next: null });
     expect(res.body.ideas.map((i) => i.key)).toEqual([expect.stringMatching(/^event:/), 'status', 'work', 'mask', 'ordinary']);
     const [event, status, work, mask, ordinary] = res.body.ideas;
     expect(event).toMatchObject({ label: 'Before Linen Swap' });
@@ -146,7 +146,7 @@ const generatePrompt = () => mockCreate.mock.calls.map(([arg]) => arg.messages[0
     expect(mockCreate).not.toHaveBeenCalled();
     const none = await ideas(ids.novoice);
     expect(none.body.ready).toBe(false);
-    expect(none.body.blocker).toMatch(/No Voice has no Voice Profile yet, and one is built only from the Active stage\. .*Make Active/);
+    expect(none.body).toMatchObject({ next: 'make_active', blocker: 'No Voice has no Voice Profile yet, and one is built only from the Active stage. Make them Active, then build it.' });
     expect((await ideas(crypto.randomUUID())).status).toBe(404);
   });
 

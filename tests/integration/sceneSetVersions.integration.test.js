@@ -172,4 +172,26 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(lockedRes.body.code).toBe('PLACE_LOCKED');
     expect((await api('get', `/${version1.id}/version-options`)).body.data.events.find((e) => e.id === locked).locked).toBe(true);
   });
+
+  // Fifth audit: a deleted everyday set took its event back; the sets offered
+  // did not say which would be refused.
+  it('stop using these photos is refused when the everyday set was deleted; the sets offered say what would refuse them', async () => {
+    const showId = await show();
+    const everyday = await set('Studio', { show_id: showId });
+    const night = await set('Studio – night', { show_id: showId });
+    const ev = await event(showId, 'Gala', { scene_set_id: everyday.id });
+    expect((await version(night.id, { everyday_set_id: everyday.id, event_id: ev })).status).toBe(200);
+
+    const other = await set('Loft', { show_id: showId });
+    await event(showId, 'Brunch', { scene_set_id: other.id });
+    const options = (await api('get', `/${night.id}/version-options`)).body.data.everyday_sets;
+    expect(options.find((o) => o.id === everyday.id)).toMatchObject({ has_versions: true });
+    expect(options.find((o) => o.id === other.id)).toMatchObject({ has_versions: false, used_by: [expect.objectContaining({ name: 'Brunch' })] });
+
+    await run('UPDATE scene_sets SET deleted_at = NOW() WHERE id = :id', { id: everyday.id });
+    const res = await version(night.id, { everyday_set_id: null, return_event: true });
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('EVERYDAY_GONE');
+    expect(await eventSet(ev)).toBe(night.id);
+  });
 });

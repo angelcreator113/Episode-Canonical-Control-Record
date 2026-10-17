@@ -53,11 +53,19 @@ async function versionOptions(sequelize, setId) {
   assertId('id', setId);
   const set = await liveSet(sequelize, setId);
   if (!set) throw new SceneSetVersionError('Scene set not found', 404, 'SET_NOT_FOUND');
+  // Each set offered says what would refuse it as an event's photos (fifth
+  // audit: the list offered them all, and the refusal came after a try):
+  // has_versions (an everyday set with event versions) and used_by (the
+  // events held at it; one other than the chosen event refuses it).
   const [everyday] = await sequelize.query(
-    `SELECT id, name, base_still_url FROM scene_sets
-      WHERE deleted_at IS NULL AND version_of_set_id IS NULL AND id <> :id
-        AND (CAST(:showId AS uuid) IS NULL OR show_id IS NULL OR show_id = CAST(:showId AS uuid))
-      ORDER BY name ASC`,
+    `SELECT s.id, s.name, s.base_still_url,
+            EXISTS (SELECT 1 FROM scene_sets v WHERE v.version_of_set_id = s.id AND v.deleted_at IS NULL) AS has_versions,
+            COALESCE((SELECT json_agg(json_build_object('id', e.id, 'name', e.name) ORDER BY e.name)
+                        FROM world_events e WHERE e.scene_set_id = s.id AND e.deleted_at IS NULL), '[]'::json) AS used_by
+       FROM scene_sets s
+      WHERE s.deleted_at IS NULL AND s.version_of_set_id IS NULL AND s.id <> :id
+        AND (CAST(:showId AS uuid) IS NULL OR s.show_id IS NULL OR s.show_id = CAST(:showId AS uuid))
+      ORDER BY s.name ASC`,
     { replacements: { id: set.id, showId: set.show_id || null } });
   const [events] = set.show_id ? await sequelize.query(
     `SELECT id, name, scene_set_id FROM world_events
@@ -144,6 +152,12 @@ async function makeEveryday(sequelize, setId, { returnEvent = false } = {}) {
     const everydayId = set.version_of_set_id || null;
     let returned = null;
     if (returnEvent && everydayId) {
+      // A deleted everyday set cannot take its event back (fifth audit): its
+      // version kept pointing at it after a delete, and the event was moved
+      // onto a removed set.
+      if (!(await liveSet(sequelize, everydayId, transaction))) {
+        throw new SceneSetVersionError('Its everyday set was deleted: choose where the event is held on the event\'s page', 409, 'EVERYDAY_GONE');
+      }
       const [events] = await sequelize.query(
         'SELECT id, name FROM world_events WHERE scene_set_id = :id AND deleted_at IS NULL',
         { replacements: { id: set.id }, transaction });
