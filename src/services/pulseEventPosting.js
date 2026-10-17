@@ -210,6 +210,9 @@ const EVENT_JOBS_SQL = () => `SELECT 1 FROM pulse_jobs j
  */
 async function enqueueForEpisode(db, { showId, episodeId, manual = false, early = false }) {
   if (!manual && process.env.PULSE_ENGINE_ENABLED !== 'true') return [];
+  // Event posts switched off in Admin › Engine (2026-10-17): none queued at
+  // completion; the episode shows under Episodes without posts to queue by hand.
+  if (!manual && !(await require('./pulseQueue').kindEnabled(db, showId, 'event'))) return [];
   const [[done]] = await db.sequelize.query(
     `SELECT COUNT(*)::int AS n FROM episodes e WHERE e.id::text = :episodeId AND e.show_id = :showId AND EXISTS (${EVENT_JOBS_SQL()})`,
     { replacements: { showId, episodeId: String(episodeId) } });
@@ -226,6 +229,8 @@ async function enqueueForEpisode(db, { showId, episodeId, manual = false, early 
         episode_id: String(episodeId), event_id: plan.eventId, posters: batch.map((x) => x.characterId), moment: plan.order,
         about: plan.about, scores: batch.map((x) => x.score), posters_all: plan.posters.map((x) => x.characterId),
         ...(early ? { early: true } : {}),
+        // Queued by Evoni from Engine: runs even while event posts are switched off.
+        ...(manual ? { manual: true } : {}),
       },
     }));
   }
@@ -256,13 +261,19 @@ async function episodesWithoutPosts(db, showId, { limit = 10 } = {}) {
 async function episodesWithDraftEvents(db, showId, { limit = 10 } = {}) {
   const { episodeEventIdSql } = require('../utils/episodeEventSql');
   const [rows] = await db.sequelize.query(
-    `SELECT e.id, e.episode_number, e.title, we.name AS event_name, we.id AS event_id FROM episodes e
+    `SELECT e.id, e.episode_number, e.title, we.name AS event_name, we.id AS event_id,
+            we.venue_name, we.event_date, we.event_time, ss.base_still_url AS image_url FROM episodes e
        JOIN world_events we ON we.id = ${episodeEventIdSql('e.id')} AND we.deleted_at IS NULL
+       LEFT JOIN scene_sets ss ON ss.id = we.scene_set_id AND ss.deleted_at IS NULL
       WHERE e.show_id = :showId AND e.deleted_at IS NULL AND e.evaluation_status IS DISTINCT FROM 'accepted'
         AND NOT EXISTS (${EVENT_JOBS_SQL()})
       ORDER BY e.episode_number ASC NULLS LAST, e.updated_at DESC LIMIT :limit`,
     { replacements: { showId, limit } });
-  return rows.map((r) => ({ id: r.id, episode_number: r.episode_number, title: r.title || null, event_id: r.event_id, event_name: r.event_name || null }));
+  return rows.map((r) => ({
+    id: r.id, episode_number: r.episode_number, title: r.title || null, event_id: r.event_id, event_name: r.event_name || null,
+    // For the card (Evoni's Engine mock, 2026-10-17): where, when, and the venue's picture.
+    venue_name: r.venue_name || null, event_date: r.event_date || null, event_time: r.event_time || null, image_url: r.image_url || null,
+  }));
 }
 
 /** The characters a job names: a batch (Task #3032), or the one a job queued before it named. */
@@ -297,7 +308,9 @@ async function handleEvent(db, job) {
   // before #3072 (no posters_all) keeps the commenters it was queued with.
   const queue = require('./pulseQueue');
   const relational = Array.isArray(p.posters_all) && p.episode_id;
-  for (const r of routed) {
+  // Comment posts switched off in Admin › Engine (2026-10-17): no replies queued.
+  const commenting = await queue.kindEnabled(db, job.show_id, 'comment');
+  for (const r of commenting ? routed : []) {
     const picked = relational
       ? (await commentersFor(db, { showId: job.show_id, episodeId: p.episode_id, posterProfileId: r.post.social_profile_id, exclude: p.posters_all }))
         .map((c) => c.characterId)

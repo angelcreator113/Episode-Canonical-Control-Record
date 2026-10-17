@@ -30,6 +30,11 @@
  *                                                  occupation, income and possessions from
  *                                                  what is written about them; saves nothing
  *                                                  (ADMIN; services/factsSuggest)
+ *   POST   /api/v1/cast/characters/:id/pressure-test  one AI call asks the hard questions a
+ *                                                  fact-checker would and answers each from
+ *                                                  their character file: answers, gap or
+ *                                                  contradiction; saves nothing (ADMIN;
+ *                                                  services/characterPressure)
  *   GET    /api/v1/cast/characters/:id/check        flag-only check of their profile's text
  *                                                  against their facts (services/characterConsistency)
  *   POST   /api/v1/cast/characters/:id/check/intentional        { flag_id, note? }: ADMIN
@@ -340,6 +345,27 @@ router.put('/characters/:id/facts', requireAuth, authorize(['ADMIN']), async (re
  * filled out when I auto generate profiles?"): a proposal for the missing
  * facts only; the fact sheet opens with it, and she saves or changes it.
  */
+// POST /api/v1/cast/characters/:id/pressure-test (the spec's #6; Evoni,
+// 2026-10-17): hard questions answered from their own character file.
+router.post('/characters/:id/pressure-test', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const db = getModels();
+    const found = await characterWithFeed(db, req.params.id);
+    if (!found) return res.status(404).json({ success: false, error: 'Character not found' });
+    const { pressureTest, PressureError } = require('../services/characterPressure');
+    try {
+      return res.json({ success: true, ...(await pressureTest(db, found)) });
+    } catch (err) {
+      if (err instanceof PressureError) return res.status(err.status).json({ success: false, error: err.message });
+      throw err;
+    }
+  } catch (err) {
+    console.error('[Cast] POST /characters/:id/pressure-test error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.post('/characters/:id/facts/suggest', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });

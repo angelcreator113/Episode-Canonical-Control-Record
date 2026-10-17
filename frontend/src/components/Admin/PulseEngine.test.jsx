@@ -11,7 +11,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 vi.mock('../../services/api', () => ({ default: { get: vi.fn(), put: vi.fn(), post: vi.fn() } }));
 
 import api from '../../services/api';
-import PulseEngine, { todayText } from './PulseEngine';
+import PulseEngine, { todayText, breakdownRows } from './PulseEngine';
 
 const STATE = {
   success: true,
@@ -38,8 +38,9 @@ describe('the Engine tab', () => {
     vi.mocked(api.post).mockResolvedValue({ data: { ...STATE, episodes_with_draft_events: [], queued: 1, posts: 2 } });
     render(<PulseEngine showId="show-1" />);
     const card = await screen.findByTestId('pulse-engine-draft-events');
-    expect(within(card).getByText('Episode 1, The Swap · Linen swap')).toBeTruthy();
-    fireEvent.click(within(card).getByText("Draft this event's posts now"));
+    expect(within(card).getByText('The Swap')).toBeTruthy();
+    expect(within(card).getByText('Linen swap')).toBeTruthy();
+    fireEvent.click(within(card).getByRole('button', { name: 'Draft event posts' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/pulse-engine/episodes/ep-1/draft-event', { show_id: 'show-1' }));
     expect((await screen.findByTestId('pulse-engine-note')).textContent).toBe('Drafting 2 posts about Linen swap for Episode 1, The Swap. They wait in Review.');
     expect(screen.queryByTestId('pulse-engine-draft-events')).toBeNull();
@@ -80,7 +81,7 @@ describe('the Engine tab', () => {
     expect((await screen.findByTestId('pulse-engine-today')).textContent).toBe('Today: 2 of 5 automated, 7 of 15 manual.');
     expect(api.get).toHaveBeenCalledWith('/api/v1/pulse-engine?show_id=show-1');
     expect(screen.getByTestId('pulse-engine-off').textContent).toMatch(/isn't running on this server/);
-    const ambient = screen.getByRole('switch');
+    const ambient = screen.getByRole('switch', { name: 'Ambient posts' });
     expect(ambient.checked).toBe(false);
     expect(screen.getByText('Ambient posts off')).toBeTruthy();
     const jobs = within(screen.getByTestId('pulse-engine-jobs')).getAllByRole('listitem').map((li) => li.textContent);
@@ -105,7 +106,7 @@ describe('the Engine tab', () => {
     const manual = screen.getByLabelText('Manual requests a day');
     expect(automated.value).toBe('5');
     expect(manual.value).toBe('15');
-    const save = screen.getByRole('button', { name: 'Save' });
+    const save = screen.getByRole('button', { name: 'Save changes' });
     expect(save.disabled).toBe(true);
     fireEvent.change(automated, { target: { value: '101' } });
     expect(save.disabled).toBe(true);
@@ -120,20 +121,62 @@ describe('the Engine tab', () => {
   test('the ambient switch turns ambient posts on', async () => {
     vi.mocked(api.put).mockResolvedValue({ data: { ...STATE, settings: { ...STATE.settings, ambient_enabled: true } } });
     render(<PulseEngine showId="show-1" />);
-    fireEvent.click(await screen.findByRole('switch'));
+    fireEvent.click(await screen.findByRole('switch', { name: 'Ambient posts' }));
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/pulse-engine', { show_id: 'show-1', ambient_enabled: true }));
     expect(await screen.findByText('Ambient posts on')).toBeTruthy();
-    expect(screen.getByRole('switch').checked).toBe(true);
+    expect(screen.getByRole('switch', { name: 'Ambient posts' }).checked).toBe(true);
   });
 
   test('a refused save and a failed read are shown', async () => {
     vi.mocked(api.put).mockRejectedValue({ response: { status: 403, data: { error: 'Admins only.' } } });
     const { unmount } = render(<PulseEngine showId="show-1" />);
-    fireEvent.click(await screen.findByRole('switch'));
+    fireEvent.click(await screen.findByRole('switch', { name: 'Ambient posts' }));
     expect((await screen.findByRole('alert')).textContent).toBe('Admins only.');
     unmount();
     vi.mocked(api.get).mockRejectedValue({ response: { status: 500 } });
     render(<PulseEngine showId="show-1" />);
     expect((await screen.findByRole('alert')).textContent).toBe('The engine could not be loaded.');
+  });
+
+  // Evoni's Engine mock (2026-10-17).
+  test('the status, the four numbers, the breakdown by kind and the queue', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: {
+      ...STATE, jobs_waiting: 1, jobs_done_today: 2,
+      requests_by_kind: { automated: { event: 1, comments: 1 }, manual: { dm: 5, reactions: 1, redraft: 1 } },
+      queue: [{ id: 'q1', kind: 'comment', status: 'queued', run_after: '2026-10-17T14:00:00Z', error: 'Waiting: Comment posts are switched off in Admin › The Pulse › Engine.' }],
+    } });
+    render(<PulseEngine showId="show-1" />);
+    expect((await screen.findByTestId('pe-status')).textContent).toContain('Engine is off');
+    expect(screen.getByTestId('pe-stat-automated').textContent).toContain('2 / 5');
+    expect(screen.getByTestId('pe-stat-manual').textContent).toContain('7 / 15');
+    expect(screen.getByTestId('pe-stat-waiting').textContent).toContain('1Pending in queue');
+    expect(screen.getByTestId('pe-stat-done').textContent).toContain('4 drafts made today');
+    const queue = within(screen.getByTestId('pe-queue'));
+    expect(queue.getByText(/switched off/)).toBeTruthy();
+    vi.mocked(api.get).mockClear();
+    fireEvent.click(queue.getByRole('button', { name: 'Refresh' }));
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/v1/pulse-engine?show_id=show-1'));
+  });
+
+  test('breakdownRows: each row sums its kinds; unnamed kinds are Other', () => {
+    const byKind = { automated: { event: 2, comment: 1, comments: 2 }, manual: { dm: 3, character_posts: 1, mystery: 2 } };
+    expect(breakdownRows('automated', byKind)).toEqual([
+      { label: 'Events', n: 2 }, { label: 'Ambient', n: 0 }, { label: 'Comments', n: 3 }, { label: 'Storylines', n: 0 }, { label: 'Voice building', n: 0 },
+    ]);
+    expect(breakdownRows('manual', byKind).slice(-2)).toEqual([{ label: 'Character and episode posts', n: 1 }, { label: 'Other', n: 2 }]);
+    expect(breakdownRows('manual', undefined).every((r) => r.n === 0)).toBe(true);
+  });
+
+  test('each kind has its switch, on unless saved off; switching one saves only it', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { ...STATE, settings: { ...STATE.settings, events_enabled: true, comments_enabled: false, storylines_enabled: true, voices_enabled: true } } });
+    vi.mocked(api.put).mockResolvedValue({ data: { ...STATE, settings: { ...STATE.settings, comments_enabled: true } } });
+    render(<PulseEngine showId="show-1" />);
+    const comments = await screen.findByRole('switch', { name: 'Comment posts' });
+    expect(comments.checked).toBe(false);
+    expect(screen.getByRole('switch', { name: 'Event posts' }).checked).toBe(true);
+    expect(screen.getByRole('switch', { name: 'Voice building' }).checked).toBe(true);
+    fireEvent.click(comments);
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/pulse-engine', { show_id: 'show-1', comments_enabled: true }));
+    expect(await screen.findByText('Comment posts on')).toBeTruthy();
   });
 });
