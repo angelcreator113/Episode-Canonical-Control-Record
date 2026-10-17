@@ -8,7 +8,7 @@
 //
 // - Lala's voice: she talks only after JustAWoman clicks her voice icon,
 //   unless she is answering a notification or message, or being dressed;
-//   per beat. Her thoughts, `Lala (V.O.):`, are not talking.
+//   per line. Her thoughts, `Lala (V.O.):`, are not talking.
 // - Beat 5 (Reveal) shows the invitation letter, never the login screen.
 
 // BEGIN SHARED
@@ -49,7 +49,7 @@ function invitationLine(on = {}) {
 // She is being dressed in this beat: a [WEAR:] cue, or the closet opens.
 const dressing = (lines) => lines.some((l) => WEAR.test(l) || (() => { const m = moment(l); return !!m && m.verb === 'OPEN' && /closet/i.test(m.target); })());
 
-/** The lines of one beat where Lala starts talking with her voice off. */
+/** The lines of one beat Lala says with her voice off. */
 function voiceOffLines(lines = []) {
   const off = [];
   if (dressing(lines)) return off;
@@ -59,12 +59,16 @@ function voiceOffLines(lines = []) {
     if (m) { if ((TAPS.has(m.verb) && VOICE.test(m.target)) || MESSAGES.has(m.verb)) on = true; return; }
     if (MAIL.test(line)) { on = true; return; }
     const lala = String(line || '').match(LALA);
-    if (lala && !/v\.?\s*o\.?/i.test(lala[1] || '') && !on) { off.push(i); on = true; }
+    if (!lala || /v\.?\s*o\.?/i.test(lala[1] || '')) return;
+    // Each line she says needs its own click (Evoni, 2026-10-17: per line,
+    // not per beat); a notification or message covers the line answering it.
+    if (!on) off.push(i);
+    on = false;
   });
   return off;
 }
 
-/** One beat's lines with the voice click before each place she starts talking: { lines, added }. */
+/** One beat's lines with the voice click before each line she says with her voice off: { lines, added }. */
 function beatWithVoiceClicks(lines = [], iconName = 'Voice Icon') {
   const off = voiceOffLines(lines);
   const next = lines.slice();

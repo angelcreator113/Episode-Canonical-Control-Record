@@ -17,12 +17,18 @@ const ON = {
 };
 
 describe("Lala's voice", () => {
-  test('a click turns her voice on for the rest of the beat', () => {
-    expect(rules.voiceOffLines(['Me: hi', 'Lala: hello', 'Lala: again'])).toEqual([1]);
-    expect(rules.voiceOffLines(['[UI:CLICK Lala Voice Icon]', 'Lala: hello', 'Me: ok', 'Lala: again'])).toEqual([]);
+  test('each line she says needs its own click', () => {
+    // Per line, not per beat (Evoni, 2026-10-17).
+    expect(rules.voiceOffLines(['Me: hi', 'Lala: hello', 'Lala: again'])).toEqual([1, 2]);
+    expect(rules.voiceOffLines(['[UI:CLICK Lala Voice Icon]', 'Lala: hello', 'Me: ok', 'Lala: again'])).toEqual([3]);
+    expect(rules.voiceOffLines(['[UI:CLICK Lala Voice Icon]', 'Lala: hello', '[UI:CLICK Lala Voice Icon]', 'Lala: again'])).toEqual([]);
+    expect(rules.beatWithVoiceClicks(['Lala: hello', 'Lala: again'], 'Voice Icon').lines)
+      .toEqual(['[UI:CLICK Voice Icon]', 'Lala: hello', '[UI:CLICK Voice Icon]', 'Lala: again']);
   });
   test('a notification or message, and being dressed, need no click', () => {
     expect(rules.voiceOffLines(['[UI:NOTIFY Mira: you up?]', 'Lala: who is this'])).toEqual([]);
+    // The notification covers the line answering it, not the next one.
+    expect(rules.voiceOffLines(['[UI:NOTIFY Mira: you up?]', 'Lala: who is this', 'Lala: anyway'])).toEqual([2]);
     expect(rules.voiceOffLines(['[UI:DM Mira: hey]', 'Lala: hey'])).toEqual([]);
     expect(rules.voiceOffLines(['[MAIL: invite]', 'Lala: mail!'])).toEqual([]);
     expect(rules.voiceOffLines(['[UI:OPEN Closet]', 'Lala: the gold one'])).toEqual([]);

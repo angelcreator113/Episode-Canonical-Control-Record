@@ -47,8 +47,8 @@ test("the writer is told both rules, by the show's own names", async () => {
   await generateGroundedScript('ep1', 'show-1', models());
   const prompt = create.mock.calls[0][0].messages[0].content;
   expect(prompt).toContain('Beat 5 (Reveal): the invitation letter comes up, [UI:OPEN Invitation], never the login screen or the Start button');
-  expect(prompt).toContain('Lala talks only after JustAWoman clicks her voice icon: [UI:CLICK Lala Voice Icon] before Lala\'s first line in a beat');
-  expect(prompt).toContain('answering a notification or message');
+  expect(prompt).toContain('Lala talks only after JustAWoman clicks her voice icon: [UI:CLICK Lala Voice Icon] on its own line right before every line Lala says: one click, one line');
+  expect(prompt).toContain('the line where she answers a notification or message');
   expect(prompt).toContain('while she is being dressed');
 });
 
