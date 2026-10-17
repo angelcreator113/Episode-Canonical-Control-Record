@@ -18,6 +18,7 @@ import {
   BarChart3, CalendarDays, Download, Link2, MapPin,
 } from 'lucide-react';
 import CharacterPlacesTab from '../components/CharacterPlaces/CharacterPlacesTab';
+import KnownFor from '../components/Cast/KnownFor';
 import { API_URL } from '../config/api';
 import CharacterDepthPanel from '../components/CharacterDepthPanel';
 import { platformLabel, atHandle, followersOf } from './feed/feedConstants';
@@ -611,6 +612,7 @@ export function TheirFacts({ character, onFeedSaved }) {
                 <dd>{facts.affordability ? `${facts.affordability.label} (${money(facts.affordability.yearly)} a year)` : <span className="ch-note">Set their income</span>}</dd>
               </div>
             </dl>
+            {facts.feed_linked && <KnownFor characterId={id} />}
             <span className="ch-facts-row">
               <button type="button" className="ch-btn-soft" onClick={() => startEdit()}>Edit facts</button>
               {needsFacts(facts) && (
