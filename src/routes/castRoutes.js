@@ -55,7 +55,7 @@
  *   POST   /api/v1/cast/characters/:id/places/share { scene_set_id, caption? }: a draft
  *                                                  Pulse post of that place from their
  *                                                  feed profile (services/characterPlaceShare)
- *   POST   /api/v1/cast/characters/:id/places/describe { scene_set_id }: one AI
+ *   POST   /api/v1/cast/characters/:id/places/describe { scene_set_id, role? }: one AI
  *                                                  call that writes the place's description
  *                                                  from their profile; saves nothing
  *                                                  (services/placeDescriptionService)
@@ -670,10 +670,11 @@ router.post('/characters/:id/places/share', requireAuth, async (req, res) => {
 router.post('/characters/:id/places/describe', requireAuth, aiRateLimiter, async (req, res) => {
   const { describePlace, PlaceDescriptionError } = require('../services/placeDescriptionService');
   try {
-    const data = await describePlace(getModels(), { characterId: req.params.id, sceneSetId: req.body?.scene_set_id });
+    const data = await describePlace(getModels(), { characterId: req.params.id, sceneSetId: req.body?.scene_set_id, role: req.body?.role || null });
     return res.json({ success: true, data });
   } catch (err) {
-    if (err instanceof PlaceDescriptionError) return res.status(err.status).json({ success: false, code: err.code, error: err.message });
+    const { PlaceShareError } = require('../services/characterPlaceShare');
+    if (err instanceof PlaceDescriptionError || err instanceof PlaceShareError) return res.status(err.status).json({ success: false, code: err.code, error: err.message });
     console.error('[cast] POST characters/:id/places/describe error:', err);
     if (err?.code === 'AI_BUDGET_EXCEEDED') return res.status(429).json({ success: false, code: err.code, error: err.message });
     return res.status(500).json({ success: false, error: err.message });
