@@ -189,6 +189,80 @@ describe('CharacterPlacesTab', () => {
       expect(posts()).toContain('/api/v1/scene-sets/set-ev/angles/ang-1/upload');
     });
 
+    // Sixth audit (2026-10-17).
+    test('Add angles sends a free label; a photo that does not upload takes its empty angle with it; one note says both', async () => {
+      routeGets();
+      vi.mocked(api.post).mockImplementation(async (url) => {
+        if (url === '/api/v1/scene-sets/set-1/angles') return { data: { success: true, data: { id: `ang-${posts().length}` } } };
+        if (/ang-\d+\/upload$/.test(url) && vi.mocked(api.post).mock.calls.at(-1)[1].get('images').name === 'big.jpg') throw new Error('413');
+        return { data: { success: true } };
+      });
+      vi.mocked(api.delete).mockResolvedValue({ data: { success: true } });
+      renderIt();
+      await screen.findByTestId('set-angles-set-1');
+      fireEvent.change(screen.getByTestId('set-angles-input-set-1'), { target: { files: [file('wide.jpg'), file('big.jpg')] } });
+      await waitFor(() => expect(api.delete).toHaveBeenCalledTimes(1));
+      const labels = vi.mocked(api.post).mock.calls.filter((c) => c[0] === '/api/v1/scene-sets/set-1/angles').map((c) => c[1].angle_label);
+      expect(labels[0]).toBe('WIDE_2');
+      expect(api.delete.mock.calls[0][0]).toMatch(/^\/api\/v1\/scene-sets\/set-1\/angles\/ang-\d+$/);
+      const note = (await screen.findByTestId('places-note')).textContent;
+      expect(note).toMatch(/Added 1 angle to Studio; could not add big\.jpg/);
+    });
+
+    test('a photo over 10 MB is not sent', async () => {
+      routeGets();
+      renderIt();
+      await screen.findByTestId('set-angles-set-1');
+      const huge = file('huge.jpg');
+      Object.defineProperty(huge, 'size', { value: 11 * 1024 * 1024 });
+      fireEvent.change(screen.getByTestId('set-angles-input-set-1'), { target: { files: [huge] } });
+      expect((await screen.findByTestId('places-note')).textContent).toMatch(/could not add huge\.jpg \(over 10 MB\)/i);
+      expect(api.post).not.toHaveBeenCalled();
+    });
+
+    test("an event's place is linked before its photos go up: a refusal uploads nothing; a failed main photo undoes the link", async () => {
+      routeGets({ events: [{ id: 'ev-1', show_id: 'show-1', name: 'Gala', role: 'host', scene_set_id: 'set-1', scene_set_name: 'Studio', scene_set_version_of: null }] });
+      vi.mocked(api.post).mockImplementation(async (url) => (url === '/api/v1/scene-sets' ? { data: { success: true, data: { id: 'set-ev' } } } : { data: { success: true } }));
+      vi.mocked(api.put).mockRejectedValueOnce({ response: { data: { error: "Its episode is accepted: the event's place is locked." } } });
+      vi.mocked(api.delete).mockResolvedValue({ data: { success: true } });
+      renderIt();
+      await screen.findByTestId('event-photos-angles-ev-1');
+      fireEvent.change(screen.getByTestId('event-photos-input-ev-1'), { target: { files: [file('stage.jpg')] } });
+      expect((await screen.findByTestId('places-note')).textContent).toMatch(/place is locked/);
+      expect(posts()).not.toContain('/api/v1/scene-sets/set-ev/upload-base');
+      expect(api.delete).toHaveBeenCalledWith('/api/v1/scene-sets/set-ev');
+
+      vi.mocked(api.put).mockReset().mockResolvedValue({ data: { success: true } });
+      vi.mocked(api.post).mockImplementation(async (url) => {
+        if (url === '/api/v1/scene-sets') return { data: { success: true, data: { id: 'set-ev2' } } };
+        if (url.endsWith('/upload-base')) throw { response: { data: { error: 'not a readable image' } } };
+        return { data: { success: true } };
+      });
+      fireEvent.change(screen.getByTestId('event-photos-input-ev-1'), { target: { files: [file('junk.jpg')] } });
+      await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/api/v1/scene-sets/set-ev2'));
+      expect(vi.mocked(api.put).mock.calls.map((c) => c[1])).toEqual([
+        { everyday_set_id: 'set-1', event_id: 'ev-1' }, { everyday_set_id: null, return_event: true },
+      ]);
+    });
+
+    test("the lead's home that is also her closet: two cards, their own ids, angles added on one show on both", async () => {
+      places = [
+        { role: 'home', scene_set_id: 'set-1', scene_set_name: 'Studio', image_url: null },
+        { role: 'closet', scene_set_id: 'set-1', scene_set_name: 'Studio', image_url: null },
+      ];
+      routeGets();
+      vi.mocked(api.post).mockImplementation(async (url) => (url === '/api/v1/scene-sets/set-1/angles'
+        ? { data: { success: true, data: { id: 'ang-1' } } } : { data: { success: true } }));
+      renderIt();
+      await waitFor(() => expect(screen.getAllByTestId('set-angles-set-1')).toHaveLength(2));
+      expect(screen.getByTestId('place-describe-home-set-1')).toBeTruthy();
+      expect(screen.getByTestId('place-describe-closet-set-1')).toBeTruthy();
+      const reads = () => vi.mocked(api.get).mock.calls.filter((c) => c[0] === '/api/v1/scene-sets/set-1').length;
+      const before = reads();
+      fireEvent.change(screen.getAllByTestId('set-angles-input-set-1')[0], { target: { files: [file('mirror.jpg')] } });
+      await waitFor(() => expect(reads()).toBeGreaterThanOrEqual(before + 2));
+    });
+
     test("an event with its own photos shows them with Add angles; one held nowhere says where to choose its place", async () => {
       routeGets({ events: [
         { id: 'ev-1', show_id: 'show-1', name: 'Gala', role: 'host', scene_set_id: 'set-ev', scene_set_name: 'Gala photos', scene_set_version_of: 'set-1' },

@@ -40,6 +40,7 @@ import { societyArchetypeCounts } from '../lib/societySummary';
 import useListEditor, { EditListsToggle, ItemActions, AddToList } from '../components/PageEdit/ListEditor';
 import BrainUpdate from '../components/BrainUpdate';
 import SocietySummary from '../components/Society/SocietySummary';
+import ContentTypeBatch from '../components/Society/ContentTypeBatch';
 import { ARCHETYPES, RELATIONSHIP_TYPES, ECONOMY_STREAMS, FASHION_TREND_STAGES, BEAUTY_TREND_STAGES, MOMENTUM_WAVES, INFLUENCE_FORCES, LEGACY_SIGNALS, INFLUENCER_DEFAULTS } from '../data/influencerData';
 import { CELEBRITY_HIERARCHY, ALGORITHM_FORCES, DRAMA_MECHANICS, GOSSIP_MEDIA, FAMOUS_CHARACTERS, CALENDAR_DEFAULTS } from '../data/calendarData';
 import { tabFromSearch } from '../utils/worldRedirects';
@@ -78,7 +79,7 @@ function feedNote(feed, counted) {
   if (feed === null) return 'Counting the LalaVerse Feed…';
   if (!counted) return 'The LalaVerse Feed could not be counted just now.';
   const parts = ['Each card counts the LalaVerse Feed profiles that have it.'];
-  if (counted.unset) parts.push(`${plural(counted.unset, 'profile')} ${counted.unset === 1 ? 'has' : 'have'} none yet: made before the Feed used these. Regenerating a profile gives it one.`);
+  if (counted.unset) parts.push(`${plural(counted.unset, 'profile')} ${counted.unset === 1 ? 'has' : 'have'} none yet: made before the Feed used these. Suggest theirs below, or set one on a character's page (Known for on The Pulse).`);
   if (counted.other) parts.push(`${plural(counted.other, 'profile')} ${counted.other === 1 ? 'carries' : 'carry'} an archetype no longer in this list.`);
   return parts.join(' ');
 }
@@ -128,6 +129,11 @@ export default function SocialSystems({ embedded = false }) {
       });
     return () => { live = false; };
   }, [tab, feed]);
+
+  // After content types are saved: recount without clearing the cards.
+  const recountFeed = () => api.get('/api/v1/social-profiles/analytics/composition?feed_layer=lalaverse')
+    .then((r) => setFeed(r.data || {}))
+    .catch((err) => console.error('[Society] the Feed profiles could not be recounted:', err?.response?.status || err?.message));
 
   const saving = isSaving || ccSaving;
   // The front page's legend chips open a group on the Legends tab.
@@ -179,6 +185,7 @@ export default function SocialSystems({ embedded = false }) {
           <div className="ss-panel">
             <p className="ss-note">Every major creator tends to fall into one of these patterns. The tension between two archetypes in the same person is often the story. Open one for its effect on the audience and what it does in the story.</p>
             <p className="ss-note" data-testid="ss-arch-feed">{feedNote(feed, counted)}</p>
+            {counted && <ContentTypeBatch unset={counted.unset} archetypes={archetypes} onApplied={recountFeed} />}
             <ul className="ss-grid">
               {archetypes.map((a, i) => {
                 const open = expandedArch === a.num;
