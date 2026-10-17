@@ -29,7 +29,11 @@ const { FACT_KEYS } = require('./characterFacts');
 const FACT_LABELS = {
   handle: 'handle', followers: 'followers', account_status: 'account status',
   income: 'income', occupation: 'occupation', major_possessions: 'what they own',
+  home_price_range: 'home price range',
 };
+// Facts a character is ready without: the home price range is only read
+// when their home is described (2026-10-17).
+const OPTIONAL_FACTS = new Set(['home_price_range']);
 
 function factStates(facts) {
   const undecided = new Set(facts.undecided || []);
@@ -40,6 +44,7 @@ function factStates(facts) {
     income: facts.income?.amount != null,
     occupation: Boolean(facts.occupation),
     major_possessions: (facts.major_possessions || []).length > 0,
+    home_price_range: Boolean(facts.home_price_range),
   };
   const out = {};
   for (const k of FACT_KEYS) {
@@ -76,7 +81,7 @@ async function overviewOf(db, character) {
   else {
     if (!showId) todo.push("Choose their registry's show");
     if (findings) todo.push(`Fix ${findings} finding${findings === 1 ? '' : 's'}`);
-    const missing = FACT_KEYS.filter((k) => states[k] === 'missing' || states[k] === 'estimate');
+    const missing = FACT_KEYS.filter((k) => !OPTIONAL_FACTS.has(k) && (states[k] === 'missing' || states[k] === 'estimate'));
     if (missing.length) todo.push(`Set their facts: ${missing.map((k) => (states[k] === 'estimate' ? `confirm ${FACT_LABELS[k]}` : FACT_LABELS[k])).join(', ')}`);
     if (voice === 'none') todo.push(POSTING_STAGES.includes(character.depth_level) ? 'Build their voice' : 'Make Active, then build their voice');
   }

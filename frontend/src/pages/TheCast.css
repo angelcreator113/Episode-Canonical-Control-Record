@@ -217,3 +217,9 @@
 .cast-log-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13px; }
 .cast-log-list li { display: grid; gap: 2px; overflow-wrap: anywhere; }
 .cast-log-list a { color: var(--lala-lavender-text); text-decoration: none; }
+/* Across the cast (CastCrossCheck): contradictions between characters */
+.cast-cross-what { font-size: 14px; overflow-wrap: anywhere; }
+.cast-cross-what a { color: var(--lala-lavender-text); text-decoration: none; }
+.cast-cross-what a:hover { text-decoration: underline; }
+.cast-cross-excerpt { font-size: 13px; font-style: italic; color: var(--text-secondary); overflow-wrap: anywhere; }
+.cast-cross-row .cast-note a { color: var(--lala-lavender-text); }

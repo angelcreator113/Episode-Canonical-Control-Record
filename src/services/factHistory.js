@@ -9,7 +9,8 @@
  *   recordFactChanges(db, { character, showId, before, after, reason, by })
  *     after a save on the fact sheet (characterFacts.setFacts): one
  *     character_fact_changes row per fact that changed (handle, account
- *     status, income, occupation, what they own, not decided yet), at the
+ *     status, income, occupation, what they own, their home's price range,
+ *     not decided yet), at the
  *     story moment of the show's present. Followers are left to their own
  *     ledger. Never throws: the save already happened; a failure is logged.
  *   factHistory(db, { character, feedProfile }) → [entry], newest first:
@@ -21,9 +22,9 @@
 
 const LABELS = {
   handle: 'Handle', account_status: 'Account status', income: 'Income', occupation: 'Occupation',
-  major_possessions: 'What they own', undecided: 'Not decided yet', followers: 'Followers',
+  major_possessions: 'What they own', home_price_range: 'Their home', undecided: 'Not decided yet', followers: 'Followers',
 };
-const TRACKED = ['handle', 'account_status', 'income', 'occupation', 'major_possessions', 'undecided'];
+const TRACKED = ['handle', 'account_status', 'income', 'occupation', 'major_possessions', 'home_price_range', 'undecided'];
 const MAX_ENTRIES = 200;
 
 /** A fact as a plain value to compare and store: null when unset. */
@@ -34,6 +35,7 @@ function valueOf(facts, key) {
     return i && i.amount != null ? { amount: i.amount, cadence: i.cadence || null, source: i.source || null } : null;
   }
   if (key === 'major_possessions') return (facts.major_possessions || []).length ? [...facts.major_possessions] : null;
+  if (key === 'home_price_range') return facts.home_price_range?.label || null;
   if (key === 'undecided') return (facts.undecided || []).length ? [...facts.undecided].sort() : null;
   return facts[key] || null;
 }

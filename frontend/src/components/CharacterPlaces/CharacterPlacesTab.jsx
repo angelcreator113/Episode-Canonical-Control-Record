@@ -8,6 +8,8 @@
  *     sets (a venue's set for a place of work) or made from uploaded photos.
  *     The same links as Characters' places on a scene set
  *     (characterPlacesService), seen from the character's side.
+ *     Each has "Write from their profile" (PlaceDescription): its description
+ *     written from their city, price range, class, style and the gap.
  *   Hosted events: the events whose host is their feed profile
  *     (characterEvents), each with its event photos (EventLookImage); add or
  *     stop hosting one (characterHostedEvents).
@@ -19,6 +21,7 @@ import api from '../../services/api';
 import { sceneSetPath } from '../../utils/sceneSets';
 import EventLookImage from '../EventPackage/EventLookImage';
 import SetAngles from './SetAngles';
+import PlaceDescription from './PlaceDescription';
 import { makeSetFromPhotos, removeSet } from './setPhotos';
 import './CharacterPlacesTab.css';
 
@@ -116,6 +119,7 @@ function RoleSection({ spec, places, linked, character, showId, sets, loadSets, 
             </div>
             {/* Its angles, and more added to this same set (2026-10-17). */}
             <SetAngles setId={p.scene_set_id} onNote={onNote} />
+            <PlaceDescription characterId={character.id} setId={p.scene_set_id} setName={p.scene_set_name} onNote={onNote} />
           </li>
         ))}
       </ul>

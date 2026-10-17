@@ -14,6 +14,11 @@
  *   income, occupation, major_possessions, undecided
  *                     registry_characters.canon_facts (JSONB)
  *   affordability     worked out from income, never stored
+ *   home_price_range  registry_characters.canon_facts: what their home costs,
+ *                     one of HOME_PRICE_RANGES (Evoni, 2026-10-17: a home's
+ *                     description is written from their profile, "what
+ *                     price range"). Decided apart from income: a home can
+ *                     cost more or less than they can afford.
  *
  * `undecided` lists facts that are not decided yet (the spec's #14): a
  * generator must not invent them, and the checker does not flag them.
@@ -46,13 +51,26 @@
  *                                    undecided cleared (FACT_FIELDS)
  */
 
-const FACT_KEYS = Object.freeze(['handle', 'followers', 'account_status', 'income', 'occupation', 'major_possessions']);
+const FACT_KEYS = Object.freeze(['handle', 'followers', 'account_status', 'income', 'occupation', 'major_possessions', 'home_price_range']);
 const ACCOUNT_STATUSES = Object.freeze(['rising', 'peaking', 'plateauing', 'controversial', 'cancelled', 'reinventing', 'gone_dark', 'posthumous']);
 const INCOME_CADENCES = Object.freeze(['per_month', 'per_year']);
 const AFFORDABILITY = Object.freeze([
   ['struggling', 0, 'Struggling'], ['getting_by', 30000, 'Getting by'], ['comfortable', 60000, 'Comfortable'],
   ['well_off', 150000, 'Well off'], ['wealthy', 1000000, 'Wealthy'],
 ]);
+// [key, label, what such a home is]: the home price range's choices.
+const HOME_PRICE_RANGES = Object.freeze([
+  ['budget', 'Budget (under $1,500 a month)', 'a room in a shared flat or a small, worn studio'],
+  ['modest', 'Modest ($1,500 to $3,000 a month)', 'a small rental apartment, plain finishes'],
+  ['comfortable', 'Comfortable ($3,000 to $6,000 a month)', 'a good apartment in a decent building, some nice pieces'],
+  ['upscale', 'Upscale ($6,000 to $15,000 a month)', 'a high-end apartment or townhouse, designer furniture, good light'],
+  ['luxury', 'Luxury ($15,000 to $50,000 a month)', 'a penthouse or a large house, custom finishes, views'],
+  ['ultra', 'Ultra-luxury (over $50,000 a month)', 'an estate or a landmark penthouse, staff, art, rare materials'],
+]);
+const homePriceRangeOf = (key) => {
+  const r = HOME_PRICE_RANGES.find(([k]) => k === key);
+  return r ? { key: r[0], label: r[1], looks_like: r[2] } : null;
+};
 const HANDLE_RE = /^[A-Za-z0-9._]{1,60}$/;
 
 class FactsError extends Error {
@@ -123,6 +141,7 @@ async function factsOf(db, { character, feedProfile = null, showId = null }) {
     occupation: stored.occupation || null,
     major_possessions: Array.isArray(stored.major_possessions) ? stored.major_possessions : [],
     affordability: affordabilityOf(income),
+    home_price_range: homePriceRangeOf(stored.home_price_range),
     undecided: Array.isArray(stored.undecided) ? stored.undecided.filter((k) => FACT_KEYS.includes(k)) : [],
   };
 }
@@ -146,6 +165,11 @@ function nextCanonFacts(current, body) {
     if (!Array.isArray(body.major_possessions)) throw new FactsError(400, 'major_possessions must be a list.');
     next.major_possessions = body.major_possessions.map((p) => text(p, 120)).filter(Boolean).slice(0, 30);
   }
+  if ('home_price_range' in body) {
+    const r = body.home_price_range || null;
+    if (r !== null && !homePriceRangeOf(r)) throw new FactsError(400, `Home price range is one of: ${HOME_PRICE_RANGES.map(([k]) => k).join(', ')}.`);
+    next.home_price_range = r;
+  }
   if ('undecided' in body) {
     if (!Array.isArray(body.undecided)) throw new FactsError(400, 'undecided must be a list of facts.');
     next.undecided = [...new Set(body.undecided.filter((k) => FACT_KEYS.includes(k)))];
@@ -155,10 +179,11 @@ function nextCanonFacts(current, body) {
 
 /**
  * Applies the body's changes: { handle?, account_status?, followers?: { count,
- * reason }, income?, occupation?, major_possessions?, undecided?, reason? }.
- * Returns the facts after. Handle, status and followers need a feed
- * profile. Each other fact that changed goes into the fact history with
- * `reason` (services/factHistory); followers keep their own ledger.
+ * reason }, income?, occupation?, major_possessions?, home_price_range?,
+ * undecided?, reason? }. Returns the facts after. Handle, status and
+ * followers need a feed profile. Each other fact that changed goes into the
+ * fact history with `reason` (services/factHistory); followers keep their
+ * own ledger.
  */
 async function setFacts(db, { character, feedProfile = null, showId = null, body = {}, by = null }) {
   const feedChanges = {};
@@ -267,8 +292,12 @@ function factsPromptBlock(facts) {
     lines.push(`- income: ${facts.income.amount.toLocaleString('en-US')} ${facts.income.cadence === 'per_month' ? 'a month' : 'a year'}${facts.income.source ? ` from ${facts.income.source}` : ''}`);
   }
   if (isDecided(facts, 'major_possessions')) lines.push(`- what they own: ${facts.major_possessions.join('; ')}`);
+  const homeSet = isDecided(facts, 'home_price_range');
+  if (homeSet) lines.push(`- their home's price range: ${facts.home_price_range.label}: ${facts.home_price_range.looks_like}`);
   if (facts.affordability && isDecided(facts, 'income')) {
-    lines.push(`- what they can afford: ${facts.affordability.label}. No home, car, purchase or lifestyle in your writing goes beyond that.`);
+    lines.push(homeSet
+      ? `- what they can afford: ${facts.affordability.label}. No car, purchase or lifestyle in your writing goes beyond that; their home is the price range above.`
+      : `- what they can afford: ${facts.affordability.label}. No home, car, purchase or lifestyle in your writing goes beyond that.`);
   }
   const notYet = (facts.undecided || []).map((k) => k.replace(/_/g, ' '));
   if (!lines.length && !notYet.length) return '';
@@ -371,7 +400,7 @@ async function factsForProfile(db, profile) {
 }
 
 module.exports = {
-  FACT_KEYS, ACCOUNT_STATUSES, INCOME_CADENCES, AFFORDABILITY, FactsError,
+  FACT_KEYS, ACCOUNT_STATUSES, INCOME_CADENCES, AFFORDABILITY, HOME_PRICE_RANGES, homePriceRangeOf, FactsError,
   formatCount, affordabilityOf, yearlyIncome, factsOf, setFacts, nextCanonFacts, showIdFor,
   isDecided, factsPromptBlock, factsForCharacter, factsForProfile, holdToFacts, agreeingFollowers, primaryPresenceKey, FACT_FIELDS, STATUS_WORDS,
 };
