@@ -1,0 +1,152 @@
+/**
+ * YouTube thumbnails (Evoni, 2026-10-17): the style and request checks,
+ * where images may come from, the title fitting, a real render (sharp,
+ * 1280x720), the picture lists, the show's style, and saving as the
+ * episode's primary thumbnail. No database (sequelize.query is mocked) and
+ * no S3 (the client is mocked).
+ */
+
+const mockSend = jest.fn();
+jest.mock('@aws-sdk/client-s3', () => ({
+  S3Client: jest.fn(() => ({ send: (...a) => mockSend(...a) })),
+  PutObjectCommand: jest.fn((input) => ({ input })),
+}));
+
+const sharp = require('sharp');
+const yt = require('../../../src/services/youtubeThumbnailService');
+
+describe('readStyle and readSpec', () => {
+  test('a missing or odd style falls back to the defaults', () => {
+    expect(yt.readStyle(undefined)).toEqual(yt.DEFAULT_STYLE);
+    expect(yt.readStyle({ layout: 'sideways', accent: 'pink', dim: 5 })).toMatchObject({ layout: 'lala-left', accent: '#E0689F', dim: 0.8 });
+    expect(yt.readStyle({ layout: 'center', accent: '#b8962e', lalaUrl: 'https://b.s3.amazonaws.com/l.png' }))
+      .toMatchObject({ layout: 'center', accent: '#B8962E', lalaUrl: 'https://b.s3.amazonaws.com/l.png' });
+  });
+
+  test('a request needs a title, a known layout and real colours', () => {
+    expect(yt.readSpec({ title: '  Studio   by Sable ', badge: 'EP 1', kicker: 'Styling Adventures' }))
+      .toMatchObject({ title: 'Studio by Sable', badge: 'EP 1', kicker: 'Styling Adventures', layout: 'lala-left' });
+    expect(() => yt.readSpec({})).toThrow(/needs a title/);
+    expect(() => yt.readSpec({ title: 'x', layout: 'diagonal' })).toThrow(/layout must be one of/);
+    expect(() => yt.readSpec({ title: 'x', accent: 'red' })).toThrow(/accent must be a colour/);
+  });
+});
+
+describe('allowedImageUrl', () => {
+  test('https S3 images only', () => {
+    expect(yt.allowedImageUrl('https://primepisodes-assets.s3.us-east-1.amazonaws.com/a.png')).toBe(true);
+    expect(yt.allowedImageUrl('https://bucket.s3.amazonaws.com/a.png')).toBe(true);
+    expect(yt.allowedImageUrl('http://bucket.s3.amazonaws.com/a.png')).toBe(false);
+    expect(yt.allowedImageUrl('https://169.254.169.254/latest/meta-data')).toBe(false);
+    expect(yt.allowedImageUrl('https://evil.example.com/s3.amazonaws.com.png')).toBe(false);
+    expect(yt.allowedImageUrl('not a url')).toBe(false);
+  });
+
+  test('fetchImage refuses anything else before any request', async () => {
+    await expect(yt.fetchImage('https://example.com/a.png')).rejects.toMatchObject({ status: 400 });
+  });
+});
+
+describe('title fitting', () => {
+  test('short titles stay big; long ones shrink to three lines, and only the longest are cut', () => {
+    expect(yt.fitTitle('Day One', 610)).toEqual({ size: 112, lines: ['Day One'] });
+    const mid = yt.fitTitle('Studio by Sable: The Creative Atelier', 610);
+    expect(mid.lines.length).toBeLessThanOrEqual(3);
+    expect(mid.lines.join(' ')).toBe('Studio by Sable: The Creative Atelier');
+    const long = yt.fitTitle('Lala Meets the Host Who Changes Everything About Her Style Forever and Ever', 610);
+    expect(long.size).toBe(54);
+    expect(long.lines).toHaveLength(3);
+    expect(long.lines[2].endsWith('…')).toBe(true);
+  });
+
+  test('the show name shrinks to fit its column', () => {
+    expect(yt.kickerSize('Lala', 610)).toBe(34);
+    expect(yt.kickerSize('Styling Adventures with Lala', 610)).toBeLessThan(34);
+  });
+
+  test('text is escaped in the SVG', () => {
+    const svg = yt.textSvg(yt.readSpec({ title: 'Tea & <Toast>', kicker: 'A "show"' }));
+    expect(svg).toContain('Tea &amp;');
+    expect(svg).toContain('&lt;Toast&gt;');
+    expect(svg).toContain('A &quot;SHOW&quot;');
+    expect(svg).not.toContain('<Toast>');
+  });
+});
+
+describe('render', () => {
+  test('a 1280x720 PNG, with and without pictures', async () => {
+    const bg = await sharp({ create: { width: 1600, height: 900, channels: 3, background: '#7A2A6A' } }).jpeg().toBuffer();
+    const lala = await sharp({ create: { width: 400, height: 800, channels: 4, background: { r: 224, g: 104, b: 159, alpha: 1 } } }).png().toBuffer();
+    for (const layout of yt.LAYOUTS) {
+      const png = await yt.render(yt.readSpec({ layout, title: 'Studio by Sable', badge: 'EP 1', kicker: 'Styling Adventures' }), { background: bg, lala });
+      const meta = await sharp(png).metadata();
+      expect([meta.format, meta.width, meta.height]).toEqual(['png', 1280, 720]);
+    }
+    const plain = await sharp(await yt.render(yt.readSpec({ title: 'No pictures' }), {})).metadata();
+    expect([plain.width, plain.height]).toEqual([1280, 720]);
+  });
+
+  test('Lala stands on her side: left layout fills the bottom-left, not the bottom-right', async () => {
+    const lala = await sharp({ create: { width: 300, height: 600, channels: 4, background: { r: 0, g: 255, b: 0, alpha: 1 } } }).png().toBuffer();
+    const png = await yt.render(yt.readSpec({ layout: 'lala-left', title: 'x', dim: 0 }), { lala });
+    const { data, info } = await sharp(png).raw().toBuffer({ resolveWithObject: true });
+    const px = (x, y) => { const i = (y * info.width + x) * info.channels; return [data[i], data[i + 1], data[i + 2]]; };
+    expect(px(150, 650)[1]).toBeGreaterThan(200);
+    expect(px(1130, 650)[1]).toBeLessThan(200);
+  });
+
+  test('an unreadable picture is a 400', async () => {
+    await expect(yt.render(yt.readSpec({ title: 'x' }), { background: Buffer.from('nope') })).rejects.toMatchObject({ status: 400 });
+  });
+});
+
+describe('database work', () => {
+  const seq = (...results) => {
+    const query = jest.fn();
+    results.forEach((r) => query.mockResolvedValueOnce(r));
+    return { query, transaction: jest.fn(async (fn) => fn({ id: 'tx' })) };
+  };
+
+  test('sources: the episode, its show and style, and only S3 pictures', async () => {
+    const s = seq(
+      [[{ id: 'ep-1', title: 'Studio by Sable', episode_number: 1, show_id: 'show-1' }]],
+      [[{ id: 'show-1', name: 'Styling Adventures', cover_image_url: 'https://b.s3.amazonaws.com/cover.jpg', metadata: { youtube_thumbnail: { layout: 'center' } } }]],
+      [[{ url: 'https://b.s3.amazonaws.com/wide.jpg', angle: 'Wide', set_name: 'Bedroom' }, { url: 'https://elsewhere.com/x.jpg', angle: 'X' }]],
+      [[{ id: 'a1', name: 'Lala cut-out', url: 'https://b.s3.amazonaws.com/lala.png' }]],
+    );
+    const out = await yt.sources(s, 'ep-1');
+    expect(out.episode).toEqual({ id: 'ep-1', title: 'Studio by Sable', episode_number: 1 });
+    expect(out.show).toEqual({ id: 'show-1', name: 'Styling Adventures' });
+    expect(out.style.layout).toBe('center');
+    expect(out.backgrounds).toEqual([
+      { url: 'https://b.s3.amazonaws.com/wide.jpg', label: 'Bedroom · Wide' },
+      { url: 'https://b.s3.amazonaws.com/cover.jpg', label: 'Show cover' },
+    ]);
+    expect(out.cutouts).toEqual([{ id: 'a1', url: 'https://b.s3.amazonaws.com/lala.png', label: 'Lala cut-out' }]);
+    expect(s.query.mock.calls[3][0]).not.toMatch(/s3_url_no_bg/);
+  });
+
+  test('sources: an unknown episode is a 404', async () => {
+    await expect(yt.sources(seq([[]]), 'nope')).rejects.toMatchObject({ status: 404 });
+  });
+
+  test('saveStyle merges into the show\'s metadata; a foreign Lala image is refused', async () => {
+    const s = seq([[{ id: 'show-1' }]]);
+    await expect(yt.saveStyle(s, 'show-1', { layout: 'lala-right', accent: '#B8962E' })).resolves.toMatchObject({ layout: 'lala-right', accent: '#B8962E' });
+    expect(s.query.mock.calls[0][0]).toMatch(/jsonb_set\(COALESCE\(metadata::jsonb/);
+    await expect(yt.saveStyle(seq(), 'show-1', { lalaUrl: 'https://example.com/l.png' })).rejects.toMatchObject({ status: 400 });
+    await expect(yt.saveStyle(seq([[]]), 'gone', {})).rejects.toMatchObject({ status: 404 });
+  });
+
+  test('saveAsPrimary uploads the PNG, turns the old primary into a cover, and adds the new one with migrated columns only', async () => {
+    mockSend.mockResolvedValue({});
+    const s = seq([[]], [[{ id: 42 }]]);
+    const out = await yt.saveAsPrimary(s, 'ep-1', Buffer.from('png'));
+    expect(mockSend.mock.calls[0][0].input).toMatchObject({ Key: expect.stringMatching(/^episodes\/ep-1\/thumbnails\/youtube-\d+\.png$/), ContentType: 'image/png' });
+    expect(s.query.mock.calls[0][0]).toMatch(/SET "thumbnailType" = 'cover'/);
+    const insert = s.query.mock.calls[1][0];
+    expect(insert).toMatch(/INSERT INTO thumbnails/);
+    expect(insert).not.toMatch(/isPrimary|publishStatus/);
+    expect(out).toMatchObject({ id: 42, url: expect.stringContaining(out.key) });
+  });
+});
