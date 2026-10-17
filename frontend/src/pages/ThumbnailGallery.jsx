@@ -98,7 +98,7 @@ function ThumbnailGallery() {
         </div>
         <div className="header-right">
           {/* The per-video thumbnail builder (uploaded images, wardrobe, phone art, text) is the release workflow, audit batch 5. */}
-          <Link className="action-btn" to={`/episodes/${episodeId}?tab=files`} data-testid="thumbnail-back-to-episode">← Back to the episode</Link>
+          <Link className="action-btn" to={`/episodes/${episodeId}?tab=overview`} data-testid="thumbnail-back-to-episode">← Back to the episode</Link>
         </div>
       </header>
 

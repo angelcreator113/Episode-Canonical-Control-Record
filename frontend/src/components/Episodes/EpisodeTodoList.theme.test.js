@@ -17,10 +17,10 @@ const jsx = readFileSync(resolve(__dirname, 'EpisodeTodoList.jsx'), 'utf8');
 const tokens = readFileSync(resolve(__dirname, '../../styles/design-tokens.css'), 'utf8');
 const HEX = /#[0-9a-f]{3,8}\b/i;
 
-// The Assets redesign (2026-10-08): the list's styles moved to
-// EpisodeAssetsTab.css (.etl-*). The wardrobe list keeps the gold accent,
+// The Assets redesign (2026-10-08) moved the list's styles out of the
+// component; since 2026-10-17 they are EpisodeTodoList.css (.etl-*). The wardrobe list keeps the gold accent,
 // the career list takes the lavender; actions are the lavender.
-const css = readFileSync(resolve(__dirname, 'EpisodeAssetsTab.css'), 'utf8');
+const css = readFileSync(resolve(__dirname, 'EpisodeTodoList.css'), 'utf8');
 
 describe('Episode Todo list theme', () => {
   test('the list carries no color literal and no gradient', () => {

@@ -1008,6 +1008,10 @@ try {
 // Footage upload routes
 app.use('/api/footage', footageRoutes);
 
+// Raw clips: the episode's raw video clips, on Assets → Files (rawClipRoutes)
+const rawClipRoutes = trackRouteLoad('rawClips', () => require('./routes/rawClipRoutes'));
+app.use('/api/v1/episode-clips', rawClipRoutes);
+
 // Scene linking routes
 app.use('/api/scene-links', sceneLinksRoutes);
 

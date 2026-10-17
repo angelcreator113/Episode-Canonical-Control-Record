@@ -44,7 +44,7 @@ vi.mock('../components/Episodes/EpisodeOverviewTab', () => ({ default: () => nul
 vi.mock('../components/Episodes/NextEventSuggestionsOverlay', () => ({ default: () => null }));
 vi.mock('../components/SceneLibraryPicker', () => ({ default: () => null }));
 vi.mock('../components/Episodes/EpisodeProductionChecklist', () => ({ default: () => null }));
-vi.mock('../components/Episodes/EpisodeAssetsTab', () => ({ default: () => null }));
+vi.mock('../components/Episodes/EpisodeRawFootageTab', () => ({ default: () => null }));
 vi.mock('../components/Episodes/EpisodePhoneMissionsTab', () => ({ default: () => null }));
 vi.mock('../components/Episodes/EpisodeScriptTab', () => ({ default: () => null }));
 vi.mock('../components/Episodes/EpisodeDistributionTab', () => ({ default: () => null }));

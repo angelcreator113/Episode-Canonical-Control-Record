@@ -24,6 +24,8 @@ export const EP_TABS = [
     // P15: every on-screen piece of the episode.
     { key: 'overlays', label: 'Overlays' },
     { key: 'money', label: 'Money' },
+    // Evoni, 2026-10-17: Files is the episode's raw video clips
+    // (EpisodeRawFootageTab), by who is on camera.
     { key: 'files', label: 'Files' },
   ]},
   { key: 'scripts', icon: '📝', label: 'Script' },

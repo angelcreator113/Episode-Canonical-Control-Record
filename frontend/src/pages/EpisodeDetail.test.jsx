@@ -77,7 +77,7 @@ vi.mock('../components/Episodes/EpisodeTodoList', () => ({
   default: () => <div data-testid="episode-todo-overlays">Episode to-do overlays</div>,
 }));
 
-vi.mock('../components/Episodes/EpisodeAssetsTab', () => ({
+vi.mock('../components/Episodes/EpisodeRawFootageTab', () => ({
   default: () => <div data-testid="episode-assets">Assets body</div>,
 }));
 vi.mock('../components/Episodes/EpisodeLalasPhoneTab', () => ({ default: () => null }));

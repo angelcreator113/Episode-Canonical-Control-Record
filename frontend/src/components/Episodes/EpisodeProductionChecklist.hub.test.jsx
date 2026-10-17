@@ -80,7 +80,7 @@ describe('Checklist hub', () => {
     fireEvent.click(within(card).getByRole('button', { name: 'Open Overlays' }));
     expect(onOpenTab).toHaveBeenCalledWith('overlays');
     // Social & Content opens Assets → Files, where its social tasks are.
-    expect(within(screen.getByTestId('checklist-section-social')).getByRole('button', { name: 'Open Files' })).toBeTruthy();
+    expect(within(screen.getByTestId('checklist-section-social')).getByRole('button', { name: 'Open Overlays' })).toBeTruthy();
   });
 
   test('a complete card says so and opens where it is worked on', async () => {
