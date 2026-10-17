@@ -162,6 +162,8 @@ const EMPTY_BRIEF = {
   emotional_stakes: '', what_failure_means: '', deadline_context: '', deadline_pressure: '',
   characters: [], registry_id: '', internal_conflict: '', world_context: '',
   must_include: '', never_include: '',
+  // The blind spot goes in only when the scene asks (Evoni, 2026-10-17).
+  dramatic_irony: false,
 };
 
 const BRIEF_REQUIRED = ['situation', 'content_name', 'content_type', 'emotional_stakes', 'characters'];
@@ -1094,6 +1096,7 @@ export default function StoryEvaluationEngine() {
         tone_dial: toneDial, // array of selected tones
         must_include: brief.must_include || undefined,
         never_include: brief.never_include || undefined,
+        dramatic_irony: !!brief.dramatic_irony,
         chapter_id: chapterId || undefined,
       }, { timeoutMs: 180000 });
       setStoryId(data.story_id);
@@ -1198,6 +1201,7 @@ export default function StoryEvaluationEngine() {
         tone_dial: toneDial,
         must_include: brief.must_include || undefined,
         never_include: brief.never_include || undefined,
+        dramatic_irony: !!brief.dramatic_irony,
         chapter_id: chapterId || undefined,
       }, { timeoutMs: 180000 });
       setStoryId(data.story_id);
@@ -1992,6 +1996,10 @@ export default function StoryEvaluationEngine() {
                     style={briefTextareaStyle} />
                 </BriefField>
               </div>
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 12, fontSize: 13, color: T.text, cursor: 'pointer' }}>
+                <input type="checkbox" checked={!!brief.dramatic_irony} onChange={e => updateBrief('dramatic_irony', e.target.checked)} data-testid="see-dramatic-irony" />
+                <span>Let the reader sense their blind spot (dramatic irony). Off: the writers never see it. On: they are told the reader should feel it, but no one names it.</span>
+              </label>
             </SectionCard>
 
             {/* Brief Preview */}

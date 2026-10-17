@@ -152,7 +152,7 @@ const reply = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }]
     expect((await auth(request(app).post('/api/v1/cast/content-types/apply'), editor).send({ items: [{ profile_id: pid2, name: 'The Archivist' }] })).status).toBe(403);
     const applied = await auth(request(app).post('/api/v1/cast/content-types/apply')).send({ items: [{ profile_id: pid2, name: 'The Archivist' }, { profile_id: pid2, name: 'Nope' }] });
     expect(applied.status).toBe(200);
-    expect(applied.body.saved).toEqual([{ profile_id: pid2, name: 'The Archivist' }]);
+    expect(applied.body.saved).toEqual([{ profile_id: pid2, name: 'The Archivist', gap_saved: false }]);
     expect(applied.body.skipped).toHaveLength(1);
     const [[row]] = await run('SELECT society_archetype FROM social_profiles WHERE id = :pid', { pid: pid2 });
     expect(row.society_archetype).toBe('The Archivist');

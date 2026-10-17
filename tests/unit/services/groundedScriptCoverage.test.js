@@ -95,7 +95,7 @@ describe("the Script tab's writer", () => {
     const asks = create.mock.calls.slice(1).map((c) => c[0].messages[0].content);
     expect(asks.find((p) => p.includes('Write ONLY beat 8 again'))).toContain(`[WEAR: ${PIECE}]`);
     expect(asks.find((p) => p.includes('Write ONLY beat 12 again'))).toContain('TikTok outfit reveal');
-    expect(out.coverage).toEqual({ missing: [], fixed_beats: [8, 12], phone_steps: 0 });
+    expect(out.coverage).toEqual({ missing: [], fixed_beats: [8, 12], phone_steps: 0, story_gaps: expect.any(Array) });
     expect(out.script).toContain(`[WEAR: ${PIECE}]`);
     expect(out.script).toContain('filming my TikTok outfit reveal');
   });
