@@ -2,6 +2,7 @@
  * Release time, the second clock (Character Consistency Engine step 6c;
  * Evoni, 2026-10-16: "yes publish/schedule/hold"): a draft in Review can be
  * released now, scheduled for a date and time, or held; it shows which.
+ * Schedule… opens with the time the story suggests (2026-10-17).
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
@@ -35,6 +36,33 @@ describe('release time', () => {
     await waitFor(() => expect(onChange).toHaveBeenCalled());
     fireEvent.click(within(box).getByText('Hold'));
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/feed-posts/p1/release-time', { mode: 'hold' }));
+  });
+
+  test('Schedule… opens with the time the story suggests, and why; changing it drops the why', async () => {
+    const at = '2030-03-04T18:00:00.000Z';
+    vi.mocked(api.get).mockImplementation(async (url) => (url.startsWith('/api/v1/feed-posts/p1/release-time/suggest')
+      ? { data: { at, why: 'Two days before Episode 3 airs' } }
+      : { data: { data: [] } }));
+    card(DRAFT);
+    const box = screen.getByTestId('prv-release');
+    fireEvent.click(within(box).getByText('Schedule…'));
+    expect((await within(box).findByTestId('prv-release-why')).textContent).toBe('Suggested: Two days before Episode 3 airs');
+    expect(api.get).toHaveBeenCalledWith(`/api/v1/feed-posts/p1/release-time/suggest?tz_offset=${new Date().getTimezoneOffset()}`);
+    const input = within(box).getByLabelText('Release on');
+    const d = new Date(at);
+    expect(input.value).toBe(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
+    fireEvent.click(within(box).getByText('Schedule'));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/feed-posts/p1/release-time', { mode: 'schedule', at }));
+  });
+
+  test('changing the suggested time drops its why', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { at: '2030-03-04T18:00:00.000Z', why: 'As Episode 3 airs' } });
+    card(DRAFT);
+    const box = screen.getByTestId('prv-release');
+    fireEvent.click(within(box).getByText('Schedule…'));
+    await within(box).findByTestId('prv-release-why');
+    fireEvent.change(within(box).getByLabelText('Release on'), { target: { value: '2030-03-05T09:00' } });
+    expect(within(box).queryByTestId('prv-release-why')).toBeNull();
   });
 
   test('a scheduled draft says when, and can be released now or unscheduled', async () => {

@@ -826,6 +826,27 @@ router.put('/:postId/release-time', requireAuth, authorize(['ADMIN']), async (re
   }
 });
 
+// GET /api/v1/feed-posts/:postId/release-time/suggest?tz_offset= (Evoni,
+// 2026-10-17): a release time the story suggests, from the post's story time
+// and its episode's air date, in her own hours (tz_offset: the browser's
+// getTimezoneOffset). Nothing is saved; she schedules it, or changes it.
+router.get('/:postId/release-time/suggest', requireAuth, async (req, res) => {
+  try {
+    const { suggestReleaseTime, ReleaseError } = require('../services/postRelease');
+    const models = require('../models');
+    const post = await models.FeedPost.findByPk(req.params.postId);
+    try {
+      return res.json(await suggestReleaseTime(models, post, { tzOffset: Number(req.query.tz_offset) || 0 }));
+    } catch (err) {
+      if (err instanceof ReleaseError) return res.status(err.status).json({ error: err.message });
+      throw err;
+    }
+  } catch (err) {
+    console.error('[FeedPosts] release-time suggest error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/v1/feed-posts/:postId/redraft { note? } — rewrite a draft in its
 // poster's voice (services/feedPostRedrafter.js); returns the old text for undo.
 router.post('/:postId/redraft', requireAuth, aiRateLimiter, async (req, res) => {
