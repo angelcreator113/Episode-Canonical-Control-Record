@@ -46,7 +46,7 @@
  */
 
 const {
-  loadSocietyArchetypes, matchSocietyArchetype, societyArchetypeMenu,
+  loadSocietyArchetypes, matchSocietyArchetype, societyArchetypeMenu, societyArchetypeCounts,
 } = require('./societyArchetypes');
 
 const MODELS = ['claude-sonnet-4-6'];
@@ -145,8 +145,9 @@ function contentTypeBlock(current, occupation = null, gap = null) {
   const job = occupation
     ? ` Their job is ${occupation}. What they post and what they do for work can differ: where they do, that gap is part of who they are, not an error. Their posts come from the content type, and the job shows only the way it would in this kind of content.`
     : '';
+  const mix = current.pillars?.length ? ` ${require('./contentPillars').pillarsLine(current.pillars)}` : '';
   const hook = gap ? ` What the gap between their job and their content says about them (author-side; let it show, never state it): ${sentence(gap)}` : '';
-  return `KNOWN FOR ON THE PULSE (their content type: what the LalaVerse knows them for, and what their posts are): ${current.name}.${more ? ` ${more}` : ''}${job}${hook}`;
+  return `KNOWN FOR ON THE PULSE (their content type: what the LalaVerse knows them for, and what their posts are): ${current.name}.${more ? ` ${more}` : ''}${mix}${job}${hook}`;
 }
 
 /**
@@ -199,7 +200,7 @@ async function ask(prompt) {
   }
 }
 
-async function suggestContentType(db, { character = null, feedProfile = null, list = null }) {
+async function suggestContentType(db, { character = null, feedProfile = null, list = null, counts }) {
   if (!feedProfile) throw new ContentTypeError(409, 'They are not on the feed yet: match them to a feed person first.');
   const archetypes = list || await loadSocietyArchetypes(db);
   if (!archetypes.length) throw new ContentTypeError(409, 'The Society tab has no content types saved.');
@@ -215,7 +216,7 @@ async function suggestContentType(db, { character = null, feedProfile = null, li
 This is not their job. What they post can differ from what they do for work (a nurse known for comedy skits, a lawyer known for thrift hauls), and a gap like that makes a person interesting. Choose from what they show the world (the mask), their voice and their posts first; their job and their private life only as far as they shape what they post.
 ${occupation ? `Their job: ${occupation}.\n` : ''}${fp.archetype ? `How they behave online (a different list, not a content type): ${fp.archetype}.\n` : ''}
 ${block}
-${societyArchetypeMenu(archetypes)}
+${societyArchetypeMenu(archetypes, counts === undefined ? await societyArchetypeCounts(db) : counts)}
 
 Answer with JSON only:
 {"society_archetype": "the name exactly as written above", "why": "two sentences: what in their file makes this what they are known for", "differs_from_job": true or false, "tension": "when it differs: one sentence on what the gap between their job and their content says about them; else null"}`;
@@ -242,6 +243,9 @@ async function suggestForUnset(db, { limit = BATCH_MAX, profileIds = null } = {}
   const unset = await db.SocialProfile.count({ where });
   const profiles = await db.SocialProfile.findAll({ where, order: [['created_at', 'ASC']], limit: n });
   const list = await loadSocietyArchetypes(db);
+  // The Feed's counts, each suggestion added as it comes, so the batch does
+  // not pile onto one type (idea 6).
+  const counts = { ...(await societyArchetypeCounts(db)) };
   const suggestions = [];
   const failed = [];
   for (const fp of profiles) {
@@ -250,7 +254,8 @@ async function suggestForUnset(db, { limit = BATCH_MAX, profileIds = null } = {}
       const character = db.RegistryCharacter
         ? await db.RegistryCharacter.findOne({ where: { feed_profile_id: fp.id }, order: [['updated_at', 'DESC']] })
         : null;
-      const { suggestion } = await suggestContentType(db, { character, feedProfile: fp, list });
+      const { suggestion } = await suggestContentType(db, { character, feedProfile: fp, list, counts });
+      counts[suggestion.name] = (counts[suggestion.name] || 0) + 1;
       suggestions.push({ ...who, character_id: character?.id || null, ...suggestion });
     } catch (err) {
       console.error(`[characterContentType] no suggestion for profile ${fp.id}:`, err.message);
