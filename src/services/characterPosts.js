@@ -24,6 +24,14 @@
  *     ('on_request' is always among its review reasons).
  *     Returns { show_id, drafted: [{ post, weight, why, review }], failed }.
  *
+ *   postIdeas(db, characterId)
+ *     what to post about, read from their own story with no AI call (Evoni,
+ *     2026-10-17: "now im just sitting here wondering what to say"): the
+ *     events they host or are a guest at, their account status, their work,
+ *     and their want and wound (as a hint, never stated), plus an ordinary
+ *     day. Each idea is { key, label, about }: `about` goes in "What is
+ *     happening". Also says whether they can post yet ({ ready, blocker }).
+ *
  * The facts are not checked against the posts: a post is the mask, and the
  * mask may lie (the spec's Piece 4).
  */
@@ -199,4 +207,70 @@ async function generatePosts(db, { characterId, count = DEFAULT_COUNT, about = n
   return { show_id: showId, drafted, failed };
 }
 
-module.exports = { generatePosts, buildPrompt, factsLines, maskLines, woundOf, PostsError, DraftError, DEFAULT_COUNT, STATUS_LINES };
+const STATUS_IDEAS = {
+  gone_dark: (n) => ['Breaking the silence', `${n}'s first post after going dark. The silence is broken; how ${n} explains it, or doesn't, is the story.`],
+  cancelled: (n) => ['Answering the backlash', `${n} posts while the audience is still angry: a reply, a deflection or a pointed silence about it.`],
+  controversial: (n) => ['In the middle of the controversy', `People are arguing about ${n}. ${n} posts as if unbothered, or not.`],
+  reinventing: (n) => ['Showing the new direction', `${n} shows the new direction of the account and quietly leaves the old one behind.`],
+  plateauing: (n) => ['Trying to get noticed again', `Growth has stalled. ${n} tries something new to get noticed, a little too hard.`],
+  rising: (n) => ['Riding the momentum', `${n}'s account is growing fast. A post that enjoys it, or pretends not to.`],
+  peaking: (n) => ['At the top', `${n} is at the peak. A post that shows it off without seeming to.`],
+};
+
+/** Post ideas from their own story; no AI call, nothing saved. */
+async function postIdeas(db, characterId) {
+  const character = await db.RegistryCharacter.findByPk(characterId);
+  if (!character) throw new PostsError(404, 'Character not found.');
+  const name = character.display_name || 'They';
+  const feedProfile = character.feed_profile_id && db.SocialProfile ? await db.SocialProfile.findByPk(character.feed_profile_id) : null;
+  let blocker = null;
+  if (!feedProfile) blocker = `${name} is not on the feed yet: match them to a feed person first.`;
+  else if (feedProfile.current_state === 'posthumous') blocker = `${name} has died: their account does not post.`;
+  else if (!(await db.PulseVoice.findOne({ where: { registry_character_id: character.id } }))) {
+    blocker = `${name} has no Voice Profile yet. Build it in Admin › The Pulse › Voices, then come back.`;
+  }
+
+  const ideas = [];
+  const add = (key, label, about) => ideas.push({ key, label, about: about.slice(0, ABOUT_MAX) });
+  if (feedProfile) {
+    const { eventsForProfile } = require('./characterEvents');
+    let events = [];
+    try {
+      events = await eventsForProfile(db.sequelize, feedProfile.id);
+    } catch (err) {
+      console.error('[CharacterPosts] could not read their events for ideas:', err.message);
+    }
+    events.sort((a, b) => (a.role === 'host' ? 0 : 1) - (b.role === 'host' ? 0 : 1));
+    for (const ev of events.slice(0, 3)) {
+      const when = ev.event_date ? ` (${String(ev.event_date).slice(0, 10)})` : '';
+      add(`event:${ev.id}`, `Before ${ev.name}`, ev.role === 'host'
+        ? `The days before ${ev.name}${when}, which ${name} is hosting. Build up to it: getting ready, teasing it. Nothing about what happens there.`
+        : `The days before ${ev.name}${when}, where ${name} is a guest. Looking forward to it, or what to wear. Nothing about what happens there.`);
+    }
+  }
+  const { factsOf } = require('./characterFacts');
+  let facts = null;
+  try {
+    facts = await factsOf(db, { character, feedProfile });
+  } catch (err) {
+    console.error('[CharacterPosts] could not read their facts for ideas:', err.message);
+  }
+  const undecided = new Set(facts?.undecided || []);
+  if (facts?.account_status && !undecided.has('account_status') && STATUS_IDEAS[facts.account_status]) {
+    const [label, about] = STATUS_IDEAS[facts.account_status](name);
+    add('status', label, about);
+  }
+  if (facts?.occupation && !undecided.has('occupation')) {
+    add('work', 'A day at work', `${name} at work as ${facts.occupation}: a small moment from the day.`);
+  }
+  if (['hidden_want', 'core_desire', 'want_architecture'].some((k) => character[k])) {
+    add('want', 'What they really want shows', `A post where what ${name} secretly wants shows through, without ${name} ever saying it.`);
+  }
+  if (character.core_wound || character.wound) {
+    add('mask', 'The mask slips a little', `A post that looks fine on the surface, where for one line the old hurt shows through. ${name} would never call it that.`);
+  }
+  add('ordinary', 'An ordinary day', '');
+  return { ready: !blocker, blocker, ideas };
+}
+
+module.exports = { postIdeas, generatePosts, buildPrompt, factsLines, maskLines, woundOf, PostsError, DraftError, DEFAULT_COUNT, STATUS_LINES };
