@@ -778,7 +778,7 @@ router.put('/:id/version', validateUUIDParam('id'), requireAuth, async (req, res
     const { makeEventVersion, makeEveryday } = require('../services/sceneSetVersionService');
     const b = req.body || {};
     const data = b.everyday_set_id == null || b.everyday_set_id === ''
-      ? await makeEveryday(SceneSet.sequelize, req.params.id)
+      ? await makeEveryday(SceneSet.sequelize, req.params.id, { returnEvent: b.return_event === true })
       : await makeEventVersion(SceneSet.sequelize, { setId: req.params.id, everydaySetId: b.everyday_set_id, eventId: b.event_id });
     return res.json({ success: true, data });
   } catch (err) {

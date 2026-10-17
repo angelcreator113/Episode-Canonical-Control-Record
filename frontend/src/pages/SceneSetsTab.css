@@ -4335,3 +4335,9 @@
     white-space: normal;
   }
 }
+
+/* The Place tab (2026-10-17): the everyday look and its angles, then the events held here. */
+.scene-sets-place-heading { display: grid; gap: 2px; margin: 10px 0 8px; font-family: 'Lora', serif; font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.scene-sets-place-sub { font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 400; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-secondary); }
+.scene-sets-modal-section > .scene-sets-looks { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--lala-parchment-3); }
+.scene-sets-event-angles-label { font-family: 'DM Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-secondary); }

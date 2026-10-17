@@ -103,10 +103,11 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(at(12)).toEqual({ url: 'https://x/door.jpg', source: 'angle', label: 'Loft · Front door' });
   });
 
-  it('a missing variant keeps the plain picture and names the gap; another set is untouched', async () => {
+  // Evoni, 2026-10-17: the times are Morning, Golden hour and Night; an
+  // evening beat shows the Night picture.
+  it('an evening beat shows Night; another set is untouched', async () => {
     const at = await plan();
-    expect(at(11)).toMatchObject({ url: 'https://x/Loft-base.jpg', source: 'base', label: 'Loft · Inside (no Evening variant yet)' });
-    expect(at(11).variant_missing).toMatchObject({ value: 'evening', text: 'Loft has no Evening variant yet' });
+    expect(at(11)).toMatchObject({ url: 'https://x/night.jpg', source: 'variant_time', label: 'Loft · Inside · Night' });
     expect(at(3)).toEqual({ url: 'https://x/Plain-room-base.jpg', source: 'base', label: 'Plain room · Inside' });
   });
 

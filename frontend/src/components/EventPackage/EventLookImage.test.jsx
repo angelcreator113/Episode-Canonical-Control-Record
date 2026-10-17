@@ -188,7 +188,10 @@ describe('EventLookImage (L7-L9)', () => {
     renderIt();
     const figure = await screen.findByTestId('event-look-approved-base');
     expect(figure.querySelector('img').getAttribute('src')).toBe('https://x/approved.jpg');
-    expect(figure.textContent).toContain('Generate this look to dress it for this event.');
+    // Evoni, 2026-10-17: it is the starting point, not the event's photo.
+    expect(figure.textContent).toContain('Not dressed yet');
+    expect(figure.textContent).toContain("Starting from the everyday look. Generate or upload this event's look.");
+    expect(figure.querySelector('.ell-from img')).toBeTruthy();
     expect(screen.getByTestId('generate-this-look')).toBeTruthy();
     expect(screen.queryByText('No look image yet.')).toBeNull();
   });

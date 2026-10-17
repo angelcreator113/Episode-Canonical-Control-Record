@@ -45,12 +45,20 @@ describe('variantFor and applyVariant', () => {
   });
 
   test('a missing variant keeps the plain picture and names the gap in its label', () => {
-    const v = pick({ beatNumber: 11 });
-    expect(v).toMatchObject({ value: 'evening', url: null });
+    const v = pick({ beatNumber: 11, moment: { time: 'morning', season: null } });
+    expect(v).toMatchObject({ value: 'morning', url: null });
     const out = applyVariant(base, v, 'Loft');
     expect(out.url).toBe('https://x/base.jpg');
-    expect(out.label).toBe('Loft · Inside (no Evening variant yet)');
-    expect(out.variant_missing).toEqual({ kind: 'time', value: 'evening', label: 'Evening', text: 'Loft has no Evening variant yet' });
+    expect(out.label).toBe('Loft · Inside (no Morning variant yet)');
+    expect(out.variant_missing).toEqual({ kind: 'time', value: 'morning', label: 'Morning', text: 'Loft has no Morning variant yet' });
+  });
+
+  // Evoni, 2026-10-17: the variant times are Morning, Golden hour and Night;
+  // the weather Winter and Rain.
+  test('an evening beat shows Night, an afternoon one the everyday look; only winter is read from a date', () => {
+    expect(pick({ beatNumber: 11 })).toMatchObject({ kind: 'time', value: 'night', url: 'https://x/night.jpg' });
+    expect(pick({ beatNumber: 11, moment: { time: 'afternoon', season: null } })).toBeNull();
+    expect(pick({ picture: front, angleKind: 'front', angleId: 'a-front', beatNumber: 10, moment: { time: 'evening', season: 'summer' } })).toBeNull();
   });
 
   test('nothing applies off the everyday set, without an event, to the event look or a dressed angle, or a non-Front angle', () => {
