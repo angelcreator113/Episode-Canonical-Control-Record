@@ -347,7 +347,7 @@ router.post('/ai-describe', requireAuth, aiRateLimiter, async (req, res) => {
       max_tokens: 500,
       messages: [{
         role: 'user',
-        content: `You are a production designer writing a location description for a show called "Before Lala" set in the LalaVerse. This description will be used to generate AI images of the location.
+        content: `You are a production designer writing a location description for "Styling Adventures with Lala", set in the LalaVerse. This description will be used to generate AI images of the location.
 
 Location name: "${name}"
 Scene type: ${scene_type || 'HOME_BASE'}

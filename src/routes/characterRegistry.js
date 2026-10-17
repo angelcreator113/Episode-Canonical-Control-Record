@@ -650,11 +650,9 @@ router.put('/characters/:id', requireAuth, express.json(), async (req, res) => {
     const character = await RegistryCharacter.findByPk(req.params.id);
     if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
 
-    // Author-only fields — only writable by authenticated authors
-    const AUTHOR_ONLY = [
-      'de_blind_spot', 'de_blind_spot_evidence', 'de_blind_spot_crack_condition',
-      'de_actual_narrative_gap',
-    ];
+    // Author-only fields — only writable by authenticated authors (the model's list,
+    // blind_spot included since the depth merge, 2026-10-17)
+    const AUTHOR_ONLY = require('../models/RegistryCharacter').AUTHOR_ONLY_FIELDS;
 
     const allowed = [
       'character_key', 'icon', 'display_name', 'subtitle', 'world', 'role_type', 'role_label',
@@ -679,17 +677,9 @@ router.put('/characters/:id', requireAuth, express.json(), async (req, res) => {
       'triggers', 'blind_spot', 'change_capacity', 'self_narrative',
       'operative_cosmology', 'foreclosed_possibility', 'experience_of_joy',
       'time_orientation', 'dilemma', 'prose_overview',
-      // Character Depth Engine v1
-      'body_relationship', 'body_history', 'body_currency', 'body_control_pattern',
-      'money_behavior_pattern', 'money_behavior_note',
-      'time_orientation_v2', 'time_orientation_note',
-      'change_capacity_v2', 'change_conditions', 'change_blocker',
-      'circumstance_advantages', 'circumstance_disadvantages', 'luck_belief', 'luck_belief_vs_stated',
-      'actual_narrative', 'narrative_gap_type',
-      'blind_spot_category', 'blind_spot_visible_to',
-      'operative_cosmology_v2', 'cosmology_vs_stated_religion',
-      'foreclosed_category', 'foreclosure_origin', 'foreclosure_vs_stated_want',
-      'joy_source', 'joy_accessibility', 'joy_vs_ambition',
+      // Character Depth Engine v1: retired 2026-10-17 (migration
+      // 20261017240000); only blind_spot_visible_to, with no twin, is kept.
+      'blind_spot_visible_to',
       // Intimate eligibility
       'intimate_eligible',
       // Death Tracking
@@ -751,7 +741,12 @@ router.put('/characters/:id', requireAuth, express.json(), async (req, res) => {
     const isAuthor = userInGroup(req.user, 'admin');
     const filteredAllowed = isAuthor ? allowed : allowed.filter(f => !AUTHOR_ONLY.includes(f));
 
-    filteredAllowed.forEach(f => { if (req.body[f] !== undefined) character[f] = req.body[f]; });
+    // A de_ field merged into an Inner life field is saved in its home
+    // (services/characterDepthFields), the rest as given.
+    const given = {};
+    filteredAllowed.forEach(f => { if (req.body[f] !== undefined) given[f] = req.body[f]; });
+    const current = typeof character.toJSON === 'function' ? character.toJSON() : character;
+    for (const [f, v] of Object.entries(require('../services/characterDepthFields').withTwinsHome(current, given))) character[f] = v;
     if (req.body.current_city !== undefined) character.current_city = currentCity;
     await character.save();
     if (req.body.selected_name !== undefined) await syncRealNameToFeed(getModels(), character);
@@ -1957,6 +1952,9 @@ ${config.schema}`,
  * fields are written; nothing already there is touched.
  * Body: { fields?: [...] } — limit it to these (default: everything missing).
  * Then the depth level moves up to what the character now has.
+ * { preview: true } writes nothing: it returns `proposed`, the values it
+ * would write, for POST /interior/apply (Evoni, 2026-10-17, step 3: see
+ * what Generate All would fill before it is saved).
  */
 router.post('/characters/:id/interior/generate', requireAuth, aiRateLimiter, async (req, res) => {
   const { id } = req.params;
@@ -2013,23 +2011,11 @@ router.post('/characters/:id/interior/generate', requireAuth, aiRateLimiter, asy
       return res.status(502).json({ error: 'The writer came back with nothing usable. Try again.' });
     }
 
-    // Write under a row lock, and only into fields still empty, so a save or
-    // another generation made meanwhile is never overwritten.
-    const result = await db.sequelize.transaction(async (transaction) => {
-      const row = await db.RegistryCharacter.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
-      if (!row) return null;
-      const patch = {};
-      for (const [field, value] of Object.entries(updates)) {
-        if (!gen.isFilled(row[field])) patch[field] = value;
-      }
-      const after = { ...(row.toJSON ? row.toJSON() : row), ...patch };
-      after.prose_overview = after.prose_overview || after.description;
-      const reached = gen.calculateDepthLevel(after);
-      const LEVELS = ['sparked', 'breathing', 'active', 'alive'];
-      if (LEVELS.indexOf(reached) > LEVELS.indexOf(row.depth_level)) patch.depth_level = reached;
-      if (Object.keys(patch).length) await row.update(patch, { transaction });
-      return { row, filled: Object.keys(patch).filter((f) => f !== 'depth_level') };
-    });
+    if (req.body?.preview === true) {
+      return res.json({ success: true, preview: true, proposed: updates, missing });
+    }
+
+    const result = await writeEmptyInterior(db, id, updates);
     if (!result) return res.status(404).json({ error: 'Character not found' });
     if (result.filled.includes('selected_name')) await syncRealNameToFeed(db, result.row);
 
@@ -2041,6 +2027,79 @@ router.post('/characters/:id/interior/generate', requireAuth, aiRateLimiter, asy
     });
   } catch (err) {
     console.error('[CharacterRegistry] POST /interior/generate error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Write generated inner life under a row lock, and only into fields still
+ * empty, so a save or another generation made meanwhile is never
+ * overwritten. Raises the depth level to what the character now has.
+ * Returns { row, filled } (null when the character is gone).
+ */
+async function writeEmptyInterior(db, id, updates) {
+  const gen = require('../services/characterGenerationService');
+  return db.sequelize.transaction(async (transaction) => {
+    const row = await db.RegistryCharacter.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+    if (!row) return null;
+    const patch = {};
+    for (const [field, value] of Object.entries(updates)) {
+      if (!gen.isFilled(row[field])) patch[field] = value;
+    }
+    const after = { ...(row.toJSON ? row.toJSON() : row), ...patch };
+    after.prose_overview = after.prose_overview || after.description;
+    const reached = gen.calculateDepthLevel(after);
+    const LEVELS = ['sparked', 'breathing', 'active', 'alive'];
+    if (LEVELS.indexOf(reached) > LEVELS.indexOf(row.depth_level)) patch.depth_level = reached;
+    if (Object.keys(patch).length) await row.update(patch, { transaction });
+    return { row, filled: Object.keys(patch).filter((f) => f !== 'depth_level') };
+  });
+}
+
+/**
+ * POST /characters/:id/interior/apply
+ * Save the values a preview (POST /interior/generate { preview: true })
+ * proposed, as the author chose them. Each value is checked as the
+ * generator's own are (interiorUpdates), written only into a field still
+ * empty, and author-only fields only by the admin group. Returns `filled`
+ * and `skipped` (written meanwhile, or not a value the field takes).
+ * Body: { values: { field: value } }.
+ */
+router.post('/characters/:id/interior/apply', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const values = req.body?.values;
+  const gen = require('../services/characterGenerationService');
+  if (!values || typeof values !== 'object' || Array.isArray(values) || !Object.keys(values).length) {
+    return res.status(400).json({ error: 'values must be an object of inner life fields' });
+  }
+  const bad = Object.keys(values).filter((f) => !gen.INTERIOR_FIELDS.includes(f));
+  if (bad.length) return res.status(400).json({ error: `Unknown fields: ${bad.join(', ')}. Valid: ${gen.INTERIOR_FIELDS.join(', ')}` });
+
+  try {
+    const db = getModels();
+    const character = await db.RegistryCharacter.findByPk(id);
+    if (!character) return res.status(404).json({ error: 'Character not found' });
+    if (character.status === 'finalized') return res.status(409).json({ error: 'This character is finalized. Unlock them to change their inner life.' });
+
+    const AUTHOR_ONLY = require('../models/RegistryCharacter').AUTHOR_ONLY_FIELDS;
+    const isAuthor = userInGroup(req.user, 'admin');
+    const fields = Object.keys(values).filter((f) => isAuthor || !AUTHOR_ONLY.includes(f));
+    // The generator asks for the real name as real_name (interiorUpdates reads it so).
+    const updates = gen.interiorUpdates({ ...values, real_name: values.selected_name }, fields);
+
+    const result = await writeEmptyInterior(db, id, updates);
+    if (!result) return res.status(404).json({ error: 'Character not found' });
+    if (result.filled.includes('selected_name')) await syncRealNameToFeed(db, result.row);
+
+    return res.json({
+      success: true,
+      filled: result.filled,
+      skipped: Object.keys(values).filter((f) => !result.filled.includes(f)),
+      depth_level: result.row.depth_level,
+      character: result.row,
+    });
+  } catch (err) {
+    console.error('[CharacterRegistry] POST /interior/apply error:', err);
     return res.status(500).json({ error: err.message });
   }
 });

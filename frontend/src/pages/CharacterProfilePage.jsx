@@ -7,7 +7,7 @@
  * "Who they are" (editable; Rewrite drafts it from the profile), "Where
  * they show up" (lib/characterPage, from GET /api/v1/cast/characters/:id/
  * appearances), their voice and what is between them and Lala. Inner life
- * holds the interior, DEPTH and the deep profile; Voice & feed the feed
+ * is a workspace of five sections (components/InnerLife); Voice & feed the feed
  * profile; Connections and In the world as before.
  */
 
@@ -20,7 +20,8 @@ import {
 import CharacterPlacesTab from '../components/CharacterPlaces/CharacterPlacesTab';
 import CharacterAppearanceTab from '../components/CharacterAppearance/CharacterAppearanceTab';
 import { API_URL } from '../config/api';
-import CharacterDepthPanel from '../components/CharacterDepthPanel';
+import InnerLifeWorkspace from '../components/InnerLife/InnerLifeWorkspace';
+import { dimensionOf as dimension, dimensionText } from '../lib/innerLifeSections';
 import { platformLabel, atHandle, followersOf } from './feed/feedConstants';
 import apiClient from '../services/api';
 import { ROLE_LABELS } from '../constants/characterConstants';
@@ -49,6 +50,8 @@ export const putFactsApi = (id, body) =>
   apiClient.put(`${API_URL}/cast/characters/${id}/facts`, body);
 export const suggestFactsApi = (id) =>
   apiClient.post(`${API_URL}/cast/characters/${id}/facts/suggest`);
+export const factHistoryApi = (id) =>
+  apiClient.get(`${API_URL}/cast/characters/${id}/facts/history`);
 export const pressureTestApi = (id) =>
   apiClient.post(`${API_URL}/cast/characters/${id}/pressure-test`);
 export const getCheckApi = (id) =>
@@ -108,6 +111,11 @@ export const draftProseApi = (id) =>
 // no fields means everything missing. Never overwrites what is there.
 export const generateInteriorApi = (id, fields) =>
   apiClient.post(`${API_URL}/character-registry/characters/${id}/interior/generate`, fields ? { fields } : {});
+// Generate All as a preview (nothing written), then the values kept (step 3).
+export const previewInteriorApi = (id) =>
+  apiClient.post(`${API_URL}/character-registry/characters/${id}/interior/generate`, { preview: true });
+export const applyInteriorApi = (id, values) =>
+  apiClient.post(`${API_URL}/character-registry/characters/${id}/interior/apply`, { values });
 
 /* ── Config ──────────────────────────────────────────────────────────────────── */
 
@@ -135,40 +143,6 @@ const TABS = [
   // Evoni, 2026-10-17: their home, closet and place of work, and the events they host.
   { id: 'places',      label: 'Places',       icon: MapPin },
 ];
-
-const DIMENSION_KEYS = [
-  'life_stage', 'the_body', 'class_money', 'religion_meaning',
-  'race_culture', 'sexuality_desire', 'family_architecture', 'friendship_loyalty',
-  'ambition_identity', 'habits_rituals', 'speech_silence', 'grief_loss',
-  'politics_justice', 'the_unseen',
-];
-
-// The older deep-profile endpoints name ten dimensions with "_and_"
-// (class_and_money); generation v2 does not (class_money). Read both.
-const DIMENSION_ALIASES = {
-  class_money: 'class_and_money', religion_meaning: 'religion_and_meaning', race_culture: 'race_and_culture',
-  sexuality_desire: 'sexuality_and_desire', friendship_loyalty: 'friendship_and_loyalty',
-  ambition_identity: 'ambition_and_identity', habits_rituals: 'habits_and_rituals',
-  speech_silence: 'speech_and_silence', grief_loss: 'grief_and_loss', politics_justice: 'politics_and_justice',
-};
-const dimension = (dp, key) => (dp ? dp[key] || dp[DIMENSION_ALIASES[key]] || null : null);
-
-const DIMENSION_ICONS = {
-  life_stage:          '\u23F3',
-  the_body:            '\u270F\uFE0F',
-  class_money:         '\uD83D\uDD25',
-  religion_meaning:    '\u2726',
-  race_culture:        '\uD83C\uDF0D',
-  sexuality_desire:    '\uD83D\uDD25',
-  family_architecture: '\uD83C\uDFE0',
-  friendship_loyalty:  '\uD83D\uDC9B',
-  ambition_identity:   '\uD83C\uDFAF',
-  habits_rituals:      '\uD83C\uDF11',
-  speech_silence:      '\uD83D\uDCAD',
-  grief_loss:          '\uD83C\uDF0A',
-  politics_justice:    '\u2696\uFE0F',
-  the_unseen:          '\uD83D\uDD2E',
-};
 
 // Something is there: non-empty text, a list with items, or an object with a filled value.
 function hasValue(v) {
@@ -223,12 +197,21 @@ const FIELD_LABELS = {
 
 /**
  * Generating the inner life. One at a time: `busy` is the key of the run
- * (its fields joined, or 'all'); `note` says what came of the last one.
+ * (its fields joined, 'all' or 'apply'); `note` says what came of the last
+ * one. run(fields) fills one empty part and saves it. Everything at once
+ * (Evoni, 2026-10-17, step 3) is a preview first: preview() puts what it
+ * would fill in `review`, nothing saved; apply(values) saves the values
+ * kept, into fields still empty; discard() drops it.
  */
 function useInteriorGenerate(character, onSaved) {
   const [busy, setBusy] = useState(null);
   const [note, setNote] = useState(null);
+  const [review, setReview] = useState(null);
   const id = character?.id;
+  const failed = (key, err, what) => {
+    console.error(`[CharacterProfilePage] ${what} failed:`, err);
+    setNote({ key, error: true, text: err.response?.data?.error || err.message || 'Could not generate it.' });
+  };
   const run = useCallback(async (fields = null) => {
     const key = fields ? fields.join(',') : 'all';
     setBusy(key); setNote(null);
@@ -240,11 +223,38 @@ function useInteriorGenerate(character, onSaved) {
         ? `Filled in: ${filled.map((f) => FIELD_LABELS[f] || f).join(', ')}.`
         : (message || 'Nothing new came back.') });
     } catch (err) {
-      console.error('[CharacterProfilePage] generate inner life failed:', err);
-      setNote({ key, error: true, text: err.response?.data?.error || err.message || 'Could not generate it.' });
+      failed(key, err, 'generate inner life');
     } finally { setBusy(null); }
   }, [id, onSaved]);
-  return { busy, note, run, locked: character?.status === 'finalized' };
+  const preview = useCallback(async () => {
+    setBusy('all'); setNote(null); setReview(null);
+    try {
+      const res = await previewInteriorApi(id);
+      const proposed = res.data?.proposed || {};
+      if (Object.keys(proposed).length) setReview({ proposed });
+      else setNote({ key: 'all', text: res.data?.message || 'Nothing is missing.' });
+    } catch (err) {
+      failed('all', err, 'preview inner life');
+    } finally { setBusy(null); }
+  }, [id]);
+  const apply = useCallback(async (values) => {
+    setBusy('apply'); setNote(null);
+    try {
+      const res = await applyInteriorApi(id, values);
+      const { filled = [], skipped = [], character: updated } = res.data || {};
+      if (updated) onSaved(updated);
+      setReview(null);
+      const name = (f) => FIELD_LABELS[f] || f;
+      setNote({ key: 'all', text: [
+        filled.length ? `Filled in: ${filled.map(name).join(', ')}.` : 'Nothing was saved.',
+        skipped.length ? `Not saved, already written or not usable: ${skipped.map(name).join(', ')}.` : '',
+      ].filter(Boolean).join(' ') });
+    } catch (err) {
+      failed('all', err, 'save generated inner life');
+    } finally { setBusy(null); }
+  }, [id, onSaved]);
+  const discard = useCallback(() => setReview(null), []);
+  return { busy, note, run, preview, apply, discard, review, locked: character?.status === 'finalized' };
 }
 
 /* ── Overview ────────────────────────────────────────────────────────────────── */
@@ -463,7 +473,15 @@ const PULSE_REVIEW = '/admin?tab=pulse&sub=review';
 const FACT_LABELS = {
   handle: 'Handle', followers: 'Followers', account_status: 'Account status',
   income: 'Income', occupation: 'Occupation', major_possessions: 'Major possessions',
+  home_price_range: 'Home price range',
 };
+// services/characterFacts HOME_PRICE_RANGES: what their home costs, read when
+// their home is described from their profile (2026-10-17).
+const HOME_PRICE_RANGE_OPTIONS = [
+  ['budget', 'Budget (under $1,500 a month)'], ['modest', 'Modest ($1,500 to $3,000 a month)'],
+  ['comfortable', 'Comfortable ($3,000 to $6,000 a month)'], ['upscale', 'Upscale ($6,000 to $15,000 a month)'],
+  ['luxury', 'Luxury ($15,000 to $50,000 a month)'], ['ultra', 'Ultra-luxury (over $50,000 a month)'],
+];
 const ACCOUNT_STATUS_OPTIONS = ['rising', 'peaking', 'plateauing', 'controversial', 'cancelled', 'reinventing', 'gone_dark', 'posthumous'];
 const words = (s) => (s ? String(s).replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()) : '');
 const money = (n) => (Number.isFinite(Number(n)) && n !== null && n !== '' ? `$${Number(n).toLocaleString('en-US')}` : null);
@@ -481,6 +499,7 @@ function factText(facts, key) {
     }
     case 'occupation': return facts.occupation;
     case 'major_possessions': return facts.major_possessions.length ? facts.major_possessions.join(', ') : null;
+    case 'home_price_range': return facts.home_price_range?.label || null;
     default: return null;
   }
 }
@@ -525,7 +544,9 @@ export function TheirFacts({ character, onFeedSaved }) {
       income_source: p.income?.source || facts.income?.source || '',
       occupation: p.occupation || facts.occupation || '',
       major_possessions: (p.major_possessions || facts.major_possessions).join(', '),
+      home_price_range: facts.home_price_range?.key || '',
       undecided: [...facts.undecided],
+      reason: '',
     });
   };
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -553,7 +574,9 @@ export function TheirFacts({ character, onFeedSaved }) {
       income: { amount: form.income_amount === '' ? null : Number(form.income_amount), cadence: form.income_cadence, source: form.income_source },
       occupation: form.occupation,
       major_possessions: form.major_possessions.split(',').map((x) => x.trim()).filter(Boolean),
+      home_price_range: form.home_price_range || null,
       undecided: form.undecided,
+      ...(form.reason.trim() ? { reason: form.reason.trim() } : {}),
     };
     if (facts.feed_linked) {
       if (form.handle !== (facts.handle || '')) body.handle = form.handle;
@@ -641,12 +664,19 @@ export function TheirFacts({ character, onFeedSaved }) {
             <label>Where the money comes from<input value={form.income_source} onChange={set('income_source')} placeholder="Brand deals, PlayRoom, a salary…" /></label>
             <label>Occupation<input value={form.occupation} onChange={set('occupation')} /></label>
             <label>Major possessions<input value={form.major_possessions} onChange={set('major_possessions')} placeholder="Separate with commas" /></label>
+            <label>Home price range
+              <select value={form.home_price_range} onChange={set('home_price_range')} data-testid="ch-facts-home-price">
+                <option value="">Not set</option>
+                {HOME_PRICE_RANGE_OPTIONS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+              </select>
+            </label>
             <fieldset className="ch-facts-undecided">
               <legend>Not decided yet</legend>
               {Object.keys(FACT_LABELS).filter((k) => facts.feed_linked || !feedKeys.includes(k)).map((k) => (
                 <label key={k}><input type="checkbox" aria-label={`${FACT_LABELS[k]}: not decided yet`} checked={form.undecided.includes(k)} onChange={() => toggleUndecided(k)} /> {FACT_LABELS[k]}</label>
               ))}
             </fieldset>
+            <label>Why these facts changed<input value={form.reason} onChange={set('reason')} placeholder="Optional, one line, kept in their fact history" maxLength={500} /></label>
             <span className="ch-facts-row">
               <button type="submit" className="ch-btn" disabled={busy}>{busy ? 'Saving…' : 'Save facts'}</button>
               <button type="button" className="ch-btn-soft" disabled={busy} onClick={() => setForm(null)}>Cancel</button>
@@ -654,9 +684,58 @@ export function TheirFacts({ character, onFeedSaved }) {
           </form>
         )}
       {note && <p className={note.kind === 'error' ? 'ch-note is-error' : 'ch-note'} role={note.kind === 'error' ? 'alert' : 'status'}>{note.text}</p>}
+      {facts && !facts.error && !form && <FactHistory characterId={id} refreshKey={facts} />}
       {facts && !facts.error && !form && <ProfileCheck characterId={id} />}
       {facts && !facts.error && !form && <PressureTest characterId={id} />}
     </section>
+  );
+}
+
+/**
+ * Fact history (the spec's #1; Evoni, 2026-10-17; services/factHistory):
+ * when and why each fact changed, newest first, with the follower ledger
+ * (an episode's result, a post, an event, a change here). Loads when opened.
+ */
+const historyWhen = (iso) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+export function FactHistory({ characterId, refreshKey }) {
+  const [open, setOpen] = useState(false);
+  const [history, setHistory] = useState(null);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    let live = true;
+    factHistoryApi(characterId)
+      .then((res) => { if (live) { setHistory(res.data?.history || []); setError(null); } })
+      .catch((err) => {
+        console.error('[CharacterProfilePage] fact history failed:', err);
+        if (live) setError(err.response?.data?.error || 'Could not load their fact history.');
+      });
+    return () => { live = false; };
+  }, [open, characterId, refreshKey]);
+  return (
+    <details className="ch-history" data-testid="ch-history" onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary>Fact history</summary>
+      {error && <p className="ch-note is-error" role="alert">{error}</p>}
+      {open && !history && !error && <p className="ch-note">Loading…</p>}
+      {history && history.length === 0 && <p className="ch-note">No changes yet. Each save on this sheet, and each follower change, is kept here.</p>}
+      {history && history.length > 0 && (
+        <ol className="ch-history-list">
+          {history.map((h, i) => (
+            <li key={`${h.at}-${h.fact}-${i}`} data-testid="ch-history-item">
+              <span className="ch-history-what">
+                <b>{h.label}</b>{' '}
+                {h.from ? <>{h.from} → {h.to || 'not set'}</> : <>set to {h.to || 'not set'}</>}
+              </span>
+              <span className="ch-history-when">
+                {historyWhen(h.at)}{h.story_label ? ` · ${h.story_label}` : ''}{h.by ? ` · ${h.by}` : ''}
+              </span>
+              {h.reason && <span className="ch-history-why">{h.reason}</span>}
+            </li>
+          ))}
+        </ol>
+      )}
+    </details>
   );
 }
 
@@ -1529,178 +1608,31 @@ export function ConnectionsCard({ relationships: rels, entanglements: ents, open
   );
 }
 
-/* ── Tab 2: Interior ─────────────────────────────────────────────────────────── */
+/* ── Inner life: what the merge kept aside ────────────────────────────────── */
 
-function TabInterior({ character, gen }) {
-  const want    = character.want_architecture;
-  const wound   = character.wound;
-  const mask    = character.the_mask;
-  // The column, or the older generate-section shape in extra_fields.
-  const dilemma = character.dilemma || character.extra_fields?.dilemma || null;
-  const triggers = character.triggers;
-  const missing = ['want_architecture', 'wound', 'the_mask', 'triggers', 'dilemma', 'deep_profile', 'living_state',
-    'self_narrative', 'operative_cosmology', 'foreclosed_possibility', 'experience_of_joy', 'change_capacity']
-    .filter((f) => !hasValue(character[f]));
-  const allNote = gen.note?.key === 'all' ? gen.note : null;
-
+// What the merge of the depth fields kept aside (2026-10-17): a value that
+// differed from the one kept, or had no place in the new lists.
+function DepthArchive({ character }) {
+  const kept = archivedDepth(character);
+  if (!kept.length) return null;
   return (
-    <div className="cp-tab-content">
-      {missing.length > 0 && !gen.locked && (
-        <div className="cp-fill-all">
-          <p className="ch-note">{missing.length} {missing.length === 1 ? 'part' : 'parts'} of their inner life {missing.length === 1 ? 'is' : 'are'} empty. Fill them in from who they already are; nothing written is changed.</p>
-          <button type="button" className="ch-btn" disabled={!!gen.busy} onClick={() => gen.run()}>
-            {gen.busy === 'all' ? 'Filling in… (about a minute)' : 'Fill in everything missing'}
-          </button>
-          {allNote && <p className={`ch-note${allNote.error ? ' is-error' : ''}`} role="status">{allNote.text}</p>}
-        </div>
-      )}
-
-      {/* Want Architecture — three cards */}
-      <section className="cp-section">
-        <h3 className="cp-section-title">Want Architecture</h3>
-        {want ? (
-          <div className="cp-want-row">
-            <div className="cp-want-card cp-want-surface">
-              <span className="cp-want-label">Surface Want</span>
-              <p>{want.surface_want}</p>
-            </div>
-            <div className="cp-want-card cp-want-real">
-              <span className="cp-want-label">Real Want</span>
-              <p>{want.real_want}</p>
-            </div>
-            <div className="cp-want-card cp-want-forbidden">
-              <span className="cp-want-label">Forbidden Want</span>
-              <p>{want.forbidden_want}</p>
-            </div>
-          </div>
-        ) : <EmptyState label="Want architecture not generated yet." gen={gen} fields={['want_architecture']} />}
-      </section>
-
-      {/* Wound */}
-      <section className="cp-section">
-        <h3 className="cp-section-title">Wound</h3>
-        {wound ? (
-          <div className="cp-wound-block">
-            <p className="cp-wound-desc">{wound.description}</p>
-            {wound.origin_period && (
-              <p className="cp-wound-meta">Origin: {wound.origin_period}</p>
-            )}
-            {wound.downstream_effects && (
-              <p className="cp-wound-effects">{wound.downstream_effects}</p>
-            )}
-            {wound.deep_profile_dimensions_affected?.length > 0 && (
-              <div className="cp-dim-tags">
-                {wound.deep_profile_dimensions_affected.map(d => (
-                  <span key={d} className="cp-dim-tag">{d.replace(/_/g, ' ')}</span>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : <EmptyState label="Wound not defined yet." gen={gen} fields={['wound']} />}
-      </section>
-
-      {/* The Mask */}
-      <section className="cp-section">
-        <h3 className="cp-section-title">The Mask</h3>
-        {mask ? (
-          <div className="cp-mask-block">
-            <p>{mask.description}</p>
-            {mask.feed_profile_is_mask && (
-              <div className="cp-mask-callout">
-                <span className="cp-mask-dot" /> This character&rsquo;s Feed profile IS their mask
-              </div>
-            )}
-            {mask.divergence_map?.length > 0 && (
-              <div className="cp-divergence-list">
-                <span className="cp-meta-label">Divergences</span>
-                {mask.divergence_map.map((d, i) => (
-                  <p key={i} className="cp-divergence-item">&middot; {d}</p>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : <EmptyState label="Mask not defined yet." gen={gen} fields={['the_mask']} />}
-      </section>
-
-      {/* Dilemma — two column */}
-      <section className="cp-section">
-        <h3 className="cp-section-title">Central Dilemma</h3>
-        {dilemma ? (
-          <div className="cp-dilemma-block">
-            <p className="cp-dilemma-tension">{dilemma.central_tension || dilemma.central_dilemma}</p>
-            <div className="cp-dilemma-options">
-              <div className="cp-dilemma-option">
-                <span className="cp-option-label">A</span>
-                <p>{dilemma.option_a}</p>
-              </div>
-              <div className="cp-dilemma-vs">vs</div>
-              <div className="cp-dilemma-option">
-                <span className="cp-option-label">B</span>
-                <p>{dilemma.option_b}</p>
-              </div>
-            </div>
-            {(dilemma.what_both_cost || dilemma.stakes) && (
-              <p className="cp-dilemma-cost">Either way: {dilemma.what_both_cost || dilemma.stakes}</p>
-            )}
-          </div>
-        ) : <EmptyState label="Dilemma not generated yet." gen={gen} fields={['dilemma']} />}
-      </section>
-
-      {/* Triggers */}
-      <section className="cp-section">
-        <h3 className="cp-section-title">Triggers</h3>
-        {triggers?.length > 0 ? (
-          <div className="cp-trigger-pills">
-            {triggers.map((t, i) => (
-              <span key={i} className="cp-trigger-pill">{typeof t === 'string' ? t : t.label || t.name}</span>
-            ))}
-          </div>
-        ) : <EmptyState label="Triggers not defined yet." gen={gen} fields={['triggers']} />}
-      </section>
-
-      {/* Blind Spot — author only */}
-      {character.blind_spot && (
-        <section className="cp-section cp-author-only">
-          <h3 className="cp-section-title">
-            Blind Spot
-            <span className="cp-author-badge">Author Only</span>
-          </h3>
-          <p className="cp-blind-spot-text">{character.blind_spot}</p>
-        </section>
-      )}
-
-      {/* Interior architecture labeled blocks */}
-      {(character.change_capacity || character.self_narrative || character.operative_cosmology ||
-        character.foreclosed_possibility || character.experience_of_joy || character.time_orientation) && (
-        <section className="cp-section">
-          <h3 className="cp-section-title">Interior Architecture</h3>
-          <div className="cp-interior-grid">
-            {[
-              { label: 'Change Capacity',        value: character.change_capacity
-                ? (typeof character.change_capacity === 'string'
-                  ? character.change_capacity
-                  // The generator writes { mobility, conditions_for_change, armor_type }.
-                  : [character.change_capacity.mobility,
-                    character.change_capacity.conditions_for_change && `Would change if: ${character.change_capacity.conditions_for_change}`,
-                    character.change_capacity.armor_type && `Armor: ${character.change_capacity.armor_type}`,
-                    character.change_capacity.description].filter(Boolean).join(' · ') || null)
-                : null },
-              { label: 'Self-Narrative',          value: character.self_narrative },
-              { label: 'Operative Cosmology',     value: character.operative_cosmology },
-              { label: 'Foreclosed Possibility',  value: character.foreclosed_possibility },
-              { label: 'Experience of Joy',       value: character.experience_of_joy },
-              { label: 'Time Orientation',        value: character.time_orientation?.replace?.(/_/g, ' ') || character.time_orientation },
-            ].filter(f => f.value).map(f => (
-              <div key={f.label} className="cp-interior-field">
-                <span className="cp-meta-label">{f.label}</span>
-                <p>{f.value}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-    </div>
+    <details className="cp-section cp-archived" data-testid="cp-depth-archive">
+      <summary className="cp-section-title">Kept from retired fields ({kept.length})</summary>
+      <p className="cp-archived-hint">When the inner life fields were merged into one place, these values differed from the one kept, or had no place in the new lists. Copy anything you want into its section.</p>
+      <ul className="cp-archived-list">
+        {kept.map(([key, value]) => (
+          <li key={key}><span className="cp-meta-label">{words(key.replace(/^de_/, ''))}</span> {typeof value === 'object' ? JSON.stringify(value) : String(value)}</li>
+        ))}
+      </ul>
+    </details>
   );
+}
+
+/* Inner life display helpers (the one-home merge, 2026-10-17). */
+/** The values the merge kept aside, as [field, value] pairs. */
+export function archivedDepth(character) {
+  const archive = character?.extra_fields?.depth_archive;
+  return archive && typeof archive === 'object' ? Object.entries(archive).filter(([, v]) => v !== null && v !== '') : [];
 }
 
 /* ── Tab 3: Connections ──────────────────────────────────────────────────────── */
@@ -2062,7 +1994,7 @@ function TabWorld({ character, onSaved, gen }) {
         <section className="cp-section">
           <h3 className="cp-section-title">Time Orientation</h3>
           <span className="cp-time-badge">
-            {character.time_orientation.replace?.(/_/g, ' ') || character.time_orientation}
+            {words(character.time_orientation)}
           </span>
         </section>
       )}
@@ -2114,73 +2046,6 @@ function TabWorld({ character, onSaved, gen }) {
           )}
         </section>
       )}
-    </div>
-  );
-}
-
-/* ── Tab 6: Deep Profile ─────────────────────────────────────────────────────── */
-
-// A dimension is text (generation v2) or an object of notes (the older
-// deep-profile endpoints); an object used to crash the page when opened.
-function dimensionText(value) {
-  if (!value) return null;
-  if (typeof value === 'string') return value;
-  if (typeof value === 'object') {
-    const parts = Object.entries(value).filter(([, v]) => hasValue(v))
-      .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${typeof v === 'string' ? v : JSON.stringify(v)}`);
-    return parts.length ? parts.join('\n') : null;
-  }
-  return String(value);
-}
-
-function TabDeepProfile({ character, gen }) {
-  const dp = character.deep_profile;
-  const [open, setOpen] = useState(null);
-
-  if (!hasValue(dp)) {
-    return (
-      <div className="cp-tab-content">
-        <EmptyState label="Deep Profile not generated yet." gen={gen} fields={['deep_profile']} />
-      </div>
-    );
-  }
-
-  const populated = DIMENSION_KEYS.filter(k => dimensionText(dimension(dp, k)));
-  const isComplete = populated.length === 14;
-
-  return (
-    <div className="cp-tab-content">
-      {/* Completion indicator */}
-      <div className="cp-dp-status">
-        <span className="cp-dp-count">{populated.length}/14 dimensions</span>
-        {isComplete && <span className="cp-dp-complete">Complete</span>}
-      </div>
-
-      <div className="cp-dp-list">
-        {DIMENSION_KEYS.map(key => {
-          const value  = dimensionText(dimension(dp, key));
-          const label  = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-          const icon   = DIMENSION_ICONS[key] || '\u00B7';
-          const isOpen = open === key;
-
-          return (
-            <div
-              key={key}
-              className={`cp-dp-row ${isOpen ? 'cp-dp-open' : ''} ${!value ? 'cp-dp-empty' : ''}`}
-              onClick={() => value && setOpen(isOpen ? null : key)}
-            >
-              <div className="cp-dp-header">
-                <span className="cp-dp-icon">{icon}</span>
-                <span className="cp-dp-label">{label}</span>
-                {value
-                  ? <span className="cp-dp-chevron">{isOpen ? '\u2191' : '\u2193'}</span>
-                  : <span className="cp-dp-missing">not generated</span>}
-              </div>
-              {isOpen && value && <p className="cp-dp-content">{value}</p>}
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -2324,8 +2189,8 @@ export default function CharacterProfilePage() {
           </ol>
           {next && (
             <button type="button" className="ch-btn-deepen" disabled={!!gen.busy || gen.locked}
-              title="Fills in the missing inner life from who they already are"
-              onClick={() => { setActiveTab('inner'); gen.run(); }}>
+              title="Drafts the missing inner life from who they already are, for you to look over before it is saved"
+              onClick={() => { setActiveTab('inner'); gen.preview(); }}>
               {gen.busy === 'all' ? 'Deepening… (about a minute)' : <>&uarr; Deepen to {next.label}</>}
             </button>
           )}
@@ -2345,18 +2210,10 @@ export default function CharacterProfilePage() {
 
       <div className="ch-panel">
         {activeTab === 'overview' && <TabOverview character={character} appearances={appearances} feedProfile={feedProfile} relationships={relationships} entanglements={entanglements} onSaved={onSaved} onFeedSaved={onFeedSaved} gen={gen} openTab={setActiveTab} />}
-        {activeTab === 'inner' && <TheirType character={character} />}
         {activeTab === 'inner' && (
           <div className="ch-card">
-            <TabInterior character={character} gen={gen} />
-            <section className="cp-section">
-              <h3 className="cp-section-title">DEPTH</h3>
-              <CharacterDepthPanel characterId={character.id} characterName={name} />
-            </section>
-            <section className="cp-section">
-              <h3 className="cp-section-title">Deep Profile</h3>
-              <TabDeepProfile character={character} gen={gen} />
-            </section>
+            <InnerLifeWorkspace character={character} gen={gen} onSaved={onSaved}
+              typeCard={<TheirType character={character} />} archive={<DepthArchive character={character} />} />
           </div>
         )}
         {activeTab === 'voice' && (

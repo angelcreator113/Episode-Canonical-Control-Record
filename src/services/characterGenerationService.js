@@ -51,9 +51,23 @@ const _DEEP_PROFILE_DIMENSIONS = [
  *
  * Nothing is written to DB until author confirms.
  */
-async function generateFullCharacter({ spark, worldContext, bookContext, existingCharacters = [] }) {
+/**
+ * Whether a new character's social is The Pulse (Evoni, 2026-10-15 and
+ * 2026-10-17: "lalaverse social media is The Pulse"). Lala's world is the
+ * default; only JustAWoman's real world ("Before Lala", Book 1, or the
+ * real_world layer asked for) keeps real apps. A LalaVerse world whose name
+ * does not say "Lala" is still on The Pulse.
+ */
+function onPulseFor(worldContext, layer = null) {
+  if (layer) return layer === 'lalaverse';
+  const named = `${worldContext?.name || ''} ${worldContext?.description || ''}`;
+  return !/before lala|book\s*1\b|justawoman|just a woman|real[\s_-]?world/i.test(named);
+}
+
+async function generateFullCharacter({ spark, worldContext, bookContext, existingCharacters = [], layer = null }) {
   const { name, vibe, role } = spark;
   const age = spark.age || null;
+  const onPulse = onPulseFor(worldContext, layer);
 
   // Build the world context string
   const worldString = worldContext
@@ -76,7 +90,7 @@ async function generateFullCharacter({ spark, worldContext, bookContext, existin
     belongingMap,
   ] = await Promise.all([
     generateInteriorArchitecture({ name, vibe, role, worldString, bookString, castString, age }),
-    determinesSocialPresence({ name, vibe, role, worldString }),
+    determinesSocialPresence({ name, vibe, role, worldString, onPulse }),
     generateFamilyTree({ name, vibe, role, worldString }),
     generateBelongingMap({ name, vibe, role, worldString }),
   ]);
@@ -88,8 +102,7 @@ async function generateFullCharacter({ spark, worldContext, bookContext, existin
       name, vibe, role, worldString,
       interior: interiorArchitecture,
       // Lala's world (the default) has one social app, The Pulse.
-      // "Before Lala" is JustAWoman's world, not Lala's.
-      onPulse: !worldContext || (/lala/i.test(worldContext.name || '') && !/before lala|book\s*1/i.test(worldContext.name || '')),
+      onPulse,
     });
   }
 
@@ -178,7 +191,7 @@ const INTERIOR_ARCHITECTURE_SYSTEM = `You are generating the complete interior a
   ],
   "blind_spot": "something true about this character that they cannot see — author-only knowledge",
   "change_capacity": {
-    "mobility": "rigid OR fluid OR conditional",
+    "mobility": "highly_rigid OR conditionally_open OR cyclically_mobile OR highly_fluid OR fixed_by_choice",
     "conditions_for_change": "what would have to happen for this person to actually change",
     "armor_type": "how their wound calcified — what they built to protect themselves"
   },
@@ -186,7 +199,7 @@ const INTERIOR_ARCHITECTURE_SYSTEM = `You are generating the complete interior a
   "operative_cosmology": "not their stated religion — the actual logic they use to make meaning. Is the world random, rigged, fair, responsive to effort? How do they explain why things happen to them?",
   "foreclosed_possibility": "what they have secretly given up on — something they no longer believe is available to them in this life",
   "experience_of_joy": "what makes this specific person come completely alive — present, lit up, fully themselves. As specific as the wound.",
-  "time_orientation": "past_anchored OR future_obsessed OR impulsive_present OR waiting",
+  "time_orientation": "past_anchored OR future_oriented OR present_impulsive OR perpetual_waiter OR cyclical",
   "dilemma": {
     "central_tension": "the core impossible choice this character carries",
     "option_a": "one horn of the dilemma",
@@ -293,7 +306,8 @@ const INTERIOR_FIELDS = [
 ];
 const INTERIOR_TEXT = ['selected_name', 'blind_spot', 'self_narrative', 'operative_cosmology', 'foreclosed_possibility', 'experience_of_joy'];
 const INTERIOR_OBJECTS = ['want_architecture', 'wound', 'the_mask', 'living_state', 'change_capacity', 'dilemma', 'deep_profile'];
-const TIME_ORIENTATIONS = ['past_anchored', 'future_obsessed', 'impulsive_present', 'waiting'];
+// The five times (services/characterDepthFields; old names are renamed on the way in).
+const { normalizeTimeOrientation, normalizeMobility } = require('./characterDepthFields');
 
 function isFilled(val) {
   if (val === null || val === undefined) return false;
@@ -319,15 +333,17 @@ function interiorUpdates(generated, fields) {
     const v = f === 'selected_name' ? generated?.real_name : generated?.[f];
     if (!isFilled(v)) continue;
     if (f === 'time_orientation') {
-      const key = String(v).trim().toLowerCase().replace(/[\s-]+/g, '_');
-      if (TIME_ORIENTATIONS.includes(key)) updates[f] = key;
+      const key = normalizeTimeOrientation(String(v).trim().toLowerCase().replace(/[\s-]+/g, '_'));
+      if (key) updates[f] = key;
     } else if (f === 'triggers') {
       const list = (Array.isArray(v) ? v : [v]).filter(isFilled);
       if (list.length) updates[f] = list;
     } else if (INTERIOR_TEXT.includes(f)) {
       if (typeof v === 'string') updates[f] = v.trim();
     } else if (INTERIOR_OBJECTS.includes(f)) {
-      if (typeof v === 'object' && !Array.isArray(v)) updates[f] = v;
+      if (typeof v !== 'object' || Array.isArray(v)) continue;
+      // Change capacity's level in the five (services/characterDepthFields).
+      updates[f] = f === 'change_capacity' && v.mobility !== undefined ? { ...v, mobility: normalizeMobility(v.mobility) } : v;
     }
   }
   return updates;
@@ -415,20 +431,22 @@ async function generateMissingInterior({ character, feedProfile = null, events =
 // SOCIAL PRESENCE DECISION
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function determinesSocialPresence({ name, vibe, role, worldString }) {
+async function determinesSocialPresence({ name, vibe, role, worldString, onPulse = false }) {
   const prompt = `${worldString}
 
 Character: ${name}
 Vibe: ${vibe}
 Role: ${role}
 
-Does this character have a social media presence? Consider their role, age, class, ambition, aesthetic, and world context.
+${onPulse
+    ? 'Is this character on The Pulse (the LalaVerse\'s one social app; Instagram, TikTok, YouTube and the rest do not exist here)? Consider their role, age, class, ambition, aesthetic, and world context.'
+    : 'Does this character have a social media presence? Consider their role, age, class, ambition, aesthetic, and world context.'}
 
 Return JSON only:
 {
   "social_presence": true or false,
   "reason": "one sentence explaining why",
-  "inferred_platform": "instagram OR tiktok OR youtube OR twitter OR none",
+  "inferred_platform": "${onPulse ? 'pulse OR none' : 'instagram OR tiktok OR youtube OR twitter OR none'}",
   "inferred_handle_style": "brief description of what their handle would feel like"
 }`;
 
@@ -632,6 +650,7 @@ function calculateDepthLevel(character) {
 
 module.exports = {
   generateFullCharacter,
+  onPulseFor,
   generateInteriorArchitecture,
   worldLineFor,
   generateMissingInterior,

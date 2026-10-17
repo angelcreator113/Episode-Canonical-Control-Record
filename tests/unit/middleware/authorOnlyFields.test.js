@@ -10,6 +10,8 @@ const {
 } = require('../../../src/middleware/authorOnlyFields');
 
 const AUTHOR = {
+  // The blind spot's home since the depth merge (2026-10-17, services/characterDepthFields).
+  blind_spot: 'e',
   de_blind_spot: 'a',
   de_blind_spot_evidence: 'b',
   de_blind_spot_crack_condition: 'c',
@@ -17,7 +19,7 @@ const AUTHOR = {
 };
 
 describe('AUTHOR_ONLY_FIELDS', () => {
-  test('is the model list of four', () => {
+  test('is the model list: the four, and blind_spot since the depth merge', () => {
     expect([...AUTHOR_ONLY_FIELDS].sort()).toEqual(Object.keys(AUTHOR).sort());
   });
 });

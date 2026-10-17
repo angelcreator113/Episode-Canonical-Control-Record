@@ -117,7 +117,8 @@ describe('interiorUpdates', () => {
       extra: 'never asked for',
     }, ['time_orientation', 'triggers', 'blind_spot', 'wound', 'self_narrative', 'dilemma']);
     expect(out).toEqual({
-      time_orientation: 'future_obsessed',
+      // An old name takes its new one (the five times since the depth merge, 2026-10-17).
+      time_orientation: 'future_oriented',
       triggers: ['being ignored'],
       self_narrative: 'she earned this',
       dilemma: { central_tension: 'x' },
@@ -161,3 +162,58 @@ describe('their real name', () => {
   });
 });
 
+
+// Step 3 (Evoni, 2026-10-17): Generate All shows what it would fill before
+// anything is saved; the author saves the values she keeps.
+describe('preview, then apply', () => {
+  const applyUrl = '/api/v1/character-registry/characters/rc-1/interior/apply';
+
+  test('a preview writes nothing and returns what it would fill', async () => {
+    mockGenerateMissingInterior.mockResolvedValue({ want_architecture: { surface_want: 'a' }, experience_of_joy: 'Fittings' });
+    const res = await request(app).post(url).send({ preview: true });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ preview: true, proposed: { want_architecture: { surface_want: 'a' }, experience_of_joy: 'Fittings' } });
+    expect(res.body.missing).not.toContain('wound');
+    expect(mockLocked.update).not.toHaveBeenCalled();
+  });
+
+  test('a preview hides the blind spot from anyone but the author', async () => {
+    mockGenerateMissingInterior.mockResolvedValue({ blind_spot: 'She keeps score.', self_narrative: 'Me' });
+    const res = await request(app).post(url).send({ preview: true, fields: ['blind_spot', 'self_narrative'] });
+    expect(res.status).toBe(200);
+    expect(res.body.proposed).toEqual({ self_narrative: 'Me' });
+  });
+
+  test('apply writes the chosen values into empty fields only, and says what it skipped', async () => {
+    const res = await request(app).post(applyUrl).send({
+      values: { experience_of_joy: ' Fittings ', wound: { description: 'generated' }, time_orientation: 'future_obsessed' },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.filled.sort()).toEqual(['experience_of_joy', 'time_orientation']);
+    expect(res.body.skipped).toEqual(['wound']);
+    expect(mockLocked.update.mock.calls[0][0]).toMatchObject({ experience_of_joy: 'Fittings', time_orientation: 'future_oriented' });
+    expect(mockLocked.wound).toEqual({ description: 'kept' });
+    expect(mockGenerateMissingInterior).not.toHaveBeenCalled();
+  });
+
+  test('apply drops a value the field does not take', async () => {
+    const res = await request(app).post(applyUrl).send({ values: { want_architecture: 'not an object' } });
+    expect(res.status).toBe(200);
+    expect(res.body.filled).toEqual([]);
+    expect(res.body.skipped).toEqual(['want_architecture']);
+  });
+
+  test('apply never writes the blind spot for anyone but the author', async () => {
+    const res = await request(app).post(applyUrl).send({ values: { blind_spot: 'Written by an editor' } });
+    expect(res.status).toBe(200);
+    expect(res.body.filled).toEqual([]);
+    expect(mockLocked.blind_spot).toBeUndefined();
+  });
+
+  test('apply refuses unknown fields, an empty body and a finalized character', async () => {
+    expect((await request(app).post(applyUrl).send({ values: { description: 'x' } })).status).toBe(400);
+    expect((await request(app).post(applyUrl).send({})).status).toBe(400);
+    mockStored.status = 'finalized';
+    expect((await request(app).post(applyUrl).send({ values: { experience_of_joy: 'x' } })).status).toBe(409);
+  });
+});

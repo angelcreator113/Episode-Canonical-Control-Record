@@ -337,210 +337,6 @@
   border-radius: 0 8px 8px 0;
 }
 
-/* ── Want Architecture — three cards side by side ──────────────────────────── */
-.cp-want-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 12px;
-}
-
-.cp-want-card {
-  padding: 16px;
-  border-radius: 8px;
-  border: 1px solid #ede8e3;
-}
-.cp-want-card p {
-  margin: 8px 0 0;
-  font-size: var(--text-base);
-  line-height: 1.55;
-  color: #444;
-}
-
-.cp-want-surface  { background: #f5f8ff; border-color: #c8ddf0; }
-.cp-want-real     { background: #f5f0fb; border-color: #ddd0f0; }
-.cp-want-forbidden {
-  background: #fdf8f6;
-  border-color: #e8ddd8;
-  border-style: dashed;
-}
-
-.cp-want-label {
-  font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: #aaa;
-}
-
-/* ── Wound ─────────────────────────────────────────────────────────────────── */
-.cp-wound-desc {
-  font-size: var(--text-base);
-  line-height: 1.6;
-  color: #3a2d3f;
-  margin: 0 0 12px;
-}
-
-.cp-wound-meta {
-  font-size: var(--text-sm);
-  color: #aaa;
-  margin: 0 0 8px;
-}
-
-.cp-wound-effects {
-  font-size: var(--text-md);
-  line-height: 1.55;
-  color: #666;
-  margin: 0 0 12px;
-  font-style: italic;
-}
-
-.cp-dim-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.cp-dim-tag {
-  font-size: var(--text-xs);
-  padding: 3px 8px;
-  background: #f5f0fb;
-  color: #a889c8;
-  border-radius: 20px;
-  text-transform: capitalize;
-}
-
-/* ── Mask ──────────────────────────────────────────────────────────────────── */
-.cp-mask-block p {
-  font-size: var(--text-base);
-  line-height: 1.6;
-  color: #444;
-  margin: 0 0 12px;
-}
-
-.cp-mask-callout {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  background: #fdf0f4;
-  border-radius: 8px;
-  font-size: var(--text-md);
-  color: #d4789a;
-  margin-bottom: 12px;
-}
-
-.cp-mask-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #d4789a;
-  flex-shrink: 0;
-}
-
-.cp-divergence-list { margin-top: 12px; }
-.cp-divergence-item {
-  font-size: var(--text-md);
-  color: #888;
-  line-height: 1.5;
-  margin: 4px 0;
-}
-
-/* ── Dilemma ───────────────────────────────────────────────────────────────── */
-.cp-dilemma-tension {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: var(--text-xl);
-  line-height: 1.5;
-  color: #3a2d3f;
-  margin: 0 0 20px;
-  font-style: italic;
-}
-
-.cp-dilemma-options {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.cp-dilemma-option {
-  padding: 14px;
-  background: #fafaf9;
-  border: 1px solid #ede8e3;
-  border-radius: 8px;
-}
-
-.cp-option-label {
-  display: block;
-  font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: #d4789a;
-  margin-bottom: 6px;
-}
-
-.cp-dilemma-option p {
-  margin: 0;
-  font-size: var(--text-md);
-  line-height: 1.5;
-  color: #555;
-}
-
-.cp-dilemma-vs {
-  font-size: var(--text-xs);
-  color: #ccc;
-  text-align: center;
-}
-
-.cp-dilemma-cost {
-  font-size: var(--text-md);
-  color: #aaa;
-  font-style: italic;
-  margin: 0;
-}
-
-/* ── Triggers ──────────────────────────────────────────────────────────────── */
-.cp-trigger-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.cp-trigger-pill {
-  font-size: var(--text-xs);
-  padding: 4px 10px;
-  background: #fdf0f4;
-  color: #d4789a;
-  border-radius: 20px;
-}
-
-/* ── Interior Grid ─────────────────────────────────────────────────────────── */
-.cp-interior-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.cp-interior-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.cp-interior-field p {
-  font-size: var(--text-base);
-  line-height: 1.6;
-  color: #444;
-  margin: 0;
-}
-
-.cp-blind-spot-text {
-  font-size: var(--text-base);
-  line-height: 1.6;
-  color: #888;
-  font-style: italic;
-  margin: 0;
-}
-
 /* ── Relationships ─────────────────────────────────────────────────────────── */
 .cp-rel-list {
   display: flex;
@@ -859,13 +655,6 @@
   align-self: stretch;
 }
 
-.cp-mask-note {
-  font-size: var(--text-base);
-  line-height: 1.6;
-  color: #d4789a;
-  margin: 0;
-}
-
 /* ── World tab ─────────────────────────────────────────────────────────────── */
 .cp-living-grid {
   display: flex;
@@ -1056,8 +845,6 @@
   margin: 0;
 }
 
-/* ── Deep Profile ──────────────────────────────────────────────────────────── */
-
 /* ── Responsive Breakpoints ────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .cp-page {
@@ -1130,84 +917,6 @@
     font-size: var(--text-lg);
   }
 }
-.cp-dp-status {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.cp-dp-count {
-  font-size: var(--text-sm);
-  color: #aaa;
-}
-
-.cp-dp-complete {
-  font-size: var(--text-xs);
-  padding: 2px 10px;
-  background: #f0f7ee;
-  color: #6a9e60;
-  border-radius: 20px;
-  font-weight: 500;
-}
-
-.cp-dp-list {
-  display: flex;
-  flex-direction: column;
-  background: #fff;
-  border: 1px solid #ede8e3;
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.cp-dp-row {
-  border-bottom: 1px solid #f0ebe5;
-  cursor: pointer;
-  transition: background 0.12s;
-}
-.cp-dp-row:last-child { border-bottom: none; }
-.cp-dp-row:hover { background: #fafaf9; }
-.cp-dp-open { background: #fdf9f5; }
-.cp-dp-empty { cursor: default; opacity: 0.6; }
-
-.cp-dp-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-}
-
-.cp-dp-icon {
-  font-size: var(--text-lg);
-  flex-shrink: 0;
-}
-
-.cp-dp-label {
-  flex: 1;
-  font-size: var(--text-md);
-  font-weight: 500;
-  color: #444;
-  text-transform: capitalize;
-}
-
-.cp-dp-chevron {
-  font-size: var(--text-sm);
-  color: #bbb;
-}
-
-.cp-dp-missing {
-  font-size: var(--text-xs);
-  color: #ccc;
-  font-style: italic;
-}
-
-.cp-dp-content {
-  font-size: var(--text-md);
-  line-height: 1.65;
-  color: #555;
-  margin: 0;
-  padding: 0 16px 16px 43px;
-}
 
 /* ── Empty State ───────────────────────────────────────────────────────────── */
 .cp-empty-state {
@@ -1226,9 +935,6 @@
 }
 
 .cp-empty-state .cp-empty-generate { align-self: center; }
-
-/* Inner life: fill in everything missing at once. */
-.cp-fill-all { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 16px; border-radius: 14px; background: var(--lala-lavender-soft); }
 .ch-note.is-error { color: var(--danger-text); }
 
 /* ── Loading / Error ───────────────────────────────────────────────────────── */
@@ -1386,13 +1092,7 @@ a.ch-show:hover .ch-show-text strong { text-decoration: underline; }
 /* The character page: the old tab bodies fill their card (they were capped
    at 780px, which left half of Inner life empty), and stack on a phone. */
 .ch-card .cp-tab-content { max-width: none; }
-.cp-dp-content { white-space: pre-line; }
 .ch-voice-habit { margin: 0; padding: 12px 14px; border-radius: 12px; background: var(--surface-card); color: var(--info-text); font-size: 14px; line-height: 1.5; }
-@media (max-width: 640px) {
-  .cp-want-row { grid-template-columns: 1fr; }
-  .cp-dilemma-options { grid-template-columns: 1fr; }
-}
-
 /* Their names: real name and social media name (Overview), and the line
    under the heading when the two differ. */
 .ch-aka { margin: -4px 0 4px; font-size: 14px; color: var(--text-secondary); }
@@ -1443,6 +1143,13 @@ a.ch-trail-text:hover { text-decoration: underline; }
 }
 
 /* The consistency check (Character Consistency Engine step 3) */
+.ch-history { border-top: 1px solid var(--lala-lavender-line); padding-top: 12px; font-size: 13px; }
+.ch-history summary { cursor: pointer; font-weight: 700; color: var(--lala-lavender-text); min-height: 32px; }
+.ch-history-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.ch-history-list li { display: grid; gap: 2px; padding: 8px 10px; border-radius: 10px; background: var(--surface-card); border: 1px solid var(--lala-lavender-line); min-width: 0; }
+.ch-history-what { overflow-wrap: anywhere; }
+.ch-history-when { font-size: 12px; color: var(--text-secondary); }
+.ch-history-why { font-size: 12px; font-style: italic; color: var(--text-secondary); overflow-wrap: anywhere; }
 .ch-pressure { display: grid; gap: 8px; border-top: 1px solid var(--lala-lavender-line); padding-top: 12px; }
 .ch-pressure > .ch-btn-soft { justify-self: start; }
 .ch-pressure-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
@@ -1624,3 +1331,9 @@ a.ch-trail-text:hover { text-decoration: underline; }
   .ch-alive { flex: 1 1 auto; width: 100%; }
   .ch-photos { grid-template-columns: 1fr 1fr; }
 }
+
+/* Inner life: what the merge of the depth fields kept aside (2026-10-17). */
+.cp-archived summary { cursor: pointer; }
+.cp-archived-hint { margin: 0.5rem 0; font-size: var(--text-sm); color: var(--text-secondary); }
+.cp-archived-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.cp-archived-list li { font-size: var(--text-sm); color: var(--text-primary); overflow-wrap: anywhere; }
