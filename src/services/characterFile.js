@@ -116,7 +116,9 @@ function characterFileBlock(file, { publicOnly = false } = {}) {
   if (!file || (!file.character && !file.feedProfile)) return '';
   const { factsPromptBlock } = require('./characterFacts');
   const { seedBlock } = require('./characterTypology');
-  const name = file.character?.display_name || file.feedProfile?.display_name || null;
+  // Their chosen name, as the tab and every generator's instruction name them
+  // (sixth audit: "Sable's home" over "THE CHARACTER FILE for The Rival").
+  const name = file.character?.selected_name || file.character?.display_name || file.feedProfile?.display_name || null;
   const sections = [
     file.facts ? factsPromptBlock(file.facts) : '',
     publicOnly ? '' : seedBlock(file.typology),
