@@ -126,7 +126,11 @@ function characterFileBlock(file, { publicOnly = false } = {}) {
   const name = file.character?.display_name || file.feedProfile?.display_name || null;
   const sections = [
     file.facts ? factsPromptBlock(file.facts) : '',
-    file.contentType ? require('./characterContentType').contentTypeBlock(file.contentType, file.facts?.occupation && !(file.facts.undecided || []).includes('occupation') ? file.facts.occupation : null) : '',
+    file.contentType ? require('./characterContentType').contentTypeBlock(
+      file.contentType,
+      file.facts?.occupation && !(file.facts.undecided || []).includes('occupation') ? file.facts.occupation : null,
+      publicOnly ? null : require('./characterContentType').gapOf(file.character),
+    ) : '',
     publicOnly ? '' : seedBlock(file.typology),
     !publicOnly && Object.keys(file.inner).length ? `INNER LIFE (author-only: it drives them; they never say it outright):\n${lines(file.inner)}` : '',
     Object.keys(file.mask).length ? `THE MASK (what they show the world, true or not; their public voice comes from here):\n${lines(file.mask)}` : '',

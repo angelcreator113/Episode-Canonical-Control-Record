@@ -58,12 +58,13 @@
  *   GET    /api/v1/cast/characters/:id/content-type  what they are known for on The Pulse
  *                                                  (a Society archetype on their feed
  *                                                  profile), the list, and their job
- *   PUT    /api/v1/cast/characters/:id/content-type  { name } or { name: null } (ADMIN)
+ *   PUT    /api/v1/cast/characters/:id/content-type  { name?, gap? }: a name or null,
+ *                                                  and the job-vs-content gap line (ADMIN)
  *   POST   /api/v1/cast/characters/:id/content-type/suggest  one AI call over their
  *                                                  character file; saves nothing (ADMIN)
  *   POST   /api/v1/cast/content-types/suggest-unset  { limit?, profile_ids? }: suggestions for LalaVerse
  *                                                  feed profiles with none; saves nothing (ADMIN)
- *   POST   /api/v1/cast/content-types/apply      { items: [{ profile_id, name }] } (ADMIN)
+ *   POST   /api/v1/cast/content-types/apply      { items: [{ profile_id, name, character_id?, gap? }] } (ADMIN)
  *   GET    /api/v1/cast/characters/:id/posts/ideas  what to post about, from their own
  *                                                  story (no AI call), and whether
  *                                                  they can post yet
@@ -630,7 +631,12 @@ router.put('/characters/:id/content-type', requireAuth, authorize(['ADMIN']), as
     if (!found) return res.status(404).json({ success: false, error: 'Character not found' });
     const { setContentType, contentTypeOf } = require('../services/characterContentType');
     try {
-      await setContentType(db, { feedProfile: found.feedProfile, name: req.body?.name ?? null });
+      const body = req.body || {};
+      await setContentType(db, {
+        ...found,
+        name: 'name' in body ? body.name : undefined,
+        gap: 'gap' in body ? body.gap : undefined,
+      });
     } catch (err) {
       if (contentTypeError(res, err)) return undefined;
       throw err;
