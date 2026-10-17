@@ -22,6 +22,7 @@ import useActiveShow from '../hooks/useActiveShow';
 import { Crown, Plus, Sparkles, UserPlus, Users, ChevronRight, Radio } from 'lucide-react';
 import { chooseRegistry, findLala, feedPeople, oldSystem, otherProtagonists } from '../lib/theCast';
 import CastFacts from '../components/Cast/CastFacts';
+import CastCrossCheck from '../components/Cast/CastCrossCheck';
 import './TheCast.css';
 
 const ROLE_CONFIG = {
@@ -327,6 +328,7 @@ export default function CharacterRegistryPage() {
 
       {/* The cast rollout: every character's facts, findings and voice (Evoni, 2026-10-17). */}
       <CastFacts registryIds={registryId ? [registryId] : registries.map((r) => r.id)} />
+      <CastCrossCheck registryIds={registryId ? [registryId] : registries.map((r) => r.id)} />
 
       {/* Create Modal */}
       {showCreate && (
