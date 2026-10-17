@@ -61,6 +61,10 @@ export const markIntentionalApi = (id, flagId, note) =>
   apiClient.post(`${API_URL}/cast/characters/${id}/check/intentional`, { flag_id: flagId, note });
 export const fixFlagApi = (id, flagId, text) =>
   apiClient.post(`${API_URL}/cast/characters/${id}/check/fix`, text === undefined ? { flag_id: flagId } : { flag_id: flagId, text });
+export const suggestFixesApi = (id) =>
+  apiClient.post(`${API_URL}/cast/characters/${id}/check/suggest`);
+export const rewriteFlagApi = (id, flagId, before, after) =>
+  apiClient.post(`${API_URL}/cast/characters/${id}/check/fix`, { flag_id: flagId, before, after });
 export const unmarkIntentionalApi = (id, flagId) =>
   apiClient.delete(`${API_URL}/cast/characters/${id}/check/intentional/${flagId}`);
 export const postIdeasApi = (id) =>
@@ -814,6 +818,11 @@ export function PressureTest({ characterId }) {
  * each finding can be fixed (the suggested wording, or Evoni's own), or
  * marked intentional and listed as such. What they post and author-only
  * notes are not checked (a gap there is the mask).
+ * Suggest fixes (Evoni, 2026-10-17: "i want to be able to auto fix the
+ * text issues"): one AI call proposes, for each finding with no single
+ * right wording, a rewrite of its sentence or that it is fine as it is.
+ * Fix all applies every one-click fix and every suggestion; a "fine" one is
+ * marked intentional with the reason.
  */
 const CHECK_LABELS = {
   followers: 'Followers', account_status: 'Account status', handle: 'Handle',
@@ -826,6 +835,9 @@ export function ProfileCheck({ characterId }) {
   const [error, setError] = useState(null);
   const [editing, setEditing] = useState(null); // { id, text }
   const [saving, setSaving] = useState(null);
+  const [suggestions, setSuggestions] = useState({}); // flag id → { verdict, before, after, why }
+  const [auto, setAuto] = useState(null); // 'suggest' | 'all'
+  const [autoNote, setAutoNote] = useState(null);
 
   const run = async () => {
     setBusy(true);
@@ -865,6 +877,73 @@ export function ProfileCheck({ characterId }) {
     }
   };
 
+  const suggest = async () => {
+    setAuto('suggest');
+    setError(null);
+    setAutoNote(null);
+    try {
+      const res = await suggestFixesApi(characterId);
+      const list = res.data?.suggestions || [];
+      setSuggestions(Object.fromEntries(list.map((x) => [x.flag_id, x])));
+      setAutoNote(list.length ? null : 'No suggestions: edit these by hand.');
+    } catch (err) {
+      console.error('[CharacterProfilePage] suggesting fixes failed:', err);
+      setError(err.response?.data?.error || 'Could not suggest fixes.');
+    } finally {
+      setAuto(null);
+    }
+  };
+  const forget = (flagId) => setSuggestions((all) => { const next = { ...all }; delete next[flagId]; return next; });
+  /** Applies one suggestion; returns the check after a rewrite, or null after a mark. */
+  const applySuggestion = async (flag, sug) => {
+    if (sug.verdict === 'fine') {
+      await markIntentionalApi(characterId, flag.id, sug.why || null);
+      return null;
+    }
+    const res = await rewriteFlagApi(characterId, flag.id, sug.before, sug.after);
+    return res.data;
+  };
+  const takeSuggestion = async (flag, sug) => {
+    setSaving(flag.id);
+    setError(null);
+    try {
+      const after = await applySuggestion(flag, sug);
+      forget(flag.id);
+      if (after) setResult(after); else await run();
+    } catch (err) {
+      console.error('[CharacterProfilePage] applying a suggestion failed:', err);
+      setError(err.response?.data?.error || 'Could not apply that.');
+    } finally {
+      setSaving(null);
+    }
+  };
+  const fixAll = async () => {
+    setAuto('all');
+    setError(null);
+    setAutoNote(null);
+    let done = 0;
+    const failed = [];
+    for (const f of result.flags) {
+      const sug = suggestions[f.id];
+      if (f.fix == null && !sug) continue;
+      try {
+        if (f.fix != null) await fixFlagApi(characterId, f.id);
+        else await applySuggestion(f, sug);
+        done += 1;
+      } catch (err) {
+        console.error('[CharacterProfilePage] fix all: one fix failed:', err);
+        failed.push(f.field_label);
+      }
+    }
+    setSuggestions({});
+    await run();
+    setAutoNote(`Fixed ${done}.${failed.length ? ` Could not fix: ${failed.join(', ')}. Check again and edit those by hand.` : ''}`);
+    setAuto(null);
+  };
+  const flags = result?.flags || [];
+  const canSuggest = flags.some((f) => f.fix == null && f.editable);
+  const fixable = flags.filter((f) => f.fix != null || suggestions[f.id]).length;
+
   return (
     <div className="ch-check" data-testid="ch-check">
       <button type="button" className="ch-btn-soft" disabled={busy} onClick={run}>
@@ -877,12 +956,38 @@ export function ProfileCheck({ characterId }) {
             {result.flags.length === 0 ? 'Everything agrees with their facts.' : `${result.flags.length} place${result.flags.length === 1 ? '' : 's'} disagree${result.flags.length === 1 ? 's' : ''} with their facts.`}
             {' '}Checked {result.checked} text field{result.checked === 1 ? '' : 's'}; what they post ({result.skipped.mask}) and author-only notes ({result.skipped.author}) are not checked.
           </p>
+          {flags.length > 0 && (
+            <span className="ch-facts-row">
+              {canSuggest && (
+                <button type="button" className="ch-btn-chip" disabled={!!auto} onClick={suggest}>
+                  {auto === 'suggest' ? 'Suggesting…' : 'Suggest fixes'}
+                </button>
+              )}
+              {fixable > 0 && (
+                <button type="button" className="ch-btn-chip is-primary" disabled={!!auto} onClick={fixAll}>
+                  {auto === 'all' ? 'Fixing…' : `Fix all ${fixable}`}
+                </button>
+              )}
+            </span>
+          )}
+          {autoNote && <p className="ch-note" role="status">{autoNote}</p>}
           {result.flags.length > 0 && (
             <ul className="ch-check-list">
               {result.flags.map((f) => (
                 <li key={f.id}>
                   <span className="ch-check-what"><b>{f.field_label}</b> says &ldquo;{f.found}&rdquo;; the facts say {f.expected}.</span>
                   <span className="ch-check-excerpt">{f.excerpt}</span>
+                  {suggestions[f.id] && (
+                    <span className="ch-check-suggestion" data-testid="ch-check-suggestion">
+                      {suggestions[f.id].verdict === 'fix'
+                        ? <>Suggested: &ldquo;{suggestions[f.id].after}&rdquo;</>
+                        : <>Looks fine as it is.</>}
+                      {suggestions[f.id].why && <span className="ch-check-why"> {suggestions[f.id].why}</span>}
+                      <button type="button" className="ch-btn-chip is-primary" disabled={saving === f.id || !!auto} onClick={() => takeSuggestion(f, suggestions[f.id])}>
+                        {saving === f.id ? 'Saving…' : suggestions[f.id].verdict === 'fix' ? 'Use this' : 'Keep it as it is'}
+                      </button>
+                    </span>
+                  )}
                   <span className="ch-facts-row">
                     <span className="ch-chip is-plain">{CHECK_LABELS[f.check] || f.check}</span>
                     {f.fix != null && (
