@@ -4,6 +4,8 @@
  * for one show:
  *   Schedule all         every draft with no release time, at the time
  *                        the story suggests (PulseScheduleAll)
+ *   Release calendar     scheduled drafts by day; drag one to another
+ *                        day (PulseReleaseCalendar)
  *   Lala's drafts        posts shared from The Pulse: Release, Edit, Delete
  *   Posts from episodes  drafted inside an episode: Approve, Edit, Discard
  *   Comments waiting     drafted reactions: Approve, Delete
@@ -33,6 +35,7 @@ import api from '../../services/api';
 import { PostCard, RequestPost } from './PulseReviewPost';
 import RevealPicker from './RevealPicker';
 import PulseScheduleAll from './PulseScheduleAll';
+import PulseReleaseCalendar from './PulseReleaseCalendar';
 import PulseNumbersWaiting from './PulseNumbersWaiting';
 import PulseClosenessWaiting from './PulseClosenessWaiting';
 import PulseDmsWaiting, { DmThread, StartConversation, draftsIn } from './PulseDmsWaiting';
@@ -151,6 +154,10 @@ export default function PulseReview({ showId, onCount }) {
   return (
     <div className="prv-review" data-testid="pulse-review">
       <PulseScheduleAll showId={showId} drafts={data.wall.total + data.episode.total} onChange={load} />
+      <details className="prv-section" data-testid="prv-calendar-section">
+        <summary className="prv-section-title">Release calendar</summary>
+        <PulseReleaseCalendar showId={showId} refreshKey={data} onChange={load} />
+      </details>
       <Section title="Lala's drafts" count={data.wall.total} testId="prv-wall-drafts"
         empty="No drafts. What Lala shares on The Pulse waits here until you release it.">
         {data.wall.posts.map((p) => <PostCard key={p.id} post={p} showId={showId} onChange={load} />)}
