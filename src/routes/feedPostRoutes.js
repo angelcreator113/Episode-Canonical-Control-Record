@@ -18,6 +18,7 @@ const { optionalAuth, requireAuth } = require('../middleware/auth');
 const { authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { statusWhere, isLive, LOCKED_MESSAGE } = require('../services/feedPostStatus');
+const { cleanTags } = require('../utils/postTags');
 const { draftReactions, pickReactors, recountComments, DraftError, COMMENT_LOCKED } = require('../services/feedCommentDrafter');
 
 /**
@@ -123,6 +124,7 @@ function applyPostReveal(post, reveals) {
 router.get('/', optionalAuth, async (req, res) => {
   try {
     const { show_id, episode_id, profile_id, narrative_function, post_type, limit, offset, status, with: withWhat, from, at, city } = req.query;
+    const { day_from: dayFrom, day_to: dayTo } = req.query;
     const { FeedPost, SocialProfile, FeedComment, Episode, sequelize } = require('../models');
 
     if (!show_id && !episode_id) {
@@ -188,6 +190,21 @@ router.get('/', optionalAuth, async (req, res) => {
         }
       }
     }
+    // ?day_from=&day_to= (ISO times; Story Clock's planner, Evoni 2026-10-17):
+    // the posts going out in that window, by the clock: drafts whose release
+    // time falls in it, and live posts posted in it; earliest first.
+    if (dayFrom !== undefined || dayTo !== undefined) {
+      const fromAt = new Date(String(dayFrom || ''));
+      const toAt = new Date(String(dayTo || ''));
+      if (Number.isNaN(fromAt.getTime()) || Number.isNaN(toAt.getTime()) || toAt <= fromAt) {
+        return res.status(400).json({ error: 'day_from and day_to must be times, day_from first' });
+      }
+      if (toAt - fromAt > 8 * 24 * 60 * 60 * 1000) return res.status(400).json({ error: 'day_from to day_to is 8 days at most' });
+      const { Op } = require('sequelize');
+      const window = { [Op.gte]: fromAt, [Op.lt]: toAt };
+      and.push({ [Op.or]: [{ release_at: window }, { status: 'live', posted_at: window }] });
+      order = [[sequelize.literal('COALESCE("FeedPost"."release_at", "FeedPost"."posted_at")'), 'ASC'], ['sort_order', 'ASC']];
+    }
     if (and.length) where[require('sequelize').Op.and] = and;
 
     const posts = await FeedPost.findAll({
@@ -247,9 +264,11 @@ router.get('/', optionalAuth, async (req, res) => {
 router.post('/', requireAuth, async (req, res) => {
   try {
     const { FeedPost } = require('../models');
-    const { show_id, content_text, poster_handle, poster_display_name, social_profile_id, poster_platform, post_type, status, episode_id } = req.body || {};
+    const { show_id, content_text, poster_handle, poster_display_name, social_profile_id, poster_platform, post_type, status, episode_id, tags } = req.body || {};
     if (!show_id) return res.status(400).json({ error: 'show_id is required' });
     if (!content_text?.trim()) return res.status(400).json({ error: 'content_text is required' });
+    const tagged = tags === undefined ? { tags: [] } : cleanTags(tags);
+    if (tagged.error) return res.status(400).json({ error: tagged.error });
     const scoped = statusWhere(status === undefined ? 'live' : status);
     if (scoped.error || !scoped.status) return res.status(400).json({ error: 'status must be draft or live' });
     // Its location, if tagged (Task #3090): a Dream City or a venue, whose city is filled in.
@@ -280,6 +299,7 @@ router.post('/', requireAuth, async (req, res) => {
       ai_generated: false,
       status: scoped.status,
       sort_order: 0,
+      tags: tagged.tags,
     });
     res.json(held.length ? { data: post, held_for_review: true, review_reasons: held } : { data: post });
     // A post created live has its numbers proposed after the response (Task #2953).
@@ -661,6 +681,11 @@ router.put('/:postId', requireAuth, async (req, res) => {
     for (const field of updatable) {
       if (req.body[field] !== undefined) updates[field] = req.body[field];
     }
+    if (req.body.tags !== undefined) {
+      const tagged = cleanTags(req.body.tags);
+      if (tagged.error) return res.status(400).json({ error: tagged.error });
+      updates.tags = tagged.tags;
+    }
     // A draft's location can change (Task #3090); a venue fills its city.
     const place = await require('../utils/feedPlaces').resolvePlace(require('../models'), req.body || {});
     if (place.error) return res.status(400).json({ error: place.error });
@@ -800,6 +825,23 @@ router.post('/:postId/restore', requireAuth, async (req, res) => {
     return res.json({ data: post });
   } catch (err) {
     console.error('[FeedPosts] Restore error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/v1/feed-posts/:postId/tags { tags } (Evoni, 2026-10-17): her own
+// labels on a post (utils/postTags). Live posts too: tags are behind the
+// curtain, not the post's words, so the 2009 lock does not apply.
+router.put('/:postId/tags', requireAuth, async (req, res) => {
+  try {
+    const tagged = cleanTags(req.body?.tags);
+    if (tagged.error) return res.status(400).json({ error: tagged.error });
+    const post = await require('../models').FeedPost.findByPk(req.params.postId);
+    if (!post) return res.status(404).json({ error: 'Post not found' });
+    await post.update({ tags: tagged.tags });
+    return res.json({ data: post });
+  } catch (err) {
+    console.error('[FeedPosts] tags error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
