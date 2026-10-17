@@ -92,7 +92,10 @@ function RoleSection({ spec, places, character, showId, sets, loadSets, onChange
       <ul className="cpl-cards">
         {places.map((p) => (
           <li key={`${p.role}-${p.scene_set_id}`} className="cpl-card" data-testid={`place-${spec.role}-${p.scene_set_id}`}>
-            {p.image_url ? <img src={p.image_url} alt={`${spec.label}: ${p.scene_set_name}`} /> : <div className="cpl-card-empty">No picture yet</div>}
+            {/* A place of work shows its venue's own photo when it has one (2026-10-17). */}
+            {spec.role === 'work' && p.venue_photo_url
+              ? <img src={p.venue_photo_url} alt={`Venue: ${p.scene_set_name}`} data-testid={`place-venue-photo-${p.scene_set_id}`} />
+              : p.image_url ? <img src={p.image_url} alt={`${spec.label}: ${p.scene_set_name}`} /> : <div className="cpl-card-empty">No picture yet</div>}
             <div className="cpl-card-text">
               <strong>{p.scene_set_name}</strong>
               {p.everyday && <span className="cpl-badge">Everyday look</span>}

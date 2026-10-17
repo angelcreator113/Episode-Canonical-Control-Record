@@ -8,6 +8,7 @@ import { isAppPath } from '../utils/sceneSets';
 import EventLookImage from '../components/EventPackage/EventLookImage';
 import DressedAngles from '../components/SceneSets/DressedAngles';
 import { UsePhotosFromSet, EventPhotosSet } from '../components/SceneSets/EventPhotos';
+import VenuePhoto from '../components/SceneSets/VenuePhoto';
 import CharacterHomes, { notifyCharacterPlacesChanged, useLalaHomeFill } from '../components/SceneSets/CharacterHomes';
 import LookVariants from '../components/SceneSets/LookVariants';
 import './SceneSetsTab.css';
@@ -1641,7 +1642,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
               }}
             >
               {/* Modal header with set name + hero thumbnail */}
-              <div className="scene-sets-modal-header" style={heroImage ? { '--scene-sets-hero': `url("${heroImage}")` } : undefined}>
+              <div className="scene-sets-modal-header" style={(set.venue_photo_url || heroImage) ? { '--scene-sets-hero': `url("${set.venue_photo_url || heroImage}")` } : undefined}>
                 <div className="scene-sets-modal-header-info">
                   {heroImage && <img src={heroImage} alt="" className="scene-sets-modal-thumb" />}
                   <div>
@@ -2084,6 +2085,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                         {/* S6: Evoni approves the base here, beside the image; nothing is approved by itself. */}
                         <ApprovedBaseRow set={set} onToast={showToast} onRefresh={onRefresh} />
                         {/* The approved base's note is ApprovedBaseRow's own (one note, not two). */}
+                        {/* The venue's own photo, apart from the main photo (2026-10-17). */}
+                        <VenuePhoto set={set} onToast={showToast} onSaved={() => onRefresh?.()} />
                         {hasBase && !set.base_approved && !set.location_approved_base && !set.world_location_id && (
                           <p className="scene-sets-ws-main-note" data-testid={`approve-needs-location-${set.id}`}>
                             To approve this image as the base, the set needs a World Location.{' '}

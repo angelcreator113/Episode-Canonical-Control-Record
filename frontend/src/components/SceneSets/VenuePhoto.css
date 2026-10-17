@@ -1,0 +1,11 @@
+/* The venue's own photo (2026-10-17). Wraps at 375px. */
+.vp { display: grid; gap: 6px; margin: 10px 0; padding-top: 10px; border-top: 1px solid var(--lala-pink-light); }
+.vp-label { display: inline-flex; align-items: center; gap: 4px; font-family: 'DM Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--lala-pink-dark); }
+.vp-body { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+.vp-img { width: 140px; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 10px; border: 1px solid var(--lala-pink-light); }
+.vp-img.is-empty { display: grid; place-items: center; font-size: 11px; color: var(--text-secondary); background: var(--lala-pink-soft); text-align: center; padding: 6px; }
+.vp-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; flex: 1 1 160px; min-width: 0; }
+.vp-btn { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 2px 12px; border-radius: 999px; border: 1px solid var(--lala-pink-light); background: var(--surface-card); color: var(--lala-pink-dark); font-size: 12px; cursor: pointer; }
+.vp-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.vp-btn.is-plain { color: var(--text-secondary); }
+.vp-hint { margin: 0; flex-basis: 100%; font-size: 11px; line-height: 1.4; color: var(--text-secondary); }
