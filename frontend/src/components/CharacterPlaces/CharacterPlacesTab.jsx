@@ -34,7 +34,7 @@ const ROLES = Object.freeze([
 const errorText = (err, fallback) => err?.response?.data?.error || fallback;
 
 /** One role's places: their sets, and pick or upload another. */
-function RoleSection({ spec, places, linked, character, showId, sets, loadSets, onSetsStale, onChanged, onNote }) {
+function RoleSection({ spec, places, linked, character, showId, sets, loadSets, onSetsStale, onChanged, onNote, anglesKey, onAnglesAdded }) {
   const [picking, setPicking] = useState(false);
   const [choice, setChoice] = useState('');
   const [busy, setBusy] = useState(null);
@@ -118,8 +118,8 @@ function RoleSection({ spec, places, linked, character, showId, sets, loadSets, 
               </span>
             </div>
             {/* Its angles, and more added to this same set (2026-10-17). */}
-            <SetAngles setId={p.scene_set_id} onNote={onNote} />
-            <PlaceDescription characterId={character.id} setId={p.scene_set_id} setName={p.scene_set_name} onNote={onNote} />
+            <SetAngles setId={p.scene_set_id} onNote={onNote} refreshKey={anglesKey[p.scene_set_id] || 0} onAdded={onAnglesAdded} />
+            <PlaceDescription characterId={character.id} setId={p.scene_set_id} setName={p.scene_set_name} role={p.role} onNote={onNote} />
           </li>
         ))}
       </ul>
@@ -176,9 +176,14 @@ function EventPhotosAndAngles({ event, onNote, onChanged }) {
     setBusy(true);
     let made = null;
     try {
-      made = await makeSetFromPhotos({ name: `${event.name} photos`, sceneType: 'EVENT_LOCATION', showId: event.show_id, files });
-      // That place dressed for it: an event version of the place it is held at.
-      await api.put(`/api/v1/scene-sets/${made.setId}/version`, { everyday_set_id: event.scene_set_id, event_id: event.id });
+      // That place dressed for it: an event version of the place it is held
+      // at, linked on the empty set before the photos go up, so a refusal
+      // (its place locked, another show's place) costs no upload (sixth audit).
+      made = await makeSetFromPhotos({
+        name: `${event.name} photos`, sceneType: 'EVENT_LOCATION', showId: event.show_id, files,
+        prepare: (setId) => api.put(`/api/v1/scene-sets/${setId}/version`, { everyday_set_id: event.scene_set_id, event_id: event.id }),
+        undo: (setId) => api.put(`/api/v1/scene-sets/${setId}/version`, { everyday_set_id: null, return_event: true }),
+      });
       const { done, failed } = made.angles;
       onNote({
         error: failed.length > 0,
@@ -187,7 +192,6 @@ function EventPhotosAndAngles({ event, onNote, onChanged }) {
       onChanged();
     } catch (err) {
       console.error('[CharacterPlacesTab] event photos failed:', err);
-      if (made?.setId) await removeSet(made.setId);
       onNote({ error: true, text: err?.response?.data?.error || err?.message || "Could not save the event's photos" });
     } finally { setBusy(false); }
   };
@@ -330,6 +334,10 @@ export default function CharacterPlacesTab({ character }) {
   const [data, setData] = useState(null);
   const [sets, setSets] = useState(null);
   const [note, setNote] = useState(null);
+  // Bumped per set when angles are added, so every card showing that set
+  // reloads its angles (sixth audit).
+  const [anglesKey, setAnglesKey] = useState({});
+  const onAnglesAdded = useCallback((setId) => setAnglesKey((k) => ({ ...k, [setId]: (k[setId] || 0) + 1 })), []);
 
   const load = useCallback(async () => {
     try {
@@ -366,10 +374,14 @@ export default function CharacterPlacesTab({ character }) {
     <div className="cpl" data-testid="character-places-tab">
       {ROLES.map((spec) => (
         <RoleSection key={spec.role} spec={spec} places={places.filter((p) => p.role === spec.role)} linked={linked} character={character}
-          showId={data.show_id} sets={sets} loadSets={loadSets} onSetsStale={() => setSets(null)} onChanged={load} onNote={setNote} />
+          showId={data.show_id} sets={sets} loadSets={loadSets} onSetsStale={() => setSets(null)} onChanged={load} onNote={setNote}
+          anglesKey={anglesKey} onAnglesAdded={onAnglesAdded} />
       ))}
       <HostedEvents character={character} showId={data.show_id} onNote={setNote} />
-      {note && <p className={`cpl-note${note.error ? ' is-error' : ''}`} role="status" data-testid="places-note">{note.text}</p>}
+      {/* Kept in view at the foot of the screen: on a phone the tab is
+          several screens long, and a result below the hosted events was
+          never seen (sixth audit). */}
+      {note && <p className={`cpl-note cpl-toast${note.error ? ' is-error' : ''}`} role="status" data-testid="places-note">{note.text}</p>}
     </div>
   );
 }

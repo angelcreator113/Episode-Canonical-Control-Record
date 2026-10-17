@@ -15,10 +15,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
   Sparkles, ArrowRight, LayoutDashboard, Heart, Mic, Users, Globe2, ImagePlus, Trash2,
-  BarChart3, CalendarDays, Download, Link2, MapPin,
+  BarChart3, CalendarDays, Download, Link2, MapPin, Palette,
 } from 'lucide-react';
 import CharacterPlacesTab from '../components/CharacterPlaces/CharacterPlacesTab';
 import KnownFor from '../components/Cast/KnownFor';
+import CharacterAppearanceTab from '../components/CharacterAppearance/CharacterAppearanceTab';
 import { API_URL } from '../config/api';
 import InnerLifeWorkspace from '../components/InnerLife/InnerLifeWorkspace';
 import { dimensionOf as dimension, dimensionText } from '../lib/innerLifeSections';
@@ -135,6 +136,8 @@ const STATE_CONFIG = {
 const TABS = [
   { id: 'overview',    label: 'Overview',     icon: LayoutDashboard },
   { id: 'inner',       label: 'Inner life',   icon: Heart },
+  // Evoni, 2026-10-17: how they look, a generator for it, and portraits.
+  { id: 'appearance',  label: 'Appearance',   icon: Palette },
   { id: 'voice',       label: 'Voice & feed', icon: Mic },
   { id: 'connections', label: 'Connections',  icon: Users },
   { id: 'world',       label: 'In the world', icon: Globe2 },
@@ -2226,6 +2229,7 @@ export default function CharacterProfilePage() {
         {activeTab === 'connections' && <div className="ch-card"><TabConnections character={character} relationships={relationships} entanglements={entanglements} /></div>}
         {activeTab === 'world' && <div className="ch-card"><TabWorld character={character} onSaved={onSaved} gen={gen} /></div>}
         {activeTab === 'places' && <div className="ch-card"><CharacterPlacesTab key={character.id} character={character} /></div>}
+        {activeTab === 'appearance' && <CharacterAppearanceTab key={character.id} character={character} onPortraitChanged={(url) => onSaved({ portrait_url: url })} />}
       </div>
     </div>
   );
