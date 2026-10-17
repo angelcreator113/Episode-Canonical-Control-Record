@@ -30,7 +30,9 @@
  *     events they host or are a guest at, their account status, their work,
  *     and their want and wound (as a hint, never stated), plus an ordinary
  *     day. Each idea is { key, label, about }: `about` goes in "What is
- *     happening". Also says whether they can post yet ({ ready, blocker }).
+ *     happening". Also says whether they can post yet ({ ready, blocker,
+ *     next }): next is 'make_active' or 'build_voice' when the page itself
+ *     can take that step, else null.
  *
  * The facts are not checked against the posts: a post is the mask, and the
  * mask may lie (the spec's Piece 4).
@@ -224,13 +226,18 @@ async function postIdeas(db, characterId) {
   const name = character.display_name || 'They';
   const feedProfile = character.feed_profile_id && db.SocialProfile ? await db.SocialProfile.findByPk(character.feed_profile_id) : null;
   let blocker = null;
+  let next = null;
   if (!feedProfile) blocker = `${name} is not on the feed yet: match them to a feed person first.`;
   else if (feedProfile.current_state === 'posthumous') blocker = `${name} has died: their account does not post.`;
   else if (!(await db.PulseVoice.findOne({ where: { registry_character_id: character.id } }))) {
     const { POSTING_STAGES } = require('./pulseVoices');
-    blocker = POSTING_STAGES.includes(character.depth_level)
-      ? `${name} has no Voice Profile yet. Build it in Admin › The Pulse › Voices, then come back.`
-      : `${name} has no Voice Profile yet, and one is built only from the Active stage. In Admin › The Pulse › Voices, press Make Active under "On the feed, not posting yet", then Build voice.`;
+    if (POSTING_STAGES.includes(character.depth_level)) {
+      next = 'build_voice';
+      blocker = `${name} has no Voice Profile yet: their posts are written in it. Build it here.`;
+    } else {
+      next = 'make_active';
+      blocker = `${name} has no Voice Profile yet, and one is built only from the Active stage. Make them Active, then build it.`;
+    }
   }
 
   const ideas = [];
@@ -273,7 +280,7 @@ async function postIdeas(db, characterId) {
     add('mask', 'The mask slips a little', `A post that looks fine on the surface, where for one line the old hurt shows through. ${name} would never call it that.`);
   }
   add('ordinary', 'An ordinary day', '');
-  return { ready: !blocker, blocker, ideas };
+  return { ready: !blocker, blocker, next, ideas };
 }
 
 module.exports = { postIdeas, generatePosts, buildPrompt, factsLines, maskLines, woundOf, PostsError, DraftError, DEFAULT_COUNT, STATUS_LINES };
