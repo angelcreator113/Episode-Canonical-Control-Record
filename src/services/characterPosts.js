@@ -227,7 +227,10 @@ async function postIdeas(db, characterId) {
   if (!feedProfile) blocker = `${name} is not on the feed yet: match them to a feed person first.`;
   else if (feedProfile.current_state === 'posthumous') blocker = `${name} has died: their account does not post.`;
   else if (!(await db.PulseVoice.findOne({ where: { registry_character_id: character.id } }))) {
-    blocker = `${name} has no Voice Profile yet. Build it in Admin › The Pulse › Voices, then come back.`;
+    const { POSTING_STAGES } = require('./pulseVoices');
+    blocker = POSTING_STAGES.includes(character.depth_level)
+      ? `${name} has no Voice Profile yet. Build it in Admin › The Pulse › Voices, then come back.`
+      : `${name} has no Voice Profile yet, and one is built only from the Active stage. In Admin › The Pulse › Voices, press Make Active under "On the feed, not posting yet", then Build voice.`;
   }
 
   const ideas = [];

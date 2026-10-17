@@ -9,9 +9,13 @@
  * Approve voice (Task 3029; Evoni, 2026-10-12): the worker posts for a
  * character only once she approves the voice; her edits keep it, a rebuild
  * clears it.
+ * Not posting yet (Evoni, 2026-10-17: "i have no way of choosing a
+ * characters voice"): characters on the feed below the Active stage are
+ * listed with their stage and Make Active, so their voice can be built.
  * Styles: AdminPanel.css (pulse-voices-*).
  */
 import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import { atHandle } from '../../pages/feed/feedConstants';
 
@@ -276,6 +280,40 @@ export function PinAsExample({ postId }) {
   );
 }
 
+const STAGE_NAMES = { sparked: 'Sparked', breathing: 'Breathing', active: 'Active', alive: 'Alive' };
+
+/** A character on the feed below Active: their stage, Make Active, and their page. */
+export function NotPostingRow({ row, onReload }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const makeActive = async () => {
+    setBusy(true); setError(null);
+    try {
+      await api.put(`/api/v1/character-registry/characters/${row.registry_character_id}`, { depth_level: 'active' });
+      if (onReload) await onReload();
+    } catch (err) {
+      console.error('[PulseVoices] making a character Active failed:', err.response?.status || err.message);
+      setError(errorOf(err, 'Could not change their stage.'));
+      setBusy(false);
+    }
+  };
+  return (
+    <li className="pulse-voices-card" data-testid="pulse-voices-below-row">
+      <div className="pulse-voices-head">
+        <span className="pulse-voices-who">
+          <b>{row.display_name}</b> {row.handle && <span className="pulse-voices-muted">{atHandle(row.handle)}</span>}
+          <span className="pulse-voices-muted">Stage: {STAGE_NAMES[row.depth_level] || 'not set'}</span>
+        </span>
+      </div>
+      <span className="pulse-voices-actions">
+        <button type="button" className="pulse-voices-btn" disabled={busy} onClick={makeActive}>{busy ? 'Moving…' : 'Make Active'}</button>
+        <Link to={`/character/${row.registry_character_id}`}>Open their page</Link>
+      </span>
+      {error && <span className="pulse-voices-error" role="alert">{error}</span>}
+    </li>
+  );
+}
+
 export default function PulseVoices({ showId }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -300,19 +338,29 @@ export default function PulseVoices({ showId }) {
   if (!data) return <p className="pulse-voices-muted">Loading the voices…</p>;
   const rows = data.characters || [];
   const notMet = data.not_met || [];
+  const below = data.not_posting || [];
   return (
     <div className="pulse-voices" data-testid="pulse-voices">
       <p className="pulse-voices-muted">Characters at the Active or Alive stage with a Feed profile, whom Lala has met or knows of (a public figure). Active characters post; Alive characters also talk in DMs, move relationships and react to events. A voice is built from their public face only; private feelings never go in.</p>
       {rows.length === 0
         ? <p className="pulse-voices-muted" data-testid="pulse-voices-empty">{notMet.length
           ? 'No posting characters yet: Lala has not met anyone below at the story clock\'s present.'
-          : 'No posting characters yet. A character posts once they reach the Active stage with a Feed profile.'}</p>
+          : below.length
+            ? 'No posting characters yet: the people on the feed below are not at the Active stage. Make one Active to build their voice.'
+            : 'No posting characters yet. A character posts once they reach the Active stage with a Feed profile.'}</p>
         : <ul className="pulse-voices-list">{rows.map((r) => <VoiceCard key={r.registry_character_id} row={r} onVoice={onVoice} onReload={load} />)}</ul>}
       {notMet.length > 0 && (
         <section className="pulse-voices-unmet" data-testid="pulse-voices-unmet" aria-labelledby="pulse-voices-unmet-h">
           <h3 id="pulse-voices-unmet-h" className="pulse-voices-unmet-h">Lala hasn&rsquo;t met them yet ({notMet.length})</h3>
           <p className="pulse-voices-muted">Build and approve their voice now. They post on their own only once Lala has met them; a character&rsquo;s page can still draft their posts for Review. A public figure Lala knows of can post in public before they meet.</p>
           <ul className="pulse-voices-list">{notMet.map((r) => <VoiceCard key={r.registry_character_id} row={r} onVoice={onVoice} onReload={load} unmet />)}</ul>
+        </section>
+      )}
+      {below.length > 0 && (
+        <section className="pulse-voices-unmet" data-testid="pulse-voices-below" aria-labelledby="pulse-voices-below-h">
+          <h3 id="pulse-voices-below-h" className="pulse-voices-unmet-h">On the feed, not posting yet ({below.length})</h3>
+          <p className="pulse-voices-muted">Their stage is below Active, so they have no voice and do not post. Make Active to give them one: they then appear above, where you build and approve their voice.</p>
+          <ul className="pulse-voices-list">{below.map((r) => <NotPostingRow key={r.registry_character_id} row={r} onReload={load} />)}</ul>
         </section>
       )}
       <details className="pulse-voices-banned" data-testid="pulse-voices-banned">
