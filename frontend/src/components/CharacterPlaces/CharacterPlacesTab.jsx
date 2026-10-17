@@ -18,6 +18,8 @@ import { Home, Shirt, Briefcase, CalendarDays, Upload, Link2, X, Plus } from 'lu
 import api from '../../services/api';
 import { sceneSetPath } from '../../utils/sceneSets';
 import EventLookImage from '../EventPackage/EventLookImage';
+import SetAngles from './SetAngles';
+import { makeSetFromPhotos, removeSet } from './setPhotos';
 import './CharacterPlacesTab.css';
 
 const ROLES = Object.freeze([
@@ -55,34 +57,28 @@ function RoleSection({ spec, places, linked, character, showId, sets, loadSets, 
       onNote({ error: true, text: errorText(err, `Could not set their ${spec.label.toLowerCase()}`) });
     } finally { setBusy(null); }
   };
-  // Upload photos: a new scene set from the first photo, linked as this place.
-  // When the photo or the link fails, the new set is deleted again: each try
-  // left an empty set behind (fifth audit).
-  const upload = async (file) => {
-    if (!file) return;
+  // Upload photos: one scene set from all the photos chosen, the first its
+  // main photo and the others its angles, linked as this place (2026-10-17:
+  // a place's angles were made into sets of their own). When the set or its
+  // main photo cannot be made, or the link fails, the set is deleted again.
+  const upload = async (files) => {
+    if (!files.length) return;
     setBusy('upload');
-    let setId = null;
+    let made = null;
     try {
-      const created = await api.post('/api/v1/scene-sets', { name: `${name}'s ${spec.label}`, scene_type: spec.sceneType, show_id: showId });
-      setId = created.data?.data?.id;
-      if (!setId) throw new Error('The scene set was not made');
-      const form = new FormData();
-      form.append('image', file);
-      await api.post(`/api/v1/scene-sets/${setId}/upload-base`, form);
-      await link(setId);
-      onNote({ text: `${spec.label} made from your photo` });
+      made = await makeSetFromPhotos({ name: `${name}'s ${spec.label}`, sceneType: spec.sceneType, showId, files });
+      await link(made.setId);
+      const { done, failed } = made.angles;
+      onNote({
+        error: failed.length > 0,
+        text: `${spec.label} made from your photos${done ? ` with ${done} angle${done === 1 ? '' : 's'}` : ''}${failed.length ? `; could not add ${failed.join(', ')}` : ''}`,
+      });
       onSetsStale();
       onChanged();
     } catch (err) {
       console.error('[CharacterPlacesTab] upload failed:', err);
-      if (setId) {
-        try {
-          await api.delete(`/api/v1/scene-sets/${setId}`);
-        } catch (cleanupErr) {
-          console.error('[CharacterPlacesTab] the new set was not removed:', cleanupErr);
-        }
-      }
-      onNote({ error: true, text: errorText(err, 'Could not make the set from that photo') });
+      if (made?.setId) await removeSet(made.setId);
+      onNote({ error: true, text: errorText(err, 'Could not make the set from those photos') });
     } finally { setBusy(null); }
   };
   const unlink = async (place) => {
@@ -118,6 +114,8 @@ function RoleSection({ spec, places, linked, character, showId, sets, loadSets, 
                 </button>
               </span>
             </div>
+            {/* Its angles, and more added to this same set (2026-10-17). */}
+            <SetAngles setId={p.scene_set_id} onNote={onNote} />
           </li>
         ))}
       </ul>
@@ -147,11 +145,71 @@ function RoleSection({ spec, places, linked, character, showId, sets, loadSets, 
           <button type="button" className="cpl-btn is-soft" disabled={busy === 'upload'} onClick={() => fileInput.current?.click()} data-testid={`place-upload-${spec.role}`}>
             <Upload size={14} aria-hidden="true" /> {busy === 'upload' ? 'Uploading…' : 'Upload photos'}
           </button>
-          <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" hidden data-testid={`place-upload-input-${spec.role}`}
-            onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; upload(f); }} />
+          <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" multiple hidden data-testid={`place-upload-input-${spec.role}`}
+            onChange={(e) => { const files = Array.from(e.target.files || []); e.target.value = ''; upload(files); }} />
+          <span className="cpl-note">Choose all its photos at once: the first is the main photo, the others its angles.</span>
         </div>
       ))}
     </section>
+  );
+}
+
+/**
+ * An event's own photos and angles: the place it is held at, dressed for
+ * this event, kept as one set (an event version of that place). With none
+ * yet, "Upload this event's photos" makes it from the photos chosen: the
+ * first its main photo, the others its angles. An event held nowhere yet
+ * chooses its place on its own page first.
+ */
+function EventPhotosAndAngles({ event, onNote, onChanged }) {
+  const [busy, setBusy] = useState(false);
+  const fileInput = useRef(null);
+  // Its own photos: its set when that set is an event version.
+  const ownSet = event.scene_set_id && event.scene_set_version_of ? event.scene_set_id : null;
+
+  const upload = async (files) => {
+    if (!files.length) return;
+    setBusy(true);
+    let made = null;
+    try {
+      made = await makeSetFromPhotos({ name: `${event.name} photos`, sceneType: 'EVENT_LOCATION', showId: event.show_id, files });
+      // That place dressed for it: an event version of the place it is held at.
+      await api.put(`/api/v1/scene-sets/${made.setId}/version`, { everyday_set_id: event.scene_set_id, event_id: event.id });
+      const { done, failed } = made.angles;
+      onNote({
+        error: failed.length > 0,
+        text: `${event.name}'s photos saved${done ? ` with ${done} angle${done === 1 ? '' : 's'}` : ''}${failed.length ? `; could not add ${failed.join(', ')}` : ''}`,
+      });
+      onChanged();
+    } catch (err) {
+      console.error('[CharacterPlacesTab] event photos failed:', err);
+      if (made?.setId) await removeSet(made.setId);
+      onNote({ error: true, text: err?.response?.data?.error || err?.message || "Could not save the event's photos" });
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="cpl-event-photos" data-testid={`event-photos-angles-${event.id}`}>
+      <span className="cpl-event-photos-title">Event photos and angles</span>
+      {ownSet ? (
+        <SetAngles setId={ownSet} onNote={onNote} label={`${event.scene_set_name || 'Event photos'} · angles`} />
+      ) : !event.scene_set_id ? (
+        <span className="cpl-note" data-testid={`event-photos-no-place-${event.id}`}>
+          Choose where it is held on <Link to={`/shows/${event.show_id}/events/${event.id}`}>the event&rsquo;s page</Link> first: its photos are that place dressed for it.
+        </span>
+      ) : (
+        <>
+          <span className="cpl-note">
+            {event.scene_set_name} dressed for this event, as its own photos. Choose all of them at once: the first is the main photo, the others its angles.
+          </span>
+          <button type="button" className="cpl-btn is-soft is-small" disabled={busy} onClick={() => fileInput.current?.click()} data-testid={`event-photos-upload-${event.id}`}>
+            <Upload size={14} aria-hidden="true" /> {busy ? 'Uploading…' : "Upload this event's photos"}
+          </button>
+          <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" multiple hidden data-testid={`event-photos-input-${event.id}`}
+            onChange={(e) => { const files = Array.from(e.target.files || []); e.target.value = ''; upload(files); }} />
+        </>
+      )}
+    </div>
   );
 }
 
@@ -232,6 +290,9 @@ function HostedEvents({ character, showId, onNote }) {
               </div>
               {/* The event's photos: its look at the venue, made or uploaded here. */}
               <EventLookImage showId={ev.show_id} eventId={ev.id} canGenerate onToast={(text, kind) => onNote({ text, error: kind === 'error' })} />
+              {/* The event's own photos and angles (2026-10-17: "when I'm trying
+                  to add angles to events, I'm not able to upload any images"). */}
+              <EventPhotosAndAngles event={ev} onNote={onNote} onChanged={load} />
             </article>
           ))}
           {adding ? (
