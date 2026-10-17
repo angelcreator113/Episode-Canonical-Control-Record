@@ -66,7 +66,7 @@ describe('ScenePlannerPage: missing angles (L4, Q19)', () => {
     expect(within(m10).queryByText('Upload image')).toBeNull();
     expect(within(m10).queryByText('Generate angle')).toBeNull();
     expect(within(m10).queryByRole('link')).toBeNull();
-    expect(within(screen.getByTestId('beat-card-10')).getByRole('link', { name: 'Change in Scenes →' }).getAttribute('href')).toBe('/episodes/ep-1?tab=scenes');
+    expect(within(screen.getByTestId('beat-card-10')).getByRole('link', { name: 'Change on the Beat Plan →' }).getAttribute('href')).toBe('/episodes/ep-1?tab=beatplan');
     expect(api.post).not.toHaveBeenCalled();
   });
 });
@@ -85,7 +85,7 @@ describe('ScenePlannerPage: the readiness flag (L5, Q21)', () => {
     READY({ ready: 12, total: 14, not_ready: [{ beat_number: 10 }, { beat_number: 11 }] });
     renderPage();
     const flag = await screen.findByTestId('planner-readiness');
-    expect(flag.textContent).toBe('12/14 beats have their image; still needed: beats 10, 11. Planning and writing can go on. Fix them in Scenes →');
+    expect(flag.textContent).toBe('12/14 beats have their image; still needed: beats 10, 11. Planning and writing can go on. Fix them on the Beat Plan →');
     expect(flag.className).toContain('is-short');
   });
 

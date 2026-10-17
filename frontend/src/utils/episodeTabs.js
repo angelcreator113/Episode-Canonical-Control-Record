@@ -5,17 +5,23 @@
  * button all land on the same tab with the same body.
  */
 
-// Four main tabs with sub-tabs. Brief was merged into Overview — the
+// Four main tabs: Overview, Script, Production, Results. Brief was merged into Overview — the
 // snapshot flows inline under Identity / Source / Stakes / Reference
 // bands instead of living on its own tab.
 export const EP_TABS = [
   { key: 'overview', icon: '📋', label: 'Overview' },
-  // Evoni, 2026-10-16: the episode's pieces get their own top tab, next to
-  // Overview: Scenes, Wardrobe, Style Page, Phone, Overlays, Money, and the
-  // asset manager as Files (it was Production → Assets; key 'files', and
-  // ?tab=assets now opens this tab).
-  { key: 'assets', icon: '🎨', label: 'Assets', subs: [
+  { key: 'scripts', icon: '📝', label: 'Script' },
+  // Evoni, 2026-10-17 (her Production mock): Production is the episode's
+  // workspace. It takes the pieces that were under Assets, after the scene
+  // workspace (Scenes) and the full plan editor (Beat Plan, the old Scenes
+  // tab, key 'beatplan'), and keeps the checklist last. ?tab=assets lands
+  // here. Sub-tab keys are unchanged, so links keep working.
+  { key: 'production', icon: '🎬', label: 'Production', subs: [
     { key: 'scenes', label: 'Scenes' },
+    { key: 'beatplan', label: 'Beat Plan' },
+    // Evoni, 2026-10-17: Files is the episode's raw video clips
+    // (EpisodeRawFootageTab), by who is on camera.
+    { key: 'files', label: 'Files' },
     { key: 'wardrobe', label: 'Wardrobe' },
     // The Style Page (was Lookbook; Task #2876): the style sheet as its
     // own editor. The key stays 'lookbook' so links keep working.
@@ -24,14 +30,6 @@ export const EP_TABS = [
     // P15: every on-screen piece of the episode.
     { key: 'overlays', label: 'Overlays' },
     { key: 'money', label: 'Money' },
-    // Evoni, 2026-10-17: Files is the episode's raw video clips
-    // (EpisodeRawFootageTab), by who is on camera.
-    { key: 'files', label: 'Files' },
-  ]},
-  { key: 'scripts', icon: '📝', label: 'Script' },
-  // Production is the checklist hub (Evoni's Episode mock, 2026-10-05); one
-  // sub-tab, so the page shows no sub-tab row for it.
-  { key: 'production', icon: '🎬', label: 'Production', subs: [
     { key: 'checklist', label: 'Checklist' },
   ]},
   // Evoni's Episode mock (2026-10-05): Results is one page, its Summary;
@@ -45,12 +43,14 @@ export const EP_TABS = [
 ];
 
 /** Where the page opens with no ?tab=, and where an unknown one lands. */
-export const DEFAULT_EP_TAB = 'checklist';
+export const DEFAULT_EP_TAB = 'production';
 
 // Old ?tab= values, kept working.
 const ALIASES = {
   // Brief was merged into Overview — old links land back on Overview.
   brief: 'overview',
+  // Assets was a top tab (2026-10-16 to 2026-10-17); its pieces are Production's now.
+  assets: 'production',
 };
 
 /**

@@ -1,0 +1,68 @@
+/* EpisodeProductionHeader — the top of Production: the step bar, the
+   episode at a glance and the checklist's progress (Evoni's Production
+   mock, 2026-10-17). Tokens only (EpisodeProductionHeader.theme.test.js). */
+
+.eph { display: flex; flex-direction: column; gap: 14px; margin-bottom: 16px; }
+.eph *, .eph *::before, .eph *::after { box-sizing: border-box; }
+.eph button:focus-visible, .eph a:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 2px; }
+
+.eph-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.eph-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 8px 16px; border-radius: 999px; border: 1.5px solid var(--accent-light); background: var(--surface-card); color: var(--accent-dark); font: inherit; font-size: 14px; font-weight: 700; text-decoration: none; cursor: pointer; }
+.eph-btn.is-primary { border-color: var(--accent-dark); background: var(--accent-dark); color: var(--text-inverse); box-shadow: var(--shadow-sm); }
+.eph-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.eph-ready { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 8px 16px; border-radius: 999px; background: var(--success-bg); color: var(--success-text); font-size: 14px; font-weight: 700; }
+
+/* Steps */
+.eph-steps { list-style: none; margin: 0; padding: 12px; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; border-radius: 18px; border: 1.5px solid var(--lala-gold-line); background: var(--surface-card); box-shadow: var(--shadow-sm); }
+.eph-step { position: relative; min-width: 0; }
+.eph-step-btn { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; height: 100%; padding: 8px 4px; border: none; border-radius: 12px; background: var(--surface-card); color: var(--text-secondary); font: inherit; text-align: center; text-decoration: none; cursor: pointer; }
+.eph-step-btn:hover { background: var(--lala-parchment); }
+.eph-step-mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--text-secondary); font-size: 14px; font-weight: 700; }
+.eph-step.is-done .eph-step-mark { border-color: var(--accent-dark); background: var(--accent-dark); color: var(--text-inverse); }
+.eph-step.is-current .eph-step-mark { border-color: var(--accent-dark); background: var(--accent-subtle); color: var(--accent-dark); box-shadow: 0 0 0 4px var(--accent-subtle); }
+.eph-step-label { display: inline-flex; align-items: center; justify-content: center; gap: 5px; font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.eph-step.is-current .eph-step-label { color: var(--accent-dark); font-weight: 700; }
+.eph-step-detail { font-size: 11px; color: var(--text-secondary); }
+
+/* Cards */
+.eph-cards { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 14px; }
+.eph-card { min-width: 0; padding: 16px; border-radius: 18px; border: 1.5px solid var(--lala-gold-line); background: var(--surface-card); color: var(--text-primary); box-shadow: var(--shadow-sm); }
+.eph .eph-card-title { margin: 0; font-family: var(--font-prose); font-size: 20px; font-weight: 600; color: var(--text-primary); }
+
+.eph-episode { display: grid; grid-template-columns: minmax(0, 150px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.eph-episode:not(:has(.eph-cover)) { grid-template-columns: minmax(0, 1fr); }
+.eph-cover { width: 100%; aspect-ratio: 2 / 3; object-fit: contain; border-radius: 12px; border: 1px solid var(--lala-gold-line); background: var(--lala-parchment-2); }
+.eph-episode-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.eph-episode-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.eph .eph-episode-title { display: flex; flex-direction: column; margin: 0; font-family: var(--font-prose); font-size: 22px; font-weight: 600; color: var(--text-primary); }
+.eph-episode-name { font-family: var(--font-sans); font-size: 15px; font-weight: 500; color: var(--text-secondary); }
+.eph-status { padding: 3px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.eph-status.is-in_review, .eph-status.is-scheduled, .eph-status.is-published { background: var(--success-bg); color: var(--success-text); }
+.eph-line { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 14px; color: var(--text-primary); }
+.eph-line svg { flex-shrink: 0; color: var(--accent-dark); }
+.eph-desc { margin: 4px 0 0; font-size: 14px; line-height: 1.5; color: var(--text-secondary); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+
+.eph-progress { display: flex; flex-direction: column; gap: 10px; }
+.eph-progress-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.eph-progress-count { font-size: 13px; color: var(--text-secondary); }
+.eph-bar { display: block; height: 8px; border-radius: 4px; background: var(--lala-parchment-2); overflow: hidden; }
+.eph-bar span { display: block; height: 100%; border-radius: 4px; background: var(--accent-dark); transition: width 0.3s; }
+.eph-sections { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 14px; }
+.eph-sections li { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; color: var(--text-secondary); }
+.eph-sections li svg { flex-shrink: 0; }
+.eph-sections li.is-done { color: var(--text-primary); }
+.eph-sections li.is-done svg { color: var(--accent-dark); }
+.eph-section-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eph-section-count { font-size: 12px; color: var(--text-secondary); }
+.eph-link { align-self: flex-start; padding: 0; border: none; background: none; color: var(--accent-dark); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.eph-link:hover { text-decoration: underline; }
+
+@media (max-width: 1100px) {
+  .eph-cards { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 760px) {
+  .eph-steps { display: flex; overflow-x: auto; padding: 8px; }
+  .eph-step { flex: 0 0 96px; }
+  .eph-episode { grid-template-columns: minmax(0, 96px) minmax(0, 1fr); }
+  .eph-sections { grid-template-columns: minmax(0, 1fr); }
+}

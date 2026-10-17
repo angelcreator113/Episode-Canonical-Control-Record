@@ -58,11 +58,11 @@ describe('ScenePlannerPage: re-planning only (S9 d)', () => {
   test('each beat changes in the Scenes tab; Locked and Chosen by you still show what a re-plan keeps', async () => {
     renderPage();
     const one = await screen.findByTestId('beat-card-1');
-    expect(within(one).getByRole('link', { name: 'Change in Scenes →' }).getAttribute('href')).toBe('/episodes/ep-1?tab=scenes');
+    expect(within(one).getByRole('link', { name: 'Change on the Beat Plan →' }).getAttribute('href')).toBe('/episodes/ep-1?tab=beatplan');
     expect(within(one).getByText('Locked')).toBeTruthy();
     expect(within(screen.getByTestId('beat-card-2')).getByText('Chosen by you')).toBeTruthy();
     expect(screen.getByTestId('beat-plan-scope').textContent)
-      .toBe('A re-plan keeps locked and chosen beats. Change a beat\'s background, lock or unlock it in the Scenes tab.');
+      .toBe('A re-plan keeps locked and chosen beats. Change a beat\'s background, lock or unlock it on the Beat Plan tab.');
   });
 
   test('a missing image is a status here, fixed in Scenes; the removed-set repair is in Scenes too', async () => {
@@ -70,8 +70,8 @@ describe('ScenePlannerPage: re-planning only (S9 d)', () => {
     const ten = await screen.findByTestId('beat-card-10');
     expect(within(ten).getByTestId('beat-missing-10').textContent).toBe('Front zone missing');
     expect(within(ten).queryByRole('link', { name: 'Open in Scene Sets →' })).toBeNull();
-    expect(within(screen.getByTestId('planner-readiness')).getByRole('link', { name: 'Fix them in Scenes →' }).getAttribute('href'))
-      .toBe('/episodes/ep-1?tab=scenes');
+    expect(within(screen.getByTestId('planner-readiness')).getByRole('link', { name: 'Fix them on the Beat Plan →' }).getAttribute('href'))
+      .toBe('/episodes/ep-1?tab=beatplan');
     expect(vi.mocked(api.get).mock.calls.some(([u]) => u.endsWith('/removed-sets'))).toBe(false);
   });
 });

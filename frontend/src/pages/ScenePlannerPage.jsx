@@ -35,11 +35,11 @@ function LocationsStrip({ locations, showId }) {
 
 // S9 (d) (Evoni, 2026-10-02; §8(hh)): "the Beat Plan page keeps
 // re-planning only, and every per-beat change happens in Scenes." A beat's
-// missing image is a status here; it is changed in the Scenes tab.
-const scenesPath = (episodeId) => `/episodes/${episodeId}?tab=scenes`;
+// missing image is a status here; it is changed on the Beat Plan tab.
+const scenesPath = (episodeId) => `/episodes/${episodeId}?tab=beatplan`;
 const BeatStatus = ({ beat }) => <MissingAngle beat={beat} statusOnly />;
 function ChangeInScenes({ episodeId, className }) {
-  return <Link className={className} to={scenesPath(episodeId)}>Change in Scenes →</Link>;
+  return <Link className={className} to={scenesPath(episodeId)}>Change on the Beat Plan →</Link>;
 }
 
 // Beat 11 (Event Outcome) plays an animated piece of the episode's short
@@ -312,8 +312,8 @@ export default function ScenePlannerPage() {
           </p>
           {plan.length > 0 && (
             <p className="scene-planner-scope" data-testid="beat-plan-scope">
-              A re-plan keeps locked and chosen beats. Change a beat&apos;s background, lock or unlock it in the{' '}
-              <Link to={scenesPath(episodeId)}>Scenes tab</Link>.
+              A re-plan keeps locked and chosen beats. Change a beat&apos;s background, lock or unlock it on the{' '}
+              <Link to={scenesPath(episodeId)}>Beat Plan tab</Link>.
             </p>
           )}
           {/* L5, Q21 (Evoni, 2026-10-02, §8(hh)): flagged, never blocking. */}
@@ -322,7 +322,7 @@ export default function ScenePlannerPage() {
               {readiness.ready === readiness.total
                 ? `Every beat has its image (${readiness.total}/${readiness.total}).`
                 : `${readiness.ready}/${readiness.total} beats have their image; still needed: beat${readiness.not_ready.length === 1 ? '' : 's'} ${readiness.not_ready.map((b) => b.beat_number).join(', ')}. Planning and writing can go on. `}
-              {readiness.ready < readiness.total && <Link to={scenesPath(episodeId)}>Fix them in Scenes →</Link>}
+              {readiness.ready < readiness.total && <Link to={scenesPath(episodeId)}>Fix them on the Beat Plan →</Link>}
             </p>
           )}
         </div>

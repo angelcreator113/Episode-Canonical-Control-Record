@@ -26,6 +26,14 @@ describe('readFields', () => {
     expect(() => clips.readFields({}, { requirePerformer: true })).toThrow(/performer must be one of lala, justawoman, guest/);
   });
 
+  test('beat_number links a scene 1-14; null or empty unlinks; anything else is a 400', () => {
+    expect(clips.readFields({ beat_number: '7' })).toEqual({ beat_number: 7 });
+    expect(clips.readFields({ beat_number: null })).toEqual({ beat_number: null });
+    expect(clips.readFields({ beat_number: '' })).toEqual({ beat_number: null });
+    expect(() => clips.readFields({ beat_number: 15 })).toThrow(/beat_number must be a whole number from 1 to 14/);
+    expect(() => clips.readFields({ beat_number: 2.5 })).toThrow(clips.RawClipError);
+  });
+
   test('label is trimmed and capped at 200', () => {
     expect(clips.readFields({ label: ` ${'x'.repeat(250)} ` }).label).toHaveLength(200);
     expect(clips.readFields({ label: '   ' }).label).toBeNull();

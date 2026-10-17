@@ -11,11 +11,11 @@ vi.mock('../../lib/rawClipsApi', async () => {
   const actual = await vi.importActual('../../lib/rawClipsApi');
   return {
     ...actual,
-    rawClipsApi: { list: vi.fn(), upload: vi.fn(), update: vi.fn(), removeGreen: vi.fn(), remove: vi.fn() },
+    rawClipsApi: { list: vi.fn(), upload: vi.fn(), update: vi.fn(), removeGreen: vi.fn(), remove: vi.fn(), beats: vi.fn() },
   };
 });
 
-import { rawClipsApi, clipLength, clipSize, anyKeying } from '../../lib/rawClipsApi';
+import { rawClipsApi, clipLength, clipSize, anyKeying, sceneChoices } from '../../lib/rawClipsApi';
 import EpisodeRawFootageTab from './EpisodeRawFootageTab';
 
 const CLIPS = [
@@ -36,12 +36,31 @@ describe('raw clip helpers', () => {
     expect(anyKeying([{ key_status: 'done' }, { key_status: 'processing' }])).toBe(true);
     expect(anyKeying([{ key_status: 'done' }])).toBe(false);
   });
+
+  test('scene choices name the beats the plan has and number the rest', () => {
+    const choices = sceneChoices([{ beat_number: 1, beat_name: 'Opening Ritual' }]);
+    expect(choices).toHaveLength(14);
+    expect(choices[0]).toEqual({ value: 1, label: '1. Opening Ritual' });
+    expect(choices[1]).toEqual({ value: 2, label: 'Beat 2' });
+  });
 });
 
 describe('EpisodeRawFootageTab', () => {
   beforeEach(() => {
     Object.values(rawClipsApi).forEach((fn) => fn.mockReset());
     rawClipsApi.list.mockResolvedValue(CLIPS);
+    rawClipsApi.beats.mockResolvedValue([{ beat_number: 4, beat_name: 'Meet the Host' }]);
+  });
+
+  test('a clip links to a scene by name', async () => {
+    rawClipsApi.update.mockResolvedValue({ id: 'c2', beat_number: 4 });
+    render(<EpisodeRawFootageTab episode={{ id: 'ep-1' }} />);
+    await waitFor(() => expect(screen.getAllByTestId('erf-clip')).toHaveLength(3));
+    const picker = within(lane('justawoman')).getByLabelText('Which scene this clip is for');
+    await waitFor(() => expect(within(picker).getByRole('option', { name: '4. Meet the Host' })).toBeTruthy());
+    fireEvent.change(picker, { target: { value: '4' } });
+    await waitFor(() => expect(rawClipsApi.update).toHaveBeenCalledWith('ep-1', 'c2', { beat_number: 4 }));
+    await waitFor(() => expect(within(lane('justawoman')).getByLabelText('Which scene this clip is for').value).toBe('4'));
   });
 
   test('each clip sits in its performer lane with its status', async () => {

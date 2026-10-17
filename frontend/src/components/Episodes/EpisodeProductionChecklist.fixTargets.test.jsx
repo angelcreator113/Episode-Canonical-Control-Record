@@ -23,7 +23,7 @@ describe('checklistFixTarget', () => {
       href: '/shows/show-1/world?tab=scene-sets&from=%2Fepisodes%2Fep-1%3Ftab%3Dchecklist&fromLabel=Gala%20Night&need=Scene%20sets%20assigned',
     });
     expect(checklistFixTarget('overlays_generated', { episode: EPISODE, showId: 'show-1' })).toEqual({ label: "Lala's Phone", href: '/shows/show-1/world?tab=overlays-tab' });
-    expect(checklistFixTarget('scene_images', { episode: EPISODE, showId: 'show-1' })).toEqual({ label: 'Open Scenes', href: '/episodes/ep-1?tab=scenes' });
+    expect(checklistFixTarget('scene_images', { episode: EPISODE, showId: 'show-1' })).toEqual({ label: 'Open Beat Plan', href: '/episodes/ep-1?tab=beatplan' });
   });
 
   test('both Style Page items open the Style Page (Tasks #2815, #2876)', () => {

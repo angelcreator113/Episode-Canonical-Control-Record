@@ -20,7 +20,7 @@
  */
 
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 vi.mock('../contexts/AuthContext', () => ({
@@ -77,6 +77,9 @@ vi.mock('../components/Episodes/EpisodeTodoList', () => ({
   default: () => <div data-testid="episode-todo-overlays">Episode to-do overlays</div>,
 }));
 
+vi.mock('../components/Episodes/EpisodeSceneWorkspace', () => ({
+  default: () => <div data-testid="episode-scenes">Scene workspace body</div>,
+}));
 vi.mock('../components/Episodes/EpisodeRawFootageTab', () => ({
   default: () => <div data-testid="episode-assets">Assets body</div>,
 }));
@@ -129,11 +132,13 @@ describe('EpisodeDetail — Track 6 CP14 module-scope helpers', () => {
     expect(screen.queryByTestId('episode-todo-overlays')).toBeNull();
   });
 
-  test('rendering with no tab shows the checklist body', async () => {
+  // Evoni, 2026-10-17: a bare URL opens Production on its Scenes workspace.
+  test('rendering with no tab shows the Scenes workspace', async () => {
     renderEpisodeDetail();
 
-    await waitFor(() => expect(screen.getByTestId('episode-checklist')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('episode-scenes')).toBeTruthy());
     expect(screen.queryByTestId('episode-overview')).toBeNull();
+    expect(screen.getByTitle('Production').className).toContain('ed-tab-active');
   });
 
   test('explicit overview tab still shows the Overview body', async () => {
@@ -143,35 +148,32 @@ describe('EpisodeDetail — Track 6 CP14 module-scope helpers', () => {
     expect(screen.queryByTestId('episode-checklist')).toBeNull();
   });
 
-  // Evoni, 2026-10-16: the asset manager is Assets → Files (it was
-  // Production → Assets); ?tab=files opens it. The default (#1531's
-  // Checklist) is unchanged for a bare URL.
-  test('?tab=files lands on Assets -> Files', async () => {
+  // Evoni, 2026-10-17: Files (the raw clips) is under Production.
+  test('?tab=files lands on Production -> Files', async () => {
     renderEpisodeDetail('/episodes/ep-1?tab=files');
 
     await waitFor(() => expect(screen.getByTestId('episode-assets')).toBeTruthy());
     expect(screen.queryByTestId('episode-checklist')).toBeNull();
     expect(screen.queryByTestId('episode-overview')).toBeNull();
-    expect(screen.getByTitle('Assets').className).toContain('ed-tab-active');
+    expect(screen.getByTitle('Production').className).toContain('ed-tab-active');
   });
 
-  test('the Checklist is still reachable from Files via the Production tab', async () => {
+  test('the Checklist is one pill away from Files', async () => {
     renderEpisodeDetail('/episodes/ep-1?tab=files');
     await waitFor(() => expect(screen.getByTestId('episode-assets')).toBeTruthy());
 
-    fireEvent.click(screen.getByTitle('Production'));
+    fireEvent.click(within(screen.getByTestId('ed-subtabs')).getByRole('button', { name: 'Checklist' }));
 
     await waitFor(() => expect(screen.getByTestId('episode-checklist')).toBeTruthy());
     expect(screen.queryByTestId('episode-assets')).toBeNull();
   });
 
-  test('the Checklist is still reachable from Overview via Production', async () => {
+  test('Production from Overview opens on Scenes', async () => {
     renderEpisodeDetail('/episodes/ep-1?tab=overview');
     await waitFor(() => expect(screen.getByTestId('episode-overview')).toBeTruthy());
 
-    // Production opens on its Checklist (Evoni's Episode mock, 2026-10-05).
     fireEvent.click(screen.getByTitle('Production'));
-    await waitFor(() => expect(screen.getByTestId('episode-checklist')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('episode-scenes')).toBeTruthy());
     expect(screen.queryByTestId('episode-assets')).toBeNull();
   });
 

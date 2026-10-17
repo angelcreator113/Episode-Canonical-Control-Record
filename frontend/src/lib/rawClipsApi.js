@@ -38,7 +38,19 @@ export const rawClipsApi = {
   update: (episodeId, clipId, changes) => api.patch(`${base(episodeId)}/${clipId}`, changes).then((r) => r.data?.data),
   removeGreen: (episodeId, clipId, strength) => api.post(`${base(episodeId)}/${clipId}/remove-green`, { strength }).then((r) => r.data?.data),
   remove: (episodeId, clipId) => api.delete(`${base(episodeId)}/${clipId}`).then(() => true),
+  // The episode's scenes (canonical beats) a clip can be linked to.
+  beats: (episodeId) => api.get(`/api/v1/episode-brief/${episodeId}/plan`)
+    .then((r) => (Array.isArray(r.data?.data) ? r.data.data : []).map((b) => ({ beat_number: b.beat_number, beat_name: b.beat_name || null }))),
 };
+
+/** The scene choices for a clip: the episode's beats, or Beats 1-14 when it has no plan yet. */
+export function sceneChoices(beats) {
+  const named = new Map((beats || []).map((b) => [Number(b.beat_number), b.beat_name]));
+  return Array.from({ length: 14 }, (_, i) => {
+    const n = i + 1;
+    return { value: n, label: named.get(n) ? `${n}. ${named.get(n)}` : `Beat ${n}` };
+  });
+}
 
 /** "1:05" from seconds; null when unknown. */
 export function clipLength(seconds) {

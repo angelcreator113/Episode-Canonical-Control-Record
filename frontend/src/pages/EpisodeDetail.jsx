@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
 import useScrolledPast from '../hooks/useScrolledPast';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Compass, Sparkles, PenLine, CalendarDays, Crown, Shirt, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Compass, Sparkles, PenLine, CalendarDays, Crown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { STATUS_LABEL } from '../lib/episodePipeline';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/ToastContainer';
@@ -20,6 +20,8 @@ import SceneLibraryPicker from '../components/SceneLibraryPicker';
 // because the player overlay only mounts when "Preview Phone" is clicked.
 const EpisodeRawFootageTab = lazy(() => import('../components/Episodes/EpisodeRawFootageTab'));
 const EpisodeTodoList = lazy(() => import('../components/Episodes/EpisodeTodoList'));
+const EpisodeSceneWorkspace = lazy(() => import('../components/Episodes/EpisodeSceneWorkspace'));
+const EpisodeProductionHeader = lazy(() => import('../components/Episodes/EpisodeProductionHeader'));
 const EpisodeLalasPhoneTab = lazy(() => import('../components/Episodes/EpisodeLalasPhoneTab'));
 const EpisodeStylePage = lazy(() => import('../components/Episodes/EpisodeStylePage'));
 const EpisodeScriptTab = lazy(() => import('../components/Episodes/EpisodeScriptTab'));
@@ -57,7 +59,7 @@ import './EpisodeDetail.css';
 // - listEpisodeLibraryScenesApi reused 4× (mount + 3 reload-after-mutation)
 // - reorderEpisodeLibrarySceneApi reused 2× (Promise.all pair on drag-reorder)
 // The main tabs' icons (Evoni's Episode mock, 2026-10-05).
-const TAB_ICONS = { overview: Sparkles, assets: Shirt, scripts: PenLine, production: CalendarDays, results: Crown };
+const TAB_ICONS = { overview: Sparkles, scripts: PenLine, production: CalendarDays, results: Crown };
 
 export const listEpisodeLibraryScenesApi = (epId) =>
   api.get(`/api/v1/episodes/${epId}/library-scenes`).then((r) => r.data);
@@ -198,15 +200,24 @@ const EpisodeDetail = () => {
   // reports again after each of its re-checks, so the badge follows it.
   // The Overview's Production checklist tile reads the same progress.
   const [checksProgress, setChecksProgress] = useState(null);
+  // The checks themselves, for Production's step bar and progress card.
+  const [productionChecks, setProductionChecks] = useState({ checks: null, sections: null });
   const checksLeft = checksProgress?.left ?? null;
-  const reportChecks = useCallback((checks, sections) => setChecksProgress(checklistProgress(checks, sections)), []);
+  const reportChecks = useCallback((checks, sections) => {
+    setChecksProgress(checklistProgress(checks, sections));
+    setProductionChecks({ checks, sections });
+  }, []);
   const checksEpisodeId = episode?.id;
   useEffect(() => {
     if (!checksEpisodeId || !episode) return undefined;
     let cancelled = false;
     import('../components/Episodes/EpisodeProductionChecklist')
       .then((m) => m.loadProductionChecks(episode, episode.show_id || episode.showId)
-        .then(({ checks }) => { if (!cancelled) setChecksProgress(checklistProgress(checks, m.CHECKLIST_SECTIONS)); }))
+        .then(({ checks }) => {
+          if (cancelled) return;
+          setChecksProgress(checklistProgress(checks, m.CHECKLIST_SECTIONS));
+          setProductionChecks({ checks, sections: m.CHECKLIST_SECTIONS });
+        }))
       .catch((err) => { console.error('[EpisodeDetail] production checks load failed:', err); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -436,7 +447,7 @@ const EpisodeDetail = () => {
   // to activeTab 'production' / sub 'wardrobe', so the old
   // `activeTab !== 'wardrobe'` gate never let this run (Task #1906).
   useEffect(() => {
-    if (!episode || tabKey !== 'assets.wardrobe') return;
+    if (!episode || tabKey !== 'production.wardrobe') return;
     const showId = episode.show_id || episode.showId;
     if (!showId) return;
 
@@ -864,6 +875,22 @@ const EpisodeDetail = () => {
             );
           })}
         </div>
+        {/* Production's top (Evoni's Production mock, 2026-10-17): the step
+            bar, the episode at a glance, the checklist's progress, Mark Ready. */}
+        {activeTab === 'production' && (
+          <Suspense fallback={null}>
+            <EpisodeProductionHeader
+              episode={episode}
+              sourceEvent={sourceEvent}
+              checks={productionChecks.checks}
+              sections={productionChecks.sections}
+              onOpenTab={openTab}
+              onMarkReady={() => changeStatus('in_review')}
+              statusSaving={statusSaving}
+            />
+          </Suspense>
+        )}
+
         {/* Sub-tabs */}
         {(() => {
           const currentTab = EP_TABS.find(t => t.key === activeTab);
@@ -923,12 +950,21 @@ const EpisodeDetail = () => {
         )}
 
         {/* Files: the episode's raw video clips, by who is on camera (Evoni, 2026-10-17) */}
-        {tabKey === 'assets.files' && (
+        {tabKey === 'production.files' && (
           <EpisodeRawFootageTab episode={episode} />
         )}
 
-        {/* Scenes Tab */}
-        {tabKey === 'assets.scenes' && (
+        {/* Scenes: the scene workspace (Evoni's Production mock, 2026-10-17) */}
+        {tabKey === 'production.scenes' && (
+          <EpisodeSceneWorkspace
+            episode={episode}
+            onOpenTab={openTab}
+            onToast={(msg, type) => (type === 'error' ? toast?.showError?.(msg) : toast?.showSuccess?.(msg))}
+          />
+        )}
+
+        {/* Beat Plan: the full plan editor (the Scenes tab until 2026-10-17) */}
+        {tabKey === 'production.beatplan' && (
           <EpisodeScenesTab
             episode={episode}
             sourceEvent={sourceEvent}
@@ -937,7 +973,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Wardrobe Tab */}
-        {tabKey === 'assets.wardrobe' && (
+        {tabKey === 'production.wardrobe' && (
           <div>
             {/* Unified wardrobe — event picker + outfit builder, for this
                 episode's own events only (Task #3107) */}
@@ -1016,7 +1052,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Style Page (was Lookbook) — the style sheet as its own editor (Task #2876) */}
-        {tabKey === 'assets.lookbook' && (
+        {tabKey === 'production.lookbook' && (
           <EpisodeStylePage episode={episode} onOpenTab={openTab} />
         )}
 
@@ -1040,17 +1076,17 @@ const EpisodeDetail = () => {
             it; same phone.start handler and overlay), what is on the phone,
             the deferred beat-requirements notice, and missions as a section
             (EpisodePhoneMissionsTab, unchanged toggles + MissionEditor). */}
-        {tabKey === 'assets.phone' && (
+        {tabKey === 'production.phone' && (
           <EpisodeLalasPhoneTab episode={episode} onPreview={phone.start} previewError={phone.error} />
         )}
 
         {/* Money Tab — Episode Money, Phase A (#2278): read-only, from the ledger */}
-        {tabKey === 'assets.money' && (
+        {tabKey === 'production.money' && (
           <EpisodeMoneyTab episode={episode} showId={episode?.show_id || episode?.showId} />
         )}
 
         {/* Overlays Tab — P15: every on-screen piece of the episode */}
-        {tabKey === 'assets.overlays' && (
+        {tabKey === 'production.overlays' && (
           <>
             <EpisodeOverlaysTab
               episode={episode}

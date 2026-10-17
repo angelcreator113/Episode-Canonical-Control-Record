@@ -737,7 +737,7 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
               {(scene?.image_label || scene?.scene_set_name) && <span className="esp-beat-picture-label">{scene.image_label || scene.scene_set_name}</span>}
             </button>
           ) : (
-            <p className="esp-beat-nopicture" data-testid={`script-nopicture-${beat.number}`}>No picture for this beat yet · <Link className="esp-link" to="?tab=scenes" onClick={(e) => e.stopPropagation()}>Open Scenes</Link></p>
+            <p className="esp-beat-nopicture" data-testid={`script-nopicture-${beat.number}`}>No picture for this beat yet · <Link className="esp-link" to="?tab=beatplan" onClick={(e) => e.stopPropagation()}>Open Beat Plan</Link></p>
           )}
           {used.length > 0 && (
             <div className="esp-build" data-testid={`script-build-${beat.number}`}>

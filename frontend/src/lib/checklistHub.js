@@ -59,7 +59,7 @@ export function timelineGrid(coverage, { lookReady = false, lookBeat = null } = 
 export const SECTION_GUIDE = {
   brief: { text: 'Arc position, archetype, intent, purpose and hook.', open: { label: 'Open Overview', tab: 'overview' } },
   world: { text: 'The event, its venue, the venue image and the invitation.', open: { label: 'Open the event package', event: true } },
-  scene: { text: 'Where each beat happens. Starts from the event’s venue.', open: { label: 'Open Scenes', tab: 'scenes' } },
+  scene: { text: 'Where each beat happens. Starts from the event’s venue.', open: { label: 'Open Beat Plan', tab: 'beatplan' } },
   wardrobe: { text: "Lala's closet and her look for the event.", open: { label: 'Open Wardrobe', tab: 'wardrobe' } },
   lookbook: { text: "The episode's style sheet, ready x of 12, and its status (Draft or Approved).", open: { label: 'Open Style Page', tab: 'lookbook' } },
   overlays: { text: 'Screens Lala looks at during the episode.', open: { label: 'Open Phone', tab: 'phone' } },

@@ -15,7 +15,7 @@ const PERFORMERS = Object.freeze(['lala', 'justawoman', 'guest']);
 const KEY_STATUSES = Object.freeze(['none', 'queued', 'processing', 'done', 'failed']);
 const KEY_STRENGTHS = Object.freeze(['low', 'medium', 'high']);
 
-const COLUMNS = `id, episode_id, show_id, performer, guest_name, label, original_filename, content_type,
+const COLUMNS = `id, episode_id, show_id, performer, guest_name, label, beat_number, original_filename, content_type,
   file_size_bytes, duration_seconds, width, height, url_raw, thumbnail_url,
   key_status, key_strength, url_cutout, key_error, key_started_at, key_finished_at, created_at, updated_at`;
 
@@ -33,7 +33,11 @@ class RawClipError extends Error {
 
 const cleanText = (v, max) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
 
-/** Validates the editable fields. Returns { performer, guest_name, label } (only the keys given). */
+/**
+ * Validates the editable fields. Returns { performer, guest_name, label,
+ * beat_number } (only the keys given). beat_number links the clip to a
+ * scene (canonical beat 1-14); null unlinks it.
+ */
 function readFields(body = {}, { requirePerformer = false } = {}) {
   const out = {};
   if (body.performer !== undefined || requirePerformer) {
@@ -42,6 +46,14 @@ function readFields(body = {}, { requirePerformer = false } = {}) {
   }
   if (body.guest_name !== undefined) out.guest_name = cleanText(body.guest_name, 200);
   if (body.label !== undefined) out.label = cleanText(body.label, 200);
+  if (body.beat_number !== undefined) {
+    if (body.beat_number === null || body.beat_number === '') out.beat_number = null;
+    else {
+      const beat = Number(body.beat_number);
+      if (!Number.isInteger(beat) || beat < 1 || beat > 14) throw new RawClipError(400, 'beat_number must be a whole number from 1 to 14, or null');
+      out.beat_number = beat;
+    }
+  }
   if (out.performer && out.performer !== 'guest') out.guest_name = null;
   return out;
 }
@@ -117,11 +129,11 @@ async function createClip(sequelize, clip) {
   return row;
 }
 
-/** Updates performer, guest_name and label. Returns the row, or null when there is no such clip. */
+/** Updates performer, guest_name, label and beat_number. Returns the row, or null when there is no such clip. */
 async function updateClip(sequelize, episodeId, clipId, body = {}) {
   const fields = readFields(body);
   const keys = Object.keys(fields);
-  if (!keys.length) throw new RawClipError(400, 'Nothing to change: send performer, guest_name or label');
+  if (!keys.length) throw new RawClipError(400, 'Nothing to change: send performer, guest_name, label or beat_number');
   const sets = keys.map((k) => `${k} = :${k}`).join(', ');
   const [rows] = await sequelize.query(
     `UPDATE episode_raw_clips SET ${sets}, updated_at = NOW()
