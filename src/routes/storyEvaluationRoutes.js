@@ -24,6 +24,7 @@ const anthropic = new Anthropic();
 const { buildArcContext, buildArcContextPromptSection } = require('../services/arcTrackingService');
 const { enrichAfterWriteBack } = require('../services/storyEnrichmentService');
 const { storyBrief } = require('../services/characterStoryBrief');
+const { secretsFor } = require('../services/characterSecrets');
 const { reviewInBackground } = require('../services/postGenerationReview');
 const { factsOf } = require('../services/worldFacts');
 const { selectRules, RULE_ATTRIBUTES, CRITICAL_OR_ALWAYS_INJECT } = require('../services/brainRules');
@@ -233,7 +234,7 @@ function buildCharacterBlock(dossier, relationships) {
   if (d.core_belief) lines.push(`  Belief: ${d.core_belief}`);
 
   // What they show, and the private truth beneath the scene (services/characterStoryBrief)
-  const brief = storyBrief(d, { layer: 'scene' });
+  const brief = storyBrief(d, { layer: 'scene', secrets: d.secrets });
   if (brief.lines.length) lines.push(...brief.lines.map((l) => `  ${l}`));
   if (d.emotional_baseline) lines.push(`  Emotional baseline: ${d.emotional_baseline}`);
 
@@ -415,9 +416,13 @@ async function fetchSceneContext(characterKeys, registryId) {
     }
   });
 
+  // Their kept secrets, for the brief's revelation budget (services/characterSecrets).
+  // Only the prompt gets them: the dossiers are saved with the story.
+  const secrets = await secretsFor(db.sequelize, charIds);
+
   // Build structured text blocks
   const blocks = dossiers.map(d =>
-    buildCharacterBlock(d, edgesByChar[d.id])
+    buildCharacterBlock({ ...d, secrets: secrets.get(d.id) || [] }, edgesByChar[d.id])
   );
 
   return {
