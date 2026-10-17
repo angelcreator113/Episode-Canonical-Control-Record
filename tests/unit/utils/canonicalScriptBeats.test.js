@@ -68,6 +68,6 @@ describe('buildScriptPrompt (grounded generator)', () => {
     expect(beat8).toMatch(/Director note: Slow reveal/);
     expect(beat8).toMatch(/UI action: CLOSET_OPEN/);
     expect(prompt).not.toMatch(/BEAT 8: CLOSET/);
-    expect(prompt).toMatch(/## BEAT: 1 · Opening Ritual\n {2}Purpose: [^\n]+\n {2}Location: Not planned yet/);
+    expect(prompt).toMatch(/## BEAT: 1 · Opening Ritual\n {2}Purpose: [^\n]+\n {2}Story job: [^\n]+\n {2}Location: Not planned yet/);
   });
 });
