@@ -1635,7 +1635,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
         )}
       </section>
       {genError && <div className="esp-error" role="alert">{genError}</div>}
-      {coverage && (coverage.missing?.length > 0 || coverage.fixed_beats?.length > 0 || coverage.phone_steps > 0) && (
+      {coverage && (coverage.missing?.length > 0 || coverage.fixed_beats?.length > 0 || coverage.phone_steps > 0 || coverage.story_gaps?.length > 0) && (
         <div className={`esp-coverage${coverage.missing?.length ? ' is-gaps' : ''}`} role="status" data-testid="script-coverage">
           {coverage.fixed_beats?.length > 0 && <p className="esp-coverage-line">✦ The writer rewrote beat{coverage.fixed_beats.length === 1 ? '' : 's'} {coverage.fixed_beats.join(', ')} to cover what the episode needs.</p>}
           {coverage.phone_steps > 0 && <p className="esp-coverage-line" data-testid="script-coverage-phone">✦ The writer added {coverage.phone_steps} phone step{coverage.phone_steps === 1 ? '' : 's'}, so every tap is on the screen its icon is on.</p>}
@@ -1646,6 +1646,14 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
                 {coverage.missing.slice(0, 8).map((m, i) => <li key={`${m.kind}-${i}`}>{COVERAGE_KINDS[m.kind] || m.kind}: {m.label}{m.target ? ` (beat ${m.target})` : ''}</li>)}
               </ul>
             </>
+          )}
+          {coverage.story_gaps?.length > 0 && (
+            <div data-testid="script-coverage-story">
+              <p className="esp-coverage-line">Not set for this episode yet, so the writer kept it to this episode and invented no history:</p>
+              <ul className="esp-coverage-list">
+                {coverage.story_gaps.map((g) => <li key={g.layer}>{g.label}</li>)}
+              </ul>
+            </div>
           )}
           <button type="button" className="esp-btn is-small" onClick={() => setCoverage(null)}>Dismiss</button>
         </div>
