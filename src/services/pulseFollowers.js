@@ -118,6 +118,9 @@ async function countsAt(db, showId, at) {
   return rows.map((r) => ({ social_profile_id: Number(r.social_profile_id), count: Number(r.count), story_order: Number(r.story_order) }));
 }
 
+// An accepted follower change this big (either way) asks for a season proposal.
+const BIG_JUMP = 1000;
+
 class LedgerError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
@@ -151,6 +154,8 @@ async function decide(db, row, { adjustTo = null, adjustBy = null, reason = null
     }, { transaction });
     if (row.cause === 'episode') await writeDecisionLog(db, row, { adjusted: adjusting, transaction });
   });
+  // A big accepted jump can move the season plan (services/seasonArcProposals): a proposal, never awaited.
+  if (row.cause !== 'start' && Math.abs(row.change) >= BIG_JUMP) require('./seasonArcProposals').proposeLater(db, row.show_id, 'follower_jump');
   return row;
 }
 
