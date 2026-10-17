@@ -1858,8 +1858,6 @@ The revised event should feel like a completely different experience from the si
             showId={showId}
             episodes={episodes}
             events={worldEvents}
-            stateHistory={stateHistory}
-            decisions={decisions}
             charState={charState}
             wardrobeCount={wardrobeTotal ?? wardrobeItems.length}
             goTo={goTo}

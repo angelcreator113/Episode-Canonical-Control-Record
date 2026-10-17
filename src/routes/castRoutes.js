@@ -5,6 +5,10 @@
  * 2026-10-08; frontend pages/CharacterRegistryPage). Its own file, not
  * routes/characterRegistry.js (F-Reg-2): each write here is one row.
  *
+ *   GET    /api/v1/cast/consistency?registry_id=   the cast rollout: each live character's
+ *                                                  facts, check findings, voice and next
+ *                                                  step (services/castConsistency; one id,
+ *                                                  or several comma-separated)
  *   GET    /api/v1/cast/review?registry_id=        live characters' review state and
  *                                                  feed link, the archived ones, and
  *                                                  how many episodes use each
@@ -136,6 +140,20 @@ async function cascadeRows(sequelize, characterId) {
   }
   return found;
 }
+
+router.get('/consistency', requireAuth, async (req, res) => {
+  try {
+    const ids = String(req.query.registry_id || '').split(',').map((s) => s.trim()).filter(Boolean);
+    if (!ids.length || ids.length > 20 || !ids.every((id) => UUID_RE.test(id))) {
+      return res.status(400).json({ success: false, error: 'registry_id must be one or more registry ids (UUIDs), comma-separated' });
+    }
+    const result = await require('../services/castConsistency').castOverview(getModels(), ids);
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('[Cast] GET /consistency error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 router.get('/review', requireAuth, async (req, res) => {
   try {
