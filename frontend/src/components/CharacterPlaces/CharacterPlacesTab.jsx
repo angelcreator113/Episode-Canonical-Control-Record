@@ -278,6 +278,12 @@ function HostedEvents({ character, showId, onNote }) {
   };
 
   const hostedIds = new Set((events || []).map((e) => String(e.id)));
+  // Who else hosts an event: a brand, or another creator (fifth audit: never replaced by a click).
+  const otherHost = (e) => String(e.host_brand || '').trim()
+    || (e.source_profile_id != null && Number(e.source_profile_id) !== Number(character.feed_profile_id) ? 'someone else' : '');
+  const offered = (all || []).filter((e) => !hostedIds.has(String(e.id)));
+  const open = offered.filter((e) => !otherHost(e));
+  const taken = offered.length - open.length;
   return (
     <section className="cpl-role" data-testid="places-hosted-events">
       <h3 className="cpl-role-title"><CalendarDays size={16} aria-hidden="true" /> Hosted events</h3>
@@ -308,16 +314,26 @@ function HostedEvents({ character, showId, onNote }) {
               <select className="cpl-input" aria-label="Event they host" value={choice} onChange={(e) => setChoice(e.target.value)} data-testid="hosted-event-select">
                 <option value="">{all ? 'Choose an event…' : 'Loading…'}</option>
                 {/* An event someone else hosts is shown, not offered (fifth audit). */}
-                {(all || []).filter((e) => !hostedIds.has(String(e.id))).map((e) => {
-                  const other = String(e.host_brand || '').trim()
-                    || (e.source_profile_id != null && Number(e.source_profile_id) !== Number(character.feed_profile_id) ? 'someone else' : '');
-                  return <option key={e.id} value={e.id} disabled={Boolean(other)}>{e.name}{other ? ` (hosted by ${other})` : ''}</option>;
-                })}
+                {open.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+                {taken > 0 && (
+                  <optgroup label="Already hosted by someone else">
+                    {offered.filter((e) => otherHost(e)).map((e) => (
+                      <option key={e.id} value={e.id} disabled>{e.name} (hosted by {otherHost(e)})</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
               <button type="button" className="cpl-btn" disabled={!choice || busy === 'add'} onClick={add} data-testid="hosted-event-add-save">
                 {busy === 'add' ? 'Saving…' : 'They host it'}
               </button>
               <button type="button" className="cpl-btn is-soft" onClick={() => setAdding(false)}>Cancel</button>
+              {all && (
+                <p className="cpl-note cpl-row-note" data-testid="hosted-event-note">
+                  {open.length === 0
+                    ? `Every event already has a host${taken ? ` (${taken} hosted by a brand or another creator)` : ''}. Create a new event in Producer Mode, or free one up on the event's page.`
+                    : taken > 0 ? `${taken} more ${taken === 1 ? 'event is' : 'events are'} hosted by a brand or another creator, so ${taken === 1 ? 'it is' : 'they are'} listed but can't be chosen.` : null}
+                </p>
+              )}
             </div>
           ) : (
             <button type="button" className="cpl-btn is-soft" onClick={startAdd} data-testid="hosted-event-add">

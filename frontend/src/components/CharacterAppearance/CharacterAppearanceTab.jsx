@@ -101,6 +101,13 @@ export default function CharacterAppearanceTab({ character, onPortraitChanged })
     setNote({ kind: 'ok', text: 'That portrait is their profile photo now.' });
   });
 
+  const remove = (url) => act(`remove:${url}`, async () => {
+    const res = await api.post(`${base(id)}/portrait/remove`, { url });
+    setData((d) => ({ ...d, ...res.data }));
+    if (data.portrait_url === url) onPortraitChanged?.(null);
+    setNote({ kind: 'ok', text: 'Removed.' });
+  });
+
   if (!data) return <p className="ch-note">{note?.text || 'Loading…'}</p>;
   const a = data.appearance;
   const portraits = a?.portraits || [];
@@ -178,6 +185,10 @@ export default function CharacterAppearanceTab({ character, onPortraitChanged })
                       {busy === p.url ? 'Setting…' : 'Use as their profile photo'}
                     </button>
                   )}
+                <button type="button" className="cap-btn-soft" disabled={!!busy} onClick={() => remove(p.url)}
+                  aria-label={`Remove this portrait${data.portrait_url === p.url ? ' (their profile photo)' : ''}`}>
+                  {busy === `remove:${p.url}` ? 'Removing…' : 'Remove'}
+                </button>
               </li>
             ))}
           </ul>
