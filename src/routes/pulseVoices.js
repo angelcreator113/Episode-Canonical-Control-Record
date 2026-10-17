@@ -10,8 +10,10 @@
  *                                     those Lala has not met and does not
  *                                     know of, whose voices can be built and
  *                                     approved now (they post on their own
- *                                     only once met); and the banned phrases
- *                                     (requireAuth)
+ *                                     only once met); not_posting: those on
+ *                                     the feed below the Active stage, who
+ *                                     get no voice until moved up; and the
+ *                                     banned phrases (requireAuth)
  *   PUT    /:characterId/known-of { known_of }  Lala knows of them before
  *                                     they meet (a public figure): their
  *                                     public posts show; DMs, replies to
@@ -69,8 +71,9 @@ router.get('/', requireAuth, async (req, res) => {
   try {
     const showId = String(req.query.show_id || '');
     if (!UUID_RE.test(showId)) return res.status(400).json({ success: false, error: 'show_id must be a show id (UUID).' });
-    const { eligible, BANNED_PHRASES } = require('../services/pulseVoices');
+    const { eligible, notPosting, BANNED_PHRASES } = require('../services/pulseVoices');
     const rows = await eligible(getModels(), showId, { includeUnmet: true });
+    const below = await notPosting(getModels(), showId);
     const row = ({ character, profile, voice, needs_rebuild: needsRebuild, met, known_of: knownOf, meets_in: meetsIn }) => ({
       registry_character_id: character.id,
       display_name: character.selected_name || character.display_name,
@@ -89,6 +92,7 @@ router.get('/', requireAuth, async (req, res) => {
       banned_phrases: BANNED_PHRASES,
       characters: rows.filter((r) => r.visible).map(row),
       not_met: rows.filter((r) => !r.visible).map(row),
+      not_posting: below.map((r) => ({ registry_character_id: r.id, display_name: r.display_name, depth_level: r.depth_level || null, handle: r.handle })),
     });
   } catch (err) {
     console.error('[PulseVoices] GET error:', err);

@@ -146,7 +146,7 @@ const generatePrompt = () => mockCreate.mock.calls.map(([arg]) => arg.messages[0
     expect(mockCreate).not.toHaveBeenCalled();
     const none = await ideas(ids.novoice);
     expect(none.body.ready).toBe(false);
-    expect(none.body.blocker).toMatch(/No Voice has no Voice Profile yet/);
+    expect(none.body.blocker).toMatch(/No Voice has no Voice Profile yet, and one is built only from the Active stage\. .*Make Active/);
     expect((await ideas(crypto.randomUUID())).status).toBe(404);
   });
 
