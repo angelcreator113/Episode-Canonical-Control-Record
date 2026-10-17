@@ -5,7 +5,9 @@
  * services/characterContentType). One of the Society tab's archetypes, kept
  * on their feed profile, shown next to their job. Suggest reads their
  * character file and proposes one; nothing is saved until Evoni keeps it or
- * picks another.
+ * picks another. The gap between their job and their content (the
+ * suggestion's "Job vs content" line, or her own words) is kept on the
+ * character: the story and chapter writers use it as a hook (idea 1).
  */
 import { useState, useEffect } from 'react';
 import apiClient from '../../services/api';
@@ -14,14 +16,15 @@ import './KnownFor.css';
 
 export const getContentTypeApi = (id) =>
   apiClient.get(`${API_URL}/cast/characters/${id}/content-type`);
-export const putContentTypeApi = (id, name) =>
-  apiClient.put(`${API_URL}/cast/characters/${id}/content-type`, { name });
+export const putContentTypeApi = (id, body) =>
+  apiClient.put(`${API_URL}/cast/characters/${id}/content-type`, body);
 export const suggestContentTypeApi = (id) =>
   apiClient.post(`${API_URL}/cast/characters/${id}/content-type/suggest`);
 
 export default function KnownFor({ characterId }) {
   const [data, setData] = useState(null);
   const [choice, setChoice] = useState(null);
+  const [gap, setGap] = useState('');
   const [suggestion, setSuggestion] = useState(null);
   const [busy, setBusy] = useState(null);
   const [note, setNote] = useState(null);
@@ -41,7 +44,7 @@ export default function KnownFor({ characterId }) {
     setBusy('save');
     setNote(null);
     try {
-      const res = await putContentTypeApi(characterId, name || null);
+      const res = await putContentTypeApi(characterId, { name: name || null, gap: gap.trim() || null });
       setData(res.data);
       setChoice(null);
       setSuggestion(null);
@@ -61,6 +64,7 @@ export default function KnownFor({ characterId }) {
       const res = await suggestContentTypeApi(characterId);
       setSuggestion(res.data?.suggestion || null);
       setChoice(res.data?.suggestion?.name || '');
+      setGap(res.data?.suggestion?.tension || data?.gap || '');
     } catch (err) {
       console.error('[KnownFor] suggest failed:', err);
       setNote({ kind: 'error', text: err.response?.data?.error || 'Could not suggest one.' });
@@ -75,6 +79,7 @@ export default function KnownFor({ characterId }) {
   const current = data.current;
   const picking = choice !== null;
   const picked = (data.list || []).find((a) => a.name === choice) || null;
+  const open = (name) => { setChoice(name); setGap(data.gap || ''); };
 
   return (
     <div className="kf" data-testid="ch-known-for">
@@ -86,6 +91,7 @@ export default function KnownFor({ characterId }) {
       {data.occupation && !picking && (
         <p className="ch-note kf-job">Their job is {data.occupation}. What they post can be different from what they do for work.</p>
       )}
+      {data.gap && !picking && <p className="kf-tension" data-testid="kf-gap">Job vs content: {data.gap}</p>}
       {picking ? (
         <div className="kf-pick">
           {suggestion && (
@@ -101,14 +107,17 @@ export default function KnownFor({ characterId }) {
             </select>
           </label>
           {picked?.content && <p className="ch-note">{picked.content}</p>}
+          <label className="kf-select">Job vs content: what the gap says about them
+            <textarea rows={2} value={gap} onChange={(e) => setGap(e.target.value)} maxLength={600} placeholder="Optional. The story and chapter writers use it as a hook." />
+          </label>
           <span className="ch-facts-row">
             <button type="button" className="ch-btn" disabled={!!busy} onClick={() => save(choice)}>{busy === 'save' ? 'Saving…' : 'Save'}</button>
-            <button type="button" className="ch-btn-soft" disabled={!!busy} onClick={() => { setChoice(null); setSuggestion(null); }}>Cancel</button>
+            <button type="button" className="ch-btn-soft" disabled={!!busy} onClick={() => { setChoice(null); setSuggestion(null); setGap(''); }}>Cancel</button>
           </span>
         </div>
       ) : (
         <span className="ch-facts-row">
-          <button type="button" className="ch-btn-soft" disabled={!!busy} onClick={() => setChoice(current?.name || '')}>{current ? 'Change' : 'Choose'}</button>
+          <button type="button" className="ch-btn-soft" disabled={!!busy} onClick={() => open(current?.name || '')}>{current ? 'Change' : 'Choose'}</button>
           <button type="button" className="ch-btn-soft" disabled={!!busy} onClick={suggest}>
             {busy === 'suggest' ? 'Reading their file…' : 'Suggest what they’re known for'}
           </button>

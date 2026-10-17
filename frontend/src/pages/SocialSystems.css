@@ -74,6 +74,10 @@
 .ss-chip-mini { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--surface-card); border: 1px solid var(--border); font-size: 11px; color: var(--text-secondary); }
 /* An archetype card's count of the LalaVerse Feed profiles that have it */
 .ss-arch-count { align-self: flex-start; margin-top: 4px; }
+/* The Feed's balance (idea 6): a crowded type and one nobody has. */
+.ss-arch-count.is-crowded { border-color: var(--warning-border); color: var(--warning-text); background: var(--warning-bg); font-weight: 700; }
+.ss-arch-count.is-empty { border-style: dashed; }
+.ss-arch-balance { border-left: 3px solid var(--warning-border); padding-left: 10px; }
 
 /* ── Trend stages ── */
 .ss-stages { list-style: none; margin: 0 0 6px; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; counter-reset: stage; }

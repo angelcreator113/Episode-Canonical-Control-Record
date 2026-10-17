@@ -149,3 +149,33 @@ describe('the prompts', () => {
     expect(societySparkBlock([])).toBe('');
   });
 });
+
+describe('the Feed\'s balance (idea 6, 2026-10-17)', () => {
+  const { societyBalance } = require('../../../src/services/societyArchetypes');
+  const five = list('The A', 'The B', 'The C', 'The D', 'The E');
+
+  test('a type with at least 3 and more than twice its even share is crowded; types nobody has are empty', () => {
+    const b = societyBalance(five, { 'The A': 6, b: 2, 'The Old': 2 });
+    expect(b.total).toBe(10);
+    expect(b.crowded).toEqual([{ name: 'The A', count: 6, share: 60 }]);
+    expect(b.empty).toEqual(['The C', 'The D', 'The E']);
+  });
+
+  test('a small Feed is never crowded: two of one type is not a crowd', () => {
+    expect(societyBalance(five, { 'The A': 2 }).crowded).toEqual([]);
+    expect(societyBalance(five, {})).toEqual({ total: 0, crowded: [], empty: ['The A', 'The B', 'The C', 'The D', 'The E'] });
+  });
+
+  test('with counts, the menu says how many have each, marks the crowded, and asks for range', () => {
+    const menu = societyArchetypeMenu(five, { 'The A': 6, 'the b': 2 });
+    expect(menu).toContain('- The A: The A posts [6 on the Feed, CROWDED]');
+    expect(menu).toContain('- The B: The B posts [2 on the Feed]');
+    expect(menu).toContain('- The C: The C posts [nobody on the Feed yet]');
+    expect(menu).toMatch(/The Feed needs range: when two fit about equally well, choose the one with fewer on the Feed/);
+  });
+
+  test('without counts, or with an empty Feed, the menu is as before', () => {
+    expect(societyArchetypeMenu(five, {})).toBe(societyArchetypeMenu(five));
+    expect(societyArchetypeMenu(five)).not.toMatch(/on the Feed/);
+  });
+});
