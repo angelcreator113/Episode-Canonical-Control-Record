@@ -9,6 +9,10 @@
  * (s3_key_cutout, a WebM with an alpha channel). Green removal is ffmpeg's
  * chromakey on the server: no outside service, no per-clip cost.
  *
+ * beat_number: the scene (canonical beat 1-14) the clip is linked to, set
+ * by Evoni once a clip is edited down; null until then. Production's scene
+ * workspace plays a beat's linked clip and takes the scene's length from it.
+ *
  * key_status: none (not asked), queued, processing, done, failed.
  * key_strength: low, medium, high (how far from pure green still keys out).
  * Raw SQL in rawClipsService, like episode_performance_clips; no model.
@@ -35,6 +39,7 @@ module.exports = {
         performer: { type: Sequelize.STRING(20), allowNull: false },
         guest_name: { type: Sequelize.STRING(200), allowNull: true },
         label: { type: Sequelize.STRING(200), allowNull: true },
+        beat_number: { type: Sequelize.SMALLINT, allowNull: true },
         original_filename: { type: Sequelize.STRING(255), allowNull: true },
         content_type: { type: Sequelize.STRING(100), allowNull: true },
         file_size_bytes: { type: Sequelize.BIGINT, allowNull: true },
@@ -59,6 +64,7 @@ module.exports = {
       await sequelize.query(
         `ALTER TABLE ${TABLE}
            ADD CONSTRAINT ${TABLE}_performer CHECK (performer IN ('lala', 'justawoman', 'guest')),
+           ADD CONSTRAINT ${TABLE}_beat_range CHECK (beat_number IS NULL OR beat_number BETWEEN 1 AND 14),
            ADD CONSTRAINT ${TABLE}_key_status CHECK (key_status IN ('none', 'queued', 'processing', 'done', 'failed')),
            ADD CONSTRAINT ${TABLE}_key_strength CHECK (key_strength IN ('low', 'medium', 'high'))`,
         { transaction });

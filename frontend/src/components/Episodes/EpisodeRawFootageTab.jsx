@@ -5,13 +5,14 @@
  * screen gets a cut-out with the green removed, made on the server in the
  * background (on by default for Lala); the original is always kept. Each
  * clip plays as the original or the cut-out, can redo the green removal at
- * another strength, move to another lane, or be deleted.
+ * another strength, be linked to a scene (Production plays it there), move
+ * to another lane, or be deleted.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Upload, Film, Trash2, Play, WandSparkles, X, Loader, CircleCheck, CircleAlert, Clock, RefreshCw, UserRound,
 } from 'lucide-react';
-import { rawClipsApi, PERFORMERS, STRENGTHS, clipLength, clipSize, anyKeying } from '../../lib/rawClipsApi';
+import { rawClipsApi, PERFORMERS, STRENGTHS, clipLength, clipSize, anyKeying, sceneChoices } from '../../lib/rawClipsApi';
 import './EpisodeRawFootageTab.css';
 
 const POLL_MS = 5000;
@@ -53,7 +54,7 @@ function ClipPlayer({ clip, onClose }) {
   );
 }
 
-function ClipCard({ clip, onPlay, onRemoveGreen, onMove, onDelete, busy }) {
+function ClipCard({ clip, scenes, onPlay, onRemoveGreen, onMove, onLink, onDelete, busy }) {
   const [strength, setStrength] = useState(clip.key_strength || 'medium');
   const st = STATUS[clip.key_status] || STATUS.none;
   const meta = [clipLength(clip.duration_seconds), clipSize(clip.file_size_bytes), clip.width && clip.height ? `${clip.width}×${clip.height}` : null].filter(Boolean);
@@ -85,6 +86,10 @@ function ClipCard({ clip, onPlay, onRemoveGreen, onMove, onDelete, busy }) {
               </button>
             </span>
           )}
+          <select className="erf-scene" value={clip.beat_number ?? ''} onChange={(e) => onLink(clip, e.target.value === '' ? null : Number(e.target.value))} aria-label="Which scene this clip is for" disabled={busy}>
+            <option value="">No scene yet</option>
+            {scenes.map((sc) => <option key={sc.value} value={sc.value}>{sc.label}</option>)}
+          </select>
           <select className="erf-move" value={clip.performer} onChange={(e) => onMove(clip, e.target.value)} aria-label="Who is in this clip" disabled={busy}>
             {PERFORMERS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
           </select>
@@ -97,7 +102,7 @@ function ClipCard({ clip, onPlay, onRemoveGreen, onMove, onDelete, busy }) {
   );
 }
 
-function Lane({ performer, clips, uploads, onFiles, busyId, ...handlers }) {
+function Lane({ performer, clips, uploads, onFiles, busyId, scenes, ...handlers }) {
   const inputRef = useRef(null);
   const [green, setGreen] = useState(performer.greenByDefault);
   const [guestName, setGuestName] = useState('');
@@ -148,7 +153,7 @@ function Lane({ performer, clips, uploads, onFiles, busyId, ...handlers }) {
       )}
       {clips.length === 0 && uploads.length === 0 ? <p className="erf-note">No {performer.label} clips yet.</p> : (
         <ul className="erf-clips">
-          {clips.map((c) => <ClipCard key={c.id} clip={c} busy={busyId === c.id} {...handlers} />)}
+          {clips.map((c) => <ClipCard key={c.id} clip={c} scenes={scenes} busy={busyId === c.id} {...handlers} />)}
         </ul>
       )}
     </section>
@@ -163,6 +168,7 @@ export default function EpisodeRawFootageTab({ episode }) {
   const [error, setError] = useState(null);
   const [playing, setPlaying] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [beats, setBeats] = useState([]);
 
   const load = useCallback(async () => {
     if (!episodeId) return;
@@ -178,6 +184,17 @@ export default function EpisodeRawFootageTab({ episode }) {
   }, [episodeId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // The scene names for the Scene picker; without them it offers Beats 1-14.
+  useEffect(() => {
+    if (!episodeId) return undefined;
+    let live = true;
+    rawClipsApi.beats(episodeId)
+      .then((b) => { if (live) setBeats(b); })
+      .catch((err) => console.error('[RawFootage] could not load the scenes:', err));
+    return () => { live = false; };
+  }, [episodeId]);
+  const scenes = sceneChoices(beats);
 
   // While a clip waits on green removal, check back every few seconds.
   useEffect(() => {
@@ -222,6 +239,7 @@ export default function EpisodeRawFootageTab({ episode }) {
     onPlay: setPlaying,
     onRemoveGreen: (clip, strength) => act(clip, () => rawClipsApi.removeGreen(episodeId, clip.id, strength), 'Could not start removing the green.'),
     onMove: (clip, performer) => act(clip, () => rawClipsApi.update(episodeId, clip.id, { performer }), 'Could not move the clip.'),
+    onLink: (clip, beatNumber) => act(clip, () => rawClipsApi.update(episodeId, clip.id, { beat_number: beatNumber }), 'Could not link the clip to the scene.'),
     onDelete: async (clip) => {
       if (!window.confirm(`Delete "${clip.label || 'this clip'}" from the episode? The file stays in storage.`)) return;
       setBusyId(clip.id);
@@ -255,7 +273,7 @@ export default function EpisodeRawFootageTab({ episode }) {
       {loading ? <p className="erf-note">Loading clips…</p> : (
         <div className="erf-lanes">
           {PERFORMERS.map((p) => (
-            <Lane key={p.key} performer={p} busyId={busyId}
+            <Lane key={p.key} performer={p} busyId={busyId} scenes={scenes}
               clips={clips.filter((c) => c.performer === p.key)}
               uploads={uploads.filter((u) => u.performer === p.key)}
               onFiles={onFiles} {...handlers} />
