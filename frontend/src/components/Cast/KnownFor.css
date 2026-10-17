@@ -1,0 +1,14 @@
+/* Known for on The Pulse (components/Cast/KnownFor). */
+.kf { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--lala-gold-soft, rgba(184, 150, 46, 0.25)); }
+.kf-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.kf-label { font-family: 'DM Mono', monospace; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); }
+.kf-value { font-family: 'Lora', serif; font-size: 16px; font-weight: 600; color: var(--lala-ink, #2C2C2C); }
+.kf-job { font-style: italic; }
+.kf-pick { display: flex; flex-direction: column; gap: 8px; }
+.kf-select { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.kf-select select { min-height: 40px; max-width: 100%; }
+.kf-suggestion { padding: 8px 12px; border-radius: 8px; background: var(--lala-parchment, #FAF7F0); font-size: 13px; line-height: 1.5; }
+.kf-suggestion p { margin: 0; }
+.kf-tension { margin-top: 4px !important; color: var(--lala-gold, #B8962E); }
+.kf-select textarea { font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 6px; border: 1px solid rgba(184, 150, 46, 0.4); max-width: 100%; }
+.kf > .kf-tension { margin: 0; font-size: 13px; line-height: 1.5; color: var(--lala-gold, #B8962E); }
