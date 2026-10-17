@@ -11,7 +11,8 @@
  * facts, type, inner life, mask, what is behind it, people, events, latest
  * posts) and asks the hard questions a fact-checker would: money against
  * what they own, their status against their posting, their type against
- * what they do, one section against another. It then answers each one
+ * what they do, their posts against what they are known for on The Pulse
+ * (their content type; 2026-10-17), one section against another. It then answers each one
  * from the file alone, and says whether the file answers it, has a gap
  * (nothing written decides it) or contradicts itself. A gap between the
  * mask and what is behind it is the character lying, never a failure.
@@ -27,7 +28,7 @@
 
 const MODELS = ['claude-sonnet-4-6'];
 const VERDICTS = ['answers', 'gap', 'contradiction'];
-const ABOUT = ['money', 'status', 'possessions', 'type', 'relationships', 'events', 'posts', 'timeline', 'other'];
+const ABOUT = ['money', 'status', 'possessions', 'type', 'content', 'relationships', 'events', 'posts', 'timeline', 'other'];
 const MAX_QUESTIONS = 8;
 // The file must say this much before a test means anything.
 const MIN_FILE_CHARS = 400;
@@ -56,6 +57,7 @@ Ask up to ${MAX_QUESTIONS} of the hardest questions a skeptical reader could ask
 - money: can they afford what they own, wear and do on the income in their facts?
 - status: does their account status fit how and when they post?
 - type: does what they do and want follow from their typology seed?
+- content: do their latest posts fit what they are KNOWN FOR ON THE PULSE? A post outside that lane holds when the file gives it a reason (an event, a rebrand, the gap between their job and their content); with no reason it is a contradiction. Their job differing from their content is never one by itself.
 - one section against another: does the inner life, the relationships, the events and the posts tell one story?
 - what is not decided yet: does anything in the file quietly assume it?
 

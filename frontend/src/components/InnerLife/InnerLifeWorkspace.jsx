@@ -24,6 +24,7 @@ import {
   SECTIONS, DEEP_PROFILE, FORECLOSURE_CATEGORIES, draftOf, saveOf, filledCount, sectionProgress, summaryOf, applySuggestion,
   DIMENSION_KEYS, dimensionLabel, dimensionOf, dimensionText, searchDimensions, dimensionDraft, deepProfileWith, reviewRows,
 } from '../../lib/innerLifeSections';
+import StoryReach from './StoryReach';
 import './InnerLifeWorkspace.css';
 
 const updateCharacterApi = (id, payload) => apiClient.put(`${API_URL}/character-registry/characters/${id}`, payload);
@@ -379,6 +380,7 @@ export default function InnerLifeWorkspace({ character, gen, onSaved, typeCard =
       return { key: s.key, label: s.label, progress: `${started}/${total}` };
     }),
     { key: DEEP_PROFILE.key, label: DEEP_PROFILE.label, progress: `${DIMENSION_KEYS.filter((k) => dimensionText(dimensionOf(character.deep_profile, k))).length}/14` },
+    { key: 'reach', label: 'Where it goes', progress: null },
   ], [character, isAuthor]);
 
   const deepFilled = DIMENSION_KEYS.some((k) => dimensionText(dimensionOf(character.deep_profile, k)));
@@ -393,7 +395,7 @@ export default function InnerLifeWorkspace({ character, gen, onSaved, typeCard =
       <nav className="il-nav" aria-label="Inner life sections">
         {nav.map((n) => (
           <button key={n.key} type="button" className={`il-pill${sectionKey === n.key ? ' is-on' : ''}`} aria-pressed={sectionKey === n.key} onClick={() => pick(n.key)}>
-            {n.label}<span className="il-pill-count">{n.progress}</span>
+            {n.label}{n.progress && <span className="il-pill-count">{n.progress}</span>}
           </button>
         ))}
       </nav>
@@ -425,6 +427,14 @@ export default function InnerLifeWorkspace({ character, gen, onSaved, typeCard =
                 editing={editing} setEditing={setEditing} onSaved={onSaved} onPending={setPending} />
             ))}
           </div>
+        </section>
+      ) : sectionKey === 'reach' ? (
+        <section className="il-section" aria-labelledby="il-h-reach">
+          <header className="il-section-head">
+            <h3 id="il-h-reach" className="il-section-title">Where it goes</h3>
+            <p className="il-about">What each writer that turns them into posts, episodes and scenes actually reads of their inner life, with their words as it reads them. Nothing here is generated.</p>
+          </header>
+          <StoryReach character={character} isAuthor={isAuthor} />
         </section>
       ) : (
         <section className="il-section" aria-labelledby="il-h-deep">
