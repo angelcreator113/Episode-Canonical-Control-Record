@@ -26,14 +26,16 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
-  ArrowRight, BarChart3, Calendar, ClipboardCheck, Clock, Cpu, GitBranch, ImagePlus, Loader2, Mic,
-  Newspaper, Radio, RefreshCw, Sparkles, Trash2, TrendingUp, Upload,
+  ArrowRight, BarChart3, Calendar, ClipboardCheck, Clock, Cpu, GitBranch, Image as ImageIcon, ImagePlus, Loader2, Mic,
+  Newspaper, Plus, Radio, RefreshCw, Sparkles, Trash2, TrendingUp, Upload,
 } from 'lucide-react';
 import api from '../services/api';
 import AdminShowGate from '../components/Admin/AdminShowGate';
 import PulseCitiesCard from '../components/Admin/PulseCitiesCard';
 import PulseCharactersCard from '../components/Admin/PulseCharactersCard';
 import PulseFitsCard from '../components/Admin/PulseFitsCard';
+import { UploadsHead } from '../components/Admin/PulseImageSpot';
+import '../components/Admin/PulseUploads.css';
 import PulseReview from '../components/Admin/PulseReview';
 import { PulseStats, PulseAttention, PulseActivity } from '../components/Admin/PulseSummary';
 import { loadPulseSummary } from '../lib/pulseSummary';
@@ -146,38 +148,45 @@ export function CoverCard({ showId }) {
 
   const altDirty = cover && alt.trim() !== (cover.alt || '');
   return (
-    <section className="pulse-card" aria-labelledby="pulse-cover-heading" data-testid="pulse-cover">
-      <h3 id="pulse-cover-heading">Cover</h3>
-      <p className="pulse-hint">The wide image across the top of The Pulse. Without one, The Pulse shows its name.</p>
+    <section className="pulse-card pu-card" aria-labelledby="pulse-cover-heading" data-testid="pulse-cover">
+      <UploadsHead Icon={ImageIcon} id="pulse-cover-heading" title="Pulse cover"
+        hint="The wide image across the top of The Pulse. Without one, The Pulse shows its name.">
+        <button type="button" className="pu-add-btn" disabled={busy} onClick={() => fileRef.current?.click()}>
+          {cover ? <RefreshCw size={16} aria-hidden="true" /> : <Plus size={16} aria-hidden="true" />}{cover ? 'Replace cover' : 'Upload cover'}
+        </button>
+      </UploadsHead>
       <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={onFile} data-testid="pulse-cover-file" />
       {cover ? (
         <>
-          <img className="pulse-cover-preview" src={cover.url} alt={cover.alt || ''} />
-          <label className="pulse-field">
-            Alt text <span className="pulse-required">(required)</span>
-            <input
-              type="text"
-              value={alt}
-              maxLength={300}
-              placeholder="Describe the image for people who can't see it"
-              onChange={(e) => setAlt(e.target.value)}
-              data-testid="pulse-cover-alt"
-            />
-          </label>
-          {!cover.alt && <p className="pulse-warning" role="status">Add alt text: the cover has none yet.</p>}
-          <RevealPicker type="image" kind="cover" id={showId} label="the cover" imageUrl={cover.url} />
-          <div className="pulse-actions">
-            <button type="button" className="pulse-btn primary" disabled={busy || !altDirty || !alt.trim()} onClick={saveAlt}>Save alt text</button>
-            <button type="button" className="pulse-btn" disabled={busy} onClick={() => fileRef.current?.click()}>
-              <RefreshCw size={16} aria-hidden="true" /> Replace
-            </button>
-            <button type="button" className="pulse-btn danger" disabled={busy} onClick={remove}>
-              <Trash2 size={16} aria-hidden="true" /> Remove
-            </button>
+          <div className="pu-spot-frame pu-cover">
+            <img className="pulse-cover-preview" src={cover.url} alt={cover.alt || ''} />
+            <span className="pu-spot-tools">
+              <button type="button" className="pu-icon-btn is-danger" disabled={busy} aria-label="Remove the cover" title="Remove the cover" onClick={remove}>
+                <Trash2 size={16} aria-hidden="true" />
+              </button>
+            </span>
+          </div>
+          <div className="pu-cover-meta">
+            <label className="pulse-field">
+              <span>Alt text <span className="pulse-required">(required)</span></span>
+              <span className="pulse-inline">
+                <input
+                  type="text"
+                  value={alt}
+                  maxLength={300}
+                  placeholder="Describe the image for people who can't see it"
+                  onChange={(e) => setAlt(e.target.value)}
+                  data-testid="pulse-cover-alt"
+                />
+                <button type="button" className="pulse-btn primary" disabled={busy || !altDirty || !alt.trim()} onClick={saveAlt}>Save alt text</button>
+              </span>
+            </label>
+            {!cover.alt && <p className="pulse-warning" role="status">Add alt text: the cover has none yet.</p>}
+            <RevealPicker type="image" kind="cover" id={showId} label="the cover" imageUrl={cover.url} />
           </div>
         </>
       ) : (
-        <button type="button" className="pulse-add-spot" disabled={busy} onClick={() => fileRef.current?.click()} data-testid="pulse-cover-add">
+        <button type="button" className="pulse-add-spot pu-cover-add" disabled={busy} onClick={() => fileRef.current?.click()} data-testid="pulse-cover-add">
           {busy ? <Loader2 size={20} className="pulse-spin" aria-hidden="true" /> : <ImagePlus size={20} aria-hidden="true" />}
           + Add cover
         </button>
@@ -189,7 +198,7 @@ export function CoverCard({ showId }) {
 
 function PulseUploads({ showId }) {
   return (
-    <div className="pulse-uploads" data-testid="pulse-uploads">
+    <div className="pulse-uploads pu" data-testid="pulse-uploads">
       <CoverCard key={showId} showId={showId} />
       <PulseCitiesCard />
       <PulseCharactersCard />

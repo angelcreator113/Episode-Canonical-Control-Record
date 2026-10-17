@@ -2,13 +2,15 @@
  * Admin › The Pulse › Uploads › Lala's everyday fits (Task #2922): outfits
  * she wears outside episodes, one photo each with an optional caption, alt
  * text and the story date she wore it (/api/v1/pulse-fits). Newest story
- * date first. Episode fits stay on the episode's Style Page.
- * Styles: styles/AdminPanel.css.
+ * date first. Episode fits stay on the episode's Style Page. Square tiles
+ * with Edit and Remove on the photo, "+ Add fit" last (Evoni's Uploads
+ * mock, 2026-10-17). Styles: styles/AdminPanel.css, PulseUploads.css (pu-*).
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { ImagePlus, Loader2, Pencil, Trash2 } from 'lucide-react';
+import { Loader2, Pencil, Plus, Shirt, Trash2 } from 'lucide-react';
 import api from '../../services/api';
 import RevealPicker from './RevealPicker';
+import { UploadsHead } from './PulseImageSpot';
 
 const errorText = (err) => err?.response?.data?.error || err?.message || 'Something went wrong.';
 
@@ -84,8 +86,16 @@ function FitTile({ fit, onSaved, onRemoved }) {
   };
 
   return (
-    <li className="pulse-fit" data-testid={`pulse-fit-${fit.id}`}>
-      <img src={fit.image_url} alt={fit.image_alt || ''} />
+    <li className="pulse-fit pu-fit" data-testid={`pulse-fit-${fit.id}`}>
+      <div className="pu-spot-frame pu-fit-frame">
+        <img src={fit.image_url} alt={fit.image_alt || ''} />
+        {!editing && (
+          <span className="pu-spot-tools">
+            <button type="button" className="pu-icon-btn" disabled={busy} aria-label="Edit the fit" title="Edit" onClick={() => setEditing(true)}><Pencil size={16} aria-hidden="true" /></button>
+            <button type="button" className="pu-icon-btn is-danger" disabled={busy} aria-label="Remove the fit" title="Remove" onClick={remove}><Trash2 size={16} aria-hidden="true" /></button>
+          </span>
+        )}
+      </div>
       {editing ? (
         <>
           <FitFields value={fields} onChange={setFields} idPrefix={`fit-${fit.id}`} />
@@ -99,10 +109,6 @@ function FitTile({ fit, onSaved, onRemoved }) {
           <p className="pulse-fit-caption">{fit.caption || <span className="pulse-hint">No caption</span>}</p>
           <p className="pulse-hint">{fit.story_date ? `Worn ${fit.story_date}` : 'No story date'}</p>
           <RevealPicker type="image" kind="fit" id={fit.id} label={fit.caption ? `the fit “${fit.caption}”` : 'this fit'} imageUrl={fit.image_url} />
-          <div className="pulse-actions">
-            <button type="button" className="pulse-btn" disabled={busy} onClick={() => setEditing(true)}><Pencil size={16} aria-hidden="true" /> Edit</button>
-            <button type="button" className="pulse-btn danger" disabled={busy} onClick={remove}><Trash2 size={16} aria-hidden="true" /> Remove</button>
-          </div>
         </>
       )}
       {note && <p className="pulse-error" role="alert">{note}</p>}
@@ -162,15 +168,22 @@ export default function PulseFitsCard({ showId }) {
   };
 
   return (
-    <section className="pulse-card" aria-labelledby="pulse-fits-heading" data-testid="pulse-fits">
-      <h3 id="pulse-fits-heading">Lala's everyday fits</h3>
-      <p className="pulse-hint">Outfits she wears outside episodes. Episode fits come from the episode's Style Page.</p>
+    <section className="pulse-card pu-card" aria-labelledby="pulse-fits-heading" data-testid="pulse-fits">
+      <UploadsHead Icon={Shirt} id="pulse-fits-heading" title="Lala's everyday fits"
+        hint="Outfits she wears outside episodes. Episode fits come from the episode's Style Page.">
+        <button type="button" className="pu-add-btn" disabled={!fits || !!pending} onClick={() => fileRef.current?.click()}><Plus size={16} aria-hidden="true" />Add a fit</button>
+      </UploadsHead>
       {error && <p className="pulse-error" role="alert">{error}</p>}
       {!fits && !error && <p className="pulse-hint"><Loader2 size={14} className="pulse-spin" aria-hidden="true" /> Loading the fits…</p>}
       <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={pick} data-testid="pulse-fit-file" />
       {fits && (
-        <ul className="pulse-fits">
-          <li className="pulse-fit">
+        <ul className="pulse-fits pu-fits">
+          {fits.map((fit) => (
+            <FitTile key={fit.id} fit={fit}
+              onSaved={(next) => setFits((list) => list.map((f) => (f.id === next.id ? next : f)).sort(byStoryDate))}
+              onRemoved={(id) => setFits((list) => list.filter((f) => f.id !== id))} />
+          ))}
+          <li className="pulse-fit pu-fit">
             {pending ? (
               <div className="pulse-fit-new" data-testid="pulse-fit-new">
                 {pending.preview && <img src={pending.preview} alt="" />}
@@ -184,16 +197,11 @@ export default function PulseFitsCard({ showId }) {
                 {note && <p className="pulse-error" role="alert">{note}</p>}
               </div>
             ) : (
-              <button type="button" className="pulse-add-spot tall" onClick={() => fileRef.current?.click()} data-testid="pulse-fit-add">
-                <ImagePlus size={20} aria-hidden="true" /> + Add fit
+              <button type="button" className="pulse-add-spot tall pu-fit-add" onClick={() => fileRef.current?.click()} data-testid="pulse-fit-add">
+                <Plus size={22} aria-hidden="true" /> + Add fit
               </button>
             )}
           </li>
-          {fits.map((fit) => (
-            <FitTile key={fit.id} fit={fit}
-              onSaved={(next) => setFits((list) => list.map((f) => (f.id === next.id ? next : f)).sort(byStoryDate))}
-              onRemoved={(id) => setFits((list) => list.filter((f) => f.id !== id))} />
-          ))}
         </ul>
       )}
     </section>

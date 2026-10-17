@@ -3,12 +3,16 @@
  * profile photo (portrait_url) and cover photo (cover_url), saved on the
  * character record (RegistryCharacter; The Pulse spec §2 rule 3). The cast
  * is every registry's characters, as the Character Registry lists them.
- * Styles: styles/AdminPanel.css.
+ * Each is a row (Evoni's Uploads mock, 2026-10-17): the profile photo, the
+ * name, role and when Lala meets them, and the cover; new characters are
+ * made in the Character Registry.
+ * Styles: styles/AdminPanel.css, PulseUploads.css (pu-*).
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Loader2, Plus, Users } from 'lucide-react';
 import api from '../../services/api';
-import PulseImageSpot from './PulseImageSpot';
+import PulseImageSpot, { UploadsHead } from './PulseImageSpot';
 import { useReveals } from './PulseRevealContext';
 
 const errorText = (err) => err?.response?.data?.error || err?.message || 'Something went wrong.';
@@ -118,16 +122,21 @@ function CharacterRow({ character, onChange, met, onMetChanged }) {
     return kind === 'portrait' ? { portrait_url: null } : { cover_url: null };
   });
 
+  const role = character.role_label || (character.role_type ? character.role_type.replace(/_/g, ' ') : null);
   return (
-    <article className="pulse-character" data-testid={`pulse-character-${character.id}`}>
-      <h4>{character.icon ? `${character.icon} ` : ''}{name}</h4>
-      <div className="pulse-character-spots">
-        <PulseImageSpot label="Profile photo" url={character.portrait_url} alt={name} round busy={busy}
+    <article className="pulse-character pu-character" data-testid={`pulse-character-${character.id}`}>
+      <div className="pu-character-portrait">
+        <PulseImageSpot label="Profile photo" url={character.portrait_url} alt={name} round overlay busy={busy}
           onFile={upload('portrait')} onRemove={remove('portrait')} testId={`char-${character.id}-portrait`} />
-        <PulseImageSpot label="Cover" url={character.cover_url} alt="" busy={busy}
+      </div>
+      <div className="pu-character-text">
+        <h4>{character.icon ? `${character.icon} ` : ''}{name}{role && <span className="pu-role">{role}</span>}</h4>
+        <MeetsLala met={met} name={name} onChanged={onMetChanged} />
+      </div>
+      <div className="pu-character-cover">
+        <PulseImageSpot label="Cover" url={character.cover_url} alt="" overlay busy={busy}
           onFile={upload('cover')} onRemove={remove('cover')} testId={`char-${character.id}-cover`} />
       </div>
-      <MeetsLala met={met} name={name} onChanged={onMetChanged} />
       {busy && <p className="pulse-hint"><Loader2 size={14} className="pulse-spin" aria-hidden="true" /> Saving…</p>}
       {note && <p className="pulse-error" role="alert">{note}</p>}
     </article>
@@ -171,20 +180,22 @@ export default function PulseCharactersCard() {
   const replace = (next) => setCharacters((list) => list.map((c) => (c.id === next.id ? next : c)));
 
   return (
-    <section className="pulse-card" aria-labelledby="pulse-characters-heading" data-testid="pulse-characters">
-      <h3 id="pulse-characters-heading">Characters</h3>
-      <p className="pulse-hint">Saved on each character. A character without a profile photo shows their initial.</p>
+    <section className="pulse-card pu-card" aria-labelledby="pulse-characters-heading" data-testid="pulse-characters">
+      <UploadsHead Icon={Users} id="pulse-characters-heading" title="Characters"
+        hint="Each character's profile photo and cover, saved on the character. Without a profile photo, they show their initial.">
+        <Link className="pu-add-btn" to="/character-registry"><Plus size={16} aria-hidden="true" />Add in the Registry</Link>
+      </UploadsHead>
       {error && <p className="pulse-error" role="alert">{error}</p>}
       {!characters && !error && <p className="pulse-hint"><Loader2 size={14} className="pulse-spin" aria-hidden="true" /> Loading the cast…</p>}
       {characters && (
         <>
-          <label className="pulse-field">
+          <label className="pulse-field pu-search">
             Search
             <input type="search" value={query} placeholder="A character's name" onChange={(e) => setQuery(e.target.value)} />
           </label>
           {characters.length === 0 && <p className="pulse-hint">No characters yet. They are made in the Character Registry.</p>}
           {characters.length > 0 && shown.length === 0 && <p className="pulse-hint">No character matches “{query.trim()}”.</p>}
-          <div className="pulse-characters">
+          <div className="pulse-characters pu-characters">
             {shown.map((c) => <CharacterRow key={c.id} character={c} onChange={replace} met={met ? (met.get(c.id) || null) : undefined} onMetChanged={loadMet} />)}
           </div>
         </>

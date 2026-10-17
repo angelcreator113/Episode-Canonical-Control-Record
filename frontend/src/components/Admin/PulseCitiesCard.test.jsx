@@ -22,10 +22,12 @@ beforeEach(() => {
 const savedCity = (key) => saved.find((c) => c.key === key);
 
 describe('Uploads › Dream Cities', () => {
-  test('one card per city, empty spots as "+ Add"', async () => {
+  test('one row per city; Edit opens it, empty spots as "+ Add"', async () => {
     render(<PulseCitiesCard />);
     for (const city of DREAM_CITIES) expect(await screen.findByTestId(`pulse-city-${city.key}`)).toBeTruthy();
     const dazzle = within(screen.getByTestId('pulse-city-dazzle_district'));
+    expect(dazzle.queryByTestId('city-dazzle_district-image-add')).toBeNull();
+    fireEvent.click(dazzle.getByRole('button', { name: 'Edit' }));
     expect(dazzle.getByTestId('city-dazzle_district-image-add').textContent).toMatch(/\+ Add image/);
     expect(dazzle.getByTestId('city-dazzle_district-bubble-add').textContent).toMatch(/\+ Add story bubble/);
     expect(dazzle.getByText("(the spec's, not saved yet)", { exact: false })).toBeTruthy();
@@ -34,7 +36,7 @@ describe('Uploads › Dream Cities', () => {
   test('an image upload saves its URL on that city only', async () => {
     vi.mocked(api.post).mockResolvedValue({ data: { url: 'https://cdn/echo.jpg' } });
     render(<PulseCitiesCard />);
-    await screen.findByTestId('pulse-city-echo_park');
+    fireEvent.click(within(await screen.findByTestId('pulse-city-echo_park')).getByRole('button', { name: 'Edit' }));
     const file = new File(['x'], 'echo.png', { type: 'image/png' });
     fireEvent.change(screen.getByTestId('city-echo_park-image-file'), { target: { files: [file] } });
     await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
@@ -48,6 +50,7 @@ describe('Uploads › Dream Cities', () => {
   test('colours: add one, save, and `color` follows the first', async () => {
     render(<PulseCitiesCard />);
     const card = within(await screen.findByTestId('pulse-city-ascent_tower'));
+    fireEvent.click(card.getByRole('button', { name: 'Edit' }));
     fireEvent.change(card.getByLabelText('New colour'), { target: { value: '0f1e2d' } });
     fireEvent.click(card.getByRole('button', { name: /Add$/ }));
     fireEvent.change(card.getByLabelText('Colour 1'), { target: { value: '#C0C7D0' } });
@@ -59,9 +62,19 @@ describe('Uploads › Dream Cities', () => {
   test('a bad hex is refused before saving', async () => {
     render(<PulseCitiesCard />);
     const card = within(await screen.findByTestId('pulse-city-radiance_row'));
+    fireEvent.click(card.getByRole('button', { name: 'Edit' }));
     fireEvent.change(card.getByLabelText('New colour'), { target: { value: 'pink' } });
     fireEvent.click(card.getByRole('button', { name: /Add$/ }));
     expect(card.getByRole('alert').textContent).toMatch(/six hex digits/);
     expect(api.put).not.toHaveBeenCalled();
   });
+});
+
+test('isLight: ink on light colours, white on dark ones', async () => {
+  const { isLight } = await import('./PulseCitiesCard');
+  expect(isLight('#F2EDE4')).toBe(true);
+  expect(isLight('#AEB6BF')).toBe(true);
+  expect(isLight('#2A8C8C')).toBe(false);
+  expect(isLight('#7B4FC9')).toBe(false);
+  expect(isLight('not a colour')).toBe(true);
 });

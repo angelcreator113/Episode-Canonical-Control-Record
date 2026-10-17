@@ -8,6 +8,7 @@
 import React from 'react';
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import api from '../../services/api';
 import RevealPicker from './RevealPicker';
 import { PulseRevealProvider } from './PulseRevealContext';
@@ -36,7 +37,7 @@ beforeEach(() => {
   vi.mocked(api.delete).mockResolvedValue({ data: { success: true } });
 });
 
-const inProvider = (ui) => render(<PulseRevealProvider showId={SHOW}>{ui}</PulseRevealProvider>);
+const inProvider = (ui) => render(<MemoryRouter><PulseRevealProvider showId={SHOW}>{ui}</PulseRevealProvider></MemoryRouter>);
 
 describe('RevealPicker', () => {
   test('outside the provider it renders nothing', () => {
@@ -130,7 +131,7 @@ describe('Uploads › Characters: when Lala meets them', () => {
   });
 
   test('outside Admin › The Pulse (no provider) the card works without it', async () => {
-    render(<PulseCharactersCard />);
+    render(<MemoryRouter><PulseCharactersCard /></MemoryRouter>);
     await screen.findByTestId('pulse-character-c1');
     expect(screen.queryByTestId('pulse-met')).toBeNull();
     expect(vi.mocked(api.get).mock.calls.some(([u]) => u.includes('/pulse-reveals/met'))).toBe(false);
