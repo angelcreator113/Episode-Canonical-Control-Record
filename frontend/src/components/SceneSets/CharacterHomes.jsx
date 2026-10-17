@@ -14,7 +14,9 @@ import { Plus, X } from 'lucide-react';
 import api from '../../services/api';
 import './CharacterHomes.css';
 
-const ROLE_LABELS = { home: 'home', closet: 'closet', other: 'place' };
+const ROLE_LABELS = { home: 'home', closet: 'closet', work: 'place of work', other: 'place' };
+// The lead's home and closet are the show's scene defaults; a place of work or another place is not.
+const isDefaultRole = (role) => role === 'home' || role === 'closet';
 
 // One read per show for every card on the page. Any change (here, on
 // another card, or "Make default" on the page) clears the show's entry and
@@ -121,7 +123,7 @@ export default function CharacterHomes({ set, onToast, onDefaultsChanged }) {
       });
       const character = data.characters.find((c) => String(c.id) === String(form.character_id));
       await after(res.data?.data, `${set.name} is ${character?.name || 'the character'}'s ${ROLE_LABELS[form.role]}`,
-        Boolean(character?.is_lead && form.role !== 'other'));
+        Boolean(character?.is_lead && isDefaultRole(form.role)));
       setOpen(false);
       setForm({ character_id: '', role: 'home', label: '' });
     } catch (err) {
@@ -139,7 +141,7 @@ export default function CharacterHomes({ set, onToast, onDefaultsChanged }) {
         character_id: character.id, scene_set_id: set.id, role: place.role,
       });
       await after(res.data?.data, `${set.name} is no longer ${character.name}'s ${ROLE_LABELS[place.role]}`,
-        Boolean(character.is_lead && place.role !== 'other'));
+        Boolean(character.is_lead && isDefaultRole(place.role)));
     } catch (err) {
       console.error('[CharacterHomes] unlink failed:', err);
       onToast?.(err.response?.data?.error || 'Could not unlink the character', 'error');
@@ -201,6 +203,7 @@ export default function CharacterHomes({ set, onToast, onDefaultsChanged }) {
               <select aria-label="Role" value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}>
                 <option value="home">Home</option>
                 <option value="closet">Closet</option>
+                <option value="work">Place of work</option>
                 <option value="other">Other place</option>
               </select>
               {form.role === 'other' && (

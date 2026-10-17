@@ -1,0 +1,25 @@
+/* A character's Places tab (2026-10-17): pink, one column at 375px. */
+.cpl { display: grid; gap: 18px; }
+.cpl-role { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--lala-pink-light); border-radius: 16px; background: var(--lala-pink-soft); }
+.cpl-role-title { margin: 0; display: inline-flex; align-items: center; gap: 6px; font-family: 'Lora', serif; font-size: 16px; color: var(--lala-pink-dark); }
+.cpl-cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.cpl-card { display: grid; background: var(--surface-card); border: 1px solid var(--lala-pink-light); border-radius: 12px; overflow: hidden; }
+.cpl-card img, .cpl-card-empty { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+.cpl-card-empty { display: grid; place-items: center; font-size: 12px; color: var(--text-secondary); background: var(--lala-pink-soft); }
+.cpl-card-text { display: grid; gap: 4px; padding: 8px 10px; font-size: 13px; color: var(--text-primary); overflow-wrap: anywhere; }
+.cpl-card-actions { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.cpl-card-actions a { color: var(--lala-pink-dark); font-weight: 600; }
+.cpl-badge { justify-self: start; padding: 1px 8px; border-radius: 999px; font-size: 11px; background: var(--primary-subtle); color: var(--primary-text); }
+.cpl-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.cpl-input { min-height: 40px; padding: 6px 12px; border-radius: 12px; border: 1px solid var(--lala-pink-light); font: inherit; font-size: 14px; flex: 1 1 180px; min-width: 0; background: var(--surface-card); }
+.cpl-btn { min-height: 40px; display: inline-flex; align-items: center; gap: 6px; padding: 6px 16px; border-radius: 999px; border: none; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; background: var(--lala-pink-dark); color: var(--text-inverse); }
+.cpl-btn.is-soft { background: var(--surface-card); color: var(--lala-pink-dark); border: 1px solid var(--lala-pink-light); }
+.cpl-btn.is-small { min-height: 32px; padding: 4px 12px; font-size: 12px; }
+.cpl-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.cpl-icon-btn { margin-left: auto; display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--lala-pink-light); background: var(--surface-card); color: var(--lala-pink-dark); cursor: pointer; }
+.cpl-event { display: grid; gap: 8px; padding: 12px; border-radius: 12px; background: var(--surface-card); border: 1px solid var(--lala-pink-light); }
+.cpl-event-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.cpl-event-name { font-weight: 700; color: var(--lala-pink-dark); }
+.cpl-event-head .cpl-btn { margin-left: auto; }
+.cpl-note { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.cpl-note.is-error { color: var(--danger-text); }

@@ -568,6 +568,33 @@ router.post('/characters/:id/places/share', requireAuth, async (req, res) => {
   }
 });
 
+// The events a character hosts, chosen on their Places tab (Evoni,
+// 2026-10-17); characterHostedEvents holds the rules.
+const hostedError = (res, err, label) => {
+  const { HostedEventError } = require('../services/characterHostedEvents');
+  if (err instanceof HostedEventError) return res.status(err.status).json({ success: false, code: err.code, error: err.message });
+  console.error(`[cast] ${label} error:`, err);
+  return res.status(500).json({ success: false, error: err.message });
+};
+
+router.post('/characters/:id/hosted-events', requireAuth, async (req, res) => {
+  try {
+    const { hostEvent } = require('../services/characterHostedEvents');
+    return res.json({ success: true, data: await hostEvent(getModels().sequelize, { characterId: req.params.id, eventId: req.body?.event_id }) });
+  } catch (err) {
+    return hostedError(res, err, 'POST characters/:id/hosted-events');
+  }
+});
+
+router.delete('/characters/:id/hosted-events/:eventId', requireAuth, async (req, res) => {
+  try {
+    const { unhostEvent } = require('../services/characterHostedEvents');
+    return res.json({ success: true, data: await unhostEvent(getModels().sequelize, { characterId: req.params.id, eventId: req.params.eventId }) });
+  } catch (err) {
+    return hostedError(res, err, 'DELETE characters/:id/hosted-events/:eventId');
+  }
+});
+
 module.exports = router;
 module.exports.episodeUseCounts = episodeUseCounts;
 module.exports.cascadeRows = cascadeRows;

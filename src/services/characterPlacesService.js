@@ -23,7 +23,9 @@ const { readSceneDefaults, saveSceneDefaults } = require('./episodeLocationsServ
 
 const { validateUUID } = require('../middleware/requestValidation');
 
-const ROLES = Object.freeze(['home', 'closet', 'other']);
+// 'work', their place of work (Evoni, 2026-10-17), may be a venue's set
+// that events are held at too; a character may have more than one.
+const ROLES = Object.freeze(['home', 'closet', 'work', 'other']);
 const SINGLE = new Set(['home', 'closet']);
 const LEAD_DEFAULT_KEY = Object.freeze({ home: 'home_set_id', closet: 'closet_set_id' });
 const LABEL_MAX = 80;

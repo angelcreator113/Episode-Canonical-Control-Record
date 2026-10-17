@@ -15,8 +15,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
   Sparkles, ArrowRight, LayoutDashboard, Heart, Mic, Users, Globe2, ImagePlus, Trash2,
-  BarChart3, CalendarDays, Download, Link2,
+  BarChart3, CalendarDays, Download, Link2, MapPin,
 } from 'lucide-react';
+import CharacterPlacesTab from '../components/CharacterPlaces/CharacterPlacesTab';
 import { API_URL } from '../config/api';
 import CharacterDepthPanel from '../components/CharacterDepthPanel';
 import { platformLabel, atHandle, followersOf } from './feed/feedConstants';
@@ -116,6 +117,8 @@ const TABS = [
   { id: 'voice',       label: 'Voice & feed', icon: Mic },
   { id: 'connections', label: 'Connections',  icon: Users },
   { id: 'world',       label: 'In the world', icon: Globe2 },
+  // Evoni, 2026-10-17: their home, closet and place of work, and the events they host.
+  { id: 'places',      label: 'Places',       icon: MapPin },
 ];
 
 const DIMENSION_KEYS = [
@@ -432,7 +435,7 @@ function TheirNames({ character, feedProfile, onSaved, onFeedSaved, gen }) {
   );
 }
 
-const PLACE_LABEL = { home: 'Home', closet: 'Closet' };
+const PLACE_LABEL = { home: 'Home', closet: 'Closet', work: 'Place of work' };
 const PULSE_REVIEW = '/admin?tab=pulse&sub=review';
 
 /**
@@ -2173,6 +2176,7 @@ export default function CharacterProfilePage() {
         )}
         {activeTab === 'connections' && <div className="ch-card"><TabConnections character={character} relationships={relationships} entanglements={entanglements} /></div>}
         {activeTab === 'world' && <div className="ch-card"><TabWorld character={character} onSaved={onSaved} gen={gen} /></div>}
+        {activeTab === 'places' && <div className="ch-card"><CharacterPlacesTab character={character} /></div>}
       </div>
     </div>
   );
