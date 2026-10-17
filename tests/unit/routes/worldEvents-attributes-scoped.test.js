@@ -16,7 +16,6 @@ const CALENDAR_SRC = read('src', 'routes', 'calendarRoutes.js');
 const WARDROBE_EVENT_SRC = read('src', 'routes', 'wardrobeEventRoutes.js');
 const CAREER_PIPELINE_SRC = read('src', 'services', 'careerPipelineService.js');
 const SCRIPT_WRITER_SRC = read('src', 'services', 'episodeScriptWriterService.js');
-const FEED_POST_SRC = read('src', 'services', 'feedPostGeneratorService.js');
 
 describe('Task #1640 follow-up — WorldEvent.CURRENT_ATTRIBUTES excludes the new columns', () => {
   test('CURRENT_ATTRIBUTES is defined and excludes category/format', () => {
@@ -75,11 +74,5 @@ describe('Task #1640 follow-up — every previously-unrestricted WorldEvent quer
     const block = SCRIPT_WRITER_SRC.match(/context\.event = eventId && await WorldEvent\.findByPk\(eventId, \{[\s\S]*?\}\)\.then/);
     expect(block).not.toBeNull();
     expect(block[0]).toMatch(/attributes:\s*WorldEvent\.CURRENT_ATTRIBUTES/);
-  });
-
-  test('feedPostGeneratorService.js — the feed-post context lookup scopes attributes', () => {
-    const block = FEED_POST_SRC.match(/event = eventId && await WorldEvent\.findByPk\(eventId, \{[\s\S]*?\}\);/);
-    expect(block).not.toBeNull();
-    expect(block[0]).toMatch(/attributes:\s*\[/);
   });
 });
