@@ -116,10 +116,13 @@ const PROMPT_EXAMPLES = {
   },
 };
 
-function buildGenerationPrompt(handle, platform, vibe_sentence, characterContext, advancedContext, layer = null) {
+function buildGenerationPrompt(handle, requestedPlatform, vibe_sentence, characterContext, advancedContext, layer = null) {
   // The protagonist of this feed: the caller's character, else Lala on The
   // Pulse and JustAWoman on her real-world feed (utils/protagonistContexts).
-  const world = (layer || characterContext?.feed_layer) === 'lalaverse' || platform === PULSE ? 'lalaverse' : 'real_world';
+  const world = (layer || characterContext?.feed_layer) === 'lalaverse' || requestedPlatform === PULSE ? 'lalaverse' : 'real_world';
+  // A LalaVerse creator is on The Pulse whatever platform was asked for
+  // (Evoni, 2026-10-17: "lalaverse social media is The Pulse").
+  const platform = world === 'lalaverse' ? PULSE : requestedPlatform;
   const ctx = require('../utils/protagonistContexts').protagonistFor(world, characterContext);
   const ex = PROMPT_EXAMPLES[world];
 
@@ -1847,7 +1850,8 @@ router.post('/:id/regenerate', requireAuth, aiRateLimiter, guardJustAWomanRecord
     if (!profile) return res.status(404).json({ error: 'Not found' });
 
     const handle = req.body.handle || profile.handle;
-    const platform = req.body.platform || profile.platform;
+    // A LalaVerse profile is on The Pulse, whatever the request says.
+    const platform = isPulseLayer(profile.feed_layer) ? PULSE : (req.body.platform || profile.platform);
     const vibe_sentence = req.body.vibe_sentence || profile.vibe_sentence;
     const character_context = req.body.character_context || null;
     const advanced_context = req.body.advanced_context || null;
@@ -2872,7 +2876,7 @@ router.post('/templates/:templateId/apply', requireAuth, async (req, res) => {
     template_applied: true,
     template_name: template.name,
     prefill: {
-      platform: td.platform || 'instagram',
+      platform: isPulseLayer(td.feed_layer) ? PULSE : (td.platform || 'instagram'),
       feed_layer: td.feed_layer || 'real_world',
       city: td.city || '',
       lala_relationship: td.lala_relationship || 'mutual_unaware',
