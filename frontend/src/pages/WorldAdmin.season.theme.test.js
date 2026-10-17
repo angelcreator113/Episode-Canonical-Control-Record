@@ -75,7 +75,8 @@ describe('Season Plan theme', () => {
     expect(css).toMatch(/\.wa-arc-primary \{[^}]*background: var\(--lala-lavender\); color: var\(--text-inverse\);/);
     expect(season).toMatch(/stat\('Income', coins\(money\.season\.income\), 'var\(--success-text\)'\)/);
     expect(season).toMatch(/stroke="var\(--lala-gold\)"/);
-    expect(season.match(/\.\.\.S\.primaryBtn, background: 'var\(--warning-text\)'/g)).toHaveLength(2);
+    // One advance-with-debt confirm, at the roadmap's phase boundary (the Phase Controls copy went, 2026-10-17).
+    expect(season.match(/\.\.\.S\.primaryBtn, background: 'var\(--warning-text\)'/g)).toHaveLength(1);
     expect(season).not.toMatch(/color: 'var\(--lala-gold\)'/);
   });
 
@@ -121,5 +122,16 @@ describe('Season Plan theme', () => {
     expect(contrast('#ffffff', '#f59e0b')).toBeLessThan(4.5);
     expect(contrast('#ffffff', '#3b82f6')).toBeLessThan(4.5);
     expect(contrast('#ffffff', '#8b5cf6')).toBeLessThan(4.5);
+  });
+});
+
+describe('Season Plan, tidied (Evoni, 2026-10-17)', () => {
+  test('one advance control (at the phase boundary), and the phases, history and Career Goals folded', () => {
+    expect(season).not.toMatch(/Phase Controls<\/h3>/);
+    expect(season).not.toMatch(/Advance Warning/);
+    expect(jsx).toMatch(/data-testid="season-phases-fold"/);
+    expect(jsx).toMatch(/data-testid="career-goals-fold"/);
+    expect(jsx).toMatch(/\{goals\.length === 0 && <button[^>]*>/);
+    expect(css).toMatch(/\.wa-season-fold-summary \{/);
   });
 });
