@@ -60,7 +60,7 @@ describe('the character page', () => {
     expect(screen.getByRole('button', { name: '↑ Deepen to Alive' })).toBeTruthy();
     expect(screen.getByRole('link', { name: '← The cast' }).getAttribute('href')).toBe('/character-registry');
     expect(screen.getAllByRole('button', { pressed: undefined }).filter((b) => b.className.includes('ch-tab')).map((b) => b.textContent))
-      .toEqual(['Overview', 'Inner life', 'Voice & feed', 'Connections', 'In the world', 'Places']);
+      .toEqual(['Overview', 'Inner life', 'Appearance', 'Voice & feed', 'Connections', 'In the world', 'Places']);
   });
 
   test('Overview: where they show up, their voice, and with Lala', async () => {
