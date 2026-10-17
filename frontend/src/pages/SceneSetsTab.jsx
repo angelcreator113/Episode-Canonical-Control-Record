@@ -7,7 +7,8 @@ import { fetchAllPages } from '../lib/fetchAllPages';
 import { isAppPath } from '../utils/sceneSets';
 import EventLookImage from '../components/EventPackage/EventLookImage';
 import DressedAngles from '../components/SceneSets/DressedAngles';
-import SetVersionChooser from '../components/SceneSets/SetVersionChooser';
+import { UsePhotosFromSet, EventPhotosSet } from '../components/SceneSets/EventPhotos';
+import VenuePhoto from '../components/SceneSets/VenuePhoto';
 import CharacterHomes, { notifyCharacterPlacesChanged, useLalaHomeFill } from '../components/SceneSets/CharacterHomes';
 import LookVariants from '../components/SceneSets/LookVariants';
 import './SceneSetsTab.css';
@@ -957,55 +958,38 @@ function formatTime(secs) {
 // ─── SCENE SET CARD ───────────────────────────────────────────────────────────
 
 
-// L9 (Evoni, 2026-10-02, §8(hh)): "a venue's set shows a Looks row: its
-// approved base, then one card per event's dressed version, each naming its
-// event"; "Scene Sets links each look back to its event."
+// L9 (Evoni, 2026-10-02, §8(hh)), reshaped 2026-10-17 ("for this night
+// this place is going to look different"): the events held at a place, each
+// with its own look and its dressed angles, under the place's everyday look.
+// An event whose photos are their own set (an event version) shows that set.
 export function LooksRow({ set, focusZone = null, onToast, onRefresh }) {
-  const looks = set.looks || [];
   const events = set.events || [];
-  if (!set.base_approved && looks.length === 0 && events.length === 0) return null;
+  const versions = (set.event_versions || []).filter((v) => v.event);
+  const eventIds = new Set(events.map((e) => String(e.id)));
+  // A look whose event is no longer held here still shows, by its event's name.
+  const otherLooks = (set.looks || []).filter((l) => !eventIds.has(String(l.event_id)));
+  if (events.length === 0 && versions.length === 0 && otherLooks.length === 0) return null;
   return (
     <div className="scene-sets-looks" data-testid={`scene-set-looks-${set.id}`} onClick={(e) => e.stopPropagation()}>
-      <span className="scene-sets-looks-label">Looks</span>
-      <div className="scene-sets-looks-row">
-        {set.base_approved && set.base_still_url && (
-          <figure className="scene-sets-look" data-testid={`scene-set-look-base-${set.id}`}>
-            <img src={set.base_still_url} alt="" />
-            <figcaption>Everyday look</figcaption>
-          </figure>
-        )}
-        {looks.map((l) => (
-          <figure key={l.id} className="scene-sets-look" data-testid={`scene-set-look-${l.id}`}>
-            {/* A look being made again, or whose last run failed, keeps
-                its picture in use (fourth audit): the picture shows. */}
-            {l.image_url
-              ? <img src={l.image_url} alt="" />
-              : <span className="scene-sets-look-empty">{l.status === 'failed' ? 'Failed' : 'Generating…'}</span>}
-            <figcaption>
-              <Link to={`/shows/${l.event_show_id}/events/${l.event_id}`}>{l.event_name}</Link>
-              {/* The beat picker does not use a look made from an old
-                  everyday look (episodeLooks), so the row says so. */}
-              {l.status === 'complete' && l.stale && <span className="scene-sets-look-stale" data-testid={`scene-set-look-stale-${l.id}`}> · old everyday look</span>}
-              {l.image_url && l.status === 'generating' && <span className="scene-sets-look-stale" data-testid={`scene-set-look-regenerating-${l.id}`}> · making it again…</span>}
-              {l.image_url && l.error && l.status !== 'generating' && (
-                <span className="scene-sets-look-stale" data-testid={`scene-set-look-error-${l.id}`}> · last try failed: {l.error}</span>
-              )}
-            </figcaption>
-          </figure>
-        ))}
-      </div>
+      <span className="scene-sets-looks-label">Events held here</span>
       {/* S8 (Evoni, 2026-10-02; §8(dd)), answers 1-2: each event's look, and
           its dressed angles once the event has an episode, are made here. */}
       {events.map((ev) => (
         <div key={ev.id} data-testid={`scene-set-event-${ev.id}`}
           className={`scene-sets-event-look${focusZone === `look:${ev.id}` ? ' is-zone-focus' : ''}`}>
           <Link className="scene-sets-event-look-name" to={`/shows/${ev.show_id}/events/${ev.id}`}>{ev.name}</Link>
-          {/* A look made or uploaded here shows in the row above (onRefresh). */}
           <EventLookImage showId={ev.show_id} eventId={ev.id} canGenerate onToast={onToast} onSaved={onRefresh} />
+          {/* Only an everyday place lends an event its photos from another set. */}
+          {!set.version_of && <UsePhotosFromSet set={set} event={ev} onToast={onToast} onSaved={onRefresh} />}
           {/* An episode made from several events dresses its own event's
               look; the others are named, each linking to its event (Evoni,
               2026-10-16). Its event is the one its brief names, stamped or not. */}
-          {ev.episode_id && ev.is_episode_event && <DressedAngles episodeId={ev.episode_id} setId={set.id} onToast={onToast} />}
+          {ev.episode_id && ev.is_episode_event && (
+            <>
+              <span className="scene-sets-event-angles-label">Angles for this event</span>
+              <DressedAngles episodeId={ev.episode_id} setId={set.id} onToast={onToast} />
+            </>
+          )}
           {ev.is_episode_event && ev.other_events?.length > 0 && (
             <p className="scene-sets-ws-empty" data-testid={`scene-set-event-others-${ev.id}`}>
               Also in this episode:{' '}
@@ -1023,6 +1007,40 @@ export function LooksRow({ set, focusZone = null, onToast, onRefresh }) {
           )}
         </div>
       ))}
+      {/* An event whose photos are their own set: that set holds its look and angles. */}
+      {versions.map((v) => (
+        <div key={v.id} data-testid={`scene-set-event-${v.event.id}`}
+          className={`scene-sets-event-look${focusZone === `look:${v.event.id}` ? ' is-zone-focus' : ''}`}>
+          <Link className="scene-sets-event-look-name" to={`/shows/${v.event.show_id || set.show_id}/events/${v.event.id}`}>{v.event.name}</Link>
+          <EventPhotosSet photosSet={v} showId={set.show_id} event={v.event} onToast={onToast} onSaved={onRefresh} />
+        </div>
+      ))}
+      {otherLooks.length > 0 && (
+        <>
+          <span className="scene-sets-looks-label">Other looks made here</span>
+          <div className="scene-sets-looks-row">
+            {otherLooks.map((l) => (
+              <figure key={l.id} className="scene-sets-look" data-testid={`scene-set-look-${l.id}`}>
+                {/* A look being made again, or whose last run failed, keeps
+                    its picture in use (fourth audit): the picture shows. */}
+                {l.image_url
+                  ? <img src={l.image_url} alt="" />
+                  : <span className="scene-sets-look-empty">{l.status === 'failed' ? 'Failed' : 'Generating…'}</span>}
+                <figcaption>
+                  <Link to={`/shows/${l.event_show_id}/events/${l.event_id}`}>{l.event_name}</Link>
+                  {/* The beat picker does not use a look made from an old
+                      everyday look (episodeLooks), so the row says so. */}
+                  {l.status === 'complete' && l.stale && <span className="scene-sets-look-stale" data-testid={`scene-set-look-stale-${l.id}`}> · old everyday look</span>}
+                  {l.image_url && l.status === 'generating' && <span className="scene-sets-look-stale" data-testid={`scene-set-look-regenerating-${l.id}`}> · making it again…</span>}
+                  {l.image_url && l.error && l.status !== 'generating' && (
+                    <span className="scene-sets-look-stale" data-testid={`scene-set-look-error-${l.id}`}> · last try failed: {l.error}</span>
+                  )}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1140,6 +1158,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
     return out;
   }, [set.base_still_url, sortedAngles, bustUrl]);
   const [showDetails, setShowDetails] = useState(false);
+  // The main picture on the Place tab flips through the base and the views (2026-10-17).
+  const [mainIndex, setMainIndex] = useState(0);
   // S8 (Evoni, 2026-10-02): "landing on the exact set and zone": the focused
   // set opens its panel on the angles, the zone (an angle id or a zone kind)
   // marked and scrolled to. A look zone (look:<eventId>) marks the Looks row.
@@ -1147,10 +1167,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
   useEffect(() => {
     if (!focused || !focusZone) return undefined;
     if (String(focusZone).startsWith('look:')) {
-      // A look zone: the set opens on its Event Looks, at the event's block.
+      // A look zone: the set opens on its Place, at the event's card.
       setShowDetails(true);
       setShowAddAngle(false);
-      setActiveModalTab('looks');
+      setActiveModalTab('angles');
       const t = setTimeout(() => {
         const el = document.querySelector(`[data-testid="scene-set-event-${String(focusZone).slice(5).replace(/[^\w-]/g, '')}"]`);
         if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -1601,7 +1621,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
             {/* A dialog for keyboards and screen readers: named by the set's
                 title, focused when it opens, closed by Escape (audit, 2026-10-15). */}
             <div
-              className="scene-sets-modal"
+              className="scene-sets-modal is-pink"
               role="dialog"
               aria-modal="true"
               // Named by the set itself: the title's own label ("…: rename")
@@ -1622,7 +1642,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
               }}
             >
               {/* Modal header with set name + hero thumbnail */}
-              <div className="scene-sets-modal-header">
+              <div className="scene-sets-modal-header" style={(set.venue_photo_url || heroImage) ? { '--scene-sets-hero': `url("${set.venue_photo_url || heroImage}")` } : undefined}>
                 <div className="scene-sets-modal-header-info">
                   {heroImage && <img src={heroImage} alt="" className="scene-sets-modal-thumb" />}
                   <div>
@@ -1651,9 +1671,15 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                         tabIndex={0}
                         aria-label={`${set.name}: rename`}
                         title="Click to rename"
-                      >{set.name}</h3>
+                      >{set.name} <Pencil size={14} aria-hidden="true" className="scene-sets-modal-title-pencil" /></h3>
                     )}
                     <span className="scene-sets-modal-subtitle">{set.scene_type?.replace(/_/g, ' ')} &middot; {readyAngles}/{totalAngles} views</span>
+                    <span className="scene-sets-modal-chips" data-testid={`scene-set-chips-${set.id}`}>
+                      <span className="scene-sets-modal-chip"><MapPin size={12} aria-hidden="true" /> {(set.scene_type || 'Set').replace(/_/g, ' ').toLowerCase()}</span>
+                      <span className="scene-sets-modal-chip"><Camera size={12} aria-hidden="true" /> {readyAngles}/{totalAngles} views</span>
+                      {set.base_approved && <span className="scene-sets-modal-chip is-ok"><ShieldCheck size={12} aria-hidden="true" /> Everyday look</span>}
+                      {set.version_of && <span className="scene-sets-modal-chip">Event photos</span>}
+                    </span>
                   </div>
                 </div>
                 <button className="scene-sets-modal-close" aria-label="Close" onClick={() => { setShowDetails(false); setShowPromptEditor(false); setShowAddAngle(false); }}>
@@ -1666,11 +1692,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
 
               {/* The set's workspace: backgrounds, event looks, details, and the advanced scene spec. */}
               <div className="scene-sets-modal-tabs">
-                <button className={`scene-sets-modal-tab ${activeModalTab === 'angles' && !showAddAngle ? 'active' : ''}`} onClick={() => openWorkspace('angles')}>
-                  <Camera size={12} /> Backgrounds <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 2 }}>{readyAngles}/{totalAngles}</span>
-                </button>
-                <button className={`scene-sets-modal-tab ${activeModalTab === 'looks' && !showAddAngle ? 'active' : ''}`} onClick={() => openWorkspace('looks')} data-testid={`scene-set-tab-looks-${set.id}`}>
-                  <Sparkles size={12} /> Event Looks {eventLookCount > 0 && <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 2 }}>{eventLookCount}</span>}
+                {/* One tab for the place (Evoni, 2026-10-17): whose place it is,
+                    its everyday look with its angles, times and weather, then
+                    the events held here, each with its look and angles. */}
+                <button className={`scene-sets-modal-tab ${activeModalTab === 'angles' && !showAddAngle ? 'active' : ''}`} onClick={() => openWorkspace('angles')} data-testid={`scene-set-tab-place-${set.id}`}>
+                  <Camera size={12} /> Place <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 2 }}>{readyAngles}/{totalAngles}</span>
                 </button>
                 <button className={`scene-sets-modal-tab ${activeModalTab === 'details' && !showAddAngle ? 'active' : ''}`} onClick={() => openWorkspace('details')}>
                   <Eye size={12} /> Details &amp; Usage
@@ -1699,8 +1725,6 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                 {/* ═══ OVERVIEW TAB ═══ */}
                 {activeModalTab === 'details' && !showAddAngle && (
                   <div className="scene-sets-modal-section">
-                    {/* 2026-10-16: the everyday set, or an event version of one. */}
-                    <SetVersionChooser set={set} onToast={showToast} onSaved={() => onRefresh?.()} />
                     <BaseModelSelect
                       set={set}
                       onSaved={() => { showToast('Base model saved'); onRefresh?.(); }}
@@ -1865,14 +1889,14 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                           >
                             <option value="">Any / Not set</option>
                             <option value="morning">Morning</option>
-                            <option value="afternoon">Afternoon</option>
                             <option value="golden_hour">Golden Hour</option>
-                            <option value="evening">Evening</option>
                             <option value="night">Night</option>
+                            {/* Afternoon and Evening were taken out (2026-10-17): a set saved with one still shows it. */}
+                            {['afternoon', 'evening'].includes(localTimeOfDay) && <option value={localTimeOfDay}>{localTimeOfDay === 'afternoon' ? 'Afternoon' : 'Evening'} (no longer offered)</option>}
                           </select>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          <span style={{ fontSize: 10, color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Season</span>
+                          <span style={{ fontSize: 10, color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Weather</span>
                           <select
                             value={localSeason}
                             onChange={async (e) => {
@@ -1881,7 +1905,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                               setLocalSeason(e.target.value);
                               try {
                                 await updateSceneSetApi(set.id, { season: val });
-                                showToast(`Season set to ${val || 'any'}`);
+                                showToast(`Weather set to ${val || 'any'}`);
                               } catch (err) {
                                 console.error('[SceneSets] season save failed:', err);
                                 setLocalSeason(prev);
@@ -1891,10 +1915,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                             className="scene-sets-select-sm"
                           >
                             <option value="">Any / Not set</option>
-                            <option value="spring">Spring</option>
-                            <option value="summer">Summer</option>
-                            <option value="fall">Fall</option>
                             <option value="winter">Winter</option>
+                            <option value="rain">Rain</option>
+                            {/* Spring, Summer and Fall were taken out (2026-10-17): a set saved with one still shows it. */}
+                            {['spring', 'summer', 'fall'].includes(localSeason) && <option value={localSeason}>{localSeason[0].toUpperCase() + localSeason.slice(1)} (no longer offered)</option>}
                           </select>
                         </div>
                       </div>
@@ -2009,23 +2033,60 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                   </div>
                 )}
 
-                {/* ═══ ANGLES TAB ═══ */}
+                {/* ═══ PLACE TAB (was Backgrounds and Event Looks) ═══ */}
                 {activeModalTab === 'angles' && !showAddAngle && (
-                  <div className="scene-sets-modal-section">
+                  <div className="scene-sets-modal-section" data-testid={`scene-set-place-${set.id}`}>
+                    {/* Whose place it is, said once (2026-10-15 character places). */}
+                    {set.show_id && <CharacterHomes set={set} onToast={showToast} onDefaultsChanged={onDefaultsChanged} />}
+                    {/* An event's own photos: this set is that event's look at its everyday place. */}
+                    {set.version_of && (
+                      <EventPhotosSet photosSet={set} showId={set.show_id} everyday={set.version_of} event={set.version_event} onToast={showToast} onSaved={onRefresh} />
+                    )}
+                    <div className="scene-sets-place-heading" data-testid={`scene-set-place-everyday-${set.id}`}>
+                      {set.version_of ? `${set.version_event?.name || 'Event'} look` : 'Everyday look'}
+                      <span className="scene-sets-place-sub">{set.version_of ? 'The place dressed for this event, and its angles' : 'The place as it usually is, and its angles'}</span>
+                    </div>
                     {/* The main background: the set's primary image. */}
                     <div className="scene-sets-ws-main" data-testid={`scene-set-main-bg-${set.id}`}>
                       <div className="scene-sets-ws-main-preview">
-                        {heroImage
-                          ? <img src={heroImage} alt={set.name} onClick={() => setShowBaseLightbox(heroImage)} title="View full size" />
-                          : <span className="scene-sets-ws-main-empty"><ImageIcon size={22} strokeWidth={1.2} /> No main background yet</span>}
+                        {(() => {
+                          // The main picture, then each view (2026-10-17): the arrows flip through them.
+                          const shown = galleryImages.length ? galleryImages[mainIndex % galleryImages.length] : null;
+                          const src = shown?.src || heroImage;
+                          if (!src) return <span className="scene-sets-ws-main-empty"><ImageIcon size={22} strokeWidth={1.2} /> No main background yet</span>;
+                          return (
+                            <>
+                              <img src={src} alt={set.name} onClick={() => setShowBaseLightbox(src)} title="View full size" />
+                              <span className="scene-sets-ws-main-tag" data-testid={`scene-set-main-tag-${set.id}`}>{!shown || shown.label === 'BASE' ? 'Main background' : shown.label}</span>
+                              {galleryImages.length > 1 && (
+                                <>
+                                  <button type="button" className="scene-sets-ws-main-nav is-prev" aria-label="Previous view"
+                                    onClick={() => setMainIndex((i) => (i - 1 + galleryImages.length) % galleryImages.length)} data-testid={`scene-set-main-prev-${set.id}`}>
+                                    <ChevronLeft size={18} aria-hidden="true" />
+                                  </button>
+                                  <button type="button" className="scene-sets-ws-main-nav is-next" aria-label="Next view"
+                                    onClick={() => setMainIndex((i) => (i + 1) % galleryImages.length)} data-testid={`scene-set-main-next-${set.id}`}>
+                                    <ChevronRight size={18} aria-hidden="true" />
+                                  </button>
+                                </>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                       <div className="scene-sets-ws-main-info">
-                        <div className="scene-sets-ws-main-label">Main background</div>
+                        <div className="scene-sets-ws-main-label">Scene set overview</div>
+                        {localDesc && <p className="scene-sets-ws-overview-desc" data-testid={`scene-set-overview-desc-${set.id}`}>{localDesc}</p>}
+                        {set.mood_tags?.length > 0 && (
+                          <div className="scene-sets-ws-overview-tags">
+                            {set.mood_tags.map((tag) => <span key={tag} className="scene-sets-ws-overview-tag">{tag}</span>)}
+                          </div>
+                        )}
                         {/* S6: Evoni approves the base here, beside the image; nothing is approved by itself. */}
                         <ApprovedBaseRow set={set} onToast={showToast} onRefresh={onRefresh} />
-                        {set.base_approved && (
-                          <p className="scene-sets-ws-main-note">Event versions at this location are made from this image. Un-approve it to replace it.</p>
-                        )}
+                        {/* The approved base's note is ApprovedBaseRow's own (one note, not two). */}
+                        {/* The venue's own photo, apart from the main photo (2026-10-17). */}
+                        <VenuePhoto set={set} onToast={showToast} onSaved={() => onRefresh?.()} />
                         {hasBase && !set.base_approved && !set.location_approved_base && !set.world_location_id && (
                           <p className="scene-sets-ws-main-note" data-testid={`approve-needs-location-${set.id}`}>
                             To approve this image as the base, the set needs a World Location.{' '}
@@ -2282,7 +2343,13 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                       )}
                     </div>
 
-                    {/* Clean angle list */}
+                    {/* The everyday look's angles, as a picture grid (2026-10-17). */}
+                    {sortedAngles.length > 0 && (
+                      <div className="scene-sets-section-head" data-testid={`scene-set-angles-head-${set.id}`}>
+                        <Camera size={15} aria-hidden="true" /> Angles <span className="scene-sets-section-count">{readyAngles}/{totalAngles}</span>
+                        {totalAngles > 0 && readyAngles === totalAngles && <span className="scene-sets-section-ok"><CheckCircle2 size={13} aria-hidden="true" /> All views made</span>}
+                      </div>
+                    )}
                     <div className="scene-sets-angle-list">
                       {sortedAngles.map(a => {
                         const isComplete = a.generation_status === 'complete' && a.still_image_url;
@@ -2437,25 +2504,12 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                         <div style={{ fontSize: 13 }}>No angles yet. Upload a base image first.</div>
                       </div>
                     )}
-                  </div>
-                )}
-
-                {/* ═══ EVENT LOOKS TAB ═══ */}
-                {activeModalTab === 'looks' && !showAddAngle && (
-                  <div className="scene-sets-modal-section" data-testid={`scene-set-looks-tab-${set.id}`}>
-                    {/* S6: the location's approved permanent base. Evoni approves it
-                        here; nothing is approved by itself. Event versions at the
-                        location are made from it, and it is not replaced until it is
-                        un-approved. */}
-                    <ApprovedBaseRow set={set} onToast={showToast} onRefresh={onRefresh} />
-                    <LooksRow set={set} focusZone={focused ? focusZone : null} onToast={showToast} onRefresh={onRefresh} />
-                    {/* 2026-10-15: which characters live here (their home, closet or another place). */}
-                    {set.show_id && <CharacterHomes set={set} onToast={showToast} onDefaultsChanged={onDefaultsChanged} />}
-                    {/* 2026-10-15: the everyday look at each time of day and in each season. */}
+                    {/* 2026-10-15, trimmed 2026-10-17: the everyday look at each time of day and in each weather. */}
                     {set.base_approved && <LookVariants setId={set.id} onToast={showToast} />}
-                    {!set.base_approved && !set.location_approved_base && !(set.world_location_id && set.base_still_url)
-                      && (set.looks || []).length === 0 && eventLookCount === 0 && (
-                      <p className="scene-sets-ws-empty">No events use this set yet. When an event is held here, its look is made on this tab.</p>
+                    {/* The events held here, each with its own look and angles. */}
+                    <LooksRow set={set} focusZone={focused ? focusZone : null} onToast={showToast} onRefresh={onRefresh} />
+                    {!set.version_of && (set.events || []).length === 0 && (set.event_versions || []).length === 0 && (set.looks || []).length === 0 && (
+                      <p className="scene-sets-ws-empty" data-testid={`scene-set-no-events-${set.id}`}>No events are held here yet. When an event is held here, its look and angles are made below the everyday look.</p>
                     )}
                   </div>
                 )}

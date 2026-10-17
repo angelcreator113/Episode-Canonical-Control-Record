@@ -66,6 +66,9 @@ async function withApprovals(sets) {
   } catch (err) {
     console.warn('[SceneSets] approved bases not read:', err.message);
   }
+  // The venue's own photo (2026-10-17), from the set's World Location.
+  const venuePhotos = await require('../services/venuePhotoService').venuePhotosFor(SceneSet.sequelize, out.map((x) => x.world_location_id));
+  out = out.map((x) => ({ ...x, venue_photo_url: (x.world_location_id && venuePhotos.get(String(x.world_location_id))) || null }));
   // L9 (§8(hh)): each set's looks, one per event, naming its event.
   try {
     const { looksForSets, eventsForSets } = require('../services/venueLookImageService');
@@ -778,7 +781,7 @@ router.put('/:id/version', validateUUIDParam('id'), requireAuth, async (req, res
     const { makeEventVersion, makeEveryday } = require('../services/sceneSetVersionService');
     const b = req.body || {};
     const data = b.everyday_set_id == null || b.everyday_set_id === ''
-      ? await makeEveryday(SceneSet.sequelize, req.params.id)
+      ? await makeEveryday(SceneSet.sequelize, req.params.id, { returnEvent: b.return_event === true })
       : await makeEventVersion(SceneSet.sequelize, { setId: req.params.id, everydaySetId: b.everyday_set_id, eventId: b.event_id });
     return res.json({ success: true, data });
   } catch (err) {
@@ -1035,6 +1038,57 @@ router.delete('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => 
     res.json({ success: true, message: 'Scene set deleted', uses_left: uses, links_dropped: linksDropped });
   } catch (err) {
     console.error('Scene Sets DELETE /:id error:', err);
+    sendFail(res, err);
+  }
+});
+
+// ─── POST/DELETE /:id/venue-photo  — the venue's own photo ──────────────────
+// Evoni, 2026-10-17: "the venue has its own photo", apart from the set's
+// main photo. Kept on the set's World Location (venuePhotoService). No
+// image model is called, so no rate limit or budget applies.
+router.post('/:id/venue-photo', validateUUIDParam('id'), requireAuth, uploadSceneSetImages, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    if (!set.world_location_id) {
+      return res.status(409).json({ success: false, code: 'NO_LOCATION', error: 'Link this set to its World Location first: the venue photo belongs to the venue.' });
+    }
+    const file = (req.files?.image || req.files?.images || [])[0];
+    if (!file) return res.status(400).json({ success: false, error: 'No image file provided' });
+    // Turned upright (EXIF) and kept whole, at most 1920 wide, as a JPEG: a
+    // street photo is not cropped to the stills' 16:9.
+    const sharp = require('sharp');
+    let body;
+    try {
+      body = await sharp(file.buffer).rotate().resize({ width: 1920, height: 1920, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 90 }).toBuffer();
+    } catch (err) {
+      console.error('Scene Sets venue-photo: not a readable image:', err.message);
+      return res.status(400).json({ success: false, error: `${file.originalname || 'The file'} is not a readable image` });
+    }
+    const key = `world-locations/${set.world_location_id}/venue-photo-${Date.now()}.jpg`;
+    await s3.send(new PutObjectCommand({ Bucket: S3_BUCKET, Key: key, Body: body, ContentType: 'image/jpeg', CacheControl: 'max-age=31536000' }));
+    const url = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${key}`;
+    const { writeVenuePhoto } = require('../services/venuePhotoService');
+    const written = await writeVenuePhoto(SceneSet.sequelize, set.world_location_id, url);
+    if (!written.found) return res.status(404).json({ success: false, error: 'World Location not found' });
+    res.json({ success: true, data: { world_location_id: set.world_location_id, venue_photo_url: url } });
+  } catch (err) {
+    console.error('Scene Sets POST /:id/venue-photo error:', err);
+    sendFail(res, err);
+  }
+});
+
+router.delete('/:id/venue-photo', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    if (!set.world_location_id) return res.status(409).json({ success: false, code: 'NO_LOCATION', error: 'This set has no World Location' });
+    const { writeVenuePhoto } = require('../services/venuePhotoService');
+    const written = await writeVenuePhoto(SceneSet.sequelize, set.world_location_id, null);
+    if (!written.found) return res.status(404).json({ success: false, error: 'World Location not found' });
+    res.json({ success: true, data: { world_location_id: set.world_location_id, venue_photo_url: null } });
+  } catch (err) {
+    console.error('Scene Sets DELETE /:id/venue-photo error:', err);
     sendFail(res, err);
   }
 });

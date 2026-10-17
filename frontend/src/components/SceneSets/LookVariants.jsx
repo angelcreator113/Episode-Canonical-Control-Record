@@ -182,7 +182,7 @@ export default function LookVariants({ setId, onToast, pollMs = POLL_MS }) {
         {v?.status !== 'generating' && (
           <span className="lv-actions">
             <button type="button" className="lv-btn" disabled={isBusy || seasonBlocked}
-              title={seasonBlocked ? 'Make this set\'s Front zone image first: season shows outside' : `Generate ${slot.label}`}
+              title={seasonBlocked ? 'Make this set\'s Front zone image first: the weather shows outside' : `Generate ${slot.label}`}
               onClick={() => ask(kind, slot)} data-testid={`look-variant-generate-${kind}-${slot.value}`}>
               <Sparkles size={11} aria-hidden="true" />
             </button>
@@ -206,9 +206,9 @@ export default function LookVariants({ setId, onToast, pollMs = POLL_MS }) {
     <div className="lv" data-testid="look-variants" onClick={(e) => e.stopPropagation()}>
       <span className="lv-label">Times of day</span>
       <div className="lv-row">{data.time.map((s) => renderSlot('time', s))}</div>
-      <span className="lv-label">Seasons <span className="lv-hint">(the outside: made from the Front view)</span></span>
+      <span className="lv-label">Weather <span className="lv-hint">(the outside: made from the Front view)</span></span>
       {!data.front_view_url && (
-        <p className="lv-hint" data-testid="look-variants-no-front">Make this set's Front zone image to generate seasons, or upload your own.</p>
+        <p className="lv-hint" data-testid="look-variants-no-front">Make this set's Front zone image to generate the weather, or upload your own.</p>
       )}
       <div className="lv-row">{data.season.map((s) => renderSlot('season', s))}</div>
 
@@ -219,7 +219,7 @@ export default function LookVariants({ setId, onToast, pollMs = POLL_MS }) {
         <div className="lv-confirm" role="dialog" aria-label={`Generate ${confirm.label}`} data-testid="look-variant-confirm">
           <span>
             Generate {confirm.label}{confirm.estimate?.usd != null ? ` — est. $${Number(confirm.estimate.usd).toFixed(2)}` : ''}?
-            {' '}{confirm.kind === 'time' ? 'A re-light of the everyday look.' : 'A re-season of the Front view.'}
+            {' '}{confirm.kind === 'time' ? 'A re-light of the everyday look.' : 'The Front view in this weather.'}
           </span>
           <button type="button" className="lv-btn lv-btn-primary" onClick={generate} data-testid="look-variant-confirm-yes">Generate</button>
           <button type="button" className="lv-btn" onClick={() => setConfirm(null)}>Cancel</button>

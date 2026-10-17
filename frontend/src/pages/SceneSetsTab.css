@@ -4335,3 +4335,114 @@
     white-space: normal;
   }
 }
+
+/* The Place tab (2026-10-17): the everyday look and its angles, then the events held here. */
+.scene-sets-place-heading { display: grid; gap: 2px; margin: 10px 0 8px; font-family: 'Lora', serif; font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.scene-sets-place-sub { font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 400; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-secondary); }
+.scene-sets-modal-section > .scene-sets-looks { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--lala-parchment-3); }
+.scene-sets-event-angles-label { font-family: 'DM Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-secondary); }
+
+/* ═══ The pink scene set panel (Evoni, 2026-10-17 mockup) ═══
+   Scoped to .scene-sets-modal.is-pink: a wide panel, the cover behind the
+   header, pill tabs, the main picture beside its overview, the angles as a
+   picture grid. One column at phone width. */
+.scene-sets-modal.is-pink {
+  width: 94vw; max-width: 1180px; max-height: 92vh;
+  background: var(--surface-bg);
+  border: 2px solid var(--lala-pink-light); border-radius: 24px;
+}
+.is-pink .scene-sets-modal-header {
+  position: relative; isolation: isolate; padding: 18px 22px; border-bottom: none; background: var(--lala-pink-soft);
+}
+/* The cover, faded behind the header's right half. */
+.is-pink .scene-sets-modal-header::before {
+  content: ''; position: absolute; inset: 0 0 0 40%; z-index: -1; opacity: 0.35;
+  background: var(--scene-sets-hero, none) center / cover no-repeat;
+}
+.is-pink .scene-sets-modal-thumb { width: 72px; height: 72px; border-radius: 14px; border: 2px solid var(--surface-card); box-shadow: var(--shadow-sm); }
+.is-pink .scene-sets-modal-title { font-family: 'Lora', serif; font-size: 24px; color: var(--text-primary); display: inline-flex; align-items: center; gap: 8px; }
+.is-pink .scene-sets-modal-title-pencil { color: var(--lala-pink-dark); }
+.is-pink .scene-sets-modal-subtitle { display: none; }
+.scene-sets-modal-chips { display: none; }
+.is-pink .scene-sets-modal-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.scene-sets-modal-chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 999px;
+  font-size: 12px; text-transform: capitalize; background: var(--surface-card); color: var(--lala-pink-dark); border: 1px solid var(--lala-pink-light);
+}
+.scene-sets-modal-chip.is-ok { color: var(--primary-text); border-color: var(--primary-light); background: var(--primary-subtle); }
+.is-pink .scene-sets-modal-close { background: var(--surface-card); border: 1px solid var(--lala-pink-light); color: var(--lala-pink-dark); border-radius: 12px; }
+
+.is-pink .scene-sets-modal-tabs { gap: 6px; padding: 8px 16px; background: var(--surface-card); border-bottom: 1px solid var(--lala-pink-light); }
+.is-pink .scene-sets-modal-tab { border-radius: 999px; padding: 6px 14px; color: var(--lala-pink-dark); border: 1px solid transparent; }
+.is-pink .scene-sets-modal-tab.active { background: var(--lala-pink-dark); color: var(--text-inverse); border-color: var(--lala-pink-dark); box-shadow: var(--shadow-sm); }
+
+.is-pink .scene-sets-modal-body { padding: 16px 20px; }
+.is-pink .scene-sets-place-heading { font-size: 20px; color: var(--lala-pink-dark); }
+
+/* The main picture beside its overview. */
+.is-pink .scene-sets-ws-main {
+  display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: start;
+  padding: 0; border: none; background: none;
+}
+.is-pink .scene-sets-ws-main-preview { position: relative; max-width: none; }
+.is-pink .scene-sets-ws-main-preview img { border-radius: 16px; border: 2px solid var(--lala-pink-light); }
+.scene-sets-ws-main-tag {
+  position: absolute; top: 10px; left: 10px; padding: 3px 10px; border-radius: 999px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px;
+  background: var(--lala-pink-soft); color: var(--lala-pink-dark); border: 1px solid var(--lala-pink-light); pointer-events: none;
+}
+.scene-sets-ws-main-nav {
+  position: absolute; top: 50%; transform: translateY(-50%); width: 36px; height: 36px; border-radius: 50%;
+  display: grid; place-items: center; border: 1px solid var(--lala-pink-light); background: var(--surface-card); color: var(--lala-pink-dark); cursor: pointer; opacity: 0.92;
+}
+.scene-sets-ws-main-nav.is-prev { left: 10px; }
+.scene-sets-ws-main-nav.is-next { right: 10px; }
+.is-pink .scene-sets-ws-main-info {
+  padding: 16px; border-radius: 16px; background: var(--surface-card); border: 1px solid var(--lala-pink-light);
+}
+.is-pink .scene-sets-ws-main-label { font-family: 'Lora', serif; font-style: italic; font-size: 18px; text-transform: none; letter-spacing: 0; color: var(--text-primary); }
+.scene-sets-ws-overview-desc { margin: 0 0 10px; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.scene-sets-ws-overview-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.scene-sets-ws-overview-tag { padding: 2px 10px; border-radius: 999px; font-size: 12px; background: var(--lala-pink-soft); color: var(--lala-pink-dark); border: 1px solid var(--lala-pink-light); }
+.is-pink .scene-sets-ws-main-actions button { border-radius: 999px; }
+.is-pink .scene-sets-ws-main-actions .scene-sets-btn-generate { background: var(--lala-pink-dark); border-color: var(--lala-pink-dark); color: var(--text-inverse); }
+
+/* Section headings. */
+.scene-sets-section-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 16px 0 8px; font-family: 'Lora', serif; font-style: italic; font-size: 18px; color: var(--text-primary); }
+.scene-sets-section-head svg { color: var(--lala-pink-dark); }
+.scene-sets-section-count { font-family: 'DM Mono', monospace; font-style: normal; font-size: 12px; color: var(--text-secondary); }
+.scene-sets-section-ok { display: inline-flex; align-items: center; gap: 4px; font-family: 'DM Mono', monospace; font-style: normal; font-size: 12px; color: var(--success-text); }
+
+/* The angles as a picture grid: each tile its picture, name and controls. */
+.is-pink .scene-sets-angle-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.is-pink .scene-sets-angle-row {
+  flex-direction: column; align-items: stretch; gap: 6px; padding: 6px; height: auto;
+  border-radius: 14px; background: var(--surface-card); border: 1.5px solid var(--lala-pink-light);
+}
+.is-pink .scene-sets-angle-row.complete { border-color: var(--lala-pink); }
+.is-pink .scene-sets-angle-row-thumb { width: 100%; height: auto; }
+.is-pink .scene-sets-angle-row-thumb img,
+.is-pink .scene-sets-angle-row-placeholder { width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 10px; }
+.is-pink .scene-sets-angle-row-status { flex-wrap: wrap; justify-content: flex-start; gap: 4px; }
+.is-pink .scene-sets-angle-row-btn { border-radius: 999px; }
+
+/* Times of day and weather: picture tiles. */
+.is-pink .lv { padding: 14px; border-radius: 16px; background: var(--surface-card); border: 1px solid var(--lala-pink-light); margin-top: 16px; }
+.is-pink .lv-label { font-family: 'Lora', serif; font-size: 15px; text-transform: none; letter-spacing: 0; color: var(--text-primary); }
+.is-pink .lv-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+.is-pink .lv-slot img, .is-pink .lv-empty { border-radius: 10px; border: 1px solid var(--lala-pink-light); }
+
+/* Events held here and the character's places under the pink panel. */
+.is-pink .scene-sets-event-look { border-radius: 16px; border: 1px solid var(--lala-pink-light); background: var(--surface-card); }
+.is-pink .scene-sets-event-look-name { color: var(--lala-pink-dark); }
+
+@media (max-width: 760px) {
+  .scene-sets-modal.is-pink { width: 100vw; max-height: 100vh; border-radius: 0; }
+  .is-pink .scene-sets-ws-main { grid-template-columns: minmax(0, 1fr); }
+  .is-pink .scene-sets-modal-title { font-size: 20px; }
+  .is-pink .scene-sets-modal-thumb { width: 52px; height: 52px; }
+  .is-pink .scene-sets-angle-list { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .is-pink .scene-sets-modal-body { padding: 12px 16px; }
+}
+.is-pink .lv-slot { width: auto; }
+.is-pink .lv-slot img, .is-pink .lv-empty { width: 100%; height: auto; aspect-ratio: 16 / 9; }
+.is-pink .scene-sets-angle-row-btn { font-size: 11px; }

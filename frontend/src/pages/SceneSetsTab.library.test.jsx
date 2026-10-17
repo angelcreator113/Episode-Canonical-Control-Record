@@ -63,16 +63,34 @@ describe('SceneSetsTab: the library', () => {
     expect(within(card('set-3')).getByTestId('scene-set-status-set-3').textContent).toContain('Needs a main background');
   });
 
-  test('Open Set opens the workspace on Backgrounds; Event Looks holds each event', async () => {
+  // Evoni, 2026-10-17: one Place tab, the everyday look and its angles, then
+  // the events held here.
+  test('Open Set opens the Place: the everyday look and its angles, then each event held here', async () => {
     renderAt();
     await waitFor(() => expect(card('set-2')).toBeTruthy());
     fireEvent.click(screen.getByTestId('scene-set-open-set-2'));
-    expect(screen.getByTestId('scene-set-main-bg-set-2')).toBeTruthy();
-    fireEvent.click(screen.getByTestId('scene-set-tab-looks-set-2'));
-    const tab = screen.getByTestId('scene-set-looks-tab-set-2');
-    expect(within(tab).getByTestId('approved-base-set-2')).toBeTruthy();
-    expect(within(tab).getByTestId('scene-set-event-ev-1')).toBeTruthy();
-    expect(within(tab).getByTestId('scene-set-event-ev-2')).toBeTruthy();
+    const place = screen.getByTestId('scene-set-place-set-2');
+    expect(within(place).getByTestId('scene-set-place-everyday-set-2').textContent).toMatch(/^Everyday look/);
+    expect(within(place).getByTestId('scene-set-main-bg-set-2')).toBeTruthy();
+    expect(within(place).getByTestId('approved-base-set-2')).toBeTruthy();
+    expect(within(place).getByTestId('scene-set-event-ev-1')).toBeTruthy();
+    expect(within(place).getByTestId('scene-set-event-ev-2')).toBeTruthy();
+    expect(screen.queryByTestId('scene-set-tab-looks-set-2')).toBeNull();
+  });
+
+  // Evoni, 2026-10-17 (the pink mockup): chips under the name; the main
+  // picture flips through the base and each made view.
+  test('the panel shows its chips, and the main picture flips through the views', async () => {
+    renderAt();
+    await waitFor(() => expect(card('set-1')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('scene-set-open-set-1'));
+    expect(screen.getByTestId('scene-set-chips-set-1').textContent).toMatch(/home base.*1\/2 views/);
+    expect(screen.getByTestId('scene-set-main-tag-set-1').textContent).toBe('Main background');
+    fireEvent.click(screen.getByTestId('scene-set-main-next-set-1'));
+    expect(screen.getByTestId('scene-set-main-tag-set-1').textContent).toBe('WIDE');
+    fireEvent.click(screen.getByTestId('scene-set-main-prev-set-1'));
+    expect(screen.getByTestId('scene-set-main-tag-set-1').textContent).toBe('Main background');
+    expect(screen.getByTestId('scene-set-angles-head-set-1').textContent).toMatch(/Angles 1\/2/);
   });
 
   test('a venue with four views gets no "events only need 1-2 angles" advice and no rebuild that deletes them', async () => {
@@ -84,9 +102,9 @@ describe('SceneSetsTab: the library', () => {
     expect(screen.getByText(/Generate All Angles \(4\)/)).toBeTruthy();
   });
 
-  test('a look zone opens the set on Event Looks', async () => {
+  test('a look zone opens the set on its Place, at the event', async () => {
     renderAt('?tab=scene-sets&set=set-2&zone=look:ev-2');
-    expect(await screen.findByTestId('scene-set-looks-tab-set-2')).toBeTruthy();
+    expect(await screen.findByTestId('scene-set-place-set-2')).toBeTruthy();
     expect(screen.getByTestId('scene-set-event-ev-2').classList.contains('is-zone-focus')).toBe(true);
   });
 

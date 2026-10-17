@@ -109,7 +109,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
 
     const one = async (id) => (await api('get', `/${id}`)).body.data;
     expect(await one(gala.id)).toMatchObject({ version_of: { id: everyday.id, name: "Lala's bedroom" }, version_event: { id: galaEvent, name: 'Spring Gala' } });
-    expect((await one(everyday.id)).event_versions).toEqual([{ id: gala.id, name: "Lala's bedroom – Gala", event: { id: galaEvent, name: 'Spring Gala' } }]);
+    expect((await one(everyday.id)).event_versions).toEqual([{ id: gala.id, name: "Lala's bedroom – Gala", event: { id: galaEvent, name: 'Spring Gala', show_id: showId } }]);
     // An everyday set with versions is not offered as a version, and is not made one.
     expect((await version(everyday.id, { everyday_set_id: gala.id, event_id: galaEvent })).status).toBe(400);
     const other = await set('Other room', { show_id: showId });
@@ -121,6 +121,22 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect((await version(gala.id, { everyday_set_id: null })).status).toBe(200);
     expect((await one(gala.id)).version_of).toBeNull();
     expect(await eventSet(galaEvent)).toBe(gala.id);
+  });
+
+  // Evoni, 2026-10-17: "Stop using these photos" on the everyday place's
+  // event card brings the event back to the everyday place.
+  it('stop using these photos: the event is held at the everyday place again', async () => {
+    const showId = await show();
+    const everyday = await set('Studio', { show_id: showId });
+    const night = await set('Studio – gala night', { show_id: showId });
+    const ev = await event(showId, 'Wearable Experiments', { scene_set_id: everyday.id });
+    expect((await version(night.id, { everyday_set_id: everyday.id, event_id: ev })).status).toBe(200);
+    expect(await eventSet(ev)).toBe(night.id);
+    const res = await version(night.id, { everyday_set_id: null, return_event: true });
+    expect(res.status).toBe(200);
+    expect(res.body.data.returned).toEqual({ scene_set_id: everyday.id, events: [{ id: ev, name: 'Wearable Experiments' }] });
+    expect(await eventSet(ev)).toBe(everyday.id);
+    expect((await rows('SELECT version_of_set_id FROM scene_sets WHERE id = :id', { id: night.id }))[0].version_of_set_id).toBeNull();
   });
 
   it('refuses itself, another show, another show\'s event, a set other events use, a locked event and bad ids', async () => {

@@ -129,14 +129,38 @@ async function makeEventVersion(sequelize, { setId, everydaySetId, eventId }) {
   });
 }
 
-/** Makes a set everyday again; its event keeps using it. */
-async function makeEveryday(sequelize, setId) {
+/**
+ * Makes a set everyday again; its event keeps using it. With returnEvent,
+ * "Stop using these photos" on the everyday place's event card (Evoni,
+ * 2026-10-17): the event is held at the everyday set again, unless its
+ * episode is accepted (the Place is locked).
+ */
+async function makeEveryday(sequelize, setId, { returnEvent = false } = {}) {
   assertId('id', setId);
-  const set = await liveSet(sequelize, setId);
-  if (!set) throw new SceneSetVersionError('Scene set not found', 404, 'SET_NOT_FOUND');
-  await sequelize.query('UPDATE scene_sets SET version_of_set_id = NULL, updated_at = NOW() WHERE id = :id',
-    { replacements: { id: set.id } });
-  return { scene_set_id: set.id, version_of: null };
+  const { isPlaceLocked, PLACE_LOCKED_CODE, PLACE_LOCKED_MESSAGE } = require('../utils/placeLock');
+  return sequelize.transaction(async (transaction) => {
+    const set = await liveSet(sequelize, setId, transaction, true);
+    if (!set) throw new SceneSetVersionError('Scene set not found', 404, 'SET_NOT_FOUND');
+    const everydayId = set.version_of_set_id || null;
+    let returned = null;
+    if (returnEvent && everydayId) {
+      const [events] = await sequelize.query(
+        'SELECT id, name FROM world_events WHERE scene_set_id = :id AND deleted_at IS NULL',
+        { replacements: { id: set.id }, transaction });
+      for (const e of events) {
+        if (await isPlaceLocked(sequelize, e.id)) throw new SceneSetVersionError(PLACE_LOCKED_MESSAGE, 409, PLACE_LOCKED_CODE);
+      }
+      if (events.length) {
+        await sequelize.query(
+          'UPDATE world_events SET scene_set_id = :everydayId, updated_at = NOW() WHERE scene_set_id = :id AND deleted_at IS NULL',
+          { replacements: { id: set.id, everydayId }, transaction });
+        returned = { scene_set_id: everydayId, events: events.map((e) => ({ id: e.id, name: e.name })) };
+      }
+    }
+    await sequelize.query('UPDATE scene_sets SET version_of_set_id = NULL, updated_at = NOW() WHERE id = :id',
+      { replacements: { id: set.id }, transaction });
+    return { scene_set_id: set.id, version_of: null, returned };
+  });
 }
 
 /**
@@ -157,12 +181,12 @@ async function versionsForSets(sequelize, sets) {
       WHERE version_of_set_id IN (:ids) AND deleted_at IS NULL ORDER BY name ASC`, { replacements: { ids } });
   const eventSetIds = [...new Set([...ids, ...versionRows.map((v) => v.id)])];
   const [eventRows] = await sequelize.query(
-    `SELECT id, name, scene_set_id FROM world_events
+    `SELECT id, name, show_id, scene_set_id FROM world_events
       WHERE scene_set_id IN (:eventSetIds) AND deleted_at IS NULL ORDER BY name ASC`, { replacements: { eventSetIds } });
   const parentById = new Map(parentRows.map((p) => [String(p.id), p]));
   const eventOf = (setId) => {
     const e = eventRows.find((r) => String(r.scene_set_id) === String(setId));
-    return e ? { id: e.id, name: e.name } : null;
+    return e ? { id: e.id, name: e.name, show_id: e.show_id } : null;
   };
   for (const s of list) {
     const parent = s.version_of_set_id ? parentById.get(String(s.version_of_set_id)) : null;
