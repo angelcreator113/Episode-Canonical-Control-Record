@@ -16,8 +16,9 @@
  *   GET  /api/v1/book-from-show/chapters/:id/episode
  *   PUT  /api/v1/book-from-show/chapters/:id/episode        { episode_id | null }
  *   POST /api/v1/book-from-show/chapters/:id/write-from-episode
- *        a draft of the chapter from its episode and short story; a preview,
- *        nothing is saved
+ *        a draft of the chapter from its episode, its approved story record,
+ *        its short story and what Evoni accepted (or dismissed) of what the
+ *        story added; a preview, nothing is saved
  *   POST /api/v1/book-from-show/chapters/:id/check-against-story
  *        where the chapter's draft contradicts the short story
  *   POST /api/v1/book-from-show/books/:bookId/plan         { count, show_id }
@@ -32,6 +33,26 @@
  *        (shows.metadata.consciousness_transfer; Evoni, 2026-10-15: "not
  *        decided yet"). The chapter writer places the Lala bleed in the
  *        first chapter after it, and writes none before it is set.
+ *   GET  /api/v1/book-from-show/episodes/:episodeId/record   the Episode Story Record
+ *        (stage C; services/episodeStoryRecord): what happened, what each
+ *        character knew and learned, the secrets hinted or revealed, what is
+ *        left open; with the cast, their kept secrets and the open threads
+ *   POST /api/v1/book-from-show/episodes/:episodeId/record/draft  one AI call
+ *        drafts it from the episode (a redraft replaces it, as a draft)
+ *   PUT  /api/v1/book-from-show/episodes/:episodeId/record   edits; an approved
+ *        record goes back to draft
+ *   POST /api/v1/book-from-show/episodes/:episodeId/record/approve  it counts:
+ *        the short story and chapter writers read it, and its secrets move on
+ *        with the audience
+ *   GET  /api/v1/book-from-show/episodes/:episodeId/canon    canon approval for its
+ *        short stories (stage D; services/storyCanon): each story with what
+ *        it adds, proposed: secrets hinted or revealed, new facts, threads,
+ *        and contradictions with the record (flags)
+ *   POST /api/v1/book-from-show/stories/:storyId/canon/review  one AI call reads
+ *        the story again; its pending proposals are replaced
+ *   POST /api/v1/book-from-show/canon/:proposalId/accept       it becomes canon: a
+ *        secret moves on, a thread opens or advances, a fact holds
+ *   POST /api/v1/book-from-show/canon/:proposalId/dismiss
  *   GET  /api/v1/book-from-show/episodes/:episodeId/beat11  the episode's beat 11
  *        piece, for the Scene Planner's beat 11
  *   GET  /api/v1/book-from-show/stories/:storyId/beat11-excerpt
@@ -51,6 +72,8 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { EPISODE_EVENT_ID_SQL } = require('../utils/episodeEventSql');
+const { recordBlock } = require('../services/episodeStoryRecord');
+const { canonBlock } = require('../services/storyCanon');
 
 const router = express.Router();
 const MODELS = ['claude-sonnet-4-6'];
@@ -304,7 +327,7 @@ function planOf(chapter) {
   return lines.length ? `\nTHE PLAN FOR THIS CHAPTER (follow it):\n${lines.join('\n')}` : '';
 }
 
-function chapterPrompt({ chapter, episode, story, before, pulse = '', bleed = 'unset' }) {
+function chapterPrompt({ chapter, episode, story, before, pulse = '', bleed = 'unset', record = '', canon = '' }) {
   return `${CANON}
 
 You are writing a chapter of JustAWoman's book. The book follows the show, Styling Adventures with Lala:
@@ -316,9 +339,9 @@ Write in JustAWoman's first person. Do not retell the short story: the reader ha
 
 THE EPISODE: Episode ${episode.episode_number ?? '?'}: "${episode.title || 'Untitled'}"${episode.description ? `\n${clip(episode.description, 1200)}` : ''}
 
-THE SHORT STORY (what the reader already knows):
+${record ? `${record}\n\n` : ''}THE SHORT STORY (what the reader already knows):
 ${story ? clip(story.content, STORY_LIMIT) : '(not written yet: work from the episode alone)'}
-${pulse ? `\nWHAT THE LALAVERSE SAID ON THE PULSE (JustAWoman sees it; she may react to it):\n${pulse}\n` : ''}${before ? `\nTHE END OF THE CHAPTER BEFORE (for continuity):\n${before}\n` : ''}
+${canon ? `\n${canon}\n` : ''}${pulse ? `\nWHAT THE LALAVERSE SAID ON THE PULSE (JustAWoman sees it; she may react to it):\n${pulse}\n` : ''}${before ? `\nTHE END OF THE CHAPTER BEFORE (for continuity):\n${before}\n` : ''}
 ${BLEED_LINES[bleed] || BLEED_LINES.unset}
 
 THIS CHAPTER: "${chapter.title || `Chapter ${chapter.chapter_number || ''}`.trim()}"${planOf(chapter)}
@@ -348,9 +371,12 @@ router.post('/chapters/:id/write-from-episode', requireAuth, aiRateLimiter, asyn
     const transfer = await transferOf(sequelize, episode.show_id);
     const bleed = await bleedStateOf(sequelize, { transfer, episode, bookId: chapter.book_id });
 
-    const prose = await ask({ prompt: chapterPrompt({ chapter, episode, story, before, pulse, bleed }), maxTokens: 5000 });
+    const record = await recordBlock(sequelize, episode.id);
+    const canon = await canonBlock(sequelize, episode.id);
+
+    const prose = await ask({ prompt: chapterPrompt({ chapter, episode, story, before, pulse, bleed, record, canon }), maxTokens: 5000 });
     if (!prose) return res.status(502).json({ success: false, error: 'The draft came back empty. Try again.' });
-    return res.json({ success: true, prose, used_short_story: Boolean(story), used_pulse_posts: pulse ? pulse.split('\n').length : 0, bleed, saved: false });
+    return res.json({ success: true, prose, used_short_story: Boolean(story), used_pulse_posts: pulse ? pulse.split('\n').length : 0, used_story_record: Boolean(record), bleed, saved: false });
   } catch (err) {
     console.error('[book-from-show] write-from-episode error:', err);
     return res.status(500).json({ success: false, error: err.message });
@@ -599,6 +625,98 @@ async function saveExcerpt(sequelize, id, excerpt) {
       WHERE id = :id`,
     { replacements: { id, excerpt: JSON.stringify(excerpt) } });
 }
+
+// ── The Episode Story Record (stage C; services/episodeStoryRecord) ─────────
+
+const recordError = (res, err, label) => {
+  const { RecordError } = require('../services/episodeStoryRecord');
+  if (err instanceof RecordError) return res.status(err.status).json({ success: false, error: err.message });
+  console.error(`[book-from-show] ${label} error:`, err);
+  return res.status(500).json({ success: false, error: err.message });
+};
+
+router.get('/episodes/:episodeId/record', requireAuth, async (req, res) => {
+  try {
+    const { getRecord } = require('../services/episodeStoryRecord');
+    return res.json({ success: true, ...(await getRecord(getDb(req).sequelize, req.params.episodeId)) });
+  } catch (err) {
+    return recordError(res, err, 'GET episode record');
+  }
+});
+
+router.post('/episodes/:episodeId/record/draft', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const { draftRecord } = require('../services/episodeStoryRecord');
+    return res.json({ success: true, ...(await draftRecord(getDb(req).sequelize, req.params.episodeId)) });
+  } catch (err) {
+    return recordError(res, err, 'POST episode record draft');
+  }
+});
+
+router.put('/episodes/:episodeId/record', requireAuth, async (req, res) => {
+  try {
+    const { updateRecord } = require('../services/episodeStoryRecord');
+    return res.json({ success: true, ...(await updateRecord(getDb(req).sequelize, req.params.episodeId, req.body || {})) });
+  } catch (err) {
+    return recordError(res, err, 'PUT episode record');
+  }
+});
+
+router.post('/episodes/:episodeId/record/approve', requireAuth, async (req, res) => {
+  try {
+    const { approveRecord } = require('../services/episodeStoryRecord');
+    const by = String(req.user?.email || req.user?.id || 'author').slice(0, 255);
+    return res.json({ success: true, ...(await approveRecord(getDb(req).sequelize, req.params.episodeId, { by })) });
+  } catch (err) {
+    return recordError(res, err, 'POST episode record approve');
+  }
+});
+
+// ── Canon approval for short stories (stage D; services/storyCanon) ────────
+
+const canonError = (res, err, label) => {
+  const { CanonError } = require('../services/storyCanon');
+  if (err instanceof CanonError) return res.status(err.status).json({ success: false, error: err.message });
+  console.error(`[book-from-show] ${label} error:`, err);
+  return res.status(500).json({ success: false, error: err.message });
+};
+const deciderOf = (req) => String(req.user?.email || req.user?.id || 'author').slice(0, 255);
+
+router.get('/episodes/:episodeId/canon', requireAuth, async (req, res) => {
+  try {
+    const { listCanon } = require('../services/storyCanon');
+    return res.json({ success: true, ...(await listCanon(getDb(req).sequelize, req.params.episodeId)) });
+  } catch (err) {
+    return canonError(res, err, 'GET episode canon');
+  }
+});
+
+router.post('/stories/:storyId/canon/review', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const { reviewStory } = require('../services/storyCanon');
+    return res.json({ success: true, ...(await reviewStory(getDb(req).sequelize, req.params.storyId)) });
+  } catch (err) {
+    return canonError(res, err, 'POST story canon review');
+  }
+});
+
+router.post('/canon/:proposalId/accept', requireAuth, async (req, res) => {
+  try {
+    const { acceptProposal } = require('../services/storyCanon');
+    return res.json({ success: true, ...(await acceptProposal(getDb(req).sequelize, req.params.proposalId, { by: deciderOf(req) })) });
+  } catch (err) {
+    return canonError(res, err, 'POST canon accept');
+  }
+});
+
+router.post('/canon/:proposalId/dismiss', requireAuth, async (req, res) => {
+  try {
+    const { dismissProposal } = require('../services/storyCanon');
+    return res.json({ success: true, ...(await dismissProposal(getDb(req).sequelize, req.params.proposalId, { by: deciderOf(req) })) });
+  } catch (err) {
+    return canonError(res, err, 'POST canon dismiss');
+  }
+});
 
 // The episode's beat 11 piece, for the Scene Planner's beat 11 (production).
 router.get('/episodes/:episodeId/beat11', requireAuth, async (req, res) => {
