@@ -2,7 +2,9 @@
  * A content type's shared audiences on the Society tab (Evoni's idea 4,
  * 2026-10-17; services/audienceMap): the types it shares an audience with
  * (they comment on each other, collaborate) and the types it competes with
- * (rivals watch each other). Who comments on whose posts follows these.
+ * (rivals watch each other). Who comments on whose posts follows these,
+ * niche first (two creators in the same niche overlap most; services/
+ * audienceMap pairAffinity).
  * Edit changes them; Suggest proposes some (nothing saved until Save);
  * Reset goes back to the default for the fifteen default types.
  */
@@ -83,6 +85,7 @@ export default function AudienceLinks({ name, types }) {
   return (
     <div className="al" data-testid="ss-audience">
       <span className="ss-label">Audience{type.custom ? ' (yours)' : ''}</span>
+      <p className="al-none">Who actually overlaps depends on niche first: two creators in the same niche share the most, whatever their types; these links decide whether they share or compete.</p>
       {!form ? (
         <>
           <p className="al-row"><strong>Shares an audience with</strong> <Chips names={type.shares} empty="none yet" /></p>

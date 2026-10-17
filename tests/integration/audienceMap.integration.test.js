@@ -2,6 +2,7 @@
  * Shared audiences (Evoni's idea 4, 2026-10-17), the Anthropic call mocked.
  * Bea is a Beauty Oracle; Tess a Trendsetter (shares Bea's audience), Lux a
  * Luxury Icon (no link to Bea), Rel a Relatable Friend (competes with Lux).
+ * Bea, Tess and Lux are all in skincare; Rel posts about parenting.
  * - /cast/audience-map: every type with its links (the defaults); Evoni's
  *   own saved over a default (ADMIN only; a type off the list is a 400);
  *   reset; suggest (nothing saved);
@@ -48,10 +49,10 @@ const KEY_SQL = "page_name = 'influencer_systems' AND constant_key = 'AUDIENCE_M
     editor = TokenService.generateTokenPair({ id: 'test-editor-aud', email: 'e@aud.dev', name: 'Ed', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
     [[before]] = await run(`SELECT data FROM page_content WHERE ${KEY_SQL}`);
     await run(`DELETE FROM page_content WHERE ${KEY_SQL}`);
-    for (const [key, type] of [['bea', 'The Beauty Oracle'], ['tess', 'The Trendsetter'], ['lux', 'The Luxury Icon'], ['rel', 'The Relatable Friend']]) {
-      const [[row]] = await run(`INSERT INTO social_profiles (handle, platform, vibe_sentence, display_name, feed_layer, society_archetype, status, lala_relevance_score, created_at, updated_at)
-        VALUES (:h, 'pulse', 'x', :d, 'lalaverse', :type, 'finalized', :rel, NOW(), NOW()) RETURNING id`,
-      { h: `@${key}${tag}`, d: `${key}${tag}`, type, rel: key === 'lux' ? 99 : 1 });
+    for (const [key, type, niche] of [['bea', 'The Beauty Oracle', `skincare ${tag}`], ['tess', 'The Trendsetter', `skincare ${tag}`], ['lux', 'The Luxury Icon', `skincare ${tag}`], ['rel', 'The Relatable Friend', `parenting ${tag}`]]) {
+      const [[row]] = await run(`INSERT INTO social_profiles (handle, platform, vibe_sentence, display_name, feed_layer, society_archetype, content_category, status, lala_relevance_score, created_at, updated_at)
+        VALUES (:h, 'pulse', 'x', :d, 'lalaverse', :type, :niche, 'finalized', :rel, NOW(), NOW()) RETURNING id`,
+      { h: `@${key}${tag}`, d: `${key}${tag}`, type, niche, rel: key === 'lux' ? 99 : 1 });
       p[key] = row.id;
     }
     lala = await require('../../src/services/lalaFeedProfile').lalaProfileId(sequelize);
@@ -101,11 +102,13 @@ const KEY_SQL = "page_name = 'influencer_systems' AND constant_key = 'AUDIENCE_M
     expect(row.n).toBe(0);
   });
 
-  it('scores a poster\'s overlap with others by content type, never Lala', async () => {
+  it('scores a poster\'s overlap with others by niche, then content type, never Lala', async () => {
     const { audienceScores } = require('../../src/services/audienceMap');
     const scores = await audienceScores(db, p.bea, [p.tess, p.lux, p.rel, lala]);
-    expect([...scores.entries()]).toEqual([[p.tess, 1]]);
-    expect((await audienceScores(db, p.lux, [p.rel])).get(p.rel)).toBe(0.7);
+    // Tess: same niche and linked types; Lux: same niche, no type link; Rel: nothing.
+    expect(new Map(scores)).toEqual(new Map([[p.tess, 1], [p.lux, 0.6]]));
+    // Lux and Rel compete by type but post about different things: half.
+    expect((await audienceScores(db, p.lux, [p.rel])).get(p.rel)).toBe(0.35);
     expect((await audienceScores(db, lala, [p.tess, p.bea])).size).toBe(0);
   });
 

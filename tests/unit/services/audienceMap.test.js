@@ -51,3 +51,36 @@ test('the commenting score: audience is a bonus on top, so no type scores as bef
   expect(commentScoreOf({ attended: false, closeness: 0, temperament: 'oversharer', audience: 1 })).toBe(0.2 + AUDIENCE_WEIGHT);
   expect(commentScoreOf({ attended: false, closeness: 0, temperament: 'regular', audience: 1 })).toBeLessThan(0.3);
 });
+
+describe('pairAffinity: niche first, type second (Evoni, 2026-10-17: "even these have different job title or niches")', () => {
+  const { pairAffinity } = require('../../../src/services/audienceMap');
+  let map;
+  beforeAll(async () => { map = await loadAudienceMap(null); });
+  const oracle = (niche, city = null) => ({ type: 'The Beauty Oracle', niche, city });
+
+  test('the same niche and linked types: the strongest overlap', () => {
+    expect(pairAffinity(map, oracle('Skincare'), { type: 'The Trendsetter', niche: 'skincare' })).toMatchObject({ kind: 'shares', score: 1, niche: true });
+  });
+
+  test('the same niche and the same type: direct rivals', () => {
+    expect(pairAffinity(map, oracle('skincare'), oracle('skincare'))).toMatchObject({ kind: 'competes', score: 0.9 });
+  });
+
+  test('the same niche, unlinked types: the niche still pulls the same people', () => {
+    expect(pairAffinity(map, oracle('drag makeup'), { type: 'The Rebel', niche: 'Drag Makeup' })).toMatchObject({ kind: 'shares', score: 0.6 });
+    expect(pairAffinity(map, { type: null, niche: 'fitness' }, { type: null, niche: 'fitness' })).toMatchObject({ kind: 'shares', score: 0.6 });
+  });
+
+  test('linked types in different niches: half; nothing in common: nothing', () => {
+    expect(pairAffinity(map, oracle('skincare'), { type: 'The Trendsetter', niche: 'streetwear' })).toMatchObject({ kind: 'shares', score: 0.5, niche: false });
+    expect(pairAffinity(map, { type: 'The Luxury Icon', niche: 'travel' }, { type: 'The Relatable Friend', niche: 'parenting' })).toMatchObject({ kind: 'competes', score: 0.35 });
+    expect(pairAffinity(map, oracle('skincare'), oracle('nails')).score).toBe(0.4);
+    expect(pairAffinity(map, oracle('skincare'), { type: 'The Viral Wildcard', niche: 'gaming' })).toEqual({ kind: null, score: 0, niche: false, city: false });
+  });
+
+  test('the same city nudges any overlap, and never makes one on its own', () => {
+    expect(pairAffinity(map, oracle('skincare', 'velvet_city'), { type: 'The Trendsetter', niche: 'streetwear', city: 'velvet_city' })).toMatchObject({ score: 0.6, city: true });
+    expect(pairAffinity(map, oracle('skincare', 'velvet_city'), { type: 'The Trendsetter', niche: 'skincare', city: 'velvet_city' }).score).toBe(1);
+    expect(pairAffinity(map, oracle('skincare', 'velvet_city'), { type: 'The Viral Wildcard', niche: 'gaming', city: 'velvet_city' })).toMatchObject({ score: 0, city: false });
+  });
+});

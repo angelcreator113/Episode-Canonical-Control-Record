@@ -85,8 +85,8 @@ const AUDIENCE_WEIGHT = 0.15;
 /**
  * The commenting score on one poster's post (Task #3072), without jitter:
  * closeness to the poster 0.5, attending 0.3, temperament 0.2, plus up to
- * AUDIENCE_WEIGHT when their content types share an audience (or compete,
- * or are the same; services/audienceMap). A guest who barely knows the
+ * AUDIENCE_WEIGHT when their audiences overlap: the same niche, content
+ * types that share or compete, the same city (services/audienceMap). A guest who barely knows the
  * poster still comments; a stranger who stayed home does not, unless an
  * oversharer whose audience overlaps the poster's.
  */

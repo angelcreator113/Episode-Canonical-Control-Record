@@ -20,9 +20,20 @@
  *   listAudience(db)  → [{ name, shares, competes, custom, has_default }]
  *   saveAudience(db, name, links)  Evoni's own (null: back to the default)
  *   suggestAudience(db, name)  one Sonnet call; nothing is saved
- *   audienceScores(db, profileId, otherIds)  Map(other profile → affinity
- *     score) from their content types; Lala is never scored (her
- *     relationships are the story's: decision c).
+ *   pairAffinity(map, a, b)  two creators ({ type, niche, city }) →
+ *     { kind, score, niche, city }: niche first, type second (Evoni,
+ *     2026-10-17: "even these have different job title or niches"). The
+ *     type says how someone is known; the niche (content_category, what
+ *     the public sees them post about) says who follows them.
+ *       same niche, linked types        1    (shares, or competes)
+ *       same niche, the same type       0.9  competes: direct rivals
+ *       same niche, unlinked types      0.6  shares: the niche pulls the same people
+ *       linked types, different niches  half the type's score (0.5 / 0.35 / 0.4)
+ *       nothing in common               0
+ *     The same city adds 0.1 to any overlap (a local scene), capped at 1.
+ *   audienceScores(db, profileId, otherIds)  Map(other profile → score)
+ *     from pairAffinity; Lala is never scored (her relationships are the
+ *     story's: decision c).
  *
  * Fail-soft: a read that fails logs and scores nothing.
  */
@@ -114,6 +125,28 @@ function affinity(map, typeA, typeB) {
   return { kind: null, score: 0 };
 }
 
+const CITY_BONUS = 0.1;
+const nicheKey = (v) => text(v, 100).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+/** Two creators ({ type, niche, city }): niche first, type second, the city a nudge. */
+function pairAffinity(map, a, b) {
+  const sameNiche = Boolean(nicheKey(a?.niche)) && nicheKey(a?.niche) === nicheKey(b?.niche);
+  const sameCity = Boolean(a?.city) && a?.city === b?.city;
+  const type = affinity(map, a?.type, b?.type);
+  let kind = null;
+  let score = 0;
+  if (sameNiche) {
+    if (type.kind === 'same') { kind = 'competes'; score = 0.9; }
+    else if (type.kind) { kind = type.kind; score = 1; }
+    else { kind = 'shares'; score = 0.6; }
+  } else if (type.kind) {
+    kind = type.kind;
+    score = type.score / 2;
+  }
+  if (score > 0 && sameCity) score = Math.min(1, score + CITY_BONUS);
+  return { kind, score: Math.round(score * 100) / 100, niche: sameNiche, city: sameCity && score > 0 };
+}
+
 async function listAudience(db) {
   const [list, saved] = await Promise.all([loadSocietyArchetypes(db), savedMap(db)]);
   const savedByKey = new Map(Object.entries(saved).map(([n, l]) => [nameKey(n), l]));
@@ -183,8 +216,9 @@ Answer with JSON only, names exactly as written above:
 }
 
 /**
- * Map(other profile id → affinity score to `profileId`) from their content
- * types. Lala (as either side) scores nothing: her ties are the story's.
+ * Map(other profile id → overlap score with `profileId`) by niche, content
+ * type and city (pairAffinity). Lala (as either side) scores nothing: her
+ * ties are the story's.
  */
 async function audienceScores(db, profileId, otherIds) {
   const scores = new Map();
@@ -194,16 +228,16 @@ async function audienceScores(db, profileId, otherIds) {
     const lalaId = await require('./lalaFeedProfile').lalaProfileId(db.sequelize);
     if (lalaId != null && Number(lalaId) === Number(profileId)) return scores;
     const [rows] = await db.sequelize.query(
-      'SELECT id, society_archetype FROM social_profiles WHERE id IN (:ids)', { replacements: { ids: [Number(profileId), ...ids] } });
-    const typeOf = new Map(rows.map((r) => [Number(r.id), r.society_archetype]));
-    const mine = typeOf.get(Number(profileId));
+      'SELECT id, society_archetype, content_category, city FROM social_profiles WHERE id IN (:ids)', { replacements: { ids: [Number(profileId), ...ids] } });
+    const who = new Map(rows.map((r) => [Number(r.id), { type: r.society_archetype, niche: r.content_category, city: r.city }]));
+    const mine = who.get(Number(profileId));
     if (!mine) return scores;
     const map = await loadAudienceMap(db);
     for (const id of ids) {
       if (lalaId != null && Number(lalaId) === id) continue;
-      const theirs = typeOf.get(id);
+      const theirs = who.get(id);
       if (!theirs) continue;
-      const { score } = affinity(map, mine, theirs);
+      const { score } = pairAffinity(map, mine, theirs);
       if (score > 0) scores.set(id, score);
     }
   } catch (err) {
@@ -220,6 +254,7 @@ module.exports = {
   normalizeLinks,
   loadAudienceMap,
   affinity,
+  pairAffinity,
   listAudience,
   saveAudience,
   suggestAudience,
