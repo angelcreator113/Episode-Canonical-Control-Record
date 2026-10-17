@@ -49,6 +49,8 @@ export const putFactsApi = (id, body) =>
   apiClient.put(`${API_URL}/cast/characters/${id}/facts`, body);
 export const suggestFactsApi = (id) =>
   apiClient.post(`${API_URL}/cast/characters/${id}/facts/suggest`);
+export const factHistoryApi = (id) =>
+  apiClient.get(`${API_URL}/cast/characters/${id}/facts/history`);
 export const pressureTestApi = (id) =>
   apiClient.post(`${API_URL}/cast/characters/${id}/pressure-test`);
 export const getCheckApi = (id) =>
@@ -541,6 +543,7 @@ export function TheirFacts({ character, onFeedSaved }) {
       major_possessions: (p.major_possessions || facts.major_possessions).join(', '),
       home_price_range: facts.home_price_range?.key || '',
       undecided: [...facts.undecided],
+      reason: '',
     });
   };
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -570,6 +573,7 @@ export function TheirFacts({ character, onFeedSaved }) {
       major_possessions: form.major_possessions.split(',').map((x) => x.trim()).filter(Boolean),
       home_price_range: form.home_price_range || null,
       undecided: form.undecided,
+      ...(form.reason.trim() ? { reason: form.reason.trim() } : {}),
     };
     if (facts.feed_linked) {
       if (form.handle !== (facts.handle || '')) body.handle = form.handle;
@@ -669,6 +673,7 @@ export function TheirFacts({ character, onFeedSaved }) {
                 <label key={k}><input type="checkbox" aria-label={`${FACT_LABELS[k]}: not decided yet`} checked={form.undecided.includes(k)} onChange={() => toggleUndecided(k)} /> {FACT_LABELS[k]}</label>
               ))}
             </fieldset>
+            <label>Why these facts changed<input value={form.reason} onChange={set('reason')} placeholder="Optional, one line, kept in their fact history" maxLength={500} /></label>
             <span className="ch-facts-row">
               <button type="submit" className="ch-btn" disabled={busy}>{busy ? 'Saving…' : 'Save facts'}</button>
               <button type="button" className="ch-btn-soft" disabled={busy} onClick={() => setForm(null)}>Cancel</button>
@@ -676,9 +681,58 @@ export function TheirFacts({ character, onFeedSaved }) {
           </form>
         )}
       {note && <p className={note.kind === 'error' ? 'ch-note is-error' : 'ch-note'} role={note.kind === 'error' ? 'alert' : 'status'}>{note.text}</p>}
+      {facts && !facts.error && !form && <FactHistory characterId={id} refreshKey={facts} />}
       {facts && !facts.error && !form && <ProfileCheck characterId={id} />}
       {facts && !facts.error && !form && <PressureTest characterId={id} />}
     </section>
+  );
+}
+
+/**
+ * Fact history (the spec's #1; Evoni, 2026-10-17; services/factHistory):
+ * when and why each fact changed, newest first, with the follower ledger
+ * (an episode's result, a post, an event, a change here). Loads when opened.
+ */
+const historyWhen = (iso) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+export function FactHistory({ characterId, refreshKey }) {
+  const [open, setOpen] = useState(false);
+  const [history, setHistory] = useState(null);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    let live = true;
+    factHistoryApi(characterId)
+      .then((res) => { if (live) { setHistory(res.data?.history || []); setError(null); } })
+      .catch((err) => {
+        console.error('[CharacterProfilePage] fact history failed:', err);
+        if (live) setError(err.response?.data?.error || 'Could not load their fact history.');
+      });
+    return () => { live = false; };
+  }, [open, characterId, refreshKey]);
+  return (
+    <details className="ch-history" data-testid="ch-history" onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary>Fact history</summary>
+      {error && <p className="ch-note is-error" role="alert">{error}</p>}
+      {open && !history && !error && <p className="ch-note">Loading…</p>}
+      {history && history.length === 0 && <p className="ch-note">No changes yet. Each save on this sheet, and each follower change, is kept here.</p>}
+      {history && history.length > 0 && (
+        <ol className="ch-history-list">
+          {history.map((h, i) => (
+            <li key={`${h.at}-${h.fact}-${i}`} data-testid="ch-history-item">
+              <span className="ch-history-what">
+                <b>{h.label}</b>{' '}
+                {h.from ? <>{h.from} → {h.to || 'not set'}</> : <>set to {h.to || 'not set'}</>}
+              </span>
+              <span className="ch-history-when">
+                {historyWhen(h.at)}{h.story_label ? ` · ${h.story_label}` : ''}{h.by ? ` · ${h.by}` : ''}
+              </span>
+              {h.reason && <span className="ch-history-why">{h.reason}</span>}
+            </li>
+          ))}
+        </ol>
+      )}
+    </details>
   );
 }
 
