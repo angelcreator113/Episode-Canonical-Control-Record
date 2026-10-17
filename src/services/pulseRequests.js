@@ -11,6 +11,7 @@
  *       a RequestCapError (429) when the lane's limit for today (UTC) is
  *       used; called right before every drafting call
  *   usedToday(db, showId, now)  { automated, manual } taken today (UTC)
+ *   usedTodayByKind(db, showId, now)  the same by kind, for Admin › Engine
  *   assertRoom(db, showId, lane)  the same refusal, without taking one: for
  *       work queued now and drafted later (a DM)
  *
@@ -70,6 +71,17 @@ async function usedToday(db, showId, now = new Date()) {
   return used;
 }
 
+/** Requests the show took today (UTC), by lane and kind: { automated: { event: 2 }, manual: { dm: 1 } }. */
+async function usedTodayByKind(db, showId, now = new Date()) {
+  const [rows] = await db.sequelize.query(
+    `SELECT lane, kind, COUNT(*)::int AS n FROM pulse_requests
+      WHERE show_id = :showId AND created_at >= :since AND deleted_at IS NULL GROUP BY lane, kind`,
+    { replacements: { showId, since: startOfUtcDay(now) } });
+  const used = { automated: {}, manual: {} };
+  for (const r of rows) if (LANES.includes(r.lane)) used[r.lane][r.kind || 'other'] = r.n;
+  return used;
+}
+
 /** Throws a RequestCapError when the lane's requests for today are used; takes none. */
 async function assertRoom(db, showId, lane, now = new Date()) {
   const settings = await require('./pulseQueue').settingsOf(db, showId);
@@ -98,4 +110,4 @@ async function take(db, { showId, lane, kind, jobId = null, now = new Date() }) 
   });
 }
 
-module.exports = { LANES, RequestCapError, capSkipSql, nextReset, usedToday, assertRoom, take };
+module.exports = { LANES, RequestCapError, capSkipSql, nextReset, usedToday, usedTodayByKind, assertRoom, take };

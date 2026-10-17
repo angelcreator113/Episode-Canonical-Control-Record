@@ -1450,6 +1450,19 @@ a.ch-trail-text:hover { text-decoration: underline; }
 .ch-history-what { overflow-wrap: anywhere; }
 .ch-history-when { font-size: 12px; color: var(--text-secondary); }
 .ch-history-why { font-size: 12px; font-style: italic; color: var(--text-secondary); overflow-wrap: anywhere; }
+.ch-pressure { display: grid; gap: 8px; border-top: 1px solid var(--lala-lavender-line); padding-top: 12px; }
+.ch-pressure > .ch-btn-soft { justify-self: start; }
+.ch-pressure-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.ch-pressure-item { display: grid; gap: 4px; padding: 10px 12px; border-radius: 12px; background: var(--surface-card); border: 1px solid var(--lala-lavender-line); font-size: 13px; min-width: 0; }
+.ch-pressure-item.is-contradiction { border-color: var(--danger-border); }
+.ch-pressure-item.is-gap { border-color: var(--warning-border); }
+.ch-pressure-verdict.is-holds { background: var(--success-bg); color: var(--success-text); }
+.ch-pressure-verdict.is-gap { background: var(--warning-bg); color: var(--warning-text); }
+.ch-pressure-verdict.is-contradiction { background: var(--danger-bg); color: var(--danger-text); }
+.ch-pressure-q { color: var(--text-primary); overflow-wrap: anywhere; }
+.ch-pressure-answer { color: var(--text-primary); overflow-wrap: anywhere; }
+.ch-pressure-cites { color: var(--text-secondary); font-size: 12px; }
+.ch-pressure-fix { color: var(--lala-lavender-text); font-weight: 600; overflow-wrap: anywhere; }
 .ch-check { display: grid; gap: 8px; border-top: 1px solid var(--lala-lavender-line); padding-top: 12px; }
 .ch-check > .ch-btn-soft { justify-self: start; }
 .ch-check-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
