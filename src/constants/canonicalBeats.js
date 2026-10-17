@@ -51,6 +51,13 @@
  *     chooses in the closet, but Lala now sees that closet screen too (it
  *     is her phone) and believes she is choosing — `diegetic` is now
  *     `true`, not `false`.
+ *   - story_job — the one thing this beat adds to the story, so no two
+ *     beats announce the same thing. Evoni's ruling, 2026-10-17: beat 3
+ *     stays phone-free; beat 4 is the notification and its sender only,
+ *     beat 5 the whole invitation; one private exchange at beat 7 is the
+ *     default, a second at beat 14 optional; beat 11 gets a real
+ *     interaction, her decision and its consequence before the result.
+ *     Read by the Script tab's writer (groundedScriptGeneratorService).
  *   - phase, emotional_intent — for beats 4, 6, 8, 10, 11, 12, 13: the
  *     content-matched mapping proposed in PR #1610's body (from
  *     episodeGeneratorService.js's BEAT_TEMPLATES, matched by narrative
@@ -78,6 +85,7 @@ const CANONICAL_BEATS = [
   {
     number: 1,
     name: 'Opening Ritual',
+    story_job: "Set Lala's mood and one thing she wants today; Prime opens the adventure from her corner. No message.",
     typical_location: 'HOME_BASE',
     description: 'Lala in her space — sets the emotional tone for the episode',
     narrative_purpose: "Headphones on — the show's sacred opening. Never skipped.",
@@ -91,6 +99,7 @@ const CANONICAL_BEATS = [
   {
     number: 2,
     name: 'Login Sequence',
+    story_job: "Orient the audience: her numbers, her progress, and what carries over from last time. The audience's game; Lala does not see it.",
     typical_location: 'HOME_BASE',
     description: 'Checking phone/social — receives the episode catalyst',
     narrative_purpose: 'Login overlay → typing animation → Enter. World loads.',
@@ -106,6 +115,7 @@ const CANONICAL_BEATS = [
   {
     number: 3,
     name: 'Welcome',
+    story_job: "Lala greets the audience. Her mood, her want or her worry comes through in what she says and does. No phone moment.",
     typical_location: 'HOME_BASE',
     description: 'Greeting the audience — introduces the episode question',
     narrative_purpose: 'Lala enters the frame. World state is visible. Tone is set.',
@@ -122,6 +132,7 @@ const CANONICAL_BEATS = [
   {
     number: 4,
     name: 'Interruption Pulse 1',
+    story_job: "The notification arrives, showing only who it is from. Lala reacts so we want it opened; its details wait for beat 5.",
     typical_location: 'HOME_BASE',
     description: 'First disruption — text, call, memory — raises stakes',
     narrative_purpose: 'Mail arrives. First narrative event of the episode. Usually an Invite.',
@@ -138,6 +149,7 @@ const CANONICAL_BEATS = [
   {
     number: 5,
     name: 'Reveal',
+    story_job: "The full invitation, read aloud: the opportunity, what it asks of her, the deadline and the stakes, made clear here once and not repeated in later beats.",
     // CORRECTED — Evoni's ruling 2026-09-21: beat 5 is the
     // invitation/opportunity reveal, not an outfit reveal. Was wrongly
     // 'CLOSET' / "The outfit/look reveal — wardrobe becomes part of the
@@ -176,6 +188,7 @@ const CANONICAL_BEATS = [
   {
     number: 6,
     name: 'Strategic Reaction',
+    story_job: "Lala chooses her approach: can she afford it, does she want it, and how her personal worry shapes the look. A reply within an existing conversation is optional.",
     typical_location: 'HOME_BASE',
     description: 'Processing the reveal — doubt, confidence, or strategy shift',
     narrative_purpose: 'Lala evaluates: Can I afford this? Do I want this? What does this mean?',
@@ -191,6 +204,7 @@ const CANONICAL_BEATS = [
   {
     number: 7,
     name: 'Interruption Pulse 2',
+    story_job: "One complication that changes her next choice, as one private exchange, from an established character when one is given: a request, a warning, a temptation or a revealing detail.",
     typical_location: 'TRANSITION',
     description: 'Second disruption — escalation, complication, or twist',
     narrative_purpose: 'Second mail arrives. Brand deal, DM, or Side Quest. Tension compounds.',
@@ -206,6 +220,7 @@ const CANONICAL_BEATS = [
   {
     number: 8,
     name: 'Transformation Loop',
+    story_job: "The conflict becomes styling choices, piece by piece in the closet on her phone; her humor and uncertainty show. No incoming messages.",
     typical_location: 'CLOSET',
     description: 'Getting ready — the physical and mental transformation',
     narrative_purpose: 'Dopamine engine. Scroll → select → swap → check. Outfit is chosen.',
@@ -225,6 +240,7 @@ const CANONICAL_BEATS = [
   {
     number: 9,
     name: 'Reminder/Deadline',
+    story_job: "Time to stop adjusting and commit: one reminder on her to-do list, never another subplot.",
     typical_location: 'TRANSITION',
     description: 'Time pressure — the event is approaching, urgency builds',
     narrative_purpose: 'Pacing accelerates. Music intensifies. The clock is real.',
@@ -243,6 +259,7 @@ const CANONICAL_BEATS = [
   {
     number: 10,
     name: 'Event Travel',
+    story_job: "Anticipation as she enters the event's world. A personal message only when it matters.",
     typical_location: 'TRANSITION',
     description: 'Moving to the event — anticipation, anxiety, or excitement',
     narrative_purpose: 'Stylish wipe transition. New environment loads. World expands.',
@@ -267,6 +284,7 @@ const CANONICAL_BEATS = [
   {
     number: 11,
     name: 'Event Outcome',
+    story_job: "The payoff, given room: a real interaction with someone there, Lala's decision and its consequence, all before the result. The event and its people carry this beat, not the phone.",
     typical_location: 'EVENT_LOCATION',
     description: 'The main event — what happens when Lala arrives and performs',
     narrative_purpose: 'The evaluation resolves. Pass or fail. Stats update.',
@@ -280,6 +298,7 @@ const CANONICAL_BEATS = [
   {
     number: 12,
     name: 'Deliverable Creation',
+    story_job: "She makes and posts the content the event asked for, showing how she presents the experience publicly.",
     typical_location: 'EVENT_LOCATION',
     description: 'Creating the content/product — the work output of the episode',
     narrative_purpose: 'Lala creates brand content. This exports as real Instagram stories.',
@@ -295,6 +314,7 @@ const CANONICAL_BEATS = [
   {
     number: 13,
     name: 'Recap Panel',
+    story_job: "Close this episode's question: results, rewards, costs and any obligation still open. Lala says how the outcome feels, in her own words; the numbers stay on the stat card, which she does not see. No new drama.",
     typical_location: 'HOME_BASE',
     description: 'Reflecting on what happened — audience engagement moment',
     narrative_purpose: 'Cinematic stat card. Coins changed. Brand trust updated. Dream Fund moved.',
@@ -312,6 +332,7 @@ const CANONICAL_BEATS = [
   {
     number: 14,
     name: 'Cliffhanger',
+    story_job: "With this episode's question answered, open one specific question for what comes next: one private message, a future invitation or an in-person discovery, never more than one. The larger story moves forward; it need not be solved.",
     typical_location: 'HOME_BASE',
     description: 'Unresolved thread — drives viewer to next episode',
     narrative_purpose: 'Next episode is seeded. The world keeps going.',
