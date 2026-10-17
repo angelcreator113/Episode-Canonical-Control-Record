@@ -105,6 +105,8 @@ module.exports = (sequelize) => {
     // 'held' until Evoni releases it. story_order stays its story time.
     release_state: { type: DataTypes.STRING(12), allowNull: true, validate: { isIn: [['scheduled', 'held']] } },
     release_at: { type: DataTypes.DATE, allowNull: true },
+    // Evoni's own labels (migration 20261017230000, utils/postTags; Story Clock).
+    tags: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
   }, {
     tableName: 'feed_posts',
     timestamps: true,
