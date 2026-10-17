@@ -31,8 +31,10 @@ const NAMES = ['Opening Ritual', 'Login Sequence', 'Welcome', 'Interruption Puls
 const draft = NAMES.map((name, i) => {
   const n = i + 1;
   if (n === 8) return beat(8, name, '[UI:OPEN Closet]', 'Lala: the gold slip dress');
-  if (n === 11) return beat(11, name, 'Lala: I finally get to meet Marcus Reed');
-  if (n === 12) return beat(12, name, '[UI:OPEN Camera]', 'Lala: a quiet moment');
+  // Lala talks once her voice icon is clicked; beat 5 brings up the invitation (show rules, 2026-10-17).
+  if (n === 5) return beat(5, name, '[UI:OPEN Invitation]');
+  if (n === 11) return beat(11, name, '[UI:CLICK Voice Icon]', 'Lala: I finally get to meet Marcus Reed');
+  if (n === 12) return beat(12, name, '[UI:OPEN Camera]', '[UI:CLICK Voice Icon]', 'Lala: a quiet moment');
   if (n === 14) return beat(14, name, 'Me: and then the DM arrives');
   return beat(n, name, [4, 5, 7, 9, 10].includes(n) ? '[UI:OPEN Mail]' : 'Me: hi');
 }).join('\n\n');
@@ -95,7 +97,7 @@ describe("the Script tab's writer", () => {
     const asks = create.mock.calls.slice(1).map((c) => c[0].messages[0].content);
     expect(asks.find((p) => p.includes('Write ONLY beat 8 again'))).toContain(`[WEAR: ${PIECE}]`);
     expect(asks.find((p) => p.includes('Write ONLY beat 12 again'))).toContain('TikTok outfit reveal');
-    expect(out.coverage).toEqual({ missing: [], fixed_beats: [8, 12], phone_steps: 0 });
+    expect(out.coverage).toEqual({ missing: [], fixed_beats: [8, 12], phone_steps: 0, voice_clicks: 1, reveal_fixed: false });
     expect(out.script).toContain(`[WEAR: ${PIECE}]`);
     expect(out.script).toContain('filming my TikTok outfit reveal');
   });

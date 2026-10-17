@@ -320,6 +320,20 @@ async function generateGroundedScript(episodeId, showId, models, { lockedBeats =
     }
     script = next; fixedBeats.push(n);
   }
+  // The show's rules (utils/scriptShowRules.js; Evoni, 2026-10-17): Lala's
+  // voice click before she talks, and the invitation in beat 5, never the
+  // login screen; approved beats are left as they are. Before the phone
+  // steps, so a click the phone can't make gets its path too.
+  let voiceClicks = 0;
+  let revealFixed = false;
+  try {
+    const { scriptWithShowRules } = require('../utils/scriptShowRules');
+    const skip = splitScriptBeats(script).beats.map((b, i) => (locked.has(b.number) ? i : -1)).filter((i) => i >= 0);
+    const ruled = scriptWithShowRules(script, rulesPhone(inputs.phone, inputs.onScreen || []), { skip });
+    script = ruled.script; voiceClicks = ruled.voice_clicks; revealFixed = ruled.reveal;
+  } catch (err) {
+    console.error('[ScriptGen] show rules failed (non-blocking):', err.message);
+  }
   // Before each tap the phone can't make from where it is, a step to the
   // icon's screen (utils/phonePaths.js, the Script tab's own check); approved
   // beats are left as they are, and read for where they leave the phone.
@@ -338,7 +352,7 @@ async function generateGroundedScript(episodeId, showId, models, { lockedBeats =
   if (fixedBeats.length || missing.length) {
     console.log(`[ScriptGen] Coverage for episode ${episodeId}: rewrote beats ${fixedBeats.join(', ') || 'none'}; still missing ${missing.length}`);
   }
-  return { script, coverage: { missing, fixed_beats: fixedBeats.sort((a, b) => a - b), phone_steps: phoneSteps }, facts };
+  return { script, coverage: { missing, fixed_beats: fixedBeats.sort((a, b) => a - b), phone_steps: phoneSteps, voice_clicks: voiceClicks, reveal_fixed: revealFixed }, facts };
 }
 
 // What the coverage check needs from the writer's inputs.
@@ -464,6 +478,18 @@ function onScreenContext(onScreen = []) {
   return `\n═══ ON SCREEN ═══\n${screens.length ? `Screens: ${screens.join(', ')}\n` : ''}${icons.length ? `Icons: ${icons.join(', ')}\n` : ''}${overlays.length ? `Overlays: ${overlays.join(', ')}\n` : ''}`;
 }
 
+// The phone the show rules name things on (utils/scriptShowRules.js): the
+// phone map when it was read, else the show's overlay list.
+function rulesPhone(phone, onScreen = []) {
+  if (phone) return phone;
+  const isIcon = (o) => o?.category === 'phone_icon' || o?.category === 'icon';
+  return {
+    screens: onScreen.filter((o) => o && !isIcon(o) && o.category !== 'production'),
+    icons: onScreen.filter(isIcon),
+    production: onScreen.filter((o) => o?.category === 'production'),
+  };
+}
+
 function seasonPurposeLines(sc) {
   // A purpose may name only a thread; it then reads as continuing that thread.
   const list = (Array.isArray(sc?.story_purposes) ? sc.story_purposes : [])
@@ -537,6 +563,8 @@ function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrob
   // Her numbers come from LALA'S STATS when the story read has them; the
   // world snapshot is the fallback, given whole (a 200-character cut broke
   // it mid-object).
+  const showRules = require('../utils/scriptShowRules');
+  const rulesOn = rulesPhone(phone, onScreen);
   const hook = typeof brief?.forward_hook === 'string' ? brief.forward_hook.trim() : '';
   const told = storyContext(story, { hasSeason: !!seasonContext?.label, hook });
   const statsContext = told.stats ? ''
@@ -638,7 +666,8 @@ JustAWoman (Me:) is playing the game on camera from her corner: she sees the gam
 
 ═══ SHOW RULES ═══
 - Lala's phone is on screen from the moment the Start button is clicked in Beat 1 until she travels to the event in Beat 10. Never write [UI:SHOW phone] or [UI:HIDE phone] in between; the phone is already there.
-- Beat 5 (Reveal): JAWIHP reads the whole invitation aloud, every word of it, not a summary.
+- Beat 5 (Reveal): the invitation letter comes up, ${showRules.invitationLine(rulesOn)}, never the login screen or the Start button (those are beats 1 and 2). JAWIHP reads the whole invitation aloud, every word of it, not a summary.
+- Lala talks only after JustAWoman clicks her voice icon: ${`[UI:CLICK ${showRules.voiceIconName(rulesOn.icons)}]`} before Lala's first line in a beat, and her voice stays on for the rest of that beat. No click is needed when she is answering a notification or message ([UI:NOTIFY …], [UI:DM …]) or while she is being dressed (the closet, [WEAR:] lines). Her thoughts, Lala (V.O.):, need no click.
 - Beat 8 (Transformation Loop): every piece of the look is picked and put on one at a time: its own pick, its own line, its own [WEAR: id] line. Never several pieces at once.
 ${only ? `═══ THE SCRIPT AS IT STANDS ═══
 ${only.currentScript.trim() || '(empty)'}

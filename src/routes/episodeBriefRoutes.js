@@ -608,6 +608,9 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
         fixed_beats: written.coverage?.fixed_beats || [],
         // Phone steps added before taps the phone couldn't make (utils/phonePaths.js).
         phone_steps: written.coverage?.phone_steps || 0,
+        // The show's rules fixed after writing (utils/scriptShowRules.js).
+        voice_clicks: written.coverage?.voice_clicks || 0,
+        reveal_fixed: !!written.coverage?.reveal_fixed,
       };
     }
     if (!saved) {
