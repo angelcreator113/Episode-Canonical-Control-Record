@@ -7,7 +7,7 @@
  * "Who they are" (editable; Rewrite drafts it from the profile), "Where
  * they show up" (lib/characterPage, from GET /api/v1/cast/characters/:id/
  * appearances), their voice and what is between them and Lala. Inner life
- * holds the interior, DEPTH and the deep profile; Voice & feed the feed
+ * is a workspace of five sections (components/InnerLife); Voice & feed the feed
  * profile; Connections and In the world as before.
  */
 
@@ -19,7 +19,8 @@ import {
 } from 'lucide-react';
 import CharacterPlacesTab from '../components/CharacterPlaces/CharacterPlacesTab';
 import { API_URL } from '../config/api';
-import CharacterDepthPanel from '../components/CharacterDepthPanel';
+import InnerLifeWorkspace from '../components/InnerLife/InnerLifeWorkspace';
+import { dimensionOf as dimension, dimensionText } from '../lib/innerLifeSections';
 import { platformLabel, atHandle, followersOf } from './feed/feedConstants';
 import apiClient from '../services/api';
 import { ROLE_LABELS } from '../constants/characterConstants';
@@ -134,40 +135,6 @@ const TABS = [
   // Evoni, 2026-10-17: their home, closet and place of work, and the events they host.
   { id: 'places',      label: 'Places',       icon: MapPin },
 ];
-
-const DIMENSION_KEYS = [
-  'life_stage', 'the_body', 'class_money', 'religion_meaning',
-  'race_culture', 'sexuality_desire', 'family_architecture', 'friendship_loyalty',
-  'ambition_identity', 'habits_rituals', 'speech_silence', 'grief_loss',
-  'politics_justice', 'the_unseen',
-];
-
-// The older deep-profile endpoints name ten dimensions with "_and_"
-// (class_and_money); generation v2 does not (class_money). Read both.
-const DIMENSION_ALIASES = {
-  class_money: 'class_and_money', religion_meaning: 'religion_and_meaning', race_culture: 'race_and_culture',
-  sexuality_desire: 'sexuality_and_desire', friendship_loyalty: 'friendship_and_loyalty',
-  ambition_identity: 'ambition_and_identity', habits_rituals: 'habits_and_rituals',
-  speech_silence: 'speech_and_silence', grief_loss: 'grief_and_loss', politics_justice: 'politics_and_justice',
-};
-const dimension = (dp, key) => (dp ? dp[key] || dp[DIMENSION_ALIASES[key]] || null : null);
-
-const DIMENSION_ICONS = {
-  life_stage:          '\u23F3',
-  the_body:            '\u270F\uFE0F',
-  class_money:         '\uD83D\uDD25',
-  religion_meaning:    '\u2726',
-  race_culture:        '\uD83C\uDF0D',
-  sexuality_desire:    '\uD83D\uDD25',
-  family_architecture: '\uD83C\uDFE0',
-  friendship_loyalty:  '\uD83D\uDC9B',
-  ambition_identity:   '\uD83C\uDFAF',
-  habits_rituals:      '\uD83C\uDF11',
-  speech_silence:      '\uD83D\uDCAD',
-  grief_loss:          '\uD83C\uDF0A',
-  politics_justice:    '\u2696\uFE0F',
-  the_unseen:          '\uD83D\uDD2E',
-};
 
 // Something is there: non-empty text, a list with items, or an object with a filled value.
 function hasValue(v) {
@@ -1597,178 +1564,31 @@ export function ConnectionsCard({ relationships: rels, entanglements: ents, open
   );
 }
 
-/* ── Tab 2: Interior ─────────────────────────────────────────────────────────── */
+/* ── Inner life: what the merge kept aside ────────────────────────────────── */
 
-function TabInterior({ character, gen }) {
-  const want    = character.want_architecture;
-  const wound   = character.wound;
-  const mask    = character.the_mask;
-  // The column, or the older generate-section shape in extra_fields.
-  const dilemma = character.dilemma || character.extra_fields?.dilemma || null;
-  const triggers = character.triggers;
-  const missing = ['want_architecture', 'wound', 'the_mask', 'triggers', 'dilemma', 'deep_profile', 'living_state',
-    'self_narrative', 'operative_cosmology', 'foreclosed_possibility', 'experience_of_joy', 'change_capacity']
-    .filter((f) => !hasValue(character[f]));
-  const allNote = gen.note?.key === 'all' ? gen.note : null;
-
+// What the merge of the depth fields kept aside (2026-10-17): a value that
+// differed from the one kept, or had no place in the new lists.
+function DepthArchive({ character }) {
+  const kept = archivedDepth(character);
+  if (!kept.length) return null;
   return (
-    <div className="cp-tab-content">
-      {missing.length > 0 && !gen.locked && (
-        <div className="cp-fill-all">
-          <p className="ch-note">{missing.length} {missing.length === 1 ? 'part' : 'parts'} of their inner life {missing.length === 1 ? 'is' : 'are'} empty. Fill them in from who they already are; nothing written is changed.</p>
-          <button type="button" className="ch-btn" disabled={!!gen.busy} onClick={() => gen.run()}>
-            {gen.busy === 'all' ? 'Filling in… (about a minute)' : 'Fill in everything missing'}
-          </button>
-          {allNote && <p className={`ch-note${allNote.error ? ' is-error' : ''}`} role="status">{allNote.text}</p>}
-        </div>
-      )}
-
-      {/* Want Architecture — three cards */}
-      <section className="cp-section">
-        <h3 className="cp-section-title">Want Architecture</h3>
-        {want ? (
-          <div className="cp-want-row">
-            <div className="cp-want-card cp-want-surface">
-              <span className="cp-want-label">Surface Want</span>
-              <p>{want.surface_want}</p>
-            </div>
-            <div className="cp-want-card cp-want-real">
-              <span className="cp-want-label">Real Want</span>
-              <p>{want.real_want}</p>
-            </div>
-            <div className="cp-want-card cp-want-forbidden">
-              <span className="cp-want-label">Forbidden Want</span>
-              <p>{want.forbidden_want}</p>
-            </div>
-          </div>
-        ) : <EmptyState label="Want architecture not generated yet." gen={gen} fields={['want_architecture']} />}
-      </section>
-
-      {/* Wound */}
-      <section className="cp-section">
-        <h3 className="cp-section-title">Wound</h3>
-        {wound ? (
-          <div className="cp-wound-block">
-            <p className="cp-wound-desc">{wound.description}</p>
-            {wound.origin_period && (
-              <p className="cp-wound-meta">Origin: {wound.origin_period}</p>
-            )}
-            {wound.downstream_effects && (
-              <p className="cp-wound-effects">{wound.downstream_effects}</p>
-            )}
-            {wound.deep_profile_dimensions_affected?.length > 0 && (
-              <div className="cp-dim-tags">
-                {wound.deep_profile_dimensions_affected.map(d => (
-                  <span key={d} className="cp-dim-tag">{d.replace(/_/g, ' ')}</span>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : <EmptyState label="Wound not defined yet." gen={gen} fields={['wound']} />}
-      </section>
-
-      {/* The Mask */}
-      <section className="cp-section">
-        <h3 className="cp-section-title">The Mask</h3>
-        {mask ? (
-          <div className="cp-mask-block">
-            <p>{mask.description}</p>
-            {mask.feed_profile_is_mask && (
-              <div className="cp-mask-callout">
-                <span className="cp-mask-dot" /> This character&rsquo;s Feed profile IS their mask
-              </div>
-            )}
-            {mask.divergence_map?.length > 0 && (
-              <div className="cp-divergence-list">
-                <span className="cp-meta-label">Divergences</span>
-                {mask.divergence_map.map((d, i) => (
-                  <p key={i} className="cp-divergence-item">&middot; {d}</p>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : <EmptyState label="Mask not defined yet." gen={gen} fields={['the_mask']} />}
-      </section>
-
-      {/* Dilemma — two column */}
-      <section className="cp-section">
-        <h3 className="cp-section-title">Central Dilemma</h3>
-        {dilemma ? (
-          <div className="cp-dilemma-block">
-            <p className="cp-dilemma-tension">{dilemma.central_tension || dilemma.central_dilemma}</p>
-            <div className="cp-dilemma-options">
-              <div className="cp-dilemma-option">
-                <span className="cp-option-label">A</span>
-                <p>{dilemma.option_a}</p>
-              </div>
-              <div className="cp-dilemma-vs">vs</div>
-              <div className="cp-dilemma-option">
-                <span className="cp-option-label">B</span>
-                <p>{dilemma.option_b}</p>
-              </div>
-            </div>
-            {(dilemma.what_both_cost || dilemma.stakes) && (
-              <p className="cp-dilemma-cost">Either way: {dilemma.what_both_cost || dilemma.stakes}</p>
-            )}
-          </div>
-        ) : <EmptyState label="Dilemma not generated yet." gen={gen} fields={['dilemma']} />}
-      </section>
-
-      {/* Triggers */}
-      <section className="cp-section">
-        <h3 className="cp-section-title">Triggers</h3>
-        {triggers?.length > 0 ? (
-          <div className="cp-trigger-pills">
-            {triggers.map((t, i) => (
-              <span key={i} className="cp-trigger-pill">{typeof t === 'string' ? t : t.label || t.name}</span>
-            ))}
-          </div>
-        ) : <EmptyState label="Triggers not defined yet." gen={gen} fields={['triggers']} />}
-      </section>
-
-      {/* Blind Spot — author only */}
-      {character.blind_spot && (
-        <section className="cp-section cp-author-only">
-          <h3 className="cp-section-title">
-            Blind Spot
-            <span className="cp-author-badge">Author Only</span>
-          </h3>
-          <p className="cp-blind-spot-text">{character.blind_spot}</p>
-        </section>
-      )}
-
-      {/* Interior architecture labeled blocks */}
-      {(character.change_capacity || character.self_narrative || character.operative_cosmology ||
-        character.foreclosed_possibility || character.experience_of_joy || character.time_orientation) && (
-        <section className="cp-section">
-          <h3 className="cp-section-title">Interior Architecture</h3>
-          <div className="cp-interior-grid">
-            {[
-              { label: 'Change Capacity',        value: character.change_capacity
-                ? (typeof character.change_capacity === 'string'
-                  ? character.change_capacity
-                  // The generator writes { mobility, conditions_for_change, armor_type }.
-                  : [character.change_capacity.mobility,
-                    character.change_capacity.conditions_for_change && `Would change if: ${character.change_capacity.conditions_for_change}`,
-                    character.change_capacity.armor_type && `Armor: ${character.change_capacity.armor_type}`,
-                    character.change_capacity.description].filter(Boolean).join(' · ') || null)
-                : null },
-              { label: 'Self-Narrative',          value: character.self_narrative },
-              { label: 'Operative Cosmology',     value: character.operative_cosmology },
-              { label: 'Foreclosed Possibility',  value: character.foreclosed_possibility },
-              { label: 'Experience of Joy',       value: character.experience_of_joy },
-              { label: 'Time Orientation',        value: character.time_orientation?.replace?.(/_/g, ' ') || character.time_orientation },
-            ].filter(f => f.value).map(f => (
-              <div key={f.label} className="cp-interior-field">
-                <span className="cp-meta-label">{f.label}</span>
-                <p>{f.value}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-    </div>
+    <details className="cp-section cp-archived" data-testid="cp-depth-archive">
+      <summary className="cp-section-title">Kept from retired fields ({kept.length})</summary>
+      <p className="cp-archived-hint">When the inner life fields were merged into one place, these values differed from the one kept, or had no place in the new lists. Copy anything you want into its section.</p>
+      <ul className="cp-archived-list">
+        {kept.map(([key, value]) => (
+          <li key={key}><span className="cp-meta-label">{words(key.replace(/^de_/, ''))}</span> {typeof value === 'object' ? JSON.stringify(value) : String(value)}</li>
+        ))}
+      </ul>
+    </details>
   );
+}
+
+/* Inner life display helpers (the one-home merge, 2026-10-17). */
+/** The values the merge kept aside, as [field, value] pairs. */
+export function archivedDepth(character) {
+  const archive = character?.extra_fields?.depth_archive;
+  return archive && typeof archive === 'object' ? Object.entries(archive).filter(([, v]) => v !== null && v !== '') : [];
 }
 
 /* ── Tab 3: Connections ──────────────────────────────────────────────────────── */
@@ -2130,7 +1950,7 @@ function TabWorld({ character, onSaved, gen }) {
         <section className="cp-section">
           <h3 className="cp-section-title">Time Orientation</h3>
           <span className="cp-time-badge">
-            {character.time_orientation.replace?.(/_/g, ' ') || character.time_orientation}
+            {words(character.time_orientation)}
           </span>
         </section>
       )}
@@ -2182,73 +2002,6 @@ function TabWorld({ character, onSaved, gen }) {
           )}
         </section>
       )}
-    </div>
-  );
-}
-
-/* ── Tab 6: Deep Profile ─────────────────────────────────────────────────────── */
-
-// A dimension is text (generation v2) or an object of notes (the older
-// deep-profile endpoints); an object used to crash the page when opened.
-function dimensionText(value) {
-  if (!value) return null;
-  if (typeof value === 'string') return value;
-  if (typeof value === 'object') {
-    const parts = Object.entries(value).filter(([, v]) => hasValue(v))
-      .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${typeof v === 'string' ? v : JSON.stringify(v)}`);
-    return parts.length ? parts.join('\n') : null;
-  }
-  return String(value);
-}
-
-function TabDeepProfile({ character, gen }) {
-  const dp = character.deep_profile;
-  const [open, setOpen] = useState(null);
-
-  if (!hasValue(dp)) {
-    return (
-      <div className="cp-tab-content">
-        <EmptyState label="Deep Profile not generated yet." gen={gen} fields={['deep_profile']} />
-      </div>
-    );
-  }
-
-  const populated = DIMENSION_KEYS.filter(k => dimensionText(dimension(dp, k)));
-  const isComplete = populated.length === 14;
-
-  return (
-    <div className="cp-tab-content">
-      {/* Completion indicator */}
-      <div className="cp-dp-status">
-        <span className="cp-dp-count">{populated.length}/14 dimensions</span>
-        {isComplete && <span className="cp-dp-complete">Complete</span>}
-      </div>
-
-      <div className="cp-dp-list">
-        {DIMENSION_KEYS.map(key => {
-          const value  = dimensionText(dimension(dp, key));
-          const label  = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-          const icon   = DIMENSION_ICONS[key] || '\u00B7';
-          const isOpen = open === key;
-
-          return (
-            <div
-              key={key}
-              className={`cp-dp-row ${isOpen ? 'cp-dp-open' : ''} ${!value ? 'cp-dp-empty' : ''}`}
-              onClick={() => value && setOpen(isOpen ? null : key)}
-            >
-              <div className="cp-dp-header">
-                <span className="cp-dp-icon">{icon}</span>
-                <span className="cp-dp-label">{label}</span>
-                {value
-                  ? <span className="cp-dp-chevron">{isOpen ? '\u2191' : '\u2193'}</span>
-                  : <span className="cp-dp-missing">not generated</span>}
-              </div>
-              {isOpen && value && <p className="cp-dp-content">{value}</p>}
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -2413,18 +2166,10 @@ export default function CharacterProfilePage() {
 
       <div className="ch-panel">
         {activeTab === 'overview' && <TabOverview character={character} appearances={appearances} feedProfile={feedProfile} relationships={relationships} entanglements={entanglements} onSaved={onSaved} onFeedSaved={onFeedSaved} gen={gen} openTab={setActiveTab} />}
-        {activeTab === 'inner' && <TheirType character={character} />}
         {activeTab === 'inner' && (
           <div className="ch-card">
-            <TabInterior character={character} gen={gen} />
-            <section className="cp-section">
-              <h3 className="cp-section-title">DEPTH</h3>
-              <CharacterDepthPanel characterId={character.id} characterName={name} />
-            </section>
-            <section className="cp-section">
-              <h3 className="cp-section-title">Deep Profile</h3>
-              <TabDeepProfile character={character} gen={gen} />
-            </section>
+            <InnerLifeWorkspace character={character} gen={gen} onSaved={onSaved}
+              typeCard={<TheirType character={character} />} archive={<DepthArchive character={character} />} />
           </div>
         )}
         {activeTab === 'voice' && (

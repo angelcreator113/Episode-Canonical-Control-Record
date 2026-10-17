@@ -650,11 +650,9 @@ router.put('/characters/:id', requireAuth, express.json(), async (req, res) => {
     const character = await RegistryCharacter.findByPk(req.params.id);
     if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
 
-    // Author-only fields — only writable by authenticated authors
-    const AUTHOR_ONLY = [
-      'de_blind_spot', 'de_blind_spot_evidence', 'de_blind_spot_crack_condition',
-      'de_actual_narrative_gap',
-    ];
+    // Author-only fields — only writable by authenticated authors (the model's list,
+    // blind_spot included since the depth merge, 2026-10-17)
+    const AUTHOR_ONLY = require('../models/RegistryCharacter').AUTHOR_ONLY_FIELDS;
 
     const allowed = [
       'character_key', 'icon', 'display_name', 'subtitle', 'world', 'role_type', 'role_label',
@@ -679,17 +677,9 @@ router.put('/characters/:id', requireAuth, express.json(), async (req, res) => {
       'triggers', 'blind_spot', 'change_capacity', 'self_narrative',
       'operative_cosmology', 'foreclosed_possibility', 'experience_of_joy',
       'time_orientation', 'dilemma', 'prose_overview',
-      // Character Depth Engine v1
-      'body_relationship', 'body_history', 'body_currency', 'body_control_pattern',
-      'money_behavior_pattern', 'money_behavior_note',
-      'time_orientation_v2', 'time_orientation_note',
-      'change_capacity_v2', 'change_conditions', 'change_blocker',
-      'circumstance_advantages', 'circumstance_disadvantages', 'luck_belief', 'luck_belief_vs_stated',
-      'actual_narrative', 'narrative_gap_type',
-      'blind_spot_category', 'blind_spot_visible_to',
-      'operative_cosmology_v2', 'cosmology_vs_stated_religion',
-      'foreclosed_category', 'foreclosure_origin', 'foreclosure_vs_stated_want',
-      'joy_source', 'joy_accessibility', 'joy_vs_ambition',
+      // Character Depth Engine v1: retired 2026-10-17 (migration
+      // 20261017240000); only blind_spot_visible_to, with no twin, is kept.
+      'blind_spot_visible_to',
       // Intimate eligibility
       'intimate_eligible',
       // Death Tracking
@@ -751,7 +741,12 @@ router.put('/characters/:id', requireAuth, express.json(), async (req, res) => {
     const isAuthor = userInGroup(req.user, 'admin');
     const filteredAllowed = isAuthor ? allowed : allowed.filter(f => !AUTHOR_ONLY.includes(f));
 
-    filteredAllowed.forEach(f => { if (req.body[f] !== undefined) character[f] = req.body[f]; });
+    // A de_ field merged into an Inner life field is saved in its home
+    // (services/characterDepthFields), the rest as given.
+    const given = {};
+    filteredAllowed.forEach(f => { if (req.body[f] !== undefined) given[f] = req.body[f]; });
+    const current = typeof character.toJSON === 'function' ? character.toJSON() : character;
+    for (const [f, v] of Object.entries(require('../services/characterDepthFields').withTwinsHome(current, given))) character[f] = v;
     if (req.body.current_city !== undefined) character.current_city = currentCity;
     await character.save();
     if (req.body.selected_name !== undefined) await syncRealNameToFeed(getModels(), character);
