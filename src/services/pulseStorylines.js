@@ -23,7 +23,10 @@
  *   suggestBeats(db, storylineId)
  *     one Sonnet call proposing plant, build and payoff beats from the
  *     premise and the show's posting characters; nothing is saved, Evoni
- *     keeps or bins each.
+ *     keeps or bins each. When the premise names posters by handle (a
+ *     storyline seeded from a pair names both), they lead and get most
+ *     beats, and only the creators whose audience overlaps theirs are
+ *     offered besides (castFor).
  *   tick / startScheduler / stopScheduler   the hourly due-beat check
  *     (app.js, with the worker)
  */
@@ -167,6 +170,35 @@ function registerHandlers() {
   require('./pulseQueue').register('storyline', handleStoryline);
 }
 
+const at = (c) => `@${String(c.profile.handle).replace(/^@+/, '')}`;
+const REACTORS_MAX = 4;
+
+/**
+ * Who a storyline is about (Evoni's idea 4, pair beats follow-up,
+ * 2026-10-17): the posters the premise names by handle are its leads (a
+ * storyline seeded from a pair names both); the reactors are the other
+ * posters whose audience overlaps a lead's most (services/audienceMap),
+ * the strongest few. A premise that names nobody has no leads, and every
+ * poster is offered as before.
+ */
+async function castFor(db, premise, people) {
+  const words = new Set((String(premise || '').toLowerCase().match(/@?[a-z0-9_.-]+/g) || []).map((w) => w.replace(/^@+/, '').replace(/\.+$/, '')));
+  const leads = people.filter((c) => words.has(String(c.profile.handle).replace(/^@+/, '').toLowerCase()));
+  if (!leads.length) return { leads: [], reactors: [] };
+  const leadIds = new Set(leads.map((c) => Number(c.profile.id)));
+  const others = people.filter((c) => !leadIds.has(Number(c.profile.id)));
+  const { audienceScores } = require('./audienceMap');
+  const best = new Map();
+  for (const lead of leads) {
+    const scores = await audienceScores(db, Number(lead.profile.id), others.map((c) => Number(c.profile.id)));
+    for (const [id, score] of scores) best.set(id, Math.max(best.get(id) || 0, score));
+  }
+  const reactors = others.filter((c) => best.has(Number(c.profile.id)))
+    .sort((a, b) => best.get(Number(b.profile.id)) - best.get(Number(a.profile.id)) || at(a).localeCompare(at(b)))
+    .slice(0, REACTORS_MAX);
+  return { leads, reactors };
+}
+
 /** One AI call proposing beats; nothing is saved. Returns [{ kind, story_order, poster_profile_id, handle, brief }]. */
 async function suggestBeats(db, storylineId) {
   const storyline = await db.PulseStoryline.findByPk(storylineId);
@@ -175,9 +207,11 @@ async function suggestBeats(db, storylineId) {
   const present = await clock.presentOrder(db, storyline.show_id);
   // Storylines are ongoing relationships: suggestions use Alive characters (Evoni, 2026-10-12)
   // Lala has met; a public figure she only knows of waits for the meeting (Evoni, 2026-10-16).
-  const people = (await require('./pulseVoices').eligible(db, storyline.show_id, { stage: 'alive', met: true })).filter((c) => c.voice);
-  if (!people.length) throw new StorylineError(400, 'No Alive character has a Voice Profile yet. Build one in Voices.');
-  const byHandle = new Map(people.map((c) => [String(c.profile.handle).toLowerCase(), Number(c.profile.id)]));
+  const everyone = (await require('./pulseVoices').eligible(db, storyline.show_id, { stage: 'alive', met: true })).filter((c) => c.voice);
+  if (!everyone.length) throw new StorylineError(400, 'No Alive character has a Voice Profile yet. Build one in Voices.');
+  const { leads, reactors } = await castFor(db, storyline.premise, everyone);
+  const people = leads.length ? [...leads, ...reactors] : everyone;
+  const byHandle = new Map(people.map((c) => [String(c.profile.handle).replace(/^@+/, '').toLowerCase(), Number(c.profile.id)]));
   const [episodes] = await db.sequelize.query(
     'SELECT episode_number FROM episodes WHERE show_id = :showId AND deleted_at IS NULL AND episode_number IS NOT NULL ORDER BY episode_number',
     { replacements: { showId: storyline.show_id } });
@@ -187,7 +221,10 @@ async function suggestBeats(db, storylineId) {
 
 Storyline: ${storyline.title}
 Premise: ${storyline.premise || '(none given)'}
-Who can post (handles): ${people.map((c) => `@${c.profile.handle}`).join(', ')}
+${leads.length
+    ? `The storyline is between: ${leads.map(at).join(', ')}. Give them most beats (at least two in three), and the payoff.
+Others who can post, creators whose audience overlaps theirs and would react: ${reactors.map(at).join(', ') || '(none)'}`
+    : `Who can post (handles): ${people.map(at).join(', ')}`}
 Story moments you may use (story orders, earliest first; each is an episode moment): ${moments.slice(0, 24).join(', ') || present}
 
 Propose up to ${MAX_SUGGESTIONS} beats: first plants (small hints nobody notices yet), then builds, then one payoff. Each is one post by one character.
@@ -261,5 +298,5 @@ function stopScheduler() {
 
 module.exports = {
   MODELS, KINDS, STATUSES, MAX_SUGGESTIONS, StorylineError,
-  addBeat, queueDueBeats, handleStoryline, registerHandlers, suggestBeats, tick, startScheduler, stopScheduler,
+  addBeat, castFor, queueDueBeats, handleStoryline, registerHandlers, suggestBeats, tick, startScheduler, stopScheduler,
 };
