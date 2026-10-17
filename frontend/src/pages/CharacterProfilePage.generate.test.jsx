@@ -91,6 +91,29 @@ describe('GeneratePosts', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
+  test('a registry with no show: choose its show here, then the next step', async () => {
+    api.get
+      .mockResolvedValueOnce({ data: { success: true, ready: false, next: 'choose_show', blocker: 'slowsift\'s registry ("LalaVerse") belongs to no show, so their voice and posts have nowhere to go. Choose its show.',
+        registry: { id: 'r1', title: 'LalaVerse', characters: 4 }, shows: [{ id: 's1', name: 'Before Lala' }, { id: 's2', name: 'Styling Adventures' }], ideas: [] } })
+      .mockResolvedValue({ data: { success: true, ready: false, next: 'build_voice', blocker: 'slowsift has no Voice Profile yet: their posts are written in it. Build it here.', ideas: [] } });
+    api.put = vi.fn().mockResolvedValue({ data: { success: true } });
+    page();
+    expect(await screen.findByText(/This puts all 4 characters in “LalaVerse” in that show/)).toBeTruthy();
+    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 's2' } });
+    fireEvent.click(screen.getByText('Put their registry in this show'));
+    expect(await screen.findByText('Build their voice')).toBeTruthy();
+    expect(api.put).toHaveBeenCalledWith('/api/v1/character-registry/registries/r1', { show_id: 's2' });
+  });
+
+  test('a refused step says why, by its button', async () => {
+    api.get.mockResolvedValue({ data: { success: true, ready: false, next: 'build_voice', blocker: 'No voice yet.', ideas: [] } });
+    api.post.mockRejectedValue({ response: { status: 409, data: { error: 'This character\'s registry belongs to no show.' } } });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    page();
+    fireEvent.click(await screen.findByText('Build their voice'));
+    expect(await screen.findByText('This character\'s registry belongs to no show.')).toBeTruthy();
+  });
+
   test('shows the refusal (no Voice Profile)', async () => {
     api.post.mockRejectedValue({ response: { data: { error: 'Maren has no Voice Profile yet. Build it in Admin › The Pulse › Voices.' } } });
     page();
