@@ -5,7 +5,9 @@
  * - Voices lists her (Active) and her Breathing friend (not posting yet);
  * - her voice builds, one manual request in that show;
  * - the Draft posts ideas say the next step: Make Active, or Build their
- *   voice, and nothing once the voice is built.
+ *   voice, and nothing once the voice is built;
+ * - with no follower count in any show either, the ideas say to choose the
+ *   registry's show, listing the shows; once chosen, the next step is the voice.
  */
 jest.unmock('uuid');
 
@@ -29,7 +31,7 @@ const reply = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }]
 
 (shouldSkip ? describe.skip : describe)('a character whose registry has no show', () => {
   const tag = uuid().slice(0, 8);
-  const ids = { show: uuid(), reg: uuid(), maren: uuid(), friend: uuid() };
+  const ids = { show: uuid(), reg: uuid(), maren: uuid(), friend: uuid(), lostReg: uuid(), lost: uuid() };
   const p = {};
   let admin;
   const as = (req) => req.set('Authorization', `Bearer ${admin}`);
@@ -49,14 +51,21 @@ const reply = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }]
       await run(`INSERT INTO pulse_followers (show_id, social_profile_id, story_order, change, count_after, cause, reason, status, decided_by, decided_at, created_at, updated_at)
         VALUES (:show, :pid, 0, 2000000, 2000000, 'start', 'test', 'accepted', 'auto', NOW(), NOW(), NOW())`, { show: ids.show, pid: row.id });
     }
+    // In a registry with no show, and no follower count anywhere.
+    await run("INSERT INTO character_registries (id, title, created_at, updated_at) VALUES (:lostReg, :title, NOW(), NOW())", { ...ids, title: `Lost ${tag}` });
+    const [[lostProfile]] = await run(`INSERT INTO social_profiles (handle, platform, vibe_sentence, display_name, feed_layer, created_at, updated_at)
+      VALUES (:h, 'pulse', 'Lost.', 'lost', 'lalaverse', NOW(), NOW()) RETURNING id`, { h: `lost${tag}` });
+    p.lost = lostProfile.id;
+    await run(`INSERT INTO registry_characters (id, registry_id, character_key, display_name, depth_level, feed_profile_id, created_at, updated_at)
+      VALUES (:lost, :lostReg, :key, 'lost', 'active', :pid, NOW(), NOW())`, { ...ids, key: `lost-${tag}`, pid: lostProfile.id });
   });
 
   afterAll(async () => {
     await run('DELETE FROM pulse_requests WHERE show_id = :show', ids);
     await run('DELETE FROM pulse_voices WHERE registry_character_id IN (:maren, :friend)', ids);
     await run('DELETE FROM pulse_followers WHERE show_id = :show', ids);
-    await run('DELETE FROM registry_characters WHERE registry_id = :reg', ids);
-    await run('DELETE FROM character_registries WHERE id = :reg', ids);
+    await run('DELETE FROM registry_characters WHERE registry_id IN (:reg, :lostReg)', ids);
+    await run('DELETE FROM character_registries WHERE id IN (:reg, :lostReg)', ids);
     await run('DELETE FROM social_profiles WHERE id IN (:a)', { a: Object.values(p) });
     await run('DELETE FROM shows WHERE id = :show', ids);
     await sequelize.close();
@@ -81,5 +90,15 @@ const reply = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }]
     const [[{ n }]] = await run("SELECT COUNT(*)::int AS n FROM pulse_requests WHERE show_id = :show AND kind = 'voice'", ids);
     expect(n).toBe(1);
     expect((await ideas(ids.maren)).body).toMatchObject({ ready: true, next: null, blocker: null });
+  });
+
+  it('no show anywhere: choose the registry\'s show, then the next step is the voice', async () => {
+    const before = (await ideas(ids.lost)).body;
+    expect(before).toMatchObject({ ready: false, next: 'choose_show', registry: { id: ids.lostReg, title: `Lost ${tag}`, characters: 1 } });
+    expect(before.blocker).toMatch(/registry \("Lost .*"\) belongs to no show/);
+    expect(before.shows.map((sh) => sh.id)).toContain(ids.show);
+    const put = await as(request(app).put(`/api/v1/character-registry/registries/${ids.lostReg}`)).send({ show_id: ids.show });
+    expect(put.status).toBe(200);
+    expect((await ideas(ids.lost)).body).toMatchObject({ next: 'build_voice' });
   });
 });
