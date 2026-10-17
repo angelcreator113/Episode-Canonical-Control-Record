@@ -189,16 +189,67 @@ export function BeatPicker({ post, showId }) {
  */
 const releaseWhen = (at) => new Date(at).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 /** A datetime-local value an hour from now, as a starting point. */
-const inAnHour = () => {
-  const d = new Date(Date.now() + 60 * 60 * 1000);
+const localInput = (d) => {
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
+const inAnHour = () => localInput(new Date(Date.now() + 60 * 60 * 1000));
+
+// Schedule… opens with the time the story suggests (Evoni, 2026-10-17:
+// "doesn't the system know a better time ... and then I can just make
+// adjustments"; services/postRelease suggestReleaseTime), and why; she
+// schedules it as it is or changes it first. A time that breaks the story
+// order (a load-bearing post after its episode airs, a reply before its
+// post, a post before its reveal) says what it breaks, and waits for
+// "Schedule anyway".
+export const tzOffset = () => new Date().getTimezoneOffset();
+export { localInput };
+
+export function StoryProblems({ problems, testId = 'prv-release-problems' }) {
+  if (!problems?.length) return null;
+  return (
+    // Spans: it sits inside a card's action line (a <p>).
+    <span className="prv-release-problems" data-testid={testId}>
+      {problems.map((p) => <span key={p} className="prv-release-problem">{p}</span>)}
+    </span>
+  );
+}
 
 export function ReleaseTime({ post, busy, act }) {
   const [picking, setPicking] = useState(false);
   const [when, setWhen] = useState(inAnHour);
+  const [why, setWhy] = useState(null);
+  const [problems, setProblems] = useState([]);
+  const [refused, setRefused] = useState(false);
+  const pick = async () => {
+    setPicking(true);
+    setWhy(null);
+    setProblems([]);
+    setRefused(false);
+    try {
+      const res = await api.get(`/api/v1/feed-posts/${post.id}/release-time/suggest?tz_offset=${tzOffset()}`);
+      if (res.data?.at) {
+        setWhen(localInput(new Date(res.data.at)));
+        setWhy(res.data.why || null);
+        setProblems(Array.isArray(res.data.problems) ? res.data.problems : []);
+      }
+    } catch (err) {
+      console.error('[PulseReviewPost] no suggested time:', err.response?.status || err.message);
+    }
+  };
   const setTime = (body, label) => act(label, () => api.put(`/api/v1/feed-posts/${post.id}/release-time`, body));
+  const schedule = (anyway) => act('Schedule', async () => {
+    try {
+      await api.put(`/api/v1/feed-posts/${post.id}/release-time`, { mode: 'schedule', at: new Date(when).toISOString(), tz_offset: tzOffset(), anyway });
+      setPicking(false);
+    } catch (err) {
+      const found = err.response?.status === 409 ? err.response?.data?.problems : null;
+      if (!Array.isArray(found) || !found.length) throw err;
+      console.error('[PulseReviewPost] the time breaks the story order:', found.length);
+      setProblems(found);
+      setRefused(true);
+    }
+  });
   const state = post.release_state;
   return (
     <span className="prv-release" data-testid="prv-release">
@@ -206,14 +257,17 @@ export function ReleaseTime({ post, busy, act }) {
       {state === 'held' && <span className="prv-badge">Held</span>}
       {picking ? (
         <>
-          <input type="datetime-local" aria-label="Release on" value={when} onChange={(e) => setWhen(e.target.value)} />
-          <button type="button" className="prv-btn" disabled={busy || !when}
-            onClick={() => { setPicking(false); setTime({ mode: 'schedule', at: new Date(when).toISOString() }, 'Schedule'); }}>Schedule</button>
+          <input type="datetime-local" aria-label="Release on" value={when}
+            onChange={(e) => { setWhen(e.target.value); setWhy(null); setProblems([]); setRefused(false); }} />
+          {why && <span className="prv-muted" data-testid="prv-release-why">Suggested: {why}</span>}
+          <StoryProblems problems={problems} />
+          <button type="button" className="prv-btn" disabled={busy || !when} onClick={() => schedule(false)}>Schedule</button>
+          {refused && <button type="button" className="prv-link-btn" disabled={busy || !when} onClick={() => schedule(true)}>Schedule anyway</button>}
           <button type="button" className="prv-link-btn" onClick={() => setPicking(false)}>Cancel</button>
         </>
       ) : (
         <>
-          <button type="button" className="prv-link-btn" disabled={busy} onClick={() => setPicking(true)}>{state === 'scheduled' ? 'Reschedule' : 'Schedule…'}</button>
+          <button type="button" className="prv-link-btn" disabled={busy} onClick={pick}>{state === 'scheduled' ? 'Reschedule' : 'Schedule…'}</button>
           {state !== 'held' && <button type="button" className="prv-link-btn" disabled={busy} onClick={() => setTime({ mode: 'hold' }, 'Hold')}>Hold</button>}
           {state && <button type="button" className="prv-link-btn" disabled={busy} onClick={() => setTime({ mode: 'clear' }, 'Clear the release time')}>{state === 'held' ? 'Stop holding' : 'Unschedule'}</button>}
         </>

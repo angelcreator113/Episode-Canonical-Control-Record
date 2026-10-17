@@ -49,6 +49,7 @@ const HOUR = 60 * 60 * 1000;
     await new Promise((r) => { setTimeout(r, 300); });
     await run('DELETE FROM pulse_post_numbers WHERE show_id = :show', { show });
     await run('DELETE FROM feed_posts WHERE show_id = :show', { show });
+    await run('DELETE FROM episodes WHERE show_id = :show', { show });
     await run('DELETE FROM shows WHERE id = :show', { show });
     await sequelize.close();
   });
@@ -94,5 +95,25 @@ const HOUR = 60 * 60 * 1000;
     expect(res.status).toBe(200);
     await p.reload();
     expect(p).toMatchObject({ status: 'live', release_state: null, release_at: null });
+  });
+
+  it('suggests a release time from the story: two days before its episode airs, in her own hours; nothing saved', async () => {
+    const air = new Date(Date.now() + 10 * 24 * HOUR);
+    air.setUTCHours(0, 0, 0, 0);
+    await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, air_date, created_at, updated_at)
+               VALUES (:id, :show, 'Air', 1, 'draft', :air, NOW(), NOW())`, { id: crypto.randomUUID(), show, air });
+    const p = await draft({ story_order: 11 });
+    const suggest = (id, token = editor) => request(app).get(`/api/v1/feed-posts/${id}/release-time/suggest?tz_offset=0`).set('Authorization', `Bearer ${token}`);
+    const res = await suggest(p.id);
+    expect(res.status).toBe(200);
+    const want = new Date(air.getTime() - 2 * 24 * HOUR);
+    want.setUTCHours(18);
+    expect(res.body).toEqual({ at: want.toISOString(), why: 'Two days before Episode 1 airs', problems: [] });
+    await p.reload();
+    expect(p.release_state).toBeNull();
+    const live = await draft({ status: 'live', posted_at: new Date() });
+    expect((await suggest(live.id)).status).toBe(409);
+    expect((await suggest(crypto.randomUUID())).status).toBe(404);
+    expect((await request(app).get(`/api/v1/feed-posts/${p.id}/release-time/suggest`)).status).toBe(401);
   });
 });

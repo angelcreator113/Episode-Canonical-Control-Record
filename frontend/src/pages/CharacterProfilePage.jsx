@@ -46,6 +46,8 @@ export const getFactsApi = (id) =>
   apiClient.get(`${API_URL}/cast/characters/${id}/facts`);
 export const putFactsApi = (id, body) =>
   apiClient.put(`${API_URL}/cast/characters/${id}/facts`, body);
+export const suggestFactsApi = (id) =>
+  apiClient.post(`${API_URL}/cast/characters/${id}/facts/suggest`);
 export const getCheckApi = (id) =>
   apiClient.get(`${API_URL}/cast/characters/${id}/check`);
 export const markIntentionalApi = (id, flagId, note) =>
@@ -478,11 +480,20 @@ function factText(facts, key) {
   }
 }
 
+/** Whether any of occupation, income and possessions is missing (and not marked not decided). */
+export const needsFacts = (facts) => {
+  const undecided = new Set(facts?.undecided || []);
+  return (!undecided.has('occupation') && !facts?.occupation)
+    || (!undecided.has('income') && facts?.income?.amount == null)
+    || (!undecided.has('major_possessions') && !(facts?.major_possessions || []).length);
+};
+
 export function TheirFacts({ character, onFeedSaved }) {
   const [facts, setFacts] = useState(null);
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
+  const [suggesting, setSuggesting] = useState(false);
   const id = character.id;
 
   useEffect(() => {
@@ -496,22 +507,38 @@ export function TheirFacts({ character, onFeedSaved }) {
     return () => { live = false; };
   }, [id]);
 
-  const startEdit = () => {
-    setNote(null);
+  const startEdit = (proposal = null, why = null) => {
+    setNote(why ? { kind: 'ok', text: `Suggested from their profile: ${why} Save to keep it, or change it first.` } : null);
+    const p = proposal || {};
     setForm({
       handle: facts.handle || '',
       followers: facts.followers?.count ?? '',
       followers_reason: '',
       account_status: facts.account_status || '',
-      income_amount: facts.income?.amount ?? '',
-      income_cadence: facts.income?.cadence || 'per_year',
-      income_source: facts.income?.source || '',
-      occupation: facts.occupation || '',
-      major_possessions: facts.major_possessions.join(', '),
+      income_amount: p.income?.amount ?? facts.income?.amount ?? '',
+      income_cadence: p.income?.cadence || facts.income?.cadence || 'per_year',
+      income_source: p.income?.source || facts.income?.source || '',
+      occupation: p.occupation || facts.occupation || '',
+      major_possessions: (p.major_possessions || facts.major_possessions).join(', '),
       undecided: [...facts.undecided],
     });
   };
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  // Suggest facts from their profile (Evoni, 2026-10-17): the missing ones,
+  // read from what is written about them; the form opens with them.
+  const suggest = async () => {
+    setSuggesting(true);
+    setNote(null);
+    try {
+      const res = await suggestFactsApi(id);
+      startEdit(res.data?.proposal || {}, res.data?.why || '');
+    } catch (err) {
+      console.error('[CharacterProfilePage] suggesting facts failed:', err);
+      setNote({ kind: 'error', text: err.response?.data?.error || 'Could not suggest their facts.' });
+    } finally {
+      setSuggesting(false);
+    }
+  };
   const toggleUndecided = (k) => setForm((f) => ({
     ...f, undecided: f.undecided.includes(k) ? f.undecided.filter((x) => x !== k) : [...f.undecided, k],
   }));
@@ -571,7 +598,14 @@ export function TheirFacts({ character, onFeedSaved }) {
                 <dd>{facts.affordability ? `${facts.affordability.label} (${money(facts.affordability.yearly)} a year)` : <span className="ch-note">Set their income</span>}</dd>
               </div>
             </dl>
-            <button type="button" className="ch-btn-soft" onClick={startEdit}>Edit facts</button>
+            <span className="ch-facts-row">
+              <button type="button" className="ch-btn-soft" onClick={() => startEdit()}>Edit facts</button>
+              {needsFacts(facts) && (
+                <button type="button" className="ch-btn-soft" disabled={suggesting} onClick={suggest}>
+                  {suggesting ? 'Reading their profile…' : 'Suggest facts from their profile'}
+                </button>
+              )}
+            </span>
           </>
         ) : (
           <form className="ch-facts-form" onSubmit={(e) => { e.preventDefault(); save(); }}>

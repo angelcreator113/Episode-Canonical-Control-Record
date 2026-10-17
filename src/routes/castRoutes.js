@@ -5,6 +5,10 @@
  * 2026-10-08; frontend pages/CharacterRegistryPage). Its own file, not
  * routes/characterRegistry.js (F-Reg-2): each write here is one row.
  *
+ *   GET    /api/v1/cast/consistency?registry_id=   the cast rollout: each live character's
+ *                                                  facts, check findings, voice and next
+ *                                                  step (services/castConsistency; one id,
+ *                                                  or several comma-separated)
  *   GET    /api/v1/cast/review?registry_id=        live characters' review state and
  *                                                  feed link, the archived ones, and
  *                                                  how many episodes use each
@@ -22,6 +26,10 @@
  *                                                  (services/characterFacts)
  *   PUT    /api/v1/cast/characters/:id/facts        change them (ADMIN: followers write a
  *                                                  follower-ledger row with a reason)
+ *   POST   /api/v1/cast/characters/:id/facts/suggest  one AI call proposes their missing
+ *                                                  occupation, income and possessions from
+ *                                                  what is written about them; saves nothing
+ *                                                  (ADMIN; services/factsSuggest)
  *   GET    /api/v1/cast/characters/:id/check        flag-only check of their profile's text
  *                                                  against their facts (services/characterConsistency)
  *   POST   /api/v1/cast/characters/:id/check/intentional        { flag_id, note? }: ADMIN
@@ -132,6 +140,20 @@ async function cascadeRows(sequelize, characterId) {
   }
   return found;
 }
+
+router.get('/consistency', requireAuth, async (req, res) => {
+  try {
+    const ids = String(req.query.registry_id || '').split(',').map((s) => s.trim()).filter(Boolean);
+    if (!ids.length || ids.length > 20 || !ids.every((id) => UUID_RE.test(id))) {
+      return res.status(400).json({ success: false, error: 'registry_id must be one or more registry ids (UUIDs), comma-separated' });
+    }
+    const result = await require('../services/castConsistency').castOverview(getModels(), ids);
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('[Cast] GET /consistency error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 router.get('/review', requireAuth, async (req, res) => {
   try {
@@ -305,6 +327,30 @@ router.put('/characters/:id/facts', requireAuth, authorize(['ADMIN']), async (re
     }
   } catch (err) {
     console.error('[Cast] PUT /characters/:id/facts error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Suggest facts from their profile (Evoni, 2026-10-17: "why aren't these
+ * filled out when I auto generate profiles?"): a proposal for the missing
+ * facts only; the fact sheet opens with it, and she saves or changes it.
+ */
+router.post('/characters/:id/facts/suggest', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const db = getModels();
+    const found = await characterWithFeed(db, req.params.id);
+    if (!found) return res.status(404).json({ success: false, error: 'Character not found' });
+    const { FactsError } = require('../services/characterFacts');
+    try {
+      return res.json({ success: true, ...(await require('../services/factsSuggest').suggestFacts(db, found)) });
+    } catch (err) {
+      if (err instanceof FactsError) return res.status(err.status).json({ success: false, error: err.message });
+      throw err;
+    }
+  } catch (err) {
+    console.error('[Cast] POST /characters/:id/facts/suggest error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
