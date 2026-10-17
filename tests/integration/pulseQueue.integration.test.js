@@ -29,6 +29,8 @@ const shouldSkip =
   !process.env.DATABASE_URL?.includes('episode_metadata_test');
 
 const uuid = () => crypto.randomUUID();
+// The engine's four switches (Evoni's Engine mock, 2026-10-17): on unless saved off.
+const ON = { events_enabled: true, comments_enabled: true, storylines_enabled: true, voices_enabled: true };
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
 (shouldSkip ? describe.skip : describe)('The Pulse posting queue (Task #2968)', () => {
@@ -59,7 +61,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   });
 
   test('settings: defaults (5 automated, 15 manual, ambient off); saving keeps the other metadata; admin only; checked', async () => {
-    expect(await queue.settingsOf(models, ids.show)).toEqual({ automated_requests: 5, manual_requests: 15, ambient_enabled: false });
+    expect(await queue.settingsOf(models, ids.show)).toEqual({ automated_requests: 5, manual_requests: 15, ambient_enabled: false, ...ON });
     expect((await request(app).get(`/api/v1/pulse-engine?show_id=${ids.show}`)).status).toBe(401);
     const put = (body, token = admin) => as(token, request(app).put('/api/v1/pulse-engine')).send({ show_id: ids.show, ...body });
     expect((await put({ automated_requests: 3 }, editor)).status).toBe(403);
@@ -78,6 +80,43 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(metadata).toMatchObject({ pulse_cover: { url: 'cover.jpg' }, tagline: 'keep me', pulse_engine: { automated_requests: 3, manual_requests: 100, ambient_enabled: true } });
     expect((await as(admin, request(app).put('/api/v1/pulse-engine')).send({ show_id: uuid(), automated_requests: 3 })).status).toBe(404);
     await queue.saveSettings(models, ids.show, { automated_requests: 5, manual_requests: 15, ambient_enabled: false });
+  });
+
+  test("the four switches (2026-10-17): saved and checked; a switched-off kind's job waits, not an attempt; Evoni's own queueing still runs; the state counts and lists what waits", async () => {
+    const put = (body) => as(admin, request(app).put('/api/v1/pulse-engine')).send({ show_id: ids.show, ...body });
+    expect((await put({ comments_enabled: 'no' })).status).toBe(400);
+    const off = await put({ comments_enabled: false, events_enabled: false });
+    expect(off.status).toBe(200);
+    expect(off.body.settings).toMatchObject({ comments_enabled: false, events_enabled: false, storylines_enabled: true, voices_enabled: true });
+    expect(await queue.kindEnabled(models, ids.show, 'comment')).toBe(false);
+    expect(await queue.kindEnabled(models, ids.show, 'dm')).toBe(true);
+
+    let ran = 0;
+    queue.register('comment', async () => { ran += 1; return { draftIds: [] }; });
+    queue.register('event', async () => { ran += 1; return { draftIds: [] }; });
+    const comment = await queue.enqueue(models, { showId: ids.show, kind: 'comment' });
+    const mine = await queue.enqueue(models, { showId: ids.show, kind: 'event', payload: { manual: true } });
+    const now = new Date();
+    for (let i = 0; i < 2; i += 1) await queue.runOne(models, { now });
+    await comment.reload(); await mine.reload();
+    expect(ran).toBe(1);
+    expect(mine.status).toBe('done');
+    expect(comment).toMatchObject({ status: 'queued', attempts: 0, error: 'Waiting: Comment posts are switched off in Admin › The Pulse › Engine.' });
+    expect(new Date(comment.run_after).getTime()).toBeGreaterThan(now.getTime() + 59 * 60 * 1000);
+
+    const state = (await as(admin, request(app).get(`/api/v1/pulse-engine?show_id=${ids.show}`))).body;
+    expect(state.jobs_waiting).toBe(1);
+    expect(state.jobs_done_today).toBeGreaterThanOrEqual(1);
+    expect(state.queue.map((j) => j.id)).toEqual([comment.id]);
+    expect(state.requests_by_kind).toEqual({ automated: expect.any(Object), manual: expect.any(Object) });
+
+    await put({ comments_enabled: true, events_enabled: true });
+    await comment.update({ run_after: new Date() });
+    await queue.runOne(models);
+    await comment.reload();
+    expect(comment.status).toBe('done');
+    queue.unregister('comment');
+    queue.unregister('event');
   });
 
   test('a job runs its handler once, records its drafts, and counts toward today', async () => {
