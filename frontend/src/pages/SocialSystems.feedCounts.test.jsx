@@ -118,4 +118,33 @@ describe('the Archetypes sub-tab counts the LalaVerse Feed', () => {
     ] });
     await waitFor(() => expect(within(card('The Rebel')).getByTestId('ss-arch-count').textContent).toBe('2 in the Feed'));
   });
+
+  test('the Feed\'s balance: a crowded type and the types nobody has are said, and their cards marked', async () => {
+    const page = { ARCHETYPES: [
+      { num: '01', name: 'The A', content: 'a' }, { num: '02', name: 'The B', content: 'b' },
+      { num: '03', name: 'The C', content: 'c' }, { num: '04', name: 'The D', content: 'd' },
+    ] };
+    serve({ composition: { society_archetypes: { 'The A': 6, 'The B': 2 }, society_archetype_unset: 0 }, page });
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('ss-arch-balance').textContent).toContain('Crowded: The A (6 of 8, 75%).'));
+    const note = screen.getByTestId('ss-arch-balance').textContent;
+    expect(note).toContain('Nobody on the Feed is known as The C or The D yet.');
+    expect(note).toContain('New creators from the Feed get the least-used types first');
+    expect(within(card('The A')).getByTestId('ss-arch-count').className).toContain('is-crowded');
+    expect(within(card('The C')).getByTestId('ss-arch-count').className).toContain('is-empty');
+    expect(within(card('The B')).getByTestId('ss-arch-count').className).not.toMatch(/is-crowded|is-empty/);
+  });
+
+  test('no balance note until anyone has a type; a balanced Feed is said so', async () => {
+    serve({ composition: { society_archetypes: {}, society_archetype_unset: 6 } });
+    const { unmount } = renderPage();
+    await waitFor(() => expect(screen.getAllByTestId('ss-arch-count')).toHaveLength(15));
+    expect(screen.queryByTestId('ss-arch-balance')).toBeNull();
+    unmount();
+
+    const page = { ARCHETYPES: [{ num: '01', name: 'The A', content: 'a' }, { num: '02', name: 'The B', content: 'b' }] };
+    serve({ composition: { society_archetypes: { 'The A': 1, 'The B': 1 } }, page });
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('ss-arch-balance').textContent).toBe('The Feed is balanced: every type has someone and none crowds it.'));
+  });
 });
