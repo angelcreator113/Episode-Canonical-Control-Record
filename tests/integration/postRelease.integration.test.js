@@ -108,7 +108,7 @@ const HOUR = 60 * 60 * 1000;
     expect(res.status).toBe(200);
     const want = new Date(air.getTime() - 2 * 24 * HOUR);
     want.setUTCHours(18);
-    expect(res.body).toEqual({ at: want.toISOString(), why: 'Two days before Episode 1 airs' });
+    expect(res.body).toEqual({ at: want.toISOString(), why: 'Two days before Episode 1 airs', problems: [] });
     await p.reload();
     expect(p.release_state).toBeNull();
     const live = await draft({ status: 'live', posted_at: new Date() });

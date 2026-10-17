@@ -158,3 +158,11 @@ button.prv-tag:hover, a.prv-tag:hover { border-color: var(--accent-light); color
 .prv-dm-draft textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 16px; padding: 6px 8px; border: 1px solid var(--lala-parchment-3); border-radius: 4px; }
 .prv-dm-start { display: flex; flex-direction: column; gap: 8px; max-width: 520px; margin: 8px 0; }
 .prv-dm-start select, .prv-dm-start input { min-height: 44px; box-sizing: border-box; width: 100%; font: inherit; font-size: 16px; padding: 4px 8px; border: 1px solid var(--lala-parchment-3); border-radius: 4px; background: var(--surface-card); color: var(--text-primary); }
+
+/* Story-order problems and Schedule all (services/postRelease guards) */
+.prv-release-problems { display: block; flex-basis: 100%; margin: 4px 0 0; padding: 6px 8px; color: var(--warning-text); background: var(--warning-bg); border: 1px solid var(--warning-border); border-radius: 4px; font-size: 12px; }
+.prv-release-problem { display: block; }
+.prv-schedule-all { display: flex; flex-direction: column; gap: 8px; margin: 0 0 12px; }
+.prv-plan { margin: 0; padding: 0; list-style: none; }
+.prv-plan-item { display: flex; flex-direction: column; gap: 4px; padding: 8px 0; border-bottom: 1px solid var(--lala-parchment-2); font-size: 13px; }
+.prv-plan-text { color: var(--text-secondary); overflow-wrap: anywhere; }
