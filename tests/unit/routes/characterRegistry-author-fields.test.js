@@ -44,7 +44,7 @@ const put = (groups) => {
 };
 
 beforeEach(() => {
-  for (const k of [...Object.keys(AUTHOR_ONLY), 'subtitle']) delete mockCharacter[k];
+  for (const k of [...Object.keys(AUTHOR_ONLY), 'blind_spot', 'subtitle']) delete mockCharacter[k];
   mockCharacter.save.mockClear();
 });
 
@@ -52,20 +52,24 @@ describe('PUT /characters/:id author-only fields', () => {
   test('admin-group user writes the four author-only fields', async () => {
     const res = await put('admin');
     expect(res.status).toBe(200);
-    for (const [k, v] of Object.entries(AUTHOR_ONLY)) expect(mockCharacter[k]).toBe(v);
+    // The blind spot is saved in blind_spot since the depth merge (2026-10-17); the rest as sent.
+    const { de_blind_spot: blindSpot, ...rest } = AUTHOR_ONLY;
+    expect(mockCharacter.blind_spot).toBe(blindSpot);
+    for (const [k, v] of Object.entries(rest)) expect(mockCharacter[k]).toBe(v);
     expect(mockCharacter.subtitle).toBe('kept');
   });
 
   test('mixed-case admin group is accepted (case-insensitive)', async () => {
     const res = await put('Admin');
     expect(res.status).toBe(200);
-    expect(mockCharacter.de_blind_spot).toBe(AUTHOR_ONLY.de_blind_spot);
+    expect(mockCharacter.blind_spot).toBe(AUTHOR_ONLY.de_blind_spot);
   });
 
   test('editor-group user: author-only fields still filtered, other fields saved', async () => {
     const res = await put('editor');
     expect(res.status).toBe(200);
     for (const k of Object.keys(AUTHOR_ONLY)) expect(mockCharacter[k]).toBeUndefined();
+    expect(mockCharacter.blind_spot).toBeUndefined();
     expect(mockCharacter.subtitle).toBe('kept');
   });
 

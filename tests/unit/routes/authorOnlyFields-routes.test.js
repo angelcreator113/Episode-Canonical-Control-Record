@@ -76,14 +76,20 @@ const call = (method, url, groups, body) => {
   if (groups !== undefined) r = r.set('x-test-groups', groups);
   return body ? r.send(body) : r;
 };
-const hasNone = (obj) => Object.keys(AUTHOR).every((k) => obj == null || !(k in obj));
+// As stored since the depth merge (2026-10-17, services/characterDepthFields):
+// the blind spot lives in blind_spot; the Depth Engine still reads and sends
+// it as de_blind_spot. Both names are author-only.
+const STORED = { ...AUTHOR, blind_spot: AUTHOR.de_blind_spot };
+delete STORED.de_blind_spot;
+const hasNone = (obj) => [...Object.keys(AUTHOR), 'blind_spot'].every((k) => obj == null || !(k in obj));
 const ALL = Object.keys(AUTHOR);
-const hasAll = (obj, keys = ALL) => keys.every((k) => obj && obj[k] === AUTHOR[k]);
+const ROW = Object.keys(STORED);
+const hasAll = (obj, keys = ALL) => keys.every((k) => obj && obj[k] === (AUTHOR[k] ?? STORED[k]));
 
 const resetRow = (withAuthor) => {
   for (const k of Object.keys(mockRow)) delete mockRow[k];
   Object.assign(mockRow, { id: 'c1', status: 'draft', display_name: 'Lala', de_money_wound: 'old' });
-  if (withAuthor) Object.assign(mockRow, AUTHOR);
+  if (withAuthor) Object.assign(mockRow, STORED);
   mockMethods.update.mockClear();
 };
 
@@ -102,9 +108,9 @@ describe('reads — the four fields reach the admin group only', () => {
     ['post', '/api/v1/character-depth/c1/generate/blindspot', (b) => b.proposed,
       ['de_blind_spot', 'de_blind_spot_evidence', 'de_blind_spot_crack_condition']],
     ['post', '/api/v1/character-depth/c1/generate/narrative', (b) => b.proposed, ['de_actual_narrative_gap']],
-    ['get', '/api/v1/character-registry/characters/c1', (b) => b.character],
-    ['get', '/api/v1/character-registry/registries/r1', (b) => b.registry.characters[0]],
-    ['get', '/api/v1/character-registry/registries/default', (b) => b.registry.characters[0]],
+    ['get', '/api/v1/character-registry/characters/c1', (b) => b.character, ROW],
+    ['get', '/api/v1/character-registry/registries/r1', (b) => b.registry.characters[0], ROW],
+    ['get', '/api/v1/character-registry/registries/default', (b) => b.registry.characters[0], ROW],
   ];
 
   beforeEach(() => resetRow(true));
@@ -121,7 +127,7 @@ describe('reads — the four fields reach the admin group only', () => {
         const res = await call(method, url, USERS[who]);
         expect(res.status).toBe(200);
         expect(hasNone(pick(res.body))).toBe(true);
-        expect(JSON.stringify(res.body)).not.toMatch(/de_blind_spot"|de_blind_spot_evidence|de_blind_spot_crack_condition|de_actual_narrative_gap/);
+        expect(JSON.stringify(res.body)).not.toMatch(/blind_spot"|de_blind_spot_evidence|de_blind_spot_crack_condition|de_actual_narrative_gap/);
       });
     }
 
@@ -140,23 +146,25 @@ describe('reads — the four fields reach the admin group only', () => {
 });
 
 describe('writes — only the admin group writes the four fields', () => {
+  // [method, url, wrap, the response's fields, the keys the response carries them under]
   const WRITES = [
-    ['put', '/api/v1/character-depth/c1', (fields) => fields, (b) => b.depth],
-    ['post', '/api/v1/character-depth/c1/confirm', (fields) => ({ proposed: fields }), (b) => b.depth],
-    ['put', '/api/v1/character-registry/characters/c1', (fields) => fields, (b) => b.character],
+    ['put', '/api/v1/character-depth/c1', (fields) => fields, (b) => b.depth, ALL],
+    ['post', '/api/v1/character-depth/c1/confirm', (fields) => ({ proposed: fields }), (b) => b.depth, ALL],
+    ['put', '/api/v1/character-registry/characters/c1', (fields) => fields, (b) => b.character, ROW],
     // characterGenerationRoutes /confirm spreads `proposed` into update()
     ['post', '/api/v1/character-generation/confirm', (fields) => ({ character_id: 'c1', proposed: fields }),
-      (b) => b.character],
+      (b) => b.character, ROW],
   ];
 
   beforeEach(() => resetRow(false));
 
-  for (const [method, url, wrap, pick] of WRITES) {
+  for (const [method, url, wrap, pick, keys] of WRITES) {
     test(`${method.toUpperCase()} ${url}: admin writes all four and reads them back`, async () => {
       const res = await call(method, url, USERS.admin, wrap({ ...AUTHOR, de_money_wound: 'new' }));
       expect(res.status).toBe(200);
-      expect(hasAll(mockRow)).toBe(true);
-      expect(hasAll(pick(res.body))).toBe(true);
+      expect(hasAll(mockRow, ROW)).toBe(true);
+      expect(mockRow.de_blind_spot).toBeUndefined();
+      expect(hasAll(pick(res.body), keys)).toBe(true);
     });
 
     for (const who of ['editor', 'viewer']) {
@@ -183,7 +191,7 @@ describe('writes — only the admin group writes the four fields', () => {
     expect(res.status).toBe(200);
     expect(res.body.character.subtitle).toBe('kept');
     expect(hasNone(res.body.character)).toBe(true);
-    expect(hasAll(mockRow)).toBe(true); // stored values untouched
+    expect(hasAll(mockRow, ROW)).toBe(true); // stored values untouched
   });
 
   test('depth PUT: an editor sending only author-only fields gets 400 and nothing is written', async () => {
