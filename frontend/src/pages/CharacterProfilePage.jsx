@@ -460,7 +460,15 @@ const PULSE_REVIEW = '/admin?tab=pulse&sub=review';
 const FACT_LABELS = {
   handle: 'Handle', followers: 'Followers', account_status: 'Account status',
   income: 'Income', occupation: 'Occupation', major_possessions: 'Major possessions',
+  home_price_range: 'Home price range',
 };
+// services/characterFacts HOME_PRICE_RANGES: what their home costs, read when
+// their home is described from their profile (2026-10-17).
+const HOME_PRICE_RANGE_OPTIONS = [
+  ['budget', 'Budget (under $1,500 a month)'], ['modest', 'Modest ($1,500 to $3,000 a month)'],
+  ['comfortable', 'Comfortable ($3,000 to $6,000 a month)'], ['upscale', 'Upscale ($6,000 to $15,000 a month)'],
+  ['luxury', 'Luxury ($15,000 to $50,000 a month)'], ['ultra', 'Ultra-luxury (over $50,000 a month)'],
+];
 const ACCOUNT_STATUS_OPTIONS = ['rising', 'peaking', 'plateauing', 'controversial', 'cancelled', 'reinventing', 'gone_dark', 'posthumous'];
 const words = (s) => (s ? String(s).replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()) : '');
 const money = (n) => (Number.isFinite(Number(n)) && n !== null && n !== '' ? `$${Number(n).toLocaleString('en-US')}` : null);
@@ -478,6 +486,7 @@ function factText(facts, key) {
     }
     case 'occupation': return facts.occupation;
     case 'major_possessions': return facts.major_possessions.length ? facts.major_possessions.join(', ') : null;
+    case 'home_price_range': return facts.home_price_range?.label || null;
     default: return null;
   }
 }
@@ -522,6 +531,7 @@ export function TheirFacts({ character, onFeedSaved }) {
       income_source: p.income?.source || facts.income?.source || '',
       occupation: p.occupation || facts.occupation || '',
       major_possessions: (p.major_possessions || facts.major_possessions).join(', '),
+      home_price_range: facts.home_price_range?.key || '',
       undecided: [...facts.undecided],
     });
   };
@@ -550,6 +560,7 @@ export function TheirFacts({ character, onFeedSaved }) {
       income: { amount: form.income_amount === '' ? null : Number(form.income_amount), cadence: form.income_cadence, source: form.income_source },
       occupation: form.occupation,
       major_possessions: form.major_possessions.split(',').map((x) => x.trim()).filter(Boolean),
+      home_price_range: form.home_price_range || null,
       undecided: form.undecided,
     };
     if (facts.feed_linked) {
@@ -638,6 +649,12 @@ export function TheirFacts({ character, onFeedSaved }) {
             <label>Where the money comes from<input value={form.income_source} onChange={set('income_source')} placeholder="Brand deals, PlayRoom, a salary…" /></label>
             <label>Occupation<input value={form.occupation} onChange={set('occupation')} /></label>
             <label>Major possessions<input value={form.major_possessions} onChange={set('major_possessions')} placeholder="Separate with commas" /></label>
+            <label>Home price range
+              <select value={form.home_price_range} onChange={set('home_price_range')} data-testid="ch-facts-home-price">
+                <option value="">Not set</option>
+                {HOME_PRICE_RANGE_OPTIONS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+              </select>
+            </label>
             <fieldset className="ch-facts-undecided">
               <legend>Not decided yet</legend>
               {Object.keys(FACT_LABELS).filter((k) => facts.feed_linked || !feedKeys.includes(k)).map((k) => (
