@@ -31,8 +31,12 @@
  *     and their want and wound (as a hint, never stated), plus an ordinary
  *     day. Each idea is { key, label, about }: `about` goes in "What is
  *     happening". Also says whether they can post yet ({ ready, blocker,
- *     next }): next is 'make_active' or 'build_voice' when the page itself
- *     can take that step, else null.
+ *     next }): next is 'choose_show', 'make_active' or 'build_voice' when
+ *     the page itself can take that step, else null. For choose_show it
+ *     also gives the registry ({ id, title, characters }) and the shows to
+ *     choose from ([{ id, name }]): a registry with no show leaves their
+ *     voice and posts nowhere to go (Evoni, 2026-10-17: Build their voice
+ *     refused with a 409).
  *
  * The facts are not checked against the posts: a post is the mask, and the
  * mask may lie (the spec's Piece 4).
@@ -227,9 +231,18 @@ async function postIdeas(db, characterId) {
   const feedProfile = character.feed_profile_id && db.SocialProfile ? await db.SocialProfile.findByPk(character.feed_profile_id) : null;
   let blocker = null;
   let next = null;
+  let extra = {};
   if (!feedProfile) blocker = `${name} is not on the feed yet: match them to a feed person first.`;
   else if (feedProfile.current_state === 'posthumous') blocker = `${name} has died: their account does not post.`;
-  else if (!(await db.PulseVoice.findOne({ where: { registry_character_id: character.id } }))) {
+  else if (!(await require('./characterFacts').showIdFor(db, character, feedProfile))) {
+    const [[registry]] = await db.sequelize.query(
+      `SELECT cr.id, cr.title, (SELECT COUNT(*)::int FROM registry_characters rc WHERE rc.registry_id = cr.id AND rc.deleted_at IS NULL) AS characters
+         FROM character_registries cr WHERE cr.id = :id`, { replacements: { id: character.registry_id } });
+    const shows = await db.Show.findAll({ attributes: ['id', 'name'], order: [['name', 'ASC']] });
+    next = 'choose_show';
+    blocker = `${name}'s registry${registry?.title ? ` ("${registry.title}")` : ''} belongs to no show, so their voice and posts have nowhere to go. Choose its show.`;
+    extra = { registry: registry || null, shows: shows.map((sh) => ({ id: sh.id, name: sh.name })) };
+  } else if (!(await db.PulseVoice.findOne({ where: { registry_character_id: character.id } }))) {
     const { POSTING_STAGES } = require('./pulseVoices');
     if (POSTING_STAGES.includes(character.depth_level)) {
       next = 'build_voice';
@@ -280,7 +293,7 @@ async function postIdeas(db, characterId) {
     add('mask', 'The mask slips a little', `A post that looks fine on the surface, where for one line the old hurt shows through. ${name} would never call it that.`);
   }
   add('ordinary', 'An ordinary day', '');
-  return { ready: !blocker, blocker, next, ideas };
+  return { ready: !blocker, blocker, next, ...extra, ideas };
 }
 
 module.exports = { postIdeas, generatePosts, buildPrompt, factsLines, maskLines, woundOf, PostsError, DraftError, DEFAULT_COUNT, STATUS_LINES };

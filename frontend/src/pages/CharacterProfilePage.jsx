@@ -58,6 +58,8 @@ export const postIdeasApi = (id) =>
   apiClient.get(`${API_URL}/cast/characters/${id}/posts/ideas`);
 export const makeActiveApi = (id) =>
   apiClient.put(`${API_URL}/character-registry/characters/${id}`, { depth_level: 'active' });
+export const setRegistryShowApi = (registryId, showId) =>
+  apiClient.put(`${API_URL}/character-registry/registries/${registryId}`, { show_id: showId });
 export const buildVoiceApi = (id) =>
   apiClient.post(`${API_URL}/pulse-voices/${id}/build`);
 export const generatePostsApi = (id, body) =>
@@ -889,7 +891,6 @@ const shortText = (t, n = 160) => (t && t.length > n ? `${t.slice(0, n - 1).trim
  */
 export function TheirStory({ character }) {
   const [trail, setTrail] = useState(null);
-  const [reload, setReload] = useState(0);
   const id = character.id;
   useEffect(() => {
     let live = true;
@@ -900,7 +901,7 @@ export function TheirStory({ character }) {
         if (live) setTrail({ error: err.response?.data?.error || 'Could not load their story.' });
       });
     return () => { live = false; };
-  }, [id, reload]);
+  }, [id]);
 
   const posts = trail?.posts || [];
   const stories = trail?.stories || [];
@@ -960,7 +961,6 @@ export function TheirStory({ character }) {
             )}
           </>
         )}
-      {character.feed_profile_id && <GeneratePosts characterId={id} onDrafted={() => setReload((n) => n + 1)} />}
     </section>
   );
 }
@@ -984,11 +984,14 @@ export function GeneratePosts({ characterId, onDrafted }) {
   const [ideas, setIdeas] = useState(null); // { ready, blocker, next, ideas }
   const [picked, setPicked] = useState(null);
   const [stepping, setStepping] = useState(false);
+  const [stepError, setStepError] = useState(null);
+  const [showChoice, setShowChoice] = useState('');
 
   const loadIdeas = useCallback(async () => {
     try {
       const res = await postIdeasApi(characterId);
       setIdeas(res.data);
+      setShowChoice((prev) => prev || res.data?.shows?.[0]?.id || '');
     } catch (err) {
       console.error('[CharacterProfilePage] post ideas failed:', err);
       setIdeas({ ready: true, blocker: null, next: null, ideas: [] });
@@ -996,18 +999,20 @@ export function GeneratePosts({ characterId, onDrafted }) {
   }, [characterId]);
   useEffect(() => { loadIdeas(); }, [loadIdeas]);
 
-  // The step that unblocks drafting, taken here (Evoni, 2026-10-17): Make
-  // Active, then Build their voice (one manual Pulse request).
+  // The step that unblocks drafting, taken here (Evoni, 2026-10-17): choose
+  // the registry's show, Make Active, then Build their voice (one manual
+  // Pulse request). Its error shows by its button.
   const step = async () => {
     setStepping(true);
-    setError(null);
+    setStepError(null);
     try {
-      if (ideas?.next === 'make_active') await makeActiveApi(characterId);
+      if (ideas?.next === 'choose_show') await setRegistryShowApi(ideas.registry.id, showChoice);
+      else if (ideas?.next === 'make_active') await makeActiveApi(characterId);
       else await buildVoiceApi(characterId);
       await loadIdeas();
     } catch (err) {
       console.error('[CharacterProfilePage] unblocking their posts failed:', err);
-      setError(err.response?.data?.error || 'Could not do that.');
+      setStepError(err.response?.data?.error || 'Could not do that.');
     } finally {
       setStepping(false);
     }
@@ -1041,13 +1046,27 @@ export function GeneratePosts({ characterId, onDrafted }) {
       <h3 className="ch-trail-h">Draft posts</h3>
       <p className="ch-note">Drafts in their voice, from their facts and the events they know about. They wait in Review; nothing posts until you approve it.</p>
       {ideas?.blocker && <p className="ch-note is-error" role="alert">{ideas.blocker}</p>}
+      {ideas?.next === 'choose_show' && ideas.registry && (
+        <label className="ch-gen-field">
+          <span>Their registry&rsquo;s show</span>
+          <select value={showChoice} onChange={(e) => setShowChoice(e.target.value)} disabled={stepping}>
+            {(ideas.shows || []).map((sh) => <option key={sh.id} value={sh.id}>{sh.name}</option>)}
+          </select>
+          {ideas.registry.characters > 1 && (
+            <span className="ch-note">This puts all {ideas.registry.characters} characters in {ideas.registry.title ? `“${ideas.registry.title}”` : 'their registry'} in that show.</span>
+          )}
+        </label>
+      )}
       {ideas?.next && (
-        <button type="button" className="ch-btn-soft" disabled={stepping} onClick={step}>
-          {ideas.next === 'make_active'
-            ? (stepping ? 'Moving…' : 'Make Active')
-            : (stepping ? 'Building their voice…' : 'Build their voice')}
+        <button type="button" className="ch-btn-soft" disabled={stepping || (ideas.next === 'choose_show' && !showChoice)} onClick={step}>
+          {ideas.next === 'choose_show'
+            ? (stepping ? 'Saving…' : 'Put their registry in this show')
+            : ideas.next === 'make_active'
+              ? (stepping ? 'Moving…' : 'Make Active')
+              : (stepping ? 'Building their voice…' : 'Build their voice')}
         </button>
       )}
+      {stepError && <p className="ch-note is-error" role="alert">{stepError}</p>}
       {ideas?.ideas?.length > 0 && (
         <div className="ch-gen-ideas">
           <span className="ch-gen-ideas-h">Not sure what to say? Pick one:</span>
@@ -2236,6 +2255,8 @@ export default function CharacterProfilePage() {
         {activeTab === 'voice' && (
           <div className="ch-voice-tab">
             <TheirVoice character={character} feedProfile={feedProfile} />
+            {/* Evoni, 2026-10-17: drafting their posts belongs with their voice and feed. */}
+            {character.feed_profile_id && <div className="ch-card"><GeneratePosts characterId={character.id} /></div>}
             <div className="ch-card"><TabOnline character={character} feedProfile={feedProfile} appearances={appearances} /></div>
           </div>
         )}
