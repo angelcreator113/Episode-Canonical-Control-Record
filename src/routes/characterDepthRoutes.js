@@ -192,8 +192,9 @@ async function eventsSection(character) {
  * the money and status dimensions agree with them; '' when none.
  */
 async function factsSection(character) {
-  const { factsForCharacter, factsPromptBlock } = require('../services/characterFacts');
-  const block = factsPromptBlock(await factsForCharacter(db, character));
+  // The whole character file (services/characterFile): the facts with their
+  // mask, what is behind it, their people and latest posts.
+  const { block } = await require('../services/characterFile').characterFilePrompt(db, { character });
   return block ? `\n\n${block}` : '';
 }
 
