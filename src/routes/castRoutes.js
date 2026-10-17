@@ -36,6 +36,11 @@
  *                                                  occupation, income and possessions from
  *                                                  what is written about them; saves nothing
  *                                                  (ADMIN; services/factsSuggest)
+ *   POST   /api/v1/cast/characters/:id/pressure-test  one AI call asks the hard questions a
+ *                                                  fact-checker would and answers each from
+ *                                                  their character file: answers, gap or
+ *                                                  contradiction; saves nothing (ADMIN;
+ *                                                  services/characterPressure)
  *   GET    /api/v1/cast/characters/:id/check        flag-only check of their profile's text
  *                                                  against their facts (services/characterConsistency)
  *   POST   /api/v1/cast/characters/:id/check/intentional        { flag_id, note? }: ADMIN
@@ -56,6 +61,10 @@
  *   POST   /api/v1/cast/characters/:id/places/share { scene_set_id, caption? }: a draft
  *                                                  Pulse post of that place from their
  *                                                  feed profile (services/characterPlaceShare)
+ *   POST   /api/v1/cast/characters/:id/places/describe { scene_set_id }: one AI
+ *                                                  call that writes the place's description
+ *                                                  from their profile; saves nothing
+ *                                                  (services/placeDescriptionService)
  *
  * Archived is the registry's soft delete (registry_characters.deleted_at).
  *
@@ -358,6 +367,27 @@ router.put('/characters/:id/facts', requireAuth, authorize(['ADMIN']), async (re
  * filled out when I auto generate profiles?"): a proposal for the missing
  * facts only; the fact sheet opens with it, and she saves or changes it.
  */
+// POST /api/v1/cast/characters/:id/pressure-test (the spec's #6; Evoni,
+// 2026-10-17): hard questions answered from their own character file.
+router.post('/characters/:id/pressure-test', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const db = getModels();
+    const found = await characterWithFeed(db, req.params.id);
+    if (!found) return res.status(404).json({ success: false, error: 'Character not found' });
+    const { pressureTest, PressureError } = require('../services/characterPressure');
+    try {
+      return res.json({ success: true, ...(await pressureTest(db, found)) });
+    } catch (err) {
+      if (err instanceof PressureError) return res.status(err.status).json({ success: false, error: err.message });
+      throw err;
+    }
+  } catch (err) {
+    console.error('[Cast] POST /characters/:id/pressure-test error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.post('/characters/:id/facts/suggest', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
@@ -611,6 +641,8 @@ router.get('/characters/:id/appearances', requireAuth, async (req, res) => {
         dress_code: ev.dress_code || null, stakes: ev.narrative_stakes || null, host_brand: ev.host_brand || null,
         goals: Array.isArray(ev.goals) ? ev.goals.filter((g) => g && g.label).map((g) => ({ slot: g.slot || null, label: g.label })) : [],
         episode: ev.episode_id ? { id: ev.episode_id, episode_number: ev.episode_number, title: ev.episode_title } : null,
+        // Its scene set, for its photos and angles on the Places tab (2026-10-17).
+        scene_set_id: ev.scene_set_id || null, scene_set_name: ev.scene_set_name || null, scene_set_version_of: ev.scene_set_version_of || null,
       })),
       episodes,
       place,
@@ -652,6 +684,21 @@ router.post('/characters/:id/places/share', requireAuth, async (req, res) => {
     return res.status(201).json({ success: true, post });
   } catch (err) {
     return placeError(res, err, 'POST characters/:id/places/share');
+  }
+});
+
+// A place's description written from their profile (Evoni, 2026-10-17):
+// nothing is saved; placeDescriptionService holds what it reads.
+router.post('/characters/:id/places/describe', requireAuth, aiRateLimiter, async (req, res) => {
+  const { describePlace, PlaceDescriptionError } = require('../services/placeDescriptionService');
+  try {
+    const data = await describePlace(getModels(), { characterId: req.params.id, sceneSetId: req.body?.scene_set_id });
+    return res.json({ success: true, data });
+  } catch (err) {
+    if (err instanceof PlaceDescriptionError) return res.status(err.status).json({ success: false, code: err.code, error: err.message });
+    console.error('[cast] POST characters/:id/places/describe error:', err);
+    if (err?.code === 'AI_BUDGET_EXCEEDED') return res.status(429).json({ success: false, code: err.code, error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 

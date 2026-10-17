@@ -248,7 +248,11 @@ const ANY = say({ text: 'ok but the playlist tho', hashtag: null, reveals_story:
       const meta = Object.fromEntries(rows.map((r) => [r.id, r.metadata]));
       expect(meta[strict]).toEqual({ tagline: 'keep me', pulse_engine: { automated_requests: 2, manual_requests: 15, ambient_enabled: true } });
       expect(meta[loose]).toEqual({ tagline: 'keep me', pulse_engine: { automated_requests: 5, manual_requests: 15, ambient_enabled: true } });
-      expect(await queue.settingsOf(models, strict)).toEqual({ automated_requests: 2, manual_requests: 15, ambient_enabled: true });
+      expect(await queue.settingsOf(models, strict)).toEqual({
+        automated_requests: 2, manual_requests: 15, ambient_enabled: true,
+        // The engine's four switches (2026-10-17) read as on when never saved.
+        events_enabled: true, comments_enabled: true, storylines_enabled: true, voices_enabled: true,
+      });
     } finally {
       await run('DELETE FROM shows WHERE id IN (:a)', { a: [strict, loose] });
     }

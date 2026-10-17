@@ -48,6 +48,8 @@ export const putFactsApi = (id, body) =>
   apiClient.put(`${API_URL}/cast/characters/${id}/facts`, body);
 export const suggestFactsApi = (id) =>
   apiClient.post(`${API_URL}/cast/characters/${id}/facts/suggest`);
+export const pressureTestApi = (id) =>
+  apiClient.post(`${API_URL}/cast/characters/${id}/pressure-test`);
 export const getCheckApi = (id) =>
   apiClient.get(`${API_URL}/cast/characters/${id}/check`);
 export const markIntentionalApi = (id, flagId, note) =>
@@ -458,7 +460,15 @@ const PULSE_REVIEW = '/admin?tab=pulse&sub=review';
 const FACT_LABELS = {
   handle: 'Handle', followers: 'Followers', account_status: 'Account status',
   income: 'Income', occupation: 'Occupation', major_possessions: 'Major possessions',
+  home_price_range: 'Home price range',
 };
+// services/characterFacts HOME_PRICE_RANGES: what their home costs, read when
+// their home is described from their profile (2026-10-17).
+const HOME_PRICE_RANGE_OPTIONS = [
+  ['budget', 'Budget (under $1,500 a month)'], ['modest', 'Modest ($1,500 to $3,000 a month)'],
+  ['comfortable', 'Comfortable ($3,000 to $6,000 a month)'], ['upscale', 'Upscale ($6,000 to $15,000 a month)'],
+  ['luxury', 'Luxury ($15,000 to $50,000 a month)'], ['ultra', 'Ultra-luxury (over $50,000 a month)'],
+];
 const ACCOUNT_STATUS_OPTIONS = ['rising', 'peaking', 'plateauing', 'controversial', 'cancelled', 'reinventing', 'gone_dark', 'posthumous'];
 const words = (s) => (s ? String(s).replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()) : '');
 const money = (n) => (Number.isFinite(Number(n)) && n !== null && n !== '' ? `$${Number(n).toLocaleString('en-US')}` : null);
@@ -476,6 +486,7 @@ function factText(facts, key) {
     }
     case 'occupation': return facts.occupation;
     case 'major_possessions': return facts.major_possessions.length ? facts.major_possessions.join(', ') : null;
+    case 'home_price_range': return facts.home_price_range?.label || null;
     default: return null;
   }
 }
@@ -520,6 +531,7 @@ export function TheirFacts({ character, onFeedSaved }) {
       income_source: p.income?.source || facts.income?.source || '',
       occupation: p.occupation || facts.occupation || '',
       major_possessions: (p.major_possessions || facts.major_possessions).join(', '),
+      home_price_range: facts.home_price_range?.key || '',
       undecided: [...facts.undecided],
     });
   };
@@ -548,6 +560,7 @@ export function TheirFacts({ character, onFeedSaved }) {
       income: { amount: form.income_amount === '' ? null : Number(form.income_amount), cadence: form.income_cadence, source: form.income_source },
       occupation: form.occupation,
       major_possessions: form.major_possessions.split(',').map((x) => x.trim()).filter(Boolean),
+      home_price_range: form.home_price_range || null,
       undecided: form.undecided,
     };
     if (facts.feed_linked) {
@@ -636,6 +649,12 @@ export function TheirFacts({ character, onFeedSaved }) {
             <label>Where the money comes from<input value={form.income_source} onChange={set('income_source')} placeholder="Brand deals, PlayRoom, a salary…" /></label>
             <label>Occupation<input value={form.occupation} onChange={set('occupation')} /></label>
             <label>Major possessions<input value={form.major_possessions} onChange={set('major_possessions')} placeholder="Separate with commas" /></label>
+            <label>Home price range
+              <select value={form.home_price_range} onChange={set('home_price_range')} data-testid="ch-facts-home-price">
+                <option value="">Not set</option>
+                {HOME_PRICE_RANGE_OPTIONS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+              </select>
+            </label>
             <fieldset className="ch-facts-undecided">
               <legend>Not decided yet</legend>
               {Object.keys(FACT_LABELS).filter((k) => facts.feed_linked || !feedKeys.includes(k)).map((k) => (
@@ -650,7 +669,75 @@ export function TheirFacts({ character, onFeedSaved }) {
         )}
       {note && <p className={note.kind === 'error' ? 'ch-note is-error' : 'ch-note'} role={note.kind === 'error' ? 'alert' : 'status'}>{note.text}</p>}
       {facts && !facts.error && !form && <ProfileCheck characterId={id} />}
+      {facts && !facts.error && !form && <PressureTest characterId={id} />}
     </section>
+  );
+}
+
+/**
+ * Pressure test (the spec's #6; Evoni, 2026-10-17: "yes start the pressure
+ * test"; services/characterPressure): the hard questions a fact-checker
+ * would ask, each answered from their own character file. A question the
+ * file answers holds; a gap is something nothing decides yet; a
+ * contradiction is two parts that disagree (the mask lying is never one).
+ * It reads; it never changes anything.
+ */
+const PRESSURE_VERDICTS = {
+  answers: { label: 'Holds', className: 'is-holds' },
+  gap: { label: 'Gap', className: 'is-gap' },
+  contradiction: { label: 'Contradiction', className: 'is-contradiction' },
+};
+const PRESSURE_SUMMARY = {
+  holds: 'They hold up: the file answers every question.',
+  gaps: 'No contradictions, but some questions have nothing written to answer them.',
+  fails: 'They don’t hold up yet: parts of their file disagree.',
+};
+
+export function PressureTest({ characterId }) {
+  const [result, setResult] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await pressureTestApi(characterId);
+      setResult(res.data);
+    } catch (err) {
+      console.error('[CharacterProfilePage] pressure test failed:', err);
+      setError(err.response?.data?.error || 'Could not run the pressure test.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="ch-pressure" data-testid="ch-pressure">
+      <button type="button" className="ch-btn-soft" disabled={busy} onClick={run}>
+        {busy ? 'Asking the hard questions…' : result ? 'Test again' : 'Pressure test: ask them the hard questions'}
+      </button>
+      {error && <p className="ch-note is-error" role="alert">{error}</p>}
+      {result && (
+        <>
+          <p className="ch-note" data-testid="ch-pressure-summary">
+            {PRESSURE_SUMMARY[result.verdict] || ''}
+            {' '}{result.summary.answers} hold, {result.summary.gaps} gap{result.summary.gaps === 1 ? '' : 's'}, {result.summary.contradictions} contradiction{result.summary.contradictions === 1 ? '' : 's'}.
+          </p>
+          <ul className="ch-pressure-list">
+            {result.questions.map((q) => (
+              <li key={q.question} className={`ch-pressure-item ${PRESSURE_VERDICTS[q.verdict]?.className || ''}`} data-testid="ch-pressure-item">
+                <span className="ch-facts-row">
+                  <span className={`ch-chip ch-pressure-verdict ${PRESSURE_VERDICTS[q.verdict]?.className || ''}`}>{PRESSURE_VERDICTS[q.verdict]?.label || q.verdict}</span>
+                  <b className="ch-pressure-q">{q.question}</b>
+                </span>
+                {q.answer && <span className="ch-pressure-answer">{q.answer}</span>}
+                {q.cites?.length > 0 && <span className="ch-pressure-cites">From: {q.cites.join(' · ')}</span>}
+                {q.fix && <span className="ch-pressure-fix">To fix: {q.fix}</span>}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
   );
 }
 

@@ -9,7 +9,9 @@
  *                    whether the worker runs on this server, and the last
  *                    jobs (requireAuth)
  *   PUT /            { show_id, automated_requests?, manual_requests?,
- *                    ambient_enabled? } (requireAuth + ADMIN)
+ *                    ambient_enabled?, events_enabled?, comments_enabled?,
+ *                    storylines_enabled?, voices_enabled? } (requireAuth + ADMIN;
+ *                    the four switches: Evoni's Engine mock, 2026-10-17)
  *   POST /episodes/:episodeId/queue  { show_id } queues a completed
  *                    episode's event posts that were never queued (the
  *                    engine was off, or the cap skipped them; Task #3049),
@@ -61,6 +63,8 @@ router.put('/', requireAuth, authorize(['ADMIN']), async (req, res) => {
     const db = getModels();
     await queue.saveSettings(db, showId, {
       automated_requests: body.automated_requests, manual_requests: body.manual_requests, ambient_enabled: body.ambient_enabled,
+      events_enabled: body.events_enabled, comments_enabled: body.comments_enabled,
+      storylines_enabled: body.storylines_enabled, voices_enabled: body.voices_enabled,
     });
     return res.json({ success: true, ...(await queue.stateOf(db, showId)) });
   } catch (err) {
