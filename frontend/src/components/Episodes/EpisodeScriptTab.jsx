@@ -176,13 +176,16 @@ export function withBeatHeaders(scriptText, lockedBeats = []) {
   return numbered === scriptText ? scriptText : numbered;
 }
 
-const CUE_LINE = /^\[(TRANSITION|WEAR|DELIVER|TODO_MODE|SCENE|LOCATION_HINT|EVENT|EPISODE_INTENT)\s*:?\s*(.*?)\s*\]$/i;
+const CUE_LINE = /^\[(TRANSITION|WEAR|DELIVER|TODO_MODE|SCENE|LOCATION_HINT|EVENT|EPISODE_INTENT|SFX|EDIT)\s*:?\s*(.*?)\s*\]$/i;
 function cueLabel(text) {
   const m = String(text || '').match(CUE_LINE);
   if (!m) return null;
   const kind = m[1].toUpperCase();
   const rest = m[2].replace(/^["']|["']$/g, '');
   if (kind === 'TRANSITION') return `Transition${rest ? `: ${rest}` : ''}`;
+  // JustAWoman's sound and edit cues (Evoni, 2026-10-17).
+  if (kind === 'SFX') return `Sound${rest ? `: ${rest}` : ''}`;
+  if (kind === 'EDIT') return `Edit${rest ? `: ${rest}` : ''}`;
   if (kind === 'WEAR') return 'Puts on a piece of the look';
   if (kind === 'DELIVER') return 'Delivers a deal item';
   if (kind === 'TODO_MODE') return `Phone to-do list: ${TODO_MODE_LABELS[rest.toLowerCase()] || rest || 'not set'}`;

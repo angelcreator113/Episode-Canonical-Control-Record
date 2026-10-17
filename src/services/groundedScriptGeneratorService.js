@@ -19,8 +19,8 @@ function getClient() {
 
 const JAWIHP_VOICE_DNA = `
 JAWIHP (JustAWomanInHerPrime) voice rules — NEVER VIOLATE:
-- Addresses the audience as "besties"
-- Warm, hype-woman energy — celebrates everything
+- Addresses the audience as "besties" (or "chat")
+- Warm, hype-woman energy, and varied: she celebrates, doubts, jokes, side-eyes and goes quiet
 - Narrates what she's clicking/doing in real time
 - Reacts naturally ("oh wow these are nice!!")
 - Breaks fourth wall ("I can't believe it you guys")
@@ -605,6 +605,7 @@ Me: [JAWIHP dialogue]
 Lala: [Lala dialogue]
 [STAT: coins +X]
 [TRANSITION: description]
+[SFX: sound] / [EDIT: editing cue] (optional, for JustAWoman's moments; not on every line)
 ${people ? 'Another character at the event speaks as their name: [their words], in their own voice (CHARACTERS AT THE EVENT).\n' : ''}
 What happens on screen goes on its own line, one moment per line, in this form (the Script tab reads these lines; write the name of a screen, icon or overlay exactly as it is listed under ON SCREEN when it is listed there):
 [UI:SHOW phone] / [UI:HIDE phone] (Lala's phone comes on screen / goes away)
@@ -615,11 +616,25 @@ Turn each beat's "UI action" above into one or more of these lines (CLOSET_OPEN 
 
 RULES:
 1. Beat 8 MUST reference specific wardrobe items by name
-2. JAWIHP reacts to everything in real time
+2. JAWIHP reacts in real time to what she has seen, and sometimes lets a moment play in silence (JUSTAWOMAN ON CAMERA)
 3. Lala's lines are ALWAYS short and punchy — max 2-3 sentences
 4. Community engagement: ask audience to react in comments at least twice
 5. A change to her stats appears only as a [STAT:] tag; she may say her coin balance in her own words when she checks it
 ${!only || only.beat.number === 14 ? `6. ${only ? 'This beat ends' : 'Beat 14 ends'} on ${hook ? `the forward hook: "${hook}"` : 'a forward hook seeding the next episode'}\n` : ''}${told.career ? "7. Lala's career is on the page: name the deal, what she owes and what she wants from the event in the beats the CAREER block gives them, in her words, never as a list\n" : ''}
+
+═══ JUSTAWOMAN ON CAMERA ═══
+JustAWoman (Me:) is playing the game on camera from her corner: she sees the game interface and reacts to it; Lala lives the experience. Two perspectives on the same moment. Lala cannot hear her commentary or see the audience's game interface.
+- She reacts to the specific thing on screen (this outfit, this message, this price, this person, this result), never an interchangeable line like "This is exciting!".
+- Only to what she has actually seen: nothing from a message before it arrives, or from the invitation before it is opened.
+- Her lines mix four things, each on its own line or inside hers:
+  - spoken commentary: jokes, predictions, doubts, celebrations, occasional criticism of the game;
+  - performance, in parentheses: Me: (side-eyes the camera) "…", (leans toward the screen), (stunned silence);
+  - player actions: the [UI:] lines she makes happen, and her hesitation, (hovers over Confirm, then pulls back);
+  - sound and edit cues, optional: [SFX: notification ping], [EDIT: punch-in on her corner frame].
+- Two modes. While playing (beats 1–12) she is emotionally involved and invested in Lala's business: "We cannot afford to embarrass ourselves tonight." While reviewing (beats 13–14) she briefly evaluates what happened: "That warning came after I spent the coins. You could've told me sooner." Write new lines; never reuse these.
+- Vary her energy and leave room to watch: let Lala's line finish before she reacts, and at least once let Lala's scene play while she watches in silence, (JustAWoman watches, silent.).
+- She may talk to viewers as "besties" or "chat" and ask them to comment, but never invents viewer messages or comments.
+- Her humor, opinions, small grudges, favorite characters and investment in Lala carry on from PREVIOUS EPISODE when it is given; never invent a past grudge or favorite.
 
 ═══ SHOW RULES ═══
 - Lala's phone is on screen from the moment the Start button is clicked in Beat 1 until she travels to the event in Beat 10. Never write [UI:SHOW phone] or [UI:HIDE phone] in between; the phone is already there.
