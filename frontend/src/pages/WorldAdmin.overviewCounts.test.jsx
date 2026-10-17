@@ -59,7 +59,7 @@ describe('WorldAdmin Overview: four questions, true counts', () => {
     renderIt();
     const producing = await screen.findByTestId('sov-producing');
     await waitFor(() => expect(producing.textContent).toContain('One'));
-    expect(within(producing).getByRole('link', { name: 'Continue episode' }).getAttribute('href')).toBe('/episodes/ep-1');
+    expect(within(producing).getByRole('link', { name: 'Continue Episode' }).getAttribute('href')).toBe('/episodes/ep-1?tab=production');
     // e2 says "ready" but lacks its invitation: it needs attention, with what is missing.
     const attention = screen.getByTestId('sov-attention');
     expect(attention.textContent).toMatch(/Missing: .*invitation/i);
