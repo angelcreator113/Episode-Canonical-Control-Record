@@ -2172,6 +2172,27 @@ async function loadFranchiseKnowledge(_characterKey) {
 }
 
 // ─── Load world timeline events (non-canon, recent) ──────────────────────────
+/**
+ * What they are known for on The Pulse, their job, and the gap between the
+ * two, as a hook for scenes (services/characterContentType contentHookFor;
+ * Evoni's idea 1, 2026-10-17). null when they have no content type.
+ */
+async function loadContentHook(characterKey) {
+  try {
+    const db = require('../../models');
+    const { Op } = require('sequelize');
+    const dbKeys = SE_DB_KEY_MAP[characterKey]?.length ? SE_DB_KEY_MAP[characterKey] : [characterKey];
+    const row = await db.RegistryCharacter.findOne({
+      where: { character_key: dbKeys, feed_profile_id: { [Op.ne]: null } },
+      order: [['updated_at', 'DESC']],
+    });
+    return row ? await require('../../services/characterContentType').contentHookFor(db, row) : null;
+  } catch (err) {
+    console.error('[loadContentHook] error:', err?.message);
+    return null;
+  }
+}
+
 async function loadRecentWorldEvents(characterKey) {
   try {
     const { WorldTimelineEvent } = require('../../models');
@@ -2238,6 +2259,7 @@ async function loadWriteModeContext(characterId) {
       growthLogs,
       franchiseKnowledge,
       recentWorldEvents,
+      contentHook,
     ] = await Promise.all([
       loadStoryMemories(ck),
       loadCharacterRelationships(ck),
@@ -2254,6 +2276,7 @@ async function loadWriteModeContext(characterId) {
       loadGrowthLogs(ck),
       loadFranchiseKnowledge(ck),
       loadRecentWorldEvents(ck),
+      loadContentHook(ck),
     ]);
 
     return {
@@ -2273,6 +2296,7 @@ async function loadWriteModeContext(characterId) {
       growthLogs,
       franchiseKnowledge,
       recentWorldEvents,
+      contentHook,
     };
   } catch (err) {
     console.error('[loadWriteModeContext] error:', err?.message);
@@ -2304,6 +2328,9 @@ function buildWriteModeContextBlock(ctx) {
 
   // Recent world events — external pressures
   if (ctx.recentWorldEvents) sections.push(ctx.recentWorldEvents);
+
+  // What they are known for on The Pulse vs their job — a hook for scenes
+  if (ctx.contentHook) sections.push(ctx.contentHook);
 
   // Locations — established sensory details
   if (ctx.locations) sections.push(ctx.locations);
@@ -2644,7 +2671,7 @@ Return JSON array of story numbers, e.g. [3, 7, 14]` }],
     }
 
     // Load all context in parallel for speed
-    const [dbProfile, storyMemories, worldState, relationships, activeThreads, locations, canonEvents, proseStyle, voiceCards, dramaticIrony, followInfluence, voiceFingerprints, arcContext, therapyProfile, growthLogs, franchiseKnowledge, recentWorldEvents] = await Promise.all([
+    const [dbProfile, storyMemories, worldState, relationships, activeThreads, locations, canonEvents, proseStyle, voiceCards, dramaticIrony, followInfluence, voiceFingerprints, arcContext, therapyProfile, growthLogs, franchiseKnowledge, recentWorldEvents, contentHook] = await Promise.all([
       loadCharacterProfile(characterKey),
       loadStoryMemories(characterKey),
       loadWorldState(characterKey, dna.world),
@@ -2662,6 +2689,7 @@ Return JSON array of story numbers, e.g. [3, 7, 14]` }],
       loadGrowthLogs(characterKey),
       loadFranchiseKnowledge(characterKey),
       loadRecentWorldEvents(characterKey),
+      loadContentHook(characterKey),
     ]);
 
     // ── Context presence logging ─────────────────────────────────────────────
@@ -2671,7 +2699,7 @@ Return JSON array of story numbers, e.g. [3, 7, 14]` }],
       canon: !!canonEvents, prose: !!proseStyle, voiceCards: !!voiceCards,
       irony: !!dramaticIrony, follow: !!followInfluence, fingerprints: !!voiceFingerprints,
       arc: !!arcContext, therapy: !!therapyProfile, growth: !!growthLogs,
-      franchise: !!franchiseKnowledge, worldEvents: !!recentWorldEvents,
+      franchise: !!franchiseKnowledge, worldEvents: !!recentWorldEvents, contentHook: !!contentHook,
     };
     const missingContext = Object.entries(contextPresence).filter(([, v]) => !v).map(([k]) => k);
     if (missingContext.length > 0) {
@@ -2699,6 +2727,7 @@ Return JSON array of story numbers, e.g. [3, 7, 14]` }],
     const growthSection = growthLogs ? `\n\n${growthLogs}` : '';
     const franchiseSection = franchiseKnowledge ? `\n\n${franchiseKnowledge}` : '';
     const worldEventsSection = recentWorldEvents ? `\n\n${recentWorldEvents}` : '';
+    const contentHookSection = contentHook ? `\n\n${contentHook}` : '';
 
     // Build pacing analysis from recent stories to prevent repetitive structure
     let pacingSection = '';
@@ -2726,7 +2755,7 @@ Wound: ${dna.wound}
 Strengths: ${strengthsList}
 Job antagonist: ${dna.job_antagonist}
 Personal antagonist: ${dna.personal_antagonist}
-Recurring object: ${dna.recurring_object}${profileSection}${arcSection}${therapySection}${growthSection}${relationshipsSection}${memoriesSection}${worldSection}${worldEventsSection}${threadsSection}${locationsSection}${canonSection}${franchiseSection}${proseSection}${voiceCardsSection}${fingerprintSection}${ironySection}${followSection}${pacingSection}
+Recurring object: ${dna.recurring_object}${profileSection}${contentHookSection}${arcSection}${therapySection}${growthSection}${relationshipsSection}${memoriesSection}${worldSection}${worldEventsSection}${threadsSection}${locationsSection}${canonSection}${franchiseSection}${proseSection}${voiceCardsSection}${fingerprintSection}${ironySection}${followSection}${pacingSection}
 
 DOMAINS TO WEAVE (all four must be present):
 Career: ${dna.domains.career}
@@ -4195,6 +4224,7 @@ router.get('/story-memories/:characterId', requireAuth, async (req, res) => {
 module.exports = router;
 module.exports.router = router;
 module.exports.loadWriteModeContext = loadWriteModeContext;
+module.exports.loadContentHook = loadContentHook;
 module.exports.buildWriteModeContextBlock = buildWriteModeContextBlock;
 module.exports.loadCharacterRelationships = loadCharacterRelationships;
 module.exports.loadFranchiseKnowledge = loadFranchiseKnowledge;
