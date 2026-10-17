@@ -28,6 +28,7 @@ test('every beat has its own story job', () => {
   expect(job(4)).toContain('only who it is from');
   expect(job(5)).toContain('The full invitation');
   expect(job(11)).toContain('before the result');
+  expect(job(13)).toContain('Lala says how the outcome feels');
 });
 
 test('the layers come from what the show holds', () => {
@@ -92,6 +93,8 @@ describe('in the writer', () => {
     });
     const prompt = create.mock.calls[0][0].messages[0].content;
     for (const b of CANONICAL_BEATS) expect(prompt).toContain(`Story job: ${b.story_job}`);
+    // Beat 13: Lala has a line (Evoni, 2026-10-17).
+    expect(prompt).toMatch(/## BEAT: 13 · Recap Panel[\s\S]*?JAWIHP speaks: true \| Lala speaks: true/);
     expect(prompt).toContain('═══ STORY LAYERS ═══');
     expect(prompt.indexOf('═══ STORY LAYERS ═══')).toBeLessThan(prompt.indexOf('═══ SCENE PLAN'));
     expect(written.coverage.story_gaps.map((g) => g.layer)).toEqual(['main', 'personal', 'arc', 'sender']);

@@ -314,7 +314,7 @@ const CANONICAL_BEATS = [
   {
     number: 13,
     name: 'Recap Panel',
-    story_job: "Close this episode's question: results, rewards, costs and any obligation still open. How the outcome feels is said in words; the numbers stay on the stat card. No new drama.",
+    story_job: "Close this episode's question: results, rewards, costs and any obligation still open. Lala says how the outcome feels, in her own words; the numbers stay on the stat card, which she does not see. No new drama.",
     typical_location: 'HOME_BASE',
     description: 'Reflecting on what happened — audience engagement moment',
     narrative_purpose: 'Cinematic stat card. Coins changed. Brand trust updated. Dream Fund moved.',

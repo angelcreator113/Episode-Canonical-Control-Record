@@ -46,8 +46,10 @@ const { beatHeader } = require('../utils/canonicalScriptBeats');
 const SPEAKS = {
   1: [true, false], 2: [true, true], 3: [true, false], 4: [true, true], 5: [true, true],
   6: [true, true], 7: [true, true], 8: [true, true], 9: [true, false], 10: [true, false],
-  11: [true, true], 12: [false, true], 13: [true, false], 14: [true, false],
+  11: [true, true], 12: [false, true], 13: [true, true], 14: [true, false],
 };
+// Beat 13: Lala says how the outcome feels (Evoni, 2026-10-17); the numbers
+// stay on the stat card, which she does not see.
 const BEAT_TEMPLATES = Object.fromEntries(CANONICAL_BEATS.map((b) => [b.number, {
   name: b.name, ui: b.screen_action, jawihp: SPEAKS[b.number][0], lala: SPEAKS[b.number][1],
 }]));
