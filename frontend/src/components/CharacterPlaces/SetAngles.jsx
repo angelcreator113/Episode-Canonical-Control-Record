@@ -2,13 +2,18 @@
  * A place's (or an event's) photos as one set, on the character's Places tab
  * (2026-10-17): its main photo and its angles, and "Add angles", which adds
  * the photos to this same set.
+ *
+ * Sixth audit: one note per add (what was added and what was not, together);
+ * `refreshKey` reloads it when another card showing the same set adds
+ * angles (the lead's home that is also her closet), and onAdded tells the
+ * tab.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ImagePlus } from 'lucide-react';
 import api from '../../services/api';
 import { addAngles } from './setPhotos';
 
-export default function SetAngles({ setId, onNote, label = 'Angles' }) {
+export default function SetAngles({ setId, onNote, onAdded, refreshKey = 0, label = 'Angles' }) {
   const [set, setSet] = useState(null);
   const [busy, setBusy] = useState(false);
   const fileInput = useRef(null);
@@ -22,15 +27,17 @@ export default function SetAngles({ setId, onNote, label = 'Angles' }) {
       setSet({ error: true });
     }
   }, [setId]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, refreshKey]);
 
   const add = async (files) => {
     if (!files.length) return;
     setBusy(true);
     try {
       const { done, failed } = await addAngles(setId, files, (set?.angles || []).map((a) => a.angle_label));
-      if (done) onNote?.({ text: `Added ${done} angle${done === 1 ? '' : 's'} to ${set?.name || 'the set'}` });
-      if (failed.length) onNote?.({ error: true, text: `Could not add ${failed.join(', ')}` });
+      const added = done ? `Added ${done} angle${done === 1 ? '' : 's'} to ${set?.name || 'the set'}` : '';
+      const notAdded = failed.length ? `could not add ${failed.join(', ')}` : '';
+      onNote?.({ error: failed.length > 0, text: [added, notAdded].filter(Boolean).join('; ').replace(/^c/, (c) => c.toUpperCase()) });
+      if (done) onAdded?.(setId);
       await load();
     } finally { setBusy(false); }
   };
