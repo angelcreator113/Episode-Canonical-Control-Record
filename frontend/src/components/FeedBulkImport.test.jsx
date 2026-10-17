@@ -26,7 +26,7 @@ describe('FeedBulkImport — Track 6 CP15 partial-migration extension', () => {
     await parseFeedBulkCsvApi('handle,platform\nlala,instagram');
     expect(apiClient.post).toHaveBeenCalledWith(
       '/api/v1/social-profiles/bulk/parse-csv',
-      { text: 'handle,platform\nlala,instagram' },
+      { text: 'handle,platform\nlala,instagram', feed_layer: 'real_world' },
     );
   });
 

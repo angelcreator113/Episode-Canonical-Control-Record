@@ -49,6 +49,10 @@
  *     day)
  *   releaseCalendar(db, { showId, from, to })  the scheduled drafts by
  *     time, for the release calendar (drag a post to another day)
+ *   The Feed's rhythm: whoever posts, scheduled and planned posts stay an
+ *     hour apart, at most four a day (then the next day); a draft's own
+ *     suggestion is its place in the Schedule all plan, so two cards never
+ *     suggest the same time
  *   shiftForAirDate(db, { showId, episodeNumber, from, to })  an episode's
  *     air date moved: its scheduled drafts move by the same amount; one that
  *     would land in the past is held
@@ -445,9 +449,44 @@ async function rhythmFor(db, post, habits) {
   return { slots: habits.slots, phaseHours: habits.phaseHours, gapMs: TEMPERAMENT_GAP_MS[temperament] || GAP_MS, temperament };
 }
 
-async function planOne(db, post, { tzOffset = 0, now = new Date(), taken = null, planned = new Map(), rhythm = null } = {}) {
+// The Feed's own rhythm (Evoni, 2026-10-17: "its giving me the same date and
+// time ... same day"): whoever posts, two posts stay SHOW_GAP_MS apart and a
+// day holds at most SHOW_PER_DAY; past that, the next day.
+const SHOW_GAP_MS = HOUR_MS;
+const SHOW_PER_DAY = 4;
+
+/** The show's other scheduled release times (every poster). */
+async function showTakenFor(db, showId, excludeId = null) {
+  if (!showId) return [];
+  const [rows] = await db.sequelize.query(
+    `SELECT release_at FROM feed_posts WHERE show_id = :showId AND status = 'draft' AND release_state = 'scheduled'
+        AND release_at IS NOT NULL AND deleted_at IS NULL ${excludeId ? 'AND id <> :excludeId' : ''}`,
+    { replacements: { showId, excludeId } });
+  return rows.map((r) => new Date(r.release_at));
+}
+
+/** `at` moved later until the poster's own gap and the Feed's gap and daily limit all hold. */
+function spreadOnFeed(at, posterTaken, showTaken, tzMinutes, rhythm) {
+  const r = rhythmOf(rhythm);
+  const dayOf = (d) => { const p = local(d, tzMinutes); return `${p.y}-${p.m}-${p.d}`; };
+  let t = at;
+  for (let i = 0; i < 20; i += 1) {
+    let next = spaced(t, posterTaken, tzMinutes, r);
+    next = spaced(next, showTaken, tzMinutes, { slots: r.slots, gapMs: SHOW_GAP_MS });
+    if (showTaken.filter((x) => dayOf(x) === dayOf(next)).length >= SHOW_PER_DAY) {
+      const p = local(next, tzMinutes);
+      next = atLocal(p.y, p.m, p.d + 1, r.slots[0], tzMinutes);
+    }
+    if (next.getTime() === t.getTime()) return t;
+    t = next;
+  }
+  return t;
+}
+
+async function planOne(db, post, { tzOffset = 0, now = new Date(), taken = null, planned = new Map(), rhythm = null, showTaken = null } = {}) {
   const story = await storyOf(db, post);
   const others = taken || await takenBy(db, post);
+  const feed = showTaken || await showTakenFor(db, story.showId, post.id);
   const r = rhythm || await rhythmFor(db, post, await releaseHabits(db, story.showId));
   const s = suggestTime({ order: story.order, airDate: story.airDate, taken: others, now, tzOffset, rhythm: r });
   const guards = await guardsFor(db, post, { story, tzOffset, planned });
@@ -459,12 +498,25 @@ async function planOne(db, post, { tzOffset = 0, now = new Date(), taken = null,
     at = spaced(fitted, others, tz(tzOffset), rhythmOf(r));
     why += '; moved to keep the story in order';
   }
+  const onFeed = spreadOnFeed(at, others, feed, tz(tzOffset), r);
+  if (onFeed.getTime() !== at.getTime()) {
+    at = onFeed;
+    why += '; moved so the Feed is not crowded';
+  }
   return { at, why, problems: problemsAt(guards, at), story };
 }
 
 async function suggestReleaseTime(db, post, { tzOffset = 0, now = new Date() } = {}) {
   if (!post) throw new ReleaseError('Post not found.', 404);
   if (post.status !== 'draft' || post.deleted_at) throw new ReleaseError('Only a draft has a release time: a live post is already out.', 409);
+  // A draft with no release time takes its place in the same plan as
+  // "Schedule all", so each card suggests its own time, in story order,
+  // never the one the next card suggests (Evoni, 2026-10-17).
+  if (!post.release_state && post.show_id) {
+    const { items } = await planReleases(db, { showId: post.show_id, tzOffset, now });
+    const mine = items.find((i) => i.post_id === post.id);
+    if (mine) return { at: mine.at, why: mine.why, problems: mine.problems };
+  }
   const { at, why, problems } = await planOne(db, post, { tzOffset, now });
   return { at: at.toISOString(), why, problems };
 }
@@ -511,6 +563,7 @@ async function planReleases(db, { showId, tzOffset = 0, now = new Date() } = {})
 
   const planned = new Map();
   const takenByPoster = new Map();
+  const showTaken = await showTakenFor(db, showId);
   const habits = await releaseHabits(db, showId);
   const rhythmByPoster = new Map();
   const items = [];
@@ -519,9 +572,10 @@ async function planReleases(db, { showId, tzOffset = 0, now = new Date() } = {})
     if (key && !takenByPoster.has(key)) takenByPoster.set(key, await takenBy(db, post));
     const taken = key ? takenByPoster.get(key) : [];
     if (!rhythmByPoster.has(key)) rhythmByPoster.set(key, await rhythmFor(db, post, habits));
-    const { at, why, problems } = await planOne(db, post, { tzOffset, now, taken, planned, rhythm: rhythmByPoster.get(key) });
+    const { at, why, problems } = await planOne(db, post, { tzOffset, now, taken, planned, rhythm: rhythmByPoster.get(key), showTaken });
     planned.set(post.id, at);
     if (key) taken.push(at);
+    showTaken.push(at);
     items.push({
       post_id: post.id,
       handle: post.poster_handle || null,
