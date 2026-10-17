@@ -42,3 +42,16 @@ test('nothing to say, nothing shown', async () => {
   await screen.findByText(/Script generated/);
   expect(screen.queryByTestId('script-coverage')).toBeNull();
 });
+
+// Story layers (Evoni, 2026-10-17): what the show holds nothing for is named,
+// so it can be set before the next Generate.
+test('names the story layers with nothing to draw on', async () => {
+  vi.mocked(api.post).mockResolvedValue({ data: { saved: true, script: SCRIPT, coverage: { fixed_beats: [], missing: [], story_gaps: [
+    { layer: 'sender', label: 'No one at the event has an established tie to Lala to send the beat 7 message.' },
+  ] } } });
+  render(<MemoryRouter><EpisodeScriptTab episode={{ id: 'ep-1', show_id: 'show-1', script_content: '' }} show={{ id: 'show-1' }} /></MemoryRouter>);
+  fireEvent.click(screen.getByRole('button', { name: /Generate Script/ }));
+  const gaps = await screen.findByTestId('script-coverage-story');
+  expect(gaps.textContent).toContain('invented no history');
+  expect(gaps.textContent).toContain('No one at the event has an established tie to Lala');
+});
