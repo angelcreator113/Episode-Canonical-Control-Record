@@ -78,13 +78,21 @@ function scoreOf({ attended, closeness = 0, temperament = 'regular', seed }) {
   return Math.round((base + JITTER * seeded(seed)) * 1000) / 1000;
 }
 
+// Shared audiences (Evoni's idea 4, 2026-10-17): a bonus on top, so a
+// character with no content type scores as before.
+const AUDIENCE_WEIGHT = 0.15;
+
 /**
  * The commenting score on one poster's post (Task #3072), without jitter:
- * closeness to the poster 0.5, attending 0.3, temperament 0.2. A guest who
- * barely knows the poster still comments; a stranger who stayed home does not.
+ * closeness to the poster 0.5, attending 0.3, temperament 0.2, plus up to
+ * AUDIENCE_WEIGHT when their audiences overlap: the same niche, content
+ * types that share or compete, the same city (services/audienceMap). A guest who barely knows the
+ * poster still comments; a stranger who stayed home does not, unless an
+ * oversharer whose audience overlaps the poster's.
  */
-function commentScoreOf({ attended, closeness = 0, temperament = 'regular' }) {
-  const base = (attended ? 0.3 : 0) + 0.5 * closeness + 0.2 * (TEMPERAMENT[temperament] ?? TEMPERAMENT.regular);
+function commentScoreOf({ attended, closeness = 0, temperament = 'regular', audience = 0 }) {
+  const base = (attended ? 0.3 : 0) + 0.5 * closeness + 0.2 * (TEMPERAMENT[temperament] ?? TEMPERAMENT.regular)
+    + AUDIENCE_WEIGHT * audience;
   return Math.round(base * 1000) / 1000;
 }
 
@@ -184,12 +192,15 @@ async function commentersFor(db, { showId, episodeId, posterProfileId, exclude =
   if (!r) return [];
   const toPoster = await closenessTo(db, showId, posterProfileId, r.order);
   const skip = new Set(exclude);
-  return r.candidates
-    .filter((c) => c.profileId !== Number(posterProfileId) && !skip.has(c.characterId))
+  const pool = r.candidates.filter((c) => c.profileId !== Number(posterProfileId) && !skip.has(c.characterId));
+  // How their content types relate to the poster's (never Lala's: decision c).
+  const audience = await require('./audienceMap').audienceScores(db, posterProfileId, pool.map((c) => c.profileId));
+  return pool
     .map((c) => {
       const closeness = toPoster.get(c.profileId) || 0;
-      const score = commentScoreOf({ attended: c.attended, closeness, temperament: c.temperament });
-      return { characterId: c.characterId, profileId: c.profileId, handle: c.handle, closeness, score, rank: score + JITTER * seeded(`${episodeId}:${posterProfileId}:${c.characterId}`) };
+      const shared = audience.get(c.profileId) || 0;
+      const score = commentScoreOf({ attended: c.attended, closeness, temperament: c.temperament, audience: shared });
+      return { characterId: c.characterId, profileId: c.profileId, handle: c.handle, closeness, audience: shared, score, rank: score + JITTER * seeded(`${episodeId}:${posterProfileId}:${c.characterId}`) };
     })
     .filter((c) => c.score >= COMMENT_LINE)
     .sort((a, b) => b.rank - a.rank || String(a.characterId).localeCompare(String(b.characterId)))
@@ -337,5 +348,5 @@ function registerHandlers() {
 
 module.exports = {
   CLOSENESS, TEMPERAMENT, MAX_POSTERS, MAX_COMMENTERS, POST_LINE, COMMENT_LINE,
-  seeded, scoreOf, commentScoreOf, pick, closenessTo, whoPosts, commentersFor, enqueueForEpisode, episodesWithoutPosts, episodesWithDraftEvents, handleEvent, handleComment, registerHandlers,
+  seeded, scoreOf, commentScoreOf, AUDIENCE_WEIGHT, pick, closenessTo, whoPosts, commentersFor, enqueueForEpisode, episodesWithoutPosts, episodesWithDraftEvents, handleEvent, handleComment, registerHandlers,
 };
