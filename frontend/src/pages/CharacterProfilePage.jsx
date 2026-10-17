@@ -2241,7 +2241,7 @@ export default function CharacterProfilePage() {
         )}
         {activeTab === 'connections' && <div className="ch-card"><TabConnections character={character} relationships={relationships} entanglements={entanglements} /></div>}
         {activeTab === 'world' && <div className="ch-card"><TabWorld character={character} onSaved={onSaved} gen={gen} /></div>}
-        {activeTab === 'places' && <div className="ch-card"><CharacterPlacesTab character={character} /></div>}
+        {activeTab === 'places' && <div className="ch-card"><CharacterPlacesTab key={character.id} character={character} /></div>}
       </div>
     </div>
   );

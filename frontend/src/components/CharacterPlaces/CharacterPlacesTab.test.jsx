@@ -90,4 +90,41 @@ describe('CharacterPlacesTab', () => {
     renderIt({ ...sable, feed_profile_id: null });
     expect((await screen.findByTestId('places-hosted-events')).textContent).toMatch(/needs a feed profile/);
   });
+
+  // Fifth audit.
+  test('a failed photo upload deletes the set it made', async () => {
+    vi.mocked(api.post).mockImplementation(async (url) => {
+      if (url === '/api/v1/scene-sets') return { data: { success: true, data: { id: 'set-new' } } };
+      if (url.endsWith('/upload-base')) throw { response: { data: { error: 'not a readable image' } } };
+      return { data: { success: true } };
+    });
+    vi.mocked(api.delete).mockResolvedValue({ data: { success: true } });
+    renderIt();
+    await screen.findByTestId('places-role-home');
+    fireEvent.change(screen.getByTestId('place-upload-input-home'), { target: { files: [new File(['x'], 'h.heic', { type: 'image/heic' })] } });
+    await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/api/v1/scene-sets/set-new'));
+    expect((await screen.findByTestId('places-note')).textContent).toMatch(/not a readable image/);
+    expect(vi.mocked(api.post).mock.calls.map((c) => c[0])).not.toContain('/api/v1/shows/show-1/character-places');
+  });
+
+  test('a set already one of their places is shown but not offered; an event another host has is not offered', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/cast/characters/c-1/places') return { data: { success: true, show_id: 'show-1', places } };
+      if (url === '/api/v1/cast/characters/c-1/appearances') return { data: { success: true, events: [] } };
+      if (url === '/api/v1/scene-sets') return { data: { success: true, data: [{ id: 'set-1', name: 'Studio' }, { id: 'set-2', name: 'Loft' }] } };
+      if (url === '/api/v1/world/show-1/events') return { data: { success: true, events: [{ id: 'ev-5', name: 'Launch', host_brand: 'Maison Belle' }, { id: 'ev-6', name: 'Brunch', source_profile_id: 99 }, { id: 'ev-7', name: 'Gala' }] } };
+      return { data: {} };
+    });
+    renderIt();
+    fireEvent.click(await screen.findByTestId('place-pick-home'));
+    const studio = await within(screen.getByTestId('place-pick-select-home')).findByText(/Studio/);
+    expect(studio.textContent).toBe('Studio (their place of work)');
+    expect(studio.disabled).toBe(true);
+    fireEvent.click(await screen.findByTestId('hosted-event-add'));
+    const select = screen.getByTestId('hosted-event-select');
+    await waitFor(() => expect(within(select).getByText(/Launch/)).toBeTruthy());
+    expect(within(select).getByText('Launch (hosted by Maison Belle)').disabled).toBe(true);
+    expect(within(select).getByText('Brunch (hosted by someone else)').disabled).toBe(true);
+    expect(within(select).getByText('Gala').disabled).toBe(false);
+  });
 });
