@@ -399,7 +399,8 @@ async function planReleases(db, { showId, tzOffset = 0, now = new Date() } = {})
   const withStory = [];
   for (const post of drafts) withStory.push({ post, story: await storyOf(db, post) });
   // Story order first (unknown last); a reply after the post it answers.
-  withStory.sort((a, b) => (a.story.order ?? Infinity) - (b.story.order ?? Infinity));
+  const rank = (e) => (Number.isInteger(e.story.order) ? e.story.order : Number.MAX_SAFE_INTEGER);
+  withStory.sort((a, b) => rank(a) - rank(b));
   const ids = new Set(drafts.map((p) => p.id));
   const placed = new Set();
   const ordered = [];
