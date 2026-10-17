@@ -25,7 +25,7 @@
  */
 
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 vi.mock('../contexts/AuthContext', () => ({
@@ -126,13 +126,14 @@ describe('EpisodeDetail — Money tab and balance chip (#2278)', () => {
     });
   });
 
-  // Evoni's Episode mock (2026-10-05) orders the pills Checklist, Scenes,
-  // Wardrobe, Phone, Overlays, Money, with Assets last.
-  test('Assets lists Money after Overlays and before Files', async () => {
+  // Evoni, 2026-10-17: Production's pills run Scenes, Beat Plan, Files,
+  // Wardrobe, Style Page, Phone, Overlays, Money, Checklist.
+  test('Production lists Money after Overlays and before the Checklist', async () => {
     renderEpisodeDetail('/episodes/ep-1?tab=files');
     await waitFor(() => expect(screen.getByTestId('episode-assets')).toBeTruthy());
 
-    const labels = ['Overlays', 'Money', 'Files'].map((name) => screen.getByRole('button', { name }));
+    const row = screen.getByTestId('ed-subtabs');
+    const labels = ['Overlays', 'Money', 'Checklist'].map((name) => within(row).getByRole('button', { name }));
     const order = (a, b) => a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING;
     expect(order(labels[0], labels[1])).toBeTruthy();
     expect(order(labels[1], labels[2])).toBeTruthy();
@@ -157,12 +158,12 @@ describe('EpisodeDetail — Money tab and balance chip (#2278)', () => {
     expect((await screen.findByTestId('ed-balance-chip')).textContent).toBe('Coins unavailable');
   });
 
-  test('the chip opens Assets → Money', async () => {
+  test('the chip opens Production → Money', async () => {
     renderEpisodeDetail('/episodes/ep-1?tab=overview');
     fireEvent.click(await screen.findByTestId('ed-balance-chip'));
 
     expect(await screen.findByText('This episode has no source event, and nothing has posted.')).toBeTruthy();
-    expect(screen.getByTitle('Assets').className).toContain('ed-tab-active');
+    expect(screen.getByTitle('Production').className).toContain('ed-tab-active');
   });
 
   test('?tab=money lands on the Money tab', async () => {

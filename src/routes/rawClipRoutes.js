@@ -7,7 +7,7 @@
  *   GET    /:episodeId                         the episode's clips
  *   POST   /:episodeId                         upload one (multipart: video, performer,
  *                                              guest_name?, label?, green_screen?, strength?)
- *   PATCH  /:episodeId/:clipId                 performer, guest_name, label
+ *   PATCH  /:episodeId/:clipId                 performer, guest_name, label, beat_number (the scene)
  *   POST   /:episodeId/:clipId/remove-green    (re)run green removal { strength }
  *   DELETE /:episodeId/:clipId                 soft delete (files stay in S3)
  *
