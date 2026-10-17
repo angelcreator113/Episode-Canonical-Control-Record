@@ -63,6 +63,15 @@
  *   PUT    /api/v1/cast/characters/:id/typology     set it (ADMIN), or { clear: true }
  *   POST   /api/v1/cast/characters/:id/typology/suggest  one AI call that reads their
  *                                                  writing and proposes one; saves nothing (ADMIN)
+ *   GET    /api/v1/cast/characters/:id/content-type  what they are known for on The Pulse
+ *                                                  (a Society archetype on their feed
+ *                                                  profile), the list, and their job
+ *   PUT    /api/v1/cast/characters/:id/content-type  { name } or { name: null } (ADMIN)
+ *   POST   /api/v1/cast/characters/:id/content-type/suggest  one AI call over their
+ *                                                  character file; saves nothing (ADMIN)
+ *   POST   /api/v1/cast/content-types/suggest-unset  { limit?, profile_ids? }: suggestions for LalaVerse
+ *                                                  feed profiles with none; saves nothing (ADMIN)
+ *   POST   /api/v1/cast/content-types/apply      { items: [{ profile_id, name }] } (ADMIN)
  *   GET    /api/v1/cast/characters/:id/posts/ideas  what to post about, from their own
  *                                                  story (no AI call), and whether
  *                                                  they can post yet
@@ -675,6 +684,95 @@ router.post('/characters/:id/typology/suggest', requireAuth, authorize(['ADMIN']
     }
   } catch (err) {
     console.error('[Cast] POST /characters/:id/typology/suggest error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * What they are known for on The Pulse (services/characterContentType):
+ * their content type, one of the Society tab's archetypes, kept on their
+ * feed profile. Not their job: the two can differ (Evoni, 2026-10-17).
+ */
+const contentTypeError = (res, err) => {
+  const { ContentTypeError } = require('../services/characterContentType');
+  if (err instanceof ContentTypeError) { res.status(err.status).json({ success: false, error: err.message }); return true; }
+  return false;
+};
+
+router.get('/characters/:id/content-type', requireAuth, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const db = getModels();
+    const found = await characterWithFeed(db, req.params.id);
+    if (!found) return res.status(404).json({ success: false, error: 'Character not found' });
+    return res.json({ success: true, ...(await require('../services/characterContentType').contentTypeOf(db, found)) });
+  } catch (err) {
+    console.error('[Cast] GET /characters/:id/content-type error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.put('/characters/:id/content-type', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const db = getModels();
+    const found = await characterWithFeed(db, req.params.id);
+    if (!found) return res.status(404).json({ success: false, error: 'Character not found' });
+    const { setContentType, contentTypeOf } = require('../services/characterContentType');
+    try {
+      await setContentType(db, { feedProfile: found.feedProfile, name: req.body?.name ?? null });
+    } catch (err) {
+      if (contentTypeError(res, err)) return undefined;
+      throw err;
+    }
+    return res.json({ success: true, ...(await contentTypeOf(db, found)) });
+  } catch (err) {
+    console.error('[Cast] PUT /characters/:id/content-type error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/characters/:id/content-type/suggest', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const db = getModels();
+    const found = await characterWithFeed(db, req.params.id);
+    if (!found) return res.status(404).json({ success: false, error: 'Character not found' });
+    try {
+      const { suggestion } = await require('../services/characterContentType').suggestContentType(db, found);
+      return res.json({ success: true, suggestion });
+    } catch (err) {
+      if (contentTypeError(res, err)) return undefined;
+      throw err;
+    }
+  } catch (err) {
+    console.error('[Cast] POST /characters/:id/content-type/suggest error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// The Society tab's batch: suggestions for LalaVerse feed profiles with no
+// content type yet. Nothing is saved until Evoni applies the ones she keeps.
+router.post('/content-types/suggest-unset', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  try {
+    const result = await require('../services/characterContentType').suggestForUnset(getModels(), { limit: req.body?.limit, profileIds: req.body?.profile_ids });
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('[Cast] POST /content-types/suggest-unset error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/content-types/apply', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    try {
+      return res.json({ success: true, ...(await require('../services/characterContentType').applyContentTypes(getModels(), req.body?.items)) });
+    } catch (err) {
+      if (contentTypeError(res, err)) return undefined;
+      throw err;
+    }
+  } catch (err) {
+    console.error('[Cast] POST /content-types/apply error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

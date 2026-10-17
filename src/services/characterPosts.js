@@ -13,6 +13,8 @@
  *         states it exactly; a fact not decided yet is never stated;
  *       their mask (how they present themselves): what their posts come
  *         from, true or not;
+ *       what they are known for on The Pulse (their content type), next
+ *         to their job: the two can differ;
  *       their wound and want, as PRIVATE context (never stated);
  *       the events they host and the events they know about by now
  *         (pulseDrafter's hosting and knowledge lines);
@@ -29,7 +31,9 @@
  *     2026-10-17: "now im just sitting here wondering what to say"): the
  *     events they host or are a guest at, their account status, their work,
  *     and their want and wound (as a hint, never stated), plus an ordinary
- *     day. Each idea is { key, label, about }: `about` goes in "What is
+ *     day; and what they are known for on The Pulse (their content type,
+ *     services/characterContentType), with an idea where their job and
+ *     their content meet. Each idea is { key, label, about }: `about` goes in "What is
  *     happening". Also says whether they can post yet ({ ready, blocker,
  *     next }): next is 'choose_show', 'make_active' or 'build_voice' when
  *     the page itself can take that step, else null. For choose_show it
@@ -105,7 +109,7 @@ function woundOf(character) {
   return out;
 }
 
-function buildPrompt({ character, profile, voice, facts, mask, wound, known, hosting, recent, label, about, count }) {
+function buildPrompt({ character, profile, voice, facts, mask, wound, known, hosting, recent, label, about, count, contentType = null }) {
   const { BANNED_PHRASES } = require('./pulseVoices');
   const examples = (voice.examples_json || []).slice(0, 8).map((e) => `- ${e.text}`).join('\n') || '(none yet)';
   const name = profile.display_name || character.display_name;
@@ -121,7 +125,7 @@ ${recent.length ? recent.map((t) => `- ${clip(t, 200)}`).join('\n') : '(none yet
 
 How they present themselves (their posts come from this face, true or not):
 ${mask}
-
+${contentType ? `\n${require('./characterContentType').contentTypeBlock(contentType, facts.occupation && !(facts.undecided || []).includes('occupation') ? facts.occupation : null)}\n` : ''}
 ${factsLines(facts)}
 
 When: ${label || 'now'}.
@@ -178,9 +182,10 @@ async function generatePosts(db, { characterId, count = DEFAULT_COUNT, about = n
     `SELECT content_text FROM feed_posts WHERE social_profile_id = :pid AND deleted_at IS NULL AND content_text IS NOT NULL
       ORDER BY created_at DESC LIMIT 6`, { replacements: { pid: feedProfile.id } });
 
+  const { current: contentType } = await require('./characterContentType').contentTypeOf(db, { feedProfile });
   const prompt = buildPrompt({
     character, profile: feedProfile, voice, facts, mask: maskLines(character, feedProfile), wound: woundOf(character),
-    known, hosting, recent: recentRows.map((r) => r.content_text), label: clock.label(at), about: what, count: n,
+    known, hosting, recent: recentRows.map((r) => r.content_text), label: clock.label(at), about: what, count: n, contentType,
   });
   await require('./pulseRequests').take(db, { showId, lane: 'manual', kind: 'character_posts' });
   const parsed = parseBatch(await askBatch(prompt, 500 * n), n);
@@ -283,8 +288,16 @@ async function postIdeas(db, characterId) {
     const [label, about] = STATUS_IDEAS[facts.account_status](name);
     add('status', label, about);
   }
+  if (feedProfile?.society_archetype) {
+    const { loadSocietyArchetypes, matchSocietyArchetype } = require('./societyArchetypes');
+    const known = matchSocietyArchetype(await loadSocietyArchetypes(db), feedProfile.society_archetype);
+    add('known_for', `What they're known for`, `A post in ${name}'s usual lane as ${feedProfile.society_archetype}${known?.content ? `: ${known.content.charAt(0).toLowerCase()}${known.content.slice(1)}` : ''}. The kind of post their audience follows them for.`);
+  }
   if (facts?.occupation && !undecided.has('occupation')) {
     add('work', 'A day at work', `${name} at work as ${facts.occupation}: a small moment from the day.`);
+  }
+  if (feedProfile?.society_archetype && facts?.occupation && !undecided.has('occupation')) {
+    add('job_meets_content', 'When work and content collide', `${name}'s job (${facts.occupation}) shows up in a post made the way ${feedProfile.society_archetype} posts. The gap between the two is the interesting part.`);
   }
   if (['hidden_want', 'core_desire', 'want_architecture'].some((k) => character[k])) {
     add('want', 'What they really want shows', `A post where what ${name} secretly wants shows through, without ${name} ever saying it.`);
