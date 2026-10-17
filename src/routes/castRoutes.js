@@ -31,6 +31,9 @@
  *   PUT    /api/v1/cast/characters/:id/typology     set it (ADMIN), or { clear: true }
  *   POST   /api/v1/cast/characters/:id/typology/suggest  one AI call that reads their
  *                                                  writing and proposes one; saves nothing (ADMIN)
+ *   GET    /api/v1/cast/characters/:id/posts/ideas  what to post about, from their own
+ *                                                  story (no AI call), and whether
+ *                                                  they can post yet
  *   POST   /api/v1/cast/characters/:id/posts/generate  { count?, about? }: ADMIN; drafts
  *                                                  their Pulse posts for Review, each
  *                                                  load-bearing or ambient (services/characterPosts)
@@ -449,6 +452,22 @@ router.post('/characters/:id/typology/suggest', requireAuth, authorize(['ADMIN']
  * posts from their voice, mask, facts and events. Every draft waits in
  * Review; nothing is released here.
  */
+router.get('/characters/:id/posts/ideas', requireAuth, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const { postIdeas, PostsError } = require('../services/characterPosts');
+    try {
+      return res.json({ success: true, ...(await postIdeas(getModels(), req.params.id)) });
+    } catch (err) {
+      if (err instanceof PostsError) return res.status(err.status).json({ success: false, error: err.message });
+      throw err;
+    }
+  } catch (err) {
+    console.error('[Cast] GET /characters/:id/posts/ideas error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.post('/characters/:id/posts/generate', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });

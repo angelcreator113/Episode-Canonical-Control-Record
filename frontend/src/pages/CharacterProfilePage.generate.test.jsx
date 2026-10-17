@@ -1,6 +1,7 @@
 /**
  * Generate Posts on the character page (Character Consistency Engine step 4;
- * Evoni, 2026-10-16): drafts wait in Review, each load-bearing or ambient.
+ * Evoni, 2026-10-16): drafts wait in Review, each load-bearing or ambient;
+ * ideas from their own story fill "What is happening" (2026-10-17).
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
@@ -17,7 +18,11 @@ import { GeneratePosts } from './CharacterProfilePage';
 const page = (onDrafted = () => {}) => render(<MemoryRouter><GeneratePosts characterId="c1" onDrafted={onDrafted} /></MemoryRouter>);
 
 describe('GeneratePosts', () => {
-  beforeEach(() => { api.post.mockReset(); });
+  beforeEach(() => {
+    api.post.mockReset();
+    api.get.mockReset();
+    api.get.mockResolvedValue({ data: { success: true, ready: true, blocker: null, ideas: [] } });
+  });
 
   test('drafts on request and lists each draft with its weight and a link to Review', async () => {
     api.post.mockResolvedValue({ data: { success: true, drafted: [
@@ -37,6 +42,35 @@ describe('GeneratePosts', () => {
     expect(within(box).getByText('Open Review').getAttribute('href')).toBe('/admin?tab=pulse&sub=review');
     expect(api.post).toHaveBeenCalledWith('/api/v1/cast/characters/c1/posts/generate', { count: 3, about: 'The week before her swap' });
     expect(onDrafted).toHaveBeenCalled();
+  });
+
+  test('ideas from their story fill "What is happening" with one tap', async () => {
+    api.get.mockResolvedValue({ data: { success: true, ready: true, blocker: null, ideas: [
+      { key: 'event:e1', label: 'Before Linen Swap', about: 'The days before Linen Swap, which Maren is hosting.' },
+      { key: 'status', label: 'Breaking the silence', about: "Maren's first post after going dark." },
+      { key: 'ordinary', label: 'An ordinary day', about: '' },
+    ] } });
+    api.post.mockResolvedValue({ data: { success: true, drafted: [], failed: [] } });
+    page();
+    expect(api.get).toHaveBeenCalledWith('/api/v1/cast/characters/c1/posts/ideas');
+    expect(await screen.findByText('Not sure what to say? Pick one:')).toBeTruthy();
+    fireEvent.click(screen.getByText('Breaking the silence'));
+    const box = screen.getByLabelText('What is happening (optional)');
+    expect(box.value).toBe("Maren's first post after going dark.");
+    expect(screen.getByText('Breaking the silence').getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByText('An ordinary day'));
+    expect(box.value).toBe('');
+    fireEvent.click(screen.getByText('Before Linen Swap'));
+    fireEvent.click(screen.getByText('Draft posts for Review'));
+    await screen.findByText(/0 drafts waiting in Review/);
+    expect(api.post).toHaveBeenCalledWith('/api/v1/cast/characters/c1/posts/generate', { count: 3, about: 'The days before Linen Swap, which Maren is hosting.' });
+  });
+
+  test('says up front when they cannot post yet, and the button waits', async () => {
+    api.get.mockResolvedValue({ data: { success: true, ready: false, blocker: 'Maren has no Voice Profile yet. Build it in Admin › The Pulse › Voices, then come back.', ideas: [] } });
+    page();
+    expect((await screen.findByRole('alert')).textContent).toMatch(/no Voice Profile/);
+    expect(screen.getByText('Draft posts for Review').disabled).toBe(true);
   });
 
   test('shows the refusal (no Voice Profile)', async () => {
