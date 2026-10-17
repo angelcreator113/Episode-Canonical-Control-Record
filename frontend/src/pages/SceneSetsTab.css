@@ -4436,7 +4436,8 @@
 .is-pink .scene-sets-event-look-name { color: var(--lala-pink-dark); }
 
 @media (max-width: 760px) {
-  .scene-sets-modal.is-pink { width: 100vw; max-height: 100vh; border-radius: 0; }
+  /* The visible height on phones (dvh): 100vh ran under the browser bar (fifth audit). */
+  .scene-sets-modal.is-pink { width: 100%; max-height: 100vh; max-height: 100dvh; border-radius: 0; }
   .is-pink .scene-sets-ws-main { grid-template-columns: minmax(0, 1fr); }
   .is-pink .scene-sets-modal-title { font-size: 20px; }
   .is-pink .scene-sets-modal-thumb { width: 52px; height: 52px; }
@@ -4446,3 +4447,8 @@
 .is-pink .lv-slot { width: auto; }
 .is-pink .lv-slot img, .is-pink .lv-empty { width: 100%; height: auto; aspect-ratio: 16 / 9; }
 .is-pink .scene-sets-angle-row-btn { font-size: 11px; }
+
+.scene-sets-ws-main-viewnote {
+  position: absolute; left: 10px; right: 10px; bottom: 10px; padding: 3px 10px; border-radius: 8px; font-size: 11px;
+  background: var(--surface-card); color: var(--text-secondary); border: 1px solid var(--lala-pink-light); pointer-events: none; opacity: 0.95;
+}

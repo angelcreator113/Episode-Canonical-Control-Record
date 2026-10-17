@@ -113,4 +113,32 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect((await host(sable.id, await other.event('Elsewhere'))).status).toBe(404);
     expect((await host(sable.id, 'not-an-id')).status).toBe(400);
   });
+
+  // Fifth audit: a brand host, an automation host and a character with no
+  // show were not respected.
+  it('a brand host or an automation copy host is not replaced; a character in no show hosts nothing', async () => {
+    const { character, event } = await cast();
+    const sable = await character('Sable');
+    const branded = await event('Maison Belle launch');
+    await run(`UPDATE world_events SET host_brand = 'Maison Belle' WHERE id = :id`, { id: branded });
+    const brand = await host(sable.id, branded);
+    expect(brand.status).toBe(409);
+    expect(brand.body).toMatchObject({ code: 'HOSTED_BY_BRAND' });
+    expect(brand.body.error).toMatch(/Maison Belle/);
+
+    const copied = await event('Feed brunch');
+    await run(`UPDATE world_events SET canon_consequences = '{"automation":{"host_profile_id":"legacy-7"}}'::jsonb WHERE id = :id`, { id: copied });
+    expect((await host(sable.id, copied)).body.code).toBe('HOSTED_BY_ANOTHER');
+    expect(await hostOf(copied)).toBeNull();
+
+    // A cast registry that names no show.
+    const registry = uuid();
+    await run(`INSERT INTO character_registries (id, title, show_id, created_at, updated_at) VALUES (:registry, 'Loose', NULL, NOW(), NOW())`, { registry });
+    const loneId = uuid();
+    const pid = (await rows(`INSERT INTO social_profiles (handle, platform, vibe_sentence, display_name, feed_layer, created_at, updated_at)
+      VALUES (:h, 'instagram', 'test', 'Lone', 'lalaverse', NOW(), NOW()) RETURNING id`, { h: `lone-${tag}` }))[0].id;
+    await run(`INSERT INTO registry_characters (id, registry_id, character_key, display_name, feed_profile_id, created_at, updated_at)
+               VALUES (:id, :registry, :key, 'Lone', :pid, NOW(), NOW())`, { id: loneId, registry, key: `lone-${loneId.slice(0, 6)}`, pid });
+    expect((await host(loneId, await event('Open house'))).body.code).toBe('NO_SHOW');
+  });
 });

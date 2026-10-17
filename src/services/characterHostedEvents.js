@@ -37,12 +37,16 @@ async function load(sequelize, characterId, eventId) {
   if (character.feed_profile_id == null) {
     throw new HostedEventError(`${character.name} needs a feed profile to host events. Match them to a feed person on The cast.`, 409, 'NO_FEED_PROFILE');
   }
+  // A character in no show's cast hosts nothing: the show check was skipped
+  // for them, and any show's event could be taken (fifth audit).
+  if (!character.show_id) throw new HostedEventError(`${character.name} is not in a show's cast`, 409, 'NO_SHOW');
   const [[event]] = await sequelize.query(
-    `SELECT we.id, we.name, we.show_id, ${HOST_ID_SQL} AS host_profile_id, sp.display_name AS host_name
+    `SELECT we.id, we.name, we.show_id, we.host_brand, ${HOST_ID_SQL} AS host_profile_id, sp.display_name AS host_name,
+            NULLIF(TRIM(we.canon_consequences->'automation'->>'host_profile_id'), '') AS automation_host
        FROM world_events we LEFT JOIN social_profiles sp ON sp.id = ${HOST_ID_SQL}
       WHERE we.id = :eventId AND we.deleted_at IS NULL`,
     { replacements: { eventId } });
-  if (!event || (character.show_id && String(event.show_id) !== String(character.show_id))) {
+  if (!event || String(event.show_id) !== String(character.show_id)) {
     throw new HostedEventError('That event is not one of their show\'s', 404, 'EVENT_NOT_FOUND');
   }
   return { character, event };
@@ -55,8 +59,23 @@ async function hostEvent(sequelize, { characterId, eventId }) {
   if (event.host_profile_id != null && Number(event.host_profile_id) !== pid) {
     throw new HostedEventError(`${event.name} is hosted by ${event.host_name || 'someone else'}`, 409, 'HOSTED_BY_ANOTHER');
   }
-  await sequelize.query('UPDATE world_events SET source_profile_id = :pid, updated_at = NOW() WHERE id = :id',
+  // The organizer readers take a brand host first, and any automation host
+  // id, numeric or not (utils/eventOrganizer): a click never replaces either
+  // (fifth audit).
+  if (String(event.host_brand || '').trim()) {
+    throw new HostedEventError(`${event.name} is hosted by ${String(event.host_brand).trim()}`, 409, 'HOSTED_BY_BRAND');
+  }
+  if (event.automation_host && event.automation_host !== String(pid)) {
+    throw new HostedEventError(`${event.name} already has a host`, 409, 'HOSTED_BY_ANOTHER');
+  }
+  // Written only while no one else hosts it: two characters adding the same
+  // event at once, the second no longer replaces the first (fifth audit).
+  const [updated] = await sequelize.query(
+    `UPDATE world_events SET source_profile_id = :pid, updated_at = NOW()
+      WHERE id = :id AND (source_profile_id IS NULL OR source_profile_id = :pid)
+      RETURNING id`,
     { replacements: { pid, id: event.id } });
+  if (!updated.length) throw new HostedEventError(`${event.name} was just given another host`, 409, 'HOSTED_BY_ANOTHER');
   return { event_id: event.id, host_profile_id: pid };
 }
 

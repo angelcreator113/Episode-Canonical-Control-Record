@@ -110,4 +110,24 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     const places = await auth(request(app).get(`/api/v1/cast/characters/${cid}/places`));
     expect(places.body.places).toEqual([expect.objectContaining({ role: 'work', scene_set_id: set, venue_photo_url: 'https://x/street.jpg' })]);
   });
+
+  // Fifth audit: a replaced or removed photo stayed in the bucket; the
+  // upload took 20 files for one.
+  it('a replaced or removed photo is deleted from storage; one file per upload', async () => {
+    const { loc, set } = await venue();
+    const first = await auth(request(app).post(`/api/v1/scene-sets/${set}/venue-photo`)).attach('image', await photo(), 'a.png');
+    mockS3Send.mockClear();
+    const second = await auth(request(app).post(`/api/v1/scene-sets/${set}/venue-photo`)).attach('image', await photo(), 'b.png');
+    expect(second.status).toBe(200);
+    const deleted = mockS3Send.mock.calls.map((c) => c[0]).filter((c) => c.constructor.name === 'DeleteObjectCommand');
+    expect(deleted.map((c) => c.input.Key)).toEqual([first.body.data.venue_photo_url.split('.amazonaws.com/')[1]]);
+    mockS3Send.mockClear();
+    expect((await auth(request(app).delete(`/api/v1/scene-sets/${set}/venue-photo`))).status).toBe(200);
+    expect(mockS3Send.mock.calls.map((c) => c[0].input.Key)).toEqual([second.body.data.venue_photo_url.split('.amazonaws.com/')[1]]);
+    expect((await rows('SELECT venue_photo_url FROM world_locations WHERE id = :loc', { loc }))[0].venue_photo_url).toBeNull();
+
+    const many = await auth(request(app).post(`/api/v1/scene-sets/${set}/venue-photo`))
+      .attach('images', await photo(), 'x.png').attach('images', await photo(), 'y.png');
+    expect(many.status).toBe(400);
+  });
 });

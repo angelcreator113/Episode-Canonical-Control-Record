@@ -965,10 +965,13 @@ function formatTime(secs) {
 export function LooksRow({ set, focusZone = null, onToast, onRefresh }) {
   const events = set.events || [];
   const versions = (set.event_versions || []).filter((v) => v.event);
+  // An event version whose event moved elsewhere still shows (fifth audit):
+  // hidden, it kept this set an everyday set with versions, unexplained.
+  const loneVersions = (set.event_versions || []).filter((v) => !v.event);
   const eventIds = new Set(events.map((e) => String(e.id)));
   // A look whose event is no longer held here still shows, by its event's name.
   const otherLooks = (set.looks || []).filter((l) => !eventIds.has(String(l.event_id)));
-  if (events.length === 0 && versions.length === 0 && otherLooks.length === 0) return null;
+  if (events.length === 0 && versions.length === 0 && loneVersions.length === 0 && otherLooks.length === 0) return null;
   return (
     <div className="scene-sets-looks" data-testid={`scene-set-looks-${set.id}`} onClick={(e) => e.stopPropagation()}>
       <span className="scene-sets-looks-label">Events held here</span>
@@ -1013,6 +1016,12 @@ export function LooksRow({ set, focusZone = null, onToast, onRefresh }) {
           className={`scene-sets-event-look${focusZone === `look:${v.event.id}` ? ' is-zone-focus' : ''}`}>
           <Link className="scene-sets-event-look-name" to={`/shows/${v.event.show_id || set.show_id}/events/${v.event.id}`}>{v.event.name}</Link>
           <EventPhotosSet photosSet={v} showId={set.show_id} event={v.event} onToast={onToast} onSaved={onRefresh} />
+        </div>
+      ))}
+      {loneVersions.map((v) => (
+        <div key={v.id} className="scene-sets-event-look" data-testid={`scene-set-lone-version-${v.id}`}>
+          <span className="scene-sets-event-look-name">Event photos with no event</span>
+          <EventPhotosSet photosSet={v} showId={set.show_id} onToast={onToast} onSaved={onRefresh} />
         </div>
       ))}
       {otherLooks.length > 0 && (
@@ -1160,6 +1169,9 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
   const [showDetails, setShowDetails] = useState(false);
   // The main picture on the Place tab flips through the base and the views (2026-10-17).
   const [mainIndex, setMainIndex] = useState(0);
+  // Back to the main background when the set, its base or its views change
+  // (fifth audit: it landed on another picture after a re-upload or a delete).
+  useEffect(() => { setMainIndex(0); }, [set.id, set.base_still_url, galleryImages.length]);
   // S8 (Evoni, 2026-10-02): "landing on the exact set and zone": the focused
   // set opens its panel on the angles, the zone (an angle id or a zone kind)
   // marked and scrolled to. A look zone (look:<eventId>) marks the Looks row.
@@ -1273,7 +1285,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
     setShowAddAngle(false);
     setShowDetails(true);
   }, []);
-  const eventLookCount = (set.events || []).length;
+  // Events held here, those using their own set of photos included (fifth audit).
+  const eventLookCount = (set.events || []).length + (set.event_versions || []).filter((v) => v.event).length;
   // One plain line on the card: what is happening, or the next thing to do.
   const cardStatus = isGenerating ? { tone: 'busy', text: 'Generating…' }
     : (specStage && specStage !== 'done') ? { tone: 'busy', text: 'Setting up…' }
@@ -2058,6 +2071,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                             <>
                               <img src={src} alt={set.name} onClick={() => setShowBaseLightbox(src)} title="View full size" />
                               <span className="scene-sets-ws-main-tag" data-testid={`scene-set-main-tag-${set.id}`}>{!shown || shown.label === 'BASE' ? 'Main background' : shown.label}</span>
+                              {/* Approve and Replace beside it are for the main background, whichever view shows (fifth audit). */}
+                              {shown && shown.label !== 'BASE' && (
+                                <span className="scene-sets-ws-main-viewnote" data-testid={`scene-set-main-viewnote-${set.id}`}>Showing a view: approving and replacing act on the main background</span>
+                              )}
                               {galleryImages.length > 1 && (
                                 <>
                                   <button type="button" className="scene-sets-ws-main-nav is-prev" aria-label="Previous view"
@@ -2086,7 +2103,9 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                         <ApprovedBaseRow set={set} onToast={showToast} onRefresh={onRefresh} />
                         {/* The approved base's note is ApprovedBaseRow's own (one note, not two). */}
                         {/* The venue's own photo, apart from the main photo (2026-10-17). */}
-                        <VenuePhoto set={set} onToast={showToast} onSaved={() => onRefresh?.()} />
+                        {set.version_of
+                          ? <p className="scene-sets-ws-main-note" data-testid={`venue-photo-elsewhere-${set.id}`}>The venue photo is {set.version_of.name}&rsquo;s, the everyday place: change it there.</p>
+                          : <VenuePhoto set={set} onToast={showToast} onSaved={() => onRefresh?.()} />}
                         {hasBase && !set.base_approved && !set.location_approved_base && !set.world_location_id && (
                           <p className="scene-sets-ws-main-note" data-testid={`approve-needs-location-${set.id}`}>
                             To approve this image as the base, the set needs a World Location.{' '}
