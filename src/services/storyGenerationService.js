@@ -216,9 +216,7 @@ ${charContext}
 ${evalData ? `OUTCOME: ${evalData.tier_final?.toUpperCase()} (${evalData.score}/100) — ${evalData.narrative_lines?.short || ''}` : ''}
 ${net !== 0 ? `FINANCIAL: ${net >= 0 ? '+' : ''}${net} coins net` : ''}
 
-${record ? `${record}
-
-` : ''}SCRIPT EXCERPT:
+${record ? `${record}\n\n` : ''}${format === 'short_story' ? 'CANON: go beneath the episode, never against it. Do not invent a major new event that contradicts what the episode showed; anything new you add is proposed to the author for canon, not canon yet.\n\n' : ''}SCRIPT EXCERPT:
 ${scriptExcerpt}
 
 FRANCHISE RULES:
@@ -244,6 +242,7 @@ Write the ${spec.name.toLowerCase()} now. Return ONLY the prose — no commentar
 
   // Save story
   const storyId = uuidv4();
+  let saved = false;
   try {
     await sequelize.query(
       `INSERT INTO stories
@@ -279,9 +278,14 @@ Write the ${spec.name.toLowerCase()} now. Return ONLY the prose — no commentar
         tags: JSON.stringify([format, evalData?.tier_final, event?.event_type].filter(Boolean)),
       }}
     );
+    saved = true;
   } catch (err) {
     console.warn('[StoryGen] Save failed:', err.message);
   }
+
+  // What a short story adds is proposed for canon, not canon (stage D,
+  // services/storyCanon): read it now, unawaited; nothing blocks on it.
+  if (saved && format === 'short_story') require('./storyCanon').reviewLater(sequelize, storyId);
 
   return {
     id: storyId,
