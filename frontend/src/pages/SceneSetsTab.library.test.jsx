@@ -78,6 +78,21 @@ describe('SceneSetsTab: the library', () => {
     expect(screen.queryByTestId('scene-set-tab-looks-set-2')).toBeNull();
   });
 
+  // Evoni, 2026-10-17 (the pink mockup): chips under the name; the main
+  // picture flips through the base and each made view.
+  test('the panel shows its chips, and the main picture flips through the views', async () => {
+    renderAt();
+    await waitFor(() => expect(card('set-1')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('scene-set-open-set-1'));
+    expect(screen.getByTestId('scene-set-chips-set-1').textContent).toMatch(/home base.*1\/2 views/);
+    expect(screen.getByTestId('scene-set-main-tag-set-1').textContent).toBe('Main background');
+    fireEvent.click(screen.getByTestId('scene-set-main-next-set-1'));
+    expect(screen.getByTestId('scene-set-main-tag-set-1').textContent).toBe('WIDE');
+    fireEvent.click(screen.getByTestId('scene-set-main-prev-set-1'));
+    expect(screen.getByTestId('scene-set-main-tag-set-1').textContent).toBe('Main background');
+    expect(screen.getByTestId('scene-set-angles-head-set-1').textContent).toMatch(/Angles 1\/2/);
+  });
+
   test('a venue with four views gets no "events only need 1-2 angles" advice and no rebuild that deletes them', async () => {
     renderAt();
     await waitFor(() => expect(card('set-2')).toBeTruthy());

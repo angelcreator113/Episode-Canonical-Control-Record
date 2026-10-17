@@ -1157,6 +1157,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
     return out;
   }, [set.base_still_url, sortedAngles, bustUrl]);
   const [showDetails, setShowDetails] = useState(false);
+  // The main picture on the Place tab flips through the base and the views (2026-10-17).
+  const [mainIndex, setMainIndex] = useState(0);
   // S8 (Evoni, 2026-10-02): "landing on the exact set and zone": the focused
   // set opens its panel on the angles, the zone (an angle id or a zone kind)
   // marked and scrolled to. A look zone (look:<eventId>) marks the Looks row.
@@ -1618,7 +1620,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
             {/* A dialog for keyboards and screen readers: named by the set's
                 title, focused when it opens, closed by Escape (audit, 2026-10-15). */}
             <div
-              className="scene-sets-modal"
+              className="scene-sets-modal is-pink"
               role="dialog"
               aria-modal="true"
               // Named by the set itself: the title's own label ("…: rename")
@@ -1639,7 +1641,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
               }}
             >
               {/* Modal header with set name + hero thumbnail */}
-              <div className="scene-sets-modal-header">
+              <div className="scene-sets-modal-header" style={heroImage ? { '--scene-sets-hero': `url("${heroImage}")` } : undefined}>
                 <div className="scene-sets-modal-header-info">
                   {heroImage && <img src={heroImage} alt="" className="scene-sets-modal-thumb" />}
                   <div>
@@ -1668,9 +1670,15 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                         tabIndex={0}
                         aria-label={`${set.name}: rename`}
                         title="Click to rename"
-                      >{set.name}</h3>
+                      >{set.name} <Pencil size={14} aria-hidden="true" className="scene-sets-modal-title-pencil" /></h3>
                     )}
                     <span className="scene-sets-modal-subtitle">{set.scene_type?.replace(/_/g, ' ')} &middot; {readyAngles}/{totalAngles} views</span>
+                    <span className="scene-sets-modal-chips" data-testid={`scene-set-chips-${set.id}`}>
+                      <span className="scene-sets-modal-chip"><MapPin size={12} aria-hidden="true" /> {(set.scene_type || 'Set').replace(/_/g, ' ').toLowerCase()}</span>
+                      <span className="scene-sets-modal-chip"><Camera size={12} aria-hidden="true" /> {readyAngles}/{totalAngles} views</span>
+                      {set.base_approved && <span className="scene-sets-modal-chip is-ok"><ShieldCheck size={12} aria-hidden="true" /> Everyday look</span>}
+                      {set.version_of && <span className="scene-sets-modal-chip">Event photos</span>}
+                    </span>
                   </div>
                 </div>
                 <button className="scene-sets-modal-close" aria-label="Close" onClick={() => { setShowDetails(false); setShowPromptEditor(false); setShowAddAngle(false); }}>
@@ -2040,17 +2048,42 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                     {/* The main background: the set's primary image. */}
                     <div className="scene-sets-ws-main" data-testid={`scene-set-main-bg-${set.id}`}>
                       <div className="scene-sets-ws-main-preview">
-                        {heroImage
-                          ? <img src={heroImage} alt={set.name} onClick={() => setShowBaseLightbox(heroImage)} title="View full size" />
-                          : <span className="scene-sets-ws-main-empty"><ImageIcon size={22} strokeWidth={1.2} /> No main background yet</span>}
+                        {(() => {
+                          // The main picture, then each view (2026-10-17): the arrows flip through them.
+                          const shown = galleryImages.length ? galleryImages[mainIndex % galleryImages.length] : null;
+                          const src = shown?.src || heroImage;
+                          if (!src) return <span className="scene-sets-ws-main-empty"><ImageIcon size={22} strokeWidth={1.2} /> No main background yet</span>;
+                          return (
+                            <>
+                              <img src={src} alt={set.name} onClick={() => setShowBaseLightbox(src)} title="View full size" />
+                              <span className="scene-sets-ws-main-tag" data-testid={`scene-set-main-tag-${set.id}`}>{!shown || shown.label === 'BASE' ? 'Main background' : shown.label}</span>
+                              {galleryImages.length > 1 && (
+                                <>
+                                  <button type="button" className="scene-sets-ws-main-nav is-prev" aria-label="Previous view"
+                                    onClick={() => setMainIndex((i) => (i - 1 + galleryImages.length) % galleryImages.length)} data-testid={`scene-set-main-prev-${set.id}`}>
+                                    <ChevronLeft size={18} aria-hidden="true" />
+                                  </button>
+                                  <button type="button" className="scene-sets-ws-main-nav is-next" aria-label="Next view"
+                                    onClick={() => setMainIndex((i) => (i + 1) % galleryImages.length)} data-testid={`scene-set-main-next-${set.id}`}>
+                                    <ChevronRight size={18} aria-hidden="true" />
+                                  </button>
+                                </>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                       <div className="scene-sets-ws-main-info">
-                        <div className="scene-sets-ws-main-label">Main background</div>
+                        <div className="scene-sets-ws-main-label">Scene set overview</div>
+                        {localDesc && <p className="scene-sets-ws-overview-desc" data-testid={`scene-set-overview-desc-${set.id}`}>{localDesc}</p>}
+                        {set.mood_tags?.length > 0 && (
+                          <div className="scene-sets-ws-overview-tags">
+                            {set.mood_tags.map((tag) => <span key={tag} className="scene-sets-ws-overview-tag">{tag}</span>)}
+                          </div>
+                        )}
                         {/* S6: Evoni approves the base here, beside the image; nothing is approved by itself. */}
                         <ApprovedBaseRow set={set} onToast={showToast} onRefresh={onRefresh} />
-                        {set.base_approved && (
-                          <p className="scene-sets-ws-main-note">Event versions at this location are made from this image. Un-approve it to replace it.</p>
-                        )}
+                        {/* The approved base's note is ApprovedBaseRow's own (one note, not two). */}
                         {hasBase && !set.base_approved && !set.location_approved_base && !set.world_location_id && (
                           <p className="scene-sets-ws-main-note" data-testid={`approve-needs-location-${set.id}`}>
                             To approve this image as the base, the set needs a World Location.{' '}
@@ -2307,7 +2340,13 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                       )}
                     </div>
 
-                    {/* Clean angle list */}
+                    {/* The everyday look's angles, as a picture grid (2026-10-17). */}
+                    {sortedAngles.length > 0 && (
+                      <div className="scene-sets-section-head" data-testid={`scene-set-angles-head-${set.id}`}>
+                        <Camera size={15} aria-hidden="true" /> Angles <span className="scene-sets-section-count">{readyAngles}/{totalAngles}</span>
+                        {totalAngles > 0 && readyAngles === totalAngles && <span className="scene-sets-section-ok"><CheckCircle2 size={13} aria-hidden="true" /> All views made</span>}
+                      </div>
+                    )}
                     <div className="scene-sets-angle-list">
                       {sortedAngles.map(a => {
                         const isComplete = a.generation_status === 'complete' && a.still_image_url;
