@@ -608,6 +608,8 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
         fixed_beats: written.coverage?.fixed_beats || [],
         // Phone steps added before taps the phone couldn't make (utils/phonePaths.js).
         phone_steps: written.coverage?.phone_steps || 0,
+        // Story layers with nothing to draw on (utils/storyLayers.js).
+        story_gaps: written.coverage?.story_gaps || [],
       };
     }
     if (!saved) {
