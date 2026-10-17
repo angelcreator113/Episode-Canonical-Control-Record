@@ -312,4 +312,4 @@ async function applyFix(db, { character, feedProfile = null }, flagId, { text = 
   return checkCharacter(db, { character, feedProfile });
 }
 
-module.exports = { checkCharacter, withIntentional, applyFix, FixError, followerMentions, zoneOf, leavesOf };
+module.exports = { checkCharacter, withIntentional, applyFix, FixError, followerMentions, zoneOf, leavesOf, labelOf, STATUS_PHRASES };

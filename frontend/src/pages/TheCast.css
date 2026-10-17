@@ -210,3 +210,9 @@
 .cast-facts-fact.is-set { background: var(--success-bg); color: var(--success-text); }
 .cast-facts-fact.is-missing, .cast-facts-fact.is-estimate { background: var(--lala-gold-soft); color: var(--lala-gold-text); }
 .cast-facts-run { align-self: flex-start; }
+/* Across the cast (CastCrossCheck): contradictions between characters */
+.cast-cross-what { font-size: 14px; overflow-wrap: anywhere; }
+.cast-cross-what a { color: var(--lala-lavender-text); text-decoration: none; }
+.cast-cross-what a:hover { text-decoration: underline; }
+.cast-cross-excerpt { font-size: 13px; font-style: italic; color: var(--text-secondary); overflow-wrap: anywhere; }
+.cast-cross-row .cast-note a { color: var(--lala-lavender-text); }
