@@ -414,7 +414,11 @@ async function queueVoiceBuilds(db) {
       ORDER BY rc.created_at`, { replacements: { stages: ACTIVE_STAGES } });
   const queue = require('./pulseQueue');
   const jobs = [];
-  for (const r of rows) jobs.push(await queue.enqueue(db, { showId: r.show_id, kind: 'voice', payload: { character_id: r.id } }));
+  for (const r of rows) {
+    // Voice building switched off for the show in Admin › Engine (2026-10-17): not queued; it is queued once it is on.
+    if (!(await queue.kindEnabled(db, r.show_id, 'voice'))) continue;
+    jobs.push(await queue.enqueue(db, { showId: r.show_id, kind: 'voice', payload: { character_id: r.id } }));
+  }
   return jobs;
 }
 
