@@ -1012,6 +1012,10 @@ app.use('/api/footage', footageRoutes);
 const rawClipRoutes = trackRouteLoad('rawClips', () => require('./routes/rawClipRoutes'));
 app.use('/api/v1/episode-clips', rawClipRoutes);
 
+// YouTube thumbnails: an episode's thumbnail from its show's style (Templates)
+const youtubeThumbnailRoutes = trackRouteLoad('youtubeThumbnails', () => require('./routes/youtubeThumbnailRoutes'));
+app.use('/api/v1/youtube-thumbnails', youtubeThumbnailRoutes);
+
 // Scene linking routes
 app.use('/api/scene-links', sceneLinksRoutes);
 
