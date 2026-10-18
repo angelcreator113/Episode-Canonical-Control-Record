@@ -1,12 +1,13 @@
 /**
  * The brand personalities keep to Evoni's rulings of 2026-10-18: the
  * established canon (constants/lalaverseBrands) takes precedence, every
- * brand has one representative with an authority level, and Jordan Ellis is
- * First Light's Brand Director, not its founder.
+ * brand has one representative, each with separate creative and financial
+ * authority as Evoni set them, and Jordan Ellis is First Light's Brand
+ * Director, not its founder.
  */
 const { LALAVERSE_BRANDS_SEED } = require('../../../src/constants/lalaverseBrands');
 const {
-  AUTHORITY_LEVELS, BRAND_PERSONALITIES, BRAND_RELATIONSHIPS, REPRESENTATIVES,
+  CREATIVE_LEVELS, FINANCIAL_LEVELS, ACTION_KINDS, BRAND_PERSONALITIES, BRAND_RELATIONSHIPS, REPRESENTATIVES,
 } = require('../../../src/constants/brandPersonalities');
 
 const CANON_FIELDS = ['slug', 'name', 'type', 'category', 'description', 'aesthetic', 'niche', 'founder', 'press_angle'];
@@ -30,26 +31,56 @@ describe('brand personalities', () => {
     expect(aura.description).toMatch(/Black and African diaspora culture/);
   });
 
-  test('each brand has its representative, and each representative an authority level', () => {
+  test('each brand has its representative, with separate creative and financial authority', () => {
     expect(REPRESENTATIVES.map((r) => r.brand).sort()).toEqual([...slugs].sort());
     for (const r of REPRESENTATIVES) {
       expect(BRAND_PERSONALITIES[r.brand].representative).toBe(r.key);
-      expect(Object.keys(AUTHORITY_LEVELS)).toContain(r.authority.level);
-      if (r.authority.level === 'founder') expect(r.authority.escalates_to).toBeNull();
+      expect(Object.keys(CREATIVE_LEVELS)).toContain(r.authority.creative);
+      expect(Object.keys(FINANCIAL_LEVELS)).toContain(r.authority.financial);
+      if (r.authority.financial === 'full') expect(r.authority.escalates_to).toBeNull();
       else expect(r.authority.escalates_to).toBe('founder');
     }
   });
 
-  test('Jordan Ellis is First Light\'s Brand Director, negotiating within approved budgets and escalating to the founder', () => {
+  test('the authority levels are Evoni\'s table of 2026-10-18', () => {
+    const table = Object.fromEntries(REPRESENTATIVES.map((r) => [r.key, [r.authority.label, r.authority.creative, r.authority.financial]]));
+    expect(table).toEqual({
+      vivienne_laurent: ['High creative authority', 'approve', 'negotiate'],
+      nia_bennett: ['Founder authority', 'approve', 'full'],
+      adrian_cole: ['Brand Director authority', 'propose', 'routine'],
+      celeste_moreau: ['Brand storytelling authority', 'approve', 'none'],
+      jordan_ellis: ['Brand Director authority', 'propose', 'negotiate'],
+      zora_vale: ['High creative authority', 'approve', 'negotiate'],
+    });
+  });
+
+  test('Celeste can approve a concept without being able to commit money', () => {
+    const celeste = REPRESENTATIVES.find((r) => r.key === 'celeste_moreau');
+    expect(celeste.authority.creative).toBe('approve');
+    expect(celeste.authority.financial).toBe('none');
+    expect(celeste.authority.needs_approval).toContain('Financial commitments');
+  });
+
+  test('Jordan Ellis is First Light\'s Brand Director, negotiating within approved budgets; major partnerships go to the founder', () => {
     const jordan = REPRESENTATIVES.find((r) => r.key === 'jordan_ellis');
     expect(jordan.title).toBe('Brand Director');
     expect(jordan.title).not.toMatch(/founder/i);
-    expect(jordan.authority).toEqual(expect.objectContaining({ level: 'negotiate', escalates_to: 'founder' }));
-    expect(jordan.authority.escalates).toEqual(expect.arrayContaining(['Major partnerships', 'Strategic changes']));
+    expect(jordan.authority).toEqual(expect.objectContaining({ financial: 'negotiate', escalates_to: 'founder' }));
+    expect(jordan.authority.needs_approval).toContain('Major partnerships');
   });
 
-  test('only Nia Bennett, Ori\'s founder, decides as a founder', () => {
-    expect(REPRESENTATIVES.filter((r) => r.authority.level === 'founder').map((r) => r.key)).toEqual(['nia_bennett']);
+  test('Adrian Cole is The Column\'s Brand Director', () => {
+    expect(REPRESENTATIVES.find((r) => r.key === 'adrian_cole').title).toBe('Brand Director');
+  });
+
+  test('only Nia Bennett, Ori\'s founder, has full financial authority', () => {
+    expect(REPRESENTATIVES.filter((r) => r.authority.financial === 'full').map((r) => r.key)).toEqual(['nia_bennett']);
+  });
+
+  test('no representative may rewrite canon, exceed a budget, invent a contract or publish unauthorized', () => {
+    expect(ACTION_KINDS.restricted).toEqual(['Rewrite established brand canon', 'Exceed a budget', 'Invent a finalized contract', 'Publish content without authorization']);
+    expect(ACTION_KINDS.autonomous).toContain('Draft proposals');
+    expect(ACTION_KINDS.approval_required).toContain('Negotiate proposed terms');
   });
 
   test('relationships name only the six brands', () => {

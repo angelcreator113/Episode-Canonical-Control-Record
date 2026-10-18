@@ -23,24 +23,44 @@
  *                       source, story moment, reason and visibility. A
  *                       campaign discussed is not a campaign that happened.
  *
- * A representative's authority (her ruling: "whether they can offer a
- * collaboration, negotiate terms, approve a campaign, or must escalate to the
- * founder") is one of AUTHORITY_LEVELS; what is above it goes to
- * `escalates_to`. No founder is named here: each brand's founder stays as the
- * app describes her until Evoni develops her.
+ * A representative's authority (Evoni, 2026-10-18: "creative authority and
+ * financial authority must be separate. Someone might be able to approve a
+ * campaign concept without being authorized to spend money or sign a
+ * contract"). Each has a creative level (CREATIVE_LEVELS), a financial level
+ * (FINANCIAL_LEVELS), what they may do in her words (`can`), and what needs
+ * someone above them (`needs_approval`, from `escalates_to`). Every
+ * representative's actions are also one of ACTION_KINDS. No founder is named
+ * here: each brand's founder stays as the app describes her until Evoni
+ * develops her.
  *
  * Press (her ruling): the existing press map (routes/wardrobeBrands
  * PRESS_COVERAGE_MAP) says who covers which category; the press keep their
  * own editorial judgement and owe a brand nothing.
  */
 
-// Lowest to highest. Each level can do what the ones below it can.
-const AUTHORITY_LEVELS = Object.freeze({
-  offer: 'Can offer a collaboration, an invitation or a gifting',
-  negotiate: 'Can negotiate terms within an approved campaign budget',
-  approve: 'Can approve a campaign',
-  founder: 'Decides major partnerships and the brand\'s direction',
+// Creative authority: concepts, messaging, styling direction, collaborators.
+const CREATIVE_LEVELS = Object.freeze({
+  propose: 'Can propose concepts and campaigns, and select creators to approach',
+  approve: 'Can approve creative concepts, messaging, styling direction and collaborators',
 });
+
+// Financial authority, separate from creative (lowest to highest).
+const FINANCIAL_LEVELS = Object.freeze({
+  none: 'Cannot commit money or sign; a financial commitment goes to an authorized approver',
+  negotiate: 'Can negotiate terms within an approved campaign budget',
+  routine: 'Can negotiate within an approved budget and approve routine collaborations',
+  full: 'Can approve partnerships, budgets and campaigns within the established business rules',
+});
+
+// What any representative may do, alone or with approval (Evoni, 2026-10-18).
+const ACTION_KINDS = Object.freeze({
+  autonomous: ['Brainstorm', 'Ask questions', 'Discuss opportunities', 'Draft proposals'],
+  approval_required: ['Recommend a partnership', 'Negotiate proposed terms', 'Suggest a major campaign decision'],
+  restricted: ['Rewrite established brand canon', 'Exceed a budget', 'Invent a finalized contract', 'Publish content without authorization'],
+});
+// A binding change needs both the business authority (the representative's
+// levels, or their escalation) and Evoni's approval in the story.
+const BINDING_RULE = 'A binding change needs the right business authority and Evoni\'s approval.';
 
 const BRAND_PERSONALITIES = Object.freeze({
   velour_atelier: {
@@ -131,7 +151,14 @@ const REPRESENTATIVES = Object.freeze([
     pronouns: 'she/her',
     brand: 'velour_atelier',
     title: 'Creative Director',
-    authority: { level: 'approve', escalates_to: 'founder', escalates: ['Exclusive or long-term partnerships', 'Any change to what Velour makes or stands for'] },
+    authority: {
+      label: 'High creative authority',
+      creative: 'approve',
+      financial: 'negotiate',
+      can: ['Approve styling concepts', 'Select collaborators', 'Negotiate approved campaigns'],
+      needs_approval: ['Major commitments'],
+      escalates_to: 'founder',
+    },
     description: 'Velour Atelier\'s Creative Director. Reserved, formidable, impeccably polished. She sees potential in Lala and expects her to prove she can represent the house.',
     personality: 'Reserved and exacting. Compliments selectively and never begs anyone to collaborate. Notices fit, proportion, material and intention before anything else.',
     core_belief: 'Restraint is the highest expression of confidence.',
@@ -156,7 +183,14 @@ const REPRESENTATIVES = Object.freeze([
     pronouns: 'she/her',
     brand: 'ori_beauty',
     title: 'Founder & Brand Director',
-    authority: { level: 'founder', escalates_to: null, escalates: [] },
+    authority: {
+      label: 'Founder authority',
+      creative: 'approve',
+      financial: 'full',
+      can: ['Approve partnerships', 'Approve budgets', 'Approve campaigns', 'Set product direction', 'All within the established business rules'],
+      needs_approval: [],
+      escalates_to: null,
+    },
     description: 'Ori Beauty\'s founder, the cosmetic chemist who started making her own formulations because nothing worked. Warm, expressive and grounded in knowledge.',
     personality: 'Warm and conversational, and unapologetic about who Ori is for. A chemist first: she cares about formulation, honest claims and teaching what the ingredients do.',
     core_belief: 'Luxury skincare should never make Black women feel like an afterthought.',
@@ -181,7 +215,14 @@ const REPRESENTATIVES = Object.freeze([
     pronouns: 'he/him',
     brand: 'the_column',
     title: 'Brand Director',
-    authority: { level: 'negotiate', escalates_to: 'founder', escalates: ['Approving a campaign', 'Partnerships beyond an approved campaign budget'] },
+    authority: {
+      label: 'Brand Director authority',
+      creative: 'propose',
+      financial: 'routine',
+      can: ['Propose campaigns', 'Select creators', 'Negotiate approved terms', 'Approve routine collaborations'],
+      needs_approval: ['Major commitments'],
+      escalates_to: 'founder',
+    },
     description: 'The Column\'s Brand Director. Analytical, understated, discerning. He asks whether someone understands her wardrobe.',
     personality: 'Calm, direct and observant, sometimes dryly funny. Asks the hard question instead of offering easy praise.',
     core_belief: 'Build a wardrobe; don\'t accumulate one.',
@@ -206,7 +247,14 @@ const REPRESENTATIVES = Object.freeze([
     pronouns: 'she/her',
     brand: 'aura_fragrance',
     title: 'Brand Storytelling Director',
-    authority: { level: 'negotiate', escalates_to: 'founder', escalates: ['Approving a campaign or a launch', 'Anything that touches how the house tells its heritage'] },
+    authority: {
+      label: 'Brand storytelling authority',
+      creative: 'approve',
+      financial: 'none',
+      can: ['Approve creative concepts', 'Approve messaging', 'Approve campaign proposals within her remit'],
+      needs_approval: ['Financial commitments'],
+      escalates_to: 'founder',
+    },
     description: 'Aura Fragrance\'s Brand Storytelling Director. Poetic, intuitive and emotionally perceptive; she carries the house\'s heritage in how she tells its stories.',
     personality: 'Thoughtful and sensory. Asks how a moment felt, not how it looked. Protective of the heritage the house is built on.',
     core_belief: 'Fragrance is identity: what you leave behind when you leave the room.',
@@ -231,7 +279,14 @@ const REPRESENTATIVES = Object.freeze([
     pronouns: 'he/him',
     brand: 'first_light_studio',
     title: 'Brand Director',
-    authority: { level: 'negotiate', escalates_to: 'founder', escalates: ['Major partnerships', 'Strategic changes', 'Anything beyond an approved campaign budget'] },
+    authority: {
+      label: 'Brand Director authority',
+      creative: 'propose',
+      financial: 'negotiate',
+      can: ['Manage creator relationships', 'Negotiate within approved budgets'],
+      needs_approval: ['Major partnerships'],
+      escalates_to: 'founder',
+    },
     description: 'First Light Studio\'s Brand Director. He manages partnerships, creator relationships, product campaigns and business development, and reports to the founder.',
     personality: 'Encouraging without sounding like a motivational speaker. Curious about creators\' daily rituals and workspaces; particular about thoughtful design and function.',
     core_belief: 'The environment around a creator changes how she feels and works.',
@@ -256,7 +311,14 @@ const REPRESENTATIVES = Object.freeze([
     pronouns: 'she/her',
     brand: 'carte_blanche',
     title: 'Creative Director',
-    authority: { level: 'approve', escalates_to: 'founder', escalates: ['Major partnerships', 'Any change to what Carte Blanche makes or stands for'] },
+    authority: {
+      label: 'High creative authority',
+      creative: 'approve',
+      financial: 'negotiate',
+      can: ['Approve creative concepts', 'Approve styling direction', 'Approve collaborators'],
+      needs_approval: ['Major financial commitments'],
+      escalates_to: 'founder',
+    },
     description: 'Carte Blanche\'s Creative Director. Confident, sharp and willing to challenge Lala, about conviction rather than controversy.',
     personality: 'Sharp, witty and direct. Challenges a creator because she wants to see what they have decided. Intentional drama, never noise.',
     core_belief: 'Clothing can express a decision someone has already made about who they are.',
@@ -277,4 +339,6 @@ const REPRESENTATIVES = Object.freeze([
   },
 ]);
 
-module.exports = { AUTHORITY_LEVELS, BRAND_PERSONALITIES, BRAND_RELATIONSHIPS, REPRESENTATIVES };
+module.exports = {
+  CREATIVE_LEVELS, FINANCIAL_LEVELS, ACTION_KINDS, BINDING_RULE, BRAND_PERSONALITIES, BRAND_RELATIONSHIPS, REPRESENTATIVES,
+};
