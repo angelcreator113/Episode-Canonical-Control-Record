@@ -298,7 +298,9 @@ async function eligible(db, showId, { at, stage = 'active', includeUnmet = false
   const reveals = require('./pulseReveals');
   const { hiddenProfiles, unmetProfiles, knownOfProfiles } = await reveals.revealsAt(db, showId, moment, { lalaProfileId: lalaId });
   const meeting = includeUnmet && unmetProfiles.size ? await reveals.metLala(db, showId) : new Map();
-  const leftOut = metOnly ? unmetProfiles : hiddenProfiles;
+  // Met-only callers (event reactions, storylines with Lala) wait for the
+  // meeting; everyone else posts whether or not Lala has met them (Evoni, 2026-10-18: "it shouldnt matter if lala has met them they should still be building themselves on the pulse").
+  const leftOut = metOnly ? unmetProfiles : new Set();
   const voices = await db.PulseVoice.findAll({ where: { registry_character_id: characters.map((c) => c.id) } });
   const voiceOf = new Map(voices.map((v) => [v.registry_character_id, v]));
   const byName = new Map(rows.map((r, i) => [r.id, i]));

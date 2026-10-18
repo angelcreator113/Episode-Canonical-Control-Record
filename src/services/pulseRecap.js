@@ -10,8 +10,8 @@
  * A week is Monday 00:00 UTC to the next Monday. "This week's moments" are
  * the show's live posts whose posted_at falls in it, shown as The Pulse
  * shows them at the present (GET /feed-posts?at=present): a story order at
- * or before the present (or none), nothing hidden and no character Lala has
- * not met (pulseReveals.revealsAt), numbers on the growth curve
+ * or before the present (or none), nothing hidden (a character Lala has not met yet still shows;
+ * Evoni, 2026-10-18; pulseReveals.revealsAt), numbers on the growth curve
  * (pulseNumbers.applyNumbers). A recap and The Pulse cannot disagree.
  *
  *   weekStartOf(date)                 the Monday (YYYY-MM-DD) a date falls in
@@ -93,8 +93,8 @@ async function visiblePosts(db, showId, where, replacements) {
   const lalaId = await require('./lalaFeedProfile').lalaProfileId(db.sequelize);
   const reveals = await require('./pulseReveals').revealsAt(db, showId, present, { lalaProfileId: lalaId });
   const hidden = new Set([...reveals.hiddenIds('post'), ...reveals.teaserIds('post')].map(String));
-  const kept = rows.filter((r) => !hidden.has(String(r.id))
-    && !(r.social_profile_id != null && reveals.hiddenProfiles.has(Number(r.social_profile_id))));
+  // A character Lala has not met yet still shows (Evoni, 2026-10-18).
+  const kept = rows.filter((r) => !hidden.has(String(r.id)));
   const shown = await require('./pulseNumbers').applyNumbers(db, kept, present);
   return shown.map((p) => ({
     id: p.id, poster_handle: p.poster_handle, poster_display_name: p.poster_display_name || null,

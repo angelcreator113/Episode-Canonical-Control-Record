@@ -153,7 +153,7 @@ not via any page's UI.
 | `/character-registry` | `pages/CharacterRegistryPage.jsx` (App.jsx:428) | live | Sidebar (WRITE zone, `?view=world`, `Sidebar.jsx:49`) + Command Palette (`character` result, `components/CommandPalette.jsx:16`) |
 | `/character/:id` | `pages/CharacterProfilePage.jsx` (App.jsx:429) | live | in-app link (`pages/CharacterRegistryPage.jsx:124`) |
 | `/setup` | `pages/SetupWizard.jsx` (App.jsx:430) | live | URL only |
-| `/therapy/:registryId` | `pages/CharacterTherapy.jsx` (App.jsx:433) | live | URL only |
+| `/therapy/:registryId` | `pages/CharacterTherapy.jsx` | retired 2026-10-18 (the character page's Talk tab replaces it) | — |
 
 ### Management — world & story systems (App.jsx:436-514)
 
@@ -606,7 +606,7 @@ on by this document.
 | `/write/:bookId/:chapterId` | `pages/WriteMode.jsx` | Unified writing hub combining a TOC sidebar, prose editor, and context panel for voice-first chapter writing. |
 | `/chapter-structure/:bookId/:chapterId` | `pages/ChapterStructureEditor.jsx` | Structured chapter writing editor with visual hierarchy (headings, quotes, reflections), collapsible sections, auto-TOC, and templates. |
 | `/setup` | `pages/SetupWizard.jsx` | Conversational onboarding wizard that walks the user through 7 world-building "beats" to build the universe. |
-| `/therapy/:registryId` | `pages/CharacterTherapy.jsx` | Psychological narrative engine where a character processes story events via therapy-style sessions driven by wound patterns. |
+| `/therapy/:registryId` | `pages/CharacterTherapy.jsx` | Retired 2026-10-18. A confidential session with Dr. Amara Sinclair is the character page's Talk tab (`CharacterTalkTab`). |
 | `/cultural-calendar` | redirect | → Culture & Events, Events tab (audit IA-04). |
 | `/world-setup` | `pages/WorldSetupGuide.jsx` | Step-by-step checklist guiding the user through world-building setup, with links to each page. |
 | `/property-manager` | `pages/PropertyManager.jsx` | Manages character properties (mansions, penthouses, etc.), letting the user create properties and add rooms from style/room templates. |

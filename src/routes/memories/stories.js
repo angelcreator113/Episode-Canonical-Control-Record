@@ -878,7 +878,6 @@ async function safeAIWithTemp(systemPrompt, userPrompt, maxTokens = 800, tempera
 // ════════════════════════════════════════════════════════════════════════
 // ROUTE: POST /character-dilemma
 // Character Dilemma Engine — generates 5 dilemmas or compiles profile
-// Called by: CharacterDilemmaEngine.jsx
 // ════════════════════════════════════════════════════════════════════════
 
 router.post('/character-dilemma', requireAuth, aiRateLimiter, async (req, res) => {

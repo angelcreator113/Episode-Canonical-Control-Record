@@ -952,8 +952,10 @@ router.post('/generate-chapter-beats', requireAuth, aiRateLimiter, async (req, r
     // Load character context if available
     let charCtx = '';
     if (registry_id) {
+      // Confidential professionals are not written into the beats (utils/confidentialCharacters).
+      const { notConfidentialSql } = require('../utils/confidentialCharacters');
       const chars = await db.RegistryCharacter.findAll({
-        where: { registry_id },
+        where: { registry_id, [db.Sequelize.Op.and]: [db.sequelize.literal(notConfidentialSql('"RegistryCharacter"'))] },
         attributes: ['display_name', 'character_key', 'core_desire', 'core_wound', 'role_type'],
         limit: 10,
       });
@@ -1060,8 +1062,8 @@ router.post('/generate-book-outline', requireAuth, aiRateLimiter, async (req, re
     if (registry_id) {
       const chars = await db.RegistryCharacter.findAll({
         where: { registry_id },
-        attributes: ['display_name', 'character_key', 'core_desire', 'core_wound', 'role_type'],
-      });
+        attributes: ['display_name', 'character_key', 'core_desire', 'core_wound', 'role_type', 'extra_fields'],
+      }).then((rows) => require('../utils/confidentialCharacters').withoutConfidential(rows)); // not outlined (utils/confidentialCharacters)
       charCtx = chars.map(c => `${c.display_name || c.character_key} (${c.role_type}): desire="${c.core_desire || '?'}", wound="${c.core_wound || '?'}"`).join('\n');
     }
 

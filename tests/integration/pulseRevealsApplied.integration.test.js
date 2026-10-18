@@ -106,13 +106,13 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
   const byId = (res) => new Map(res.body.data.map((x) => [x.id, x]));
 
-  it('posts: hidden ones and those of characters not met yet never arrive; a teaser has no words, comments or full photo', async () => {
+  it('posts: hidden ones never arrive, those of characters not met yet do (Evoni, 2026-10-18); a teaser has no words, comments or full photo', async () => {
     const res = await get(`/api/v1/feed-posts?show_id=${ids.show}&at=present&with=comments`);
     expect(res.status).toBe(200);
     const posts = byId(res);
     expect(posts.has(ids.hiddenPost)).toBe(false);
-    expect(posts.has(ids.strangerPost)).toBe(false);
-    expect(res.body.total).toBe(3);
+    expect(posts.has(ids.strangerPost)).toBe(true);
+    expect(res.body.total).toBe(4);
     expect(posts.get(ids.teaserPost)).toMatchObject({ teaser: true, photo_teaser: true, content_text: null, comments: [], image_url: 'https://cdn/teasers/post.jpg', teaser_style: 'crop' });
     expect(JSON.stringify(res.body)).not.toContain(`words of ${ids.teaserPost}`);
     expect(JSON.stringify(res.body)).not.toContain('spoiler');
@@ -121,7 +121,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     // No teaser response carries the full image URL (Task #3034).
     expect(JSON.stringify(res.body)).not.toContain('https://cdn/teaser.jpg');
     expect(JSON.stringify(res.body)).not.toContain('https://cdn/photo.jpg');
-    expect(posts.get(ids.plainPost).comments.map((c) => c.text)).toEqual(['mine']);
+    expect(posts.get(ids.plainPost).comments.map((c) => c.text).sort()).toEqual(['hi from later', 'mine']);
   });
 
   it('posts: from their moment everything shows, and without at (Director view) nothing is held back', async () => {
