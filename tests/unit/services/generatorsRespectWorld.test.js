@@ -83,10 +83,6 @@ describe('The Pulse rules and episode posts', () => {
     expect(pulsePromptRules('lalaverse')).toMatch(/Never name JustAWoman, and never say Lala was built/);
     expect(pulsePromptRules('real_world')).toBe('');
   });
-  test('episode posts come from LalaVerse profiles only', () => {
-    const src = read('src', 'services', 'feedPostGeneratorService.js');
-    expect(src).toMatch(/feed_layer: 'lalaverse'/);
-  });
 });
 
 describe('a crossed character does not take JustAWoman\'s cost as their wound', () => {

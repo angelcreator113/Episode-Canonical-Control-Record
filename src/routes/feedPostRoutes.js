@@ -372,38 +372,10 @@ router.get('/comments/pending', requireAuth, async (req, res) => {
   }
 });
 
-// ── GENERATE FEED POSTS FOR EPISODE ──────────────────────────────────────────
-// POST /api/v1/feed-posts/:episodeId/generate
-router.post('/:episodeId/generate', requireAuth, aiRateLimiter, async (req, res) => {
-  try {
-    const { episodeId } = req.params;
-    const { showId } = req.body;
-
-    if (!showId) return res.status(400).json({ error: 'showId is required' });
-    if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' });
-
-    const models = require('../models');
-    const episode = await models.Episode.findByPk(episodeId);
-    if (!episode) return res.status(404).json({ error: 'Episode not found' });
-
-    const { generateEpisodeFeedPosts } = require('../services/feedPostGeneratorService');
-    const posts = await generateEpisodeFeedPosts(episodeId, showId, models);
-
-    return res.json({
-      success: true,
-      message: `${posts.length} feed posts generated.`,
-      data: posts,
-    });
-  } catch (err) {
-    // Today's manual requests are used (Task #3051): nothing was drafted.
-    if (err instanceof require('../services/pulseRequests').RequestCapError) {
-      console.error('[FeedPosts] Generate refused:', err.message);
-      return res.status(429).json({ error: err.message, code: err.code });
-    }
-    console.error('[FeedPosts] Generate error:', err);
-    return res.status(500).json({ error: err.message });
-  }
-});
+// The whole-episode post generator (POST /:episodeId/generate) is retired
+// (Evoni, 2026-10-17): an episode's posts are drafted from its event in
+// Admin › The Pulse › Engine (pulseEngine draft-event), through the drafter
+// and the Review gate.
 
 // ── GET FEED TIMELINE ────────────────────────────────────────────────────────
 // GET /api/v1/feed-posts/:showId/timeline
