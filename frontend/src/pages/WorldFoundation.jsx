@@ -19,6 +19,7 @@ import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../co
 import BrainUpdate from '../components/BrainUpdate';
 import DreamMap from '../components/DreamMap';
 import DreamCityExplorer from '../components/World/DreamCityExplorer';
+import StudioTypes from '../components/World/StudioTypes';
 import apiClient from '../services/api';
 import { DREAM_CITIES, UNIVERSITIES, CORPORATIONS, WORLD_LAYERS } from '../data/dreamCities';
 import { tabFromSearch } from '../utils/worldRedirects';
@@ -61,7 +62,7 @@ const LOCATION_TYPES = [
   { value: 'virtual', label: 'Virtual' }, { value: 'transitional', label: 'Transitional' },
 ];
 
-const VENUE_TYPES = ['restaurant','club','bar','cafe','salon','spa','gallery','museum','boutique','gym','hotel','office','park','rooftop','theater','other'];
+const VENUE_TYPES = ['restaurant','club','bar','cafe','salon','spa','gallery','museum','boutique','gym','hotel','office','park','rooftop','theater','studio','recording_studio','coworking','other'];
 const PROPERTY_TYPES = ['penthouse','mansion','apartment','townhouse','studio','villa','loft','cottage'];
 
 const tabStyle = (active) => ({
@@ -401,6 +402,9 @@ export default function WorldFoundation({ embedded = false }) {
               <button onClick={() => { setShowForm(true); setEditId(null); setForm(emptyForm); }} style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, background: '#2C2C2C', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>+ Add Location</button>
             </div>
           </div>
+
+          {/* Creator studios still typed "other" (2026-10-18) */}
+          <StudioTypes onChanged={loadLocations} />
 
           {/* Type filters */}
           <div style={{ display: 'flex', gap: 4, marginBottom: 16, flexWrap: 'wrap' }}>
