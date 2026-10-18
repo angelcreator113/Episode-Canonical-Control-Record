@@ -8,8 +8,11 @@
  *
  *   since_yesterday  what happened since `since`: posts that went live (the
  *                    quality gate's own releases marked auto), drafts
- *                    scheduled, new characters, and changes made on their
- *                    own (fact changes, voices built, findings resolved)
+ *                    scheduled, posts that went out on trust (a fully
+ *                    trusted poster's post the gate would have held; undo:
+ *                    POST /pulse-trust/undo/:postId; services/pulseTrust),
+ *                    new characters, and changes made on their own (fact
+ *                    changes, voices built, findings resolved)
  *   waiting          what waits for her, each group with the existing
  *                    endpoint that decides one item (the page calls those,
  *                    so every rule they keep still holds):
@@ -130,6 +133,12 @@ async function sinceYesterday(db, { start, end }, shows) {
     FROM pulse_voices v JOIN registry_characters rc ON rc.id = v.registry_character_id
     WHERE v.deleted_at IS NULL AND v.built_at >= :start AND rc.deleted_at IS NULL AND ${notConfidentialSql('rc')}
     ORDER BY v.built_at DESC LIMIT ${LIMIT}`, r, 'voices built');
+  // Went out on trust (services/pulseTrust): a fully trusted poster's post the
+  // gate would have held, each with Undo (POST /pulse-trust/undo/:postId).
+  const trustWhere = `deleted_at IS NULL AND gate_json->'released_on_trust' IS NOT NULL
+    AND gate_json->'released_on_trust'->>'undone_at' IS NULL AND (gate_json->'released_on_trust'->>'at')::timestamptz >= :start`;
+  const onTrust = await rows(db, `SELECT * FROM feed_posts WHERE ${trustWhere} ORDER BY (gate_json->'released_on_trust'->>'at') DESC LIMIT ${LIMIT}`, r, 'posts on trust');
+  const onTrustTotal = await count(db, `SELECT COUNT(*) AS n FROM feed_posts WHERE ${trustWhere}`, r, 'posts on trust');
   const resolved = await rows(db, `SELECT l.status, COUNT(*) AS n FROM consistency_flag_log l
     JOIN registry_characters rc ON rc.id = l.registry_character_id
     WHERE l.deleted_at IS NULL AND l.status IN ('fixed', 'gone', 'intentional') AND l.resolved_at >= :start AND ${notConfidentialSql('rc')}
@@ -138,6 +147,10 @@ async function sinceYesterday(db, { start, end }, shows) {
   return {
     went_live: { total: liveTotal, auto: live.filter((p) => p.ai_generated && p.gate_json?.pass === true).length, items: live.map((p) => postItem(p, shows)) },
     scheduled: { total: scheduledTotal, items: scheduled.map((p) => postItem(p, shows)) },
+    on_trust: {
+      total: onTrustTotal,
+      items: onTrust.map((p) => ({ ...postItem(p, shows), status: p.status, waived_flags: p.gate_json?.released_on_trust?.flags || [] })),
+    },
     new_characters: {
       total: charactersTotal,
       items: characters.map((c) => ({ id: c.id, name: c.selected_name || c.display_name, status: c.status || null, world: c.world || null, created_at: iso(c.created_at) })),

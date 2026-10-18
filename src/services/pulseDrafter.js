@@ -534,10 +534,13 @@ function draftBatch(db, { kind, ...args }) {
 async function routePost(db, { post, revealsStory, privateState, voice, pillar = null }, { lalaProfileId, alwaysReview = [] }) {
   const gateApi = require('./pulseGate');
   const gate = await gateApi.check(db, post, { voice, privateState, lalaProfileId });
-  const review = gateApi.reviewReasons(post, gate, { lalaProfileId, revealsStory });
-  for (const reason of alwaysReview) if (!review.includes(reason)) review.push(reason);
+  const reasons = gateApi.reviewReasons(post, gate, { lalaProfileId, revealsStory });
+  for (const reason of alwaysReview) if (!reasons.includes(reason)) reasons.push(reason);
+  // Their trust (services/pulseTrust; Evoni, 2026-10-18): review_all holds
+  // even a passing post; full lets a post flagged only for how it reads go out.
+  const { review, released_on_trust: onTrust } = await require('./pulseTrust').trustedReview(db, post, reasons, gate);
   // The pillar it is (services/contentPillars), so the next posts keep the mix.
-  await post.update({ gate_json: { ...gate, review, ...(pillar ? { pillar } : {}), checked_at: new Date().toISOString() } });
+  await post.update({ gate_json: { ...gate, review, ...(pillar ? { pillar } : {}), ...(onTrust ? { released_on_trust: onTrust } : {}), checked_at: new Date().toISOString() } });
   if (review.length === 0) await release(post);
   return { post, gate, review, published: review.length === 0 };
 }
