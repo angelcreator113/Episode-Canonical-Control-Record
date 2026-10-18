@@ -23,6 +23,7 @@
 const LABELS = {
   handle: 'Handle', account_status: 'Account status', income: 'Income', occupation: 'Occupation',
   major_possessions: 'What they own', home_price_range: 'Their home', undecided: 'Not decided yet', followers: 'Followers',
+  content_type: 'Known for on The Pulse', // services/contentTypeHistory (Evoni's idea 2)
 };
 const TRACKED = ['handle', 'account_status', 'income', 'occupation', 'major_possessions', 'home_price_range', 'undecided'];
 const MAX_ENTRIES = 200;
