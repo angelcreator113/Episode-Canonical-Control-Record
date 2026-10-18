@@ -204,7 +204,7 @@ export default function AddPieceDialog({ showId, onClose, onAdded }) {
                   </select>
                 </Field>
                 <Field label="Brand" hint={fictionalBrand ? 'A LalaVerse brand, filled in from the photo' : null}>
-                  <input value={form.brand} onChange={(e) => { setFictionalBrand(false); set({ brand: e.target.value }); }} placeholder="Velvet House" />
+                  <input value={form.brand} onChange={(e) => { setFictionalBrand(false); set({ brand: e.target.value }); }} placeholder="Velour Atelier" />
                 </Field>
                 <Field label="Colour">
                   <input value={form.color} onChange={(e) => set({ color: e.target.value })} placeholder="Blush pink" />

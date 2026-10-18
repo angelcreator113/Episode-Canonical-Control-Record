@@ -278,13 +278,13 @@ function costName(cost) {
   return (label || COST_KIND_NAMES[cost?.kind] || 'costs').toLowerCase();
 }
 
-// A typed deliverable by its natural D15 phrase ("1 TikTok GRWM", "3
-// Instagram Stories", "a link in bio (7 days)"); Other and untyped rows by
+// A typed deliverable by its natural D15 phrase ("1 Pulse video", "3
+// Pulse stories", "Profile link (7 days)"); Other and untyped rows by
 // their description.
 function deliverableName(d) {
   const { deliverablePhrase } = require('../utils/deliverableFormats');
   const phrase = d?.deliverable_type !== 'other' ? deliverablePhrase(d) : null;
-  if (phrase) return phrase.startsWith('Link in bio') ? `a link in bio${phrase.slice('Link in bio'.length)}` : phrase;
+  if (phrase) return phrase.startsWith('Profile link') ? `a profile link${phrase.slice('Profile link'.length)}` : phrase;
   const described = d?.description && String(d.description).trim();
   return described ? `"${described}"` : 'a deliverable';
 }

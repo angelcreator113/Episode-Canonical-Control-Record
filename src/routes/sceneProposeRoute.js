@@ -93,12 +93,13 @@ function calculateArcStage(_bookId) {
 // ─────────────────────────────────────────────────────────────────────────────
 async function readCharacterContext(registryId) {
   try {
-    const characters = await db.RegistryCharacter.findAll({
+    // Confidential professionals are not proposed into scenes (utils/confidentialCharacters).
+    const characters = require('../utils/confidentialCharacters').withoutConfidential(await db.RegistryCharacter.findAll({
       where: {
         registry_id: registryId,
         status: { [Op.in]: ['approved', 'edited', 'finalized'] },
       },
-    });
+    }));
 
     const charIds = characters.map(c => c.id);
 

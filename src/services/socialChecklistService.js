@@ -194,7 +194,7 @@ function renderSocialChecklist(tasks, event, options = {}) {
       // Platform badge
       ctx.font = `${Math.round(W * 0.02)}px LibreBaskerville, serif`;
       ctx.fillStyle = task.completed ? '#CCC' : '#999';
-      ctx.fillText(task.platform || '', labelX, taskY + 34);
+      ctx.fillText(require('../utils/pulsePlatform').platformLabel(task.platform) || '', labelX, taskY + 34);
 
       // Source badge (T1/T2): where the task comes from — host requirement,
       // brand deliverable, goal or optional idea — and "required" only on a

@@ -137,14 +137,14 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(empty.body.data.deliverables).toEqual([]);
     const { insertEventDeliverables } = require('../../src/services/eventTermsService');
     await insertEventDeliverables(models.sequelize, ids.event, [
-      { description: 'Wearable art reel', deliverable_type: 'instagram_reel', required: true, owed_to: 'brand' },
-      { description: 'Story shout-out', deliverable_type: 'instagram_stories', quantity: 3, required: false, owed_to: 'host' },
+      { description: 'Wearable art reel', deliverable_type: 'pulse_video', required: true, owed_to: 'brand' },
+      { description: 'Story shout-out', deliverable_type: 'pulse_stories', quantity: 3, required: false, owed_to: 'host' },
     ]);
     const res = await auth(request(app).get(`${base(ids)}/documents`));
     const byLabel = Object.fromEntries(res.body.data.deliverables.map((d) => [d.label, d]));
     expect(Object.keys(byLabel).sort()).toEqual(['Story shout-out', 'Wearable art reel']);
-    expect(byLabel['Wearable art reel']).toMatchObject({ required: true, owed_to: 'brand', detail: '1 Instagram Reel' });
-    expect(byLabel['Story shout-out']).toMatchObject({ required: false, owed_to: 'host', detail: '3 Instagram Stories' });
+    expect(byLabel['Wearable art reel']).toMatchObject({ required: true, owed_to: 'brand', detail: '1 Pulse video' });
+    expect(byLabel['Story shout-out']).toMatchObject({ required: false, owed_to: 'host', detail: '3 Pulse stories' });
     // Never stored in the plan.
     expect((await stored(ids)).documents).toBeUndefined();
   });

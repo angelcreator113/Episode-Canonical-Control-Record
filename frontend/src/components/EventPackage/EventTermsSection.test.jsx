@@ -173,7 +173,7 @@ describe('EventTermsSection', () => {
   // components, the fixed deliverable types, and Propose terms.
   const CARD = { version: 1, anchors: {}, premiums: { rush: { '48h': 10, '24h': 20 }, paid_ad: { whitelisting: null } } };
   const TYPED = [
-    { id: 'd1', description: 'One reel in the coat', deliverable_type: 'instagram_reel', platform: 'instagram', quantity: 1, required: true, status: 'pending', fee: null },
+    { id: 'd1', description: 'One reel in the coat', deliverable_type: 'pulse_video', platform: 'pulse', quantity: 1, required: true, status: 'pending', fee: null },
     { id: 'd2', description: 'Host a Q&A', deliverable_type: 'other', required: true, status: 'pending', fee: null },
   ];
 
@@ -288,13 +288,13 @@ describe('EventTermsSection', () => {
       canon_consequences: { automation: {
         auto_drafted: { deliverables: 'deal', deliverable_fees: 'pricing' },
         drafted_values: {
-          deliverables: { r1: { type: 'instagram_reel', platform: 'instagram', quantity: 1, fee: 325, description: 'Instagram Reel', required: true } },
+          deliverables: { r1: { type: 'pulse_video', platform: 'pulse', quantity: 1, fee: 325, description: 'Pulse video', required: true } },
           deliverable_fees: { r1: 325 },
         },
       } },
     };
     vi.mocked(api.get).mockResolvedValue({ data: { success: true, locked: false, deliverables: [
-      { id: 'r1', description: 'Instagram Reel', deliverable_type: 'instagram_reel', platform: 'instagram', quantity: 1, required: true, owed_to: 'host', status: 'pending', fee: 325 },
+      { id: 'r1', description: 'Pulse video', deliverable_type: 'pulse_video', platform: 'pulse', quantity: 1, required: true, owed_to: 'host', status: 'pending', fee: 325 },
     ] } });
     renderTerms({ event });
     const row = await screen.findByTestId('terms-deliverable-r1');
@@ -306,10 +306,10 @@ describe('EventTermsSection', () => {
 
   test('with a pricing version, the one note names it; an edited fee reads Edited once', async () => {
     const auto = { auto_drafted: { deliverables: 'deal', deliverable_fees: 'pricing' }, pricing_version: 2,
-      drafted_values: { deliverables: { r1: { type: 'instagram_reel', platform: 'instagram', quantity: 1, fee: 325, description: 'Instagram Reel', required: true } }, deliverable_fees: { r1: 325 } } };
+      drafted_values: { deliverables: { r1: { type: 'pulse_video', platform: 'pulse', quantity: 1, fee: 325, description: 'Pulse video', required: true } }, deliverable_fees: { r1: 325 } } };
     const event = { ...EVENT, deal_type: 'paid_deliverables', canon_consequences: { automation: auto } };
     vi.mocked(api.get).mockResolvedValue({ data: { success: true, locked: false, deliverables: [
-      { id: 'r1', description: 'Instagram Reel', deliverable_type: 'instagram_reel', platform: 'instagram', quantity: 1, required: true, owed_to: 'host', status: 'pending', fee: 400 },
+      { id: 'r1', description: 'Pulse video', deliverable_type: 'pulse_video', platform: 'pulse', quantity: 1, required: true, owed_to: 'host', status: 'pending', fee: 400 },
     ] } });
     renderTerms({ event });
     const row = await screen.findByTestId('terms-deliverable-r1');
@@ -322,13 +322,13 @@ describe('EventTermsSection', () => {
     const event = {
       ...EVENT, deal_type: 'brand_partnership',
       canon_consequences: { automation: { auto_drafted: { deliverables: 'deal' }, drafted_values: { deliverables: {
-        r1: { type: 'instagram_reel', platform: 'instagram', quantity: 1, fee: 125, description: 'Instagram Reel', required: true },
-        s1: { type: 'instagram_stories', platform: 'instagram', quantity: 3, fee: 60, description: 'Instagram Stories (×3)', required: true },
+        r1: { type: 'pulse_video', platform: 'pulse', quantity: 1, fee: 125, description: 'Pulse video', required: true },
+        s1: { type: 'pulse_stories', platform: 'pulse', quantity: 3, fee: 60, description: 'Pulse stories (×3)', required: true },
       } } } },
     };
     vi.mocked(api.get).mockResolvedValue({ data: { success: true, locked: false, deliverables: [
-      { id: 'r1', description: 'Instagram Reel', deliverable_type: 'instagram_reel', platform: 'instagram', quantity: 1, required: true, owed_to: 'brand', status: 'pending', fee: 125 },
-      { id: 's1', description: 'Instagram Stories (×3)', deliverable_type: 'instagram_stories', platform: 'instagram', quantity: 3, required: true, owed_to: 'brand', status: 'pending', fee: 80 },
+      { id: 'r1', description: 'Pulse video', deliverable_type: 'pulse_video', platform: 'pulse', quantity: 1, required: true, owed_to: 'brand', status: 'pending', fee: 125 },
+      { id: 's1', description: 'Pulse stories (×3)', deliverable_type: 'pulse_stories', platform: 'pulse', quantity: 3, required: true, owed_to: 'brand', status: 'pending', fee: 80 },
       { id: 'x1', description: 'Host a Q&A', deliverable_type: 'other', required: true, owed_to: 'brand', status: 'pending', fee: 50 },
     ] } });
     renderTerms({ event });
@@ -344,8 +344,8 @@ describe('EventTermsSection', () => {
     await waitFor(() => expect(screen.getByTestId('terms-deliverable-add')).toBeTruthy());
     fireEvent.click(screen.getByTestId('terms-deliverable-add'));
     const select = screen.getByTestId('terms-deliverable-type');
-    expect([...select.options].map((o) => o.textContent)).toEqual(['Choose a type', 'Instagram Reel', 'Instagram post', 'TikTok video',
-      'GRWM video', 'Instagram Stories', 'Carousel post', 'Go Live', 'Link in bio', 'Try-on/haul video', 'Content for the brand (UGC)', 'Other']);
+    expect([...select.options].map((o) => o.textContent)).toEqual(['Choose a type', 'Pulse video', 'Pulse post',
+      'GRWM video', 'Pulse stories', 'Pulse carousel', 'Pulse live', 'Profile link', 'Try-on/haul video', 'Content for the brand (UGC)', 'Other']);
     fireEvent.change(select, { target: { value: 'other' } });
     expect(screen.getByTestId('terms-deliverable-manual-note').textContent).toBe('Other is never priced automatically: set its fee.');
     fireEvent.change(screen.getByTestId('terms-deliverable-description'), { target: { value: 'Host a Q&A' } });
@@ -356,44 +356,44 @@ describe('EventTermsSection', () => {
     ));
   });
 
-  test('D15: a format with several platforms asks for one, and its quantity is sent', async () => {
+  test('D15 on The Pulse: a format starts on The Pulse, can name another account, and its quantity is sent', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { success: true, deliverables: [], locked: false } });
     vi.mocked(api.post).mockResolvedValue({ data: { success: true, deliverable: { id: 'd9' } } });
     renderTerms({ event: { ...EVENT, deal_type: 'paid_deliverables' } });
     await waitFor(() => expect(screen.getByTestId('terms-deliverable-add')).toBeTruthy());
     fireEvent.click(screen.getByTestId('terms-deliverable-add'));
-    // A single-platform format has no platform picker; Stories start at 3 slides.
-    fireEvent.change(screen.getByTestId('terms-deliverable-type'), { target: { value: 'instagram_stories' } });
+    // UGC is not posted: no account picker.
+    fireEvent.change(screen.getByTestId('terms-deliverable-type'), { target: { value: 'ugc' } });
     expect(screen.queryByTestId('terms-deliverable-platform')).toBeNull();
+    // Stories start at 3 slides, on The Pulse; the accounts are the LalaVerse's, no real app.
+    fireEvent.change(screen.getByTestId('terms-deliverable-type'), { target: { value: 'pulse_stories' } });
     expect(screen.getByTestId('terms-deliverable-quantity').value).toBe('3');
     expect(screen.getByText('Slides')).toBeTruthy();
-    // GRWM goes on several platforms; switching keeps a platform it is also on.
-    fireEvent.change(screen.getByTestId('terms-deliverable-type'), { target: { value: 'grwm_video' } });
+    expect(screen.getByText('Account')).toBeTruthy();
     const platform = screen.getByTestId('terms-deliverable-platform');
-    expect(platform.value).toBe('instagram');
-    expect([...platform.options].map((o) => o.textContent)).toEqual(['Choose a platform', 'TikTok', 'Instagram', 'YouTube']);
-    fireEvent.change(platform, { target: { value: '' } });
+    expect(platform.value).toBe('pulse');
+    expect([...platform.options].map((o) => o.textContent)).toEqual(['The Pulse', 'Private Pulse account', 'The PlayRoom']);
+    // Switching format keeps an account it also goes on.
+    fireEvent.change(platform, { target: { value: 'pulse_private' } });
+    fireEvent.change(screen.getByTestId('terms-deliverable-type'), { target: { value: 'grwm_video' } });
+    expect(screen.getByTestId('terms-deliverable-platform').value).toBe('pulse_private');
     fireEvent.change(screen.getByTestId('terms-deliverable-description'), { target: { value: 'GRWM for the launch' } });
-    fireEvent.click(screen.getByTestId('terms-deliverable-save'));
-    await waitFor(() => expect(screen.getByText(/Platform: choose TikTok, Instagram, YouTube/)).toBeTruthy());
-    expect(api.post).not.toHaveBeenCalled();
-    fireEvent.change(platform, { target: { value: 'tiktok' } });
     fireEvent.change(screen.getByTestId('terms-deliverable-quantity'), { target: { value: '2' } });
     fireEvent.click(screen.getByTestId('terms-deliverable-save'));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(
       '/api/v1/world/show-1/events/ev-1/deliverables',
-      expect.objectContaining({ deliverable_type: 'grwm_video', platform: 'tiktok', quantity: 2 })
+      expect.objectContaining({ deliverable_type: 'grwm_video', platform: 'pulse_private', quantity: 2 })
     ));
   });
 
-  test('D15: a row shows its format with quantity, and the platform where it has a choice', async () => {
+  test('D15 on The Pulse: a row shows its format with quantity, and its account only when not The Pulse', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { success: true, locked: false, deliverables: [
-      { id: 'g1', description: 'GRWM', deliverable_type: 'grwm_video', platform: 'tiktok', quantity: 2, required: true, owed_to: 'brand', status: 'pending', fee: 540 },
-      { id: 's1', description: 'Stories', deliverable_type: 'instagram_stories', platform: 'instagram', quantity: 3, required: true, owed_to: 'brand', status: 'pending', fee: 110 },
+      { id: 'g1', description: 'GRWM', deliverable_type: 'grwm_video', platform: 'pulse_private', quantity: 2, required: true, owed_to: 'brand', status: 'pending', fee: 540 },
+      { id: 's1', description: 'Stories', deliverable_type: 'pulse_stories', platform: 'pulse', quantity: 3, required: true, owed_to: 'brand', status: 'pending', fee: 110 },
     ] } });
     renderTerms({ event: { ...EVENT, deal_type: 'paid_deliverables' } });
-    await waitFor(() => expect(screen.getByTestId('terms-deliverable-type-g1').textContent).toBe('GRWM video (×2) · TikTok'));
-    expect(screen.getByTestId('terms-deliverable-type-s1').textContent).toBe('Instagram Stories (×3)');
+    await waitFor(() => expect(screen.getByTestId('terms-deliverable-type-g1').textContent).toBe('GRWM video (×2) · Private Pulse account'));
+    expect(screen.getByTestId('terms-deliverable-type-s1').textContent).toBe('Pulse stories (×3)');
   });
 
   test('pricing: locked shows the numbers, with no edit or propose control', async () => {
