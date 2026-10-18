@@ -7,7 +7,8 @@
  * Bible, only "stay in the world").
  *
  *   posterWorldLine(db, profileId)  their DREAM city and its culture, their
- *     home studio and the venues they frequent, as prompt lines ('' when
+ *     home studio and the venues they frequent, as prompt lines (the city's
+ *     words are the saved DREAM city list's, services/dreamCityText) ('' when
  *     none is known, or on a failed read, logged). A place they may post
  *     from; never a reason to name it in every post.
  *   posterWorldLines(db, profileId)  the same as bare lines, for the
@@ -18,7 +19,8 @@
  *     once the call succeeds.
  */
 
-const { feedCity, DREAM_CITY_CULTURE } = require('../utils/feedCities');
+const { feedCity } = require('../utils/feedCities');
+const { cityCultures } = require('./dreamCityText');
 
 const cityName = (key) => key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 const MAX_VENUES = 3;
@@ -31,7 +33,7 @@ async function posterWorldLines(db, profileId) {
     if (!p) return [];
     const lines = [];
     const key = feedCity(p.city);
-    if (key) lines.push(`They live in ${cityName(key)}, a DREAM city: ${DREAM_CITY_CULTURE[key]}`);
+    if (key) lines.push(`They live in ${cityName(key)}, a DREAM city: ${(await cityCultures(db))[key]}`);
     const ids = [p.home_location_id, ...(Array.isArray(p.frequent_venues) ? p.frequent_venues : [])].filter(Boolean);
     if (ids.length) {
       const [rows] = await db.sequelize.query(

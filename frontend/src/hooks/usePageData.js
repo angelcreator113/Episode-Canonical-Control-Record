@@ -20,7 +20,7 @@ export const deletePageContentKeyApi = (pageName, constantKey) =>
  *
  * @param {string} pageName  e.g. 'cultural_calendar'
  * @param {Object} defaultsMap  e.g. { CELEBRITY_HIERARCHY: [...], FASHION_TIERS: [...] }
- * @returns {{ data, updateItems, addItem, removeItem, resetKey, saving, editMode, setEditMode, loaded }}
+ * @returns {{ data, updateItems, addItem, removeItem, resetKey, setSaved, saving, editMode, setEditMode, loaded }}
  *   loaded is true once the saved content has been read; until then data is
  *   only the defaults (and stays so if the read fails).
  */
@@ -108,5 +108,10 @@ export default function usePageData(pageName, defaultsMap) {
     }
   }, [pageName]);
 
-  return { data, updateItems, updateItem, addItem, removeItem, resetKey, saving, editMode, setEditMode, loaded };
+  // A list someone else already saved (lib/pulseCities saveCity): shown, not written again.
+  const setSaved = useCallback((constantKey, newData) => {
+    setOverrides(prev => ({ ...prev, [constantKey]: newData }));
+  }, []);
+
+  return { data, updateItems, updateItem, addItem, removeItem, resetKey, setSaved, saving, editMode, setEditMode, loaded };
 }
