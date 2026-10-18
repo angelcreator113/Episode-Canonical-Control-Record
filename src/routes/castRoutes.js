@@ -48,6 +48,10 @@
  *                                                  the follower ledger (services/factHistory)
  *   GET    /api/v1/cast/characters/:id/check        flag-only check of their profile's text
  *                                                  against their facts (services/characterConsistency)
+ *   POST   /api/v1/cast/characters/:id/check/suggest  one AI call proposing a rewrite of each
+ *                                                  finding's sentence, or that it does not
+ *                                                  really disagree; saves nothing (ADMIN;
+ *                                                  services/checkAutofix)
  *   POST   /api/v1/cast/characters/:id/check/intentional        { flag_id, note? }: ADMIN
  *   DELETE /api/v1/cast/characters/:id/check/intentional/:flagId  unmark it: ADMIN
  *   GET    /api/v1/cast/characters/:id/appearance   how they look and their portraits
@@ -533,7 +537,8 @@ router.post('/characters/:id/check/intentional', requireAuth, authorize(['ADMIN'
 /**
  * Fixes one finding (Evoni, 2026-10-16: "I have no way of correcting these
  * findings"): { flag_id } puts the suggested fix in place, { flag_id, text }
- * saves her own wording as the field's whole text. Returns the check after.
+ * saves her own wording as the field's whole text, { flag_id, before, after }
+ * swaps one sentence for a suggested rewrite. Returns the check after.
  */
 router.post('/characters/:id/check/fix', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
@@ -546,7 +551,8 @@ router.post('/characters/:id/check/fix', requireAuth, authorize(['ADMIN']), asyn
     const { applyFix, FixError } = require('../services/characterConsistency');
     try {
       const text = req.body && 'text' in req.body ? req.body.text : undefined;
-      const result = await applyFix(db, found, flagId, { text });
+      const replace = req.body && 'before' in req.body ? { before: req.body.before, after: req.body.after } : undefined;
+      const result = await applyFix(db, found, flagId, { text, replace });
       const flagLog = require('../services/flagLog');
       await flagLog.markFixed(db, found.character.id, flagId);
       await flagLog.logCheck(db, found.character, result);
@@ -558,6 +564,26 @@ router.post('/characters/:id/check/fix', requireAuth, authorize(['ADMIN']), asyn
   } catch (err) {
     console.error('[Cast] POST /characters/:id/check/fix error:', err);
     return res.status(500).json({ success: false, error: err.message });
+  }
+});
+/**
+ * Suggested fixes (Evoni, 2026-10-17: "i want to be able to auto fix the
+ * text issues"): one AI call proposing, for every finding with no single
+ * right wording, either a rewrite of its sentence that agrees with the
+ * facts or that it does not really disagree (and why). Nothing is saved;
+ * a rewrite is applied through /check/fix { flag_id, before, after }.
+ */
+router.post('/characters/:id/check/suggest', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const db = getModels();
+    const found = await characterWithFeed(db, req.params.id);
+    if (!found) return res.status(404).json({ success: false, error: 'Character not found' });
+    const suggestions = await require('../services/checkAutofix').suggestFixes(db, found);
+    return res.json({ success: true, suggestions });
+  } catch (err) {
+    console.error('[Cast] POST /characters/:id/check/suggest error:', err);
+    return res.status(err.status === 502 ? 502 : 500).json({ success: false, error: err.message });
   }
 });
 router.delete('/characters/:id/check/intentional/:flagId', requireAuth, authorize(['ADMIN']), (req, res) => markIntentional(req, res, false));
