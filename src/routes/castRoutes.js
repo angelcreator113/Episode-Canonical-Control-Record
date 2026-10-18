@@ -62,6 +62,8 @@
  *                                                  the saved look (ADMIN, budget-gated)
  *   POST   /api/v1/cast/characters/:id/appearance/portrait/use { url }: it becomes their
  *                                                  profile photo (ADMIN)
+ *   POST   /api/v1/cast/characters/:id/appearance/portrait/remove { url }: drop one
+ *                                                  of their portraits (ADMIN)
  *   GET    /api/v1/cast/characters/:id/typology     their typology seed (Enneagram type and
  *                                                  wing, MBTI, why) and its label
  *   PUT    /api/v1/cast/characters/:id/typology     set it (ADMIN), or { clear: true }
@@ -676,6 +678,19 @@ router.post('/characters/:id/appearance/portrait/use', requireAuth, authorize(['
     return res.json({ success: true, ...appearanceOut(character) });
   } catch (err) {
     return appearanceError(res, err, 'POST /characters/:id/appearance/portrait/use');
+  }
+});
+
+// POST portrait/remove { url } (ADMIN): drop one of their portraits (a black one, say).
+router.post('/characters/:id/appearance/portrait/remove', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const character = await getModels().RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+    await require('../services/characterAppearance').removePortrait(character, String(req.body?.url || ''));
+    return res.json({ success: true, ...appearanceOut(character) });
+  } catch (err) {
+    return appearanceError(res, err, 'POST /characters/:id/appearance/portrait/remove');
   }
 });
 
