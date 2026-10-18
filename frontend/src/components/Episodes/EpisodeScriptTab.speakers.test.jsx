@@ -60,6 +60,14 @@ describe('lines', () => {
     expect(screen.getByRole('button', { name: 'Move line up' }).disabled).toBe(true);
   });
 
+  test("JustAWoman's sound and edit cues show as short notes", () => {
+    // Evoni, 2026-10-17.
+    renderTab('## BEAT: 4 · Interruption Pulse 1\n[SFX: notification ping]\n[EDIT: punch-in on her corner frame]\nMe: (looks toward the notification) "Hold on, who is texting us?"');
+    const beat = within(screen.getByTestId('script-beat-4'));
+    expect(beat.getByText('Sound: notification ping')).toBeTruthy();
+    expect(beat.getByText('Edit: punch-in on her corner frame')).toBeTruthy();
+  });
+
   test("a [UI: line the tab can't read shows as written", () => {
     renderTab('## BEAT: 1 · Opening Ritual\n[UI:CLICK MailIcon] (she taps)\nLala: A');
     expect(within(screen.getByTestId('script-beat-1')).getByText('[UI:CLICK MailIcon] (she taps)')).toBeTruthy();

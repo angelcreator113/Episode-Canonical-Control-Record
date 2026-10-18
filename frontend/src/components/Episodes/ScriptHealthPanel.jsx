@@ -34,7 +34,7 @@ export default function ScriptHealthPanel({ rows = [], beatNumbers = {}, onOpenB
       {!collapsed && fixable.length > 1 && onFix && (
         <div className="esp-health-fixall">
           <button type="button" className="esp-btn-primary is-small" data-testid="script-health-fix-all" disabled={busy} onClick={() => onFix(null)}>
-            Fix all {fixable.length} phone paths
+            Fix all {fixable.length}
           </button>
         </div>
       )}
