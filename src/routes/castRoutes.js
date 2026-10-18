@@ -64,6 +64,9 @@
  *                                                  profile photo (ADMIN)
  *   POST   /api/v1/cast/characters/:id/appearance/portrait/remove { url }: drop one
  *                                                  of their portraits (ADMIN)
+ *   GET    /api/v1/cast/characters/:id/gallery      every picture already linked to them,
+ *                                                  grouped: portraits, places, wardrobe,
+ *                                                  events, posts (services/characterGallery)
  *   GET    /api/v1/cast/characters/:id/typology     their typology seed (Enneagram type and
  *                                                  wing, MBTI, why) and its label
  *   PUT    /api/v1/cast/characters/:id/typology     set it (ADMIN), or { clear: true }
@@ -111,6 +114,10 @@
  *   PUT    /api/v1/cast/characters/:id/secrets/:secretId  any of those, or { status }:
  *                                                  candidate | confirmed | retired (ADMIN)
  *   DELETE /api/v1/cast/characters/:id/secrets/:secretId  (ADMIN; soft)
+ *   GET    /api/v1/cast/characters/:id/pulse-visibility  why their posts are or are not on
+ *                                                  The Pulse: live, waiting in Review,
+ *                                                  scheduled, held, hidden until they meet
+ *                                                  Lala (ADMIN; services/pulseVisibility)
  *   GET    /api/v1/cast/characters/:id/talk         { can_talk, sessions }: their confidential
  *                                                  sessions with Dr. Amara Sinclair (ADMIN;
  *                                                  services/characterTalk)
@@ -1014,6 +1021,21 @@ router.get('/characters/:id/appearances', requireAuth, async (req, res) => {
   }
 });
 
+// The Gallery tab (Evoni, 2026-10-18): every picture already linked to them,
+// grouped; reads only (services/characterGallery).
+router.get('/characters/:id/gallery', requireAuth, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const { galleryFor } = require('../services/characterGallery');
+    return res.json({ success: true, ...(await galleryFor(getModels(), req.params.id)) });
+  } catch (err) {
+    const { GalleryError } = require('../services/characterGallery');
+    if (err instanceof GalleryError) return res.status(err.status).json({ success: false, error: err.message });
+    console.error('[Cast] GET /characters/:id/gallery error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // A place error is its own status and message; anything else is a 500.
 function placeError(res, err, label) {
   const { PlaceShareError, CharacterPlacesError } = require('../services/characterPlaceShare');
@@ -1193,6 +1215,20 @@ router.delete('/characters/:id/secrets/:secretId', requireAuth, authorize(['ADMI
     return res.json({ success: true, ...(await deleteSecret(getModels().sequelize, req.params.id, req.params.secretId)) });
   } catch (err) {
     return secretError(res, err, 'DELETE /characters/:id/secrets/:secretId');
+  }
+});
+
+// Why their posts are or aren't on The Pulse (services/pulseVisibility).
+router.get('/characters/:id/pulse-visibility', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(404).json({ success: false, error: 'Character not found' });
+    const { visibilityFor } = require('../services/pulseVisibility');
+    return res.json({ success: true, ...(await visibilityFor(getModels(), { characterId: req.params.id })) });
+  } catch (err) {
+    const { VisibilityError } = require('../services/pulseVisibility');
+    if (err instanceof VisibilityError) return res.status(err.status).json({ success: false, error: err.message });
+    console.error('[Cast] GET /characters/:id/pulse-visibility error:', err);
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 

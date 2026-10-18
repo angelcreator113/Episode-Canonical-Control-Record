@@ -358,6 +358,7 @@ router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
               belief_pressured, emotional_function
        FROM registry_characters
        WHERE registry_id = :registry_id AND deleted_at IS NULL
+         AND ${require('../utils/confidentialCharacters').notConfidentialSql('')}
        ORDER BY sort_order ASC`,
       { replacements: { registry_id }, type: db.sequelize.QueryTypes.SELECT }
     );
@@ -837,6 +838,7 @@ router.post('/generate-family', requireAuth, aiRateLimiter, async (req, res) => 
               core_belief, personality, description, character_key
        FROM registry_characters
        WHERE registry_id = :registry_id AND deleted_at IS NULL
+         AND ${require('../utils/confidentialCharacters').notConfidentialSql('')}
        ORDER BY sort_order ASC`,
       { replacements: { registry_id }, type: db.sequelize.QueryTypes.SELECT }
     );

@@ -99,7 +99,9 @@ const AFTER = 30;
     const after = await reveals.revealsAt(models, ids.show, AFTER, { lalaProfileId: lala });
     expect(after.unmetProfiles.has(p.maren)).toBe(false);
     expect(after.hiddenProfiles.has(p.maren)).toBe(false);
-    expect(names(await eligible(models, ids.show, { at: BEFORE }))).toEqual(['nia']);
+    // Evoni, 2026-10-18: "it shouldnt matter if lala has met them they should
+    // still be building themselves on the pulse": she posts before the meeting.
+    expect(names(await eligible(models, ids.show, { at: BEFORE }))).toEqual(['maren', 'nia']);
   });
 
   test('the toggle is admin only and must be true or false', async () => {
