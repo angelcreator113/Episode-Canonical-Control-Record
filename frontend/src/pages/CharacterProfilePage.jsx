@@ -18,7 +18,7 @@ import {
   BarChart3, CalendarDays, Download, Link2, MapPin, Palette, Crown, Instagram,
   Quote, Star, TrendingUp, Briefcase, IdCard, Activity, FileText, CirclePlay, Flame,
   Copy, BadgeCheck, Lock, Eye, Smartphone, Plus, ExternalLink, Share2, Search,
-  Building2, BookOpen, Radio, Settings as SettingsIcon, AlertTriangle, Archive, RotateCcw, Link as LinkIcon, MessageCircle, Images,
+  Building2, BookOpen, Radio, Settings as SettingsIcon, AlertTriangle, Archive, RotateCcw, Link as LinkIcon, MessageCircle,
 } from 'lucide-react';
 import Pager, { usePaged } from '../components/Pager/Pager';
 import CharacterPlacesTab from '../components/CharacterPlaces/CharacterPlacesTab';
@@ -152,13 +152,13 @@ export const TABS = [
   { id: 'inner',       label: 'Inner Life',   icon: Heart },
   // Evoni, 2026-10-17: how they look, a generator for it, and portraits.
   { id: 'appearance',  label: 'Appearance',   icon: Palette },
-  // Evoni, 2026-10-18: every picture already linked to them, in its own tab.
-  { id: 'gallery',     label: 'Gallery',      icon: Images },
   { id: 'voice',       label: 'Voice & Feed', icon: Mic },
   { id: 'connections', label: 'Connections',  icon: Users },
   { id: 'world',       label: 'In the World', icon: Globe2 },
   // Evoni, 2026-10-17: their home, closet and place of work, and the events they host.
-  { id: 'places',      label: 'Places',       icon: MapPin },
+  // Evoni, 2026-10-18: "maybe the gallery and places tab should be one": every
+  // picture already linked to them sits under their places.
+  { id: 'places',      label: 'Places & Gallery', icon: MapPin },
   // Evoni, 2026-10-18: their episodes, events, posts, stories and chapters in one place.
   { id: 'story',       label: 'Story & Events', icon: CalendarDays },
   // Evoni, 2026-10-18: a confidential session with them, as Dr. Amara Sinclair.
@@ -3622,9 +3622,13 @@ export default function CharacterProfilePage() {
         )}
         {activeTab === 'connections' && <TabConnections character={character} relationships={listOf(relationships)} entanglements={listOf(entanglements)} />}
         {activeTab === 'world' && <TabWorld character={character} feedProfile={feedProfile} appearances={appearances} onSaved={onSaved} gen={gen} openTab={setActiveTab} />}
-        {activeTab === 'places' && <div className="ch-card"><CharacterPlacesTab key={character.id} character={character} /></div>}
+        {activeTab === 'places' && (
+          <>
+            <div className="ch-card"><CharacterPlacesTab key={character.id} character={character} /></div>
+            <div className="ch-card"><CharacterGalleryTab key={character.id} character={character} openTab={setActiveTab} hide={['places']} /></div>
+          </>
+        )}
         {activeTab === 'story' && <TabStory character={character} feedProfile={feedProfile} appearances={appearances} openTab={setActiveTab} />}
-        {activeTab === 'gallery' && <div className="ch-card"><CharacterGalleryTab key={character.id} character={character} openTab={setActiveTab} /></div>}
         {activeTab === 'talk' && <div className="ch-card"><CharacterTalkTab key={character.id} character={character} onSaved={onSaved} /></div>}
         {activeTab === 'settings' && <TabSettings character={character} feedProfile={feedProfile} onSaved={onSaved} onExport={exportJson} onDeleted={() => navigate('/character-registry')} />}
         {activeTab === 'appearance' && <CharacterAppearanceTab key={character.id} character={character} onPortraitChanged={(url) => onSaved({ portrait_url: url })} />}

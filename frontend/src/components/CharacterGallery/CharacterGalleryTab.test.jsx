@@ -35,8 +35,8 @@ describe('CharacterGalleryTab', () => {
     expect(api.get).toHaveBeenCalledWith('/api/v1/cast/characters/c-1/gallery');
     expect(within(screen.getByTestId('gallery-wardrobe')).getByAltText('Silk slip dress').getAttribute('loading')).toBe('lazy');
     const places = screen.getByTestId('gallery-places');
-    expect(places.textContent).toContain('Link their home, closet or work on the Places tab');
-    fireEvent.click(within(places).getByRole('button', { name: 'Open Places' }));
+    expect(places.textContent).toContain('Link their home, closet or work on the Places & Gallery tab');
+    fireEvent.click(within(places).getByRole('button', { name: 'Open Places & Gallery' }));
     expect(openTab).toHaveBeenCalledWith('places');
   });
 
@@ -56,5 +56,13 @@ describe('CharacterGalleryTab', () => {
     const text = (await screen.findByTestId('character-gallery')).textContent;
     expect(text).toContain('No pictures of Maren yet.');
     expect(text).toContain('their events and posts are not here yet');
+  });
+
+  test('under their places, the places group is left out: the place editor above shows them', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { success: true, linked: true, groups } });
+    render(<CharacterGalleryTab character={maren} hide={['places']} />);
+    await screen.findByTestId('character-gallery');
+    expect(screen.queryByTestId('gallery-places')).toBeNull();
+    expect(screen.getByTestId('gallery-wardrobe')).toBeTruthy();
   });
 });

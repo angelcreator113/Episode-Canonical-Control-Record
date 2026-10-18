@@ -4,7 +4,10 @@
  * character, grouped: portraits, places, wardrobe, events and posts.
  * Reads only (GET /api/v1/cast/characters/:id/gallery,
  * services/characterGallery); portraits are made on the Appearance tab and
- * places linked on the Places tab. A picture opens larger on click.
+ * places linked on the Places & Gallery tab. A picture opens larger on click.
+ * Evoni, 2026-10-18: "maybe the gallery and places tab should be one": it
+ * sits under their places there, with `hide` leaving out the places group
+ * the place editor above already shows.
  */
 import { useState, useEffect, useCallback } from 'react';
 import { Images, UserRound, MapPin, Shirt, CalendarDays, FileText, X, ExternalLink } from 'lucide-react';
@@ -15,14 +18,14 @@ const GROUP_ICONS = { portraits: UserRound, places: MapPin, wardrobe: Shirt, eve
 // Where each kind of picture is added, for a group with none yet.
 const EMPTY = {
   portraits: ['No portraits yet. Make one on the Appearance tab.', 'appearance'],
-  places: ['No places with pictures yet. Link their home, closet or work on the Places tab.', 'places'],
+  places: ['No places with pictures yet. Link their home, closet or work on the Places & Gallery tab.', 'places'],
   wardrobe: ['No wardrobe pieces name them yet.', null],
   events: ['No event invitations or event sets yet.', 'story'],
   posts: ['No posts with photos yet.', 'voice'],
 };
-const TAB_WORDS = { appearance: 'Appearance', places: 'Places', story: 'Story & Events', voice: 'Voice & Feed' };
+const TAB_WORDS = { appearance: 'Appearance', places: 'Places & Gallery', story: 'Story & Events', voice: 'Voice & Feed' };
 
-export default function CharacterGalleryTab({ character, openTab }) {
+export default function CharacterGalleryTab({ character, openTab, hide = [] }) {
   const [state, setState] = useState({ loading: true, groups: [], linked: false });
   const [error, setError] = useState(null);
   const [open, setOpen] = useState(null);
@@ -48,7 +51,8 @@ export default function CharacterGalleryTab({ character, openTab }) {
   }, [open]);
 
   if (state.loading) return <p className="gal-muted">Loading…</p>;
-  const total = state.groups.reduce((n, g) => n + (g.items || []).length, 0);
+  const groups = state.groups.filter((g) => !hide.includes(g.key));
+  const total = groups.reduce((n, g) => n + (g.items || []).length, 0);
 
   return (
     <div className="gal" data-testid="character-gallery">
@@ -61,7 +65,7 @@ export default function CharacterGalleryTab({ character, openTab }) {
       </header>
       {error && <p className="gal-error" role="alert">{error}</p>}
 
-      {state.groups.map((g) => {
+      {groups.map((g) => {
         const Icon = GROUP_ICONS[g.key] || Images;
         const items = g.items || [];
         const [emptyText, tab] = EMPTY[g.key] || ['Nothing here yet.', null];

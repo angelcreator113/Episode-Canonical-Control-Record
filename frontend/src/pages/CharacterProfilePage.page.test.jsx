@@ -62,7 +62,7 @@ describe('the character page', () => {
     expect(screen.getByRole('button', { name: 'Export Profile' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'The cast' }).getAttribute('href')).toBe('/character-registry');
     const tabs = within(screen.getByRole('navigation', { name: 'Character sections' })).getAllByRole('link');
-    expect(tabs.map((t) => t.textContent)).toEqual(['Overview', 'Inner Life', 'Appearance', 'Gallery', 'Voice & Feed', 'Connections', 'In the World', 'Places', 'Story & Events', 'Talk', 'Settings']);
+    expect(tabs.map((t) => t.textContent)).toEqual(['Overview', 'Inner Life', 'Appearance', 'Voice & Feed', 'Connections', 'In the World', 'Places & Gallery', 'Story & Events', 'Talk', 'Settings']);
     expect(tabs[0].getAttribute('aria-current')).toBe('page');
   });
 
