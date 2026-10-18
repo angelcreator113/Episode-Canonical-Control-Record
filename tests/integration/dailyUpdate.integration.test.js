@@ -79,6 +79,14 @@ const HOUR = 60 * 60 * 1000;
     await run(`INSERT INTO character_fact_changes (registry_character_id, show_id, fact_key, before_value, after_value, reason, source)
                VALUES (:maren, :show, 'occupation', NULL, '"Designer"', 'Suggested from their profile', 'fact_sheet')`, r);
     await run("INSERT INTO ai_usage_logs (route_name, model_name, cost_usd, created_at) VALUES ('daily-test-feature', 'claude-sonnet-4-6', 0.25, NOW())");
+    // Posting schedules (every day, all day): Maren's and Dr. Sinclair's.
+    const always = JSON.stringify({ days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'], windows: [{ start: '00:00', end: '23:55' }], per_week: 28, tz_offset: 0, source: 'set' });
+    const profile = async (h, name) => (await run(`INSERT INTO social_profiles (handle, platform, vibe_sentence, display_name, feed_layer, posting_schedule, created_at, updated_at)
+      VALUES (:h, 'pulse', 'Daily test.', :name, 'lalaverse', CAST(:always AS JSONB), NOW(), NOW()) RETURNING id`, { h, name, always }))[0][0].id;
+    ids.marenProfile = await profile(`dailymaren${tag}`, 'Daily Maren');
+    ids.drProfile = await profile(`dailydr${tag}`, 'Daily Dr. Sinclair');
+    await run('UPDATE registry_characters SET feed_profile_id = :marenProfile WHERE id = :maren', ids);
+    await run('UPDATE registry_characters SET feed_profile_id = :drProfile WHERE id = :dr', ids);
   });
 
   afterAll(async () => {
@@ -93,6 +101,7 @@ const HOUR = 60 * 60 * 1000;
     await run('DELETE FROM world_events WHERE id = :event', r);
     await run('DELETE FROM episodes WHERE id = :episode', r);
     await run('DELETE FROM registry_characters WHERE id IN (:maren, :dr)', r);
+    if (r.marenProfile) await run('DELETE FROM social_profiles WHERE id IN (:marenProfile, :drProfile)', r);
     await run('DELETE FROM character_registries WHERE id = :reg', r);
     await run('DELETE FROM shows WHERE id = :show', r);
   });
@@ -151,6 +160,17 @@ const HOUR = 60 * 60 * 1000;
     expect(c.episodes.find((e) => e.id === ids.episode)).toMatchObject({ number: 901, title: 'Daily episode' });
     expect(c.events.find((e) => e.id === ids.event)).toMatchObject({ name: 'Daily gala', episode_number: 901 });
     expect(c.deals.find((d) => d.id === ids.dealSoon).dates.map((d) => d.kind)).toEqual(['Shoot']);
+  });
+
+  it('coming up: each posting schedule\'s next open time, Dr. Sinclair\'s left out', async () => {
+    const { body } = await get();
+    const slots = body.coming_up.slots;
+    const maren = slots.find((s) => s.profile_id === ids.marenProfile);
+    expect(maren).toMatchObject({ character_id: ids.maren, name: 'Daily Maren' });
+    expect(new Date(maren.at).getTime()).toBeGreaterThanOrEqual(new Date(body.now).getTime());
+    expect(new Date(maren.at).getTime()).toBeLessThan(new Date(body.coming_up.until).getTime());
+    expect(typeof maren.schedule).toBe('string');
+    expect(slots.some((s) => s.profile_id === ids.drProfile)).toBe(false);
   });
 
   it('cost: today\'s spend against the budget, and where it went', async () => {

@@ -346,7 +346,8 @@ function SinceYesterday({ s }) {
 }
 
 function ComingUp({ c }) {
-  const empty = !c.posts.length && !c.episodes.length && !c.events.length && !c.deals.length;
+  const slots = c.slots || [];
+  const empty = !c.posts.length && !c.episodes.length && !c.events.length && !c.deals.length && !slots.length;
   return (
     <section className="du-section" aria-labelledby="du-coming" data-testid="du-coming">
       <h2 id="du-coming"><CalendarDays size={18} aria-hidden /> Coming up <span className="du-muted">the next three days</span></h2>
@@ -366,6 +367,19 @@ function ComingUp({ c }) {
         <>
           <h3 className="du-sub">Scheduled posts</h3>
           <ul className="du-items">{c.posts.map((p) => <ScheduledPost key={p.id} post={p} />)}</ul>
+        </>
+      )}
+      {slots.length > 0 && (
+        <>
+          <h3 className="du-sub">Next open time on their schedule</h3>
+          <ul className="du-names" data-testid="du-slots">
+            {slots.map((sl) => (
+              <li key={sl.profile_id}>
+                {sl.character_id ? <Link to={`/character/${sl.character_id}`}>{sl.name}</Link> : <strong>{sl.name}</strong>}
+                {' '}{when(sl.at)}<span className="du-muted"> · {sl.schedule}</span>
+              </li>
+            ))}
+          </ul>
         </>
       )}
     </section>

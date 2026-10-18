@@ -39,6 +39,7 @@ const update = () => ({
     episodes: [{ id: 'e-1', number: 4, title: 'The Gala', air_date: '2026-10-20T00:00:00.000Z' }],
     events: [{ id: 'ev-1', name: 'Velour gala', episode_number: 4 }],
     deals: [{ id: 'o-2', brand: 'Aura', dates: [{ kind: 'Shoot', date: '2026-10-19' }] }],
+    slots: [{ profile_id: 7, character_id: 'c-1', name: 'Maren', at: '2026-10-19T09:00:00.000Z', schedule: 'Mon–Fri mornings' }],
   },
   cost: { spent_usd: 4.5, budget_usd: 50, left_usd: 45.5, share: 0.09, features: [{ feature: 'pulse-drafter', usd: 3.2, calls: 12 }] },
 });
@@ -140,6 +141,13 @@ describe('DailyUpdate', () => {
     expect(coming).toContain('Episode 4');
     expect(coming).toContain('Velour gala');
     expect(coming).toContain('Aura: Shoot');
+  });
+
+  test('coming up shows each posting schedule\'s next open time', async () => {
+    renderPage();
+    const slots = (await screen.findByTestId('du-slots')).textContent;
+    expect(slots).toContain('Maren');
+    expect(slots).toContain('Mon–Fri mornings');
   });
 
   test('when the update cannot load it says so', async () => {

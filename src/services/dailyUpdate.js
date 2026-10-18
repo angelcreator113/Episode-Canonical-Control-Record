@@ -26,7 +26,10 @@
  *                               character (the flag log), fixed on Facts & checks
  *   coming_up        the next three days: scheduled posts (move or hold:
  *                    PUT /feed-posts/:id/release-time), episode air dates,
- *                    those episodes' events, and deal dates
+ *                    those episodes' events, deal dates, and each posting
+ *                    schedule's next open time (services/postingSchedule;
+ *                    Evoni, 2026-10-18: "yes do the two posting schedule
+ *                    follow-ups")
  *   cost             today's AI spend (UTC day) against the daily budget,
  *                    and the features it went to
  *
@@ -229,6 +232,7 @@ async function comingUp(db, { end }, shows) {
       AND (shoot_date BETWEEN :today AND :last OR publish_date BETWEEN :today AND :last OR response_deadline BETWEEN :today AND :last)
     ORDER BY LEAST(COALESCE(shoot_date, '9999-12-31'), COALESCE(publish_date, '9999-12-31'), COALESCE(response_deadline, '9999-12-31')) ASC LIMIT ${LIMIT}`, r, 'deal dates');
   const inWindow = (d) => d && d >= r.today && d <= r.last;
+  const slots = await nextSlots(db, { now: end, until });
 
   return {
     until: until.toISOString(),
@@ -246,7 +250,47 @@ async function comingUp(db, { end }, shows) {
         inWindow(d.publish_date) && { kind: 'Goes public', date: d.publish_date },
       ].filter(Boolean),
     })),
+    slots,
   };
+}
+
+/**
+ * Each posting schedule's next open time before `until`: the first slot on
+ * their days, in their windows, with room in the week, counting what they
+ * already have scheduled (services/postingSchedule.nextSlot). Characters and
+ * brand accounts alike; Dr. Sinclair stays out. Reads only.
+ */
+async function nextSlots(db, { now, until }) {
+  const ps = require('./postingSchedule');
+  const profiles = await rows(db, `SELECT sp.id, sp.handle, sp.display_name, sp.posting_schedule, rc.id AS character_id
+    FROM social_profiles sp LEFT JOIN registry_characters rc ON rc.feed_profile_id = sp.id AND rc.deleted_at IS NULL
+    WHERE sp.deleted_at IS NULL AND sp.posting_schedule IS NOT NULL AND ${notConfidentialSql('rc')}
+    ORDER BY sp.display_name ASC NULLS LAST LIMIT ${LIMIT}`, {}, 'posting schedules');
+  if (!profiles.length) return [];
+  const weekAgo = new Date(now.getTime() - 7 * DAY_MS);
+  const taken = await rows(db, `SELECT social_profile_id, COALESCE(release_at, posted_at, created_at) AS at FROM feed_posts
+    WHERE deleted_at IS NULL AND social_profile_id IN (:ids)
+      AND ((status = 'draft' AND release_state = 'scheduled' AND release_at >= :weekAgo AND release_at < :until)
+        OR (status = 'live' AND COALESCE(posted_at, created_at) >= :weekAgo))`,
+  { ids: profiles.map((p) => p.id), weekAgo, until }, 'scheduled times');
+  const takenBy = new Map();
+  for (const t of taken) takenBy.set(t.social_profile_id, [...(takenBy.get(t.social_profile_id) || []), new Date(t.at)]);
+  const out = [];
+  for (const p of profiles) {
+    const schedule = typeof p.posting_schedule === 'string' ? JSON.parse(p.posting_schedule) : p.posting_schedule;
+    let at = null;
+    try {
+      at = ps.nextSlot(schedule, { after: now, tzOffset: schedule.tz_offset || 0, taken: takenBy.get(p.id) || [] });
+    } catch (err) {
+      console.error(`[dailyUpdate] no next slot for profile ${p.id}:`, err.message);
+    }
+    if (!at || at >= until) continue;
+    out.push({
+      profile_id: p.id, character_id: p.character_id || null, name: p.display_name || p.handle, handle: p.handle,
+      at: iso(at), schedule: ps.describe(schedule),
+    });
+  }
+  return out.sort((a, b) => a.at.localeCompare(b.at));
 }
 
 async function cost(db, { end }) {
