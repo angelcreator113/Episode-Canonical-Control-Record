@@ -1,0 +1,61 @@
+/* The Episode Story Record (stage C): Results → Story, above the formats. Tokens only. */
+.esr {
+  display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; padding: 18px 22px;
+  border: 1px solid var(--lala-gold-line); border-radius: 14px; background: var(--surface-card);
+}
+.esr-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.esr-icon { color: var(--accent-dark); }
+.esr .esr-title { margin: 0; font-family: var(--font-prose); font-size: 20px !important; font-weight: 600; color: var(--lala-ink); }
+.esr-badge { padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--accent-subtle); color: var(--accent-dark); }
+.esr-badge.is-approved { background: var(--lala-gold-soft); color: var(--lala-gold-text); }
+.esr-note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--lala-ink-muted); }
+.esr-note.is-error { color: var(--danger-text); }
+.esr-note.is-done { color: var(--success-text); }
+.esr-group { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 12px 14px; border: 1px solid var(--lala-gold-line); border-radius: 12px; min-width: 0; }
+.esr .esr-label { padding: 0 4px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--lala-gold-text); }
+.esr-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.esr-field.is-inline { gap: 4px; flex: 1; }
+.esr-sublabel { font-size: 12px; font-weight: 700; color: var(--lala-ink); }
+.esr-field textarea, .esr-field input, .esr-field select {
+  width: 100%; box-sizing: border-box; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--lala-gold-line);
+  font: inherit; font-size: 14px; line-height: 1.5; color: var(--lala-ink); background: var(--surface-card);
+}
+.esr-field textarea { resize: vertical; font-family: var(--font-prose); }
+.esr-field textarea:focus, .esr-field input:focus, .esr-field select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.esr-person, .esr-secret { display: flex; flex-direction: column; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid var(--lala-gold-line); }
+.esr-row-head { display: flex; align-items: flex-start; gap: 8px; }
+.esr-name { flex: 1; font-size: 14px; color: var(--lala-ink); }
+.esr-secret-text { flex: 1; min-width: 0; font-family: var(--font-prose); font-size: 14px; color: var(--lala-ink); }
+.esr-pair { display: flex; align-items: flex-end; gap: 8px; }
+.esr-x {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 32px; min-height: 32px; border: none; border-radius: 999px;
+  background: var(--accent-subtle); color: var(--accent-dark); cursor: pointer;
+}
+.esr-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.esr-btn, .esr-btn-soft {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 6px 16px; border-radius: 999px;
+  border: none; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; align-self: flex-start;
+}
+.esr-btn { background: var(--accent-dark); color: var(--text-inverse); }
+.esr-btn-soft { background: var(--accent-subtle); color: var(--accent-dark); }
+.esr-btn:disabled, .esr-btn-soft:disabled { opacity: 0.6; cursor: not-allowed; }
+@media (max-width: 600px) {
+  .esr { padding: 14px 14px; }
+  .esr-pair { flex-direction: column; align-items: stretch; }
+  .esr-pair .esr-x { align-self: flex-end; }
+}
+
+/* Short story canon (stage D): the proposals, under the record. */
+.esr-how { font-weight: 400; color: var(--lala-ink-muted); }
+.esr-prop-group { display: flex; flex-direction: column; gap: 6px; }
+.esr-props { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.esr-prop {
+  display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px;
+  border: 1px solid var(--lala-gold-line); background: var(--surface-card);
+}
+.esr-prop.is-contradiction { border-color: var(--danger-text); }
+.esr-prop.is-accepted { background: var(--lala-gold-soft); }
+.esr-prop.is-dismissed { border-style: dashed; }
+.esr-prop-text { margin: 0; font-size: 14px; line-height: 1.5; color: var(--lala-ink); }
+.esr-prop .esr-badge { align-self: flex-start; }
+.esr-warn { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 12px; font-weight: 700; color: var(--danger-text); }

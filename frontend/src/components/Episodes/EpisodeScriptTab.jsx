@@ -18,6 +18,7 @@ import { beatImage, beatImageLabel } from '../BeatPlan/BeatPlanParts';
 import { beatSeconds, scriptSeconds, formatRuntime } from '../../lib/scriptRuntime';
 import { scriptHealth } from '../../lib/scriptHealth';
 import { scriptWithPhonePaths } from '../../lib/phonePaths';
+import { scriptWithShowRules } from '../../lib/scriptShowRules';
 import ScriptHealthPanel from './ScriptHealthPanel';
 import ScriptReadActions from './ScriptReadActions';
 import ScriptHistory from './ScriptHistory';
@@ -176,13 +177,16 @@ export function withBeatHeaders(scriptText, lockedBeats = []) {
   return numbered === scriptText ? scriptText : numbered;
 }
 
-const CUE_LINE = /^\[(TRANSITION|WEAR|DELIVER|TODO_MODE|SCENE|LOCATION_HINT|EVENT|EPISODE_INTENT)\s*:?\s*(.*?)\s*\]$/i;
+const CUE_LINE = /^\[(TRANSITION|WEAR|DELIVER|TODO_MODE|SCENE|LOCATION_HINT|EVENT|EPISODE_INTENT|SFX|EDIT)\s*:?\s*(.*?)\s*\]$/i;
 function cueLabel(text) {
   const m = String(text || '').match(CUE_LINE);
   if (!m) return null;
   const kind = m[1].toUpperCase();
   const rest = m[2].replace(/^["']|["']$/g, '');
   if (kind === 'TRANSITION') return `Transition${rest ? `: ${rest}` : ''}`;
+  // JustAWoman's sound and edit cues (Evoni, 2026-10-17).
+  if (kind === 'SFX') return `Sound${rest ? `: ${rest}` : ''}`;
+  if (kind === 'EDIT') return `Edit${rest ? `: ${rest}` : ''}`;
   if (kind === 'WEAR') return 'Puts on a piece of the look';
   if (kind === 'DELIVER') return 'Delivers a deal item';
   if (kind === 'TODO_MODE') return `Phone to-do list: ${TODO_MODE_LABELS[rest.toLowerCase()] || rest || 'not set'}`;
@@ -1113,14 +1117,29 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // it is, a step to the icon's screen (lib/phonePaths). `fix` is a health
   // row's ({ beatIndex }), or null for every beat. Approved beats keep their
   // words; the steps are on the page until Save.
+  // A fix from "Ready to film?": one row's (`fix`), or all of them (null).
+  // The show's rules go first (lib/scriptShowRules: Lala's voice click, the
+  // invitation in beat 5), then the phone steps, so a new tap gets its path too.
   const handleFixPhonePaths = (fix) => {
     if (busy) { flash('Wait for the new script before editing it.', 'error'); return; }
-    const base = withBeatHeaders(scriptText, lockedBeats);
+    let base = withBeatHeaders(scriptText, lockedBeats);
     const skip = parseScriptIntoBeats(base, lockedBeats).map((b, i) => (b.approved ? i : -1)).filter((i) => i >= 0);
-    const { script, added } = scriptWithPhonePaths(base, onScreen, { only: fix ? [fix.beatIndex] : null, skip });
-    if (!added) { flash('No phone step could fix this one; open the beat to change the tap.', 'error', 6000); return; }
-    setScriptText(script);
-    flash(`Added ${added} phone step${added === 1 ? '' : 's'} ✦ Save to keep ${added === 1 ? 'it' : 'them'}.`, 'success', 5000);
+    const only = fix ? [fix.beatIndex] : null;
+    const done = [];
+    if (!fix || fix.kind === 'voice' || fix.kind === 'reveal') {
+      const r = scriptWithShowRules(base, onScreen, { only, skip, voice: !fix || fix.kind === 'voice', reveal: !fix || fix.kind === 'reveal' });
+      base = r.script;
+      if (r.voice_clicks) done.push(`${r.voice_clicks} voice click${r.voice_clicks === 1 ? '' : 's'}`);
+      if (r.reveal) done.push('the invitation in beat 5');
+    }
+    if (!fix || fix.kind === 'phone' || fix.kind === 'voice') {
+      const { script, added } = scriptWithPhonePaths(base, onScreen, { only, skip });
+      base = script;
+      if (added) done.push(`${added} phone step${added === 1 ? '' : 's'}`);
+    }
+    if (!done.length) { flash(fix?.kind === 'phone' ? 'No phone step could fix this one; open the beat to change the tap.' : 'Nothing could be fixed here; open the beat to change it.', 'error', 6000); return; }
+    setScriptText(base);
+    flash(`Added ${done.join(', ')} ✦ Save to keep the changes.`, 'success', 5000);
   };
 
   // A phone moment or an overlay, added at the end of the beat (Task #2789).
@@ -1635,10 +1654,12 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
         )}
       </section>
       {genError && <div className="esp-error" role="alert">{genError}</div>}
-      {coverage && (coverage.missing?.length > 0 || coverage.fixed_beats?.length > 0 || coverage.phone_steps > 0 || coverage.story_gaps?.length > 0) && (
+      {coverage && (coverage.missing?.length > 0 || coverage.fixed_beats?.length > 0 || coverage.phone_steps > 0 || coverage.voice_clicks > 0 || coverage.reveal_fixed || coverage.story_gaps?.length > 0) && (
         <div className={`esp-coverage${coverage.missing?.length ? ' is-gaps' : ''}`} role="status" data-testid="script-coverage">
           {coverage.fixed_beats?.length > 0 && <p className="esp-coverage-line">✦ The writer rewrote beat{coverage.fixed_beats.length === 1 ? '' : 's'} {coverage.fixed_beats.join(', ')} to cover what the episode needs.</p>}
           {coverage.phone_steps > 0 && <p className="esp-coverage-line" data-testid="script-coverage-phone">✦ The writer added {coverage.phone_steps} phone step{coverage.phone_steps === 1 ? '' : 's'}, so every tap is on the screen its icon is on.</p>}
+          {coverage.voice_clicks > 0 && <p className="esp-coverage-line" data-testid="script-coverage-voice">✦ The writer added {coverage.voice_clicks} voice click{coverage.voice_clicks === 1 ? '' : 's'}, so Lala talks only once her voice icon is clicked.</p>}
+          {coverage.reveal_fixed && <p className="esp-coverage-line" data-testid="script-coverage-reveal">✦ Beat 5 now shows the invitation letter, not the login screen.</p>}
           {coverage.missing?.length > 0 && (
             <>
               <p className="esp-coverage-line">Still not in the script:</p>

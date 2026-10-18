@@ -1,0 +1,31 @@
+/* Season Plan › From the feed (2026-10-17): pink and gold, tokens only. */
+.sp-card {
+  display: flex; flex-direction: column; gap: 12px; padding: 16px 18px; border: 1px solid var(--lala-gold-line);
+  border-radius: 18px; background: var(--lala-gold-soft); min-width: 0;
+}
+.sp-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.sp-title { display: flex; align-items: center; gap: 8px; margin: 0; font-family: var(--font-prose); font-size: 20px; font-weight: 700; color: var(--text-primary); }
+.sp-title svg { color: var(--lala-gold-text); }
+.sp-about { margin: 4px 0 0; font-size: 13px; color: var(--text-secondary); }
+.sp-summary { margin: 0; font-family: var(--font-prose); font-size: 15px; line-height: 1.55; color: var(--text-primary); }
+.sp-open { display: flex; flex-direction: column; gap: 12px; }
+.sp-moved { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.sp-moved li {
+  display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 999px;
+  background: var(--surface-card); color: var(--lala-gold-text); font-size: 12px; font-weight: 600;
+}
+.sp-changes { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.sp-change { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 1px solid var(--lala-gold-line); border-radius: 12px; background: var(--surface-card); }
+.sp-change-pick { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.sp-change-pick input { width: 18px; height: 18px; accent-color: var(--accent-dark); }
+.sp-change-kind { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent-dark); }
+.sp-change-text { margin: 0; font-size: 14px; line-height: 1.5; color: var(--text-primary); overflow-wrap: anywhere; }
+.sp-change-why { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.sp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.sp-btn, .sp-btn-soft {
+  min-height: 40px; padding: 6px 16px; border-radius: 12px; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.sp-btn { border: none; background: var(--accent-dark); color: var(--text-inverse); }
+.sp-btn-soft { border: 1px solid var(--accent-light); background: var(--surface-card); color: var(--accent-dark); }
+.sp-btn:disabled, .sp-btn-soft:disabled { opacity: 0.6; cursor: not-allowed; }
+.sp-empty, .sp-note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }

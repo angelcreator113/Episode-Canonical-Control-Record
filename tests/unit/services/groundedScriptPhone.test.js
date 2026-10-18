@@ -17,6 +17,7 @@ const PHONE = [
   { id: 'messages_page', name: 'Messages Page', category: 'phone' },
   { id: 'closet', name: 'closet', category: 'phone', screen_links: [{ label: 'Outfit Icon', target: 'outfit_page' }] },
   { id: 'outfit_page', name: 'Outfit Page', category: 'phone' },
+  { id: 'InviteLetterOverlay', name: 'Invitation', category: 'phone' },
   { id: 'title', name: 'Show Title', category: 'production' },
 ];
 
@@ -32,7 +33,8 @@ const models = () => ({
   sequelize: { query: async () => [[]] },
 });
 // Every beat; beat 3 opens the closet, beats 4 and 5 tap Messages from where the last left the phone.
-const body = (n) => (n === 3 ? '[UI:OPEN closet]' : n === 4 || n === 5 ? '[UI:CLICK Messages Icon]' : 'Me: hi');
+// Beat 5 brings up the invitation first, as the show's rules ask (2026-10-17).
+const body = (n) => (n === 3 ? '[UI:OPEN closet]' : n === 4 ? '[UI:CLICK Messages Icon]' : n === 5 ? '[UI:OPEN Invitation]\n[UI:CLICK Messages Icon]' : 'Me: hi');
 const FULL = CANONICAL_BEATS.map((b) => `${beatHeader(b)}\n${body(b.number)}`).join('\n\n');
 
 beforeEach(() => {
@@ -66,7 +68,7 @@ test("the writer reads the phone's map, and every tap it writes can happen", asy
   expect(create.mock.calls[0][0].messages[0].content).toContain('═══ PHONE MAP ═══');
   expect(out.coverage.phone_steps).toBe(2);
   expect(out.script).toContain(`${beatHeader(CANONICAL_BEATS[3])}\n[UI:OPEN Homepage]\n[UI:CLICK Messages Icon]`);
-  expect(out.script).toContain(`${beatHeader(CANONICAL_BEATS[4])}\n[UI:OPEN Homepage]\n[UI:CLICK Messages Icon]`);
+  expect(out.script).toContain(`${beatHeader(CANONICAL_BEATS[4])}\n[UI:OPEN Invitation]\n[UI:OPEN Homepage]\n[UI:CLICK Messages Icon]`);
 });
 
 test('an approved beat keeps its words', async () => {
