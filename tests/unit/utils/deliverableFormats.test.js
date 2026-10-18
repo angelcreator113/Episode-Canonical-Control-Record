@@ -1,6 +1,8 @@
 /**
- * Ruling D15 and answers 8–12 (Evoni, 2026-09-30): real influencer formats,
- * natural labels, and how each is priced from the rate card.
+ * Ruling D15 and answers 8–12 (Evoni, 2026-09-30): influencer formats,
+ * natural labels, and how each is priced from the rate card. On The Pulse
+ * since 2026-10-18: one platform, three accounts (The Pulse, a private Pulse
+ * account, The PlayRoom); a Reel and a TikTok video are one Pulse video.
  */
 const {
   DELIVERABLE_FORMATS, deliverableTypeLabel, deliverablePhrase, formatAnchorPrice, roundTo5, platformOf, quantityOf,
@@ -9,54 +11,68 @@ const { V2_NEW_ANCHORS } = require('../../../src/migrations/20261001160000-add-d
 
 const REEL = [75, 125, 225, 325, 450];
 const STORIES_3 = [35, 60, 110, 160, 225];
+const byTier = (list) => Object.fromEntries(list.map((a, i) => [i + 1, a]));
+// The v2 card as 20261018130000-pulse-deliverables renamed it.
+const { tiktok_video: _merged, instagram_post: post, ...rest } = V2_NEW_ANCHORS;
 const card = {
   anchors: {
-    reel: Object.fromEntries(REEL.map((a, i) => [i + 1, a])),
-    stories_3: Object.fromEntries(STORIES_3.map((a, i) => [i + 1, a])),
-    ...Object.fromEntries(Object.entries(V2_NEW_ANCHORS).map(([k, list]) => [k, Object.fromEntries(list.map((a, i) => [i + 1, a]))])),
+    pulse_video: byTier(REEL),
+    pulse_stories_3: byTier(STORIES_3),
+    pulse_post: byTier(post),
+    ...Object.fromEntries(Object.entries(rest).map(([k, list]) => [k, byTier(list)])),
   },
 };
 
-describe('labels and phrases (D15: "1 TikTok GRWM, 3 Instagram Stories")', () => {
-  test('"Story Set (3)" is renamed "Instagram Stories (×3)"', () => {
-    expect(deliverableTypeLabel({ deliverable_type: 'instagram_stories', quantity: 3 })).toBe('Instagram Stories (×3)');
-    expect(deliverablePhrase({ deliverable_type: 'instagram_stories', quantity: 3 })).toBe('3 Instagram Stories');
-    expect(deliverablePhrase({ deliverable_type: 'instagram_stories', quantity: 1 })).toBe('1 Instagram Story');
+describe('labels and phrases (D15, on The Pulse: "1 Pulse video, 3 Pulse stories")', () => {
+  test('"Story Set (3)" is "Pulse stories (×3)"', () => {
+    expect(deliverableTypeLabel({ deliverable_type: 'pulse_stories', quantity: 3 })).toBe('Pulse stories (×3)');
+    expect(deliverablePhrase({ deliverable_type: 'pulse_stories', quantity: 3 })).toBe('3 Pulse stories');
+    expect(deliverablePhrase({ deliverable_type: 'pulse_stories', quantity: 1 })).toBe('1 Pulse story');
   });
 
-  test('the platform is named where the format goes on several', () => {
-    expect(deliverablePhrase({ deliverable_type: 'grwm_video', platform: 'tiktok', quantity: 1 })).toBe('1 TikTok GRWM');
-    expect(deliverablePhrase({ deliverable_type: 'go_live', platform: 'instagram', quantity: 2 })).toBe('2 Instagram Lives');
-    expect(deliverablePhrase({ deliverable_type: 'carousel_post', platform: 'instagram', quantity: 1 })).toBe('1 Instagram carousel post');
-    expect(deliverablePhrase({ deliverable_type: 'try_on_haul', platform: 'youtube', quantity: 1 })).toBe('1 YouTube try-on/haul video');
+  test('an account other than the public one is named; The Pulse is not', () => {
+    expect(deliverablePhrase({ deliverable_type: 'grwm_video', platform: 'pulse', quantity: 1 })).toBe('1 GRWM Pulse video');
+    expect(deliverablePhrase({ deliverable_type: 'go_live', platform: 'pulse_private', quantity: 2 })).toBe('2 Pulse lives on a private Pulse account');
+    expect(deliverablePhrase({ deliverable_type: 'carousel_post', platform: 'pulse', quantity: 1 })).toBe('1 Pulse carousel');
+    expect(deliverablePhrase({ deliverable_type: 'try_on_haul', platform: 'playroom', quantity: 1 })).toBe('1 try-on/haul video on The PlayRoom');
+    expect(deliverablePhrase({ deliverable_type: 'pulse_stories', platform: 'pulse_private', quantity: 3 })).toBe('3 Pulse stories on a private Pulse account');
   });
 
-  test('single-platform formats read as their name', () => {
-    expect(deliverablePhrase({ deliverable_type: 'instagram_reel', quantity: 1 })).toBe('1 Instagram Reel');
-    expect(deliverablePhrase({ deliverable_type: 'tiktok_video', quantity: 2 })).toBe('2 TikTok videos');
-    expect(deliverablePhrase({ deliverable_type: 'instagram_post', quantity: 1 })).toBe('1 Instagram post');
+  test('a row with no account reads as on The Pulse', () => {
+    expect(deliverablePhrase({ deliverable_type: 'pulse_video', quantity: 1 })).toBe('1 Pulse video');
+    expect(deliverablePhrase({ deliverable_type: 'pulse_video', quantity: 2 })).toBe('2 Pulse videos');
+    expect(deliverablePhrase({ deliverable_type: 'pulse_post', quantity: 1 })).toBe('1 Pulse post');
     expect(deliverablePhrase({ deliverable_type: 'ugc', quantity: 2 })).toBe('2 UGC pieces for the brand');
   });
 
-  test('link in bio counts days', () => {
-    expect(deliverableTypeLabel({ deliverable_type: 'link_in_bio', quantity: 7 })).toBe('Link in bio (7 days)');
-    expect(deliverablePhrase({ deliverable_type: 'link_in_bio', quantity: 10, platform: 'tiktok' })).toBe('Link in bio on TikTok (10 days)');
+  test('no format names a real app', () => {
+    const words = JSON.stringify(DELIVERABLE_FORMATS);
+    expect(words).not.toMatch(/instagram|tiktok|youtube|reel/i);
+    expect(Object.keys(DELIVERABLE_FORMATS)).not.toContain('tiktok_video');
+  });
+
+  test('a profile link counts days', () => {
+    expect(deliverableTypeLabel({ deliverable_type: 'link_in_bio', quantity: 7 })).toBe('Profile link (7 days)');
+    expect(deliverablePhrase({ deliverable_type: 'link_in_bio', quantity: 7 })).toBe('Profile link (7 days)');
+    expect(deliverablePhrase({ deliverable_type: 'link_in_bio', quantity: 10, platform: 'pulse_private' })).toBe('Profile link on a private Pulse account (10 days)');
   });
 
   test('a quantity of one shows no multiplier; an untyped row has no label', () => {
-    expect(deliverableTypeLabel({ deliverable_type: 'instagram_reel', quantity: 1 })).toBe('Instagram Reel');
-    expect(deliverableTypeLabel({ deliverable_type: 'tiktok_video', quantity: 2 })).toBe('TikTok video (×2)');
+    expect(deliverableTypeLabel({ deliverable_type: 'pulse_video', quantity: 1 })).toBe('Pulse video');
+    expect(deliverableTypeLabel({ deliverable_type: 'pulse_video', quantity: 2 })).toBe('Pulse video (×2)');
     expect(deliverableTypeLabel({ deliverable_type: 'Sponsored post' })).toBeNull();
     expect(deliverablePhrase({ deliverable_type: null })).toBeNull();
   });
 
-  test('platform and quantity defaults', () => {
-    expect(platformOf({ deliverable_type: 'instagram_reel' })).toBe('instagram');
-    expect(platformOf({ deliverable_type: 'grwm_video' })).toBeNull();
+  test('account and quantity defaults', () => {
+    expect(platformOf({ deliverable_type: 'pulse_video' })).toBe('pulse');
+    expect(platformOf({ deliverable_type: 'grwm_video' })).toBe('pulse');
+    expect(platformOf({ deliverable_type: 'grwm_video', platform: 'playroom' })).toBe('playroom');
+    expect(platformOf({ deliverable_type: 'grwm_video', platform: 'instagram' })).toBe('pulse');
     expect(platformOf({ deliverable_type: 'ugc' })).toBeNull();
-    expect(quantityOf({ deliverable_type: 'instagram_stories' })).toBe(3);
+    expect(quantityOf({ deliverable_type: 'pulse_stories' })).toBe(3);
     expect(quantityOf({ deliverable_type: 'link_in_bio' })).toBe(7);
-    expect(quantityOf({ deliverable_type: 'instagram_reel', quantity: 0 })).toBe(1);
+    expect(quantityOf({ deliverable_type: 'pulse_video', quantity: 0 })).toBe(1);
   });
 });
 
@@ -78,20 +94,20 @@ describe('pricing (answers 8–12)', () => {
     }
   });
 
-  test('per piece: anchor × quantity; platform never changes it (answer 12)', () => {
-    expect(formatAnchorPrice({ deliverable_type: 'instagram_reel', quantity: 1 }, 3, card)).toBe(225);
-    expect(formatAnchorPrice({ deliverable_type: 'grwm_video', platform: 'tiktok', quantity: 2 }, 3, card)).toBe(540);
-    expect(formatAnchorPrice({ deliverable_type: 'grwm_video', platform: 'youtube', quantity: 2 }, 3, card)).toBe(540);
-    expect(formatAnchorPrice({ deliverable_type: 'instagram_post', quantity: 1 }, 1, card)).toBe(40);
+  test('per piece: anchor × quantity; the account never changes it (answer 12)', () => {
+    expect(formatAnchorPrice({ deliverable_type: 'pulse_video', quantity: 1 }, 3, card)).toBe(225);
+    expect(formatAnchorPrice({ deliverable_type: 'grwm_video', platform: 'pulse', quantity: 2 }, 3, card)).toBe(540);
+    expect(formatAnchorPrice({ deliverable_type: 'grwm_video', platform: 'playroom', quantity: 2 }, 3, card)).toBe(540);
+    expect(formatAnchorPrice({ deliverable_type: 'pulse_post', quantity: 1 }, 1, card)).toBe(40);
   });
 
-  test('Instagram Stories: the 3-slide anchor ÷ 3 × N, rounded to 5 (answer 10)', () => {
-    expect(formatAnchorPrice({ deliverable_type: 'instagram_stories', quantity: 3 }, 1, card)).toBe(35);
-    expect(formatAnchorPrice({ deliverable_type: 'instagram_stories', quantity: 1 }, 1, card)).toBe(10);
-    expect(formatAnchorPrice({ deliverable_type: 'instagram_stories', quantity: 5 }, 3, card)).toBe(185);
+  test('Pulse stories: the 3-slide anchor ÷ 3 × N, rounded to 5 (answer 10)', () => {
+    expect(formatAnchorPrice({ deliverable_type: 'pulse_stories', quantity: 3 }, 1, card)).toBe(35);
+    expect(formatAnchorPrice({ deliverable_type: 'pulse_stories', quantity: 1 }, 1, card)).toBe(10);
+    expect(formatAnchorPrice({ deliverable_type: 'pulse_stories', quantity: 5 }, 3, card)).toBe(185);
   });
 
-  test('link in bio: per started week (answer 11)', () => {
+  test('a profile link: per started week (answer 11)', () => {
     expect(formatAnchorPrice({ deliverable_type: 'link_in_bio', quantity: 7 }, 2, card)).toBe(40);
     expect(formatAnchorPrice({ deliverable_type: 'link_in_bio', quantity: 10 }, 2, card)).toBe(80);
     expect(formatAnchorPrice({ deliverable_type: 'link_in_bio', quantity: 1 }, 5, card)).toBe(135);

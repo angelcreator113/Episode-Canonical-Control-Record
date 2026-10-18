@@ -39,8 +39,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await run(`INSERT INTO episode_briefs (id, episode_id, event_id, created_at, updated_at) VALUES
                  (:brief, :ep, :event, NOW(), NOW()), (:bareBrief, :bare, :plain, NOW(), NOW())`, ids);
     await run(`INSERT INTO event_deliverables (id, event_id, description, deliverable_type, platform, quantity, due_date, owed_to, fee, created_at, updated_at) VALUES
-                 (:reel, :event, 'A get-ready-with-me reel in the Maison Rue dress', 'reel', 'instagram', 1, 'Day 3', 'brand', 300, NOW(), NOW()),
-                 (:story, :event, 'Tag the brand in a story set', 'story', 'instagram', 3, NULL, 'brand', NULL, NOW(), NOW())`, ids);
+                 (:reel, :event, 'A get-ready-with-me video in the Maison Rue dress', 'pulse_video', 'pulse', 1, 'Day 3', 'brand', 300, NOW(), NOW()),
+                 (:story, :event, 'Tag the brand in a story set', 'story', NULL, 3, NULL, 'brand', NULL, NOW(), NOW())`, ids);
     await run(`INSERT INTO event_deliverables (id, event_id, description, created_at, updated_at, deleted_at) VALUES (:gone, :event, 'A removed deliverable', NOW(), NOW(), NOW())`, ids);
   });
 
@@ -61,15 +61,17 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       bonus: ['SLAY 200 coins'],
     });
     expect(context.career.deliverables.map((d) => d.description).sort()).toEqual([
-      'A get-ready-with-me reel in the Maison Rue dress', 'Tag the brand in a story set',
+      'A get-ready-with-me video in the Maison Rue dress', 'Tag the brand in a story set',
     ]);
     expect(context.career.goals).toEqual([{ label: 'Get Maison Rue to book her again', description: 'Sable decides the next campaign' }]);
 
     const prompt = buildFullPrompt(context);
     expect(prompt).toContain("═══ LALA'S CAREER IN THIS EPISODE ═══");
     expect(prompt).toContain('THE DEAL: Maison Rue is offering Lala Paid to appear (400 coins), Paid for content, Gifted items (worth 150 coins).');
-    expect(prompt).toContain('- instagram reel: A get-ready-with-me reel in the Maison Rue dress (owed to the brand, 300 coins, due Day 3)');
-    expect(prompt).toContain('- 3x instagram story: Tag the brand in a story set (owed to the brand)');
+    // A format reads by its phrase; an untyped row by its stored type. No real app is named.
+    expect(prompt).toContain('- 1 Pulse video: A get-ready-with-me video in the Maison Rue dress (owed to the brand, 300 coins, due Day 3)');
+    expect(prompt).toContain('- 3x story: Tag the brand in a story set (owed to the brand)');
+    expect(prompt).not.toMatch(/instagram|tiktok/i);
     expect(prompt).toContain('- Get Maison Rue to book her again: Sable decides the next campaign');
     expect(prompt).toContain('- Beat 12: she makes what she owes');
     expect(prompt).toContain('- Beat 13: whether she earned the bonus');

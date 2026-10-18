@@ -1827,7 +1827,7 @@ Navigation:
   - navigate: go to any page in Prime Studios. Key routes:
     Dashboard & Hub: /, /universe, /universe/production, /universe/knowledge, /universe/world-state
     StoryTeller: /storyteller, /write/:bookId/:chapterId, /books/:bookId/read, /chapter/:bookId/:chapterId, /chapter-structure/:bookId/:chapterId
-    Characters: /character-registry, /character/:id, /world-studio, /therapy/:registryId, /setup
+    Characters: /character-registry, /character/:id, /world-studio, /setup
     Shows & Episodes: /shows, /shows/:id, /episodes/:episodeId, /episodes/:episodeId/edit
     Production: /episodes/:episodeId/scene-composer, /episodes/:episodeId/timeline, /episodes/:episodeId/beats, /episodes/:episodeId/animatic-preview, /episodes/:episodeId/icon-cues
     Templates & Composition: /template-studio, /template-studio/designer, /library, /thumbnails/:episodeId

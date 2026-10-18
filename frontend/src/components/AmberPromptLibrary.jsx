@@ -77,7 +77,6 @@ const CATEGORIES = [
       "Take me to the Continuity Engine.",
       "Take me to Universe Admin.",
       "Take me to the Show Production system.",
-      "Take me to Character Therapy.",
       "Take me to the Franchise Brain.",
     ],
   },

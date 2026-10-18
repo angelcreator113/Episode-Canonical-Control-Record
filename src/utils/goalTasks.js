@@ -180,7 +180,7 @@ function nameGoals(f) {
   if (!f.event_name) return [];
   return [
     { slot: 'presence', label: `Post from ${f.event_name}`, description: 'Make her attendance visible to the right audience', timing: 'during' },
-    { slot: 'recap', label: `Recap ${f.event_name}`, description: "A carousel or reel of the night's best moments", timing: 'after' },
+    { slot: 'recap', label: `Recap ${f.event_name}`, description: "A Pulse carousel or video of the night's best moments", timing: 'after' },
   ];
 }
 
@@ -221,7 +221,7 @@ function composeGoalTasks(fields, bounds, { upTo = bounds.max, where = 'goalTask
   const tasks = goals
     .map((g) => ({
       ...g,
-      platform: platform || (g.timing === 'before' ? 'tiktok' : 'instagram'),
+      platform: platform || 'pulse',
       task_source: 'goal',
       required: false,
       completed: false,

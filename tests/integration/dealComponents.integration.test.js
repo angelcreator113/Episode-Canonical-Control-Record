@@ -131,7 +131,7 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     const ids = await seed({ tier: 3 });
     await putEvent(ids, { deal_components: ['partnership_base'] });
     await auth(request(app).post(`/api/v1/world/${ids.show}/events/${ids.event}/deliverables`))
-      .send({ description: 'One reel', deliverable_type: 'instagram_reel' });
+      .send({ description: 'One reel', deliverable_type: 'pulse_video' });
     const res = await propose(ids);
     expect(res.status).toBe(200);
     expect(res.body.proposal).toMatchObject({ ok: true, cash: true, deal_components: ['partnership_base'] });

@@ -20,20 +20,21 @@ describe('deliverable format mirror (frontend/src/constants/deliverableTypes.jso
     expect([...DELIVERABLE_TYPES]).toEqual([...formats.DELIVERABLE_TYPES]);
   });
 
-  it('is D15\'s list, with answer 8\'s Instagram post, and Other', () => {
+  it('is D15\'s list on The Pulse (2026-10-18: a Reel and a TikTok video are one Pulse video), with Other', () => {
     expect([...DELIVERABLE_TYPES]).toEqual([
-      'instagram_reel', 'instagram_post', 'tiktok_video', 'grwm_video', 'instagram_stories',
+      'pulse_video', 'pulse_post', 'grwm_video', 'pulse_stories',
       'carousel_post', 'go_live', 'link_in_bio', 'try_on_haul', 'ugc', 'other',
     ]);
   });
 
-  it('mirrors the formats, the platform labels and the quantity range exactly', () => {
+  it('mirrors the formats, the account labels and phrases and the quantity range exactly', () => {
     expect(mirror.formats).toEqual(JSON.parse(JSON.stringify(formats.DELIVERABLE_FORMATS)));
     expect(mirror.platform_labels).toEqual({ ...formats.PLATFORM_LABELS });
+    expect(mirror.platform_on).toEqual({ ...formats.PLATFORM_ON });
     expect(mirror.quantity).toEqual({ min: formats.QUANTITY_MIN, max: formats.QUANTITY_MAX });
   });
 
   it('mirrors nothing else', () => {
-    expect(Object.keys(mirror)).toEqual(['deliverable_type', 'formats', 'platform_labels', 'quantity']);
+    expect(Object.keys(mirror)).toEqual(['deliverable_type', 'formats', 'platform_labels', 'platform_on', 'quantity']);
   });
 });

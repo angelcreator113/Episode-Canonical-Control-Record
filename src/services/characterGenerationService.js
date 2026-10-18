@@ -653,6 +653,7 @@ module.exports = {
   onPulseFor,
   generateInteriorArchitecture,
   worldLineFor,
+  worldOf,
   generateMissingInterior,
   missingInteriorFields,
   interiorUpdates,

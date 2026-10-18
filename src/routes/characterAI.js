@@ -157,8 +157,10 @@ async function gatherCharacterContext(characterId) {
         registry_id: character.registry_id,
         id: { [Op.ne]: characterId },
       },
-      attributes: ['display_name', 'selected_name', 'role_type', 'core_belief', 'core_wound', 'core_desire', 'subtitle'],
+      attributes: ['display_name', 'selected_name', 'role_type', 'core_belief', 'core_wound', 'core_desire', 'subtitle', 'character_key', 'extra_fields'],
     });
+    // Confidential professionals are not part of the ensemble (utils/confidentialCharacters).
+    castMembers = require('../utils/confidentialCharacters').withoutConfidential(castMembers);
   } catch (e) { /* no cast */ }
 
   // 7. Recent approved lines mentioning character

@@ -731,7 +731,7 @@ router.get('/story-engine-characters', requireAuth, async (req, res) => {
           'id', 'character_key', 'display_name', 'icon', 'role_type',
           'world',
           'core_desire', 'core_fear', 'core_wound', 'description',
-          'career_status', 'portrait_url',
+          'career_status', 'portrait_url', 'extra_fields',
         ],
         order: [['sort_order', 'ASC'], ['display_name', 'ASC']],
       });
@@ -767,6 +767,9 @@ router.get('/story-engine-characters', requireAuth, async (req, res) => {
         }
       }
     }
+
+    // Confidential professionals are not written about (utils/confidentialCharacters).
+    characters = require('../../utils/confidentialCharacters').withoutConfidential(characters);
 
     // Group by world column — never show 'unknown'
     const byWorld = {};
@@ -1517,8 +1520,8 @@ async function loadWorldState(characterKey, worldBookTag) {
         where: { book_tag: worldBookTag },
         attributes: ['book_tag'],
       }],
-      attributes: ['id', 'character_key', 'display_name'],
-    });
+      attributes: ['id', 'character_key', 'display_name', 'extra_fields'],
+    }).then((rows) => require('../../utils/confidentialCharacters').withoutConfidential(rows));
 
     if (!sameWorldChars.length) return null;
 
@@ -1838,10 +1841,10 @@ async function loadDialogueVoiceCards(_characterKey) {
     const { Op } = require('sequelize');
     const chars = await RegistryCharacter.findAll({
       where: { status: { [Op.in]: ['accepted', 'finalized'] } },
-      attributes: ['character_key', 'display_name', 'voice_signature', 'personality', 'description'],
+      attributes: ['character_key', 'display_name', 'voice_signature', 'personality', 'description', 'extra_fields'],
       order: [['updated_at', 'DESC']],
       limit: 15,
-    });
+    }).then((rows) => require('../../utils/confidentialCharacters').withoutConfidential(rows));
 
     if (!chars.length) return null;
 

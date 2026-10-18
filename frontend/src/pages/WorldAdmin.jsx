@@ -48,7 +48,7 @@ import {
 import {
   createEventSaveQueue, putEventVersioned, isStaleSaveError, saveErrorMessage,
 } from '../utils/eventSaveVersion';
-import { MoreHorizontal, ArrowRight, ArrowLeft, Plus, Calendar, CalendarDays, Sparkles, Lightbulb, AlertTriangle, Loader2, RotateCw, X, Mail, Gem, Crown, Heart, ChevronDown, Search, MessageSquare, FileUp } from 'lucide-react';
+import { MoreHorizontal, ArrowRight, ArrowLeft, Plus, Calendar, CalendarDays, Sparkles, Lightbulb, AlertTriangle, Loader2, RotateCw, X, Mail, Gem, Crown, Heart, ChevronDown, Search, MessageSquare, FileUp, Briefcase } from 'lucide-react';
 import useWardrobeProcessing from '../hooks/useWardrobeProcessing';
 import { backgroundRemovalStarted, PROCESSING_STATES } from '../utils/wardrobeProcessingState';
 import AddPieceDialog from '../components/Wardrobe/AddPieceDialog';
@@ -62,7 +62,7 @@ import { fetchAllEpisodes, fetchAllSceneSets, partialNote } from '../lib/fetchAl
 import CareerBrands from '../components/Career/CareerBrands';
 import './WorldAdmin.css';
 import '../styles/wardrobe-backdrop.css';
-import { atHandle } from './feed/feedConstants';
+import { atHandle, platformLabel } from './feed/feedConstants';
 
 // Track 6 CP13 module-scope helpers — page structural shape, file-local
 // `api` import style preserved (file already partial-migrated at line 6306).
@@ -255,6 +255,8 @@ const TABS = [
     { key: 'episodes-ledger', label: 'Results' },
   ]},
   { key: 'events', Icon: Mail, label: 'Events' },
+  // Its page was there with no tab (the quick wins, 2026-10-18): a brand's offers and bookings.
+  { key: 'opportunities', Icon: Briefcase, label: 'Opportunities' },
   { key: 'wardrobe', Icon: Gem, label: 'Assets', subs: [
     { key: 'scene-sets', label: 'Scene Sets' },
     { key: 'wardrobe-items', label: 'Wardrobe' },
@@ -4790,11 +4792,11 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         <span style={{ color: 'var(--text-secondary)' }}>☐</span>
                         <span style={{ fontWeight: 600 }}>{task.label}</span>
                         <SocialTaskBadge task={task} />
-                        {task.source === 'platform' && <span style={{ fontSize: 8, padding: '1px 4px', background: 'var(--info-bg)', color: 'var(--info-text)', borderRadius: 3 }}>{task.platform}</span>}
+                        {task.source === 'platform' && <span style={{ fontSize: 8, padding: '1px 4px', background: 'var(--info-bg)', color: 'var(--info-text)', borderRadius: 3 }}>{platformLabel(task.platform)}</span>}
                         {task.source === 'category' && <span style={{ fontSize: 8, padding: '1px 4px', background: 'var(--success-bg)', color: 'var(--success-text)', borderRadius: 3 }}>niche</span>}
                       </div>
                       <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2 }}>{task.description}</div>
-                      <div style={{ fontSize: 9, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace", marginTop: 1 }}>{task.platform} · {task.timing}</div>
+                      <div style={{ fontSize: 9, color: 'var(--text-secondary)', fontFamily: "'DM Mono', monospace", marginTop: 1 }}>{platformLabel(task.platform)} · {task.timing}</div>
                     </div>
                   ))}
                 </div>

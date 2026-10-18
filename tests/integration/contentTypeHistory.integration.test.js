@@ -78,6 +78,18 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     });
   });
 
+  // Evoni, 2026-10-18: "yes start the story writers seeing the rebrand".
+  it('the story writers see the rebrand: the character file and the content hook', async () => {
+    const { storyLabel } = { storyLabel: require('../../src/services/storyClock').label(orderOf(3, 'after_episode')) };
+    const line = `Rebrands in the story: known as The Entertainer until ${storyLabel}, then The Educator (why: After the burnout post, she started teaching).`;
+    const character = await models.RegistryCharacter.findByPk(ids.char);
+    const { block } = await require('../../src/services/characterFile').characterFilePrompt(models, { character });
+    expect(block).toContain(line);
+    expect(block).toContain('A scene set before a rebrand uses what they were known for then');
+    const hook = await require('../../src/services/characterContentType').contentHookFor(models, character);
+    expect(hook).toContain(line);
+  });
+
   it('a correction has no moment and leaves earlier moments alone', async () => {
     const res = await put({ name: 'The Commentator', rebrand: false, reason: 'Wrong pick' });
     expect(res.status).toBe(200);

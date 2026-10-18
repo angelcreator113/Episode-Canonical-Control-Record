@@ -76,12 +76,12 @@ async function writeFeedPost(sequelize, showId, post) {
     await sequelize.query(
       `INSERT INTO feed_posts (
         id, show_id, episode_id, event_id, social_profile_id, poster_handle,
-        poster_display_name, poster_creator_name, post_type, content_text,
+        poster_display_name, poster_creator_name, poster_platform, post_type, content_text,
         narrative_function, emotional_impact, ai_generated, posted_at,
         timeline_position, status, created_at, updated_at
       ) VALUES (
         :id, :showId, :episodeId, :eventId, :profileId, :handle,
-        :displayName, :creatorName, :postType, :contentText,
+        :displayName, :creatorName, 'lalaverse', :postType, :contentText,
         :narrativeFunction, :emotionalImpact, true, NOW(),
         :timelinePosition, :status, NOW(), NOW()
       )`,

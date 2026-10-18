@@ -1306,14 +1306,10 @@ try {
   console.error('✗ Failed to load Character Generator routes:', e.message);
 }
 
-// Character Therapy — Psychological Narrative Engine routes
-try {
-  const therapyRoutes = require('./routes/therapy');
-  app.use('/api/v1/therapy', therapyRoutes);
-  console.log('✓ Character Therapy routes loaded at /api/v1/therapy');
-} catch (e) {
-  console.error('✗ Failed to load Character Therapy routes:', e.message);
-}
+// The Character Therapy routes (/api/v1/therapy) are retired (Evoni,
+// 2026-10-18: "we can retire/delete the therapy room"); the Talk tab
+// (services/characterTalk) replaces them. The past therapy profiles
+// (CharacterTherapyProfile) are kept and still read.
 
 // Lala Scene Detection routes
 try {

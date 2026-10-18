@@ -116,7 +116,6 @@ const ReadingMode = lazy(() => import('./pages/ReadingMode'));
 const WriteMode = lazy(() => import('./pages/WriteMode'));
 const RelationshipEngine = lazy(() => import('./pages/RelationshipEngine'));
 const SessionStart = lazy(() => import('./pages/SessionStart'));
-const CharacterTherapy = lazy(() => import('./pages/CharacterTherapy'));
 const PressPublisher = lazy(() => import('./pages/PressPublisher'));
 const StoryEvaluationEngine = lazy(() => import('./pages/StoryEvaluationEngine'));
 const StoryProposer = lazy(() => import('./pages/StoryProposer'));
@@ -441,8 +440,6 @@ function AppContent() {
           <Route path="/character/:id" element={<CharacterProfile />} />
           <Route path="/setup" element={<SetupWizard />} />
           
-          {/* PNOS Character Therapy — Psychological Narrative Engine */}
-          <Route path="/therapy/:registryId" element={<CharacterTherapy />} />
           
           {/* PNOS Continuity Engine */}
           <Route path="/continuity" element={<ContinuityEnginePage />} />
@@ -639,7 +636,6 @@ function AppContent() {
           const bookMatch = p.match(/\/(?:books?|write|chapter)\/([^/]+)/);
           const chapterMatch = p.match(/\/(?:write|chapter)\/[^/]+\/([^/]+)/);
           const showMatch = p.match(/\/shows\/([^/]+)/);
-          const therapyMatch = p.match(/\/therapy\/([^/]+)/);
           const episodeMatch = p.match(/\/episodes\/([^/]+)/);
           const ctx = {
             currentView: p,
@@ -649,7 +645,6 @@ function AppContent() {
           if (bookMatch) ctx.activeBookId = bookMatch[1];
           if (chapterMatch) ctx.activeChapterId = chapterMatch[1];
           if (showMatch) ctx.activeShowId = showMatch[1];
-          if (therapyMatch) ctx.activeRegistryId = therapyMatch[1];
           if (episodeMatch && episodeMatch[1] !== 'create') ctx.activeEpisodeId = episodeMatch[1];
           if (currentEpisodeId) ctx.currentEpisodeId = currentEpisodeId;
           // Pass URL search params for tab context

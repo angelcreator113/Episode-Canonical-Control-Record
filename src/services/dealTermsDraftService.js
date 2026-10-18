@@ -154,7 +154,7 @@ function relationshipGoalTasks(event) {
       label: String(g.label).trim(),
       description: g.description || '',
       timing: 'after',
-      platform: 'instagram',
+      platform: 'pulse',
       task_source: 'goal',
       required: false,
       completed: false,
