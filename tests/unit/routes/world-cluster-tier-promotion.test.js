@@ -71,10 +71,12 @@ const CP3_FILES = [
 // the event's look, no AI call); no other CP3-zone route changed.
 // worldStudio.js 36: +1 for POST /world/dream-cities/:key/image (a Dream
 // City's image or story bubble, The Pulse Uploads, Task #2920, requireAuth).
+// 38: +2 for GET and POST /world/locations/studio-types (creator studios
+// typed "other", Evoni 2026-10-18; requireAuth, no AI call).
 const REQUIRE_AUTH_COUNTS = {
   'world.js': 5,
   'worldEvents.js': 81,
-  'worldStudio.js': 36,
+  'worldStudio.js': 38,
   'worldTemperatureRoutes.js': 3,
 };
 
@@ -269,7 +271,7 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
       expect(matches.length).toBe(18);
     });
 
-    test('Tier 1 — exactly 35 mutation handlers use requireAuth (23 POST + 6 PUT + 7 DELETE excl. line 2483)', () => {
+    test('Tier 1 — exactly 36 mutation handlers use requireAuth (24 POST + 6 PUT + 7 DELETE excl. line 2483)', () => {
       // Mutations are POST/PUT/DELETE with requireAuth
       const postPattern = /router\.post\([^)]*,\s*requireAuth,/g;
       const putPattern = /router\.put\([^)]*,\s*requireAuth,/g;
@@ -277,16 +279,16 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
       const postCount = (src.match(postPattern) || []).length;
       const putCount = (src.match(putPattern) || []).length;
       const deleteCount = (src.match(deletePattern) || []).length;
-      expect(postCount).toBe(22); // 23 POST minus 1 Tier 3 (+1 dream-cities image, Task #2920)
+      expect(postCount).toBe(23); // 24 POST minus 1 Tier 3 (+1 dream-cities image, Task #2920; +1 studio-types, 2026-10-18)
       expect(putCount).toBe(6);
       expect(deleteCount).toBe(7);
-      expect(postCount + putCount + deleteCount).toBe(35);
+      expect(postCount + putCount + deleteCount).toBe(36);
     });
 
-    test('Tier 3 + Tier 4 + Tier 1 cover all 54 worldStudio handlers', () => {
+    test('Tier 3 + Tier 4 + Tier 1 cover all 56 worldStudio handlers', () => {
       const handlerPattern = /^router\.(get|post|put|delete|patch)\(/gm;
       const matches = src.match(handlerPattern) || [];
-      expect(matches.length).toBe(54); // +1 dream-cities image (Task #2920)
+      expect(matches.length).toBe(56); // +1 dream-cities image (Task #2920); +2 studio-types GET/POST (2026-10-18)
     });
 
     test('F-AUTH-5 site at line ~2624 preserved (req.user?.id || req.ip || null)', () => {
@@ -342,14 +344,15 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
   describe('CP3 zone aggregate consumer counts', () => {
     // 123, not the CP3-close 105 — see REQUIRE_AUTH_COUNTS['worldEvents.js'] above;
     // 124 with worldStudio.js POST /world/dream-cities/:key/image (Task #2920);
-    // 125 with worldEvents.js POST .../look/upload (2026-10-15).
-    test('CP3 zone contains 125 total requireAuth references across 4 files (4 imports + 121 handlers)', () => {
+    // 125 with worldEvents.js POST .../look/upload (2026-10-15);
+    // 127 with worldStudio.js GET + POST /world/locations/studio-types (2026-10-18).
+    test('CP3 zone contains 127 total requireAuth references across 4 files (4 imports + 123 handlers)', () => {
       const total = CP3_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(125);
+      expect(total).toBe(127);
     });
 
     test('CP3 zone contains 20 total optionalAuth references (all in worldStudio.js)', () => {
@@ -401,5 +404,12 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
       expect(manuscriptCount).toBe(0);
       expect(pressCount + manuscriptCount).toBe(2);
     });
+  });
+
+  // Evoni, 2026-10-18: creator studios typed "other".
+  test('studio types: the list and the apply step both need a signed-in user', () => {
+    const src = readSrc('worldStudio.js');
+    expect(src).toMatch(/router\.get\('\/world\/locations\/studio-types',\s*requireAuth,/);
+    expect(src).toMatch(/router\.post\('\/world\/locations\/studio-types',\s*requireAuth,/);
   });
 });

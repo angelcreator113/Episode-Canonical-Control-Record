@@ -26,6 +26,8 @@ export function UsePhotosFromSet({ set, event, onToast, onSaved }) {
   // event versions of its own, or one another event is held at.
   const refusal = (o) => {
     if (o.has_versions) return 'it has event versions';
+    // The location's everyday look is not one event's photos (seventh audit).
+    if (o.is_everyday_look) return "it is the location's everyday look";
     const others = (o.used_by || []).filter((e) => String(e.id) !== String(event.id));
     return others.length ? `used by ${others.map((e) => e.name).join(', ')}` : null;
   };
@@ -98,8 +100,12 @@ export function UsePhotosFromSet({ set, event, onToast, onSaved }) {
  * The set an event's photos are in, with "Stop using these photos". On the
  * everyday place: the event's card. On the event's own set: from the other
  * side (everyday names the everyday place).
+ *
+ * Seventh audit: its links open the other set's panel (onLeave closes this
+ * one; the zone opens the target's), and an event whose episode is accepted
+ * is not offered "Stop using these photos": its place is locked.
  */
-export function EventPhotosSet({ photosSet, showId, everyday = null, event = null, onToast, onSaved }) {
+export function EventPhotosSet({ photosSet, showId, everyday = null, event = null, onToast, onSaved, onLeave }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   // keep: the set becomes its own place and the event stays on it (the old
@@ -124,15 +130,18 @@ export function EventPhotosSet({ photosSet, showId, everyday = null, event = nul
       {everyday ? (
         <span>
           These are the photos for {event ? <strong>{event.name}</strong> : 'an event'} at{' '}
-          <Link to={sceneSetPath(showId, everyday.id)} data-testid={`event-photos-everyday-${photosSet.id}`}>{everyday.name}</Link>.
+          <Link to={sceneSetPath(showId, everyday.id, { zone: 'place' })} onClick={() => onLeave?.()} data-testid={`event-photos-everyday-${photosSet.id}`}>{everyday.name}</Link>.
         </span>
       ) : (
         <span>
           Its photos are their own set:{' '}
-          <Link to={sceneSetPath(showId, photosSet.id)} data-testid={`event-photos-open-${photosSet.id}`}>{photosSet.name}</Link>
+          <Link to={sceneSetPath(showId, photosSet.id, { zone: 'place' })} onClick={() => onLeave?.()} data-testid={`event-photos-open-${photosSet.id}`}>{photosSet.name}</Link>
         </span>
       )}
-      {event && (
+      {event && event.locked && (
+        <span className="evp-hint" data-testid={`event-photos-locked-${photosSet.id}`}>Its episode is accepted: the event&rsquo;s place is locked.</span>
+      )}
+      {event && !event.locked && (
         <button type="button" className="evp-btn evp-btn-plain" disabled={busy} onClick={() => stop(false)} data-testid={`event-photos-stop-${photosSet.id}`}>
           Stop using these photos
         </button>
