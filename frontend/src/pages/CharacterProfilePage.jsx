@@ -26,6 +26,7 @@ import KnownFor from '../components/Cast/KnownFor';
 import CharacterAppearanceTab from '../components/CharacterAppearance/CharacterAppearanceTab';
 import PostingSchedule from '../components/PostingSchedule/PostingSchedule';
 import CharacterTalkTab from '../components/CharacterTalk/CharacterTalkTab';
+import CharacterGalleryTab from '../components/CharacterGallery/CharacterGalleryTab';
 import { API_URL } from '../config/api';
 import InnerLifeWorkspace from '../components/InnerLife/InnerLifeWorkspace';
 import { dimensionOf as dimension, dimensionText } from '../lib/innerLifeSections';
@@ -159,7 +160,9 @@ export const TABS = [
   { id: 'connections', label: 'Connections',  icon: Users },
   { id: 'world',       label: 'In the World', icon: Globe2 },
   // Evoni, 2026-10-17: their home, closet and place of work, and the events they host.
-  { id: 'places',      label: 'Places',       icon: MapPin },
+  // Evoni, 2026-10-18: "maybe the gallery and places tab should be one": every
+  // picture already linked to them sits under their places.
+  { id: 'places',      label: 'Places & Gallery', icon: MapPin },
   // Evoni, 2026-10-18: their episodes, events, posts, stories and chapters in one place.
   { id: 'story',       label: 'Story & Events', icon: CalendarDays },
   // Evoni, 2026-10-18: a confidential session with them, as Dr. Amara Sinclair.
@@ -3665,7 +3668,12 @@ export default function CharacterProfilePage() {
         )}
         {activeTab === 'connections' && <TabConnections character={character} relationships={listOf(relationships)} entanglements={listOf(entanglements)} />}
         {activeTab === 'world' && <TabWorld character={character} feedProfile={feedProfile} appearances={appearances} onSaved={onSaved} gen={gen} openTab={setActiveTab} />}
-        {activeTab === 'places' && <div className="ch-card"><CharacterPlacesTab key={character.id} character={character} /></div>}
+        {activeTab === 'places' && (
+          <>
+            <div className="ch-card"><CharacterPlacesTab key={character.id} character={character} /></div>
+            <div className="ch-card"><CharacterGalleryTab key={character.id} character={character} openTab={setActiveTab} hide={['places']} /></div>
+          </>
+        )}
         {activeTab === 'story' && <TabStory character={character} feedProfile={feedProfile} appearances={appearances} openTab={setActiveTab} />}
         {activeTab === 'talk' && <div className="ch-card"><CharacterTalkTab key={character.id} character={character} onSaved={onSaved} /></div>}
         {activeTab === 'settings' && <TabSettings character={character} feedProfile={feedProfile} onSaved={onSaved} onExport={exportJson} onDeleted={() => navigate('/character-registry')} />}
