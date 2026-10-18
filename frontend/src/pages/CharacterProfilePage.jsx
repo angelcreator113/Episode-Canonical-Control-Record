@@ -17,7 +17,7 @@ import {
   Sparkles, ArrowRight, LayoutDashboard, Heart, Mic, Users, Globe2, ImagePlus, Trash2,
   BarChart3, CalendarDays, Download, Link2, MapPin, Palette, Crown, Instagram,
   Quote, Star, TrendingUp, Briefcase, IdCard, Activity, FileText, CirclePlay, Flame,
-  Copy, BadgeCheck, Lock, Eye, Smartphone, Plus, ExternalLink,
+  Copy, BadgeCheck, Lock, Eye, Smartphone, Plus, ExternalLink, Share2, Search,
 } from 'lucide-react';
 import Pager, { usePaged } from '../components/Pager/Pager';
 import CharacterPlacesTab from '../components/CharacterPlaces/CharacterPlacesTab';
@@ -31,6 +31,10 @@ import apiClient from '../services/api';
 import { ROLE_LABELS } from '../constants/characterConstants';
 import { findLala } from '../lib/theCast';
 import { DEPTH_STEPS, depthOf, depthLevelOf, cityOf, archetypeOf, showUpRows, withLala, voiceOf } from '../lib/characterPage';
+import {
+  GROUPS, TENSION, groupOf, closenessOf, nameOf, typeLabel, noteOf, connectionStats, SORTS,
+  filterConnections, keyRelationships, connectionHistory, mapPoints,
+} from '../lib/characterConnections';
 import './CharacterProfilePage.css';
 
 // ─── Track 6 CP9 module-scope helpers (Pattern F prophylactic — Api suffix) ───
@@ -1890,7 +1894,6 @@ export function TheirEvents({ appearances }) {
 }
 
 /* ── Connections on the Overview: their closest ties, the full list a tab away ─ */
-const TENSION_SCORE = { calm: 90, healing: 70, simmering: 45, volatile: 25, fractured: 10 };
 // An API that answers with an object where a list belongs counts as none.
 const listOf = (v) => (Array.isArray(v) ? v : []);
 
@@ -1911,7 +1914,7 @@ export function ConnectionsCard({ relationships: rels, entanglements: ents, open
         <ul className="ch-ties">
           {rows.map((r) => {
             const who = r.related_name || r.character_b_name || r.character_a_name || 'Someone';
-            const score = TENSION_SCORE[r.tension_state];
+            const score = closenessOf(r) ?? undefined;
             return (
               <li key={r.id} className="ch-tie">
                 <span className="ch-tie-avatar" aria-hidden="true">{who.charAt(0).toUpperCase()}</span>
@@ -1960,100 +1963,278 @@ export function archivedDepth(character) {
   return archive && typeof archive === 'object' ? Object.entries(archive).filter(([, v]) => v !== null && v !== '') : [];
 }
 
-/* ── Tab 3: Connections ──────────────────────────────────────────────────────── */
+/* ── Connections (Evoni's mock, 2026-10-18, step 4) ───────────────────────────
+   Their relationships with counts, filters, search, sort and pages; a map of
+   the closest; their key relationships; when each began; their feed ties
+   (entanglements) and where they belong. The groups and closeness are
+   lib/characterConnections. */
+
+const GROUP_LABEL = Object.fromEntries(GROUPS.map((g) => [g.key, g.label]));
+
+function Avatar({ src, name, size = 44 }) {
+  return src
+    ? <img className="ch-avatar-sm" src={src} alt="" width={size} height={size} style={{ width: size, height: size }} />
+    : <span className="ch-avatar-sm is-initial" aria-hidden="true" style={{ width: size, height: size }}>{(name || '?').charAt(0).toUpperCase()}</span>;
+}
+
+const toPerson = (r) => (r.related_id ? `/character/${r.related_id}` : null);
+const sinceOf = (r) => (activityDate(r.created_at) ? activityWhen(activityDate(r.created_at)) : null);
+
+export function RelationshipOverview({ character, relationships }) {
+  const [filter, setFilter] = useState('all');
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState('closeness');
+  const stats = connectionStats(relationships);
+  const rows = filterConnections(relationships, { filter, query, sort });
+  const { pageItems, pager } = usePaged(rows);
+  const name = (character.selected_name || character.display_name || 'they').split(' ')[0];
+  const filters = [
+    { key: 'all', label: 'All', n: stats.total },
+    { key: 'close', label: 'Close', n: stats.close },
+    ...GROUPS.map((g) => ({ key: g.key, label: g.label, n: stats.groups[g.key] })).filter((f) => f.n > 0),
+  ];
+  const tiles = [
+    { key: 'total', label: 'Total connections', n: stats.total, icon: Users, tone: 'pink' },
+    { key: 'close', label: 'Close', n: stats.close, icon: Heart, tone: 'green' },
+    { key: 'working', label: 'Working with', n: stats.groups.working, icon: Briefcase, tone: 'lavender' },
+    { key: 'rival', label: 'Rivals', n: stats.groups.rival, icon: Crown, tone: 'gold' },
+  ];
+  return (
+    <section className="ch-card" aria-labelledby="ch-ro" data-testid="ch-rel-overview">
+      <div className="ch-card-head">
+        <span className="ch-head-icon" aria-hidden="true"><Share2 size={20} /></span>
+        <span className="ch-head-text">
+          <h2 id="ch-ro" className="ch-h2">Relationship overview</h2>
+          <span className="ch-note">The people in {name}&rsquo;s world and how they connect.</span>
+        </span>
+        <Link className="ch-pill-btn" to="/relationships"><Plus size={14} aria-hidden="true" /> Add connection</Link>
+      </div>
+      <ul className="ch-ro-tiles">
+        {tiles.map(({ key, label, n, icon: Icon, tone }) => (
+          <li key={key} className={`ch-ro-tile is-${tone}`}>
+            <Icon size={20} aria-hidden="true" />
+            <strong>{n}</strong>
+            <span>{label}</span>
+          </li>
+        ))}
+      </ul>
+      {stats.total === 0 ? (
+        <p className="ch-note">No relationships yet. Add them in the <Link to="/relationships">Relationship Engine</Link>.</p>
+      ) : (
+        <>
+          <div className="ch-filter" role="group" aria-label="Show connections">
+            {filters.map((f) => (
+              <button key={f.key} type="button" className={`ch-filter-btn${filter === f.key ? ' is-on' : ''}`} aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>
+                {f.label} ({f.n})
+              </button>
+            ))}
+          </div>
+          <div className="ch-ro-tools">
+            <label className="ch-ro-search">
+              <Search size={15} aria-hidden="true" />
+              <input type="search" value={query} placeholder="Search connections…" aria-label="Search connections" onChange={(e) => setQuery(e.target.value)} />
+            </label>
+            <label className="ch-ro-sort">
+              <span className="ch-visually-hidden">Sort</span>
+              <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort connections">
+                {SORTS.map((o) => <option key={o.key} value={o.key}>Sort: {o.label}</option>)}
+              </select>
+            </label>
+          </div>
+          {rows.length === 0 ? <p className="ch-note">No one matches.</p> : (
+            <ul className="ch-conn-list">
+              {pageItems.map((r) => {
+                const tension = TENSION[r.tension_state];
+                const to = toPerson(r);
+                const since = sinceOf(r);
+                return (
+                  <li key={r.id} className="ch-conn" data-testid="ch-conn">
+                    <Avatar src={r.related_portrait} name={nameOf(r)} />
+                    <span className="ch-conn-text">
+                      <span className="ch-conn-top">
+                        {to ? <Link to={to} className="ch-conn-name">{nameOf(r)}</Link> : <strong className="ch-conn-name">{nameOf(r)}</strong>}
+                        <span className="ch-chip">{typeLabel(r)}</span>
+                        {tension && <span className={`ch-tension is-${r.tension_state}`}>{tension.label}</span>}
+                      </span>
+                      {noteOf(r) && <span className="ch-conn-note">{shortText(noteOf(r), 140)}</span>}
+                    </span>
+                    <span className="ch-conn-meta">
+                      <span>{GROUP_LABEL[groupOf(r)]}</span>
+                      {since && <span>Since {since}</span>}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <Pager {...pager} label="Connections" />
+        </>
+      )}
+    </section>
+  );
+}
+
+export function ConnectionMap({ character, relationships }) {
+  const size = 300;
+  const points = mapPoints(relationships, 6, size);
+  const c = size / 2;
+  const used = GROUPS.map((g) => g.key).filter((k) => points.some((p) => groupOf(p.r) === k));
+  return (
+    <section className="ch-card" aria-labelledby="ch-cm" data-testid="ch-conn-map">
+      <div className="ch-card-head">
+        <h2 id="ch-cm" className="ch-h2"><Share2 size={20} aria-hidden="true" className="ch-h2-icon" /> Connection map</h2>
+        <Link className="ch-pill-btn" to="/relationships">View full map</Link>
+      </div>
+      {points.length === 0 ? <p className="ch-note">No one to map yet.</p> : (
+        <>
+          <div className="ch-cm" style={{ aspectRatio: '1 / 1' }}>
+            <svg viewBox={`0 0 ${size} ${size}`} className="ch-cm-lines" aria-hidden="true">
+              {points.map((p) => <line key={p.r.id} x1={c} y1={c} x2={p.x} y2={p.y} className={`ch-cm-line is-${groupOf(p.r)}`} />)}
+            </svg>
+            <span className="ch-cm-node is-centre" style={{ left: '50%', top: '50%' }}>
+              <Avatar src={character.portrait_url} name={character.display_name} size={64} />
+            </span>
+            {points.map((p) => (
+              <span key={p.r.id} className="ch-cm-node" style={{ left: `${(p.x / size) * 100}%`, top: `${(p.y / size) * 100}%` }}>
+                <Avatar src={p.r.related_portrait} name={nameOf(p.r)} size={40} />
+                <span className="ch-cm-name">{nameOf(p.r)}</span>
+                <span className="ch-cm-type">{typeLabel(p.r)}</span>
+              </span>
+            ))}
+          </div>
+          <ul className="ch-cm-legend" aria-label="Line colours">
+            {used.map((g) => <li key={g} className={`is-${g}`}><span aria-hidden="true" />{GROUP_LABEL[g]}</li>)}
+          </ul>
+          {listOf(relationships).length > points.length && <p className="ch-note">The {points.length} closest of {listOf(relationships).length}.</p>}
+        </>
+      )}
+    </section>
+  );
+}
+
+export function KeyRelationships({ relationships }) {
+  const rows = keyRelationships(relationships);
+  return (
+    <section className="ch-card" aria-labelledby="ch-kr" data-testid="ch-key-rels">
+      <h2 id="ch-kr" className="ch-h2"><Heart size={20} aria-hidden="true" className="ch-h2-icon" /> Key relationships</h2>
+      {rows.length === 0 ? <p className="ch-note">No relationships yet.</p> : (
+        <ul className="ch-kr">
+          {rows.map((r) => {
+            const score = closenessOf(r);
+            const to = toPerson(r);
+            return (
+              <li key={r.id} className="ch-kr-item">
+                <Avatar src={r.related_portrait} name={nameOf(r)} size={56} />
+                <span className="ch-kr-text">
+                  <span className="ch-conn-top"><strong>{nameOf(r)}</strong><span className="ch-chip">{typeLabel(r)}</span></span>
+                  {score !== null && (
+                    <span className="ch-tie-meter" role="img" aria-label={`${TENSION[r.tension_state].label}`}><span style={{ width: `${score}%` }} /></span>
+                  )}
+                  {noteOf(r) && <span className="ch-conn-note">{shortText(noteOf(r), 120)}</span>}
+                  {to && <Link className="ch-link ch-more" to={to}>View <ArrowRight size={14} aria-hidden="true" /></Link>}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+export function RelationshipHistory({ relationships }) {
+  const rows = connectionHistory(relationships);
+  const { pageItems, pager } = usePaged(rows, 4);
+  return (
+    <section className="ch-card" aria-labelledby="ch-rh" data-testid="ch-rel-history">
+      <h2 id="ch-rh" className="ch-h2"><CalendarDays size={20} aria-hidden="true" className="ch-h2-icon" /> Relationship history</h2>
+      {rows.length === 0 ? <p className="ch-note">No dates yet.</p> : (
+        <ol className="ch-rh">
+          {pageItems.map((r) => (
+            <li key={r.id} className={`ch-rh-item is-${groupOf(r)}`}>
+              <span className="ch-rh-when">{sinceOf(r)}</span>
+              <span className="ch-rh-text"><strong>Connected with {nameOf(r)}</strong><span>{typeLabel(r)}</span></span>
+            </li>
+          ))}
+        </ol>
+      )}
+      <Pager {...pager} label="Relationship history" />
+    </section>
+  );
+}
+
+export function FeedTies({ entanglements }) {
+  const rows = listOf(entanglements);
+  const { pageItems, pager } = usePaged(rows);
+  return (
+    <section className="ch-card" aria-labelledby="ch-ft" data-testid="ch-feed-ties">
+      <h2 id="ch-ft" className="ch-h2"><Link2 size={20} aria-hidden="true" className="ch-h2-icon" /> Feed ties</h2>
+      <p className="ch-note">Feed people whose posts reach them, and how.</p>
+      {rows.length === 0 ? <p className="ch-note">No feed ties yet.</p> : (
+        <ul className="ch-ft">
+          {pageItems.map((e, i) => (
+            <li key={e.id || i} className="ch-ft-item">
+              {e.profile ? (
+                <Link className="ch-conn-name" to={`/pulse?profile=${e.profile.id}`}>
+                  {e.profile.display_name || `@${String(e.profile.handle || '').replace(/^@/, '')}`}
+                </Link>
+              ) : <strong className="ch-conn-name">Someone on the feed</strong>}
+              <span className="ch-ft-meta">
+                {[words(e.dimension), e.directionality ? words(e.directionality) : null].filter(Boolean).join(' · ')}
+              </span>
+              <span className="ch-ft-chips">
+                <span className={`ch-tension is-${e.intensity === 'high' ? 'volatile' : e.intensity === 'medium' ? 'simmering' : 'calm'}`}>{words(e.intensity || 'low')}</span>
+                {e.turbulence_flag && <span className="ch-tension is-fractured" title={e.turbulence_reason || ''}>Turbulent</span>}
+                {e.is_active === false && <span className="ch-chip">Ended</span>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Pager {...pager} label="Feed ties" />
+    </section>
+  );
+}
+
+function BelongingMap({ character }) {
+  const map = objOf(character.belonging_map);
+  const belongs = Array.isArray(map.belongs_to) ? map.belongs_to : [];
+  const excluded = Array.isArray(map.excluded_from) ? map.excluded_from : [];
+  if (!belongs.length && !excluded.length) return null;
+  return (
+    <section className="ch-card" aria-labelledby="ch-bm" data-testid="ch-belonging">
+      <h2 id="ch-bm" className="ch-h2"><Users size={20} aria-hidden="true" className="ch-h2-icon" /> Where they belong</h2>
+      {belongs.length > 0 && (
+        <div className="ch-fb-block">
+          <h3 className="ch-fb-h">Belongs to</h3>
+          <ul className="ch-rules-list">{belongs.map((g, i) => <li key={i}><strong>{g.name}</strong>{g.type ? ` · ${g.type}` : ''}</li>)}</ul>
+        </div>
+      )}
+      {excluded.length > 0 && (
+        <div className="ch-fb-block">
+          <h3 className="ch-fb-h">Kept out of</h3>
+          <ul className="ch-rules-list">{excluded.map((g, i) => <li key={i}><strong>{g.name}</strong>{g.why ? ` · ${g.why}` : ''}</li>)}</ul>
+        </div>
+      )}
+    </section>
+  );
+}
 
 function TabConnections({ character, relationships, entanglements }) {
-  const relPages = usePaged(relationships);
-  const entPages = usePaged(entanglements);
   return (
-    <div className="cp-tab-content">
-      {/* Relationships */}
-      <section className="cp-section">
-        <h3 className="cp-section-title">
-          {relationships.length > 0 ? `${relationships.length} Relationships` : 'Relationships'}
-        </h3>
-        {relationships.length > 0 ? (
-          <div className="cp-rel-list">
-            {relPages.pageItems.map((r, i) => (
-              <div key={r.id || i} className="cp-rel-row">
-                <div className="cp-rel-avatar">
-                  {(r.related_name || r.name || '?')[0].toUpperCase()}
-                </div>
-                <div className="cp-rel-info">
-                  <span className="cp-rel-name">{r.related_name || r.name}</span>
-                  <span className="cp-rel-type">{r.relationship_type || r.type}</span>
-                </div>
-                <div className="cp-rel-meta">
-                  {r.tension_state && (
-                    <span className={`cp-tension-badge cp-tension-${r.tension_state}`}>
-                      {r.tension_state}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : null}
-        <Pager {...relPages.pager} label="Relationships" />
-        {relationships.length === 0 && <EmptyState label="No relationships defined yet.">
-          <Link className="ch-link" to="/feed-relationships">Open Relationship Map</Link>
-        </EmptyState>}
-      </section>
-
-      {/* Entanglements */}
-      <section className="cp-section">
-        <h3 className="cp-section-title">Entanglements</h3>
-        {entanglements.length > 0 ? (
-          <div className="cp-entanglement-list">
-            {entPages.pageItems.map((e, i) => (
-              <div key={e.id || i} className="cp-entanglement-row">
-                {e.profile && (
-                  <Link className="cp-entanglement-who" to={`/pulse?profile=${e.profile.id}`}>
-                    {e.profile.display_name || `@${String(e.profile.handle || '').replace(/^@/, '')}`}
-                  </Link>
-                )}
-                <span className="cp-entanglement-dim">{(e.dimension || '').replace(/_/g, ' ')}</span>
-                <span className={`cp-entanglement-intensity cp-intensity-${e.intensity || 'low'}`}>
-                  {e.intensity || 'low'}
-                </span>
-                <span className="cp-entanglement-dir">{e.directionality ? e.directionality.replace(/_/g, ' ') : '\u2014'}</span>
-                {e.turbulence_flag && <span className="cp-entanglement-unresolved" title={e.turbulence_reason || ''}>turbulent</span>}
-                {e.is_active === false && <span className="cp-entanglement-dir">ended</span>}
-              </div>
-            ))}
-          </div>
-        ) : <EmptyState label="No entanglements yet." />}
-        <Pager {...entPages.pager} label="Entanglements" />
-      </section>
-
-      {/* Belonging Map */}
-      {character.belonging_map && (
-        <section className="cp-section">
-          <h3 className="cp-section-title">Belonging Map</h3>
-          {character.belonging_map.belongs_to?.length > 0 && (
-            <div className="cp-belonging-group">
-              <span className="cp-meta-label">Belongs To</span>
-              {character.belonging_map.belongs_to.map((g, i) => (
-                <div key={i} className="cp-belonging-item">
-                  <span className="cp-belonging-name">{g.name}</span>
-                  <span className="cp-belonging-type">{g.type}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {character.belonging_map.excluded_from?.length > 0 && (
-            <div className="cp-belonging-group cp-excluded">
-              <span className="cp-meta-label">Excluded From</span>
-              {character.belonging_map.excluded_from.map((g, i) => (
-                <div key={i} className="cp-belonging-item">
-                  <span className="cp-belonging-name">{g.name}</span>
-                  <p className="cp-belonging-why">{g.why}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
+    <div className="ch-overview ch-conn-grid">
+      <div className="ch-col">
+        <RelationshipOverview character={character} relationships={relationships} />
+      </div>
+      <div className="ch-col">
+        <ConnectionMap character={character} relationships={relationships} />
+        <RelationshipHistory relationships={relationships} />
+      </div>
+      <div className="ch-col">
+        <KeyRelationships relationships={relationships} />
+        <FeedTies entanglements={entanglements} />
+        <BelongingMap character={character} />
+      </div>
     </div>
   );
 }
@@ -2798,7 +2979,7 @@ export default function CharacterProfilePage() {
         {activeTab === 'voice' && (
           <TabVoice character={character} feedProfile={feedProfile} appearances={appearances} onSaved={onSaved} onFeedSaved={onFeedSaved} />
         )}
-        {activeTab === 'connections' && <div className="ch-card"><TabConnections character={character} relationships={relationships} entanglements={entanglements} /></div>}
+        {activeTab === 'connections' && <TabConnections character={character} relationships={listOf(relationships)} entanglements={listOf(entanglements)} />}
         {activeTab === 'world' && <div className="ch-card"><TabWorld character={character} onSaved={onSaved} gen={gen} /></div>}
         {activeTab === 'places' && <div className="ch-card"><CharacterPlacesTab key={character.id} character={character} /></div>}
         {activeTab === 'appearance' && <CharacterAppearanceTab key={character.id} character={character} onPortraitChanged={(url) => onSaved({ portrait_url: url })} />}

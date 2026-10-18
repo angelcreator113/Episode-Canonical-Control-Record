@@ -59,12 +59,14 @@ const CHAR_JOIN = `
 const CHAR_SELECT_A = `
   ca.display_name AS character_a_name, ca.selected_name AS character_a_selected,
   ca.role_type AS character_a_type, ca.role_label AS character_a_role_label,
-  ca.appearance_mode AS character_a_appearance, ca.icon AS character_a_icon`;
+  ca.appearance_mode AS character_a_appearance, ca.icon AS character_a_icon,
+  ca.portrait_url AS character_a_portrait`;
 
 const CHAR_SELECT_B = `
   cb.display_name AS character_b_name, cb.selected_name AS character_b_selected,
   cb.role_type AS character_b_type, cb.role_label AS character_b_role_label,
-  cb.appearance_mode AS character_b_appearance, cb.icon AS character_b_icon`;
+  cb.appearance_mode AS character_b_appearance, cb.icon AS character_b_icon,
+  cb.portrait_url AS character_b_portrait`;
 
 // ════════════════════════════════════════════════════════════════════════
 // GET /api/v1/relationships
@@ -123,7 +125,7 @@ router.get('/pending', requireAuth, async (req, res) => {
 // GET /api/v1/relationships/character/:charId
 // All relationships (confirmed + pending) for a single character;
 // ?confirmed=true for confirmed ones only (the Character Profile, Task #3119).
-// Each row also names the other character: related_id, related_name.
+// Each row also names the other character: related_id, related_name, related_portrait.
 // ════════════════════════════════════════════════════════════════════════
 router.get('/character/:charId', requireAuth, async (req, res) => {
   try {
@@ -145,6 +147,8 @@ router.get('/character/:charId', requireAuth, async (req, res) => {
         ...r,
         related_id: isA ? r.character_id_b : r.character_id_a,
         related_name: isA ? (r.character_b_selected || r.character_b_name) : (r.character_a_selected || r.character_a_name),
+        // Their portrait, for the character page's Connections (2026-10-18).
+        related_portrait: (isA ? r.character_b_portrait : r.character_a_portrait) || null,
       };
     });
 

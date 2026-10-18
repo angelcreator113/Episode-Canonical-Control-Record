@@ -281,7 +281,8 @@ describe('the character page', () => {
     await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toBeTruthy());
     fireEvent.click(screen.getByRole('link', { name: 'Connections' }));
     await waitFor(() => expect(screen.getByRole('link', { name: 'slowsift' }).getAttribute('href')).toBe('/pulse?profile=9'));
-    expect(screen.getByText('one way')).toBeTruthy();
+    expect(screen.getByText('Ambition identity · One way')).toBeTruthy();
+    expect(screen.getByText('High')).toBeTruthy();
     expect(screen.queryByText('unresolved')).toBeNull();
   });
 
