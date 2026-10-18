@@ -163,7 +163,7 @@ async function senderOf(db, profileId) {
   return { voice, character, profile };
 }
 
-function buildPrompt({ sender, other, history, topic, label, known }) {
+function buildPrompt({ sender, other, history, topic, label, known, world = '', bible = null, media = '' }) {
   const { BANNED_PHRASES } = require('./pulseVoices');
   const name = (p) => `${p.display_name || p.handle} (@${p.handle})`;
   const examples = (sender.voice.examples_json || []).slice(0, 6).map((e) => `- ${e.text}`).join('\n') || '(none yet)';
@@ -175,7 +175,7 @@ Write exactly in this voice:
 ${JSON.stringify(sender.voice.habits_json || {}, null, 2)}
 Things they really wrote:
 ${examples}
-
+${world}
 When: ${label || 'now'}.
 ${require('./pulseDrafter').knowsLine(known)}
 What the conversation is about: ${topic || 'whatever they would message about'}.
@@ -184,7 +184,7 @@ ${lines}
 
 ${require('./pulseDrafter').PRIVATE_RULE}
 ${JSON.stringify(require('./pulseDrafter').privateOf(sender.character))}
-
+${media}${bible || ''}
 Rules: stay in the world (nothing about a show, episodes or a studio); nothing that happens after this moment; one message, the length they really text; never use: ${BANNED_PHRASES.join(', ')}.
 Answer with JSON only: {"text": "the message"}`;
 }
@@ -205,6 +205,11 @@ async function draftMessage(db, { threadId, senderProfileId, at = null, jobId = 
   const clock = require('./storyClock');
   // What the sender knows by then (Task #2982): the gate flags a DM naming anything else.
   const known = await require('./pulseKnowledge').knowledgeLine(db, thread.show_id, senderId, order);
+  // Their city, places and the Show Bible's always-on rules (services/posterWorld, 2026-10-18), and the gossip outlets (services/cultureCanon).
+  const { posterWorldLine, showBible } = require('./posterWorld');
+  const world = await posterWorldLine(db, senderId);
+  const bible = await showBible(db, thread.show_id, 'PulseDms');
+  const media = await require('./pulseDrafter').mediaBlock(db);
   // DMs are started by hand: one manual request per message drafted (Task #3031).
   await require('./pulseRequests').take(db, { showId: thread.show_id, lane: 'manual', kind: 'dm', jobId });
   let message;
@@ -212,7 +217,7 @@ async function draftMessage(db, { threadId, senderProfileId, at = null, jobId = 
     try {
       message = await getClient().messages.create({
         model, max_tokens: 300,
-        messages: [{ role: 'user', content: buildPrompt({ sender, other: other || { handle: String(otherId) }, history, topic: thread.topic, label: clock.label(order), known }) }],
+        messages: [{ role: 'user', content: buildPrompt({ sender, other: other || { handle: String(otherId) }, history, topic: thread.topic, label: clock.label(order), known, world, bible: bible.block, media }) }],
       });
       break;
     } catch (modelErr) {
@@ -220,6 +225,7 @@ async function draftMessage(db, { threadId, senderProfileId, at = null, jobId = 
       if (model === MODELS[MODELS.length - 1]) throw modelErr;
     }
   }
+  await require('./brainRules').recordRuleUse(db.sequelize, bible.ids, 'PulseDms');
   const raw = (message?.content?.[0]?.text || '').trim();
   let text;
   try {
