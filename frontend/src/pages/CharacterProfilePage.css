@@ -1430,3 +1430,45 @@ a.ch-activity-row:focus-visible { outline: 2px solid var(--accent-dark); outline
   .ch-stat-value { font-size: 18px; }
   .ch-stat-label { font-size: 10px; letter-spacing: -0.01em; }
 }
+
+/* Voice & Feed to Evoni's mock (2026-10-18, step 3). */
+.ch-head-icon { display: grid; place-items: center; flex: none; color: var(--accent-dark); }
+.ch-head-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 0; }
+.ch-card-head:has(.ch-head-text) { flex-wrap: nowrap; align-items: flex-start; }
+.ch-sample-copy { margin-left: auto; flex: none; }
+.ch-rules { border: 1px solid var(--lala-gold-line); border-radius: 14px; padding: 12px 14px; }
+.ch-rules-h { margin: 0 0 8px; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700; color: var(--text-primary); }
+.ch-rules-h svg { color: var(--success-text); }
+.ch-rules-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 13px; line-height: 1.45; color: var(--text-primary); }
+.ch-rules-list li { overflow-wrap: anywhere; }
+.ch-rules-list li.is-empty { color: var(--text-secondary); }
+.ch-pp-text { margin: 4px 0 0; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+
+.ch-fb-who { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 13px; color: var(--text-secondary); }
+.ch-fb-who strong { color: var(--text-primary); }
+.ch-fb-block { border: 1px solid var(--lala-gold-line); border-radius: 14px; padding: 12px 14px; }
+.ch-fb-block.is-style { background: var(--lala-gold-soft); color: var(--text-primary); }
+.ch-fb-block p { margin: 0; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.ch-fb-h { margin: 0 0 6px; font-size: 14px; font-weight: 700; color: var(--text-primary); }
+.ch-fb-tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.ch-fb-tile { display: flex; gap: 10px; align-items: center; border: 1px solid var(--lala-gold-line); border-radius: 12px; padding: 10px 12px; min-width: 0; }
+.ch-fb-tile > span:last-child { display: flex; flex-direction: column; min-width: 0; }
+.ch-fb-tile strong { font-size: 13px; overflow-wrap: anywhere; color: var(--text-primary); }
+.ch-fb-tile-label { font-size: 12px; color: var(--text-secondary); }
+
+.ch-filter { display: flex; flex-wrap: wrap; gap: 6px; }
+.ch-filter-btn { min-height: 34px; padding: 4px 14px; border-radius: 10px; border: 1.5px solid var(--lala-gold-line); background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.ch-filter-btn.is-on { border-color: var(--accent-dark); background: var(--accent-dark); color: var(--text-inverse); }
+.ch-filter-btn:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 2px; }
+.ch-px { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ch-px-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; padding: 10px 12px; border: 1px solid var(--lala-gold-line); border-radius: 12px; }
+.ch-px-text { font-size: 14px; line-height: 1.45; color: var(--text-primary); overflow-wrap: anywhere; }
+.ch-px-status { align-self: start; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--success-bg); color: var(--success-text); }
+.ch-px-status.is-draft { background: var(--lala-gold-soft); color: var(--lala-gold-text); }
+.ch-px-meta { grid-column: 1 / -1; font-size: 12px; color: var(--text-secondary); }
+.ch-px-meta:empty { display: none; }
+.ch-px-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.ch-px-actions .ch-btn, .ch-px-link { display: inline-flex; align-items: center; gap: 6px; }
+.ch-px-link { text-decoration: none; }
+.ch-presence { flex: none; align-self: center; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.ch-presence.is-on { background: var(--success-bg); color: var(--success-text); }
