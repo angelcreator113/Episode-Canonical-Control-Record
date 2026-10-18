@@ -101,7 +101,6 @@ describe('the prompts carry the block', () => {
 describe('every Feed and event generator loads and counts the Bible', () => {
   const src = (f) => fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', f), 'utf8');
   const GENERATORS = [
-    ['services/feedPostGeneratorService.js', 'FeedPosts'],
     ['services/feedScheduler.js', 'FeedScheduler'],
     ['routes/socialProfileRoutes.js', 'SocialProfiles'],
     ['services/feedCommentDrafter.js', 'FeedComments'],

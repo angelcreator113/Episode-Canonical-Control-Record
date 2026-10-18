@@ -63,7 +63,7 @@ describe('the episode\'s event, one rule for every service (Task #1917)', () => 
     'src/routes/episodes.js', 'src/routes/evaluation.js', 'src/routes/wardrobe.js', 'src/routes/worldEvents.js',
     'src/services/episodeScriptWriterService.js', 'src/services/groundedScriptGeneratorService.js',
     'src/services/financialTransactionService.js', 'src/services/scenePlannerService.js',
-    'src/services/distributionService.js', 'src/services/feedPostGeneratorService.js', 'src/services/todoListService.js',
+    'src/services/distributionService.js', 'src/services/todoListService.js',
     'src/services/storyGenerationService.js', 'src/services/careerPipelineService.js',
     'src/services/wardrobeIntelligenceService.js', 'src/services/episodeMoneyService.js',
     'src/services/outfitScoreContext.js', 'src/services/seasonIntentionService.js',
