@@ -20,3 +20,24 @@
 .cap-portrait img { width: 100%; aspect-ratio: 9 / 16; object-fit: cover; border-radius: 12px; border: 1px solid var(--lala-lavender-line); }
 .cap-current { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 700; color: var(--success-text); }
 @media (max-width: 480px) { .cap-row { grid-template-columns: 1fr; gap: 2px; } }
+
+/* Step 7 of the character page (Evoni's mock, 2026-10-18): cards in three columns. */
+.cap-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.cap-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.cap-photo { position: relative; display: grid; place-items: center; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden; border: 1.5px solid var(--lala-gold-line); background: var(--lala-gold-soft); }
+.cap-photo img { width: 100%; height: 100%; object-fit: cover; object-position: center 25%; }
+.cap-photo-empty { font-size: 13px; color: var(--text-secondary); }
+.cap-photo-label { position: absolute; left: 8px; bottom: 8px; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--surface-card); color: var(--text-primary); }
+.cap-grid .cap-portraits { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.cap-grid .cap-portrait img { aspect-ratio: 1 / 1; object-position: center 25%; }
+.cap-looks { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.cap-look { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--lala-gold-line); font-size: 13px; line-height: 1.45; color: var(--text-primary); overflow-wrap: anywhere; }
+.cap-look-label { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent-dark); }
+.cap-look.is-never_wears .cap-look-label { color: var(--text-secondary); }
+.cap-swatches { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 10px; }
+.cap-swatch { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-primary); overflow-wrap: anywhere; }
+.cap-swatch-chip { display: block; aspect-ratio: 1 / 1; border-radius: 10px; border: 1.5px solid var(--lala-gold-line); background: var(--lala-gold-soft); }
+.cap-text { margin: 0; font-size: 14px; line-height: 1.5; color: var(--text-primary); overflow-wrap: anywhere; }
+@media (max-width: 1200px) { .cap-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cap-col:nth-child(3) { grid-column: 1 / -1; } }
+@media (max-width: 900px) { .cap-grid { grid-template-columns: 1fr; } .cap-col:nth-child(3) { grid-column: auto; } }
+@media (max-width: 480px) { .cap-looks { grid-template-columns: 1fr; } }
