@@ -1360,6 +1360,9 @@ try {
   console.error('✗ Failed to load Wardrobe Brand routes:', e.message);
 }
 
+// Brands on The Pulse (Evoni, 2026-10-18; services/brandPulse)
+try { app.use('/api/v1/brand-pulse', require('./routes/brandPulseRoutes')); console.log('✓ Brand Pulse routes loaded at /api/v1/brand-pulse'); } catch (e) { console.error('✗ Failed to load Brand Pulse routes:', e.message); }
+
 // Consciousness Layer routes
 try {
   const consciousnessRoutes = require('./routes/consciousness');
