@@ -11,12 +11,13 @@
  * profile; Connections and In the world as before.
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Sparkles, ArrowRight, LayoutDashboard, Heart, Mic, Users, Globe2, ImagePlus, Trash2,
-  BarChart3, CalendarDays, Download, Link2, MapPin, Palette,
+  BarChart3, CalendarDays, Download, Link2, MapPin, Palette, Crown, Instagram,
 } from 'lucide-react';
+import Pager, { usePaged } from '../components/Pager/Pager';
 import CharacterPlacesTab from '../components/CharacterPlaces/CharacterPlacesTab';
 import KnownFor from '../components/Cast/KnownFor';
 import CharacterAppearanceTab from '../components/CharacterAppearance/CharacterAppearanceTab';
@@ -137,17 +138,20 @@ const STATE_CONFIG = {
   crossed:       { label: 'Crossed',       color: '#d4789a', bg: '#fdf0f4' },
 };
 
-const TABS = [
+// Each tab has its own link (?tab=voice), so a tab can be shared or reopened
+// (the redesign, Evoni's mocks, 2026-10-18); Overview is the page with no tab.
+export const TABS = [
   { id: 'overview',    label: 'Overview',     icon: LayoutDashboard },
-  { id: 'inner',       label: 'Inner life',   icon: Heart },
+  { id: 'inner',       label: 'Inner Life',   icon: Heart },
   // Evoni, 2026-10-17: how they look, a generator for it, and portraits.
   { id: 'appearance',  label: 'Appearance',   icon: Palette },
-  { id: 'voice',       label: 'Voice & feed', icon: Mic },
+  { id: 'voice',       label: 'Voice & Feed', icon: Mic },
   { id: 'connections', label: 'Connections',  icon: Users },
-  { id: 'world',       label: 'In the world', icon: Globe2 },
+  { id: 'world',       label: 'In the World', icon: Globe2 },
   // Evoni, 2026-10-17: their home, closet and place of work, and the events they host.
   { id: 'places',      label: 'Places',       icon: MapPin },
 ];
+const tabOf = (value) => (TABS.some((t) => t.id === value) ? value : 'overview');
 
 // Something is there: non-empty text, a list with items, or an object with a filled value.
 function hasValue(v) {
@@ -1201,6 +1205,9 @@ export function TheirStory({ character }) {
   const chapters = trail?.chapters || [];
   const counts = trail?.post_counts || { live: 0, draft: 0 };
   const empty = trail && !trail.error && posts.length === 0 && stories.length === 0 && chapters.length === 0;
+  const postPages = usePaged(posts);
+  const storyPages = usePaged(stories);
+  const chapterPages = usePaged(chapters);
 
   return (
     <section className="ch-card" aria-labelledby="ch-story" data-testid="ch-story">
@@ -1217,39 +1224,42 @@ export function TheirStory({ character }) {
               <div className="ch-trail">
                 <h3 className="ch-trail-h">On The Pulse <span>{counts.live} posted{counts.draft ? `, ${counts.draft} draft${counts.draft === 1 ? '' : 's'}` : ''}</span></h3>
                 <ul className="ch-trail-list">
-                  {posts.map((p) => (
+                  {postPages.pageItems.map((p) => (
                     <li key={p.id}>
                       <span className="ch-trail-text">{shortText(p.text)}</span>
                       <span className="ch-trail-meta">{[p.status === 'draft' ? 'Draft' : null, p.episode_number != null ? `Episode ${p.episode_number}` : null].filter(Boolean).join(' · ')}</span>
                     </li>
                   ))}
                 </ul>
+                <Pager {...postPages.pager} label="Posts" />
               </div>
             )}
             {stories.length > 0 && (
               <div className="ch-trail">
                 <h3 className="ch-trail-h">Stories</h3>
                 <ul className="ch-trail-list">
-                  {stories.map((st) => (
+                  {storyPages.pageItems.map((st) => (
                     <li key={st.id}>
                       <Link to={st.show_id ? `/stories?show=${st.show_id}` : '/stories'} className="ch-trail-text">{st.title || 'Untitled'}</Link>
                       <span className="ch-trail-meta">{[STORY_FORMATS[st.format] || st.format, st.episode_number != null ? `Episode ${st.episode_number}` : null, st.status].filter(Boolean).join(' · ')}</span>
                     </li>
                   ))}
                 </ul>
+                <Pager {...storyPages.pager} label="Stories" />
               </div>
             )}
             {chapters.length > 0 && (
               <div className="ch-trail">
                 <h3 className="ch-trail-h">Chapters</h3>
                 <ul className="ch-trail-list">
-                  {chapters.map((c) => (
+                  {chapterPages.pageItems.map((c) => (
                     <li key={c.id}>
                       <Link to={`/chapter/${c.book_id}/${c.id}`} className="ch-trail-text">{c.title || `Chapter ${c.chapter_number ?? ''}`.trim()}</Link>
                       <span className="ch-trail-meta">{[c.book_title, c.written ? null : 'not written yet'].filter(Boolean).join(' · ')}</span>
                     </li>
                   ))}
                 </ul>
+                <Pager {...chapterPages.pager} label="Chapters" />
               </div>
             )}
           </>
@@ -1642,13 +1652,14 @@ export function TheirStats({ feedProfile, appearances, relationships, entangleme
 /* ── Their events: the ones they host or attend (cast appearances) ──────────── */
 export function TheirEvents({ appearances }) {
   const events = appearances?.events || [];
+  const { pageItems, pager } = usePaged(events, 4);
   return (
     <section className="ch-card" aria-labelledby="ch-events" data-testid="ch-events">
       <h2 id="ch-events" className="ch-kicker is-pink"><CalendarDays size={16} aria-hidden /> Their events</h2>
       {!appearances ? <p className="ch-note">Loading…</p>
         : events.length === 0 ? <p className="ch-note">No events yet: they host or attend none.</p> : (
           <ul className="ch-events">
-            {events.slice(0, 4).map((ev) => (
+            {pageItems.map((ev) => (
               <li key={ev.id}>
                 <Link className="ch-event" to={`/shows/${ev.show_id}/events/${ev.id}`}>
                   <span className="ch-event-badge"><CalendarDays size={20} aria-hidden /></span>
@@ -1667,6 +1678,7 @@ export function TheirEvents({ appearances }) {
             ))}
           </ul>
         )}
+      <Pager {...pager} label="Events" />
     </section>
   );
 }
@@ -1745,6 +1757,8 @@ export function archivedDepth(character) {
 /* ── Tab 3: Connections ──────────────────────────────────────────────────────── */
 
 function TabConnections({ character, relationships, entanglements }) {
+  const relPages = usePaged(relationships);
+  const entPages = usePaged(entanglements);
   return (
     <div className="cp-tab-content">
       {/* Relationships */}
@@ -1754,8 +1768,8 @@ function TabConnections({ character, relationships, entanglements }) {
         </h3>
         {relationships.length > 0 ? (
           <div className="cp-rel-list">
-            {relationships.map((r, i) => (
-              <div key={i} className="cp-rel-row">
+            {relPages.pageItems.map((r, i) => (
+              <div key={r.id || i} className="cp-rel-row">
                 <div className="cp-rel-avatar">
                   {(r.related_name || r.name || '?')[0].toUpperCase()}
                 </div>
@@ -1773,7 +1787,9 @@ function TabConnections({ character, relationships, entanglements }) {
               </div>
             ))}
           </div>
-        ) : <EmptyState label="No relationships defined yet.">
+        ) : null}
+        <Pager {...relPages.pager} label="Relationships" />
+        {relationships.length === 0 && <EmptyState label="No relationships defined yet.">
           <Link className="ch-link" to="/feed-relationships">Open Relationship Map</Link>
         </EmptyState>}
       </section>
@@ -1783,7 +1799,7 @@ function TabConnections({ character, relationships, entanglements }) {
         <h3 className="cp-section-title">Entanglements</h3>
         {entanglements.length > 0 ? (
           <div className="cp-entanglement-list">
-            {entanglements.map((e, i) => (
+            {entPages.pageItems.map((e, i) => (
               <div key={e.id || i} className="cp-entanglement-row">
                 {e.profile && (
                   <Link className="cp-entanglement-who" to={`/pulse?profile=${e.profile.id}`}>
@@ -1801,6 +1817,7 @@ function TabConnections({ character, relationships, entanglements }) {
             ))}
           </div>
         ) : <EmptyState label="No entanglements yet." />}
+        <Pager {...entPages.pager} label="Entanglements" />
       </section>
 
       {/* Belonging Map */}
@@ -2168,7 +2185,18 @@ export default function CharacterProfilePage() {
   const [entanglements, setEntanglements] = useState([]);
   const [feedProfile, setFeedProfile]     = useState(null);
   const [appearances, setAppearances]     = useState(null);
-  const [activeTab, setActiveTab]         = useState('overview');
+  // The open tab lives in the link (?tab=), so it can be shared, reopened and
+  // gone back to; Overview has no ?tab.
+  const [searchParams, setSearchParams]   = useSearchParams();
+  const activeTab = tabOf(searchParams.get('tab'));
+  const setActiveTab = useCallback((tab) => {
+    setSearchParams((prev) => {
+      const nextParams = new URLSearchParams(prev);
+      if (tabOf(tab) === 'overview') nextParams.delete('tab'); else nextParams.set('tab', tab);
+      return nextParams;
+    });
+  }, [setSearchParams]);
+  const tabBarRef = useRef(null);
   const [loading, setLoading]             = useState(true);
   const [error, setError]                 = useState(null);
 
@@ -2218,6 +2246,12 @@ export default function CharacterProfilePage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // On a phone the tab bar scrolls sideways: keep the open tab in view.
+  useEffect(() => {
+    const el = tabBarRef.current?.querySelector('.ch-tab.is-on');
+    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }, [activeTab, loading]);
+
   const onSaved = useCallback((patch) => setCharacter((prev) => ({ ...prev, ...patch })), []);
   const onFeedSaved = useCallback((patch) => setFeedProfile((prev) => (prev ? { ...prev, ...patch } : prev)), []);
   const gen = useInteriorGenerate(character, onSaved);
@@ -2257,6 +2291,10 @@ export default function CharacterProfilePage() {
   const archetype = archetypeOf(feedProfile);
   const firstEpisode = appearances?.episodes?.[0];
   const role = roleOf(character);
+  const hosts = (appearances?.events || []).some((ev) => ev.role === 'host');
+  // What they are, in a line: what they are known for, their role, that they host.
+  const roles = [archetype, role, hosts ? 'Event host' : null].filter(Boolean);
+  const hasVoice = !!voiceOf(character, feedProfile);
 
   return (
     <div className="ch-page">
@@ -2266,13 +2304,23 @@ export default function CharacterProfilePage() {
           {character.portrait_url ? <img src={character.portrait_url} alt="" /> : name.charAt(0).toUpperCase()}
         </div>
         <div className="ch-hero-text">
-          <Link to="/character-registry" className="ch-back">&larr; The cast</Link>
+          <div className="ch-hero-kicker">
+            <Link to="/character-registry" className="ch-back">The cast</Link>
+            <span className="ch-status">{step.label}</span>
+          </div>
           <h1 className="ch-name">{name}</h1>
           {/* Their real name heads the page; the name they post under follows. */}
           {socialName && socialName !== name && <p className="ch-aka" data-testid="ch-aka">Online as {socialName}</p>}
-          <p className="ch-sub">{[handle, role, city].filter(Boolean).join(' · ')}</p>
+          {(handle || city) && (
+            <p className="ch-sub">
+              {handle && <span className="ch-sub-item"><Instagram size={16} aria-hidden />{handle}</span>}
+              {city && <span className="ch-sub-item"><MapPin size={16} aria-hidden />{city}</span>}
+            </p>
+          )}
+          {roles.length > 0 && <p className="ch-roles">{roles.join(' · ')}</p>}
           <div className="ch-chips">
-            {archetype && <span className="ch-chip">{archetype}</span>}
+            {firstEpisode && <span className="ch-chip is-green">In Episode {firstEpisode.episode_number ?? '?'}</span>}
+            {hasVoice && <span className="ch-chip is-gold">Has voice</span>}
             {character.feed_profile_id && <span className="ch-chip is-blue">Feed profile</span>}
             {cityDiffers && (
               <span className="ch-chip is-warn" data-testid="ch-city-differs"
@@ -2280,12 +2328,10 @@ export default function CharacterProfilePage() {
                 City differs: feed says {cityDiffers.feed}, character says {cityDiffers.own}
               </span>
             )}
-            {firstEpisode && <span className="ch-chip is-green">In Episode {firstEpisode.episode_number ?? '?'}</span>}
-            <span className="ch-chip is-plain">{step.label}</span>
           </div>
         </div>
         <div className="ch-alive">
-          <div className="ch-kicker is-pink">How alive they are</div>
+          <div className="ch-kicker is-pink"><Crown size={16} aria-hidden /> How alive they are</div>
           <ol className="ch-steps" aria-label={`How alive: ${step.label}`}>
             {DEPTH_STEPS.map((s, i) => (
               <li key={s.key} className={i <= depthIndex ? 'is-on' : ''} aria-current={i === depthIndex ? 'step' : undefined}>
@@ -2302,16 +2348,18 @@ export default function CharacterProfilePage() {
             </button>
           )}
           {deepenNote && <p className={`ch-note${deepenNote.error ? ' is-error' : ''}`} role="status">{deepenNote.text}</p>}
-          <button type="button" className="ch-link" onClick={exportJson}><Download size={14} aria-hidden /> Export</button>
+          <button type="button" className="ch-btn-export" onClick={exportJson}><Download size={16} aria-hidden /> Export Profile</button>
         </div>
       </header>
 
-      <nav className="ch-tabs" aria-label="Character sections">
+      <nav className="ch-tabs" aria-label="Character sections" ref={tabBarRef}>
         {TABS.map((tab) => (
-          <button key={tab.id} type="button" className={`ch-tab${activeTab === tab.id ? ' is-on' : ''}`}
-            aria-pressed={activeTab === tab.id} onClick={() => setActiveTab(tab.id)}>
+          <Link key={tab.id} to={tab.id === 'overview' ? '?' : `?tab=${tab.id}`}
+            className={`ch-tab${activeTab === tab.id ? ' is-on' : ''}`}
+            aria-current={activeTab === tab.id ? 'page' : undefined}
+            onClick={(e) => { e.preventDefault(); setActiveTab(tab.id); }}>
             <tab.icon size={17} aria-hidden />{tab.label}
-          </button>
+          </Link>
         ))}
       </nav>
 

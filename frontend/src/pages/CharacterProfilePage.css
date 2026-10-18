@@ -1208,10 +1208,11 @@ a.ch-trail-text:hover { text-decoration: underline; }
 .ch-hero-cover { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; }
 .ch-hero.has-cover::before {
   content: ''; position: absolute; inset: 0; z-index: -1;
+  /* Dark where the name is, the cover showing through to the right (the 2026-10-18 mocks). */
   background: linear-gradient(100deg,
-    color-mix(in srgb, var(--lala-lavender-dark) 92%, transparent) 0%,
-    color-mix(in srgb, var(--accent-dark) 72%, transparent) 55%,
-    color-mix(in srgb, var(--accent-dark) 25%, transparent) 100%);
+    color-mix(in srgb, var(--lala-lavender-dark) 90%, transparent) 0%,
+    color-mix(in srgb, var(--lala-lavender-dark) 62%, transparent) 45%,
+    color-mix(in srgb, var(--accent-dark) 12%, transparent) 100%);
 }
 .ch-avatar {
   width: 148px; height: 148px; border-radius: 26px; overflow: hidden;
@@ -1244,6 +1245,36 @@ a.ch-trail-text:hover { text-decoration: underline; }
 .ch-tab { display: inline-flex; align-items: center; gap: 8px; padding: 8px 18px; border-radius: 14px; }
 .ch-tab:hover { background: var(--accent-subtle); }
 .ch-tab.is-on { background: var(--accent-dark); color: var(--text-inverse); }
+
+/* The redesign (Evoni's character page mocks, 2026-10-18): the hero's kicker,
+   lines and chips, the How-alive card's Export Profile, and one tab bar that
+   spans the page, a link per tab, swiped sideways on a phone. */
+.ch-hero-kicker { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ch-hero .ch-back {
+  padding: 3px 12px; border-radius: 999px; border: 1.5px solid var(--lala-gold);
+  font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--lala-gold-soft); text-decoration: none;
+}
+.ch-hero .ch-back:hover { background: var(--lala-gold); color: var(--text-primary); }
+.ch-status { padding: 3px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--success-bg); color: var(--success-text); }
+.ch-sub { display: flex; align-items: center; gap: 6px 16px; flex-wrap: wrap; }
+.ch-sub-item { display: inline-flex; align-items: center; gap: 6px; }
+.ch-roles { margin: 0; font-size: 16px; font-weight: 600; color: var(--text-inverse); }
+.ch-hero .ch-chip { padding: 5px 14px; font-size: 13px; }
+.ch-hero .ch-chip.is-gold { background: var(--lala-gold-soft); color: var(--lala-gold-text); }
+.ch-btn-export {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; padding: 8px 16px;
+  border-radius: 12px; border: 1.5px solid var(--lala-lavender); background: var(--surface-card); color: var(--lala-lavender-text);
+  font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.ch-btn-export:hover { background: var(--lala-lavender-soft); }
+.ch-tabs { display: flex; flex-wrap: nowrap; gap: 4px; }
+.ch-tab {
+  flex: 1 0 auto; justify-content: center; min-height: 46px; color: var(--text-primary); text-decoration: none; white-space: nowrap;
+}
+.ch-tab svg { color: var(--accent-dark); }
+.ch-tab.is-on svg { color: var(--text-inverse); }
+.ch-tab.is-on { box-shadow: var(--shadow-md); }
+.ch-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* Overview: three columns of gold-edged cards. */
 .ch-overview { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
@@ -1321,8 +1352,8 @@ a.ch-trail-text:hover { text-decoration: underline; }
 @media (max-width: 900px) {
   .ch-overview { grid-template-columns: 1fr; }
   .ch-overview > .ch-col:nth-child(3) { grid-column: auto; display: flex; }
-  .ch-tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
-  .ch-tab { flex-shrink: 0; }
+  .ch-tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; }
+  .ch-tab { flex: 0 0 auto; scroll-snap-align: center; }
 }
 @media (max-width: 560px) {
   .ch-page { padding: 8px; }
