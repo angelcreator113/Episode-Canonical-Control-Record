@@ -1683,6 +1683,15 @@ try {
   console.error('✗ Failed to load Scene Studio Episode routes:', e.message);
 }
 
+// Fix what can be fixed — Facts & checks across the cast (services/castFixAll)
+try {
+  const castFixAllRoutes = require('./routes/castFixAllRoutes');
+  app.use('/api/v1/cast/consistency', castFixAllRoutes);
+  console.log('✓ Cast fix-all loaded at /api/v1/cast/consistency');
+} catch (e) {
+  console.error('✗ Failed to load Cast fix-all routes:', e.message);
+}
+
 // The cast — review of the old system's characters (Keep, Match, Archived)
 try {
   const castRoutes = require('./routes/castRoutes');
