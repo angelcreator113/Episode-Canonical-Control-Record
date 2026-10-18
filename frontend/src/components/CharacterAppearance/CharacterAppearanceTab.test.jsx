@@ -78,4 +78,31 @@ describe('CharacterAppearanceTab', () => {
     await waitFor(() => expect(screen.queryByTestId('cap-portrait')).toBeNull());
     expect(onPortraitChanged).toHaveBeenCalledWith(null);
   });
+
+  test('laid out to the mock: physical details, signature look, palette, accessories, notes', async () => {
+    api.get.mockResolvedValue({ data: { appearance: {
+      ...LOOK, face: 'High cheekbones', build: 'Long-limbed', going_out: 'A cream suit', never_wears: 'Logos',
+      accessories: 'Gold hoops', palette: ['gold', 'oat'], portraits: [],
+    }, portrait_url: 'https://x/me.jpg', portrait_cost: 0.04 } });
+    render(<CharacterAppearanceTab character={CHAR} />);
+    const sheet = await screen.findByTestId('cap-sheet');
+    expect([...sheet.querySelectorAll('dt')].map((d) => d.textContent)).toEqual(['Face', 'Hair', 'Build']);
+    expect(screen.getByTestId('cap-signature').textContent).toContain('Going outA cream suit');
+    expect(screen.getByTestId('cap-signature').textContent).toContain('Never seen inLogos');
+    const swatches = within(screen.getByTestId('cap-palette')).getAllByRole('listitem');
+    expect(swatches.map((li) => li.textContent)).toEqual(['gold', 'oat']);
+    expect(screen.getByTestId('cap-accessories').textContent).toContain('Gold hoops');
+    expect(screen.getByTestId('cap-notes').textContent).toContain('At a glanceTall, still, linen-pale');
+    expect(screen.getByAltText('Maren’s profile photo').getAttribute('src')).toBe('https://x/me.jpg');
+  });
+
+  test('portraits four to a page', async () => {
+    const portraits = Array.from({ length: 6 }, (_, i) => ({ url: `https://x/p${i}.jpg` }));
+    api.get.mockResolvedValue({ data: { appearance: { ...LOOK, portraits }, portrait_url: 'https://x/p0.jpg', portrait_cost: null } });
+    render(<CharacterAppearanceTab character={CHAR} />);
+    expect(await screen.findAllByTestId('cap-portrait')).toHaveLength(4);
+    expect(within(screen.getAllByTestId('cap-portrait')[0]).getByText('Their profile photo')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
+    expect(screen.getAllByTestId('cap-portrait').map((li) => li.querySelector('img').getAttribute('src'))).toEqual(['https://x/p4.jpg', 'https://x/p5.jpg']);
+  });
 });

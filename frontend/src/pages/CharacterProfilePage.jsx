@@ -17,7 +17,8 @@ import {
   Sparkles, ArrowRight, LayoutDashboard, Heart, Mic, Users, Globe2, ImagePlus, Trash2,
   BarChart3, CalendarDays, Download, Link2, MapPin, Palette, Crown, Instagram,
   Quote, Star, TrendingUp, Briefcase, IdCard, Activity, FileText, CirclePlay, Flame,
-  Copy, BadgeCheck, Lock, Eye, Smartphone, Plus, ExternalLink,
+  Copy, BadgeCheck, Lock, Eye, Smartphone, Plus, ExternalLink, Share2, Search,
+  Building2, BookOpen, Radio, Settings as SettingsIcon, AlertTriangle, Archive, RotateCcw, Link as LinkIcon,
 } from 'lucide-react';
 import Pager, { usePaged } from '../components/Pager/Pager';
 import CharacterPlacesTab from '../components/CharacterPlaces/CharacterPlacesTab';
@@ -30,7 +31,11 @@ import { platformLabel, atHandle, followersOf } from './feed/feedConstants';
 import apiClient from '../services/api';
 import { ROLE_LABELS } from '../constants/characterConstants';
 import { findLala } from '../lib/theCast';
-import { DEPTH_STEPS, depthOf, depthLevelOf, cityOf, archetypeOf, showUpRows, withLala, voiceOf } from '../lib/characterPage';
+import { DEPTH_STEPS, depthOf, depthLevelOf, cityOf, archetypeOf, showUpRows, withLala, voiceOf, DREAM_CITIES, dreamCityOf, eventPurpose } from '../lib/characterPage';
+import {
+  GROUPS, TENSION, groupOf, closenessOf, nameOf, typeLabel, noteOf, connectionStats, SORTS,
+  filterConnections, keyRelationships, connectionHistory, mapPoints,
+} from '../lib/characterConnections';
 import './CharacterProfilePage.css';
 
 // ─── Track 6 CP9 module-scope helpers (Pattern F prophylactic — Api suffix) ───
@@ -72,6 +77,17 @@ export const unmarkIntentionalApi = (id, flagId) =>
   apiClient.delete(`${API_URL}/cast/characters/${id}/check/intentional/${flagId}`);
 export const postIdeasApi = (id) =>
   apiClient.get(`${API_URL}/cast/characters/${id}/posts/ideas`);
+// Settings (step 8): status, keep in the cast, archive, bring back, delete for good.
+export const setStatusApi = (id, status) =>
+  apiClient.post(`${API_URL}/character-registry/characters/${id}/set-status`, { status });
+export const keepApi = (id, kept) =>
+  apiClient.post(`${API_URL}/cast/characters/${id}/keep`, { kept });
+export const archiveApi = (id) =>
+  apiClient.delete(`${API_URL}/character-registry/characters/${id}`);
+export const restoreApi = (id) =>
+  apiClient.post(`${API_URL}/cast/characters/${id}/restore`);
+export const deleteForGoodApi = (id) =>
+  apiClient.delete(`${API_URL}/cast/characters/${id}/permanent`);
 export const makeActiveApi = (id) =>
   apiClient.put(`${API_URL}/character-registry/characters/${id}`, { depth_level: 'active' });
 export const setRegistryShowApi = (registryId, showId) =>
@@ -139,6 +155,10 @@ export const TABS = [
   { id: 'world',       label: 'In the World', icon: Globe2 },
   // Evoni, 2026-10-17: their home, closet and place of work, and the events they host.
   { id: 'places',      label: 'Places',       icon: MapPin },
+  // Evoni, 2026-10-18: their episodes, events, posts, stories and chapters in one place.
+  { id: 'story',       label: 'Story & Events', icon: CalendarDays },
+  // Evoni, 2026-10-18: what already works: status, keep, feed profile, export, archive and delete.
+  { id: 'settings',    label: 'Settings',     icon: SettingsIcon },
 ];
 const tabOf = (value) => (TABS.some((t) => t.id === value) ? value : 'overview');
 
@@ -1890,7 +1910,6 @@ export function TheirEvents({ appearances }) {
 }
 
 /* ── Connections on the Overview: their closest ties, the full list a tab away ─ */
-const TENSION_SCORE = { calm: 90, healing: 70, simmering: 45, volatile: 25, fractured: 10 };
 // An API that answers with an object where a list belongs counts as none.
 const listOf = (v) => (Array.isArray(v) ? v : []);
 
@@ -1911,7 +1930,7 @@ export function ConnectionsCard({ relationships: rels, entanglements: ents, open
         <ul className="ch-ties">
           {rows.map((r) => {
             const who = r.related_name || r.character_b_name || r.character_a_name || 'Someone';
-            const score = TENSION_SCORE[r.tension_state];
+            const score = closenessOf(r) ?? undefined;
             return (
               <li key={r.id} className="ch-tie">
                 <span className="ch-tie-avatar" aria-hidden="true">{who.charAt(0).toUpperCase()}</span>
@@ -1960,100 +1979,278 @@ export function archivedDepth(character) {
   return archive && typeof archive === 'object' ? Object.entries(archive).filter(([, v]) => v !== null && v !== '') : [];
 }
 
-/* ── Tab 3: Connections ──────────────────────────────────────────────────────── */
+/* ── Connections (Evoni's mock, 2026-10-18, step 4) ───────────────────────────
+   Their relationships with counts, filters, search, sort and pages; a map of
+   the closest; their key relationships; when each began; their feed ties
+   (entanglements) and where they belong. The groups and closeness are
+   lib/characterConnections. */
+
+const GROUP_LABEL = Object.fromEntries(GROUPS.map((g) => [g.key, g.label]));
+
+function Avatar({ src, name, size = 44 }) {
+  return src
+    ? <img className="ch-avatar-sm" src={src} alt="" width={size} height={size} style={{ width: size, height: size }} />
+    : <span className="ch-avatar-sm is-initial" aria-hidden="true" style={{ width: size, height: size }}>{(name || '?').charAt(0).toUpperCase()}</span>;
+}
+
+const toPerson = (r) => (r.related_id ? `/character/${r.related_id}` : null);
+const sinceOf = (r) => (activityDate(r.created_at) ? activityWhen(activityDate(r.created_at)) : null);
+
+export function RelationshipOverview({ character, relationships }) {
+  const [filter, setFilter] = useState('all');
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState('closeness');
+  const stats = connectionStats(relationships);
+  const rows = filterConnections(relationships, { filter, query, sort });
+  const { pageItems, pager } = usePaged(rows);
+  const name = (character.selected_name || character.display_name || 'they').split(' ')[0];
+  const filters = [
+    { key: 'all', label: 'All', n: stats.total },
+    { key: 'close', label: 'Close', n: stats.close },
+    ...GROUPS.map((g) => ({ key: g.key, label: g.label, n: stats.groups[g.key] })).filter((f) => f.n > 0),
+  ];
+  const tiles = [
+    { key: 'total', label: 'Total connections', n: stats.total, icon: Users, tone: 'pink' },
+    { key: 'close', label: 'Close', n: stats.close, icon: Heart, tone: 'green' },
+    { key: 'working', label: 'Working with', n: stats.groups.working, icon: Briefcase, tone: 'lavender' },
+    { key: 'rival', label: 'Rivals', n: stats.groups.rival, icon: Crown, tone: 'gold' },
+  ];
+  return (
+    <section className="ch-card" aria-labelledby="ch-ro" data-testid="ch-rel-overview">
+      <div className="ch-card-head">
+        <span className="ch-head-icon" aria-hidden="true"><Share2 size={20} /></span>
+        <span className="ch-head-text">
+          <h2 id="ch-ro" className="ch-h2">Relationship overview</h2>
+          <span className="ch-note">The people in {name}&rsquo;s world and how they connect.</span>
+        </span>
+        <Link className="ch-pill-btn" to="/relationships"><Plus size={14} aria-hidden="true" /> Add connection</Link>
+      </div>
+      <ul className="ch-ro-tiles">
+        {tiles.map(({ key, label, n, icon: Icon, tone }) => (
+          <li key={key} className={`ch-ro-tile is-${tone}`}>
+            <Icon size={20} aria-hidden="true" />
+            <strong>{n}</strong>
+            <span>{label}</span>
+          </li>
+        ))}
+      </ul>
+      {stats.total === 0 ? (
+        <p className="ch-note">No relationships yet. Add them in the <Link to="/relationships">Relationship Engine</Link>.</p>
+      ) : (
+        <>
+          <div className="ch-filter" role="group" aria-label="Show connections">
+            {filters.map((f) => (
+              <button key={f.key} type="button" className={`ch-filter-btn${filter === f.key ? ' is-on' : ''}`} aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>
+                {f.label} ({f.n})
+              </button>
+            ))}
+          </div>
+          <div className="ch-ro-tools">
+            <label className="ch-ro-search">
+              <Search size={15} aria-hidden="true" />
+              <input type="search" value={query} placeholder="Search connections…" aria-label="Search connections" onChange={(e) => setQuery(e.target.value)} />
+            </label>
+            <label className="ch-ro-sort">
+              <span className="ch-visually-hidden">Sort</span>
+              <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort connections">
+                {SORTS.map((o) => <option key={o.key} value={o.key}>Sort: {o.label}</option>)}
+              </select>
+            </label>
+          </div>
+          {rows.length === 0 ? <p className="ch-note">No one matches.</p> : (
+            <ul className="ch-conn-list">
+              {pageItems.map((r) => {
+                const tension = TENSION[r.tension_state];
+                const to = toPerson(r);
+                const since = sinceOf(r);
+                return (
+                  <li key={r.id} className="ch-conn" data-testid="ch-conn">
+                    <Avatar src={r.related_portrait} name={nameOf(r)} />
+                    <span className="ch-conn-text">
+                      <span className="ch-conn-top">
+                        {to ? <Link to={to} className="ch-conn-name">{nameOf(r)}</Link> : <strong className="ch-conn-name">{nameOf(r)}</strong>}
+                        <span className="ch-chip">{typeLabel(r)}</span>
+                        {tension && <span className={`ch-tension is-${r.tension_state}`}>{tension.label}</span>}
+                      </span>
+                      {noteOf(r) && <span className="ch-conn-note">{shortText(noteOf(r), 140)}</span>}
+                    </span>
+                    <span className="ch-conn-meta">
+                      <span>{GROUP_LABEL[groupOf(r)]}</span>
+                      {since && <span>Since {since}</span>}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <Pager {...pager} label="Connections" />
+        </>
+      )}
+    </section>
+  );
+}
+
+export function ConnectionMap({ character, relationships }) {
+  const size = 300;
+  const points = mapPoints(relationships, 6, size);
+  const c = size / 2;
+  const used = GROUPS.map((g) => g.key).filter((k) => points.some((p) => groupOf(p.r) === k));
+  return (
+    <section className="ch-card" aria-labelledby="ch-cm" data-testid="ch-conn-map">
+      <div className="ch-card-head">
+        <h2 id="ch-cm" className="ch-h2"><Share2 size={20} aria-hidden="true" className="ch-h2-icon" /> Connection map</h2>
+        <Link className="ch-pill-btn" to="/relationships">View full map</Link>
+      </div>
+      {points.length === 0 ? <p className="ch-note">No one to map yet.</p> : (
+        <>
+          <div className="ch-cm" style={{ aspectRatio: '1 / 1' }}>
+            <svg viewBox={`0 0 ${size} ${size}`} className="ch-cm-lines" aria-hidden="true">
+              {points.map((p) => <line key={p.r.id} x1={c} y1={c} x2={p.x} y2={p.y} className={`ch-cm-line is-${groupOf(p.r)}`} />)}
+            </svg>
+            <span className="ch-cm-node is-centre" style={{ left: '50%', top: '50%' }}>
+              <Avatar src={character.portrait_url} name={character.display_name} size={64} />
+            </span>
+            {points.map((p) => (
+              <span key={p.r.id} className="ch-cm-node" style={{ left: `${(p.x / size) * 100}%`, top: `${(p.y / size) * 100}%` }}>
+                <Avatar src={p.r.related_portrait} name={nameOf(p.r)} size={40} />
+                <span className="ch-cm-name">{nameOf(p.r)}</span>
+                <span className="ch-cm-type">{typeLabel(p.r)}</span>
+              </span>
+            ))}
+          </div>
+          <ul className="ch-cm-legend" aria-label="Line colours">
+            {used.map((g) => <li key={g} className={`is-${g}`}><span aria-hidden="true" />{GROUP_LABEL[g]}</li>)}
+          </ul>
+          {listOf(relationships).length > points.length && <p className="ch-note">The {points.length} closest of {listOf(relationships).length}.</p>}
+        </>
+      )}
+    </section>
+  );
+}
+
+export function KeyRelationships({ relationships }) {
+  const rows = keyRelationships(relationships);
+  return (
+    <section className="ch-card" aria-labelledby="ch-kr" data-testid="ch-key-rels">
+      <h2 id="ch-kr" className="ch-h2"><Heart size={20} aria-hidden="true" className="ch-h2-icon" /> Key relationships</h2>
+      {rows.length === 0 ? <p className="ch-note">No relationships yet.</p> : (
+        <ul className="ch-kr">
+          {rows.map((r) => {
+            const score = closenessOf(r);
+            const to = toPerson(r);
+            return (
+              <li key={r.id} className="ch-kr-item">
+                <Avatar src={r.related_portrait} name={nameOf(r)} size={56} />
+                <span className="ch-kr-text">
+                  <span className="ch-conn-top"><strong>{nameOf(r)}</strong><span className="ch-chip">{typeLabel(r)}</span></span>
+                  {score !== null && (
+                    <span className="ch-tie-meter" role="img" aria-label={`${TENSION[r.tension_state].label}`}><span style={{ width: `${score}%` }} /></span>
+                  )}
+                  {noteOf(r) && <span className="ch-conn-note">{shortText(noteOf(r), 120)}</span>}
+                  {to && <Link className="ch-link ch-more" to={to}>View <ArrowRight size={14} aria-hidden="true" /></Link>}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+export function RelationshipHistory({ relationships }) {
+  const rows = connectionHistory(relationships);
+  const { pageItems, pager } = usePaged(rows, 4);
+  return (
+    <section className="ch-card" aria-labelledby="ch-rh" data-testid="ch-rel-history">
+      <h2 id="ch-rh" className="ch-h2"><CalendarDays size={20} aria-hidden="true" className="ch-h2-icon" /> Relationship history</h2>
+      {rows.length === 0 ? <p className="ch-note">No dates yet.</p> : (
+        <ol className="ch-rh">
+          {pageItems.map((r) => (
+            <li key={r.id} className={`ch-rh-item is-${groupOf(r)}`}>
+              <span className="ch-rh-when">{sinceOf(r)}</span>
+              <span className="ch-rh-text"><strong>Connected with {nameOf(r)}</strong><span>{typeLabel(r)}</span></span>
+            </li>
+          ))}
+        </ol>
+      )}
+      <Pager {...pager} label="Relationship history" />
+    </section>
+  );
+}
+
+export function FeedTies({ entanglements }) {
+  const rows = listOf(entanglements);
+  const { pageItems, pager } = usePaged(rows);
+  return (
+    <section className="ch-card" aria-labelledby="ch-ft" data-testid="ch-feed-ties">
+      <h2 id="ch-ft" className="ch-h2"><Link2 size={20} aria-hidden="true" className="ch-h2-icon" /> Feed ties</h2>
+      <p className="ch-note">Feed people whose posts reach them, and how.</p>
+      {rows.length === 0 ? <p className="ch-note">No feed ties yet.</p> : (
+        <ul className="ch-ft">
+          {pageItems.map((e, i) => (
+            <li key={e.id || i} className="ch-ft-item">
+              {e.profile ? (
+                <Link className="ch-conn-name" to={`/pulse?profile=${e.profile.id}`}>
+                  {e.profile.display_name || `@${String(e.profile.handle || '').replace(/^@/, '')}`}
+                </Link>
+              ) : <strong className="ch-conn-name">Someone on the feed</strong>}
+              <span className="ch-ft-meta">
+                {[words(e.dimension), e.directionality ? words(e.directionality) : null].filter(Boolean).join(' · ')}
+              </span>
+              <span className="ch-ft-chips">
+                <span className={`ch-tension is-${e.intensity === 'high' ? 'volatile' : e.intensity === 'medium' ? 'simmering' : 'calm'}`}>{words(e.intensity || 'low')}</span>
+                {e.turbulence_flag && <span className="ch-tension is-fractured" title={e.turbulence_reason || ''}>Turbulent</span>}
+                {e.is_active === false && <span className="ch-chip">Ended</span>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Pager {...pager} label="Feed ties" />
+    </section>
+  );
+}
+
+function BelongingMap({ character }) {
+  const map = objOf(character.belonging_map);
+  const belongs = Array.isArray(map.belongs_to) ? map.belongs_to : [];
+  const excluded = Array.isArray(map.excluded_from) ? map.excluded_from : [];
+  if (!belongs.length && !excluded.length) return null;
+  return (
+    <section className="ch-card" aria-labelledby="ch-bm" data-testid="ch-belonging">
+      <h2 id="ch-bm" className="ch-h2"><Users size={20} aria-hidden="true" className="ch-h2-icon" /> Where they belong</h2>
+      {belongs.length > 0 && (
+        <div className="ch-fb-block">
+          <h3 className="ch-fb-h">Belongs to</h3>
+          <ul className="ch-rules-list">{belongs.map((g, i) => <li key={i}><strong>{g.name}</strong>{g.type ? ` · ${g.type}` : ''}</li>)}</ul>
+        </div>
+      )}
+      {excluded.length > 0 && (
+        <div className="ch-fb-block">
+          <h3 className="ch-fb-h">Kept out of</h3>
+          <ul className="ch-rules-list">{excluded.map((g, i) => <li key={i}><strong>{g.name}</strong>{g.why ? ` · ${g.why}` : ''}</li>)}</ul>
+        </div>
+      )}
+    </section>
+  );
+}
 
 function TabConnections({ character, relationships, entanglements }) {
-  const relPages = usePaged(relationships);
-  const entPages = usePaged(entanglements);
   return (
-    <div className="cp-tab-content">
-      {/* Relationships */}
-      <section className="cp-section">
-        <h3 className="cp-section-title">
-          {relationships.length > 0 ? `${relationships.length} Relationships` : 'Relationships'}
-        </h3>
-        {relationships.length > 0 ? (
-          <div className="cp-rel-list">
-            {relPages.pageItems.map((r, i) => (
-              <div key={r.id || i} className="cp-rel-row">
-                <div className="cp-rel-avatar">
-                  {(r.related_name || r.name || '?')[0].toUpperCase()}
-                </div>
-                <div className="cp-rel-info">
-                  <span className="cp-rel-name">{r.related_name || r.name}</span>
-                  <span className="cp-rel-type">{r.relationship_type || r.type}</span>
-                </div>
-                <div className="cp-rel-meta">
-                  {r.tension_state && (
-                    <span className={`cp-tension-badge cp-tension-${r.tension_state}`}>
-                      {r.tension_state}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : null}
-        <Pager {...relPages.pager} label="Relationships" />
-        {relationships.length === 0 && <EmptyState label="No relationships defined yet.">
-          <Link className="ch-link" to="/feed-relationships">Open Relationship Map</Link>
-        </EmptyState>}
-      </section>
-
-      {/* Entanglements */}
-      <section className="cp-section">
-        <h3 className="cp-section-title">Entanglements</h3>
-        {entanglements.length > 0 ? (
-          <div className="cp-entanglement-list">
-            {entPages.pageItems.map((e, i) => (
-              <div key={e.id || i} className="cp-entanglement-row">
-                {e.profile && (
-                  <Link className="cp-entanglement-who" to={`/pulse?profile=${e.profile.id}`}>
-                    {e.profile.display_name || `@${String(e.profile.handle || '').replace(/^@/, '')}`}
-                  </Link>
-                )}
-                <span className="cp-entanglement-dim">{(e.dimension || '').replace(/_/g, ' ')}</span>
-                <span className={`cp-entanglement-intensity cp-intensity-${e.intensity || 'low'}`}>
-                  {e.intensity || 'low'}
-                </span>
-                <span className="cp-entanglement-dir">{e.directionality ? e.directionality.replace(/_/g, ' ') : '\u2014'}</span>
-                {e.turbulence_flag && <span className="cp-entanglement-unresolved" title={e.turbulence_reason || ''}>turbulent</span>}
-                {e.is_active === false && <span className="cp-entanglement-dir">ended</span>}
-              </div>
-            ))}
-          </div>
-        ) : <EmptyState label="No entanglements yet." />}
-        <Pager {...entPages.pager} label="Entanglements" />
-      </section>
-
-      {/* Belonging Map */}
-      {character.belonging_map && (
-        <section className="cp-section">
-          <h3 className="cp-section-title">Belonging Map</h3>
-          {character.belonging_map.belongs_to?.length > 0 && (
-            <div className="cp-belonging-group">
-              <span className="cp-meta-label">Belongs To</span>
-              {character.belonging_map.belongs_to.map((g, i) => (
-                <div key={i} className="cp-belonging-item">
-                  <span className="cp-belonging-name">{g.name}</span>
-                  <span className="cp-belonging-type">{g.type}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {character.belonging_map.excluded_from?.length > 0 && (
-            <div className="cp-belonging-group cp-excluded">
-              <span className="cp-meta-label">Excluded From</span>
-              {character.belonging_map.excluded_from.map((g, i) => (
-                <div key={i} className="cp-belonging-item">
-                  <span className="cp-belonging-name">{g.name}</span>
-                  <p className="cp-belonging-why">{g.why}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
+    <div className="ch-overview ch-conn-grid">
+      <div className="ch-col">
+        <RelationshipOverview character={character} relationships={relationships} />
+      </div>
+      <div className="ch-col">
+        <ConnectionMap character={character} relationships={relationships} />
+        <RelationshipHistory relationships={relationships} />
+      </div>
+      <div className="ch-col">
+        <KeyRelationships relationships={relationships} />
+        <FeedTies entanglements={entanglements} />
+        <BelongingMap character={character} />
+      </div>
     </div>
   );
 }
@@ -2436,164 +2633,783 @@ function GhostPromote({ character, ghost, onSaved }) {
   </>);
 }
 
-function TabWorld({ character, onSaved, gen }) {
-  // living_context (the backfill's shape) has none of these three fields, so it read as an empty grid.
-  const living = hasValue(character.living_state) ? character.living_state : null;
-  const plotThreads = character.plot_threads || character.extra_fields?.plot_threads || [];
-  const dp     = character.deep_profile;
+/* ── In the World (Evoni's mock, 2026-10-18, step 5) ───────────────────────────
+   Where they live and what they are in the LalaVerse, the DREAM city map
+   with their home, their events by date, their story in the world (living
+   state, arc, threads, ambition), their places, their latest posts, the
+   people their story names who are not built yet, and their family. */
+
+const WORLDS = [['book-1', 'Book 1 — JustAWoman’s World'], ['lalaverse', 'LalaVerse'], ['series-2', 'Series 2']];
+
+export function WorldPresence({ character, feedProfile, appearances, onSaved }) {
+  const [note, setNote] = useState(null);
+  const city = cityOf(character, feedProfile);
+  const dream = dreamCityOf(city.label);
+  const hosts = (appearances?.events || []).some((e) => e.role === 'host');
+  const role = [roleOf(character), hosts ? 'Event host' : null].filter(Boolean).join(' · ');
+  const locked = character.status === 'finalized';
+  const setWorld = async (world) => {
+    if (!world) return;
+    setNote(null);
+    try {
+      await updateCharacterApi(character.id, { world });
+      onSaved({ world });
+    } catch (err) {
+      console.error('[CharacterProfilePage] world update failed:', err);
+      setNote('Could not change their world.');
+    }
+  };
+  const rows = [
+    { key: 'city', label: 'Home city', icon: MapPin, value: city.label, sub: dream ? `Capital of ${dream.capital.toLowerCase()}` : null },
+    { key: 'home', label: 'Lives at', icon: Building2, value: appearances?.place?.name || null, sub: appearances?.place ? 'Their home place' : null },
+    { key: 'appearance', label: 'Appears as', icon: Eye, value: character.appearance_mode ? words(character.appearance_mode) : null },
+    { key: 'role', label: 'World role', icon: Star, value: role || null },
+  ];
+  return (
+    <section className="ch-card" aria-labelledby="ch-wp" data-testid="ch-world-presence">
+      <div className="ch-card-head">
+        <span className="ch-head-icon" aria-hidden="true"><Globe2 size={20} /></span>
+        <span className="ch-head-text">
+          <h2 id="ch-wp" className="ch-h2">World presence</h2>
+          <span className="ch-note">Where they live and what they are in the world</span>
+        </span>
+      </div>
+      <ul className="ch-wp">
+        {rows.map(({ key, label, icon: Icon, value, sub }) => (
+          <li key={key} className="ch-wp-row">
+            <span className="ch-wp-icon" aria-hidden="true"><Icon size={18} /></span>
+            <span className="ch-wp-label">{label}</span>
+            <span className="ch-wp-value">
+              <strong className={value ? '' : 'is-empty'}>{value || 'Not set'}</strong>
+              {sub && <span>{sub}</span>}
+            </span>
+          </li>
+        ))}
+        <li className="ch-wp-row">
+          <span className="ch-wp-icon" aria-hidden="true"><BookOpen size={18} /></span>
+          <label className="ch-wp-label" htmlFor="ch-world-select">Story world</label>
+          <span className="ch-wp-value">
+            <select id="ch-world-select" className="ch-wp-select" value={character.world || ''} disabled={locked} onChange={(e) => setWorld(e.target.value)}>
+              {/* No world set reads as not set, not as Book 1. */}
+              {!character.world && <option value="">Not set</option>}
+              {WORLDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select>
+          </span>
+        </li>
+      </ul>
+      {city.differs && <p className="ch-note is-error">Their feed says {city.differs.feed}; their profile says {city.differs.own}.</p>}
+      {note && <p className="ch-note is-error" role="alert">{note}</p>}
+    </section>
+  );
+}
+
+export function LalaVerseMap({ character, feedProfile }) {
+  const home = dreamCityOf(cityOf(character, feedProfile).label);
+  return (
+    <section className="ch-card" aria-labelledby="ch-map" data-testid="ch-lalaverse-map">
+      <div className="ch-card-head">
+        <span className="ch-head-icon" aria-hidden="true"><MapPin size={20} /></span>
+        <span className="ch-head-text">
+          <h2 id="ch-map" className="ch-h2">LalaVerse map</h2>
+          <span className="ch-note">The five DREAM cities{home ? `; they live in ${home.label}` : ''}</span>
+        </span>
+      </div>
+      <div className="ch-map" role="list" aria-label="DREAM cities">
+        {DREAM_CITIES.map((c) => (
+          <span key={c.key} role="listitem" className={`ch-map-pin${home?.key === c.key ? ' is-home' : ''}`} style={{ left: `${c.x}%`, top: `${c.y}%` }}>
+            <MapPin size={16} aria-hidden="true" />
+            <span><strong>{c.label}</strong><span>{c.capital}{home?.key === c.key ? ' (Home)' : ''}</span></span>
+          </span>
+        ))}
+      </div>
+      {!home && <p className="ch-note">No home city in the LalaVerse yet. Set it in their facts or feed profile.</p>}
+    </section>
+  );
+}
+
+const eventTime = (ev) => {
+  const d = activityDate(ev.event_date);
+  return d ? d.getTime() : null;
+};
+
+export function WorldEvents({ appearances, now = Date.now() }) {
+  const events = [...(appearances?.events || [])].sort((a, b) => {
+    const ta = eventTime(a); const tb = eventTime(b);
+    if (ta === null || tb === null) return (ta === null) - (tb === null);
+    // Upcoming soonest first, then past most recent first.
+    const fa = ta >= now; const fb = tb >= now;
+    if (fa !== fb) return fa ? -1 : 1;
+    return fa ? ta - tb : tb - ta;
+  });
+  const { pageItems, pager } = usePaged(events, 3);
+  return (
+    <section className="ch-card" aria-labelledby="ch-we" data-testid="ch-world-events">
+      <h2 id="ch-we" className="ch-h2"><CalendarDays size={20} aria-hidden="true" className="ch-h2-icon" /> Their events</h2>
+      {!appearances ? <p className="ch-note">Loading…</p>
+        : events.length === 0 ? <p className="ch-note">No events yet: they host or attend none.</p> : (
+          <ul className="ch-we">
+            {pageItems.map((ev) => {
+              const t = eventTime(ev);
+              const when = t !== null ? activityWhen(new Date(t)) : ev.event_date || 'No date yet';
+              return (
+                <li key={ev.id}>
+                  <Link className="ch-we-item" to={`/shows/${ev.show_id}/events/${ev.id}`}>
+                    <span className="ch-we-text">
+                      <strong>{ev.name}</strong>
+                      <span className="ch-conn-top">
+                        <span className={`ch-tension ${ev.role === 'host' ? 'is-volatile' : 'is-healing'}`}>{ev.role === 'host' ? 'Host' : 'Guest'}</span>
+                        {ev.episode && <span className="ch-tension">Episode {ev.episode.episode_number ?? '?'}</span>}
+                        {t !== null && t < now && <span className="ch-chip">Past</span>}
+                      </span>
+                      <span className="ch-we-meta">{[`${when}${ev.event_time ? ` · ${ev.event_time}` : ''}`, ev.venue_name].filter(Boolean).join(' · ')}</span>
+                    </span>
+                    <ArrowRight size={16} aria-hidden="true" className="ch-show-go" />
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      <Pager {...pager} label="Their events" />
+    </section>
+  );
+}
+
+export function StoryInWorld({ character, gen }) {
+  const living = hasValue(character.living_state) ? objOf(character.living_state) : null;
+  const threads = [character.plot_threads, character.extra_fields?.plot_threads].find((t) => Array.isArray(t) && t.length) || [];
+  const ambition = dimensionText(dimension(character.deep_profile, 'ambition_identity'));
+  const { pageItems, pager } = usePaged(threads, 4);
+  const chips = [
+    character.arc_stage ? `Arc: ${words(character.arc_stage)}` : null,
+    character.time_orientation ? `Lives in the ${words(character.time_orientation).toLowerCase()}` : null,
+  ].filter(Boolean);
+  const fields = living ? [['Right now', living.current_situation], ['The tension', living.active_tension], ['Momentum', living.momentum]].filter(([, v]) => textOf(v)) : [];
+  return (
+    <section className="ch-card" aria-labelledby="ch-sw" data-testid="ch-story-world">
+      <h2 id="ch-sw" className="ch-h2"><BookOpen size={20} aria-hidden="true" className="ch-h2-icon" /> Their story in the world</h2>
+      {fields.length ? (
+        <ul className="ch-rules-list">
+          {fields.map(([k, v]) => <li key={k}><span className="ch-wf-kind">{k}</span>{v}</li>)}
+        </ul>
+      ) : <EmptyState label="Living state not generated yet." gen={gen} fields={['living_state']} />}
+      {chips.length > 0 && <div className="ch-chips">{chips.map((c) => <span key={c} className="ch-chip">{c}</span>)}</div>}
+      {ambition && (
+        <div className="ch-fb-block">
+          <h3 className="ch-fb-h">Career and ambition</h3>
+          <p>{ambition}</p>
+        </div>
+      )}
+      {threads.length > 0 && (
+        <div className="ch-fb-block">
+          <h3 className="ch-fb-h">Plot threads</h3>
+          <ul className="ch-rules-list">
+            {pageItems.map((t, i) => (
+              <li key={t.id || i}>{typeof t === 'string' ? t : t.title || t.name || t.label}{t.status ? ` · ${words(t.status)}` : ''}</li>
+            ))}
+          </ul>
+          <Pager {...pager} label="Plot threads" />
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function WorldPlaces({ character, openTab }) {
+  const [data, setData] = useState(null);
+  const id = character.id;
+  useEffect(() => {
+    let live = true;
+    getPlacesApi(id)
+      .then((res) => { if (live) setData(res.data || { places: [] }); })
+      .catch((err) => {
+        console.error('[CharacterProfilePage] world places load failed:', err);
+        if (live) setData({ places: [], error: err.response?.data?.error || 'Could not load their places.' });
+      });
+    return () => { live = false; };
+  }, [id]);
+  const places = data?.places || [];
+  const { pageItems, pager } = usePaged(places, 4);
+  return (
+    <section className="ch-card" aria-labelledby="ch-wpl" data-testid="ch-world-places">
+      <div className="ch-card-head">
+        <h2 id="ch-wpl" className="ch-h2"><MapPin size={20} aria-hidden="true" className="ch-h2-icon" /> Their places</h2>
+        {openTab && <button type="button" className="ch-pill-btn" onClick={() => openTab('places')}>View all</button>}
+      </div>
+      {!data ? <p className="ch-note">Loading…</p>
+        : data.error ? <p className="ch-note is-error">{data.error}</p>
+        : places.length === 0 ? <p className="ch-note">No places yet: no home, closet or place of work.</p> : (
+          <ul className="ch-wpl">
+            {pageItems.map((p) => (
+              <li key={`${p.role}-${p.scene_set_id}`} className="ch-wpl-item">
+                {p.image_url ? <img src={p.image_url} alt="" /> : <span className="ch-wpl-empty" aria-hidden="true"><MapPin size={20} /></span>}
+                <strong>{p.scene_set_name}</strong>
+                <span>{PLACE_LABEL[p.role] || p.label || 'Place'}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      <Pager {...pager} label="Their places" />
+    </section>
+  );
+}
+
+export function WorldFeed({ trail, openTab }) {
+  const posts = (trail?.posts || []).filter((p) => p.status !== 'draft').slice(0, 3);
+  return (
+    <section className="ch-card" aria-labelledby="ch-wf" data-testid="ch-world-feed">
+      <div className="ch-card-head">
+        <h2 id="ch-wf" className="ch-h2"><Radio size={20} aria-hidden="true" className="ch-h2-icon" /> On the feed lately</h2>
+        {openTab && <button type="button" className="ch-pill-btn" onClick={() => openTab('voice')}>View all</button>}
+      </div>
+      {!trail ? <p className="ch-note">Loading…</p>
+        : posts.length === 0 ? <p className="ch-note">Nothing posted yet.</p> : (
+          <ul className="ch-activity">
+            {posts.map((p) => (
+              <li key={p.id}>
+                <div className="ch-activity-row">
+                  <span className="ch-activity-icon is-post" aria-hidden="true"><FileText size={15} /></span>
+                  <span className="ch-activity-text"><strong>{shortText(p.text, 70)}</strong>{p.episode_number != null && <span>Episode {p.episode_number}</span>}</span>
+                  {activityDate(p.at) && <span className="ch-activity-when">{activityWhen(activityDate(p.at))}</span>}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+    </section>
+  );
+}
+
+function GhostsCard({ character, onSaved }) {
+  const ghosts = Array.isArray(character.ghost_characters) ? character.ghost_characters : [];
+  const { pageItems, pager } = usePaged(ghosts);
+  if (!ghosts.length) return null;
+  return (
+    <section className="ch-card" aria-labelledby="ch-gh" data-testid="ch-ghosts">
+      <h2 id="ch-gh" className="ch-h2"><Users size={20} aria-hidden="true" className="ch-h2-icon" /> Not built yet <span className="ch-chip">{ghosts.length}</span></h2>
+      <p className="ch-note">People their story names who aren&rsquo;t in the registry yet.</p>
+      <ul className="ch-ft">
+        {pageItems.map((g, i) => (
+          <li key={`${g.name}-${i}`} className="ch-ft-item">
+            <strong className="ch-conn-name">{g.name}</strong>
+            {g.relation && <span className="ch-ft-meta">{g.relation}</span>}
+            <span className="ch-ft-chips">
+              {!g.promoted && <GhostPromote character={character} ghost={g} onSaved={onSaved} />}
+              {g.promoted && (g.promoted_id
+                ? <Link className="cp-promoted-badge" to={`/character/${g.promoted_id}`}>&uarr; In Registry</Link>
+                : <span className="cp-promoted-badge">&uarr; In Registry</span>)}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <Pager {...pager} label="Not built yet" />
+    </section>
+  );
+}
+
+function FamilyCard({ character }) {
+  const tree = objOf(character.family_tree);
+  const members = Array.isArray(tree.members) ? tree.members : [];
+  if (!members.length && !tree.generational_wound) return null;
+  return (
+    <section className="ch-card" aria-labelledby="ch-fam" data-testid="ch-family">
+      <h2 id="ch-fam" className="ch-h2"><Heart size={20} aria-hidden="true" className="ch-h2-icon" /> Family</h2>
+      {tree.generational_wound && <p className="ch-note">Generational wound: {tree.generational_wound}</p>}
+      {members.length > 0 && (
+        <ul className="ch-ft">
+          {members.map((m, i) => (
+            <li key={i} className="ch-ft-item">
+              <strong className="ch-conn-name">{m.name}</strong>
+              {m.relation && <span className="ch-ft-meta">{m.relation}</span>}
+              {m.personality_sketch && <span className="ch-conn-note">{m.personality_sketch}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function TabWorld({ character, feedProfile, appearances, onSaved, gen, openTab }) {
+  const trail = useStoryTrail(character.id);
+  return (
+    <div className="ch-overview ch-world-grid">
+      <div className="ch-col">
+        <WorldPresence character={character} feedProfile={feedProfile} appearances={appearances} onSaved={onSaved} />
+        <StoryInWorld character={character} gen={gen} />
+      </div>
+      <div className="ch-col">
+        <LalaVerseMap character={character} feedProfile={feedProfile} />
+        <WorldPlaces character={character} openTab={openTab} />
+        <FamilyCard character={character} />
+      </div>
+      <div className="ch-col">
+        <WorldEvents appearances={appearances} />
+        <WorldFeed trail={trail} openTab={openTab} />
+        <GhostsCard character={character} onSaved={onSaved} />
+      </div>
+    </div>
+  );
+}
+
+/* ── Story & Events (Evoni's mock, 2026-10-18, step 6) ─────────────────────────
+   Everything their story is made of, in one tab with its own sections: an
+   overview (counts, their latest episode, what is coming up, recent posts,
+   Lala's goals at their events, the timeline ahead), then each list in full
+   with pages. Episodes and events are their cast appearances; posts,
+   stories and chapters are their story trail. */
+
+const STORY_SECTIONS = [
+  { key: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { key: 'events', label: 'Events', icon: CalendarDays },
+  { key: 'episodes', label: 'Episodes', icon: CirclePlay },
+  { key: 'posts', label: 'Feed posts', icon: FileText },
+  { key: 'stories', label: 'Stories & chapters', icon: BookOpen },
+  { key: 'timeline', label: 'Timeline', icon: Activity },
+];
+
+const upcomingOf = (appearances, now) => (appearances?.events || []).filter((e) => (eventTime(e) ?? -1) >= now);
+
+/** Lala's goals at their events, each with the event it comes from. */
+export const goalsOf = (appearances) => (appearances?.events || []).flatMap((ev) => (ev.goals || []).map((g, i) => ({
+  key: `${ev.id}-${g.id || i}`, label: g.label, event: ev,
+})));
+
+function StoryTiles({ appearances, trail, now }) {
+  const posts = trail?.posts || [];
+  const live = posts.filter((p) => p.status !== 'draft').length;
+  const tiles = [
+    { key: 'episodes', label: 'Episodes', n: (appearances?.episodes || []).length, sub: null, icon: CirclePlay, tone: 'pink' },
+    { key: 'events', label: 'Events', n: (appearances?.events || []).length, sub: `${upcomingOf(appearances, now).length} upcoming`, icon: CalendarDays, tone: 'green' },
+    { key: 'posts', label: 'Feed posts', n: posts.length, sub: `${live} posted`, icon: FileText, tone: 'lavender' },
+    { key: 'goals', label: "Lala's goals", n: goalsOf(appearances).length, sub: 'at their events', icon: Star, tone: 'gold' },
+    { key: 'stories', label: 'Stories & chapters', n: (trail?.stories || []).length + (trail?.chapters || []).length, sub: null, icon: BookOpen, tone: 'pink' },
+  ];
+  return (
+    <ul className="ch-st-tiles" data-testid="ch-story-tiles">
+      {tiles.map(({ key, label, n, sub, icon: Icon, tone }) => (
+        <li key={key} className={`ch-ro-tile is-${tone}`}>
+          <Icon size={20} aria-hidden="true" />
+          <strong>{n}</strong>
+          <span>{label}</span>
+          {sub && <span className="ch-st-sub">{sub}</span>}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function EpisodeList({ appearances, limit }) {
+  const episodes = [...(appearances?.episodes || [])].sort((a, b) => (b.episode_number ?? -1) - (a.episode_number ?? -1));
+  const eventFor = (ep) => (appearances?.events || []).find((ev) => ev.episode?.id === ep.id || ev.episode?.episode_number === ep.episode_number);
+  const { pageItems, pager } = usePaged(episodes, limit || 5);
+  const rows = limit ? episodes.slice(0, limit) : pageItems;
+  if (!appearances) return <p className="ch-note">Loading…</p>;
+  if (!episodes.length) return <p className="ch-note">Not in an episode yet.</p>;
+  return (
+    <>
+      <ul className="ch-we">
+        {rows.map((ep) => {
+          const ev = eventFor(ep);
+          return (
+            <li key={ep.id}>
+              <Link className="ch-we-item" to={`/episodes/${ep.id}`}>
+                <span className="ch-ep-badge">Episode {ep.episode_number ?? '?'}</span>
+                <span className="ch-we-text">
+                  <strong>{ep.title || 'Untitled'}</strong>
+                  {ev && <span className="ch-we-meta">{[ev.name, ev.role === 'host' ? 'Hosting' : 'Guest'].join(' · ')}</span>}
+                </span>
+                <ArrowRight size={16} aria-hidden="true" className="ch-show-go" />
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+      {!limit && <Pager {...pager} label="Episodes" />}
+    </>
+  );
+}
+
+function EventCards({ events, now }) {
+  return (
+    <ul className="ch-ev-cards">
+      {events.map((ev) => {
+        const t = eventTime(ev);
+        const d = t !== null ? new Date(t) : null;
+        const purpose = eventPurpose(ev);
+        return (
+          <li key={ev.id}>
+            <Link className="ch-ev-card" to={`/shows/${ev.show_id}/events/${ev.id}`}>
+              <span className="ch-ev-date">
+                {d ? (<>
+                  <span>{d.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' })}</span>
+                  <strong>{d.getUTCDate()}</strong>
+                  <span>{d.getUTCFullYear()}</span>
+                </>) : <span>No date</span>}
+              </span>
+              <span className="ch-we-text">
+                <span className="ch-conn-top">
+                  <span className={`ch-tension ${ev.role === 'host' ? 'is-volatile' : 'is-healing'}`}>{ev.role === 'host' ? 'Host' : 'Guest'}</span>
+                  {t !== null && t < now && <span className="ch-chip">Past</span>}
+                </span>
+                <strong>{ev.name}</strong>
+                <span className="ch-we-meta">{[ev.event_time, ev.venue_name].filter(Boolean).join(' · ') || ' '}</span>
+                {purpose && <span className="ch-conn-note">{shortText(purpose, 160)}</span>}
+              </span>
+              <ArrowRight size={16} aria-hidden="true" className="ch-show-go" />
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function StoriesChapters({ trail }) {
+  const stories = trail?.stories || [];
+  const chapters = trail?.chapters || [];
+  const s = usePaged(stories);
+  const c = usePaged(chapters);
+  if (!trail) return <p className="ch-note">Loading…</p>;
+  if (trail.error) return <p className="ch-note" role="alert">{trail.error}</p>;
+  if (!stories.length && !chapters.length) return <p className="ch-note">Not in a story or chapter yet.</p>;
+  return (
+    <>
+      {stories.length > 0 && (
+        <div className="ch-trail">
+          <h3 className="ch-trail-h">Stories</h3>
+          <ul className="ch-trail-list">
+            {s.pageItems.map((st) => (
+              <li key={st.id}>
+                <Link to={st.show_id ? `/stories?show=${st.show_id}` : '/stories'} className="ch-trail-text">{st.title || 'Untitled'}</Link>
+                <span className="ch-trail-meta">{[STORY_FORMATS[st.format] || st.format, st.episode_number != null ? `Episode ${st.episode_number}` : null, st.status].filter(Boolean).join(' · ')}</span>
+              </li>
+            ))}
+          </ul>
+          <Pager {...s.pager} label="Stories" />
+        </div>
+      )}
+      {chapters.length > 0 && (
+        <div className="ch-trail">
+          <h3 className="ch-trail-h">Chapters</h3>
+          <ul className="ch-trail-list">
+            {c.pageItems.map((ch) => (
+              <li key={ch.id}>
+                <Link to={`/chapter/${ch.book_id}/${ch.id}`} className="ch-trail-text">{ch.title || `Chapter ${ch.chapter_number ?? ''}`.trim()}</Link>
+                <span className="ch-trail-meta">{[ch.book_title, ch.written ? null : 'not written yet'].filter(Boolean).join(' · ')}</span>
+              </li>
+            ))}
+          </ul>
+          <Pager {...c.pager} label="Chapters" />
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Their story in order: dated posts and events oldest first, then episodes. */
+export const timelineOf = (appearances, trail) => {
+  const all = activityOf(appearances, trail);
+  const dated = all.filter((x) => x.at).sort((a, b) => a.at - b.at);
+  return [...dated, ...all.filter((x) => !x.at)];
+};
+
+/** `size` items of the timeline from today on (the latest ones when less is ahead). */
+export const timelineNow = (items, now, size) => {
+  const ahead = items.findIndex((x) => x.at && x.at.getTime() >= now);
+  const dated = items.filter((x) => x.at).length;
+  const from = ahead === -1 ? Math.max(0, dated - size) : Math.max(0, Math.min(ahead, dated - size));
+  return items.slice(from, from + size);
+};
+
+// The whole timeline with pages; with `now`, only the stretch from today (the overview's strip).
+function StoryTimeline({ appearances, trail, size = 6, now = null }) {
+  const items = timelineOf(appearances, trail);
+  const { pageItems, pager } = usePaged(items, size);
+  const shown = now === null ? pageItems : timelineNow(items, now, size);
+  if (!items.length) return <p className="ch-note">Nothing on their timeline yet.</p>;
+  return (
+    <>
+      <ol className="ch-tl">
+        {shown.map((x) => {
+          const Icon = ACTIVITY_ICONS[x.kind];
+          const body = (<>
+            <span className={`ch-activity-icon is-${x.kind}`} aria-hidden="true"><Icon size={15} /></span>
+            <span className="ch-tl-when">{x.at ? activityWhen(x.at) : x.when || 'No date'}</span>
+            <strong>{x.title}</strong>
+            {x.sub && <span className="ch-tl-sub">{x.sub}</span>}
+          </>);
+          return <li key={x.key} className="ch-tl-item">{x.to ? <Link className="ch-tl-body" to={x.to}>{body}</Link> : <div className="ch-tl-body">{body}</div>}</li>;
+        })}
+      </ol>
+      {now === null && <Pager {...pager} label="Timeline" />}
+    </>
+  );
+}
+
+function StoryCard({ id, title, icon: Icon, action, children, testid }) {
+  return (
+    <section className="ch-card" aria-labelledby={id} data-testid={testid}>
+      <div className="ch-card-head">
+        <h2 id={id} className="ch-h2"><Icon size={20} aria-hidden="true" className="ch-h2-icon" /> {title}</h2>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+export function TabStory({ character, feedProfile, appearances, openTab, now = Date.now() }) {
+  const [section, setSection] = useState('overview');
+  const trail = useStoryTrail(character.id);
+  const go = (key) => <button type="button" className="ch-pill-btn" onClick={() => setSection(key)}>View all</button>;
+  const upcoming = [...upcomingOf(appearances, now)].sort((a, b) => eventTime(a) - eventTime(b));
+  const allEvents = [...(appearances?.events || [])].sort((a, b) => {
+    const ta = eventTime(a); const tb = eventTime(b);
+    if (ta === null || tb === null) return (ta === null) - (tb === null);
+    return tb - ta;
+  });
+  const events = usePaged(allEvents, 4);
+  const goals = goalsOf(appearances);
+  const goalPages = usePaged(goals);
+  const recent = (trail?.posts || []).slice(0, 4);
+  return (
+    <div className="ch-story" data-testid="ch-story-tab">
+      <nav className="ch-st-nav" aria-label="Story sections">
+        {STORY_SECTIONS.map(({ key, label, icon: Icon }) => (
+          <button key={key} type="button" className={`ch-st-link${section === key ? ' is-on' : ''}`} aria-pressed={section === key} onClick={() => setSection(key)}>
+            <Icon size={15} aria-hidden="true" /> {label}
+          </button>
+        ))}
+      </nav>
+
+      {section === 'overview' && (
+        <>
+          <StoryTiles appearances={appearances} trail={trail} now={now} />
+          <div className="ch-overview">
+            <div className="ch-col">
+              <StoryCard id="ch-st-ep" title="Latest episode" icon={CirclePlay} testid="ch-st-latest" action={go('episodes')}>
+                <EpisodeList appearances={appearances} limit={1} />
+              </StoryCard>
+              <StoryCard id="ch-st-goals" title="Lala's goals at their events" icon={Star} testid="ch-st-goals">
+                {goals.length === 0 ? <p className="ch-note">No goals at their events yet.</p> : (
+                  <>
+                    <ul className="ch-rules-list">
+                      {goalPages.pageItems.map((g) => <li key={g.key}><strong>{g.label}</strong><span className="ch-wf-kind">At {g.event.name}</span></li>)}
+                    </ul>
+                    <Pager {...goalPages.pager} label="Goals" />
+                  </>
+                )}
+              </StoryCard>
+            </div>
+            <div className="ch-col">
+              <StoryCard id="ch-st-up" title="Coming up" icon={CalendarDays} testid="ch-st-upcoming" action={go('events')}>
+                {!appearances ? <p className="ch-note">Loading…</p>
+                  : upcoming.length === 0 ? <p className="ch-note">Nothing coming up.</p>
+                  : <EventCards events={upcoming.slice(0, 2)} now={now} />}
+              </StoryCard>
+            </div>
+            <div className="ch-col">
+              <StoryCard id="ch-st-posts" title="Recent feed posts" icon={FileText} testid="ch-st-posts" action={go('posts')}>
+                {!trail ? <p className="ch-note">Loading…</p> : recent.length === 0 ? <p className="ch-note">No posts yet.</p> : (
+                  <ul className="ch-px">
+                    {recent.map((p) => (
+                      <li key={p.id} className="ch-px-item">
+                        <span className="ch-px-text">{shortText(p.text, 90)}</span>
+                        <span className={`ch-px-status${p.status === 'draft' ? ' is-draft' : ''}`}>{p.status === 'draft' ? 'Draft' : 'Posted'}</span>
+                        <span className="ch-px-meta">{activityDate(p.at) ? activityWhen(activityDate(p.at)) : ''}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </StoryCard>
+            </div>
+          </div>
+          <StoryCard id="ch-st-tl" title="Story timeline" icon={Activity} testid="ch-st-timeline" action={go('timeline')}>
+            <StoryTimeline appearances={appearances} trail={trail} size={4} now={now} />
+          </StoryCard>
+        </>
+      )}
+
+      {section === 'events' && (
+        <StoryCard id="ch-st-events" title="Their events" icon={CalendarDays} testid="ch-st-events">
+          {!appearances ? <p className="ch-note">Loading…</p>
+            : allEvents.length === 0 ? <p className="ch-note">No events yet: they host or attend none.</p>
+            : <><EventCards events={events.pageItems} now={now} /><Pager {...events.pager} label="Events" /></>}
+        </StoryCard>
+      )}
+      {section === 'episodes' && (
+        <StoryCard id="ch-st-eps" title="Their episodes" icon={CirclePlay} testid="ch-st-episodes">
+          <EpisodeList appearances={appearances} />
+        </StoryCard>
+      )}
+      {section === 'posts' && (
+        <PostExamples character={character} feedProfile={feedProfile} trail={trail} onDraft={() => openTab('voice')} />
+      )}
+      {section === 'stories' && (
+        <StoryCard id="ch-st-stories" title="Stories and chapters" icon={BookOpen} testid="ch-st-stories">
+          <StoriesChapters trail={trail} />
+        </StoryCard>
+      )}
+      {section === 'timeline' && (
+        <StoryCard id="ch-st-tl-full" title="Story timeline" icon={Activity} testid="ch-st-timeline-full">
+          <StoryTimeline appearances={appearances} trail={trail} />
+        </StoryCard>
+      )}
+    </div>
+  );
+}
+
+/* ── Settings (Evoni's mock, 2026-10-18, step 8: "what already works") ───────────
+   Their status (draft, accepted, declined, finalized: finalized locks
+   editing), whether The cast keeps them, their feed profile, sharing and
+   export, and the danger zone: archive (they leave the cast and the page),
+   then bring them back or delete them for good, which asks for their name
+   typed out and is refused while an episode or anything else still uses
+   them. The mock's notifications, permissions and automations have nothing
+   behind them yet. */
+
+const STATUSES = [
+  ['draft', 'Draft', 'Still being written.'],
+  ['accepted', 'Accepted', 'In the cast; editable.'],
+  ['declined', 'Declined', 'Not used.'],
+  ['finalized', 'Finalized', 'Locked: nothing on this page can be edited until you change it back.'],
+];
+
+function SettingRow({ label, hint, children, htmlFor }) {
+  return (
+    <div className="ch-set-row">
+      <div className="ch-set-label">
+        {htmlFor ? <label htmlFor={htmlFor}>{label}</label> : <span>{label}</span>}
+        {hint && <span className="ch-note">{hint}</span>}
+      </div>
+      <div className="ch-set-control">{children}</div>
+    </div>
+  );
+}
+
+export function TabSettings({ character, feedProfile, onSaved, onExport, onDeleted }) {
+  const [busy, setBusy] = useState(null);
+  const [note, setNote] = useState(null);
+  const [archived, setArchived] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [typed, setTyped] = useState('');
+  const name = character.display_name || character.selected_name || 'this character';
+  const kept = character.cast_review === 'kept';
+  const link = typeof window !== 'undefined' ? `${window.location.origin}/character/${character.id}` : `/character/${character.id}`;
+
+  const act = async (what, call, done) => {
+    setBusy(what); setNote(null);
+    try {
+      await call();
+      if (done) setNote({ text: done });
+      return true;
+    } catch (err) {
+      console.error(`[CharacterProfilePage] settings ${what} failed:`, err);
+      setNote({ error: true, text: err.response?.data?.error || 'That did not work. Try again.' });
+      return false;
+    } finally { setBusy(null); }
+  };
+  const setStatus = (status) => act('status', async () => {
+    const res = await setStatusApi(character.id, status);
+    onSaved({ status: res.data?.character?.status || status });
+  }, 'Status saved.');
+  const setKept = (next) => act('keep', async () => {
+    const res = await keepApi(character.id, next);
+    onSaved({ cast_review: res.data?.cast_review ?? (next ? 'kept' : null) });
+  }, next ? 'Kept in the cast.' : 'No longer marked as kept.');
+  const copyLink = () => act('copy', () => navigator.clipboard.writeText(link), 'Link copied.');
+  const archive = () => act('archive', async () => { await archiveApi(character.id); setArchived(true); },
+    `${name} is archived: out of the cast, the feed and this page once you leave it.`);
+  const restore = () => act('restore', async () => { await restoreApi(character.id); setArchived(false); setConfirming(false); setTyped(''); },
+    `${name} is back.`);
+  const removeForGood = async () => {
+    if (await act('delete', () => deleteForGoodApi(character.id))) onDeleted();
+  };
 
   return (
-    <div className="cp-tab-content">
-      {/* Details (the old Overview's meta; its World picker's save never reached the page's state) */}
-      <section className="cp-section cp-meta-grid">
-        <div className="cp-meta-item">
-          <span className="cp-meta-label">Role</span>
-          <span className="cp-meta-value">{roleOf(character) || '\u2014'}</span>
-        </div>
-        <div className="cp-meta-item">
-          <span className="cp-meta-label">Appearance</span>
-          <span className="cp-meta-value">{character.appearance_mode || '\u2014'}</span>
-        </div>
-        <div className="cp-meta-item">
-          <label className="cp-meta-label" htmlFor="cp-world">World</label>
-          <select
-            id="cp-world"
-            className="cp-meta-select"
-            value={character.world || ''}
-            onChange={async (e) => {
-              const world = e.target.value;
-              if (!world) return;
-              try {
-                await updateCharacterApi(character.id, { world });
-                onSaved({ world });
-              } catch (err) { console.error('[CharacterProfilePage] world update failed:', err); }
-            }}
-            disabled={character.status === 'finalized'}
-          >
-            {/* No world set reads as not set, not as Book 1. */}
-            {!character.world && <option value="">Not set</option>}
-            <option value="book-1">Book 1 — JustAWoman&rsquo;s World</option>
-            <option value="lalaverse">LalaVerse</option>
-            <option value="series-2">Series 2</option>
-          </select>
-        </div>
-      </section>
-
-      {/* Living State */}
-      <section className="cp-section">
-        <h3 className="cp-section-title">Living State</h3>
-        {living ? (
-          <div className="cp-living-grid">
-            {living.current_situation && (
-              <div className="cp-living-field">
-                <span className="cp-meta-label">Current Situation</span>
-                <p>{living.current_situation}</p>
-              </div>
-            )}
-            {living.active_tension && (
-              <div className="cp-living-field">
-                <span className="cp-meta-label">Active Tension</span>
-                <p>{living.active_tension}</p>
-              </div>
-            )}
-            {living.momentum && (
-              <div className="cp-living-field">
-                <span className="cp-meta-label">Momentum</span>
-                <p>{living.momentum}</p>
-              </div>
-            )}
-          </div>
-        ) : <EmptyState label="Living state not generated yet." gen={gen} fields={['living_state']} />}
-      </section>
-
-      {/* Arc Stage */}
-      {character.arc_stage && (
-        <section className="cp-section">
-          <h3 className="cp-section-title">Arc Stage</h3>
-          <span className="cp-arc-badge">{character.arc_stage.replace?.(/_/g, ' ') || character.arc_stage}</span>
+    <div className="ch-overview ch-settings" data-testid="ch-settings">
+      <div className="ch-col">
+        <section className="ch-card" aria-labelledby="ch-set-vis">
+          <h2 id="ch-set-vis" className="ch-h2"><Users size={20} aria-hidden="true" className="ch-h2-icon" /> Profile and status</h2>
+          <SettingRow label="Status" htmlFor="ch-set-status" hint={STATUSES.find(([k]) => k === character.status)?.[2]}>
+            <select id="ch-set-status" className="ch-wp-select" value={character.status || 'draft'} disabled={!!busy || archived} onChange={(e) => setStatus(e.target.value)}>
+              {STATUSES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select>
+          </SettingRow>
+          <SettingRow label="Kept in the cast" hint="The cast's review: kept characters are past review.">
+            <label className="ch-switch">
+              <input type="checkbox" role="switch" checked={kept} disabled={!!busy || archived} onChange={(e) => setKept(e.target.checked)} aria-label="Kept in the cast" />
+              <span aria-hidden="true" />
+              {kept ? 'Kept' : 'Not yet'}
+            </label>
+          </SettingRow>
         </section>
-      )}
+      </div>
 
-      {/* Plot Threads */}
-      {plotThreads.length > 0 && (
-        <section className="cp-section">
-          <h3 className="cp-section-title">Plot Threads</h3>
-          <div className="cp-thread-list">
-            {plotThreads.map((t, i) => (
-              <div key={t.id || i} className="cp-thread-row">
-                <span className="cp-thread-name">{typeof t === 'string' ? t : t.title || t.name || t.label}</span>
-                {t.status && <span className="cp-thread-status">{t.status}</span>}
-              </div>
-            ))}
-          </div>
+      <div className="ch-col">
+        <section className="ch-card" aria-labelledby="ch-set-feed">
+          <h2 id="ch-set-feed" className="ch-h2"><Smartphone size={20} aria-hidden="true" className="ch-h2-icon" /> Feed profile</h2>
+          <SettingRow label="On the feed as" hint="One feed person per character.">
+            {feedProfile
+              ? <span className="ch-set-value"><strong>{atHandle(feedProfile.handle)}</strong>{feedProfile.display_name ? ` · ${feedProfile.display_name}` : ''}</span>
+              : <span className="ch-note">No feed profile.</span>}
+          </SettingRow>
+          <Link className="ch-btn-soft ch-px-link" to="/character-registry">{feedProfile ? 'Match a different feed person on The cast' : 'Match them to a feed person on The cast'}</Link>
         </section>
-      )}
-
-      {/* Career / Ambition from deep profile */}
-      {dimensionText(dimension(dp, 'ambition_identity')) && (
-        <section className="cp-section">
-          <h3 className="cp-section-title">Career &amp; Ambition</h3>
-          <p className="cp-career-text">{dimensionText(dimension(dp, 'ambition_identity'))}</p>
+        <section className="ch-card" aria-labelledby="ch-set-share">
+          <h2 id="ch-set-share" className="ch-h2"><LinkIcon size={20} aria-hidden="true" className="ch-h2-icon" /> Sharing and export</h2>
+          <SettingRow label="Export profile" hint="Their whole record as a file.">
+            <button type="button" className="ch-pill-btn" onClick={onExport}><Download size={14} aria-hidden="true" /> Export profile</button>
+          </SettingRow>
+          <SettingRow label="Link to this page" hint="For the studio team; it needs a sign-in.">
+            <span className="ch-set-link">
+              <input readOnly value={link} aria-label="Link to this page" onFocus={(e) => e.target.select()} />
+              <button type="button" className="ch-icon-btn" aria-label="Copy the link" onClick={copyLink}><Copy size={15} aria-hidden /></button>
+            </span>
+          </SettingRow>
         </section>
-      )}
+      </div>
 
-      {/* Time orientation */}
-      {character.time_orientation && (
-        <section className="cp-section">
-          <h3 className="cp-section-title">Time Orientation</h3>
-          <span className="cp-time-badge">
-            {words(character.time_orientation)}
-          </span>
-        </section>
-      )}
-
-      {/* Ghost Characters */}
-      {character.ghost_characters?.length > 0 && (
-        <section className="cp-section">
-          <h3 className="cp-section-title">
-            Ghost Characters
-            <span className="cp-ghost-count">{character.ghost_characters.length}</span>
-          </h3>
-          <p className="cp-ghost-note">
-            Characters mentioned in this character&rsquo;s story who haven&rsquo;t been built yet.
-          </p>
-          <div className="cp-ghost-list">
-            {character.ghost_characters.map((g, i) => (
-              <div key={i} className={`cp-ghost-item ${g.promoted ? 'cp-ghost-promoted' : ''}`}>
-                <span className="cp-ghost-name">{g.name}</span>
-                <span className="cp-ghost-relation">{g.relation}</span>
-                {!g.promoted && <GhostPromote character={character} ghost={g} onSaved={onSaved} />}
-                {g.promoted && (g.promoted_id
-                  ? <Link className="cp-promoted-badge" to={`/character/${g.promoted_id}`}>&uarr; In Registry</Link>
-                  : <span className="cp-promoted-badge">&uarr; In Registry</span>)}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Family Tree */}
-      {character.family_tree && (
-        <section className="cp-section">
-          <h3 className="cp-section-title">Family</h3>
-          {character.family_tree.generational_wound && (
-            <p className="cp-generational-wound">
-              Generational wound: {character.family_tree.generational_wound}
-            </p>
-          )}
-          {character.family_tree.members?.length > 0 && (
-            <div className="cp-family-list">
-              {character.family_tree.members.map((m, i) => (
-                <div key={i} className="cp-family-member">
-                  <span className="cp-member-name">{m.name}</span>
-                  <span className="cp-member-relation">{m.relation}</span>
-                  {m.personality_sketch && <p className="cp-member-sketch">{m.personality_sketch}</p>}
-                </div>
-              ))}
-            </div>
+      <div className="ch-col">
+        <section className="ch-card ch-danger" aria-labelledby="ch-set-danger" data-testid="ch-danger">
+          <h2 id="ch-set-danger" className="ch-h2"><AlertTriangle size={20} aria-hidden="true" className="ch-h2-icon" /> Danger zone</h2>
+          {!archived ? (
+            <SettingRow label="Archive" hint="Takes them out of the cast and the feed. You can bring them back.">
+              <button type="button" className="ch-danger-btn" disabled={!!busy} onClick={archive}>
+                <Archive size={14} aria-hidden="true" /> {busy === 'archive' ? 'Archiving…' : `Archive ${name}`}
+              </button>
+            </SettingRow>
+          ) : (
+            <>
+              <SettingRow label="Bring back" hint="Undo the archive.">
+                <button type="button" className="ch-pill-btn" disabled={!!busy} onClick={restore}>
+                  <RotateCcw size={14} aria-hidden="true" /> {busy === 'restore' ? 'Bringing back…' : 'Bring back'}
+                </button>
+              </SettingRow>
+              <SettingRow label="Delete permanently" hint="Removes them for good. Refused while an episode or anything else still uses them.">
+                {!confirming ? (
+                  <button type="button" className="ch-danger-btn" disabled={!!busy} onClick={() => setConfirming(true)}>
+                    <Trash2 size={14} aria-hidden="true" /> Delete permanently
+                  </button>
+                ) : (
+                  <span className="ch-set-confirm">
+                    <label htmlFor="ch-set-typed">Type <strong>{name}</strong> to delete them for good.</label>
+                    <input id="ch-set-typed" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
+                    <span className="ch-facts-row">
+                      <button type="button" className="ch-danger-btn is-solid" disabled={!!busy || typed.trim() !== name} onClick={removeForGood}>
+                        {busy === 'delete' ? 'Deleting…' : 'Delete for good'}
+                      </button>
+                      <button type="button" className="ch-btn-soft" disabled={!!busy} onClick={() => { setConfirming(false); setTyped(''); }}>Cancel</button>
+                    </span>
+                  </span>
+                )}
+              </SettingRow>
+            </>
           )}
         </section>
-      )}
+      </div>
+      {note && <p className={`ch-note ch-set-note${note.error ? ' is-error' : ''}`} role={note.error ? 'alert' : 'status'}>{note.text}</p>}
     </div>
   );
 }
@@ -2798,9 +3614,11 @@ export default function CharacterProfilePage() {
         {activeTab === 'voice' && (
           <TabVoice character={character} feedProfile={feedProfile} appearances={appearances} onSaved={onSaved} onFeedSaved={onFeedSaved} />
         )}
-        {activeTab === 'connections' && <div className="ch-card"><TabConnections character={character} relationships={relationships} entanglements={entanglements} /></div>}
-        {activeTab === 'world' && <div className="ch-card"><TabWorld character={character} onSaved={onSaved} gen={gen} /></div>}
+        {activeTab === 'connections' && <TabConnections character={character} relationships={listOf(relationships)} entanglements={listOf(entanglements)} />}
+        {activeTab === 'world' && <TabWorld character={character} feedProfile={feedProfile} appearances={appearances} onSaved={onSaved} gen={gen} openTab={setActiveTab} />}
         {activeTab === 'places' && <div className="ch-card"><CharacterPlacesTab key={character.id} character={character} /></div>}
+        {activeTab === 'story' && <TabStory character={character} feedProfile={feedProfile} appearances={appearances} openTab={setActiveTab} />}
+        {activeTab === 'settings' && <TabSettings character={character} feedProfile={feedProfile} onSaved={onSaved} onExport={exportJson} onDeleted={() => navigate('/character-registry')} />}
         {activeTab === 'appearance' && <CharacterAppearanceTab key={character.id} character={character} onPortraitChanged={(url) => onSaved({ portrait_url: url })} />}
       </div>
     </div>
