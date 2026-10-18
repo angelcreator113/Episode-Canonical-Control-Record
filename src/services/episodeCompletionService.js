@@ -723,6 +723,9 @@ ${narrativeLines.short || ''}`,
     draftNextSlot(sequelize, showId).catch((draftErr) => {
       console.error('[EpisodeCompletion] Next slot intention draft failed (non-blocking):', draftErr?.message);
     });
+    // The season plan from the feed's growth (Evoni, 2026-10-17): a proposal
+    // she approves, never awaited; skipped when the feed has not moved.
+    require('./seasonArcProposals').proposeLater(require('../models'), showId, 'episode_accepted');
   }
 
   // ── 17d. Draft the Episode Story Record (stage C) ──
