@@ -50,16 +50,61 @@ describe('the character page', () => {
     renderIt();
     await waitFor(() => expect(screen.getAllByText('In Episode 1')).toHaveLength(2));
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('STUDIO BY SABLE');
-    // The role as The cast says it (ROLE_LABELS): support is Supporting.
-    expect(screen.getByText('@studiobysable · Supporting · Echo Park')).toBeTruthy();
-    expect(screen.getByText('The peer')).toBeTruthy();
+    // Handle and city on one line; what they are known for, the role as The
+    // cast says it (ROLE_LABELS: support is Supporting) and that they host on the next.
+    expect(document.querySelector('.ch-sub').textContent).toBe('@studiobysableEcho Park');
+    expect(document.querySelector('.ch-roles').textContent).toBe('The peer · Supporting · Event host');
     expect(screen.getByText('Feed profile')).toBeTruthy();
+    expect(screen.getByText('Has voice')).toBeTruthy();
     // Saved as Breathing, but a feed profile already makes them Active.
-    expect(screen.getByText('Active', { selector: '.ch-chip' })).toBeTruthy();
+    expect(screen.getByText('Active', { selector: '.ch-status' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '↑ Deepen to Alive' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: '← The cast' }).getAttribute('href')).toBe('/character-registry');
-    expect(screen.getAllByRole('button', { pressed: undefined }).filter((b) => b.className.includes('ch-tab')).map((b) => b.textContent))
-      .toEqual(['Overview', 'Inner life', 'Appearance', 'Voice & feed', 'Connections', 'In the world', 'Places']);
+    expect(screen.getByRole('button', { name: 'Export Profile' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'The cast' }).getAttribute('href')).toBe('/character-registry');
+    const tabs = within(screen.getByRole('navigation', { name: 'Character sections' })).getAllByRole('link');
+    expect(tabs.map((t) => t.textContent)).toEqual(['Overview', 'Inner Life', 'Appearance', 'Voice & Feed', 'Connections', 'In the World', 'Places']);
+    expect(tabs[0].getAttribute('aria-current')).toBe('page');
+  });
+
+  test('each tab has its own link: opening one with ?tab=, and going back', async () => {
+    render(
+      <MemoryRouter initialEntries={['/character/c1?tab=world']}>
+        <Routes><Route path="/character/:id" element={<CharacterProfilePage />} /></Routes>
+      </MemoryRouter>,
+    );
+    const world = await screen.findByRole('link', { name: 'In the World' });
+    expect(world.getAttribute('aria-current')).toBe('page');
+    expect(world.getAttribute('href')).toBe('/character/c1?tab=world');
+    expect(screen.getByRole('link', { name: 'Overview' }).getAttribute('href')).toBe('/character/c1');
+    fireEvent.click(screen.getByRole('link', { name: 'Overview' }));
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Overview' }).getAttribute('aria-current')).toBe('page'));
+    expect(screen.getByTestId('ch-shows')).toBeTruthy();
+  });
+
+  test('an unknown ?tab opens the Overview', async () => {
+    render(
+      <MemoryRouter initialEntries={['/character/c1?tab=nope']}>
+        <Routes><Route path="/character/:id" element={<CharacterProfilePage />} /></Routes>
+      </MemoryRouter>,
+    );
+    expect((await screen.findByRole('link', { name: 'Overview' })).getAttribute('aria-current')).toBe('page');
+  });
+
+  test('their events page instead of stopping at four', async () => {
+    const events = Array.from({ length: 6 }, (_, i) => ({ id: `ev${i}`, show_id: 's1', name: `Event ${i + 1}`, role: 'guest', goals: [] }));
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/character-registry/characters/c1') return { data: { character: CHARACTER } };
+      if (url === '/api/v1/social-profiles/7') return { data: { profile: PROFILE } };
+      if (url === '/api/v1/cast/characters/c1/appearances') return { data: { ...APPEARANCES, events } };
+      return { data: {} };
+    });
+    renderIt();
+    const card = await screen.findByTestId('ch-events');
+    await waitFor(() => expect(within(card).getByText('1–4 of 6')).toBeTruthy());
+    expect(within(card).queryByText('Event 5')).toBeNull();
+    fireEvent.click(within(card).getByRole('button', { name: 'Next page' }));
+    expect(within(card).getByText('Event 5')).toBeTruthy();
+    expect(within(card).getByText('5–6 of 6')).toBeTruthy();
   });
 
   test('Overview: where they show up, their voice, and with Lala', async () => {
@@ -102,14 +147,14 @@ describe('the character page', () => {
   test('the other tabs hold the old sections', async () => {
     renderIt();
     await waitFor(() => expect(screen.getAllByText('In Episode 1')).toHaveLength(2));
-    fireEvent.click(screen.getByRole('button', { name: 'Inner life' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Inner Life' }));
     // The workspace's five sections (step 2), not the old always-open panels.
     for (const name of [/Core psychology/, /Emotional architecture/, /Personal history/, /Beliefs & behaviours/, /Deep profile/]) {
       expect(screen.getByRole('button', { name })).toBeTruthy();
     }
     expect(screen.getByTestId('il-subject-wants')).toBeTruthy();
     expect(screen.queryByTestId('depth-panel')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'In the world' }));
+    fireEvent.click(screen.getByRole('link', { name: 'In the World' }));
     fireEvent.change(screen.getByLabelText('World'), { target: { value: 'lalaverse' } });
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/character-registry/characters/c1', { world: 'lalaverse' }));
     expect(screen.getByLabelText('World').value).toBe('lalaverse');
@@ -119,7 +164,7 @@ describe('the character page', () => {
     vi.mocked(api.post).mockResolvedValue({ data: { success: true, filled: ['wound'], character: { ...CHARACTER, wound: { description: 'The shop that closed.' } } } });
     renderIt();
     await waitFor(() => expect(screen.getAllByText('In Episode 1')).toHaveLength(2));
-    fireEvent.click(screen.getByRole('button', { name: 'Inner life' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Inner Life' }));
     const wound = screen.getByText('Wound not written yet.').closest('.cp-empty-state');
     fireEvent.click(wound.querySelector('button'));
     await waitFor(() => expect(screen.getByText('The shop that closed.')).toBeTruthy());
@@ -138,7 +183,7 @@ describe('the character page', () => {
     fireEvent.click(screen.getByRole('button', { name: '↑ Deepen to Alive' }));
     await waitFor(() => expect(screen.getByTestId('il-review')).toBeTruthy());
     expect(api.post).toHaveBeenCalledWith('/api/v1/character-registry/characters/c1/interior/generate', { preview: true });
-    expect(screen.getByRole('button', { name: 'Inner life' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('link', { name: 'Inner Life' }).getAttribute('aria-current')).toBe('page');
     // Nothing saved yet.
     expect(api.post).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('checkbox', { name: /Joy/ }));
@@ -153,7 +198,7 @@ describe('the character page', () => {
     vi.mocked(api.post).mockRejectedValue({ response: { data: { error: 'Daily AI budget reached.' } } });
     renderIt();
     await waitFor(() => expect(screen.getAllByText('In Episode 1')).toHaveLength(2));
-    fireEvent.click(screen.getByRole('button', { name: 'Inner life' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Inner Life' }));
     fireEvent.click(screen.getByRole('button', { name: 'Fill in everything missing' }));
     await waitFor(() => expect(screen.getByText('Daily AI budget reached.')).toBeTruthy());
   });
@@ -165,7 +210,7 @@ describe('the character page', () => {
     });
     renderIt();
     await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: 'Inner life' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Inner Life' }));
     fireEvent.click(screen.getByRole('button', { name: /Deep profile/ }));
     expect(screen.getByText('1/14 dimensions')).toBeTruthy();
     fireEvent.click(screen.getByText('The Body'));
@@ -179,7 +224,7 @@ describe('the character page', () => {
     });
     renderIt();
     await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: 'Inner life' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Inner Life' }));
     expect(screen.queryByRole('button', { name: /Generate/ })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Fill in everything missing' })).toBeNull();
   });
@@ -194,6 +239,10 @@ describe('the character page', () => {
     renderIt();
     await waitFor(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Sable Okafor'));
     expect(screen.getByTestId('ch-aka').textContent).toBe('Online as STUDIO BY SABLE');
+    // Quick facts shows the real name; its Edit opens their names.
+    expect(screen.getByTestId('ch-quick').textContent).toContain('Real nameSable Okafor');
+    expect(screen.queryByTestId('ch-names')).toBeNull();
+    fireEvent.click(within(screen.getByTestId('ch-quick')).getByRole('button', { name: 'Edit' }));
     const names = screen.getByTestId('ch-names');
     expect(names.textContent).toContain('Sable Okafor');
     expect(names.textContent).toContain('@studiobysable');
@@ -212,6 +261,7 @@ describe('the character page', () => {
   test('no real name yet: Suggest one asks the generator for it', async () => {
     vi.mocked(api.post).mockResolvedValue({ data: { success: true, filled: ['selected_name'], character: { ...CHARACTER, selected_name: 'Maren Ellis' } } });
     renderIt();
+    fireEvent.click(within(await screen.findByTestId('ch-quick')).getByRole('button', { name: 'Edit' }));
     await waitFor(() => expect(screen.getByTestId('ch-names')).toBeTruthy());
     expect(screen.getByTestId('ch-names').textContent).toContain('Not set');
     fireEvent.click(screen.getByRole('button', { name: /Suggest one/ }));
@@ -229,7 +279,7 @@ describe('the character page', () => {
     });
     renderIt();
     await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: 'Connections' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Connections' }));
     await waitFor(() => expect(screen.getByRole('link', { name: 'slowsift' }).getAttribute('href')).toBe('/pulse?profile=9'));
     expect(screen.getByText('one way')).toBeTruthy();
     expect(screen.queryByText('unresolved')).toBeNull();
@@ -241,7 +291,8 @@ describe('the character page', () => {
       return { data: {} };
     });
     renderIt();
-    await waitFor(() => expect(screen.getByText('Protagonist')).toBeTruthy());
+    // In the header's roles and in Quick facts.
+    await waitFor(() => expect(screen.getByText('Protagonist', { selector: '.ch-qf-row dd' })).toBeTruthy());
     expect(screen.queryByText(/Special/)).toBeNull();
   });
 
