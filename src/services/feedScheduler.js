@@ -20,6 +20,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { loadBrainContext, recordRuleUse } = require('./brainRules');
 const { DREAM_CITY_KEYS, feedCity, randomFeedCity } = require('../utils/feedCities');
 const { cityCultures } = require('./dreamCityText');
+const { loadCultureList, hierarchyBlock } = require('./cultureCanon');
 const {
   loadSocietyArchetypes, societyArchetypeCounts, pickSocietyArchetypes, matchSocietyArchetype,
   assignSocietyArchetype, societyArchetypeLine, societySparkBlock,
@@ -611,6 +612,8 @@ async function generateAndSaveProfile(db, spark, layer) {
   // mapping does; utils/feedCities). A spark with none still gets none.
   const city = layer === 'lalaverse' && spark.city ? feedCity(spark.city) : null;
   const cityCulture = city ? (await cityCultures(db))[city] : '';
+  // The Culture page's celebrity hierarchy (services/cultureCanon, 2026-10-18).
+  const hierarchy = layer === 'lalaverse' ? hierarchyBlock(await loadCultureList(db, 'CELEBRITY_HIERARCHY')) : '';
 
   // A LalaVerse profile's Society archetype (fix-list item 26): its spark's,
   // else the least used.
@@ -630,7 +633,7 @@ async function generateAndSaveProfile(db, spark, layer) {
 PROTAGONIST: ${ctx.name} — ${ctx.description} Wound: ${ctx.wound} Goal: ${ctx.goal}.
 
 CREATOR: ${spark.handle} on ${platformLabel(spark.platform)}. "${spark.vibe_sentence}"${advHints ? `\nHints: ${advHints}` : ''}
-${layer === 'lalaverse' && city ? `\nLALAVERSE: Lives in ${city.replace(/_/g, ' ')} — ${cityCulture || ''}. Lala relationship: ${spark.lala_relationship || 'mutual_unaware'}. Career pressure: ${spark.career_pressure || 'level'}. Do not reference JustAWoman or the real world.` : ''}${societyArchetypeLine(society)}${brain.block || ''}
+${layer === 'lalaverse' && city ? `\nLALAVERSE: Lives in ${city.replace(/_/g, ' ')} — ${cityCulture || ''}. Lala relationship: ${spark.lala_relationship || 'mutual_unaware'}. Career pressure: ${spark.career_pressure || 'level'}. Do not reference JustAWoman or the real world.` : ''}${hierarchy}${societyArchetypeLine(society)}${brain.block || ''}
 
 IMPORTANT RULES:
 ${isPulseLayer(layer) ? `- Every creator is on The Pulse. Some also keep a PRIVATE Pulse account (close friends, an alt) with a DIFFERENT persona
