@@ -278,6 +278,14 @@ function HostedEvents({ character, showId, onNote }) {
   };
 
   const hostedIds = new Set((events || []).map((e) => String(e.id)));
+  // Another creator hosting an event is never replaced by a click (fifth
+  // audit); a brand's event they co-host, the brand staying (Evoni,
+  // 2026-10-17: "let them co-host brand events").
+  const otherHost = (e) => (e.source_profile_id != null && Number(e.source_profile_id) !== Number(character.feed_profile_id) ? 'someone else' : '');
+  const brandOf = (e) => String(e.host_brand || '').trim();
+  const offered = (all || []).filter((e) => !hostedIds.has(String(e.id)));
+  const open = offered.filter((e) => !otherHost(e));
+  const taken = offered.length - open.length;
   return (
     <section className="cpl-role" data-testid="places-hosted-events">
       <h3 className="cpl-role-title"><CalendarDays size={16} aria-hidden="true" /> Hosted events</h3>
@@ -291,7 +299,7 @@ function HostedEvents({ character, showId, onNote }) {
             <article key={ev.id} className="cpl-event" data-testid={`hosted-event-${ev.id}`}>
               <div className="cpl-event-head">
                 <Link to={`/shows/${ev.show_id}/events/${ev.id}`} className="cpl-event-name">{ev.name}</Link>
-                <span className="cpl-note">{[ev.event_date, ev.venue_name].filter(Boolean).join(' · ')}</span>
+                <span className="cpl-note">{[ev.event_date, ev.venue_name, ev.host_brand && `co-hosting with ${ev.host_brand}`].filter(Boolean).join(' · ')}</span>
                 <button type="button" className="cpl-btn is-soft is-small" disabled={busy === ev.id} onClick={() => stop(ev)} data-testid={`hosted-event-stop-${ev.id}`}>
                   Not hosting
                 </button>
@@ -308,16 +316,26 @@ function HostedEvents({ character, showId, onNote }) {
               <select className="cpl-input" aria-label="Event they host" value={choice} onChange={(e) => setChoice(e.target.value)} data-testid="hosted-event-select">
                 <option value="">{all ? 'Choose an event…' : 'Loading…'}</option>
                 {/* An event someone else hosts is shown, not offered (fifth audit). */}
-                {(all || []).filter((e) => !hostedIds.has(String(e.id))).map((e) => {
-                  const other = String(e.host_brand || '').trim()
-                    || (e.source_profile_id != null && Number(e.source_profile_id) !== Number(character.feed_profile_id) ? 'someone else' : '');
-                  return <option key={e.id} value={e.id} disabled={Boolean(other)}>{e.name}{other ? ` (hosted by ${other})` : ''}</option>;
-                })}
+                {open.map((e) => <option key={e.id} value={e.id}>{e.name}{brandOf(e) ? ` (co-host with ${brandOf(e)})` : ''}</option>)}
+                {taken > 0 && (
+                  <optgroup label="Already hosted by someone else">
+                    {offered.filter((e) => otherHost(e)).map((e) => (
+                      <option key={e.id} value={e.id} disabled>{e.name} (hosted by {otherHost(e)})</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
               <button type="button" className="cpl-btn" disabled={!choice || busy === 'add'} onClick={add} data-testid="hosted-event-add-save">
                 {busy === 'add' ? 'Saving…' : 'They host it'}
               </button>
               <button type="button" className="cpl-btn is-soft" onClick={() => setAdding(false)}>Cancel</button>
+              {all && (
+                <p className="cpl-note cpl-row-note" data-testid="hosted-event-note">
+                  {open.length === 0
+                    ? `Every event already has a host${taken ? ` (${taken} hosted by another creator)` : ''}. Create a new event in Producer Mode, or free one up on the event's page.`
+                    : taken > 0 ? `${taken} more ${taken === 1 ? 'event is' : 'events are'} hosted by another creator, so ${taken === 1 ? 'it is' : 'they are'} listed but can't be chosen. A brand's event they co-host with the brand.` : null}
+                </p>
+              )}
             </div>
           ) : (
             <button type="button" className="cpl-btn is-soft" onClick={startAdd} data-testid="hosted-event-add">
