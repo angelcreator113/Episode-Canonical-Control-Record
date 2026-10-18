@@ -120,13 +120,19 @@
 .cast-person-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
 .cast-person { display: flex; flex-direction: column; gap: 8px; padding-bottom: 12px; color: inherit; text-decoration: none; min-width: 0; flex: 1; }
 .cast-person-cover {
-  display: grid; place-items: center; height: 120px; overflow: hidden;
+  display: grid; place-items: center; height: 112px; overflow: hidden;
   background: linear-gradient(160deg, var(--lala-lavender-soft), var(--accent-subtle));
   border-bottom: 1.5px solid var(--lala-gold-line);
 }
-.cast-person-cover img { width: 100%; height: 100%; object-fit: cover; }
+/* Photo or initial, every card's head is the same circle, so the cards in a
+   row match; a portrait is cut to the circle around the face, not to a band
+   of hair (Evoni, 2026-10-18). */
+.cast-person-cover img {
+  width: 76px; height: 76px; border-radius: 50%; object-fit: cover; object-position: center 25%;
+  border: 2px solid var(--lala-gold-line); background: var(--surface-card);
+}
 .cast-avatar {
-  display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%;
+  display: grid; place-items: center; width: 76px; height: 76px; border-radius: 50%; box-sizing: border-box;
   background: var(--surface-card); color: var(--lala-lavender-text); border: 2px solid var(--lala-gold-line);
   font-family: var(--font-prose); font-size: 26px; font-weight: 700;
 }
@@ -134,7 +140,7 @@
 .cast-person-text strong { font-size: 15px; color: var(--lala-lavender-text); overflow-wrap: anywhere; }
 .cast-person-text span { font-size: 13px; color: var(--text-secondary); overflow-wrap: anywhere; }
 .cast-person-text .cast-real-name { color: var(--text-primary); font-weight: 600; }
-.cast-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px; }
+.cast-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px; margin-top: auto; }
 .cast-chip { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
 .cast-chip.is-lavender { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
 .cast-chip.is-gold { background: var(--lala-gold-soft); color: var(--lala-gold-text); border: 1px solid var(--lala-gold-line); }
@@ -192,7 +198,8 @@
   .cast-world { padding: 14px; }
   .cast-link { margin-left: 0; }
   .cast-people { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-  .cast-person-cover { height: 96px; }
+  .cast-person-cover { height: 92px; }
+  .cast-person-cover img, .cast-avatar { width: 64px; height: 64px; }
   .cast-person-text { padding: 0 10px; }
   .cast-person-text strong { font-size: 14px; overflow-wrap: break-word; }
   .cast-chips { padding: 0 10px; }

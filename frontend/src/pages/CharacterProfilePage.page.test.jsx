@@ -62,7 +62,7 @@ describe('the character page', () => {
     expect(screen.getByRole('button', { name: 'Export Profile' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'The cast' }).getAttribute('href')).toBe('/character-registry');
     const tabs = within(screen.getByRole('navigation', { name: 'Character sections' })).getAllByRole('link');
-    expect(tabs.map((t) => t.textContent)).toEqual(['Overview', 'Inner Life', 'Appearance', 'Voice & Feed', 'Connections', 'In the World', 'Places']);
+    expect(tabs.map((t) => t.textContent)).toEqual(['Overview', 'Inner Life', 'Appearance', 'Voice & Feed', 'Connections', 'In the World', 'Places', 'Story & Events', 'Settings']);
     expect(tabs[0].getAttribute('aria-current')).toBe('page');
   });
 
@@ -155,9 +155,9 @@ describe('the character page', () => {
     expect(screen.getByTestId('il-subject-wants')).toBeTruthy();
     expect(screen.queryByTestId('depth-panel')).toBeNull();
     fireEvent.click(screen.getByRole('link', { name: 'In the World' }));
-    fireEvent.change(screen.getByLabelText('World'), { target: { value: 'lalaverse' } });
+    fireEvent.change(screen.getByLabelText('Story world'), { target: { value: 'lalaverse' } });
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/character-registry/characters/c1', { world: 'lalaverse' }));
-    expect(screen.getByLabelText('World').value).toBe('lalaverse');
+    expect(screen.getByLabelText('Story world').value).toBe('lalaverse');
   });
 
   test('Inner life: Generate fills that section in', async () => {
@@ -239,6 +239,10 @@ describe('the character page', () => {
     renderIt();
     await waitFor(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Sable Okafor'));
     expect(screen.getByTestId('ch-aka').textContent).toBe('Online as STUDIO BY SABLE');
+    // Quick facts shows the real name; its Edit opens their names.
+    expect(screen.getByTestId('ch-quick').textContent).toContain('Real nameSable Okafor');
+    expect(screen.queryByTestId('ch-names')).toBeNull();
+    fireEvent.click(within(screen.getByTestId('ch-quick')).getByRole('button', { name: 'Edit' }));
     const names = screen.getByTestId('ch-names');
     expect(names.textContent).toContain('Sable Okafor');
     expect(names.textContent).toContain('@studiobysable');
@@ -257,6 +261,7 @@ describe('the character page', () => {
   test('no real name yet: Suggest one asks the generator for it', async () => {
     vi.mocked(api.post).mockResolvedValue({ data: { success: true, filled: ['selected_name'], character: { ...CHARACTER, selected_name: 'Maren Ellis' } } });
     renderIt();
+    fireEvent.click(within(await screen.findByTestId('ch-quick')).getByRole('button', { name: 'Edit' }));
     await waitFor(() => expect(screen.getByTestId('ch-names')).toBeTruthy());
     expect(screen.getByTestId('ch-names').textContent).toContain('Not set');
     fireEvent.click(screen.getByRole('button', { name: /Suggest one/ }));
@@ -276,7 +281,8 @@ describe('the character page', () => {
     await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toBeTruthy());
     fireEvent.click(screen.getByRole('link', { name: 'Connections' }));
     await waitFor(() => expect(screen.getByRole('link', { name: 'slowsift' }).getAttribute('href')).toBe('/pulse?profile=9'));
-    expect(screen.getByText('one way')).toBeTruthy();
+    expect(screen.getByText('Ambition identity · One way')).toBeTruthy();
+    expect(screen.getByText('High')).toBeTruthy();
     expect(screen.queryByText('unresolved')).toBeNull();
   });
 
@@ -286,7 +292,8 @@ describe('the character page', () => {
       return { data: {} };
     });
     renderIt();
-    await waitFor(() => expect(screen.getByText('Protagonist')).toBeTruthy());
+    // In the header's roles and in Quick facts.
+    await waitFor(() => expect(screen.getByText('Protagonist', { selector: '.ch-qf-row dd' })).toBeTruthy());
     expect(screen.queryByText(/Special/)).toBeNull();
   });
 
