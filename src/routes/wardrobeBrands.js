@@ -408,3 +408,5 @@ router.post('/mark-published', requireAuth, async (req, res) => {
 });
 
 module.exports = router;
+// Who covers which brand category, for the press's weekly pieces (services/worldMoments).
+module.exports.PRESS_COVERAGE_MAP = PRESS_COVERAGE_MAP;

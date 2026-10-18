@@ -731,12 +731,20 @@ if (process.env.PULSE_ENGINE_ENABLED === 'true' && process.env.NODE_ENV !== 'tes
   require('./services/pulseVoices').startScheduler(db);
   // The weekly recap (Task #3008): each hour, last week's draft if it has none (never AI; never published by itself).
   require('./services/pulseRecap').startScheduler(db);
+  // World moments' press and trend posts (services/worldMoments): drafted here, never in a request.
+  require('./services/worldMoments').registerHandlers();
 }
 
 // Release time (Character Consistency Engine step 6c, services/postRelease):
 // each minute, drafts Evoni scheduled whose time has come go live. Not under
 // the posting engine's switch (she chose each time herself); never in tests.
 if (process.env.NODE_ENV !== 'test') require('./services/postRelease').startScheduler(db);
+
+// Scheduled world moments (services/worldMoments; Evoni, 2026-10-18): the routes, and
+// the automatic run, which starts only when the server sets WORLD_MOMENTS_ENABLED=true
+// (Evoni's .env change) and drafts only for shows whose switch is on; never in tests.
+try { app.use('/api/v1/world-moments', require('./routes/worldMomentsRoutes')); console.log('✓ World moments routes loaded at /api/v1/world-moments'); } catch (e) { console.error('✗ Failed to load World moments routes:', e.message); }
+if (process.env.NODE_ENV !== 'test') require('./services/worldMoments').startScheduler(db);
 
 // Phase 2 routes
 app.use('/api/v1/files', filesRoutes);
