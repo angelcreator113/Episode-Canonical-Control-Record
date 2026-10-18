@@ -10,6 +10,7 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 const { loadBrainContext, recordRuleUse } = require('./brainRules');
+const { loadCultureList, awardShowsBlock } = require('./cultureCanon');
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'];
@@ -85,6 +86,8 @@ async function generateSeasonalEvents(month, showId, models, options = {}) {
 
   // The Show Bible's always-true rules (2026-10-06): the calendar is canon.
   const brain = await loadBrainContext(models, { showId, label: 'SeasonalEvents' });
+  // The Culture page's award shows, each in its month (services/cultureCanon, 2026-10-18).
+  const awards = awardShowsBlock(await loadCultureList(models, 'AWARD_SHOWS'), monthName);
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const response = await client.messages.create({
@@ -99,7 +102,7 @@ The LalaVerse is a constructed digital reality for content creators, influencers
 SEASONAL CONTEXT: ${seasons.join(', ')}
 RELEVANT FEED EVENT TYPES: ${relevantTemplates.map(t => t.name).join(', ')}
 ALREADY EXISTS: ${existingTitles.join(', ') || 'none'}
-${brain.block || ''}
+${awards}${brain.block || ''}
 Generate events that are BIG cultural moments — fashion weeks, award shows, brand launches, creator summits. NOT micro events.
 
 Return JSON array:

@@ -3,11 +3,11 @@
  * Shows cultural calendar events grouped by city or month.
  *
  * 2026-10-06: in the hub's design (pages/CultureEvents.css, tokens only).
- * A city's own color from data/dreamCities is only its accent; each
+ * A city's own color (the saved DREAM city list's, lib/dreamCityList) is only its accent; each
  * cultural category has a tone class.
  */
 import React, { useState, useMemo } from 'react';
-import { DREAM_CITIES } from '../../data/dreamCities';
+import { useDreamCities } from '../../lib/dreamCityList';
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
@@ -21,10 +21,10 @@ const CITY_CATEGORIES = {
 };
 const CATEGORY_TONES = ['fashion', 'beauty', 'entertainment', 'lifestyle', 'community', 'technology'];
 
-function getCityForEvent(ev) {
-  if (ev.lalaverse_district) return DREAM_CITIES.find((c) => c.name === ev.lalaverse_district) || null;
+function getCityForEvent(ev, cities) {
+  if (ev.lalaverse_district) return cities.find((c) => c.name === ev.lalaverse_district) || null;
   const cat = (ev.cultural_category || '').toLowerCase();
-  return DREAM_CITIES.find((c) => (CITY_CATEGORIES[c.key] || []).includes(cat)) || null;
+  return cities.find((c) => (CITY_CATEGORIES[c.key] || []).includes(cat)) || null;
 }
 const toneOf = (ev) => (CATEGORY_TONES.includes(ev.cultural_category) ? ev.cultural_category : 'community');
 const accent = (color) => (color ? { '--item': color } : undefined);
@@ -56,6 +56,8 @@ function EventCard({ ev, city, expanded, onToggle, onCreateEvent, onDelete }) {
 export default function EventsTab({ events, loading, onCreateEvent, onDelete }) {
   const [calView, setCalView] = useState('city');
   const [expandedId, setExpandedId] = useState(null);
+  // The saved DREAM city list over the built-in one (lib/dreamCityList).
+  const DREAM_CITIES = useDreamCities();
 
   const majorEvents = events.filter((e) => !e.is_micro_event);
   const microEvents = events.filter((e) => e.is_micro_event);
@@ -78,7 +80,7 @@ export default function EventsTab({ events, loading, onCreateEvent, onDelete }) 
       <div className="ce-toolbar">
         <div className="ce-city-counts">
           {DREAM_CITIES.map((c) => {
-            const count = majorEvents.filter((ev) => getCityForEvent(ev)?.key === c.key).length;
+            const count = majorEvents.filter((ev) => getCityForEvent(ev, DREAM_CITIES)?.key === c.key).length;
             return (
               <div key={c.key} className="ce-city-count" style={accent(c.color)} title={c.name}>
                 <span className="ce-city-letter">{c.letter}</span>
@@ -100,7 +102,7 @@ export default function EventsTab({ events, loading, onCreateEvent, onDelete }) 
       {calView === 'city' && (
         <div className="ce-columns">
           {DREAM_CITIES.map((city) => {
-            const cityEvents = majorEvents.filter((ev) => getCityForEvent(ev)?.key === city.key);
+            const cityEvents = majorEvents.filter((ev) => getCityForEvent(ev, DREAM_CITIES)?.key === city.key);
             return (
               <div key={city.key} className="ce-column" style={accent(city.color)}>
                 <div className="ce-column-head">
@@ -119,7 +121,7 @@ export default function EventsTab({ events, loading, onCreateEvent, onDelete }) 
           {MONTHS.map((m, i) => (
             <div key={m} className="ce-column">
               <div className="ce-column-head"><div><strong>{m}</strong><span>{(byMonth[i] || []).length} events</span></div></div>
-              {(byMonth[i] || []).length > 0 ? byMonth[i].map((ev) => card(ev, getCityForEvent(ev))) : <p className="ce-empty">—</p>}
+              {(byMonth[i] || []).length > 0 ? byMonth[i].map((ev) => card(ev, getCityForEvent(ev, DREAM_CITIES))) : <p className="ce-empty">—</p>}
             </div>
           ))}
         </div>
@@ -130,7 +132,7 @@ export default function EventsTab({ events, loading, onCreateEvent, onDelete }) 
           <h3 className="ce-h3">Micro events ({microEvents.length})</h3>
           <div className="ce-grid">
             {microEvents.map((ev) => {
-              const city = getCityForEvent(ev);
+              const city = getCityForEvent(ev, DREAM_CITIES);
               return (
                 <div key={ev.id} className={`ce-ev ce-cat-${toneOf(ev)}`} style={accent(city?.color)}>
                   <div className="ce-ev-head is-static"><span className="ce-ev-title">{ev.title}</span>{city && <span className="ce-ev-letter">{city.letter}</span>}</div>

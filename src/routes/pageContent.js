@@ -44,6 +44,8 @@ router.put('/:pageName/:constantKey', requireAuth, async (req, res) => {
       returning: true,
     });
     if (cities) {
+      // The writers read the saved cities' words (services/dreamCityText).
+      require('../services/dreamCityText').forgetCityCultures();
       const teasers = require('../services/pulseTeasers');
       const keys = teasers.changedCityKeys(before, row.data);
       if (keys.length) {
@@ -68,6 +70,7 @@ router.delete('/:pageName/:constantKey', requireAuth, async (req, res) => {
         constant_key: req.params.constantKey,
       },
     });
+    if (req.params.pageName === 'world_infrastructure' && req.params.constantKey === 'DREAM_CITIES') require('../services/dreamCityText').forgetCityCultures();
     res.json({ deleted: deleted > 0 });
   } catch (err) {
     console.error('[PageContent] DELETE error:', err);

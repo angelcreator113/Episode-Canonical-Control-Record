@@ -105,6 +105,9 @@ const answer = (text) => ({ content: [{ type: 'text', text }] });
     expect(prompt).toContain('- @velvet: Who turned the lights off?? #VelvetHour');   // the Pulse, live posts only
     expect(prompt).not.toContain('DRAFT: not out yet');
     expect(prompt).toContain('the consciousness transfer is not placed yet. Write no bleed.');
+    // How feuds and legends grow in Lala's world (services/cultureCanon, 2026-10-18).
+    expect(prompt).toContain("HOW FEUDS AND LEGENDS GROW IN LALA'S WORLD");
+    expect(prompt).toContain('- Year 2-3: Escalation:');
     expect(res.body).toMatchObject({ used_pulse_posts: 1, bleed: 'unset' });
     const [[ch]] = await run('SELECT draft_prose FROM storyteller_chapters WHERE id = :ch2', ids);
     expect(ch.draft_prose).toBeNull();
@@ -178,6 +181,7 @@ const answer = (text) => ({ content: [{ type: 'text', text }] });
     expect(prompt).toContain(`episode_id ${ids.ep1}`);
     expect(prompt).toContain('Its short story begins: Lala arrived late.');
     expect(prompt).toContain('The consciousness transfer is not placed yet: plan no bleed.');
+    expect(prompt).toContain('How someone becomes a legend:');
 
     const applied = await request(app).post(`${api}/books/${ids.book}/plan/apply`).send({ items: planned.body.plan });
     expect(applied.body).toMatchObject({ created: 1, filled: 1 });

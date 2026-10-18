@@ -90,6 +90,10 @@ const links = (h) => q(
     expect(prompt).toContain('Do not reference JustAWoman or the real world in any generated content.');
     expect(prompt).toContain('SHOW BIBLE: ALWAYS TRUE');
     expect(prompt).toContain(`${RULE}: Every city has its own weather.`);
+    // The hierarchy, schools, companies and economy (services/cultureCanon, 2026-10-18).
+    for (const heading of ["THE LALAVERSE'S CELEBRITY HIERARCHY", "THE LALAVERSE'S SCHOOLS", "THE LALAVERSE'S BIG COMPANIES", 'HOW LALAVERSE CREATORS MAKE MONEY']) {
+      expect(prompt).toContain(heading);
+    }
     const after = (await q('SELECT injection_count FROM franchise_knowledge WHERE id = :id', { id: ruleId }))[0].injection_count;
     expect(after).toBe(before + 1);
   });
@@ -118,6 +122,7 @@ const links = (h) => q(
     const prompt = promptOf(mockCreate.mock.calls[0]);
     expect(prompt).not.toContain('LALAVERSE CONTEXT');
     expect(prompt).not.toContain('SHOW BIBLE');
+    expect(prompt).not.toContain("THE LALAVERSE'S SCHOOLS");
     expect((await row(handle('r'), 'home_location_id')).home_location_id).toBeNull();
   });
 

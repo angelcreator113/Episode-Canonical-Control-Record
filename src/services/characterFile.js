@@ -13,8 +13,8 @@
  *     registry character (its feed profile loaded when not given) or from a
  *     feed profile alone (its registry character found by feed_profile_id).
  *     Never throws: a part that cannot be read is left out and logged.
- *       { character, feedProfile, facts, typology, contentType, inner, mask,
- *         behind, relationships, events, recentPosts }
+ *       { character, feedProfile, facts, typology, contentType, rebrands, inner, mask,
+ *         behind, relationships, events, recentPosts, world }
  *   characterFileBlock(file)   the prompt block: facts (characterFacts
  *     factsPromptBlock), what they are known for on The Pulse (their content
  *     type, services/characterContentType; it can differ from their job),
@@ -22,7 +22,9 @@
  *     services/characterAppearance; public, so in publicOnly too), then each part under a heading
  *     that says which zone it belongs to: the inner life (author-only), the
  *     mask (what they show, true or not), behind it (what is actually
- *     true), the people in their life, their events, their latest posts.
+ *     true), the people in their life, where they live (their DREAM city,
+ *     its culture, their studio and the venues they go to; services/
+ *     posterWorld, 2026-10-18; public), their events, their latest posts.
  *     '' when there is nothing. { publicOnly }: only what the public sees
  *     (facts, content type, mask, events, posts), for a generator that writes from the
  *     public face alone (the voice build).
@@ -68,7 +70,7 @@ async function loadCharacterFile(db, { character = null, feedProfile } = {}) {
   }
   const file = {
     character: c, feedProfile: fp, facts: null, typology: c?.typology || null, contentType: null,
-    inner: {}, mask: {}, behind: {}, relationships: [], events: [], recentPosts: [],
+    inner: {}, mask: {}, behind: {}, relationships: [], events: [], recentPosts: [], world: [],
   };
   if (!c && !fp) return file;
 
@@ -86,6 +88,8 @@ async function loadCharacterFile(db, { character = null, feedProfile } = {}) {
       const pillars = await require('./contentPillars').pillarsFor(db, type.name);
       return pillars.length ? { ...type, pillars } : type;
     }, { name: fp.society_archetype });
+    // Their rebrands in the story (services/contentTypeHistory, 2026-10-18): public, their followers saw them.
+    file.rebrands = await part('their rebrands', () => require('./contentTypeHistory').rebrandsOf(db, fp.id), []);
   }
   for (const k of PROFILE_MASK_KEYS) if (clip(fp?.[k])) file.mask[k] = clip(fp[k]);
   for (const [k, from] of BEHIND_KEYS) {
@@ -109,6 +113,7 @@ async function loadCharacterFile(db, { character = null, feedProfile } = {}) {
     }, []);
   }
   if (fp?.id) {
+    file.world = await require('./posterWorld').posterWorldLines(db, fp.id);
     file.events = await part('the events', () => require('./characterEvents').eventsForProfile(db.sequelize, fp.id), []);
     file.recentPosts = await part('the recent posts', async () => {
       const [rows] = await db.sequelize.query(
@@ -136,6 +141,7 @@ function characterFileBlock(file, { publicOnly = false } = {}) {
       file.contentType,
       file.facts?.occupation && !(file.facts.undecided || []).includes('occupation') ? file.facts.occupation : null,
       publicOnly ? null : require('./characterContentType').gapOf(file.character),
+      file.rebrands || [],
     ) : '',
     publicOnly ? '' : seedBlock(file.typology),
     file.character?.appearance && require('./characterAppearance').appearanceLines(file.character.appearance)
@@ -144,6 +150,7 @@ function characterFileBlock(file, { publicOnly = false } = {}) {
     Object.keys(file.mask).length ? `THE MASK (what they show the world, true or not; their public voice comes from here):\n${lines(file.mask)}` : '',
     !publicOnly && Object.keys(file.behind).length ? `BEHIND THE MASK (what is actually true; the public does not see it, and a gap between this and the mask is intentional, not an error):\n${lines(file.behind)}` : '',
     !publicOnly && file.relationships.length ? `PEOPLE IN THEIR LIFE (confirmed relationships; stay consistent with them):\n${file.relationships.map((r) => `- ${r.person}${r.kind ? ` (${r.kind}${r.status && r.status !== 'Active' ? `, ${r.status.toLowerCase()}` : ''})` : ''}${r.knows ? `: privately knows ${r.knows}` : ''}`).join('\n')}` : '',
+    file.world?.length ? `WHERE THEY LIVE (their DREAM city and places; anything set in their world agrees with it):\n${file.world.map((l) => `- ${l}`).join('\n')}` : '',
     file.events.length ? `THEIR EVENTS:\n${require('./characterEvents').eventsPromptLines(file.events)}` : '',
     file.recentPosts.length ? `THEIR LATEST POSTS ON THE PULSE (what the public has already seen of them):\n${file.recentPosts.map((t) => `- ${t}`).join('\n')}` : '',
   ].filter(Boolean);

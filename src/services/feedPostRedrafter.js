@@ -10,6 +10,11 @@
  * The new text replaces the draft's, and the old text comes back so the
  * page can undo it. The AI call is one Claude message (claude-sonnet-4-6,
  * two attempts), logged and budget-gated by aiCostTracker's client patch.
+ *
+ * A redraft knows the world a new draft does (Evoni, 2026-10-18: a draft
+ * waiting in Review redrafted got the Show Bible but not the world): the
+ * poster's city, studio and places (services/posterWorld) and the gossip
+ * outlets, trends and archives (pulseDrafter.mediaBlock).
  */
 
 const { isLive, LOCKED_MESSAGE } = require('./feedPostStatus');
@@ -42,7 +47,7 @@ async function posterProfile(models, post) {
   return SocialProfile.findOne({ where: { handle }, attributes: VOICE_ATTRIBUTES });
 }
 
-function buildPrompt(post, profile, note, brainBlock = null) {
+function buildPrompt(post, profile, note, brainBlock = null, { world = '', culture = '' } = {}) {
   const who = post.poster_display_name || profile?.display_name || `@${String(post.poster_handle || 'lala').replace(/^@/, '')}`;
   const voice = profile ? [
     profile.archetype ? `archetype: ${profile.archetype}` : null,
@@ -52,8 +57,8 @@ function buildPrompt(post, profile, note, brainBlock = null) {
   return `A character in the LalaVerse (a 2009-style social feed) has a draft post. Rewrite it in that character's own voice, keeping what the post is about and what it does in the story. One post, about the same length or shorter, no hashtags unless the voice uses them, no emoji walls. Answer with the post's text only.
 
 Who is posting: ${who}${post.poster_platform ? ` (${post.poster_platform})` : ''}
-${voice ? `Their voice:\n${voice}\n` : 'No profile is on file: take the voice from the draft itself.\n'}${post.narrative_function ? `What the post does: ${String(post.narrative_function).replace(/_/g, ' ')}\n` : ''}${note ? `Evoni's note for this redraft: ${note}\n` : ''}
-${brainBlock ? `${brainBlock}\n` : ''}The draft:
+${voice ? `Their voice:\n${voice}\n` : 'No profile is on file: take the voice from the draft itself.\n'}${world}${post.narrative_function ? `What the post does: ${String(post.narrative_function).replace(/_/g, ' ')}\n` : ''}${note ? `Evoni's note for this redraft: ${note}\n` : ''}
+${culture}${brainBlock ? `${brainBlock}\n` : ''}The draft:
 ${post.content_text || ''}`;
 }
 
@@ -70,7 +75,9 @@ async function redraftPost(models, postId, { note = null } = {}) {
   const profile = await posterProfile(models, post);
   // A redraft stays canon: the Show Bible's always-true rules (2026-10-06).
   const brain = await loadBrainContext(models, { showId: post.show_id || null, limit: 15, label: 'FeedRedraft' });
-  const prompt = buildPrompt(post, profile, note ? note.trim() : null, brain.block);
+  const world = profile?.id ? await require('./posterWorld').posterWorldLine(models, profile.id) : '';
+  const culture = await require('./pulseDrafter').mediaBlock(models);
+  const prompt = buildPrompt(post, profile, note ? note.trim() : null, brain.block, { world, culture });
   // A regeneration counts: one manual request (The Pulse, Task #3031).
   await require('./pulseRequests').take(models, { showId: post.show_id, lane: 'manual', kind: 'redraft' });
   let message;
