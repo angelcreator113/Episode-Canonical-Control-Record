@@ -18,7 +18,7 @@ import {
   BarChart3, CalendarDays, Download, Link2, MapPin, Palette, Crown, Instagram,
   Quote, Star, TrendingUp, Briefcase, IdCard, Activity, FileText, CirclePlay, Flame,
   Copy, BadgeCheck, Lock, Eye, Smartphone, Plus, ExternalLink, Share2, Search,
-  Building2, BookOpen, Radio,
+  Building2, BookOpen, Radio, Settings as SettingsIcon, AlertTriangle, Archive, RotateCcw, Link as LinkIcon,
 } from 'lucide-react';
 import Pager, { usePaged } from '../components/Pager/Pager';
 import CharacterPlacesTab from '../components/CharacterPlaces/CharacterPlacesTab';
@@ -73,6 +73,17 @@ export const unmarkIntentionalApi = (id, flagId) =>
   apiClient.delete(`${API_URL}/cast/characters/${id}/check/intentional/${flagId}`);
 export const postIdeasApi = (id) =>
   apiClient.get(`${API_URL}/cast/characters/${id}/posts/ideas`);
+// Settings (step 8): status, keep in the cast, archive, bring back, delete for good.
+export const setStatusApi = (id, status) =>
+  apiClient.post(`${API_URL}/character-registry/characters/${id}/set-status`, { status });
+export const keepApi = (id, kept) =>
+  apiClient.post(`${API_URL}/cast/characters/${id}/keep`, { kept });
+export const archiveApi = (id) =>
+  apiClient.delete(`${API_URL}/character-registry/characters/${id}`);
+export const restoreApi = (id) =>
+  apiClient.post(`${API_URL}/cast/characters/${id}/restore`);
+export const deleteForGoodApi = (id) =>
+  apiClient.delete(`${API_URL}/cast/characters/${id}/permanent`);
 export const makeActiveApi = (id) =>
   apiClient.put(`${API_URL}/character-registry/characters/${id}`, { depth_level: 'active' });
 export const setRegistryShowApi = (registryId, showId) =>
@@ -142,6 +153,8 @@ export const TABS = [
   { id: 'places',      label: 'Places',       icon: MapPin },
   // Evoni, 2026-10-18: their episodes, events, posts, stories and chapters in one place.
   { id: 'story',       label: 'Story & Events', icon: CalendarDays },
+  // Evoni, 2026-10-18: what already works: status, keep, feed profile, export, archive and delete.
+  { id: 'settings',    label: 'Settings',     icon: SettingsIcon },
 ];
 const tabOf = (value) => (TABS.some((t) => t.id === value) ? value : 'overview');
 
@@ -3142,6 +3155,160 @@ export function TabStory({ character, feedProfile, appearances, openTab, now = D
   );
 }
 
+/* ── Settings (Evoni's mock, 2026-10-18, step 8: "what already works") ───────────
+   Their status (draft, accepted, declined, finalized: finalized locks
+   editing), whether The cast keeps them, their feed profile, sharing and
+   export, and the danger zone: archive (they leave the cast and the page),
+   then bring them back or delete them for good, which asks for their name
+   typed out and is refused while an episode or anything else still uses
+   them. The mock's notifications, permissions and automations have nothing
+   behind them yet. */
+
+const STATUSES = [
+  ['draft', 'Draft', 'Still being written.'],
+  ['accepted', 'Accepted', 'In the cast; editable.'],
+  ['declined', 'Declined', 'Not used.'],
+  ['finalized', 'Finalized', 'Locked: nothing on this page can be edited until you change it back.'],
+];
+
+function SettingRow({ label, hint, children, htmlFor }) {
+  return (
+    <div className="ch-set-row">
+      <div className="ch-set-label">
+        {htmlFor ? <label htmlFor={htmlFor}>{label}</label> : <span>{label}</span>}
+        {hint && <span className="ch-note">{hint}</span>}
+      </div>
+      <div className="ch-set-control">{children}</div>
+    </div>
+  );
+}
+
+export function TabSettings({ character, feedProfile, onSaved, onExport, onDeleted }) {
+  const [busy, setBusy] = useState(null);
+  const [note, setNote] = useState(null);
+  const [archived, setArchived] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [typed, setTyped] = useState('');
+  const name = character.display_name || character.selected_name || 'this character';
+  const kept = character.cast_review === 'kept';
+  const link = typeof window !== 'undefined' ? `${window.location.origin}/character/${character.id}` : `/character/${character.id}`;
+
+  const act = async (what, call, done) => {
+    setBusy(what); setNote(null);
+    try {
+      await call();
+      if (done) setNote({ text: done });
+      return true;
+    } catch (err) {
+      console.error(`[CharacterProfilePage] settings ${what} failed:`, err);
+      setNote({ error: true, text: err.response?.data?.error || 'That did not work. Try again.' });
+      return false;
+    } finally { setBusy(null); }
+  };
+  const setStatus = (status) => act('status', async () => {
+    const res = await setStatusApi(character.id, status);
+    onSaved({ status: res.data?.character?.status || status });
+  }, 'Status saved.');
+  const setKept = (next) => act('keep', async () => {
+    const res = await keepApi(character.id, next);
+    onSaved({ cast_review: res.data?.cast_review ?? (next ? 'kept' : null) });
+  }, next ? 'Kept in the cast.' : 'No longer marked as kept.');
+  const copyLink = () => act('copy', () => navigator.clipboard.writeText(link), 'Link copied.');
+  const archive = () => act('archive', async () => { await archiveApi(character.id); setArchived(true); },
+    `${name} is archived: out of the cast, the feed and this page once you leave it.`);
+  const restore = () => act('restore', async () => { await restoreApi(character.id); setArchived(false); setConfirming(false); setTyped(''); },
+    `${name} is back.`);
+  const removeForGood = async () => {
+    if (await act('delete', () => deleteForGoodApi(character.id))) onDeleted();
+  };
+
+  return (
+    <div className="ch-overview ch-settings" data-testid="ch-settings">
+      <div className="ch-col">
+        <section className="ch-card" aria-labelledby="ch-set-vis">
+          <h2 id="ch-set-vis" className="ch-h2"><Users size={20} aria-hidden="true" className="ch-h2-icon" /> Profile and status</h2>
+          <SettingRow label="Status" htmlFor="ch-set-status" hint={STATUSES.find(([k]) => k === character.status)?.[2]}>
+            <select id="ch-set-status" className="ch-wp-select" value={character.status || 'draft'} disabled={!!busy || archived} onChange={(e) => setStatus(e.target.value)}>
+              {STATUSES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select>
+          </SettingRow>
+          <SettingRow label="Kept in the cast" hint="The cast's review: kept characters are past review.">
+            <label className="ch-switch">
+              <input type="checkbox" role="switch" checked={kept} disabled={!!busy || archived} onChange={(e) => setKept(e.target.checked)} aria-label="Kept in the cast" />
+              <span aria-hidden="true" />
+              {kept ? 'Kept' : 'Not yet'}
+            </label>
+          </SettingRow>
+        </section>
+      </div>
+
+      <div className="ch-col">
+        <section className="ch-card" aria-labelledby="ch-set-feed">
+          <h2 id="ch-set-feed" className="ch-h2"><Smartphone size={20} aria-hidden="true" className="ch-h2-icon" /> Feed profile</h2>
+          <SettingRow label="On the feed as" hint="One feed person per character.">
+            {feedProfile
+              ? <span className="ch-set-value"><strong>{atHandle(feedProfile.handle)}</strong>{feedProfile.display_name ? ` · ${feedProfile.display_name}` : ''}</span>
+              : <span className="ch-note">No feed profile.</span>}
+          </SettingRow>
+          <Link className="ch-btn-soft ch-px-link" to="/character-registry">{feedProfile ? 'Match a different feed person on The cast' : 'Match them to a feed person on The cast'}</Link>
+        </section>
+        <section className="ch-card" aria-labelledby="ch-set-share">
+          <h2 id="ch-set-share" className="ch-h2"><LinkIcon size={20} aria-hidden="true" className="ch-h2-icon" /> Sharing and export</h2>
+          <SettingRow label="Export profile" hint="Their whole record as a file.">
+            <button type="button" className="ch-pill-btn" onClick={onExport}><Download size={14} aria-hidden="true" /> Export profile</button>
+          </SettingRow>
+          <SettingRow label="Link to this page" hint="For the studio team; it needs a sign-in.">
+            <span className="ch-set-link">
+              <input readOnly value={link} aria-label="Link to this page" onFocus={(e) => e.target.select()} />
+              <button type="button" className="ch-icon-btn" aria-label="Copy the link" onClick={copyLink}><Copy size={15} aria-hidden /></button>
+            </span>
+          </SettingRow>
+        </section>
+      </div>
+
+      <div className="ch-col">
+        <section className="ch-card ch-danger" aria-labelledby="ch-set-danger" data-testid="ch-danger">
+          <h2 id="ch-set-danger" className="ch-h2"><AlertTriangle size={20} aria-hidden="true" className="ch-h2-icon" /> Danger zone</h2>
+          {!archived ? (
+            <SettingRow label="Archive" hint="Takes them out of the cast and the feed. You can bring them back.">
+              <button type="button" className="ch-danger-btn" disabled={!!busy} onClick={archive}>
+                <Archive size={14} aria-hidden="true" /> {busy === 'archive' ? 'Archiving…' : `Archive ${name}`}
+              </button>
+            </SettingRow>
+          ) : (
+            <>
+              <SettingRow label="Bring back" hint="Undo the archive.">
+                <button type="button" className="ch-pill-btn" disabled={!!busy} onClick={restore}>
+                  <RotateCcw size={14} aria-hidden="true" /> {busy === 'restore' ? 'Bringing back…' : 'Bring back'}
+                </button>
+              </SettingRow>
+              <SettingRow label="Delete permanently" hint="Removes them for good. Refused while an episode or anything else still uses them.">
+                {!confirming ? (
+                  <button type="button" className="ch-danger-btn" disabled={!!busy} onClick={() => setConfirming(true)}>
+                    <Trash2 size={14} aria-hidden="true" /> Delete permanently
+                  </button>
+                ) : (
+                  <span className="ch-set-confirm">
+                    <label htmlFor="ch-set-typed">Type <strong>{name}</strong> to delete them for good.</label>
+                    <input id="ch-set-typed" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
+                    <span className="ch-facts-row">
+                      <button type="button" className="ch-danger-btn is-solid" disabled={!!busy || typed.trim() !== name} onClick={removeForGood}>
+                        {busy === 'delete' ? 'Deleting…' : 'Delete for good'}
+                      </button>
+                      <button type="button" className="ch-btn-soft" disabled={!!busy} onClick={() => { setConfirming(false); setTyped(''); }}>Cancel</button>
+                    </span>
+                  </span>
+                )}
+              </SettingRow>
+            </>
+          )}
+        </section>
+      </div>
+      {note && <p className={`ch-note ch-set-note${note.error ? ' is-error' : ''}`} role={note.error ? 'alert' : 'status'}>{note.text}</p>}
+    </div>
+  );
+}
+
 /* ── MAIN COMPONENT ──────────────────────────────────────────────────────────── */
 
 export default function CharacterProfilePage() {
@@ -3346,6 +3513,7 @@ export default function CharacterProfilePage() {
         {activeTab === 'world' && <TabWorld character={character} feedProfile={feedProfile} appearances={appearances} onSaved={onSaved} gen={gen} openTab={setActiveTab} />}
         {activeTab === 'places' && <div className="ch-card"><CharacterPlacesTab key={character.id} character={character} /></div>}
         {activeTab === 'story' && <TabStory character={character} feedProfile={feedProfile} appearances={appearances} openTab={setActiveTab} />}
+        {activeTab === 'settings' && <TabSettings character={character} feedProfile={feedProfile} onSaved={onSaved} onExport={exportJson} onDeleted={() => navigate('/character-registry')} />}
         {activeTab === 'appearance' && <CharacterAppearanceTab key={character.id} character={character} onPortraitChanged={(url) => onSaved({ portrait_url: url })} />}
       </div>
     </div>
