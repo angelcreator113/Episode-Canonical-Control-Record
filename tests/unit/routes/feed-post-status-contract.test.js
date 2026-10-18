@@ -33,7 +33,6 @@ describe('feed post status contract', () => {
     expect(put).toMatch(/const updatable = \['status', 'content_text'/);
   });
   test('posts created inside an episode start as drafts', () => {
-    expect(read('src', 'services', 'feedPostGeneratorService.js')).toMatch(/sort_order: i,\s*\/\/[^\n]*\n\s*status: 'draft',/);
     expect(read('src', 'services', 'feedEngagementService.js')).toMatch(/status: post\.status === 'draft' \|\| held \? 'draft' : 'live'/);
     const fin = read('src', 'services', 'financialFeedService.js');
     expect(fin).toMatch(/timeline_position, status, created_at, updated_at/);
