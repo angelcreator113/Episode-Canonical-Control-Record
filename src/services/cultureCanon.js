@@ -87,7 +87,7 @@ const DEFAULTS = Object.freeze({
     { stream: 'Membership Communities', what: 'Fans pay for exclusive access — behind-the-scenes, private discussions', who: 'Tier 2-4. Requires deep audience trust.' },
     { stream: 'Event Appearances', what: 'Festivals, award shows, industry panels, brand activations', who: 'Tier 1-3. Invitation is the signal.' },
     { stream: 'Digital Products', what: 'Courses, presets, templates, educational content', who: 'Tier 3-6. Knowledge monetized.' },
-    { stream: 'Pay-for-Attention', what: 'DM access, CashApp tipping, direct financial relationships with audience members', who: 'Any tier — but rarely discussed publicly.' },
+    { stream: 'Pay-for-Attention', what: 'DM access, Prime Coin tipping, direct financial relationships with audience members (the LalaVerse pays in Prime Coins)', who: 'Any tier — but rarely discussed publicly.' },
   ],
 });
 
