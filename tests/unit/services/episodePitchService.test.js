@@ -101,7 +101,11 @@ describe('parsePitches', () => {
 describe('pitchEpisodes', () => {
   const rows = (list) => list.map((r) => ({ toJSON: () => r }));
   const models = () => ({
-    sequelize: { query: jest.fn(async () => [[{ reputation: 3, brand_trust: 2, influence: 2, stress: 4, coins: 999 }]]) },
+    // The locations come through services/locationPicks' query.
+    sequelize: {
+      QueryTypes: { SELECT: 'SELECT' },
+      query: jest.fn(async (sql) => (/FROM world_locations/.test(sql) ? INPUTS.locations : [[{ reputation: 3, brand_trust: 2, influence: 2, stress: 4, coins: 999 }]])),
+    },
     SocialProfile: { findAll: jest.fn(async () => rows(INPUTS.creators)) },
     LalaverseBrand: { findAll: jest.fn(async () => rows(INPUTS.brands)) },
     WorldLocation: { findAll: jest.fn(async () => rows(INPUTS.locations)) },
@@ -115,6 +119,7 @@ describe('pitchEpisodes', () => {
     expect(create.mock.calls[0][0].model).toBe(MODELS[0]);
     expect(MODELS).toEqual(['claude-haiku-4-5-20251001']);
     expect(create.mock.calls[0][0].messages[0].content).toMatch(/Lala: 425 coins/);
+    expect(create.mock.calls[0][0].messages[0].content).toContain('The Honey Table');
     expect(result.pitches.map((p) => p.title)).toEqual(['Champagne Before Noon']);
   });
 
@@ -135,11 +140,12 @@ describe('pitchEpisodes', () => {
 
   test('a failed load is logged and the rest still pitch', async () => {
     const m = models();
-    m.WorldLocation.findAll = jest.fn(async () => { throw new Error('no table'); });
+    const state = m.sequelize.query;
+    m.sequelize.query = jest.fn(async (sql, opts) => { if (/FROM world_locations/.test(sql)) throw new Error('no table'); return state(sql, opts); });
     const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
     const create = jest.fn(async () => ({ content: [{ text: reply([{ title: 'T', organizer: { kind: 'creator', profile_id: 11 }, premise: 'P.' }]) }] }));
     const result = await pitchEpisodes(m, 'show-1', { client: { messages: { create } } });
-    expect(spy).toHaveBeenCalledWith('[EpisodePitch] locations load failed:', 'no table');
+    expect(spy).toHaveBeenCalledWith('[locationPicks] the World locations could not be read:', 'no table');
     expect(result.pitches).toHaveLength(1);
     spy.mockRestore();
   });
