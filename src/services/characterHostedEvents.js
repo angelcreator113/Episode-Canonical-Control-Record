@@ -8,6 +8,9 @@
  * automation copy's host_profile_id. Hosting an event writes the
  * character's feed profile there; an event already hosted by someone else
  * is refused, naming them, so a host is never replaced by a click.
+ * A brand-organized event can be co-hosted (Evoni, 2026-10-17: "let them
+ * co-host brand events"): the brand stays as host_brand and the character
+ * becomes its creator host beside it; stopping clears only the character.
  */
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -59,12 +62,9 @@ async function hostEvent(sequelize, { characterId, eventId }) {
   if (event.host_profile_id != null && Number(event.host_profile_id) !== pid) {
     throw new HostedEventError(`${event.name} is hosted by ${event.host_name || 'someone else'}`, 409, 'HOSTED_BY_ANOTHER');
   }
-  // The organizer readers take a brand host first, and any automation host
-  // id, numeric or not (utils/eventOrganizer): a click never replaces either
-  // (fifth audit).
-  if (String(event.host_brand || '').trim()) {
-    throw new HostedEventError(`${event.name} is hosted by ${String(event.host_brand).trim()}`, 409, 'HOSTED_BY_BRAND');
-  }
+  // A brand host stays and the character co-hosts (host_brand is never
+  // written here); an automation host id, numeric or not, is never replaced
+  // by a click (fifth audit).
   if (event.automation_host && event.automation_host !== String(pid)) {
     throw new HostedEventError(`${event.name} already has a host`, 409, 'HOSTED_BY_ANOTHER');
   }
@@ -76,7 +76,8 @@ async function hostEvent(sequelize, { characterId, eventId }) {
       RETURNING id`,
     { replacements: { pid, id: event.id } });
   if (!updated.length) throw new HostedEventError(`${event.name} was just given another host`, 409, 'HOSTED_BY_ANOTHER');
-  return { event_id: event.id, host_profile_id: pid };
+  const brand = String(event.host_brand || '').trim() || null;
+  return { event_id: event.id, host_profile_id: pid, co_host_brand: brand };
 }
 
 /** The character no longer hosts the event: both copies of the host are cleared when they are this character. */

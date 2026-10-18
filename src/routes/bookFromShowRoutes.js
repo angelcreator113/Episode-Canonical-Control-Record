@@ -17,8 +17,9 @@
  *   PUT  /api/v1/book-from-show/chapters/:id/episode        { episode_id | null }
  *   POST /api/v1/book-from-show/chapters/:id/write-from-episode
  *        a draft of the chapter from its episode, its approved story record,
- *        its short story and what Evoni accepted (or dismissed) of what the
- *        story added; a preview, nothing is saved
+ *        its short story, what Evoni accepted (or dismissed) of what the
+ *        story added, and the season around it (the arc, this slot, the
+ *        reveal plan; services/seasonRevealPlan); a preview, nothing is saved
  *   POST /api/v1/book-from-show/chapters/:id/check-against-story
  *        where the chapter's draft contradicts the short story
  *   POST /api/v1/book-from-show/books/:bookId/plan         { count, show_id }
@@ -74,6 +75,7 @@ const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { EPISODE_EVENT_ID_SQL } = require('../utils/episodeEventSql');
 const { recordBlock } = require('../services/episodeStoryRecord');
 const { canonBlock } = require('../services/storyCanon');
+const { seasonBlock } = require('../services/seasonRevealPlan');
 
 const router = express.Router();
 const MODELS = ['claude-sonnet-4-6'];
@@ -327,7 +329,7 @@ function planOf(chapter) {
   return lines.length ? `\nTHE PLAN FOR THIS CHAPTER (follow it):\n${lines.join('\n')}` : '';
 }
 
-function chapterPrompt({ chapter, episode, story, before, pulse = '', bleed = 'unset', record = '', canon = '' }) {
+function chapterPrompt({ chapter, episode, story, before, pulse = '', bleed = 'unset', record = '', canon = '', season = '' }) {
   return `${CANON}
 
 You are writing a chapter of JustAWoman's book. The book follows the show, Styling Adventures with Lala:
@@ -338,7 +340,7 @@ You are writing a chapter of JustAWoman's book. The book follows the show, Styli
 Write in JustAWoman's first person. Do not retell the short story: the reader has it. Let its event sit at the edge of the chapter: before it, around it, after it, behind the screen. Vary sentence rhythm: short when doubt peaks, longer when something opens. Do not give her clarity she hasn't earned.
 
 THE EPISODE: Episode ${episode.episode_number ?? '?'}: "${episode.title || 'Untitled'}"${episode.description ? `\n${clip(episode.description, 1200)}` : ''}
-
+${season ? `\n${season}\n` : ''}
 ${record ? `${record}\n\n` : ''}THE SHORT STORY (what the reader already knows):
 ${story ? clip(story.content, STORY_LIMIT) : '(not written yet: work from the episode alone)'}
 ${canon ? `\n${canon}\n` : ''}${pulse ? `\nWHAT THE LALAVERSE SAID ON THE PULSE (JustAWoman sees it; she may react to it):\n${pulse}\n` : ''}${before ? `\nTHE END OF THE CHAPTER BEFORE (for continuity):\n${before}\n` : ''}
@@ -373,10 +375,11 @@ router.post('/chapters/:id/write-from-episode', requireAuth, aiRateLimiter, asyn
 
     const record = await recordBlock(sequelize, episode.id);
     const canon = await canonBlock(sequelize, episode.id);
+    const season = await seasonBlock(sequelize, episode.id);
 
-    const prose = await ask({ prompt: chapterPrompt({ chapter, episode, story, before, pulse, bleed, record, canon }), maxTokens: 5000 });
+    const prose = await ask({ prompt: chapterPrompt({ chapter, episode, story, before, pulse, bleed, record, canon, season }), maxTokens: 5000 });
     if (!prose) return res.status(502).json({ success: false, error: 'The draft came back empty. Try again.' });
-    return res.json({ success: true, prose, used_short_story: Boolean(story), used_pulse_posts: pulse ? pulse.split('\n').length : 0, used_story_record: Boolean(record), bleed, saved: false });
+    return res.json({ success: true, prose, used_short_story: Boolean(story), used_pulse_posts: pulse ? pulse.split('\n').length : 0, used_story_record: Boolean(record), used_season: Boolean(season), bleed, saved: false });
   } catch (err) {
     console.error('[book-from-show] write-from-episode error:', err);
     return res.status(500).json({ success: false, error: err.message });

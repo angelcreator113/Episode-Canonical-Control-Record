@@ -150,13 +150,18 @@ async function generateFlux(prompt, options = {}) {
 
   const cost = imageCost.estimateImageCost(plan).usd;
 
-  console.log(`[ImageGen] Flux success: ${imageUrl.slice(0, 80)}...`);
+  // Flux Pro's own filter sends back an all-black image when it flags one,
+  // and says so here (Evoni, 2026-10-17: portraits "showing black").
+  const nsfwFlagged = Array.isArray(response.data?.has_nsfw_concepts) && response.data.has_nsfw_concepts[0] === true;
+  if (nsfwFlagged) console.warn('[ImageGen] Flux flagged this image; it is black.');
+  else console.log(`[ImageGen] Flux success: ${imageUrl.slice(0, 80)}...`);
   return {
     url: imageUrl,
     provider: 'flux',
     model,
     seed: response.data?.images?.[0]?.seed || null,
     cost_estimate: cost,
+    nsfw_flagged: nsfwFlagged,
   };
 }
 
