@@ -16,7 +16,7 @@
  *   - the character file (services/characterFile): facts with the home price
  *     range, the mask and what is behind it, the people in their life;
  *   - their DREAM city (social_profiles.city) and its culture
- *     (utils/feedCities DREAM_CITY_CULTURE);
+ *     (the saved DREAM city list's words, services/dreamCityText);
  *   - the place's World location, else their home location
  *     (social_profiles.home_location_id): district, street, property type;
  *   - the class they grew up in and are in now (de_money_*);
@@ -164,8 +164,7 @@ async function gather(db, { characterId, sceneSetId, role: askedRole = null }) {
 }
 
 /** The profile's parts the description uses, labelled, and the ones it lacks. */
-function readings({ character: c, file, fp, place, location }) {
-  const { DREAM_CITY_CULTURE } = require('../utils/feedCities');
+function readings({ character: c, file, fp, place, location, cityCulture = require('../utils/feedCities').DREAM_CITY_CULTURE }) {
   const used = [];
   const missing = [];
   const add = (label, value, needed = true) => {
@@ -197,7 +196,7 @@ function readings({ character: c, file, fp, place, location }) {
   add('Current life', fieldsText(c?.living_context, 200), place.role === 'home');
   const gap = lived ? gapOf(fp) : null;
   if (gap) add('Shown vs real', `${words(gap.kind)} gap`, false);
-  return { used, missing, gap, lived, cityName, cityCulture: cityKey ? DREAM_CITY_CULTURE[cityKey] || null : null, rangeSet };
+  return { used, missing, gap, lived, cityName, cityCulture: cityKey ? cityCulture[cityKey] || null : null, rangeSet };
 }
 
 function buildPrompt(ctx, read) {
@@ -223,7 +222,7 @@ function buildPrompt(ctx, read) {
 async function describePlace(db, { characterId, sceneSetId, role = null, client: injected = null }) {
   if (!injected && !process.env.ANTHROPIC_API_KEY) throw new PlaceDescriptionError(503, 'ANTHROPIC_API_KEY not configured', 'AI_UNAVAILABLE');
   const ctx = await gather(db, { characterId, sceneSetId, role });
-  const read = readings(ctx);
+  const read = readings({ ...ctx, cityCulture: await require('./dreamCityText').cityCultures(db) });
   const prompt = buildPrompt(ctx, read);
   const ai = injected || getClient();
   let message;

@@ -40,6 +40,8 @@ const {
   logValueTooLong,
 } = require('../utils/fitToModel');
 const { DREAM_CITY_CULTURE, DREAM_CITY_KEYS, feedCity } = require('../utils/feedCities');
+const { cityCultures } = require('../services/dreamCityText');
+const { profileWorldBlock } = require('../services/cultureCanon');
 const { DEFAULT_TIER_AFFINITY, withSixTiers } = require('../utils/followerTiers');
 const { generatedProfileFields } = require('../utils/generatedProfileFields');
 const { assignHomeLocation } = require('../services/feedHomeLocation');
@@ -90,7 +92,10 @@ function crossedWriterNotes(profile) {
 
 // ── LalaVerse city culture ───────────────────────────────────────────────────
 // The five DREAM cities (utils/feedCities). A profile that still has an old
-// city is read as its DREAM city (feedCity), so the old texts are gone.
+// city is read as its DREAM city (feedCity), so the old texts are gone. A
+// prompt reads each city's words from the saved DREAM city list
+// (services/dreamCityText cityCultures); these built-in texts are the
+// default for a caller that passes none.
 const CITY_CULTURE = DREAM_CITY_CULTURE;
 
 // ── Generation prompt ─────────────────────────────────────────────────────────
@@ -405,8 +410,8 @@ router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
     let prompt = buildGenerationPrompt(handle, platform, vibe_sentence, character_context, advanced_context, layer);
     if (layer === 'lalaverse' && lalaCity) {
       prompt += `\n\nLALAVERSE CONTEXT:
-This creator lives in ${lalaCity.replace(/_/g, ' ')} — ${CITY_CULTURE[lalaCity] || ''}
-Generate a profile that feels native to that city's creator culture.
+This creator lives in ${lalaCity.replace(/_/g, ' ')} — ${(await cityCultures(db))[lalaCity] || ''}
+Generate a profile that feels native to that city's creator culture.${await profileWorldBlock(db, lalaCity)}
 Lala's relationship to this creator: ${lala_relationship || 'mutual_unaware'}.
 Career position relative to Lala: ${career_pressure || 'level'}.
 Do not reference JustAWoman or the real world in any generated content.
@@ -543,7 +548,7 @@ function autofillVibe(value) {
   return v && v.length <= AUTOFILL_VIBE_MAX ? v : '';
 }
 
-function buildAutofillPrompt({ layer, platformHint, platforms, cities, relationships, careerPressures, takenHandles = [], existingHandles = [] }) {
+function buildAutofillPrompt({ layer, platformHint, platforms, cities, relationships, careerPressures, takenHandles = [], existingHandles = [], cityCulture = CITY_CULTURE }) {
   const lines = [
     'You are drafting the starting spark for ONE new social media creator in a literary fiction franchise.',
     layer === 'lalaverse'
@@ -554,7 +559,7 @@ function buildAutofillPrompt({ layer, platformHint, platforms, cities, relations
     `platform — one of: ${platforms.join(', ')}${platformHint ? ` (prefer ${platformHint})` : ''}`,
   ];
   if (layer === 'lalaverse') {
-    lines.push(`city — one of: ${cities.map((c) => (CITY_CULTURE[c] ? `${c} (${CITY_CULTURE[c]})` : c)).join('; ')}`);
+    lines.push(`city — one of: ${cities.map((c) => (cityCulture[c] ? `${c} (${cityCulture[c]})` : c)).join('; ')}`);
     lines.push(`relationship (Lala's relationship to this creator) — one of: ${relationships.join(', ')}`);
     lines.push(`careerPressure (career position relative to Lala) — one of: ${careerPressures.join(', ')}`);
   }
@@ -683,13 +688,14 @@ router.post('/autofill-draft', requireAuth, aiRateLimiter, async (req, res) => {
     const takenHandles = [];
     let existingHandles = null;
     let draft = null;
+    const cityCulture = layer === 'lalaverse' ? await cityCultures(db) : CITY_CULTURE;
     for (let round = 0; round <= AUTOFILL_MAX_RETRIES; round++) {
       if (round > 0 && existingHandles === null) {
         existingHandles = await sampleExistingHandles(db, layer);
       }
       const prompt = buildAutofillPrompt({
         layer, platformHint, platforms, cities, relationships, careerPressures,
-        takenHandles, existingHandles: existingHandles || [],
+        takenHandles, existingHandles: existingHandles || [], cityCulture,
       });
 
       const response = await callAutofillModel(prompt);
@@ -1862,8 +1868,8 @@ router.post('/:id/regenerate', requireAuth, aiRateLimiter, guardJustAWomanRecord
     const lalaCity = layer === 'lalaverse' ? feedCity(profile.city) : null;
     if (lalaCity) {
       prompt += `\n\nLALAVERSE CONTEXT:
-This creator lives in ${lalaCity.replace(/_/g, ' ')} — ${CITY_CULTURE[lalaCity] || ''}
-Generate a profile that feels native to that city's creator culture.
+This creator lives in ${lalaCity.replace(/_/g, ' ')} — ${(await cityCultures(db))[lalaCity] || ''}
+Generate a profile that feels native to that city's creator culture.${await profileWorldBlock(db, lalaCity)}
 Lala's relationship to this creator: ${profile.lala_relationship || 'mutual_unaware'}.
 Career position relative to Lala: ${profile.career_pressure || 'level'}.`;
     }

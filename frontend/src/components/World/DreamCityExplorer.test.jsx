@@ -6,7 +6,7 @@
  */
 import React from 'react';
 import { vi, describe, test, expect } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import DreamCityExplorer from './DreamCityExplorer';
 import { DREAM_CITIES, UNIVERSITIES, CORPORATIONS } from '../../data/dreamCities';
 
@@ -64,5 +64,34 @@ describe('DreamCityExplorer', () => {
     expect(screen.getByTestId('the-map').getAttribute('data-city')).toBe('echo_park');
     expect(screen.getByTestId('dce-city').textContent).toContain('Echo Park');
     expect(screen.getByTestId('dce-venues').textContent).toContain("STUDIO BY SABLE's Studio");
+  });
+  test('Edit changes a city\'s words: the form starts from them, Save sends them, and no Edit without a save', async () => {
+    const onSaveCity = vi.fn().mockResolvedValue();
+    renderIt({ onSaveCity });
+    fireEvent.click(screen.getByRole('button', { name: /Echo Park/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const form = screen.getByTestId('dce-city-form');
+    const echo = DREAM_CITIES.find((c) => c.key === 'echo_park');
+    expect(screen.getByLabelText('Its energy').value).toBe(echo.energy);
+    expect(screen.getByLabelText('Big events (commas between)').value).toBe(echo.majorEvents.join(', '));
+    expect(form.textContent).toContain('write Echo Park from these words');
+    fireEvent.change(screen.getByLabelText('Its culture'), { target: { value: ' Karaoke capital. ' } });
+    fireEvent.change(screen.getByLabelText('Big events (commas between)'), { target: { value: 'Neon Nights, , Open Mic' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByTestId('dce-city-form')).toBeNull());
+    expect(onSaveCity).toHaveBeenCalledWith('echo_park', expect.objectContaining({ culture: 'Karaoke capital.', energy: echo.energy, majorEvents: ['Neon Nights', 'Open Mic'] }));
+  });
+
+  test('a failed save keeps the form and says so; without onSaveCity there is no Edit', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { unmount } = renderIt({ onSaveCity: vi.fn().mockRejectedValue(new Error('no')) });
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('could not be saved');
+    expect(screen.getByTestId('dce-city-form')).toBeTruthy();
+    err.mockRestore();
+    unmount();
+    renderIt();
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
   });
 });

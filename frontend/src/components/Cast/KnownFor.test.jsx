@@ -51,8 +51,36 @@ describe('KnownFor', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Change' }));
     fireEvent.change(screen.getByLabelText('Content type'), { target: { value: 'The Educator' } });
     expect(screen.getByText('Tutorials, explainers')).toBeTruthy();
+    // A change asks rebrand or correction; a correction is the default.
+    expect(screen.getByTestId('kf-change').textContent).toContain('From The Entertainer to The Educator');
+    expect(screen.getByLabelText(/A correction: they were always this/).checked).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(apiClient.put).toHaveBeenCalledWith(expect.any(String), { name: 'The Educator', gap: null }));
+    await waitFor(() => expect(apiClient.put).toHaveBeenCalledWith(expect.any(String), { name: 'The Educator', gap: null, rebrand: false, reason: null }));
+    expect(await screen.findByText('Saved as a correction.')).toBeTruthy();
+  });
+
+  // Idea 2 (2026-10-18): a content type that changes over time.
+  test('a rebrand is saved with why; it happens now in the story', async () => {
+    apiClient.get.mockResolvedValue({ data: { ...base, current: LIST[0] } });
+    apiClient.put.mockResolvedValue({ data: { ...base, current: LIST[1] } });
+    render(<KnownFor characterId="c1" />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Change' }));
+    fireEvent.change(screen.getByLabelText('Content type'), { target: { value: 'The Educator' } });
+    fireEvent.click(screen.getByLabelText(/A rebrand: they change now, in the story/));
+    expect(screen.getByLabelText(/A rebrand/).textContent || screen.getByTestId('kf-change').textContent).toContain('Their earlier posts stay The Entertainer');
+    fireEvent.change(screen.getByLabelText('Why'), { target: { value: ' After the burnout post went viral, she started teaching. ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(apiClient.put).toHaveBeenCalledWith(expect.any(String), {
+      name: 'The Educator', gap: null, rebrand: true, reason: 'After the burnout post went viral, she started teaching.',
+    }));
+    expect(await screen.findByText('Saved as a rebrand at this point in the story.')).toBeTruthy();
+  });
+
+  test('keeping the same type asks nothing about a change', async () => {
+    apiClient.get.mockResolvedValue({ data: { ...base, current: LIST[0] } });
+    render(<KnownFor characterId="c1" />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Change' }));
+    expect(screen.queryByTestId('kf-change')).toBeNull();
   });
 
   test('shows the job-vs-content gap, and edits it with the type (a story hook for the writers)', async () => {

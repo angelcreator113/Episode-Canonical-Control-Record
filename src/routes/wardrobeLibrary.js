@@ -259,6 +259,15 @@ router.post('/analyze-image', requireAuth, aiRateLimiter, upload.single('image')
     // is a suggestion the upload form fills only into an empty price.
     const priceGuide = priceGuideText();
 
+    // The brand is one of the LalaVerse brands (services/wardrobeBrandChoice);
+    // with none in the world, a fictional name as before.
+    const brandChoice = require('../services/wardrobeBrandChoice');
+    const brands = await brandChoice.loadBrandChoices(require('../models'));
+    const brandRule = brands.length
+      ? 'exactly one name from THE LALAVERSE BRANDS below'
+      : 'fictional brand name only (never a real-world brand). If no logo is visible, invent one that fits the item style.';
+    const brandBlock = brandChoice.brandChoiceBlock(brands);
+
     // Two prompts: basic (current behavior) and gameplay (extended). Gameplay
     // mode gets more tokens since it's asking for 9 extra fields + 3 short
     // narrative blurbs.
@@ -273,7 +282,7 @@ Analyze this image and return JSON:
   "description": "2-3 sentences: material, style, fit, notable details",
   "season": "spring|summer|fall|winter|all-season",
   "occasion": "casual|formal|business|party|athletic|brunch|date_night|resort",
-  "brand_guess": "fictional brand name only (never a real-world brand). If no logo is visible, invent one that fits the item style.",
+  "brand_guess": "${brandRule}",
   "price_estimate": "estimated retail price in US dollars as a single number, from the PRICE GUIDE below for this item_type and tier",
   "aesthetic_tags": ["tag1", "tag2", "tag3"],
   "tier": "basic|mid|luxury|elite",
@@ -281,7 +290,7 @@ Analyze this image and return JSON:
 }
 
 ${priceGuide}
-
+${brandBlock}
 Return ONLY the JSON.`;
 
     const gameplayPrompt = `You are a fashion stylist AND a narrative designer for a luxury-world story game (the LalaVerse). Analyze this image and return JSON that covers BOTH the fashion metadata AND the in-story gameplay fields. Use the show context below to keep your gameplay suggestions consistent with the existing world.${contextBlock}
@@ -294,7 +303,7 @@ Return ONLY the JSON.`;
   "description": "2-3 sentences: material, style, fit, notable details",
   "season": "spring|summer|fall|winter|all-season",
   "occasion": "casual|formal|business|party|athletic|brunch|date_night|resort",
-  "brand_guess": "fictional brand name only (never a real-world brand). If no logo is visible, invent one that fits the item style.",
+  "brand_guess": "${brandRule}",
   "price_estimate": "estimated retail price in US dollars as a single number, from the PRICE GUIDE below for this item_type and tier",
   "aesthetic_tags": ["tag1", "tag2", "tag3"],
   "tier": "basic|mid|luxury|elite",
@@ -312,7 +321,7 @@ Return ONLY the JSON.`;
 }
 
 ${priceGuide}
-
+${brandBlock}
 Return ONLY the JSON.`;
 
     const response = await client.messages.create({
@@ -332,10 +341,18 @@ Return ONLY the JSON.`;
     if (!match) return res.status(500).json({ error: 'AI analysis failed — no JSON returned' });
 
     const analysis = JSON.parse(match[0]);
-    // Auto-fill safety: always emit fictional brands so generated wardrobe
-    // entries never leak real-world brand names into the LalaVerse.
-    const brandSeed = analysis.brand_guess || analysis.name || `${analysis.item_type || ''} ${analysis.color || ''}`;
-    analysis.brand_guess = makeFictionalBrand(brandSeed);
+    // Auto-fill safety: the brand is always a LalaVerse one, never a
+    // real-world name: one of the brands (an answer naming none of them takes
+    // the first, fashion first), else a fictional name.
+    if (brands.length) {
+      const picked = brandChoice.pickBrand(analysis.brand_guess, brands);
+      if (!picked) console.error(`[WardrobeAnalyze] the brand "${analysis.brand_guess}" is not a LalaVerse brand; using ${brands[0].name}`);
+      analysis.brand_guess = (picked || brands[0]).name;
+      analysis.brand_id = (picked || brands[0]).id;
+    } else {
+      const brandSeed = analysis.brand_guess || analysis.name || `${analysis.item_type || ''} ${analysis.color || ''}`;
+      analysis.brand_guess = makeFictionalBrand(brandSeed);
+    }
     analysis.brand_is_fictional = true;
     return res.json({ success: true, data: analysis, gameplay: wantsGameplay });
   } catch (err) {
