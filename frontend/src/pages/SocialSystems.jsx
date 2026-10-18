@@ -46,6 +46,7 @@ import { ARCHETYPES, RELATIONSHIP_TYPES, ECONOMY_STREAMS, FASHION_TREND_STAGES, 
 import { CELEBRITY_HIERARCHY, ALGORITHM_FORCES, DRAMA_MECHANICS, GOSSIP_MEDIA, FAMOUS_CHARACTERS, CALENDAR_DEFAULTS } from '../data/calendarData';
 import { tabFromSearch } from '../utils/worldRedirects';
 import { LEGENDARY_GROUPS } from '../data/legendaryGroups';
+import AudienceLinks from '../components/Society/AudienceLinks';
 import './SocialSystems.css';
 
 const TABS = [
@@ -241,6 +242,7 @@ export default function SocialSystems({ embedded = false }) {
                     </button>
                     {open && (
                       <div className="ss-card-more">
+                        <AudienceLinks name={a.name} types={archetypes.map((x) => x.name)} />
                         <span className="ss-label">Audience effect</span>
                         <p>{a.audience}</p>
                         <span className="ss-label">Narrative function</span>

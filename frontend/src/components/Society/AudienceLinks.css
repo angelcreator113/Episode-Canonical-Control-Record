@@ -1,0 +1,17 @@
+/* A content type's shared audiences (components/Society/AudienceLinks); theme tokens only. */
+.al { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.al-row { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 13px; color: var(--text-primary); }
+.al-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.al-chip { padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-card); font-size: 12px; color: var(--text-primary); }
+.al-none { font-size: 12px; color: var(--text-secondary); }
+.al-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.al-btn { min-height: 36px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 12px; cursor: pointer; }
+.al-btn.is-primary { background: var(--accent); border-color: var(--accent); color: var(--text-inverse); }
+.al-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.al-form { display: flex; flex-direction: column; gap: 8px; }
+.al-set { margin: 0; padding: 8px; border: 1px solid var(--border); border-radius: 6px; display: grid; grid-template-columns: 1fr; gap: 2px; }
+.al-set legend { font-size: 12px; color: var(--text-secondary); padding: 0 4px; }
+.al-pick { display: flex; align-items: center; gap: 6px; min-height: 32px; font-size: 13px; color: var(--text-primary); }
+.al-note { margin: 0; font-size: 12px; color: var(--text-secondary); }
+.al-note.is-error { color: var(--danger-text); }
+@media (min-width: 640px) { .al-set { grid-template-columns: 1fr 1fr; } }
