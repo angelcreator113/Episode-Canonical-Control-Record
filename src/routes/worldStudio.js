@@ -3367,7 +3367,20 @@ router.get('/world/locations', optionalAuth, async (req, res) => {
         order: [['name', 'ASC']],
         limit: 200,
       });
-      return res.json({ locations: rows });
+      // Each resident's character, so a studio card can add its photos as
+      // their place of work and open their Places tab (Evoni, 2026-10-18).
+      const locations = rows.map((r) => r.toJSON());
+      const residentIds = [...new Set(locations.flatMap((l) => (l.residents || []).map((p) => p.id)))];
+      if (residentIds.length) {
+        const [chars] = await models.sequelize.query(
+          `SELECT id, feed_profile_id FROM registry_characters
+            WHERE feed_profile_id IN (:ids) AND deleted_at IS NULL`, { replacements: { ids: residentIds } });
+        const charOf = new Map(chars.map((c) => [Number(c.feed_profile_id), c.id]));
+        for (const l of locations) {
+          l.residents = (l.residents || []).map((p) => ({ ...p, character_id: charOf.get(Number(p.id)) || null }));
+        }
+      }
+      return res.json({ locations });
     } catch (richErr) {
       // Fallback: simple query without includes
       console.warn('WorldLocations rich query failed, falling back:', richErr.message);
