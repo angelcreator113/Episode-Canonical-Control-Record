@@ -53,14 +53,6 @@ const TABS = [
   { key: 'locations', label: 'Locations' },
 ];
 
-const LOCATION_TYPES = [
-  { value: 'city', label: 'City' }, { value: 'district', label: 'District' },
-  { value: 'street', label: 'Street' }, { value: 'venue', label: 'Venue / Business' },
-  { value: 'property', label: 'Property / Home' }, { value: 'interior', label: 'Interior Space' },
-  { value: 'exterior', label: 'Exterior / Outdoor' }, { value: 'landmark', label: 'Landmark' },
-  { value: 'virtual', label: 'Virtual' }, { value: 'transitional', label: 'Transitional' },
-];
-
 // A place's senses (world_locations.sensory_details), which the event
 // generator and the Story Engine write scenes from (Evoni, 2026-10-18: "yes
 // start the sensory details on the location form").
@@ -76,6 +68,14 @@ const EMPTY_SENSES = Object.fromEntries(SENSES.map(([k]) => [k, '']));
 const sensesOf = (sd) => ({ ...EMPTY_SENSES, ...(sd && typeof sd === 'object' && !Array.isArray(sd) ? sd : {}) });
 /** The senses to save: blank ones left out. */
 const sensesToSave = (sd) => Object.fromEntries(Object.entries(sd || {}).filter(([, v]) => (typeof v === 'string' ? v.trim() : v)).map(([k, v]) => [k, typeof v === 'string' ? v.trim() : v]));
+
+const LOCATION_TYPES = [
+  { value: 'city', label: 'City' }, { value: 'district', label: 'District' },
+  { value: 'street', label: 'Street' }, { value: 'venue', label: 'Venue / Business' },
+  { value: 'property', label: 'Property / Home' }, { value: 'interior', label: 'Interior Space' },
+  { value: 'exterior', label: 'Exterior / Outdoor' }, { value: 'landmark', label: 'Landmark' },
+  { value: 'virtual', label: 'Virtual' }, { value: 'transitional', label: 'Transitional' },
+];
 
 const VENUE_TYPES = ['restaurant','club','bar','cafe','salon','spa','gallery','museum','boutique','gym','hotel','office','park','rooftop','theater','other'];
 const PROPERTY_TYPES = ['penthouse','mansion','apartment','townhouse','studio','villa','loft','cottage'];
