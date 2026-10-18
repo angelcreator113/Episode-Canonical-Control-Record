@@ -18,6 +18,7 @@ import {
   BarChart3, CalendarDays, Download, Link2, MapPin, Palette, Crown, Instagram,
   Quote, Star, TrendingUp, Briefcase, IdCard, Activity, FileText, CirclePlay, Flame,
   Copy, BadgeCheck, Lock, Eye, Smartphone, Plus, ExternalLink, Share2, Search,
+  Building2, BookOpen, Radio,
 } from 'lucide-react';
 import Pager, { usePaged } from '../components/Pager/Pager';
 import CharacterPlacesTab from '../components/CharacterPlaces/CharacterPlacesTab';
@@ -30,7 +31,7 @@ import { platformLabel, atHandle, followersOf } from './feed/feedConstants';
 import apiClient from '../services/api';
 import { ROLE_LABELS } from '../constants/characterConstants';
 import { findLala } from '../lib/theCast';
-import { DEPTH_STEPS, depthOf, depthLevelOf, cityOf, archetypeOf, showUpRows, withLala, voiceOf } from '../lib/characterPage';
+import { DEPTH_STEPS, depthOf, depthLevelOf, cityOf, archetypeOf, showUpRows, withLala, voiceOf, DREAM_CITIES, dreamCityOf } from '../lib/characterPage';
 import {
   GROUPS, TENSION, groupOf, closenessOf, nameOf, typeLabel, noteOf, connectionStats, SORTS,
   filterConnections, keyRelationships, connectionHistory, mapPoints,
@@ -2512,164 +2513,321 @@ function GhostPromote({ character, ghost, onSaved }) {
   </>);
 }
 
-function TabWorld({ character, onSaved, gen }) {
-  // living_context (the backfill's shape) has none of these three fields, so it read as an empty grid.
-  const living = hasValue(character.living_state) ? character.living_state : null;
-  const plotThreads = character.plot_threads || character.extra_fields?.plot_threads || [];
-  const dp     = character.deep_profile;
+/* ── In the World (Evoni's mock, 2026-10-18, step 5) ───────────────────────────
+   Where they live and what they are in the LalaVerse, the DREAM city map
+   with their home, their events by date, their story in the world (living
+   state, arc, threads, ambition), their places, their latest posts, the
+   people their story names who are not built yet, and their family. */
 
+const WORLDS = [['book-1', 'Book 1 — JustAWoman’s World'], ['lalaverse', 'LalaVerse'], ['series-2', 'Series 2']];
+
+export function WorldPresence({ character, feedProfile, appearances, onSaved }) {
+  const [note, setNote] = useState(null);
+  const city = cityOf(character, feedProfile);
+  const dream = dreamCityOf(city.label);
+  const hosts = (appearances?.events || []).some((e) => e.role === 'host');
+  const role = [roleOf(character), hosts ? 'Event host' : null].filter(Boolean).join(' · ');
+  const locked = character.status === 'finalized';
+  const setWorld = async (world) => {
+    if (!world) return;
+    setNote(null);
+    try {
+      await updateCharacterApi(character.id, { world });
+      onSaved({ world });
+    } catch (err) {
+      console.error('[CharacterProfilePage] world update failed:', err);
+      setNote('Could not change their world.');
+    }
+  };
+  const rows = [
+    { key: 'city', label: 'Home city', icon: MapPin, value: city.label, sub: dream ? `Capital of ${dream.capital.toLowerCase()}` : null },
+    { key: 'home', label: 'Lives at', icon: Building2, value: appearances?.place?.name || null, sub: appearances?.place ? 'Their home place' : null },
+    { key: 'appearance', label: 'Appears as', icon: Eye, value: character.appearance_mode ? words(character.appearance_mode) : null },
+    { key: 'role', label: 'World role', icon: Star, value: role || null },
+  ];
   return (
-    <div className="cp-tab-content">
-      {/* Details (the old Overview's meta; its World picker's save never reached the page's state) */}
-      <section className="cp-section cp-meta-grid">
-        <div className="cp-meta-item">
-          <span className="cp-meta-label">Role</span>
-          <span className="cp-meta-value">{roleOf(character) || '\u2014'}</span>
-        </div>
-        <div className="cp-meta-item">
-          <span className="cp-meta-label">Appearance</span>
-          <span className="cp-meta-value">{character.appearance_mode || '\u2014'}</span>
-        </div>
-        <div className="cp-meta-item">
-          <label className="cp-meta-label" htmlFor="cp-world">World</label>
-          <select
-            id="cp-world"
-            className="cp-meta-select"
-            value={character.world || ''}
-            onChange={async (e) => {
-              const world = e.target.value;
-              if (!world) return;
-              try {
-                await updateCharacterApi(character.id, { world });
-                onSaved({ world });
-              } catch (err) { console.error('[CharacterProfilePage] world update failed:', err); }
-            }}
-            disabled={character.status === 'finalized'}
-          >
-            {/* No world set reads as not set, not as Book 1. */}
-            {!character.world && <option value="">Not set</option>}
-            <option value="book-1">Book 1 — JustAWoman&rsquo;s World</option>
-            <option value="lalaverse">LalaVerse</option>
-            <option value="series-2">Series 2</option>
-          </select>
-        </div>
-      </section>
-
-      {/* Living State */}
-      <section className="cp-section">
-        <h3 className="cp-section-title">Living State</h3>
-        {living ? (
-          <div className="cp-living-grid">
-            {living.current_situation && (
-              <div className="cp-living-field">
-                <span className="cp-meta-label">Current Situation</span>
-                <p>{living.current_situation}</p>
-              </div>
-            )}
-            {living.active_tension && (
-              <div className="cp-living-field">
-                <span className="cp-meta-label">Active Tension</span>
-                <p>{living.active_tension}</p>
-              </div>
-            )}
-            {living.momentum && (
-              <div className="cp-living-field">
-                <span className="cp-meta-label">Momentum</span>
-                <p>{living.momentum}</p>
-              </div>
-            )}
-          </div>
-        ) : <EmptyState label="Living state not generated yet." gen={gen} fields={['living_state']} />}
-      </section>
-
-      {/* Arc Stage */}
-      {character.arc_stage && (
-        <section className="cp-section">
-          <h3 className="cp-section-title">Arc Stage</h3>
-          <span className="cp-arc-badge">{character.arc_stage.replace?.(/_/g, ' ') || character.arc_stage}</span>
-        </section>
-      )}
-
-      {/* Plot Threads */}
-      {plotThreads.length > 0 && (
-        <section className="cp-section">
-          <h3 className="cp-section-title">Plot Threads</h3>
-          <div className="cp-thread-list">
-            {plotThreads.map((t, i) => (
-              <div key={t.id || i} className="cp-thread-row">
-                <span className="cp-thread-name">{typeof t === 'string' ? t : t.title || t.name || t.label}</span>
-                {t.status && <span className="cp-thread-status">{t.status}</span>}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Career / Ambition from deep profile */}
-      {dimensionText(dimension(dp, 'ambition_identity')) && (
-        <section className="cp-section">
-          <h3 className="cp-section-title">Career &amp; Ambition</h3>
-          <p className="cp-career-text">{dimensionText(dimension(dp, 'ambition_identity'))}</p>
-        </section>
-      )}
-
-      {/* Time orientation */}
-      {character.time_orientation && (
-        <section className="cp-section">
-          <h3 className="cp-section-title">Time Orientation</h3>
-          <span className="cp-time-badge">
-            {words(character.time_orientation)}
+    <section className="ch-card" aria-labelledby="ch-wp" data-testid="ch-world-presence">
+      <div className="ch-card-head">
+        <span className="ch-head-icon" aria-hidden="true"><Globe2 size={20} /></span>
+        <span className="ch-head-text">
+          <h2 id="ch-wp" className="ch-h2">World presence</h2>
+          <span className="ch-note">Where they live and what they are in the world</span>
+        </span>
+      </div>
+      <ul className="ch-wp">
+        {rows.map(({ key, label, icon: Icon, value, sub }) => (
+          <li key={key} className="ch-wp-row">
+            <span className="ch-wp-icon" aria-hidden="true"><Icon size={18} /></span>
+            <span className="ch-wp-label">{label}</span>
+            <span className="ch-wp-value">
+              <strong className={value ? '' : 'is-empty'}>{value || 'Not set'}</strong>
+              {sub && <span>{sub}</span>}
+            </span>
+          </li>
+        ))}
+        <li className="ch-wp-row">
+          <span className="ch-wp-icon" aria-hidden="true"><BookOpen size={18} /></span>
+          <label className="ch-wp-label" htmlFor="ch-world-select">Story world</label>
+          <span className="ch-wp-value">
+            <select id="ch-world-select" className="ch-wp-select" value={character.world || ''} disabled={locked} onChange={(e) => setWorld(e.target.value)}>
+              {/* No world set reads as not set, not as Book 1. */}
+              {!character.world && <option value="">Not set</option>}
+              {WORLDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select>
           </span>
-        </section>
-      )}
+        </li>
+      </ul>
+      {city.differs && <p className="ch-note is-error">Their feed says {city.differs.feed}; their profile says {city.differs.own}.</p>}
+      {note && <p className="ch-note is-error" role="alert">{note}</p>}
+    </section>
+  );
+}
 
-      {/* Ghost Characters */}
-      {character.ghost_characters?.length > 0 && (
-        <section className="cp-section">
-          <h3 className="cp-section-title">
-            Ghost Characters
-            <span className="cp-ghost-count">{character.ghost_characters.length}</span>
-          </h3>
-          <p className="cp-ghost-note">
-            Characters mentioned in this character&rsquo;s story who haven&rsquo;t been built yet.
-          </p>
-          <div className="cp-ghost-list">
-            {character.ghost_characters.map((g, i) => (
-              <div key={i} className={`cp-ghost-item ${g.promoted ? 'cp-ghost-promoted' : ''}`}>
-                <span className="cp-ghost-name">{g.name}</span>
-                <span className="cp-ghost-relation">{g.relation}</span>
-                {!g.promoted && <GhostPromote character={character} ghost={g} onSaved={onSaved} />}
-                {g.promoted && (g.promoted_id
-                  ? <Link className="cp-promoted-badge" to={`/character/${g.promoted_id}`}>&uarr; In Registry</Link>
-                  : <span className="cp-promoted-badge">&uarr; In Registry</span>)}
-              </div>
+export function LalaVerseMap({ character, feedProfile }) {
+  const home = dreamCityOf(cityOf(character, feedProfile).label);
+  return (
+    <section className="ch-card" aria-labelledby="ch-map" data-testid="ch-lalaverse-map">
+      <div className="ch-card-head">
+        <span className="ch-head-icon" aria-hidden="true"><MapPin size={20} /></span>
+        <span className="ch-head-text">
+          <h2 id="ch-map" className="ch-h2">LalaVerse map</h2>
+          <span className="ch-note">The five DREAM cities{home ? `; they live in ${home.label}` : ''}</span>
+        </span>
+      </div>
+      <div className="ch-map" role="list" aria-label="DREAM cities">
+        {DREAM_CITIES.map((c) => (
+          <span key={c.key} role="listitem" className={`ch-map-pin${home?.key === c.key ? ' is-home' : ''}`} style={{ left: `${c.x}%`, top: `${c.y}%` }}>
+            <MapPin size={16} aria-hidden="true" />
+            <span><strong>{c.label}</strong><span>{c.capital}{home?.key === c.key ? ' (Home)' : ''}</span></span>
+          </span>
+        ))}
+      </div>
+      {!home && <p className="ch-note">No home city in the LalaVerse yet. Set it in their facts or feed profile.</p>}
+    </section>
+  );
+}
+
+const eventTime = (ev) => {
+  const d = activityDate(ev.event_date);
+  return d ? d.getTime() : null;
+};
+
+export function WorldEvents({ appearances, now = Date.now() }) {
+  const events = [...(appearances?.events || [])].sort((a, b) => {
+    const ta = eventTime(a); const tb = eventTime(b);
+    if (ta === null || tb === null) return (ta === null) - (tb === null);
+    // Upcoming soonest first, then past most recent first.
+    const fa = ta >= now; const fb = tb >= now;
+    if (fa !== fb) return fa ? -1 : 1;
+    return fa ? ta - tb : tb - ta;
+  });
+  const { pageItems, pager } = usePaged(events, 3);
+  return (
+    <section className="ch-card" aria-labelledby="ch-we" data-testid="ch-world-events">
+      <h2 id="ch-we" className="ch-h2"><CalendarDays size={20} aria-hidden="true" className="ch-h2-icon" /> Their events</h2>
+      {!appearances ? <p className="ch-note">Loading…</p>
+        : events.length === 0 ? <p className="ch-note">No events yet: they host or attend none.</p> : (
+          <ul className="ch-we">
+            {pageItems.map((ev) => {
+              const t = eventTime(ev);
+              const when = t !== null ? activityWhen(new Date(t)) : ev.event_date || 'No date yet';
+              return (
+                <li key={ev.id}>
+                  <Link className="ch-we-item" to={`/shows/${ev.show_id}/events/${ev.id}`}>
+                    <span className="ch-we-text">
+                      <strong>{ev.name}</strong>
+                      <span className="ch-conn-top">
+                        <span className={`ch-tension ${ev.role === 'host' ? 'is-volatile' : 'is-healing'}`}>{ev.role === 'host' ? 'Host' : 'Guest'}</span>
+                        {ev.episode && <span className="ch-tension">Episode {ev.episode.episode_number ?? '?'}</span>}
+                        {t !== null && t < now && <span className="ch-chip">Past</span>}
+                      </span>
+                      <span className="ch-we-meta">{[`${when}${ev.event_time ? ` · ${ev.event_time}` : ''}`, ev.venue_name].filter(Boolean).join(' · ')}</span>
+                    </span>
+                    <ArrowRight size={16} aria-hidden="true" className="ch-show-go" />
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      <Pager {...pager} label="Their events" />
+    </section>
+  );
+}
+
+export function StoryInWorld({ character, gen }) {
+  const living = hasValue(character.living_state) ? objOf(character.living_state) : null;
+  const threads = [character.plot_threads, character.extra_fields?.plot_threads].find((t) => Array.isArray(t) && t.length) || [];
+  const ambition = dimensionText(dimension(character.deep_profile, 'ambition_identity'));
+  const { pageItems, pager } = usePaged(threads, 4);
+  const chips = [
+    character.arc_stage ? `Arc: ${words(character.arc_stage)}` : null,
+    character.time_orientation ? `Lives in the ${words(character.time_orientation).toLowerCase()}` : null,
+  ].filter(Boolean);
+  const fields = living ? [['Right now', living.current_situation], ['The tension', living.active_tension], ['Momentum', living.momentum]].filter(([, v]) => textOf(v)) : [];
+  return (
+    <section className="ch-card" aria-labelledby="ch-sw" data-testid="ch-story-world">
+      <h2 id="ch-sw" className="ch-h2"><BookOpen size={20} aria-hidden="true" className="ch-h2-icon" /> Their story in the world</h2>
+      {fields.length ? (
+        <ul className="ch-rules-list">
+          {fields.map(([k, v]) => <li key={k}><span className="ch-wf-kind">{k}</span>{v}</li>)}
+        </ul>
+      ) : <EmptyState label="Living state not generated yet." gen={gen} fields={['living_state']} />}
+      {chips.length > 0 && <div className="ch-chips">{chips.map((c) => <span key={c} className="ch-chip">{c}</span>)}</div>}
+      {ambition && (
+        <div className="ch-fb-block">
+          <h3 className="ch-fb-h">Career and ambition</h3>
+          <p>{ambition}</p>
+        </div>
+      )}
+      {threads.length > 0 && (
+        <div className="ch-fb-block">
+          <h3 className="ch-fb-h">Plot threads</h3>
+          <ul className="ch-rules-list">
+            {pageItems.map((t, i) => (
+              <li key={t.id || i}>{typeof t === 'string' ? t : t.title || t.name || t.label}{t.status ? ` · ${words(t.status)}` : ''}</li>
             ))}
-          </div>
-        </section>
+          </ul>
+          <Pager {...pager} label="Plot threads" />
+        </div>
       )}
+    </section>
+  );
+}
 
-      {/* Family Tree */}
-      {character.family_tree && (
-        <section className="cp-section">
-          <h3 className="cp-section-title">Family</h3>
-          {character.family_tree.generational_wound && (
-            <p className="cp-generational-wound">
-              Generational wound: {character.family_tree.generational_wound}
-            </p>
-          )}
-          {character.family_tree.members?.length > 0 && (
-            <div className="cp-family-list">
-              {character.family_tree.members.map((m, i) => (
-                <div key={i} className="cp-family-member">
-                  <span className="cp-member-name">{m.name}</span>
-                  <span className="cp-member-relation">{m.relation}</span>
-                  {m.personality_sketch && <p className="cp-member-sketch">{m.personality_sketch}</p>}
+export function WorldPlaces({ character, openTab }) {
+  const [data, setData] = useState(null);
+  const id = character.id;
+  useEffect(() => {
+    let live = true;
+    getPlacesApi(id)
+      .then((res) => { if (live) setData(res.data || { places: [] }); })
+      .catch((err) => {
+        console.error('[CharacterProfilePage] world places load failed:', err);
+        if (live) setData({ places: [], error: err.response?.data?.error || 'Could not load their places.' });
+      });
+    return () => { live = false; };
+  }, [id]);
+  const places = data?.places || [];
+  const { pageItems, pager } = usePaged(places, 4);
+  return (
+    <section className="ch-card" aria-labelledby="ch-wpl" data-testid="ch-world-places">
+      <div className="ch-card-head">
+        <h2 id="ch-wpl" className="ch-h2"><MapPin size={20} aria-hidden="true" className="ch-h2-icon" /> Their places</h2>
+        {openTab && <button type="button" className="ch-pill-btn" onClick={() => openTab('places')}>View all</button>}
+      </div>
+      {!data ? <p className="ch-note">Loading…</p>
+        : data.error ? <p className="ch-note is-error">{data.error}</p>
+        : places.length === 0 ? <p className="ch-note">No places yet: no home, closet or place of work.</p> : (
+          <ul className="ch-wpl">
+            {pageItems.map((p) => (
+              <li key={`${p.role}-${p.scene_set_id}`} className="ch-wpl-item">
+                {p.image_url ? <img src={p.image_url} alt="" /> : <span className="ch-wpl-empty" aria-hidden="true"><MapPin size={20} /></span>}
+                <strong>{p.scene_set_name}</strong>
+                <span>{PLACE_LABEL[p.role] || p.label || 'Place'}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      <Pager {...pager} label="Their places" />
+    </section>
+  );
+}
+
+export function WorldFeed({ trail, openTab }) {
+  const posts = (trail?.posts || []).filter((p) => p.status !== 'draft').slice(0, 3);
+  return (
+    <section className="ch-card" aria-labelledby="ch-wf" data-testid="ch-world-feed">
+      <div className="ch-card-head">
+        <h2 id="ch-wf" className="ch-h2"><Radio size={20} aria-hidden="true" className="ch-h2-icon" /> On the feed lately</h2>
+        {openTab && <button type="button" className="ch-pill-btn" onClick={() => openTab('voice')}>View all</button>}
+      </div>
+      {!trail ? <p className="ch-note">Loading…</p>
+        : posts.length === 0 ? <p className="ch-note">Nothing posted yet.</p> : (
+          <ul className="ch-activity">
+            {posts.map((p) => (
+              <li key={p.id}>
+                <div className="ch-activity-row">
+                  <span className="ch-activity-icon is-post" aria-hidden="true"><FileText size={15} /></span>
+                  <span className="ch-activity-text"><strong>{shortText(p.text, 70)}</strong>{p.episode_number != null && <span>Episode {p.episode_number}</span>}</span>
+                  {activityDate(p.at) && <span className="ch-activity-when">{activityWhen(activityDate(p.at))}</span>}
                 </div>
-              ))}
-            </div>
-          )}
-        </section>
+              </li>
+            ))}
+          </ul>
+        )}
+    </section>
+  );
+}
+
+function GhostsCard({ character, onSaved }) {
+  const ghosts = Array.isArray(character.ghost_characters) ? character.ghost_characters : [];
+  const { pageItems, pager } = usePaged(ghosts);
+  if (!ghosts.length) return null;
+  return (
+    <section className="ch-card" aria-labelledby="ch-gh" data-testid="ch-ghosts">
+      <h2 id="ch-gh" className="ch-h2"><Users size={20} aria-hidden="true" className="ch-h2-icon" /> Not built yet <span className="ch-chip">{ghosts.length}</span></h2>
+      <p className="ch-note">People their story names who aren&rsquo;t in the registry yet.</p>
+      <ul className="ch-ft">
+        {pageItems.map((g, i) => (
+          <li key={`${g.name}-${i}`} className="ch-ft-item">
+            <strong className="ch-conn-name">{g.name}</strong>
+            {g.relation && <span className="ch-ft-meta">{g.relation}</span>}
+            <span className="ch-ft-chips">
+              {!g.promoted && <GhostPromote character={character} ghost={g} onSaved={onSaved} />}
+              {g.promoted && (g.promoted_id
+                ? <Link className="cp-promoted-badge" to={`/character/${g.promoted_id}`}>&uarr; In Registry</Link>
+                : <span className="cp-promoted-badge">&uarr; In Registry</span>)}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <Pager {...pager} label="Not built yet" />
+    </section>
+  );
+}
+
+function FamilyCard({ character }) {
+  const tree = objOf(character.family_tree);
+  const members = Array.isArray(tree.members) ? tree.members : [];
+  if (!members.length && !tree.generational_wound) return null;
+  return (
+    <section className="ch-card" aria-labelledby="ch-fam" data-testid="ch-family">
+      <h2 id="ch-fam" className="ch-h2"><Heart size={20} aria-hidden="true" className="ch-h2-icon" /> Family</h2>
+      {tree.generational_wound && <p className="ch-note">Generational wound: {tree.generational_wound}</p>}
+      {members.length > 0 && (
+        <ul className="ch-ft">
+          {members.map((m, i) => (
+            <li key={i} className="ch-ft-item">
+              <strong className="ch-conn-name">{m.name}</strong>
+              {m.relation && <span className="ch-ft-meta">{m.relation}</span>}
+              {m.personality_sketch && <span className="ch-conn-note">{m.personality_sketch}</span>}
+            </li>
+          ))}
+        </ul>
       )}
+    </section>
+  );
+}
+
+function TabWorld({ character, feedProfile, appearances, onSaved, gen, openTab }) {
+  const trail = useStoryTrail(character.id);
+  return (
+    <div className="ch-overview ch-world-grid">
+      <div className="ch-col">
+        <WorldPresence character={character} feedProfile={feedProfile} appearances={appearances} onSaved={onSaved} />
+        <StoryInWorld character={character} gen={gen} />
+      </div>
+      <div className="ch-col">
+        <LalaVerseMap character={character} feedProfile={feedProfile} />
+        <WorldPlaces character={character} openTab={openTab} />
+        <FamilyCard character={character} />
+      </div>
+      <div className="ch-col">
+        <WorldEvents appearances={appearances} />
+        <WorldFeed trail={trail} openTab={openTab} />
+        <GhostsCard character={character} onSaved={onSaved} />
+      </div>
     </div>
   );
 }
@@ -2875,7 +3033,7 @@ export default function CharacterProfilePage() {
           <TabVoice character={character} feedProfile={feedProfile} appearances={appearances} onSaved={onSaved} onFeedSaved={onFeedSaved} />
         )}
         {activeTab === 'connections' && <TabConnections character={character} relationships={listOf(relationships)} entanglements={listOf(entanglements)} />}
-        {activeTab === 'world' && <div className="ch-card"><TabWorld character={character} onSaved={onSaved} gen={gen} /></div>}
+        {activeTab === 'world' && <TabWorld character={character} feedProfile={feedProfile} appearances={appearances} onSaved={onSaved} gen={gen} openTab={setActiveTab} />}
         {activeTab === 'places' && <div className="ch-card"><CharacterPlacesTab key={character.id} character={character} /></div>}
         {activeTab === 'appearance' && <CharacterAppearanceTab key={character.id} character={character} onPortraitChanged={(url) => onSaved({ portrait_url: url })} />}
       </div>

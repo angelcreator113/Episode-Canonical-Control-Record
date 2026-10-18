@@ -52,6 +52,23 @@ const CITY_LABELS = {
   dazzle_district: 'Dazzle District', radiance_row: 'Radiance Row', echo_park: 'Echo Park',
   ascent_tower: 'Ascent Tower', maverick_harbor: 'Maverick Harbor',
 };
+/**
+ * The five DREAM cities and what each is the capital of (the franchise laws'
+ * world infrastructure), placed where the LalaVerse map draws them.
+ */
+export const DREAM_CITIES = [
+  { key: 'radiance_row', label: 'Radiance Row', capital: 'Beauty', x: 18, y: 18 },
+  { key: 'ascent_tower', label: 'Ascent Tower', capital: 'Tech and startups', x: 78, y: 18 },
+  { key: 'echo_park', label: 'Echo Park', capital: 'Entertainment', x: 52, y: 50 },
+  { key: 'dazzle_district', label: 'Dazzle District', capital: 'Fashion', x: 20, y: 80 },
+  { key: 'maverick_harbor', label: 'Maverick Harbor', capital: 'Influencer culture', x: 76, y: 82 },
+];
+/** The DREAM city a label names (any case, spaces or underscores), or null. */
+export const dreamCityOf = (label) => {
+  const k = String(label || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  return DREAM_CITIES.find((c) => c.key === k) || null;
+};
+
 export const cityLabel = (city) => CITY_LABELS[city] || (city ? String(city).replace(/_/g, ' ') : null);
 
 /**

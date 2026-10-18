@@ -155,9 +155,9 @@ describe('the character page', () => {
     expect(screen.getByTestId('il-subject-wants')).toBeTruthy();
     expect(screen.queryByTestId('depth-panel')).toBeNull();
     fireEvent.click(screen.getByRole('link', { name: 'In the World' }));
-    fireEvent.change(screen.getByLabelText('World'), { target: { value: 'lalaverse' } });
+    fireEvent.change(screen.getByLabelText('Story world'), { target: { value: 'lalaverse' } });
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/character-registry/characters/c1', { world: 'lalaverse' }));
-    expect(screen.getByLabelText('World').value).toBe('lalaverse');
+    expect(screen.getByLabelText('Story world').value).toBe('lalaverse');
   });
 
   test('Inner life: Generate fills that section in', async () => {
