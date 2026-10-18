@@ -166,6 +166,8 @@ async function generateEpisodeStory(episodeId, showId, sequelize, options = {}) 
 
   // Their kept secrets, for the brief's revelation budget (services/characterSecrets).
   const secretsByCharacter = await secretsFor(sequelize, characters.map((c) => c.char_id));
+  // The season's reveal plan for this episode (services/seasonRevealPlan).
+  const plan = await require('./seasonRevealPlan').planForEpisode(sequelize, episodeId);
 
   // The approved Episode Story Record: what the audience saw, which the
   // story goes beneath and never against (services/episodeStoryRecord).
@@ -183,7 +185,7 @@ async function generateEpisodeStory(episodeId, showId, sequelize, options = {}) 
     if (c.depth_level) block += ` (depth: ${c.depth_level})`;
     if (c.core_belief) block += `\n    Believes: "${c.core_belief}"`;
     // What was happening beneath the episode (services/characterStoryBrief).
-    const brief = storyBrief(c, { layer: 'short_story', secrets: secretsByCharacter.get(c.char_id) });
+    const brief = storyBrief(c, { layer: 'short_story', secrets: require('./seasonRevealPlan').withPlan(secretsByCharacter.get(c.char_id), plan, 'short_story') });
     if (brief.lines.length) block += `\n    ${brief.lines.join('\n    ')}`;
     if (c.therapy_primary_defense) block += `\n    Defense mechanism: ${c.therapy_primary_defense}`;
     if (c.signature_trait) block += `\n    Signature trait: ${c.signature_trait}`;

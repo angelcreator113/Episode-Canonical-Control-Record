@@ -11,7 +11,7 @@
  * success text, not on a translucent green.
  */
 import { describe, test, expect } from 'vitest';
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync } from 'fs';
 import { resolve } from 'path';
 import { contrast, readToken, stripTaskRefs } from '../styles/contrast';
 
@@ -32,6 +32,19 @@ const rule = (selector) => {
 };
 
 describe('Scene Sets stylesheet theme', () => {
+  // Every stylesheet under components/SceneSets (seventh audit: Times &
+  // Weather carried a hex fallback for a token that does not exist).
+  test('the Scene Sets component stylesheets carry no color literal, nor a var() fallback', () => {
+    const dir = resolve(__dirname, '../components/SceneSets');
+    const files = readdirSync(dir).filter((f) => f.endsWith('.css'));
+    expect(files.length).toBeGreaterThanOrEqual(5);
+    for (const f of files) {
+      const text = readFileSync(resolve(dir, f), 'utf8');
+      expect([f, stripTaskRefs(text).match(HEX)?.[0] || null]).toEqual([f, null]);
+      expect([f, text.match(/var\(--[a-z0-9-]+,\s*#/i)?.[0] || null]).toEqual([f, null]);
+    }
+  });
+
   test('the stylesheets carry no color literal, not even as a var() fallback, and no color gradient', () => {
     expect(stripTaskRefs(css)).not.toMatch(HEX);
     expect(stripTaskRefs(dressed)).not.toMatch(HEX);
