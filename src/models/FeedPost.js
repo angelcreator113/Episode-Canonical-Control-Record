@@ -18,7 +18,9 @@ module.exports = (sequelize) => {
     poster_handle: { type: DataTypes.STRING(100), allowNull: false },
     poster_display_name: { type: DataTypes.STRING(200), allowNull: true },
     poster_creator_name: { type: DataTypes.STRING(200), allowNull: true },  // Real name of the creator
-    poster_platform: { type: DataTypes.STRING(30), allowNull: true, defaultValue: 'instagram' },
+    // 'lalaverse' is The Pulse; a real-world (JustAWoman) post carries its own
+    // app, which its writers pass (utils/pulsePlatform.postPlatformFor).
+    poster_platform: { type: DataTypes.STRING(30), allowNull: true, defaultValue: 'lalaverse' },
 
     post_type: {
       type: DataTypes.STRING(30), allowNull: false, defaultValue: 'post',

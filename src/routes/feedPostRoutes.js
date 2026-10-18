@@ -282,13 +282,19 @@ router.post('/', requireAuth, async (req, res) => {
     // Lala's posts and posts about her wait in Review, an admin's too (Task #3047; #3103).
     const held = scoped.status === 'live' ? await lalaHold(fields) : [];
     if (held.length) scoped.status = 'draft';
+    // With no platform sent: The Pulse, or a real-world profile's own app.
+    let platform = poster_platform || null;
+    if (!platform) {
+      const profile = fields.social_profile_id ? await require('../models').SocialProfile.findByPk(fields.social_profile_id, { attributes: ['feed_layer', 'platform'] }) : null;
+      platform = require('../utils/pulsePlatform').postPlatformFor(profile, 'instagram');
+    }
     const post = await FeedPost.create({
       ...fields,
       ...place.values,
       show_id,
       episode_id: episode_id || null,
       poster_display_name: poster_display_name || null,
-      poster_platform: poster_platform || 'lalaverse',
+      poster_platform: platform,
       post_type: post_type || 'post',
       likes: 0, comments_count: 0, shares: 0, sample_comments: [],
       posted_at: scoped.status === 'live' ? new Date() : null,

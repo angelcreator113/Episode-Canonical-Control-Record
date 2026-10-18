@@ -306,6 +306,8 @@ module.exports = {
         lala_reaction_reject: lalaReactionReject || undefined,
         ...real.values,
       });
+      // A piece that names a LalaVerse brand is tagged with it (services/wardrobeBrandLink).
+      if (wardrobeItem.brand) await require('../services/wardrobeBrandLink').linkItemBrand(sequelize, wardrobeItem);
 
       // Auto background removal — runs async, updates the record when done.
       // Whether it was started is returned to the client (Task #1769): the
@@ -831,6 +833,8 @@ module.exports = {
       );
 
       await wardrobeItem.update(updateData);
+      // A new brand moves the piece's brand tag (services/wardrobeBrandLink).
+      if (updateData.brand !== undefined) await require('../services/wardrobeBrandLink').linkItemBrand(sequelize, wardrobeItem);
 
       res.json({
         success: true,
