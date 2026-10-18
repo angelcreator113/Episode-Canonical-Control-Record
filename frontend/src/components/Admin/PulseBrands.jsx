@@ -13,6 +13,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CalendarPlus, Handshake, Megaphone, MessageSquareReply, Sparkles, Store } from 'lucide-react';
 import api from '../../services/api';
+import { atHandle } from '../../pages/feed/feedConstants';
 import './PulseBrands.css';
 
 const REVIEW = '/admin?tab=pulse&sub=review';
@@ -79,7 +80,7 @@ function BrandCard({ brand, showId, onChanged }) {
     <li className="pb-card" data-testid={`pb-brand-${brand.slug}`}>
       <div className="pb-card-head">
         <h4 className="pb-name">{brand.name}</h4>
-        {brand.account ? <span className="pb-handle">@{brand.account.handle}</span> : <span className="pb-muted">No Pulse account yet</span>}
+        {brand.account ? <span className="pb-handle">{atHandle(brand.account.handle)}</span> : <span className="pb-muted">No Pulse account yet</span>}
       </div>
       {brand.principle && <p className="pb-principle">{brand.principle}</p>}
       {brand.reps.length > 0 && (
@@ -122,7 +123,7 @@ function BrandCard({ brand, showId, onChanged }) {
                 <ul className="pb-list">
                   {answerable.map((p) => (
                     <li key={p.id} className="pb-item">
-                      <span className="pb-item-text"><b>@{p.poster_handle}</b> {p.content_text}</span>
+                      <span className="pb-item-text"><b>{atHandle(p.poster_handle)}</b> {p.content_text}</span>
                       <button type="button" className="pb-btn" disabled={!!busy} onClick={() => reply(p.id)}>
                         {busy === `reply-${p.id}` ? 'Drafting…' : 'Draft a reply'}
                       </button>
@@ -202,7 +203,7 @@ export default function PulseBrands({ showId }) {
   };
   const giveAccounts = () => run('accounts', async () => {
     const { data: d } = await api.post('/api/v1/brand-pulse/accounts');
-    setNote(d.created.length ? `Made ${d.created.length} account${d.created.length === 1 ? '' : 's'}: ${d.created.map((c) => `@${c.handle}`).join(', ')}.` : 'Every brand already has its account.');
+    setNote(d.created.length ? `Made ${d.created.length} account${d.created.length === 1 ? '' : 's'}: ${d.created.map((c) => atHandle(c.handle)).join(', ')}.` : 'Every brand already has its account.');
   });
   const draftWeek = () => run('week', async () => {
     const { data: d } = await api.post('/api/v1/brand-pulse/draft-week', { show_id: showId });
