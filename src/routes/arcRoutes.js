@@ -22,6 +22,10 @@
  * POST   /world/:showId/season/threads/:threadId/close — Close it (only Evoni closes, Q9)
  * POST   /world/:showId/season/threads/:threadId/reopen — Reopen a closed one, keeping its history
  * GET    /world/:showId/season/insights — Planning Insights: plan beside result, money from the ledger (A8, Q13, Q15)
+ * GET    /world/:showId/season/proposals — The open season-arc proposal from the feed, and the last decided (Evoni, 2026-10-17)
+ * POST   /world/:showId/season/proposals — Ask for one now (one AI call), even if the feed has not moved
+ * POST   /world/:showId/season/proposals/:proposalId/accept  — Apply the chosen changes ({ changes: [indexes] }; all when absent)
+ * POST   /world/:showId/season/proposals/:proposalId/dismiss — Dismiss it
  *
  * Extend (lengthen the current phase, pushing the season past 24) is removed:
  * "Remove Extend; phase boundaries can shift within the 24, only across slots
@@ -348,6 +352,58 @@ router.post('/world/:showId/season/threads/:threadId/reopen', requireAuth, async
     return res.json({ success: true });
   } catch (err) {
     return sendSlotError(res, err, 'reopen thread');
+  }
+});
+
+// ── Season arc proposals from the feed (Evoni, 2026-10-17: "as the feed
+// characters grow so does the story arc"; proposals she approves) ──
+// services/seasonArcProposals.
+
+const decidedBy = (req) => req.user?.email || req.user?.id || null;
+
+// GET /world/:showId/season/proposals — the open proposal and the last decided
+router.get('/world/:showId/season/proposals', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { listProposals } = require('../services/seasonArcProposals');
+    return res.json({ success: true, ...(await listProposals(models, req.params.showId)) });
+  } catch (err) {
+    return sendSlotError(res, err, 'list proposals');
+  }
+});
+
+// POST /world/:showId/season/proposals — ask now (one AI call)
+router.post('/world/:showId/season/proposals', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { propose } = require('../services/seasonArcProposals');
+    const result = await propose(models, req.params.showId, { trigger: 'manual', force: true });
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return sendSlotError(res, err, 'propose');
+  }
+});
+
+// POST /world/:showId/season/proposals/:proposalId/accept — apply the chosen changes
+router.post('/world/:showId/season/proposals/:proposalId/accept', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { accept } = require('../services/seasonArcProposals');
+    const indexes = Array.isArray(req.body?.changes) ? req.body.changes : null;
+    return res.json({ success: true, ...(await accept(models, req.params.showId, req.params.proposalId, { indexes, by: decidedBy(req) })) });
+  } catch (err) {
+    return sendSlotError(res, err, 'accept proposal');
+  }
+});
+
+// POST /world/:showId/season/proposals/:proposalId/dismiss
+router.post('/world/:showId/season/proposals/:proposalId/dismiss', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { dismiss } = require('../services/seasonArcProposals');
+    return res.json({ success: true, ...(await dismiss(models, req.params.showId, req.params.proposalId, { by: decidedBy(req) })) });
+  } catch (err) {
+    return sendSlotError(res, err, 'dismiss proposal');
   }
 });
 
