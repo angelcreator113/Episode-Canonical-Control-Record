@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../services/api';
 import useActiveShow from '../hooks/useActiveShow';
 import { platformLabel, atHandle } from './feed/feedConstants';
+import SuggestedPairs from '../components/SuggestedPairs/SuggestedPairs';
 
 /* ── Feed Relationship Map ──────────────────────────────────────────────────
  * SVG canvas showing influencer-to-influencer relationships.
@@ -398,6 +399,9 @@ export default function FeedRelationshipMap() {
           </span>
         )}
       </div>
+
+      {/* Suggested pairs: who should know each other, for Evoni to keep (idea 4) */}
+      <SuggestedPairs onKept={loadCanvas} />
 
       {/* Create relationship form */}
       {createOpen && (
