@@ -14,7 +14,8 @@ import api from '../../services/api';
 import EpisodeScriptTab from './EpisodeScriptTab';
 import { scriptHealth } from '../../lib/scriptHealth';
 
-const SCRIPT = '## BEAT: 1 · Opening Ritual\nLala: Hi besties.\n\n## BEAT: 2 · Login Sequence\nLala: Logging in.\n[UI:OPEN Nowhere]';
+// JustAWoman speaks here: Lala's voice has its own rows (see "Lala's voice" below).
+const SCRIPT = '## BEAT: 1 · Opening Ritual\nMe: Hi besties.\n\n## BEAT: 2 · Login Sequence\nMe: Logging in.\n[UI:OPEN Nowhere]';
 const renderTab = (script = SCRIPT, locked = []) => render(
   <MemoryRouter><EpisodeScriptTab episode={{ id: 'ep-1', show_id: 'show-1', script_content: script, script_locked_beats: locked }} show={{ id: 'show-1' }} /></MemoryRouter>,
 );
@@ -87,12 +88,12 @@ describe('Ready to film?', () => {
 
 describe('scriptHealth', () => {
   const canonical = [{ number: 1, name: 'A' }, { number: 2, name: 'B' }];
-  const beats = [{ id: 'beat-1', number: 1, lines: ['Lala: hi'], approved: true }, { id: 'beat-2', number: 2, lines: ['[DELIVER: nope]'], approved: true }];
+  const beats = [{ id: 'beat-1', number: 1, lines: ['Lala (V.O.): hi'], approved: true }, { id: 'beat-2', number: 2, lines: ['[DELIVER: nope]'], approved: true }];
 
   test('every check clear reads ok', () => {
     const rows = scriptHealth({ beats: beats.slice(0, 1), canonical: canonical.slice(0, 1), cover: [{ key: 'hook', label: 'x', source: 'Forward hook', beat: 1 }] });
     expect(rows.every((r) => r.ok)).toBe(true);
-    expect(rows.map((r) => r.key)).toEqual(['beats', 'cover', 'approved', 'saved']);
+    expect(rows.map((r) => r.key)).toEqual(['beats', 'cover', 'voice', 'approved', 'saved']);
   });
 
   test('cover gaps, deal cues and an unsaved draft are flagged', () => {
@@ -112,6 +113,7 @@ describe('phone paths', () => {
     { id: 'homepage', name: 'Homepage', category: 'phone', is_home: true, screen_links: [{ label: 'Messages Icon', target: 'messages_page' }, { label: 'Closet Icon', target: 'closet' }] },
     { id: 'messages_page', name: 'Messages Page', category: 'phone' },
     { id: 'closet', name: 'closet', category: 'phone' },
+    { id: 'InviteLetterOverlay', name: 'Invitation', category: 'phone' },
   ];
   const PATHS = '## BEAT: 3 · Welcome\n[UI:OPEN closet]\nMe: "The closet."\n\n## BEAT: 4 · Interruption Pulse 1\n[UI:CLICK Messages Icon]\n\n## BEAT: 5 · Reveal\n[UI:CLICK Messages Icon]';
   beforeEach(() => {
@@ -148,5 +150,33 @@ describe('phone paths', () => {
     expect(screen.queryByTestId('script-health-fix-phone-beat-4')).toBeNull();
     fireEvent.click(screen.getByTestId('script-health-fix-phone-beat-5'));
     expect(raw()).toContain('## BEAT: 4 · Interruption Pulse 1\n[UI:CLICK Messages Icon]');
+  });
+});
+
+// Two show rules (Evoni, 2026-10-17): Lala's voice icon is clicked before
+// she talks; beat 5 shows the invitation letter, never the login screen.
+describe("Lala's voice and the invitation", () => {
+  const raw = () => { fireEvent.click(screen.getByRole('button', { name: 'Raw editor' })); return screen.getByRole('textbox', { name: 'Raw script' }).value; };
+  const RULES = '## BEAT: 4 · Interruption Pulse 1\nMe: ooh\nLala: hi\n\n## BEAT: 5 · Reveal\n[UI:DISPLAY Start button]\nMe: read it';
+
+  test('each is flagged, and its row fixes it', async () => {
+    renderTab(RULES);
+    expect(screen.getByTestId('script-health-voice-beat-4').textContent).toContain('Beat 4: Lala talks before her voice icon is clicked.');
+    expect(screen.getByTestId('script-health-reveal').textContent).toContain('Beat 5: shows the login screen; it shows the invitation letter.');
+    fireEvent.click(screen.getByTestId('script-health-fix-voice-beat-4'));
+    expect(await screen.findByText(/Added 1 voice click/)).toBeTruthy();
+    fireEvent.click(screen.getByTestId('script-health-fix-reveal'));
+    expect(await screen.findByText(/Added the invitation in beat 5/)).toBeTruthy();
+    const text = raw();
+    expect(text).toContain('Me: ooh\n[UI:CLICK Voice Icon]\nLala: hi');
+    expect(text).toContain('## BEAT: 5 · Reveal\n[UI:OPEN Invitation]\nMe: read it');
+    expect(text).not.toContain('Start button');
+  });
+
+  test('an approved beat is flagged but offers no fix', () => {
+    renderTab(RULES, [4, 5]);
+    expect(screen.getByTestId('script-health-voice-beat-4')).toBeTruthy();
+    expect(screen.queryByTestId('script-health-fix-voice-beat-4')).toBeNull();
+    expect(screen.queryByTestId('script-health-fix-reveal')).toBeNull();
   });
 });

@@ -7,6 +7,7 @@
  * open one.
  */
 import { phoneCheck, uncuedPieces, wearFlags, dealCueFlags, lastGettingReadyIndex } from './scriptMoments';
+import { REVEAL_BEAT, voiceOffLines, revealCheck } from './scriptShowRules';
 
 const list = (items) => (items.length <= 2 ? items.join(' and ') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`);
 const plural = (n, one, many) => (n === 1 ? one : many);
@@ -67,6 +68,32 @@ export function scriptHealth({
   const home = (onScreen.screens || []).find((s) => s.is_home);
   if (phoneFlags.length) rows.push(...perBeat(phoneFlags, beats, 'phone', home ? (home.name || home.id) : null));
   else if (moments) rows.push({ key: 'phone', ok: true, beatId: null, text: 'Every phone and overlay moment points at something made.' });
+
+  // Lala's voice (Evoni, 2026-10-17; lib/scriptShowRules): she talks only
+  // after her voice icon is clicked, unless she answers a notification or
+  // message, or is being dressed.
+  const quiet = beats.map((b, i) => ({ b, i, off: voiceOffLines(b.lines || []) })).filter((x) => x.off.length);
+  for (const { b, i, off } of quiet) {
+    rows.push({
+      key: `voice-${b.id || i}`, ok: false, beatId: b.id || null,
+      text: `Beat ${b.number ?? i + 1}: Lala talks before her voice icon is clicked${off.length > 1 ? ` (${off.length} times)` : ''}.`,
+      ...(!b.approved ? { fix: { kind: 'voice', beatIndex: i, label: 'Click her voice icon first' } } : {}),
+    });
+  }
+  if (!quiet.length && beats.some((b) => (b.lines || []).some((l) => /^\s*lala\s*(\([^)]*\))?\s*:/i.test(l)))) {
+    rows.push({ key: 'voice', ok: true, beatId: null, text: "Lala's voice icon is clicked before she talks." });
+  }
+
+  // Beat 5 shows the invitation letter, never the login screen (Evoni, 2026-10-17).
+  const revealIndex = beats.findIndex((b) => b.number === REVEAL_BEAT);
+  if (revealIndex >= 0) {
+    const b = beats[revealIndex];
+    const r = revealCheck(b.lines || []);
+    const fix = !b.approved ? { fix: { kind: 'reveal', beatIndex: revealIndex, label: 'Show the invitation' } } : {};
+    if (r.login.length) rows.push({ key: 'reveal', ok: false, beatId: b.id || null, text: `Beat ${REVEAL_BEAT}: shows the login screen; it shows the invitation letter.`, ...fix });
+    else if (!r.invitation) rows.push({ key: 'reveal', ok: false, beatId: b.id || null, text: `Beat ${REVEAL_BEAT}: the invitation letter never comes up.`, ...fix });
+    else rows.push({ key: 'reveal', ok: true, beatId: b.id || null, text: `Beat ${REVEAL_BEAT} shows the invitation letter.` });
+  }
 
   // The locked look: pieces never put on, and wear cues that name no piece.
   if (Array.isArray(outfit) && outfit.length) {

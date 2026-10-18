@@ -32,6 +32,13 @@
  *     draftBatch, then each draft through the gate on its own (the gate
  *     takes no request), published or left for Review as above.
  *
+ * The content mix (Evoni, 2026-10-17; services/contentPillars): a poster
+ * with a content type gets it and its pillars in the prompt (posterMix).
+ * An everyday post is the pillar they are furthest behind on; a post about
+ * something that happened (an event, a storyline beat) is framed as
+ * whichever pillar fits. Each draft keeps its pillar in gate_json.pillar,
+ * so the next posts keep the mix (as Generate Posts does).
+ *
  * Called by the queue's handlers (#2970 events, #2971 ambient), never in a
  * request. Each call counts toward the daily draft cap through its job.
  */
@@ -82,7 +89,39 @@ async function loadPoster(db, characterId) {
   return { character, profile, voice };
 }
 
-function buildPrompt({ character, profile, voice, label, context, known = null, hosting = '' }) {
+/**
+ * The poster's content mix for a post (Evoni, 2026-10-17: background posts
+ * keep each creator's mix; services/contentPillars): their content type,
+ * its pillars, and the pillar they are furthest behind on. With something
+ * that happened (an event, a storyline beat), the AI frames the post as
+ * whichever pillar fits instead. null when they have no content type (or
+ * on a failed read, logged): the post is drafted as before.
+ */
+async function posterMix(db, profileId, { about = null } = {}) {
+  try {
+    const [[row]] = await db.sequelize.query('SELECT society_archetype FROM social_profiles WHERE id = :id', { replacements: { id: profileId } });
+    if (!row?.society_archetype) return null;
+    const mix = require('./contentPillars');
+    const pillars = await mix.pillarsFor(db, row.society_archetype);
+    if (!pillars.length) return { type: row.society_archetype, pillars, planned: null, line: `They are known on The Pulse as ${row.society_archetype}.` };
+    const [planned] = about ? [null] : mix.planPillars(pillars, await mix.recentPillarCounts(db, profileId), 1);
+    const which = planned
+      ? `This post is a ${planned.name} post${planned.example ? ` (for example: ${planned.example})` : ''}: their mix needs one.`
+      : 'Frame the post as whichever of these pillars fits what happened.';
+    return { type: row.society_archetype, pillars, planned, line: `They are known on The Pulse as ${row.society_archetype}. ${mix.pillarsLine(pillars)} ${which}` };
+  } catch (err) {
+    console.error('[PulseDrafter] their content mix could not be read; drafting without it:', err.message);
+    return null;
+  }
+}
+
+/** The pillar a draft is: the answer's, when it names one of theirs, else the planned one. */
+function pillarOf(mix, answer) {
+  if (!mix?.pillars?.length) return null;
+  return (require('./contentPillars').matchPillar(mix.pillars, answer) || mix.planned || null)?.name || null;
+}
+
+function buildPrompt({ character, profile, voice, label, context, known = null, hosting = '', mix = null }) {
   const { BANNED_PHRASES } = require('./pulseVoices');
   const examples = (voice.examples_json || []).slice(0, 8).map((e) => `- ${e.text}`).join('\n') || '(none yet)';
   return `You write one post on The Pulse, LalaVerse's social network, as ${profile.display_name || character.display_name} (@${profile.handle}).
@@ -91,7 +130,7 @@ Write exactly in this voice:
 ${JSON.stringify(voice.habits_json || {}, null, 2)}
 Posts they really wrote (match these):
 ${examples}
-
+${mix?.line ? `${mix.line}\n` : ''}
 When: ${label || 'now'}.
 What happened: ${context.about || 'an ordinary day; post about whatever they would.'}
 ${knowsLine(known)}
@@ -106,7 +145,7 @@ Rules:
 - One post, the length and style this person really posts.
 
 Answer with JSON only:
-{"text": "the post", "hashtag": "#OneTag or null", "reveals_story": true or false (does it reveal a secret or a plot turn?)}`;
+{"text": "the post", "hashtag": "#OneTag or null", "reveals_story": true or false (does it reveal a secret or a plot turn?)${mix?.pillars?.length ? ', "pillar": "the pillar from their mix, its name exactly"' : ''}}`;
 }
 
 /**
@@ -143,6 +182,7 @@ async function draftPost(db, { showId, characterId, moment, context = {}, reques
   const at = Number.isInteger(moment) ? moment : await clock.presentOrder(db, showId);
   const known = await require('./pulseKnowledge').knowledgeLine(db, showId, profile.id, at);
   const hosting = await hostedEventLines(db, profile.id);
+  const mix = await posterMix(db, profile.id, { about: context.about || null });
   // One automated request per drafting call (Task #3031); the caller names the kind and its job.
   await require('./pulseRequests').take(db, { showId, lane: 'automated', kind: request.kind || 'post', jobId: request.jobId || null });
   let message;
@@ -150,7 +190,7 @@ async function draftPost(db, { showId, characterId, moment, context = {}, reques
     try {
       message = await getClient().messages.create({
         model, max_tokens: 600,
-        messages: [{ role: 'user', content: buildPrompt({ character, profile, voice, label: clock.label(at), context, known, hosting }) }],
+        messages: [{ role: 'user', content: buildPrompt({ character, profile, voice, label: clock.label(at), context, known, hosting, mix }) }],
       });
       break;
     } catch (modelErr) {
@@ -188,7 +228,7 @@ async function draftPost(db, { showId, characterId, moment, context = {}, reques
     status: 'draft',
     sort_order: 0,
   });
-  return { post, revealsStory: parsed.reveals_story === true, privateState: privateOf(character), voice };
+  return { post, revealsStory: parsed.reveals_story === true, privateState: privateOf(character), voice, pillar: pillarOf(mix, parsed.pillar) };
 }
 
 /** Releases a draft the way PUT /feed-posts/:id does: live, posted now, numbers proposed (#2953). */
@@ -302,7 +342,7 @@ Rules for every post:
 - The length and style this person really posts.
 
 Answer with JSON only, one entry per person, numbered as above:
-{"items": [{"n": 1, "text": "the post", "hashtag": "#OneTag or null", "reveals_story": true or false (does it reveal a secret or a plot turn?)}]}`;
+{"items": [{"n": 1, "text": "the post", "hashtag": "#OneTag or null", "reveals_story": true or false (does it reveal a secret or a plot turn?)${entries.some((e) => e.mix?.pillars?.length) ? ', "pillar": "for a person with a content mix: the pillar from it, its name exactly; else null"' : ''}}]}`;
 }
 
 /** The prompt for several replies on one post, one per commenter. */
@@ -398,6 +438,8 @@ async function draftPostBatch(db, { showId, items, moment, context = {}, request
   for (const e of entries) {
     e.known = await knowledge.knowledgeLine(db, showId, e.profile.id, at);
     e.hosting = await hostedEventLines(db, e.profile.id);
+    e.mix = await posterMix(db, e.profile.id, { about: context.about || null });
+    e.extra = e.mix?.line ? `${e.mix.line}\n` : '';
   }
   if (!entries.length) return { drafted: [], failed };
   await require('./pulseRequests').take(db, { showId, lane: 'automated', kind: request.kind || 'posts', jobId: request.jobId || null });
@@ -415,7 +457,7 @@ async function draftPostBatch(db, { showId, items, moment, context = {}, request
       likes: 0, comments_count: 0, shares: 0, sample_comments: [], story_order: at,
       ai_generated: true, generation_model: MODELS[0], status: 'draft', sort_order: 0,
     });
-    drafted.push({ post, revealsStory: got.reveals_story === true, privateState: privateOf(e.character), voice: e.voice, characterId: e.item.characterId });
+    drafted.push({ post, revealsStory: got.reveals_story === true, privateState: privateOf(e.character), voice: e.voice, characterId: e.item.characterId, pillar: pillarOf(e.mix, got.pillar) });
   }
   return { drafted, failed };
 }
@@ -467,12 +509,13 @@ function draftBatch(db, { kind, ...args }) {
 }
 
 /** Gates one drafted post and publishes it or leaves it for Review (as draftAndRoute). */
-async function routePost(db, { post, revealsStory, privateState, voice }, { lalaProfileId, alwaysReview = [] }) {
+async function routePost(db, { post, revealsStory, privateState, voice, pillar = null }, { lalaProfileId, alwaysReview = [] }) {
   const gateApi = require('./pulseGate');
   const gate = await gateApi.check(db, post, { voice, privateState, lalaProfileId });
   const review = gateApi.reviewReasons(post, gate, { lalaProfileId, revealsStory });
   for (const reason of alwaysReview) if (!review.includes(reason)) review.push(reason);
-  await post.update({ gate_json: { ...gate, review, checked_at: new Date().toISOString() } });
+  // The pillar it is (services/contentPillars), so the next posts keep the mix.
+  await post.update({ gate_json: { ...gate, review, ...(pillar ? { pillar } : {}), checked_at: new Date().toISOString() } });
   if (review.length === 0) await release(post);
   return { post, gate, review, published: review.length === 0 };
 }
@@ -515,5 +558,5 @@ async function draftCommentsAndRoute(db, args) {
 
 module.exports = {
   MODELS, BATCH_MAX, knowsLine, hostingLine, privateOf, PRIVATE_RULE, draftPost, draftAndRoute, draftComment, draftCommentAndRoute, release, DraftError,
-  buildPostBatchPrompt, buildCommentBatchPrompt, parseBatch, askBatch, hostedEventLines, draftBatch, draftPostBatch, draftCommentBatch, draftPostsAndRoute, draftCommentsAndRoute,
+  buildPostBatchPrompt, buildCommentBatchPrompt, posterMix, parseBatch, askBatch, hostedEventLines, draftBatch, draftPostBatch, draftCommentBatch, draftPostsAndRoute, draftCommentsAndRoute,
 };

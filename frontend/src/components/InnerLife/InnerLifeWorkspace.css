@@ -171,3 +171,21 @@
   .il-subject { padding: 14px; }
   .il-search { margin-left: 0; flex-basis: 100%; }
 }
+
+/* Secrets (stage B: the revelation budget) */
+.il-secrets { display: flex; flex-direction: column; gap: 14px; }
+.il-secret-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.il-secret {
+  display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 16px;
+  border: 1px solid var(--lala-gold-line); background: var(--surface-card);
+}
+.il-secret.is-candidate { border-style: dashed; background: var(--lala-gold-soft); }
+.il-secret-head { display: flex; align-items: flex-start; gap: 10px; }
+.il-secret-text { margin: 0; flex: 1; min-width: 0; font-family: 'Lora', serif; font-size: 15px; line-height: 1.55; color: var(--text-primary); }
+.il-secret .il-badge { align-self: flex-start; }
+.il-secret-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.il-secret-candidates { display: flex; flex-direction: column; gap: 8px; }
+.il-secret-add { display: flex; flex-direction: column; gap: 8px; }
+@media (max-width: 600px) {
+  .il-secret-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

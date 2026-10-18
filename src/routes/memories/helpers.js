@@ -11,6 +11,7 @@ const _anthropic = new Anthropic();
 
 const db = require('../../models');
 const { storyBrief } = require('../../services/characterStoryBrief');
+const { secretsFor } = require('../../services/characterSecrets');
 const { RegistryCharacter } = db;
 
 function buildExtractionPrompt(lineContent, characterContext) {
@@ -163,7 +164,8 @@ async function getCharacterVoiceContext(characterId) {
     if (vs.catchphrases?.length) voiceBlock += `\nCatchphrases: "${vs.catchphrases.join('", "')}"`;
     if (char.core_belief) voiceBlock += `\nCore belief: ${char.core_belief}`;
     // Their inner life at the chapter book's depth (services/characterStoryBrief).
-    const brief = storyBrief(char, { layer: 'chapter' });
+    const secrets = (await secretsFor(RegistryCharacter.sequelize, [char.id])).get(char.id);
+    const brief = storyBrief(char, { layer: 'chapter', secrets });
     if (brief.lines.length) voiceBlock += `\n${brief.text}`;
 
     const charRules = `
