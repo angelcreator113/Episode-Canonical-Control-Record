@@ -3458,7 +3458,7 @@ router.post('/world/locations/seed-infrastructure', requireAuth, async (req, res
   try {
     const WorldLocation = models.WorldLocation;
     if (!WorldLocation) return res.status(500).json({ error: 'WorldLocation model not available' });
-    const { LALAS_HOME, renameOldLalaHome } = require('../services/lalaHomeLocation');
+    const { LALAS_HOME, homeAtAddress, renameOldLalaHome } = require('../services/lalaHomeLocation');
 
     // Full DREAM city infrastructure — cities, districts, venues, properties, landmarks
     const DREAM_INFRA = [
@@ -3507,9 +3507,14 @@ router.post('/world/locations/seed-infrastructure', requireAuth, async (req, res
 
     // A home seeded before as "Lala's Penthouse" becomes Lala's Home (services/lalaHomeLocation).
     const renamed = (await renameOldLalaHome(WorldLocation)) ? 1 : 0;
+    // One Lala's home: none is added when a location is at her address
+    // already (the one holding her home and closet scene sets, or the seed's).
+    const homeThere = await homeAtAddress(WorldLocation);
+    const oldPenthouse = !renamed && homeThere ? await WorldLocation.findOne({ where: { slug: 'lala-s-penthouse' } }) : null;
 
     let created = 0;
     for (const item of DREAM_INFRA) {
+      if (item === LALAS_HOME && homeThere) continue;
       const slug = item.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
       const exists = await WorldLocation.findOne({ where: { slug } }).catch(() => null);
       if (exists) continue;
@@ -3517,7 +3522,7 @@ router.post('/world/locations/seed-infrastructure', requireAuth, async (req, res
       created++;
     }
 
-    res.json({ success: true, created, renamed, total: DREAM_INFRA.length, message: `Seeded ${created} DREAM locations across 5 cities${renamed ? '; Lala\'s Penthouse is now Lala\'s Home' : ''}` });
+    res.json({ success: true, created, renamed, old_penthouse_id: oldPenthouse?.id || null, total: DREAM_INFRA.length, message: `Seeded ${created} DREAM locations across 5 cities${renamed ? '; Lala\'s Penthouse is now Lala\'s Home' : ''}${oldPenthouse ? `; Lala's home is already at ${LALAS_HOME.street_address}, so the old Lala's Penthouse can be deleted` : ''}` });
   } catch (err) {
     console.error('Seed infrastructure error:', err.message);
     res.status(500).json({ error: err.message });

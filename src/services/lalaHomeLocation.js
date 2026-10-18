@@ -8,10 +8,16 @@
  * real-world book's; she is not in the LalaVerse).
  *
  *   LALAS_HOME  the seed's row
+ *   homeAtAddress(WorldLocation)  the location already at her address, or
+ *     null: the one "Fill in Lala's home" (services/characterPlacesService
+ *     fillLalaHome) makes to hold her home and closet scene sets finds a
+ *     location by this address, so there is one Lala's home, whichever ran
+ *     first. The seed adds none when one is there.
  *   renameOldLalaHome(WorldLocation)  a row seeded the old way becomes
  *     Lala's Home: each field still as the old seed wrote it takes the new
  *     one, a field Evoni changed is kept. Nothing when there is no such row,
- *     or Lala's Home is already there. Returns the row it changed, or null.
+ *     or Lala's Home (or any location at her address) is already there.
+ *     Returns the row it changed, or null.
  */
 
 const LALAS_HOME = Object.freeze({
@@ -29,9 +35,17 @@ const OLD_LALA_HOME = Object.freeze({
   }),
 });
 
+async function homeAtAddress(WorldLocation) {
+  const { fn, col, where } = require('sequelize');
+  return WorldLocation.findOne({
+    where: where(fn('LOWER', fn('TRIM', col('street_address'))), LALAS_HOME.street_address.toLowerCase()),
+    order: [['created_at', 'ASC']],
+  });
+}
+
 async function renameOldLalaHome(WorldLocation) {
   const old = await WorldLocation.findOne({ where: { slug: OLD_LALA_HOME.slug } });
-  if (!old || await WorldLocation.findOne({ where: { slug: SLUG } })) return null;
+  if (!old || await WorldLocation.findOne({ where: { slug: SLUG } }) || await homeAtAddress(WorldLocation)) return null;
   const patch = { slug: SLUG };
   for (const [field, was] of Object.entries(OLD_LALA_HOME.fields)) {
     if ((old[field] ?? null) === was) patch[field] = LALAS_HOME[field] ?? null;
@@ -40,4 +54,4 @@ async function renameOldLalaHome(WorldLocation) {
   return old;
 }
 
-module.exports = { LALAS_HOME, OLD_LALA_HOME, renameOldLalaHome };
+module.exports = { LALAS_HOME, OLD_LALA_HOME, homeAtAddress, renameOldLalaHome };

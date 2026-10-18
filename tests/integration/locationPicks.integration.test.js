@@ -4,14 +4,16 @@
  *   episode pitches read put a character's own places first, then a city's,
  *   and real venues before a Feed creator's own studio;
  * - "Seed Infrastructure" turns a "Lala's Penthouse" it made before into
- *   Lala's Home in Echo Park, keeping a field Evoni changed.
+ *   Lala's Home in Echo Park, keeping a field Evoni changed;
+ * - with a home already at her address (the one "Fill in Lala's home" makes
+ *   for her home and closet scene sets), it makes no second one.
  */
 jest.unmock('uuid');
 
 const crypto = require('crypto');
 const models = require('../../src/models');
 const { pickLocations } = require('../../src/services/locationPicks');
-const { renameOldLalaHome, OLD_LALA_HOME } = require('../../src/services/lalaHomeLocation');
+const { renameOldLalaHome, homeAtAddress, OLD_LALA_HOME, LALAS_HOME } = require('../../src/services/lalaHomeLocation');
 
 const { sequelize, WorldLocation } = models;
 
@@ -55,7 +57,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
   it('the old penthouse becomes Lala\'s Home; a field Evoni changed stays', async () => {
     // A shared test database could hold a seeded one already; this test needs neither.
-    const [[existing]] = await run("SELECT COUNT(*)::int AS n FROM world_locations WHERE slug IN ('lala-s-penthouse', 'lala-s-home')");
+    const [[existing]] = await run("SELECT COUNT(*)::int AS n FROM world_locations WHERE slug IN ('lala-s-penthouse', 'lala-s-home') OR LOWER(TRIM(street_address)) = LOWER(:a)", { a: LALAS_HOME.street_address });
     if (existing.n) return;
     const street = `My own street ${tag}`;
     const row = await WorldLocation.create({ ...OLD_LALA_HOME.fields, slug: OLD_LALA_HOME.slug, location_type: 'property', street_address: street });
@@ -64,5 +66,20 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(row).toMatchObject({ slug: 'lala-s-home', name: 'Lala\'s Home', city: 'Echo Park', district: null, property_type: null, street_address: street,
       description: 'Lala\'s home in Echo Park, at 246 Olddy Paveway Ln.' });
     expect(await renameOldLalaHome(WorldLocation)).toBeNull();
+  });
+
+  it('with a home already at her address (her scene sets\' one), no second Lala\'s Home and the penthouse is left', async () => {
+    const [[existing]] = await run("SELECT COUNT(*)::int AS n FROM world_locations WHERE slug IN ('lala-s-penthouse', 'lala-s-home') OR LOWER(TRIM(street_address)) = LOWER(:a)", { a: LALAS_HOME.street_address });
+    if (existing.n) return;
+    const house = await WorldLocation.create({ name: 'Lala\'s home', location_type: 'interior', street_address: ` ${LALAS_HOME.street_address} `, city: 'Echo Park', metadata: { source: 'lala_home', tag } });
+    const old = await WorldLocation.create({ ...OLD_LALA_HOME.fields, slug: OLD_LALA_HOME.slug, location_type: 'property' });
+    try {
+      expect((await homeAtAddress(WorldLocation)).id).toBe(house.id);
+      expect(await renameOldLalaHome(WorldLocation)).toBeNull();
+      await old.reload();
+      expect(old.name).toBe('Lala\'s Penthouse');
+    } finally {
+      await run('DELETE FROM world_locations WHERE id IN (:ids)', { ids: [house.id, old.id] });
+    }
   });
 });
