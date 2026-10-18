@@ -1714,11 +1714,10 @@ async function loadLocations(characterKey) {
     const { WorldLocation } = require('../../models');
     if (!WorldLocation) return null;
 
-    // Get locations associated with this character + general important ones
-    const locations = await WorldLocation.findAll({
-      order: [['updated_at', 'DESC']],
-      limit: 20,
-    });
+    // This character's places first, then real venues before the Feed
+    // creators' own studios, the cities in turn (services/locationPicks):
+    // the 20 last updated were mostly new creators' studios.
+    const locations = await require('../../services/locationPicks').pickLocations(require('../../models'), { limit: 20, characterKey });
 
     if (!locations.length) return null;
 

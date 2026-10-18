@@ -168,10 +168,8 @@ async function buildEventPrompt(db, show_id) {
   // Load World Locations for event placement
   let locationContext = '';
   try {
-    const locations = await db.sequelize.query(
-      `SELECT name, description, location_type, sensory_details FROM world_locations WHERE deleted_at IS NULL ORDER BY name LIMIT 20`,
-      { type: db.sequelize.QueryTypes.SELECT }
-    );
+    // Real venues before the Feed creators' own studios, the cities in turn (services/locationPicks).
+    const locations = await require('../services/locationPicks').pickLocations(db, { limit: 20 });
     if (locations.length > 0) {
       const locs = locations.map(l => {
         const sensory = l.sensory_details ? (typeof l.sensory_details === 'string' ? l.sensory_details : JSON.stringify(l.sensory_details)) : '';

@@ -11,6 +11,6 @@
 .lv-btn { display: inline-flex; align-items: center; gap: 4px; min-width: 28px; min-height: 28px; justify-content: center; padding: 2px 6px; border: 1px solid var(--lala-parchment-3); border-radius: 4px; background: var(--surface-card); color: var(--text-primary); font-size: 11px; cursor: pointer; }
 .lv-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .lv-btn-primary { border-color: var(--lala-gold); color: var(--lala-gold-text); }
-.lv-error { color: var(--error-text, #b42318); font-size: 11px; }
+.lv-error { color: var(--danger-text); font-size: 11px; }
 .lv-link { background: none; border: none; padding: 0; color: var(--lala-gold-text); text-decoration: underline; cursor: pointer; font: inherit; }
 .lv-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; padding: 6px 8px; border: 1px solid var(--lala-parchment-3); border-radius: 4px; background: var(--surface-card); }
