@@ -10,6 +10,7 @@ const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 const db = require('../../models');
 const { StorytellerMemory, StorytellerLine, StorytellerBook, StorytellerChapter, RegistryCharacter } = db;
 const { buildUniverseContext } = require('../../utils/universeContext');
+const { Op } = require('sequelize');
 
 let registrySync;
 try { registrySync = require('../../services/registrySync'); } catch { registrySync = null; }
@@ -606,6 +607,25 @@ router.get('/books/:bookId/memories/pending', requireAuth, async (req, res) => {
             line_content_preview: (line.text || '').slice(0, 100),
           });
         }
+      }
+    }
+
+    // Memories not tied to a line (from Talk, the Story Engine or another
+    // source with a character but no line; the quick wins, 2026-10-18) appear
+    // too, for the characters of the book's show, so none waits unseen.
+    if (book.show_id) {
+      const unplaced = await StorytellerMemory.findAll({
+        where: {
+          line_id: null,
+          character_id: { [Op.in]: db.sequelize.literal(
+            `(SELECT rc.id FROM registry_characters rc JOIN character_registries cr ON cr.id = rc.registry_id
+               WHERE cr.show_id = ${db.sequelize.escape(book.show_id)} AND rc.deleted_at IS NULL)`) },
+        },
+        include: [{ model: RegistryCharacter, as: 'character', attributes: ['id', 'display_name', 'role_type'], required: false }],
+        order: [['created_at', 'DESC']],
+      });
+      for (const memory of unplaced) {
+        memories.push({ ...memory.toJSON(), chapter_title: null, line_content_preview: null, unplaced: true });
       }
     }
 

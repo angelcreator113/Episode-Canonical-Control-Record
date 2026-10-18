@@ -48,7 +48,7 @@ import {
 import {
   createEventSaveQueue, putEventVersioned, isStaleSaveError, saveErrorMessage,
 } from '../utils/eventSaveVersion';
-import { MoreHorizontal, ArrowRight, ArrowLeft, Plus, Calendar, CalendarDays, Sparkles, Lightbulb, AlertTriangle, Loader2, RotateCw, X, Mail, Gem, Crown, Heart, ChevronDown, Search, MessageSquare, FileUp } from 'lucide-react';
+import { MoreHorizontal, ArrowRight, ArrowLeft, Plus, Calendar, CalendarDays, Sparkles, Lightbulb, AlertTriangle, Loader2, RotateCw, X, Mail, Gem, Crown, Heart, ChevronDown, Search, MessageSquare, FileUp, Briefcase } from 'lucide-react';
 import useWardrobeProcessing from '../hooks/useWardrobeProcessing';
 import { backgroundRemovalStarted, PROCESSING_STATES } from '../utils/wardrobeProcessingState';
 import AddPieceDialog from '../components/Wardrobe/AddPieceDialog';
@@ -255,6 +255,8 @@ const TABS = [
     { key: 'episodes-ledger', label: 'Results' },
   ]},
   { key: 'events', Icon: Mail, label: 'Events' },
+  // Its page was there with no tab (the quick wins, 2026-10-18): a brand's offers and bookings.
+  { key: 'opportunities', Icon: Briefcase, label: 'Opportunities' },
   { key: 'wardrobe', Icon: Gem, label: 'Assets', subs: [
     { key: 'scene-sets', label: 'Scene Sets' },
     { key: 'wardrobe-items', label: 'Wardrobe' },
