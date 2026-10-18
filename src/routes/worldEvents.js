@@ -3228,7 +3228,7 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
               const { buildSocialTasks } = require('../services/episodeGeneratorService');
               // T9 (§8(cc); Task #2395): goals written from this event's
               // fields, their count set by its prestige.
-              return buildSocialTasks('invite', { platform: 'instagram', content_category: p.content_category || 'creator_economy' }, [], {
+              return buildSocialTasks('invite', { platform: 'pulse', content_category: p.content_category || 'creator_economy' }, [], {
                 prestige,
                 event_name: draftedName || `${event_template || 'Event'} with ${creatorName}`,
                 venue_name: venue?.name || null,

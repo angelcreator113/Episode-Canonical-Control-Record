@@ -41,13 +41,13 @@ const STATUS_FLOW = {
 const TYPE_DEFAULTS = {
   modeling: { wardrobe: { style_direction: 'As directed by creative team', provided_pieces: true }, deliverables: ['Show up on time', 'Follow creative direction', 'Sign usage rights'] },
   runway: { wardrobe: { style_direction: 'Designer provides all pieces', provided_pieces: true, dress_code: 'runway' }, deliverables: ['Attend fitting', 'Walk rehearsal', 'Walk show'] },
-  editorial: { wardrobe: { style_direction: 'Styled by magazine team', provided_pieces: true }, deliverables: ['Photo shoot', 'Interview if requested', 'Social media mention'] },
-  campaign: { wardrobe: { style_direction: 'Brand aesthetic — provided or styled', provided_pieces: true }, deliverables: ['Campaign shoot', 'Social posts per contract', 'Exclusivity period'] },
-  ambassador: { wardrobe: { style_direction: 'Wear brand regularly, authentically', provided_pieces: true }, deliverables: ['Monthly posts', 'Event appearances', 'Exclusivity compliance'] },
-  brand_deal: { wardrobe: { style_direction: 'Incorporate product naturally' }, deliverables: ['Sponsored content', 'Story mentions', 'Engagement targets'] },
+  editorial: { wardrobe: { style_direction: 'Styled by magazine team', provided_pieces: true }, deliverables: ['Photo shoot', 'Interview if requested', 'Pulse mention'] },
+  campaign: { wardrobe: { style_direction: 'Brand aesthetic — provided or styled', provided_pieces: true }, deliverables: ['Campaign shoot', 'Pulse posts per contract', 'Exclusivity period'] },
+  ambassador: { wardrobe: { style_direction: 'Wear brand regularly, authentically', provided_pieces: true }, deliverables: ['Monthly Pulse posts', 'Event appearances', 'Exclusivity compliance'] },
+  brand_deal: { wardrobe: { style_direction: 'Incorporate product naturally' }, deliverables: ['Sponsored Pulse content', 'Pulse story mentions', 'Engagement targets'] },
   podcast: { wardrobe: { style_direction: 'Camera-ready casual' }, deliverables: ['Appear on show', 'Promote episode'] },
   interview: { wardrobe: { style_direction: 'Publication-appropriate' }, deliverables: ['Interview session', 'Photo if needed'] },
-  award_show: { wardrobe: { style_direction: 'Red carpet — statement piece', dress_code: 'black_tie' }, deliverables: ['Red carpet appearance', 'Social documentation'] },
+  award_show: { wardrobe: { style_direction: 'Red carpet — statement piece', dress_code: 'black_tie' }, deliverables: ['Red carpet appearance', 'Pulse coverage'] },
 };
 
 // ═══════════════════════════════════════════

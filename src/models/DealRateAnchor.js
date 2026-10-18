@@ -13,10 +13,13 @@ const { DataTypes } = require('sequelize');
  * 20260929200002-create-deal-rate-anchors.js. No code reads them yet.
  */
 // Version 2 (20261001160000-add-deliverable-formats.js; ruling D15 and
-// answer 8, 2026-09-30) adds the deliverable formats' anchors.
+// answer 8, 2026-09-30) adds the deliverable formats' anchors. On The Pulse
+// (20261018130000-pulse-deliverables.js): reel is pulse_video, stories_3
+// pulse_stories_3, instagram_post pulse_post; tiktok_video merged into
+// pulse_video.
 const RATE_COMPONENTS = Object.freeze([
-  'paid_appearance', 'reel', 'stories_3', 'brand_partnership_base', 'performance_booking',
-  'tiktok_video', 'grwm_video', 'instagram_post', 'carousel_post', 'go_live', 'try_on_haul', 'ugc', 'link_in_bio_week',
+  'paid_appearance', 'pulse_video', 'pulse_stories_3', 'brand_partnership_base', 'performance_booking',
+  'grwm_video', 'pulse_post', 'carousel_post', 'go_live', 'try_on_haul', 'ugc', 'link_in_bio_week',
 ]);
 
 module.exports = (sequelize) => {

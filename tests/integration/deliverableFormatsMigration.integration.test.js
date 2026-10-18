@@ -7,6 +7,10 @@
  * holds them) are carried to their formats with a platform and quantity,
  * their fees untouched; a drafted row keeps reading Auto-drafted; free text
  * is left alone; down restores the old keys; up again is a no-op on v2.
+ *
+ * The formats moved to The Pulse later (20261018130000-pulse-deliverables,
+ * tested in pulseDeliverablesMigration.integration.test.js); this file
+ * undoes that one first so it tests D15 as it was, and redoes it after.
  */
 jest.unmock('uuid');
 
@@ -14,6 +18,7 @@ const crypto = require('crypto');
 const { Sequelize } = require('sequelize');
 const models = require('../../src/models');
 const migration = require('../../src/migrations/20261001160000-add-deliverable-formats');
+const pulseMigration = require('../../src/migrations/20261018130000-pulse-deliverables');
 
 const { sequelize } = models;
 
@@ -31,6 +36,7 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
   const ids = { show: uuid(), event: uuid(), reel: uuid(), stories: uuid(), post: uuid(), photos: uuid(), free: uuid() };
 
   beforeAll(async () => {
+    await pulseMigration.down(sequelize.getQueryInterface(), Sequelize);
     await run(`INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:show, 'D15 show', :slug, NOW(), NOW())`,
       { show: ids.show, slug: `d15-${ids.show.slice(0, 8)}` });
     const drafted = {
@@ -65,6 +71,7 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     await run('DELETE FROM event_deliverables WHERE event_id = :event', ids);
     await run('DELETE FROM world_events WHERE id = :event', ids);
     await run('DELETE FROM shows WHERE id = :show', ids);
+    await pulseMigration.up(sequelize.getQueryInterface(), Sequelize);
   });
 
   const rows = () => q(`SELECT id, deliverable_type, platform, quantity, description, fee FROM event_deliverables

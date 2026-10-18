@@ -38,7 +38,7 @@ describe('deliverable sizing by components (§4.1)', () => {
   test('a retainer drafts no deliverables; a performance booking without content drafts the optional Stories', () => {
     expect(draftDeliverablesForDeal({ deal_components: ['partnership_base'], career_tier: 4 })).toEqual([]);
     const perf = draftDeliverablesForDeal({ deal_components: ['performance_fee'], career_tier: 2 });
-    expect(perf).toEqual([expect.objectContaining({ deliverable_type: 'instagram_stories', quantity: 3, required: false, fee: null })]);
+    expect(perf).toEqual([expect.objectContaining({ deliverable_type: 'pulse_stories', quantity: 3, required: false, fee: null })]);
   });
 });
 
@@ -136,8 +136,8 @@ describe('Lala\'s home (the travel ruling)', () => {
 
 describe('deliverableIsAutoDrafted (rule 14)', () => {
   test('equal to its record, else Edited', () => {
-    const record = { type: 'instagram_reel', platform: 'instagram', quantity: 1, fee: 125, description: 'Instagram Reel', required: true };
-    const row = { deliverable_type: 'instagram_reel', platform: 'instagram', quantity: 1, fee: 125, description: 'Instagram Reel', required: true };
+    const record = { type: 'pulse_video', platform: 'pulse', quantity: 1, fee: 125, description: 'Pulse video', required: true };
+    const row = { deliverable_type: 'pulse_video', platform: 'pulse', quantity: 1, fee: 125, description: 'Pulse video', required: true };
     expect(deliverableIsAutoDrafted(row, record)).toBe(true);
     expect(deliverableIsAutoDrafted({ ...row, fee: 150 }, record)).toBe(false);
     expect(deliverableIsAutoDrafted(row, undefined)).toBe(false);
