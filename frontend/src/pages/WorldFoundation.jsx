@@ -19,9 +19,13 @@ import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../co
 import BrainUpdate from '../components/BrainUpdate';
 import DreamMap from '../components/DreamMap';
 import DreamCityExplorer from '../components/World/DreamCityExplorer';
+import StudioTypes from '../components/World/StudioTypes';
 import apiClient from '../services/api';
 import { DREAM_CITIES, UNIVERSITIES, CORPORATIONS, WORLD_LAYERS } from '../data/dreamCities';
 import { tabFromSearch } from '../utils/worldRedirects';
+import { saveCity } from '../lib/pulseCities';
+import useActiveShow from '../hooks/useActiveShow';
+import StudioPhotos from '../components/World/StudioPhotos';
 
 const API = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -61,7 +65,7 @@ const LOCATION_TYPES = [
   { value: 'virtual', label: 'Virtual' }, { value: 'transitional', label: 'Transitional' },
 ];
 
-const VENUE_TYPES = ['restaurant','club','bar','cafe','salon','spa','gallery','museum','boutique','gym','hotel','office','park','rooftop','theater','other'];
+const VENUE_TYPES = ['restaurant','club','bar','cafe','salon','spa','gallery','museum','boutique','gym','hotel','office','park','rooftop','theater','studio','recording_studio','coworking','other'];
 const PROPERTY_TYPES = ['penthouse','mansion','apartment','townhouse','studio','villa','loft','cottage'];
 
 const tabStyle = (active) => ({
@@ -78,7 +82,7 @@ export default function WorldFoundation({ embedded = false }) {
   // ?tab= opens a tab (audit IA-04): the retired duplicate editors land here.
   const [tab, setTab] = useState(() => tabFromSearch(TABS, 'map', undefined, 'sub'));
   const [editItem, setEditItem] = useState(null);
-  const { data, updateItem, addItem, removeItem, saving, loaded } = usePageData('world_infrastructure', DEFAULTS);
+  const { data, updateItem, addItem, removeItem, setSaved, saving, loaded } = usePageData('world_infrastructure', DEFAULTS);
 
   // Location state
   const [locations, setLocations] = useState([]);
@@ -91,6 +95,8 @@ export default function WorldFoundation({ embedded = false }) {
   const [selectedLoc, setSelectedLoc] = useState(null);
   const emptyForm = { name: '', description: '', location_type: 'venue', narrative_role: '', street_address: '', city: '', district: '', venue_type: '', property_type: '', parent_location_id: '', venue_details: { hours: '', price_level: '', capacity: '', dress_code: '', vibe_tags: [] } };
   const [form, setForm] = useState(emptyForm);
+  // A studio's photos belong to the active show (StudioPhotos, 2026-10-18).
+  const { showId } = useActiveShow();
 
   const flash = useCallback((msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); }, []);
 
@@ -127,6 +133,13 @@ export default function WorldFoundation({ embedded = false }) {
     } catch { flash('Save failed', 'error'); }
   }, [editId, form, flash, loadLocations]);
 
+  // A city's words (the one DREAM city list): saved onto the latest list, which the writers read.
+  const saveCityText = useCallback(async (key, patch) => {
+    const next = await saveCity(key, patch);
+    setSaved('DREAM_CITIES', next);
+    flash('City saved');
+  }, [setSaved, flash]);
+
   const deleteLocation = useCallback(async (id) => {
     if (!confirm('Delete this location?')) return;
     try { await deleteLocationApi(id); flash('Deleted'); loadLocations(); }
@@ -150,6 +163,44 @@ export default function WorldFoundation({ embedded = false }) {
     setForm({ name: loc.name || '', description: loc.description || '', location_type: loc.location_type || 'venue', narrative_role: loc.narrative_role || '', street_address: loc.street_address || '', city: loc.city || '', district: loc.district || '', venue_type: loc.venue_type || '', property_type: loc.property_type || '', parent_location_id: loc.parent_location_id || '', venue_details: loc.venue_details || emptyForm.venue_details });
     setShowForm(true);
   };
+
+  // The location form: a new one opens above the list, an edit opens in
+  // the card being edited (Evoni, 2026-10-18: on a phone, Edit opened the
+  // form far above the card, so nothing seemed to happen).
+  const locationForm = () => (
+            <div style={{ ...cardStyle, marginBottom: 16, background: '#FAF7F0', border: '1px solid #e8e0d0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                <span style={{ fontWeight: 700, fontSize: 13 }}>{editId ? 'Edit Location' : 'New Location'}</span>
+                <button onClick={() => { setShowForm(false); setEditId(null); setForm(emptyForm); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999' }}>x</button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <input style={inputStyle} placeholder="Name *" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
+                <select style={inputStyle} value={form.location_type} onChange={e => setForm(p => ({ ...p, location_type: e.target.value }))}>
+                  {LOCATION_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+                {/* One of the five DREAM cities, so the map places it (wiring map,
+                    fix-list item 18); a city already stored outside them stays
+                    choosable rather than being dropped on save. */}
+                <select style={inputStyle} aria-label="City" value={form.city || ''} onChange={e => setForm(p => ({ ...p, city: e.target.value }))}>
+                  <option value="">No city</option>
+                  {(data.DREAM_CITIES || DREAM_CITIES).map(c => <option key={c.key} value={c.name}>{c.name}</option>)}
+                  {form.city && !(data.DREAM_CITIES || DREAM_CITIES).some(c => c.name === form.city) && (
+                    <option value={form.city}>{form.city} (not a DREAM city)</option>
+                  )}
+                </select>
+                <input style={inputStyle} placeholder="District" value={form.district} onChange={e => setForm(p => ({ ...p, district: e.target.value }))} />
+                <input style={inputStyle} placeholder="Street Address" value={form.street_address} onChange={e => setForm(p => ({ ...p, street_address: e.target.value }))} />
+                <input style={inputStyle} placeholder="Narrative Role" value={form.narrative_role} onChange={e => setForm(p => ({ ...p, narrative_role: e.target.value }))} />
+                {form.location_type === 'venue' && <select style={inputStyle} value={form.venue_type} onChange={e => setForm(p => ({ ...p, venue_type: e.target.value }))}><option value="">Venue Type</option>{VENUE_TYPES.map(v => <option key={v} value={v}>{v}</option>)}</select>}
+                {form.location_type === 'property' && <select style={inputStyle} value={form.property_type} onChange={e => setForm(p => ({ ...p, property_type: e.target.value }))}><option value="">Property Type</option>{PROPERTY_TYPES.map(v => <option key={v} value={v}>{v}</option>)}</select>}
+              </div>
+              <textarea style={{ ...inputStyle, marginTop: 8, resize: 'vertical' }} rows={2} placeholder="Description" value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} />
+              <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
+                <button onClick={saveLocation} disabled={!form.name} style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, background: '#2C2C2C', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>{editId ? 'Update' : 'Create'}</button>
+                <button onClick={() => { setShowForm(false); setEditId(null); setForm(emptyForm); }} style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, background: '#fff', color: '#666', border: '1px solid #e8e0d0', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
+              </div>
+            </div>
+  );
 
   // Profile counts by city (for map)
   const [profileCounts, setProfileCounts] = useState([]);
@@ -250,7 +301,7 @@ export default function WorldFoundation({ embedded = false }) {
 
           {embedded ? (
             <DreamCityExplorer cities={data.DREAM_CITIES || DREAM_CITIES} universities={data.UNIVERSITIES || UNIVERSITIES} corporations={data.CORPORATIONS || CORPORATIONS}
-              locations={locations} loading={locLoading} onAddVenue={addInCity} onOpenLocations={() => setTab('locations')}
+              locations={locations} loading={locLoading} onAddVenue={addInCity} onOpenLocations={() => setTab('locations')} onSaveCity={saveCityText}
               renderMap={(cityKey, pickCity) => (<>
                 <DreamMap locations={locations} profiles={profileCounts} onSelectLocation={loc => setSelectedLoc(loc)} mapImageUrl={mapImageUrl}
                   selectedCity={cityKey} onSelectCity={pickCity} />
@@ -364,6 +415,9 @@ export default function WorldFoundation({ embedded = false }) {
             </div>
           </div>
 
+          {/* Creator studios still typed "other" (2026-10-18) */}
+          <StudioTypes onChanged={loadLocations} />
+
           {/* Type filters */}
           <div style={{ display: 'flex', gap: 4, marginBottom: 16, flexWrap: 'wrap' }}>
             <button onClick={() => setFilterType('')} style={{ padding: '4px 10px', fontSize: 10, borderRadius: 12, border: '1px solid #e8e0d0', background: !filterType ? '#2C2C2C' : '#fff', color: !filterType ? '#fff' : '#666', cursor: 'pointer', fontWeight: 600 }}>All ({locations.length})</button>
@@ -373,41 +427,8 @@ export default function WorldFoundation({ embedded = false }) {
             })}
           </div>
 
-          {/* Create/Edit form */}
-          {showForm && (
-            <div style={{ ...cardStyle, marginBottom: 16, background: '#FAF7F0', border: '1px solid #e8e0d0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                <span style={{ fontWeight: 700, fontSize: 13 }}>{editId ? 'Edit Location' : 'New Location'}</span>
-                <button onClick={() => { setShowForm(false); setEditId(null); setForm(emptyForm); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999' }}>x</button>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <input style={inputStyle} placeholder="Name *" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
-                <select style={inputStyle} value={form.location_type} onChange={e => setForm(p => ({ ...p, location_type: e.target.value }))}>
-                  {LOCATION_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </select>
-                {/* One of the five DREAM cities, so the map places it (wiring map,
-                    fix-list item 18); a city already stored outside them stays
-                    choosable rather than being dropped on save. */}
-                <select style={inputStyle} aria-label="City" value={form.city || ''} onChange={e => setForm(p => ({ ...p, city: e.target.value }))}>
-                  <option value="">No city</option>
-                  {(data.DREAM_CITIES || DREAM_CITIES).map(c => <option key={c.key} value={c.name}>{c.name}</option>)}
-                  {form.city && !(data.DREAM_CITIES || DREAM_CITIES).some(c => c.name === form.city) && (
-                    <option value={form.city}>{form.city} (not a DREAM city)</option>
-                  )}
-                </select>
-                <input style={inputStyle} placeholder="District" value={form.district} onChange={e => setForm(p => ({ ...p, district: e.target.value }))} />
-                <input style={inputStyle} placeholder="Street Address" value={form.street_address} onChange={e => setForm(p => ({ ...p, street_address: e.target.value }))} />
-                <input style={inputStyle} placeholder="Narrative Role" value={form.narrative_role} onChange={e => setForm(p => ({ ...p, narrative_role: e.target.value }))} />
-                {form.location_type === 'venue' && <select style={inputStyle} value={form.venue_type} onChange={e => setForm(p => ({ ...p, venue_type: e.target.value }))}><option value="">Venue Type</option>{VENUE_TYPES.map(v => <option key={v} value={v}>{v}</option>)}</select>}
-                {form.location_type === 'property' && <select style={inputStyle} value={form.property_type} onChange={e => setForm(p => ({ ...p, property_type: e.target.value }))}><option value="">Property Type</option>{PROPERTY_TYPES.map(v => <option key={v} value={v}>{v}</option>)}</select>}
-              </div>
-              <textarea style={{ ...inputStyle, marginTop: 8, resize: 'vertical' }} rows={2} placeholder="Description" value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} />
-              <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
-                <button onClick={saveLocation} disabled={!form.name} style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, background: '#2C2C2C', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>{editId ? 'Update' : 'Create'}</button>
-                <button onClick={() => { setShowForm(false); setEditId(null); setForm(emptyForm); }} style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, background: '#fff', color: '#666', border: '1px solid #e8e0d0', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
-              </div>
-            </div>
-          )}
+          {/* Create form (an edit opens in its own card, below) */}
+          {showForm && !editId && locationForm()}
 
           {/* Location cards */}
           {locLoading ? <div style={{ textAlign: 'center', color: '#999', padding: 40 }}>Loading...</div> : filtered.length === 0 ? <div style={{ textAlign: 'center', color: '#999', padding: 40 }}>{search || filterType ? 'No matching locations.' : 'No locations yet — seed infrastructure or add one above.'}</div> : (
@@ -416,7 +437,9 @@ export default function WorldFoundation({ embedded = false }) {
                 <div key={title} style={{ marginBottom: 16 }}>
                   <div style={{ ...labelStyle, marginBottom: 6 }}>{title.toUpperCase()} ({items.length})</div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 8 }}>
-                    {items.map(loc => (
+                    {items.map(loc => (editId === loc.id && showForm) ? (
+                      <div key={loc.id} data-testid={`location-edit-${loc.id}`}>{locationForm()}</div>
+                    ) : (
                       <div key={loc.id} style={cardStyle}>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                           <div>
@@ -433,6 +456,12 @@ export default function WorldFoundation({ embedded = false }) {
                         {loc.residents?.length > 0 && <div style={{ fontSize: 9, color: '#d4789a', marginTop: 4, fontWeight: 600 }}>{loc.residents.length} resident{loc.residents.length > 1 ? 's' : ''}: {loc.residents.slice(0, 3).map(r => r.display_name || r.handle).join(', ')}</div>}
                         {loc.sceneSets?.length > 0 && <div style={{ fontSize: 9, color: '#7ab3d4', marginTop: 2, fontWeight: 600 }}>{loc.sceneSets.length} scene set{loc.sceneSets.length > 1 ? 's' : ''}</div>}
                         {loc.events?.length > 0 && <div style={{ fontSize: 9, color: '#B8962E', marginTop: 2, fontWeight: 600 }}>{loc.events.length} event{loc.events.length > 1 ? 's' : ''}</div>}
+                        {loc.residents?.length > 0 && loc.location_type === 'venue' && (
+                          <div style={{ fontSize: 10, color: '#888', marginTop: 4 }} data-testid={`location-uses-${loc.id}`}>
+                            Home base of {loc.residents.length === 1 ? 'this creator' : 'these creators'}: their pin on the phone map, guests suggested for events held here, and where their events are set.
+                          </div>
+                        )}
+                        {loc.location_type === 'venue' && <StudioPhotos location={loc} showId={showId} onDone={loadLocations} />}
                       </div>
                     ))}
                   </div>

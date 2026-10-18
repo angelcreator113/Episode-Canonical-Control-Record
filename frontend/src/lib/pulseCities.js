@@ -13,6 +13,7 @@
  */
 import api from '../services/api';
 import { DREAM_CITIES } from '../data/dreamCities';
+import { forgetSavedCities } from './dreamCityList';
 
 const PAGE = 'world_infrastructure';
 const KEY = 'DREAM_CITIES';
@@ -74,6 +75,7 @@ export async function loadPulseCities(showId, at = 'present') {
 export async function saveCity(key, patch) {
   const next = mergeCity(await loadCities(), key, patch);
   await api.put(`/api/v1/page-content/${PAGE}/${KEY}`, { data: next });
+  forgetSavedCities();
   return next;
 }
 

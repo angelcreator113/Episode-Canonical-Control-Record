@@ -7,13 +7,14 @@
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({
   default: { get: vi.fn(async () => ({ data: { data: {}, locations: [], events: [] } })), post: vi.fn(), put: vi.fn(), delete: vi.fn(), patch: vi.fn() },
 }));
 
+import api from '../services/api';
 import WorldFoundation from './WorldFoundation';
 
 const renderAt = (url) => render(<MemoryRouter initialEntries={[url]}><WorldFoundation embedded /></MemoryRouter>);
@@ -74,5 +75,24 @@ describe('World tab', () => {
     fireEvent.change(city, { target: { value: 'Echo Park' } });
     expect(city.value).toBe('Echo Park');
     expect(screen.queryByPlaceholderText('City (e.g. Dazzle District)')).toBeNull();
+  });
+
+  // Evoni, 2026-10-18: "I'm not able to edit these" (on a phone, Edit opened
+  // the form far above the card).
+  test('Edit opens the form in the card itself, filled in; a studio says what it is used for', async () => {
+    const studio = { id: 'loc-9', name: "STUDIO BY SABLE's Studio", location_type: 'venue', venue_type: 'other', city: 'Echo Park',
+      description: 'Where they create.', residents: [{ handle: 'sable', display_name: 'STUDIO BY SABLE' }], sceneSets: [{}, {}, {}] };
+    vi.mocked(api.get).mockImplementation(async (url) => (url === '/api/v1/world/locations' ? { data: { locations: [studio] } } : { data: { data: {}, locations: [], events: [] } }));
+    window.history.pushState({}, '', '/universe?tab=world&sub=locations');
+    renderAt('/universe?tab=world&sub=locations');
+    expect((await screen.findByTestId('location-uses-loc-9')).textContent).toMatch(/^Home base of this creator: their pin on the phone map/);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const card = screen.getByTestId('location-edit-loc-9');
+    expect(within(card).getByText('Edit Location')).toBeTruthy();
+    expect(within(card).getByPlaceholderText('Name *').value).toBe("STUDIO BY SABLE's Studio");
+    expect(within(card).getByRole('combobox', { name: 'City' }).value).toBe('Echo Park');
+    fireEvent.click(within(card).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByTestId('location-edit-loc-9')).toBeNull();
+    expect(screen.getByText("STUDIO BY SABLE's Studio")).toBeTruthy();
   });
 });

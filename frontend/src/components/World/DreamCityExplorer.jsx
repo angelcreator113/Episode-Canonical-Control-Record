@@ -12,6 +12,11 @@
  * Honest about the data (lib/dreamCityExplorer): a venue counts for a city
  * only when its city field names it; companies and legends carry no city
  * in the data, so the card lists them as not placed in a city yet.
+ *
+ * One DREAM city list (Evoni, 2026-10-18): Edit on the city card changes its
+ * words (onSaveCity(key, patch)), and the writers read the saved words
+ * (services/dreamCityText): the Feed's profile writer, the post drafter,
+ * the place describer.
  */
 import React, { useState } from 'react';
 import { cityPlaces, placeCounts, citySchools, cityCompanies } from '../../lib/dreamCityExplorer';
@@ -19,9 +24,64 @@ import './DreamCityExplorer.css';
 
 const VENUES_SHOWN = 6;
 
-export default function DreamCityExplorer({ cities, universities, corporations, locations, loading, renderMap, onAddVenue, onOpenLocations }) {
+// The words a city's card shows and the writers read.
+const TEXT_FIELDS = [
+  { key: 'subtitle', label: 'What it is (one line)' },
+  { key: 'culture', label: 'Its culture', long: true },
+  { key: 'energy', label: 'Its energy', long: true },
+  { key: 'famousFor', label: 'Known for', long: true },
+  { key: 'whoLivesHere', label: 'Who lives here', long: true },
+];
+
+function CityTextForm({ city, onSave, onCancel }) {
+  const [form, setForm] = useState(() => ({
+    ...Object.fromEntries(TEXT_FIELDS.map((f) => [f.key, city[f.key] || ''])),
+    majorEvents: (Array.isArray(city.majorEvents) ? city.majorEvents : []).join(', '),
+  }));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave({
+        ...Object.fromEntries(TEXT_FIELDS.map((f) => [f.key, form[f.key].trim()])),
+        majorEvents: form.majorEvents.split(',').map((e) => e.trim()).filter(Boolean),
+      });
+    } catch (err) {
+      console.error('[DreamCityExplorer] the city could not be saved:', err);
+      setError('The city could not be saved. Try again.');
+      setSaving(false);
+    }
+  };
+  return (
+    <div className="dce-form" data-testid="dce-city-form">
+      {TEXT_FIELDS.map((f) => (
+        <label key={f.key} className="dce-field">
+          <span>{f.label}</span>
+          {f.long
+            ? <textarea rows={2} value={form[f.key]} onChange={(e) => setForm({ ...form, [f.key]: e.target.value })} />
+            : <input value={form[f.key]} onChange={(e) => setForm({ ...form, [f.key]: e.target.value })} />}
+        </label>
+      ))}
+      <label className="dce-field">
+        <span>Big events (commas between)</span>
+        <input value={form.majorEvents} onChange={(e) => setForm({ ...form, majorEvents: e.target.value })} />
+      </label>
+      <p className="dce-note">The Feed, the post drafter and the place describer write {city.name} from these words.</p>
+      {error && <p className="dce-note dce-error" role="alert">{error}</p>}
+      <div className="dce-form-actions">
+        <button type="button" className="dce-btn" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+        <button type="button" className="dce-link" onClick={onCancel} disabled={saving}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+export default function DreamCityExplorer({ cities, universities, corporations, locations, loading, renderMap, onAddVenue, onOpenLocations, onSaveCity }) {
   const list = (cities || []).filter((c) => c?.key);
   const [selectedKey, setSelectedKey] = useState(() => list[0]?.key || null);
+  const [editingKey, setEditingKey] = useState(null);
   const city = list.find((c) => c.key === selectedKey) || list[0] || null;
   const counts = placeCounts(locations, list);
   const places = city ? cityPlaces(locations, city) : [];
@@ -52,10 +112,19 @@ export default function DreamCityExplorer({ cities, universities, corporations, 
 
         {city && (<>
           <section className={`dce-card dce-city-card dce-city-${city.letter?.toLowerCase() || 'x'}`} aria-labelledby="dce-city-heading" data-testid="dce-city">
-            <div className="dce-kicker">City{city.subtitle ? ` · ${city.subtitle}` : ''}</div>
+            <div className="dce-card-head">
+              <div className="dce-kicker">City{city.subtitle ? ` · ${city.subtitle}` : ''}</div>
+              {onSaveCity && editingKey !== city.key && <button type="button" className="dce-link" onClick={() => setEditingKey(city.key)}>Edit</button>}
+            </div>
             <h2 id="dce-city-heading" className="dce-city-name">{city.name}</h2>
-            {city.famousFor && <p className="dce-known">Known for {city.famousFor.charAt(0).toLowerCase() + city.famousFor.slice(1)}.</p>}
-            {city.energy && <p className="dce-energy">{city.energy}</p>}
+            {editingKey === city.key ? (
+              <CityTextForm key={city.key} city={city} onCancel={() => setEditingKey(null)}
+                onSave={async (patch) => { await onSaveCity(city.key, patch); setEditingKey(null); }} />
+            ) : (<>
+              {city.famousFor && <p className="dce-known">Known for {city.famousFor.charAt(0).toLowerCase() + city.famousFor.slice(1)}.</p>}
+              {city.energy && <p className="dce-energy">{city.energy}</p>}
+              {city.culture && <p className="dce-energy">{city.culture}</p>}
+            </>)}
           </section>
 
           <section className="dce-card" aria-labelledby="dce-venues-heading">

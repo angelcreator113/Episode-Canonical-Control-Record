@@ -45,7 +45,7 @@ async function setPictures(sequelize, setIds) {
     `SELECT s.id, s.base_still_url, s.world_location_id,
             CASE WHEN wl.approved_base_scene_set_id = s.id THEN wl.approved_base_image_url END AS everyday_url
        FROM scene_sets s
-       LEFT JOIN world_locations wl ON wl.id = s.world_location_id
+       LEFT JOIN world_locations wl ON wl.id = s.world_location_id AND wl.deleted_at IS NULL
       WHERE s.id IN (:ids)`,
     { replacements: { ids: setIds } });
   return new Map(rows.map((r) => [String(r.id), {

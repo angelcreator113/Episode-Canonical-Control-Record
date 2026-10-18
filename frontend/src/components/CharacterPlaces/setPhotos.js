@@ -65,15 +65,18 @@ export async function addAngles(setId, files, existingLabels = []) {
  * sent: a step that can refuse (an event's place locked) refuses before the
  * photos are uploaded and analysed (sixth audit). undo(setId) reverses it
  * when a later step fails, before the set is deleted.
+ *
+ * worldLocationId, when given, ties the set to that World Location (a
+ * creator's studio, from its card on Universe › Locations, 2026-10-18).
  */
-export async function makeSetFromPhotos({ name, sceneType, showId, files, prepare = null, undo = null }) {
+export async function makeSetFromPhotos({ name, sceneType, showId, files, prepare = null, undo = null, worldLocationId = null }) {
   const list = Array.from(files || []);
   if (!list.length) throw new Error('No photos chosen');
   if (tooBig(list[0])) throw new Error(`${list[0].name || 'The main photo'} is over 10 MB`);
   let setId = null;
   let prepared = false;
   try {
-    const created = await api.post('/api/v1/scene-sets', { name, scene_type: sceneType, show_id: showId });
+    const created = await api.post('/api/v1/scene-sets', { name, scene_type: sceneType, show_id: showId, ...(worldLocationId ? { world_location_id: worldLocationId } : {}) });
     setId = created.data?.data?.id;
     if (!setId) throw new Error('The scene set was not made');
     if (prepare) {
