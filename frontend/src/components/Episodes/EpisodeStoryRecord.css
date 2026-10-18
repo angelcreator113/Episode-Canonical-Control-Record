@@ -44,3 +44,18 @@
   .esr-pair { flex-direction: column; align-items: stretch; }
   .esr-pair .esr-x { align-self: flex-end; }
 }
+
+/* Short story canon (stage D): the proposals, under the record. */
+.esr-how { font-weight: 400; color: var(--lala-ink-muted); }
+.esr-prop-group { display: flex; flex-direction: column; gap: 6px; }
+.esr-props { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.esr-prop {
+  display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px;
+  border: 1px solid var(--lala-gold-line); background: var(--surface-card);
+}
+.esr-prop.is-contradiction { border-color: var(--danger-text); }
+.esr-prop.is-accepted { background: var(--lala-gold-soft); }
+.esr-prop.is-dismissed { border-style: dashed; }
+.esr-prop-text { margin: 0; font-size: 14px; line-height: 1.5; color: var(--lala-ink); }
+.esr-prop .esr-badge { align-self: flex-start; }
+.esr-warn { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 12px; font-weight: 700; color: var(--danger-text); }

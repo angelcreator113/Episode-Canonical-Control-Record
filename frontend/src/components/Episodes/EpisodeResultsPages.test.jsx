@@ -26,7 +26,8 @@ const renderIn = (ui) => render(<MemoryRouter>{ui}</MemoryRouter>);
 beforeEach(() => {
   Object.values(api).forEach((fn) => fn?.mockReset?.());
   // Results → Story loads the episode's story record (EpisodeStoryRecord).
-  vi.mocked(api.get).mockResolvedValue({ data: { record: null, cast: [], threads: [] } });
+  vi.mocked(api.get).mockImplementation((url) => Promise.resolve({ data: url.endsWith('/canon')
+    ? { stories: [], pending: 0 } : { record: null, cast: [], threads: [] } }));
 });
 
 describe('Results → Evaluation', () => {
