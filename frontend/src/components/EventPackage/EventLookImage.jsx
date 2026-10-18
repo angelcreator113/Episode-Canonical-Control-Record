@@ -45,7 +45,10 @@ const POLL_MAX = 180;
 const lookGenerating = (d) => d?.look?.status === 'generating';
 const baseGenerating = (d) => d?.scene_set?.generation_status === 'generating';
 
-export default function EventLookImage({ showId, eventId, onToast, onSaved, pollMs = POLL_MS, canGenerate = false, fromLabel = 'Event' }) {
+// refreshKey: changes with the venue's base and its approval (seventh
+// audit), so a base approved, un-approved or replaced in the same panel is
+// read again.
+export default function EventLookImage({ showId, eventId, onToast, onSaved, pollMs = POLL_MS, canGenerate = false, fromLabel = 'Event', refreshKey = '' }) {
   const base = `/api/v1/world/${showId}/events/${eventId}/look`;
   const [state, setState] = useState(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -95,7 +98,7 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
     }
   }, [base]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, refreshKey]);
 
   // DJ bug 6: an approval made in Scene Sets shows when Evoni comes back.
   useEffect(() => {

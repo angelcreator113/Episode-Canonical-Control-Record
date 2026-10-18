@@ -19,7 +19,9 @@ export const POLL_MAX = 150;
 
 const isGenerating = (a) => a.dressed?.status === 'generating';
 
-export default function DressedAngles({ episodeId, setId, onToast, pollMs = POLL_MS }) {
+// refreshKey: the set's angle ids (seventh audit), so an angle added or
+// deleted in the same panel is listed, or not, at once.
+export default function DressedAngles({ episodeId, setId, onToast, pollMs = POLL_MS, refreshKey = '' }) {
   const [data, setData] = useState(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [asking, setAsking] = useState(null); // the angle whose brief is open
@@ -63,7 +65,7 @@ export default function DressedAngles({ episodeId, setId, onToast, pollMs = POLL
     }
   }, [base, setId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, refreshKey]);
 
   const generating = Boolean(data?.angles?.some(isGenerating));
   useEffect(() => {

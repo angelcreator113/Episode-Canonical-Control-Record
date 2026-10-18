@@ -48,13 +48,17 @@ async function countUses(sequelize, setId, { episodeId = null, transaction } = {
   // A character's home, closet or other place (character_places): deleting
   // it silently dropped the place (fourth audit, 2026-10-15).
   const homes = episodeId ? 0 : await q('SELECT COUNT(*) n FROM character_places WHERE scene_set_id = :setId AND deleted_at IS NULL');
-  return { locations, beats, events, defaults, scenes, homes, total: locations + beats + events + defaults + scenes + homes };
+  // Its event versions (seventh audit): deleting an everyday set left its
+  // versions pointing at a removed set, offered nowhere as everyday.
+  const versions = episodeId ? 0 : await q('SELECT COUNT(*) n FROM scene_sets WHERE version_of_set_id = :setId AND deleted_at IS NULL');
+  return { locations, beats, events, defaults, scenes, homes, versions, total: locations + beats + events + defaults + scenes + homes + versions };
 }
 
 /**
  * Uses of a set by shows other than showId: episode locations, plan beats
  * and scene rows of another show's episodes, another show's events, and
- * another show's home or closet default. A set another show uses is not
+ * another show's home or closet default, and its event versions in another
+ * show (seventh audit). A set another show uses is not
  * moved to this one (fourth audit, 2026-10-15: a shared set moved, and the
  * other show's episodes then pointed at a set of a show not theirs).
  */
@@ -74,6 +78,8 @@ async function otherShowUses(sequelize, setId, showId, { transaction } = {}) {
          WHERE w.scene_set_id = :setId AND w.deleted_at IS NULL AND w.show_id IS NOT NULL AND w.show_id <> :showId)
      + (SELECT COUNT(*) FROM shows s, jsonb_each_text(COALESCE(s.metadata::jsonb->'scene_defaults', '{}'::jsonb)) d
          WHERE s.id <> :showId AND s.deleted_at IS NULL AND d.key IN ('home_set_id', 'closet_set_id') AND d.value = CAST(:setId AS text))
+     + (SELECT COUNT(*) FROM scene_sets v
+         WHERE v.version_of_set_id = :setId AND v.deleted_at IS NULL AND v.show_id IS NOT NULL AND v.show_id <> :showId)
        AS n`,
     { replacements: { setId, showId }, transaction });
   return Number(row?.n || 0);
@@ -82,7 +88,7 @@ async function otherShowUses(sequelize, setId, showId, { transaction } = {}) {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 async function liveSet(sequelize, id, transaction) {
-  const [rows] = await sequelize.query('SELECT id, name, show_id FROM scene_sets WHERE id = :id AND deleted_at IS NULL',
+  const [rows] = await sequelize.query('SELECT id, name, show_id, version_of_set_id FROM scene_sets WHERE id = :id AND deleted_at IS NULL',
     { replacements: { id }, transaction });
   return rows[0] || null;
 }
@@ -104,6 +110,16 @@ async function moveUses(sequelize, fromId, toId, { episodeId = null, transaction
   const [[from]] = await sequelize.query('SELECT show_id FROM scene_sets WHERE id = :fromId', { replacements: { fromId }, transaction });
   if (from?.show_id && to.show_id && String(from.show_id) !== String(to.show_id)) {
     throw new SceneSetUsesError(`"${to.name}" belongs to another show; choose a set of this show, or one shared by all shows`, 400, 'BAD_REPLACEMENT');
+  }
+  // A shared set's uses by other shows are not moved onto one show's set
+  // (seventh audit: only a show's own set was checked).
+  if (!from?.show_id && to.show_id && await otherShowUses(sequelize, fromId, to.show_id, { transaction }) > 0) {
+    throw new SceneSetUsesError(`Other shows use this set; "${to.name}" is one show's. Choose a set shared by all shows`, 400, 'BAD_REPLACEMENT');
+  }
+  // Its events and versions go to an everyday set: an event version is one
+  // event's place, not a replacement for a set many use (seventh audit).
+  if (!episodeId && to.version_of_set_id) {
+    throw new SceneSetUsesError(`"${to.name}" is an event version; choose an everyday set`, 400, 'BAD_REPLACEMENT');
   }
   const r = { fromId, toId, episodeId };
   const ep = episodeId ? ' AND episode_id = :episodeId' : '';
@@ -169,7 +185,10 @@ async function moveUses(sequelize, fromId, toId, { episodeId = null, transaction
                                 AND keep.registry_character_id = old.registry_character_id AND keep.deleted_at IS NULL)`);
     homes = await exec('UPDATE character_places SET scene_set_id = :toId, updated_at = NOW() WHERE scene_set_id = :fromId AND deleted_at IS NULL');
   }
-  return { locations, beats, events, defaults, scenes, homes, looks };
+  // Its event versions become the replacement's (seventh audit).
+  const versions = episodeId ? 0 : await exec(
+    'UPDATE scene_sets SET version_of_set_id = :toId, updated_at = NOW() WHERE version_of_set_id = :fromId AND deleted_at IS NULL');
+  return { locations, beats, events, defaults, scenes, homes, looks, versions };
 }
 
 /**
@@ -218,6 +237,29 @@ async function removedSetsForEpisode(sequelize, episodeId) {
  * with it. setId limits it to one set (its delete), else every removed
  * set. Returns how many links were dropped.
  */
+/**
+ * Events held at a set whose Place is locked (their episode is accepted):
+ * deleting the set, or moving its uses, would change a locked place
+ * (seventh audit). [{ id, name }].
+ */
+async function lockedEventsAt(sequelize, setId) {
+  const [events] = await sequelize.query(
+    'SELECT id, name FROM world_events WHERE scene_set_id = :setId AND deleted_at IS NULL ORDER BY name',
+    { replacements: { setId } });
+  const { isPlaceLocked } = require('../utils/placeLock');
+  const locked = [];
+  for (const e of events) if (await isPlaceLocked(sequelize, e.id)) locked.push(e);
+  return locked;
+}
+
+/** A deleted set's event versions read as everyday again (as the FK's SET NULL would on a hard delete). */
+async function releaseVersions(sequelize, setId, { transaction } = {}) {
+  const [, meta] = await sequelize.query(
+    'UPDATE scene_sets SET version_of_set_id = NULL, updated_at = NOW() WHERE version_of_set_id = :setId AND deleted_at IS NULL',
+    { replacements: { setId }, transaction });
+  return meta?.rowCount ?? 0;
+}
+
 async function dropRemovedSetLinks(sequelize, { setId = null, transaction = null } = {}) {
   const [, meta] = await sequelize.query(
     `UPDATE scene_set_episodes l SET deleted_at = NOW(), updated_at = NOW()
@@ -253,4 +295,6 @@ module.exports = {
   removedSetsForEpisode,
   moveRemovedSetsForEpisode,
   dropRemovedSetLinks,
+  lockedEventsAt,
+  releaseVersions,
 };

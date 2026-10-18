@@ -24,8 +24,12 @@
  *     budget-gated and logged) from the saved appearance, kept in the
  *     studio's storage (pulseImageService) and added to their portraits
  *     (the newest MAX_PORTRAITS); returns { url, cost }
+ *     A black image (the image service's filter flagged it) is never kept:
+ *     one more try, then an AppearanceError 422 that says so.
  *   usePortrait(character, url)  makes one of their portraits their profile
  *     photo (portrait_url)
+ *   removePortrait(character, url)  drops one of their portraits (and
+ *     clears their profile photo when it was that one)
  * The look is never measurements (no height, weight or sizes in numbers):
  * how they read in a room, not a spec sheet.
  */
@@ -39,6 +43,8 @@ const LABELS = {
 };
 const MAX_TEXT = 600;
 const MAX_PORTRAITS = 6;
+const PORTRAIT_TRIES = 2;
+const BLANK_MAX = 12; // brightest pixel of a filtered (black) image, out of 255
 // What the look may already say elsewhere, read by the suggestion.
 const LOOK_FIELDS = ['aesthetic_dna', 'physical_presence', 'signature_trait', 'appearance_mode'];
 const PROFILE_LOOK_FIELDS = ['beauty_description', 'aesthetic_dna', 'beauty_factor', 'aesthetic_power', 'city'];
@@ -170,17 +176,60 @@ async function generatePortrait(db, character) {
   }
   const prompt = portraitPrompt(appearance, character.selected_name || character.display_name);
   const imageGen = require('./imageGenerationService');
-  const generated = await imageGen.generateImage(prompt, { useCase: 'character', size: 'portrait' });
-  // The provider's link expires: keep the image in the studio's storage.
   const axios = require('axios');
-  const download = await axios.get(generated.url, { responseType: 'arraybuffer', timeout: 60000 });
+  let generated = null;
+  let buffer = null;
+  let cost = 0;
+  for (let attempt = 1; attempt <= PORTRAIT_TRIES && !buffer; attempt += 1) {
+    const made = await imageGen.generateImage(prompt, { useCase: 'character', size: 'portrait' });
+    cost += Number(made.cost_estimate) || 0;
+    if (made.nsfw_flagged) {
+      console.warn(`[characterAppearance] portrait try ${attempt} for ${character.id} was flagged by the image service (black)`);
+      continue;
+    }
+    // The provider's link expires: keep the image in the studio's storage.
+    const download = await axios.get(made.url, { responseType: 'arraybuffer', timeout: 60000 });
+    const data = Buffer.from(download.data);
+    if (await isBlank(data)) {
+      console.warn(`[characterAppearance] portrait try ${attempt} for ${character.id} came back black`);
+      continue;
+    }
+    generated = made;
+    buffer = data;
+  }
+  if (!buffer) {
+    throw new AppearanceError(`The image service blocked this portrait twice (it sends back a black picture when its filter flags one), so nothing was saved. Try again, or soften the look: words about eyes, skin, marks or the hour of night can set it off.`, 422);
+  }
   const { storePulseImage } = require('./pulseImageService');
   const { url } = await storePulseImage(
-    { buffer: Buffer.from(download.data), mimetype: 'image/jpeg', originalname: 'portrait.jpg' },
+    { buffer, mimetype: 'image/jpeg', originalname: 'portrait.jpg' },
     { keyPrefix: `characters/${character.id}/generated`, maxSide: 1200, minSide: 200, label: 'The portrait' });
   const portraits = [{ url, prompt, created_at: new Date().toISOString() }, ...(appearance.portraits || [])].slice(0, MAX_PORTRAITS);
   await character.update({ appearance: { ...appearance, portraits } });
-  return { url, cost: generated.cost_estimate ?? null };
+  return { url, cost: cost || (generated.cost_estimate ?? null) };
+}
+
+/** An image that is all (nearly) black: the image service's filter at work. */
+async function isBlank(buffer) {
+  try {
+    const { channels } = await require('sharp')(buffer).stats();
+    return channels.slice(0, 3).every((c) => c.max <= BLANK_MAX);
+  } catch (err) {
+    console.error('[characterAppearance] could not read the portrait to check it:', err.message);
+    return false;
+  }
+}
+
+async function removePortrait(character, url) {
+  if (!character) throw new AppearanceError('Character not found.', 404);
+  const appearance = character.appearance || {};
+  const portraits = appearance.portraits || [];
+  if (!portraits.some((p) => p.url === url)) throw new AppearanceError('That is not one of their portraits.', 400);
+  await character.update({
+    appearance: { ...appearance, portraits: portraits.filter((p) => p.url !== url) },
+    ...(character.portrait_url === url ? { portrait_url: null } : {}),
+  });
+  return { portrait_url: character.portrait_url };
 }
 
 async function usePortrait(character, url) {
@@ -192,6 +241,6 @@ async function usePortrait(character, url) {
 }
 
 module.exports = {
-  AppearanceError, normalizeAppearance, appearanceLines, suggestAppearance, portraitPrompt, generatePortrait, usePortrait,
+  AppearanceError, normalizeAppearance, appearanceLines, suggestAppearance, portraitPrompt, generatePortrait, usePortrait, removePortrait, isBlank,
   TEXT_KEYS, LABELS, MAX_PORTRAITS,
 };
