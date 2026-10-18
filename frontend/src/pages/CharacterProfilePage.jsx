@@ -16,6 +16,7 @@ import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Sparkles, ArrowRight, LayoutDashboard, Heart, Mic, Users, Globe2, ImagePlus, Trash2,
   BarChart3, CalendarDays, Download, Link2, MapPin, Palette, Crown, Instagram,
+  Quote, Star, TrendingUp, Briefcase, IdCard, Activity, FileText, CirclePlay, Flame,
 } from 'lucide-react';
 import Pager, { usePaged } from '../components/Pager/Pager';
 import CharacterPlacesTab from '../components/CharacterPlaces/CharacterPlacesTab';
@@ -264,8 +265,9 @@ function useInteriorGenerate(character, onSaved) {
 
 /* ── Overview ────────────────────────────────────────────────────────────────── */
 
-function WhoTheyAre({ character, onSaved }) {
+function WhoTheyAre({ character, onSaved, openTab }) {
   const [editing, setEditing] = useState(false);
+  const [full, setFull] = useState(false);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
@@ -302,7 +304,7 @@ function WhoTheyAre({ character, onSaved }) {
     <section className="ch-card" aria-labelledby="ch-who">
       <div className="ch-card-head">
         <h2 id="ch-who" className="ch-h2">Who they are</h2>
-        {!editing && !locked && <button type="button" className="ch-link" onClick={() => edit(prose)}>Edit</button>}
+        {!editing && !locked && <button type="button" className="ch-pill-btn" onClick={() => edit(prose)}>Edit</button>}
       </div>
       {editing ? (
         <>
@@ -313,7 +315,16 @@ function WhoTheyAre({ character, onSaved }) {
           </div>
         </>
       ) : prose
-        ? <p className="ch-prose" data-testid="ch-prose">{prose}</p>
+        ? (
+          <>
+            <p className={`ch-prose${full ? '' : ' is-clamped'}`} data-testid="ch-prose">{prose}</p>
+            {prose.length > PROSE_CLAMP && (
+              <button type="button" className="ch-pill-btn" aria-expanded={full} onClick={() => setFull((f) => !f)}>
+                {full ? 'Show less' : 'Read full narrative'} <ArrowRight size={14} aria-hidden="true" />
+              </button>
+            )}
+          </>
+        )
         : <p className="ch-note">Nothing written yet.</p>}
       {note && <p className="ch-note" role="status">{note}</p>}
       {!editing && !locked && (
@@ -321,12 +332,74 @@ function WhoTheyAre({ character, onSaved }) {
           <Sparkles size={14} aria-hidden="true" /> {busy ? 'Drafting…' : 'Rewrite from profile'}
         </button>
       )}
+      {!editing && <WantsAndFears character={character} openTab={openTab} />}
     </section>
+  );
+}
+
+// Longer than this, "Who they are" shows its first lines and Read full narrative.
+const PROSE_CLAMP = 420;
+
+// A JSON column may come back as text.
+const objOf = (v) => {
+  if (!v) return {};
+  if (typeof v === 'object') return v;
+  try { const o = JSON.parse(v); return o && typeof o === 'object' ? o : {}; } catch (err) {
+    console.error('[CharacterProfilePage] not JSON:', err);
+    return {};
+  }
+};
+const textOf = (v) => (typeof v === 'string' ? v.trim() : '');
+
+/**
+ * Wants and fears (Evoni's mock, 2026-10-18), from their inner life: what
+ * they say they want, what they actually need, what they will not admit,
+ * their desire; their fear and their wound. Nothing written, nothing shown
+ * but the way to Inner Life.
+ */
+export function wantsAndFears(character) {
+  const want = objOf(character?.want_architecture);
+  const wound = objOf(character?.wound);
+  const wants = [
+    ['Says they want', want.surface_want], ['Actually needs', want.real_want],
+    ['Will not admit wanting', want.forbidden_want || character?.hidden_want], ['Desire', character?.core_desire],
+  ].map(([kind, v]) => ({ kind, text: textOf(v) })).filter((x) => x.text);
+  const fears = [['Fear', character?.core_fear], ['The wound', wound.description || character?.core_wound]]
+    .map(([kind, v]) => ({ kind, text: textOf(v) })).filter((x) => x.text);
+  return { wants, fears };
+}
+
+function WantsAndFears({ character, openTab }) {
+  const { wants, fears } = wantsAndFears(character);
+  if (!wants.length && !fears.length) {
+    return (
+      <p className="ch-note">
+        No wants or fears written yet.{' '}
+        {openTab && <button type="button" className="ch-link" onClick={() => openTab('inner')}>Open Inner Life</button>}
+      </p>
+    );
+  }
+  const list = (items, tone, Icon, title) => (
+    <div className={`ch-wf is-${tone}`} data-testid={`ch-${tone === 'want' ? 'wants' : 'fears'}`}>
+      <h3 className="ch-wf-h"><Icon size={16} aria-hidden="true" /> {title}</h3>
+      {items.length ? (
+        <ul className="ch-wf-list">
+          {items.map((x) => <li key={x.kind}><span className="ch-wf-kind">{x.kind}</span> {x.text}</li>)}
+        </ul>
+      ) : <p className="ch-note">Not written yet.</p>}
+    </div>
+  );
+  return (
+    <div className="ch-wfs">
+      {list(wants, 'want', Heart, 'Wants')}
+      {list(fears, 'fear', Flame, 'Fears')}
+    </div>
   );
 }
 
 function WhereTheyShowUp({ appearances, feedProfile }) {
   const rows = showUpRows(appearances, feedProfile);
+  const { pageItems, pager } = usePaged(rows);
   return (
     <section className="ch-card" aria-labelledby="ch-where">
       <div className="ch-card-head">
@@ -338,7 +411,7 @@ function WhereTheyShowUp({ appearances, feedProfile }) {
         : rows.length === 0 ? <p className="ch-note">Not in the show yet: no event, home or posts.</p>
         : (
           <ul className="ch-shows" data-testid="ch-shows">
-            {rows.map((r, i) => {
+            {pageItems.map((r, i) => {
               const inner = (<>
                 <span className="ch-show-kind">{r.label}</span>
                 <span className="ch-show-text"><strong>{r.title}</strong>{r.sub && <span>{r.sub}</span>}{r.detail && <span className="ch-show-detail">{r.detail}</span>}</span>
@@ -352,18 +425,27 @@ function WhereTheyShowUp({ appearances, feedProfile }) {
             })}
           </ul>
         )}
+      <Pager {...pager} label="Where they show up" />
     </section>
   );
 }
 
-function TheirVoice({ character, feedProfile }) {
+function TheirVoice({ character, feedProfile, openTab }) {
   const voice = voiceOf(character, feedProfile);
   const name = character.display_name || character.selected_name;
   return (
-    <section className="ch-card is-blue" aria-labelledby="ch-voice" data-testid="ch-voice">
-      <h2 id="ch-voice" className="ch-kicker is-blue">Their voice</h2>
+    <section className="ch-card" aria-labelledby="ch-voice" data-testid="ch-voice">
+      <div className="ch-card-head">
+        <h2 id="ch-voice" className="ch-h2"><Quote size={20} aria-hidden="true" className="ch-h2-icon" /> Their voice</h2>
+        {openTab && <button type="button" className="ch-pill-btn" onClick={() => openTab('voice')}>View all</button>}
+      </div>
       {!voice ? <p className="ch-note">No voice yet. It comes from their feed profile and voice signature.</p> : (<>
-        {voice.sample && <p className="ch-sample"><strong>{name}</strong> {voice.sample}</p>}
+        {voice.sample && (
+          <p className="ch-sample">
+            <span className="ch-sample-mark" aria-hidden="true"><Quote size={16} /></span>
+            <span><strong>{name}</strong> {voice.sample}</span>
+          </p>
+        )}
         {/* The habit is a paragraph of direction, too long for a pill. */}
         {voice.habit && <p className="ch-voice-habit">{voice.habit}</p>}
         <div className="ch-chips">
@@ -373,6 +455,9 @@ function TheirVoice({ character, feedProfile }) {
         </div>
         <p className="ch-note">How they sound on the feed and in their head.</p>
       </>)}
+      {openTab && voice && (
+        <button type="button" className="ch-link ch-more" onClick={() => openTab('voice')}>More examples <ArrowRight size={14} aria-hidden="true" /></button>
+      )}
     </section>
   );
 }
@@ -381,7 +466,7 @@ function WithLala({ appearances }) {
   const line = withLala(appearances);
   return (
     <section className="ch-card" aria-labelledby="ch-lala" data-testid="ch-lala">
-      <h2 id="ch-lala" className="ch-kicker is-pink">With Lala</h2>
+      <h2 id="ch-lala" className="ch-h2"><Crown size={20} aria-hidden className="ch-h2-icon" /> With Lala</h2>
       <p className="ch-text">{line || 'Nothing between them and Lala yet.'}</p>
       <Link className="ch-link" to="/feed-relationships">Open Relationship Map</Link>
     </section>
@@ -1081,10 +1166,11 @@ const shortText = (t, n = 160) => (t && t.length > n ? `${t.slice(0, n - 1).trim
  * Their story (Evoni, 2026-10-16): what they posted on The Pulse, and the
  * short stories and book chapters they are in (services/characterStoryTrail).
  */
-export function TheirStory({ character }) {
+// Their posts, stories and chapters; `skip` when the trail is already loaded.
+function useStoryTrail(id, skip = false) {
   const [trail, setTrail] = useState(null);
-  const id = character.id;
   useEffect(() => {
+    if (skip) return undefined;
     let live = true;
     getStoryTrailApi(id)
       .then((res) => { if (live) setTrail(res.data || {}); })
@@ -1093,7 +1179,13 @@ export function TheirStory({ character }) {
         if (live) setTrail({ error: err.response?.data?.error || 'Could not load their story.' });
       });
     return () => { live = false; };
-  }, [id]);
+  }, [id, skip]);
+  return trail;
+}
+
+export function TheirStory({ character, trail: given }) {
+  const own = useStoryTrail(character.id, given !== undefined);
+  const trail = given !== undefined ? given : own;
 
   const posts = trail?.posts || [];
   const stories = trail?.stories || [];
@@ -1381,7 +1473,7 @@ function TheirPlaces({ character }) {
 
   return (
     <section className="ch-card" aria-labelledby="ch-places" data-testid="ch-places">
-      <h2 id="ch-places" className="ch-kicker is-pink">Their places</h2>
+      <h2 id="ch-places" className="ch-h2"><MapPin size={20} aria-hidden className="ch-h2-icon" /> Their places</h2>
       {!data ? <p className="ch-note">Loading…</p>
         : data.error ? <p className="ch-note is-error">{data.error}</p>
         : !data.show_id ? <p className="ch-note">Not in a show&rsquo;s cast yet, so no home to set.</p>
@@ -1428,28 +1520,154 @@ function TheirPlaces({ character }) {
   );
 }
 
+/**
+ * The Overview to Evoni's mock (2026-10-18): Quick facts, Who they are with
+ * their wants and fears, Key stats, Their voice, Profile images, Where they
+ * show up and Recent activity first; the rest of what the page already
+ * showed below them. Quick facts' Edit opens their names and facts.
+ */
 function TabOverview({ character, appearances, feedProfile, relationships, entanglements, onSaved, onFeedSaved, gen, openTab }) {
+  const [editingFacts, setEditingFacts] = useState(false);
+  const trail = useStoryTrail(character.id);
   return (
     <div className="ch-overview">
       <div className="ch-col">
-        <TheirNames character={character} feedProfile={feedProfile} onSaved={onSaved} onFeedSaved={onFeedSaved} gen={gen} />
-        <TheirFacts character={character} onFeedSaved={onFeedSaved} />
+        <QuickFacts character={character} feedProfile={feedProfile} appearances={appearances} editing={editingFacts} onEdit={setEditingFacts} />
+        {editingFacts && (
+          <>
+            <TheirNames character={character} feedProfile={feedProfile} onSaved={onSaved} onFeedSaved={onFeedSaved} gen={gen} />
+            <TheirFacts character={character} onFeedSaved={onFeedSaved} />
+          </>
+        )}
         <ProfileImages character={character} onSaved={onSaved} />
-        <TheirStory character={character} />
-      </div>
-      <div className="ch-col">
-        <WhoTheyAre character={character} onSaved={onSaved} />
-        <TheirStats feedProfile={feedProfile} appearances={appearances} relationships={relationships} entanglements={entanglements} />
-        <WhereTheyShowUp appearances={appearances} feedProfile={feedProfile} />
-        <TheirEvents appearances={appearances} />
-      </div>
-      <div className="ch-col">
-        <TheirVoice character={character} feedProfile={feedProfile} />
-        <WithLala appearances={appearances} />
         <ConnectionsCard relationships={relationships} entanglements={entanglements} openTab={openTab} />
+      </div>
+      <div className="ch-col">
+        <WhoTheyAre character={character} onSaved={onSaved} openTab={openTab} />
+        <WhereTheyShowUp appearances={appearances} feedProfile={feedProfile} />
+        <TheirStory character={character} trail={trail} />
+      </div>
+      <div className="ch-col">
+        <TheirStats feedProfile={feedProfile} appearances={appearances} relationships={relationships} entanglements={entanglements} />
+        <TheirVoice character={character} feedProfile={feedProfile} openTab={openTab} />
+        <RecentActivity appearances={appearances} trail={trail} />
+        <WithLala appearances={appearances} />
+        <TheirEvents appearances={appearances} />
         <TheirPlaces character={character} />
       </div>
     </div>
+  );
+}
+
+/* ── Quick facts: who they are at a glance; Edit opens their names and facts ── */
+export function QuickFacts({ character, feedProfile, appearances, editing, onEdit }) {
+  const [facts, setFacts] = useState(null);
+  const [type, setType] = useState(null);
+  const id = character.id;
+  // Read again when the editors close, so a saved fact shows here.
+  useEffect(() => {
+    if (editing) return undefined;
+    let live = true;
+    getFactsApi(id)
+      .then((res) => { if (live) setFacts(res.data?.facts || {}); })
+      .catch((err) => {
+        console.error('[CharacterProfilePage] quick facts load failed:', err);
+        if (live) setFacts({});
+      });
+    getTypologyApi(id)
+      .then((res) => { if (live) setType(res.data?.typology && res.data.label ? String(res.data.label).replace(/^Type /, '') : ''); })
+      .catch((err) => {
+        console.error('[CharacterProfilePage] quick facts type load failed:', err);
+        if (live) setType('');
+      });
+    return () => { live = false; };
+  }, [id, editing]);
+
+  const episodes = (appearances?.episodes || []).map((e) => e.episode_number).filter((n) => n != null);
+  const firstEp = episodes.length ? Math.min(...episodes) : null;
+  const loading = (v) => (v === null ? '…' : v);
+  const rows = [
+    { key: 'real', label: 'Real name', icon: IdCard, value: realNameOf(character, feedProfile) },
+    { key: 'type', label: 'Type', icon: Crown, value: loading(type) },
+    { key: 'status', label: 'Status', icon: Heart, value: depthOf(depthLevelOf(character)).step.label },
+    { key: 'first', label: 'First appearance', icon: CalendarDays, value: !appearances ? '…' : firstEp != null ? `Episode ${firstEp}` : null },
+    { key: 'known', label: 'Known as', icon: Star, value: archetypeOf(feedProfile) },
+    { key: 'role', label: 'Role', icon: Users, value: roleOf(character) },
+    { key: 'work', label: 'Occupation', icon: Briefcase, value: facts ? facts.occupation : '…' },
+    { key: 'followers', label: 'Followers', icon: BarChart3, value: facts ? (facts.followers ? `${facts.followers.label}${facts.followers.source === 'estimate' ? ' (estimate)' : ''}` : null) : '…' },
+    { key: 'account', label: 'Account status', icon: TrendingUp, value: facts ? (facts.account_status ? words(facts.account_status) : null) : '…' },
+  ];
+  return (
+    <section className="ch-card" aria-labelledby="ch-quick" data-testid="ch-quick">
+      <div className="ch-card-head">
+        <h2 id="ch-quick" className="ch-h2">Quick facts</h2>
+        <button type="button" className="ch-pill-btn" aria-expanded={editing} onClick={() => onEdit(!editing)}>{editing ? 'Done' : 'Edit'}</button>
+      </div>
+      <dl className="ch-qf">
+        {rows.map(({ key, label, icon: Icon, value }) => (
+          <div key={key} className="ch-qf-row">
+            <dt><span className="ch-qf-icon" aria-hidden="true"><Icon size={14} /></span>{label}</dt>
+            <dd className={value ? '' : 'is-empty'}>{value || 'Not set'}</dd>
+          </div>
+        ))}
+      </dl>
+      {editing && <p className="ch-note">Their names and facts are open below.</p>}
+    </section>
+  );
+}
+
+/* ── Recent activity: their posts, events and episodes, newest first ────────── */
+const activityDate = (v) => {
+  if (!v) return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+const activityWhen = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+export function activityOf(appearances, trail) {
+  const items = [];
+  for (const p of trail?.posts || []) {
+    items.push({ key: `post-${p.id}`, kind: 'post', title: p.status === 'draft' ? 'Drafted a post' : 'Posted to the feed', sub: shortText(p.text, 70) || null, at: activityDate(p.at) });
+  }
+  for (const ev of appearances?.events || []) {
+    items.push({
+      key: `event-${ev.id}`, kind: 'event', title: ev.role === 'host' ? 'Hosts an event' : 'Guest at an event', sub: ev.name,
+      at: activityDate(ev.event_date), when: activityDate(ev.event_date) ? null : ev.event_date || null,
+      to: ev.show_id ? `/shows/${ev.show_id}/events/${ev.id}` : null,
+    });
+  }
+  for (const ep of appearances?.episodes || []) {
+    items.push({ key: `episode-${ep.id}`, kind: 'episode', title: `Featured in Episode ${ep.episode_number ?? '?'}`, sub: ep.title || null, at: null, to: `/episodes/${ep.id}` });
+  }
+  // Dated first, newest first; the rest after, in the order they came.
+  return items.map((x, i) => ({ ...x, i }))
+    .sort((a, b) => (a.at && b.at ? b.at - a.at : a.at ? -1 : b.at ? 1 : a.i - b.i));
+}
+
+const ACTIVITY_ICONS = { post: FileText, event: CalendarDays, episode: CirclePlay };
+
+export function RecentActivity({ appearances, trail }) {
+  const items = activityOf(appearances, trail);
+  const { pageItems, pager } = usePaged(items, 4);
+  return (
+    <section className="ch-card" aria-labelledby="ch-activity" data-testid="ch-activity">
+      <h2 id="ch-activity" className="ch-h2"><Activity size={20} aria-hidden="true" className="ch-h2-icon" /> Recent activity</h2>
+      {!appearances && !trail ? <p className="ch-note">Loading…</p>
+        : items.length === 0 ? <p className="ch-note">Nothing yet: no posts, events or episodes.</p> : (
+          <ul className="ch-activity">
+            {pageItems.map((x) => {
+              const Icon = ACTIVITY_ICONS[x.kind];
+              const body = (<>
+                <span className={`ch-activity-icon is-${x.kind}`} aria-hidden="true"><Icon size={15} /></span>
+                <span className="ch-activity-text"><strong>{x.title}</strong>{x.sub && <span>{x.sub}</span>}</span>
+                {(x.at || x.when) && <span className="ch-activity-when">{x.at ? activityWhen(x.at) : x.when}</span>}
+              </>);
+              return <li key={x.key}>{x.to ? <Link className="ch-activity-row" to={x.to}>{body}</Link> : <div className="ch-activity-row">{body}</div>}</li>;
+            })}
+          </ul>
+        )}
+      <Pager {...pager} label="Recent activity" />
+    </section>
   );
 }
 
@@ -1486,7 +1704,7 @@ export function ProfileImages({ character, onSaved }) {
   };
   return (
     <section className="ch-card" aria-labelledby="ch-images" data-testid="ch-images">
-      <h2 id="ch-images" className="ch-kicker is-pink"><ImagePlus size={16} aria-hidden /> Profile images</h2>
+      <h2 id="ch-images" className="ch-h2"><ImagePlus size={20} aria-hidden className="ch-h2-icon" /> Profile images</h2>
       <div className="ch-photos">
         {PHOTO_KINDS.map(({ kind, field, label }) => {
           const url = character[field];
@@ -1522,14 +1740,14 @@ export function TheirStats({ feedProfile, appearances, relationships, entangleme
   const followers = feedProfile ? followersOf(feedProfile) : '';
   const stats = [
     { key: 'followers', label: 'Followers', value: followers || '—', icon: Users, tone: 'pink' },
-    { key: 'posts', label: 'Posts', value: appearances?.feed?.posts ?? (appearances ? 0 : '…'), icon: Sparkles, tone: 'lavender' },
-    { key: 'episodes', label: 'Episodes', value: appearances ? (appearances.episodes || []).length : '…', icon: BarChart3, tone: 'gold' },
-    { key: 'events', label: 'Events', value: appearances ? (appearances.events || []).length : '…', icon: CalendarDays, tone: 'green' },
+    { key: 'posts', label: 'Posts', value: appearances?.feed?.posts ?? (appearances ? 0 : '…'), icon: FileText, tone: 'lavender' },
+    { key: 'events', label: 'Events', value: appearances ? (appearances.events || []).length : '…', icon: CalendarDays, tone: 'gold' },
+    { key: 'episodes', label: 'Episodes', value: appearances ? (appearances.episodes || []).length : '…', icon: CirclePlay, tone: 'green' },
     { key: 'ties', label: 'Connections', value: ties, icon: Link2, tone: 'blue' },
   ];
   return (
     <section className="ch-card" aria-labelledby="ch-stats" data-testid="ch-stats">
-      <h2 id="ch-stats" className="ch-kicker is-pink"><BarChart3 size={16} aria-hidden /> Stats &amp; influence</h2>
+      <h2 id="ch-stats" className="ch-h2">Key stats</h2>
       <ul className="ch-stats">
         {stats.map(({ key, label, value, icon: Icon, tone }) => (
           <li key={key} className={`ch-stat is-${tone}`}>
@@ -1550,7 +1768,7 @@ export function TheirEvents({ appearances }) {
   const { pageItems, pager } = usePaged(events, 4);
   return (
     <section className="ch-card" aria-labelledby="ch-events" data-testid="ch-events">
-      <h2 id="ch-events" className="ch-kicker is-pink"><CalendarDays size={16} aria-hidden /> Their events</h2>
+      <h2 id="ch-events" className="ch-h2"><CalendarDays size={20} aria-hidden className="ch-h2-icon" /> Their events</h2>
       {!appearances ? <p className="ch-note">Loading…</p>
         : events.length === 0 ? <p className="ch-note">No events yet: they host or attend none.</p> : (
           <ul className="ch-events">
@@ -1591,8 +1809,8 @@ export function ConnectionsCard({ relationships: rels, entanglements: ents, open
   return (
     <section className="ch-card" aria-labelledby="ch-ties" data-testid="ch-ties">
       <div className="ch-card-head">
-        <h2 id="ch-ties" className="ch-kicker is-pink"><Users size={16} aria-hidden /> Their people</h2>
-        {total > 0 && <button type="button" className="ch-link" onClick={() => openTab('connections')}>See all {total}</button>}
+        <h2 id="ch-ties" className="ch-h2"><Users size={20} aria-hidden className="ch-h2-icon" /> Their people</h2>
+        {total > 0 && <button type="button" className="ch-pill-btn" onClick={() => openTab('connections')}>See all {total}</button>}
       </div>
       {rows.length === 0 ? (
         <p className="ch-note">{entanglements.length ? `${entanglements.length} feed tie${entanglements.length === 1 ? '' : 's'}, no relationships yet.` : 'No relationships yet.'}</p>

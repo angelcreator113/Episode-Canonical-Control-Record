@@ -239,6 +239,10 @@ describe('the character page', () => {
     renderIt();
     await waitFor(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Sable Okafor'));
     expect(screen.getByTestId('ch-aka').textContent).toBe('Online as STUDIO BY SABLE');
+    // Quick facts shows the real name; its Edit opens their names.
+    expect(screen.getByTestId('ch-quick').textContent).toContain('Real nameSable Okafor');
+    expect(screen.queryByTestId('ch-names')).toBeNull();
+    fireEvent.click(within(screen.getByTestId('ch-quick')).getByRole('button', { name: 'Edit' }));
     const names = screen.getByTestId('ch-names');
     expect(names.textContent).toContain('Sable Okafor');
     expect(names.textContent).toContain('@studiobysable');
@@ -257,6 +261,7 @@ describe('the character page', () => {
   test('no real name yet: Suggest one asks the generator for it', async () => {
     vi.mocked(api.post).mockResolvedValue({ data: { success: true, filled: ['selected_name'], character: { ...CHARACTER, selected_name: 'Maren Ellis' } } });
     renderIt();
+    fireEvent.click(within(await screen.findByTestId('ch-quick')).getByRole('button', { name: 'Edit' }));
     await waitFor(() => expect(screen.getByTestId('ch-names')).toBeTruthy());
     expect(screen.getByTestId('ch-names').textContent).toContain('Not set');
     fireEvent.click(screen.getByRole('button', { name: /Suggest one/ }));
@@ -286,7 +291,8 @@ describe('the character page', () => {
       return { data: {} };
     });
     renderIt();
-    await waitFor(() => expect(screen.getByText('Protagonist')).toBeTruthy());
+    // In the header's roles and in Quick facts.
+    await waitFor(() => expect(screen.getByText('Protagonist', { selector: '.ch-qf-row dd' })).toBeTruthy());
     expect(screen.queryByText(/Special/)).toBeNull();
   });
 

@@ -49,13 +49,13 @@ describe('Profile images', () => {
   });
 });
 
-describe('Stats & influence', () => {
-  test('counts followers, posts, episodes, events and connections from what is loaded', () => {
+describe('Key stats', () => {
+  test('counts followers, posts, events, episodes and connections from what is loaded', () => {
     inRouter(<TheirStats feedProfile={{ follower_count_approx: '412K' }}
       appearances={{ feed: { posts: 7 }, episodes: [{ id: 'e1' }, { id: 'e2' }], events: [{ id: 'v1' }] }}
       relationships={[{ id: 'r1' }]} entanglements={[{ id: 'n1' }, { id: 'n2' }]} />);
     const values = within(screen.getByTestId('ch-stats')).getAllByRole('listitem').map((li) => li.textContent);
-    expect(values).toEqual(['412KFollowers', '7Posts', '2Episodes', '1Events', '3Connections']);
+    expect(values).toEqual(['412KFollowers', '7Posts', '1Events', '2Episodes', '3Connections']);
   });
 
   test('with no feed profile, followers read — and say where they come from; a non-list counts as none', () => {
