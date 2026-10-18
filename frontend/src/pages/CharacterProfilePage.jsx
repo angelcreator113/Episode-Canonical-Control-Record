@@ -31,7 +31,7 @@ import { platformLabel, atHandle, followersOf } from './feed/feedConstants';
 import apiClient from '../services/api';
 import { ROLE_LABELS } from '../constants/characterConstants';
 import { findLala } from '../lib/theCast';
-import { DEPTH_STEPS, depthOf, depthLevelOf, cityOf, archetypeOf, showUpRows, withLala, voiceOf, DREAM_CITIES, dreamCityOf } from '../lib/characterPage';
+import { DEPTH_STEPS, depthOf, depthLevelOf, cityOf, archetypeOf, showUpRows, withLala, voiceOf, DREAM_CITIES, dreamCityOf, eventPurpose } from '../lib/characterPage';
 import {
   GROUPS, TENSION, groupOf, closenessOf, nameOf, typeLabel, noteOf, connectionStats, SORTS,
   filterConnections, keyRelationships, connectionHistory, mapPoints,
@@ -140,6 +140,8 @@ export const TABS = [
   { id: 'world',       label: 'In the World', icon: Globe2 },
   // Evoni, 2026-10-17: their home, closet and place of work, and the events they host.
   { id: 'places',      label: 'Places',       icon: MapPin },
+  // Evoni, 2026-10-18: their episodes, events, posts, stories and chapters in one place.
+  { id: 'story',       label: 'Story & Events', icon: CalendarDays },
 ];
 const tabOf = (value) => (TABS.some((t) => t.id === value) ? value : 'overview');
 
@@ -2832,6 +2834,314 @@ function TabWorld({ character, feedProfile, appearances, onSaved, gen, openTab }
   );
 }
 
+/* ── Story & Events (Evoni's mock, 2026-10-18, step 6) ─────────────────────────
+   Everything their story is made of, in one tab with its own sections: an
+   overview (counts, their latest episode, what is coming up, recent posts,
+   Lala's goals at their events, the timeline ahead), then each list in full
+   with pages. Episodes and events are their cast appearances; posts,
+   stories and chapters are their story trail. */
+
+const STORY_SECTIONS = [
+  { key: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { key: 'events', label: 'Events', icon: CalendarDays },
+  { key: 'episodes', label: 'Episodes', icon: CirclePlay },
+  { key: 'posts', label: 'Feed posts', icon: FileText },
+  { key: 'stories', label: 'Stories & chapters', icon: BookOpen },
+  { key: 'timeline', label: 'Timeline', icon: Activity },
+];
+
+const upcomingOf = (appearances, now) => (appearances?.events || []).filter((e) => (eventTime(e) ?? -1) >= now);
+
+/** Lala's goals at their events, each with the event it comes from. */
+export const goalsOf = (appearances) => (appearances?.events || []).flatMap((ev) => (ev.goals || []).map((g, i) => ({
+  key: `${ev.id}-${g.id || i}`, label: g.label, event: ev,
+})));
+
+function StoryTiles({ appearances, trail, now }) {
+  const posts = trail?.posts || [];
+  const live = posts.filter((p) => p.status !== 'draft').length;
+  const tiles = [
+    { key: 'episodes', label: 'Episodes', n: (appearances?.episodes || []).length, sub: null, icon: CirclePlay, tone: 'pink' },
+    { key: 'events', label: 'Events', n: (appearances?.events || []).length, sub: `${upcomingOf(appearances, now).length} upcoming`, icon: CalendarDays, tone: 'green' },
+    { key: 'posts', label: 'Feed posts', n: posts.length, sub: `${live} posted`, icon: FileText, tone: 'lavender' },
+    { key: 'goals', label: "Lala's goals", n: goalsOf(appearances).length, sub: 'at their events', icon: Star, tone: 'gold' },
+    { key: 'stories', label: 'Stories & chapters', n: (trail?.stories || []).length + (trail?.chapters || []).length, sub: null, icon: BookOpen, tone: 'pink' },
+  ];
+  return (
+    <ul className="ch-st-tiles" data-testid="ch-story-tiles">
+      {tiles.map(({ key, label, n, sub, icon: Icon, tone }) => (
+        <li key={key} className={`ch-ro-tile is-${tone}`}>
+          <Icon size={20} aria-hidden="true" />
+          <strong>{n}</strong>
+          <span>{label}</span>
+          {sub && <span className="ch-st-sub">{sub}</span>}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function EpisodeList({ appearances, limit }) {
+  const episodes = [...(appearances?.episodes || [])].sort((a, b) => (b.episode_number ?? -1) - (a.episode_number ?? -1));
+  const eventFor = (ep) => (appearances?.events || []).find((ev) => ev.episode?.id === ep.id || ev.episode?.episode_number === ep.episode_number);
+  const { pageItems, pager } = usePaged(episodes, limit || 5);
+  const rows = limit ? episodes.slice(0, limit) : pageItems;
+  if (!appearances) return <p className="ch-note">Loading…</p>;
+  if (!episodes.length) return <p className="ch-note">Not in an episode yet.</p>;
+  return (
+    <>
+      <ul className="ch-we">
+        {rows.map((ep) => {
+          const ev = eventFor(ep);
+          return (
+            <li key={ep.id}>
+              <Link className="ch-we-item" to={`/episodes/${ep.id}`}>
+                <span className="ch-ep-badge">Episode {ep.episode_number ?? '?'}</span>
+                <span className="ch-we-text">
+                  <strong>{ep.title || 'Untitled'}</strong>
+                  {ev && <span className="ch-we-meta">{[ev.name, ev.role === 'host' ? 'Hosting' : 'Guest'].join(' · ')}</span>}
+                </span>
+                <ArrowRight size={16} aria-hidden="true" className="ch-show-go" />
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+      {!limit && <Pager {...pager} label="Episodes" />}
+    </>
+  );
+}
+
+function EventCards({ events, now }) {
+  return (
+    <ul className="ch-ev-cards">
+      {events.map((ev) => {
+        const t = eventTime(ev);
+        const d = t !== null ? new Date(t) : null;
+        const purpose = eventPurpose(ev);
+        return (
+          <li key={ev.id}>
+            <Link className="ch-ev-card" to={`/shows/${ev.show_id}/events/${ev.id}`}>
+              <span className="ch-ev-date">
+                {d ? (<>
+                  <span>{d.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' })}</span>
+                  <strong>{d.getUTCDate()}</strong>
+                  <span>{d.getUTCFullYear()}</span>
+                </>) : <span>No date</span>}
+              </span>
+              <span className="ch-we-text">
+                <span className="ch-conn-top">
+                  <span className={`ch-tension ${ev.role === 'host' ? 'is-volatile' : 'is-healing'}`}>{ev.role === 'host' ? 'Host' : 'Guest'}</span>
+                  {t !== null && t < now && <span className="ch-chip">Past</span>}
+                </span>
+                <strong>{ev.name}</strong>
+                <span className="ch-we-meta">{[ev.event_time, ev.venue_name].filter(Boolean).join(' · ') || ' '}</span>
+                {purpose && <span className="ch-conn-note">{shortText(purpose, 160)}</span>}
+              </span>
+              <ArrowRight size={16} aria-hidden="true" className="ch-show-go" />
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function StoriesChapters({ trail }) {
+  const stories = trail?.stories || [];
+  const chapters = trail?.chapters || [];
+  const s = usePaged(stories);
+  const c = usePaged(chapters);
+  if (!trail) return <p className="ch-note">Loading…</p>;
+  if (trail.error) return <p className="ch-note" role="alert">{trail.error}</p>;
+  if (!stories.length && !chapters.length) return <p className="ch-note">Not in a story or chapter yet.</p>;
+  return (
+    <>
+      {stories.length > 0 && (
+        <div className="ch-trail">
+          <h3 className="ch-trail-h">Stories</h3>
+          <ul className="ch-trail-list">
+            {s.pageItems.map((st) => (
+              <li key={st.id}>
+                <Link to={st.show_id ? `/stories?show=${st.show_id}` : '/stories'} className="ch-trail-text">{st.title || 'Untitled'}</Link>
+                <span className="ch-trail-meta">{[STORY_FORMATS[st.format] || st.format, st.episode_number != null ? `Episode ${st.episode_number}` : null, st.status].filter(Boolean).join(' · ')}</span>
+              </li>
+            ))}
+          </ul>
+          <Pager {...s.pager} label="Stories" />
+        </div>
+      )}
+      {chapters.length > 0 && (
+        <div className="ch-trail">
+          <h3 className="ch-trail-h">Chapters</h3>
+          <ul className="ch-trail-list">
+            {c.pageItems.map((ch) => (
+              <li key={ch.id}>
+                <Link to={`/chapter/${ch.book_id}/${ch.id}`} className="ch-trail-text">{ch.title || `Chapter ${ch.chapter_number ?? ''}`.trim()}</Link>
+                <span className="ch-trail-meta">{[ch.book_title, ch.written ? null : 'not written yet'].filter(Boolean).join(' · ')}</span>
+              </li>
+            ))}
+          </ul>
+          <Pager {...c.pager} label="Chapters" />
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Their story in order: dated posts and events oldest first, then episodes. */
+export const timelineOf = (appearances, trail) => {
+  const all = activityOf(appearances, trail);
+  const dated = all.filter((x) => x.at).sort((a, b) => a.at - b.at);
+  return [...dated, ...all.filter((x) => !x.at)];
+};
+
+/** `size` items of the timeline from today on (the latest ones when less is ahead). */
+export const timelineNow = (items, now, size) => {
+  const ahead = items.findIndex((x) => x.at && x.at.getTime() >= now);
+  const dated = items.filter((x) => x.at).length;
+  const from = ahead === -1 ? Math.max(0, dated - size) : Math.max(0, Math.min(ahead, dated - size));
+  return items.slice(from, from + size);
+};
+
+// The whole timeline with pages; with `now`, only the stretch from today (the overview's strip).
+function StoryTimeline({ appearances, trail, size = 6, now = null }) {
+  const items = timelineOf(appearances, trail);
+  const { pageItems, pager } = usePaged(items, size);
+  const shown = now === null ? pageItems : timelineNow(items, now, size);
+  if (!items.length) return <p className="ch-note">Nothing on their timeline yet.</p>;
+  return (
+    <>
+      <ol className="ch-tl">
+        {shown.map((x) => {
+          const Icon = ACTIVITY_ICONS[x.kind];
+          const body = (<>
+            <span className={`ch-activity-icon is-${x.kind}`} aria-hidden="true"><Icon size={15} /></span>
+            <span className="ch-tl-when">{x.at ? activityWhen(x.at) : x.when || 'No date'}</span>
+            <strong>{x.title}</strong>
+            {x.sub && <span className="ch-tl-sub">{x.sub}</span>}
+          </>);
+          return <li key={x.key} className="ch-tl-item">{x.to ? <Link className="ch-tl-body" to={x.to}>{body}</Link> : <div className="ch-tl-body">{body}</div>}</li>;
+        })}
+      </ol>
+      {now === null && <Pager {...pager} label="Timeline" />}
+    </>
+  );
+}
+
+function StoryCard({ id, title, icon: Icon, action, children, testid }) {
+  return (
+    <section className="ch-card" aria-labelledby={id} data-testid={testid}>
+      <div className="ch-card-head">
+        <h2 id={id} className="ch-h2"><Icon size={20} aria-hidden="true" className="ch-h2-icon" /> {title}</h2>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+export function TabStory({ character, feedProfile, appearances, openTab, now = Date.now() }) {
+  const [section, setSection] = useState('overview');
+  const trail = useStoryTrail(character.id);
+  const go = (key) => <button type="button" className="ch-pill-btn" onClick={() => setSection(key)}>View all</button>;
+  const upcoming = [...upcomingOf(appearances, now)].sort((a, b) => eventTime(a) - eventTime(b));
+  const allEvents = [...(appearances?.events || [])].sort((a, b) => {
+    const ta = eventTime(a); const tb = eventTime(b);
+    if (ta === null || tb === null) return (ta === null) - (tb === null);
+    return tb - ta;
+  });
+  const events = usePaged(allEvents, 4);
+  const goals = goalsOf(appearances);
+  const goalPages = usePaged(goals);
+  const recent = (trail?.posts || []).slice(0, 4);
+  return (
+    <div className="ch-story" data-testid="ch-story-tab">
+      <nav className="ch-st-nav" aria-label="Story sections">
+        {STORY_SECTIONS.map(({ key, label, icon: Icon }) => (
+          <button key={key} type="button" className={`ch-st-link${section === key ? ' is-on' : ''}`} aria-pressed={section === key} onClick={() => setSection(key)}>
+            <Icon size={15} aria-hidden="true" /> {label}
+          </button>
+        ))}
+      </nav>
+
+      {section === 'overview' && (
+        <>
+          <StoryTiles appearances={appearances} trail={trail} now={now} />
+          <div className="ch-overview">
+            <div className="ch-col">
+              <StoryCard id="ch-st-ep" title="Latest episode" icon={CirclePlay} testid="ch-st-latest" action={go('episodes')}>
+                <EpisodeList appearances={appearances} limit={1} />
+              </StoryCard>
+              <StoryCard id="ch-st-goals" title="Lala's goals at their events" icon={Star} testid="ch-st-goals">
+                {goals.length === 0 ? <p className="ch-note">No goals at their events yet.</p> : (
+                  <>
+                    <ul className="ch-rules-list">
+                      {goalPages.pageItems.map((g) => <li key={g.key}><strong>{g.label}</strong><span className="ch-wf-kind">At {g.event.name}</span></li>)}
+                    </ul>
+                    <Pager {...goalPages.pager} label="Goals" />
+                  </>
+                )}
+              </StoryCard>
+            </div>
+            <div className="ch-col">
+              <StoryCard id="ch-st-up" title="Coming up" icon={CalendarDays} testid="ch-st-upcoming" action={go('events')}>
+                {!appearances ? <p className="ch-note">Loading…</p>
+                  : upcoming.length === 0 ? <p className="ch-note">Nothing coming up.</p>
+                  : <EventCards events={upcoming.slice(0, 2)} now={now} />}
+              </StoryCard>
+            </div>
+            <div className="ch-col">
+              <StoryCard id="ch-st-posts" title="Recent feed posts" icon={FileText} testid="ch-st-posts" action={go('posts')}>
+                {!trail ? <p className="ch-note">Loading…</p> : recent.length === 0 ? <p className="ch-note">No posts yet.</p> : (
+                  <ul className="ch-px">
+                    {recent.map((p) => (
+                      <li key={p.id} className="ch-px-item">
+                        <span className="ch-px-text">{shortText(p.text, 90)}</span>
+                        <span className={`ch-px-status${p.status === 'draft' ? ' is-draft' : ''}`}>{p.status === 'draft' ? 'Draft' : 'Posted'}</span>
+                        <span className="ch-px-meta">{activityDate(p.at) ? activityWhen(activityDate(p.at)) : ''}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </StoryCard>
+            </div>
+          </div>
+          <StoryCard id="ch-st-tl" title="Story timeline" icon={Activity} testid="ch-st-timeline" action={go('timeline')}>
+            <StoryTimeline appearances={appearances} trail={trail} size={4} now={now} />
+          </StoryCard>
+        </>
+      )}
+
+      {section === 'events' && (
+        <StoryCard id="ch-st-events" title="Their events" icon={CalendarDays} testid="ch-st-events">
+          {!appearances ? <p className="ch-note">Loading…</p>
+            : allEvents.length === 0 ? <p className="ch-note">No events yet: they host or attend none.</p>
+            : <><EventCards events={events.pageItems} now={now} /><Pager {...events.pager} label="Events" /></>}
+        </StoryCard>
+      )}
+      {section === 'episodes' && (
+        <StoryCard id="ch-st-eps" title="Their episodes" icon={CirclePlay} testid="ch-st-episodes">
+          <EpisodeList appearances={appearances} />
+        </StoryCard>
+      )}
+      {section === 'posts' && (
+        <PostExamples character={character} feedProfile={feedProfile} trail={trail} onDraft={() => openTab('voice')} />
+      )}
+      {section === 'stories' && (
+        <StoryCard id="ch-st-stories" title="Stories and chapters" icon={BookOpen} testid="ch-st-stories">
+          <StoriesChapters trail={trail} />
+        </StoryCard>
+      )}
+      {section === 'timeline' && (
+        <StoryCard id="ch-st-tl-full" title="Story timeline" icon={Activity} testid="ch-st-timeline-full">
+          <StoryTimeline appearances={appearances} trail={trail} />
+        </StoryCard>
+      )}
+    </div>
+  );
+}
+
 /* ── MAIN COMPONENT ──────────────────────────────────────────────────────────── */
 
 export default function CharacterProfilePage() {
@@ -3035,6 +3345,7 @@ export default function CharacterProfilePage() {
         {activeTab === 'connections' && <TabConnections character={character} relationships={listOf(relationships)} entanglements={listOf(entanglements)} />}
         {activeTab === 'world' && <TabWorld character={character} feedProfile={feedProfile} appearances={appearances} onSaved={onSaved} gen={gen} openTab={setActiveTab} />}
         {activeTab === 'places' && <div className="ch-card"><CharacterPlacesTab key={character.id} character={character} /></div>}
+        {activeTab === 'story' && <TabStory character={character} feedProfile={feedProfile} appearances={appearances} openTab={setActiveTab} />}
         {activeTab === 'appearance' && <CharacterAppearanceTab key={character.id} character={character} onPortraitChanged={(url) => onSaved({ portrait_url: url })} />}
       </div>
     </div>
