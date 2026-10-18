@@ -19,9 +19,13 @@ import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../co
 import BrainUpdate from '../components/BrainUpdate';
 import DreamMap from '../components/DreamMap';
 import DreamCityExplorer from '../components/World/DreamCityExplorer';
+import StudioTypes from '../components/World/StudioTypes';
 import apiClient from '../services/api';
 import { DREAM_CITIES, UNIVERSITIES, CORPORATIONS, WORLD_LAYERS } from '../data/dreamCities';
 import { tabFromSearch } from '../utils/worldRedirects';
+import { saveCity } from '../lib/pulseCities';
+import useActiveShow from '../hooks/useActiveShow';
+import StudioPhotos from '../components/World/StudioPhotos';
 
 const API = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -77,7 +81,7 @@ const LOCATION_TYPES = [
   { value: 'virtual', label: 'Virtual' }, { value: 'transitional', label: 'Transitional' },
 ];
 
-const VENUE_TYPES = ['restaurant','club','bar','cafe','salon','spa','gallery','museum','boutique','gym','hotel','office','park','rooftop','theater','other'];
+const VENUE_TYPES = ['restaurant','club','bar','cafe','salon','spa','gallery','museum','boutique','gym','hotel','office','park','rooftop','theater','studio','recording_studio','coworking','other'];
 const PROPERTY_TYPES = ['penthouse','mansion','apartment','townhouse','studio','villa','loft','cottage'];
 
 const tabStyle = (active) => ({
@@ -94,7 +98,7 @@ export default function WorldFoundation({ embedded = false }) {
   // ?tab= opens a tab (audit IA-04): the retired duplicate editors land here.
   const [tab, setTab] = useState(() => tabFromSearch(TABS, 'map', undefined, 'sub'));
   const [editItem, setEditItem] = useState(null);
-  const { data, updateItem, addItem, removeItem, saving, loaded } = usePageData('world_infrastructure', DEFAULTS);
+  const { data, updateItem, addItem, removeItem, setSaved, saving, loaded } = usePageData('world_infrastructure', DEFAULTS);
 
   // Location state
   const [locations, setLocations] = useState([]);
@@ -107,6 +111,8 @@ export default function WorldFoundation({ embedded = false }) {
   const [selectedLoc, setSelectedLoc] = useState(null);
   const emptyForm = { name: '', description: '', location_type: 'venue', narrative_role: '', street_address: '', city: '', district: '', venue_type: '', property_type: '', parent_location_id: '', venue_details: { hours: '', price_level: '', capacity: '', dress_code: '', vibe_tags: [] }, sensory_details: EMPTY_SENSES };
   const [form, setForm] = useState(emptyForm);
+  // A studio's photos belong to the active show (StudioPhotos, 2026-10-18).
+  const { showId } = useActiveShow();
 
   const flash = useCallback((msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); }, []);
 
@@ -143,6 +149,13 @@ export default function WorldFoundation({ embedded = false }) {
       setForm(emptyForm); setEditId(null); setShowForm(false); loadLocations();
     } catch { flash('Save failed', 'error'); }
   }, [editId, form, flash, loadLocations]);
+
+  // A city's words (the one DREAM city list): saved onto the latest list, which the writers read.
+  const saveCityText = useCallback(async (key, patch) => {
+    const next = await saveCity(key, patch);
+    setSaved('DREAM_CITIES', next);
+    flash('City saved');
+  }, [setSaved, flash]);
 
   const deleteLocation = useCallback(async (id) => {
     if (!confirm('Delete this location?')) return;
@@ -318,7 +331,7 @@ export default function WorldFoundation({ embedded = false }) {
 
           {embedded ? (
             <DreamCityExplorer cities={data.DREAM_CITIES || DREAM_CITIES} universities={data.UNIVERSITIES || UNIVERSITIES} corporations={data.CORPORATIONS || CORPORATIONS}
-              locations={locations} loading={locLoading} onAddVenue={addInCity} onOpenLocations={() => setTab('locations')}
+              locations={locations} loading={locLoading} onAddVenue={addInCity} onOpenLocations={() => setTab('locations')} onSaveCity={saveCityText}
               renderMap={(cityKey, pickCity) => (<>
                 <DreamMap locations={locations} profiles={profileCounts} onSelectLocation={loc => setSelectedLoc(loc)} mapImageUrl={mapImageUrl}
                   selectedCity={cityKey} onSelectCity={pickCity} />
@@ -432,6 +445,9 @@ export default function WorldFoundation({ embedded = false }) {
             </div>
           </div>
 
+          {/* Creator studios still typed "other" (2026-10-18) */}
+          <StudioTypes onChanged={loadLocations} />
+
           {/* Type filters */}
           <div style={{ display: 'flex', gap: 4, marginBottom: 16, flexWrap: 'wrap' }}>
             <button onClick={() => setFilterType('')} style={{ padding: '4px 10px', fontSize: 10, borderRadius: 12, border: '1px solid #e8e0d0', background: !filterType ? '#2C2C2C' : '#fff', color: !filterType ? '#fff' : '#666', cursor: 'pointer', fontWeight: 600 }}>All ({locations.length})</button>
@@ -475,6 +491,7 @@ export default function WorldFoundation({ embedded = false }) {
                             Home base of {loc.residents.length === 1 ? 'this creator' : 'these creators'}: their pin on the phone map, guests suggested for events held here, and where their events are set.
                           </div>
                         )}
+                        {loc.location_type === 'venue' && <StudioPhotos location={loc} showId={showId} onDone={loadLocations} />}
                       </div>
                     ))}
                   </div>

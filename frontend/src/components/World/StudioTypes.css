@@ -1,0 +1,13 @@
+/* Studio types on Universe › Locations (components/World/StudioTypes); theme tokens only. */
+.stt { display: flex; flex-direction: column; gap: 8px; margin: 0 0 16px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-card); }
+.stt-head { margin: 0; font-size: 13px; color: var(--text-primary); }
+.stt-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.stt-row { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--text-primary); min-height: 36px; overflow-wrap: anywhere; }
+.stt-row input { margin-top: 3px; width: 18px; height: 18px; flex: none; }
+.stt-name { font-weight: 700; }
+.stt-was, .stt-why { color: var(--text-secondary); font-size: 12px; }
+.stt-type { color: var(--text-primary); }
+.stt-btn { align-self: flex-start; min-height: 36px; padding: 4px 16px; border-radius: 999px; border: 1px solid var(--accent); background: var(--accent); color: var(--text-inverse); font: inherit; font-size: 13px; cursor: pointer; }
+.stt-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.stt-note { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.stt-note.is-error { color: var(--danger-text); }

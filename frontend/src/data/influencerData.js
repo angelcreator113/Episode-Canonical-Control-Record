@@ -41,7 +41,7 @@ export const ECONOMY_STREAMS = [
   { stream: 'Membership Communities', icon: '🔐', color: T.orchid, what: 'Fans pay for exclusive access — behind-the-scenes, private discussions', who: 'Tier 2-4. Requires deep audience trust.', narrative: 'Who\'s in the paid community and what they\'re getting is always more interesting than the public content.' },
   { stream: 'Event Appearances', icon: '🎪', color: T.steel, what: 'Festivals, award shows, industry panels, brand activations', who: 'Tier 1-3. Invitation is the signal.', narrative: 'Which events she attended, which she skipped, which she was not invited to.' },
   { stream: 'Digital Products', icon: '📦', color: T.mint, what: 'Courses, presets, templates, educational content', who: 'Tier 3-6. Knowledge monetized.', narrative: 'The course she released when the content stopped working. The pivot.' },
-  { stream: 'Pay-for-Attention', icon: '💸', color: T.amber, what: 'DM access, CashApp tipping, direct financial relationships with audience members', who: 'Any tier — but rarely discussed publicly.', narrative: 'The money is agreement. He is agreeing with something she already knew.' },
+  { stream: 'Pay-for-Attention', icon: '💸', color: T.amber, what: 'DM access, Prime Coin tipping, direct financial relationships with audience members (the LalaVerse pays in Prime Coins)', who: 'Any tier — but rarely discussed publicly.', narrative: 'The money is agreement. He is agreeing with something she already knew.' },
 ];
 
 export const FASHION_TREND_STAGES = [

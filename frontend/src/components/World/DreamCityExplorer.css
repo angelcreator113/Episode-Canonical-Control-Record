@@ -47,6 +47,24 @@
   font: inherit; font-size: 13px; font-weight: 700; color: var(--success-text);
 }
 .dce-note { margin: 0 0 8px; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.dce-city-card .dce-card-head { margin-bottom: 0; }
+.dce-city-card .dce-card-head .dce-kicker { margin-bottom: 0; }
+
+/* The city's words, edited on its card */
+.dce-form { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.dce-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: var(--text-primary); }
+.dce-field input, .dce-field textarea {
+  font: inherit; font-size: 14px; font-weight: 400; padding: 8px 10px; border-radius: 10px;
+  border: 1px solid var(--city-line); background: var(--surface-card); color: var(--text-primary); min-width: 0;
+}
+.dce-form-actions { display: flex; align-items: center; gap: 12px; }
+.dce-form-actions .dce-link { margin-left: 0; }
+.dce-btn {
+  min-height: 44px; padding: 0 18px; border-radius: 10px; border: none; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 700; background: var(--text-primary); color: var(--surface-card);
+}
+.dce-btn:disabled { opacity: 0.6; cursor: default; }
+.dce-error { color: var(--danger-text); }
 
 .dce-venues { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .dce-venue { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--surface-bg); }

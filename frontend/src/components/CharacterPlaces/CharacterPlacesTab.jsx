@@ -305,7 +305,8 @@ function HostedEvents({ character, showId, onNote }) {
                 </button>
               </div>
               {/* The event's photos: its look at the venue, made or uploaded here. */}
-              <EventLookImage showId={ev.show_id} eventId={ev.id} canGenerate onToast={(text, kind) => onNote({ text, error: kind === 'error' })} />
+              {/* Read again when the event moves onto its own photos (seventh audit). */}
+              <EventLookImage showId={ev.show_id} eventId={ev.id} canGenerate onToast={(text, kind) => onNote({ text, error: kind === 'error' })} refreshKey={ev.scene_set_id || ''} />
               {/* The event's own photos and angles (2026-10-17: "when I'm trying
                   to add angles to events, I'm not able to upload any images"). */}
               <EventPhotosAndAngles event={ev} onNote={onNote} onChanged={load} />
