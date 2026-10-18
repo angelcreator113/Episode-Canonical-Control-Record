@@ -40,3 +40,7 @@
   .pb-cards { grid-template-columns: minmax(0, 1fr); }
   .pb-btn { flex: 1 1 auto; }
 }
+
+/* The brand account's posting schedule (components/PostingSchedule), opened on demand. */
+.pb-schedule summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--accent-dark); }
+.pb-schedule[open] { padding-bottom: 8px; }

@@ -14,6 +14,7 @@ import { Link } from 'react-router-dom';
 import { CalendarPlus, Handshake, Megaphone, MessageSquareReply, Sparkles, Store } from 'lucide-react';
 import api from '../../services/api';
 import { atHandle } from '../../pages/feed/feedConstants';
+import PostingSchedule from '../PostingSchedule/PostingSchedule';
 import './PulseBrands.css';
 
 const REVIEW = '/admin?tab=pulse&sub=review';
@@ -32,6 +33,8 @@ export function postState(p) {
 }
 
 function BrandCard({ brand, showId, onChanged }) {
+  // The brand account's posting schedule, read only once it is opened.
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const [rep, setRep] = useState('');
   const [about, setAbout] = useState('');
   const [busy, setBusy] = useState(null);
@@ -91,6 +94,10 @@ function BrandCard({ brand, showId, onChanged }) {
 
       {brand.account && (
         <>
+          <details className="pb-schedule" onToggle={(e) => setScheduleOpen(e.currentTarget.open)}>
+            <summary>Posting schedule</summary>
+            {scheduleOpen && <PostingSchedule profileId={brand.account.id} />}
+          </details>
           <div className="pb-draft">
             <label className="pb-label" htmlFor={`pb-who-${brand.slug}`}>Who posts</label>
             <select id={`pb-who-${brand.slug}`} className="pb-input" value={rep} onChange={(e) => setRep(e.target.value)}>

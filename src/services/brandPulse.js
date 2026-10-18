@@ -80,14 +80,27 @@ async function accountsByBrand(db) {
   return new Map(rows.map((r) => [r.brand_id, { id: r.id, handle: r.handle, display_name: r.display_name }]));
 }
 
-/** "Give the brands their Pulse accounts": makes the missing ones. */
+/** A brand account's suggested posting schedule, from what the brand is (services/postingSchedule). */
+function brandSchedule(brand) {
+  return require('./postingSchedule').suggestSchedule({ content_category: [brand.category, 'fashion'].filter(Boolean).join(' ') }).schedule;
+}
+
+/** "Give the brands their Pulse accounts": makes the missing ones, and gives each one a posting schedule. */
 async function ensureAccounts(db) {
   const brands = await db.LalaverseBrand.findAll({ order: [['name', 'ASC']] });
   const have = await accountsByBrand(db);
   const created = [];
   const existing = [];
   for (const brand of brands) {
-    if (have.has(brand.id)) { existing.push({ brand: brand.name, handle: have.get(brand.id).handle }); continue; }
+    if (have.has(brand.id)) {
+      const account = have.get(brand.id);
+      // An account made before posting schedules gets its suggested one; a
+      // schedule already there (suggested or hers) is never changed.
+      await db.sequelize.query('UPDATE social_profiles SET posting_schedule = CAST(:s AS JSONB), updated_at = NOW() WHERE id = :id AND posting_schedule IS NULL',
+        { replacements: { id: account.id, s: JSON.stringify(brandSchedule(brand)) } });
+      existing.push({ brand: brand.name, handle: account.handle });
+      continue;
+    }
     const p = personalityOf(brand);
     const base = baseHandle(brand);
     let handle = base;
@@ -109,6 +122,9 @@ async function ensureAccounts(db) {
       // Public houses: Lala knows of them, so their posts are not hidden as unmet.
       lala_knows_of: true,
       lalaverse_cap_exempt: true,
+      // Evoni, 2026-10-18: brand posts land in the brand's own posting
+      // schedule (postRelease follows it); suggested until she saves hers.
+      posting_schedule: brandSchedule(brand),
       status: 'finalized',
       full_profile: { lalaverse_brand_id: brand.id, lalaverse_brand_slug: brand.slug, account: 'brand' },
     });

@@ -101,6 +101,19 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }], 
     expect(accounts).toHaveLength(Object.keys(brands).length);
     expect(new Set(accounts.map((a) => a.brand_id)).size).toBe(Object.keys(brands).length);
     expect(accounts.every((a) => a.feed_layer === 'lalaverse' && a.lala_knows_of === true)).toBe(true);
+    // Each account comes with a suggested posting schedule (services/postingSchedule).
+    const schedules = await q("SELECT posting_schedule FROM social_profiles WHERE deleted_at IS NULL AND full_profile->>'lalaverse_brand_id' IS NOT NULL");
+    expect(schedules.every((r) => r.posting_schedule && r.posting_schedule.source === 'suggested' && r.posting_schedule.days.length > 0)).toBe(true);
+    // An account without one gets it on the next run; one she set is left alone.
+    const [noSchedule, setByHer] = await q("SELECT id FROM social_profiles WHERE deleted_at IS NULL AND full_profile->>'lalaverse_brand_id' IS NOT NULL ORDER BY id LIMIT 2");
+    const hers = { days: ['sat'], windows: [{ start: '10:00', end: '11:00' }], per_week: 1, tz_offset: 0, source: 'set' };
+    await run('UPDATE social_profiles SET posting_schedule = NULL WHERE id = :id', { id: noSchedule.id });
+    await run('UPDATE social_profiles SET posting_schedule = CAST(:s AS JSONB) WHERE id = :id', { id: setByHer.id, s: JSON.stringify(hers) });
+    await as(request(app).post('/api/v1/brand-pulse/accounts'));
+    const [refilled] = await q('SELECT posting_schedule FROM social_profiles WHERE id = :id', { id: noSchedule.id });
+    expect(refilled.posting_schedule.source).toBe('suggested');
+    const [kept] = await q('SELECT posting_schedule FROM social_profiles WHERE id = :id', { id: setByHer.id });
+    expect(kept.posting_schedule).toEqual(hers);
     const view = await as(request(app).get(`/api/v1/brand-pulse?show_id=${ids.show}`));
     expect(view.body.accounts_missing).toBe(0);
     const velour = view.body.brands.find((b) => b.slug === 'velour_atelier');

@@ -57,6 +57,16 @@ describe('PulseBrands', () => {
     expect(api.post).toHaveBeenCalledWith('/api/v1/brand-pulse/brands/b-1/draft', { show_id: 's-1', rep: 'vivienne_laurent', about: 'the new coat' });
   });
 
+  test('the brand account\'s posting schedule opens on its card', async () => {
+    renderIt();
+    const card = await screen.findByTestId('pb-brand-velour_atelier');
+    const summary = within(card).getByText('Posting schedule');
+    expect(api.get.mock.calls.some(([url]) => /posting-schedule/.test(url))).toBe(false);
+    summary.closest('details').open = true;
+    fireEvent(summary.closest('details'), new Event('toggle'));
+    await waitFor(() => expect(api.get.mock.calls.some(([url]) => /\/social-profiles\/.+\/posting-schedule$/.test(url))).toBe(true));
+  });
+
   test('a post that passes the gate is scheduled, not posted at once', async () => {
     vi.mocked(api.post).mockResolvedValueOnce({ data: { success: true, published: false, review: [], scheduled_at: '2026-10-20T15:00:00Z' } });
     renderIt();
