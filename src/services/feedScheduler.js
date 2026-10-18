@@ -1048,10 +1048,11 @@ async function autoCrossAgent(db) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// SUB-AGENT 6: Auto-Discover — Find potential relationships
+// SUB-AGENT 6: Auto-Discover — Suggest potential relationships (Evoni keeps them)
 // ═══════════════════════════════════════════════════════════════
 async function autoDiscoverAgent(db) {
   const findings = [];
+  const matches = [];
   let discovered = 0;
 
   if (!db.SocialProfileRelationship) {
@@ -1093,32 +1094,33 @@ async function autoDiscoverAgent(db) {
       }
 
       if (score >= 5) {
-        try {
-          let relType = 'collab';
-          if (a.content_category === b.content_category && a.follower_tier === b.follower_tier) relType = 'rival';
-
-          await db.SocialProfileRelationship.create({
-            source_profile_id: a.id,
-            target_profile_id: b.id,
-            relationship_type: relType,
-            description: `Auto-discovered: shared ${a.content_category || 'niche'} on ${platformLabel(a.platform)}`,
-            auto_generated: true,
-            direction: 'mutual',
-            public_visibility: 'public',
-            drama_level: 0,
-          });
-          discovered++;
-          relSet.add(`${a.id}-${b.id}`);
-          findings.push({ level: 'success', msg: `Discovered ${relType} between @${a.handle} and @${b.handle}` });
-        } catch (err) {
-          findings.push({ level: 'error', msg: `Discovery failed for ${a.id}-${b.id}: ${err.message}` });
-        }
+        let relType = 'collab';
+        if (a.content_category === b.content_category && a.follower_tier === b.follower_tier) relType = 'rival';
+        matches.push({ a: a.id, b: b.id, type: relType, why: `Shared ${a.content_category || 'niche'} on ${platformLabel(a.platform)}`, handles: [a.handle, b.handle] });
+        discovered++;
+        relSet.add(`${a.id}-${b.id}`);
       }
     }
   }
 
-  findings.push({ level: 'info', msg: `Discovered ${discovered} new relationships` });
-  return { agent: 'auto_discover', findings, relationships_discovered: discovered };
+  // Matches are suggestions now, never relationships on their own (Evoni's
+  // decision b, 2026-10-17): they wait in the Relationship Map's Suggested
+  // pairs for her to keep or dismiss (services/pairSuggestions).
+  let suggested = 0;
+  try {
+    const added = await require('./pairSuggestions').addRulePairs(db, matches);
+    suggested = added.length;
+    const handles = new Map(matches.map((m) => [require('./pairSuggestions').pairKey(m.a, m.b), m]));
+    for (const p of added) {
+      const m = handles.get(p.key);
+      findings.push({ level: 'success', msg: `Suggested ${p.type} between @${m.handles[0]} and @${m.handles[1]}` });
+    }
+  } catch (err) {
+    findings.push({ level: 'error', msg: `Suggesting pairs failed: ${err.message}` });
+  }
+
+  findings.push({ level: 'info', msg: `Suggested ${suggested} new pairs for the Relationship Map (${discovered} matches)` });
+  return { agent: 'auto_discover', findings, relationships_discovered: 0, pairs_suggested: suggested };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1166,6 +1168,7 @@ async function runFullCycle(db) {
       followers_updated:      results.find(r => r.agent === 'auto_follow')?.followers_updated || 0,
       profiles_flagged:       results.find(r => r.agent === 'auto_cross')?.profiles_flagged || 0,
       relationships_discovered: results.find(r => r.agent === 'auto_discover')?.relationships_discovered || 0,
+      pairs_suggested: results.find(r => r.agent === 'auto_discover')?.pairs_suggested || 0,
     },
     layer_status: {
       real_world: { count: realCount, cap: FEED_CAPS.real_world, remaining: FEED_CAPS.real_world - realCount },
@@ -1291,6 +1294,7 @@ module.exports = {
   generateSmartSparks,
   generateAndSaveProfile,
   autoGenerateBatch,
+  autoDiscoverAgent,
   validateClaudeAccess,
   addSSEClient,
 };

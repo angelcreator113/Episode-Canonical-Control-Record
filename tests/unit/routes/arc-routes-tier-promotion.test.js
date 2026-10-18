@@ -1,7 +1,7 @@
 // ============================================================================
 // UNIT TESTS — arcRoutes.js (Step 3 CP7 — PROMOTE, no AI)
 // ============================================================================
-// 22 handlers; 20 pinned here (the two AI routes, the intention draft and the season proposal, below). Lazy-noop fallback at L19-25 removed.
+// 25 handlers; 23 pinned here (the two AI routes, the intention draft and the season proposal, below). Lazy-noop fallback at L19-25 removed.
 
 const fs = require('fs');
 const path = require('path');
@@ -13,7 +13,7 @@ describe('Step 3 CP7 — arcRoutes.js PROMOTE shape', () => {
     expect(SRC).toMatch(/const\s*\{\s*requireAuth\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
   });
 
-  describe('All 20 handlers carry requireAuth', () => {
+  describe('All 23 handlers carry requireAuth', () => {
     [
       ['get', '/world/:showId/arc'],
       ['post', '/world/:showId/arc/seed'],
@@ -36,6 +36,10 @@ describe('Step 3 CP7 — arcRoutes.js PROMOTE shape', () => {
       ['get', '/world/:showId/season/proposals'],
       ['post', '/world/:showId/season/proposals/:proposalId/accept'],
       ['post', '/world/:showId/season/proposals/:proposalId/dismiss'],
+      // The reveal plan (stage E, 2026-10-18).
+      ['get', '/world/:showId/season/reveals'],
+      ['put', '/world/:showId/season/reveals'],
+      ['delete', '/world/:showId/season/reveals/:revealId'],
     ].forEach(([verb, route]) => {
       test(`${verb.toUpperCase()} ${route} → requireAuth`, () => {
         const re = new RegExp(`router\\.${verb}\\('${route.replace(/\//g, '\\/')}',\\s*requireAuth,\\s*async`);
