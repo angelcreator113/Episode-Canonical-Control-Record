@@ -1360,6 +1360,9 @@ try {
   console.error('✗ Failed to load Wardrobe Brand routes:', e.message);
 }
 
+// Brands on The Pulse (Evoni, 2026-10-18; services/brandPulse)
+try { app.use('/api/v1/brand-pulse', require('./routes/brandPulseRoutes')); console.log('✓ Brand Pulse routes loaded at /api/v1/brand-pulse'); } catch (e) { console.error('✗ Failed to load Brand Pulse routes:', e.message); }
+
 // The Consciousness Layer routes (/api/v1/consciousness) were retired
 // 2026-10-18 (Evoni: "retire the two you suggested"): no page called them,
 // and /save wrote straight into a character's writer_notes. What they saved
