@@ -43,6 +43,15 @@ test('nothing to say, nothing shown', async () => {
   expect(screen.queryByTestId('script-coverage')).toBeNull();
 });
 
+// The show's rules fixed after writing (Evoni, 2026-10-17).
+test("says when the writer added Lala's voice clicks and put the invitation in beat 5", async () => {
+  vi.mocked(api.post).mockResolvedValue({ data: { saved: true, script: SCRIPT, coverage: { fixed_beats: [], missing: [], voice_clicks: 3, reveal_fixed: true } } });
+  render(<MemoryRouter><EpisodeScriptTab episode={{ id: 'ep-1', show_id: 'show-1', script_content: '' }} show={{ id: 'show-1' }} /></MemoryRouter>);
+  fireEvent.click(screen.getByRole('button', { name: /Generate Script/ }));
+  expect((await screen.findByTestId('script-coverage-voice')).textContent).toContain('added 3 voice clicks');
+  expect(screen.getByTestId('script-coverage-reveal').textContent).toContain('Beat 5 now shows the invitation letter');
+});
+
 // Story layers (Evoni, 2026-10-17): what the show holds nothing for is named,
 // so it can be set before the next Generate.
 test('names the story layers with nothing to draw on', async () => {

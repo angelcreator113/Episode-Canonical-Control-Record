@@ -162,7 +162,11 @@ async function handleStoryline(db, job) {
   }
   await beat.update({ status: 'drafted', post_id: post.id });
   const next = beat.kind === 'payoff' ? 'paid_off' : 'running';
-  if (storyline.status !== next && storyline.status !== 'paid_off') await storyline.update({ status: next });
+  if (storyline.status !== next && storyline.status !== 'paid_off') {
+    await storyline.update({ status: next });
+    // A storyline paid off can move the season plan (services/seasonArcProposals): a proposal, never awaited.
+    if (next === 'paid_off') require('./seasonArcProposals').proposeLater(require('../models'), storyline.show_id, 'storyline_paid_off');
+  }
   return { draftIds: [post.id] };
 }
 
