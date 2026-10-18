@@ -11,11 +11,14 @@ jest.mock('@anthropic-ai/sdk', () => jest.fn().mockImplementation(() => ({ messa
 
 const fs = require('fs');
 const path = require('path');
-const { DEFAULTS, loadCultureList, awardShowsBlock, gossipMediaBlock, hierarchyBlock } = require('../../../src/services/cultureCanon');
+const {
+  DEFAULTS, loadCultureList, awardShowsBlock, gossipMediaBlock, hierarchyBlock, schoolsBlock, companiesBlock, economyBlock, profileWorldBlock,
+} = require('../../../src/services/cultureCanon');
 
-const frontend = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'frontend', 'src', 'data', 'calendarData.js'), 'utf8');
-const pageList = (name) => {
-  const m = new RegExp(`export const ${name} = (\\[[\\s\\S]*?\\n\\]);`).exec(frontend);
+const data = (file) => fs.readFileSync(path.join(__dirname, '..', '..', '..', 'frontend', 'src', 'data', file), 'utf8');
+const frontend = data('calendarData.js');
+const pageList = (name, source = frontend) => {
+  const m = new RegExp(`export const ${name} = (\\[[\\s\\S]*?\\n\\]);`).exec(source);
   expect(m).toBeTruthy();
   const T = new Proxy({}, { get: (_, k) => String(k) });
   return Function('T', `return ${m[1]}`)(T);
@@ -29,6 +32,12 @@ describe('the defaults', () => {
     expect(DEFAULTS.GOSSIP_MEDIA).toEqual(pageList('GOSSIP_MEDIA').map(pick(['name', 'focus', 'covers', 'power'])));
     expect(DEFAULTS.CELEBRITY_HIERARCHY).toEqual(pageList('CELEBRITY_HIERARCHY').map(pick(['tier', 'name', 'followers', 'desc'])));
   });
+
+  test('the World and Society pages\' lists, as dreamCities.js and influencerData.js have them', () => {
+    expect(DEFAULTS.UNIVERSITIES).toEqual(pageList('UNIVERSITIES', data('dreamCities.js')).map(pick(['name', 'city', 'specialization', 'programs', 'significance'])));
+    expect(DEFAULTS.CORPORATIONS).toEqual(pageList('CORPORATIONS', data('dreamCities.js')).map(pick(['name', 'industry', 'knownFor', 'power'])));
+    expect(DEFAULTS.ECONOMY_STREAMS).toEqual(pageList('ECONOMY_STREAMS', data('influencerData.js')).map(pick(['stream', 'what', 'who'])));
+  });
 });
 
 describe('loadCultureList', () => {
@@ -38,6 +47,13 @@ describe('loadCultureList', () => {
     expect(saved.PageContent.findOne).toHaveBeenCalledWith(expect.objectContaining({ where: { page_name: 'cultural_calendar', constant_key: 'AWARD_SHOWS' } }));
     expect(await loadCultureList(db(async () => ({ data: [] })), 'GOSSIP_MEDIA')).toEqual([]);
     expect(await loadCultureList(db(async () => null), 'GOSSIP_MEDIA')).toBe(DEFAULTS.GOSSIP_MEDIA);
+  });
+
+  test('each list from its own page; an economy stream is named by `stream`', async () => {
+    const saved = db(async ({ where }) => (where.constant_key === 'ECONOMY_STREAMS' ? { data: [{ stream: 'Prime Coin tips', what: 'x' }, { name: 'no stream' }] } : null));
+    expect(await loadCultureList(saved, 'ECONOMY_STREAMS')).toEqual([{ stream: 'Prime Coin tips', what: 'x' }]);
+    await loadCultureList(saved, 'UNIVERSITIES');
+    expect(saved.PageContent.findOne.mock.calls.map(([q]) => q.where.page_name)).toEqual(['influencer_systems', 'world_infrastructure']);
   });
 
   test('a failed read is logged and uses the defaults; an unknown list throws', async () => {
@@ -65,6 +81,31 @@ describe('the blocks', () => {
     expect(hierarchyBlock(DEFAULTS.CELEBRITY_HIERARCHY)).toContain('not the follower_tier values');
     expect(gossipMediaBlock([])).toBe('');
     expect(hierarchyBlock(null)).toBe('');
+  });
+});
+
+describe('the profile writers\' lists', () => {
+  test('schools: their city\'s first, may-have-trained; companies; the economy', () => {
+    const schools = schoolsBlock(DEFAULTS.UNIVERSITIES, 'Radiance Row');
+    expect(schools).toContain('a creator may have trained at one, most did not; never invent another');
+    expect(schools.indexOf('The Radiance Institute')).toBeLessThan(schools.indexOf('The Dazzle Academy'));
+    expect(schools).toContain('- The Radiance Institute (Radiance Row): Most prestigious beauty academy; programs: Makeup artistry, Skincare science');
+    expect(companiesBlock(DEFAULTS.CORPORATIONS)).toContain('- Pulse Media Network (Talent and media): Talent management, influencer partnerships, brand matchmaking. The middleman');
+    expect(companiesBlock(DEFAULTS.CORPORATIONS)).toContain('most have none');
+    expect(economyBlock(DEFAULTS.ECONOMY_STREAMS)).toContain('- Event Appearances: Festivals, award shows, industry panels, brand activations. Tier 1-3. Invitation is the signal.');
+    expect(schoolsBlock([])).toBe('');
+    expect(companiesBlock(null)).toBe('');
+    expect(economyBlock([])).toBe('');
+  });
+
+  test('profileWorldBlock: the four in order, a city key read as its name', async () => {
+    const block = await profileWorldBlock({}, 'ascent_tower');
+    const at = (s) => block.indexOf(s);
+    expect(at('CELEBRITY HIERARCHY')).toBeGreaterThan(-1);
+    expect(at('CELEBRITY HIERARCHY')).toBeLessThan(at('SCHOOLS'));
+    expect(at('SCHOOLS')).toBeLessThan(at('BIG COMPANIES'));
+    expect(at('BIG COMPANIES')).toBeLessThan(at('MAKE MONEY'));
+    expect(block.indexOf('Ascent Tech Institute')).toBeLessThan(block.indexOf('The Dazzle Academy'));
   });
 });
 

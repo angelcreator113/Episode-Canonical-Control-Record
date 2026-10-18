@@ -20,7 +20,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { loadBrainContext, recordRuleUse } = require('./brainRules');
 const { DREAM_CITY_KEYS, feedCity, randomFeedCity } = require('../utils/feedCities');
 const { cityCultures } = require('./dreamCityText');
-const { loadCultureList, hierarchyBlock } = require('./cultureCanon');
+const { profileWorldBlock } = require('./cultureCanon');
 const {
   loadSocietyArchetypes, societyArchetypeCounts, pickSocietyArchetypes, matchSocietyArchetype,
   assignSocietyArchetype, societyArchetypeLine, societySparkBlock,
@@ -612,8 +612,9 @@ async function generateAndSaveProfile(db, spark, layer) {
   // mapping does; utils/feedCities). A spark with none still gets none.
   const city = layer === 'lalaverse' && spark.city ? feedCity(spark.city) : null;
   const cityCulture = city ? (await cityCultures(db))[city] : '';
-  // The Culture page's celebrity hierarchy (services/cultureCanon, 2026-10-18).
-  const hierarchy = layer === 'lalaverse' ? hierarchyBlock(await loadCultureList(db, 'CELEBRITY_HIERARCHY')) : '';
+  // The celebrity hierarchy, the schools, the big companies and how creators
+  // make money (services/cultureCanon, 2026-10-18).
+  const hierarchy = layer === 'lalaverse' ? await profileWorldBlock(db, city) : '';
 
   // A LalaVerse profile's Society archetype (fix-list item 26): its spark's,
   // else the least used.
