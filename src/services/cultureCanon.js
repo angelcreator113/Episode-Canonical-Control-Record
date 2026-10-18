@@ -34,6 +34,16 @@
  *   economyBlock(list)  how creators make money, by tier ('' for none)
  *   profileWorldBlock(db, cityName)  the four for a LalaVerse profile: the
  *     hierarchy, the schools, the companies and the economy
+ *
+ * The trends and archives for the post and message drafters (Evoni,
+ * 2026-10-18: "yes start the trends and archives for the post drafter"):
+ * FASHION_TREND_STAGES, BEAUTY_TREND_STAGES and MOMENTUM_WAVES
+ * (influencer_systems) and ARCHIVES (cultural_memory, defaults
+ * frontend/src/data/memoryData.js). Kept short: the drafter writes most
+ * posts, so a line costs on every one.
+ *
+ *   trendsBlock(lists)  { fashion, beauty, waves, archives } as a few lines
+ *     a post may lean on ('' for none)
  */
 
 // Where each list is saved, and the field that names an item.
@@ -44,6 +54,10 @@ const LISTS = Object.freeze({
   UNIVERSITIES: { page: 'world_infrastructure', name: 'name' },
   CORPORATIONS: { page: 'world_infrastructure', name: 'name' },
   ECONOMY_STREAMS: { page: 'influencer_systems', name: 'stream' },
+  FASHION_TREND_STAGES: { page: 'influencer_systems', name: 'name' },
+  BEAUTY_TREND_STAGES: { page: 'influencer_systems', name: 'name' },
+  MOMENTUM_WAVES: { page: 'influencer_systems', name: 'event' },
+  ARCHIVES: { page: 'cultural_memory', name: 'name' },
 });
 
 const DEFAULTS = Object.freeze({
@@ -89,10 +103,31 @@ const DEFAULTS = Object.freeze({
     { stream: 'Digital Products', what: 'Courses, presets, templates, educational content', who: 'Tier 3-6. Knowledge monetized.' },
     { stream: 'Pay-for-Attention', what: 'DM access, Prime Coin tipping, direct financial relationships with audience members (the LalaVerse pays in Prime Coins)', who: 'Any tier — but rarely discussed publicly.' },
   ],
+  FASHION_TREND_STAGES: [
+    { stage: 1, name: 'Underground' }, { stage: 2, name: 'Rising' }, { stage: 3, name: 'Mainstream' },
+    { stage: 4, name: 'Saturation' }, { stage: 5, name: 'Replacement' },
+  ],
+  BEAUTY_TREND_STAGES: [
+    { stage: 1, name: 'Salon Discovery' }, { stage: 2, name: 'Creator Demonstration' }, { stage: 3, name: 'Product Launch' }, { stage: 4, name: 'Viral Adoption' },
+  ],
+  MOMENTUM_WAVES: [
+    { event: 'Award Wins', feedEffect: 'Immediate career trajectory jump. Every brand reassesses.' },
+    { event: 'Viral Scandals', feedEffect: 'Feed dominance — pushes everything else out.' },
+    { event: 'Celebrity Collaborations', feedEffect: 'Audience crossover — both creators gain from the other\'s reach.' },
+    { event: 'Surprise Partnerships', feedEffect: 'The reveal is the content — speculation, reaction, analysis.' },
+    { event: 'Platform Changes', feedEffect: 'Entire creator class responds — some gain, most scramble.' },
+  ],
+  ARCHIVES: [
+    { name: 'The Dazzle Archive', tracks: 'Runway collections, style revolutions, designer legacies, Atelier Circuit history' },
+    { name: 'Glow Archives', tracks: 'Cosmetic innovations, viral beauty trends, technique origins, Glow Honors history' },
+    { name: 'The Creator Chronicle', tracks: 'Influencer milestones, viral moments, creator economy breakthroughs, platform history' },
+    { name: 'The Whisper Ledger', tracks: 'Feuds, breakups, public controversies, cancelled creators, apology records' },
+  ],
 });
 
 const text = (v) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : '');
 const sentence = (s) => (/[.!?]$/.test(s) ? s : `${s}.`);
+const lowerFirst = (s) => s.charAt(0).toLowerCase() + s.slice(1);
 
 async function loadCultureList(db, key) {
   const list = LISTS[key];
@@ -166,6 +201,30 @@ ${streams.map((e) => `- ${text(e.stream)}${text(e.what) ? `: ${text(e.what)}` : 
 `;
 }
 
+const byStage = (list) => [...list].sort((a, b) => (Number(a.stage) || 0) - (Number(b.stage) || 0));
+
+function trendsBlock({ fashion = [], beauty = [], waves = [], archives = [] } = {}) {
+  const names = (list, field = 'name') => (list || []).map((x) => text(x?.[field])).filter(Boolean);
+  const lines = [];
+  if (names(fashion).length) lines.push(`- A fashion trend moves: ${names(byStage(fashion)).join(' → ')}. A post can catch one early, ride it or be tired of it.`);
+  if (names(beauty).length) lines.push(`- A beauty trend moves: ${names(byStage(beauty)).join(' → ')}.`);
+  const w = (waves || []).filter((x) => text(x?.event));
+  if (w.length) lines.push(`- What moves a career: ${w.map((x) => `${text(x.event)}${text(x.feedEffect) ? ` (${lowerFirst(text(x.feedEffect).split(/\.\s/)[0].replace(/\.$/, ''))})` : ''}`).join('; ')}.`);
+  const a = (archives || []).filter((x) => text(x?.name));
+  if (a.length) lines.push(`- What the LalaVerse remembers, and where: ${a.map((x) => `${text(x.name)}${text(x.tracks) ? ` (${lowerFirst(text(x.tracks))})` : ''}`).join('; ')}. A post may look back ("so Dazzle Season '22").`);
+  return lines.length ? `The LalaVerse's culture (a post may lean on it where it fits; most posts need none of it):\n${lines.join('\n')}\n` : '';
+}
+
+/** The trends and archives, each Evoni's saved list or the page's. */
+async function loadTrends(db) {
+  return {
+    fashion: await loadCultureList(db, 'FASHION_TREND_STAGES'),
+    beauty: await loadCultureList(db, 'BEAUTY_TREND_STAGES'),
+    waves: await loadCultureList(db, 'MOMENTUM_WAVES'),
+    archives: await loadCultureList(db, 'ARCHIVES'),
+  };
+}
+
 /** The hierarchy, schools, companies and economy for a LalaVerse profile writer; cityName (a DREAM city name or key) puts its schools first. */
 async function profileWorldBlock(db, cityName = null) {
   const city = cityName ? String(cityName).replace(/_/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase()) : null;
@@ -177,4 +236,5 @@ async function profileWorldBlock(db, cityName = null) {
 
 module.exports = {
   DEFAULTS, LISTS, loadCultureList, awardShowsBlock, gossipMediaBlock, hierarchyBlock, schoolsBlock, companiesBlock, economyBlock, profileWorldBlock,
+  trendsBlock, loadTrends,
 };

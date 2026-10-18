@@ -125,10 +125,13 @@ function pillarOf(mix, answer) {
   return (require('./contentPillars').matchPillar(mix.pillars, answer) || mix.planned || null)?.name || null;
 }
 
-/** The Culture page's gossip and media outlets a post may name (services/cultureCanon; '' for none). */
+/**
+ * The Culture page's gossip and media outlets a post may name, and the
+ * trends and archives it may lean on (services/cultureCanon; '' for none).
+ */
 async function mediaBlock(db) {
-  const { loadCultureList, gossipMediaBlock } = require('./cultureCanon');
-  return gossipMediaBlock(await loadCultureList(db, 'GOSSIP_MEDIA'));
+  const { loadCultureList, gossipMediaBlock, trendsBlock, loadTrends } = require('./cultureCanon');
+  return gossipMediaBlock(await loadCultureList(db, 'GOSSIP_MEDIA')) + trendsBlock(await loadTrends(db));
 }
 
 function buildPrompt({ character, profile, voice, label, context, known = null, hosting = '', mix = null, world = '', bible = null, media = '' }) {

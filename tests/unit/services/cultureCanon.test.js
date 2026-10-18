@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const {
   DEFAULTS, loadCultureList, awardShowsBlock, gossipMediaBlock, hierarchyBlock, schoolsBlock, companiesBlock, economyBlock, profileWorldBlock,
+  trendsBlock, loadTrends,
 } = require('../../../src/services/cultureCanon');
 
 const data = (file) => fs.readFileSync(path.join(__dirname, '..', '..', '..', 'frontend', 'src', 'data', file), 'utf8');
@@ -37,6 +38,13 @@ describe('the defaults', () => {
     expect(DEFAULTS.UNIVERSITIES).toEqual(pageList('UNIVERSITIES', data('dreamCities.js')).map(pick(['name', 'city', 'specialization', 'programs', 'significance'])));
     expect(DEFAULTS.CORPORATIONS).toEqual(pageList('CORPORATIONS', data('dreamCities.js')).map(pick(['name', 'industry', 'knownFor', 'power'])));
     expect(DEFAULTS.ECONOMY_STREAMS).toEqual(pageList('ECONOMY_STREAMS', data('influencerData.js')).map(pick(['stream', 'what', 'who'])));
+  });
+
+  test('the trends and archives, as influencerData.js and memoryData.js have them', () => {
+    expect(DEFAULTS.FASHION_TREND_STAGES).toEqual(pageList('FASHION_TREND_STAGES', data('influencerData.js')).map(pick(['stage', 'name'])));
+    expect(DEFAULTS.BEAUTY_TREND_STAGES).toEqual(pageList('BEAUTY_TREND_STAGES', data('influencerData.js')).map(pick(['stage', 'name'])));
+    expect(DEFAULTS.MOMENTUM_WAVES).toEqual(pageList('MOMENTUM_WAVES', data('influencerData.js')).map(pick(['event', 'feedEffect'])));
+    expect(DEFAULTS.ARCHIVES).toEqual(pageList('ARCHIVES', data('memoryData.js')).map(pick(['name', 'tracks'])));
   });
 });
 
@@ -106,6 +114,27 @@ describe('the profile writers\' lists', () => {
     expect(at('SCHOOLS')).toBeLessThan(at('BIG COMPANIES'));
     expect(at('BIG COMPANIES')).toBeLessThan(at('MAKE MONEY'));
     expect(block.indexOf('Ascent Tech Institute')).toBeLessThan(block.indexOf('The Dazzle Academy'));
+  });
+});
+
+describe('the drafter\'s trends and archives', () => {
+  test('a few lines: trends in stage order, what moves a career, the archives; none with nothing', async () => {
+    const block = trendsBlock({ fashion: [{ stage: 2, name: 'Rising' }, { stage: 1, name: 'Underground' }], waves: DEFAULTS.MOMENTUM_WAVES, archives: DEFAULTS.ARCHIVES });
+    expect(block).toContain('most posts need none of it');
+    expect(block).toContain('- A fashion trend moves: Underground → Rising.');
+    expect(block).not.toContain('A beauty trend moves');
+    expect(block).toContain('Award Wins (immediate career trajectory jump)');
+    expect(block).toContain('The Whisper Ledger (feuds, breakups, public controversies, cancelled creators, apology records)');
+    expect(trendsBlock({})).toBe('');
+    expect(trendsBlock(await loadTrends({}))).toContain('- A beauty trend moves: Salon Discovery → Creator Demonstration → Product Launch → Viral Adoption.');
+  });
+
+  test('the drafter\'s block is the outlets and the culture', async () => {
+    const { mediaBlock } = require('../../../src/services/pulseDrafter');
+    const block = await mediaBlock({});
+    expect(block).toContain('The Whisper Wire');
+    expect(block).toContain('What the LalaVerse remembers');
+    expect(block.indexOf('gossip and media outlets')).toBeLessThan(block.indexOf("The LalaVerse's culture"));
   });
 });
 
