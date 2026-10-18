@@ -21,7 +21,6 @@ const ROUTE_LABELS = {
   'write': 'Write',
   'read': 'Read',
   'character-registry': 'Characters',
-  'therapy': 'Therapy Room',
   'continuity': 'Timeline',
   'relationships': 'Relationships',
   'press': 'The Press',
