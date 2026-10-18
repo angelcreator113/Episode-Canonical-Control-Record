@@ -25,6 +25,7 @@ import {
   DIMENSION_KEYS, dimensionLabel, dimensionOf, dimensionText, searchDimensions, dimensionDraft, deepProfileWith, reviewRows,
 } from '../../lib/innerLifeSections';
 import StoryReach from './StoryReach';
+import CharacterSecrets from './CharacterSecrets';
 import './InnerLifeWorkspace.css';
 
 const updateCharacterApi = (id, payload) => apiClient.put(`${API_URL}/character-registry/characters/${id}`, payload);
@@ -380,6 +381,7 @@ export default function InnerLifeWorkspace({ character, gen, onSaved, typeCard =
       return { key: s.key, label: s.label, progress: `${started}/${total}` };
     }),
     { key: DEEP_PROFILE.key, label: DEEP_PROFILE.label, progress: `${DIMENSION_KEYS.filter((k) => dimensionText(dimensionOf(character.deep_profile, k))).length}/14` },
+    { key: 'secrets', label: 'Secrets', progress: null },
     { key: 'reach', label: 'Where it goes', progress: null },
   ], [character, isAuthor]);
 
@@ -427,6 +429,14 @@ export default function InnerLifeWorkspace({ character, gen, onSaved, typeCard =
                 editing={editing} setEditing={setEditing} onSaved={onSaved} onPending={setPending} />
             ))}
           </div>
+        </section>
+      ) : sectionKey === 'secrets' ? (
+        <section className="il-section" aria-labelledby="il-h-secrets">
+          <header className="il-section-head">
+            <h3 id="il-h-secrets" className="il-section-title">Secrets</h3>
+            <p className="il-about">What they keep, who in the story knows it, and what each story may do with it: keep it hidden, hint at it, or reveal it. Every writer gets the kept ones with their story brief; the rest of their private truth stays subtext.</p>
+          </header>
+          <CharacterSecrets character={character} isAuthor={isAuthor} />
         </section>
       ) : sectionKey === 'reach' ? (
         <section className="il-section" aria-labelledby="il-h-reach">

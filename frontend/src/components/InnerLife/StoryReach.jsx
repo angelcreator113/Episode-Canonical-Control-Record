@@ -50,6 +50,7 @@ export default function StoryReach({ character, isAuthor }) {
                 <div className="il-reach-body">
                   <p className="il-note">{w.where}.</p>
                   {w.note && <p className="il-note">{w.note}</p>}
+                  {w.brief && <p className="il-note">Reads their story brief, with their kept secrets and what this story may reveal of each (Secrets).</p>}
                   {KINDS.filter(([k]) => w[k].length).map(([k, title, about]) => (
                     <section key={k} className={`il-reach-kind is-${k}`}>
                       <h5 className="il-reach-kind-title" title={about}>{title}</h5>

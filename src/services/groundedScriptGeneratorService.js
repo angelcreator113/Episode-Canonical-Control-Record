@@ -19,8 +19,8 @@ function getClient() {
 
 const JAWIHP_VOICE_DNA = `
 JAWIHP (JustAWomanInHerPrime) voice rules — NEVER VIOLATE:
-- Addresses the audience as "besties"
-- Warm, hype-woman energy — celebrates everything
+- Addresses the audience as "besties" (or "chat")
+- Warm, hype-woman energy, and varied: she celebrates, doubts, jokes, side-eyes and goes quiet
 - Narrates what she's clicking/doing in real time
 - Reacts naturally ("oh wow these are nice!!")
 - Breaks fourth wall ("I can't believe it you guys")
@@ -322,6 +322,20 @@ async function generateGroundedScript(episodeId, showId, models, { lockedBeats =
     }
     script = next; fixedBeats.push(n);
   }
+  // The show's rules (utils/scriptShowRules.js; Evoni, 2026-10-17): Lala's
+  // voice click before she talks, and the invitation in beat 5, never the
+  // login screen; approved beats are left as they are. Before the phone
+  // steps, so a click the phone can't make gets its path too.
+  let voiceClicks = 0;
+  let revealFixed = false;
+  try {
+    const { scriptWithShowRules } = require('../utils/scriptShowRules');
+    const skip = splitScriptBeats(script).beats.map((b, i) => (locked.has(b.number) ? i : -1)).filter((i) => i >= 0);
+    const ruled = scriptWithShowRules(script, rulesPhone(inputs.phone, inputs.onScreen || []), { skip });
+    script = ruled.script; voiceClicks = ruled.voice_clicks; revealFixed = ruled.reveal;
+  } catch (err) {
+    console.error('[ScriptGen] show rules failed (non-blocking):', err.message);
+  }
   // Before each tap the phone can't make from where it is, a step to the
   // icon's screen (utils/phonePaths.js, the Script tab's own check); approved
   // beats are left as they are, and read for where they leave the phone.
@@ -344,7 +358,7 @@ async function generateGroundedScript(episodeId, showId, models, { lockedBeats =
   // writer kept them to this episode; the Script tab shows them.
   let storyGaps = [];
   try { storyGaps = require('../utils/storyLayers').storyLayers(inputs).gaps; } catch (err) { console.error('[ScriptGen] story gaps failed (non-blocking):', err.message); }
-  return { script, coverage: { missing, fixed_beats: fixedBeats.sort((a, b) => a - b), phone_steps: phoneSteps, story_gaps: storyGaps }, facts };
+  return { script, coverage: { missing, fixed_beats: fixedBeats.sort((a, b) => a - b), phone_steps: phoneSteps, voice_clicks: voiceClicks, reveal_fixed: revealFixed, story_gaps: storyGaps }, facts };
 }
 
 // What the coverage check needs from the writer's inputs.
@@ -470,6 +484,18 @@ function onScreenContext(onScreen = []) {
   return `\n═══ ON SCREEN ═══\n${screens.length ? `Screens: ${screens.join(', ')}\n` : ''}${icons.length ? `Icons: ${icons.join(', ')}\n` : ''}${overlays.length ? `Overlays: ${overlays.join(', ')}\n` : ''}`;
 }
 
+// The phone the show rules name things on (utils/scriptShowRules.js): the
+// phone map when it was read, else the show's overlay list.
+function rulesPhone(phone, onScreen = []) {
+  if (phone) return phone;
+  const isIcon = (o) => o?.category === 'phone_icon' || o?.category === 'icon';
+  return {
+    screens: onScreen.filter((o) => o && !isIcon(o) && o.category !== 'production'),
+    icons: onScreen.filter(isIcon),
+    production: onScreen.filter((o) => o?.category === 'production'),
+  };
+}
+
 // The three story layers and what feeds each (utils/storyLayers.js; Evoni,
 // 2026-10-17). Left out, logged, when it cannot be built.
 function layersText(inputs) {
@@ -550,6 +576,8 @@ function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrob
   // Her numbers come from LALA'S STATS when the story read has them; the
   // world snapshot is the fallback, given whole (a 200-character cut broke
   // it mid-object).
+  const showRules = require('../utils/scriptShowRules');
+  const rulesOn = rulesPhone(phone, onScreen);
   const hook = typeof brief?.forward_hook === 'string' ? brief.forward_hook.trim() : '';
   const told = storyContext(story, { hasSeason: !!seasonContext?.label, hook });
   const statsContext = told.stats ? ''
@@ -618,6 +646,7 @@ Me: [JAWIHP dialogue]
 Lala: [Lala dialogue]
 [STAT: coins +X]
 [TRANSITION: description]
+[SFX: sound] / [EDIT: editing cue] (optional, for JustAWoman's moments; not on every line)
 ${people ? 'Another character at the event speaks as their name: [their words], in their own voice (CHARACTERS AT THE EVENT).\n' : ''}
 What happens on screen goes on its own line, one moment per line, in this form (the Script tab reads these lines; write the name of a screen, icon or overlay exactly as it is listed under ON SCREEN when it is listed there):
 [UI:SHOW phone] / [UI:HIDE phone] (Lala's phone comes on screen / goes away)
@@ -628,15 +657,30 @@ Turn each beat's "UI action" above into one or more of these lines (CLOSET_OPEN 
 
 RULES:
 1. Beat 8 MUST reference specific wardrobe items by name
-2. JAWIHP reacts to everything in real time
+2. JAWIHP reacts in real time to what she has seen, and sometimes lets a moment play in silence (JUSTAWOMAN ON CAMERA)
 3. Lala's lines are ALWAYS short and punchy — max 2-3 sentences
 4. Community engagement: ask audience to react in comments at least twice
 5. A change to her stats appears only as a [STAT:] tag; she may say her coin balance in her own words when she checks it
 ${!only || only.beat.number === 14 ? `6. ${only ? 'This beat ends' : 'Beat 14 ends'} on ${hook ? `the forward hook: "${hook}"` : 'a forward hook seeding the next episode'}\n` : ''}${told.career ? "7. Lala's career is on the page: name the deal, what she owes and what she wants from the event in the beats the CAREER block gives them, in her words, never as a list\n" : ''}
 
+═══ JUSTAWOMAN ON CAMERA ═══
+JustAWoman (Me:) is playing the game on camera from her corner: she sees the game interface and reacts to it; Lala lives the experience. Two perspectives on the same moment. Lala cannot hear her commentary or see the audience's game interface.
+- She reacts to the specific thing on screen (this outfit, this message, this price, this person, this result), never an interchangeable line like "This is exciting!".
+- Only to what she has actually seen: nothing from a message before it arrives, or from the invitation before it is opened.
+- Her lines mix four things, each on its own line or inside hers:
+  - spoken commentary: jokes, predictions, doubts, celebrations, occasional criticism of the game;
+  - performance, in parentheses: Me: (side-eyes the camera) "…", (leans toward the screen), (stunned silence);
+  - player actions: the [UI:] lines she makes happen, and her hesitation, (hovers over Confirm, then pulls back);
+  - sound and edit cues, optional: [SFX: notification ping], [EDIT: punch-in on her corner frame].
+- Two modes. While playing (beats 1–12) she is emotionally involved and invested in Lala's business: "We cannot afford to embarrass ourselves tonight." While reviewing (beats 13–14) she briefly evaluates what happened: "That warning came after I spent the coins. You could've told me sooner." Write new lines; never reuse these.
+- Vary her energy and leave room to watch: let Lala's line finish before she reacts, and at least once let Lala's scene play while she watches in silence, (JustAWoman watches, silent.).
+- She may talk to viewers as "besties" or "chat" and ask them to comment, but never invents viewer messages or comments.
+- Her humor, opinions, small grudges, favorite characters and investment in Lala carry on from PREVIOUS EPISODE when it is given; never invent a past grudge or favorite.
+
 ═══ SHOW RULES ═══
 - Lala's phone is on screen from the moment the Start button is clicked in Beat 1 until she travels to the event in Beat 10. Never write [UI:SHOW phone] or [UI:HIDE phone] in between; the phone is already there.
-- Beat 5 (Reveal): JAWIHP reads the whole invitation aloud, every word of it, not a summary.
+- Beat 5 (Reveal): the invitation letter comes up, ${showRules.invitationLine(rulesOn)}, never the login screen or the Start button (those are beats 1 and 2). JAWIHP reads the whole invitation aloud, every word of it, not a summary.
+- Lala talks only after JustAWoman clicks her voice icon: ${`[UI:CLICK ${showRules.voiceIconName(rulesOn.icons)}]`} on its own line right before every line Lala says: one click, one line. No click is needed for the line where she answers a notification or message ([UI:NOTIFY …], [UI:DM …]), or while she is being dressed (the closet, [WEAR:] lines). Her thoughts, Lala (V.O.):, need no click.
 - Beat 8 (Transformation Loop): every piece of the look is picked and put on one at a time: its own pick, its own line, its own [WEAR: id] line. Never several pieces at once.
 ${only ? `═══ THE SCRIPT AS IT STANDS ═══
 ${only.currentScript.trim() || '(empty)'}
