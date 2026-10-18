@@ -9,7 +9,8 @@
  *                  planned, queued, drafted with its post live or in Review);
  *                  add a beat (a story moment, a character with a voice);
  *                  remove a planned one; Suggest beats (one AI call, nothing
- *                  saved: Keep or Bin each); Drop the storyline
+ *                  saved: Keep or Bin each; the handles the premise names
+ *                  lead); Drop the storyline
  * Beats are drafted by the posting engine when their moment comes; a payoff
  * always waits in Review. Styles: AdminPanel.css (pulse-story-*).
  */
@@ -200,6 +201,7 @@ function NewStoryline({ showId, threads, onCreated }) {
     <form className="pulse-story-new" onSubmit={create} data-testid="pulse-story-new">
       <label>Title<input type="text" maxLength={200} value={form.title} onChange={set('title')} /></label>
       <label className="pulse-story-wide">Premise<textarea rows={2} maxLength={4000} value={form.premise} onChange={set('premise')} /></label>
+      <p className="pulse-hint pulse-story-wide">Name the characters it is about by handle (@name): Suggest beats gives them most beats, and the rest to creators whose audience overlaps theirs.</p>
       <label>Follows a show thread (optional)
         <select value={form.thread} onChange={set('thread')}>
           <option value="">None</option>
