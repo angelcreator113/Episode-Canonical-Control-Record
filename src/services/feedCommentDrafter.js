@@ -8,7 +8,9 @@
  * edit or delete. Nothing goes live on its own.
  *
  * Who reacts: the poster's connections in social_profile_relationships
- * (either direction), then the profiles most relevant to Lala, up to
+ * (either direction), then creators whose content type shares an audience
+ * with the poster's or competes with it, niche first (services/audienceMap;
+ * never on Lala's posts), then the profiles most relevant to Lala, up to
  * `limit`; the caller may pick the reactors instead (reactor_ids). On
  * Lala's own posts, only those she has met by then reply (withoutUnmet).
  * The AI call is one Claude message (claude-sonnet-4-6, two attempts),
@@ -77,6 +79,29 @@ async function pickReactors(models, post, { limit = DEFAULT_LIMIT } = {}) {
         picked.push({ profile: p, relationship: byId.get(p.id) });
         seen.add(p.id);
       }
+    }
+  }
+
+  // Next, creators whose audience overlaps the poster's: the same niche, or
+  // content types that share or compete (services/audienceMap; Evoni's idea
+  // 4): never for or with Lala (decision c).
+  if (picked.length < limit && post.social_profile_id) {
+    const candidates = await SocialProfile.findAll({
+      where: {
+        ...live,
+        [Op.or]: [{ society_archetype: { [Op.ne]: null } }, { content_category: { [Op.ne]: null } }],
+        ...(seen.size ? { id: { [Op.notIn]: [...seen] } } : {}),
+      },
+      attributes: VOICE_ATTRIBUTES,
+      order: [['lala_relevance_score', 'DESC'], ['id', 'ASC']],
+      limit: 50,
+    });
+    const scores = await require('./audienceMap').audienceScores(models, post.social_profile_id, candidates.map((p) => p.id));
+    const ranked = candidates.filter((p) => scores.has(Number(p.id))).sort((a, b) => scores.get(Number(b.id)) - scores.get(Number(a.id)));
+    for (const p of ranked) {
+      if (picked.length >= limit) break;
+      picked.push({ profile: p, relationship: null });
+      seen.add(p.id);
     }
   }
 

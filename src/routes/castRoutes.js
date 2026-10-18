@@ -72,6 +72,10 @@
  *                                                  character file; saves nothing (ADMIN)
  *   POST   /api/v1/cast/content-types/suggest-unset  { limit?, profile_ids? }: suggestions for LalaVerse
  *                                                  feed profiles with none; saves nothing (ADMIN)
+ *   GET    /api/v1/cast/audience-map             each content type's shared audiences: the
+ *                                                  types it shares with and competes with
+ *   PUT    /api/v1/cast/audience-map             { name, shares, competes } or { name, reset: true } (ADMIN)
+ *   POST   /api/v1/cast/audience-map/suggest     { name }: one AI call; saves nothing (ADMIN)
  *   GET    /api/v1/cast/content-pillars          each content type's mix: pillars with
  *                                                  shares and an example (services/contentPillars)
  *   PUT    /api/v1/cast/content-pillars          { name, pillars } or { name, pillars: null }
@@ -1028,6 +1032,55 @@ router.delete('/characters/:id/hosted-events/:eventId', requireAuth, async (req,
     return res.json({ success: true, data: await unhostEvent(getModels().sequelize, { characterId: req.params.id, eventId: req.params.eventId }) });
   } catch (err) {
     return hostedError(res, err, 'DELETE characters/:id/hosted-events/:eventId');
+  }
+});
+
+/**
+ * Shared audiences (services/audienceMap; Evoni's idea 4, 2026-10-17):
+ * which content types share an audience and which compete for one.
+ */
+const audienceError = (res, err) => {
+  const { AudienceError } = require('../services/audienceMap');
+  if (err instanceof AudienceError) { res.status(err.status).json({ success: false, error: err.message }); return true; }
+  return false;
+};
+
+router.get('/audience-map', requireAuth, async (req, res) => {
+  try {
+    return res.json({ success: true, types: await require('../services/audienceMap').listAudience(getModels()) });
+  } catch (err) {
+    console.error('[Cast] GET /audience-map error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.put('/audience-map', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const body = req.body || {};
+    const links = body.reset ? null : { shares: body.shares, competes: body.competes };
+    try {
+      return res.json({ success: true, type: await require('../services/audienceMap').saveAudience(getModels(), body.name, links) });
+    } catch (err) {
+      if (audienceError(res, err)) return undefined;
+      throw err;
+    }
+  } catch (err) {
+    console.error('[Cast] PUT /audience-map error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/audience-map/suggest', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  try {
+    try {
+      return res.json({ success: true, ...(await require('../services/audienceMap').suggestAudience(getModels(), req.body?.name)) });
+    } catch (err) {
+      if (audienceError(res, err)) return undefined;
+      throw err;
+    }
+  } catch (err) {
+    console.error('[Cast] POST /audience-map/suggest error:', err);
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 

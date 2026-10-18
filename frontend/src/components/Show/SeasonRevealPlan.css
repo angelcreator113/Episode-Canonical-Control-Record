@@ -1,0 +1,42 @@
+/* Season Plan › Reveal plan (stage E): pink and gold, tokens only. */
+.srp-card {
+  display: flex; flex-direction: column; gap: 12px; padding: 16px 18px; border: 1px solid var(--lala-gold-line);
+  border-radius: 18px; background: var(--surface-card); min-width: 0;
+}
+.srp-title { display: flex; align-items: center; gap: 8px; margin: 0; font-family: var(--font-prose); font-size: 20px; font-weight: 700; color: var(--text-primary); }
+.srp-title svg { color: var(--accent-dark); }
+.srp-about { margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.srp-note { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.srp-note.is-error { color: var(--danger-text); }
+.srp-note.is-done { color: var(--success-text); }
+.srp-secrets { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.srp-secret { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--lala-gold-line); border-radius: 12px; min-width: 0; }
+.srp-secret-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.srp-secret-text { min-width: 0; font-size: 14px; line-height: 1.5; color: var(--text-primary); overflow-wrap: anywhere; }
+.srp-state { flex-shrink: 0; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--lala-gold-soft); color: var(--lala-gold-text); }
+.srp-state.is-revealed { background: var(--accent-subtle); color: var(--accent-dark); }
+.srp-steps { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.srp-step {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px; border-radius: 999px;
+  font-size: 13px; background: var(--lala-gold-soft); color: var(--text-primary); max-width: 100%;
+}
+.srp-step.is-reveal { background: var(--accent-subtle); color: var(--text-primary); }
+.srp-how { color: var(--text-secondary); }
+.srp-x {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 28px; min-height: 28px; border: none; border-radius: 999px;
+  background: var(--surface-card); color: var(--accent-dark); cursor: pointer;
+}
+.srp-warn { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 12px; font-weight: 700; color: var(--danger-text); }
+.srp-add { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin: 0; padding: 12px 14px; border: 1px dashed var(--lala-gold-line); border-radius: 12px; min-width: 0; }
+.srp-legend { padding: 0 4px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--lala-gold-text); }
+.srp-field { display: flex; flex-direction: column; gap: 4px; flex: 1 1 160px; min-width: 0; font-size: 12px; font-weight: 700; color: var(--text-primary); }
+.srp-field.is-wide { flex-basis: 100%; }
+.srp-field select, .srp-field input {
+  width: 100%; box-sizing: border-box; min-height: 40px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--lala-gold-line);
+  font: inherit; font-size: 14px; font-weight: 400; color: var(--text-primary); background: var(--surface-card);
+}
+.srp-btn {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 6px 16px; border: none; border-radius: 12px;
+  font: inherit; font-size: 14px; font-weight: 700; background: var(--accent-dark); color: var(--text-inverse); cursor: pointer;
+}
+.srp-btn:disabled, .srp-x:disabled { opacity: 0.6; cursor: not-allowed; }
