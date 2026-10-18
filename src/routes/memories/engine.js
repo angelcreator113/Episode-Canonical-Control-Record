@@ -13,6 +13,7 @@ const db = require('../../models');
 const { StorytellerMemory, StorytellerLine, StorytellerBook, StorytellerChapter, RegistryCharacter } = db;
 const { buildUniverseContext } = require('../../utils/universeContext');
 const { storyBrief } = require('../../services/characterStoryBrief');
+const { secretsFor } = require('../../services/characterSecrets');
 
 let _registrySync;
 try { _registrySync = require('../../services/registrySync'); } catch { _registrySync = null; }
@@ -1281,7 +1282,9 @@ async function loadCharacterProfile(characterKey) {
     const sections = [];
 
     // Their inner life beneath the story (services/characterStoryBrief).
-    const brief = storyBrief(merged, { layer: 'short_story' });
+    const secretsById = await secretsFor(RegistryCharacter.sequelize, rows.map((r) => r.id));
+    const secrets = rows.flatMap((r) => secretsById.get(r.id) || []);
+    const brief = storyBrief(merged, { layer: 'short_story', secrets });
     if (brief.lines.length) sections.push(brief.text);
     if (merged.core_belief)   sections.push(`CORE BELIEF: ${merged.core_belief}`);
     if (merged.signature_trait)    sections.push(`SIGNATURE TRAIT: ${merged.signature_trait}`);
