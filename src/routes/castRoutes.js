@@ -111,6 +111,16 @@
  *   PUT    /api/v1/cast/characters/:id/secrets/:secretId  any of those, or { status }:
  *                                                  candidate | confirmed | retired (ADMIN)
  *   DELETE /api/v1/cast/characters/:id/secrets/:secretId  (ADMIN; soft)
+ *   GET    /api/v1/cast/characters/:id/talk         { can_talk, sessions }: their confidential
+ *                                                  sessions with Dr. Amara Sinclair (ADMIN;
+ *                                                  services/characterTalk)
+ *   POST   /api/v1/cast/characters/:id/talk         { session_id?, text }: Dr. Sinclair says it,
+ *                                                  they answer; saved (ADMIN, one AI call)
+ *   POST   /api/v1/cast/talk/:sessionId/review      what the session revealed: inner-life
+ *                                                  changes, candidate secrets, Producer
+ *                                                  Insights; saved on it (ADMIN, one AI call)
+ *   POST   /api/v1/cast/talk/:sessionId/items/:itemId  { action }: apply | send | keep |
+ *                                                  dismiss one of them (ADMIN)
  *   POST   /api/v1/cast/characters/:id/secrets/suggest  one AI call over their story brief;
  *                                                  saves up to five as candidates to keep
  *                                                  or discard (ADMIN)
@@ -1179,6 +1189,56 @@ router.delete('/characters/:id/secrets/:secretId', requireAuth, authorize(['ADMI
     return res.json({ success: true, ...(await deleteSecret(getModels().sequelize, req.params.id, req.params.secretId)) });
   } catch (err) {
     return secretError(res, err, 'DELETE /characters/:id/secrets/:secretId');
+  }
+});
+
+// Talk: a confidential session with Dr. Amara Sinclair (services/characterTalk).
+// ADMIN only, reads included: the sessions are private.
+const talkError = (res, err, label) => {
+  const { TalkError } = require('../services/characterTalk');
+  if (err instanceof TalkError) return res.status(err.status).json({ success: false, error: err.message });
+  console.error(`[Cast] ${label} error:`, err);
+  return res.status(err.status === 429 ? 429 : 500).json({ success: false, error: err.message });
+};
+
+router.get('/characters/:id/talk', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const talk = require('../services/characterTalk');
+    const models = getModels();
+    const character = await models.RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+    const feedProfile = character.feed_profile_id && models.SocialProfile ? await models.SocialProfile.findByPk(character.feed_profile_id) : null;
+    return res.json({ success: true, can_talk: talk.canTalk(character, feedProfile), sessions: await talk.listSessions(models, character.id) });
+  } catch (err) {
+    return talkError(res, err, 'GET /characters/:id/talk');
+  }
+});
+
+router.post('/characters/:id/talk', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  try {
+    const { say } = require('../services/characterTalk');
+    const { session_id: sessionId = null, text } = req.body || {};
+    return res.json({ success: true, session: await say(getModels(), { characterId: req.params.id, sessionId, text, by: byOf(req) }) });
+  } catch (err) {
+    return talkError(res, err, 'POST /characters/:id/talk');
+  }
+});
+
+router.post('/talk/:sessionId/review', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  try {
+    const { review } = require('../services/characterTalk');
+    return res.json({ success: true, session: await review(getModels(), req.params.sessionId) });
+  } catch (err) {
+    return talkError(res, err, 'POST /talk/:sessionId/review');
+  }
+});
+
+router.post('/talk/:sessionId/items/:itemId', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const { act } = require('../services/characterTalk');
+    return res.json({ success: true, session: await act(getModels(), { sessionId: req.params.sessionId, itemId: req.params.itemId, action: req.body?.action, by: byOf(req) }) });
+  } catch (err) {
+    return talkError(res, err, 'POST /talk/:sessionId/items/:itemId');
   }
 });
 
