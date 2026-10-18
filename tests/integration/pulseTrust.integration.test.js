@@ -8,6 +8,8 @@
  *   - review everything holds a post that passed
  *   - the trust routes are ADMIN only; Undo puts a post back in Review once
  *   - the daily update lists what went out on trust, until it is undone
+ *   - comments follow the same trust: a fully trusted character's comment held
+ *     only for its voice goes out, is listed, and Undo takes it back
  */
 jest.unmock('uuid');
 
@@ -43,6 +45,7 @@ const SECRET = 'secretly terrified the brand deal will collapse';
   let admin;
   let user;
   let trustedPostId;
+  let other;
 
   const draft = async ({ text, revealsStory = false, score = 0.9 }) => {
     mockCreate.mockResolvedValueOnce(say({ text, hashtag: null, reveals_story: revealsStory }));
@@ -80,12 +83,13 @@ const SECRET = 'secretly terrified the brand deal will collapse';
 
   afterAll(async () => {
     await new Promise((r) => { setTimeout(r, 300); });
+    await run('DELETE FROM feed_comments WHERE show_id = :show', ids);
     await run('DELETE FROM pulse_post_numbers WHERE show_id = :show', ids);
     await run('DELETE FROM feed_posts WHERE show_id = :show', ids);
     await run('DELETE FROM pulse_voices WHERE registry_character_id = :character', ids);
     await run('DELETE FROM registry_characters WHERE registry_id = :reg', ids);
     await run('DELETE FROM character_registries WHERE id = :reg', ids);
-    await run('DELETE FROM social_profiles WHERE id IN (:a)', { a: [profile, ...(madeLala ? [lala] : [])] });
+    await run('DELETE FROM social_profiles WHERE id IN (:a)', { a: [profile, ...(other ? [other] : []), ...(madeLala ? [lala] : [])] });
     await run('DELETE FROM shows WHERE id = :show', ids);
   });
 
@@ -159,5 +163,39 @@ const SECRET = 'secretly terrified the brand deal will collapse';
 
     const after = await as(request(app).get('/api/v1/daily-update'));
     expect(after.body.since_yesterday.on_trust.items.some((p) => p.id === trustedPostId)).toBe(false);
+  });
+
+  test('comments follow the same trust: held for voice under trusted, out on trust under full, and Undo takes it back', async () => {
+    const [[row]] = await run(`INSERT INTO social_profiles (handle, platform, vibe_sentence, display_name, feed_layer, created_at, updated_at)
+      VALUES (:handle, 'instagram', 'test', 'Other', 'lalaverse', NOW(), NOW()) RETURNING id`, { handle: `other${tag}` });
+    other = row.id;
+    const postId = uuid();
+    await run(`INSERT INTO feed_posts (id, show_id, social_profile_id, poster_handle, content_text, status, posted_at, created_at, updated_at)
+               VALUES (:id, :show, :other, :h, 'new coat, who dis', 'live', NOW(), NOW(), NOW())`, { id: postId, show: ids.show, other, h: `@other${tag}` });
+    const comment = async () => {
+      mockCreate.mockResolvedValueOnce(say({ text: 'the coat is giving' }));
+      mockCreate.mockResolvedValueOnce(say({ score: 0.3, why: 'not quite them' }));
+      return drafter.draftCommentAndRoute(models, { postId, characterId: ids.character });
+    };
+    const held = await comment();
+    expect(held.published).toBe(false);
+    expect(held.review).toEqual(['gate']);
+
+    await setTrust('full');
+    const out = await comment();
+    expect(out.published).toBe(true);
+    await out.comment.reload();
+    expect(out.comment.status).toBe('live');
+    expect(out.comment.released_on_trust).toMatchObject({ level: 'full', waived: ['gate'], flags: ['voice'] });
+    await setTrust(null);
+
+    const update = await as(request(app).get('/api/v1/daily-update'));
+    expect(update.body.since_yesterday.on_trust.items.find((c) => c.id === out.comment.id)).toMatchObject({ kind: 'comment', status: 'live', waived_flags: ['voice'] });
+
+    expect((await as(request(app).post(`/api/v1/pulse-trust/undo-comment/${out.comment.id}`), user)).status).toBe(403);
+    const undone = await as(request(app).post(`/api/v1/pulse-trust/undo-comment/${out.comment.id}`));
+    expect(undone.body).toMatchObject({ success: true, comment: { status: 'draft' } });
+    expect((await as(request(app).post(`/api/v1/pulse-trust/undo-comment/${out.comment.id}`))).status).toBe(409);
+    expect((await as(request(app).post(`/api/v1/pulse-trust/undo-comment/${held.comment.id}`))).status).toBe(409);
   });
 });

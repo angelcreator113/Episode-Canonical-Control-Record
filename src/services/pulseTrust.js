@@ -100,6 +100,21 @@ async function trustedReview(db, post, review, gate) {
  * scheduled one loses its time). A post that did not go out on trust, or was
  * already undone, is a 409.
  */
+/**
+ * Undo a comment that went out on trust: it goes back to a draft, off its
+ * post, and the post's comment count is recounted. 409 as for posts.
+ */
+async function undoCommentTrust(db, commentId) {
+  const comment = await db.FeedComment.findByPk(commentId);
+  if (!comment) throw new TrustError(404, 'Comment not found.');
+  const onTrust = comment.released_on_trust;
+  if (!onTrust) throw new TrustError(409, 'That comment did not go out on trust.');
+  if (onTrust.undone_at) throw new TrustError(409, 'That comment is already back in Review.');
+  await comment.update({ status: 'draft', posted_at: null, released_on_trust: { ...onTrust, undone_at: new Date().toISOString() } });
+  await require('./feedCommentDrafter').recountComments(db, comment.feed_post_id);
+  return comment;
+}
+
 async function undoTrust(db, postId) {
   const post = await db.FeedPost.findByPk(postId);
   if (!post) throw new TrustError(404, 'Post not found.');
@@ -117,5 +132,5 @@ async function undoTrust(db, postId) {
 
 module.exports = {
   LEVELS, DEFAULT_LEVEL, WAIVABLE_FLAGS, ALWAYS_REVIEW, TrustError,
-  levelOf, applyTrust, releasedOnTrust, trustedReview, trustOfProfile, setTrust, undoTrust,
+  levelOf, applyTrust, releasedOnTrust, trustedReview, trustOfProfile, setTrust, undoTrust, undoCommentTrust,
 };

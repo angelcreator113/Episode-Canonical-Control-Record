@@ -553,10 +553,14 @@ async function routeComment(db, post, { comment, voice, privateState }, { lalaPr
     content_text: comment.text, trending_topic: null, story_order: post.story_order,
   };
   const gate = await gateApi.check(db, asPost, { voice, privateState, lalaProfileId });
-  const review = gateApi.reviewReasons(asPost, gate, { lalaProfileId });
+  let review = gateApi.reviewReasons(asPost, gate, { lalaProfileId });
   if (post.status !== 'live') review.push('post_not_live');
+  // Trust per character: a fully trusted commenter's comment goes out when it
+  // was held only for how it reads, as their posts do (services/pulseTrust).
+  const trusted = await require('./pulseTrust').trustedReview(db, asPost, review, gate);
+  review = trusted.review;
   if (review.length === 0) {
-    await comment.update({ status: 'live', posted_at: new Date() });
+    await comment.update({ status: 'live', posted_at: new Date(), ...(trusted.released_on_trust ? { released_on_trust: trusted.released_on_trust } : {}) });
     await require('./feedCommentDrafter').recountComments(db, post.id);
     require('./pulseCloseness').proposeLater(post.id);   // Task #2983
   }

@@ -162,6 +162,17 @@ describe('DailyUpdate', () => {
     expect(await within(group).findByText('Back in Review')).toBeTruthy();
   });
 
+  test('a comment that went out on trust is marked, and its Undo uses the comment endpoint', async () => {
+    const u = update();
+    u.since_yesterday.on_trust = { total: 1, items: [{ id: 'c-trust', kind: 'comment', handle: 'maren', text: 'the coat is giving', status: 'live', waived_flags: ['voice'] }] };
+    vi.mocked(api.get).mockResolvedValue({ data: u });
+    renderPage();
+    const group = await screen.findByTestId('du-on-trust');
+    expect(group.textContent).toContain('Comment');
+    fireEvent.click(within(group).getByRole('button', { name: /Undo/ }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/pulse-trust/undo-comment/c-trust'));
+  });
+
   test('when the update cannot load it says so', async () => {
     vi.mocked(api.get).mockRejectedValue({ response: { data: { error: 'Forbidden' } } });
     renderPage();

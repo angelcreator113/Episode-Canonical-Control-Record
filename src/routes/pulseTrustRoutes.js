@@ -7,6 +7,8 @@
  *   PUT  /profiles/:id      { level: review_all | trusted | full }
  *   POST /undo/:postId      a post that went out on trust goes back to
  *                           Review with what was waived
+ *   POST /undo-comment/:commentId  a comment that went out on trust goes
+ *                           back to a draft
  */
 const express = require('express');
 const { requireAuth, authorize } = require('../middleware/auth');
@@ -55,6 +57,16 @@ router.post('/undo/:postId', requireAuth, authorize(['ADMIN']), async (req, res)
     return res.json({ success: true, post: { id: post.id, status: post.status, review: post.gate_json?.review || [] } });
   } catch (err) {
     return sendError(res, err, 'POST /undo/:postId');
+  }
+});
+
+router.post('/undo-comment/:commentId', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.commentId)) return res.status(404).json({ success: false, error: 'Comment not found.' });
+    const comment = await require('../services/pulseTrust').undoCommentTrust(require('../models'), req.params.commentId);
+    return res.json({ success: true, comment: { id: comment.id, status: comment.status } });
+  } catch (err) {
+    return sendError(res, err, 'POST /undo-comment/:commentId');
   }
 });
 

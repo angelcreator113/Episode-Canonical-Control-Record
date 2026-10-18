@@ -283,7 +283,9 @@ function ScheduledPost({ post }) {
 
 /**
  * Went out on trust (services/pulseTrust): a fully trusted poster's post the
- * gate would have held. Undo puts it back in Review (POST /pulse-trust/undo/:id).
+ * gate would have held, and their comments too. Undo puts a post back in
+ * Review (POST /pulse-trust/undo/:id) and a comment back to a draft
+ * (POST /pulse-trust/undo-comment/:id).
  */
 function OnTrust({ group }) {
   const [undone, setUndone] = useState({});
@@ -292,7 +294,7 @@ function OnTrust({ group }) {
   const undo = async (p) => {
     setBusy(p.id); setError(null);
     try {
-      await api.post(`/api/v1/pulse-trust/undo/${p.id}`);
+      await api.post(p.kind === 'comment' ? `/api/v1/pulse-trust/undo-comment/${p.id}` : `/api/v1/pulse-trust/undo/${p.id}`);
       setUndone((u) => ({ ...u, [p.id]: true }));
     } catch (err) {
       console.error('[DailyUpdate] undo on trust failed:', err);
@@ -308,7 +310,7 @@ function OnTrust({ group }) {
         {group.items.map((p) => (
           <li key={p.id} className="du-item">
             <div className="du-item-body">
-              <span className="du-who">{p.handle || 'A post'}{p.show && <span className="du-muted"> · {p.show}</span>}</span>
+              <span className="du-who">{p.handle || 'A post'}{p.kind === 'comment' && <span className="du-tag">Comment</span>}{p.show && <span className="du-muted"> · {p.show}</span>}</span>
               <p className="du-text">{p.text}</p>
               {p.waived_flags?.length > 0 && <span className="du-muted">Let through: {p.waived_flags.map((f) => TRUST_FLAG_WORDS[f] || f).join(', ')}</span>}
             </div>
