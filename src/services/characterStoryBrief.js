@@ -27,7 +27,8 @@
  *   storyBrief(character, { layer, secrets })  { lines, text }
  *     character  a registry character (plain or a model instance)
  *     secrets    their confirmed secrets (characterSecrets.secretsFor);
- *                a scene uses the chapter's permission
+ *                a scene uses the chapter's permission; one the season's
+ *                plan sets for this episode carries planned (seasonRevealPlan)
  *   BRIEF_COLUMNS              the registry_characters columns it reads,
  *                              for writers that select columns themselves;
  *                              never blind_spot, so a writer that saves its
@@ -94,7 +95,9 @@ function secretLines(secrets, layer) {
     for (const s of open) {
       const permission = s.permissions?.[key] || 'hint';
       const where = s.state === 'hinted' ? ` Already hinted${s.where ? ` (${text(s.where)})` : ''}.` : '';
-      lines.push(`- ${text(s.text)} [${PERMISSION_RULE[permission] || PERMISSION_RULE.hint}. ${knownTo(s)}.${where}]`);
+      // The season's reveal plan for this episode (services/seasonRevealPlan).
+      const planned = s.planned ? ` Planned for this episode${typeof s.planned === 'string' ? `: ${text(s.planned)}` : ''}.` : '';
+      lines.push(`- ${text(s.text)} [${PERMISSION_RULE[permission] || PERMISSION_RULE.hint}. ${knownTo(s)}.${where}${planned}]`);
       if (permission === 'reveal') cleared.push(s);
     }
   }
