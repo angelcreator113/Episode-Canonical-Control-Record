@@ -93,7 +93,10 @@ router.post('/seed-brands', requireAuth, async (req, res) => {
 router.get('/brands', requireAuth, async (req, res) => {
   try {
     const models = getModels();
+    // Fashion brands only: outlets, agencies and venues are companies too
+    // (constants/companyKinds) but no wardrobe piece is theirs.
     const brands = await models.LalaverseBrand.findAll({
+      where: { kind: 'brand' },
       order: [['name', 'ASC']],
     });
 

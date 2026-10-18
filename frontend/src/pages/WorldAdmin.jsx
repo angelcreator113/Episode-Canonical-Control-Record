@@ -8072,6 +8072,15 @@ function OpportunitiesTab({ showId, api, S, setToast, loadData }) {
     api.get(`/api/v1/opportunities/${showId}`).then(r => { setOpps(r.data.opportunities || []); setOppLoading(false); }).catch(() => setOppLoading(false));
   }, [showId]);
 
+  // The companies a deal can be with (Evoni, 2026-10-18: brand and company
+  // profiles): picked from the list, or typed; the server links a typed name
+  // to the company of that name (services/brandProfile.linkDeal).
+  const [companies, setCompanies] = useState([]);
+  useEffect(() => {
+    api.get('/api/v1/companies').then(r => setCompanies(r.data.companies || [])).catch((err) => { console.error('[OpportunitiesTab] the companies could not be read:', err); setCompanies([]); });
+  }, []);
+  const companyById = new Map(companies.map(c => [c.id, c]));
+
   const createOpp = async () => {
     if (!oppForm?.name) return;
     try {
@@ -8129,7 +8138,12 @@ function OpportunitiesTab({ showId, api, S, setToast, loadData }) {
             <div><label style={S.fLabel}>Category</label><select value={oppForm.category} onChange={e => setOppForm({ ...oppForm, category: e.target.value })} style={S.sel}>{['fashion','beauty','lifestyle','luxury','entertainment','media'].map(c => <option key={c} value={c}>{c}</option>)}</select></div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
-            <div><label style={S.fLabel}>Brand</label><input value={oppForm.brand_or_company || ''} onChange={e => setOppForm({ ...oppForm, brand_or_company: e.target.value })} style={S.sel} /></div>
+            <div>
+              <label style={S.fLabel} htmlFor="opp-company">Brand or company</label>
+              <input id="opp-company" list="opp-companies" value={oppForm.brand_or_company || ''} onChange={e => setOppForm({ ...oppForm, brand_or_company: e.target.value })} style={S.sel} />
+              <datalist id="opp-companies">{companies.map(c => <option key={c.id} value={c.name}>{c.kind_label}</option>)}</datalist>
+              <Link to="/brands" style={{ fontSize: 10 }}>New company</Link>
+            </div>
             <div><label style={S.fLabel}>Payment</label><input type="number" value={oppForm.payment_amount || 0} onChange={e => setOppForm({ ...oppForm, payment_amount: parseInt(e.target.value) || 0 })} style={S.sel} /></div>
             <div><label style={S.fLabel}>Prestige</label><input type="number" min={1} max={10} value={oppForm.prestige || 5} onChange={e => setOppForm({ ...oppForm, prestige: parseInt(e.target.value) || 5 })} style={S.sel} /></div>
             <div><label style={S.fLabel}>Season</label><input value={oppForm.season || ''} onChange={e => setOppForm({ ...oppForm, season: e.target.value })} placeholder="FW26" style={S.sel} /></div>
@@ -8151,7 +8165,9 @@ function OpportunitiesTab({ showId, api, S, setToast, loadData }) {
                     <div style={{ fontSize: 11, color: '#666', display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
                       <span style={{ padding: '1px 6px', borderRadius: 4, background: sc + '20', color: sc, fontWeight: 600, fontSize: 10 }}>{opp.status}</span>
                       <span>{opp.opportunity_type?.replace(/_/g, ' ')}</span>
-                      {opp.brand_or_company && <span>{opp.brand_or_company}</span>}
+                      {opp.company_id && companyById.get(opp.company_id)
+                        ? <Link to={`/brands/${companyById.get(opp.company_id).slug}`}>{opp.brand_or_company || companyById.get(opp.company_id).name}</Link>
+                        : opp.brand_or_company && <span>{opp.brand_or_company}</span>}
                     </div>
                   </div>
                   {parseFloat(opp.payment_amount) > 0 && <div style={{ fontSize: 16, fontWeight: 800, color: '#16a34a' }}>${parseFloat(opp.payment_amount).toLocaleString()}</div>}

@@ -25,7 +25,7 @@ async function loadBrandChoices(models) {
   try {
     const [rows] = await sequelize.query(
       `SELECT id, name, category, aesthetic, niche FROM lalaverse_brands
-        WHERE deleted_at IS NULL AND name IS NOT NULL AND TRIM(name) <> ''
+        WHERE deleted_at IS NULL AND kind = 'brand' AND name IS NOT NULL AND TRIM(name) <> ''
         ORDER BY (category = 'fashion') DESC, name`);
     return (rows || []).map((b) => ({
       id: b.id, name: text(b.name), category: text(b.category) || null, aesthetic: text(b.aesthetic) || null, niche: text(b.niche) || null,
