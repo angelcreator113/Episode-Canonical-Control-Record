@@ -64,7 +64,7 @@ router.put('/settings', requireAuth, authorize(['ADMIN']), async (req, res) => {
     if (!showId) return res.status(400).json({ success: false, error: 'show_id must be a show id.' });
     const { show_id: _ignored, ...fields } = req.body || {};
     const saved = await require('../services/worldMoments').saveSettings(getModels(), showId, fields);
-    const { drafted, ...settings } = saved;
+    const { drafted: _drafted, ...settings } = saved;
     return res.json({ success: true, settings });
   } catch (err) {
     return sendError(res, err, 'PUT /settings');
