@@ -32,6 +32,8 @@ jest.mock('../../../src/services/financialTransactionService', () => ({
 }));
 
 const mockGetOutfitScore = jest.fn();
+// The Episode Story Record is drafted after completion, unawaited (stage C).
+jest.mock('../../../src/services/episodeStoryRecord', () => ({ draftLater: jest.fn(async () => null) }));
 jest.mock('../../../src/routes/wardrobe', () => ({ getOutfitScore: (...a) => mockGetOutfitScore(...a) }));
 jest.mock('../../../src/services/wardrobeIntelligenceService', () => ({ getWardrobeGrowthArc: jest.fn(async () => null) }));
 

@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Crown, BookOpen, Smartphone, Scissors, RotateCcw, Sparkles, Library } from 'lucide-react';
 import api from '../../services/api';
+import EpisodeStoryRecord from './EpisodeStoryRecord';
 import './EpisodeResultsSummary.css';
 
 const TIER_STYLES = {
@@ -189,6 +190,8 @@ export function EpisodeResultsStory({ episode }) {
         <span className="ers-sub">This episode retold as prose</span>
         <Link className="ers-btn" to="/stories"><Library size={14} aria-hidden="true" /> Open Stories Library</Link>
       </div>
+
+      {episode?.id && <EpisodeStoryRecord episodeId={episode.id} />}
 
       <section className="ers-card">
         <p className="ers-text">
