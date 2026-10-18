@@ -39,6 +39,8 @@ const {
 } = require('../services/societyArchetypes');
 const { loadBrainContext, recordRuleUse } = require('../services/brainRules');
 const { DREAM_CITY_CULTURE, feedCity, randomFeedCity } = require('../utils/feedCities');
+const { cityCultures } = require('../services/dreamCityText');
+const { profileWorldBlock } = require('../services/cultureCanon');
 
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
@@ -128,11 +130,12 @@ const CAREER_PRESSURES = ['ahead', 'level', 'behind', 'different_lane'];
 const relationshipOf = (creator) => (LALA_RELATIONSHIPS.includes(creator.lala_relationship) ? creator.lala_relationship : 'mutual_unaware');
 const careerOf = (creator) => (CAREER_PRESSURES.includes(creator.career_pressure) ? creator.career_pressure : 'level');
 
-function lalaverseContext(creator) {
+// cityCulture: each city's words, the saved DREAM city list's (services/dreamCityText).
+function lalaverseContext(creator, cityCulture = DREAM_CITY_CULTURE) {
   const city = feedCity(creator.city);
   const cityLines = city
-    ? `This creator lives in ${city.replace(/_/g, ' ')} — ${DREAM_CITY_CULTURE[city]}`
-    : `This creator lives in one of the five DREAM cities. Pick the one their content fits, and return its key as "city":\n${Object.entries(DREAM_CITY_CULTURE).map(([key, culture]) => `- ${key}: ${culture}`).join('\n')}`;
+    ? `This creator lives in ${city.replace(/_/g, ' ')} — ${cityCulture[city]}`
+    : `This creator lives in one of the five DREAM cities. Pick the one their content fits, and return its key as "city":\n${Object.entries(cityCulture).map(([key, culture]) => `- ${key}: ${culture}`).join('\n')}`;
   return `\n\nLALAVERSE CONTEXT:
 ${cityLines}
 Generate a profile that feels native to that city's creator culture.
@@ -168,7 +171,7 @@ async function generateSingleProfile(creator, { db, seriesId, characterContext, 
   // real-world (JustAWoman's Feed) one does not.
   const brain = lalaverse ? await loadBrainContext(db, { label: 'bulk-generate' }) : { block: null, ids: [] };
   const prompt = buildGenerationPrompt(creator.handle, creator.platform, creator.vibe_sentence, characterContext, null, feedLayer)
-    + (lalaverse ? lalaverseContext(creator) : '')
+    + (lalaverse ? lalaverseContext(creator, await cityCultures(db)) + await profileWorldBlock(db, feedCity(creator.city)) : '')
     + societyArchetypeMenu(societyList, societyCounts)
     + (brain.block ? `\n${brain.block}` : '');
   // Keep the timer handle and clear it once the race settles (Task #1859),
