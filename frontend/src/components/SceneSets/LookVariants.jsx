@@ -23,7 +23,9 @@ const POLL_MAX = 180;
 
 const generatingIn = (data) => [...(data?.time || []), ...(data?.season || [])].some((s) => s.variant?.status === 'generating');
 
-export default function LookVariants({ setId, onToast, pollMs = POLL_MS }) {
+// refreshKey: changes when the set's Front view does (seventh audit), so a
+// Front made or replaced in the same panel is read again.
+export default function LookVariants({ setId, onToast, pollMs = POLL_MS, refreshKey = '' }) {
   const base = `/api/v1/scene-sets/${setId}/look-variants`;
   const [data, setData] = useState(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -67,7 +69,7 @@ export default function LookVariants({ setId, onToast, pollMs = POLL_MS }) {
     }
   }, [base]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, refreshKey]);
 
   const generating = generatingIn(data);
   useEffect(() => {

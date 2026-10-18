@@ -208,6 +208,10 @@ async function linkPlace(sequelize, { showId, characterId, sceneSetId, role, lab
     return listPlaces(sequelize, showId);
   }
   await sequelize.transaction(async (transaction) => {
+    // One link at a time per character, so two homes saved at once do not
+    // both stay (seventh audit).
+    await sequelize.query("SELECT pg_advisory_xact_lock(hashtext('character-places:' || :characterId))",
+      { replacements: { characterId }, transaction });
     if (SINGLE.has(role)) {
       await sequelize.query(
         `UPDATE character_places SET deleted_at = NOW(), updated_at = NOW()

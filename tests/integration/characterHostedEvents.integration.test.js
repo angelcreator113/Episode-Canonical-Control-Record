@@ -116,15 +116,19 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
 
   // Fifth audit: a brand host, an automation host and a character with no
   // show were not respected.
-  it('a brand host or an automation copy host is not replaced; a character in no show hosts nothing', async () => {
+  // Evoni, 2026-10-17: "let them co-host brand events".
+  it('a brand event is co-hosted (the brand stays); an automation copy host is not replaced; a character in no show hosts nothing', async () => {
     const { character, event } = await cast();
     const sable = await character('Sable');
     const branded = await event('Maison Belle launch');
     await run(`UPDATE world_events SET host_brand = 'Maison Belle' WHERE id = :id`, { id: branded });
     const brand = await host(sable.id, branded);
-    expect(brand.status).toBe(409);
-    expect(brand.body).toMatchObject({ code: 'HOSTED_BY_BRAND' });
-    expect(brand.body.error).toMatch(/Maison Belle/);
+    expect(brand.status).toBe(200);
+    expect(brand.body.data).toMatchObject({ host_profile_id: sable.pid, co_host_brand: 'Maison Belle' });
+    expect(await hostOf(branded)).toBe(sable.pid);
+    expect((await unhost(sable.id, branded)).status).toBe(200);
+    const [after] = await rows('SELECT host_brand, source_profile_id FROM world_events WHERE id = :id', { id: branded });
+    expect(after).toEqual({ host_brand: 'Maison Belle', source_profile_id: null });
 
     const copied = await event('Feed brunch');
     await run(`UPDATE world_events SET canon_consequences = '{"automation":{"host_profile_id":"legacy-7"}}'::jsonb WHERE id = :id`, { id: copied });

@@ -55,11 +55,14 @@ async function versionOptions(sequelize, setId) {
   if (!set) throw new SceneSetVersionError('Scene set not found', 404, 'SET_NOT_FOUND');
   // Each set offered says what would refuse it as an event's photos (fifth
   // audit: the list offered them all, and the refusal came after a try):
-  // has_versions (an everyday set with event versions) and used_by (the
-  // events held at it; one other than the chosen event refuses it).
+  // has_versions (an everyday set with event versions), used_by (the
+  // events held at it; one other than the chosen event refuses it) and
+  // is_everyday_look (its base is its location's approved everyday look,
+  // seventh audit).
   const [everyday] = await sequelize.query(
     `SELECT s.id, s.name, s.base_still_url,
             EXISTS (SELECT 1 FROM scene_sets v WHERE v.version_of_set_id = s.id AND v.deleted_at IS NULL) AS has_versions,
+            EXISTS (SELECT 1 FROM world_locations wl WHERE wl.approved_base_scene_set_id = s.id AND wl.deleted_at IS NULL) AS is_everyday_look,
             COALESCE((SELECT json_agg(json_build_object('id', e.id, 'name', e.name) ORDER BY e.name)
                         FROM world_events e WHERE e.scene_set_id = s.id AND e.deleted_at IS NULL), '[]'::json) AS used_by
        FROM scene_sets s
@@ -87,7 +90,9 @@ async function makeEventVersion(sequelize, { setId, everydaySetId, eventId }) {
   return sequelize.transaction(async (transaction) => {
     const set = await liveSet(sequelize, setId, transaction, true);
     if (!set) throw new SceneSetVersionError('Scene set not found', 404, 'SET_NOT_FOUND');
-    const everyday = await liveSet(sequelize, everydaySetId, transaction);
+    // Locked too, so a set made a version meanwhile cannot become this
+    // one's everyday set (seventh audit: a version of a version).
+    const everyday = await liveSet(sequelize, everydaySetId, transaction, true);
     if (!everyday) throw new SceneSetVersionError('The everyday set was not found', 404, 'EVERYDAY_NOT_FOUND');
     if (everyday.version_of_set_id) {
       throw new SceneSetVersionError(`"${everyday.name}" is itself an event version: choose an everyday set`, 400, 'NOT_EVERYDAY');
@@ -101,8 +106,15 @@ async function makeEventVersion(sequelize, { setId, everydaySetId, eventId }) {
     if (versions.n > 0) {
       throw new SceneSetVersionError(`"${set.name}" has event versions of its own: it stays an everyday set`, 409, 'HAS_VERSIONS');
     }
+    // A location's approved everyday look is not one event's photos (seventh audit).
+    const [[approvedAt]] = await sequelize.query(
+      'SELECT name FROM world_locations WHERE approved_base_scene_set_id = :id AND deleted_at IS NULL LIMIT 1',
+      { replacements: { id: set.id }, transaction });
+    if (approvedAt) {
+      throw new SceneSetVersionError(`"${set.name}" is ${approvedAt.name}'s everyday look: un-approve it first`, 409, 'IS_EVERYDAY_LOOK');
+    }
     const [[event]] = await sequelize.query(
-      'SELECT id, name, show_id, scene_set_id FROM world_events WHERE id = :eventId AND deleted_at IS NULL',
+      'SELECT id, name, show_id, scene_set_id FROM world_events WHERE id = :eventId AND deleted_at IS NULL FOR UPDATE',
       { replacements: { eventId }, transaction });
     const showId = set.show_id || everyday.show_id || null;
     if (!event || (showId && String(event.show_id) !== String(showId))) {
@@ -117,6 +129,14 @@ async function makeEventVersion(sequelize, { setId, everydaySetId, eventId }) {
     }
     if (String(event.scene_set_id || '') !== String(set.id) && await isPlaceLocked(sequelize, event.id)) {
       throw new SceneSetVersionError(PLACE_LOCKED_MESSAGE, 409, PLACE_LOCKED_CODE);
+    }
+    // A shared set other shows use is not claimed for this one (seventh
+    // audit; PUT /:id refuses the same move).
+    if (!set.show_id && showId) {
+      const { otherShowUses } = require('./sceneSetUsesService');
+      if (await otherShowUses(sequelize, set.id, showId, { transaction }) > 0) {
+        throw new SceneSetVersionError(`Other shows use "${set.name}": it stays shared, so it is not one event's photos`, 409, 'USED_BY_ANOTHER_SHOW');
+      }
     }
     await sequelize.query(
       `UPDATE scene_sets
@@ -151,16 +171,28 @@ async function makeEveryday(sequelize, setId, { returnEvent = false } = {}) {
     if (!set) throw new SceneSetVersionError('Scene set not found', 404, 'SET_NOT_FOUND');
     const everydayId = set.version_of_set_id || null;
     let returned = null;
+    // "Stop using these photos" on a set that is no longer a version did
+    // nothing and said it had (seventh audit): it is refused, saying why.
+    if (returnEvent && !everydayId) {
+      throw new SceneSetVersionError(`"${set.name}" is already its own set: choose where its event is held on the event's page`, 409, 'NOT_A_VERSION');
+    }
     if (returnEvent && everydayId) {
       // A deleted everyday set cannot take its event back (fifth audit): its
       // version kept pointing at it after a delete, and the event was moved
       // onto a removed set.
-      if (!(await liveSet(sequelize, everydayId, transaction))) {
+      const everyday = await liveSet(sequelize, everydayId, transaction);
+      if (!everyday) {
         throw new SceneSetVersionError('Its everyday set was deleted: choose where the event is held on the event\'s page', 409, 'EVERYDAY_GONE');
       }
       const [events] = await sequelize.query(
-        'SELECT id, name FROM world_events WHERE scene_set_id = :id AND deleted_at IS NULL',
+        'SELECT id, name, show_id FROM world_events WHERE scene_set_id = :id AND deleted_at IS NULL',
         { replacements: { id: set.id }, transaction });
+      // An everyday set moved to another show does not take this show's
+      // event (seventh audit).
+      const crossing = events.find((e) => !sameShow(e.show_id, everyday.show_id));
+      if (crossing) {
+        throw new SceneSetVersionError(`"${everyday.name}" now belongs to another show: choose where ${crossing.name} is held on the event's page`, 409, 'OTHER_SHOW');
+      }
       for (const e of events) {
         if (await isPlaceLocked(sequelize, e.id)) throw new SceneSetVersionError(PLACE_LOCKED_MESSAGE, 409, PLACE_LOCKED_CODE);
       }
@@ -198,9 +230,16 @@ async function versionsForSets(sequelize, sets) {
     `SELECT id, name, show_id, scene_set_id FROM world_events
       WHERE scene_set_id IN (:eventSetIds) AND deleted_at IS NULL ORDER BY name ASC`, { replacements: { eventSetIds } });
   const parentById = new Map(parentRows.map((p) => [String(p.id), p]));
+  // A version's event says whether its Place is locked, so "Stop using
+  // these photos" is not offered for it (seventh audit).
+  const { isPlaceLocked } = require('../utils/placeLock');
+  const lockedIds = new Set();
+  for (const e of eventRows) {
+    if (versionRows.some((v) => String(v.id) === String(e.scene_set_id)) && await isPlaceLocked(sequelize, e.id)) lockedIds.add(String(e.id));
+  }
   const eventOf = (setId) => {
     const e = eventRows.find((r) => String(r.scene_set_id) === String(setId));
-    return e ? { id: e.id, name: e.name, show_id: e.show_id } : null;
+    return e ? { id: e.id, name: e.name, show_id: e.show_id, locked: lockedIds.has(String(e.id)) } : null;
   };
   for (const s of list) {
     const parent = s.version_of_set_id ? parentById.get(String(s.version_of_set_id)) : null;
