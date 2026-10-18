@@ -23,6 +23,7 @@ import StudioTypes from '../components/World/StudioTypes';
 import apiClient from '../services/api';
 import { DREAM_CITIES, UNIVERSITIES, CORPORATIONS, WORLD_LAYERS } from '../data/dreamCities';
 import { tabFromSearch } from '../utils/worldRedirects';
+import { saveCity } from '../lib/pulseCities';
 import useActiveShow from '../hooks/useActiveShow';
 import StudioPhotos from '../components/World/StudioPhotos';
 
@@ -81,7 +82,7 @@ export default function WorldFoundation({ embedded = false }) {
   // ?tab= opens a tab (audit IA-04): the retired duplicate editors land here.
   const [tab, setTab] = useState(() => tabFromSearch(TABS, 'map', undefined, 'sub'));
   const [editItem, setEditItem] = useState(null);
-  const { data, updateItem, addItem, removeItem, saving, loaded } = usePageData('world_infrastructure', DEFAULTS);
+  const { data, updateItem, addItem, removeItem, setSaved, saving, loaded } = usePageData('world_infrastructure', DEFAULTS);
 
   // Location state
   const [locations, setLocations] = useState([]);
@@ -131,6 +132,13 @@ export default function WorldFoundation({ embedded = false }) {
       setForm(emptyForm); setEditId(null); setShowForm(false); loadLocations();
     } catch { flash('Save failed', 'error'); }
   }, [editId, form, flash, loadLocations]);
+
+  // A city's words (the one DREAM city list): saved onto the latest list, which the writers read.
+  const saveCityText = useCallback(async (key, patch) => {
+    const next = await saveCity(key, patch);
+    setSaved('DREAM_CITIES', next);
+    flash('City saved');
+  }, [setSaved, flash]);
 
   const deleteLocation = useCallback(async (id) => {
     if (!confirm('Delete this location?')) return;
@@ -293,7 +301,7 @@ export default function WorldFoundation({ embedded = false }) {
 
           {embedded ? (
             <DreamCityExplorer cities={data.DREAM_CITIES || DREAM_CITIES} universities={data.UNIVERSITIES || UNIVERSITIES} corporations={data.CORPORATIONS || CORPORATIONS}
-              locations={locations} loading={locLoading} onAddVenue={addInCity} onOpenLocations={() => setTab('locations')}
+              locations={locations} loading={locLoading} onAddVenue={addInCity} onOpenLocations={() => setTab('locations')} onSaveCity={saveCityText}
               renderMap={(cityKey, pickCity) => (<>
                 <DreamMap locations={locations} profiles={profileCounts} onSelectLocation={loc => setSelectedLoc(loc)} mapImageUrl={mapImageUrl}
                   selectedCity={cityKey} onSelectCity={pickCity} />

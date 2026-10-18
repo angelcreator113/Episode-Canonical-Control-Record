@@ -18,7 +18,8 @@
 /* eslint-disable no-console */
 const Anthropic = require('@anthropic-ai/sdk');
 const { loadBrainContext, recordRuleUse } = require('./brainRules');
-const { DREAM_CITY_CULTURE, DREAM_CITY_KEYS, feedCity, randomFeedCity } = require('../utils/feedCities');
+const { DREAM_CITY_KEYS, feedCity, randomFeedCity } = require('../utils/feedCities');
+const { cityCultures } = require('./dreamCityText');
 const {
   loadSocietyArchetypes, societyArchetypeCounts, pickSocietyArchetypes, matchSocietyArchetype,
   assignSocietyArchetype, societyArchetypeLine, societySparkBlock,
@@ -172,8 +173,8 @@ const MAX_HISTORY = 50;
 // The five DREAM cities (utils/feedCities). This offered the old five
 // (nova_prime, velour_city, the_drift, solenne, cascade_row) after the July
 // unification renamed them, so the profiles it made carried old names.
+// Each city's words are the saved DREAM city list's (services/dreamCityText).
 const LALAVERSE_CITIES = DREAM_CITY_KEYS;
-const CITY_CULTURE = DREAM_CITY_CULTURE;
 
 const { PULSE, isPulseLayer, platformLabel, pulsePromptRules } = require('../utils/pulsePlatform');
 const PLATFORMS = ['instagram', 'tiktok', 'youtube', 'twitter', 'onlyfans'];
@@ -331,9 +332,10 @@ async function generateSmartSparks(db, layer, count = 5) {
     if (p.follower_tier) existingTiers[p.follower_tier] = (existingTiers[p.follower_tier] || 0) + 1;
   }
 
+  const cityCulture = layer === 'lalaverse' ? await cityCultures(db) : {};
   const layerContext = layer === 'lalaverse'
     ? `These creators live in the LALAVERSE — a constructed digital reality Lala believes is real.
-Cities: ${Object.entries(CITY_CULTURE).map(([k, v]) => `${k}: ${v}`).join('\n')}
+Cities: ${Object.entries(cityCulture).map(([k, v]) => `${k}: ${v}`).join('\n')}
 For each spark, include: city (one of: ${LALAVERSE_CITIES.join(', ')}), lala_relationship (direct|competitive|aware|mutual_unaware|one_sided), career_pressure (ahead|level|behind|different_lane).`
     : `These creators exist in JustAWoman's real-world feed — the parasocial ecosystem she watches, follows, envies, and obsesses over.
 JustAWoman is a Black woman, mother, wife, content creator in fashion/beauty/lifestyle. She does everything right and the right room has not found her yet. She wants to be legendary.
@@ -608,6 +610,7 @@ async function generateAndSaveProfile(db, spark, layer) {
   // A LalaVerse profile's city is a DREAM city (an old name read as July's
   // mapping does; utils/feedCities). A spark with none still gets none.
   const city = layer === 'lalaverse' && spark.city ? feedCity(spark.city) : null;
+  const cityCulture = city ? (await cityCultures(db))[city] : '';
 
   // A LalaVerse profile's Society archetype (fix-list item 26): its spark's,
   // else the least used.
@@ -627,7 +630,7 @@ async function generateAndSaveProfile(db, spark, layer) {
 PROTAGONIST: ${ctx.name} — ${ctx.description} Wound: ${ctx.wound} Goal: ${ctx.goal}.
 
 CREATOR: ${spark.handle} on ${platformLabel(spark.platform)}. "${spark.vibe_sentence}"${advHints ? `\nHints: ${advHints}` : ''}
-${layer === 'lalaverse' && city ? `\nLALAVERSE: Lives in ${city.replace(/_/g, ' ')} — ${CITY_CULTURE[city] || ''}. Lala relationship: ${spark.lala_relationship || 'mutual_unaware'}. Career pressure: ${spark.career_pressure || 'level'}. Do not reference JustAWoman or the real world.` : ''}${societyArchetypeLine(society)}${brain.block || ''}
+${layer === 'lalaverse' && city ? `\nLALAVERSE: Lives in ${city.replace(/_/g, ' ')} — ${cityCulture || ''}. Lala relationship: ${spark.lala_relationship || 'mutual_unaware'}. Career pressure: ${spark.career_pressure || 'level'}. Do not reference JustAWoman or the real world.` : ''}${societyArchetypeLine(society)}${brain.block || ''}
 
 IMPORTANT RULES:
 ${isPulseLayer(layer) ? `- Every creator is on The Pulse. Some also keep a PRIVATE Pulse account (close friends, an alt) with a DIFFERENT persona
