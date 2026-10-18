@@ -21,6 +21,13 @@
  *     profile had at that story moment: the one before the first change
  *     placed after it, else their current one. null when they have none.
  *     A post's lane and its content mix are judged by it.
+ *   rebrandsOf(db, profileId)  the rebrands placed in the story, oldest
+ *     first: [{ story_order, story_label, from, to, reason }] ([] on none or
+ *     a failed read, logged).
+ *   rebrandsLine(rebrands)  for the story writers (Evoni, 2026-10-18: "yes
+ *     start the story writers seeing the rebrand"): what they were known
+ *     for before and after each rebrand, so a scene set earlier in the
+ *     story uses the type they had then ('' for none).
  */
 
 const FACT_KEY = 'content_type';
@@ -73,4 +80,33 @@ async function contentTypeAt(db, { profileId, storyOrder = null }) {
   }
 }
 
-module.exports = { recordContentTypeChange, contentTypeAt, FACT_KEY };
+async function rebrandsOf(db, profileId) {
+  if (!profileId) return [];
+  try {
+    const [rows] = await db.sequelize.query(
+      `SELECT c.before_value, c.after_value, c.reason, c.story_order FROM character_fact_changes c
+         JOIN registry_characters rc ON rc.id = c.registry_character_id
+        WHERE rc.feed_profile_id = :pid AND c.fact_key = :key AND c.deleted_at IS NULL AND c.story_order IS NOT NULL
+        ORDER BY c.story_order ASC, c.created_at ASC`,
+      { replacements: { pid: profileId, key: FACT_KEY } });
+    const { label } = require('./storyClock');
+    return rows.map((r) => ({
+      story_order: r.story_order, story_label: label(r.story_order),
+      from: typeof r.before_value === 'string' ? r.before_value : null,
+      to: typeof r.after_value === 'string' ? r.after_value : null,
+      reason: r.reason || null,
+    }));
+  } catch (err) {
+    console.error('[contentTypeHistory] their rebrands could not be read:', err.message);
+    return [];
+  }
+}
+
+function rebrandsLine(rebrands) {
+  const list = (rebrands || []).filter((r) => r.from && r.to);
+  if (!list.length) return '';
+  const steps = list.map((r) => `known as ${r.from} until ${r.story_label || 'a moment in the story'}, then ${r.to}${r.reason ? ` (why: ${r.reason.replace(/[.\s]+$/, '')})` : ''}`);
+  return `Rebrands in the story: ${steps.join('; ')}. A scene set before a rebrand uses what they were known for then; the change itself is a moment their followers noticed.`;
+}
+
+module.exports = { recordContentTypeChange, contentTypeAt, rebrandsOf, rebrandsLine, FACT_KEY };

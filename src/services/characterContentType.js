@@ -140,7 +140,7 @@ async function setContentType(db, { character = null, feedProfile, name, gap, re
 }
 
 /** The prompt section: what they are known for, next to what they do for work. */
-function contentTypeBlock(current, occupation = null, gap = null) {
+function contentTypeBlock(current, occupation = null, gap = null, rebrands = []) {
   if (!current?.name) return '';
   const more = [
     current.content && `What they post: ${sentence(current.content)}`,
@@ -152,7 +152,8 @@ function contentTypeBlock(current, occupation = null, gap = null) {
     : '';
   const mix = current.pillars?.length ? ` ${require('./contentPillars').pillarsLine(current.pillars)}` : '';
   const hook = gap ? ` What the gap between their job and their content says about them (author-side; let it show, never state it): ${sentence(gap)}` : '';
-  return `KNOWN FOR ON THE PULSE (their content type: what the LalaVerse knows them for, and what their posts are): ${current.name}.${more ? ` ${more}` : ''}${mix}${job}${hook}`;
+  const story = require('./contentTypeHistory').rebrandsLine(rebrands);
+  return `KNOWN FOR ON THE PULSE (their content type: what the LalaVerse knows them for, and what their posts are): ${current.name}.${more ? ` ${more}` : ''}${mix}${job}${hook}${story ? ` ${story}` : ''}`;
 }
 
 /**
@@ -171,8 +172,11 @@ async function contentHookFor(db, character) {
     const occupation = await occupationOf(db, character, feedProfile);
     const gap = gapOf(c);
     const name = c.selected_name || c.display_name || 'They';
+    const { rebrandsOf, rebrandsLine } = require('./contentTypeHistory');
+    const rebrands = rebrandsLine(await rebrandsOf(db, feedProfile.id));
     return [
       `${name} ON THE PULSE: known as ${current.name}${current.content ? ` (what they post: ${current.content.replace(/[.\s]+$/, '')})` : ''}.`,
+      rebrands,
       occupation ? `By day: ${occupation}.` : '',
       gap ? `The gap between the two: ${sentence(gap)}` : '',
       occupation || gap

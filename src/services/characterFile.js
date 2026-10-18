@@ -13,7 +13,7 @@
  *     registry character (its feed profile loaded when not given) or from a
  *     feed profile alone (its registry character found by feed_profile_id).
  *     Never throws: a part that cannot be read is left out and logged.
- *       { character, feedProfile, facts, typology, contentType, inner, mask,
+ *       { character, feedProfile, facts, typology, contentType, rebrands, inner, mask,
  *         behind, relationships, events, recentPosts, world }
  *   characterFileBlock(file)   the prompt block: facts (characterFacts
  *     factsPromptBlock), what they are known for on The Pulse (their content
@@ -88,6 +88,8 @@ async function loadCharacterFile(db, { character = null, feedProfile } = {}) {
       const pillars = await require('./contentPillars').pillarsFor(db, type.name);
       return pillars.length ? { ...type, pillars } : type;
     }, { name: fp.society_archetype });
+    // Their rebrands in the story (services/contentTypeHistory, 2026-10-18): public, their followers saw them.
+    file.rebrands = await part('their rebrands', () => require('./contentTypeHistory').rebrandsOf(db, fp.id), []);
   }
   for (const k of PROFILE_MASK_KEYS) if (clip(fp?.[k])) file.mask[k] = clip(fp[k]);
   for (const [k, from] of BEHIND_KEYS) {
@@ -139,6 +141,7 @@ function characterFileBlock(file, { publicOnly = false } = {}) {
       file.contentType,
       file.facts?.occupation && !(file.facts.undecided || []).includes('occupation') ? file.facts.occupation : null,
       publicOnly ? null : require('./characterContentType').gapOf(file.character),
+      file.rebrands || [],
     ) : '',
     publicOnly ? '' : seedBlock(file.typology),
     file.character?.appearance && require('./characterAppearance').appearanceLines(file.character.appearance)
