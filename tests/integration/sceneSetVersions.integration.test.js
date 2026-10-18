@@ -109,7 +109,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
 
     const one = async (id) => (await api('get', `/${id}`)).body.data;
     expect(await one(gala.id)).toMatchObject({ version_of: { id: everyday.id, name: "Lala's bedroom" }, version_event: { id: galaEvent, name: 'Spring Gala' } });
-    expect((await one(everyday.id)).event_versions).toEqual([{ id: gala.id, name: "Lala's bedroom – Gala", event: { id: galaEvent, name: 'Spring Gala', show_id: showId } }]);
+    expect((await one(everyday.id)).event_versions).toEqual([{ id: gala.id, name: "Lala's bedroom – Gala", event: { id: galaEvent, name: 'Spring Gala', show_id: showId, locked: false } }]);
     // An everyday set with versions is not offered as a version, and is not made one.
     expect((await version(everyday.id, { everyday_set_id: gala.id, event_id: galaEvent })).status).toBe(400);
     const other = await set('Other room', { show_id: showId });

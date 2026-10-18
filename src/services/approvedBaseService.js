@@ -94,6 +94,9 @@ async function assertBaseReplaceable(sequelize, sceneSetId) {
 async function approveBase(sequelize, sceneSet) {
   if (!sceneSet.world_location_id) return { status: 400, error: 'This scene set has no World Location to approve its base for.' };
   if (!sceneSet.base_still_url) return { status: 400, error: 'This scene set has no base image to approve.' };
+  // An event version is the place dressed for one event, not how it usually
+  // looks (seventh audit).
+  if (sceneSet.version_of_set_id) return { status: 409, code: 'IS_EVENT_VERSION', error: 'This set is an event version: its photos are one event\'s, not the location\'s everyday look.' };
   return sequelize.transaction(async (transaction) => {
     // A base being generated is about to be replaced: approving it now would
     // let the run overwrite the approved picture. A claim older than the
