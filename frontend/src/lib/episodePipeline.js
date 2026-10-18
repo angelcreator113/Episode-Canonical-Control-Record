@@ -12,6 +12,7 @@
  */
 import { resolveEventVenueAndDate } from '../utils/eventReadiness';
 import { computeEventPackageReadiness, describeMissing } from '../utils/eventReadinessSections';
+import { productionSteps } from './productionSteps';
 
 export const STAGES = [
   { key: 'planning', label: 'Planning', status: 'draft' },
@@ -117,4 +118,47 @@ export function eventPanel(event, locations = []) {
     earns: Number.isFinite(pays) && pays > 0 ? pays : null,
     stillNeeded,
   };
+}
+
+/**
+ * The seven steps of Evoni's Episodes mock (2026-10-17): Planning, Script,
+ * Production, Edit, Thumbnail, Review, Release. Derived, not stored (her
+ * ruling: no new statuses), from the episode's own Production steps
+ * (lib/productionSteps) so the board and the episode page agree:
+ *   Planning   the checklist's brief and event sections
+ *   Script     a script written, or the status past Draft
+ *   Production the scene plan done and footage uploaded
+ *   Edit       every scene has a clip
+ *   Thumbnail  a primary thumbnail, or a thumbnail on the episode
+ *   Review     In review or later
+ *   Release    Scheduled or Published (or accepted)
+ * Each { key, label, number, done, current, href }; current is the first
+ * step not done.
+ */
+export function pipelineSteps({ episode = {}, checks = null, sections = null, clips = [], hasThumbnail = false } = {}) {
+  const p = Object.fromEntries(productionSteps({ episode, checks, sections, clips, hasThumbnail }).map((s) => [s.key, s]));
+  const status = String(episode.status || 'draft').toLowerCase();
+  const id = episode.id;
+  const steps = [
+    { key: 'planning', label: 'Planning', done: p.brief.done, href: `/episodes/${id}` },
+    { key: 'script', label: 'Script', done: p.script.done, href: `/episodes/${id}?tab=scripts` },
+    { key: 'production', label: 'Production', done: p.scenes.done && p.files.done, href: `/episodes/${id}?tab=scenes` },
+    { key: 'edit', label: 'Edit', done: p.edit.done, href: `/episodes/${id}/timeline` },
+    { key: 'thumbnail', label: 'Thumbnail', done: p.thumbnail.done || Boolean(episode.thumbnail_url), href: `/template-studio/youtube?episode=${id}` },
+    { key: 'review', label: 'Review', done: ['in_review', 'scheduled', 'published'].includes(status), href: `/episodes/${id}?tab=distribution` },
+    { key: 'release', label: 'Release', done: ['scheduled', 'published'].includes(status) || episode.evaluation_status === 'accepted', href: `/episodes/${id}?tab=distribution` },
+  ];
+  const current = steps.findIndex((s) => !s.done);
+  return steps.map((s, i) => ({ ...s, number: i + 1, current: i === current }));
+}
+
+/** A search over the board: the episode's code, title, logline and tags, or a slot's purpose and event. */
+export function matchesSearch(card, query) {
+  const words = String(query || '').toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const hay = card.kind === 'slot'
+    ? [card.slot.label, card.slot.intention?.story_purpose, card.slot.event?.name].join(' ')
+    : [episodeCode(card.episode), card.episode.title, card.episode.logline, card.episode.description, ...episodeTags(card.episode)].join(' ');
+  const text = hay.toLowerCase();
+  return words.every((w) => text.includes(w));
 }
