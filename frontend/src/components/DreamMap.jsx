@@ -18,6 +18,7 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import apiClient from '../services/api';
 import { placeCity, inCity } from '../lib/dreamCityExplorer';
+import { useDreamCities } from '../lib/dreamCityList';
 
 // File-local helpers — world map city positions persistence.
 export const getMapPositionsApi = () =>
@@ -27,7 +28,9 @@ export const saveMapPositionsApi = (positions) =>
 
 // ── DREAM City Zone Definitions ─────────────────────────────────────────────
 // Positions are % of the map image (x%, y%) for each city zone center
-const DREAM_CITIES = [
+// The map's own fields (where each city sits, its pins); the saved DREAM
+// city list's words and colour are laid over them (lib/dreamCityList).
+const MAP_CITIES = [
   {
     key: 'dazzle_district', letter: 'D', name: 'Dazzle District',
     subtitle: 'Fashion & Luxury', icon: '👗',
@@ -110,6 +113,7 @@ export default function DreamMap({
   selectedCity,
   onSelectCity,
 }) {
+  const DREAM_CITIES = useDreamCities(MAP_CITIES);
   const containerRef = useRef(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
   const [dragging, setDragging] = useState(false);
@@ -195,7 +199,7 @@ export default function DreamMap({
       if (match) map[match.key].push(loc);
     });
     return map;
-  }, [locations]);
+  }, [locations, DREAM_CITIES]);
 
   // Profile counts
   const profilesByCity = useMemo(() => {
@@ -203,7 +207,7 @@ export default function DreamMap({
     DREAM_CITIES.forEach(c => { map[c.key] = 0; });
     profiles.forEach(p => { if (map[p.city] !== undefined) map[p.city] = p.count; });
     return map;
-  }, [profiles]);
+  }, [profiles, DREAM_CITIES]);
 
   // ── Pan ──
   const onMouseDown = useCallback((e) => {
@@ -708,4 +712,4 @@ export default function DreamMap({
   );
 }
 
-export { DREAM_CITIES };
+export { MAP_CITIES as DREAM_CITIES };

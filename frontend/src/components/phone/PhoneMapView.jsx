@@ -24,7 +24,7 @@
  */
 import { useEffect, useState } from 'react';
 import api from '../../services/api';
-import { DREAM_CITIES } from '../../data/dreamCities';
+import { useDreamCities } from '../../lib/dreamCityList';
 
 export default function PhoneMapView({
   showId,
@@ -46,6 +46,8 @@ export default function PhoneMapView({
   // so their % coordinates stay aligned with what creators positioned on
   // World Foundation.
   const [imgAspect, setImgAspect] = useState(null);
+  // The saved DREAM city list over the built-in one (lib/dreamCityList).
+  const DREAM_CITIES = useDreamCities();
 
   useEffect(() => {
     let cancelled = false;
