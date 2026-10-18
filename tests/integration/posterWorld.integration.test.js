@@ -94,6 +94,8 @@ const drafts = () => mockCreate.mock.calls.map(([a]) => a.messages[0].content).f
     expect(prompt).toContain('- They live in Echo Park, a DREAM city: Entertainment & nightlife hub.');
     expect(prompt).toContain(`- Where they work and create: Mira${tag}'s Studio (recording studio).`);
     expect(prompt).toContain(`- Places they go: Night Owl ${tag}.`);
+    // The Culture page's outlets (services/cultureCanon; fix 3, 2026-10-18).
+    expect(prompt).toContain("The LalaVerse's gossip and media outlets (a post may name one where it fits; there are no others):");
     expect(block).toBeTruthy();
     expect(prompt).toContain(block.trim());
     if (ruleIds.includes(rule)) expect(prompt).toContain(`No money talk ${tag}`);

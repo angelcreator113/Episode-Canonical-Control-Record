@@ -40,6 +40,7 @@ const {
 const { loadBrainContext, recordRuleUse } = require('../services/brainRules');
 const { DREAM_CITY_CULTURE, feedCity, randomFeedCity } = require('../utils/feedCities');
 const { cityCultures } = require('../services/dreamCityText');
+const { loadCultureList, hierarchyBlock } = require('../services/cultureCanon');
 
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
@@ -170,7 +171,7 @@ async function generateSingleProfile(creator, { db, seriesId, characterContext, 
   // real-world (JustAWoman's Feed) one does not.
   const brain = lalaverse ? await loadBrainContext(db, { label: 'bulk-generate' }) : { block: null, ids: [] };
   const prompt = buildGenerationPrompt(creator.handle, creator.platform, creator.vibe_sentence, characterContext, null, feedLayer)
-    + (lalaverse ? lalaverseContext(creator, await cityCultures(db)) : '')
+    + (lalaverse ? lalaverseContext(creator, await cityCultures(db)) + hierarchyBlock(await loadCultureList(db, 'CELEBRITY_HIERARCHY')) : '')
     + societyArchetypeMenu(societyList, societyCounts)
     + (brain.block ? `\n${brain.block}` : '');
   // Keep the timer handle and clear it once the race settles (Task #1859),
