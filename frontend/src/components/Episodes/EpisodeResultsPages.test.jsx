@@ -23,7 +23,11 @@ const EVAL = {
 };
 const renderIn = (ui) => render(<MemoryRouter>{ui}</MemoryRouter>);
 
-beforeEach(() => Object.values(api).forEach((fn) => fn?.mockReset?.()));
+beforeEach(() => {
+  Object.values(api).forEach((fn) => fn?.mockReset?.());
+  // Results → Story loads the episode's story record (EpisodeStoryRecord).
+  vi.mocked(api.get).mockResolvedValue({ data: { record: null, cast: [], threads: [] } });
+});
 
 describe('Results → Evaluation', () => {
   test('not evaluated: says so', () => {
@@ -74,6 +78,12 @@ describe('Results → Story', () => {
     fireEvent.click(screen.getByTestId('results-story-recap'));
     await screen.findByText('Budget reached');
     expect(screen.getByTestId('results-story-recap').textContent).toContain('Failed · try again');
+  });
+
+  test('the story record sits above the formats', async () => {
+    renderIn(<EpisodeResultsStory episode={{ id: 'ep-1', show_id: 'show-1' }} />);
+    expect(await screen.findByRole('button', { name: /Draft the record/ })).toBeTruthy();
+    expect(api.get).toHaveBeenCalledWith('/api/v1/book-from-show/episodes/ep-1/record');
   });
 
   test('the Stories Library is a link', () => {

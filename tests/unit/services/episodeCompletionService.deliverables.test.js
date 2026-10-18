@@ -33,6 +33,8 @@ jest.mock('../../../src/services/financialTransactionService', () => ({
   getFinancialGoals: jest.fn(async () => []),
 }));
 
+// The Episode Story Record is drafted after completion, unawaited (stage C).
+jest.mock('../../../src/services/episodeStoryRecord', () => ({ draftLater: jest.fn(async () => null) }));
 jest.mock('../../../src/routes/wardrobe', () => ({}));
 
 const mockModels = {};
@@ -148,6 +150,8 @@ describe('completeEpisode leaves deliverables untouched (Task #1815, §8(t) item
 
     for (const m of WRITE_METHODS) expect(eventDeliverable[m]).not.toHaveBeenCalled();
     expect(errorSpy).not.toHaveBeenCalled();
+    // The episode's story record is drafted (unawaited) once it completes.
+    expect(require('../../../src/services/episodeStoryRecord').draftLater).toHaveBeenCalledWith(sequelize, EPISODE_ID);
   });
 
   it('episodeCompletionService.js names neither the table nor the model', () => {
