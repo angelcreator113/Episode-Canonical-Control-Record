@@ -1701,6 +1701,15 @@ try {
   console.error('✗ Failed to load Cast routes:', e.message);
 }
 
+// The daily update — since yesterday, waiting for Evoni, the next three days, AI spend
+try {
+  const dailyUpdateRoutes = require('./routes/dailyUpdateRoutes');
+  app.use('/api/v1/daily-update', dailyUpdateRoutes);
+  console.log('✓ Daily update loaded at /api/v1/daily-update');
+} catch (e) {
+  console.error('✗ Failed to load Daily update routes:', e.message);
+}
+
 // The book follows the show — episode → short story → chapter (docs/CANON.md)
 try {
   const bookFromShowRoutes = require('./routes/bookFromShowRoutes');
