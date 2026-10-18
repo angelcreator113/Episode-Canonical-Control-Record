@@ -327,7 +327,7 @@ function planOf(chapter) {
   return lines.length ? `\nTHE PLAN FOR THIS CHAPTER (follow it):\n${lines.join('\n')}` : '';
 }
 
-function chapterPrompt({ chapter, episode, story, before, pulse = '', bleed = 'unset', record = '', canon = '' }) {
+function chapterPrompt({ chapter, episode, story, before, pulse = '', bleed = 'unset', record = '', canon = '', arcs = '' }) {
   return `${CANON}
 
 You are writing a chapter of JustAWoman's book. The book follows the show, Styling Adventures with Lala:
@@ -341,7 +341,7 @@ THE EPISODE: Episode ${episode.episode_number ?? '?'}: "${episode.title || 'Unti
 
 ${record ? `${record}\n\n` : ''}THE SHORT STORY (what the reader already knows):
 ${story ? clip(story.content, STORY_LIMIT) : '(not written yet: work from the episode alone)'}
-${canon ? `\n${canon}\n` : ''}${pulse ? `\nWHAT THE LALAVERSE SAID ON THE PULSE (JustAWoman sees it; she may react to it):\n${pulse}\n` : ''}${before ? `\nTHE END OF THE CHAPTER BEFORE (for continuity):\n${before}\n` : ''}
+${canon ? `\n${canon}\n` : ''}${arcs ? `\n${arcs}` : ''}${pulse ? `\nWHAT THE LALAVERSE SAID ON THE PULSE (JustAWoman sees it; she may react to it):\n${pulse}\n` : ''}${before ? `\nTHE END OF THE CHAPTER BEFORE (for continuity):\n${before}\n` : ''}
 ${BLEED_LINES[bleed] || BLEED_LINES.unset}
 
 THIS CHAPTER: "${chapter.title || `Chapter ${chapter.chapter_number || ''}`.trim()}"${planOf(chapter)}
@@ -374,7 +374,11 @@ router.post('/chapters/:id/write-from-episode', requireAuth, aiRateLimiter, asyn
     const record = await recordBlock(sequelize, episode.id);
     const canon = await canonBlock(sequelize, episode.id);
 
-    const prose = await ask({ prompt: chapterPrompt({ chapter, episode, story, before, pulse, bleed, record, canon }), maxTokens: 5000 });
+    // How feuds and legends grow in Lala's world (the Culture page's memory lists; services/cultureCanon).
+    const { arcsBlock, loadArcs } = require('../services/cultureCanon');
+    const arcs = arcsBlock(await loadArcs(getDb(req)));
+
+    const prose = await ask({ prompt: chapterPrompt({ chapter, episode, story, before, pulse, bleed, record, canon, arcs }), maxTokens: 5000 });
     if (!prose) return res.status(502).json({ success: false, error: 'The draft came back empty. Try again.' });
     return res.json({ success: true, prose, used_short_story: Boolean(story), used_pulse_posts: pulse ? pulse.split('\n').length : 0, used_story_record: Boolean(record), bleed, saved: false });
   } catch (err) {
@@ -473,6 +477,8 @@ router.post('/books/:bookId/plan', requireAuth, aiRateLimiter, async (req, res) 
         WHERE book_id = :bookId AND deleted_at IS NULL AND COALESCE(BTRIM(draft_prose), '') <> ''
         ORDER BY COALESCE(sort_order, chapter_number, 0) DESC LIMIT 3`, { replacements: { bookId } });
     const before = recent.reverse().map((c) => `- "${c.title || 'Untitled'}"${c.scene_goal ? `: ${clip(c.scene_goal, 200)}` : ''}`).join('\n');
+    const { arcsBlock, loadArcs } = require('../services/cultureCanon');
+    const arcs = arcsBlock(await loadArcs(getDb(req)));
 
     const raw = await ask({
       maxTokens: 3500,
@@ -480,7 +486,7 @@ router.post('/books/:bookId/plan', requireAuth, aiRateLimiter, async (req, res) 
 
 You plan chapters of JustAWoman's book. The book follows the show, Styling Adventures with Lala: the episode is what the viewer sees, the short story is the event in full, and each chapter is everything the viewer does not see, in JustAWoman's first person: her own life in her world while she builds and plays that episode, and the juicy details she, in her prime, imagines happening in Lala's world beyond the event.
 ${transfer ? `The consciousness transfer happens in Episode ${transfer.episode_number}.` : 'The consciousness transfer is not placed yet: plan no bleed.'}
-${before ? `\nTHE LAST CHAPTERS WRITTEN:\n${before}\n` : ''}
+${before ? `\nTHE LAST CHAPTERS WRITTEN:\n${before}\n` : ''}${arcs ? `\n${arcs}` : ''}
 PLAN ONE CHAPTER FOR EACH OF THESE EPISODES, in order:
 ${details.join('\n')}
 

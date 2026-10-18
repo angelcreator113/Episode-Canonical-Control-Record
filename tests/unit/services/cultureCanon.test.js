@@ -13,7 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const {
   DEFAULTS, loadCultureList, awardShowsBlock, gossipMediaBlock, hierarchyBlock, schoolsBlock, companiesBlock, economyBlock, profileWorldBlock,
-  trendsBlock, loadTrends,
+  trendsBlock, loadTrends, arcsBlock, loadArcs,
 } = require('../../../src/services/cultureCanon');
 
 const data = (file) => fs.readFileSync(path.join(__dirname, '..', '..', '..', 'frontend', 'src', 'data', file), 'utf8');
@@ -45,6 +45,11 @@ describe('the defaults', () => {
     expect(DEFAULTS.BEAUTY_TREND_STAGES).toEqual(pageList('BEAUTY_TREND_STAGES', data('influencerData.js')).map(pick(['stage', 'name'])));
     expect(DEFAULTS.MOMENTUM_WAVES).toEqual(pageList('MOMENTUM_WAVES', data('influencerData.js')).map(pick(['event', 'feedEffect'])));
     expect(DEFAULTS.ARCHIVES).toEqual(pageList('ARCHIVES', data('memoryData.js')).map(pick(['name', 'tracks'])));
+  });
+
+  test('the feud stages and legend paths, as memoryData.js has them', () => {
+    expect(DEFAULTS.FEUD_STAGES).toEqual(pageList('FEUD_STAGES', data('memoryData.js')).map(pick(['stage', 'looks', 'attention', 'preserved'])));
+    expect(DEFAULTS.LEGEND_PATHS).toEqual(pageList('LEGEND_PATHS', data('memoryData.js')).map(pick(['path', 'requires', 'costs', 'preserved'])));
   });
 });
 
@@ -135,6 +140,17 @@ describe('the drafter\'s trends and archives', () => {
     expect(block).toContain('The Whisper Wire');
     expect(block).toContain('What the LalaVerse remembers');
     expect(block.indexOf('gossip and media outlets')).toBeLessThan(block.indexOf("The LalaVerse's culture"));
+  });
+});
+
+describe('the book\'s feuds and legends', () => {
+  test('the stages and the paths, each with its words; none with nothing', async () => {
+    const block = arcsBlock(await loadArcs({}));
+    expect(block).toContain('most chapters will not');
+    expect(block).toContain('- Year 1: Origin: The initial conflict — often misread as minor at the time. Who watches: The immediate followers of each party. What remains: Screenshots.');
+    expect(block).toContain('- Defining an era. Takes: A period of culture');
+    expect(arcsBlock({ feuds: [], legends: [{ path: 'Going quiet', costs: 'The audience' }] })).toBe("HOW FEUDS AND LEGENDS GROW IN LALA'S WORLD (arcs over years: a chapter may carry one a step further where its story fits; most chapters will not):\nHow someone becomes a legend:\n- Going quiet. Costs: The audience.\n");
+    expect(arcsBlock({})).toBe('');
   });
 });
 
