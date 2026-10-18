@@ -18,12 +18,13 @@ import {
   BarChart3, CalendarDays, Download, Link2, MapPin, Palette, Crown, Instagram,
   Quote, Star, TrendingUp, Briefcase, IdCard, Activity, FileText, CirclePlay, Flame,
   Copy, BadgeCheck, Lock, Eye, Smartphone, Plus, ExternalLink, Share2, Search,
-  Building2, BookOpen, Radio, Settings as SettingsIcon, AlertTriangle, Archive, RotateCcw, Link as LinkIcon,
+  Building2, BookOpen, Radio, Settings as SettingsIcon, AlertTriangle, Archive, RotateCcw, Link as LinkIcon, MessageCircle,
 } from 'lucide-react';
 import Pager, { usePaged } from '../components/Pager/Pager';
 import CharacterPlacesTab from '../components/CharacterPlaces/CharacterPlacesTab';
 import KnownFor from '../components/Cast/KnownFor';
 import CharacterAppearanceTab from '../components/CharacterAppearance/CharacterAppearanceTab';
+import CharacterTalkTab from '../components/CharacterTalk/CharacterTalkTab';
 import { API_URL } from '../config/api';
 import InnerLifeWorkspace from '../components/InnerLife/InnerLifeWorkspace';
 import { dimensionOf as dimension, dimensionText } from '../lib/innerLifeSections';
@@ -160,6 +161,8 @@ export const TABS = [
   { id: 'places',      label: 'Places',       icon: MapPin },
   // Evoni, 2026-10-18: their episodes, events, posts, stories and chapters in one place.
   { id: 'story',       label: 'Story & Events', icon: CalendarDays },
+  // Evoni, 2026-10-18: a confidential session with them, as Dr. Amara Sinclair.
+  { id: 'talk',        label: 'Talk',         icon: MessageCircle },
   // Evoni, 2026-10-18: what already works: status, keep, feed profile, export, archive and delete.
   { id: 'settings',    label: 'Settings',     icon: SettingsIcon },
 ];
@@ -3662,6 +3665,7 @@ export default function CharacterProfilePage() {
         {activeTab === 'world' && <TabWorld character={character} feedProfile={feedProfile} appearances={appearances} onSaved={onSaved} gen={gen} openTab={setActiveTab} />}
         {activeTab === 'places' && <div className="ch-card"><CharacterPlacesTab key={character.id} character={character} /></div>}
         {activeTab === 'story' && <TabStory character={character} feedProfile={feedProfile} appearances={appearances} openTab={setActiveTab} />}
+        {activeTab === 'talk' && <div className="ch-card"><CharacterTalkTab key={character.id} character={character} onSaved={onSaved} /></div>}
         {activeTab === 'settings' && <TabSettings character={character} feedProfile={feedProfile} onSaved={onSaved} onExport={exportJson} onDeleted={() => navigate('/character-registry')} />}
         {activeTab === 'appearance' && <CharacterAppearanceTab key={character.id} character={character} onPortraitChanged={(url) => onSaved({ portrait_url: url })} />}
       </div>

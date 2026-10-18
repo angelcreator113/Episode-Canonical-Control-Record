@@ -16,4 +16,8 @@ module.exports = (sequelize) => sequelize.define('LalaverseBrand', {
   contact_email:      DataTypes.STRING,
   partnership_status: DataTypes.STRING,
   website:            DataTypes.STRING,
+  // The approved personality (constants/brandPersonalities, migration
+  // 20261018140000): what the brand believes, apart from its established
+  // canon above, which it never changes.
+  personality:        DataTypes.JSONB,
 }, { tableName: 'lalaverse_brands', timestamps: true, underscored: true });

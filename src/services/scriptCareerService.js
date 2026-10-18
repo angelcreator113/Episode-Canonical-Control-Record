@@ -84,8 +84,9 @@ function dealOf(event) {
 }
 
 function deliverableLine(d) {
-  const what = [d.quantity > 1 ? `${d.quantity}x` : null, d.platform, d.deliverable_type ? d.deliverable_type.replace(/_/g, ' ') : null]
-    .filter(Boolean).join(' ');
+  // The format's phrase ("3 Pulse stories"); an untyped row by its stored type.
+  const what = require('../utils/deliverableFormats').deliverablePhrase(d)
+    || [d.quantity > 1 ? `${d.quantity}x` : null, d.deliverable_type ? d.deliverable_type.replace(/_/g, ' ') : null].filter(Boolean).join(' ');
   const terms = [
     d.owed_to ? `owed to the ${d.owed_to}` : null,
     d.fee > 0 ? `${d.fee} coins` : null,
