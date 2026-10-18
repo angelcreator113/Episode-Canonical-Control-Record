@@ -3,7 +3,8 @@
  * §4; Task #2919). Its sub-tabs are ?sub=: Review, Uploads, Growth,
  * Storylines and Calendar, Story clock (Task 2941: the scrubber, The
  * Pulse as of any story moment), Voices (Task 2972: each posting
- * character's Voice Profile), Engine (Task 2968: the daily requests by
+ * character's Voice Profile), Brands (Evoni, 2026-10-18: the six houses on
+ * The Pulse, components/Admin/PulseBrands), Engine (Task 2968: the daily requests by
  * lane, Task 3031, the ambient switch and the posting queue), Polls and
  * Recaps. Review (Task 2925, the feed's director tools) is the default.
  * A tab with comingIn says which phase brings it; none has one now.
@@ -27,7 +28,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   ArrowRight, BarChart3, Calendar, ClipboardCheck, Clock, Cpu, GitBranch, Image as ImageIcon, ImagePlus, Loader2, Mic,
-  Newspaper, Plus, Radio, RefreshCw, Sparkles, Trash2, TrendingUp, Upload,
+  Newspaper, Plus, Radio, RefreshCw, Sparkles, Store, Trash2, TrendingUp, Upload,
 } from 'lucide-react';
 import api from '../services/api';
 import AdminShowGate from '../components/Admin/AdminShowGate';
@@ -45,6 +46,7 @@ import PulseStoryClock from '../components/Admin/PulseStoryClock';
 import PulseGrowth from '../components/Admin/PulseGrowth';
 import PulseEngine from '../components/Admin/PulseEngine';
 import PulseVoices from '../components/Admin/PulseVoices';
+import PulseBrands from '../components/Admin/PulseBrands';
 import PulseStorylines from '../components/Admin/PulseStorylines';
 import PulseCalendar from '../components/Admin/PulseCalendar';
 import PulsePolls from '../components/Admin/PulsePolls';
@@ -57,6 +59,8 @@ export const PULSE_TABS = [
   { key: 'story-clock', label: 'Story clock' },
   { key: 'growth', label: 'Growth' },
   { key: 'voices', label: 'Voices' },
+  // Evoni, 2026-10-18: the six houses post, reply and announce deals (services/brandPulse).
+  { key: 'brands', label: 'Brands' },
   { key: 'engine', label: 'Engine' },
   { key: 'storylines', label: 'Storylines' },
   { key: 'calendar', label: 'Calendar' },
@@ -64,7 +68,7 @@ export const PULSE_TABS = [
   { key: 'recaps', label: 'Recaps' },
 ];
 const TAB_ICONS = {
-  review: ClipboardCheck, uploads: Upload, 'story-clock': Clock, growth: TrendingUp, voices: Mic,
+  review: ClipboardCheck, uploads: Upload, 'story-clock': Clock, growth: TrendingUp, voices: Mic, brands: Store,
   engine: Cpu, storylines: GitBranch, calendar: Calendar, polls: BarChart3, recaps: Newspaper,
 };
 const DEFAULT_SUB = 'review';
@@ -300,6 +304,7 @@ export default function PulseDirector() {
                 {sub === 'story-clock' && <PulseStoryClock />}
                 {sub === 'growth' && <PulseGrowth key={showId} showId={showId} />}
                 {sub === 'voices' && <PulseVoices key={showId} showId={showId} />}
+                {sub === 'brands' && <PulseBrands key={showId} showId={showId} />}
                 {sub === 'engine' && <PulseEngine key={showId} showId={showId} />}
                 {sub === 'storylines' && <PulseStorylines key={showId} showId={showId} />}
                 {sub === 'calendar' && <PulseCalendar key={showId} showId={showId} />}

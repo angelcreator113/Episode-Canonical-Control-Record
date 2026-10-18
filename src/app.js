@@ -1368,6 +1368,9 @@ try {
   console.error('✗ Failed to load Wardrobe Brand routes:', e.message);
 }
 
+// Brands on The Pulse (Evoni, 2026-10-18; services/brandPulse)
+try { app.use('/api/v1/brand-pulse', require('./routes/brandPulseRoutes')); console.log('✓ Brand Pulse routes loaded at /api/v1/brand-pulse'); } catch (e) { console.error('✗ Failed to load Brand Pulse routes:', e.message); }
+
 // The Consciousness Layer routes (/api/v1/consciousness) were retired
 // 2026-10-18 (Evoni: "retire the two you suggested"): no page called them,
 // and /save wrote straight into a character's writer_notes. What they saved
@@ -1691,6 +1694,15 @@ try {
   console.error('✗ Failed to load Scene Studio Episode routes:', e.message);
 }
 
+// Fix what can be fixed — Facts & checks across the cast (services/castFixAll)
+try {
+  const castFixAllRoutes = require('./routes/castFixAllRoutes');
+  app.use('/api/v1/cast/consistency', castFixAllRoutes);
+  console.log('✓ Cast fix-all loaded at /api/v1/cast/consistency');
+} catch (e) {
+  console.error('✗ Failed to load Cast fix-all routes:', e.message);
+}
+
 // The cast — review of the old system's characters (Keep, Match, Archived)
 try {
   const castRoutes = require('./routes/castRoutes');
@@ -1698,6 +1710,15 @@ try {
   console.log('✓ Cast loaded at /api/v1/cast');
 } catch (e) {
   console.error('✗ Failed to load Cast routes:', e.message);
+}
+
+// The daily update — since yesterday, waiting for Evoni, the next three days, AI spend
+try {
+  const dailyUpdateRoutes = require('./routes/dailyUpdateRoutes');
+  app.use('/api/v1/daily-update', dailyUpdateRoutes);
+  console.log('✓ Daily update loaded at /api/v1/daily-update');
+} catch (e) {
+  console.error('✗ Failed to load Daily update routes:', e.message);
 }
 
 // The book follows the show — episode → short story → chapter (docs/CANON.md)

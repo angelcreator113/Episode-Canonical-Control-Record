@@ -391,7 +391,7 @@ export function PostCard({ post, onChange, showId }) {
   );
 }
 
-const REVIEW_LABELS = { lala: "Lala's post", about_lala: 'About Lala', reveals_story: 'Reveals story', gate: 'Flagged by the gate', dm: 'DM', storyline_payoff: "A storyline's payoff", on_request: "Asked for on their page", event_draft: "Its episode isn't complete yet" };
+const REVIEW_LABELS = { lala: "Lala's post", about_lala: 'About Lala', reveals_story: 'Reveals story', gate: 'Flagged by the gate', dm: 'DM', storyline_payoff: "A storyline's payoff", on_request: "Asked for on their page", event_draft: "Its episode isn't complete yet", brand_deal: 'A brand deal announcement', schedule: 'No release time could be found' };
 const FLAG_LABELS = {
   banned_phrase: 'AI-sounding phrase', private_state: 'Quotes private feelings', unrevealed_character: 'Names someone Lala has not met',
   unrevealed_event: 'Names a hidden event', future_event: 'Names a later event', voice: 'Off voice',
