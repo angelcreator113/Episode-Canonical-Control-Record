@@ -2330,6 +2330,7 @@ router.post('/:id/pieces', requireAuth, async (req, res) => {
       character_id: parent.character_id,
       show_id: parent.show_id,
     });
+    if (brand) await require('../services/wardrobeBrandLink').linkItemBrand(models.sequelize, { id: pieceId, name, brand, show_id: parent.show_id });
 
     return res.json({ success: true, piece: { id: pieceId, name, attachment_type, parent_item_id: parentId } });
   } catch (err) {

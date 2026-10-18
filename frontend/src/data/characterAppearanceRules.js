@@ -16,7 +16,6 @@
  *   generate-chapter-draft route    — character_rules in prompt
  *   narrative-intelligence route    — prevents wrong appearances
  *   CharacterAppearanceRules.jsx    — display panel in chapter brief
- *   character-voice-session route   — governs session behavior per character
  *
  * ════════════════════════════════════════════════════════════════════════
  * HOW TO USE IN AI ROUTES

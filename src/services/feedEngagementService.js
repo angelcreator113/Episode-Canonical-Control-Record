@@ -226,7 +226,7 @@ async function generateRippleEffects(postId, models) {
         social_profile_id: reactor.id,
         poster_handle: reactor.handle,
         poster_display_name: reactor.display_name,
-        poster_platform: reactor.platform || 'twitter',
+        poster_platform: require('../utils/pulsePlatform').postPlatformFor(reactor, 'twitter'),
         post_type: reactionType === 'comparison_post' ? 'post' : 'tweet',
         content_text: content,
         likes: Math.floor(Math.random() * (post.likes || 100) * 0.3),
@@ -386,16 +386,14 @@ async function getTrendingTopics(showId, models, { at = null, city = null } = {}
     const storyOrder = require('./storyClock').postOrderSql('FeedPost');
     and.push(sequelize.literal(`(${storyOrder} IS NULL OR ${storyOrder} <= ${Number(at)})`));
     // Reveals at that moment (services/pulseReveals.js), as GET /feed-posts?at=:
-    // a hidden post, or one by a character Lala has not met yet, is not counted.
+    // a hidden post is not counted; one by a character Lala has not met yet is
+    // (Evoni, 2026-10-18: they build themselves on The Pulse either way).
     // Nor is a teaser post: it is sent with no words and no topic
     // (applyPostReveal, routes/feedPostRoutes.js), so its tags would give it away (Task #3048).
     const { lalaProfileId } = require('./lalaFeedProfile');
     const reveals = await require('./pulseReveals').revealsAt(models, showId, at, { lalaProfileId: await lalaProfileId(sequelize) });
     const hiddenPosts = [...reveals.hiddenIds('post'), ...reveals.teaserIds('post')];
     if (hiddenPosts.length) and.push({ id: { [Op.notIn]: hiddenPosts } });
-    if (reveals.hiddenProfiles.size) {
-      and.push({ [Op.or]: [{ social_profile_id: null }, { social_profile_id: { [Op.notIn]: [...reveals.hiddenProfiles] } }] });
-    }
   }
   if (city) and.push(sequelize.literal(require('../utils/feedCities').cityPostsSql('FeedPost', city)));
   if (and.length) where[require('sequelize').Op.and] = and;

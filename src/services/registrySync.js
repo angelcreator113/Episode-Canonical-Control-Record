@@ -3,19 +3,17 @@
  * src/services/registrySync.js
  *
  * Real-time registry sync service.
- * Fires on four triggers. Updates character profile immediately.
+ * Fires on three triggers. Updates character profile immediately.
+ * (The therapy session-close trigger is retired with the Therapy Room,
+ * 2026-10-18: it wrote into the character with no approval step.)
  *
  * TRIGGERS:
- *   1. Therapy session closes → emotional state delta
  *   2. Memory confirmed → write to character profile field
  *   3. Line approved → extract character moments (batched per chapter)
  *   4. Pain point tagged → wound depth + active wounds
  *
  * USAGE:
  *   const registrySync = require('../services/registrySync');
- *
- *   // In therapy route, after session close:
- *   await registrySync.onTherapySessionClose(session, models);
  *
  *   // In memories route, after memory confirmed:
  *   await registrySync.onMemoryConfirmed(memory, models);
@@ -33,76 +31,6 @@
 'use strict';
 
 const registrySync = {
-
-  // ══════════════════════════════════════════════════════════════════════
-  // TRIGGER 1: Therapy session closes
-  // Updates: emotional_baseline, wound_depth, defense_mechanism, writer_notes
-  // ══════════════════════════════════════════════════════════════════════
-
-  async onTherapySessionClose(session, models) {
-    try {
-      if (!session?.character_id) return;
-
-      // F-Reg-2 fix group 2 (v1.2 R2), row 70: read, compute and write under a
-      // row lock, so a note, state or depth written by a concurrent trigger
-      // since the read is built on rather than overwritten. A lock rather than
-      // one UPDATE, because the appends keep _appendNote's JS formatting.
-      const sequelize = models.RegistryCharacter.sequelize;
-      await sequelize.transaction(async (transaction) => {
-        const character = await models.RegistryCharacter.findByPk(session.character_id, { transaction, lock: transaction.LOCK.UPDATE });
-        if (!character) return;
-        if (character.status === 'finalized') return; // respect the lock
-
-        // Build delta from session data
-        const updates = {};
-
-        // Emotional state — session stores start/end emotional readings
-        if (session.emotional_state_end) {
-          updates.emotional_function = _mergeEmotionalState(
-            character.emotional_function,
-            session.emotional_state_end,
-            session.session_number
-          );
-        }
-
-        // Defense mechanism shifts — if therapist detected a change
-        if (session.defense_shift_detected && session.new_defense_mechanism) {
-          updates.writer_notes = _appendNote(
-            character.writer_notes,
-            `Session ${session.session_number}: Defense shift detected — ${session.new_defense_mechanism}`,
-            'therapy'
-          );
-        }
-
-        // Wound depth — track how many times the wound was activated
-        if (session.wound_activated) {
-          const currentDepth = character.wound_depth || 0;
-          updates.wound_depth = Math.min(10, currentDepth + 1);
-        }
-
-        // Breakthrough — session marked as breakthrough
-        if (session.breakthrough_moment) {
-          updates.writer_notes = _appendNote(
-            updates.writer_notes || character.writer_notes,
-            `Session ${session.session_number} breakthrough: ${session.breakthrough_moment}`,
-            'therapy'
-          );
-        }
-
-        if (Object.keys(updates).length > 0) {
-          await models.RegistryCharacter.update(updates, {
-            where: { id: session.character_id },
-            transaction,
-          });
-          console.log(`[registrySync] Therapy close → updated ${character.selected_name || character.name}`);
-        }
-      });
-
-    } catch (err) {
-      console.error('[registrySync] onTherapySessionClose error:', err.message);
-    }
-  },
-
 
   // ══════════════════════════════════════════════════════════════════════
   // TRIGGER 2: Memory confirmed

@@ -87,7 +87,7 @@ const reply = (obj) => ({ content: [{ type: 'text', text: `Here you go:\n${JSON.
     expect(res.body.banned_phrases).toContain('delve');
   });
 
-  test('a voice can be built for a character Lala has not met yet; they still do not post', async () => {
+  test('a voice can be built for a character Lala has not met yet, and they post too (Evoni, 2026-10-18)', async () => {
     mockCreate.mockResolvedValueOnce(reply({ case: 'sentence', punctuation: '', emoji: { use: 'never', favorites: [] },
       sentence_length: 'short', topics: ['linen'], never_says: [], signature_phrases: [] }));
     const res = await as(admin, request(app).post(`/api/v1/pulse-voices/${c.hidden}/build`));
@@ -95,8 +95,8 @@ const reply = (obj) => ({ content: [{ type: 'text', text: `Here you go:\n${JSON.
     const listed = await as(editor, request(app).get(`/api/v1/pulse-voices?show_id=${ids.show}`));
     expect(listed.body.not_met[0]).toMatchObject({ display_name: 'hidden', voice: { id: res.body.voice.id } });
     const { eligible } = require('../../src/services/pulseVoices');
-    expect((await eligible(models, ids.show)).map((r) => r.character.display_name)).toEqual(['marcus', 'nia']);
-    expect((await eligible(models, ids.show, { stage: 'alive' })).map((r) => r.character.display_name)).toEqual(['nia']);
+    expect((await eligible(models, ids.show)).map((r) => r.character.display_name)).toEqual(['hidden', 'marcus', 'nia']);
+    expect((await eligible(models, ids.show, { stage: 'alive' })).map((r) => r.character.display_name)).toEqual(['hidden', 'nia']);
     await run('DELETE FROM pulse_voices WHERE registry_character_id = :id', { id: c.hidden });
   });
 

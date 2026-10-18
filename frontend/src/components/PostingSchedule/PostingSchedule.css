@@ -1,0 +1,18 @@
+.ps { display: flex; flex-direction: column; gap: 10px; }
+.ps-title { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 15px; color: var(--text-primary); }
+.ps-muted, .ps-why, .ps-note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.ps-why { color: var(--lala-lavender-text); }
+.ps-error { margin: 0; font-size: 13px; color: var(--error-text, #b42318); }
+.ps-days { display: flex; flex-wrap: wrap; gap: 6px; }
+.ps-day { min-height: 32px; min-width: 44px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--lala-lavender-line); background: var(--surface-card); font: inherit; font-size: 12px; font-weight: 600; color: var(--lala-lavender-text); cursor: pointer; }
+.ps-day.is-on { background: var(--lala-lavender); color: var(--text-inverse); }
+.ps-windows { display: flex; flex-direction: column; gap: 6px; }
+.ps-window { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); }
+.ps-window input, .ps-week input { min-height: 32px; padding: 2px 8px; border-radius: 8px; border: 1px solid var(--lala-lavender-line); font: inherit; font-size: 13px; color: var(--text-primary); background: var(--surface-card); }
+.ps-week { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); }
+.ps-week input { width: 64px; }
+.ps-icon, .ps-link { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; border: none; background: none; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; color: var(--lala-lavender-text); padding: 0 4px; }
+.ps-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.ps-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 14px; border: none; border-radius: 999px; background: var(--lala-lavender); color: var(--text-inverse); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.ps-btn.is-quiet { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.ps-btn:disabled { opacity: .55; cursor: default; }
