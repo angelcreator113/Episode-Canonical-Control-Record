@@ -1351,7 +1351,7 @@ a.ch-trail-text:hover { text-decoration: underline; }
 }
 @media (max-width: 900px) {
   .ch-overview { grid-template-columns: 1fr; }
-  .ch-overview > .ch-col:nth-child(3) { grid-column: auto; display: flex; }
+  .ch-overview > .ch-col:nth-child(3) { grid-column: auto; display: flex; align-items: stretch; }
   .ch-tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; }
   .ch-tab { flex: 0 0 auto; scroll-snap-align: center; }
 }
@@ -1370,3 +1370,65 @@ a.ch-trail-text:hover { text-decoration: underline; }
 .cp-archived-hint { margin: 0.5rem 0; font-size: var(--text-sm); color: var(--text-secondary); }
 .cp-archived-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
 .cp-archived-list li { font-size: var(--text-sm); color: var(--text-primary); overflow-wrap: anywhere; }
+
+/* Overview to Evoni's mock (2026-10-18, step 2): Lora card titles with an
+   outlined pill action, Quick facts, Wants and fears, Key stats, Their voice
+   and Recent activity. */
+.ch-h2 { display: inline-flex; align-items: center; gap: 8px; }
+.ch-h2-icon { color: var(--accent-dark); flex: none; }
+.ch-pill-btn {
+  display: inline-flex; align-items: center; gap: 6px; margin-left: auto; min-height: 34px; padding: 4px 14px;
+  border: 1.5px solid var(--accent); border-radius: 10px; background: var(--surface-card); color: var(--accent-dark);
+  font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap;
+}
+.ch-pill-btn:hover { background: var(--accent-subtle); }
+.ch-pill-btn:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 2px; }
+.ch-card-head { align-items: center; }
+.ch-card > .ch-pill-btn { margin-left: 0; align-self: flex-start; }
+.ch-prose.is-clamped { display: -webkit-box; -webkit-line-clamp: 7; -webkit-box-orient: vertical; overflow: hidden; }
+.ch-more { display: inline-flex; align-items: center; gap: 4px; align-self: flex-end; }
+
+.ch-qf { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.ch-qf-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 10px; align-items: center; }
+.ch-qf-row dt { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-secondary); }
+.ch-qf-row dd { margin: 0; font-size: 14px; font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; }
+.ch-qf-row dd.is-empty { font-weight: 400; color: var(--text-secondary); }
+.ch-qf-icon { display: grid; place-items: center; flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--accent-subtle); color: var(--accent-dark); }
+
+.ch-wfs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.ch-wf { border-radius: 14px; padding: 12px 14px; min-width: 0; }
+.ch-wf.is-want { background: var(--success-bg); color: var(--text-primary); }
+.ch-wf.is-fear { background: var(--accent-subtle); color: var(--text-primary); }
+.ch-wf-h { margin: 0 0 6px; display: flex; align-items: center; gap: 6px; font-family: 'Lora', serif; font-size: 16px; }
+.ch-wf.is-want .ch-wf-h svg { color: var(--success-text); }
+.ch-wf.is-fear .ch-wf-h svg { color: var(--accent-dark); }
+.ch-wf-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.45; }
+.ch-wf-list li { overflow-wrap: anywhere; }
+.ch-wf-kind { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-secondary); }
+
+.ch-sample { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--lala-gold-line); }
+.ch-sample-mark { display: grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--accent-subtle); color: var(--accent-dark); }
+.ch-sample strong { color: var(--text-primary); }
+
+.ch-activity { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.ch-activity-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 6px; border-radius: 10px; color: var(--text-primary); text-decoration: none; }
+a.ch-activity-row:hover { background: var(--accent-subtle); }
+a.ch-activity-row:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 2px; }
+.ch-activity-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--accent-subtle); color: var(--accent-dark); }
+.ch-activity-icon.is-post { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.ch-activity-icon.is-event { background: var(--lala-gold-soft); color: var(--lala-gold-text); }
+.ch-activity-text { display: flex; flex-direction: column; min-width: 0; }
+.ch-activity-text strong { font-size: 14px; font-weight: 600; }
+.ch-activity-text span { font-size: 12px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.ch-activity-when { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+
+@media (max-width: 560px) {
+  .ch-wfs { grid-template-columns: 1fr; }
+  .ch-qf-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .ch-activity-row { grid-template-columns: auto minmax(0, 1fr); }
+  .ch-activity-when { grid-column: 2; }
+  .ch-stats { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+  .ch-stat-ring { width: 40px; height: 40px; }
+  .ch-stat-value { font-size: 18px; }
+  .ch-stat-label { font-size: 10px; letter-spacing: -0.01em; }
+}
