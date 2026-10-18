@@ -18,13 +18,14 @@ import {
   BarChart3, CalendarDays, Download, Link2, MapPin, Palette, Crown, Instagram,
   Quote, Star, TrendingUp, Briefcase, IdCard, Activity, FileText, CirclePlay, Flame,
   Copy, BadgeCheck, Lock, Eye, Smartphone, Plus, ExternalLink, Share2, Search,
-  Building2, BookOpen, Radio, Settings as SettingsIcon, AlertTriangle, Archive, RotateCcw, Link as LinkIcon, MessageCircle,
+  Building2, BookOpen, Radio, Settings as SettingsIcon, AlertTriangle, Archive, RotateCcw, Link as LinkIcon, MessageCircle, Images,
 } from 'lucide-react';
 import Pager, { usePaged } from '../components/Pager/Pager';
 import CharacterPlacesTab from '../components/CharacterPlaces/CharacterPlacesTab';
 import KnownFor from '../components/Cast/KnownFor';
 import CharacterAppearanceTab from '../components/CharacterAppearance/CharacterAppearanceTab';
 import CharacterTalkTab from '../components/CharacterTalk/CharacterTalkTab';
+import CharacterGalleryTab from '../components/CharacterGallery/CharacterGalleryTab';
 import { API_URL } from '../config/api';
 import InnerLifeWorkspace from '../components/InnerLife/InnerLifeWorkspace';
 import { dimensionOf as dimension, dimensionText } from '../lib/innerLifeSections';
@@ -151,6 +152,8 @@ export const TABS = [
   { id: 'inner',       label: 'Inner Life',   icon: Heart },
   // Evoni, 2026-10-17: how they look, a generator for it, and portraits.
   { id: 'appearance',  label: 'Appearance',   icon: Palette },
+  // Evoni, 2026-10-18: every picture already linked to them, in its own tab.
+  { id: 'gallery',     label: 'Gallery',      icon: Images },
   { id: 'voice',       label: 'Voice & Feed', icon: Mic },
   { id: 'connections', label: 'Connections',  icon: Users },
   { id: 'world',       label: 'In the World', icon: Globe2 },
@@ -3621,6 +3624,7 @@ export default function CharacterProfilePage() {
         {activeTab === 'world' && <TabWorld character={character} feedProfile={feedProfile} appearances={appearances} onSaved={onSaved} gen={gen} openTab={setActiveTab} />}
         {activeTab === 'places' && <div className="ch-card"><CharacterPlacesTab key={character.id} character={character} /></div>}
         {activeTab === 'story' && <TabStory character={character} feedProfile={feedProfile} appearances={appearances} openTab={setActiveTab} />}
+        {activeTab === 'gallery' && <div className="ch-card"><CharacterGalleryTab key={character.id} character={character} openTab={setActiveTab} /></div>}
         {activeTab === 'talk' && <div className="ch-card"><CharacterTalkTab key={character.id} character={character} onSaved={onSaved} /></div>}
         {activeTab === 'settings' && <TabSettings character={character} feedProfile={feedProfile} onSaved={onSaved} onExport={exportJson} onDeleted={() => navigate('/character-registry')} />}
         {activeTab === 'appearance' && <CharacterAppearanceTab key={character.id} character={character} onPortraitChanged={(url) => onSaved({ portrait_url: url })} />}
