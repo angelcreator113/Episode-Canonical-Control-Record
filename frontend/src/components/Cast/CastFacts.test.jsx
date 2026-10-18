@@ -7,7 +7,7 @@ import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
-vi.mock('../../services/api', () => ({ default: { get: vi.fn() } }));
+vi.mock('../../services/api', () => ({ default: { get: vi.fn(), post: vi.fn() } }));
 
 import api from '../../services/api';
 import CastFacts from './CastFacts';

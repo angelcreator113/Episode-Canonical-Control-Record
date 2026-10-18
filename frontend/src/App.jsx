@@ -78,6 +78,8 @@ const SceneStudio = lazy(() => import('./pages/SceneStudio'));
 const SceneStudioPage = lazy(() => import('./pages/SceneStudioPage'));
 const ScenePlannerPage = lazy(() => import('./pages/ScenePlannerPage'));
 const ThisWeekPage = lazy(() => import('./pages/ThisWeekPage'));
+// The daily update (automation step 2; Evoni, 2026-10-18).
+const DailyUpdate = lazy(() => import('./pages/DailyUpdate'));
 const EpisodeScriptWriterPage = lazy(() => import('./pages/EpisodeScriptWriterPage'));
 const FeedTimelinePage = lazy(() => import('./pages/FeedTimelinePage'));
 const EventFeedDashboard = lazy(() => import('./pages/feed/EventFeedDashboard'));
@@ -431,6 +433,7 @@ function AppContent() {
           {/* StoryTeller Book Editor */}
           <Route path="/stories" element={<StoriesPage />} />
           <Route path="/this-week" element={<ThisWeekPage />} />
+          <Route path="/today" element={<DailyUpdate />} />
           <Route path="/storyteller" element={<Navigate to="/stories" replace />} />
           <Route path="/book/:id" element={<BookToWriteRedirect />} />
           <Route path="/books/:bookId/read" element={<ReadingMode />} />

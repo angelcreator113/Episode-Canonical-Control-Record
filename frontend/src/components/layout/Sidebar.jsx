@@ -1,6 +1,7 @@
 /**
  * Sidebar.jsx — Prime Studios Navigation
- * Home, then four zones by the question each answers (#1739):
+ * Home, then five zones by the question each answers (#1739):
+ *   TODAY — what happened and what waits for me (the daily update) ·
  *   WORLD — what exists · PRODUCE — what am I making ·
  *   LIBRARY — what reusable things do I have · WRITE — the novel.
  * Footer: Search, Settings and Admin rows (Admin's tools index reaches the
@@ -21,6 +22,14 @@ import './Sidebar.css';
 function buildNav() {
 
   return [
+    {
+      zone: 'TODAY',
+      items: [
+        // The daily update (automation step 2; Evoni, 2026-10-18): what
+        // happened, what waits for her, the next three days, AI spend.
+        { icon: '☀️', label: 'Daily update', route: '/today', hint: 'Since yesterday, waiting for you, coming up' },
+      ],
+    },
     {
       zone: 'WORLD',
       items: [
