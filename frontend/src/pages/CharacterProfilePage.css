@@ -1630,3 +1630,35 @@ a.ch-conn-name:hover { text-decoration: underline; }
   .ch-map-pin { position: static; transform: none; white-space: normal; padding: 6px 8px; }
   .ch-map-pin.is-home { grid-column: 1 / -1; order: -1; }
 }
+
+/* Story & Events to Evoni's mock (2026-10-18, step 6). */
+.ch-story { display: flex; flex-direction: column; gap: 14px; }
+.ch-st-nav { display: flex; gap: 6px; overflow-x: auto; padding: 6px; border: 1.5px solid var(--lala-gold-line); border-radius: 16px; background: var(--surface-card); }
+.ch-st-link { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; min-height: 40px; padding: 6px 14px; border: none; border-radius: 12px; background: none; color: var(--text-primary); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.ch-st-link svg { color: var(--accent-dark); }
+.ch-st-link.is-on { background: var(--accent-dark); color: var(--text-inverse); }
+.ch-st-link.is-on svg { color: var(--text-inverse); }
+.ch-st-link:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 2px; }
+.ch-st-tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.ch-ro-tile .ch-st-sub { font-weight: 400; color: var(--text-secondary); }
+.ch-ep-badge { flex: none; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 700; background: var(--accent-dark); color: var(--text-inverse); }
+.ch-ev-cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.ch-ev-card { display: flex; gap: 12px; align-items: center; padding: 12px; border: 1px solid var(--lala-gold-line); border-radius: 14px; color: var(--text-primary); text-decoration: none; }
+.ch-ev-card:hover { background: var(--lala-gold-soft); }
+.ch-ev-card:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 2px; }
+.ch-ev-date { flex: none; display: flex; flex-direction: column; align-items: center; width: 60px; padding: 6px 0; border-radius: 12px; border: 1.5px solid var(--lala-gold-line); background: var(--surface-card); color: var(--text-primary); font-size: 11px; text-transform: uppercase; }
+.ch-ev-date strong { font-family: var(--font-prose); font-size: 22px; line-height: 1.1; }
+.ch-tl { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.ch-tl-item { min-width: 0; }
+.ch-tl-body { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; align-items: start; height: 100%; padding: 10px 12px; border: 1px solid var(--lala-gold-line); border-radius: 12px; color: var(--text-primary); text-decoration: none; }
+a.ch-tl-body:hover { background: var(--lala-gold-soft); }
+.ch-tl-body .ch-activity-icon { grid-row: span 3; }
+.ch-tl-when { font-size: 12px; color: var(--text-secondary); }
+.ch-tl-body strong { font-size: 14px; }
+.ch-tl-sub { font-size: 12px; color: var(--text-secondary); overflow-wrap: anywhere; }
+@media (max-width: 900px) {
+  .ch-st-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .ch-st-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
