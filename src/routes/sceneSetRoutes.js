@@ -1001,11 +1001,21 @@ router.delete('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => 
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
-    const { countUses, moveUses, SceneSetUsesError } = require('../services/sceneSetUsesService');
+    const { countUses, moveUses, SceneSetUsesError, lockedEventsAt, releaseVersions } = require('../services/sceneSetUsesService');
     // The location's approved base (S6) is un-approved before its set is
     // deleted: deleting it left the location pointing at a removed set, and
     // no other set there could be approved (audit, 2026-10-15).
     if (await refuseApprovedBase(res, set)) return;
+    // An event whose episode is accepted keeps its Place: deleting its set,
+    // or moving it to a replacement, changed a locked place (seventh audit).
+    const locked = await lockedEventsAt(SceneSet.sequelize, set.id);
+    if (locked.length) {
+      const { PLACE_LOCKED_CODE } = require('../utils/placeLock');
+      return res.status(409).json({
+        success: false, code: PLACE_LOCKED_CODE, locked_events: locked,
+        error: `${locked.map((e) => e.name).join(', ')} ${locked.length === 1 ? 'is' : 'are'} held here and ${locked.length === 1 ? 'its episode is' : 'their episodes are'} accepted: the place is locked, so this set stays.`,
+      });
+    }
     const replacementId = req.query.replacement_id || req.body?.replacement_id || null;
     const confirmOrphan = String(req.query.confirm_orphan || req.body?.confirm_orphan || '') === 'true';
     if (replacementId) {
@@ -1033,6 +1043,8 @@ router.delete('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => 
     const { dropRemovedSetLinks } = require('../services/sceneSetUsesService');
     const linksDropped = await SceneSet.sequelize.transaction(async (transaction) => {
       await set.destroy({ transaction });
+      // Its event versions read as everyday sets again (seventh audit).
+      await releaseVersions(SceneSet.sequelize, set.id, { transaction });
       return dropRemovedSetLinks(SceneSet.sequelize, { setId: set.id, transaction });
     });
     res.json({ success: true, message: 'Scene set deleted', uses_left: uses, links_dropped: linksDropped });
@@ -1248,10 +1260,10 @@ Return ONLY JSON.` },
           const match = text.match(/\{[\s\S]*\}/);
           if (match) {
             const styleData = JSON.parse(match[0]);
-            await SceneSet.update(
-              { visual_language: { ...vl, ...styleData, locked: true } },
-              { where: { id: set.id } }
-            );
+            // Merged into the stored copy, not written back from the one
+            // read before the style call (seventh audit: a description
+            // review answered meanwhile came back).
+            await sceneGenService.mergeVisualLanguage(SceneSet, set.id, { ...styleData, locked: true });
             console.log(`[SceneSets] Auto-locked style on upload: ${styleData.design_style}`);
           }
         } catch (styleErr) {
@@ -1847,6 +1859,9 @@ router.delete('/:id/angles/:angleId', validateUUIDParam('id'), requireAuth, vali
       where: { id: req.params.angleId, scene_set_id: req.params.id },
     });
     if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
+    // Not while it is being made: the paid run wrote into a deleted angle
+    // (seventh audit; DELETE /:id/angles already refused this).
+    if (refuseWhileGenerating(res, angle, 'This angle')) return;
     await angle.destroy();
     res.json({ success: true, message: 'Angle deleted' });
   } catch (err) {
