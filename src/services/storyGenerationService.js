@@ -16,6 +16,7 @@ const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 const { LINKED_CHARACTER_JOIN } = require('../utils/registryLink');
 const { pulsePromptRules } = require('../utils/pulsePlatform');
 const { storyBrief, BRIEF_COLUMNS } = require('./characterStoryBrief');
+const { secretsFor } = require('./characterSecrets');
 
 function getClient() {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -152,6 +153,9 @@ async function generateEpisodeStory(episodeId, showId, sequelize, options = {}) 
     }));
   }
 
+  // Their kept secrets, for the brief's revelation budget (services/characterSecrets).
+  const secretsByCharacter = await secretsFor(sequelize, characters.map((c) => c.char_id));
+
   // Build the prompt
   const scriptExcerpt = episode.script_content ? episode.script_content.slice(0, 4000) : 'No script available';
   const outfitText = outfitPieces.length > 0
@@ -164,7 +168,7 @@ async function generateEpisodeStory(episodeId, showId, sequelize, options = {}) 
     if (c.depth_level) block += ` (depth: ${c.depth_level})`;
     if (c.core_belief) block += `\n    Believes: "${c.core_belief}"`;
     // What was happening beneath the episode (services/characterStoryBrief).
-    const brief = storyBrief(c, { layer: 'short_story' });
+    const brief = storyBrief(c, { layer: 'short_story', secrets: secretsByCharacter.get(c.char_id) });
     if (brief.lines.length) block += `\n    ${brief.lines.join('\n    ')}`;
     if (c.therapy_primary_defense) block += `\n    Defense mechanism: ${c.therapy_primary_defense}`;
     if (c.signature_trait) block += `\n    Signature trait: ${c.signature_trait}`;
