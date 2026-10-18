@@ -21,6 +21,8 @@
  *   updateRecord(sequelize, episodeId, body)  edits; an approved record goes back to draft
  *   approveRecord(sequelize, episodeId, { by })
  *   recordBlock(sequelize, episodeId)    the approved record as prompt text; ''
+ *   castOf / openThreads                 the episode's cast with their kept secrets, and
+ *                                        the show's unresolved threads (also for services/storyCanon)
  *
  * Raw SQL (episode_story_records, migration 20261018050000); no model.
  */
@@ -313,4 +315,4 @@ async function recordBlock(sequelize, episodeId) {
   return lines.join('\n');
 }
 
-module.exports = { RecordError, getRecord, draftRecord, draftLater, updateRecord, approveRecord, recordBlock, draftPrompt };
+module.exports = { RecordError, getRecord, draftRecord, draftLater, updateRecord, approveRecord, recordBlock, draftPrompt, castOf, openThreads };

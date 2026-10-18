@@ -7,6 +7,7 @@ import { Link } from 'react-router-dom';
 import { Crown, BookOpen, Smartphone, Scissors, RotateCcw, Sparkles, Library } from 'lucide-react';
 import api from '../../services/api';
 import EpisodeStoryRecord from './EpisodeStoryRecord';
+import EpisodeStoryCanon from './EpisodeStoryCanon';
 import './EpisodeResultsSummary.css';
 
 const TIER_STYLES = {
@@ -169,6 +170,8 @@ export function EpisodeResultsStory({ episode }) {
   const [state, setState] = useState({});
   const [error, setError] = useState(null);
   const busy = Object.values(state).includes('busy');
+  // A new short story is read for canon on the server; the canon card reloads.
+  const [written, setWritten] = useState(0);
 
   const generate = async (format) => {
     setError(null);
@@ -176,6 +179,7 @@ export function EpisodeResultsStory({ episode }) {
     try {
       await api.post(`/api/v1/world/${showId}/episodes/${episode.id}/generate-story`, { format });
       setState((s) => ({ ...s, [format]: 'done' }));
+      if (format === 'short_story') setWritten((n) => n + 1);
     } catch (err) {
       console.error('[EpisodeResults] story generation failed:', err);
       setState((s) => ({ ...s, [format]: 'failed' }));
@@ -192,6 +196,7 @@ export function EpisodeResultsStory({ episode }) {
       </div>
 
       {episode?.id && <EpisodeStoryRecord episodeId={episode.id} />}
+      {episode?.id && <EpisodeStoryCanon episodeId={episode.id} refreshKey={written} />}
 
       <section className="ers-card">
         <p className="ers-text">
