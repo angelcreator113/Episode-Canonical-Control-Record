@@ -2063,7 +2063,11 @@ export default function CharacterProfilePage() {
   const [entanglements, setEntanglements] = useState([]);
   const [feedProfile, setFeedProfile]     = useState(null);
   const [appearances, setAppearances]     = useState(null);
-  const [activeTab, setActiveTab]         = useState('overview');
+  // ?tab=places opens a tab directly (the studio card's link, 2026-10-18).
+  const [activeTab, setActiveTab]         = useState(() => {
+    const asked = new URLSearchParams(window.location.search).get('tab');
+    return TABS.some((t) => t.id === asked) ? asked : 'overview';
+  });
   const [loading, setLoading]             = useState(true);
   const [error, setError]                 = useState(null);
 

@@ -22,6 +22,8 @@ import DreamCityExplorer from '../components/World/DreamCityExplorer';
 import apiClient from '../services/api';
 import { DREAM_CITIES, UNIVERSITIES, CORPORATIONS, WORLD_LAYERS } from '../data/dreamCities';
 import { tabFromSearch } from '../utils/worldRedirects';
+import useActiveShow from '../hooks/useActiveShow';
+import StudioPhotos from '../components/World/StudioPhotos';
 
 const API = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -91,6 +93,8 @@ export default function WorldFoundation({ embedded = false }) {
   const [selectedLoc, setSelectedLoc] = useState(null);
   const emptyForm = { name: '', description: '', location_type: 'venue', narrative_role: '', street_address: '', city: '', district: '', venue_type: '', property_type: '', parent_location_id: '', venue_details: { hours: '', price_level: '', capacity: '', dress_code: '', vibe_tags: [] } };
   const [form, setForm] = useState(emptyForm);
+  // A studio's photos belong to the active show (StudioPhotos, 2026-10-18).
+  const { showId } = useActiveShow();
 
   const flash = useCallback((msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); }, []);
 
@@ -445,6 +449,7 @@ export default function WorldFoundation({ embedded = false }) {
                             Home base of {loc.residents.length === 1 ? 'this creator' : 'these creators'}: their pin on the phone map, guests suggested for events held here, and where their events are set.
                           </div>
                         )}
+                        {loc.location_type === 'venue' && <StudioPhotos location={loc} showId={showId} onDone={loadLocations} />}
                       </div>
                     ))}
                   </div>
