@@ -6,11 +6,12 @@
  * opens the character's page, where every step is taken.
  * Read from GET /api/v1/cast/consistency (services/castConsistency); it runs
  * every character's check, so it loads when opened. Styles: TheCast.css
- * (cast-facts-*).
+ * (cast-facts-*). Fix what can be fixed runs the steps for her: CastFixAll.
  */
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
+import CastFixAll from './CastFixAll';
 
 const FACT_ORDER = [
   ['handle', 'Handle'], ['followers', 'Followers'], ['account_status', 'Status'],
@@ -53,6 +54,7 @@ export default function CastFacts({ registryIds }) {
       <button type="button" className="cast-btn-soft cast-facts-run" disabled={busy || !key} onClick={load}>
         {busy ? 'Checking the cast…' : data ? 'Check again' : 'Check the whole cast'}
       </button>
+      <CastFixAll registryIds={registryIds} onDone={load} />
       {error && <p className="cast-note" role="alert">{error}</p>}
       {s && (
         <p className="cast-note" data-testid="cast-facts-summary">

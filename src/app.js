@@ -1686,6 +1686,15 @@ try {
   console.error('✗ Failed to load Scene Studio Episode routes:', e.message);
 }
 
+// Fix what can be fixed — Facts & checks across the cast (services/castFixAll)
+try {
+  const castFixAllRoutes = require('./routes/castFixAllRoutes');
+  app.use('/api/v1/cast/consistency', castFixAllRoutes);
+  console.log('✓ Cast fix-all loaded at /api/v1/cast/consistency');
+} catch (e) {
+  console.error('✗ Failed to load Cast fix-all routes:', e.message);
+}
+
 // The cast — review of the old system's characters (Keep, Match, Archived)
 try {
   const castRoutes = require('./routes/castRoutes');
@@ -1693,6 +1702,15 @@ try {
   console.log('✓ Cast loaded at /api/v1/cast');
 } catch (e) {
   console.error('✗ Failed to load Cast routes:', e.message);
+}
+
+// The daily update — since yesterday, waiting for Evoni, the next three days, AI spend
+try {
+  const dailyUpdateRoutes = require('./routes/dailyUpdateRoutes');
+  app.use('/api/v1/daily-update', dailyUpdateRoutes);
+  console.log('✓ Daily update loaded at /api/v1/daily-update');
+} catch (e) {
+  console.error('✗ Failed to load Daily update routes:', e.message);
 }
 
 // The book follows the show — episode → short story → chapter (docs/CANON.md)
