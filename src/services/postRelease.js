@@ -42,6 +42,12 @@
  *     no release time, each at its suggested time, in story order; saved
  *     only by scheduleAll(db, items, { anyway }), which skips a time that
  *     breaks the guards unless `anyway`
+ *   A poster's schedule (social_profiles.posting_schedule, services/
+ *     postingSchedule; Evoni, 2026-10-18): when they have one, the suggested
+ *     time moves to the first time on their days and in their windows (and
+ *     under their posts a week), still inside the story guards and the
+ *     Feed's rhythm; the why says "on their schedule (Tue/Thu mornings)".
+ *     No schedule, no change.
  *   A poster's rhythm: the suggestions use her own posting hours once
  *     learned (releaseHabits; learnReleaseTime counts every hour she
  *     schedules at, overall and per story phase) and keep one poster's posts
@@ -439,14 +445,24 @@ async function learnReleaseTime(db, post, at, { tzOffset = 0 } = {}) {
   }
 }
 
-/** The poster's rhythm: the show's learned hours and their voice's temperament. */
+/** The poster's rhythm: the show's learned hours, their voice's temperament and their posting schedule. */
 async function rhythmFor(db, post, habits) {
   let temperament = 'regular';
+  let schedule = null;
   if (post.social_profile_id && db.PulseVoice) {
     const voice = await db.PulseVoice.findOne({ where: { social_profile_id: post.social_profile_id }, attributes: ['habits_json'] });
     temperament = voice?.habits_json?.temperament || 'regular';
   }
-  return { slots: habits.slots, phaseHours: habits.phaseHours, gapMs: TEMPERAMENT_GAP_MS[temperament] || GAP_MS, temperament };
+  if (post.social_profile_id) {
+    try {
+      const [[row]] = await db.sequelize.query('SELECT posting_schedule FROM social_profiles WHERE id = :id', { replacements: { id: post.social_profile_id } });
+      const raw = row?.posting_schedule;
+      schedule = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : null;
+    } catch (err) {
+      console.error('[postRelease] their posting schedule could not be read; suggesting without it:', err.message);
+    }
+  }
+  return { slots: habits.slots, phaseHours: habits.phaseHours, gapMs: TEMPERAMENT_GAP_MS[temperament] || GAP_MS, temperament, schedule };
 }
 
 // The Feed's own rhythm (Evoni, 2026-10-17: "its giving me the same date and
@@ -483,6 +499,27 @@ function spreadOnFeed(at, posterTaken, showTaken, tzMinutes, rhythm) {
   return t;
 }
 
+/** The first time on the poster's schedule at or after `at` that keeps the Feed's gap and daily limit. */
+function scheduleFit(rhythm, at, posterTaken, showTaken, tzOffset) {
+  const ps = require('./postingSchedule');
+  const zone = tz(tzOffset);
+  const dayOf = (d) => { const p = local(d, zone); return `${p.y}-${p.m}-${p.d}`; };
+  let from = at;
+  for (let i = 0; i < 40; i += 1) {
+    const t = ps.nextSlot(rhythm.schedule, { after: from, tzOffset: zone, taken: posterTaken, gapMs: rhythmOf(rhythm).gapMs });
+    if (!t) return null;
+    const near = showTaken.filter((x) => Math.abs(x.getTime() - t.getTime()) < SHOW_GAP_MS);
+    if (near.length) { from = new Date(Math.max(...near.map((x) => x.getTime())) + SHOW_GAP_MS); continue; }
+    if (showTaken.filter((x) => dayOf(x) === dayOf(t)).length >= SHOW_PER_DAY) {
+      const p = local(t, zone);
+      from = atLocal(p.y, p.m, p.d + 1, 0, zone);
+      continue;
+    }
+    return t;
+  }
+  return null;
+}
+
 async function planOne(db, post, { tzOffset = 0, now = new Date(), taken = null, planned = new Map(), rhythm = null, showTaken = null } = {}) {
   const story = await storyOf(db, post);
   const others = taken || await takenBy(db, post);
@@ -502,6 +539,19 @@ async function planOne(db, post, { tzOffset = 0, now = new Date(), taken = null,
   if (onFeed.getTime() !== at.getTime()) {
     at = onFeed;
     why += '; moved so the Feed is not crowded';
+  }
+  // Their posting schedule (services/postingSchedule; Evoni, 2026-10-18):
+  // the first time on their days, in their windows, at or after the time
+  // above, still the Feed's gap and daily limit from everyone else; kept only
+  // when it breaks no story guard.
+  if (r.schedule) {
+    const onSchedule = scheduleFit(r, at, others, feed, tzOffset);
+    if (onSchedule && !problemsAt(guards, onSchedule).length) {
+      if (onSchedule.getTime() !== at.getTime()) at = onSchedule;
+      why += `; on their schedule (${require('./postingSchedule').describe(r.schedule)})`;
+    } else {
+      why += '; their schedule has no open time that keeps the story in order';
+    }
   }
   return { at, why, problems: problemsAt(guards, at), story };
 }

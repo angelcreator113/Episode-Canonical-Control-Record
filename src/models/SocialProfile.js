@@ -72,6 +72,8 @@ module.exports = (sequelize, DataTypes) => {
     archetype:             { type: DataTypes.ENUM('polished_curator','messy_transparent','soft_life','explicitly_paid','overnight_rise','cautionary','the_peer','the_watcher','chaos_creator','community_builder'), allowNull: true },
     // The Society tab's archetype, by name (services/societyArchetypes; fix-list item 26): a new LalaVerse profile's; NULL for real-world profiles and older ones.
     society_archetype:     { type: DataTypes.STRING(100), allowNull: true },
+    // When they post (services/postingSchedule, migration 20261018160000): null keeps the old behaviour.
+    posting_schedule:      { type: DataTypes.JSONB, allowNull: true },
     content_persona:       { type: DataTypes.TEXT, allowNull: true },
     real_signal:           { type: DataTypes.TEXT, allowNull: true },
     posting_voice:         { type: DataTypes.TEXT, allowNull: true },
