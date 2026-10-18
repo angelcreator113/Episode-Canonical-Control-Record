@@ -163,6 +163,15 @@ const keyOf = (type, id, kind) => `${type}:${kind || ''}:${id}`;
  * Evoni, 2026-10-16: "Maren's a public figure with 2M followers. Lala should
  * be able to see her public posts before they meet"), who post in public
  * before the meeting. With no moment (Director view) everything is revealed.
+ *
+ * Since Evoni, 2026-10-18 ("it shouldnt matter if lala has met them they
+ * should still be building themselves on the pulse"), hiddenProfiles no
+ * longer hides anyone's posts on The Pulse: the feed, trending, comments,
+ * the recap and ambient posting show and include characters Lala has not
+ * met. It is what Lala herself knows: the gate's unrevealed_character flag,
+ * the episode script's Pulse posts, "people she may know", and the Voices
+ * page read it; DMs, reactions to her posts, closeness and storylines wait
+ * for the meeting (unmetProfiles) as before.
  */
 /** Which of these Feed profiles are public figures Lala knows of, as a Set of numbers. */
 async function knownOf(db, profileIds) {

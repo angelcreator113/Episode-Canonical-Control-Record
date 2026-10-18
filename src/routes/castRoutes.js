@@ -111,6 +111,10 @@
  *   PUT    /api/v1/cast/characters/:id/secrets/:secretId  any of those, or { status }:
  *                                                  candidate | confirmed | retired (ADMIN)
  *   DELETE /api/v1/cast/characters/:id/secrets/:secretId  (ADMIN; soft)
+ *   GET    /api/v1/cast/characters/:id/pulse-visibility  why their posts are or are not on
+ *                                                  The Pulse: live, waiting in Review,
+ *                                                  scheduled, held, hidden until they meet
+ *                                                  Lala (ADMIN; services/pulseVisibility)
  *   POST   /api/v1/cast/characters/:id/secrets/suggest  one AI call over their story brief;
  *                                                  saves up to five as candidates to keep
  *                                                  or discard (ADMIN)
@@ -1179,6 +1183,20 @@ router.delete('/characters/:id/secrets/:secretId', requireAuth, authorize(['ADMI
     return res.json({ success: true, ...(await deleteSecret(getModels().sequelize, req.params.id, req.params.secretId)) });
   } catch (err) {
     return secretError(res, err, 'DELETE /characters/:id/secrets/:secretId');
+  }
+});
+
+// Why their posts are or aren't on The Pulse (services/pulseVisibility).
+router.get('/characters/:id/pulse-visibility', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(404).json({ success: false, error: 'Character not found' });
+    const { visibilityFor } = require('../services/pulseVisibility');
+    return res.json({ success: true, ...(await visibilityFor(getModels(), { characterId: req.params.id })) });
+  } catch (err) {
+    const { VisibilityError } = require('../services/pulseVisibility');
+    if (err instanceof VisibilityError) return res.status(err.status).json({ success: false, error: err.message });
+    console.error('[Cast] GET /characters/:id/pulse-visibility error:', err);
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 

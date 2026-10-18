@@ -89,14 +89,14 @@ async function withAuthorPortraits(models, posts) {
  * A post as Lala sees it at a story moment (Task #2939): a teaser keeps its
  * author and time, loses its words and comments, and shows a "first look"
  * (teaser: true); a post photo's own reveal makes a first look of (teaser)
- * or removes (hidden) the photo alone; comments by characters Lala has not
- * met yet are left out. A first look's photo is its teaser image, cut from
+ * or removes (hidden) the photo alone. Comments by characters Lala has not
+ * met yet stay (Evoni, 2026-10-18: they build themselves on The Pulse
+ * whether or not Lala has met them). A first look's photo is its teaser image, cut from
  * the full one (Task #3034): the full image URL and its description never
  * go out before the moment; with no teaser image, no photo goes out.
  */
 function applyPostReveal(post, reveals) {
   const out = { ...post };
-  if (Array.isArray(out.comments)) out.comments = out.comments.filter((c) => !reveals.hiddenProfiles.has(c.social_profile_id));
   const photo = reveals.stateOf('image', post.id, 'post_photo');
   const postTeaser = reveals.stateOf('post', post.id) === 'teaser';
   // Every photo of a hidden post stays back; a teaser shows only its teaser image (Task #3089: up to four photos).
@@ -177,17 +177,14 @@ router.get('/', optionalAuth, async (req, res) => {
       and.push(sequelize.literal(`(${storyOrder} IS NULL OR ${storyOrder} <= ${Number(atOrder)})`));
       order = [[sequelize.literal(`${storyOrder} DESC NULLS LAST`)], ['posted_at', 'DESC'], ['sort_order', 'ASC']];
       // Reveals at that moment (Task #2939, services/pulseReveals.js): a
-      // hidden post, and the posts of a character Lala has not met yet, are
-      // left out here, so they never reach the browser.
+      // hidden post is left out here, so it never reaches the browser. A
+      // character Lala has not met yet still posts on The Pulse (Evoni, 2026-10-18: "it shouldnt matter if lala has met them they should still be building themselves on the pulse").
       if (show_id) {
         const models = require('../models');
         const { lalaProfileId } = require('../services/lalaFeedProfile');
         reveals = await require('../services/pulseReveals').revealsAt(models, show_id, atOrder, { lalaProfileId: await lalaProfileId(sequelize) });
         const hiddenPosts = reveals.hiddenIds('post');
         if (hiddenPosts.length) and.push({ id: { [Op.notIn]: hiddenPosts } });
-        if (reveals.hiddenProfiles.size) {
-          and.push({ [Op.or]: [{ social_profile_id: null }, { social_profile_id: { [Op.notIn]: [...reveals.hiddenProfiles] } }] });
-        }
       }
     }
     // ?day_from=&day_to= (ISO times; Story Clock's planner, Evoni 2026-10-17):
