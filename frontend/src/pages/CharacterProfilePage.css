@@ -1176,6 +1176,8 @@ a.ch-trail-text:hover { text-decoration: underline; }
 .ch-btn-chip.is-picked { background: var(--lala-lavender); color: var(--text-inverse); }
 .ch-btn-chip.is-primary { background: var(--lala-lavender); color: var(--text-inverse); max-width: 100%; text-align: left; overflow-wrap: anywhere; }
 .ch-check-edit { display: grid; gap: 6px; }
+.ch-check-suggestion { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; color: var(--text-primary); overflow-wrap: anywhere; }
+.ch-check-why { font-size: 12px; color: var(--text-secondary); }
 .ch-check-edit-label { font-size: 12px; font-weight: 700; color: var(--text-secondary); }
 .ch-type-now { display: grid; gap: 4px; }
 .ch-type-label { margin: 0; overflow-wrap: anywhere; }
