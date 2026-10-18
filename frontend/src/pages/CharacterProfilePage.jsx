@@ -95,6 +95,9 @@ export const setRegistryShowApi = (registryId, showId) =>
   apiClient.put(`${API_URL}/character-registry/registries/${registryId}`, { show_id: showId });
 export const buildVoiceApi = (id) =>
   apiClient.post(`${API_URL}/pulse-voices/${id}/build`);
+// Why their posts are or aren't on The Pulse (Evoni, 2026-10-18).
+export const pulseVisibilityApi = (id) =>
+  apiClient.get(`${API_URL}/cast/characters/${id}/pulse-visibility`);
 export const generatePostsApi = (id, body) =>
   apiClient.post(`${API_URL}/cast/characters/${id}/posts/generate`, body);
 export const getTypologyApi = (id) =>
@@ -2603,12 +2606,53 @@ function TabVoice({ character, feedProfile, appearances, onSaved, onFeedSaved })
         <FeedBehavior character={character} feedProfile={feedProfile} appearances={appearances} onFeedSaved={onFeedSaved} />
       </div>
       <div className="ch-col">
+        <OnThePulse character={character} />
         <PostExamples character={character} feedProfile={feedProfile} trail={trail} onDraft={() => setDrafting(true)} />
         {/* Evoni, 2026-10-17: drafting their posts belongs with their voice and feed. */}
         {drafting && character.feed_profile_id && (
           <div className="ch-card" ref={draftRef}><GeneratePosts characterId={character.id} /></div>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * On The Pulse (Evoni, 2026-10-18: "when a character has a voice and even
+ * makes post they are not showing up on the pulse"): how many of their posts
+ * are live, waiting in Review, scheduled or held, and anything else keeping
+ * them off The Pulse (services/pulseVisibility). Whether Lala has met them
+ * does not matter (Evoni, 2026-10-18).
+ */
+export function OnThePulse({ character }) {
+  const [v, setV] = useState(null);
+  const [error, setError] = useState(null);
+  const load = useCallback(async () => {
+    try {
+      const { data } = await pulseVisibilityApi(character.id);
+      setV(data); setError(null);
+    } catch (err) {
+      console.error('[CharacterProfilePage] Pulse visibility could not be read:', err);
+      setError('Could not check The Pulse.');
+    }
+  }, [character.id]);
+  useEffect(() => { load(); }, [load]);
+  if (error) return <div className="ch-card" data-testid="on-the-pulse"><p className="ch-note">{error}</p></div>;
+  if (!v) return null;
+  const next = v.scheduled?.[0]?.release_at ? new Date(v.scheduled[0].release_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : null;
+  return (
+    <div className="ch-card ch-pulse-vis" data-testid="on-the-pulse">
+      <h3 className="ch-fb-h">On The Pulse</h3>
+      {v.profile ? (
+        <ul className="ch-pulse-vis-counts">
+          <li><strong>{v.live_count}</strong> live</li>
+          <li><strong>{v.draft_count}</strong> waiting in <Link to="/admin?tab=pulse&sub=review">Review</Link></li>
+          {v.scheduled?.length > 0 && <li><strong>{v.scheduled.length}</strong> scheduled{next ? ` (next: ${next})` : ''}</li>}
+          {v.held_count > 0 && <li><strong>{v.held_count}</strong> held</li>}
+        </ul>
+      ) : null}
+      {(v.reasons || []).map((r) => <p key={r} className="ch-note">{r}</p>)}
+      {!v.reasons?.length && <p className="ch-note">Their live posts show on The Pulse.</p>}
     </div>
   );
 }
