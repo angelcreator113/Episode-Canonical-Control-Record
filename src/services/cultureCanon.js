@@ -21,9 +21,30 @@
  *     post may name ('' for none)
  *   hierarchyBlock(list)  the Feed profile writers': the celebrity tiers by
  *     follower count ('' for none)
+ *
+ * The World and Society pages' lists for the Feed profile writers (Evoni,
+ * 2026-10-18: "yes start the profile writer lists"): UNIVERSITIES and
+ * CORPORATIONS (page_content world_infrastructure, defaults
+ * frontend/src/data/dreamCities.js) and ECONOMY_STREAMS (influencer_systems,
+ * defaults frontend/src/data/influencerData.js), loaded the same way.
+ *
+ *   schoolsBlock(list, cityName)  the schools, theirs first; a creator may
+ *     have trained at one, most did not ('' for none)
+ *   companiesBlock(list)  the companies a creator may work with ('' for none)
+ *   economyBlock(list)  how creators make money, by tier ('' for none)
+ *   profileWorldBlock(db, cityName)  the four for a LalaVerse profile: the
+ *     hierarchy, the schools, the companies and the economy
  */
 
-const PAGE = 'cultural_calendar';
+// Where each list is saved, and the field that names an item.
+const LISTS = Object.freeze({
+  AWARD_SHOWS: { page: 'cultural_calendar', name: 'name' },
+  GOSSIP_MEDIA: { page: 'cultural_calendar', name: 'name' },
+  CELEBRITY_HIERARCHY: { page: 'cultural_calendar', name: 'name' },
+  UNIVERSITIES: { page: 'world_infrastructure', name: 'name' },
+  CORPORATIONS: { page: 'world_infrastructure', name: 'name' },
+  ECONOMY_STREAMS: { page: 'influencer_systems', name: 'stream' },
+});
 
 const DEFAULTS = Object.freeze({
   AWARD_SHOWS: [
@@ -47,17 +68,39 @@ const DEFAULTS = Object.freeze({
     { tier: 5, name: 'Micro Creators', followers: '10K-100K', desc: 'Niche community creators. Deep trust, narrow reach. Brands court them for authenticity.' },
     { tier: 6, name: 'Everyday Creators', followers: '0-10K', desc: 'Local personalities, hobby creators. The origin of culture. Everything starts here.' },
   ],
+  UNIVERSITIES: [
+    { name: 'The Dazzle Academy', city: 'Dazzle District', specialization: "World's top fashion school", programs: ['Fashion design', 'Styling', 'Fashion photography', 'Fashion journalism'], significance: 'Graduates often debut during the Atelier Circuit. A Dazzle Academy degree is a Tier 1 credential.' },
+    { name: 'The Radiance Institute', city: 'Radiance Row', specialization: 'Most prestigious beauty academy', programs: ['Makeup artistry', 'Skincare science', 'Cosmetic formulation', 'Aesthetic treatments'], significance: 'Graduates dominate Glow Week. The Radiance Institute and the beauty industry are inseparable.' },
+    { name: 'The Creator Conservatory', city: 'Maverick Harbor', specialization: 'Content creation and media', programs: ['Storytelling', 'Video production', 'Social media strategy', 'Branding'], significance: 'The school that legitimized being a creator. Graduates become influencers who cite it.' },
+    { name: 'Ascent Tech Institute', city: 'Ascent Tower', specialization: 'Technology and innovation', programs: ['Digital product design', 'Social platform engineering', 'AI and media tools'], significance: 'Many founders of major LalaVerse platforms came from here. The architecture of the world.' },
+  ],
+  CORPORATIONS: [
+    { name: 'Dazzle House', industry: 'Luxury fashion', knownFor: 'Couture collections, high-status events, collaborations with top creators', power: 'Controls what high fashion means. Who they invite to shows is a power signal.' },
+    { name: 'Glow Labs', industry: 'Beauty', knownFor: 'Skincare breakthroughs, viral beauty products, innovation-first positioning', power: 'Makes beauty credible. Their product recommendations become canon.' },
+    { name: 'Nova Studios', industry: 'Entertainment', knownFor: 'Creator shows, music projects, comedy series, content production', power: 'Produces the content that defines the entertainment tier of LalaVerse.' },
+    { name: 'Dream Market Collective', industry: 'Creator economy', knownFor: 'Digital shops, creator launches, marketplace infrastructure', power: 'The platform creators use to sell. They take a cut of everything.' },
+    { name: 'Pulse Media Network', industry: 'Talent and media', knownFor: 'Talent management, influencer partnerships, brand matchmaking', power: 'The middleman between creators and brands. Enormous invisible power.' },
+  ],
+  ECONOMY_STREAMS: [
+    { stream: 'Brand Collaborations', what: 'Partnerships with companies to promote products — fashion, beauty, lifestyle, tech', who: 'Every tier uses it. Quality of brand signals tier level.' },
+    { stream: 'Creator Shops', what: 'Personal storefronts — clothing, digital products, merchandise', who: 'Tier 3-6. The entrepreneurial layer of the creator economy.' },
+    { stream: 'Membership Communities', what: 'Fans pay for exclusive access — behind-the-scenes, private discussions', who: 'Tier 2-4. Requires deep audience trust.' },
+    { stream: 'Event Appearances', what: 'Festivals, award shows, industry panels, brand activations', who: 'Tier 1-3. Invitation is the signal.' },
+    { stream: 'Digital Products', what: 'Courses, presets, templates, educational content', who: 'Tier 3-6. Knowledge monetized.' },
+    { stream: 'Pay-for-Attention', what: 'DM access, Prime Coin tipping, direct financial relationships with audience members (the LalaVerse pays in Prime Coins)', who: 'Any tier — but rarely discussed publicly.' },
+  ],
 });
 
 const text = (v) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : '');
 const sentence = (s) => (/[.!?]$/.test(s) ? s : `${s}.`);
 
 async function loadCultureList(db, key) {
-  if (!DEFAULTS[key]) throw new Error(`Unknown culture list: ${key}`);
+  const list = LISTS[key];
+  if (!list) throw new Error(`Unknown culture list: ${key}`);
   if (db?.PageContent) {
     try {
-      const row = await db.PageContent.findOne({ where: { page_name: PAGE, constant_key: key }, attributes: ['data'] });
-      if (row && Array.isArray(row.data)) return row.data.filter((item) => item && text(item.name));
+      const row = await db.PageContent.findOne({ where: { page_name: list.page, constant_key: key }, attributes: ['data'] });
+      if (row && Array.isArray(row.data)) return row.data.filter((item) => item && text(item[list.name]));
     } catch (err) {
       console.error(`[cultureCanon] the saved ${key} could not be read; using the defaults:`, err.message);
     }
@@ -95,4 +138,43 @@ ${tiers.map((t) => `- ${text(t.name)}${text(t.followers) ? ` (${text(t.followers
 `;
 }
 
-module.exports = { DEFAULTS, loadCultureList, awardShowsBlock, gossipMediaBlock, hierarchyBlock };
+const words = (v) => (Array.isArray(v) ? v.map(text).filter(Boolean) : []);
+
+function schoolsBlock(list, cityName = null) {
+  const schools = (list || []).filter((u) => text(u?.name));
+  if (!schools.length) return '';
+  const home = text(cityName).toLowerCase();
+  const ordered = [...schools.filter((u) => home && text(u.city).toLowerCase() === home), ...schools.filter((u) => !home || text(u.city).toLowerCase() !== home)];
+  return `\nTHE LALAVERSE'S SCHOOLS (a creator may have trained at one, most did not; never invent another):
+${ordered.map((u) => `- ${text(u.name)}${text(u.city) ? ` (${text(u.city)})` : ''}${text(u.specialization) ? `: ${text(u.specialization)}` : ''}${words(u.programs).length ? `; programs: ${words(u.programs).join(', ')}` : ''}${text(u.significance) ? `. ${sentence(text(u.significance))}` : ''}`).join('\n')}
+`;
+}
+
+function companiesBlock(list) {
+  const companies = (list || []).filter((c) => text(c?.name));
+  if (!companies.length) return '';
+  return `\nTHE LALAVERSE'S BIG COMPANIES (a creator may work with, be signed to or have a deal with one where it fits; most have none):
+${companies.map((c) => `- ${text(c.name)}${text(c.industry) ? ` (${text(c.industry)})` : ''}${text(c.knownFor) ? `: ${text(c.knownFor)}` : ''}${text(c.power) ? `. ${sentence(text(c.power))}` : ''}`).join('\n')}
+`;
+}
+
+function economyBlock(list) {
+  const streams = (list || []).filter((e) => text(e?.stream));
+  if (!streams.length) return '';
+  return `\nHOW LALAVERSE CREATORS MAKE MONEY (what they earn from fits where they stand):
+${streams.map((e) => `- ${text(e.stream)}${text(e.what) ? `: ${text(e.what)}` : ''}${text(e.who) ? `. ${sentence(text(e.who))}` : ''}`).join('\n')}
+`;
+}
+
+/** The hierarchy, schools, companies and economy for a LalaVerse profile writer; cityName (a DREAM city name or key) puts its schools first. */
+async function profileWorldBlock(db, cityName = null) {
+  const city = cityName ? String(cityName).replace(/_/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase()) : null;
+  return hierarchyBlock(await loadCultureList(db, 'CELEBRITY_HIERARCHY'))
+    + schoolsBlock(await loadCultureList(db, 'UNIVERSITIES'), city)
+    + companiesBlock(await loadCultureList(db, 'CORPORATIONS'))
+    + economyBlock(await loadCultureList(db, 'ECONOMY_STREAMS'));
+}
+
+module.exports = {
+  DEFAULTS, LISTS, loadCultureList, awardShowsBlock, gossipMediaBlock, hierarchyBlock, schoolsBlock, companiesBlock, economyBlock, profileWorldBlock,
+};
