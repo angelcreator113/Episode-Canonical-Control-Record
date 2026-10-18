@@ -49,7 +49,9 @@ function BrandCard({ brand, showId, onChanged }) {
 
   const draft = () => act('draft', async () => {
     const { data } = await api.post(`/api/v1/brand-pulse/brands/${brand.id}/draft`, { show_id: showId, rep: rep || null, about: about.trim() || null });
-    setNote(data.published ? 'Posted: it passed the gate.' : 'Drafted: it waits in Review.');
+    setNote(data.published ? 'Posted: it passed the gate.'
+      : data.scheduled_at ? `Scheduled: it passed the gate and goes out ${new Date(data.scheduled_at).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}.`
+        : 'Drafted: it waits in Review.');
     setAbout('');
     onChanged();
   });

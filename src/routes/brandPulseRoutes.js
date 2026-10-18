@@ -85,7 +85,7 @@ router.post('/brands/:brandId/draft', requireAuth, authorize(['ADMIN']), aiRateL
     const { show_id: showId, rep = null, about = null } = req.body || {};
     if (badIds(res, req.params.brandId, showId)) return undefined;
     const out = await require('../services/brandPulse').draftBrandPost(getModels(), { showId, brandId: req.params.brandId, repKey: rep, about });
-    return res.json({ success: true, post: out.post, review: out.review, published: out.published });
+    return res.json({ success: true, post: out.post, review: out.review, published: out.published, scheduled_at: out.scheduled_at || null });
   } catch (err) {
     if (sendKnown(res, err)) return undefined;
     console.error('[BrandPulse] POST /brands/:brandId/draft error:', err);

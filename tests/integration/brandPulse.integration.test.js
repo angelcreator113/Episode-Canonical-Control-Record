@@ -108,12 +108,15 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }], 
     expect(velour.reps.map((r) => r.key)).toEqual(['vivienne_laurent']);
   });
 
-  it('an everyday post that passes the gate goes out; a rep signs hers; a flagged one waits in Review', async () => {
+  it('an everyday post that passes the gate is scheduled at its suggested time; a rep signs hers; a flagged one waits in Review', async () => {
     drafts.push({ text: 'Nothing extraneous. Ivory, cut close.', hashtag: '#Velour' });
     const ok = await as(request(app).post(`/api/v1/brand-pulse/brands/${brands.velour_atelier.id}/draft`)).send({ show_id: ids.show });
     expect(ok.status).toBe(200);
-    expect(ok.body.published).toBe(true);
+    expect(ok.body.published).toBe(false);
     expect(ok.body.review).toEqual([]);
+    expect(ok.body.scheduled_at).toBeTruthy();
+    const [okPost] = await q('SELECT status, release_state FROM feed_posts WHERE id = :id', { id: ok.body.post.id });
+    expect(okPost).toEqual({ status: 'draft', release_state: 'scheduled' });
     const prompt = mockCreate.mock.calls[0][0].messages[0].content;
     expect(prompt).toContain('ESTABLISHED CANON about Velour Atelier');
     expect(prompt).toContain('Never state a new fact about Velour Atelier\'s history');

@@ -291,7 +291,12 @@ async function routeEveryday(db, post, { brand, rep, release = 'now', alwaysRevi
 
 const EVERYDAY_KINDS = 'a drop, a look behind the scenes, or one of its beliefs';
 
-/** "Draft a post": one everyday post by the brand (or a rep), through the gate. */
+/**
+ * "Draft a post": one everyday post by the brand (or a rep), through the
+ * gate. Evoni, 2026-10-18: one that passes is scheduled at its suggested
+ * time, like the week's posts, so brand posts don't all land the moment
+ * she clicks.
+ */
 async function draftBrandPost(db, { showId, brandId, repKey = null, about = null }) {
   if (!showId) throw new BrandPulseError(400, 'show_id is required.');
   const { brand, account } = await brandAndAccount(db, brandId);
@@ -310,7 +315,7 @@ Answer with JSON only: {"text": "the post", "hashtag": "#OneTag or null"}`, 600)
   const text = cleanText(parsed.text, 2000);
   if (!text) throw new BrandPulseError(502, 'The draft came back empty.');
   const post = await saveDraft(db, { showId, account, brand, rep, text, tag: cleanTag(parsed.hashtag), at, kind: 'everyday' });
-  return routeEveryday(db, post, { brand, rep, release: 'now' });
+  return routeEveryday(db, post, { brand, rep, release: 'schedule' });
 }
 
 /**
