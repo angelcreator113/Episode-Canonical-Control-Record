@@ -7,7 +7,7 @@
  * - DELETE /relationships/dismiss/:id dismisses a seed (the page's method);
  *   a confirmed relationship is refused;
  * - GET /relationships/character/:id names the other character on each row,
- *   and ?confirmed=true leaves seeds out;
+ *   with their portrait, and ?confirmed=true leaves seeds out;
  * - the CharacterRelationship model reads deleted_at: a soft-deleted row is
  *   not found.
  */
@@ -87,7 +87,11 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(confirmed.body.relationships.map((r) => r.relationship_type)).toEqual(['sisters']);
     // From Bea's side, the other is Ana, by her selected name.
     const fromBea = await as(request(app).get(`/api/v1/relationships/character/${ids.bea}`).query({ confirmed: true }));
-    expect(fromBea.body.relationships[0]).toMatchObject({ related_id: ids.ana, related_name: 'Ana Reyes' });
+    expect(fromBea.body.relationships[0]).toMatchObject({ related_id: ids.ana, related_name: 'Ana Reyes', related_portrait: null });
+    // And their portrait, for the character page's Connections.
+    await run('UPDATE registry_characters SET portrait_url = :url WHERE id = :ana', { ...ids, url: 'https://x/ana.jpg' });
+    const withPortrait = await as(request(app).get(`/api/v1/relationships/character/${ids.bea}`).query({ confirmed: true }));
+    expect(withPortrait.body.relationships[0].related_portrait).toBe('https://x/ana.jpg');
   });
 
   test('DELETE /dismiss/:id dismisses a seed; a confirmed relationship is refused', async () => {
