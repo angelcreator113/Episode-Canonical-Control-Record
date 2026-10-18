@@ -38,7 +38,7 @@ export const getSceneSetUsesApi = (setId) => apiClient.get(`${API_BASE}/scene-se
 // beats or locations use asks for a replacement set and moves every use ...
 // to it; deleting without a replacement shows how many uses will be left
 // pointing at a removed set."
-const USE_WORDS = [['locations', 'episode location'], ['beats', 'beat'], ['events', 'event'], ['defaults', 'show default'], ['scenes', 'scene'], ['homes', 'character place']];
+const USE_WORDS = [['locations', 'episode location'], ['beats', 'beat'], ['events', 'event'], ['defaults', 'show default'], ['scenes', 'scene'], ['homes', 'character place'], ['versions', 'event version']];
 // The library's status filter, and the card's status line: one progress
 // state per set, from its main background and its views.
 export const SET_PROGRESS_LABELS = {
@@ -787,7 +787,7 @@ function ArtifactReviewModal({ angle, setId, onClose, onSubmit }) {
       <div className="scene-sets-artifact-modal">
         <div className="scene-sets-artifact-modal-header">
           <h3>Quality Review: {angle.angle_name}</h3>
-          <button onClick={onClose} className="scene-sets-modal-close"><X size={16} /></button>
+          <button onClick={onClose} className="scene-sets-modal-close" aria-label="Close the quality review"><X size={16} /></button>
         </div>
 
         {angle.still_image_url && (
@@ -962,8 +962,12 @@ function formatTime(secs) {
 // this place is going to look different"): the events held at a place, each
 // with its own look and its dressed angles, under the place's everyday look.
 // An event whose photos are their own set (an event version) shows that set.
-export function LooksRow({ set, focusZone = null, onToast, onRefresh }) {
+export function LooksRow({ set, focusZone = null, onToast, onRefresh, onClose }) {
   const events = set.events || [];
+  // Seventh audit: the event cards and dressed angles read again when the
+  // base, its approval or the angles change in this same panel.
+  const baseKey = `${set.base_still_url || ''}|${set.base_approved ? 1 : 0}|${set.location_approved_base?.image_url || ''}`;
+  const angleKey = (set.angles || []).map((a) => a.id).join(',');
   const versions = (set.event_versions || []).filter((v) => v.event);
   // An event version whose event moved elsewhere still shows (fifth audit):
   // hidden, it kept this set an everyday set with versions, unexplained.
@@ -981,7 +985,7 @@ export function LooksRow({ set, focusZone = null, onToast, onRefresh }) {
         <div key={ev.id} data-testid={`scene-set-event-${ev.id}`}
           className={`scene-sets-event-look${focusZone === `look:${ev.id}` ? ' is-zone-focus' : ''}`}>
           <Link className="scene-sets-event-look-name" to={`/shows/${ev.show_id}/events/${ev.id}`}>{ev.name}</Link>
-          <EventLookImage showId={ev.show_id} eventId={ev.id} canGenerate onToast={onToast} onSaved={onRefresh} />
+          <EventLookImage showId={ev.show_id} eventId={ev.id} canGenerate onToast={onToast} onSaved={onRefresh} refreshKey={baseKey} />
           {/* Only an everyday place lends an event its photos from another set. */}
           {!set.version_of && <UsePhotosFromSet set={set} event={ev} onToast={onToast} onSaved={onRefresh} />}
           {/* An episode made from several events dresses its own event's
@@ -990,7 +994,7 @@ export function LooksRow({ set, focusZone = null, onToast, onRefresh }) {
           {ev.episode_id && ev.is_episode_event && (
             <>
               <span className="scene-sets-event-angles-label">Angles for this event</span>
-              <DressedAngles episodeId={ev.episode_id} setId={set.id} onToast={onToast} />
+              <DressedAngles episodeId={ev.episode_id} setId={set.id} onToast={onToast} refreshKey={angleKey} />
             </>
           )}
           {ev.is_episode_event && ev.other_events?.length > 0 && (
@@ -1015,13 +1019,13 @@ export function LooksRow({ set, focusZone = null, onToast, onRefresh }) {
         <div key={v.id} data-testid={`scene-set-event-${v.event.id}`}
           className={`scene-sets-event-look${focusZone === `look:${v.event.id}` ? ' is-zone-focus' : ''}`}>
           <Link className="scene-sets-event-look-name" to={`/shows/${v.event.show_id || set.show_id}/events/${v.event.id}`}>{v.event.name}</Link>
-          <EventPhotosSet photosSet={v} showId={set.show_id} event={v.event} onToast={onToast} onSaved={onRefresh} />
+          <EventPhotosSet photosSet={v} showId={set.show_id} event={v.event} onToast={onToast} onSaved={onRefresh} onLeave={onClose} />
         </div>
       ))}
       {loneVersions.map((v) => (
         <div key={v.id} className="scene-sets-event-look" data-testid={`scene-set-lone-version-${v.id}`}>
           <span className="scene-sets-event-look-name">Event photos with no event</span>
-          <EventPhotosSet photosSet={v} showId={set.show_id} onToast={onToast} onSaved={onRefresh} />
+          <EventPhotosSet photosSet={v} showId={set.show_id} onToast={onToast} onSaved={onRefresh} onLeave={onClose} />
         </div>
       ))}
       {otherLooks.length > 0 && (
@@ -1092,6 +1096,8 @@ export function ApprovedBaseRow({ set, onToast = () => {}, onRefresh = () => {} 
       </div>
     );
   }
+  // An event version is one event's photos, not the everyday look (seventh audit).
+  if (set.version_of) return null;
   if (set.world_location_id && set.base_still_url) {
     return (
       <div className="scene-sets-approved-row" data-testid={`approved-base-${set.id}`}>
@@ -1167,6 +1173,19 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
     return out;
   }, [set.base_still_url, sortedAngles, bustUrl]);
   const [showDetails, setShowDetails] = useState(false);
+  // Focus goes back to what opened the panel when it closes (seventh audit:
+  // it fell to the page, and a keyboard user lost their place).
+  const openerRef = useRef(null);
+  useEffect(() => {
+    if (showDetails) {
+      openerRef.current = typeof document !== 'undefined' ? document.activeElement : null;
+      return undefined;
+    }
+    const opener = openerRef.current;
+    openerRef.current = null;
+    if (opener && opener.isConnected && typeof opener.focus === 'function') opener.focus();
+    return undefined;
+  }, [showDetails]);
   // The main picture on the Place tab flips through the base and the views (2026-10-17).
   const [mainIndex, setMainIndex] = useState(0);
   // Back to the main background when the set, its base or its views change
@@ -1542,7 +1561,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                       <CheckCircle2 size={12} /> Make default {set.scene_type === 'CLOSET' ? 'closet' : 'home'}
                     </button>
                   )}
-                  <button onClick={() => { setShowMenu(false); onDeleteSet(set); }} disabled={isGenerating} className="scene-sets-kebab-danger">
+                  {/* Its base is the location's everyday look: the server refuses
+                      the delete until it is un-approved, so it says so first
+                      (seventh audit). */}
+                  <button onClick={() => { setShowMenu(false); onDeleteSet(set); }} disabled={isGenerating || set.base_approved} className="scene-sets-kebab-danger"
+                    title={set.base_approved ? "Its base is the location's everyday look: un-approve it first" : undefined} data-testid={`delete-set-${set.id}`}>
                     <Trash2 size={12} /> Delete Set
                   </button>
                 </div>
@@ -2016,7 +2039,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                             { key: 'cozy', label: '🕯️ Cozy' },
                             { key: 'dramatic', label: '🎭 Dramatic' },
                           ].map(m => (
-                            <button key={m.key} className="scene-sets-mood-btn" disabled={toolsAction === `mood_${m.key}`}
+                            <button key={m.key} className="scene-sets-mood-btn" disabled={String(toolsAction || '').startsWith('mood_')}
                               onClick={async () => {
                                 setToolsAction(`mood_${m.key}`);
                                 try {
@@ -2053,7 +2076,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                     {set.show_id && <CharacterHomes set={set} onToast={showToast} onDefaultsChanged={onDefaultsChanged} />}
                     {/* An event's own photos: this set is that event's look at its everyday place. */}
                     {set.version_of && (
-                      <EventPhotosSet photosSet={set} showId={set.show_id} everyday={set.version_of} event={set.version_event} onToast={showToast} onSaved={onRefresh} />
+                      <EventPhotosSet photosSet={set} showId={set.show_id} everyday={set.version_of} event={set.version_event} onToast={showToast} onSaved={onRefresh} onLeave={() => setShowDetails(false)} />
                     )}
                     <div className="scene-sets-place-heading" data-testid={`scene-set-place-everyday-${set.id}`}>
                       {set.version_of ? `${set.version_event?.name || 'Event'} look` : 'Everyday look'}
@@ -2524,9 +2547,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                       </div>
                     )}
                     {/* 2026-10-15, trimmed 2026-10-17: the everyday look at each time of day and in each weather. */}
-                    {set.base_approved && <LookVariants setId={set.id} onToast={showToast} />}
+                    {set.base_approved && <LookVariants setId={set.id} onToast={showToast}
+                      refreshKey={(set.angles || []).filter((a) => a.angle_kind === 'front').map((a) => `${a.id}:${a.still_image_url || ''}`).join(',')} />}
                     {/* The events held here, each with its own look and angles. */}
-                    <LooksRow set={set} focusZone={focused ? focusZone : null} onToast={showToast} onRefresh={onRefresh} />
+                    <LooksRow set={set} focusZone={focused ? focusZone : null} onToast={showToast} onRefresh={onRefresh} onClose={() => setShowDetails(false)} />
                     {!set.version_of && (set.events || []).length === 0 && (set.event_versions || []).length === 0 && (set.looks || []).length === 0 && (
                       <p className="scene-sets-ws-empty" data-testid={`scene-set-no-events-${set.id}`}>No events are held here yet. When an event is held here, its look and angles are made below the everyday look.</p>
                     )}
@@ -2805,7 +2829,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                             <button
                               key={m.key}
                               className="scene-sets-mood-btn"
-                              disabled={toolsAction === `mood_${m.key}`}
+                              disabled={String(toolsAction || '').startsWith('mood_')}
                               onClick={async () => {
                                 setToolsAction(`mood_${m.key}`);
                                 try {
@@ -3106,6 +3130,13 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
   if (ps.base_approved !== ns.base_approved) return false;
   if (ps.world_location_id !== ns.world_location_id) return false;
   if (ps.location_approved_base?.scene_set_id !== ns.location_approved_base?.scene_set_id) return false;
+  if (ps.location_approved_base?.image_url !== ns.location_approved_base?.image_url) return false;
+  // Changes that touch another row than this set's (seventh audit): its
+  // versions made their own set, the venue photo on its World Location.
+  if (ps.version_of?.id !== ns.version_of?.id || ps.version_event?.id !== ns.version_event?.id) return false;
+  const versionSig = (x) => (x.event_versions || []).map((v) => `${v.id}:${v.event?.id || ''}:${v.event?.locked ? 1 : 0}`).join(',');
+  if (versionSig(ps) !== versionSig(ns)) return false;
+  if (ps.venue_photo_url !== ns.venue_photo_url) return false;
   const pe = ps.events || [], ne = ns.events || [];
   if (pe.length !== ne.length) return false;
   for (let i = 0; i < pe.length; i++) {
