@@ -26,8 +26,10 @@
  * A representative's authority (Evoni, 2026-10-18: "creative authority and
  * financial authority must be separate. Someone might be able to approve a
  * campaign concept without being authorized to spend money or sign a
- * contract"). Each has a creative level (CREATIVE_LEVELS), a financial level
- * (FINANCIAL_LEVELS), what they may do in her words (`can`), and what needs
+ * contract"; "negotiating, authorizing spending, and finalizing an agreement
+ * are three separate permissions"). Each has a creative level
+ * (CREATIVE_LEVELS) and three permissions (NEGOTIATE_LEVELS, SPEND_LEVELS,
+ * FINALIZE_LEVELS), what they may do in her words (`can`), and what needs
  * someone above them (`needs_approval`, from `escalates_to`). Every
  * representative's actions are also one of ACTION_KINDS. No founder is named
  * here: each brand's founder stays as the app describes her until Evoni
@@ -44,12 +46,21 @@ const CREATIVE_LEVELS = Object.freeze({
   approve: 'Can approve creative concepts, messaging, styling direction and collaborators',
 });
 
-// Financial authority, separate from creative (lowest to highest).
-const FINANCIAL_LEVELS = Object.freeze({
-  none: 'Cannot commit money or sign; a financial commitment goes to an authorized approver',
-  negotiate: 'Can negotiate terms within an approved campaign budget',
-  routine: 'Can negotiate within an approved budget and approve routine collaborations',
-  full: 'Can approve partnerships, budgets and campaigns within the established business rules',
+// Negotiating, authorizing spending and finalizing an agreement are three
+// separate permissions, each checked on its own (Evoni, 2026-10-18).
+const NEGOTIATE_LEVELS = Object.freeze({
+  propose: 'Can propose and discuss terms, and recommend compensation',
+  within_approved: 'Can negotiate terms within approved parameters or an approved budget',
+  full: 'Can negotiate any terms, subject to the business rules',
+});
+const SPEND_LEVELS = Object.freeze({
+  none: 'Cannot authorize spending; the founder approves it',
+  delegated: 'Can authorize spending within explicitly delegated limits',
+  full: 'Can authorize spending as founder, subject to the business rules',
+});
+const FINALIZE_LEVELS = Object.freeze({
+  none: 'Cannot finalize a binding agreement alone; it needs the required business approval',
+  founder: 'Can finalize as founder, subject to the business rules',
 });
 
 // What any representative may do, alone or with approval (Evoni, 2026-10-18).
@@ -59,7 +70,8 @@ const ACTION_KINDS = Object.freeze({
   restricted: ['Rewrite established brand canon', 'Exceed a budget', 'Invent a finalized contract', 'Publish content without authorization'],
 });
 // A binding change needs both the business authority (the representative's
-// levels, or their escalation) and Evoni's approval in the story.
+// permissions, or their escalation) and Evoni's approval in the story; no
+// permission here executes a transaction.
 const BINDING_RULE = 'A binding change needs the right business authority and Evoni\'s approval.';
 
 const BRAND_PERSONALITIES = Object.freeze({
@@ -154,9 +166,11 @@ const REPRESENTATIVES = Object.freeze([
     authority: {
       label: 'High creative authority',
       creative: 'approve',
-      financial: 'negotiate',
-      can: ['Approve styling concepts', 'Select collaborators', 'Negotiate approved campaigns'],
-      needs_approval: ['Major commitments'],
+      negotiate: 'within_approved',
+      spend: 'delegated',
+      finalize: 'none',
+      can: ['Approve styling concepts', 'Select collaborators', 'Negotiate approved campaigns within approved parameters'],
+      needs_approval: ['Major commitments', 'Spending beyond delegated limits', 'Finalizing a binding agreement'],
       escalates_to: 'founder',
     },
     description: 'Velour Atelier\'s Creative Director. Reserved, formidable, impeccably polished. She sees potential in Lala and expects her to prove she can represent the house.',
@@ -186,7 +200,9 @@ const REPRESENTATIVES = Object.freeze([
     authority: {
       label: 'Founder authority',
       creative: 'approve',
-      financial: 'full',
+      negotiate: 'full',
+      spend: 'full',
+      finalize: 'founder',
       can: ['Approve partnerships', 'Approve budgets', 'Approve campaigns', 'Set product direction', 'All within the established business rules'],
       needs_approval: [],
       escalates_to: null,
@@ -218,9 +234,11 @@ const REPRESENTATIVES = Object.freeze([
     authority: {
       label: 'Brand Director authority',
       creative: 'propose',
-      financial: 'routine',
+      negotiate: 'within_approved',
+      spend: 'delegated',
+      finalize: 'none',
       can: ['Propose campaigns', 'Select creators', 'Negotiate approved terms', 'Approve routine collaborations'],
-      needs_approval: ['Major commitments'],
+      needs_approval: ['Major commitments', 'Spending beyond delegated limits', 'Finalizing a binding agreement'],
       escalates_to: 'founder',
     },
     description: 'The Column\'s Brand Director. Analytical, understated, discerning. He asks whether someone understands her wardrobe.',
@@ -250,9 +268,11 @@ const REPRESENTATIVES = Object.freeze([
     authority: {
       label: 'Brand storytelling authority',
       creative: 'approve',
-      financial: 'none',
-      can: ['Approve creative concepts', 'Approve messaging', 'Approve campaign proposals within her remit'],
-      needs_approval: ['Financial commitments'],
+      negotiate: 'propose',
+      spend: 'none',
+      finalize: 'none',
+      can: ['Develop campaigns', 'Select potential creative partners', 'Discuss collaboration opportunities and propose deliverables', 'Negotiate creative direction and campaign messaging', 'Recommend compensation'],
+      needs_approval: ['Any spending', 'Financial commitments', 'Finalizing a binding agreement'],
       escalates_to: 'founder',
     },
     description: 'Aura Fragrance\'s Brand Storytelling Director. Poetic, intuitive and emotionally perceptive; she carries the house\'s heritage in how she tells its stories.',
@@ -282,9 +302,11 @@ const REPRESENTATIVES = Object.freeze([
     authority: {
       label: 'Brand Director authority',
       creative: 'propose',
-      financial: 'negotiate',
+      negotiate: 'within_approved',
+      spend: 'delegated',
+      finalize: 'none',
       can: ['Manage creator relationships', 'Negotiate within approved budgets'],
-      needs_approval: ['Major partnerships'],
+      needs_approval: ['Major partnerships', 'Spending beyond delegated limits', 'Finalizing a binding agreement'],
       escalates_to: 'founder',
     },
     description: 'First Light Studio\'s Brand Director. He manages partnerships, creator relationships, product campaigns and business development, and reports to the founder.',
@@ -314,9 +336,11 @@ const REPRESENTATIVES = Object.freeze([
     authority: {
       label: 'High creative authority',
       creative: 'approve',
-      financial: 'negotiate',
-      can: ['Approve creative concepts', 'Approve styling direction', 'Approve collaborators'],
-      needs_approval: ['Major financial commitments'],
+      negotiate: 'within_approved',
+      spend: 'delegated',
+      finalize: 'none',
+      can: ['Select potential collaborators', 'Approve creative concepts and styling direction', 'Negotiate compensation and deliverables within an approved budget', 'Propose alternative deal structures'],
+      needs_approval: ['Exceeding the approved budget', 'Major financial commitments', 'Finalizing a binding agreement'],
       escalates_to: 'founder',
     },
     description: 'Carte Blanche\'s Creative Director. Confident, sharp and willing to challenge Lala, about conviction rather than controversy.',
@@ -340,5 +364,5 @@ const REPRESENTATIVES = Object.freeze([
 ]);
 
 module.exports = {
-  CREATIVE_LEVELS, FINANCIAL_LEVELS, ACTION_KINDS, BINDING_RULE, BRAND_PERSONALITIES, BRAND_RELATIONSHIPS, REPRESENTATIVES,
+  CREATIVE_LEVELS, NEGOTIATE_LEVELS, SPEND_LEVELS, FINALIZE_LEVELS, ACTION_KINDS, BINDING_RULE, BRAND_PERSONALITIES, BRAND_RELATIONSHIPS, REPRESENTATIVES,
 };

@@ -96,9 +96,9 @@ const seedOf = (slug) => LALAVERSE_BRANDS_SEED.find((b) => b.slug === slug);
     }
     const jordan = reps.find((r) => r.character_key === 'jordan_ellis');
     expect(jordan.role_label).toBe('Brand Director, First Light Studio');
-    expect(asJson(jordan.extra_fields).authority).toMatchObject({ creative: 'propose', financial: 'negotiate', escalates_to: 'founder' });
+    expect(asJson(jordan.extra_fields).authority).toMatchObject({ creative: 'propose', negotiate: 'within_approved', spend: 'delegated', finalize: 'none', escalates_to: 'founder' });
     const nia = reps.find((r) => r.character_key === 'nia_bennett');
-    expect(asJson(nia.extra_fields).authority).toMatchObject({ financial: 'full', escalates_to: null });
+    expect(asJson(nia.extra_fields).authority).toMatchObject({ spend: 'full', finalize: 'founder', escalates_to: null });
   });
 
   it('leaves a representative already there alone', async () => {

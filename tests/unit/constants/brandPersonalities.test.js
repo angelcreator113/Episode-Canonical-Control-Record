@@ -7,7 +7,7 @@
  */
 const { LALAVERSE_BRANDS_SEED } = require('../../../src/constants/lalaverseBrands');
 const {
-  CREATIVE_LEVELS, FINANCIAL_LEVELS, ACTION_KINDS, BRAND_PERSONALITIES, BRAND_RELATIONSHIPS, REPRESENTATIVES,
+  CREATIVE_LEVELS, NEGOTIATE_LEVELS, SPEND_LEVELS, FINALIZE_LEVELS, ACTION_KINDS, BRAND_PERSONALITIES, BRAND_RELATIONSHIPS, REPRESENTATIVES,
 } = require('../../../src/constants/brandPersonalities');
 
 const CANON_FIELDS = ['slug', 'name', 'type', 'category', 'description', 'aesthetic', 'niche', 'founder', 'press_angle'];
@@ -36,36 +36,41 @@ describe('brand personalities', () => {
     for (const r of REPRESENTATIVES) {
       expect(BRAND_PERSONALITIES[r.brand].representative).toBe(r.key);
       expect(Object.keys(CREATIVE_LEVELS)).toContain(r.authority.creative);
-      expect(Object.keys(FINANCIAL_LEVELS)).toContain(r.authority.financial);
-      if (r.authority.financial === 'full') expect(r.authority.escalates_to).toBeNull();
+      expect(Object.keys(NEGOTIATE_LEVELS)).toContain(r.authority.negotiate);
+      expect(Object.keys(SPEND_LEVELS)).toContain(r.authority.spend);
+      expect(Object.keys(FINALIZE_LEVELS)).toContain(r.authority.finalize);
+      if (r.authority.finalize === 'founder') expect(r.authority.escalates_to).toBeNull();
       else expect(r.authority.escalates_to).toBe('founder');
     }
   });
 
   test('the authority levels are Evoni\'s table of 2026-10-18', () => {
-    const table = Object.fromEntries(REPRESENTATIVES.map((r) => [r.key, [r.authority.label, r.authority.creative, r.authority.financial]]));
+    const a = (r) => r.authority;
+    const table = Object.fromEntries(REPRESENTATIVES.map((r) => [r.key, [a(r).label, a(r).creative, a(r).negotiate, a(r).spend, a(r).finalize]]));
     expect(table).toEqual({
-      vivienne_laurent: ['High creative authority', 'approve', 'negotiate'],
-      nia_bennett: ['Founder authority', 'approve', 'full'],
-      adrian_cole: ['Brand Director authority', 'propose', 'routine'],
-      celeste_moreau: ['Brand storytelling authority', 'approve', 'none'],
-      jordan_ellis: ['Brand Director authority', 'propose', 'negotiate'],
-      zora_vale: ['High creative authority', 'approve', 'negotiate'],
+      vivienne_laurent: ['High creative authority', 'approve', 'within_approved', 'delegated', 'none'],
+      nia_bennett: ['Founder authority', 'approve', 'full', 'full', 'founder'],
+      adrian_cole: ['Brand Director authority', 'propose', 'within_approved', 'delegated', 'none'],
+      celeste_moreau: ['Brand storytelling authority', 'approve', 'propose', 'none', 'none'],
+      jordan_ellis: ['Brand Director authority', 'propose', 'within_approved', 'delegated', 'none'],
+      zora_vale: ['High creative authority', 'approve', 'within_approved', 'delegated', 'none'],
     });
   });
 
   test('Celeste can approve a concept without being able to commit money', () => {
     const celeste = REPRESENTATIVES.find((r) => r.key === 'celeste_moreau');
     expect(celeste.authority.creative).toBe('approve');
-    expect(celeste.authority.financial).toBe('none');
+    expect(celeste.authority.negotiate).toBe('propose');
+    expect(celeste.authority.spend).toBe('none');
     expect(celeste.authority.needs_approval).toContain('Financial commitments');
+    expect(celeste.authority.can).toContain('Recommend compensation');
   });
 
   test('Jordan Ellis is First Light\'s Brand Director, negotiating within approved budgets; major partnerships go to the founder', () => {
     const jordan = REPRESENTATIVES.find((r) => r.key === 'jordan_ellis');
     expect(jordan.title).toBe('Brand Director');
     expect(jordan.title).not.toMatch(/founder/i);
-    expect(jordan.authority).toEqual(expect.objectContaining({ financial: 'negotiate', escalates_to: 'founder' }));
+    expect(jordan.authority).toEqual(expect.objectContaining({ negotiate: 'within_approved', spend: 'delegated', escalates_to: 'founder' }));
     expect(jordan.authority.needs_approval).toContain('Major partnerships');
   });
 
@@ -73,8 +78,16 @@ describe('brand personalities', () => {
     expect(REPRESENTATIVES.find((r) => r.key === 'adrian_cole').title).toBe('Brand Director');
   });
 
-  test('only Nia Bennett, Ori\'s founder, has full financial authority', () => {
-    expect(REPRESENTATIVES.filter((r) => r.authority.financial === 'full').map((r) => r.key)).toEqual(['nia_bennett']);
+  test('only Nia Bennett, Ori\'s founder, authorizes any spending or finalizes an agreement', () => {
+    expect(REPRESENTATIVES.filter((r) => r.authority.spend === 'full').map((r) => r.key)).toEqual(['nia_bennett']);
+    expect(REPRESENTATIVES.filter((r) => r.authority.finalize !== 'none').map((r) => r.key)).toEqual(['nia_bennett']);
+  });
+
+  test('Zora negotiates within an approved budget and cannot exceed it', () => {
+    const zora = REPRESENTATIVES.find((r) => r.key === 'zora_vale');
+    expect(zora.authority.negotiate).toBe('within_approved');
+    expect(zora.authority.can).toContain('Propose alternative deal structures');
+    expect(zora.authority.needs_approval).toEqual(expect.arrayContaining(['Exceeding the approved budget', 'Major financial commitments', 'Finalizing a binding agreement']));
   });
 
   test('no representative may rewrite canon, exceed a budget, invent a contract or publish unauthorized', () => {
