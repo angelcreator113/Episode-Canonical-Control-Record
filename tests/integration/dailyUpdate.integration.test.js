@@ -136,6 +136,7 @@ const HOUR = 60 * 60 * 1000;
     expect(group(body, 'secrets').items.find((x) => x.id === ids.secret)).toMatchObject({ character_id: ids.maren, text: 'She rehearses what she will say.' });
     expect(has(group(body, 'secrets').items, ids.drSecret)).toBe(false);
     expect(group(body, 'deals').items.find((x) => x.id === ids.deal)).toMatchObject({ brand: 'Velour', amount: 1200, show: `Daily ${tag}` });
+    expect(group(body, 'deals').link).toBe('/admin?tab=opportunities');
     const findings = group(body, 'findings');
     expect(findings.read_only).toBe(true);
     expect(findings.items.find((x) => x.character_id === ids.maren).open).toBe(2);

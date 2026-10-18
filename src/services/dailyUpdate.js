@@ -45,6 +45,7 @@ const AHEAD_DAYS = 3;
 const REVIEW = '/admin?tab=pulse&sub=review';
 const VOICES = '/admin?tab=pulse&sub=voices';
 const CAST = '/character-registry';
+const OPPORTUNITIES = '/admin?tab=opportunities';
 
 const clip = (v, n = 160) => (v == null ? null : String(v).replace(/\s+/g, ' ').trim().slice(0, n));
 const iso = (d) => (d ? new Date(d).toISOString() : null);
@@ -196,7 +197,7 @@ async function waiting(db, shows) {
       items: secrets.map((s) => ({ id: s.id, character_id: s.registry_character_id, name: s.name, text: clip(s.text, 300), source: s.source_field || null, by: s.created_by || null, created_at: iso(s.created_at) })),
     },
     {
-      key: 'deals', label: 'Brand deals', total: dealsTotal, link: null,
+      key: 'deals', label: 'Brand deals', total: dealsTotal, link: OPPORTUNITIES,
       items: deals.map((d) => ({
         id: d.id, show_id: d.show_id, show: shows.get(d.show_id) || null, name: d.name, type: d.opportunity_type, brand: d.brand_or_company || null,
         amount: d.payment_amount == null ? null : Number(d.payment_amount), payment_type: d.payment_type || null,
