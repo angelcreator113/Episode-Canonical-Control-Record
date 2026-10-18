@@ -77,8 +77,9 @@ async function loadPitchInputs(models, showId) {
 
   const locations = await safe('locations', async () => {
     if (!WorldLocation) return [];
-    const rows = await WorldLocation.findAll({ attributes: ['id', 'name', 'city'], order: [['name', 'ASC']], limit: LIMITS.locations });
-    return rows.map((r) => (r.toJSON ? r.toJSON() : r)).filter((l) => l.name);
+    // Real venues before the Feed creators' own studios, the cities in turn (services/locationPicks).
+    const rows = await require('./locationPicks').pickLocations(models, { limit: LIMITS.locations });
+    return rows.map(({ id, name, city }) => ({ id, name, city })).filter((l) => l.name);
   }, []);
 
   const recent = await safe('recent events', async () => {
