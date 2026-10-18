@@ -52,7 +52,7 @@ describe('the $150 floor is gone (Task #2347)', () => {
   });
 
   it('both prompts carry the price guide', () => {
-    expect((routeSrc.match(/\$\{priceGuide\}\n\nReturn ONLY the JSON\./g) || []).length).toBe(2);
+    expect((routeSrc.match(/\$\{priceGuide\}\n\$\{brandBlock\}\nReturn ONLY the JSON\./g) || []).length).toBe(2);
   });
 
   it('neither WorldAdmin nor the Add piece auto-fill clamps the AI price to 150.00', () => {
