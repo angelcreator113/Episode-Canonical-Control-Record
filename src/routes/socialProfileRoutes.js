@@ -10,6 +10,9 @@
 // POST /:id/cross         — promote to world character
 // POST /:id/add-moment    — append encounter moment
 // GET  /:id/scene-context — formatted context for story engine injection
+// GET  /:id/posting-schedule         — their posting schedule (or null) and a suggestion (services/postingSchedule)
+// PUT  /:id/posting-schedule         — save { days, windows, per_week, tz_offset } (ADMIN); null clears it
+// POST /:id/posting-schedule/suggest — a schedule from who they are; saves nothing (ADMIN)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const express   = require('express');
@@ -24,6 +27,8 @@ const Anthropic = require('@anthropic-ai/sdk');
 // §5.55: guardJustAWomanRecord (8 handlers — record-content gate);
 // generateRateLimits (POST /generate — IP-rate-limit alongside aiRateLimiter).
 const { optionalAuth, requireAuth } = require('../middleware/auth');
+// ADMIN for the posting schedule writes (Evoni, 2026-10-18).
+const { authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -3089,6 +3094,67 @@ router.get('/lala', requireAuth, async (req, res) => {
     return res.json({ data: await getLalaFeedProfile(db, showId, { allFriends: req.query.friends === 'all', at }) });
   } catch (err) {
     console.error('[SocialProfiles] Lala profile error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Posting schedule (Evoni, 2026-10-18; services/postingSchedule) ──────────
+async function scheduleProfile(id) {
+  const { SocialProfile, PulseVoice } = require('../models');
+  const profile = await SocialProfile.findByPk(id);
+  if (!profile) return { profile: null, voice: null };
+  const voice = PulseVoice ? await PulseVoice.findOne({ where: { social_profile_id: profile.id }, attributes: ['habits_json'] }) : null;
+  return { profile, voice };
+}
+const scheduleOf = (v) => {
+  if (!v) return null;
+  try { return typeof v === 'string' ? JSON.parse(v) : v; } catch (err) {
+    console.error('[socialProfiles] a stored posting schedule is not JSON:', err.message);
+    return null;
+  }
+};
+
+router.get('/:id/posting-schedule', requireAuth, async (req, res) => {
+  try {
+    const { profile, voice } = await scheduleProfile(req.params.id);
+    if (!profile) return res.status(404).json({ error: 'Profile not found' });
+    const { suggestSchedule } = require('../services/postingSchedule');
+    return res.json({ success: true, schedule: scheduleOf(profile.posting_schedule), suggestion: suggestSchedule(profile, voice) });
+  } catch (err) {
+    console.error('[socialProfiles] GET posting-schedule error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/:id/posting-schedule/suggest', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const { profile, voice } = await scheduleProfile(req.params.id);
+    if (!profile) return res.status(404).json({ error: 'Profile not found' });
+    return res.json({ success: true, ...require('../services/postingSchedule').suggestSchedule(profile, voice) });
+  } catch (err) {
+    console.error('[socialProfiles] POST posting-schedule/suggest error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/:id/posting-schedule', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const { profile } = await scheduleProfile(req.params.id);
+    if (!profile) return res.status(404).json({ error: 'Profile not found' });
+    const { normalize, ScheduleError } = require('../services/postingSchedule');
+    let schedule = null;
+    if (req.body?.schedule !== null) {
+      try {
+        schedule = normalize(req.body?.schedule || req.body, { source: 'set' });
+      } catch (err) {
+        if (err instanceof ScheduleError) return res.status(400).json({ error: err.message });
+        throw err;
+      }
+    }
+    await profile.update({ posting_schedule: schedule });
+    return res.json({ success: true, schedule });
+  } catch (err) {
+    console.error('[socialProfiles] PUT posting-schedule error:', err);
     return res.status(500).json({ error: err.message });
   }
 });

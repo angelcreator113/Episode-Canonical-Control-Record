@@ -24,6 +24,7 @@ import Pager, { usePaged } from '../components/Pager/Pager';
 import CharacterPlacesTab from '../components/CharacterPlaces/CharacterPlacesTab';
 import KnownFor from '../components/Cast/KnownFor';
 import CharacterAppearanceTab from '../components/CharacterAppearance/CharacterAppearanceTab';
+import PostingSchedule from '../components/PostingSchedule/PostingSchedule';
 import CharacterTalkTab from '../components/CharacterTalk/CharacterTalkTab';
 import { API_URL } from '../config/api';
 import InnerLifeWorkspace from '../components/InnerLife/InnerLifeWorkspace';
@@ -2604,6 +2605,7 @@ function TabVoice({ character, feedProfile, appearances, onSaved, onFeedSaved })
       </div>
       <div className="ch-col">
         <FeedBehavior character={character} feedProfile={feedProfile} appearances={appearances} onFeedSaved={onFeedSaved} />
+        {character.feed_profile_id && <PostingSchedule profileId={character.feed_profile_id} />}
       </div>
       <div className="ch-col">
         <OnThePulse character={character} />
