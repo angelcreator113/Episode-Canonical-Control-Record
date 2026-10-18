@@ -1,10 +1,9 @@
 {
   "deliverable_type": [
-    "instagram_reel",
-    "instagram_post",
-    "tiktok_video",
+    "pulse_video",
+    "pulse_post",
     "grwm_video",
-    "instagram_stories",
+    "pulse_stories",
     "carousel_post",
     "go_live",
     "link_in_bio",
@@ -13,127 +12,113 @@
     "other"
   ],
   "formats": {
-    "instagram_reel": {
-      "label": "Instagram Reel",
+    "pulse_video": {
+      "label": "Pulse video",
       "noun": [
-        "Instagram Reel",
-        "Instagram Reels"
+        "Pulse video",
+        "Pulse videos"
       ],
       "platforms": [
-        "instagram"
+        "pulse",
+        "pulse_private",
+        "playroom"
       ],
-      "platformInPhrase": false,
       "unit": "piece",
-      "anchor": "reel",
+      "anchor": "pulse_video",
       "pricing": "per_unit",
       "defaultQuantity": 1
     },
-    "instagram_post": {
-      "label": "Instagram post",
+    "pulse_post": {
+      "label": "Pulse post",
       "noun": [
-        "Instagram post",
-        "Instagram posts"
+        "Pulse post",
+        "Pulse posts"
       ],
       "platforms": [
-        "instagram"
+        "pulse",
+        "pulse_private",
+        "playroom"
       ],
-      "platformInPhrase": false,
       "unit": "piece",
-      "anchor": "instagram_post",
-      "pricing": "per_unit",
-      "defaultQuantity": 1
-    },
-    "tiktok_video": {
-      "label": "TikTok video",
-      "noun": [
-        "TikTok video",
-        "TikTok videos"
-      ],
-      "platforms": [
-        "tiktok"
-      ],
-      "platformInPhrase": false,
-      "unit": "piece",
-      "anchor": "tiktok_video",
+      "anchor": "pulse_post",
       "pricing": "per_unit",
       "defaultQuantity": 1
     },
     "grwm_video": {
       "label": "GRWM video",
       "noun": [
-        "GRWM",
-        "GRWMs"
+        "GRWM Pulse video",
+        "GRWM Pulse videos"
       ],
       "platforms": [
-        "tiktok",
-        "instagram",
-        "youtube"
+        "pulse",
+        "pulse_private",
+        "playroom"
       ],
-      "platformInPhrase": true,
       "unit": "piece",
       "anchor": "grwm_video",
       "pricing": "per_unit",
       "defaultQuantity": 1
     },
-    "instagram_stories": {
-      "label": "Instagram Stories",
+    "pulse_stories": {
+      "label": "Pulse stories",
       "noun": [
-        "Instagram Story",
-        "Instagram Stories"
+        "Pulse story",
+        "Pulse stories"
       ],
       "platforms": [
-        "instagram"
+        "pulse",
+        "pulse_private",
+        "playroom"
       ],
-      "platformInPhrase": false,
       "unit": "slide",
-      "anchor": "stories_3",
+      "anchor": "pulse_stories_3",
       "pricing": "per_slide_of_3",
       "defaultQuantity": 3
     },
     "carousel_post": {
-      "label": "Carousel post",
+      "label": "Pulse carousel",
       "noun": [
-        "carousel post",
-        "carousel posts"
+        "Pulse carousel",
+        "Pulse carousels"
       ],
       "platforms": [
-        "instagram",
-        "tiktok"
+        "pulse",
+        "pulse_private",
+        "playroom"
       ],
-      "platformInPhrase": true,
       "unit": "piece",
       "anchor": "carousel_post",
       "pricing": "per_unit",
       "defaultQuantity": 1
     },
     "go_live": {
-      "label": "Go Live",
+      "label": "Pulse live",
       "noun": [
-        "Live",
-        "Lives"
+        "Pulse live",
+        "Pulse lives"
       ],
       "platforms": [
-        "instagram",
-        "tiktok",
-        "youtube"
+        "pulse",
+        "pulse_private",
+        "playroom"
       ],
-      "platformInPhrase": true,
       "unit": "piece",
       "anchor": "go_live",
       "pricing": "per_unit",
       "defaultQuantity": 1
     },
     "link_in_bio": {
-      "label": "Link in bio",
+      "label": "Profile link",
       "noun": [
         "day",
         "days"
       ],
       "platforms": [
-        "instagram",
-        "tiktok"
+        "pulse",
+        "pulse_private",
+        "playroom"
       ],
-      "platformInPhrase": false,
       "unit": "day",
       "anchor": "link_in_bio_week",
       "pricing": "per_started_week",
@@ -146,11 +131,10 @@
         "try-on/haul videos"
       ],
       "platforms": [
-        "tiktok",
-        "instagram",
-        "youtube"
+        "pulse",
+        "pulse_private",
+        "playroom"
       ],
-      "platformInPhrase": true,
       "unit": "piece",
       "anchor": "try_on_haul",
       "pricing": "per_unit",
@@ -163,7 +147,6 @@
         "UGC pieces for the brand"
       ],
       "platforms": [],
-      "platformInPhrase": false,
       "unit": "piece",
       "anchor": "ugc",
       "pricing": "per_unit",
@@ -176,11 +159,10 @@
         "other deliverables"
       ],
       "platforms": [
-        "instagram",
-        "tiktok",
-        "youtube"
+        "pulse",
+        "pulse_private",
+        "playroom"
       ],
-      "platformInPhrase": false,
       "unit": "piece",
       "anchor": null,
       "pricing": "per_unit",
@@ -188,9 +170,14 @@
     }
   },
   "platform_labels": {
-    "instagram": "Instagram",
-    "tiktok": "TikTok",
-    "youtube": "YouTube"
+    "pulse": "The Pulse",
+    "pulse_private": "Private Pulse account",
+    "playroom": "The PlayRoom"
+  },
+  "platform_on": {
+    "pulse": "on The Pulse",
+    "pulse_private": "on a private Pulse account",
+    "playroom": "on The PlayRoom"
   },
   "quantity": {
     "min": 1,

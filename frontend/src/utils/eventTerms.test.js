@@ -174,21 +174,23 @@ describe('deal type (Task #2330)', () => {
 });
 
 describe('deliverable formats (ruling D15, 2026-09-30; replacing the Deal PR 3 list)', () => {
-  test('the formats, with their labels; "Story Set (3)" is "Instagram Stories (×3)"', () => {
-    expect(DELIVERABLE_TYPES).toEqual(['instagram_reel', 'instagram_post', 'tiktok_video', 'grwm_video', 'instagram_stories',
+  test('the formats on The Pulse (2026-10-18), with their labels; "Story Set (3)" is "Pulse stories (×3)"', () => {
+    expect(DELIVERABLE_TYPES).toEqual(['pulse_video', 'pulse_post', 'grwm_video', 'pulse_stories',
       'carousel_post', 'go_live', 'link_in_bio', 'try_on_haul', 'ugc', 'other']);
-    expect(DELIVERABLE_TYPE_LABELS.instagram_stories).toBe('Instagram Stories');
-    expect(deliverableTypeLabel({ deliverable_type: 'instagram_stories', quantity: 3 })).toBe('Instagram Stories (×3)');
-    expect(deliverableTypeLabel({ deliverable_type: 'link_in_bio', quantity: 7 })).toBe('Link in bio (7 days)');
-    expect(deliverableTypeLabel('instagram_reel')).toBe('Instagram Reel');
+    expect(DELIVERABLE_TYPE_LABELS.pulse_stories).toBe('Pulse stories');
+    expect(deliverableTypeLabel({ deliverable_type: 'pulse_stories', quantity: 3 })).toBe('Pulse stories (×3)');
+    expect(deliverableTypeLabel({ deliverable_type: 'link_in_bio', quantity: 7 })).toBe('Profile link (7 days)');
+    expect(deliverableTypeLabel('pulse_video')).toBe('Pulse video');
+    expect(deliverableTypeLabel('instagram_reel')).toBe('instagram_reel (no type chosen)');
     expect(deliverableTypeLabel('reel')).toBe('reel (no type chosen)');
     expect(deliverableTypeLabel(null)).toBeNull();
   });
 
-  test('labels read naturally, as the server writes them ("1 TikTok GRWM, 3 Instagram Stories")', () => {
-    expect(deliverablePhrase({ deliverable_type: 'grwm_video', platform: 'tiktok', quantity: 1 })).toBe('1 TikTok GRWM');
-    expect(deliverablePhrase({ deliverable_type: 'instagram_stories', quantity: 3 })).toBe('3 Instagram Stories');
-    expect(deliverablePhrase({ deliverable_type: 'link_in_bio', platform: 'tiktok', quantity: 10 })).toBe('Link in bio on TikTok (10 days)');
+  test('labels read naturally, as the server writes them ("1 Pulse video, 3 Pulse stories"); only a non-public account is named', () => {
+    expect(deliverablePhrase({ deliverable_type: 'grwm_video', platform: 'pulse', quantity: 1 })).toBe('1 GRWM Pulse video');
+    expect(deliverablePhrase({ deliverable_type: 'pulse_stories', quantity: 3 })).toBe('3 Pulse stories');
+    expect(deliverablePhrase({ deliverable_type: 'pulse_stories', platform: 'pulse_private', quantity: 3 })).toBe('3 Pulse stories on a private Pulse account');
+    expect(deliverablePhrase({ deliverable_type: 'link_in_bio', platform: 'playroom', quantity: 10 })).toBe('Profile link on The PlayRoom (10 days)');
     expect(deliverablePhrase({ deliverable_type: 'Sponsored post' })).toBeNull();
   });
 
@@ -200,24 +202,29 @@ describe('deliverable formats (ruling D15, 2026-09-30; replacing the Deal PR 3 l
 
   test('a type off the list is refused; an untyped legacy row keeps its text until a type is chosen', () => {
     expect(buildDeliverableBody({ description: 'Reel', deliverable_type: 'appearance' }).error).toBe('Type: choose one of the listed types');
-    expect(buildDeliverableBody({ description: 'Reel', deliverable_type: 'instagram_reel' }).body)
-      .toMatchObject({ deliverable_type: 'instagram_reel', platform: 'instagram', quantity: 1 });
+    expect(buildDeliverableBody({ description: 'Reel', deliverable_type: 'instagram_reel' }).error).toBe('Type: choose one of the listed types');
+    expect(buildDeliverableBody({ description: 'Reel', deliverable_type: 'pulse_video' }).body)
+      .toMatchObject({ deliverable_type: 'pulse_video', platform: 'pulse', quantity: 1 });
     const legacy = deliverableDraftFrom({ description: 'Old reel', deliverable_type: 'IG reel' });
     expect(legacy).toMatchObject({ deliverable_type: '', legacy_type: 'IG reel', platform: '', quantity: '' });
     expect(buildDeliverableBody(legacy).body).not.toHaveProperty('deliverable_type');
-    expect(buildDeliverableBody({ ...legacy, deliverable_type: 'instagram_reel' }).body.deliverable_type).toBe('instagram_reel');
+    expect(buildDeliverableBody({ ...legacy, deliverable_type: 'pulse_video' }).body.deliverable_type).toBe('pulse_video');
     expect(deliverableDraftFrom({ description: 'Q&A', deliverable_type: 'other' })).toMatchObject({ deliverable_type: 'other', legacy_type: null });
   });
 
-  test('platform and quantity: defaults, a platform the format is not on, and the quantity range', () => {
-    expect(deliverableDraftFrom({ description: 'Stories', deliverable_type: 'instagram_stories', quantity: 5 }))
-      .toMatchObject({ platform: 'instagram', quantity: '5' });
-    expect(buildDeliverableBody({ description: 'Stories', deliverable_type: 'instagram_stories', quantity: '' }).body.quantity).toBe(3);
-    expect(buildDeliverableBody({ description: 'GRWM', deliverable_type: 'grwm_video', platform: '' }).error).toBe('Platform: choose TikTok, Instagram, YouTube');
-    expect(buildDeliverableBody({ description: 'GRWM', deliverable_type: 'instagram_reel', platform: 'tiktok' }).error).toBe('Platform: Instagram Reel is on Instagram');
+  test('account and quantity: defaults, an account the format does not go on, and the quantity range', () => {
+    expect(deliverableDraftFrom({ description: 'Stories', deliverable_type: 'pulse_stories', quantity: 5 }))
+      .toMatchObject({ platform: 'pulse', quantity: '5' });
+    expect(buildDeliverableBody({ description: 'Stories', deliverable_type: 'pulse_stories', quantity: '' }).body.quantity).toBe(3);
+    // No account chosen: The Pulse.
+    expect(buildDeliverableBody({ description: 'GRWM', deliverable_type: 'grwm_video', platform: '' }).body).toMatchObject({ platform: 'pulse' });
+    expect(buildDeliverableBody({ description: 'GRWM', deliverable_type: 'grwm_video', platform: 'pulse_private' }).body).toMatchObject({ platform: 'pulse_private' });
+    expect(buildDeliverableBody({ description: 'GRWM', deliverable_type: 'grwm_video', platform: 'tiktok' }).error)
+      .toBe('Account: GRWM video goes on The Pulse or Private Pulse account or The PlayRoom');
+    expect(buildDeliverableBody({ description: 'UGC', deliverable_type: 'ugc', platform: 'pulse' }).error).toBe('Account: Content for the brand (UGC) is not posted');
     expect(buildDeliverableBody({ description: 'Bio', deliverable_type: 'link_in_bio', quantity: '0' }).error).toBe('Days: a whole number from 1 to 365');
     expect(buildDeliverableBody({ description: 'Bio', deliverable_type: 'link_in_bio', platform: '', quantity: '14' }).body)
-      .toMatchObject({ platform: null, quantity: 14 });
+      .toMatchObject({ platform: 'pulse', quantity: 14 });
     expect(buildDeliverableBody({ description: 'UGC', deliverable_type: 'ugc', quantity: '2' }).body).toMatchObject({ platform: null, quantity: 2 });
   });
 });

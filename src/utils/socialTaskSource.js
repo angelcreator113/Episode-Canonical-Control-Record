@@ -32,8 +32,8 @@ const RETIRED_SLOTS = new Set(['brand_post_1', 'brand_post_2']);
 
 const DESCRIPTION_MAX = 160;
 
-// A typed deliverable reads by its D15 format phrase ("1 TikTok GRWM",
-// "3 Instagram Stories"; ruling D15: "The Tasks list uses the same format
+// A typed deliverable reads by its D15 format phrase ("1 Pulse video",
+// "3 Pulse stories"; ruling D15: "The Tasks list uses the same format
 // names"); an untyped row shows its stored text.
 const { deliverablePhrase, platformOf } = require('./deliverableFormats');
 

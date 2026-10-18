@@ -44,8 +44,8 @@ describe('deliverablesFromOpportunity', () => {
       ],
     });
     expect(rows).toEqual([
-      // D15: a pre-D15 key becomes its format (post → Instagram post, answer 8).
-      { description: 'Tagged post', deliverable_type: 'instagram_post', platform: 'instagram', quantity: 1, due_date: '2026-11-07', required: true, owed_to: 'brand' },
+      // D15: a pre-D15 key becomes its format (post → Pulse post, answer 8), on The Pulse.
+      { description: 'Tagged post', deliverable_type: 'pulse_post', platform: 'pulse', quantity: 1, due_date: '2026-11-07', required: true, owed_to: 'brand' },
       { description: 'Walk the show', deliverable_type: null, due_date: null, required: true, owed_to: 'brand' },
     ]);
   });
@@ -53,15 +53,15 @@ describe('deliverablesFromOpportunity', () => {
   test('D15: a format key is kept, free text stays untyped', () => {
     const rows = deliverablesFromOpportunity({
       deliverables: [
-        { type: 'tiktok_video', description: 'Unboxing' },
+        { type: 'pulse_video', description: 'Unboxing' },
         { type: 'Sponsored story', description: 'Story mention' },
         { type: 'story_set_3', description: 'Three stories' },
       ],
     });
     expect(rows.map((r) => [r.deliverable_type, r.platform, r.quantity])).toEqual([
-      ['tiktok_video', undefined, undefined],
+      ['pulse_video', undefined, undefined],
       ['Sponsored story', undefined, undefined],
-      ['instagram_stories', 'instagram', 3],
+      ['pulse_stories', 'pulse', 3],
     ]);
   });
 
