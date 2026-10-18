@@ -14,11 +14,9 @@ describe('Jade, the Almost-Mentor, is deleted', () => {
   test.each([
     ['src/routes/characterRegistry.js'],
     ['src/routes/characterGenerator.js'],
-    ['src/routes/therapy.js'],
     ['src/services/thresholdDetection.js'],
     ['src/routes/memories/voice.js'],
     ['frontend/src/data/characterAppearanceRules.js'],
-    ['frontend/src/pages/CharacterTherapy.jsx'],
     ['frontend/src/pages/SocialImport.jsx'],
     ['frontend/src/pages/NovelAssembler.jsx'],
   ])('%s has no Jade or Almost-Mentor', (file) => {

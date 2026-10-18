@@ -124,9 +124,12 @@ describe('Step 3 CP7 — memories cluster Tier 1 sweep + AI POST PROMOTE', () =>
     });
   });
 
-  describe('voice.js — 3 AI POSTs PROMOTE shape', () => {
+  describe('voice.js — 2 AI POSTs PROMOTE shape (the voice session retired 2026-10-18)', () => {
     const SRC = readSrc('voice.js');
-    ['/character-voice-session', '/generate-career-echo', '/generate-chapter-draft'].forEach((route) => {
+    test('the Character Voice Session is retired', () => {
+      expect(SRC).not.toMatch(/router\.post\('\/character-voice-session'/);
+    });
+    ['/generate-career-echo', '/generate-chapter-draft'].forEach((route) => {
       test(`POST ${route} → requireAuth + aiRateLimiter`, () => {
         const re = new RegExp(`router\\.post\\('${route.replace(/\//g, '\\/')}',\\s*requireAuth,\\s*aiRateLimiter,\\s*async`);
         expect(SRC).toMatch(re);

@@ -10,6 +10,8 @@
  *     short timeout shows the second is waiting on the lock);
  *   - row 72: a note is appended during the (mocked) AI call.
  * On origin/main one of the two writes is lost; with the fix both survive.
+ * Row 70's trigger (the therapy session close) is retired with the Therapy
+ * Room (2026-10-18), and its test with it.
  */
 jest.unmock('uuid');
 
@@ -73,22 +75,6 @@ function interleave(second, waitMs = 600) {
     for (const fn of cleanups) await fn();
   });
   const track = (ids) => cleanups.push(() => run(`DELETE FROM character_registries WHERE id = :reg`, ids));
-
-  it('row 70: two concurrent therapy-session closes both keep their breakthrough note and wound activation', async () => {
-    const ids = await seed();
-    track(ids);
-    const close = (n, moment) => registrySync.onTherapySessionClose(
-      { character_id: ids.rc, session_number: n, wound_activated: true, breakthrough_moment: moment }, models);
-
-    const secondDone = interleave(() => close(2, 'second breakthrough'));
-    await close(1, 'first breakthrough');
-    await secondDone();
-
-    const row = await rowOf(ids, 'writer_notes, wound_depth');
-    expect(row.writer_notes).toContain('first breakthrough');
-    expect(row.writer_notes).toContain('second breakthrough');
-    expect(row.wound_depth).toBe(2);
-  });
 
   it('row 71: two concurrent memory confirmations both keep their note', async () => {
     const ids = await seed();

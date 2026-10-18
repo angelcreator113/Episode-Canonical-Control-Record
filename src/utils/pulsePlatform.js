@@ -121,7 +121,19 @@ THE PULSE (LalaVerse rule):
 `;
 }
 
+/**
+ * The poster_platform a feed post by this profile carries (the quick wins,
+ * 2026-10-18: "posts default to The Pulse"): 'lalaverse' (The Pulse) for a
+ * LalaVerse profile or no profile, the profile's own app on JustAWoman's
+ * real-world feed (fallback when it has none).
+ */
+function postPlatformFor(profile, fallback = null) {
+  if (!profile || profile.feed_layer !== 'real_world') return 'lalaverse';
+  return profile.platform || fallback;
+}
+
 module.exports = {
+  postPlatformFor,
   PULSE,
   PULSE_PRIVATE,
   PLAYROOM,

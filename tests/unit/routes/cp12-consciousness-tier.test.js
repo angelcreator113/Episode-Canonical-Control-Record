@@ -1,31 +1,16 @@
-// CP12 — consciousness.js — lazy-noop closure + Tier 1 sweep + 4 AI overlay
+// The Consciousness Layer routes were retired 2026-10-18 (Evoni: "retire the
+// two you suggested"): no page called them, and /save wrote straight into a
+// character's writer_notes. This keeps them gone.
 const fs = require('fs');
 const path = require('path');
-const SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'routes', 'consciousness.js'), 'utf8');
 
-describe('CP12 — consciousness.js lazy-noop closure + AI overlay', () => {
-  test('imports requireAuth', () => {
-    expect(SRC).toMatch(/const \{ requireAuth \} = require\(['"]\.\.\/middleware\/auth['"]\)/);
-  });
-  test('imports aiRateLimiter', () => {
-    expect(SRC).toMatch(/const \{ aiRateLimiter \} = require\(['"]\.\.\/middleware\/aiRateLimiter['"]\)/);
-  });
-  test('lazy-noop residue absent', () => {
-    expect(SRC).not.toMatch(/let optionalAuth/);
-  });
-  test('AI POST /generate carries requireAuth + aiRateLimiter', () => {
-    expect(SRC).toMatch(/router\.post\('\/generate', requireAuth, aiRateLimiter,/);
-  });
-  test('AI POST /generate-lala carries requireAuth + aiRateLimiter', () => {
-    expect(SRC).toMatch(/router\.post\('\/generate-lala', requireAuth, aiRateLimiter,/);
-  });
-  test('AI POST /dilemma-triggers carries requireAuth + aiRateLimiter', () => {
-    expect(SRC).toMatch(/router\.post\('\/dilemma-triggers', requireAuth, aiRateLimiter,/);
-  });
-  test('AI POST /interview-next carries requireAuth + aiRateLimiter', () => {
-    expect(SRC).toMatch(/router\.post\('\/interview-next', requireAuth, aiRateLimiter,/);
-  });
-  test('non-AI POST /save carries requireAuth', () => {
-    expect(SRC).toMatch(/router\.post\('\/save', requireAuth,/);
+const ROOT = path.join(__dirname, '..', '..', '..');
+
+describe('the Consciousness Layer routes stay retired', () => {
+  test('the route file and its mount are gone', () => {
+    expect(fs.existsSync(path.join(ROOT, 'src', 'routes', 'consciousness.js'))).toBe(false);
+    const app = fs.readFileSync(path.join(ROOT, 'src', 'app.js'), 'utf8');
+    expect(app).not.toMatch(/require\(['"]\.\/routes\/consciousness['"]\)/);
+    expect(app).not.toMatch(/app\.use\(['"]\/api\/v1\/consciousness['"]/);
   });
 });
