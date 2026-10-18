@@ -124,10 +124,10 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     await lala(ids, 7); // Influential Lala (reputation 7–8)
     expect((await putEvent(ids, { deal_components: ['paid_for_content'] })).status).toBe(200);
     const rows = await deliverables(ids);
-    const reel = rows.find((d) => d.deliverable_type === 'instagram_reel');
+    const reel = rows.find((d) => d.deliverable_type === 'pulse_video');
     expect(reel).toBeTruthy();
-    expect(Number(reel.fee)).toBe(await anchor('reel', 4));
-    expect(Number(reel.fee)).not.toBe(await anchor('reel', 1));
+    expect(Number(reel.fee)).toBe(await anchor('pulse_video', 4));
+    expect(Number(reel.fee)).not.toBe(await anchor('pulse_video', 1));
     // The deal records the tier it was priced at.
     expect((await row(ids)).career_tier).toBe(1);
   });
@@ -136,8 +136,8 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     const ids = await seed();
     await run('UPDATE world_events SET career_tier = 3 WHERE id = :event', ids);
     expect((await putEvent(ids, { deal_components: ['paid_for_content'] })).status).toBe(200);
-    const reel = (await deliverables(ids)).find((d) => d.deliverable_type === 'instagram_reel');
-    expect(Number(reel.fee)).toBe(await anchor('reel', 3));
+    const reel = (await deliverables(ids)).find((d) => d.deliverable_type === 'pulse_video');
+    expect(Number(reel.fee)).toBe(await anchor('pulse_video', 3));
   });
 
   it('2. the first draft records its pricing version', async () => {

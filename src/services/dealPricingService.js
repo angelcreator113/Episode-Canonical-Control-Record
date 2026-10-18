@@ -223,12 +223,12 @@ const hasChoices = (list) => Array.isArray(list) && list.length > 0;
 // read as Influential and Elite for both the Post and the third piece.
 const DRAFTED_DELIVERABLES_SOURCE = 'deal';
 
-// D15 (2026-09-30): the pieces are drafted in the new formats: a Reel is an
-// Instagram Reel, a Story Set (3) is Instagram Stories ×3, a Post is an
-// Instagram post (answer 8).
-const REEL = { type: 'instagram_reel' };
-const STORIES = { type: 'instagram_stories', quantity: 3 };
-const POST = { type: 'instagram_post' };
+// D15 (2026-09-30), on The Pulse since 2026-10-18 (utils/deliverableFormats):
+// a Reel is a Pulse video, a Story Set (3) is Pulse stories ×3, a Post is a
+// Pulse post (answer 8).
+const REEL = { type: 'pulse_video' };
+const STORIES = { type: 'pulse_stories', quantity: 3 };
+const POST = { type: 'pulse_post' };
 
 /** D12's mapping: [{ type, quantity?, required? }] for a deal type at a tier. Pure. */
 function draftedDeliverableTypes(dealType, tier) {

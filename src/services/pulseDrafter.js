@@ -36,7 +36,8 @@
  * with a content type gets it and its pillars in the prompt (posterMix).
  * Every post also carries the poster's world, their DREAM city and its
  * culture, their studio and the venues they go to, and the Show Bible's
- * always-on rules (services/posterWorld; Evoni, 2026-10-18).
+ * always-on rules (services/posterWorld; Evoni, 2026-10-18), and the
+ * Culture page's gossip and media outlets (services/cultureCanon).
  * An everyday post is the pillar they are furthest behind on; a post about
  * something that happened (an event, a storyline beat) is framed as
  * whichever pillar fits. Each draft keeps its pillar in gate_json.pillar,
@@ -100,10 +101,12 @@ async function loadPoster(db, characterId) {
  * whichever pillar fits instead. null when they have no content type (or
  * on a failed read, logged): the post is drafted as before.
  */
-async function posterMix(db, profileId, { about = null } = {}) {
+async function posterMix(db, profileId, { about = null, at = null } = {}) {
   try {
-    const [[row]] = await db.sequelize.query('SELECT society_archetype FROM social_profiles WHERE id = :id', { replacements: { id: profileId } });
-    if (!row?.society_archetype) return null;
+    // The type they had at this moment: a rebrand later in the story has not happened yet (services/contentTypeHistory).
+    const type = await require('./contentTypeHistory').contentTypeAt(db, { profileId, storyOrder: at });
+    const row = { society_archetype: type };
+    if (!row.society_archetype) return null;
     const mix = require('./contentPillars');
     const pillars = await mix.pillarsFor(db, row.society_archetype);
     if (!pillars.length) return { type: row.society_archetype, pillars, planned: null, line: `They are known on The Pulse as ${row.society_archetype}.` };
@@ -124,7 +127,16 @@ function pillarOf(mix, answer) {
   return (require('./contentPillars').matchPillar(mix.pillars, answer) || mix.planned || null)?.name || null;
 }
 
-function buildPrompt({ character, profile, voice, label, context, known = null, hosting = '', mix = null, world = '', bible = null }) {
+/**
+ * The Culture page's gossip and media outlets a post may name, and the
+ * trends and archives it may lean on (services/cultureCanon; '' for none).
+ */
+async function mediaBlock(db) {
+  const { loadCultureList, gossipMediaBlock, trendsBlock, loadTrends } = require('./cultureCanon');
+  return gossipMediaBlock(await loadCultureList(db, 'GOSSIP_MEDIA')) + trendsBlock(await loadTrends(db));
+}
+
+function buildPrompt({ character, profile, voice, label, context, known = null, hosting = '', mix = null, world = '', bible = null, media = '' }) {
   const { BANNED_PHRASES } = require('./pulseVoices');
   const examples = (voice.examples_json || []).slice(0, 8).map((e) => `- ${e.text}`).join('\n') || '(none yet)';
   return `You write one post on The Pulse, LalaVerse's social network, as ${profile.display_name || character.display_name} (@${profile.handle}).
@@ -140,7 +152,7 @@ ${knowsLine(known)}
 ${hostingLine(hosting)}
 ${PRIVATE_RULE}
 ${JSON.stringify(privateOf(character))}
-${bible || ''}
+${media}${bible || ''}
 Rules:
 - Stay in the world: nothing about a show, episodes, filming or a studio.
 - Nothing that happens after this moment.
@@ -185,10 +197,11 @@ async function draftPost(db, { showId, characterId, moment, context = {}, reques
   const at = Number.isInteger(moment) ? moment : await clock.presentOrder(db, showId);
   const known = await require('./pulseKnowledge').knowledgeLine(db, showId, profile.id, at);
   const hosting = await hostedEventLines(db, profile.id);
-  const mix = await posterMix(db, profile.id, { about: context.about || null });
+  const mix = await posterMix(db, profile.id, { about: context.about || null, at });
   const { posterWorldLine, showBible } = require('./posterWorld');
   const world = await posterWorldLine(db, profile.id);
   const bible = await showBible(db, showId);
+  const media = await mediaBlock(db);
   // One automated request per drafting call (Task #3031); the caller names the kind and its job.
   await require('./pulseRequests').take(db, { showId, lane: 'automated', kind: request.kind || 'post', jobId: request.jobId || null });
   let message;
@@ -196,7 +209,7 @@ async function draftPost(db, { showId, characterId, moment, context = {}, reques
     try {
       message = await getClient().messages.create({
         model, max_tokens: 600,
-        messages: [{ role: 'user', content: buildPrompt({ character, profile, voice, label: clock.label(at), context, known, hosting, mix, world, bible: bible.block }) }],
+        messages: [{ role: 'user', content: buildPrompt({ character, profile, voice, label: clock.label(at), context, known, hosting, mix, world, bible: bible.block, media }) }],
       });
       break;
     } catch (modelErr) {
@@ -333,7 +346,7 @@ ${JSON.stringify(privateOf(character))}`;
 }
 
 /** The prompt for several posts about one moment, one per poster. */
-function buildPostBatchPrompt(entries, { label, about, bible = null }) {
+function buildPostBatchPrompt(entries, { label, about, bible = null, media = '' }) {
   const { BANNED_PHRASES } = require('./pulseVoices');
   return `You write ${entries.length} separate posts on The Pulse, LalaVerse's social network: one by each person below, each exactly in that person's own voice. They post on their own; nobody has seen the others' posts.
 
@@ -341,7 +354,7 @@ When: ${label || 'now'}.
 What happened: ${about || 'an ordinary day; each posts about whatever they would.'}
 
 ${entries.map((e, i) => itemBlock(i + 1, e, 8)).join('\n\n')}
-${bible || ''}
+${media}${bible || ''}
 Rules for every post:
 - Stay in the world: nothing about a show, episodes, filming or a studio.
 - Nothing that happens after this moment.
@@ -445,13 +458,13 @@ async function draftPostBatch(db, { showId, items, moment, context = {}, request
   for (const e of entries) {
     e.known = await knowledge.knowledgeLine(db, showId, e.profile.id, at);
     e.hosting = await hostedEventLines(db, e.profile.id);
-    e.mix = await posterMix(db, e.profile.id, { about: context.about || null });
+    e.mix = await posterMix(db, e.profile.id, { about: context.about || null, at });
     e.extra = `${e.mix?.line ? `${e.mix.line}\n` : ''}${await require('./posterWorld').posterWorldLine(db, e.profile.id)}`;
   }
   if (!entries.length) return { drafted: [], failed };
   const bible = await require('./posterWorld').showBible(db, showId);
   await require('./pulseRequests').take(db, { showId, lane: 'automated', kind: request.kind || 'posts', jobId: request.jobId || null });
-  const parsed = parseBatch(await askBatch(buildPostBatchPrompt(entries, { label: clock.label(at), about: context.about, bible: bible.block }), 500 * entries.length), entries.length);
+  const parsed = parseBatch(await askBatch(buildPostBatchPrompt(entries, { label: clock.label(at), about: context.about, bible: bible.block, media: await mediaBlock(db) }), 500 * entries.length), entries.length);
   await require('./brainRules').recordRuleUse(db.sequelize, bible.ids, 'PulseDrafter');
   const drafted = [];
   for (const [i, e] of entries.entries()) {
@@ -566,6 +579,6 @@ async function draftCommentsAndRoute(db, args) {
 }
 
 module.exports = {
-  MODELS, BATCH_MAX, knowsLine, hostingLine, privateOf, PRIVATE_RULE, draftPost, draftAndRoute, draftComment, draftCommentAndRoute, release, DraftError,
+  MODELS, BATCH_MAX, knowsLine, mediaBlock, hostingLine, privateOf, PRIVATE_RULE, draftPost, draftAndRoute, draftComment, draftCommentAndRoute, release, DraftError,
   buildPostBatchPrompt, buildCommentBatchPrompt, posterMix, parseBatch, askBatch, hostedEventLines, draftBatch, draftPostBatch, draftCommentBatch, draftPostsAndRoute, draftCommentsAndRoute,
 };

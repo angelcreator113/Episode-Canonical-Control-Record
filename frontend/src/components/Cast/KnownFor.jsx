@@ -8,6 +8,11 @@
  * picks another. The gap between their job and their content (the
  * suggestion's "Job vs content" line, or her own words) is kept on the
  * character: the story and chapter writers use it as a hook (idea 1).
+ *
+ * A type that changes over time (idea 2, 2026-10-18): changing an existing
+ * type asks whether it is a rebrand (they change now, in the story: the
+ * Pulse judges earlier posts by the old type) or a correction (they were
+ * always this), and why. The change goes into their fact history.
  */
 import { useState, useEffect } from 'react';
 import apiClient from '../../services/api';
@@ -25,6 +30,8 @@ export default function KnownFor({ characterId }) {
   const [data, setData] = useState(null);
   const [choice, setChoice] = useState(null);
   const [gap, setGap] = useState('');
+  const [rebrand, setRebrand] = useState(false);
+  const [reason, setReason] = useState('');
   const [suggestion, setSuggestion] = useState(null);
   const [busy, setBusy] = useState(null);
   const [note, setNote] = useState(null);
@@ -44,11 +51,17 @@ export default function KnownFor({ characterId }) {
     setBusy('save');
     setNote(null);
     try {
-      const res = await putContentTypeApi(characterId, { name: name || null, gap: gap.trim() || null });
+      const changing = Boolean(data?.current?.name) && (name || null) !== data.current.name;
+      const res = await putContentTypeApi(characterId, {
+        name: name || null, gap: gap.trim() || null,
+        ...(changing ? { rebrand, reason: reason.trim() || null } : {}),
+      });
       setData(res.data);
       setChoice(null);
       setSuggestion(null);
-      setNote({ kind: 'ok', text: 'Saved.' });
+      setNote({ kind: 'ok', text: changing ? (rebrand ? 'Saved as a rebrand at this point in the story.' : 'Saved as a correction.') : 'Saved.' });
+      setRebrand(false);
+      setReason('');
     } catch (err) {
       console.error('[KnownFor] save failed:', err);
       setNote({ kind: 'error', text: err.response?.data?.error || 'Could not save it.' });
@@ -79,7 +92,8 @@ export default function KnownFor({ characterId }) {
   const current = data.current;
   const picking = choice !== null;
   const picked = (data.list || []).find((a) => a.name === choice) || null;
-  const open = (name) => { setChoice(name); setGap(data.gap || ''); };
+  const open = (name) => { setChoice(name); setGap(data.gap || ''); setRebrand(false); setReason(''); };
+  const changing = picking && Boolean(current?.name) && (choice || null) !== current.name;
 
   return (
     <div className="kf" data-testid="ch-known-for">
@@ -107,6 +121,23 @@ export default function KnownFor({ characterId }) {
             </select>
           </label>
           {picked?.content && <p className="ch-note">{picked.content}</p>}
+          {changing && (
+            <fieldset className="kf-change" data-testid="kf-change">
+              <legend>From {current.name} to {choice || 'none'}</legend>
+              <label className="kf-radio">
+                <input type="radio" name="kf-change" checked={rebrand} onChange={() => setRebrand(true)} />
+                A rebrand: they change now, in the story. Their earlier posts stay {current.name}.
+              </label>
+              <label className="kf-radio">
+                <input type="radio" name="kf-change" checked={!rebrand} onChange={() => setRebrand(false)} />
+                A correction: they were always this.
+              </label>
+              <label className="kf-select">Why
+                <textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500}
+                  placeholder={rebrand ? 'What made them change (it goes on their history)' : 'Optional'} />
+              </label>
+            </fieldset>
+          )}
           <label className="kf-select">Job vs content: what the gap says about them
             <textarea rows={2} value={gap} onChange={(e) => setGap(e.target.value)} maxLength={600} placeholder="Optional. The story and chapter writers use it as a hook." />
           </label>

@@ -111,9 +111,9 @@ function readDeliverableBody(body, { partial }) {
     }
     fields.deliverable_type = b.deliverable_type;
   }
-  // D15: the platform, one the format allows (checked against the type when
-  // both are sent), or null. A format on one platform only takes it when the
-  // type is sent without one.
+  // D15: the account (The Pulse, a private Pulse account, The PlayRoom), one
+  // the format allows (checked against the type when both are sent), or
+  // null. A type sent without one takes the format's first, The Pulse.
   if (b.platform !== undefined) {
     if (b.platform !== null && !PLATFORMS.includes(b.platform)) {
       return { error: `platform must be one of ${PLATFORMS.join(', ')}, or null` };
@@ -122,9 +122,9 @@ function readDeliverableBody(body, { partial }) {
   }
   const format = formatOf(fields.deliverable_type);
   if (format && fields.platform != null && !format.platforms.includes(fields.platform)) {
-    return { error: `${format.label} is not on ${fields.platform}; choose ${format.platforms.join(' or ') || 'no platform'}` };
+    return { error: `${format.label} does not go on ${fields.platform}; choose ${format.platforms.join(' or ') || 'no platform'}` };
   }
-  if (format && fields.platform === undefined && format.platforms.length <= 1) {
+  if (format && fields.platform === undefined) {
     fields.platform = format.platforms[0] || null;
   }
   // D15: the quantity (pieces, slides or days), a whole number.

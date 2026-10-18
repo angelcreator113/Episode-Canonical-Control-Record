@@ -41,6 +41,7 @@ const {
 } = require('../utils/fitToModel');
 const { DREAM_CITY_CULTURE, DREAM_CITY_KEYS, feedCity } = require('../utils/feedCities');
 const { cityCultures } = require('../services/dreamCityText');
+const { profileWorldBlock } = require('../services/cultureCanon');
 const { DEFAULT_TIER_AFFINITY, withSixTiers } = require('../utils/followerTiers');
 const { generatedProfileFields } = require('../utils/generatedProfileFields');
 const { assignHomeLocation } = require('../services/feedHomeLocation');
@@ -410,7 +411,7 @@ router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
     if (layer === 'lalaverse' && lalaCity) {
       prompt += `\n\nLALAVERSE CONTEXT:
 This creator lives in ${lalaCity.replace(/_/g, ' ')} — ${(await cityCultures(db))[lalaCity] || ''}
-Generate a profile that feels native to that city's creator culture.
+Generate a profile that feels native to that city's creator culture.${await profileWorldBlock(db, lalaCity)}
 Lala's relationship to this creator: ${lala_relationship || 'mutual_unaware'}.
 Career position relative to Lala: ${career_pressure || 'level'}.
 Do not reference JustAWoman or the real world in any generated content.
@@ -1868,7 +1869,7 @@ router.post('/:id/regenerate', requireAuth, aiRateLimiter, guardJustAWomanRecord
     if (lalaCity) {
       prompt += `\n\nLALAVERSE CONTEXT:
 This creator lives in ${lalaCity.replace(/_/g, ' ')} — ${(await cityCultures(db))[lalaCity] || ''}
-Generate a profile that feels native to that city's creator culture.
+Generate a profile that feels native to that city's creator culture.${await profileWorldBlock(db, lalaCity)}
 Lala's relationship to this creator: ${profile.lala_relationship || 'mutual_unaware'}.
 Career position relative to Lala: ${profile.career_pressure || 'level'}.`;
     }

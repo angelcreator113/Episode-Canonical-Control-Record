@@ -57,6 +57,22 @@ const TABS = [
   { key: 'locations', label: 'Locations' },
 ];
 
+// A place's senses (world_locations.sensory_details), which the event
+// generator and the Story Engine write scenes from (Evoni, 2026-10-18: "yes
+// start the sensory details on the location form").
+const SENSES = [
+  ['sight', 'Sight', 'What you see: light, colour, what catches the eye'],
+  ['sound', 'Sound', 'What you hear'],
+  ['smell', 'Smell', 'What it smells like'],
+  ['texture', 'Touch', 'What you feel: surfaces, air, temperature'],
+  ['atmosphere', 'Atmosphere', 'The feel of the place, in a line'],
+];
+const EMPTY_SENSES = Object.fromEntries(SENSES.map(([k]) => [k, '']));
+/** The saved senses over empty fields; keys the form does not show (from_story) are kept. */
+const sensesOf = (sd) => ({ ...EMPTY_SENSES, ...(sd && typeof sd === 'object' && !Array.isArray(sd) ? sd : {}) });
+/** The senses to save: blank ones left out. */
+const sensesToSave = (sd) => Object.fromEntries(Object.entries(sd || {}).filter(([, v]) => (typeof v === 'string' ? v.trim() : v)).map(([k, v]) => [k, typeof v === 'string' ? v.trim() : v]));
+
 const LOCATION_TYPES = [
   { value: 'city', label: 'City' }, { value: 'district', label: 'District' },
   { value: 'street', label: 'Street' }, { value: 'venue', label: 'Venue / Business' },
@@ -93,7 +109,7 @@ export default function WorldFoundation({ embedded = false }) {
   const [editId, setEditId] = useState(null);
   const [toast, setToast] = useState(null);
   const [selectedLoc, setSelectedLoc] = useState(null);
-  const emptyForm = { name: '', description: '', location_type: 'venue', narrative_role: '', street_address: '', city: '', district: '', venue_type: '', property_type: '', parent_location_id: '', venue_details: { hours: '', price_level: '', capacity: '', dress_code: '', vibe_tags: [] } };
+  const emptyForm = { name: '', description: '', location_type: 'venue', narrative_role: '', street_address: '', city: '', district: '', venue_type: '', property_type: '', parent_location_id: '', venue_details: { hours: '', price_level: '', capacity: '', dress_code: '', vibe_tags: [] }, sensory_details: EMPTY_SENSES };
   const [form, setForm] = useState(emptyForm);
   // A studio's photos belong to the active show (StudioPhotos, 2026-10-18).
   const { showId } = useActiveShow();
@@ -126,8 +142,9 @@ export default function WorldFoundation({ embedded = false }) {
 
   const saveLocation = useCallback(async () => {
     try {
-      if (editId) await updateLocationApi(editId, form);
-      else await createLocationApi(form);
+      const payload = { ...form, sensory_details: sensesToSave(form.sensory_details) };
+      if (editId) await updateLocationApi(editId, payload);
+      else await createLocationApi(payload);
       flash(editId ? 'Updated' : 'Created');
       setForm(emptyForm); setEditId(null); setShowForm(false); loadLocations();
     } catch { flash('Save failed', 'error'); }
@@ -160,7 +177,7 @@ export default function WorldFoundation({ embedded = false }) {
 
   const startEdit = (loc) => {
     setEditId(loc.id);
-    setForm({ name: loc.name || '', description: loc.description || '', location_type: loc.location_type || 'venue', narrative_role: loc.narrative_role || '', street_address: loc.street_address || '', city: loc.city || '', district: loc.district || '', venue_type: loc.venue_type || '', property_type: loc.property_type || '', parent_location_id: loc.parent_location_id || '', venue_details: loc.venue_details || emptyForm.venue_details });
+    setForm({ name: loc.name || '', description: loc.description || '', location_type: loc.location_type || 'venue', narrative_role: loc.narrative_role || '', street_address: loc.street_address || '', city: loc.city || '', district: loc.district || '', venue_type: loc.venue_type || '', property_type: loc.property_type || '', parent_location_id: loc.parent_location_id || '', venue_details: loc.venue_details || emptyForm.venue_details, sensory_details: sensesOf(loc.sensory_details) });
     setShowForm(true);
   };
 
@@ -195,6 +212,19 @@ export default function WorldFoundation({ embedded = false }) {
                 {form.location_type === 'property' && <select style={inputStyle} value={form.property_type} onChange={e => setForm(p => ({ ...p, property_type: e.target.value }))}><option value="">Property Type</option>{PROPERTY_TYPES.map(v => <option key={v} value={v}>{v}</option>)}</select>}
               </div>
               <textarea style={{ ...inputStyle, marginTop: 8, resize: 'vertical' }} rows={2} placeholder="Description" value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} />
+              <details style={{ marginTop: 8 }} open={SENSES.some(([k]) => (form.sensory_details?.[k] || '').trim())} data-testid="location-senses">
+                <summary style={{ ...labelStyle, cursor: 'pointer', marginBottom: 6 }}>SENSES (the event generator and Story Engine write scenes here from these)</summary>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
+                  {SENSES.map(([k, label, hint]) => (
+                    <label key={k} style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, fontWeight: 600, color: '#555' }}>
+                      {label}
+                      <textarea style={{ ...inputStyle, resize: 'vertical', fontWeight: 400 }} rows={2} placeholder={hint} aria-label={label}
+                        value={form.sensory_details?.[k] || ''}
+                        onChange={e => setForm(p => ({ ...p, sensory_details: { ...sensesOf(p.sensory_details), [k]: e.target.value } }))} />
+                    </label>
+                  ))}
+                </div>
+              </details>
               <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
                 <button onClick={saveLocation} disabled={!form.name} style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, background: '#2C2C2C', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>{editId ? 'Update' : 'Create'}</button>
                 <button onClick={() => { setShowForm(false); setEditId(null); setForm(emptyForm); }} style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, background: '#fff', color: '#666', border: '1px solid #e8e0d0', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>

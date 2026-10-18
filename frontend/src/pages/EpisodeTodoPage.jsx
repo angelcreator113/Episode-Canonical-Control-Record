@@ -14,6 +14,7 @@ import { eventCreatorOrganizer } from '../utils/eventOrganizer';
 import { getEpisodeEvents } from '../services/episodeEventsApi';
 import SocialTaskBadge from '../components/SocialTaskBadge';
 import './WorldAdmin.css';
+import { platformLabel } from './feed/feedConstants';
 
 // ─── Track 6 CP7 module-scope helpers (Pattern F prophylactic — Api suffix) ───
 // 6 helpers covering 6 fetch sites. Promise.all + .catch fallback semantics
@@ -276,12 +277,12 @@ export default function EpisodeTodoPage() {
                           {task.label}
                         </span>
                         <SocialTaskBadge task={task} />
-                        {task.source === 'platform' && <span style={{ fontSize: 8, padding: '1px 5px', background: '#dbeafe', color: '#1e40af', borderRadius: 3, fontWeight: 600 }}>{task.platform}</span>}
+                        {task.source === 'platform' && <span style={{ fontSize: 8, padding: '1px 5px', background: '#dbeafe', color: '#1e40af', borderRadius: 3, fontWeight: 600 }}>{platformLabel(task.platform)}</span>}
                         {task.source === 'category' && <span style={{ fontSize: 8, padding: '1px 5px', background: '#d1fae5', color: '#065f46', borderRadius: 3, fontWeight: 600 }}>niche</span>}
                       </div>
                       {task.description && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>{task.description}</div>}
                     </div>
-                    <span style={{ fontSize: 9, color: '#aaa', fontFamily: "'DM Mono', monospace", whiteSpace: 'nowrap' }}>{task.platform}</span>
+                    <span style={{ fontSize: 9, color: '#aaa', fontFamily: "'DM Mono', monospace", whiteSpace: 'nowrap' }}>{platformLabel(task.platform)}</span>
                   </div>
                 ))}
               </div>

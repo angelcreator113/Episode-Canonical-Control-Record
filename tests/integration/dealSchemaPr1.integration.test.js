@@ -43,6 +43,10 @@ const RULED_ANCHORS = {
   brand_partnership_base: [null, 500, 900, 1300, 1800],
   performance_booking: [100, 200, 400, 600, 850],
 };
+// The tree's later migration 20261018130000-pulse-deliverables renames the
+// Reel and Story Set anchors for The Pulse; the amounts stay as ruled.
+const { ANCHOR_MAP } = require('../../src/migrations/20261018130000-pulse-deliverables');
+const PULSE_ANCHORS = Object.fromEntries(Object.entries(RULED_ANCHORS).map(([c, a]) => [ANCHOR_MAP[c] || c, a]));
 const RULED_PREMIUMS = {
   'rush 48h': 10, 'rush 24h': 20,
   'usage 30d': 15, 'usage 90d': 25,
@@ -105,8 +109,8 @@ const readSchema = async () => ({
     ]);
   });
 
-  it('M-3 seeds version 1 with the ruled anchors and premiums', async () => {
-    expect(await readAnchors()).toEqual(RULED_ANCHORS);
+  it('M-3 seeds version 1 with the ruled anchors and premiums (named for The Pulse by the tree)', async () => {
+    expect(await readAnchors()).toEqual(PULSE_ANCHORS);
     expect(await readPremiums()).toEqual(RULED_PREMIUMS);
   });
 
@@ -126,11 +130,16 @@ const readSchema = async () => ({
     expect(await readSchema()).toEqual(before);
     expect(await readAnchors()).toEqual(RULED_ANCHORS);
     // Dropping the rate tables also dropped rate card v2 (D15's formats,
-    // 20261001160000); its up re-seeds v2 only when it is missing, so the
-    // suites that run after this one read the card the migrations leave.
+    // 20261001160000); its up re-seeds v2 only when it is missing, and the
+    // Pulse rename (20261018130000) runs again, so the suites that run after
+    // this one read the card the migrations leave.
     await require('../../src/migrations/20261001160000-add-deliverable-formats').up(sequelize.getQueryInterface(), Sequelize);
     const [{ v2 }] = await q(`SELECT COUNT(*)::int AS v2 FROM deal_rate_anchors WHERE version = 2`);
     expect(v2).toBe(65);
+    await require('../../src/migrations/20261018130000-pulse-deliverables').up(sequelize.getQueryInterface(), Sequelize);
+    expect(await readAnchors()).toEqual(PULSE_ANCHORS);
+    const [{ live }] = await q(`SELECT COUNT(*)::int AS live FROM deal_rate_anchors WHERE version = 2 AND deleted_at IS NULL`);
+    expect(live).toBe(60); // tiktok_video's five retired
     // Recreating event_costs also restored amount NOT NULL; D13
     // (20261001190000) made it nullable, and the suites after this one
     // draft travel lines with no amount.

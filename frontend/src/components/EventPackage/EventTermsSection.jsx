@@ -495,7 +495,7 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
                     <span className="epp-term-item-text">{d.description}</span>
                     <span className="epp-term-meta">
                       <span data-testid={`terms-deliverable-owed-${d.id}`}>{DELIVERABLE_OWED_TO_LABELS[d.owed_to === 'brand' ? 'brand' : 'host']}</span>
-                      {d.deliverable_type && <span data-testid={`terms-deliverable-type-${d.id}`}>{deliverableTypeLabel(d)}{d.platform && DELIVERABLE_FORMATS[d.deliverable_type]?.platforms.length > 1 ? ` · ${PLATFORM_LABELS[d.platform]}` : ''}</span>}
+                      {d.deliverable_type && <span data-testid={`terms-deliverable-type-${d.id}`}>{deliverableTypeLabel(d)}{d.platform && PLATFORM_LABELS[d.platform] && d.platform !== DELIVERABLE_FORMATS[d.deliverable_type]?.platforms[0] ? ` · ${PLATFORM_LABELS[d.platform]}` : ''}</span>}
                       {(() => {
                         const { fee } = deliverableNotes(event, d);
                         return fee.label && (
@@ -581,13 +581,13 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
                   <select
                     value={delivDraft.deliverable_type} data-testid="terms-deliverable-type"
                     onChange={(e) => {
-                      // D15: a new format starts at its own platform and quantity.
+                      // D15: a new format starts at its own account and quantity.
                       const type = e.target.value;
                       const f = DELIVERABLE_FORMATS[type];
                       setDelivDraft((d) => ({
                         ...d,
                         deliverable_type: type,
-                        platform: f ? (f.platforms.includes(d.platform) ? d.platform : (f.platforms.length === 1 ? f.platforms[0] : '')) : '',
+                        platform: f ? (f.platforms.includes(d.platform) ? d.platform : (f.platforms[0] || '')) : '',
                         quantity: f ? String(f.defaultQuantity) : '',
                       }));
                     }}
@@ -598,12 +598,11 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
                 </label>
                 {DELIVERABLE_FORMATS[delivDraft.deliverable_type]?.platforms.length > 1 && (
                   <label className="epp-term-field">
-                    <span>Platform</span>
+                    <span>Account</span>
                     <select
-                      value={delivDraft.platform} data-testid="terms-deliverable-platform"
+                      value={delivDraft.platform || DELIVERABLE_FORMATS[delivDraft.deliverable_type].platforms[0]} data-testid="terms-deliverable-platform"
                       onChange={(e) => setDelivDraft((d) => ({ ...d, platform: e.target.value }))}
                     >
-                      <option value="">{DELIVERABLE_FORMATS[delivDraft.deliverable_type].platformInPhrase ? 'Choose a platform' : 'Any platform'}</option>
                       {DELIVERABLE_FORMATS[delivDraft.deliverable_type].platforms.map((p) => <option key={p} value={p}>{PLATFORM_LABELS[p]}</option>)}
                     </select>
                   </label>

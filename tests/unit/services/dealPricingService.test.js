@@ -11,20 +11,26 @@ const {
 const { DELIVERABLE_TYPES, DELIVERABLE_TYPE_LABELS } = require('../../../src/services/eventTermsService');
 const { ANCHORS, PREMIUMS } = require('../../../src/migrations/20260929200002-create-deal-rate-anchors');
 const { DEAL_TYPES } = require('../../../src/models/WorldEvent');
+const { ANCHOR_MAP } = require('../../../src/migrations/20261018130000-pulse-deliverables');
+
+// The seeds as 20261018130000-pulse-deliverables renamed them; tiktok_video
+// is merged into pulse_video.
+const onPulse = (anchors) => Object.fromEntries(Object.entries(anchors)
+  .filter(([c]) => c !== 'tiktok_video').map(([c, a]) => [ANCHOR_MAP[c] || c, a]));
 
 const card = rateCardFrom(
   1,
-  Object.entries(ANCHORS).flatMap(([component, amounts]) => amounts.map((amount, i) => ({ component, career_tier: i + 1, amount }))),
+  Object.entries(onPulse(ANCHORS)).flatMap(([component, amounts]) => amounts.map((amount, i) => ({ component, career_tier: i + 1, amount }))),
   PREMIUMS.map(([kind, key, percent]) => ({ kind, key, percent }))
 );
 
-// The D15 formats (2026-09-30): the Reel is an Instagram Reel, the Story Set
-// (3) Instagram Stories ×3, the Post an Instagram post, the Photo Set a
-// carousel post.
-const reel = { id: 'd-reel', description: 'One reel in the coat', deliverable_type: 'instagram_reel', platform: 'instagram', quantity: 1 };
-const stories = { id: 'd-stories', description: 'Three stories', deliverable_type: 'instagram_stories', platform: 'instagram', quantity: 3 };
-const post = { id: 'd-post', description: 'A feed post', deliverable_type: 'instagram_post', platform: 'instagram', quantity: 1 };
-const photos = { id: 'd-photos', description: 'Lookbook shots', deliverable_type: 'carousel_post', platform: 'instagram', quantity: 1 };
+// The D15 formats (2026-09-30) on The Pulse (2026-10-18): the Reel is a
+// Pulse video, the Story Set (3) Pulse stories ×3, the Post a Pulse post,
+// the Photo Set a Pulse carousel.
+const reel = { id: 'd-reel', description: 'One reel in the coat', deliverable_type: 'pulse_video', platform: 'pulse', quantity: 1 };
+const stories = { id: 'd-stories', description: 'Three stories', deliverable_type: 'pulse_stories', platform: 'pulse', quantity: 3 };
+const post = { id: 'd-post', description: 'A feed post', deliverable_type: 'pulse_post', platform: 'pulse', quantity: 1 };
+const photos = { id: 'd-photos', description: 'Lookbook shots', deliverable_type: 'carousel_post', platform: 'pulse', quantity: 1 };
 const other = { id: 'd-other', description: 'Host a Q&A', deliverable_type: 'other' };
 const legacy = { id: 'd-legacy', description: 'IG reel from the old form', deliverable_type: 'reel' };
 
@@ -33,7 +39,7 @@ const legacy = { id: 'd-legacy', description: 'IG reel from the old form', deliv
 const { V2_NEW_ANCHORS } = require('../../../src/migrations/20261001160000-add-deliverable-formats');
 const card2 = rateCardFrom(
   2,
-  Object.entries({ ...ANCHORS, ...V2_NEW_ANCHORS }).flatMap(([component, amounts]) => amounts.map((amount, i) => ({ component, career_tier: i + 1, amount }))),
+  Object.entries(onPulse({ ...ANCHORS, ...V2_NEW_ANCHORS })).flatMap(([component, amounts]) => amounts.map((amount, i) => ({ component, career_tier: i + 1, amount }))),
   PREMIUMS.map(([kind, key, percent]) => ({ kind, key, percent }))
 );
 
@@ -97,16 +103,16 @@ describe('proposeTerms', () => {
     expect(p.pricing_version).toBe(2);
     expect(fees(p)).toEqual({ appearance: 250 });
     expect(p.deliverables.map((l) => [l.id, l.component, l.fee, l.price_required])).toEqual([
-      ['d-reel', 'reel', 125, false], ['d-stories', 'stories_3', 60, false],
-      ['d-post', 'instagram_post', 65, false], ['d-photos', 'carousel_post', 75, false], ['d-other', null, null, true],
+      ['d-reel', 'pulse_video', 125, false], ['d-stories', 'pulse_stories_3', 60, false],
+      ['d-post', 'pulse_post', 65, false], ['d-photos', 'carousel_post', 75, false], ['d-other', null, null, true],
     ]);
     expect(p.gaps).toEqual(['"Host a Q&A": price required (Other is never priced automatically).']);
   });
 
   it('on card v1 (no format anchors yet) a new format is price required, and says why', () => {
     const p = proposeTerms({ event: { deal_type: 'paid_deliverables', career_tier: 2 }, deliverables: [post], card });
-    expect(p.deliverables[0]).toMatchObject({ component: 'instagram_post', fee: null, price_required: true });
-    expect(p.gaps).toEqual(['"A feed post": price required (instagram_post is not offered at tier 2).']);
+    expect(p.deliverables[0]).toMatchObject({ component: 'pulse_post', fee: null, price_required: true });
+    expect(p.gaps).toEqual(['"A feed post": price required (pulse_post is not offered at tier 2).']);
   });
 
   it('D15: quantity prices Stories per slide (answer 10) and link in bio per started week (answer 11)', () => {
@@ -114,8 +120,8 @@ describe('proposeTerms', () => {
       event: { deal_type: 'paid_deliverables', career_tier: 3 },
       deliverables: [
         { ...stories, id: 's5', quantity: 5 },
-        { id: 'bio', description: 'Bio link', deliverable_type: 'link_in_bio', platform: 'instagram', quantity: 10 },
-        { id: 'grwm', description: 'GRWM', deliverable_type: 'grwm_video', platform: 'tiktok', quantity: 2 },
+        { id: 'bio', description: 'Bio link', deliverable_type: 'link_in_bio', platform: 'pulse', quantity: 10 },
+        { id: 'grwm', description: 'GRWM', deliverable_type: 'grwm_video', platform: 'pulse_private', quantity: 2 },
       ],
       card: card2,
     });
@@ -128,8 +134,8 @@ describe('proposeTerms', () => {
     expect(p.deliverables.map((l) => [l.component, l.fee])).toEqual([[null, null], [null, null]]);
     expect(p.gaps[0]).toBe('"IG reel from the old form": price required (no type is chosen).');
     expect(DELIVERABLE_ANCHORS).toEqual({
-      instagram_reel: 'reel', instagram_post: 'instagram_post', tiktok_video: 'tiktok_video', grwm_video: 'grwm_video',
-      instagram_stories: 'stories_3', carousel_post: 'carousel_post', go_live: 'go_live', link_in_bio: 'link_in_bio_week',
+      pulse_video: 'pulse_video', pulse_post: 'pulse_post', grwm_video: 'grwm_video',
+      pulse_stories: 'pulse_stories_3', carousel_post: 'carousel_post', go_live: 'go_live', link_in_bio: 'link_in_bio_week',
       try_on_haul: 'try_on_haul', ugc: 'ugc',
     });
   });
