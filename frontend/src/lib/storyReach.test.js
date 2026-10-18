@@ -29,6 +29,17 @@ describe('the map matches the code', () => {
     }
   });
 
+  test('and gives it their kept secrets (stage B)', () => {
+    for (const w of WRITERS.filter((x) => x.brief)) {
+      const own = w.sources.filter((f) => !f.endsWith('characterStoryBrief.js'));
+      for (const f of own) {
+        const code = readFileSync(resolve(repo, f), 'utf8');
+        expect(code, `${f} loads secrets`).toMatch(/\bsecretsFor\(/);
+        for (const call of code.match(/\bstoryBrief\([^)]*\)/g)) expect(call, f).toMatch(/secrets/);
+      }
+    }
+  });
+
   test('no field is listed twice for one writer', () => {
     for (const w of WRITERS) {
       const all = [...w.shows, ...w.private, ...w.unmarked];

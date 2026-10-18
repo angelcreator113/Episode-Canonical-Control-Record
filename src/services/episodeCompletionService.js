@@ -723,7 +723,15 @@ ${narrativeLines.short || ''}`,
     draftNextSlot(sequelize, showId).catch((draftErr) => {
       console.error('[EpisodeCompletion] Next slot intention draft failed (non-blocking):', draftErr?.message);
     });
+    // The season plan from the feed's growth (Evoni, 2026-10-17): a proposal
+    // she approves, never awaited; skipped when the feed has not moved.
+    require('./seasonArcProposals').proposeLater(require('../models'), showId, 'episode_accepted');
   }
+
+  // ── 17d. Draft the Episode Story Record (stage C) ──
+  // An AI call: not awaited; it drafts only when the episode has no record
+  // yet, and nothing counts until Evoni approves it.
+  require('./episodeStoryRecord').draftLater(sequelize, episodeId);
 
   // ── 18. Complete the linked opportunity (Task #1817) ──
   // Runs once per completion: the already-accepted early return above skips

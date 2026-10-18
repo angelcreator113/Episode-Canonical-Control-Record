@@ -3,7 +3,7 @@
  * 2026-10-07): a stage is the episode's status.
  */
 import { describe, test, expect } from 'vitest';
-import { stageOf, episodeCode, episodeTags, openSlots, cardLine, pipelineColumns, pipelineSummary, eventPanel } from './episodePipeline';
+import { stageOf, episodeCode, episodeTags, openSlots, cardLine, pipelineColumns, pipelineSummary, eventPanel, pipelineSteps, matchesSearch } from './episodePipeline';
 
 describe('stageOf', () => {
   test('each status has its stage; archived has none', () => {
@@ -57,5 +57,49 @@ describe('eventPanel', () => {
   test('no event, no panel; no pay, no earns line', () => {
     expect(eventPanel(null)).toBeNull();
     expect(eventPanel({ name: 'Free' }).earns).toBeNull();
+  });
+});
+
+describe('the seven steps (Episodes mock, 2026-10-17)', () => {
+  const SECTIONS = [
+    { id: 'brief', items: [{ id: 'b1', required: true }] },
+    { id: 'world', items: [{ id: 'w1', required: true }] },
+    { id: 'scene', items: [{ id: 's1', required: true }] },
+  ];
+  const labels = (steps) => steps.map((s) => s.label);
+
+  test('seven steps; a new draft is at Planning', () => {
+    const steps = pipelineSteps({ episode: { id: 'e1', status: 'draft' } });
+    expect(labels(steps)).toEqual(['Planning', 'Script', 'Production', 'Edit', 'Thumbnail', 'Review', 'Release']);
+    expect(steps.find((s) => s.current).key).toBe('planning');
+    expect(steps[1].href).toBe('/episodes/e1?tab=scripts');
+  });
+
+  test('each step from what the episode has', () => {
+    const steps = pipelineSteps({
+      episode: { id: 'e1', status: 'scripted', script_content: 'INT.', thumbnail_url: 'x.png' },
+      checks: { b1: true, w1: true, s1: true }, sections: SECTIONS, clips: [{ beat_number: 1 }],
+    });
+    const done = Object.fromEntries(steps.map((s) => [s.key, s.done]));
+    expect(done).toEqual({ planning: true, script: true, production: true, edit: false, thumbnail: true, review: false, release: false });
+    expect(steps.find((s) => s.current).key).toBe('edit');
+  });
+
+  test('In review is Review done; Published is Release done', () => {
+    expect(pipelineSteps({ episode: { status: 'in_review' } }).find((s) => s.key === 'review').done).toBe(true);
+    expect(pipelineSteps({ episode: { status: 'published' } }).find((s) => s.key === 'release').done).toBe(true);
+  });
+});
+
+describe('searching the board', () => {
+  const ep = { kind: 'episode', episode: { season_number: 1, episode_number: 2, title: 'Gala Night', categories: ['grwm'] } };
+  const slot = { kind: 'slot', slot: { label: 'S1 · E3', intention: { story_purpose: 'A boutique challenge' }, event: null } };
+  test('by code, title, tags, or a slot’s purpose; every word must match', () => {
+    expect(matchesSearch(ep, 'gala')).toBe(true);
+    expect(matchesSearch(ep, 's1 e2')).toBe(true);
+    expect(matchesSearch(ep, 'grwm night')).toBe(true);
+    expect(matchesSearch(ep, 'boutique')).toBe(false);
+    expect(matchesSearch(slot, 'boutique')).toBe(true);
+    expect(matchesSearch(slot, '')).toBe(true);
   });
 });

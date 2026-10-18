@@ -62,7 +62,7 @@ describe('ShowEpisodesBoard', () => {
     expect(screen.getByText(/^No episodes yet\. An episode starts from an event/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Grid' }));
     expect(screen.getByText('No episodes yet')).toBeTruthy();
-    fireEvent.click(screen.getAllByRole('button', { name: '+ New episode' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'New episode' })[0]);
     expect(where).toBe('/shows/show-1/new-episode');
   });
 
@@ -113,11 +113,14 @@ describe('ShowEpisodesBoard — Now producing and the pipeline (Evoni\'s mock, 2
   test('Now producing: code, status, logline, tags, the stage, and the script still to generate', async () => {
     renderIt([DRAFT]);
     const hero = await screen.findByTestId('seb-hero');
-    expect(hero.textContent).toContain('Now producing · S1 E1');
-    expect(hero.textContent).toContain('Draft');
+    expect(hero.querySelector('.seb-badge').textContent).toBe('S1 E1');
+    expect(hero.querySelector('.seb-badge.is-status').textContent).toBe('Draft');
     expect(hero.textContent).toContain('Lala steps into the studio.');
-    expect([...hero.querySelectorAll('.seb-tags li')].map((li) => li.textContent)).toEqual(['fashion design', 'grwm']);
-    expect(hero.querySelector('[aria-current="step"]').textContent).toBe('Planning');
+    expect([...hero.querySelectorAll('.seb-tags li:not(.seb-tag-add)')].map((li) => li.textContent)).toEqual(['fashion design', 'grwm']);
+    // The seven steps (2026-10-17), derived; a new draft is at Planning.
+    expect([...hero.querySelectorAll('.seb-step-label')].map((l) => l.textContent)).toEqual(['Planning', 'Script', 'Production', 'Edit', 'Thumbnail', 'Review', 'Release']);
+    expect(hero.querySelector('[aria-current="step"] .seb-step-label').textContent).toBe('Planning');
+    expect(screen.getByRole('link', { name: /Edit Thumbnail/ }).getAttribute('href')).toBe('/template-studio/youtube?episode=ep-1');
     expect(screen.getByRole('link', { name: 'Generate Script' }).getAttribute('href')).toBe('/episodes/ep-1?tab=scripts');
     expect(screen.getByRole('link', { name: 'Open episode' }).getAttribute('href')).toBe('/episodes/ep-1');
   });
@@ -139,9 +142,10 @@ describe('ShowEpisodesBoard — Now producing and the pipeline (Evoni\'s mock, 2
     renderIt([DRAFT, { id: 'ep-9', episode_number: 9, title: 'Gala', status: 'in_review' }]);
     await waitFor(() => expect(screen.getByTestId('seb-count').textContent).toBe('2 episodes · 2 open slots'));
     const cols = [...document.querySelectorAll('.seb-col')];
-    expect(cols.map((c) => c.querySelector('.seb-col-head span').textContent)).toEqual(['Planning', 'Script', 'Production', 'Edit', 'Released']);
-    expect(cols[0].textContent).toContain('S1 E1 · Draft');
-    expect(cols[0].textContent).toContain('S1 · E2 · open slot');
+    expect(cols.map((c) => c.querySelector('.seb-col-name > span').textContent)).toEqual(['Planning', 'Script', 'Production', 'Edit', 'Released']);
+    expect(cols[0].textContent).toContain('S1 E1Draft');
+    expect(cols[0].textContent).toContain('S1 · E2Open Slot');
+    expect(cols[1].textContent).toContain('No episodes in script stage yet');
     expect(cols[0].textContent).toContain('Lala lands her first real styling opportunity');
     expect(cols[3].textContent).toContain('Gala');
   });
@@ -149,12 +153,47 @@ describe('ShowEpisodesBoard — Now producing and the pipeline (Evoni\'s mock, 2
   test('dropping a card on another stage sets that stage\'s status', async () => {
     const onChanged = renderIt([DRAFT]);
     vi.mocked(episodeService.updateEpisode).mockResolvedValue({});
-    const card = await screen.findByRole('button', { name: /I Designed My Outfit/ });
+    const card = await screen.findByTestId('seb-card-ep-1');
     const scriptCol = [...document.querySelectorAll('.seb-col')][1];
     fireEvent.dragStart(card, { dataTransfer: { effectAllowed: '' } });
     fireEvent.dragOver(scriptCol);
     fireEvent.drop(scriptCol);
     await waitFor(() => expect(episodeService.updateEpisode).toHaveBeenCalledWith('ep-1', { status: 'scripted' }));
     expect(onChanged).toHaveBeenCalled();
+  });
+});
+
+describe('ShowEpisodesBoard — the Episode Pipeline mock (2026-10-17)', () => {
+  const DRAFT = { id: 'ep-1', episode_number: 1, season_number: 1, title: 'I Designed My Outfit', status: 'draft', categories: ['grwm'] };
+  beforeEach(() => {
+    vi.mocked(api.get).mockReset().mockResolvedValue({ data: {} });
+    vi.mocked(loadProductionChecks).mockReset().mockResolvedValue({ checks: {}, linkedEvent: null });
+    Object.values(episodeService).forEach((fn) => fn.mockReset());
+  });
+
+  test('Add Tag saves the episode\u2019s categories and reloads', async () => {
+    vi.mocked(episodeService.updateEpisode).mockResolvedValue({});
+    const onChanged = renderIt([DRAFT]);
+    fireEvent.click(await screen.findByRole('button', { name: /Add Tag/ }));
+    fireEvent.change(screen.getByLabelText('New tag'), { target: { value: 'Wearable Art' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(episodeService.updateEpisode).toHaveBeenCalledWith('ep-1', { categories: ['grwm', 'Wearable Art'] }));
+    expect(onChanged).toHaveBeenCalled();
+  });
+
+  test('search narrows every column; Continue opens the episode', async () => {
+    renderIt([DRAFT, { id: 'ep-9', episode_number: 9, season_number: 1, title: 'Gala', status: 'in_review' }]);
+    fireEvent.change(await screen.findByLabelText('Search episodes'), { target: { value: 'gala' } });
+    expect(screen.queryByTestId('seb-card-ep-1')).toBeNull();
+    const gala = screen.getByTestId('seb-card-ep-9');
+    fireEvent.click(within(gala).getByRole('button', { name: 'Continue' }));
+    expect(where).toBe('/episodes/ep-9');
+  });
+
+  test('the menu holds the checklist and Edit details', async () => {
+    renderIt([DRAFT]);
+    fireEvent.click(await screen.findByRole('button', { name: 'More' }));
+    expect(screen.getByRole('menuitem', { name: /Checklist/ }).getAttribute('href')).toBe('/episodes/ep-1?tab=checklist');
+    expect(screen.getByRole('menuitem', { name: 'Edit details' }).getAttribute('href')).toBe('/episodes/ep-1/edit');
   });
 });
