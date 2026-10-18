@@ -93,6 +93,17 @@
  *                                                  call that writes the place's description
  *                                                  from their profile; saves nothing
  *                                                  (services/placeDescriptionService)
+ *   GET    /api/v1/cast/characters/:id/secrets      their secrets, kept and suggested, and
+ *                                                  the cast of their registry for Known to
+ *                                                  (services/characterSecrets)
+ *   POST   /api/v1/cast/characters/:id/secrets      { text, source_field?, known_by?, permissions?,
+ *                                                  state?, where? }: a kept secret (ADMIN)
+ *   PUT    /api/v1/cast/characters/:id/secrets/:secretId  any of those, or { status }:
+ *                                                  candidate | confirmed | retired (ADMIN)
+ *   DELETE /api/v1/cast/characters/:id/secrets/:secretId  (ADMIN; soft)
+ *   POST   /api/v1/cast/characters/:id/secrets/suggest  one AI call over their story brief;
+ *                                                  saves up to five as candidates to keep
+ *                                                  or discard (ADMIN)
  *
  * Archived is the registry's soft delete (registry_characters.deleted_at).
  *
@@ -1017,6 +1028,63 @@ router.delete('/characters/:id/hosted-events/:eventId', requireAuth, async (req,
     return res.json({ success: true, data: await unhostEvent(getModels().sequelize, { characterId: req.params.id, eventId: req.params.eventId }) });
   } catch (err) {
     return hostedError(res, err, 'DELETE characters/:id/hosted-events/:eventId');
+  }
+});
+
+/**
+ * Their secrets and what each story may reveal (services/characterSecrets;
+ * Evoni, 2026-10-17, stage B: the revelation budget).
+ */
+const secretError = (res, err, label) => {
+  const { SecretError } = require('../services/characterSecrets');
+  if (err instanceof SecretError) return res.status(err.status).json({ success: false, error: err.message });
+  console.error(`[Cast] ${label} error:`, err);
+  return res.status(500).json({ success: false, error: err.message });
+};
+const byOf = (req) => String(req.user?.email || req.user?.id || 'admin').slice(0, 255);
+
+router.get('/characters/:id/secrets', requireAuth, async (req, res) => {
+  try {
+    const { listSecrets } = require('../services/characterSecrets');
+    return res.json({ success: true, ...(await listSecrets(getModels().sequelize, req.params.id)) });
+  } catch (err) {
+    return secretError(res, err, 'GET /characters/:id/secrets');
+  }
+});
+
+router.post('/characters/:id/secrets/suggest', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  try {
+    const { suggestSecrets } = require('../services/characterSecrets');
+    return res.json({ success: true, ...(await suggestSecrets(getModels().sequelize, req.params.id, { by: byOf(req) })) });
+  } catch (err) {
+    return secretError(res, err, 'POST /characters/:id/secrets/suggest');
+  }
+});
+
+router.post('/characters/:id/secrets', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const { createSecret } = require('../services/characterSecrets');
+    return res.json({ success: true, secret: await createSecret(getModels().sequelize, req.params.id, req.body || {}, { by: byOf(req) }) });
+  } catch (err) {
+    return secretError(res, err, 'POST /characters/:id/secrets');
+  }
+});
+
+router.put('/characters/:id/secrets/:secretId', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const { updateSecret } = require('../services/characterSecrets');
+    return res.json({ success: true, secret: await updateSecret(getModels().sequelize, req.params.id, req.params.secretId, req.body || {}) });
+  } catch (err) {
+    return secretError(res, err, 'PUT /characters/:id/secrets/:secretId');
+  }
+});
+
+router.delete('/characters/:id/secrets/:secretId', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const { deleteSecret } = require('../services/characterSecrets');
+    return res.json({ success: true, ...(await deleteSecret(getModels().sequelize, req.params.id, req.params.secretId)) });
+  } catch (err) {
+    return secretError(res, err, 'DELETE /characters/:id/secrets/:secretId');
   }
 });
 
