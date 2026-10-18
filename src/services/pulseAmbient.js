@@ -15,6 +15,9 @@
  *     restart picks the same. Queues `ambient` jobs at the present story
  *     moment, never more than the day's ambient share of the automated requests: the
  *     rest (RESERVE_FOR_EVENTS) is kept for event posts.
+ *     A poster with a posting schedule (services/postingSchedule) is picked
+ *     only on one of their days and while their week has room under
+ *     per_week (Evoni, 2026-10-18); no schedule, as before.
  *   handleAmbient(db, job)   pulseDrafter.draftAndRoute with no event:
  *                            the character's Living State shapes it,
  *                            privately; the gate decides publish or Review
@@ -52,6 +55,33 @@ function pickAmbient(candidates, windowKey, limit) {
 
 const startOfUtcDay = (now) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
+/**
+ * The posters whose schedule keeps them from an ambient post now
+ * (services/postingSchedule; Evoni, 2026-10-18): today is not one of their
+ * days, or their week already holds per_week posts. No schedule, never.
+ */
+async function offScheduleProfiles(db, showId, profiles, now) {
+  const ps = require('./postingSchedule');
+  const off = new Set();
+  const asJson = (v) => { if (!v) return null; try { return typeof v === 'string' ? JSON.parse(v) : v; } catch (err) { console.error('[PulseAmbient] a posting schedule is not JSON:', err.message); return null; } };
+  for (const profile of profiles) {
+    let schedule = asJson(profile?.posting_schedule);
+    if (schedule === null && profile?.id && profile.posting_schedule === undefined) {
+      const [[row]] = await db.sequelize.query('SELECT posting_schedule FROM social_profiles WHERE id = :id', { replacements: { id: profile.id } });
+      schedule = asJson(row?.posting_schedule);
+    }
+    if (!schedule) continue;
+    if (!ps.allowsDay(schedule, now)) { off.add(Number(profile.id)); continue; }
+    const since = ps.weekStart(now, schedule.tz_offset);
+    const [[{ n }]] = await db.sequelize.query(
+      `SELECT COUNT(*)::int AS n FROM feed_posts
+        WHERE show_id = :showId AND social_profile_id = :pid AND deleted_at IS NULL AND created_at >= :since`,
+      { replacements: { showId, pid: profile.id, since } });
+    if (n >= schedule.per_week) off.add(Number(profile.id));
+  }
+  return off;
+}
+
 async function planAmbient(db, showId, now = new Date()) {
   if (process.env.PULSE_ENGINE_ENABLED !== 'true') return [];
   const queue = require('./pulseQueue');
@@ -79,8 +109,9 @@ async function planAmbient(db, showId, now = new Date()) {
       WHERE show_id = :showId AND deleted_at IS NULL AND social_profile_id IS NOT NULL AND created_at >= :since`,
     { replacements: { showId, since: new Date(now.getTime() - RECENT_HOURS * 60 * 60 * 1000) } });
   const posted = new Set(recent.map((r) => Number(r.social_profile_id)));
+  const offSchedule = await offScheduleProfiles(db, showId, candidates.map((c) => c.profile), now);
   const picks = pickAmbient(
-    candidates.filter((c) => !posted.has(Number(c.profile.id)))
+    candidates.filter((c) => !posted.has(Number(c.profile.id)) && !offSchedule.has(Number(c.profile.id)))
       .map((c) => ({ characterId: c.character.id, temperament: c.voice.habits_json?.temperament || 'regular' })),
     windowKey, room);
   const jobs = [];
@@ -138,5 +169,5 @@ function stopScheduler() {
 
 module.exports = {
   WINDOW_HOURS, RECENT_HOURS, PER_WINDOW, RESERVE_FOR_EVENTS, CHANCE,
-  windowOf, ambientRoom, pickAmbient, planAmbient, handleAmbient, registerHandlers, tick, startScheduler, stopScheduler,
+  windowOf, ambientRoom, pickAmbient, offScheduleProfiles, planAmbient, handleAmbient, registerHandlers, tick, startScheduler, stopScheduler,
 };
