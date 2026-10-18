@@ -20,8 +20,11 @@
  *     → { current, list, occupation, gap, profile }
  *     current: the archetype ({ name, content, audience, narrative }) or
  *     { name } for a stored name no longer on the list; null when none.
- *   setContentType(db, { character, feedProfile, name, gap })  name from the
- *     list, or null to clear (undefined leaves it). A ContentTypeError 409
+ *   setContentType(db, { character, feedProfile, name, gap, reason, by, rebrand })
+ *     name from the list, or null to clear (undefined leaves it). A change
+ *     is recorded in their fact history with its reason
+ *     (services/contentTypeHistory; Evoni's idea 2): a rebrand at the
+ *     story's present moment, a correction with no moment. A ContentTypeError 409
  *     with no feed profile, 400 for a name not on the list. gap: the line on
  *     what the gap between their job and their content says about them
  *     (the suggestion's tension, or Evoni's own words); kept on the
@@ -116,7 +119,7 @@ async function saveGap(character, gap) {
   await character.update({ extra_fields: extra });
 }
 
-async function setContentType(db, { character = null, feedProfile, name, gap }) {
+async function setContentType(db, { character = null, feedProfile, name, gap, reason = null, by = null, rebrand = false }) {
   if (!feedProfile) throw new ContentTypeError(409, 'They are not on the feed yet: match them to a feed person first. The content type is kept on their feed profile.');
   if (gap !== undefined && gap !== null && typeof gap !== 'string') throw new ContentTypeError(400, 'gap must be text, or null to clear it.');
   if (gap !== undefined && !character) throw new ContentTypeError(409, 'The gap between their job and their content is kept on their character: this feed profile has none.');
@@ -128,14 +131,16 @@ async function setContentType(db, { character = null, feedProfile, name, gap }) 
       if (!found) throw new ContentTypeError(400, `"${text(name, 100)}" is not on the Society tab's list of content types.`);
       next = found.name;
     }
+    const before = feedProfile.society_archetype || null;
     await feedProfile.update({ society_archetype: next });
+    if (character) await require('./contentTypeHistory').recordContentTypeChange(db, { character: plain(character), from: before, to: next, reason, by, rebrand: rebrand === true });
   }
   if (gap !== undefined) await saveGap(character, gap);
   return next;
 }
 
 /** The prompt section: what they are known for, next to what they do for work. */
-function contentTypeBlock(current, occupation = null, gap = null) {
+function contentTypeBlock(current, occupation = null, gap = null, rebrands = []) {
   if (!current?.name) return '';
   const more = [
     current.content && `What they post: ${sentence(current.content)}`,
@@ -147,7 +152,8 @@ function contentTypeBlock(current, occupation = null, gap = null) {
     : '';
   const mix = current.pillars?.length ? ` ${require('./contentPillars').pillarsLine(current.pillars)}` : '';
   const hook = gap ? ` What the gap between their job and their content says about them (author-side; let it show, never state it): ${sentence(gap)}` : '';
-  return `KNOWN FOR ON THE PULSE (their content type: what the LalaVerse knows them for, and what their posts are): ${current.name}.${more ? ` ${more}` : ''}${mix}${job}${hook}`;
+  const story = require('./contentTypeHistory').rebrandsLine(rebrands);
+  return `KNOWN FOR ON THE PULSE (their content type: what the LalaVerse knows them for, and what their posts are): ${current.name}.${more ? ` ${more}` : ''}${mix}${job}${hook}${story ? ` ${story}` : ''}`;
 }
 
 /**
@@ -166,8 +172,11 @@ async function contentHookFor(db, character) {
     const occupation = await occupationOf(db, character, feedProfile);
     const gap = gapOf(c);
     const name = c.selected_name || c.display_name || 'They';
+    const { rebrandsOf, rebrandsLine } = require('./contentTypeHistory');
+    const rebrands = rebrandsLine(await rebrandsOf(db, feedProfile.id));
     return [
       `${name} ON THE PULSE: known as ${current.name}${current.content ? ` (what they post: ${current.content.replace(/[.\s]+$/, '')})` : ''}.`,
+      rebrands,
       occupation ? `By day: ${occupation}.` : '',
       gap ? `The gap between the two: ${sentence(gap)}` : '',
       occupation || gap
@@ -276,14 +285,14 @@ async function applyContentTypes(db, items) {
     if (!archetype) { skipped.push({ profile_id: item?.profile_id || null, error: 'not on the list' }); continue; }
     const fp = item?.profile_id ? await db.SocialProfile.findByPk(item.profile_id) : null;
     if (!fp) { skipped.push({ profile_id: item?.profile_id || null, error: 'profile not found' }); continue; }
+    const before = fp.society_archetype || null;
     await fp.update({ society_archetype: archetype.name });
     let gapSaved = false;
-    if (typeof item.gap === 'string' && item.gap.trim() && db.RegistryCharacter) {
-      const character = item.character_id
-        ? await db.RegistryCharacter.findOne({ where: { id: item.character_id, feed_profile_id: fp.id } })
-        : await db.RegistryCharacter.findOne({ where: { feed_profile_id: fp.id }, order: [['updated_at', 'DESC']] });
-      if (character) { await saveGap(character, item.gap); gapSaved = true; }
-    }
+    const character = db.RegistryCharacter ? (item.character_id
+      ? await db.RegistryCharacter.findOne({ where: { id: item.character_id, feed_profile_id: fp.id } })
+      : await db.RegistryCharacter.findOne({ where: { feed_profile_id: fp.id }, order: [['updated_at', 'DESC']] })) : null;
+    if (character && typeof item.gap === 'string' && item.gap.trim()) { await saveGap(character, item.gap); gapSaved = true; }
+    if (character) await require('./contentTypeHistory').recordContentTypeChange(db, { character: plain(character), from: before, to: archetype.name, reason: 'Kept from the suggestions on the Society tab' });
     saved.push({ profile_id: fp.id, name: archetype.name, gap_saved: gapSaved });
   }
   return { saved, skipped };

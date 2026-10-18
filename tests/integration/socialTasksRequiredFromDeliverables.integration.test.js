@@ -25,10 +25,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 // What an event saved before T1 carries: generated tasks marked required,
 // including the retired Sponsored Post slots.
 const PRE_T1_SAVED_TASKS = [
-  { slot: 'brand_post_1', label: 'Sponsored Post 1', platform: 'instagram', timing: 'during', required: true, completed: false },
-  { slot: 'brand_post_2', label: 'Sponsored Post 2', platform: 'tiktok', timing: 'during', required: true, completed: false },
-  { slot: 'brand_stories', label: 'Brand Stories', platform: 'instagram', timing: 'during', required: true, completed: false },
-  { slot: 'teaser', label: 'Brand Teaser', platform: 'instagram', timing: 'before', required: false, completed: false },
+  { slot: 'brand_post_1', label: 'Sponsored Post 1', platform: 'pulse', timing: 'during', required: true, completed: false },
+  { slot: 'brand_post_2', label: 'Sponsored Post 2', platform: 'pulse_private', timing: 'during', required: true, completed: false },
+  { slot: 'brand_stories', label: 'Brand Stories', platform: 'pulse', timing: 'during', required: true, completed: false },
+  { slot: 'teaser', label: 'Brand Teaser', platform: 'pulse', timing: 'before', required: false, completed: false },
 ];
 
 (shouldSkip ? describe.skip : describe)('Start Episode: required social tasks come only from deliverables (T1)', () => {
@@ -90,7 +90,7 @@ const PRE_T1_SAVED_TASKS = [
   it('an event with a real deliverable gets exactly that task required', async () => {
     const ids = await seedEvent({ savedTasks: PRE_T1_SAVED_TASKS });
     await insertEventDeliverables(sequelize, ids.event, [
-      { description: 'One Instagram reel wearing the Maison Rue coat', deliverable_type: 'instagram_reel', due_date: 'launch night', required: true },
+      { description: 'One Instagram reel wearing the Maison Rue coat', deliverable_type: 'pulse_video', due_date: 'launch night', required: true },
     ]);
     const [row] = await q(`SELECT id FROM event_deliverables WHERE event_id = :event`, ids);
 
@@ -105,8 +105,8 @@ const PRE_T1_SAVED_TASKS = [
       label: 'One Instagram reel wearing the Maison Rue coat',
       // D15: the task names the format as the Terms do ("The Tasks list
       // uses the same format names"), and its platform is the real one.
-      description: '1 Instagram Reel · due launch night',
-      platform: 'instagram',
+      description: '1 Pulse video · due launch night',
+      platform: 'pulse',
     });
   });
 });

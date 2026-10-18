@@ -124,14 +124,17 @@ async function canonFlags(db, post, { privateState = null, lalaProfileId } = {})
 
 const LANES = ['in', 'off'];
 
-/** The poster's content type ({ name, content }) from their feed profile, else null. */
+/** The poster's content type ({ name, content }) at the post's moment, else null. */
 async function laneOf(db, post) {
   if (!post?.social_profile_id || !db?.SocialProfile) return null;
   try {
-    const profile = await db.SocialProfile.findByPk(post.social_profile_id, { attributes: ['id', 'society_archetype'] });
-    if (!profile?.society_archetype) return null;
+    // What they were known for at the post's moment: a rebrand later in the story has not happened yet (services/contentTypeHistory).
+    const type = await require('./contentTypeHistory').contentTypeAt(db, {
+      profileId: post.social_profile_id, storyOrder: Number.isInteger(post.story_order) ? post.story_order : null,
+    });
+    if (!type) return null;
     const { loadSocietyArchetypes, matchSocietyArchetype } = require('./societyArchetypes');
-    const lane = matchSocietyArchetype(await loadSocietyArchetypes(db), profile.society_archetype) || { name: profile.society_archetype };
+    const lane = matchSocietyArchetype(await loadSocietyArchetypes(db), type) || { name: type };
     // Their content mix (idea 3): a post fits when it is one of their pillars.
     const pillars = await require('./contentPillars').pillarsFor(db, lane.name);
     return pillars.length ? { ...lane, pillars } : lane;

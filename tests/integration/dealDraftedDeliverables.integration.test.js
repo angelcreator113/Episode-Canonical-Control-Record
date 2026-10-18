@@ -75,30 +75,30 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     ['self_funded', 3, []],
     ['invited_comped', 3, []],
     ['gifted', 3, []],
-    ['paid_appearance', 2, [{ type: 'instagram_stories', required: false, owed_to: 'host', fee: null }]],
-    ['paid_deliverables', 1, [{ type: 'instagram_reel', required: true, owed_to: 'host', fee: 75 }]],
+    ['paid_appearance', 2, [{ type: 'pulse_stories', required: false, owed_to: 'host', fee: null }]],
+    ['paid_deliverables', 1, [{ type: 'pulse_video', required: true, owed_to: 'host', fee: 75 }]],
     ['paid_deliverables', 3, [
-      { type: 'instagram_reel', required: true, owed_to: 'host', fee: 225 },
-      { type: 'instagram_stories', required: true, owed_to: 'host', fee: 110 },
+      { type: 'pulse_video', required: true, owed_to: 'host', fee: 225 },
+      { type: 'pulse_stories', required: true, owed_to: 'host', fee: 110 },
     ]],
     ['paid_deliverables', 5, [
-      { type: 'instagram_reel', required: true, owed_to: 'host', fee: 450 },
-      { type: 'instagram_stories', required: true, owed_to: 'host', fee: 225 },
-      { type: 'instagram_post', required: true, owed_to: 'host', fee: 225 },
+      { type: 'pulse_video', required: true, owed_to: 'host', fee: 450 },
+      { type: 'pulse_stories', required: true, owed_to: 'host', fee: 225 },
+      { type: 'pulse_post', required: true, owed_to: 'host', fee: 225 },
     ]],
     ['appearance_plus_deliverables', 4, [
-      { type: 'instagram_reel', required: true, owed_to: 'host', fee: 325 },
-      { type: 'instagram_stories', required: true, owed_to: 'host', fee: 160 },
+      { type: 'pulse_video', required: true, owed_to: 'host', fee: 325 },
+      { type: 'pulse_stories', required: true, owed_to: 'host', fee: 160 },
     ]],
-    ['performance_booking', 2, [{ type: 'instagram_reel', required: true, owed_to: 'host', fee: 125 }]],
+    ['performance_booking', 2, [{ type: 'pulse_video', required: true, owed_to: 'host', fee: 125 }]],
     ['brand_partnership', 2, [
-      { type: 'instagram_reel', required: true, owed_to: 'brand', fee: 125 },
-      { type: 'instagram_stories', required: true, owed_to: 'brand', fee: 60 },
+      { type: 'pulse_video', required: true, owed_to: 'brand', fee: 125 },
+      { type: 'pulse_stories', required: true, owed_to: 'brand', fee: 60 },
     ]],
     ['brand_partnership', 4, [
-      { type: 'instagram_reel', required: true, owed_to: 'brand', fee: 325 },
-      { type: 'instagram_stories', required: true, owed_to: 'brand', fee: 160 },
-      { type: 'instagram_post', required: true, owed_to: 'brand', fee: 165 },
+      { type: 'pulse_video', required: true, owed_to: 'brand', fee: 325 },
+      { type: 'pulse_stories', required: true, owed_to: 'brand', fee: 160 },
+      { type: 'pulse_post', required: true, owed_to: 'brand', fee: 165 },
     ]],
   ];
 
@@ -159,7 +159,7 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     const put = await auth(request(app).put(`${deliverablesUrl(ids)}/${reel.id}`)).send({ fee: 150 });
     expect(put.status).toBe(200);
     const record = (await automationOf(ids)).drafted_values.deliverables[reel.id];
-    expect(record).toEqual({ type: 'instagram_reel', platform: 'instagram', quantity: 1, fee: 125, description: 'Instagram Reel', required: true });
+    expect(record).toEqual({ type: 'pulse_video', platform: 'pulse', quantity: 1, fee: 125, description: 'Pulse video', required: true });
     expect(put.body.deliverable.fee).not.toBe(record.fee);
   });
 

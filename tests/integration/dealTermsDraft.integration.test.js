@@ -114,7 +114,7 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     // Deliverables: the partnership package at tier 2 (Reel + Stories x3), priced.
     const rows = await deliverables(ids);
     expect(rows.map((d) => [d.deliverable_type, d.quantity, d.required])).toEqual([
-      ['instagram_reel', 1, true], ['instagram_stories', 3, true],
+      ['pulse_video', 1, true], ['pulse_stories', 3, true],
     ]);
     expect(rows.every((d) => d.fee > 0)).toBe(true);
     // The partnership base, priced from the card.
@@ -138,7 +138,7 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     const ids = await seed();
     await putEvent(ids, { deal_components: ['paid_for_content'] });
     const [reel, stories] = await deliverables(ids);
-    expect(reel.deliverable_type).toBe('instagram_reel');
+    expect(reel.deliverable_type).toBe('pulse_video');
     expect(stories).toBeUndefined(); // tier 2 paid content: a Reel only
 
     // Evoni edits the Reel's fee; a bonus she sets by hand.
@@ -146,7 +146,7 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     // Now a partnership: the edited Reel stays; the Stories are drafted.
     await putEvent(ids, { deal_components: ['paid_for_content', 'partnership_base'] });
     let rows = await deliverables(ids);
-    expect(rows.map((d) => [d.deliverable_type, d.fee])).toEqual([['instagram_reel', 999], ['instagram_stories', expect.any(Number)]]);
+    expect(rows.map((d) => [d.deliverable_type, d.fee])).toEqual([['pulse_video', 999], ['pulse_stories', expect.any(Number)]]);
 
     // Evoni deletes the drafted Stories; going back to paid content and
     // forward again never re-adds them.
@@ -155,7 +155,7 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     await putEvent(ids, { deal_components: ['paid_for_content'] });
     await putEvent(ids, { deal_components: ['paid_for_content', 'partnership_base'] });
     rows = await deliverables(ids);
-    expect(rows.map((d) => d.deliverable_type)).toEqual(['instagram_reel']);
+    expect(rows.map((d) => d.deliverable_type)).toEqual(['pulse_video']);
 
     // The bonus follows the components while Auto-drafted, and goes when no
     // component calls for one.
@@ -241,7 +241,7 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     const res = await auth(request(app).post(`/api/v1/world/${ids.show}/events/${ids.event}/propose-terms`)).send({});
     expect(res.status).toBe(200);
     expect((await row(ids)).appearance_fee).toBe(res.body.proposal.components.appearance.fee);
-    expect(res.body.deliverables.map((d) => d.deliverable_type)).toEqual(['instagram_reel']);
+    expect(res.body.deliverables.map((d) => d.deliverable_type)).toEqual(['pulse_video']);
   });
 
   it('Start Episode writes the relationship goals as Lala\'s goals, within T9\'s count (answer 6)', async () => {

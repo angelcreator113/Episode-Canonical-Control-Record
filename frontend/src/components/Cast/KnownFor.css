@@ -12,3 +12,8 @@
 .kf-tension { margin-top: 4px !important; color: var(--lala-gold, #B8962E); }
 .kf-select textarea { font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 6px; border: 1px solid rgba(184, 150, 46, 0.4); max-width: 100%; }
 .kf > .kf-tension { margin: 0; font-size: 13px; line-height: 1.5; color: var(--lala-gold, #B8962E); }
+/* Changing a type: a rebrand in the story, or a correction (idea 2). */
+.kf-change { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 8px 12px; border: 1px solid rgba(184, 150, 46, 0.4); border-radius: 8px; font-size: 13px; }
+.kf-change legend { padding: 0 4px; font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text-secondary); }
+.kf-radio { display: flex; align-items: flex-start; gap: 8px; line-height: 1.4; min-height: 32px; }
+.kf-radio input { margin-top: 3px; flex-shrink: 0; }

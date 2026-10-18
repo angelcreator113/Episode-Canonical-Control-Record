@@ -175,46 +175,48 @@ describe('POST', () => {
   test.each(['appearance', 'reel', 'story_set_3', 'Reel', 'stories', ''])('deliverable_type %j is refused: 400, nothing written', async (type) => {
     const res = await request(app).post(base('ev-open')).set(AUTH).send({ description: 'A deliverable', deliverable_type: type });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/deliverable_type must be one of instagram_reel, instagram_post, tiktok_video, grwm_video, instagram_stories, carousel_post, go_live, link_in_bio, try_on_haul, ugc, other, or null/);
+    expect(res.body.error).toMatch(/deliverable_type must be one of pulse_video, pulse_post, grwm_video, pulse_stories, carousel_post, go_live, link_in_bio, try_on_haul, ugc, other, or null/);
     expect(writes()).toHaveLength(0);
   });
 
-  test.each(['instagram_reel', 'instagram_post', 'tiktok_video', 'grwm_video', 'instagram_stories', 'carousel_post',
+  test.each(['pulse_video', 'pulse_post', 'pulse_video', 'grwm_video', 'pulse_stories', 'carousel_post',
     'go_live', 'link_in_bio', 'try_on_haul', 'ugc', 'other'])('deliverable_type %s is accepted', async (type) => {
     const res = await request(app).post(base('ev-open')).set(AUTH).send({ description: 'A deliverable', deliverable_type: type });
     expect(res.status).toBe(201);
     expect(res.body.deliverable.deliverable_type).toBe(type);
   });
 
-  // D15: each format has a platform and a quantity.
-  test('a single-platform format takes its platform; the default quantity is the format\'s', async () => {
-    const res = await request(app).post(base('ev-open')).set(AUTH).send({ description: 'Stories', deliverable_type: 'instagram_stories' });
+  // D15: each format has an account (on The Pulse since 2026-10-18) and a quantity.
+  test('a format sent without an account goes on The Pulse; the default quantity is the format\'s', async () => {
+    const res = await request(app).post(base('ev-open')).set(AUTH).send({ description: 'Stories', deliverable_type: 'pulse_stories' });
     expect(res.status).toBe(201);
-    expect(res.body.deliverable).toMatchObject({ platform: 'instagram', quantity: 3 });
-    const bio = await request(app).post(base('ev-open')).set(AUTH).send({ description: 'Bio link', deliverable_type: 'link_in_bio', platform: 'tiktok' });
-    expect(bio.body.deliverable).toMatchObject({ platform: 'tiktok', quantity: 7 });
+    expect(res.body.deliverable).toMatchObject({ platform: 'pulse', quantity: 3 });
+    const bio = await request(app).post(base('ev-open')).set(AUTH).send({ description: 'Bio link', deliverable_type: 'link_in_bio', platform: 'pulse_private' });
+    expect(bio.body.deliverable).toMatchObject({ platform: 'pulse_private', quantity: 7 });
   });
 
-  test('a platform the format is not on is refused', async () => {
-    const res = await request(app).post(base('ev-open')).set(AUTH).send({ description: 'GRWM', deliverable_type: 'instagram_reel', platform: 'tiktok' });
+  test('an account the format does not go on, or a real app, is refused', async () => {
+    const res = await request(app).post(base('ev-open')).set(AUTH).send({ description: 'Brand content', deliverable_type: 'ugc', platform: 'pulse' });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/Instagram Reel is not on tiktok/);
+    expect(res.body.error).toMatch(/Content for the brand \(UGC\) does not go on pulse; choose no platform/);
     const unknown = await request(app).post(base('ev-open')).set(AUTH).send({ description: 'GRWM', deliverable_type: 'grwm_video', platform: 'myspace' });
     expect(unknown.status).toBe(400);
-    expect(unknown.body.error).toMatch(/platform must be one of instagram, tiktok, youtube, or null/);
+    expect(unknown.body.error).toMatch(/platform must be one of pulse, pulse_private, playroom, or null/);
+    const app2 = await request(app).post(base('ev-open')).set(AUTH).send({ description: 'GRWM', deliverable_type: 'grwm_video', platform: 'tiktok' });
+    expect(app2.status).toBe(400);
     expect(writes()).toHaveLength(0);
   });
 
   test.each([0, -1, 1.5, 366, 'two'])('quantity %j is refused', async (quantity) => {
-    const res = await request(app).post(base('ev-open')).set(AUTH).send({ description: 'GRWM', deliverable_type: 'grwm_video', platform: 'tiktok', quantity });
+    const res = await request(app).post(base('ev-open')).set(AUTH).send({ description: 'GRWM', deliverable_type: 'grwm_video', platform: 'pulse_private', quantity });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/quantity must be a whole number from 1 to 365/);
   });
 
   test('a multi-platform format keeps the platform and quantity it is given', async () => {
-    const res = await request(app).post(base('ev-open')).set(AUTH).send({ description: 'GRWM', deliverable_type: 'grwm_video', platform: 'tiktok', quantity: 2 });
+    const res = await request(app).post(base('ev-open')).set(AUTH).send({ description: 'GRWM', deliverable_type: 'grwm_video', platform: 'pulse_private', quantity: 2 });
     expect(res.status).toBe(201);
-    expect(res.body.deliverable).toMatchObject({ deliverable_type: 'grwm_video', platform: 'tiktok', quantity: 2 });
+    expect(res.body.deliverable).toMatchObject({ deliverable_type: 'grwm_video', platform: 'pulse_private', quantity: 2 });
   });
 
   test('a description is required', async () => {

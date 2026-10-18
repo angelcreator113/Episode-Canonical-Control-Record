@@ -752,7 +752,7 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
             eventType,
             host
               ? {
-                  platform: host.platform || 'instagram',
+                  platform: host.platform || 'pulse',
                   content_category: host.content_category,
                   handle: host.handle,
                   display_name: host.display_name || hostName,

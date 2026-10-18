@@ -84,8 +84,8 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     expect(res.status).toBe(200);
     expect(res.body.card.version).toBe(2);
     // 20261001160000-add-deliverable-formats.js: the formats at D15's
-    // proportions of the Reel anchor (answer 8's Instagram post at 0.5×).
-    expect(res.body.card.anchors.instagram_post).toEqual({ 1: 40, 2: 65, 3: 115, 4: 165, 5: 225 });
+    // proportions of the Reel anchor (answer 8's post at 0.5×), renamed for The Pulse.
+    expect(res.body.card.anchors.pulse_post).toEqual({ 1: 40, 2: 65, 3: 115, 4: 165, 5: 225 });
     expect(res.body.card.anchors.go_live).toEqual({ 1: 115, 2: 190, 3: 340, 4: 490, 5: 675 });
     expect(res.body.card.anchors.paid_appearance).toEqual({ 1: 150, 2: 250, 3: 450, 4: 650, 5: 900 });
     expect(res.body.card.premiums.paid_ad).toEqual({ whitelisting: null });
@@ -93,13 +93,13 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
 
   it('writes the proposal onto the deal as a draft, with premiums on one line only (rulings 2 and 3)', async () => {
     const ids = await seed({ dealType: 'appearance_plus_deliverables', tier: 3, deliverables: [
-      { description: 'One reel in the coat', deliverable_type: 'instagram_reel', owed_to: 'brand' },
-      { description: 'A feed post', deliverable_type: 'instagram_post', owed_to: 'brand' },
+      { description: 'One reel in the coat', deliverable_type: 'pulse_video', owed_to: 'brand' },
+      { description: 'A feed post', deliverable_type: 'pulse_post', owed_to: 'brand' },
     ] });
-    const res = await propose(ids, { premiums: { deliverables: { [ids.d.instagram_reel]: [{ kind: 'rush', key: '24h' }] } } });
+    const res = await propose(ids, { premiums: { deliverables: { [ids.d.pulse_video]: [{ kind: 'rush', key: '24h' }] } } });
     expect(res.status).toBe(200);
     expect(res.body.proposal).toMatchObject({ ok: true, pricing_version: 2, career_tier: 3 });
-    // D15: the Instagram post has its anchor on card v2 (answer 8): 115 at tier 3.
+    // D15: the Pulse post has its anchor on card v2 (answer 8): 115 at tier 3.
     expect(res.body.proposal.gaps).toEqual([]);
 
     expect(await components(ids)).toEqual({ appearance_fee: 450, partnership_base_fee: null, performance_fee: null, pricing_version: 2 });
@@ -107,15 +107,15 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     const automation = asJson(event.canon_consequences).automation;
     expect(automation.auto_drafted).toMatchObject({ appearance_fee: 'pricing', deliverable_fees: 'pricing' });
     expect(automation.drafted_values.appearance_fee).toBe(450);
-    expect(automation.drafted_values.deliverable_fees).toEqual({ [ids.d.instagram_reel]: 270, [ids.d.instagram_post]: 115 }); // 225 × 1.20
+    expect(automation.drafted_values.deliverable_fees).toEqual({ [ids.d.pulse_video]: 270, [ids.d.pulse_post]: 115 }); // 225 × 1.20
 
     const fees = await q(`SELECT deliverable_type, fee FROM event_deliverables WHERE event_id = :event ORDER BY deliverable_type`, ids);
-    expect(fees).toEqual([{ deliverable_type: 'instagram_post', fee: 115 }, { deliverable_type: 'instagram_reel', fee: 270 }]);
+    expect(fees).toEqual([{ deliverable_type: 'pulse_post', fee: 115 }, { deliverable_type: 'pulse_video', fee: 270 }]);
   });
 
   it('ruling 1: a brand partnership writes the base to its own column, and the appearance only when required', async () => {
     const without = await seed({ dealType: 'brand_partnership', tier: 2, deliverables: [
-      { description: 'Three stories', deliverable_type: 'instagram_stories', owed_to: 'brand' },
+      { description: 'Three stories', deliverable_type: 'pulse_stories', owed_to: 'brand' },
     ] });
     expect((await propose(without)).status).toBe(200);
     expect(await components(without)).toEqual({ appearance_fee: null, partnership_base_fee: 500, performance_fee: null, pricing_version: 2 });
@@ -141,25 +141,25 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
 
   it('Evoni edits the numbers through the event and deliverable PUTs', async () => {
     const ids = await seed({ dealType: 'appearance_plus_deliverables', tier: 1, deliverables: [
-      { description: 'A feed post', deliverable_type: 'instagram_post', owed_to: 'brand' },
+      { description: 'A feed post', deliverable_type: 'pulse_post', owed_to: 'brand' },
     ] });
     await propose(ids);
     const put = await putEvent(ids, { appearance_fee: 175, partnership_base_fee: 10, performance_fee: 20, gifted_value: 300 });
     expect(put.status).toBe(200);
     expect(put.body.event).toMatchObject({ appearance_fee: 175, partnership_base_fee: 10, performance_fee: 20, gifted_value: 300 });
-    const fee = await putDeliverable(ids, 'instagram_post', { fee: 40 });
+    const fee = await putDeliverable(ids, 'pulse_post', { fee: 40 });
     expect(fee.status).toBe(200);
     expect(fee.body.deliverable.fee).toBe(40);
 
     for (const field of ['appearance_fee', 'partnership_base_fee', 'performance_fee', 'gifted_value']) {
       expect((await putEvent(ids, { [field]: -5 })).status).toBe(400);
     }
-    expect((await putDeliverable(ids, 'instagram_post', { fee: 2.5 })).status).toBe(400);
-    expect((await putDeliverable(ids, 'instagram_post', { deliverable_type: 'appearance' })).status).toBe(400);
+    expect((await putDeliverable(ids, 'pulse_post', { fee: 2.5 })).status).toBe(400);
+    expect((await putDeliverable(ids, 'pulse_post', { deliverable_type: 'appearance' })).status).toBe(400);
   });
 
   it('ruling 4: a gifted deal proposes no cash and writes no fee', async () => {
-    const ids = await seed({ dealType: 'gifted', tier: 4, deliverables: [{ description: 'Reel', deliverable_type: 'instagram_reel', owed_to: 'brand' }] });
+    const ids = await seed({ dealType: 'gifted', tier: 4, deliverables: [{ description: 'Reel', deliverable_type: 'pulse_video', owed_to: 'brand' }] });
     const res = await propose(ids);
     expect(res.status).toBe(200);
     expect(res.body.proposal).toMatchObject({ cash: false, components: {}, note: 'Gifted: no cash income. Record the gifted value on the deal.' });
@@ -179,7 +179,7 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
 
   it('ruling 6: "Other" is never priced, and Start Episode refuses until it has a price', async () => {
     const ids = await seed({ dealType: 'paid_deliverables', tier: 2, deliverables: [
-      { description: 'One reel in the coat', deliverable_type: 'instagram_reel', owed_to: 'brand' },
+      { description: 'One reel in the coat', deliverable_type: 'pulse_video', owed_to: 'brand' },
       { description: 'Host a Q&A', deliverable_type: 'other', owed_to: 'brand' },
     ] });
     const proposal = await propose(ids);

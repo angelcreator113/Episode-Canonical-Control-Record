@@ -221,11 +221,11 @@ export function buildDeliverableBody(draft) {
   if (format) {
     const platforms = format.platforms;
     const platform = String(draft?.platform || '').trim();
-    if (platform && !platforms.includes(platform)) return { error: `Platform: ${format.label} is on ${platforms.map((x) => PLATFORM_LABELS[x]).join(' or ')}` };
-    // A format that names its platform ("1 TikTok GRWM") needs one; the
-    // rest take their only platform, or none.
-    if (!platform && format.platformInPhrase) return { error: `Platform: choose ${platforms.map((x) => PLATFORM_LABELS[x]).join(', ')}` };
-    body.platform = platform || (platforms.length === 1 ? platforms[0] : null);
+    if (platform && !platforms.includes(platform)) {
+      return { error: platforms.length ? `Account: ${format.label} goes on ${platforms.map((x) => PLATFORM_LABELS[x]).join(' or ')}` : `Account: ${format.label} is not posted` };
+    }
+    // No account chosen: the format's first, The Pulse (none for UGC).
+    body.platform = platform || platforms[0] || null;
     const raw = String(draft?.quantity ?? '').trim();
     const quantity = raw === '' ? format.defaultQuantity : Number(raw);
     if (!Number.isInteger(quantity) || quantity < QUANTITY.min || quantity > QUANTITY.max) {
@@ -256,7 +256,7 @@ export function deliverableDraftFrom(d) {
     description: d?.description || '',
     deliverable_type: typed ? stored : '',
     legacy_type: !typed && stored ? stored : null,
-    platform: typed ? (d?.platform || (DELIVERABLE_FORMATS[stored].platforms.length === 1 ? DELIVERABLE_FORMATS[stored].platforms[0] : '')) : '',
+    platform: typed ? (d?.platform || DELIVERABLE_FORMATS[stored].platforms[0] || '') : '',
     quantity: typed ? String(d?.quantity ?? DELIVERABLE_FORMATS[stored].defaultQuantity) : '',
     due_date: d?.due_date || '',
     required: d ? d.required !== false : true,
@@ -480,12 +480,13 @@ export function buildDealComponentsUpdate(event, next) {
 // once it differs. The plans are mirrored from dealPricingService in
 // constants/dealPlans.json (pinned by tests/unit/services/dealPlanMirror.test.js).
 
-// The D15 formats (Evoni, 2026-09-30), mirrored from
+// The D15 formats (Evoni, 2026-09-30), The Pulse's since 2026-10-18, mirrored from
 // src/utils/deliverableFormats.js (pinned by
 // tests/unit/services/deliverableTypeMirror.test.js).
 export const DELIVERABLE_TYPES = deliverableTypesMirror.deliverable_type;
 export const DELIVERABLE_FORMATS = deliverableTypesMirror.formats;
 export const PLATFORM_LABELS = deliverableTypesMirror.platform_labels;
+const PLATFORM_ON = deliverableTypesMirror.platform_on;
 const QUANTITY = deliverableTypesMirror.quantity;
 export const DELIVERABLE_TYPE_LABELS = Object.fromEntries(
   Object.entries(DELIVERABLE_FORMATS).map(([k, f]) => [k, f.label])
@@ -505,8 +506,8 @@ function quantityOf(d, f) {
 
 /**
  * A deliverable's type as shown in the Terms. A row (or type key) of a
- * format reads its label with its quantity ("Instagram Stories (×3)",
- * "Link in bio (7 days)"); an untyped row its stored text; nothing, null.
+ * format reads its label with its quantity ("Pulse stories (×3)",
+ * "Profile link (7 days)"); an untyped row its stored text; nothing, null.
  */
 export function deliverableTypeLabel(dOrType) {
   const d = typeof dOrType === 'string' ? { deliverable_type: dOrType } : dOrType;
@@ -519,18 +520,15 @@ export function deliverableTypeLabel(dOrType) {
   return n > 1 ? `${f.label} (×${n})` : f.label;
 }
 
-/** The natural phrase ("1 TikTok GRWM", "3 Instagram Stories"), as the server writes it; null when untyped. */
+/** The natural phrase ("1 Pulse video", "3 Pulse stories on a private Pulse account"), as the server writes it; null when untyped. */
 export function deliverablePhrase(d) {
   const f = DELIVERABLE_FORMATS[d?.deliverable_type];
   if (!f) return null;
   const n = quantityOf(d, f);
-  const platform = d?.platform && PLATFORM_LABELS[d.platform] ? d.platform : (f.platforms.length === 1 ? f.platforms[0] : null);
-  if (f.unit === 'day') {
-    const on = platform && f.platforms.length > 1 ? ` on ${PLATFORM_LABELS[platform]}` : '';
-    return `Link in bio${on} (${n} ${n === 1 ? 'day' : 'days'})`;
-  }
-  const noun = n === 1 ? f.noun[0] : f.noun[1];
-  return `${n} ${f.platformInPhrase && platform ? `${PLATFORM_LABELS[platform]} ${noun}` : noun}`;
+  const platform = d?.platform && PLATFORM_LABELS[d.platform] ? d.platform : (f.platforms[0] || null);
+  const on = platform && platform !== f.platforms[0] ? ` ${PLATFORM_ON[platform]}` : '';
+  if (f.unit === 'day') return `Profile link${on} (${n} ${n === 1 ? 'day' : 'days'})`;
+  return `${n} ${n === 1 ? f.noun[0] : f.noun[1]}${on}`;
 }
 
 const COMPONENTS = dealPlansMirror.components;
