@@ -1,0 +1,8 @@
+/* A studio's photos on Universe › Locations (components/World/StudioPhotos); theme tokens only. */
+.stp { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.stp-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.stp-btn { min-height: 36px; padding: 4px 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 12px; cursor: pointer; }
+.stp-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.stp-link { font-size: 12px; color: var(--primary-text); }
+.stp-note { font-size: 12px; color: var(--text-secondary); }
+.stp-note.is-error { color: var(--danger-text); }
