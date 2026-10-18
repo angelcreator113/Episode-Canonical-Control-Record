@@ -97,10 +97,12 @@ async function loadPoster(db, characterId) {
  * whichever pillar fits instead. null when they have no content type (or
  * on a failed read, logged): the post is drafted as before.
  */
-async function posterMix(db, profileId, { about = null } = {}) {
+async function posterMix(db, profileId, { about = null, at = null } = {}) {
   try {
-    const [[row]] = await db.sequelize.query('SELECT society_archetype FROM social_profiles WHERE id = :id', { replacements: { id: profileId } });
-    if (!row?.society_archetype) return null;
+    // The type they had at this moment: a rebrand later in the story has not happened yet (services/contentTypeHistory).
+    const type = await require('./contentTypeHistory').contentTypeAt(db, { profileId, storyOrder: at });
+    const row = { society_archetype: type };
+    if (!row.society_archetype) return null;
     const mix = require('./contentPillars');
     const pillars = await mix.pillarsFor(db, row.society_archetype);
     if (!pillars.length) return { type: row.society_archetype, pillars, planned: null, line: `They are known on The Pulse as ${row.society_archetype}.` };
@@ -182,7 +184,7 @@ async function draftPost(db, { showId, characterId, moment, context = {}, reques
   const at = Number.isInteger(moment) ? moment : await clock.presentOrder(db, showId);
   const known = await require('./pulseKnowledge').knowledgeLine(db, showId, profile.id, at);
   const hosting = await hostedEventLines(db, profile.id);
-  const mix = await posterMix(db, profile.id, { about: context.about || null });
+  const mix = await posterMix(db, profile.id, { about: context.about || null, at });
   // One automated request per drafting call (Task #3031); the caller names the kind and its job.
   await require('./pulseRequests').take(db, { showId, lane: 'automated', kind: request.kind || 'post', jobId: request.jobId || null });
   let message;
@@ -438,7 +440,7 @@ async function draftPostBatch(db, { showId, items, moment, context = {}, request
   for (const e of entries) {
     e.known = await knowledge.knowledgeLine(db, showId, e.profile.id, at);
     e.hosting = await hostedEventLines(db, e.profile.id);
-    e.mix = await posterMix(db, e.profile.id, { about: context.about || null });
+    e.mix = await posterMix(db, e.profile.id, { about: context.about || null, at });
     e.extra = e.mix?.line ? `${e.mix.line}\n` : '';
   }
   if (!entries.length) return { drafted: [], failed };

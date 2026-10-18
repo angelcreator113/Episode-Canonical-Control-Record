@@ -787,6 +787,10 @@ router.put('/characters/:id/content-type', requireAuth, authorize(['ADMIN']), as
         ...found,
         name: 'name' in body ? body.name : undefined,
         gap: 'gap' in body ? body.gap : undefined,
+        // Why it changed: a rebrand at a moment in the story (Evoni's idea 2).
+        reason: typeof body.reason === 'string' ? body.reason : null,
+        by: req.user?.email || req.user?.name || null,
+        rebrand: body.rebrand === true,
       });
     } catch (err) {
       if (contentTypeError(res, err)) return undefined;
