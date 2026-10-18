@@ -49,7 +49,7 @@ describe('the workspace', () => {
     renderIt();
     const nav = screen.getByRole('navigation', { name: 'Inner life sections' });
     expect(within(nav).getAllByRole('button').map((b) => b.textContent)).toEqual([
-      'Core psychology2/5', 'Emotional architecture2/4', 'Personal history0/4', 'Beliefs & behaviours0/2', 'Deep profile2/14', 'Where it goes',
+      'Core psychology2/5', 'Emotional architecture2/4', 'Personal history0/4', 'Beliefs & behaviours0/2', 'Deep profile2/14', 'Secrets', 'Where it goes',
     ]);
     expect(screen.getByTestId('type-card')).toBeTruthy();
     const wants = screen.getByTestId('il-subject-wants');
@@ -226,7 +226,7 @@ describe('Fill in everything missing (step 3)', () => {
 
 describe('Where it goes (step 4)', () => {
   test('each writer with what it reads of them, and what no writer reads', () => {
-    renderIt({ character: { ...CHARACTER, mask_persona: 'Effortless', triggers: ['Silence'], living_state: { current_situation: 'Between leases' } } });
+    renderIt({ character: { ...CHARACTER, mask_persona: 'Effortless', de_money_wound: 'Never enough', living_state: { current_situation: 'Between leases' } } });
     fireEvent.click(screen.getByRole('button', { name: 'Where it goes' }));
     const posts = screen.getByTestId('il-reach-posts');
     expect(within(posts).getByText('Effortless')).toBeTruthy();
@@ -237,7 +237,7 @@ describe('Where it goes (step 4)', () => {
     fireEvent.click(within(events).getByRole('button'));
     expect(within(events).getByText(/No event writer reads the inner life/)).toBeTruthy();
     const unread = screen.getByRole('region', { name: 'Reaches no writer yet' });
-    expect(within(unread).getByText('Silence')).toBeTruthy();
+    expect(within(unread).getByText('Never enough')).toBeTruthy();
   });
 
   test('the blind spot is listed for the author only', () => {

@@ -23,6 +23,8 @@ const db = require('../models');
 const anthropic = new Anthropic();
 const { buildArcContext, buildArcContextPromptSection } = require('../services/arcTrackingService');
 const { enrichAfterWriteBack } = require('../services/storyEnrichmentService');
+const { storyBrief } = require('../services/characterStoryBrief');
+const { secretsFor } = require('../services/characterSecrets');
 const { reviewInBackground } = require('../services/postGenerationReview');
 const { factsOf } = require('../services/worldFacts');
 const { selectRules, RULE_ATTRIBUTES, CRITICAL_OR_ALWAYS_INJECT } = require('../services/brainRules');
@@ -115,9 +117,11 @@ function buildDynamicDeepHints(dossiers, voiceKey) {
   return charSpecific.length ? `${base}\n\nCHARACTER-SPECIFIC FOCUS:\n${charSpecific.join('\n')}` : base;
 }
 
-// Build selective dramatic irony hints from author knowledge (blind spots only)
-function buildDramaticIronyHints(dossiers) {
-  if (!dossiers?.length) return '';
+// Build selective dramatic irony hints from author knowledge (blind spots only).
+// Only when the scene asks for it (dramatic_irony: true): the blind spot serves
+// a scene, it is not an automatic explanation (Evoni, 2026-10-17).
+function buildDramaticIronyHints(dossiers, wanted = false) {
+  if (!wanted || !dossiers?.length) return '';
   const hints = dossiers.map(d => {
     if (!d.blind_spot && !d.actual_narrative) return null;
     const parts = [`${d.display_name || d.character_key}`];
@@ -129,7 +133,7 @@ function buildDramaticIronyHints(dossiers) {
   return `\n\nDRAMATIC IRONY (the reader should SENSE these truths, but the character cannot name them — show through behaviour, body, choices, NOT through telling):\n${hints.join('\n\n')}`;
 }
 
-function buildGenerationPrompt({ scene_brief, voice_key, characters_in_scene, charBlocks, tone_dial, dossiers, must_include, never_include }) {
+function buildGenerationPrompt({ scene_brief, voice_key, characters_in_scene, charBlocks, tone_dial, dossiers, must_include, never_include, dramatic_irony = false }) {
   const tones = VOICE_TONES[voice_key] || ['literary'];
   const toneMod = tones.map(t => TONE_MODIFIERS[t]).join(' ');
   // Layer the writer's chosen tone_dial(s) on top of the voice's assigned tones
@@ -142,7 +146,7 @@ function buildGenerationPrompt({ scene_brief, voice_key, characters_in_scene, ch
     .join('\n');
   const dialBlock = dialMod ? `\n${dialMod}` : '';
   const deepHint = buildDynamicDeepHints(dossiers, voice_key);
-  const ironyHint = buildDramaticIronyHints(dossiers);
+  const ironyHint = buildDramaticIronyHints(dossiers, dramatic_irony);
 
   // Must/Never constraints
   let constraints = '';
@@ -166,10 +170,11 @@ Write a 2500–3500 word scene. Adult literary fiction — explicit language, se
 }
 
 // ── Character depth knowledge (character knowledge, safe for voice generation) ─
-// Read from each idea's one home since the depth fields were merged (2026-10-17;
-// migration 20261017240000, services/characterDepthFields). Author-only parts
-// (blind spot, the actual narrative gap, foreclosure) are never added here.
-// Notes the merge archived from the retired v1 set are kept in the block.
+// The body, money, luck and circumstance detail the story brief does not
+// carry (services/characterStoryBrief has wants, wound, change, time, the
+// self-story, beliefs and joy). Author-only parts (blind spot, the actual
+// narrative gap, foreclosure) are never added here. Notes the merge archived
+// from the retired v1 set are kept in the block.
 const ARCHIVED_CHARACTER_NOTES = {
   money_behavior_note: 'Money note', time_orientation_note: 'Time note', luck_belief_vs_stated: 'Luck gap',
   body_relationship: 'Body relationship', body_currency: 'Body as currency', body_control_pattern: 'Body control pattern',
@@ -177,25 +182,16 @@ const ARCHIVED_CHARACTER_NOTES = {
 };
 
 function buildDepthLines(d) {
-  const { changeCapacityOf } = require('../services/characterDepthFields');
   const lines = [];
   const add = (label, v) => { if (v !== null && v !== undefined && String(v).trim() !== '') lines.push(`  ${label}: ${v}`); };
   add('Body relationship', d.de_body_relationship);
   add('Body history (depth)', d.de_body_history);
   add('Money pattern', d.de_money_behavior);
-  add('Time orientation', d.time_orientation);
   add('Time wound', d.de_time_wound);
-  const change = changeCapacityOf(d.change_capacity);
-  add('Change capacity', change.level || change.summary);
-  add('Change conditions', change.condition);
-  add('Change blocker', change.blocker);
   add('Unchosen advantages', d.de_circumstance_advantages);
   add('Unchosen obstacles', d.de_circumstance_disadvantages);
   add('Luck belief', d.de_world_belief);
-  add('Self-narrative', d.self_narrative);
-  add('Operative cosmology', d.de_operative_cosmology || d.operative_cosmology);
   add('Cosmology gap', d.de_cosmology_conflict);
-  add('Joy source', d.de_joy_trigger);
   const archived = (d.extra_fields && d.extra_fields.depth_archive) || {};
   for (const [key, label] of Object.entries(ARCHIVED_CHARACTER_NOTES)) add(label, archived[key]);
   return lines;
@@ -235,16 +231,11 @@ function buildCharacterBlock(dossier, relationships) {
   if (d.character_archetype) lines.push(`  Archetype: ${d.character_archetype}`);
   if (d.signature_trait) lines.push(`  Signature trait: ${d.signature_trait}`);
 
-  // Identity triad
-  if (d.core_wound) lines.push(`  Wound: ${d.core_wound}`);
-  if (d.core_desire) lines.push(`  Desire: ${d.core_desire}`);
-  if (d.core_fear) lines.push(`  Fear: ${d.core_fear}`);
-  if (d.hidden_want) lines.push(`  Hidden want: ${d.hidden_want}`);
   if (d.core_belief) lines.push(`  Belief: ${d.core_belief}`);
 
-  // Mask vs Truth
-  if (d.mask_persona) lines.push(`  Public self (mask): ${d.mask_persona}`);
-  if (d.truth_persona) lines.push(`  True self (hidden): ${d.truth_persona}`);
+  // What they show, and the private truth beneath the scene (services/characterStoryBrief)
+  const brief = storyBrief(d, { layer: 'scene', secrets: d.secrets });
+  if (brief.lines.length) lines.push(...brief.lines.map((l) => `  ${l}`));
   if (d.emotional_baseline) lines.push(`  Emotional baseline: ${d.emotional_baseline}`);
 
   // Living context (situational grounding)
@@ -356,6 +347,8 @@ async function fetchSceneContext(characterKeys, registryId) {
       'de_circumstance_advantages', 'de_circumstance_disadvantages', 'de_world_belief',
       'self_narrative', 'operative_cosmology', 'de_operative_cosmology', 'de_cosmology_conflict',
       'de_joy_trigger', 'extra_fields',
+      // The rest of the inner life, for the story brief (services/characterStoryBrief)
+      'the_mask', 'want_architecture', 'wound', 'dilemma', 'triggers', 'experience_of_joy', 'de_forbidden_joy', 'living_state',
       // Author knowledge (the evaluation agent only; buildAuthorKnowledgeLines)
       'blind_spot', 'de_blind_spot_category', 'blind_spot_visible_to', 'de_actual_narrative_gap',
       'foreclosed_possibility', 'de_foreclosure_origins',
@@ -423,9 +416,13 @@ async function fetchSceneContext(characterKeys, registryId) {
     }
   });
 
+  // Their kept secrets, for the brief's revelation budget (services/characterSecrets).
+  // Only the prompt gets them: the dossiers are saved with the story.
+  const secrets = await secretsFor(db.sequelize, charIds);
+
   // Build structured text blocks
   const blocks = dossiers.map(d =>
-    buildCharacterBlock(d, edgesByChar[d.id])
+    buildCharacterBlock({ ...d, secrets: secrets.get(d.id) || [] }, edgesByChar[d.id])
   );
 
   return {
@@ -1133,7 +1130,7 @@ async function loadSocialFeedContext(characterKeys, registryId) {
 // ── POST /generate-story-multi ────────────────────────────────────────────
 router.post('/generate-story-multi', requireAuth, aiRateLimiter, async (req, res) => {
   try {
-    const { chapter_id, book_id, scene_brief, characters_in_scene, registry_id, tone_dial, must_include, never_include } = req.body;
+    const { chapter_id, book_id, scene_brief, characters_in_scene, registry_id, tone_dial, must_include, never_include, dramatic_irony } = req.body;
     if (!scene_brief) {
       return res.status(400).json({ error: 'scene_brief is required' });
     }
@@ -1177,7 +1174,7 @@ router.post('/generate-story-multi', requireAuth, aiRateLimiter, async (req, res
 
     const fullCharBlocks = charBlocks + storyMemories + therapyCtx + franchiseCtx + authorNoteCtx + worldCtx + voiceRuleCtx + arcCtx + socialCtx + continuityCtx + growthCtx + worldStateCtx + crossingCtx + arcTrackingSection;
 
-    const genOpts = { characters_in_scene: characters_in_scene || [], charBlocks: fullCharBlocks, tone_dial, dossiers, must_include, never_include };
+    const genOpts = { characters_in_scene: characters_in_scene || [], charBlocks: fullCharBlocks, tone_dial, dossiers, must_include, never_include, dramatic_irony: dramatic_irony === true };
     const promptA = buildGenerationPrompt({ scene_brief, voice_key: 'voice_a', ...genOpts });
     const promptB = buildGenerationPrompt({ scene_brief, voice_key: 'voice_b', ...genOpts });
     const promptC = buildGenerationPrompt({ scene_brief, voice_key: 'voice_c', ...genOpts });
@@ -1791,3 +1788,7 @@ Only include characters and dimensions where the scene reveals something new.`,
 module.exports = router;
 module.exports.loadFranchiseConstraints = loadFranchiseConstraints;
 module.exports.buildDynamicDeepHints = buildDynamicDeepHints;
+// The scene's character block and its prompt, for tests (the story brief and
+// the blind spot only on request).
+module.exports.buildCharacterBlock = buildCharacterBlock;
+module.exports.buildGenerationPrompt = buildGenerationPrompt;

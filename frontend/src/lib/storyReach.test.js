@@ -22,6 +22,24 @@ describe('the map matches the code', () => {
     });
   }
 
+  test('a writer said to read the story brief calls it in its own code', () => {
+    for (const w of WRITERS.filter((x) => x.brief)) {
+      const own = w.sources.filter((f) => !f.endsWith('characterStoryBrief.js'));
+      for (const f of own) expect(readFileSync(resolve(repo, f), 'utf8'), `${f} calls storyBrief`).toMatch(/\bstoryBrief\(/);
+    }
+  });
+
+  test('and gives it their kept secrets (stage B)', () => {
+    for (const w of WRITERS.filter((x) => x.brief)) {
+      const own = w.sources.filter((f) => !f.endsWith('characterStoryBrief.js'));
+      for (const f of own) {
+        const code = readFileSync(resolve(repo, f), 'utf8');
+        expect(code, `${f} loads secrets`).toMatch(/\bsecretsFor\(/);
+        for (const call of code.match(/\bstoryBrief\([^)]*\)/g)) expect(call, f).toMatch(/secrets/);
+      }
+    }
+  });
+
   test('no field is listed twice for one writer', () => {
     for (const w of WRITERS) {
       const all = [...w.shows, ...w.private, ...w.unmarked];
@@ -59,9 +77,10 @@ describe('for one character', () => {
 
   test('what reaches no writer, written first', () => {
     const list = unreached(C);
-    expect(list.map((i) => i.field)).toEqual(expect.arrayContaining(['triggers', 'experience_of_joy', 'dilemma']));
-    expect(list.slice(0, 3).every((i) => i.text)).toBe(true);
-    expect(list.find((i) => i.field === 'dilemma').text).toBe('central tension: Stay or go');
+    // The story brief now carries triggers, joy and the dilemma to the writers.
+    expect(list.map((i) => i.field)).not.toContain('triggers');
+    expect(list.map((i) => i.field)).not.toContain('dilemma');
+    expect(list.map((i) => i.field)).toEqual(expect.arrayContaining(['de_joy_origin', 'de_money_wound']));
     expect(list.map((i) => i.field)).not.toContain('time_orientation');
     expect(INNER_LIFE_FIELDS).toContain('deep_profile');
   });

@@ -5,7 +5,7 @@
 // cumulative §5.21 instance):
 //   - 3 GETs Tier 4 PUBLIC (timeline catalog reads)
 //   - 2 writes Tier 1 (PUT /:postId, DELETE /:postId)
-//   - 1 service-mediated AI POST aiRateLimiter (POST /:episodeId/generate)
+//   - the AI POST /:episodeId/generate was retired 2026-10-17 (episodeFeedGeneratorRetired.test.js)
 
 const fs = require('fs');
 const path = require('path');
@@ -36,8 +36,8 @@ describe('Step 3 CP8 — feedPostRoutes.js mixed Tier 1+4', () => {
     });
   });
 
-  test('AI POST /:episodeId/generate → requireAuth + aiRateLimiter', () => {
-    expect(SRC).toMatch(/router\.post\('\/:episodeId\/generate',\s*requireAuth,\s*aiRateLimiter,\s*async/);
+  test('the AI POST /:episodeId/generate is retired (no unguarded route left behind)', () => {
+    expect(SRC).not.toMatch(/router\.post\('\/:episodeId\/generate'/);
   });
 
   describe('Tier 1 writes (2)', () => {

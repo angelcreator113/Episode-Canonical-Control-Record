@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Heart, MessageCircle, Share2, Wand2, Trash2, ArrowLeft,
+import { Heart, MessageCircle, Share2, Send, Trash2, ArrowLeft,
   Clock, Smile, Frown, AlertTriangle, Star, Filter, Flame, TrendingUp,
   BarChart3, Eye, Activity, Link2 } from 'lucide-react';
 import api from '../services/api';
 import './FeedTimelinePage.css';
 import { atHandle } from './feed/feedConstants';
+
+const PULSE_ENGINE = '/admin?tab=pulse&sub=engine';
 
 const TIMELINE_LABELS = {
   before_episode: 'Before Episode',
@@ -182,7 +184,6 @@ export default function FeedTimelinePage() {
   const [posts, setPosts] = useState([]);
   const [grouped, setGrouped] = useState({});
   const [stats, setStats] = useState(null);
-  const [generating, setGenerating] = useState(false);
   const [filter, setFilter] = useState('all');
   const [error, setError] = useState(null);
 
@@ -203,20 +204,6 @@ export default function FeedTimelinePage() {
   }, [showId, episodeId]);
 
   useEffect(() => { loadPosts(); }, [loadPosts]);
-
-  const handleGenerate = async () => {
-    if (!episodeId || !showId) return;
-    setGenerating(true);
-    setError(null);
-    try {
-      await api.post(`/api/v1/feed-posts/${episodeId}/generate`, { showId });
-      loadPosts();
-    } catch (err) {
-      setError(err.response?.data?.error || err.message);
-    } finally {
-      setGenerating(false);
-    }
-  };
 
   const handleDelete = async (postId) => {
     try {
@@ -259,13 +246,13 @@ export default function FeedTimelinePage() {
             <BarChart3 size={16} /> Dashboard
           </button>
           {episodeId && (
+            // An episode's posts are drafted from its event in The Pulse's
+            // Engine, through the Review gate (the old generator is retired).
             <button
               className="feed-timeline-btn generate"
-              onClick={handleGenerate}
-              disabled={generating}
+              onClick={() => navigate(PULSE_ENGINE)}
             >
-              <Wand2 size={16} />
-              {generating ? 'Generating...' : 'Generate Posts'}
+              <Send size={16} /> Draft posts in The Pulse › Engine
             </button>
           )}
         </div>
@@ -326,7 +313,7 @@ export default function FeedTimelinePage() {
             <div className="feed-timeline-empty">
               <MessageCircle size={48} />
               <p>No feed posts yet</p>
-              {episodeId && <p>Generate posts to see the timeline activity after this episode.</p>}
+              {episodeId && <p>Draft this episode's posts in Admin › The Pulse › Engine to see its activity here.</p>}
             </div>
           )
         )}

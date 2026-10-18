@@ -77,6 +77,7 @@ describe('the Storylines tab', () => {
     await cards();
     fireEvent.click(screen.getByRole('button', { name: 'New storyline' }));
     const form = screen.getByTestId('pulse-story-new');
+    expect(within(form).getByText(/Name the characters it is about by handle/)).toBeTruthy();
     fireEvent.change(within(form).getByLabelText('Title'), { target: { value: ' A lost ring ' } });
     fireEvent.change(within(form).getByLabelText('Premise'), { target: { value: 'It turns up.' } });
     fireEvent.change(within(form).getByLabelText('Follows a show thread (optional)'), { target: { value: 't1' } });

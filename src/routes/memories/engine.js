@@ -12,6 +12,8 @@ const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 const db = require('../../models');
 const { StorytellerMemory, StorytellerLine, StorytellerBook, StorytellerChapter, RegistryCharacter } = db;
 const { buildUniverseContext } = require('../../utils/universeContext');
+const { storyBrief } = require('../../services/characterStoryBrief');
+const { secretsFor } = require('../../services/characterSecrets');
 
 let _registrySync;
 try { _registrySync = require('../../services/registrySync'); } catch { _registrySync = null; }
@@ -1264,6 +1266,10 @@ async function loadCharacterProfile(characterKey) {
       'pressure_type', 'pressure_quote', 'description',
       'aesthetic_dna', 'belief_pressured', 'writer_notes',
       'wound_depth', 'extra_fields',
+      // The rest of the inner life, for the story brief (services/characterStoryBrief).
+      'the_mask', 'want_architecture', 'hidden_want', 'wound', 'dilemma', 'triggers', 'experience_of_joy',
+      'de_joy_trigger', 'de_forbidden_joy', 'change_capacity', 'time_orientation', 'self_narrative',
+      'operative_cosmology', 'de_operative_cosmology', 'foreclosed_possibility', 'living_state',
     ];
     for (const row of rows) {
       const plain = row.get({ plain: true });
@@ -1275,12 +1281,12 @@ async function loadCharacterProfile(characterKey) {
     // Build profile string
     const sections = [];
 
-    if (merged.core_desire)   sections.push(`CORE DESIRE: ${merged.core_desire}`);
-    if (merged.core_fear)     sections.push(`CORE FEAR: ${merged.core_fear}`);
-    if (merged.core_wound)    sections.push(`CORE WOUND: ${merged.core_wound}`);
+    // Their inner life beneath the story (services/characterStoryBrief).
+    const secretsById = await secretsFor(RegistryCharacter.sequelize, rows.map((r) => r.id));
+    const secrets = rows.flatMap((r) => secretsById.get(r.id) || []);
+    const brief = storyBrief(merged, { layer: 'short_story', secrets });
+    if (brief.lines.length) sections.push(brief.text);
     if (merged.core_belief)   sections.push(`CORE BELIEF: ${merged.core_belief}`);
-    if (merged.mask_persona)  sections.push(`MASK (public persona): ${merged.mask_persona}`);
-    if (merged.truth_persona) sections.push(`TRUTH (private self): ${merged.truth_persona}`);
     if (merged.signature_trait)    sections.push(`SIGNATURE TRAIT: ${merged.signature_trait}`);
     if (merged.emotional_baseline) sections.push(`EMOTIONAL BASELINE: ${merged.emotional_baseline}`);
     if (merged.pressure_type)      sections.push(`PRESSURE TYPE: ${merged.pressure_type}`);
