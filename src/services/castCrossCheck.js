@@ -85,7 +85,7 @@ async function loadCast(db, registryIds) {
 
 /** What A's narrator text says about other cast members' follower counts and status. */
 function proseFlags(cast) {
-  const { leavesOf, followerMentions, labelOf, STATUS_PHRASES } = require('./characterConsistency');
+  const { leavesOf, followerMentions, labelOf, statusMentions } = require('./characterConsistency');
   const flags = [];
   for (const a of cast) {
     const others = cast.filter((m) => m !== a && m.facts);
@@ -110,11 +110,10 @@ function proseFlags(cast) {
           }
         }
         if (b.facts.account_status && !undecided.has('account_status')) {
-          for (const [status, re] of STATUS_PHRASES) {
-            const m = re.exec(sentence);
-            if (m && status !== b.facts.account_status) {
-              flags.push({ ...base, id: idOf('other_status', a.character.id, leaf.path, m[0]), check: 'other_status',
-                found: m[0], expected: `${nameOf(b.character)}'s account is ${b.facts.account_status.replace(/_/g, ' ')}` });
+          for (const m of statusMentions(sentence)) {
+            if (m.status !== b.facts.account_status) {
+              flags.push({ ...base, id: idOf('other_status', a.character.id, leaf.path, m.match), check: 'other_status',
+                found: m.match, expected: `${nameOf(b.character)}'s account is ${b.facts.account_status.replace(/_/g, ' ')}` });
             }
           }
         }

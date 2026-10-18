@@ -592,7 +592,7 @@ export default function FeedViewContent({
                         {key:'auto_relate_enabled',label:'Auto-Relate',desc:'Link relationships automatically'},
                         {key:'auto_follow_enabled',label:'Auto-Follow',desc:'Assign followers to new profiles'},
                         {key:'auto_cross_enabled',label:'Auto-Cross',desc:'Flag profiles ready for crossing'},
-                        {key:'auto_discover_enabled',label:'Auto-Discover',desc:'Find potential relationships between profiles'},
+                        {key:'auto_discover_enabled',label:'Auto-Discover',desc:'Suggest potential relationships for you to keep (Relationship Map › Suggested pairs)'},
                       ].map(a=>{
                         const enabled=autoStatus?.config?.[a.key]!==false;
                         return (
