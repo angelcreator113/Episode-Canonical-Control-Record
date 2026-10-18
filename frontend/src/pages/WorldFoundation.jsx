@@ -151,6 +151,44 @@ export default function WorldFoundation({ embedded = false }) {
     setShowForm(true);
   };
 
+  // The location form: a new one opens above the list, an edit opens in
+  // the card being edited (Evoni, 2026-10-18: on a phone, Edit opened the
+  // form far above the card, so nothing seemed to happen).
+  const locationForm = () => (
+            <div style={{ ...cardStyle, marginBottom: 16, background: '#FAF7F0', border: '1px solid #e8e0d0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                <span style={{ fontWeight: 700, fontSize: 13 }}>{editId ? 'Edit Location' : 'New Location'}</span>
+                <button onClick={() => { setShowForm(false); setEditId(null); setForm(emptyForm); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999' }}>x</button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <input style={inputStyle} placeholder="Name *" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
+                <select style={inputStyle} value={form.location_type} onChange={e => setForm(p => ({ ...p, location_type: e.target.value }))}>
+                  {LOCATION_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+                {/* One of the five DREAM cities, so the map places it (wiring map,
+                    fix-list item 18); a city already stored outside them stays
+                    choosable rather than being dropped on save. */}
+                <select style={inputStyle} aria-label="City" value={form.city || ''} onChange={e => setForm(p => ({ ...p, city: e.target.value }))}>
+                  <option value="">No city</option>
+                  {(data.DREAM_CITIES || DREAM_CITIES).map(c => <option key={c.key} value={c.name}>{c.name}</option>)}
+                  {form.city && !(data.DREAM_CITIES || DREAM_CITIES).some(c => c.name === form.city) && (
+                    <option value={form.city}>{form.city} (not a DREAM city)</option>
+                  )}
+                </select>
+                <input style={inputStyle} placeholder="District" value={form.district} onChange={e => setForm(p => ({ ...p, district: e.target.value }))} />
+                <input style={inputStyle} placeholder="Street Address" value={form.street_address} onChange={e => setForm(p => ({ ...p, street_address: e.target.value }))} />
+                <input style={inputStyle} placeholder="Narrative Role" value={form.narrative_role} onChange={e => setForm(p => ({ ...p, narrative_role: e.target.value }))} />
+                {form.location_type === 'venue' && <select style={inputStyle} value={form.venue_type} onChange={e => setForm(p => ({ ...p, venue_type: e.target.value }))}><option value="">Venue Type</option>{VENUE_TYPES.map(v => <option key={v} value={v}>{v}</option>)}</select>}
+                {form.location_type === 'property' && <select style={inputStyle} value={form.property_type} onChange={e => setForm(p => ({ ...p, property_type: e.target.value }))}><option value="">Property Type</option>{PROPERTY_TYPES.map(v => <option key={v} value={v}>{v}</option>)}</select>}
+              </div>
+              <textarea style={{ ...inputStyle, marginTop: 8, resize: 'vertical' }} rows={2} placeholder="Description" value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} />
+              <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
+                <button onClick={saveLocation} disabled={!form.name} style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, background: '#2C2C2C', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>{editId ? 'Update' : 'Create'}</button>
+                <button onClick={() => { setShowForm(false); setEditId(null); setForm(emptyForm); }} style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, background: '#fff', color: '#666', border: '1px solid #e8e0d0', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
+              </div>
+            </div>
+  );
+
   // Profile counts by city (for map)
   const [profileCounts, setProfileCounts] = useState([]);
   useEffect(() => {
@@ -373,41 +411,8 @@ export default function WorldFoundation({ embedded = false }) {
             })}
           </div>
 
-          {/* Create/Edit form */}
-          {showForm && (
-            <div style={{ ...cardStyle, marginBottom: 16, background: '#FAF7F0', border: '1px solid #e8e0d0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                <span style={{ fontWeight: 700, fontSize: 13 }}>{editId ? 'Edit Location' : 'New Location'}</span>
-                <button onClick={() => { setShowForm(false); setEditId(null); setForm(emptyForm); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999' }}>x</button>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <input style={inputStyle} placeholder="Name *" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
-                <select style={inputStyle} value={form.location_type} onChange={e => setForm(p => ({ ...p, location_type: e.target.value }))}>
-                  {LOCATION_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </select>
-                {/* One of the five DREAM cities, so the map places it (wiring map,
-                    fix-list item 18); a city already stored outside them stays
-                    choosable rather than being dropped on save. */}
-                <select style={inputStyle} aria-label="City" value={form.city || ''} onChange={e => setForm(p => ({ ...p, city: e.target.value }))}>
-                  <option value="">No city</option>
-                  {(data.DREAM_CITIES || DREAM_CITIES).map(c => <option key={c.key} value={c.name}>{c.name}</option>)}
-                  {form.city && !(data.DREAM_CITIES || DREAM_CITIES).some(c => c.name === form.city) && (
-                    <option value={form.city}>{form.city} (not a DREAM city)</option>
-                  )}
-                </select>
-                <input style={inputStyle} placeholder="District" value={form.district} onChange={e => setForm(p => ({ ...p, district: e.target.value }))} />
-                <input style={inputStyle} placeholder="Street Address" value={form.street_address} onChange={e => setForm(p => ({ ...p, street_address: e.target.value }))} />
-                <input style={inputStyle} placeholder="Narrative Role" value={form.narrative_role} onChange={e => setForm(p => ({ ...p, narrative_role: e.target.value }))} />
-                {form.location_type === 'venue' && <select style={inputStyle} value={form.venue_type} onChange={e => setForm(p => ({ ...p, venue_type: e.target.value }))}><option value="">Venue Type</option>{VENUE_TYPES.map(v => <option key={v} value={v}>{v}</option>)}</select>}
-                {form.location_type === 'property' && <select style={inputStyle} value={form.property_type} onChange={e => setForm(p => ({ ...p, property_type: e.target.value }))}><option value="">Property Type</option>{PROPERTY_TYPES.map(v => <option key={v} value={v}>{v}</option>)}</select>}
-              </div>
-              <textarea style={{ ...inputStyle, marginTop: 8, resize: 'vertical' }} rows={2} placeholder="Description" value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} />
-              <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
-                <button onClick={saveLocation} disabled={!form.name} style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, background: '#2C2C2C', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>{editId ? 'Update' : 'Create'}</button>
-                <button onClick={() => { setShowForm(false); setEditId(null); setForm(emptyForm); }} style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, background: '#fff', color: '#666', border: '1px solid #e8e0d0', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
-              </div>
-            </div>
-          )}
+          {/* Create form (an edit opens in its own card, below) */}
+          {showForm && !editId && locationForm()}
 
           {/* Location cards */}
           {locLoading ? <div style={{ textAlign: 'center', color: '#999', padding: 40 }}>Loading...</div> : filtered.length === 0 ? <div style={{ textAlign: 'center', color: '#999', padding: 40 }}>{search || filterType ? 'No matching locations.' : 'No locations yet — seed infrastructure or add one above.'}</div> : (
@@ -416,7 +421,9 @@ export default function WorldFoundation({ embedded = false }) {
                 <div key={title} style={{ marginBottom: 16 }}>
                   <div style={{ ...labelStyle, marginBottom: 6 }}>{title.toUpperCase()} ({items.length})</div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 8 }}>
-                    {items.map(loc => (
+                    {items.map(loc => (editId === loc.id && showForm) ? (
+                      <div key={loc.id} data-testid={`location-edit-${loc.id}`}>{locationForm()}</div>
+                    ) : (
                       <div key={loc.id} style={cardStyle}>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                           <div>
@@ -433,6 +440,11 @@ export default function WorldFoundation({ embedded = false }) {
                         {loc.residents?.length > 0 && <div style={{ fontSize: 9, color: '#d4789a', marginTop: 4, fontWeight: 600 }}>{loc.residents.length} resident{loc.residents.length > 1 ? 's' : ''}: {loc.residents.slice(0, 3).map(r => r.display_name || r.handle).join(', ')}</div>}
                         {loc.sceneSets?.length > 0 && <div style={{ fontSize: 9, color: '#7ab3d4', marginTop: 2, fontWeight: 600 }}>{loc.sceneSets.length} scene set{loc.sceneSets.length > 1 ? 's' : ''}</div>}
                         {loc.events?.length > 0 && <div style={{ fontSize: 9, color: '#B8962E', marginTop: 2, fontWeight: 600 }}>{loc.events.length} event{loc.events.length > 1 ? 's' : ''}</div>}
+                        {loc.residents?.length > 0 && loc.location_type === 'venue' && (
+                          <div style={{ fontSize: 10, color: '#888', marginTop: 4 }} data-testid={`location-uses-${loc.id}`}>
+                            Home base of {loc.residents.length === 1 ? 'this creator' : 'these creators'}: their pin on the phone map, guests suggested for events held here, and where their events are set.
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
