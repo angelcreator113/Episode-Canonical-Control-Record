@@ -26,6 +26,11 @@
  * POST   /world/:showId/season/proposals — Ask for one now (one AI call), even if the feed has not moved
  * POST   /world/:showId/season/proposals/:proposalId/accept  — Apply the chosen changes ({ changes: [indexes] }; all when absent)
  * POST   /world/:showId/season/proposals/:proposalId/dismiss — Dismiss it
+ * GET    /world/:showId/season/reveals — The reveal plan (stage E): the season's slots, the show's kept
+ *                                         secrets, which secret is hinted or revealed in which slot, and
+ *                                         what is wrong with the plan (services/seasonRevealPlan)
+ * PUT    /world/:showId/season/reveals — { slot_id, secret_id, intent: hint|reveal, note? }: add or change one
+ * DELETE /world/:showId/season/reveals/:revealId — Take it out of the plan
  *
  * Extend (lengthen the current phase, pushing the season past 24) is removed:
  * "Remove Extend; phase boundaries can shift within the 24, only across slots
@@ -404,6 +409,48 @@ router.post('/world/:showId/season/proposals/:proposalId/dismiss', requireAuth, 
     return res.json({ success: true, ...(await dismiss(models, req.params.showId, req.params.proposalId, { by: decidedBy(req) })) });
   } catch (err) {
     return sendSlotError(res, err, 'dismiss proposal');
+  }
+});
+
+// ── The reveal plan (stage E; services/seasonRevealPlan) ───────────────────
+
+const sendPlanError = (res, err, label) => {
+  const { RevealPlanError } = require('../services/seasonRevealPlan');
+  if (err instanceof RevealPlanError) return res.status(err.status).json({ error: err.message });
+  console.error(`[ArcRoutes] ${label} error:`, err);
+  return res.status(500).json({ error: err.message });
+};
+
+// GET /world/:showId/season/reveals — the plan, the slots and the show's secrets
+router.get('/world/:showId/season/reveals', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { getPlan } = require('../services/seasonRevealPlan');
+    return res.json({ success: true, ...(await getPlan(models.sequelize, req.params.showId)) });
+  } catch (err) {
+    return sendPlanError(res, err, 'reveal plan');
+  }
+});
+
+// PUT /world/:showId/season/reveals — add or change one slot's plan for a secret
+router.put('/world/:showId/season/reveals', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { setReveal } = require('../services/seasonRevealPlan');
+    return res.json({ success: true, ...(await setReveal(models.sequelize, req.params.showId, req.body || {}, { by: decidedBy(req) })) });
+  } catch (err) {
+    return sendPlanError(res, err, 'set reveal');
+  }
+});
+
+// DELETE /world/:showId/season/reveals/:revealId
+router.delete('/world/:showId/season/reveals/:revealId', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { deleteReveal } = require('../services/seasonRevealPlan');
+    return res.json({ success: true, ...(await deleteReveal(models.sequelize, req.params.showId, req.params.revealId)) });
+  } catch (err) {
+    return sendPlanError(res, err, 'delete reveal');
   }
 });
 

@@ -22,6 +22,7 @@ const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 const { LINKED_CHARACTER_JOIN } = require('../utils/registryLink');
 const { storyBrief, BRIEF_COLUMNS } = require('./characterStoryBrief');
 const { secretsFor } = require('./characterSecrets');
+const { planForEpisode, withPlan } = require('./seasonRevealPlan');
 const { latestWorldSnapshotForShow } = require('./worldSnapshotForShow');
 const { loadScriptCareer, careerBlock } = require('./scriptCareerService');
 const { episodeEventId } = require('../utils/episodeEventSql');
@@ -300,11 +301,13 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
       );
       // Their kept secrets, for the brief's revelation budget (services/characterSecrets).
       const secrets = await secretsFor(sequelize, (rows || []).map(r => r.registry_character_id));
+      // The season's reveal plan for this episode decides what it may hint at or reveal.
+      const plan = await planForEpisode(sequelize, episodeId);
       context.socialProfiles = (rows || []).map(r => {
         // Parse personality JSON if present
         let personality = r.personality;
         if (typeof personality === 'string') try { personality = JSON.parse(personality); } catch { personality = null; }
-        return { ...r, personality, story_role: storyRoleByProfileId.get(r.id) || null, secrets: secrets.get(r.registry_character_id) || [] };
+        return { ...r, personality, story_role: storyRoleByProfileId.get(r.id) || null, secrets: withPlan(secrets.get(r.registry_character_id) || [], plan, 'episode') };
       });
     }
   } catch { /* non-blocking */ }

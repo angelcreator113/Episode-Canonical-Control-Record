@@ -110,3 +110,23 @@ describe('storyBrief with secrets', () => {
     expect(storyBrief(MAREN, { layer: 'chapter', secrets: [{ ...DEBT, permissions: {} }] }).text).toContain('[HINT ONLY');
   });
 });
+
+// Stage E: the season's reveal plan sets a secret's permission for this
+// episode and marks it planned (services/seasonRevealPlan.withPlan).
+describe('storyBrief with the season plan', () => {
+  const { withPlan } = require('../../../src/services/seasonRevealPlan');
+  const RING = { id: 's1', text: 'She sold the ring', status: 'confirmed', state: 'hidden', permissions: { episode: 'hidden', short_story: 'hint' }, known_by_people: [] };
+
+  test('a planned hint overrides keep hidden, with how', () => {
+    const secrets = withPlan([RING], new Map([['s1', { intent: 'hint', note: 'She hides her hand' }]]), 'episode');
+    expect(storyBrief(MAREN, { layer: 'episode', secrets }).text)
+      .toContain('- She sold the ring [HINT ONLY: show it in what they do; nobody explains it. No one else knows. Planned for this episode: She hides her hand.]');
+  });
+
+  test('a planned reveal clears it for that layer only; no plan changes nothing', () => {
+    const plan = new Map([['s1', { intent: 'reveal', note: null }]]);
+    expect(storyBrief(MAREN, { layer: 'short_story', secrets: withPlan([RING], plan, 'short_story') }).text).toContain('CLEARED TO REVEAL in this story');
+    expect(storyBrief(MAREN, { layer: 'episode', secrets: withPlan([RING], plan, 'short_story') }).text).toContain('[KEEP HIDDEN');
+    expect(withPlan([RING], new Map(), 'episode')).toEqual([RING]);
+  });
+});
