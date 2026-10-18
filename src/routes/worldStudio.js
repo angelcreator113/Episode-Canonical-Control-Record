@@ -3453,13 +3453,12 @@ router.delete('/world/locations/:id', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-const { LALAS_HOME, renameOldLalaHome } = require('../services/lalaHomeLocation');
-
 // POST /world/locations/seed-infrastructure — generate full DREAM city infrastructure
 router.post('/world/locations/seed-infrastructure', requireAuth, async (req, res) => {
   try {
     const WorldLocation = models.WorldLocation;
     if (!WorldLocation) return res.status(500).json({ error: 'WorldLocation model not available' });
+    const { LALAS_HOME, renameOldLalaHome } = require('../services/lalaHomeLocation');
 
     // Full DREAM city infrastructure — cities, districts, venues, properties, landmarks
     const DREAM_INFRA = [
