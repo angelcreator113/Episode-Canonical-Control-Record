@@ -95,4 +95,36 @@ describe('World tab', () => {
     expect(screen.queryByTestId('location-edit-loc-9')).toBeNull();
     expect(screen.getByText("STUDIO BY SABLE's Studio")).toBeTruthy();
   });
+
+  // Evoni, 2026-10-18: "yes start the sensory details on the location form".
+  test('the form edits a place\'s senses: filled in from what is saved, blanks left out on save, other keys kept', async () => {
+    const club = { id: 'loc-3', name: 'Club Neon', location_type: 'venue', venue_type: 'club', city: 'Echo Park',
+      sensory_details: { sight: 'Violet lasers', from_story: 'A story said it was loud' } };
+    vi.mocked(api.get).mockImplementation(async (url) => (url === '/api/v1/world/locations' ? { data: { locations: [club] } } : { data: { data: {}, locations: [], events: [] } }));
+    vi.mocked(api.put).mockResolvedValue({ data: { location: club } });
+    window.history.pushState({}, '', '/universe?tab=world&sub=locations');
+    renderAt('/universe?tab=world&sub=locations');
+    await screen.findByText('Club Neon');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const card = screen.getByTestId('location-edit-loc-3');
+    expect(within(card).getByTestId('location-senses').open).toBe(true);
+    expect(within(card).getByLabelText('Sight').value).toBe('Violet lasers');
+    expect(within(card).getByLabelText('Smell').value).toBe('');
+    fireEvent.change(within(card).getByLabelText('Sound'), { target: { value: '  Bass through the floor ' } });
+    fireEvent.change(within(card).getByLabelText('Smell'), { target: { value: '   ' } });
+    fireEvent.click(within(card).getByRole('button', { name: 'Update' }));
+    await vi.waitFor(() => expect(api.put).toHaveBeenCalled());
+    const [url, body] = vi.mocked(api.put).mock.calls[0];
+    expect(url).toContain('/world/locations/loc-3');
+    expect(body.sensory_details).toEqual({ sight: 'Violet lasers', sound: 'Bass through the floor', from_story: 'A story said it was loud' });
+  });
+
+  test('a new location\'s senses start closed and empty', async () => {
+    window.history.pushState({}, '', '/universe?tab=world&sub=locations');
+    renderAt('/universe?tab=world&sub=locations');
+    fireEvent.click(await screen.findByRole('button', { name: '+ Add Location' }));
+    const senses = screen.getByTestId('location-senses');
+    expect(senses.open).toBe(false);
+    expect(within(senses).getByLabelText('Atmosphere').value).toBe('');
+  });
 });

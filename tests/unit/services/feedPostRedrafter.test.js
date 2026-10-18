@@ -11,6 +11,10 @@ jest.mock('@anthropic-ai/sdk', () => function Anthropic() { return { messages: {
 const mockTake = jest.fn(async () => ({}));
 jest.mock('../../../src/services/pulseRequests', () => ({ take: (...args) => mockTake(...args), RequestCapError: class RequestCapError extends Error {} }));
 
+// The poster's world (services/posterWorld) has its own integration test; here it gives one line.
+const mockWorld = jest.fn(async () => 'Their world (a post may be set here; it need not name it):\n- They live in Echo Park, a DREAM city: Loud.\n');
+jest.mock('../../../src/services/posterWorld', () => ({ posterWorldLine: (...args) => mockWorld(...args) }));
+
 const { redraftPost, buildPrompt, posterProfile } = require('../../../src/services/feedPostRedrafter');
 const { DraftError } = require('../../../src/services/feedCommentDrafter');
 
@@ -45,6 +49,19 @@ describe('redraftPost', () => {
     expect(m.row.update).toHaveBeenCalledWith({ content_text: "She drew it. We built it. You'll want it.", ai_generated: true });
     expect(out.previous_text).toBe('Our pump, her design.');
     expect(out.voice).toBe('stableofficial');
+  });
+
+  // Evoni, 2026-10-18: a redraft knows the world a new draft does.
+  test('a redraft carries the poster\'s world and the gossip outlets, trends and archives', async () => {
+    const m = makeModels({ post: DRAFT });
+    mockCreate.mockResolvedValue({ content: [{ text: 'She drew it.' }] });
+    await redraftPost(m, 'p-1');
+    expect(mockWorld).toHaveBeenCalledWith(m, 7);
+    const prompt = mockCreate.mock.calls[0][0].messages[0].content;
+    expect(prompt).toContain('- They live in Echo Park, a DREAM city: Loud.');
+    expect(prompt).toContain("The LalaVerse's gossip and media outlets");
+    expect(prompt).toContain("The LalaVerse's culture (a post may lean on it where it fits");
+    expect(prompt.indexOf('They live in Echo Park')).toBeLessThan(prompt.indexOf('The draft:'));
   });
 
   test('a live post is locked, a missing post is 404, an overlong note is 400, no key is 503', async () => {

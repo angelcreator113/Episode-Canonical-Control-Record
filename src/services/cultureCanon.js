@@ -44,6 +44,16 @@
  *
  *   trendsBlock(lists)  { fashion, beauty, waves, archives } as a few lines
  *     a post may lean on ('' for none)
+ *
+ * The feud stages and legend paths for the book (Evoni, 2026-10-18: "yes
+ * start the feud stages and legend paths"): FEUD_STAGES and LEGEND_PATHS
+ * (cultural_memory), for the chapter planner and the chapter writer
+ * (routes/bookFromShowRoutes), whose chapters hold what JustAWoman imagines
+ * in Lala's world beyond the event. Arcs over years, so a chapter may grow
+ * one; most will not.
+ *
+ *   arcsBlock({ feuds, legends })  the stages and paths ('' for none)
+ *   loadArcs(db)  the two lists, saved or the page's
  */
 
 // Where each list is saved, and the field that names an item.
@@ -58,6 +68,8 @@ const LISTS = Object.freeze({
   BEAUTY_TREND_STAGES: { page: 'influencer_systems', name: 'name' },
   MOMENTUM_WAVES: { page: 'influencer_systems', name: 'event' },
   ARCHIVES: { page: 'cultural_memory', name: 'name' },
+  FEUD_STAGES: { page: 'cultural_memory', name: 'stage' },
+  LEGEND_PATHS: { page: 'cultural_memory', name: 'path' },
 });
 
 const DEFAULTS = Object.freeze({
@@ -122,6 +134,18 @@ const DEFAULTS = Object.freeze({
     { name: 'Glow Archives', tracks: 'Cosmetic innovations, viral beauty trends, technique origins, Glow Honors history' },
     { name: 'The Creator Chronicle', tracks: 'Influencer milestones, viral moments, creator economy breakthroughs, platform history' },
     { name: 'The Whisper Ledger', tracks: 'Feuds, breakups, public controversies, cancelled creators, apology records' },
+  ],
+  FEUD_STAGES: [
+    { stage: 'Year 1: Origin', looks: 'The initial conflict — often misread as minor at the time.', attention: 'The immediate followers of each party', preserved: 'Screenshots. There are always screenshots.' },
+    { stage: 'Year 2-3: Escalation', looks: 'The feud becomes public narrative — media coverage, audience sides, event proximity moments', attention: 'The entire industry — this is entertainment with stakes', preserved: 'The Whisper Ledger coverage. Every outlet has a take. The takes become the history.' },
+    { stage: 'Year 5+: Legacy', looks: 'The feud is historical — referenced to explain current events, invoked whenever similar situations arise', attention: 'Cultural commentators, industry analysts, anyone explaining how LalaVerse works', preserved: 'The narrative that survived — not necessarily the accurate one. The one that made better content.' },
+    { stage: 'Post-resolution', looks: 'The reconciliation, ignored alliance, or professional distance — all three land differently', attention: 'Everyone who picked a side. They feel robbed of the ending they were promised.', preserved: 'The reconciliation post. Or the notable absence of one.' },
+  ],
+  LEGEND_PATHS: [
+    { path: 'Inventing a major trend', requires: 'First mover on something that escaped origin cluster and became platform-wide', costs: 'Credit — the trend often gets attributed to whoever amplified it, not who invented it', preserved: 'The Creator Chronicle, if the documentation happened fast enough.' },
+    { path: 'Surviving a defining controversy', requires: 'Coming back after a significant public fall — stronger, more specific, more honest than before', costs: 'Privacy. The recovery is always more exposed than the original person was before the fall.', preserved: 'The Whisper Ledger has both versions. The survivor controls neither.' },
+    { path: 'Building a lasting institution', requires: 'Creating something that outlasts the personal content — a brand, a school, a platform, a methodology', costs: 'The individual identity, which gets absorbed into the institutional one. She becomes the founder.', preserved: 'The institution itself. What she built is the archive.' },
+    { path: 'Defining an era', requires: 'A period of culture that the entire ecosystem organized around — named after the person, referenced by year', costs: 'The weight of being the reference point. Every creator who came after is compared to her.', preserved: 'Every archive simultaneously. Era-defining figures appear in every archive because every industry intersects with an era.' },
   ],
 });
 
@@ -225,6 +249,26 @@ async function loadTrends(db) {
   };
 }
 
+function arcsBlock({ feuds = [], legends = [] } = {}) {
+  const f = (feuds || []).filter((x) => text(x?.stage));
+  const l = (legends || []).filter((x) => text(x?.path));
+  if (!f.length && !l.length) return '';
+  const parts = ['HOW FEUDS AND LEGENDS GROW IN LALA\'S WORLD (arcs over years: a chapter may carry one a step further where its story fits; most chapters will not):'];
+  if (f.length) {
+    parts.push('A feud\'s stages:');
+    parts.push(...f.map((x) => `- ${text(x.stage)}: ${[text(x.looks), text(x.attention) && `Who watches: ${text(x.attention)}`, text(x.preserved) && `What remains: ${text(x.preserved)}`].filter(Boolean).map(sentence).join(' ')}`));
+  }
+  if (l.length) {
+    parts.push('How someone becomes a legend:');
+    parts.push(...l.map((x) => `- ${text(x.path)}. ${[text(x.requires) && `Takes: ${text(x.requires)}`, text(x.costs) && `Costs: ${text(x.costs)}`, text(x.preserved) && `Remembered: ${text(x.preserved)}`].filter(Boolean).map(sentence).join(' ')}`));
+  }
+  return `${parts.join('\n')}\n`;
+}
+
+async function loadArcs(db) {
+  return { feuds: await loadCultureList(db, 'FEUD_STAGES'), legends: await loadCultureList(db, 'LEGEND_PATHS') };
+}
+
 /** The hierarchy, schools, companies and economy for a LalaVerse profile writer; cityName (a DREAM city name or key) puts its schools first. */
 async function profileWorldBlock(db, cityName = null) {
   const city = cityName ? String(cityName).replace(/_/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase()) : null;
@@ -236,5 +280,5 @@ async function profileWorldBlock(db, cityName = null) {
 
 module.exports = {
   DEFAULTS, LISTS, loadCultureList, awardShowsBlock, gossipMediaBlock, hierarchyBlock, schoolsBlock, companiesBlock, economyBlock, profileWorldBlock,
-  trendsBlock, loadTrends,
+  trendsBlock, loadTrends, arcsBlock, loadArcs,
 };

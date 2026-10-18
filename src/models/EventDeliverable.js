@@ -62,7 +62,8 @@ module.exports = (sequelize) => {
     fee: { type: DataTypes.INTEGER, allowNull: true },
     // Ruling D15 (2026-09-30): the platform and the quantity (pieces, slides
     // or days) of the format in deliverable_type (src/utils/deliverableFormats.js).
-    platform: { type: DataTypes.STRING(20), allowNull: true, comment: 'instagram | tiktok | youtube' },
+    // The account since 2026-10-18 (20261018130000-pulse-deliverables.js).
+    platform: { type: DataTypes.STRING(20), allowNull: true, comment: 'pulse | pulse_private | playroom' },
     quantity: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1 },
   }, {
     tableName: 'event_deliverables',

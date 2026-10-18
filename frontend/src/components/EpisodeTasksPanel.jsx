@@ -13,6 +13,7 @@
 
 import React, { useState } from 'react';
 import SocialTaskBadge from './SocialTaskBadge';
+import { platformLabel } from '../pages/feed/feedConstants';
 
 const SOURCE_BG = { platform: '#f0f7ff', category: '#f0fdf4' };
 
@@ -72,9 +73,9 @@ export default function EpisodeTasksPanel({ episodeId, load, buttonStyle }) {
                 <div key={t.slot || i} style={{ fontSize: 12, padding: '4px 8px', background: SOURCE_BG[t.source] || '#f8f8f8', borderRadius: 4 }}>
                   {t.completed ? '☑' : '☐'} <strong>{t.label}</strong>
                   <SocialTaskBadge task={t} />
-                  {t.source === 'platform' && <span style={{ fontSize: 8, padding: '1px 4px', background: '#dbeafe', color: '#1e40af', borderRadius: 3, marginLeft: 4 }}>{t.platform}</span>}
+                  {t.source === 'platform' && <span style={{ fontSize: 8, padding: '1px 4px', background: '#dbeafe', color: '#1e40af', borderRadius: 3, marginLeft: 4 }}>{platformLabel(t.platform)}</span>}
                   {t.source === 'category' && <span style={{ fontSize: 8, padding: '1px 4px', background: '#d1fae5', color: '#065f46', borderRadius: 3, marginLeft: 4 }}>niche</span>}
-                  {' '}<span style={{ color: '#999', fontSize: 10 }}>· {t.platform} · {t.timing}</span>
+                  {' '}<span style={{ color: '#999', fontSize: 10 }}>· {platformLabel(t.platform)} · {t.timing}</span>
                 </div>
               ))}
             </div>

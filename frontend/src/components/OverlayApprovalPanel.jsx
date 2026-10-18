@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../services/api';
 import SocialTaskBadge from './SocialTaskBadge';
 import { isSocialTaskRequired } from '../utils/socialTaskSource';
+import { platformLabel } from '../pages/feed/feedConstants';
 
 /**
  * OverlayApprovalPanel — Reusable generate → preview → edit → approve/reject workflow
@@ -288,7 +289,7 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
                           {isWardrobe
                             ? task.required && <span style={{ fontSize: 9, padding: '1px 6px', background: timingBg, color: timingText, borderRadius: 4, fontWeight: 700 }}>required</span>
                             : <SocialTaskBadge task={task} />}
-                          {!isWardrobe && task.platform && <span style={{ fontSize: 9, color: 'var(--text-secondary)' }}>{task.platform}</span>}
+                          {!isWardrobe && task.platform && <span style={{ fontSize: 9, color: 'var(--text-secondary)' }}>{platformLabel(task.platform)}</span>}
                         </div>
                         <input
                           value={task.label || ''}
@@ -464,7 +465,7 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
                         borderLeft: `3px solid ${TIMING_COLORS[phase]}`, fontSize: 10,
                       }}>
                         <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{t.label}</span>
-                        <span style={{ color: 'var(--text-secondary)', marginLeft: 4 }}>{t.platform}</span>
+                        <span style={{ color: 'var(--text-secondary)', marginLeft: 4 }}>{platformLabel(t.platform)}</span>
                         <SocialTaskBadge task={t} />
                       </div>
                     ))}
