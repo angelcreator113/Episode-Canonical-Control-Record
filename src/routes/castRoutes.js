@@ -48,6 +48,10 @@
  *                                                  the follower ledger (services/factHistory)
  *   GET    /api/v1/cast/characters/:id/check        flag-only check of their profile's text
  *                                                  against their facts (services/characterConsistency)
+ *   POST   /api/v1/cast/characters/:id/check/suggest  one AI call proposing a rewrite of each
+ *                                                  finding's sentence, or that it does not
+ *                                                  really disagree; saves nothing (ADMIN;
+ *                                                  services/checkAutofix)
  *   POST   /api/v1/cast/characters/:id/check/intentional        { flag_id, note? }: ADMIN
  *   DELETE /api/v1/cast/characters/:id/check/intentional/:flagId  unmark it: ADMIN
  *   GET    /api/v1/cast/characters/:id/appearance   how they look and their portraits
@@ -74,6 +78,10 @@
  *                                                  character file; saves nothing (ADMIN)
  *   POST   /api/v1/cast/content-types/suggest-unset  { limit?, profile_ids? }: suggestions for LalaVerse
  *                                                  feed profiles with none; saves nothing (ADMIN)
+ *   GET    /api/v1/cast/audience-map             each content type's shared audiences: the
+ *                                                  types it shares with and competes with
+ *   PUT    /api/v1/cast/audience-map             { name, shares, competes } or { name, reset: true } (ADMIN)
+ *   POST   /api/v1/cast/audience-map/suggest     { name }: one AI call; saves nothing (ADMIN)
  *   GET    /api/v1/cast/content-pillars          each content type's mix: pillars with
  *                                                  shares and an example (services/contentPillars)
  *   PUT    /api/v1/cast/content-pillars          { name, pillars } or { name, pillars: null }
@@ -95,6 +103,17 @@
  *                                                  call that writes the place's description
  *                                                  from their profile; saves nothing
  *                                                  (services/placeDescriptionService)
+ *   GET    /api/v1/cast/characters/:id/secrets      their secrets, kept and suggested, and
+ *                                                  the cast of their registry for Known to
+ *                                                  (services/characterSecrets)
+ *   POST   /api/v1/cast/characters/:id/secrets      { text, source_field?, known_by?, permissions?,
+ *                                                  state?, where? }: a kept secret (ADMIN)
+ *   PUT    /api/v1/cast/characters/:id/secrets/:secretId  any of those, or { status }:
+ *                                                  candidate | confirmed | retired (ADMIN)
+ *   DELETE /api/v1/cast/characters/:id/secrets/:secretId  (ADMIN; soft)
+ *   POST   /api/v1/cast/characters/:id/secrets/suggest  one AI call over their story brief;
+ *                                                  saves up to five as candidates to keep
+ *                                                  or discard (ADMIN)
  *
  * Archived is the registry's soft delete (registry_characters.deleted_at).
  *
@@ -520,7 +539,8 @@ router.post('/characters/:id/check/intentional', requireAuth, authorize(['ADMIN'
 /**
  * Fixes one finding (Evoni, 2026-10-16: "I have no way of correcting these
  * findings"): { flag_id } puts the suggested fix in place, { flag_id, text }
- * saves her own wording as the field's whole text. Returns the check after.
+ * saves her own wording as the field's whole text, { flag_id, before, after }
+ * swaps one sentence for a suggested rewrite. Returns the check after.
  */
 router.post('/characters/:id/check/fix', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
@@ -533,7 +553,8 @@ router.post('/characters/:id/check/fix', requireAuth, authorize(['ADMIN']), asyn
     const { applyFix, FixError } = require('../services/characterConsistency');
     try {
       const text = req.body && 'text' in req.body ? req.body.text : undefined;
-      const result = await applyFix(db, found, flagId, { text });
+      const replace = req.body && 'before' in req.body ? { before: req.body.before, after: req.body.after } : undefined;
+      const result = await applyFix(db, found, flagId, { text, replace });
       const flagLog = require('../services/flagLog');
       await flagLog.markFixed(db, found.character.id, flagId);
       await flagLog.logCheck(db, found.character, result);
@@ -545,6 +566,26 @@ router.post('/characters/:id/check/fix', requireAuth, authorize(['ADMIN']), asyn
   } catch (err) {
     console.error('[Cast] POST /characters/:id/check/fix error:', err);
     return res.status(500).json({ success: false, error: err.message });
+  }
+});
+/**
+ * Suggested fixes (Evoni, 2026-10-17: "i want to be able to auto fix the
+ * text issues"): one AI call proposing, for every finding with no single
+ * right wording, either a rewrite of its sentence that agrees with the
+ * facts or that it does not really disagree (and why). Nothing is saved;
+ * a rewrite is applied through /check/fix { flag_id, before, after }.
+ */
+router.post('/characters/:id/check/suggest', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const db = getModels();
+    const found = await characterWithFeed(db, req.params.id);
+    if (!found) return res.status(404).json({ success: false, error: 'Character not found' });
+    const suggestions = await require('../services/checkAutofix').suggestFixes(db, found);
+    return res.json({ success: true, suggestions });
+  } catch (err) {
+    console.error('[Cast] POST /characters/:id/check/suggest error:', err);
+    return res.status(err.status === 502 ? 502 : 500).json({ success: false, error: err.message });
   }
 });
 router.delete('/characters/:id/check/intentional/:flagId', requireAuth, authorize(['ADMIN']), (req, res) => markIntentional(req, res, false));
@@ -1032,6 +1073,112 @@ router.delete('/characters/:id/hosted-events/:eventId', requireAuth, async (req,
     return res.json({ success: true, data: await unhostEvent(getModels().sequelize, { characterId: req.params.id, eventId: req.params.eventId }) });
   } catch (err) {
     return hostedError(res, err, 'DELETE characters/:id/hosted-events/:eventId');
+  }
+});
+
+/**
+ * Shared audiences (services/audienceMap; Evoni's idea 4, 2026-10-17):
+ * which content types share an audience and which compete for one.
+ */
+const audienceError = (res, err) => {
+  const { AudienceError } = require('../services/audienceMap');
+  if (err instanceof AudienceError) { res.status(err.status).json({ success: false, error: err.message }); return true; }
+  return false;
+};
+
+router.get('/audience-map', requireAuth, async (req, res) => {
+  try {
+    return res.json({ success: true, types: await require('../services/audienceMap').listAudience(getModels()) });
+  } catch (err) {
+    console.error('[Cast] GET /audience-map error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.put('/audience-map', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const body = req.body || {};
+    const links = body.reset ? null : { shares: body.shares, competes: body.competes };
+    try {
+      return res.json({ success: true, type: await require('../services/audienceMap').saveAudience(getModels(), body.name, links) });
+    } catch (err) {
+      if (audienceError(res, err)) return undefined;
+      throw err;
+    }
+  } catch (err) {
+    console.error('[Cast] PUT /audience-map error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/audience-map/suggest', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  try {
+    try {
+      return res.json({ success: true, ...(await require('../services/audienceMap').suggestAudience(getModels(), req.body?.name)) });
+    } catch (err) {
+      if (audienceError(res, err)) return undefined;
+      throw err;
+    }
+  } catch (err) {
+    console.error('[Cast] POST /audience-map/suggest error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Their secrets and what each story may reveal (services/characterSecrets;
+ * Evoni, 2026-10-17, stage B: the revelation budget).
+ */
+const secretError = (res, err, label) => {
+  const { SecretError } = require('../services/characterSecrets');
+  if (err instanceof SecretError) return res.status(err.status).json({ success: false, error: err.message });
+  console.error(`[Cast] ${label} error:`, err);
+  return res.status(500).json({ success: false, error: err.message });
+};
+const byOf = (req) => String(req.user?.email || req.user?.id || 'admin').slice(0, 255);
+
+router.get('/characters/:id/secrets', requireAuth, async (req, res) => {
+  try {
+    const { listSecrets } = require('../services/characterSecrets');
+    return res.json({ success: true, ...(await listSecrets(getModels().sequelize, req.params.id)) });
+  } catch (err) {
+    return secretError(res, err, 'GET /characters/:id/secrets');
+  }
+});
+
+router.post('/characters/:id/secrets/suggest', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  try {
+    const { suggestSecrets } = require('../services/characterSecrets');
+    return res.json({ success: true, ...(await suggestSecrets(getModels().sequelize, req.params.id, { by: byOf(req) })) });
+  } catch (err) {
+    return secretError(res, err, 'POST /characters/:id/secrets/suggest');
+  }
+});
+
+router.post('/characters/:id/secrets', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const { createSecret } = require('../services/characterSecrets');
+    return res.json({ success: true, secret: await createSecret(getModels().sequelize, req.params.id, req.body || {}, { by: byOf(req) }) });
+  } catch (err) {
+    return secretError(res, err, 'POST /characters/:id/secrets');
+  }
+});
+
+router.put('/characters/:id/secrets/:secretId', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const { updateSecret } = require('../services/characterSecrets');
+    return res.json({ success: true, secret: await updateSecret(getModels().sequelize, req.params.id, req.params.secretId, req.body || {}) });
+  } catch (err) {
+    return secretError(res, err, 'PUT /characters/:id/secrets/:secretId');
+  }
+});
+
+router.delete('/characters/:id/secrets/:secretId', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const { deleteSecret } = require('../services/characterSecrets');
+    return res.json({ success: true, ...(await deleteSecret(getModels().sequelize, req.params.id, req.params.secretId)) });
+  } catch (err) {
+    return secretError(res, err, 'DELETE /characters/:id/secrets/:secretId');
   }
 });
 

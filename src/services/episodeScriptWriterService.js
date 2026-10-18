@@ -21,6 +21,8 @@ const crypto = require('crypto');
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 const { LINKED_CHARACTER_JOIN } = require('../utils/registryLink');
 const { storyBrief, BRIEF_COLUMNS } = require('./characterStoryBrief');
+const { secretsFor } = require('./characterSecrets');
+const { planForEpisode, withPlan } = require('./seasonRevealPlan');
 const { latestWorldSnapshotForShow } = require('./worldSnapshotForShow');
 const { loadScriptCareer, careerBlock } = require('./scriptCareerService');
 const { episodeEventId } = require('../utils/episodeEventSql');
@@ -297,11 +299,15 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
          WHERE sp.id IN (:ids) AND sp.deleted_at IS NULL`,
         { replacements: { ids: profileIds } }
       );
+      // Their kept secrets, for the brief's revelation budget (services/characterSecrets).
+      const secrets = await secretsFor(sequelize, (rows || []).map(r => r.registry_character_id));
+      // The season's reveal plan for this episode decides what it may hint at or reveal.
+      const plan = await planForEpisode(sequelize, episodeId);
       context.socialProfiles = (rows || []).map(r => {
         // Parse personality JSON if present
         let personality = r.personality;
         if (typeof personality === 'string') try { personality = JSON.parse(personality); } catch { personality = null; }
-        return { ...r, personality, story_role: storyRoleByProfileId.get(r.id) || null };
+        return { ...r, personality, story_role: storyRoleByProfileId.get(r.id) || null, secrets: withPlan(secrets.get(r.registry_character_id) || [], plan, 'episode') };
       });
     }
   } catch { /* non-blocking */ }
@@ -431,7 +437,7 @@ function storyContextBlocks(context, { withSeason = true } = {}) {
 
         // Their inner life as the episode may use it: it shapes what they
         // do and is never said (services/characterStoryBrief).
-        const brief = storyBrief(p, { layer: 'episode' });
+        const brief = storyBrief(p, { layer: 'episode', secrets: p.secrets });
         if (brief.lines.length) block += `\n  ${brief.lines.join('\n  ')}`;
         if (p.therapy_primary_defense) block += `\n  Primary Defense: ${p.therapy_primary_defense}`;
         if (p.signature_trait) block += `\n  Signature Trait: ${p.signature_trait}`;

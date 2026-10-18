@@ -13,15 +13,22 @@
  *                      change, time, self-story, beliefs, living state:
  *                      it shapes behaviour, tension and choices and is
  *                      never stated, at the depth the layer allows
- *   CLEARED TO REVEAL  nothing yet (the revelation budget is stage B)
+ *   SECRETS            what they keep (services/characterSecrets), each
+ *                      with who knows it and what this layer may do: keep
+ *                      hidden, hint only, or reveal; already revealed ones
+ *                      the audience knows
+ *   CLEARED TO REVEAL  the secrets this layer may reveal, else nothing yet
  *
  * The layers are the levels of access to one story (Evoni): the episode
  * shows what happens, the short story what was happening beneath it, the
  * chapter book what it all means.
  *
  *   LAYERS                     episode | short_story | chapter | scene
- *   storyBrief(character, { layer })  { lines, text }
+ *   storyBrief(character, { layer, secrets })  { lines, text }
  *     character  a registry character (plain or a model instance)
+ *     secrets    their confirmed secrets (characterSecrets.secretsFor);
+ *                a scene uses the chapter's permission; one the season's
+ *                plan sets for this episode carries planned (seasonRevealPlan)
  *   BRIEF_COLUMNS              the registry_characters columns it reads,
  *                              for writers that select columns themselves;
  *                              never blind_spot, so a writer that saves its
@@ -37,10 +44,10 @@
 const { changeCapacityOf, normalizeTimeOrientation } = require('./characterDepthFields');
 
 const LAYERS = {
-  episode: 'The audience sees only behaviour. Let it shape their choices, avoidances, tension and timing. Never state it, explain it, or have anyone name it.',
-  short_story: 'It may surface beneath the scene: private reactions, the body, half-thoughts, what they almost say. Hint; never name the wound or the secret outright.',
+  episode: 'The audience sees only behaviour. Let it shape their choices, avoidances, tension and timing. Never state it, explain it, or have anyone name it, unless it is cleared to reveal below.',
+  short_story: 'It may surface beneath the scene: private reactions, the body, half-thoughts, what they almost say. Hint; never name the wound or the secret outright unless it is cleared to reveal below.',
   chapter: 'It can be explored in depth as subtext, history and consequence. Nothing in it is stated outright unless it is cleared to reveal below.',
-  scene: 'It may surface beneath the scene: private reactions, the body, half-thoughts, what they almost say. Hint; never name the wound or the secret outright.',
+  scene: 'It may surface beneath the scene: private reactions, the body, half-thoughts, what they almost say. Hint; never name the wound or the secret outright unless it is cleared to reveal below.',
 };
 
 const BRIEF_COLUMNS = [
@@ -63,9 +70,47 @@ const objectOf = (v) => {
   }
   return typeof v === 'string' && v.trim() ? { description: v } : {};
 };
+// What a layer may do with a secret; a storyteller scene is the chapter book's.
+const PERMISSION_OF = { episode: 'episode', short_story: 'short_story', chapter: 'chapter', scene: 'chapter' };
+const PERMISSION_RULE = {
+  hidden: 'KEEP HIDDEN: nothing on the page points at it',
+  hint: 'HINT ONLY: show it in what they do; nobody explains it',
+  reveal: 'MAY BE REVEALED in this story',
+};
+const knownTo = (s) => {
+  const names = (s.known_by_people || []).map((p) => p.name).filter(Boolean);
+  return names.length ? `Known to: ${names.join(', ')}` : 'No one else knows';
+};
+
+/** The SECRETS and CLEARED TO REVEAL lines for a layer. */
+function secretLines(secrets, layer) {
+  const key = PERMISSION_OF[layer] || 'episode';
+  const lines = [];
+  const cleared = [];
+  const kept = (secrets || []).filter((s) => s && s.text && s.status !== 'retired' && s.status !== 'candidate');
+  const revealed = kept.filter((s) => s.state === 'revealed');
+  const open = kept.filter((s) => s.state !== 'revealed');
+  if (open.length) {
+    lines.push('SECRETS (only the people who know one can act on it or refer to it; the others do not know it):');
+    for (const s of open) {
+      const permission = s.permissions?.[key] || 'hint';
+      const where = s.state === 'hinted' ? ` Already hinted${s.where ? ` (${text(s.where)})` : ''}.` : '';
+      // The season's reveal plan for this episode (services/seasonRevealPlan).
+      const planned = s.planned ? ` Planned for this episode${typeof s.planned === 'string' ? `: ${text(s.planned)}` : ''}.` : '';
+      lines.push(`- ${text(s.text)} [${PERMISSION_RULE[permission] || PERMISSION_RULE.hint}. ${knownTo(s)}.${where}${planned}]`);
+      if (permission === 'reveal') cleared.push(s);
+    }
+  }
+  if (revealed.length) {
+    lines.push('ALREADY REVEALED (the audience knows these; characters who were not told still do not):');
+    for (const s of revealed) lines.push(`- ${text(s.text)}${s.where ? ` (revealed ${text(s.where)})` : ''}. ${knownTo(s)}.`);
+  }
+  return { lines, cleared };
+}
+
 const words = (v) => (v ? String(v).replace(/_/g, ' ') : '');
 
-function storyBrief(character, { layer = 'episode' } = {}) {
+function storyBrief(character, { layer = 'episode', secrets = [] } = {}) {
   const c = character && typeof character.get === 'function' ? character.get({ plain: true }) : (character || {});
   const rule = LAYERS[layer] || LAYERS.episode;
 
@@ -106,8 +151,15 @@ function storyBrief(character, { layer = 'episode' } = {}) {
   const lines = [];
   if (show.length) lines.push('WHAT THEY SHOW (their public face; their voice in public comes from here):', ...show);
   if (truth.length) lines.push(`PRIVATE AUTHOR TRUTH (you know this; they may not, and the audience is not told it). ${rule}`, ...truth);
-  if (truth.length) lines.push('CLEARED TO REVEAL: nothing yet. Keep every private truth as subtext.');
+  const kept = secretLines(secrets, layer);
+  lines.push(...kept.lines);
+  if (kept.cleared.length) {
+    lines.push('CLEARED TO REVEAL in this story (the audience may learn these; everything else stays subtext):',
+      ...kept.cleared.map((s) => `- ${text(s.text)}`));
+  } else if (truth.length || kept.lines.length) {
+    lines.push('CLEARED TO REVEAL: nothing yet. Keep every private truth as subtext.');
+  }
   return { lines, text: lines.join('\n') };
 }
 
-module.exports = { storyBrief, LAYERS, BRIEF_COLUMNS };
+module.exports = { storyBrief, LAYERS, BRIEF_COLUMNS, PERMISSION_OF };

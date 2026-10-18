@@ -16,6 +16,7 @@ const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 const { LINKED_CHARACTER_JOIN } = require('../utils/registryLink');
 const { pulsePromptRules } = require('../utils/pulsePlatform');
 const { storyBrief, BRIEF_COLUMNS } = require('./characterStoryBrief');
+const { secretsFor } = require('./characterSecrets');
 
 function getClient() {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -75,6 +76,43 @@ function CANON_RULES(format) {
 /**
  * Generate a prose story from an episode.
  */
+/**
+ * The episode's people: the event's host and guests, each with the registry
+ * character linked to their feed profile (ruling C3, utils/registryLink),
+ * its story-brief columns and char_id. [] when there is no event or none.
+ */
+async function episodeCast(sequelize, event) {
+  let characters = [];
+  try {
+    let cc = event?.canon_consequences;
+    if (typeof cc === 'string') try { cc = JSON.parse(cc); } catch { cc = {}; }
+    const auto = cc?.automation || {};
+    // g.id is the pre-fix shape a guest written by the opportunity
+    // pipeline may still carry (Task #1686, docs/GUEST_OWNERSHIP_READ.md
+    // §6) — g.profile_id is preferred, g.id is the fallback.
+    const profileIds = [eventCreatorOrganizer(event)?.profileId, ...(auto.guest_profiles || []).map(g => g.profile_id || g.id)].filter(Boolean);
+    if (profileIds.length > 0) {
+      // The newest registry entry should two be linked. The join on
+      // sp.registry_character_id compared an integer to a UUID and failed.
+      const [rows] = await sequelize.query(
+        `SELECT sp.handle, sp.display_name, sp.creator_name, sp.archetype, sp.posting_voice,
+                rc.id as char_id, rc.display_name as char_name, rc.core_belief, rc.role_type, rc.depth_level,
+                rc.personality, rc.pressure_type, rc.therapy_primary_defense,
+                rc.signature_trait, rc.character_archetype,
+                ${BRIEF_COLUMNS.map((col) => `rc.${col}`).join(', ')}
+         FROM social_profiles sp
+         ${LINKED_CHARACTER_JOIN}
+         WHERE sp.id IN (:ids) AND sp.deleted_at IS NULL`,
+        { replacements: { ids: profileIds } }
+      );
+      characters = rows || [];
+    }
+  } catch (err) {
+    console.error('[StoryGeneration] the episode cast could not be read (non-blocking):', err.message);
+  }
+  return characters;
+}
+
 async function generateEpisodeStory(episodeId, showId, sequelize, options = {}) {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not configured');
 
@@ -109,33 +147,7 @@ async function generateEpisodeStory(episodeId, showId, sequelize, options = {}) 
   const net = (parseFloat(episode.total_income) || 0) - (parseFloat(episode.total_expenses) || 0);
 
   // Load character profiles for this episode
-  let characters = [];
-  try {
-    let cc = event?.canon_consequences;
-    if (typeof cc === 'string') try { cc = JSON.parse(cc); } catch { cc = {}; }
-    const auto = cc?.automation || {};
-    // g.id is the pre-fix shape a guest written by the opportunity
-    // pipeline may still carry (Task #1686, docs/GUEST_OWNERSHIP_READ.md
-    // §6) — g.profile_id is preferred, g.id is the fallback.
-    const profileIds = [eventCreatorOrganizer(event)?.profileId, ...(auto.guest_profiles || []).map(g => g.profile_id || g.id)].filter(Boolean);
-    if (profileIds.length > 0) {
-      // Each guest's character is the registry entry linked to the profile
-      // (ruling C3, utils/registryLink), the newest should two be. The join
-      // on sp.registry_character_id compared an integer to a UUID and failed.
-      const [rows] = await sequelize.query(
-        `SELECT sp.handle, sp.display_name, sp.creator_name, sp.archetype, sp.posting_voice,
-                rc.id as char_id, rc.display_name as char_name, rc.core_belief, rc.role_type, rc.depth_level,
-                rc.personality, rc.pressure_type, rc.therapy_primary_defense,
-                rc.signature_trait, rc.character_archetype,
-                ${BRIEF_COLUMNS.map((col) => `rc.${col}`).join(', ')}
-         FROM social_profiles sp
-         ${LINKED_CHARACTER_JOIN}
-         WHERE sp.id IN (:ids) AND sp.deleted_at IS NULL`,
-        { replacements: { ids: profileIds } }
-      );
-      characters = rows || [];
-    }
-  } catch { /* non-blocking */ }
+  const characters = await episodeCast(sequelize, event);
 
   // What each is known for on The Pulse against their job: a hook for the
   // story (services/characterContentType; null when none).
@@ -152,6 +164,15 @@ async function generateEpisodeStory(episodeId, showId, sequelize, options = {}) 
     }));
   }
 
+  // Their kept secrets, for the brief's revelation budget (services/characterSecrets).
+  const secretsByCharacter = await secretsFor(sequelize, characters.map((c) => c.char_id));
+  // The season's reveal plan for this episode (services/seasonRevealPlan).
+  const plan = await require('./seasonRevealPlan').planForEpisode(sequelize, episodeId);
+
+  // The approved Episode Story Record: what the audience saw, which the
+  // story goes beneath and never against (services/episodeStoryRecord).
+  const record = await require('./episodeStoryRecord').recordBlock(sequelize, episodeId);
+
   // Build the prompt
   const scriptExcerpt = episode.script_content ? episode.script_content.slice(0, 4000) : 'No script available';
   const outfitText = outfitPieces.length > 0
@@ -164,7 +185,7 @@ async function generateEpisodeStory(episodeId, showId, sequelize, options = {}) 
     if (c.depth_level) block += ` (depth: ${c.depth_level})`;
     if (c.core_belief) block += `\n    Believes: "${c.core_belief}"`;
     // What was happening beneath the episode (services/characterStoryBrief).
-    const brief = storyBrief(c, { layer: 'short_story' });
+    const brief = storyBrief(c, { layer: 'short_story', secrets: require('./seasonRevealPlan').withPlan(secretsByCharacter.get(c.char_id), plan, 'short_story') });
     if (brief.lines.length) block += `\n    ${brief.lines.join('\n    ')}`;
     if (c.therapy_primary_defense) block += `\n    Defense mechanism: ${c.therapy_primary_defense}`;
     if (c.signature_trait) block += `\n    Signature trait: ${c.signature_trait}`;
@@ -197,7 +218,7 @@ ${charContext}
 ${evalData ? `OUTCOME: ${evalData.tier_final?.toUpperCase()} (${evalData.score}/100) — ${evalData.narrative_lines?.short || ''}` : ''}
 ${net !== 0 ? `FINANCIAL: ${net >= 0 ? '+' : ''}${net} coins net` : ''}
 
-SCRIPT EXCERPT:
+${record ? `${record}\n\n` : ''}${format === 'short_story' ? 'CANON: go beneath the episode, never against it. Do not invent a major new event that contradicts what the episode showed; anything new you add is proposed to the author for canon, not canon yet.\n\n' : ''}SCRIPT EXCERPT:
 ${scriptExcerpt}
 
 FRANCHISE RULES:
@@ -223,6 +244,7 @@ Write the ${spec.name.toLowerCase()} now. Return ONLY the prose — no commentar
 
   // Save story
   const storyId = uuidv4();
+  let saved = false;
   try {
     await sequelize.query(
       `INSERT INTO stories
@@ -258,9 +280,14 @@ Write the ${spec.name.toLowerCase()} now. Return ONLY the prose — no commentar
         tags: JSON.stringify([format, evalData?.tier_final, event?.event_type].filter(Boolean)),
       }}
     );
+    saved = true;
   } catch (err) {
     console.warn('[StoryGen] Save failed:', err.message);
   }
+
+  // What a short story adds is proposed for canon, not canon (stage D,
+  // services/storyCanon): read it now, unawaited; nothing blocks on it.
+  if (saved && format === 'short_story') require('./storyCanon').reviewLater(sequelize, storyId);
 
   return {
     id: storyId,
@@ -297,6 +324,7 @@ async function getStories(sequelize, options = {}) {
 
 module.exports = {
   generateEpisodeStory,
+  episodeCast,
   getStories,
   FORMAT_SPECS,
   CANON_RULES,

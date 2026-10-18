@@ -4,6 +4,8 @@
  * profile's relationships show how close each pair is.
  * Since Task 3115 the map edits The Pulse's relationships: its form offers
  * The Pulse's 17 kinds, there is no Auto-Generate, and a refused pair says why.
+ * Storyline seeds (idea 4, PR 3, 2026-10-17): a relationship the canvas marks
+ * seedable (never Lala's) has a Storyline button that opens the seed panel.
  */
 import React from 'react';
 import { describe, test, expect, vi, beforeEach } from 'vitest';
@@ -22,8 +24,8 @@ const canvas = {
     { id: 3, handle: 'kim', display_name: 'Kim', state: 'rising' },
   ],
   edges: [
-    { id: 'e1', source: 1, target: 2, type: 'collab', closeness: 0.62 },
-    { id: 'e2', source: 1, target: 3, type: 'orbit', closeness: null },
+    { id: 'e1', source: 1, target: 2, type: 'collab', closeness: 0.62, seedable: true },
+    { id: 'e2', source: 1, target: 3, type: 'orbit', closeness: null, seedable: false },
   ],
 };
 
@@ -74,5 +76,20 @@ describe('FeedRelationshipMap closeness', () => {
     expect(api.post).toHaveBeenCalledWith('/api/v1/feed-relationships', {
       influencer_a_id: 1, influencer_b_id: 2, relationship_type: 'former_friends', is_public: true,
     });
+  });
+
+  test('a seedable relationship has a Storyline button that opens the seed panel; Lala\'s has none', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { title: 'Co-Host', premise: '@nia and @marcus plan a live.', pair: { a: { handle: 'nia' }, b: { handle: 'marcus' } }, can_post: [] } });
+    const { container } = render(<MemoryRouter><FeedRelationshipMap /></MemoryRouter>);
+    const nia = await waitFor(() => {
+      const g = [...container.querySelectorAll('g')].find((el) => el.querySelector('text')?.textContent?.includes('nia'));
+      expect(g).toBeTruthy();
+      return g;
+    });
+    fireEvent.click(nia);
+    expect(await screen.findAllByRole('button', { name: /^Storyline with/ })).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Storyline with @marcus' }));
+    expect(await screen.findByTestId('pair-storyline')).toBeTruthy();
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/feed-relationships/e1/storyline-seed', { show_id: 'show-1' }));
   });
 });
