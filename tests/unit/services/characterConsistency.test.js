@@ -10,7 +10,7 @@ jest.mock('../../../src/services/characterFacts', () => ({
   primaryPresenceKey: jest.requireActual('../../../src/services/characterFacts').primaryPresenceKey,
 }));
 const { factsOf } = require('../../../src/services/characterFacts');
-const { checkCharacter, followerMentions, withIntentional, zoneOf } = require('../../../src/services/characterConsistency');
+const { checkCharacter, followerMentions, withIntentional, zoneOf, statusMentions, applyFix } = require('../../../src/services/characterConsistency');
 
 const FACTS = {
   handle: '@slowsift', followers: { count: 2000000, label: '2M', source: 'ledger' }, account_status: 'gone_dark',
@@ -112,5 +112,52 @@ describe('checkCharacter (Maren)', () => {
     expect(out.flags.find((f) => f.id === target.id)).toBeUndefined();
     expect(out.intentional).toEqual([expect.objectContaining({ id: target.id, note: 'She lies about it' })]);
     expect(() => withIntentional({}, 'not-an-id')).toThrow(/flag id/);
+  });
+});
+
+describe('statusMentions (Evoni, 2026-10-17: false alarms on "goes quiet" and "gone silent")', () => {
+  test.each([
+    ['When people compliment her influence on another creator, she goes quiet for days.'],
+    ['Three sponsors in six weeks have confirmed deals and gone silent within 48 hours.'],
+  ])('a mood or someone else going quiet is not the account: %s', (text) => {
+    expect(statusMentions(text)).toEqual([]);
+  });
+  test.each([
+    ['She went dark after the retakes.', 'went dark'],
+    ['Her feed has gone quiet since March.', 'has gone quiet'],
+    ['She went silent on Instagram for a month.', 'went silent'],
+  ])('the account going dark or quiet is: %s', (text, found) => {
+    expect(statusMentions(text)).toEqual([expect.objectContaining({ status: 'gone_dark', match: found })]);
+  });
+  test('a cue in another sentence does not count', () => {
+    expect(statusMentions('Her feed is busy. She goes quiet when praised.')).toEqual([]);
+  });
+});
+
+describe('applyFix with a suggested rewrite', () => {
+  const record = (fields) => ({ ...fields, update: jest.fn(async function update(patch) { Object.assign(this, patch); }) });
+
+  test('swaps only the flagged sentence, then checks again', async () => {
+    factsOf.mockResolvedValue({ ...FACTS, account_status: 'rising' });
+    const fp = record(feed({ real_signal: 'Her numbers climb. She went dark after the retakes. Nobody noticed.' }));
+    const character = maren();
+    const flag = (await checkCharacter({}, { character, feedProfile: fp })).flags.find((f) => f.check === 'account_status');
+    const out = await applyFix({}, { character, feedProfile: fp }, flag.id, {
+      replace: { before: 'She went dark after the retakes.', after: 'She kept posting through the retakes.' },
+    });
+    expect(fp.update).toHaveBeenCalledWith({ real_signal: 'Her numbers climb. She kept posting through the retakes. Nobody noticed.' });
+    expect(out.flags.find((f) => f.id === flag.id)).toBeUndefined();
+  });
+
+  test('a sentence that has changed since is refused', async () => {
+    factsOf.mockResolvedValue({ ...FACTS, account_status: 'rising' });
+    const fp = record(feed());
+    const character = maren();
+    const flag = (await checkCharacter({}, { character, feedProfile: fp })).flags.find((f) => f.check === 'account_status');
+    await expect(applyFix({}, { character, feedProfile: fp }, flag.id, { replace: { before: 'Not in the text.', after: 'x' } }))
+      .rejects.toMatchObject({ status: 409 });
+    await expect(applyFix({}, { character, feedProfile: fp }, flag.id, { replace: { before: 'She went dark after the retakes.', after: ' ' } }))
+      .rejects.toMatchObject({ status: 400 });
+    expect(fp.update).not.toHaveBeenCalled();
   });
 });

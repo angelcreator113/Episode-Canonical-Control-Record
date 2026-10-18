@@ -1,0 +1,14 @@
+/* Page controls for long lists (lib/paging): pink and gold, tokens only. */
+.pg { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.pg-range { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.pg-buttons { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.pg-btn {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 36px; min-height: 36px; padding: 0 8px;
+  border: 1px solid var(--lala-gold-line); border-radius: 10px; background: var(--surface-card); color: var(--accent-dark);
+  font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.pg-btn:hover:not(:disabled) { background: var(--accent-subtle); }
+.pg-btn.is-on { border-color: var(--accent-dark); background: var(--accent-dark); color: var(--text-inverse); }
+.pg-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.pg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pg-gap { min-width: 20px; text-align: center; font-weight: 700; color: var(--text-secondary); }

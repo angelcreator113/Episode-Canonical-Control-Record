@@ -36,10 +36,11 @@
  *     each flag carries `fix` (what `found` becomes to agree with the facts,
  *     or null when only Evoni can say), `editable` (its field is text she can
  *     rewrite) and, when editable, `text` (the field's whole text).
- *   applyFix(db, { character, feedProfile }, flagId, { text? }) → the check after
+ *   applyFix(db, { character, feedProfile }, flagId, { text?, replace? }) → the check after
  *     with no text, puts `fix` in place of `found`; with text, saves it as the
  *     field's whole text (Evoni, 2026-10-16: "I have no way of correcting
- *     these findings").
+ *     these findings"); with replace { before, after }, swaps one sentence
+ *     for its suggested rewrite (services/checkAutofix).
  */
 
 const crypto = require('crypto');
@@ -147,6 +148,31 @@ const STATUS_PHRASES = [
   ['cancelled', /\b(?:got|was|been|is|being) cancell?ed\b/i],
   ['posthumous', /\bposthumous(?:ly)?\b/i],
 ];
+// "Goes quiet" / "gone silent" is about the account only when its sentence
+// is about posting (Evoni, 2026-10-17: "she goes quiet for days" is a mood,
+// "sponsors ... gone silent" is the sponsors). "Went dark" needs no cue.
+const QUIET_RE = /\b(?:quiet|silent)$/i;
+const ACCOUNT_CUE = /\b(?:feed|pulse|post(?:s|ing|ed)?|online|socials?|social media|account|followers?|instagram|tiktok|youtube|onlyfans|platform|page|channel|stories|uploads?|grid)\b/i;
+
+/** The sentence around index i in text. */
+function sentenceAt(text, i) {
+  const start = Math.max(text.lastIndexOf('.', i - 1), text.lastIndexOf('!', i - 1), text.lastIndexOf('?', i - 1), text.lastIndexOf('\n', i - 1)) + 1;
+  const ends = ['.', '!', '?', '\n'].map((c) => text.indexOf(c, i)).filter((n) => n >= 0);
+  const end = ends.length ? Math.min(...ends) + 1 : text.length;
+  return { start, end, sentence: text.slice(start, end) };
+}
+
+/** Each account-status phrase in text: [{ status, match, index }], at most one per status. */
+function statusMentions(text) {
+  const out = [];
+  for (const [status, re] of STATUS_PHRASES) {
+    const m = re.exec(text);
+    if (!m) continue;
+    if (QUIET_RE.test(m[0]) && !ACCOUNT_CUE.test(sentenceAt(text, m.index).sentence.replace(m[0], ''))) continue;
+    out.push({ status, match: m[0], index: m.index });
+  }
+  return out;
+}
 
 // ── Luxuries and what they need ─────────────────────────────────────────────
 const TIER_ORDER = ['struggling', 'getting_by', 'comfortable', 'well_off', 'wealthy'];
@@ -188,11 +214,10 @@ async function checkCharacter(db, { character, feedProfile = null }) {
       }
     }
     if (facts.account_status && !undecided.has('account_status')) {
-      for (const [status, re] of STATUS_PHRASES) {
-        const m = re.exec(leaf.text);
-        if (m && status !== facts.account_status) {
-          add({ check: 'account_status', field, field_label: labelOf(leaf.path), found: m[0],
-            expected: `account status "${facts.account_status.replace(/_/g, ' ')}"`, excerpt: excerpt(leaf.text, m.index, m[0].length) },
+      for (const m of statusMentions(leaf.text)) {
+        if (m.status !== facts.account_status) {
+          add({ check: 'account_status', field, field_label: labelOf(leaf.path), found: m.match,
+            expected: `account status "${facts.account_status.replace(/_/g, ' ')}"`, excerpt: excerpt(leaf.text, m.index, m.match.length) },
           { text: leaf.text });
         }
       }
@@ -280,7 +305,7 @@ const valueAt = (root, parts) => parts.reduce((v, k) => (v === null || v === und
  * no text it puts the flag's `fix` in place of `found`; with text it saves
  * the text as the field's whole text. Writes only that one field.
  */
-async function applyFix(db, { character, feedProfile = null }, flagId, { text = undefined } = {}) {
+async function applyFix(db, { character, feedProfile = null }, flagId, { text = undefined, replace = undefined } = {}) {
   const before = await checkCharacter(db, { character, feedProfile });
   const flag = before.flags.find((f) => f.id === flagId);
   if (!flag) throw new FixError(404, 'That finding is no longer there. Check again.');
@@ -290,7 +315,17 @@ async function applyFix(db, { character, feedProfile = null }, flagId, { text = 
   const current = rest.length ? valueAt(record[top], rest) : record[top];
   if (current === undefined || current === null) throw new FixError(409, 'That field is empty now. Check again.');
   let next;
-  if (text !== undefined) {
+  if (replace !== undefined) {
+    // A suggested rewrite of one sentence (services/checkAutofix): only that sentence changes.
+    if (!flag.editable) throw new FixError(400, 'That one is changed on the fact sheet, not here.');
+    const before = typeof replace?.before === 'string' ? replace.before : '';
+    const after = typeof replace?.after === 'string' ? replace.after.trim() : '';
+    if (!before || !after) throw new FixError(400, 'A rewrite needs the sentence before and after.');
+    const s = String(current);
+    if (!s.includes(before)) throw new FixError(409, 'That text has changed. Check again.');
+    next = s.replace(before, before.match(/^\s*/)[0] + after + before.match(/\s*$/)[0]);
+    if (next.length > TEXT_MAX) throw new FixError(400, `Keep it under ${TEXT_MAX.toLocaleString('en-US')} characters.`);
+  } else if (text !== undefined) {
     if (!flag.editable) throw new FixError(400, 'That one is changed on the fact sheet, not here.');
     if (typeof text !== 'string' || !text.trim()) throw new FixError(400, 'Write the new text.');
     if (text.length > TEXT_MAX) throw new FixError(400, `Keep it under ${TEXT_MAX.toLocaleString('en-US')} characters.`);
@@ -312,4 +347,4 @@ async function applyFix(db, { character, feedProfile = null }, flagId, { text = 
   return checkCharacter(db, { character, feedProfile });
 }
 
-module.exports = { checkCharacter, withIntentional, applyFix, FixError, followerMentions, zoneOf, leavesOf, labelOf, STATUS_PHRASES };
+module.exports = { checkCharacter, withIntentional, applyFix, FixError, followerMentions, zoneOf, leavesOf, labelOf, STATUS_PHRASES, statusMentions, sentenceAt };

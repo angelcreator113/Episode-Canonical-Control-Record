@@ -3453,6 +3453,31 @@ router.delete('/world/locations/:id', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Studio types (Evoni, 2026-10-18: every creator's studio read "venue ·
+// other"): GET lists the studios typed "other" with a better type for the
+// creator who lives there; POST { items: [{ location_id, venue_type, name? }] }
+// applies the ones Evoni approves (services/feedHomeLocation).
+router.get('/world/locations/studio-types', requireAuth, async (req, res) => {
+  try {
+    const { studioRetypes } = require('../services/feedHomeLocation');
+    return res.json({ success: true, studios: await studioRetypes(models) });
+  } catch (err) {
+    console.error('[WorldStudio] GET /world/locations/studio-types failed:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/world/locations/studio-types', requireAuth, async (req, res) => {
+  try {
+    const { applyStudioRetypes } = require('../services/feedHomeLocation');
+    const changed = await applyStudioRetypes(models, req.body?.items);
+    return res.json({ success: true, changed });
+  } catch (err) {
+    console.error('[WorldStudio] POST /world/locations/studio-types failed:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // POST /world/locations/seed-infrastructure — generate full DREAM city infrastructure
 router.post('/world/locations/seed-infrastructure', requireAuth, async (req, res) => {
   try {

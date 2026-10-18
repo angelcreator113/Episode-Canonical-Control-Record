@@ -4,7 +4,8 @@
 // 7 handlers gated by router.use(requireAuth).
 // 1 service-mediated AI POST aiRateLimiter inline (generate-ripples).
 // Suggested pairs (2026-10-17): POST /suggestions ADMIN + aiRateLimiter;
-// keep and dismiss ADMIN.
+// keep and dismiss ADMIN. Storyline seeds (2026-10-17): POST
+// /:id/storyline-seed ADMIN + aiRateLimiter.
 // POST /auto-generate was removed with Task #3115: the map edits The Pulse's
 // own table, so there is nothing left to copy.
 
@@ -23,6 +24,10 @@ describe('Step 3 CP8 — feedRelationshipRoutes.js router.use migration', () => 
     expect(SRC).toMatch(/router\.post\('\/suggestions',\s*authorize\(\['ADMIN'\]\),\s*aiRateLimiter,/);
     expect(SRC).toMatch(/router\.post\('\/suggestions\/:key\/keep',\s*authorize\(\['ADMIN'\]\),/);
     expect(SRC).toMatch(/router\.post\('\/suggestions\/:key\/dismiss',\s*authorize\(\['ADMIN'\]\),/);
+  });
+
+  test('a storyline seed from a pair is ADMIN only and rate-limited (2026-10-17)', () => {
+    expect(SRC).toMatch(/router\.post\('\/:id\/storyline-seed',\s*authorize\(\['ADMIN'\]\),\s*aiRateLimiter,/);
   });
 
   test('router.use(requireAuth) gates the entire router', () => {

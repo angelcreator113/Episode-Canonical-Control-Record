@@ -16,3 +16,5 @@
 .sp-btn.is-primary { background: var(--accent); border-color: var(--accent); color: var(--text-inverse); }
 .sp-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 @media (min-width: 720px) { .sp-row { grid-template-columns: 1.3fr 1fr 0.7fr 1.6fr auto; align-items: end; } }
+.sp-story { margin: 12px 0 0; }
+.sp-field textarea { font: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-card); color: var(--text-primary); max-width: 100%; resize: vertical; }
