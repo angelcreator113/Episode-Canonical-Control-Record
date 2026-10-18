@@ -1662,3 +1662,33 @@ a.ch-tl-body:hover { background: var(--lala-gold-soft); }
 @media (max-width: 560px) {
   .ch-st-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Settings to Evoni's mock (2026-10-18, step 8). */
+.ch-settings .ch-set-note { grid-column: 1 / -1; }
+.ch-set-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 12px; align-items: start; padding: 10px 0; border-bottom: 1px solid var(--lala-lavender-line); }
+.ch-set-row:last-child { border-bottom: none; }
+.ch-set-label { display: flex; flex-direction: column; gap: 2px; font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.ch-set-label .ch-note { font-weight: 400; font-size: 12px; }
+.ch-set-control { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
+.ch-set-value { font-size: 14px; color: var(--text-primary); overflow-wrap: anywhere; }
+.ch-set-link { display: flex; gap: 6px; width: 100%; }
+.ch-set-link input { flex: 1; min-width: 0; min-height: 34px; padding: 0 8px; border: 1.5px solid var(--lala-gold-line); border-radius: 8px; font: inherit; font-size: 12px; background: var(--surface-card); color: var(--text-secondary); }
+.ch-switch { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-primary); cursor: pointer; }
+.ch-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.ch-switch > span { position: relative; width: 40px; height: 22px; border-radius: 999px; background: var(--lala-lavender-soft); border: 1.5px solid var(--lala-lavender-line); transition: background 0.15s; }
+.ch-switch > span::after { content: ''; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; border-radius: 50%; background: var(--surface-card); box-shadow: var(--shadow-sm); transition: transform 0.15s; }
+.ch-switch input:checked + span { background: var(--accent-dark); border-color: var(--accent-dark); }
+.ch-switch input:checked + span::after { transform: translateX(18px); }
+.ch-switch input:focus-visible + span { outline: 2px solid var(--accent-dark); outline-offset: 2px; }
+.ch-switch input:disabled + span { opacity: 0.6; }
+.ch-danger { border-color: var(--danger-border); }
+.ch-danger .ch-h2-icon { color: var(--danger-text); }
+.ch-danger-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 14px; border: 1.5px solid var(--danger-border); border-radius: 10px; background: var(--surface-card); color: var(--danger-text); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.ch-danger-btn.is-solid { background: var(--danger); border-color: var(--danger); color: var(--text-inverse); }
+.ch-danger-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.ch-danger-btn:focus-visible { outline: 2px solid var(--danger-text); outline-offset: 2px; }
+.ch-set-confirm { display: flex; flex-direction: column; gap: 6px; width: 100%; font-size: 13px; color: var(--text-primary); }
+.ch-set-confirm input { min-height: 36px; padding: 0 10px; border: 1.5px solid var(--danger-border); border-radius: 8px; font: inherit; font-size: 16px; background: var(--surface-card); color: var(--text-primary); }
+@media (max-width: 560px) {
+  .ch-set-row { grid-template-columns: 1fr; gap: 6px; }
+}
