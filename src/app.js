@@ -1364,14 +1364,10 @@ try {
   console.error('✗ Failed to load Wardrobe Brand routes:', e.message);
 }
 
-// Consciousness Layer routes
-try {
-  const consciousnessRoutes = require('./routes/consciousness');
-  app.use('/api/v1/consciousness', consciousnessRoutes);
-  console.log('✓ Consciousness routes loaded at /api/v1/consciousness');
-} catch (e) {
-  console.error('✗ Failed to load Consciousness routes:', e.message);
-}
+// The Consciousness Layer routes (/api/v1/consciousness) were retired
+// 2026-10-18 (Evoni: "retire the two you suggested"): no page called them,
+// and /save wrote straight into a character's writer_notes. What they saved
+// (writer_notes.consciousness) stays and is still read.
 
 // Story Health Dashboard + Cross-System Search + Version History + Therapy Suggestions
 try {

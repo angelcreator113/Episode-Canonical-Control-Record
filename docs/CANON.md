@@ -136,8 +136,9 @@ Cited by name, so a later edit can find them.
   ("a confident AI fashion game character who became sentient"); the Lala
   entry in `src/routes/characterGenerator.js`; `characterGrowthRoute.js`
   ("Lala does NOT know she was built by JustAWoman").
-- Consciousness: `src/routes/consciousness.js` (JustAWoman's consciousness
-  in Lala; Lala does not know).
+- Consciousness: the Consciousness Layer routes were retired 2026-10-18 (no
+  page used them); what they saved stays in a character's
+  `writer_notes.consciousness`.
 - Book 1 cast: `BOOK1_NODES` / `BOOK1_EDGES` (the relationship map's seed)
   and `BOOK1_ECOSYSTEM` in `src/routes/memories/engine.js`;
   `WORLD_CONFIGS.book1` in `src/routes/characterGenerator.js`;
