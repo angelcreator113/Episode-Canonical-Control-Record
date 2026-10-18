@@ -258,6 +258,8 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
   // The newest snapshot of the show's universe (or of none); the old
   // show_id query named a column the table does not have.
   context.worldState = await latestWorldSnapshotForShow(sequelize, showId);
+  // Its world facts and the latest world temperature (services/worldNow, 2026-10-18).
+  context.worldNow = await require('./worldNow').worldNowForShow(sequelize, showId, context.worldState);
 
   // 10. Social profiles + linked character depth — host + guests with real literary depth
   context.socialProfiles = [];
@@ -663,7 +665,7 @@ function eventContextBlock(event) {
 }
 
 function buildFullPrompt(context) {
-  const { brief, scenePlan, event, financial, wardrobe, franchiseLaws, worldState } = context;
+  const { brief, scenePlan, event, financial, wardrobe, franchiseLaws, worldState, worldNow = '' } = context;
 
   // Scene plan with full context
   const beatContext = scenePlan.length > 0
@@ -782,7 +784,7 @@ Allowed outcomes: ${JSON.stringify(brief?.allowed_outcomes || [])}
 ${financialContext}
 ${careerBlock(context.career)}
 ${stateContext}
-
+${worldNow}
 ═══ WARDROBE ═══
 ${wardrobeContext}
 
