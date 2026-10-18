@@ -17,6 +17,7 @@ import {
   Sparkles, ArrowRight, LayoutDashboard, Heart, Mic, Users, Globe2, ImagePlus, Trash2,
   BarChart3, CalendarDays, Download, Link2, MapPin, Palette, Crown, Instagram,
   Quote, Star, TrendingUp, Briefcase, IdCard, Activity, FileText, CirclePlay, Flame,
+  Copy, BadgeCheck, Lock, Eye, Smartphone, Plus, ExternalLink,
 } from 'lucide-react';
 import Pager, { usePaged } from '../components/Pager/Pager';
 import CharacterPlacesTab from '../components/CharacterPlaces/CharacterPlacesTab';
@@ -125,19 +126,6 @@ export const applyInteriorApi = (id, values) =>
   apiClient.post(`${API_URL}/character-registry/characters/${id}/interior/apply`, { values });
 
 /* ── Config ──────────────────────────────────────────────────────────────────── */
-
-const STATE_CONFIG = {
-  rising:        { label: 'Rising',        color: '#6a9e60', bg: '#f0f7ee' },
-  peaking:       { label: 'Peaking',       color: '#c9a84c', bg: '#fdf6ee' },
-  plateauing:    { label: 'Plateauing',    color: '#888',    bg: '#f5f5f5' },
-  controversial: { label: 'Controversial', color: '#d47a3a', bg: '#fdf3ee' },
-  cancelled:     { label: 'Cancelled',     color: '#c44',    bg: '#fdf0f0' },
-  gone_dark:     { label: 'Gone Dark',     color: '#555',    bg: '#eee' },
-  reinventing:   { label: 'Reinventing',   color: '#7ab3d4', bg: '#eef5fb' },
-  posthumous:    { label: 'Posthumous',    color: '#555',    bg: '#eee' },
-  rebuilding:    { label: 'Rebuilding',    color: '#7ab3d4', bg: '#eef5fb' },
-  crossed:       { label: 'Crossed',       color: '#d4789a', bg: '#fdf0f4' },
-};
 
 // Each tab has its own link (?tab=voice), so a tab can be shared or reopened
 // (the redesign, Evoni's mocks, 2026-10-18); Overview is the page with no tab.
@@ -2070,139 +2058,357 @@ function TabConnections({ character, relationships, entanglements }) {
   );
 }
 
-/* ── Tab 4: Online ───────────────────────────────────────────────────────────── */
+/* ── Voice & Feed (Evoni's mock, 2026-10-18, step 3) ─────────────────────────
+   Their voice profile (voice_signature on the character), their feed
+   behavior (the feed profile's posting voice, frequency, comment energy and
+   what they post), their posts with a filter and pages, the public voice
+   against the private one, and drafting new posts. */
 
-function TabOnline({ character, feedProfile, appearances }) {
-  const hasFeed  = !!feedProfile || character.social_presence;
-  const stateCfg = feedProfile?.current_state
-    ? STATE_CONFIG[feedProfile.current_state] || null
-    : null;
+const asList = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string' && x.trim()) : typeof v === 'string' && v.trim() ? [v.trim()] : []);
+const feedProfileLink = (fp) => (fp?.id
+  ? `/world-studio?tab=feed&layer=${fp.feed_layer === 'real_world' ? 'real_world' : 'lalaverse'}&profile=${fp.id}`
+  : '/pulse');
 
-  // Build persona gap data
-  const performAs = feedProfile?.content_persona || feedProfile?.public_persona || feedProfile?.vibe_sentence || null;
-  const realAs    = character.the_mask?.description || dimensionText(dimension(character.deep_profile, 'ambition_identity')) || null;
+/** The voice signature as rows: how they speak, their words, inside, how they react, what they never say. */
+export function voiceRows(character) {
+  const vs = objOf(character?.voice_signature);
+  const voice = voiceOf(character, null) || {};
+  return [
+    { key: 'speech_pattern', label: 'How they speak', text: textOf(vs.speech_pattern) },
+    { key: 'vocabulary_tone', label: 'Their words', text: textOf(vs.vocabulary_tone) },
+    { key: 'internal_monologue_style', label: 'Inner voice', text: textOf(vs.internal_monologue_style) },
+    { key: 'emotional_reactivity', label: 'How they react', text: textOf(vs.emotional_reactivity) },
+    { key: 'never', label: 'Never says outright', text: textOf(voice.neverSays), readOnly: true },
+  ].filter((r) => r.text || !r.readOnly);
+}
+
+const VOICE_FIELDS = ['speech_pattern', 'vocabulary_tone', 'internal_monologue_style', 'emotional_reactivity'];
+
+export function VoiceProfile({ character, feedProfile, onSaved }) {
+  const [form, setForm] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(null);
+  const vs = objOf(character.voice_signature);
+  const sample = voiceOf(character, feedProfile)?.sample || null;
+  const phrases = asList(vs.catchphrases);
+  const rows = voiceRows(character);
+  const locked = character.status === 'finalized';
+  const name = character.display_name || character.selected_name;
+
+  const open = () => {
+    setNote(null);
+    setForm({ ...Object.fromEntries(VOICE_FIELDS.map((k) => [k, textOf(vs[k])])), catchphrases: phrases.join(', ') });
+  };
+  const save = async (e) => {
+    e.preventDefault();
+    setBusy(true); setNote(null);
+    const next = {
+      ...vs,
+      ...Object.fromEntries(VOICE_FIELDS.map((k) => [k, form[k].trim() || null])),
+      catchphrases: form.catchphrases.split(',').map((x) => x.trim()).filter(Boolean),
+    };
+    try {
+      await updateCharacterApi(character.id, { voice_signature: next });
+      onSaved({ voice_signature: next });
+      setForm(null);
+      setNote({ text: 'Saved.' });
+    } catch (err) {
+      console.error('[CharacterProfilePage] save voice failed:', err);
+      setNote({ error: true, text: err.response?.data?.error || 'Could not save their voice.' });
+    } finally { setBusy(false); }
+  };
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(sample);
+      setNote({ text: 'Copied.' });
+    } catch (err) {
+      console.error('[CharacterProfilePage] copy sample failed:', err);
+      setNote({ error: true, text: 'Could not copy it.' });
+    }
+  };
 
   return (
-    <div className="cp-tab-content">
-      {/* Social presence indicator */}
-      <section className="cp-section">
-        <h3 className="cp-section-title">Social Presence</h3>
-        {/* Whether they are on the feed at all, not how their account is
-            doing: that is the status on their account card (current_state).
-            It said "Active" beside "Gone Dark" (Evoni, 2026-10-16). */}
-        <span className={`cp-social-toggle ${character.social_presence || character.feed_profile_id ? 'cp-social-on' : 'cp-social-off'}`}>
-          {character.social_presence || character.feed_profile_id ? 'On the feed' : 'Not on the feed'}
+    <section className="ch-card" aria-labelledby="ch-vp" data-testid="ch-voice-profile">
+      <div className="ch-card-head">
+        <span className="ch-head-icon" aria-hidden="true"><Mic size={20} /></span>
+        <span className="ch-head-text">
+          <h2 id="ch-vp" className="ch-h2">Voice profile</h2>
+          <span className="ch-note">How they speak, write and express themselves</span>
         </span>
-      </section>
+        {!form && !locked && <button type="button" className="ch-pill-btn" onClick={open}>Edit</button>}
+      </div>
+      {sample ? (
+        <div className="ch-sample">
+          <span className="ch-sample-mark" aria-hidden="true"><Quote size={16} /></span>
+          <span><strong>{name}</strong> {sample}</span>
+          <button type="button" className="ch-icon-btn ch-sample-copy" aria-label="Copy the sample post" onClick={copy}><Copy size={15} aria-hidden /></button>
+        </div>
+      ) : <p className="ch-note">No sample post yet. It comes from their feed profile.</p>}
+      {phrases.length > 0 && (
+        <div className="ch-chips" role="group" aria-label="Their catchphrases">
+          {phrases.map((p) => <span key={p} className="ch-chip">{p}</span>)}
+        </div>
+      )}
+      {form ? (
+        <form className="ch-facts-form" onSubmit={save}>
+          {VOICE_FIELDS.map((k) => (
+            <label key={k}>{rows.find((r) => r.key === k)?.label}
+              <textarea rows={2} value={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value })} />
+            </label>
+          ))}
+          <label>Catchphrases<input value={form.catchphrases} placeholder="Separate with commas" onChange={(e) => setForm({ ...form, catchphrases: e.target.value })} /></label>
+          <span className="ch-facts-row">
+            <button type="submit" className="ch-btn" disabled={busy}>{busy ? 'Saving…' : 'Save voice'}</button>
+            <button type="button" className="ch-btn-soft" disabled={busy} onClick={() => setForm(null)}>Cancel</button>
+          </span>
+        </form>
+      ) : (
+        <div className="ch-rules">
+          <h3 className="ch-rules-h"><BadgeCheck size={16} aria-hidden="true" /> How they sound</h3>
+          <ul className="ch-rules-list">
+            {rows.map((r) => (
+              <li key={r.key} className={r.text ? '' : 'is-empty'}>
+                <span className="ch-wf-kind">{r.label}</span>
+                {r.text || 'Not written yet'}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {note && <p className={`ch-note${note.error ? ' is-error' : ''}`} role="status">{note.text}</p>}
+    </section>
+  );
+}
 
-      {!hasFeed ? (
-        <section className="cp-section">
-          <div className="cp-empty-state">
-            <p className="cp-empty-label">No Feed profile</p>
-            <p className="cp-offline-note">
-              {character.feed_profile_id
-                ? 'Their feed profile could not be loaded. Reload the page to try again.'
-                : <>Not on the feed yet. Match them to a feed person on <Link to="/character-registry">The cast</Link>.</>}
-            </p>
-          </div>
-        </section>
+/** Who the feed sees, and what only the writers know. */
+export function PublicPrivateVoice({ character, feedProfile }) {
+  const mask = objOf(character.the_mask);
+  const pub = textOf(feedProfile?.public_persona) || textOf(feedProfile?.content_persona) || textOf(feedProfile?.vibe_sentence)
+    || textOf(character.mask_persona) || textOf(mask.description);
+  const priv = textOf(feedProfile?.private_reality) || textOf(character.truth_persona)
+    || dimensionText(dimension(character.deep_profile, 'ambition_identity')) || null;
+  return (
+    <section className="ch-card" aria-labelledby="ch-pp" data-testid="ch-public-private">
+      <h2 id="ch-pp" className="ch-h2"><Lock size={20} aria-hidden="true" className="ch-h2-icon" /> Public and private voice</h2>
+      <div className="ch-wfs">
+        <div className="ch-wf is-want">
+          <h3 className="ch-wf-h"><Eye size={16} aria-hidden="true" /> Public voice</h3>
+          <span className="ch-wf-kind">What the feed sees</span>
+          <p className="ch-pp-text">{pub || 'Not written yet.'}</p>
+        </div>
+        <div className="ch-wf is-fear">
+          <h3 className="ch-wf-h"><Lock size={16} aria-hidden="true" /> Private voice</h3>
+          <span className="ch-wf-kind">For writers only</span>
+          <p className="ch-pp-text">{priv || 'Not written yet.'}</p>
+        </div>
+      </div>
+      {mask.feed_profile_is_mask && (
+        <p className="ch-note">Their feed profile is their mask: the gap between who they perform online and who they are is the story.</p>
+      )}
+    </section>
+  );
+}
+
+// The account's status as The Pulse names it (current_state).
+const ACCOUNT_STATES = {
+  rising:        { label: 'Rising' },
+  peaking:       { label: 'Peaking' },
+  plateauing:    { label: 'Plateauing' },
+  controversial: { label: 'Controversial' },
+  cancelled:     { label: 'Cancelled' },
+  gone_dark:     { label: 'Gone Dark' },
+  reinventing:   { label: 'Reinventing' },
+  posthumous:    { label: 'Posthumous' },
+  rebuilding:    { label: 'Rebuilding' },
+  crossed:       { label: 'Crossed' },
+};
+
+const FEED_EDIT = [
+  ['posting_voice', 'Posting style'],
+  ['comment_energy', 'How they comment'],
+  ['content_persona', 'Who they perform'],
+];
+
+export function FeedBehavior({ character, feedProfile, appearances, onFeedSaved }) {
+  const [form, setForm] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(null);
+  // Whether they are on the feed at all, not how their account is doing
+  // (Evoni, 2026-10-16: it said "Active" beside "Gone Dark").
+  const onFeed = character.social_presence || character.feed_profile_id;
+  const presence = <span className={`ch-presence${onFeed ? ' is-on' : ''}`}>{onFeed ? 'On the feed' : 'Not on the feed'}</span>;
+  const head = (
+    <div className="ch-card-head">
+      <span className="ch-head-icon" aria-hidden="true"><Smartphone size={20} /></span>
+      <span className="ch-head-text">
+        <h2 id="ch-fb" className="ch-h2">Feed behavior</h2>
+        <span className="ch-note">What they post, how often, and how they come across</span>
+      </span>
+      {feedProfile && !form && <button type="button" className="ch-pill-btn" onClick={() => setForm(Object.fromEntries(FEED_EDIT.map(([k]) => [k, textOf(feedProfile[k])])))}>Edit</button>}
+    </div>
+  );
+  if (!feedProfile) {
+    return (
+      <section className="ch-card" aria-labelledby="ch-fb" data-testid="ch-feed-behavior">
+        {head}
+        <p className="ch-fb-who">{presence}</p>
+        <p className="ch-note">
+          {character.feed_profile_id
+            ? 'Their feed profile could not be loaded. Reload the page to try again.'
+            : <>Not on the feed yet. Match them to a feed person on <Link to="/character-registry">The cast</Link>.</>}
+        </p>
+      </section>
+    );
+  }
+  const save = async (e) => {
+    e.preventDefault();
+    setBusy(true); setNote(null);
+    const body = Object.fromEntries(FEED_EDIT.map(([k]) => [k, form[k].trim() || null]));
+    try {
+      await updateSocialProfileApi(feedProfile.id, body);
+      onFeedSaved(body);
+      setForm(null);
+      setNote({ text: 'Saved.' });
+    } catch (err) {
+      console.error('[CharacterProfilePage] save feed behavior failed:', err);
+      setNote({ error: true, text: err.response?.data?.error || 'Could not save it.' });
+    } finally { setBusy(false); }
+  };
+  const tags = asList(feedProfile.aesthetic_dna?.vibe_tags);
+  const tiles = [
+    { key: 'freq', label: 'How often', icon: CalendarDays, text: textOf(feedProfile.post_frequency) },
+    { key: 'followers', label: 'Followers', icon: Users, text: followersOf(feedProfile) || null },
+    { key: 'posts', label: 'Posts', icon: FileText, text: appearances?.feed ? String(appearances.feed.posts ?? 0) : null },
+    { key: 'state', label: 'Account', icon: TrendingUp, text: feedProfile.current_state ? ACCOUNT_STATES[feedProfile.current_state]?.label || words(feedProfile.current_state) : null },
+  ].filter((t) => t.text);
+  return (
+    <section className="ch-card" aria-labelledby="ch-fb" data-testid="ch-feed-behavior">
+      {head}
+      <p className="ch-fb-who">
+        {presence}
+        <strong>{atHandle(feedProfile.handle)}</strong>
+        {feedProfile.display_name && <span>{feedProfile.display_name}</span>}
+        <span>{platformLabel(feedProfile.platform)}</span>
+      </p>
+      {form ? (
+        <form className="ch-facts-form" onSubmit={save}>
+          {FEED_EDIT.map(([k, label]) => (
+            <label key={k}>{label}<textarea rows={3} value={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value })} /></label>
+          ))}
+          <span className="ch-facts-row">
+            <button type="submit" className="ch-btn" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+            <button type="button" className="ch-btn-soft" disabled={busy} onClick={() => setForm(null)}>Cancel</button>
+          </span>
+        </form>
       ) : (
         <>
-          {feedProfile && (
-            <section className="cp-section cp-feed-section">
-              <div className="cp-feed-header">
-                <div className="cp-feed-avatar">
-                  {(feedProfile.handle || feedProfile.display_name || '?')[0].toUpperCase()}
-                </div>
-                <div className="cp-feed-identity">
-                  <span className="cp-feed-handle">{atHandle(feedProfile.handle)}</span>
-                  <span className="cp-feed-display">{feedProfile.display_name}</span>
-                  <span className="cp-feed-platform">{platformLabel(feedProfile.platform)}</span>
-                  {feedProfile.registry_character_id && (
-                    <span className="cp-registry-badge" title="Linked to registry character" style={{fontSize:10,fontWeight:700,padding:'1px 6px',borderRadius:8,background:'#eef0fb',color:'#6366f1',marginLeft:4}}>Registry</span>
-                  )}
-                </div>
-                <a href={`/pulse?profile=${feedProfile.id}&layer=${feedProfile.feed_layer}`}
-                   style={{fontSize:12,fontWeight:600,color:'#6366f1',textDecoration:'none',marginLeft:'auto',whiteSpace:'nowrap'}}>
-                  View in The Pulse &rarr;
-                </a>
-                {stateCfg && (
-                  <span className="cp-state-badge" style={{ background: stateCfg.bg, color: stateCfg.color }}>
-                    {stateCfg.label}
-                  </span>
-                )}
-              </div>
-
-              {/* A feed profile has no bio, content_posture, post_count or
-                  vibe_tags column: these read its vibe sentence, what it
-                  posts, the posts The Pulse holds and its aesthetic's tags. */}
-              {feedProfile.vibe_sentence && (
-                <p className="cp-feed-bio">&ldquo;{feedProfile.vibe_sentence}&rdquo;</p>
-              )}
-
-              {feedProfile.content_category && (
-                <div className="cp-feed-posture">
-                  <span className="cp-meta-label">What they post</span>
-                  <p>{feedProfile.content_category}</p>
-                </div>
-              )}
-
-              <div className="cp-feed-stats">
-                <div className="cp-feed-stat">
-                  <span className="cp-stat-num">
-                    {followersOf(feedProfile) || '\u2014'}
-                  </span>
-                  <span className="cp-stat-label">followers</span>
-                </div>
-                <div className="cp-feed-stat">
-                  <span className="cp-stat-num">{appearances?.feed?.posts ?? '\u2014'}</span>
-                  <span className="cp-stat-label">posts</span>
-                </div>
-              </div>
-
-              {feedProfile.aesthetic_dna?.vibe_tags?.length > 0 && (
-                <div className="cp-vibe-tags">
-                  {feedProfile.aesthetic_dna.vibe_tags.map(t => (
-                    <span key={t} className="cp-vibe-tag">{t}</span>
-                  ))}
-                </div>
-              )}
-            </section>
+          <div className="ch-fb-block is-style">
+            <h3 className="ch-fb-h">Posting style</h3>
+            <p>{textOf(feedProfile.posting_voice) || 'Not written yet.'}</p>
+          </div>
+          {tiles.length > 0 && (
+            <ul className="ch-fb-tiles">
+              {tiles.map(({ key, label, icon: Icon, text }) => (
+                <li key={key} className="ch-fb-tile">
+                  <span className="ch-qf-icon" aria-hidden="true"><Icon size={14} /></span>
+                  <span><span className="ch-fb-tile-label">{label}</span><strong>{text}</strong></span>
+                </li>
+              ))}
+            </ul>
           )}
-
-          {/* Persona Gap — side by side */}
-          {(performAs || realAs) && (
-            <section className="cp-section cp-author-only">
-              <h3 className="cp-section-title">
-                Persona Gap
-                <span className="cp-author-badge">Author Only</span>
-              </h3>
-              <div className="cp-persona-gap">
-                <div className="cp-gap-side cp-gap-perform">
-                  <span className="cp-gap-label">Who they perform</span>
-                  <p>{performAs || 'Not defined'}</p>
-                </div>
-                <div className="cp-gap-divider" />
-                <div className="cp-gap-side cp-gap-real">
-                  <span className="cp-gap-label">Who they are</span>
-                  <p>{realAs || 'Not defined'}</p>
-                </div>
-              </div>
-            </section>
+          {textOf(feedProfile.content_category) && (
+            <div className="ch-fb-block">
+              <h3 className="ch-fb-h">What they post</h3>
+              <p>{feedProfile.content_category}</p>
+            </div>
           )}
-
-          {/* Mask connection callout */}
-          {character.the_mask?.feed_profile_is_mask && (
-            <section className="cp-section">
-              <h3 className="cp-section-title">Mask Status</h3>
-              <p className="cp-mask-note">
-                This character&rsquo;s Feed profile IS their mask. The gap between
-                who they perform online and who they actually are is the story.
-              </p>
-            </section>
+          {textOf(feedProfile.comment_energy) && (
+            <div className="ch-fb-block">
+              <h3 className="ch-fb-h">How they comment</h3>
+              <p>{feedProfile.comment_energy}</p>
+            </div>
+          )}
+          {tags.length > 0 && (
+            <div className="ch-fb-block">
+              <h3 className="ch-fb-h">Topics and aesthetic</h3>
+              <div className="ch-chips">{tags.map((t) => <span key={t} className="ch-chip">{t}</span>)}</div>
+            </div>
           )}
         </>
       )}
+      {note && <p className={`ch-note${note.error ? ' is-error' : ''}`} role="status">{note.text}</p>}
+    </section>
+  );
+}
+
+const POST_FILTERS = [['all', 'All'], ['posted', 'Posted'], ['draft', 'Drafts']];
+
+export function PostExamples({ character, feedProfile, trail, onDraft }) {
+  const [filter, setFilter] = useState('all');
+  const posts = (trail?.posts || []).filter((p) => filter === 'all' || (filter === 'draft' ? p.status === 'draft' : p.status !== 'draft'));
+  const { pageItems, pager } = usePaged(posts);
+  return (
+    <section className="ch-card" aria-labelledby="ch-px" data-testid="ch-post-examples">
+      <div className="ch-card-head">
+        <span className="ch-head-icon" aria-hidden="true"><ImagePlus size={20} /></span>
+        <span className="ch-head-text">
+          <h2 id="ch-px" className="ch-h2">Post examples</h2>
+          <span className="ch-note">How they sound on the feed</span>
+        </span>
+      </div>
+      <div className="ch-filter" role="group" aria-label="Show posts">
+        {POST_FILTERS.map(([k, label]) => (
+          <button key={k} type="button" className={`ch-filter-btn${filter === k ? ' is-on' : ''}`} aria-pressed={filter === k} onClick={() => setFilter(k)}>{label}</button>
+        ))}
+      </div>
+      {!trail ? <p className="ch-note">Loading…</p>
+        : trail.error ? <p className="ch-note" role="alert">{trail.error}</p>
+        : posts.length === 0 ? <p className="ch-note">{filter === 'all' ? 'No posts yet.' : filter === 'draft' ? 'No drafts.' : 'Nothing posted yet.'}</p>
+        : (
+          <ul className="ch-px">
+            {pageItems.map((p) => (
+              <li key={p.id} className="ch-px-item">
+                <span className="ch-px-text">{shortText(p.text, 200)}</span>
+                <span className={`ch-px-status${p.status === 'draft' ? ' is-draft' : ''}`}>{p.status === 'draft' ? 'Draft' : 'Posted'}</span>
+                <span className="ch-px-meta">
+                  {[p.episode_number != null ? `Episode ${p.episode_number}` : null, activityDate(p.at) ? activityWhen(activityDate(p.at)) : null].filter(Boolean).join(' · ')}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      <Pager {...pager} label="Posts" />
+      <div className="ch-px-actions">
+        {character.feed_profile_id && <button type="button" className="ch-btn" onClick={onDraft}><Plus size={15} aria-hidden="true" /> Draft new posts</button>}
+        {feedProfile && <Link className="ch-btn-soft ch-px-link" to={feedProfileLink(feedProfile)}><ExternalLink size={15} aria-hidden="true" /> View feed profile</Link>}
+      </div>
+    </section>
+  );
+}
+
+function TabVoice({ character, feedProfile, appearances, onSaved, onFeedSaved }) {
+  const trail = useStoryTrail(character.id);
+  const draftRef = useRef(null);
+  const [drafting, setDrafting] = useState(false);
+  useEffect(() => {
+    if (drafting) draftRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }, [drafting]);
+  return (
+    <div className="ch-overview ch-voice-grid">
+      <div className="ch-col">
+        <VoiceProfile character={character} feedProfile={feedProfile} onSaved={onSaved} />
+        <PublicPrivateVoice character={character} feedProfile={feedProfile} />
+      </div>
+      <div className="ch-col">
+        <FeedBehavior character={character} feedProfile={feedProfile} appearances={appearances} onFeedSaved={onFeedSaved} />
+      </div>
+      <div className="ch-col">
+        <PostExamples character={character} feedProfile={feedProfile} trail={trail} onDraft={() => setDrafting(true)} />
+        {/* Evoni, 2026-10-17: drafting their posts belongs with their voice and feed. */}
+        {drafting && character.feed_profile_id && (
+          <div className="ch-card" ref={draftRef}><GeneratePosts characterId={character.id} /></div>
+        )}
+      </div>
     </div>
   );
 }
@@ -2590,12 +2796,7 @@ export default function CharacterProfilePage() {
           </div>
         )}
         {activeTab === 'voice' && (
-          <div className="ch-voice-tab">
-            <TheirVoice character={character} feedProfile={feedProfile} />
-            {/* Evoni, 2026-10-17: drafting their posts belongs with their voice and feed. */}
-            {character.feed_profile_id && <div className="ch-card"><GeneratePosts characterId={character.id} /></div>}
-            <div className="ch-card"><TabOnline character={character} feedProfile={feedProfile} appearances={appearances} /></div>
-          </div>
+          <TabVoice character={character} feedProfile={feedProfile} appearances={appearances} onSaved={onSaved} onFeedSaved={onFeedSaved} />
         )}
         {activeTab === 'connections' && <div className="ch-card"><TabConnections character={character} relationships={relationships} entanglements={entanglements} /></div>}
         {activeTab === 'world' && <div className="ch-card"><TabWorld character={character} onSaved={onSaved} gen={gen} /></div>}
