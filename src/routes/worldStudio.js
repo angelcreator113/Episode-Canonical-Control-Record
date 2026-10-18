@@ -3496,6 +3496,7 @@ router.post('/world/locations/seed-infrastructure', requireAuth, async (req, res
   try {
     const WorldLocation = models.WorldLocation;
     if (!WorldLocation) return res.status(500).json({ error: 'WorldLocation model not available' });
+    const { LALAS_HOME, homeAtAddress, renameOldLalaHome } = require('../services/lalaHomeLocation');
 
     // Full DREAM city infrastructure — cities, districts, venues, properties, landmarks
     const DREAM_INFRA = [
@@ -3507,7 +3508,6 @@ router.post('/world/locations/seed-infrastructure', requireAuth, async (req, res
       { name: 'Dazzle Academy', location_type: 'venue', city: 'Dazzle District', district: 'Runway Quarter', street_address: '15 Academy Boulevard', venue_type: 'school', narrative_role: 'sanctuary', description: 'World\'s top fashion school — atelier workshops, fabric libraries, student runway shows.', sensory_details: { sight: 'Mannequins draped in student work, mood boards', sound: 'Sewing machines whirring', smell: 'Fresh linen, dye chemicals', atmosphere: 'Creative pressure-cooker, mentorship and rivalry' } },
       { name: 'Dazzle House HQ', location_type: 'venue', city: 'Dazzle District', district: 'Runway Quarter', street_address: '100 Couture Tower', venue_type: 'office', description: 'Headquarters of Dazzle House — the most powerful fashion corporation in the LalaVerse.' },
       { name: 'The Style Market', location_type: 'venue', city: 'Dazzle District', street_address: '42 Market Lane', venue_type: 'boutique', description: 'Where street style meets luxury. Emerging designers get discovered here.' },
-      { name: 'Lala\'s Penthouse', location_type: 'property', city: 'Dazzle District', district: 'Runway Quarter', street_address: '88 Skyline Drive, PH-1', property_type: 'penthouse', narrative_role: 'sanctuary', description: 'JustAWoman\'s luxury penthouse overlooking the Runway Quarter. Floor-to-ceiling windows with city views.' },
 
       // ── R: RADIANCE ROW (Beauty & Wellness) ──
       { name: 'Radiance Row', location_type: 'city', city: 'Radiance Row', narrative_role: 'hub', description: 'Beauty & wellness heartland. Skincare labs, salons, beauty schools. Reinvention is the local religion.', sensory_details: { sight: 'Pink-tinged lighting, glass storefronts with gold lettering', sound: 'Gentle spa music, bubbling serums', smell: 'Rose water, shea butter, botanical extracts', atmosphere: 'Curated perfection hiding fierce competition' } },
@@ -3518,6 +3518,9 @@ router.post('/world/locations/seed-infrastructure', requireAuth, async (req, res
 
       // ── E: ECHO PARK (Entertainment & Nightlife) ──
       { name: 'Echo Park', location_type: 'city', city: 'Echo Park', narrative_role: 'hub', description: 'Entertainment & nightlife hub. Music studios, comedy clubs, creator houses. Something here becomes a meme by morning.', sensory_details: { sight: 'Giant LED billboards, red carpet flash photography', sound: 'Bass drops, crowd cheers, camera drones', smell: 'Fog machine haze, champagne', atmosphere: 'Electric and relentless, fame as oxygen' } },
+      // Lala's home (canon, utils/lalaHome; Evoni, 2026-10-18: "call it Lala's Home"). It was
+      // "Lala's Penthouse" in Dazzle District, described as JustAWoman's.
+      LALAS_HOME,
       { name: 'Music Row', location_type: 'street', city: 'Echo Park', street_address: 'Music Row', description: 'Recording studios, music venues, and producer offices line both sides.' },
       { name: 'Club Neon', location_type: 'venue', city: 'Echo Park', street_address: '9 Neon Boulevard', venue_type: 'club', narrative_role: 'battleground', description: 'The nightclub where careers are made and destroyed. The Nightlife Queen\'s domain.', venue_details: { hours: '10PM - 4AM', capacity: '800', dress_code: 'Trendy/Upscale', price_level: '4', vibe_tags: ['nightlife', 'exclusive', 'VIP'] } },
       { name: 'Nova Studios', location_type: 'venue', city: 'Echo Park', street_address: '300 Soundstage Drive', venue_type: 'recording_studio', narrative_role: 'battleground', description: 'Major entertainment production studio — sound stages, editing bays, content creation.', sensory_details: { sight: 'Soundstage lights, green screens', sound: 'Director calls, playback speakers', atmosphere: 'High stakes, magic when it works' } },
@@ -3540,8 +3543,16 @@ router.post('/world/locations/seed-infrastructure', requireAuth, async (req, res
       { name: 'Pulse Media Network', location_type: 'venue', city: 'Maverick Harbor', street_address: '400 Talent Tower', venue_type: 'office', description: 'Talent management and influencer partnerships HQ. The middleman with enormous invisible power.' },
     ];
 
+    // A home seeded before as "Lala's Penthouse" becomes Lala's Home (services/lalaHomeLocation).
+    const renamed = (await renameOldLalaHome(WorldLocation)) ? 1 : 0;
+    // One Lala's home: none is added when a location is at her address
+    // already (the one holding her home and closet scene sets, or the seed's).
+    const homeThere = await homeAtAddress(WorldLocation);
+    const oldPenthouse = !renamed && homeThere ? await WorldLocation.findOne({ where: { slug: 'lala-s-penthouse' } }) : null;
+
     let created = 0;
     for (const item of DREAM_INFRA) {
+      if (item === LALAS_HOME && homeThere) continue;
       const slug = item.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
       const exists = await WorldLocation.findOne({ where: { slug } }).catch(() => null);
       if (exists) continue;
@@ -3549,7 +3560,7 @@ router.post('/world/locations/seed-infrastructure', requireAuth, async (req, res
       created++;
     }
 
-    res.json({ success: true, created, total: DREAM_INFRA.length, message: `Seeded ${created} DREAM locations across 5 cities` });
+    res.json({ success: true, created, renamed, old_penthouse_id: oldPenthouse?.id || null, total: DREAM_INFRA.length, message: `Seeded ${created} DREAM locations across 5 cities${renamed ? '; Lala\'s Penthouse is now Lala\'s Home' : ''}${oldPenthouse ? `; Lala's home is already at ${LALAS_HOME.street_address}, so the old Lala's Penthouse can be deleted` : ''}` });
   } catch (err) {
     console.error('Seed infrastructure error:', err.message);
     res.status(500).json({ error: err.message });
