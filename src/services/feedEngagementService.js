@@ -226,7 +226,7 @@ async function generateRippleEffects(postId, models) {
         social_profile_id: reactor.id,
         poster_handle: reactor.handle,
         poster_display_name: reactor.display_name,
-        poster_platform: reactor.platform || 'twitter',
+        poster_platform: require('../utils/pulsePlatform').postPlatformFor(reactor, 'twitter'),
         post_type: reactionType === 'comparison_post' ? 'post' : 'tweet',
         content_text: content,
         likes: Math.floor(Math.random() * (post.likes || 100) * 0.3),
