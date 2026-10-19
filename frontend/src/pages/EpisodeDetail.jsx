@@ -968,7 +968,9 @@ const EpisodeDetail = () => {
           <EpisodeScenesTab
             episode={episode}
             sourceEvent={sourceEvent}
-            onToast={(msg, type) => toast && toast[type] ? toast[type](msg) : console.log(msg)}
+            // The toast's own names (eighth audit: toast[type] was undefined,
+            // so every message, refusals included, went to the console).
+            onToast={(msg, type) => (type === 'error' ? toast?.showError?.(msg) : type === 'success' ? toast?.showSuccess?.(msg) : toast?.showInfo?.(msg))}
           />
         )}
 

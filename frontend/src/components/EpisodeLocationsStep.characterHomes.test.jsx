@@ -77,4 +77,29 @@ describe('EpisodeLocationsStep: character homes', () => {
     expect((await screen.findByTestId('els-missing-home')).textContent).toBe("The show's default home was removed from Scene Sets: choose another.");
     expect(screen.getByTestId('els-missing-closet').textContent).toBe('No saved default: choose one.');
   });
+
+  // Eighth audit (2026-10-19).
+  test("another event's photos are named and listed last; the current choice is marked; Escape closes", async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => (url === '/api/v1/shows/show-1/character-places'
+      ? { data: { success: true, data: PLACES } }
+      : { data: { data: [
+        { id: 'set-gala', name: 'A loft – Gala', version_of: { id: 'set-loft', name: 'Loft' }, version_event: { id: 'ev', name: 'Spring Gala' } },
+        { id: 'set-loft', name: 'Loft' },
+      ] } }));
+    const onCancel = vi.fn();
+    render(
+      <MemoryRouter>
+        <EpisodeLocationsStep showId="show-1" initial={[{ role: 'home', scene_set_id: 'set-loft', scene_set: { id: 'set-loft', name: 'Loft' } }]}
+          onConfirm={() => {}} onCancel={onCancel} />
+      </MemoryRouter>,
+    );
+    fireEvent.click(await screen.findByTestId('els-change-home'));
+    await screen.findByTestId('els-option-set-gala');
+    const options = screen.getByTestId('els-picker-home').querySelectorAll('.els-option');
+    expect([...options].map((o) => o.getAttribute('data-testid'))).toEqual(['els-option-set-loft', 'els-option-set-gala']);
+    expect(screen.getByTestId('els-option-version-set-gala').textContent).toBe('Event photos · Spring Gala');
+    expect(screen.getByTestId('els-option-set-loft').getAttribute('aria-pressed')).toBe('true');
+    fireEvent.keyDown(screen.getByTestId('episode-locations-step'), { key: 'Escape' });
+    expect(onCancel).toHaveBeenCalled();
+  });
 });

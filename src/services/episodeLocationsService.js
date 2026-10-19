@@ -176,8 +176,11 @@ async function applyLocations(sequelize, { episodeId, locations, transaction }) 
   for (const l of locations) {
     const old = current.find((c) => sameSlot(c, l));
     if (old && old.scene_set_id !== l.scene_set_id) {
+      // The moved beats' angle is placed again on the new set: the old
+      // set's label (WIDE, DOORWAY) named an angle the new one may not have
+      // (eighth audit: "Wide angle missing" on a set that had its base).
       await sequelize.query(
-        `UPDATE scene_plans SET scene_set_id = :next, updated_at = NOW()
+        `UPDATE scene_plans SET scene_set_id = :next, angle_label = NULL, updated_at = NOW()
           WHERE episode_id = :episodeId AND scene_set_id = :prev AND locked = false
             AND chosen_by_user = false AND deleted_at IS NULL`,
         { replacements: { next: l.scene_set_id, prev: old.scene_set_id, episodeId }, transaction });
@@ -198,6 +201,16 @@ async function applyLocations(sequelize, { episodeId, locations, transaction }) 
        ON CONFLICT (scene_set_id, episode_id) WHERE deleted_at IS NULL
        DO UPDATE SET sort_order = EXCLUDED.sort_order, role = EXCLUDED.role, role_name = EXCLUDED.role_name, updated_at = NOW()`,
       { replacements: { setId: l.scene_set_id, episodeId, order: i, role: l.role, name: l.name }, transaction });
+  }
+  // The episode's Event location is its event's place (eighth audit: the two
+  // drifted apart, and the event's look and photos never met its beats).
+  const eventLocation = locations.find((l) => l.role === 'event');
+  if (eventLocation) {
+    const { EPISODE_EVENT_ID_SQL } = require('../utils/episodeEventSql');
+    await sequelize.query(
+      `UPDATE world_events SET scene_set_id = :setId, updated_at = NOW()
+        WHERE id = ${EPISODE_EVENT_ID_SQL} AND scene_set_id IS DISTINCT FROM :setId`,
+      { replacements: { setId: eventLocation.scene_set_id, episodeId }, transaction });
   }
   return listLocations(sequelize, episodeId, transaction);
 }

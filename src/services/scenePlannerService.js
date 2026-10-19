@@ -25,11 +25,17 @@ function getClient() {
 const { CANONICAL_BEATS: BEAT_STRUCTURE } = require('../constants/canonicalBeats');
 
 /**
- * Load all available scene sets for a show, with their angles and images.
+ * Load all available scene sets for a show, with their angles and images:
+ * the show's and the shared ones, and the event's own set whatever its show;
+ * no other event's version (eighth audit: shared sets and the event's set
+ * were left out, so the event's beats were saved with no set, and another
+ * event's dressed photos could be chosen).
  */
-async function loadAvailableSceneSets(showId) {
-  const where = { generation_status: 'complete' };
-  if (showId) where.show_id = showId;
+async function loadAvailableSceneSets(showId, eventSetId = null) {
+  const { Op } = require('sequelize');
+  const notOtherVersion = { [Op.or]: [{ version_of_set_id: null }, ...(eventSetId ? [{ id: eventSetId }] : [])] };
+  const inShow = showId ? { [Op.or]: [{ show_id: showId }, { show_id: null }, ...(eventSetId ? [{ id: eventSetId }] : [])] } : {};
+  const where = { generation_status: 'complete', [Op.and]: [notOtherVersion, inShow] };
 
   const includes = [
     {
@@ -77,8 +83,17 @@ async function loadAvailableSceneSets(showId) {
 async function generateScenePlan(episodeId, showId, briefData, options = {}) {
   const { save = true } = options;
 
-  // Load available scene sets
-  const sceneSets = await loadAvailableSceneSets(showId);
+  // Load available scene sets, with the event's own set
+  let eventSetId = null;
+  try {
+    const [[ev]] = await require('../models').sequelize.query(
+      `SELECT scene_set_id FROM world_events WHERE id = ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL}`,
+      { replacements: { episodeId } });
+    eventSetId = ev?.scene_set_id || null;
+  } catch (evErr) {
+    console.error('[ScenePlanner] The event\'s set could not be read:', evErr.message);
+  }
+  const sceneSets = await loadAvailableSceneSets(showId, eventSetId);
 
   // L4 (Evoni, 2026-10-02; Q17, Q18, §8(hh)): an episode with locations
   // plans each beat at the location of its role, on the angle of the kind
@@ -131,7 +146,10 @@ ${ev.scene_set_id ? `- Preferred Scene Set ID: ${ev.scene_set_id} (use this for 
 
 IMPORTANT: The Event Travel (beat 10), Event Outcome (beat 11), and Fashion Challenge (beat 12) should use the event's location/scene set. The event's dress code and prestige level should inform the visual tone.`;
     }
-  } catch (e) { /* world_events may not exist */ }
+  } catch (e) {
+    // Every catch logs (eighth audit): a failed read dropped the event's set from the prompt unseen.
+    console.error('[ScenePlanner] The episode\'s event could not be read:', e.message);
+  }
 
   const systemPrompt = `You are a scene planner for "Styling Adventures with Lala", a narrative-driven luxury fashion show about a creator building her career in the LalaVerse.
 
@@ -278,8 +296,6 @@ Return ONLY the JSON array, no other text.`;
       where: { episode_id: episodeId, [Op.or]: [{ locked: true }, { chosen_by_user: true }] },
     });
     const lockedByBeat = new Map(lockedRows.map((r) => [r.beat_number, r]));
-    await ScenePlan.destroy({ where: { episode_id: episodeId, locked: false, chosen_by_user: false }, force: true });
-
     const rows = enrichedBeats.map((beat, i) => ({ beat, i })).filter(({ beat }) => !lockedByBeat.has(beat.beat_number)).map(({ beat, i }) => ({
       episode_id: episodeId,
       episode_brief_id: null, // will link later if needed
@@ -297,7 +313,19 @@ Return ONLY the JSON array, no other text.`;
       ai_confidence: beat.ai_confidence,
     }));
 
-    await ScenePlan.bulkCreate(rows);
+    // One transaction: a failed save no longer loses the unlocked beats it
+    // had just removed (eighth audit).
+    const { sequelize: planDb } = require('../models');
+    const transaction = await planDb.transaction();
+    try {
+      await ScenePlan.destroy({ where: { episode_id: episodeId, locked: false, chosen_by_user: false }, force: true, transaction });
+      await ScenePlan.bulkCreate(rows, { transaction });
+      await transaction.commit();
+    } catch (saveErr) {
+      await transaction.rollback();
+      console.error('[ScenePlanner] Saving the plan failed; the beats are as they were:', saveErr.message);
+      throw saveErr;
+    }
     console.log(`[ScenePlanner] Saved ${rows.length} beats for episode ${episodeId}; kept ${lockedRows.length} locked or chosen`);
 
     return enrichedBeats.map((beat) => {

@@ -199,7 +199,8 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
     } else {
       setLedger({ transactions: [], loading: false });
     }
-    api.get(`/api/v1/episodes/${episode.id}/scene-sets`).then(({ data }) => setSceneSets(data?.data || [])).catch(() => {});
+    api.get(`/api/v1/episodes/${episode.id}/scene-sets`).then(({ data }) => setSceneSets(data?.data || []))
+      .catch((err) => console.error('[EpisodeOverviewTab] scene sets load failed:', err));
     api.get(`/api/v1/world/locations`).then(({ data }) => setWorldLocations(data?.locations || [])).catch(() => {});
     api.get(`/api/v1/episodes/${episode.id}/scripts?includeAllVersions=false`).then(({ data }) => {
       const scripts = data?.data || data?.scripts || [];

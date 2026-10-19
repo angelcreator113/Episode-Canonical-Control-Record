@@ -17,13 +17,14 @@ const BEAT_NAMES = [
 
 // L11: "shows the episode's locations at its top, each linking to its set
 // in Scene Sets." From GET /episodes/:id/locations.
-function LocationsStrip({ locations, showId }) {
+// Each link brings Evoni back here (eighth audit, the S8 way back).
+function LocationsStrip({ locations, showId, episodeId }) {
   if (!locations?.length || !showId) return null;
   return (
     <nav className="beat-plan-locations" aria-label="This episode's locations" data-testid="beat-plan-locations">
       <span className="beat-plan-locations-label">Locations</span>
       {locations.map((l) => (
-        <Link key={`${l.role}-${l.scene_set_id}`} className="beat-plan-location" to={sceneSetPath(showId, l.scene_set_id)}>
+        <Link key={`${l.role}-${l.scene_set_id}`} className="beat-plan-location" to={sceneSetPath(showId, l.scene_set_id, episodeId ? { from: `/episodes/${episodeId}/plan`, fromLabel: 'Scene planner' } : {})}>
           {l.role === 'extra' && l.name ? l.name : ROLE_LABELS[l.role] || l.role}: {l.scene_set?.name || 'Scene set'}
         </Link>
       ))}
@@ -340,7 +341,7 @@ export default function ScenePlannerPage() {
         </div>
       </div>
 
-      <LocationsStrip locations={locations.locations} showId={locations.show_id} />
+      <LocationsStrip locations={locations.locations} showId={locations.show_id} episodeId={episodeId} />
 
       {!loading && (
         <BriefPanel brief={brief} onUpdate={handleUpdateBrief}
