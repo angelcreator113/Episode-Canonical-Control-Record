@@ -20,6 +20,8 @@ const { sequelize } = require('../../src/models');
 const migration = require('../../src/migrations/20261019120000-media-library');
 // Phase 4's tables point at media_assets, so they come down first and go back up after, as a rollback would.
 const later = require('../../src/migrations/20261019160000-picture-suggestions');
+// The camera roll's moments point at media_assets too: undone first, redone last.
+const cameraRoll = require('../../src/migrations/20261019220000-camera-roll');
 
 const shouldSkip =
   !process.env.DATABASE_URL ||
@@ -185,6 +187,7 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
     await run(`DELETE FROM media_asset_links WHERE asset_id IN (SELECT id FROM media_assets WHERE url LIKE :pre)`, { pre: `https://cdn.test/${tag}/%` });
     await run('DELETE FROM media_assets WHERE url LIKE :pre', { pre: `https://cdn.test/${tag}/%` });
     const qi = sequelize.getQueryInterface();
+    await cameraRoll.down(qi, sequelize.constructor);
     await later.down(qi, sequelize.constructor);
     await migration.down(qi, sequelize.constructor);
     const gone = await q("SELECT to_regclass('public.media_assets') AS a, to_regclass('public.media_asset_links') AS l, to_regclass('public.feed_posts') AS f");
@@ -192,9 +195,11 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
     expect(gone[0].f).toBeTruthy();
     await migration.up(qi, sequelize.constructor);
     await later.up(qi, sequelize.constructor);
-    const back = await q("SELECT to_regclass('public.media_assets') AS a, to_regclass('public.media_asset_links') AS l, to_regclass('public.media_asset_sources') AS s");
+    await cameraRoll.up(qi, sequelize.constructor);
+    const back = await q("SELECT to_regclass('public.media_assets') AS a, to_regclass('public.media_asset_links') AS l, to_regclass('public.media_asset_sources') AS s, to_regclass('public.camera_roll_moments') AS c");
     expect(back[0].a).toBeTruthy();
     expect(back[0].l).toBeTruthy();
     expect(back[0].s).toBeTruthy();
+    expect(back[0].c).toBeTruthy();
   });
 });
