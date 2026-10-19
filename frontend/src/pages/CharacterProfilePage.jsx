@@ -76,6 +76,10 @@ export const suggestFixesApi = (id) =>
   apiClient.post(`${API_URL}/cast/characters/${id}/check/suggest`);
 export const rewriteFlagApi = (id, flagId, before, after) =>
   apiClient.post(`${API_URL}/cast/characters/${id}/check/fix`, { flag_id: flagId, before, after });
+export const fixCharacterApi = (id) =>
+  apiClient.post(`${API_URL}/cast/consistency/fix-character/${id}`);
+export const undoFixApi = (change) =>
+  apiClient.post(`${API_URL}/cast/consistency/undo`, { change });
 export const unmarkIntentionalApi = (id, flagId) =>
   apiClient.delete(`${API_URL}/cast/characters/${id}/check/intentional/${flagId}`);
 export const postIdeasApi = (id) =>
@@ -930,6 +934,11 @@ export function PressureTest({ characterId }) {
  * right wording, a rewrite of its sentence or that it is fine as it is.
  * Fix all applies every one-click fix and every suggestion; a "fine" one is
  * marked intentional with the reason.
+ * Check and fix (Evoni, 2026-10-19: "i want it to automatically fix it for
+ * me inside character profiles"): one click checks and fixes everything it
+ * can (POST /cast/consistency/fix-character/:id, services/castFixAll), then
+ * lists each change with Undo and what is left to do by hand. "Only check"
+ * still checks without changing anything.
  */
 const CHECK_LABELS = {
   followers: 'Followers', account_status: 'Account status', handle: 'Handle',
@@ -945,6 +954,8 @@ export function ProfileCheck({ characterId }) {
   const [suggestions, setSuggestions] = useState({}); // flag id → { verdict, before, after, why }
   const [auto, setAuto] = useState(null); // 'suggest' | 'all'
   const [autoNote, setAutoNote] = useState(null);
+  const [fixed, setFixed] = useState(null); // { changes, left } from Check and fix
+  const [undone, setUndone] = useState({}); // change id → 'undone' | error text
 
   const run = async () => {
     setBusy(true);
@@ -1047,16 +1058,73 @@ export function ProfileCheck({ characterId }) {
     setAutoNote(`Fixed ${done}.${failed.length ? ` Could not fix: ${failed.join(', ')}. Check again and edit those by hand.` : ''}`);
     setAuto(null);
   };
+  const checkAndFix = async () => {
+    setBusy(true);
+    setError(null);
+    setAutoNote(null);
+    setSuggestions({});
+    setUndone({});
+    try {
+      const res = await fixCharacterApi(characterId);
+      setFixed({ changes: res.data.changes || [], left: res.data.left || [] });
+      setResult(res.data.check);
+    } catch (err) {
+      console.error('[CharacterProfilePage] check and fix failed:', err);
+      setError(err.response?.data?.error || 'Could not fix their profile.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const undo = async (change) => {
+    try {
+      await undoFixApi(change);
+      setUndone((u) => ({ ...u, [change.id]: 'undone' }));
+      await run();
+    } catch (err) {
+      console.error('[CharacterProfilePage] undoing a fix failed:', err);
+      setUndone((u) => ({ ...u, [change.id]: err.response?.data?.error || 'Could not undo that.' }));
+    }
+  };
   const flags = result?.flags || [];
   const canSuggest = flags.some((f) => f.fix == null && f.editable);
   const fixable = flags.filter((f) => f.fix != null || suggestions[f.id]).length;
 
   return (
     <div className="ch-check" data-testid="ch-check">
-      <button type="button" className="ch-btn-soft" disabled={busy} onClick={run}>
-        {busy ? 'Checking…' : result ? 'Check again' : 'Check their profile against these facts'}
-      </button>
+      <span className="ch-facts-row">
+        <button type="button" className="ch-btn-chip is-primary" disabled={busy || !!auto} onClick={checkAndFix} data-testid="ch-check-and-fix">
+          {busy ? 'Checking and fixing…' : 'Check and fix'}
+        </button>
+        <button type="button" className="ch-btn-chip" disabled={busy || !!auto} onClick={run}>
+          {result ? 'Check again' : 'Only check'}
+        </button>
+      </span>
       {error && <p className="ch-note is-error" role="alert">{error}</p>}
+      {fixed && (
+        <div className="ch-check-fixed" data-testid="ch-check-fixed" role="status">
+          <p className="ch-note">
+            {fixed.changes.length ? `Fixed ${fixed.changes.length}.` : 'Nothing needed fixing automatically.'}
+          </p>
+          {fixed.changes.length > 0 && (
+            <ul className="ch-check-list">
+              {fixed.changes.map((c) => (
+                <li key={c.id}>
+                  <span className="ch-check-what">{c.label}</span>
+                  <span className="ch-facts-row">
+                    {undone[c.id] === 'undone'
+                      ? <span className="ch-note">Undone</span>
+                      : <button type="button" className="ch-btn-chip" onClick={() => undo(c)}>Undo</button>}
+                    {undone[c.id] && undone[c.id] !== 'undone' && <span className="ch-note is-error">{undone[c.id]}</span>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {fixed.left.length > 0 && (
+            <ul className="ch-check-left">{fixed.left.map((l) => <li key={l} className="ch-note">{l}</li>)}</ul>
+          )}
+        </div>
+      )}
       {result && (
         <>
           <p className="ch-note">
