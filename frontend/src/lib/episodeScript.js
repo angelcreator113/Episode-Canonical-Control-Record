@@ -110,20 +110,15 @@ export function mentionedIn(beats = [], text) {
   return null;
 }
 
-const deliverableLabel = (d) => String(d?.description || '').trim()
-  || [d?.platform, d?.deliverable_type].filter(Boolean).join(' ').trim();
-
 /**
- * [{ key, label, source, beat }] in the order: deliverables, goals, the
- * brief's hook. beat is the number of the beat that mentions it, or null.
- * `deliverables` null (unread) is treated as none.
+ * [{ key, label, source, beat }] in the order: goals, the brief's hook. beat
+ * is the number of the beat that mentions it, or null. What she owes is not
+ * on the list: deliverables are not always shown in the show (Evoni,
+ * 2026-10-18; beat 12 is The Fashion Challenge). `deliverables` is kept in
+ * the call for its callers and read no more.
  */
-export function mustCover({ beats = [], deliverables = [], event = null, brief = null } = {}) {
+export function mustCover({ beats = [], event = null, brief = null } = {}) {
   const items = [];
-  (Array.isArray(deliverables) ? deliverables : []).forEach((d, n) => {
-    const label = deliverableLabel(d);
-    if (label) items.push({ key: `deliverable-${d.id || n}`, label, source: 'Deliverable' });
-  });
   relationshipGoalsOf(event).forEach((g, n) => {
     items.push({ key: `goal-${n}`, label: String(g.label).trim(), source: 'Goal' });
   });

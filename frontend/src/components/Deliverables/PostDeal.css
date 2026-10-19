@@ -1,0 +1,9 @@
+/* Counts toward a deal (components/Deliverables/PostDeal). */
+.pd { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); margin: 4px 0; }
+.pd b { color: var(--text-primary); }
+.pd-label { font-weight: 600; }
+.pd-select { max-width: 100%; font: inherit; font-size: 12px; padding: 3px 6px; border-radius: 8px; border: 1px solid var(--lala-lavender-line); background: var(--surface-card); color: var(--text-primary); }
+.pd-btn { border: none; border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 12px; cursor: pointer; background: var(--lala-lavender); color: var(--text-inverse); }
+.pd-btn.is-quiet { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.pd-btn:disabled { opacity: 0.5; cursor: default; }
+.pd-error { color: var(--error-text, var(--text-primary)); }

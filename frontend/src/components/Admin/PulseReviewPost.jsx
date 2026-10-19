@@ -23,6 +23,7 @@ import RevealPicker from './RevealPicker';
 import { atHandle } from '../../pages/feed/feedConstants';
 import { PinAsExample } from './PulseVoices';
 import PostPictures from '../PostMedia/PostPictures';
+import PostDeal from '../Deliverables/PostDeal';
 import './PulseReviewPost.css';
 
 const Tile = ({ name, size = 'sm', tone = 'c' }) => <span className={`prv-tile prv-tile-${size} prv-tone-${tone}`} aria-hidden="true">{initial(name)}</span>;
@@ -376,6 +377,8 @@ export function PostCard({ post, onChange, showId }) {
           </p>
         )}
         {picturesOpen && <PostPictures postId={post.id} onSaved={onChange} />}
+        {/* Deliverables that check themselves (2026-10-19): what deal it counts toward. */}
+        {picturesOpen && <PostDeal postId={post.id} />}
         {(likes > 0 || commentsN > 0) && (
           <p className="prv-item-likes">
             {likes > 0 && <span>[{likes}] like this.</span>}{likes > 0 && commentsN > 0 && ' '}

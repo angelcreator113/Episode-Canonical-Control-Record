@@ -23,7 +23,7 @@ async function brandNamed(sequelize, name) {
   const text = typeof name === 'string' ? name.trim() : '';
   if (!text) return null;
   const [[row]] = await sequelize.query(
-    'SELECT id FROM lalaverse_brands WHERE LOWER(TRIM(name)) = LOWER(:name) AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 1',
+    "SELECT id FROM lalaverse_brands WHERE LOWER(TRIM(name)) = LOWER(:name) AND kind = 'brand' AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 1",
     { replacements: { name: text } });
   return row?.id || null;
 }

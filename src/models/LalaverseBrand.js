@@ -6,6 +6,9 @@ module.exports = (sequelize) => sequelize.define('LalaverseBrand', {
   slug:               DataTypes.STRING,
   name:               DataTypes.STRING,
   type:               { type: DataTypes.STRING, defaultValue: 'lalaverse' },
+  // brand | outlet | agency | venue (constants/companyKinds; migration
+  // 20261019100000): every company in Lala's world, not only fashion brands.
+  kind:               { type: DataTypes.STRING(20), defaultValue: 'brand' },
   category:           DataTypes.STRING,
   description:        DataTypes.TEXT,
   aesthetic:          DataTypes.TEXT,
