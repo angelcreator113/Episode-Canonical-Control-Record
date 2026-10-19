@@ -62,7 +62,9 @@ describe('Script reordering', () => {
     fireEvent.drop(lines()[0]);
     // Rewrite sits beside the line's row, not inside it (Script page audit, 2026-10-19).
     expect(lines().map((l) => l.textContent)).toEqual(['Lala"Two b."', 'Lala"Two a."']);
-    expect(lines().map((l) => l.parentElement.textContent)).toEqual(['Lala"Two b."✦ Rewrite', 'Lala"Two a."✦ Rewrite']);
+    // The row is now a line card (number, length, icon beside the line); Rewrite stays outside the line.
+    expect(lines().map((l) => l.parentElement.querySelector('.esp-rewrite')?.textContent)).toEqual(['✦ Rewrite', '✦ Rewrite']);
+    expect(lines().some((l) => l.querySelector('.esp-rewrite'))).toBe(false);
     fireEvent.click(lines()[0]);
     fireEvent.click(screen.getByRole('button', { name: 'Move line down' }));
     expect(lines().map((l) => l.textContent)).toEqual(['Lala"Two a."', 'Lala"Two b."']);

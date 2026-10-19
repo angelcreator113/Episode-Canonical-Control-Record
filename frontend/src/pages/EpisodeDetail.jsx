@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
 import useScrolledPast from '../hooks/useScrolledPast';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Compass, Sparkles, PenLine, CalendarDays, Crown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Compass, Sparkles, PenLine, CalendarDays, Crown, ChevronLeft, ChevronRight, ChevronDown, Clapperboard, MapPin, Calendar, Coins, MoreVertical, ArrowRight } from 'lucide-react';
 import { STATUS_LABEL } from '../lib/episodePipeline';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/ToastContainer';
@@ -92,6 +92,17 @@ export function withSavedScript(prev, fields) {
   const { id, ...rest } = fields;
   if (id !== undefined && id !== prev.id) return prev;
   return { ...prev, ...rest };
+}
+
+// The header's dates read like the mockup's "Nov 12, 2026". A date-only
+// value ("2026-11-12") is a calendar day, so it is read in UTC and never
+// shifts a day with the viewer's time zone.
+export function formatShortDate(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const dateOnly = typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', ...(dateOnly ? { timeZone: 'UTC' } : {}) });
 }
 
 const EpisodeDetail = () => {
@@ -234,6 +245,8 @@ const EpisodeDetail = () => {
   }, [checksEpisodeId]);
 
   const [showMoreActions, setShowMoreActions] = useState(false);
+  // A cover whose image would not load falls back to the placeholder.
+  const [failedCover, setFailedCover] = useState(null);
   // { episodeId, events, failed? } — the Wardrobe's events and the episode
   // they were read for (Task #3107); null until the first read.
   const [episodeEvents, setEpisodeEvents] = useState(null);
@@ -687,7 +700,7 @@ const EpisodeDetail = () => {
   // edit) keeps the open tab mounted instead of blanking it.
   if (authLoading || (loading && (!episode || String(episode.id) !== String(episodeId)))) {
     return (
-      <div className="ed-page">
+      <div className="ed-page ed-studio">
         <div className="ed-state">
           <div className="ed-spinner"></div>
           <p>Loading episode...</p>
@@ -698,7 +711,7 @@ const EpisodeDetail = () => {
 
   if (error || !episode) {
     return (
-      <div className="ed-page">
+      <div className="ed-page ed-studio">
         <div className="ed-state ed-state-error">
           <span className="ed-error-icon">⚠️</span>
           <h2>Episode Not Found</h2>
@@ -711,53 +724,135 @@ const EpisodeDetail = () => {
     );
   }
 
+  // The header's pieces (Evoni's studio mockup, 2026-10-19): only what the
+  // page already reads. The cover is the episode's thumbnail, else its source
+  // event's scene still; the location and date come from that event when the
+  // episode has no air date of its own.
+  const episodeTitle = episode.title || episode.episodeTitle || 'Untitled Episode';
+  const episodeNumber = episode.episode_number || episode.episodeNumber;
+  const showIdForLinks = episode.show_id || episode.showId;
+  const coverUrl = episode.thumbnail_url || episode.thumbnailUrl || sourceEvent?.sceneSet?.base_still_url || null;
+  const showCover = !!coverUrl && coverUrl !== failedCover;
+  const description = episode.description || episode.teaser || '';
+  const eventPlace = sourceEvent ? (sourceEvent.venue_name || sourceEvent.host_brand || sourceEvent.host || '') : '';
+  const heroDate = episode.air_date
+    ? { label: 'Air date', value: formatShortDate(episode.air_date) }
+    : sourceEvent?.event_date ? { label: 'Event date', value: formatShortDate(sourceEvent.event_date) } : null;
+  // A link that leaves the page asks first while the script has unsaved edits.
+  const guardLeave = (e) => {
+    if (scriptDirtyRef.current && !window.confirm('The script has unsaved changes. Leave without saving?')) e.preventDefault();
+  };
+
   return (
-    <div className="ed-page">
-      {/* Simplified Header: Identity + Action */}
+    <div className="ed-page ed-studio">
+      {/* The studio header (Evoni's mockup, 2026-10-19): the breadcrumb, then
+          the hero card: cover, show, title, meta, description, and the
+          status, previous/next and actions at the top right. */}
       {/* S9 (b): collapses to the title and navigation while scrolling. */}
       <div ref={headerRef} className={`ed-header-new${headerCompact ? ' is-compact' : ''}`} data-testid="ed-header">
-        <div className="ed-header-left">
-          <button onClick={() => leaveTo(episode?.show_id || episode?.showId ? `/shows/${episode.show_id || episode.showId}` : '/episodes')} className="ed-back-btn">
-            ← Back to Show
-          </button>
-          <div className="ed-header-info">
-            <h1 className="ed-header-title">{episode.title || episode.episodeTitle || 'Untitled Episode'}</h1>
-            <div className="ed-header-meta">
-              {(episode.episode_number || episode.episodeNumber) && (
-                <span className="ed-meta-item ed-ep-switch" data-testid="ed-ep-switch">
+        <nav className="eds-crumbs" aria-label="Breadcrumb">
+          <ol>
+            <li><Link to="/" onClick={guardLeave}>Home</Link></li>
+            <li aria-hidden="true" className="eds-crumb-sep"><ChevronRight size={14} /></li>
+            {/* The show's page lists its episodes; it was "← Back to Show". */}
+            <li>
+              <Link to={showIdForLinks ? `/shows/${showIdForLinks}` : '/episodes'} onClick={guardLeave}
+                className="ed-back-btn" title="Back to Show">Episodes</Link>
+            </li>
+            <li aria-hidden="true" className="eds-crumb-sep"><ChevronRight size={14} /></li>
+            <li><span aria-current="page" className="eds-crumb-current">{episodeTitle}</span></li>
+          </ol>
+        </nav>
+
+        <div className="eds-hero">
+          <div className={`eds-cover${showCover ? '' : ' is-empty'}`} data-testid="ed-cover">
+            {showCover ? (
+              <img src={coverUrl} alt="" loading="lazy" onError={() => setFailedCover(coverUrl)} />
+            ) : (
+              episodeNumber ? <span className="eds-cover-number" aria-hidden="true">{episodeNumber}</span> : null
+            )}
+            {episodeNumber && <span className="eds-cover-badge" data-testid="ed-cover-badge">Episode {episodeNumber}</span>}
+          </div>
+
+          <div className="eds-hero-body">
+            {episode.show?.name && (
+              <Link to={`/shows/${episode.show.id}`} className="eds-show-pill" data-testid="ed-show-pill"
+                onClick={(e) => { e.stopPropagation(); guardLeave(e); }}>
+                {episode.show.name}
+              </Link>
+            )}
+            <h1 className="ed-header-title eds-title">{episodeTitle}</h1>
+            <ul className="eds-meta" aria-label="Episode details">
+              {episodeNumber && (
+                <li className="eds-meta-item"><Clapperboard size={16} aria-hidden="true" /><span>Episode {episodeNumber}</span></li>
+              )}
+              {/* Task #2356: the link back to the Event Package the episode
+                  was started from, with the event's venue. */}
+              {sourceEvent && (sourceEvent.show_id || showIdForLinks) && (
+                <li className="eds-meta-item">
+                  <Link
+                    to={`/shows/${sourceEvent.show_id || showIdForLinks}/events/${sourceEvent.id}`}
+                    className="ed-source-event-link"
+                    data-testid="ed-source-event"
+                    title="Open the Event Package this episode was started from"
+                  >
+                    <MapPin size={16} aria-hidden="true" />
+                    <span className="ed-visually-hidden">From event: </span>
+                    <span className="ed-source-event-name">{sourceEvent.name || 'Event'}</span>
+                    {eventPlace && eventPlace !== sourceEvent.name && <span className="eds-meta-sub">· {eventPlace}</span>}
+                  </Link>
+                </li>
+              )}
+              {heroDate && (
+                <li className="eds-meta-item" title={heroDate.label}>
+                  <Calendar size={16} aria-hidden="true" />
+                  <span className="ed-visually-hidden">{heroDate.label}: </span>
+                  <span>{heroDate.value}</span>
+                </li>
+              )}
+            </ul>
+            {description && <p className="eds-description">{description}</p>}
+            {/* P15: the title's status; opens Production → Overlays. */}
+            <EpisodeTitleChip
+              episodeId={episode.id}
+              title={episode.title}
+              version={overlaysVersion}
+              onOpen={openOverlaysTab}
+            />
+          </div>
+
+          <div className="eds-hero-side">
+            <div className="eds-nav-row">
+              {/* The previous/next switcher around the status (the mockup's "‹ Draft ▾ ›"). */}
+              <div className="eds-nav" {...(episodeNumber ? { 'data-testid': 'ed-ep-switch' } : {})}>
+                {episodeNumber && (
                   <button type="button" className="ed-ep-step" disabled={!prevEpisode}
                     onClick={() => goToEpisode(prevEpisode)}
                     aria-label={prevEpisode ? `Previous episode: ${prevEpisode.episode_number ?? ''} ${prevEpisode.title || ''}`.trim() : 'No previous episode'}
                     title={prevEpisode ? `Episode ${prevEpisode.episode_number ?? '?'}: ${prevEpisode.title || 'Untitled'}` : undefined}>
-                    <ChevronLeft size={16} aria-hidden="true" />
+                    <ChevronLeft size={18} aria-hidden="true" />
                   </button>
-                  <span className="ed-meta-label">Episode</span>
-                  <span className="ed-meta-value">{episode.episode_number || episode.episodeNumber}</span>
+                )}
+                <label className={`ed-status-select ed-status-${episode.status?.toLowerCase() || 'draft'}`}>
+                  <span className="ed-visually-hidden">Status</span>
+                  <select data-testid="ed-status" value={episode.status || 'draft'} disabled={statusSaving}
+                    onChange={(e) => changeStatus(e.target.value)} aria-label="Episode status">
+                    {Object.entries(STATUS_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    {episode.status && !STATUS_LABEL[episode.status] && <option value={episode.status}>{episode.status}</option>}
+                  </select>
+                  <ChevronDown size={16} className="eds-select-caret" aria-hidden="true" />
+                </label>
+                {episodeNumber && (
                   <button type="button" className="ed-ep-step" disabled={!nextEpisode}
                     onClick={() => goToEpisode(nextEpisode)}
                     aria-label={nextEpisode ? `Next episode: ${nextEpisode.episode_number ?? ''} ${nextEpisode.title || ''}`.trim() : 'No next episode'}
                     title={nextEpisode ? `Episode ${nextEpisode.episode_number ?? '?'}: ${nextEpisode.title || 'Untitled'}` : undefined}>
-                    <ChevronRight size={16} aria-hidden="true" />
+                    <ChevronRight size={18} aria-hidden="true" />
                   </button>
-                </span>
-              )}
-              {episode.show && (
-                <Link 
-                  to={`/shows/${episode.show.id}`} 
-                  className="ed-show-link"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <span className="ed-show-name">{episode.show.name}</span>
-                </Link>
-              )}
-              <label className={`ed-status-select ed-status-${episode.status?.toLowerCase() || 'draft'}`}>
-                <span className="ed-visually-hidden">Status</span>
-                <select data-testid="ed-status" value={episode.status || 'draft'} disabled={statusSaving}
-                  onChange={(e) => changeStatus(e.target.value)} aria-label="Episode status">
-                  {Object.entries(STATUS_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                  {episode.status && !STATUS_LABEL[episode.status] && <option value={episode.status}>{episode.status}</option>}
-                </select>
-              </label>
+                )}
+              </div>
+            </div>
+            <div className="eds-chip-row">
               <span className="ed-working-badge" title="Studio tools (Timeline, Scene Composer) will open this episode">
                 Working Episode
               </span>
@@ -769,101 +864,79 @@ const EpisodeDetail = () => {
                   title={balanceFailed ? "Lala's balance couldn't be read. Open this episode's money." : "Lala's balance. Open this episode's money."}
                   data-testid="ed-balance-chip"
                 >
+                  <Coins size={14} aria-hidden="true" />
                   {balanceFailed && headerBalance === null ? 'Coins unavailable' : coinsLabel(headerBalance)}
                 </button>
               )}
-            </div>
-            {/* Its own line, outside .ed-header-meta, which phones hide
-                (Task #2356: the link back must work at 375px). */}
-            {sourceEvent && (sourceEvent.show_id || episode.show_id || episode.showId) && (
-              <Link
-                to={`/shows/${sourceEvent.show_id || episode.show_id || episode.showId}/events/${sourceEvent.id}`}
-                className="ed-source-event-link"
-                data-testid="ed-source-event"
-                title="Open the Event Package this episode was started from"
-              >
-                <span className="ed-source-event-label">From event</span>
-                <span className="ed-source-event-name">{sourceEvent.name || 'Event'}</span>
-                <span aria-hidden="true">→</span>
-              </Link>
-            )}
-            {/* P15: the title's status; opens Production → Overlays. Its own
-                line too, so it shows at 375px. */}
-            <EpisodeTitleChip
-              episodeId={episode.id}
-              title={episode.title}
-              version={overlaysVersion}
-              onOpen={openOverlaysTab}
-            />
-          </div>
-        </div>
-        <div className="ed-header-actions">
-          {/* Play on Phone, Todo List, and Evaluate relocated to the
-              Production sub-tabs that own that work (issue #1601) — the
-              header now carries only whole-episode actions: What's next
-              (once accepted) and the administrative ⋯ menu. */}
-          {/* On-demand open of the next-event suggestions overlay — shown
-              only once the episode is accepted (evaluation_status ===
-              'accepted'; issue #1601 narrows this from #1584's
-              always-visible button). When shown, ignores the per-episode
-              "already shown" flag that only gates the automatic
-              wrap-transition open above. Stays a persistent, visible
-              button at every width (icon-only below tablet width) rather
-              than being buried in the "More actions" menu — most sessions
-              on this page are on a phone. */}
-          {episode?.evaluation_status === 'accepted' && (
-            <button
-              onClick={() => setShowNextSuggestions(true)}
-              title="What's next: ranked event suggestions from Lala's current state"
-              className="ed-btn-whats-next"
-            >
-              <Compass size={14} aria-hidden="true" />
-              <span className="ed-btn-whats-next-label">What's next</span>
-            </button>
-          )}
-          <div className="ed-more-menu">
-            <button
-              onClick={() => setShowMoreActions(!showMoreActions)}
-              className="ed-btn-more"
-              aria-label="More actions"
-            >
-              ⋯
-            </button>
-            {showMoreActions && (
-              <div className="ed-dropdown">
+              <div className="ed-more-menu">
                 <button
-                  onClick={() => {
-                    leaveTo(`/episodes/${episode.id}/edit`);
-                    setShowMoreActions(false);
-                  }}
-                  className="ed-dropdown-item"
+                  type="button"
+                  onClick={() => setShowMoreActions(!showMoreActions)}
+                  className="ed-btn-more"
+                  aria-label="More actions"
+                  aria-expanded={showMoreActions}
                 >
-                  <span>✏️</span>
-                  <span>Edit Episode</span>
+                  <MoreVertical size={18} aria-hidden="true" />
                 </button>
-                {/* Create Thumbnail relocated to the Assets area, Scene
-                    Planner relocated to the Scenes sub-tab (which already
-                    had its own copy — issue #1601). The ⋯ menu now carries
-                    only administrative actions. */}
-                <button
-                  onClick={async () => {
-                    if (window.confirm('Delete this episode? This cannot be undone.')) {
-                      try {
-                        await episodeService.deleteEpisode(episode.id);
-                        toast.showSuccess('Episode deleted');
-                        navigate('/episodes');
-                      } catch (err) {
-                        toast.showError(err.message || 'Failed to delete episode');
-                      }
-                    }
-                    setShowMoreActions(false);
-                  }}
-                  className="ed-dropdown-item ed-dropdown-danger"
-                >
-                  <span>🗑️</span>
-                  <span>Delete Episode</span>
-                </button>
+                {showMoreActions && (
+                  <div className="ed-dropdown">
+                    <button
+                      onClick={() => {
+                        leaveTo(`/episodes/${episode.id}/edit`);
+                        setShowMoreActions(false);
+                      }}
+                      className="ed-dropdown-item"
+                    >
+                      <span>✏️</span>
+                      <span>Edit Episode</span>
+                    </button>
+                    {/* Create Thumbnail relocated to the Assets area, Scene
+                        Planner relocated to the Scenes sub-tab (which already
+                        had its own copy — issue #1601). The ⋯ menu now carries
+                        only administrative actions. */}
+                    <button
+                      onClick={async () => {
+                        if (window.confirm('Delete this episode? This cannot be undone.')) {
+                          try {
+                            await episodeService.deleteEpisode(episode.id);
+                            toast.showSuccess('Episode deleted');
+                            navigate('/episodes');
+                          } catch (err) {
+                            console.error('[EpisodeDetail] delete failed:', err);
+                            toast.showError(err.message || 'Failed to delete episode');
+                          }
+                        }
+                        setShowMoreActions(false);
+                      }}
+                      className="ed-dropdown-item ed-dropdown-danger"
+                    >
+                      <span>🗑️</span>
+                      <span>Delete Episode</span>
+                    </button>
+                  </div>
+                )}
               </div>
+            </div>
+            {/* The header's one primary action (the mockup's gradient button).
+                Play on Phone, Todo List, and Evaluate live in the Production
+                sub-tabs that own that work (issue #1601). What's next shows
+                only once the episode is accepted (evaluation_status ===
+                'accepted'; issue #1601 narrows #1584's always-visible button)
+                and ignores the per-episode "already shown" flag that gates
+                only the automatic wrap-transition open above. It stays a
+                visible button at every width rather than going into the
+                "More actions" menu — most sessions here are on a phone. */}
+            {episode?.evaluation_status === 'accepted' && (
+              <button
+                type="button"
+                onClick={() => setShowNextSuggestions(true)}
+                title="What's next: ranked event suggestions from Lala's current state"
+                className="ed-btn-whats-next eds-primary"
+              >
+                <Compass size={16} aria-hidden="true" />
+                <span className="ed-btn-whats-next-label">What's next</span>
+                <ArrowRight size={16} aria-hidden="true" />
+              </button>
             )}
           </div>
         </div>
@@ -874,18 +947,19 @@ const EpisodeDetail = () => {
       {/* Main Content Wrapper */}
       <div className="ed-wrap">
 
-        {/* Main Tabs */}
-        <div className="ed-tabs-modern">
+        {/* Main Tabs: a white bar, the chosen tab a magenta pill (the mockup's "Script"). */}
+        <div className="ed-tabs-modern" data-testid="ed-tabs">
           {EP_TABS.map(t => {
             const Icon = TAB_ICONS[t.key];
             return (
               <button key={t.key}
+                type="button"
                 className={`ed-tab ${activeTab === t.key ? 'ed-tab-active' : ''}`}
                 onClick={() => openTab(t.key)}
                 title={t.label}
                 aria-current={activeTab === t.key ? 'page' : undefined}
               >
-                {Icon && <Icon size={15} className="ed-tab-icon" aria-hidden="true" />}
+                {Icon && <Icon size={16} className="ed-tab-icon" aria-hidden="true" />}
                 <span className="ed-tab-label">{t.label}</span>
                 {t.key === 'production' && checksLeft > 0 && (
                   <span className="ed-tab-badge" data-testid="ed-production-left">{checksLeft} left</span>

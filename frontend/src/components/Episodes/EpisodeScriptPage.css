@@ -1,89 +1,96 @@
-/* The Script page (Evoni's Episode mock, 2026-10-05): the script's card
-   and its beats beside what generation reads and where the voices come
-   from. Colours through tokens only. */
-.esp { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 20px; align-items: start; padding: 4px 0 24px; }
-.esp-main, .esp-side { min-width: 0; }
-.esp-side { display: flex; flex-direction: column; gap: 16px; }
-
-.esp-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
-  padding: 20px 22px;
-  border: 1px solid var(--lala-lavender-line);
-  border-radius: 14px;
-  background: var(--surface-card);
+/* The Script page in the studio look (Evoni's mockup, 2026-10-19): the
+   Episode Beats card on the left, the open beat in the centre (its header,
+   Scene Visuals, Script Lines and three cards), what generation reads below
+   the beats. Soft pink page, white cards, magenta marks; colours through
+   tokens only (--studio-* in styles/design-tokens.css). */
+.esp {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  grid-template-areas: "top top" "main side";
+  gap: 18px 20px;
+  align-items: start;
+  padding: 4px 0 24px;
+  color: var(--studio-ink);
 }
+.esp-top { grid-area: top; min-width: 0; }
+.esp-main { grid-area: main; min-width: 0; }
+.esp-side { grid-area: side; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.esp-beatlist { grid-area: list; }
+.esp.has-beatlist {
+  grid-template-columns: minmax(300px, 350px) minmax(0, 1fr);
+  grid-template-areas: "top top" "list main" "side main";
+  grid-template-rows: auto auto 1fr;
+}
+.esp-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* Cards: white, rounded, a soft pink line. */
+.esp-head, .esp-beatlist, .esp-beat, .esp-uses, .esp-cover, .esp-phonecheck, .esp-truth, .esp-health, .esp-card, .esp-empty {
+  border: 1px solid var(--studio-line);
+  border-radius: var(--studio-radius);
+  background: var(--studio-card);
+  box-shadow: var(--studio-shadow);
+}
+
+/* The script's card: its state and its actions. */
+.esp-head { display: flex; align-items: center; justify-content: space-between; gap: 12px 16px; flex-wrap: wrap; margin-bottom: 14px; padding: 14px 18px; }
 .esp-head-text { min-width: 0; }
-.esp .esp-title { margin: 0; font-family: var(--font-prose); font-size: 24px; font-weight: 600; color: var(--lala-ink); }
-.esp-sub { margin: 2px 0 0; font-size: 13px; color: var(--lala-ink-muted); }
-.esp-complete { color: var(--lala-lavender-text); font-weight: 700; }
-.esp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.esp .esp-title { margin: 0; font-family: var(--font-prose); font-size: 22px; font-weight: 600; color: var(--studio-ink); }
+.esp-sub { margin: 2px 0 0; font-size: 13px; color: var(--studio-ink-muted); }
+.esp-complete { color: var(--studio-ok); font-weight: 700; }
+.esp-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .esp-btn {
   /* Icon beside its label, not above it at 375px (Script page audit, 2026-10-19). */
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 9px 16px;
-  border: 1px solid var(--lala-lavender-line);
+  padding: 8px 14px;
+  border: 1px solid var(--studio-line-strong);
   border-radius: 10px;
-  background: var(--surface-card);
-  color: var(--lala-lavender-text);
-  font-size: 14px;
+  background: var(--studio-card);
+  color: var(--studio-purple);
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
 }
-.esp-btn:hover, .esp-btn.is-on { background: var(--lala-lavender-soft); }
+.esp-btn:hover, .esp-btn.is-on { background: var(--studio-purple-soft); }
 .esp-btn:disabled { cursor: not-allowed; opacity: 0.6; }
+.esp-btn:focus-visible, .esp-btn-primary:focus-visible, .esp-lock-btn:focus-visible, .esp-regen-btn:focus-visible, .esp-move-btn:focus-visible, .esp-moment-btn:focus-visible, .esp-step:focus-visible, .esp-thumb:focus-visible, .esp-beat-picture:focus-visible, .esp-beat-scene:focus-visible, .esp-rowmenu-btn:focus-visible, .esp-rowmenu-item:focus-visible, .esp-rewrite:focus-visible { outline: 2px solid var(--studio-magenta); outline-offset: 2px; }
 
-.esp-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding: 32px 24px;
-  border: 1px dashed var(--lala-gold-line);
-  border-radius: 14px;
-  background: var(--surface-card);
-}
-.esp-empty-icon { color: var(--lala-lavender-light); margin-bottom: 8px; }
-.esp .esp-empty-title { margin: 0 0 8px; font-size: 17px; font-weight: 700; color: var(--lala-ink); }
-.esp-empty-text { max-width: 460px; margin: 0; font-size: 15px; line-height: 1.55; color: var(--lala-ink-muted); }
+.esp-empty { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 32px 24px; border-style: dashed; }
+.esp-empty-icon { color: var(--studio-magenta); margin-bottom: 8px; }
+.esp .esp-empty-title { margin: 0 0 8px; font-size: 17px; font-weight: 700; color: var(--studio-ink); }
+.esp-empty-text { max-width: 460px; margin: 0; font-size: 15px; line-height: 1.55; color: var(--studio-ink-muted); }
 
-.esp-uses, .esp-voice { padding: 18px 20px; border-radius: 14px; }
-.esp-uses { border: 1px solid var(--lala-lavender-line); background: var(--surface-card); }
-.esp-voice { border: 1px solid var(--accent-light); background: var(--accent-subtle); }
-.esp .esp-side-title { margin: 0 0 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--lala-lavender-text); }
-.esp .esp-voice .esp-side-title { color: var(--accent-dark); }
-.esp-voice p { margin: 0 0 8px; font-size: 14px; color: var(--lala-ink); }
+/* The side: what generation reads, must cover, true at the beat, voices. */
+.esp-uses, .esp-voice { padding: 16px 18px; }
+.esp-voice { border: 1px solid var(--studio-line); border-radius: var(--studio-radius); background: var(--studio-magenta-soft); }
+.esp .esp-side-title { margin: 0 0 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--studio-purple); }
+.esp-voice p { margin: 0 0 8px; font-size: 14px; color: var(--studio-ink); }
 .esp-uses-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.esp-uses-list li { display: flex; align-items: baseline; gap: 10px; font-size: 14px; color: var(--lala-ink-muted); overflow-wrap: anywhere; }
-.esp-uses-list strong { color: var(--lala-ink); }
-.esp-dot { flex-shrink: 0; width: 9px; height: 9px; border-radius: 50%; background: var(--lala-lavender); transform: translateY(1px); }
+.esp-uses-list li { display: flex; align-items: baseline; gap: 10px; font-size: 14px; color: var(--studio-ink-muted); overflow-wrap: anywhere; }
+.esp-uses-list strong { color: var(--studio-ink); }
+.esp-dot { flex-shrink: 0; width: 9px; height: 9px; border-radius: 50%; background: var(--studio-ok); transform: translateY(1px); }
 .esp-uses-list .is-gap .esp-dot { background: var(--warning); }
-.esp-uses-note { margin: 12px 0 0; font-size: 12px; color: var(--lala-ink-muted); }
-.esp-link { font-size: 14px; font-weight: 600; color: var(--lala-lavender-text); text-decoration: none; }
+.esp-uses-note { margin: 12px 0 0; font-size: 12px; color: var(--studio-ink-muted); }
+.esp-link { font-size: 14px; font-weight: 600; color: var(--studio-magenta); text-decoration: none; }
 .esp-link:hover { text-decoration: underline; }
 
-/* Primary actions: lavender (the mock). */
+/* Primary actions: the studio's magenta (the mockup). */
 .esp-btn-primary {
-  padding: 9px 20px;
+  padding: 8px 18px;
   border: none;
   border-radius: 10px;
-  background: var(--lala-lavender);
+  background: var(--studio-gradient);
   color: var(--text-inverse);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
 }
-.esp-btn-primary:hover { filter: brightness(0.95); }
+.esp-btn-primary:hover { background: var(--studio-magenta-hover); }
 .esp-btn-primary:disabled { cursor: not-allowed; opacity: 0.6; }
 .esp-btn-primary.is-saved { background: var(--success-bg); color: var(--success-text); }
 .esp-btn-primary.is-large { padding: 11px 22px; font-size: 15px; flex-shrink: 0; }
-.esp-btn-primary.is-small, .esp-btn.is-small { padding: 6px 14px; border-radius: 8px; font-size: 12px; }
+.esp-btn-primary.is-small, .esp-btn.is-small { padding: 6px 12px; border-radius: 8px; font-size: 12px; }
 
 /* Messages. */
 .esp-toast { position: fixed; top: 20px; right: 20px; z-index: 9999; max-width: min(420px, calc(100vw - 32px)); padding: 12px 18px; border-radius: 10px; font-size: 13px; font-weight: 500; box-shadow: var(--shadow-lg); }
@@ -92,161 +99,311 @@
 .esp-unsaved-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 16px; padding: 10px 14px; border-radius: 10px; background: var(--accent-subtle); border: 1px solid var(--accent); color: var(--text-primary); font-size: 13px; }
 .esp-unsaved-banner-text { flex: 1 1 240px; min-width: 0; }
 .esp-error { margin-bottom: 16px; padding: 10px 16px; border-radius: 10px; background: var(--danger-bg); color: var(--danger-text); border: 1px solid var(--danger-border); font-size: 13px; }
-.esp-unsaved { color: var(--accent-dark); font-weight: 600; }
-.esp-waiting { margin-bottom: 16px; padding: 10px 16px; border-radius: 10px; background: var(--accent-subtle); border: 1px solid var(--accent); color: var(--text-primary); font-size: 13px; }
+.esp-unsaved { color: var(--studio-warn); font-weight: 600; }
+.esp-saved-state { color: var(--studio-ok); }
+.esp-waiting { margin-bottom: 16px; padding: 10px 16px; border-radius: 10px; background: var(--studio-magenta-soft); border: 1px solid var(--studio-line-strong); color: var(--studio-ink); font-size: 13px; }
 /* Save from anywhere in the script: it sticks to the bottom of the screen
    while there are unsaved changes (Task #2785). */
-.esp-savebar { position: sticky; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding: 10px 14px; border-radius: 12px; background: var(--surface-card); border: 1px solid var(--accent); box-shadow: var(--shadow-lg); font-size: 13px; }
-.esp-savebar-text { color: var(--accent-dark); font-weight: 600; }
+.esp-savebar { position: sticky; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding: 10px 14px; border-radius: 12px; background: var(--studio-card); border: 1px solid var(--studio-magenta); box-shadow: var(--shadow-lg); font-size: 13px; }
+.esp-savebar-text { color: var(--studio-magenta); font-weight: 600; }
 /* The episode page's wrappers clip sideways with overflow-x: hidden, which
    makes each a scroll container that never scrolls, so a sticky bar sticks
    to them and not to the screen. clip cuts the same overflow without being a
-   scroll container. Only while the Script tab is showing; other tabs keep
-   the wrappers as they are. */
+   scroll container. Only while the Script tab is showing. */
 .ed-wrap:has(.esp-main), .ed-content:has(> .esp) { overflow-x: clip; }
-.esp-order-hint, .esp-raw-note { margin: 0 0 10px; font-size: 12px; color: var(--lala-ink-muted); }
+.esp-order-hint, .esp-raw-note { margin: 0 0 10px; font-size: 12px; color: var(--studio-ink-muted); }
 /* A new script is being written: the beats wait for it. */
 .esp-beats.is-busy { opacity: 0.6; }
 
 /* Raw editor. */
-.esp-raw { display: block; box-sizing: border-box; width: 100%; margin-bottom: 24px; padding: 16px; border: 1px solid var(--lala-lavender-line); border-radius: 14px; background: var(--surface-card); color: var(--lala-ink); font-family: var(--font-mono); font-size: 13px; line-height: 1.6; resize: vertical; }
-.esp-raw:focus { outline: 2px solid var(--lala-lavender); outline-offset: 1px; }
+.esp-raw { display: block; box-sizing: border-box; width: 100%; margin-bottom: 24px; padding: 16px; border: 1px solid var(--studio-line); border-radius: var(--studio-radius); background: var(--studio-card); color: var(--studio-ink); font-family: var(--font-mono); font-size: 13px; line-height: 1.6; resize: vertical; }
+.esp-raw:focus { outline: 2px solid var(--studio-magenta); outline-offset: 1px; }
 
-/* A beat: a card with its act colour down the left edge. */
-.esp-beat {
-  margin-bottom: 10px;
-  border: 1px solid var(--lala-lavender-line);
-  border-left: 4px solid var(--beat-color, var(--lala-lavender));
-  border-radius: 14px;
-  background: var(--surface-card);
-  overflow: hidden;
-  transition: box-shadow 0.15s;
-}
-.esp-beat.is-open { box-shadow: 0 2px 10px color-mix(in srgb, var(--lala-lavender) 8%, transparent); }
-.esp-beat.is-locked { border-color: var(--lala-gold-line); border-left-color: var(--beat-color, var(--lala-gold)); }
-.esp-beat-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px; cursor: pointer; }
-.esp-beat.is-locked .esp-beat-head { background: var(--lala-gold-soft); }
-.esp-beat-head:focus-visible { outline: 2px solid var(--lala-lavender); outline-offset: -2px; }
-/* "BEAT n" before the beat's name (Task #2881). */
-.esp-beat-num {
-  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
-  height: 26px; padding: 0 9px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap;
-  background: color-mix(in srgb, var(--beat-color, var(--lala-lavender)) 12%, transparent);
-  color: var(--beat-color, var(--lala-lavender-text));
-  font-family: 'DM Mono', var(--font-mono); font-size: 12px; font-weight: 700;
-}
-.esp-beat-title { flex: 1; min-width: 0; }
-.esp-beat-name-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-.esp-beat-icon { font-size: 16px; }
-.esp-beat-name { font-size: 15px; font-weight: 700; color: var(--lala-ink); }
-.esp-chip-approved { padding: 1px 8px; border-radius: 10px; background: var(--lala-gold); color: var(--text-primary); font-family: 'DM Mono', var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.04em; white-space: nowrap; }
-/* Under the beat's head, beside it in the DOM, not inside its role="button" (Script page audit, 2026-10-19). */
-.esp-beat-scene { display: block; margin: -6px 16px 10px; padding: 0; border: none; background: none; color: var(--lala-lavender-text); font-size: 12px; text-align: left; cursor: pointer; }
-.esp-beat-scene:hover { text-decoration: underline; }
-.esp-beat-count { font-family: 'DM Mono', var(--font-mono); font-size: 11px; color: var(--lala-ink-muted); white-space: nowrap; }
+/* ── The Episode Beats card (left column) ── */
+.esp-beatlist { position: relative; align-self: start; min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 16px 10px; }
+.esp-beatlist-head { padding: 0 4px 6px; }
+.esp .esp-beatlist-title { display: flex; align-items: center; gap: 8px; margin: 0; font-family: var(--font-prose); font-size: 19px; font-weight: 600; color: var(--studio-ink); }
+.esp-beatlist-title svg { color: var(--studio-purple); }
+.esp-beatlist-sum { margin: 2px 0 0 26px; font-size: 13px; color: var(--studio-ink-muted); }
+.esp-beatlist-items { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.esp-beatrow { position: relative; display: flex; align-items: center; gap: 4px; padding: 6px 4px 6px 6px; border: 1.5px solid var(--studio-line); border-radius: var(--studio-radius); background: var(--studio-card); transition: border-color 0.15s, background 0.15s; }
+.esp-beatrow:hover { background: var(--studio-page); }
+.esp-beatrow.is-open { border-color: var(--studio-magenta); background: var(--studio-magenta-soft); }
+.esp-beatlist-btn { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 2px; border: none; border-radius: 10px; background: none; color: var(--studio-ink); font: inherit; text-align: left; cursor: pointer; }
+.esp-beatlist-btn:focus-visible, .esp-pill:focus-visible, .esp-mobilebar-btn:focus-visible, .esp-side-close:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.esp-beatlist-num { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: var(--studio-page-2); color: var(--studio-ink); font-family: 'DM Mono', var(--font-mono); font-size: 12px; font-weight: 700; }
+.esp-beatrow.is-open .esp-beatlist-num { background: var(--studio-magenta); color: var(--text-inverse); }
+.esp-beatlist-thumb { flex: none; display: flex; align-items: center; justify-content: center; width: 56px; height: 50px; border-radius: 8px; overflow: hidden; background: var(--studio-purple-soft); }
+.esp-beatlist-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.esp-beatlist-icon { font-size: 22px; }
+.esp-beatlist-text { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.esp-beatlist-badges { display: inline-flex; align-items: center; gap: 6px; }
+.esp-beatlist-name { max-width: 100%; font-size: 14px; font-weight: 700; line-height: 1.3; color: var(--studio-ink); overflow-wrap: break-word; hyphens: auto; }
+.esp-beatlist-meta { display: flex; justify-content: space-between; gap: 8px; width: 100%; font-size: 12px; color: var(--studio-ink-muted); }
+.esp-beatlist-where { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.esp-beatlist-time { flex: none; font-family: 'DM Mono', var(--font-mono); }
+.esp-beatlist-phone { flex: none; color: var(--studio-purple); }
+.esp-beatlist-legend { display: flex; align-items: center; gap: 4px; margin: 4px 4px 0; font-size: 11px; color: var(--studio-ink-muted); }
 
-/* The beat's scene, its phone moments and overlays (Task #2789). */
-.esp-beat-thumb { flex-shrink: 0; width: 44px; height: 30px; border-radius: 6px; overflow: hidden; background: var(--surface-bg); }
-.esp-beat-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.esp-beat-picture { position: relative; display: block; width: 100%; margin: 6px 0 12px; padding: 0; border: none; border-radius: 10px; overflow: hidden; background: var(--surface-bg); cursor: zoom-in; }
-.esp-beat-picture img { display: block; width: 100%; max-height: 260px; object-fit: cover; }
-.esp-beat-picture-label { position: absolute; left: 8px; bottom: 8px; padding: 2px 8px; border-radius: 8px; background: var(--surface-card); color: var(--text-primary); font-size: 11px; font-weight: 600; }
-.esp-beat-nopicture { margin: 6px 0 10px; font-size: 12px; color: var(--lala-ink-muted); }
-.esp-beat-nopicture .esp-link { font-size: 12px; }
-.esp-beat-expects { display: flex; align-items: center; gap: 6px; margin: 0 0 10px; font-size: 12px; color: var(--lala-lavender-text); }
-.esp-moment { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: 1px dashed var(--lala-lavender-line); border-radius: 10px; background: var(--surface-card); }
-.esp-moment.is-unknown { border-color: var(--warning-border, var(--lala-lavender-line)); }
-.esp-moment-thumb { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 40px; height: 56px; border-radius: 6px; overflow: hidden; background: var(--accent-subtle); color: var(--lala-lavender-text); }
-.esp-moment.is-overlay .esp-moment-thumb { width: 56px; height: 40px; }
-.esp-moment-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.esp-moment-text { display: flex; flex-direction: column; min-width: 0; }
-.esp-moment-kind { font-family: 'DM Mono', var(--font-mono); font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--lala-ink-muted); }
-.esp-moment-what { font-size: 14px; font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; }
-.esp-moment-missing { font-size: 11px; color: var(--warning-text, var(--lala-ink-muted)); }
-.esp-moment-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border: 1px solid var(--lala-lavender-line); border-radius: 8px; background: var(--surface-card); color: var(--lala-lavender-text); font-size: 12px; font-weight: 600; cursor: pointer; }
-.esp-picker { margin-top: 12px; padding: 12px; border: 1px solid var(--lala-lavender-line); border-radius: 12px; background: var(--surface-card); }
-.esp-picker-head { display: flex; align-items: center; justify-content: space-between; }
-.esp-picker-title { font-size: 14px; font-weight: 700; color: var(--text-primary); }
-.esp-picker-close { display: inline-flex; padding: 4px; border: none; background: none; color: var(--lala-ink-muted); cursor: pointer; }
-.esp-picker-group { margin: 10px 0 6px; font-family: 'DM Mono', var(--font-mono); font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--lala-ink-muted); }
-.esp-picker-empty { margin: 0; font-size: 12px; color: var(--lala-ink-muted); }
-.esp-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
-.esp-pick-tile { display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 4px; border: 2px solid transparent; border-radius: 10px; background: var(--accent-subtle); cursor: pointer; text-align: left; }
-.esp-pick-tile.is-picked { border-color: var(--lala-lavender); }
-.esp-pick-img { display: flex; align-items: center; justify-content: center; height: 90px; border-radius: 6px; overflow: hidden; background: var(--surface-card); color: var(--lala-lavender-text); }
-.esp-pick-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.esp-pick-name { font-size: 11px; font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; }
-.esp-picker-do { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; }
-.esp-picker-verbs { display: flex; flex-wrap: wrap; gap: 6px; }
-.esp-verb { padding: 5px 12px; border: 1px solid var(--lala-lavender-line); border-radius: 999px; background: var(--surface-card); color: var(--lala-lavender-text); font-size: 12px; font-weight: 600; cursor: pointer; }
-.esp-verb.is-on { background: var(--lala-lavender); border-color: var(--lala-lavender); color: var(--text-inverse); }
-.esp-zoom { position: fixed; inset: 0; z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 16px; background: color-mix(in srgb, var(--gray-900) 70%, transparent); cursor: zoom-out; }
-.esp-zoom img { max-width: 100%; max-height: 100%; border-radius: 10px; object-fit: contain; }
-.esp-zoom-close { position: absolute; top: 12px; right: 12px; display: inline-flex; padding: 8px; border: none; border-radius: 999px; background: var(--surface-card); color: var(--text-primary); cursor: pointer; }
-.esp-beat-chev { font-size: 11px; color: var(--lala-ink-muted); transition: transform 0.2s; }
-.esp-beat.is-open .esp-beat-chev { transform: rotate(180deg); }
-.esp-beat-body { padding: 4px 18px 16px; border-top: 1px solid var(--lala-lavender-line); }
-.esp-beat.is-locked .esp-beat-body { border-top-color: var(--lala-gold-line); }
-.esp-beat-context { margin: 12px 0; padding: 8px 12px; border-radius: 8px; background: var(--primary-subtle); color: var(--primary-text); font-size: 12px; font-style: italic; line-height: 1.5; }
-.esp-beat-intent { margin: 0 0 12px; padding: 6px 12px; border-radius: 8px; background: var(--lala-gold-soft); color: var(--lala-gold-text); font-size: 12px; }
-.esp-lines { padding-top: 8px; }
-.esp-beat-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 14px; }
-.esp-beat-foot .esp-move { margin-right: auto; }
-.esp-beat-locked-note { font-size: 12px; color: var(--lala-ink-muted); }
-.esp-lock-btn { padding: 7px 18px; border: none; border-radius: 8px; background: var(--lala-lavender); color: var(--text-inverse); font-size: 12px; font-weight: 700; cursor: pointer; }
-.esp-lock-btn.is-locked { background: var(--lala-gold-soft); color: var(--lala-gold-text); border: 1px solid var(--lala-gold); }
-/* aria-disabled, not disabled: a disabled button drops the focus (Script page audit 3, 2026-10-19). */
-.esp-lock-btn:disabled, .esp-lock-btn[aria-disabled="true"] { cursor: wait; opacity: 0.7; }
-.esp-regen-btn { padding: 7px 14px; border: 1px solid var(--lala-lavender-line); border-radius: 8px; background: var(--surface-card); color: var(--lala-lavender-text); font-size: 12px; font-weight: 600; cursor: pointer; }
-.esp-regen-btn:disabled { cursor: wait; opacity: 0.7; }
+/* A beat's status: APPROVED, NEEDS REVISION, DRAFT. */
+.esp-status { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 6px; font-family: 'DM Mono', var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.05em; white-space: nowrap; }
+.esp-status.is-approved { background: var(--studio-ok-soft); color: var(--studio-ok); }
+.esp-status.is-revision { background: var(--studio-warn-soft); color: var(--studio-warn); }
+.esp-status.is-draft { background: var(--studio-draft-soft); color: var(--studio-draft); }
 
-/* A line: speaker in small caps, the words in the prose face. */
-.esp-line { padding: 6px 10px; border-radius: 8px; cursor: pointer; }
-.esp-line:hover { background: var(--lala-lavender-soft); }
-.esp-line.is-locked { cursor: default; }
-.esp-line.is-locked:hover { background: none; }
-.esp-line-speaker { margin-right: 8px; font-family: 'DM Mono', var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--speaker, var(--text-primary)); }
-/* A long unbroken word wraps, not under Rewrite (Script page re-audit, 2026-10-19). */
-.esp-line-text { font-family: var(--font-prose); font-size: 15px; line-height: 1.65; color: var(--lala-ink); overflow-wrap: anywhere; }
-.esp-line-action { font-family: var(--font-prose); font-size: 14px; font-style: italic; color: var(--lala-ink-muted); }
-.esp-line-cue { font-family: var(--font-mono, 'DM Mono', monospace); font-size: 11px; letter-spacing: 0.02em; color: var(--lala-ink-muted); }
-.esp-rewrite { margin-left: 8px; padding: 0; border: none; background: none; color: var(--lala-lavender-text); font-size: 11px; font-weight: 600; cursor: pointer; opacity: 0; transition: opacity 0.15s; }
-/* Rewrite beside the line's row, not inside it (Script page audit, 2026-10-19). */
-.esp-line-row { display: flex; align-items: baseline; gap: 4px; }
-.esp-line-row > .esp-line { flex: 1; min-width: 0; }
-.esp-line-row > .esp-rewrite { flex: none; }
-.esp-line-row:hover .esp-rewrite, .esp-rewrite:focus-visible { opacity: 1; }
-@media (hover: none) { .esp-rewrite { opacity: 1; } }
-.esp-line-edit { padding: 6px 0; }
-.esp-line-input { display: block; box-sizing: border-box; width: 100%; padding: 8px 12px; border: 1.5px solid var(--lala-lavender); border-radius: 8px; font-family: var(--font-prose); font-size: 15px; line-height: 1.6; resize: vertical; outline: none; }
-.esp-line-edit-actions { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
-/* The beat was approved while its line was open (Script page audit, 2026-10-19). */
-.esp-line-edit-note { margin: 0 0 6px; font-size: 12px; color: var(--lala-gold-text); }
-.esp-move--end { margin-left: auto; }
+/* A row's ⋮ menu. */
+.esp-rowmenu { position: relative; flex: none; }
+.esp-rowmenu-btn { display: flex; align-items: center; justify-content: center; width: 32px; height: 44px; border-radius: 8px; color: var(--studio-ink-muted); cursor: pointer; list-style: none; }
+.esp-rowmenu-btn::-webkit-details-marker { display: none; }
+.esp-rowmenu-btn:hover { background: var(--studio-page-2); color: var(--studio-ink); }
+.esp-rowmenu-list { position: absolute; right: 0; top: 100%; z-index: 20; display: flex; flex-direction: column; min-width: 170px; padding: 6px; border: 1px solid var(--studio-line); border-radius: 10px; background: var(--studio-card); box-shadow: var(--shadow-lg); }
+.esp-rowmenu-item { min-height: 40px; padding: 6px 10px; border: none; border-radius: 6px; background: none; color: var(--studio-ink); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.esp-rowmenu-item:hover { background: var(--studio-magenta-soft); }
+.esp-rowmenu-item:disabled, .esp-rowmenu-item[aria-disabled="true"] { opacity: 0.5; cursor: default; }
 
-/* Reordering (drag and drop, and the Up/Down buttons for touch). */
-.esp-grip { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 20px; height: 28px; margin-left: -8px; border-radius: 6px; color: var(--lala-ink-muted); cursor: grab; touch-action: none; }
-.esp-grip:hover { background: var(--lala-parchment-2); color: var(--lala-ink); }
+/* Reordering: the handle on a beat row, Up/Down on the open beat. */
+.esp-grip { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 20px; height: 32px; border-radius: 6px; color: var(--studio-ink-muted); cursor: grab; touch-action: none; }
+.esp-grip:hover { background: var(--studio-page-2); color: var(--studio-ink); }
 .esp-grip:active { cursor: grabbing; }
 .esp-grip.is-locked { cursor: default; }
 .esp-grip.is-locked:hover { background: none; }
 .esp-move { display: inline-flex; gap: 6px; }
-.esp-move-btn { display: inline-flex; align-items: center; gap: 4px; min-height: 30px; padding: 4px 10px; border: 1px solid var(--lala-lavender-line); border-radius: 8px; background: var(--surface-card); color: var(--lala-lavender-text); font-size: 12px; font-weight: 600; cursor: pointer; }
+.esp-move-btn { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 4px 10px; border: 1px solid var(--studio-line-strong); border-radius: 8px; background: var(--studio-card); color: var(--studio-purple); font-size: 12px; font-weight: 600; cursor: pointer; }
 .esp-move-btn:disabled { opacity: 0.4; cursor: default; }
-.esp-drop-before { box-shadow: 0 -3px 0 0 var(--lala-gold) !important; }
-.esp-drop-after { box-shadow: 0 3px 0 0 var(--lala-gold) !important; }
+.esp-drop-before { box-shadow: 0 -3px 0 0 var(--studio-magenta) !important; }
+.esp-drop-after { box-shadow: 0 3px 0 0 var(--studio-magenta) !important; }
+
+/* ── The open beat (centre) ── */
+.esp-beat { margin-bottom: 12px; overflow: visible; }
+/* One open beat in the centre; with none open, every beat as a short card. */
+.esp-beats.has-open .esp-beat:not(.is-open) { display: none; }
+.esp-beat:not(.is-open) { border-left: 4px solid var(--beat-color, var(--studio-magenta)); }
+.esp-beat-top { display: flex; align-items: center; gap: 8px; padding: 12px 14px 4px; }
+.esp-beat:not(.is-open) .esp-beat-top { padding-bottom: 12px; }
+.esp-beat-head { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 4px; border-radius: 10px; cursor: pointer; }
+.esp-beat-head:focus-visible { outline: 2px solid var(--studio-magenta); outline-offset: 2px; }
+.esp-beat-num { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%; background: var(--studio-magenta); color: var(--text-inverse); font-family: 'DM Mono', var(--font-mono); font-size: 14px; font-weight: 700; }
+.esp-beat:not(.is-open) .esp-beat-num { background: var(--studio-page-2); color: var(--studio-ink); }
+.esp-beat-title { flex: 1; min-width: 0; }
+.esp-beat-name-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; }
+.esp-beat-name { font-family: var(--font-prose); font-size: 22px; font-weight: 600; color: var(--studio-ink); overflow-wrap: anywhere; }
+.esp-beat:not(.is-open) .esp-beat-name { font-size: 16px; }
+.esp-beat-count { font-family: 'DM Mono', var(--font-mono); font-size: 12px; color: var(--studio-ink-muted); white-space: nowrap; }
+.esp-beat-runtime { color: var(--studio-ink); font-weight: 600; }
+.esp-beat-runtime::before { content: ' · '; color: var(--studio-ink-muted); font-weight: 400; }
+.esp-beat-chev { font-size: 10px; color: var(--studio-ink-muted); transition: transform 0.2s; }
+.esp-beat.is-open .esp-beat-chev { transform: rotate(180deg); }
+.esp-beat-thumb { flex-shrink: 0; width: 52px; height: 36px; border-radius: 6px; overflow: hidden; background: var(--studio-page-2); }
+.esp-beat-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.esp-beat-steps { display: inline-flex; gap: 6px; flex: none; }
+.esp-step { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 1px solid var(--studio-line); border-radius: 10px; background: var(--studio-card); color: var(--studio-ink); cursor: pointer; }
+.esp-step:hover:not(:disabled) { background: var(--studio-magenta-soft); }
+.esp-step:disabled { opacity: 0.4; cursor: default; }
+
+/* The beat's tags: location (the DREAM map), setting, shot, mood. */
+.esp-tags { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0; padding: 4px 18px 10px 62px; list-style: none; }
+.esp-tags > li { display: inline-flex; min-width: 0; }
+.esp-tag, .esp-beat-scene { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; font-size: 12px; color: var(--studio-ink-muted); }
+.esp-tag svg, .esp-beat-scene svg { flex: none; color: var(--studio-purple); }
+.esp-tag-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
+/* Beside the beat's head in the DOM, not inside its role="button" (Script page audit, 2026-10-19). */
+.esp-beat-scene { padding: 2px 0; border: none; background: none; text-align: left; cursor: pointer; color: var(--studio-ink); font-weight: 600; }
+.esp-beat-scene:hover { text-decoration: underline; }
+.esp-beat-body { padding: 4px 16px 16px; }
+
+/* Sections inside the open beat: Scene Visuals, Script Lines. */
+.esp-section { margin-top: 10px; padding: 14px; border: 1px solid var(--studio-line); border-radius: var(--studio-radius); background: var(--studio-card); }
+.esp-section-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.esp-section-tab { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 8px; background: var(--studio-purple); color: var(--text-inverse); font-size: 12px; font-weight: 600; }
+.esp .esp-section-title { display: flex; align-items: center; gap: 8px; margin: 0; font-family: var(--font-prose); font-size: 18px; font-weight: 600; color: var(--studio-ink); }
+.esp-section-title svg { color: var(--studio-purple); }
+.esp-section-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.esp-section-link { font-size: 13px; }
+
+/* Scene Visuals: the big picture and the plan's other pictures. */
+.esp-visuals-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.esp-visuals-grid.has-thumbs { grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); }
+.esp-beat-picture { position: relative; display: block; width: 100%; margin: 0; padding: 0; border: none; border-radius: 10px; overflow: hidden; background: var(--studio-page-2); cursor: zoom-in; }
+.esp-beat-picture img { display: block; width: 100%; aspect-ratio: 16 / 10; max-height: 340px; object-fit: cover; }
+.esp-beat-picture-label { position: absolute; left: 10px; bottom: 10px; max-width: calc(100% - 20px); padding: 3px 10px; border-radius: 999px; background: var(--studio-card); color: var(--studio-ink); font-size: 11px; font-weight: 600; overflow-wrap: anywhere; }
+.esp-thumbs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-content: start; margin: 0; padding: 0; list-style: none; }
+.esp-thumb { display: block; width: 100%; padding: 0; border: 2px solid transparent; border-radius: 8px; overflow: hidden; background: var(--studio-page-2); cursor: pointer; }
+.esp-thumb.is-on { border-color: var(--studio-magenta); }
+.esp-thumb img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+.esp-beat-nopicture { margin: 0 0 6px; padding: 18px; border: 1px dashed var(--studio-line-strong); border-radius: 10px; background: var(--studio-page); font-size: 13px; color: var(--studio-ink-muted); text-align: center; }
+.esp-beat-nopicture .esp-link { font-size: 13px; }
+.esp-beat-expects { display: flex; align-items: center; gap: 6px; margin: 10px 0 0; font-size: 12px; color: var(--studio-purple); }
+.esp-build { margin: 10px 0 0; }
+.esp-build-title { display: block; margin-bottom: 4px; font-family: 'DM Mono', var(--font-mono); font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--studio-ink-muted); }
+.esp-build-strip { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.esp-build-item { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 2px; width: 64px; font-size: 10px; color: var(--studio-ink); text-align: center; overflow-wrap: anywhere; }
+.esp-build-item img, .esp-build-item svg { width: 64px; height: 44px; border-radius: 6px; object-fit: cover; background: var(--studio-page-2); color: var(--studio-purple); }
+.esp-build-item.is-scene img { outline: 2px solid var(--studio-magenta); }
+
+/* Script Lines: each line a card with its number, kind, words, length and icon. */
+.esp-lines { display: flex; flex-direction: column; gap: 8px; }
+.esp-line-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--studio-line); border-radius: 10px; background: var(--studio-card); }
+.esp-line-row:hover { border-color: var(--studio-line-strong); }
+.esp-line-row.is-cue { padding-top: 6px; padding-bottom: 6px; background: var(--studio-page); }
+.esp-line-n { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; margin-top: 2px; border-radius: 50%; background: var(--studio-page-2); color: var(--studio-ink-muted); font-family: 'DM Mono', var(--font-mono); font-size: 11px; font-weight: 700; }
+.esp-line-row > .esp-line { flex: 1; min-width: 0; }
+.esp-line { padding: 2px 4px; border-radius: 6px; cursor: pointer; }
+.esp-line:hover { background: var(--studio-page); }
+.esp-line.is-locked { cursor: default; }
+.esp-line.is-locked:hover { background: none; }
+.esp-line:focus-visible { outline: 2px solid var(--studio-magenta); outline-offset: 2px; }
+.esp-line-kind, .esp-line-speaker { display: inline-block; margin-bottom: 2px; font-family: 'DM Mono', var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.esp-line-kind { display: block; color: var(--studio-ink); }
+.esp-line-speaker { color: var(--speaker, var(--studio-magenta)); }
+.esp-line-note { margin-left: 4px; font-family: 'DM Mono', var(--font-mono); font-size: 11px; font-weight: 700; color: var(--studio-magenta); }
+/* A long unbroken word wraps, not under Rewrite (Script page re-audit, 2026-10-19). */
+.esp-line-text { display: block; font-family: var(--font-prose); font-size: 15px; line-height: 1.6; color: var(--studio-ink); overflow-wrap: anywhere; }
+.esp-line-action { font-family: var(--font-prose); font-size: 15px; line-height: 1.6; color: var(--studio-ink); overflow-wrap: anywhere; }
+.esp-line-cue { font-family: var(--font-mono, 'DM Mono', monospace); font-size: 11px; letter-spacing: 0.02em; color: var(--studio-ink-muted); }
+.esp-line-meta { flex: none; display: inline-flex; align-items: center; gap: 8px; margin-top: 4px; color: var(--studio-ink-muted); }
+.esp-line-icon { color: var(--studio-purple); }
+.esp-line-row.is-dialogue .esp-line-icon { color: var(--studio-magenta); }
+.esp-line-dur { min-width: 34px; font-family: 'DM Mono', var(--font-mono); font-size: 12px; text-align: right; }
+/* Rewrite beside the line's row, not inside it (Script page audit, 2026-10-19). */
+.esp-rewrite { flex: none; margin-top: 2px; padding: 4px 8px; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--studio-magenta); font-size: 11px; font-weight: 600; cursor: pointer; opacity: 0; transition: opacity 0.15s; }
+.esp-line-row:hover .esp-rewrite, .esp-rewrite:focus-visible { opacity: 1; }
+.esp-rewrite:hover { border-color: var(--studio-line-strong); }
+@media (hover: none) { .esp-rewrite { opacity: 1; } }
+.esp-line-edit { padding: 8px; border: 1.5px solid var(--studio-magenta); border-radius: 10px; background: var(--studio-card); }
+.esp-line-input { display: block; box-sizing: border-box; width: 100%; padding: 8px 12px; border: 1px solid var(--studio-line-strong); border-radius: 8px; background: var(--studio-card); color: var(--studio-ink); font-family: var(--font-prose); font-size: 15px; line-height: 1.6; resize: vertical; outline: none; }
+.esp-line-input:focus { border-color: var(--studio-magenta); }
+.esp-line-edit-actions { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+/* The beat was approved while its line was open (Script page audit, 2026-10-19). */
+.esp-line-edit-note { margin: 0 0 6px; font-size: 12px; color: var(--studio-warn); }
+.esp-move--end { margin-left: auto; }
+.esp-line-delete { display: inline-flex; align-items: center; gap: 4px; color: var(--danger-text); }
+
+/* Moments on screen in a line (Task #2789, #2885). */
+.esp-moment { display: flex; align-items: center; gap: 10px; margin-top: 4px; padding: 6px 8px; border: 1px dashed var(--studio-line-strong); border-radius: 10px; background: var(--studio-page); }
+.esp-moment.is-unknown { border-color: var(--warning-border, var(--studio-line-strong)); }
+.esp-moment-thumb { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 40px; height: 56px; border-radius: 6px; overflow: hidden; background: var(--studio-purple-soft); color: var(--studio-purple); }
+.esp-moment.is-overlay .esp-moment-thumb { width: 56px; height: 40px; }
+.esp-moment-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.esp-moment-text { display: flex; flex-direction: column; min-width: 0; }
+.esp-moment-kind { font-family: 'DM Mono', var(--font-mono); font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--studio-ink-muted); }
+.esp-moment-what { font-size: 14px; font-weight: 600; color: var(--studio-ink); overflow-wrap: anywhere; }
+.esp-moment-missing { font-size: 11px; color: var(--warning-text, var(--studio-ink-muted)); }
+.esp-moment-with { font-size: 11px; color: var(--studio-purple); }
+.esp-moment-opens { font-size: 11px; color: var(--studio-ink-muted); }
+.esp-moment-words { font-family: 'Lora', serif; font-size: 13px; color: var(--studio-ink); overflow-wrap: anywhere; }
+.esp-moment-drafted { font-size: 11px; font-weight: 600; color: var(--success-text); }
+.esp-moment.is-icon .esp-moment-thumb { width: 40px; height: 40px; border-radius: 10px; }
+.esp-moment.is-icon .esp-moment-thumb img { object-fit: contain; }
+
+/* "+ Add line" (Task #2884): the chips, in the studio style. */
+.esp-addrow { margin-top: 10px; padding: 10px; border: 1px dashed var(--studio-line-strong); border-radius: 10px; background: var(--studio-page); }
+.esp-add-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.esp-add-label { display: inline-flex; align-items: center; gap: 4px; margin-right: 4px; font-size: 13px; font-weight: 700; color: var(--studio-magenta); }
+.esp-moment-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid var(--studio-line-strong); border-radius: 999px; background: var(--studio-card); color: var(--studio-purple); font-size: 12px; font-weight: 600; cursor: pointer; }
+.esp-moment-btn:hover { background: var(--studio-purple-soft); }
+.esp-beat-nophone { font-size: 12px; color: var(--studio-ink-muted); }
+
+/* The adders and the moment picker. */
+.esp-picker { margin-top: 10px; padding: 12px; border: 1px solid var(--studio-line-strong); border-radius: var(--studio-radius); background: var(--studio-card); }
+.esp-picker-head { display: flex; align-items: center; justify-content: space-between; }
+.esp-picker-title { font-size: 14px; font-weight: 700; color: var(--studio-ink); }
+.esp-picker-close { display: inline-flex; padding: 4px; border: none; background: none; color: var(--studio-ink-muted); cursor: pointer; }
+.esp-picker-group { margin: 10px 0 6px; font-family: 'DM Mono', var(--font-mono); font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--studio-ink-muted); }
+.esp-picker-sub { margin: 8px 0 4px; font-size: 11px; font-weight: 600; color: var(--studio-purple); }
+.esp-picker-empty { margin: 0; font-size: 12px; color: var(--studio-ink-muted); }
+.esp-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+.esp-pick-grid.is-icons { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); }
+.esp-pick-grid.is-icons .esp-pick-img { height: 56px; }
+.esp-pick-grid.is-icons .esp-pick-img img { object-fit: contain; }
+.esp-pick-tile { display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 4px; border: 2px solid transparent; border-radius: 10px; background: var(--studio-page); cursor: pointer; text-align: left; }
+.esp-pick-tile.is-picked { border-color: var(--studio-magenta); }
+.esp-pick-img { display: flex; align-items: center; justify-content: center; height: 90px; border-radius: 6px; overflow: hidden; background: var(--studio-card); color: var(--studio-purple); }
+.esp-pick-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.esp-pick-name { font-size: 11px; font-weight: 600; color: var(--studio-ink); overflow-wrap: anywhere; }
+.esp-pick-sub { font-size: 10px; color: var(--studio-ink-muted); overflow-wrap: anywhere; }
+.esp-pick-steps { align-self: flex-start; padding: 1px 6px; border-radius: 999px; background: var(--studio-card); font-size: 10px; font-weight: 600; color: var(--studio-purple); }
+.esp-picker-taps { flex: 1 1 100%; font-size: 12px; color: var(--studio-ink); }
+.esp-picker-do { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; }
+.esp-picker-verbs { display: flex; flex-wrap: wrap; gap: 6px; }
+.esp-verb { padding: 5px 12px; border: 1px solid var(--studio-line-strong); border-radius: 999px; background: var(--studio-card); color: var(--studio-purple); font-size: 12px; font-weight: 600; cursor: pointer; }
+.esp-verb.is-on { background: var(--studio-magenta); border-color: var(--studio-magenta); color: var(--text-inverse); }
+.esp-picker-where { display: flex; flex-direction: column; gap: 4px; flex: 1 1 200px; min-width: 0; font-size: 11px; color: var(--studio-ink-muted); }
+.esp-picker-where select, .esp-picker-where input { width: 100%; padding: 6px 8px; border: 1px solid var(--studio-line-strong); border-radius: 8px; background: var(--studio-card); color: var(--studio-ink); font-size: 13px; }
+.esp-picker-where input { font-size: 16px; }
+.esp-picker-foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 10px; }
+.esp-picker-added { margin-right: auto; font-size: 12px; font-weight: 600; color: var(--success-text); }
+.esp-adder .esp-picker-verbs { margin: 8px 0; }
+.esp-adder-text { margin-bottom: 4px; }
+
+/* Lala's line after a piece she puts on (Task 3190). */
+.esp-lala-slot { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; margin: 0 0 0 34px; padding: 8px 12px; border: 1px dashed var(--studio-magenta); border-radius: 10px; background: var(--studio-magenta-soft); font-size: 13px; color: var(--studio-ink); }
+.esp-lala-slot-label { font-family: 'DM Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--studio-ink-muted); }
+.esp-lala-slot-draft { flex: 1 1 200px; min-width: 0; font-family: 'Lora', serif; overflow-wrap: anywhere; }
+.esp-lala-slot-actions { display: flex; gap: 6px; }
+
+/* The beat's actions: move, regenerate, ask, approve. */
+.esp-beat-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 12px; padding: 12px 14px; border: 1px solid var(--studio-line); border-radius: var(--studio-radius); background: var(--studio-page); }
+.esp-beat-foot .esp-move { margin-right: auto; }
+.esp-beat-locked-note { margin-right: auto; font-size: 12px; color: var(--studio-ink-muted); }
+.esp-lock-btn { padding: 8px 18px; border: none; border-radius: 10px; background: var(--studio-magenta); color: var(--text-inverse); font-size: 12px; font-weight: 700; cursor: pointer; }
+.esp-lock-btn.is-locked { background: var(--studio-ok-soft); color: var(--studio-ok); border: 1px solid var(--studio-ok); }
+/* aria-disabled, not disabled: a disabled button drops the focus (Script page audit 3, 2026-10-19). */
+.esp-lock-btn:disabled, .esp-lock-btn[aria-disabled="true"] { cursor: wait; opacity: 0.7; }
+.esp-regen-btn { padding: 7px 14px; border: 1px solid var(--studio-line-strong); border-radius: 10px; background: var(--studio-card); color: var(--studio-purple); font-size: 12px; font-weight: 600; cursor: pointer; }
+.esp-regen-btn:disabled { cursor: wait; opacity: 0.7; }
+.esp-ask { display: inline-flex; flex: 1 1 260px; gap: 6px; min-width: 0; }
+.esp-ask-input { flex: 1; min-width: 0; padding: 7px 10px; border: 1px solid var(--studio-line-strong); border-radius: 10px; background: var(--studio-card); color: var(--studio-ink); font-size: 13px; }
+
+/* The three cards under the beat: Scene Context, Assets & Links, Beat Checklist. */
+.esp-beat-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+.esp-card { padding: 14px; min-width: 0; }
+.esp .esp-card-title { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-family: var(--font-prose); font-size: 16px; font-weight: 600; color: var(--studio-ink); }
+.esp-card-title svg { flex: none; color: var(--studio-purple); }
+.esp-card-empty { margin: 0; font-size: 13px; color: var(--studio-ink-muted); }
+.esp-context-list { display: flex; flex-direction: column; margin: 0; }
+.esp-context-list > div { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 8px; padding: 8px 0; border-top: 1px solid var(--studio-line); }
+.esp-context-list > div:first-child { border-top: none; padding-top: 0; }
+.esp-context-list dt { font-size: 12px; color: var(--studio-ink-muted); }
+.esp-context-list dd { margin: 0; font-size: 13px; line-height: 1.45; color: var(--studio-ink); overflow-wrap: anywhere; }
+.esp-assets-list { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.esp-assets-list li { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--studio-ink); overflow-wrap: anywhere; }
+.esp-assets-list svg { flex: none; margin-top: 1px; color: var(--studio-magenta); }
+.esp-assets-kind { color: var(--studio-ink-muted); }
+.esp-checklist-count { margin-left: auto; font-family: 'DM Mono', var(--font-mono); font-size: 13px; color: var(--studio-ink); }
+.esp-progress { display: block; width: 100%; height: 8px; margin: 0 0 12px; border: none; border-radius: 999px; background: var(--studio-page-2); overflow: hidden; appearance: none; }
+.esp-progress::-webkit-progress-bar { background: var(--studio-page-2); border-radius: 999px; }
+.esp-progress::-webkit-progress-value { background: var(--studio-purple); border-radius: 999px; }
+.esp-progress::-moz-progress-bar { background: var(--studio-purple); border-radius: 999px; }
+.esp-checklist-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.esp-checklist-list li { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 1.4; color: var(--studio-ink); overflow-wrap: anywhere; }
+.esp-checkbox { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin-top: 1px; border: 1.5px solid var(--studio-line-strong); border-radius: 4px; background: var(--studio-card); color: var(--text-inverse); }
+.esp-checklist-list li.is-ok .esp-checkbox { border-color: var(--studio-ok); background: var(--studio-ok); }
+.esp-checklist-list li.is-todo { color: var(--studio-ink-muted); }
+
+/* A rewrite or regenerated beat before it goes in (Script tab audit, 2026-10-15). */
+.esp-proposal { margin: 6px 0 4px; padding: 10px 12px; border: 1px solid var(--studio-magenta); border-radius: 10px; background: var(--studio-magenta-soft); }
+.esp-proposal-title { margin: 0 0 6px; font-family: var(--font-mono, 'DM Mono', monospace); font-size: 12px; color: var(--studio-magenta); }
+.esp-proposal-was { margin: 0 0 6px; font-size: 12px; color: var(--studio-ink-muted); text-decoration: line-through; }
+.esp-proposal-lines { margin: 0 0 8px; padding-left: 18px; font-family: var(--font-prose); font-size: 14px; color: var(--studio-ink); }
+.esp-proposal-lines li { margin: 2px 0; overflow-wrap: anywhere; }
+.esp-proposal-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* Franchise guard, and the all-approved card. */
-.esp-guard { margin-top: 16px; padding: 14px 18px; border-radius: 14px; }
+.esp-guard { margin-top: 16px; padding: 14px 18px; border-radius: var(--studio-radius); }
 .esp-guard.is-bad { background: var(--danger-bg); border: 1px solid var(--danger-border); }
 .esp-guard.is-ok { background: var(--success-bg); border: 1px solid var(--success-border); }
 .esp-guard-title { margin-bottom: 6px; font-size: 14px; font-weight: 700; }
 .esp-guard.is-bad .esp-guard-title { color: var(--danger-text); }
 .esp-guard.is-ok .esp-guard-title { color: var(--success-text); }
-.esp-guard-count { margin-left: 8px; font-size: 11px; font-weight: 400; color: var(--lala-ink-muted); }
-.esp-guard-item { margin-bottom: 4px; padding: 6px 10px; border: 1px solid var(--danger-border); border-radius: 8px; background: var(--surface-card); color: var(--danger-text); font-size: 12px; }
-.esp-done { margin-top: 16px; padding: 20px 24px; border: 1px solid var(--success-border); border-radius: 14px; background: var(--success-bg); text-align: center; }
-.esp-done-text { margin: 0 0 12px; font-size: 15px; font-weight: 700; color: var(--success-text); }
+.esp-guard-count { margin-left: 8px; font-size: 11px; font-weight: 400; color: var(--studio-ink-muted); }
+.esp-guard-item { margin-bottom: 4px; padding: 6px 10px; border: 1px solid var(--danger-border); border-radius: 8px; background: var(--studio-card); color: var(--danger-text); font-size: 12px; }
+.esp-done { margin-top: 16px; padding: 20px 24px; border: 1px solid var(--studio-ok); border-radius: var(--studio-radius); background: var(--studio-ok-soft); text-align: center; }
+.esp-done-text { margin: 0 0 12px; font-size: 15px; font-weight: 700; color: var(--studio-ok); }
+
+/* The scene picture, larger. */
+.esp-zoom { position: fixed; inset: 0; z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 16px; background: color-mix(in srgb, var(--gray-900) 70%, transparent); cursor: zoom-out; }
+.esp-zoom img { max-width: 100%; max-height: 100%; border-radius: 10px; object-fit: contain; }
+.esp-zoom-close { position: absolute; top: 12px; right: 12px; display: inline-flex; padding: 8px; border: none; border-radius: 999px; background: var(--studio-card); color: var(--studio-ink); cursor: pointer; }
 
 /* The DREAM map. */
 .esp-map-backdrop { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--gray-900) 70%, transparent); }
@@ -256,228 +413,62 @@
 .esp-map-close { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: none; border-radius: 8px; background: color-mix(in srgb, var(--text-inverse) 10%, transparent); color: var(--text-inverse); font-size: 18px; cursor: pointer; }
 .esp-map-loading { padding: 40px; text-align: center; color: var(--lala-parchment-3); }
 
-@media (max-width: 900px) {
-  .esp { grid-template-columns: minmax(0, 1fr); }
-}
-@media (max-width: 480px) {
-  .esp-head { flex-direction: column; align-items: stretch; }
-  .esp-head > button { width: 100%; }
-  .esp-beat-head { padding: 12px 12px 12px 14px; gap: 8px; }
-  .esp-beat-body { padding: 4px 12px 14px; }
-  .esp-line { padding: 6px 4px; }
-}
-/* responsive.css sizes every h3 on small screens with !important; the
-   panel's small caps and the empty card's title keep their size. */
-.esp .esp-side-title { font-size: 12px !important; }
-.esp .esp-empty-title { font-size: 17px !important; }
-
-/* Several moments in a beat: placed between lines, on screen together, and
-   what builds the scene (Task #2793). */
-.esp-moment-with { font-size: 11px; color: var(--lala-lavender-text); }
-.esp-picker-where { display: flex; flex-direction: column; gap: 4px; flex: 1 1 200px; min-width: 0; font-size: 11px; color: var(--lala-ink-muted); }
-.esp-picker-where select { width: 100%; padding: 6px 8px; border: 1px solid var(--lala-lavender-line); border-radius: 8px; background: var(--surface-card); color: var(--text-primary); font-size: 13px; }
-.esp-picker-foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 10px; }
-.esp-picker-added { margin-right: auto; font-size: 12px; font-weight: 600; color: var(--success-text); }
-.esp-build { margin: 0 0 10px; }
-.esp-build-title { display: block; margin-bottom: 4px; font-family: 'DM Mono', var(--font-mono); font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--lala-ink-muted); }
-.esp-build-strip { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
-.esp-build-item { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 2px; width: 64px; font-size: 10px; color: var(--text-primary); text-align: center; overflow-wrap: anywhere; }
-.esp-build-item img, .esp-build-item svg { width: 64px; height: 44px; border-radius: 6px; object-fit: cover; background: var(--accent-subtle); color: var(--lala-lavender-text); }
-.esp-build-item.is-scene img { outline: 2px solid var(--lala-lavender); }
-
-/* Add a line anywhere in a beat (Task #2795). */
-.esp-adder .esp-picker-verbs { margin: 8px 0; }
-.esp-adder-text { margin-bottom: 4px; }
-
-/* Lala's phone icons (Task #2801): the icon the script taps, square, with the
-   screen it opens and how many taps reach it. */
-.esp-picker-sub { margin: 8px 0 4px; font-size: 11px; font-weight: 600; color: var(--lala-lavender-text); }
-.esp-pick-grid.is-icons { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); }
-.esp-pick-grid.is-icons .esp-pick-img { height: 56px; }
-.esp-pick-grid.is-icons .esp-pick-img img { object-fit: contain; }
-.esp-pick-sub { font-size: 10px; color: var(--lala-ink-muted); overflow-wrap: anywhere; }
-.esp-pick-steps { align-self: flex-start; padding: 1px 6px; border-radius: 999px; background: var(--surface-card); font-size: 10px; font-weight: 600; color: var(--lala-lavender-text); }
-.esp-picker-taps { flex: 1 1 100%; font-size: 12px; color: var(--text-primary); }
-.esp-moment.is-icon .esp-moment-thumb { width: 40px; height: 40px; border-radius: 10px; }
-.esp-moment.is-icon .esp-moment-thumb img { object-fit: contain; }
-.esp-moment-opens { font-size: 11px; color: var(--lala-ink-muted); }
-
-/* ── The beat list, pills, context chips and bottom bar (Task #2881) ──
-   Wide: the beat list, the beats, the context side panel. Narrower: the
-   beats as pills above them. Phone width: one column, the open beat only,
-   the context as chips and a panel the bottom bar opens. */
-.esp.has-beatlist { grid-template-columns: 150px minmax(0, 1.7fr) minmax(240px, 1fr); }
-.esp-beatlist { position: sticky; top: 12px; align-self: start; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-.esp-beatlist-items { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
-.esp-beatlist-btn { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 6px 8px; border: 1px solid transparent; border-radius: 10px; background: none; color: var(--lala-ink); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
-.esp-beatlist-btn:hover { background: var(--lala-lavender-soft); }
-.esp-beatlist-btn.is-open { background: var(--lala-lavender-soft); border-color: var(--lala-lavender-line); font-weight: 700; }
-.esp-beatlist-btn:focus-visible, .esp-pill:focus-visible, .esp-mobilebar-btn:focus-visible, .esp-side-close:focus-visible { outline: none; box-shadow: var(--focus-ring); }
-.esp-beatlist-num { flex: none; min-width: 22px; font-family: 'DM Mono', var(--font-mono); font-size: 12px; color: var(--lala-lavender-text); }
-.esp-beatlist-name { flex: 1; min-width: 0; overflow-wrap: break-word; hyphens: auto; }
-.esp-beatlist-phone { flex: none; color: var(--lala-lavender-text); }
-.esp-beatlist-legend { display: flex; align-items: center; gap: 4px; margin: 4px 0 0; font-size: 11px; color: var(--lala-ink-muted); }
-.esp-saved-state { color: var(--success-text); }
-
-.esp-pills, .esp-chips, .esp-mobilebar, .esp-side-close { display: none; }
-.esp-pills { gap: 6px; margin: 0 0 10px; padding: 2px 2px 6px; list-style: none; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
-.esp-pill { flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; border: 1px solid var(--lala-lavender-line); border-radius: 999px; background: var(--surface-card); color: var(--lala-ink); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; }
-.esp-pills > li { flex: none; display: flex; }
-.esp-pill.is-open { background: var(--lala-lavender); border-color: var(--lala-lavender); color: var(--text-inverse); font-weight: 700; }
-.esp-chips { flex-wrap: wrap; gap: 6px; margin: 0 0 10px; padding: 0; list-style: none; }
-.esp-chips li { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; background: var(--lala-lavender-soft); color: var(--lala-lavender-text); font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
-.esp-mobilebar-btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; border: 1px solid var(--lala-lavender-line); border-radius: 12px; background: var(--surface-card); color: var(--lala-lavender-text); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
-.esp-mobilebar-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.esp-mobilebar-btn.is-on { background: var(--lala-lavender); border-color: var(--lala-lavender); color: var(--text-inverse); }
-.esp-side-close { align-self: flex-end; align-items: center; gap: 4px; min-height: 44px; padding: 0 14px; border: 1px solid var(--lala-lavender-line); border-radius: 999px; background: var(--surface-card); color: var(--lala-lavender-text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
-
-@media (max-width: 1179px) {
-  .esp.has-beatlist { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); }
-  .esp-beatlist { display: none; }
-  .esp-pills { display: flex; }
-}
-@media (max-width: 900px) {
-  .esp.has-beatlist { grid-template-columns: minmax(0, 1fr); }
-}
-@media (max-width: 760px) {
-  .esp.has-beatlist { padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
-  .esp-chips { display: flex; }
-  .esp.has-beatlist .esp-beat:not(.is-open) { display: none; }
-  .esp.has-beatlist .esp-order-hint { display: none; }
-  .esp-mobilebar {
-    display: flex; gap: 8px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 55; /* above the episode's sticky header (50) */
-    padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
-    background: var(--surface-card); border-top: 1px solid var(--lala-lavender-line); box-shadow: 0 -4px 16px color-mix(in srgb, var(--lala-ink) 8%, transparent);
-  }
-  .esp.has-beatlist .esp-savebar { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
-  .esp.has-beatlist .esp-side { display: none; }
-  .esp.has-beatlist.is-context-open .esp-side {
-    display: flex; position: fixed; left: 0; right: 0; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); z-index: 56;
-    max-height: 70vh; overflow-y: auto; overscroll-behavior: contain; padding: 12px 16px;
-    background: var(--surface-bg); border-top: 1px solid var(--lala-lavender-line); box-shadow: 0 -8px 24px color-mix(in srgb, var(--lala-ink) 14%, transparent);
-  }
-  .esp.is-context-open .esp-side-close { display: inline-flex; }
-  /* Every control on the tab is at least a 44px tap target at phone width. */
-  .esp button { min-height: 44px; }
-}
-
-/* "Add:" chips, must-cover checklist and phone check (2026-10-11). */
-.esp-add-chips { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.esp-beat-nophone { font-size: 12px; color: var(--lala-ink-muted); }
-.esp-add-label { font-family: 'DM Mono', var(--font-mono); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--lala-ink-muted); }
-.esp-cover, .esp-phonecheck { padding: 14px 16px; border: 1px solid var(--lala-lavender-line); border-radius: 14px; background: var(--surface-card); }
-.esp-cover-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
-.esp-cover-list li { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 1.45; color: var(--text-primary); overflow-wrap: anywhere; }
-.esp-cover-list li svg { flex: none; margin-top: 2px; color: var(--lala-ink-muted); }
-.esp-cover-list li.is-covered svg { color: var(--success-text); }
-.esp-cover-list li.is-gap svg { color: var(--warning-text); }
-.esp-cover-beat { color: var(--lala-lavender-text); }
-.esp-cover-empty { margin: 8px 0 0; font-size: 13px; color: var(--lala-ink-muted); }
-
-/* Notifications, DMs and Lala's posts in a beat (Task #2885): the words, and
-   a post's draft in her Feed. */
-.esp-moment-words { font-family: 'Lora', serif; font-size: 13px; color: var(--text-primary); overflow-wrap: anywhere; }
-.esp-moment-drafted { font-size: 11px; font-weight: 600; color: var(--success-text); }
-.esp-picker-where input { width: 100%; padding: 6px 8px; border: 1px solid var(--lala-lavender-line); border-radius: 8px; background: var(--surface-card); color: var(--text-primary); font-size: 16px; }
-
-/* True at Beat N (Task #2882): what is true at the open beat, each value
-   the episode's own. */
-.esp-truth { padding: 14px 16px; border: 1px solid var(--lala-lavender-line); border-radius: 14px; background: var(--surface-card); }
-.esp-truth-list { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 0; }
-.esp-truth-list > div { display: flex; flex-direction: column; gap: 2px; }
-.esp-truth-list dt { display: inline-flex; align-items: center; gap: 6px; font-family: 'DM Mono', var(--font-mono); font-size: 11px; letter-spacing: 0.03em; text-transform: uppercase; color: var(--lala-ink-muted); }
-.esp-truth-list dd { margin: 0; min-width: 0; font-size: 14px; font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; }
-.esp-truth-note { display: block; margin-top: 2px; font-size: 11px; font-weight: 400; color: var(--lala-ink-muted); }
-
-/* Lala's line after a piece she puts on (Task 3190): the draft under the cue, Insert to write it. */
-.esp-lala-slot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px 10px;
-  margin: 2px 0 6px 18px;
-  padding: 6px 10px;
-  border: 1px dashed var(--lala-gold);
-  border-radius: 8px;
-  background: var(--lala-gold-soft);
-  font-size: 13px;
-}
-.esp-lala-slot-label { font-family: 'DM Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); }
-.esp-lala-slot-draft { flex: 1 1 200px; min-width: 0; font-family: 'Lora', serif; overflow-wrap: anywhere; }
-.esp-lala-slot-actions { display: flex; gap: 6px; }
-
-/* Script writing flow (Script tab audit, 2026-10-15): "Ready to film?",
-   each beat's rough length, a line opened from the keyboard, Delete line,
-   and Ask for a change beside Regenerate beat. */
-.esp-health { margin-bottom: 14px; border: 1px solid var(--lala-lavender-line); border-radius: 14px; background: var(--surface-card); }
-.esp-health-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 12px 16px; border: none; border-radius: 14px; background: none; color: var(--lala-ink); font: inherit; text-align: left; cursor: pointer; }
+/* "Ready to film?" (Script tab audit, 2026-10-15), the must-cover list, the
+   phone check, True at Beat N. */
+.esp-health { margin-bottom: 14px; }
+.esp-health-head { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 10px 16px; border: none; border-radius: var(--studio-radius); background: none; color: var(--studio-ink); font: inherit; text-align: left; cursor: pointer; }
+.esp-health-head:focus-visible { outline: 2px solid var(--studio-magenta); outline-offset: -2px; }
 .esp-health.has-gaps .esp-health-head > svg:first-child { color: var(--warning-text); }
 .esp-health.is-clear .esp-health-head > svg:first-child { color: var(--success-text); }
 .esp-health-title { font-family: var(--font-prose); font-size: 16px; font-weight: 600; }
-.esp-health-sum { margin-left: auto; font-family: 'DM Mono', var(--font-mono); font-size: 11px; color: var(--lala-ink-muted); }
-.esp-health-chev { flex: none; color: var(--lala-ink-muted); transition: transform 0.15s; }
+.esp-health-sum { margin-left: auto; font-family: 'DM Mono', var(--font-mono); font-size: 11px; color: var(--studio-ink-muted); }
+.esp-health-chev { flex: none; color: var(--studio-ink-muted); transition: transform 0.15s; }
 .esp-health-head[aria-expanded="true"] .esp-health-chev { transform: rotate(180deg); }
 .esp-health-list[hidden] { display: none; }
 .esp-health-list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0 16px 14px; list-style: none; }
-.esp-health-list li { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 1.45; color: var(--text-primary); overflow-wrap: anywhere; }
+.esp-health-list li { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 1.45; color: var(--studio-ink); overflow-wrap: anywhere; }
 .esp-health-list li svg { flex: none; margin-top: 2px; }
 .esp-health-list li.is-ok svg { color: var(--success-text); }
 .esp-health-list li.is-gap svg { color: var(--warning-text); }
 .esp-health-text { flex: 1; min-width: 0; }
-.esp-health-open { flex: none; padding: 2px 10px; border: 1px solid var(--lala-lavender-line); border-radius: 8px; background: var(--surface-card); color: var(--lala-lavender-text); font-size: 12px; font-weight: 600; cursor: pointer; }
+.esp-health-open { flex: none; padding: 2px 10px; border: 1px solid var(--studio-line-strong); border-radius: 8px; background: var(--studio-card); color: var(--studio-purple); font-size: 12px; font-weight: 600; cursor: pointer; }
 /* Phone paths (2026-10-16): a row that can fix itself, and Fix all. */
-.esp-health-fix { border-color: var(--lala-gold-line); color: var(--lala-gold-text); }
+.esp-health-fix { border-color: var(--studio-magenta); color: var(--studio-magenta); }
 .esp-health-fix:disabled, .esp-health-fixall button:disabled { opacity: 0.5; cursor: default; }
 .esp-health-fixall { padding: 0 16px 8px; }
-.esp-beat-runtime { color: var(--lala-ink-muted); }
-.esp-beat-runtime::before { content: ' · '; }
-.esp-line:focus-visible { outline: 2px solid var(--lala-lavender); outline-offset: 2px; }
-.esp-line-delete { display: inline-flex; align-items: center; gap: 4px; color: var(--danger-text); }
-.esp-ask { display: inline-flex; flex: 1 1 260px; gap: 6px; min-width: 0; }
-.esp-ask-input { flex: 1; min-width: 0; padding: 7px 10px; border: 1px solid var(--lala-lavender-line); border-radius: 8px; background: var(--surface-card); color: var(--lala-ink); font-size: 13px; }
-@media (max-width: 760px) {
-  .esp-health-list li { flex-wrap: wrap; }
-  .esp-health-open { margin-left: 22px; }
-  .esp-ask { flex-basis: 100%; }
-  /* At phone width the length goes under the line count, so the beat's name keeps its room. */
-  .esp-beat-count { display: flex; flex-direction: column; align-items: flex-end; }
-  .esp-beat-runtime::before { content: none; }
-  .esp-ask-input { min-height: 44px; font-size: 16px; /* iOS zooms into smaller inputs */ }
-  /* The line editor, the adders' words and "Put it after" too (Script page audit, 2026-10-19). */
-  .esp-line-input, .esp-picker-where select { font-size: 16px; }
-  /* Ready to film? opened on a phone scrolls in its own box, so the beat stays near. */
-  .esp-health-list { max-height: 50vh; overflow-y: auto; overscroll-behavior: contain; }
-  .esp-line-edit-actions { flex-wrap: wrap; }
-  /* Links are tap targets too (Script page re-audit, 2026-10-19). */
-  .esp-link { display: inline-flex; align-items: center; min-height: 44px; }
-}
-
-/* A rewrite or regenerated beat before it goes in (Script tab audit, 2026-10-15). */
-.esp-proposal { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--lala-gold); border-radius: 8px; background: var(--lala-parchment); }
-.esp-proposal-title { margin: 0 0 6px; font-family: var(--font-mono, 'DM Mono', monospace); font-size: 12px; color: var(--lala-gold-text); }
-.esp-proposal-was { margin: 0 0 6px; font-size: 12px; color: var(--lala-ink-muted); text-decoration: line-through; }
-.esp-proposal-lines { margin: 0 0 8px; padding-left: 18px; font-family: var(--font-prose); font-size: 14px; color: var(--lala-ink); }
-.esp-proposal-lines li { margin: 2px 0; overflow-wrap: anywhere; }
-.esp-proposal-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.esp-cover, .esp-phonecheck, .esp-truth { padding: 14px 16px; }
+.esp-cover-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
+.esp-cover-list li { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 1.45; color: var(--studio-ink); overflow-wrap: anywhere; }
+.esp-cover-list li svg { flex: none; margin-top: 2px; color: var(--studio-ink-muted); }
+.esp-cover-list li.is-covered svg { color: var(--success-text); }
+.esp-cover-list li.is-gap svg { color: var(--warning-text); }
+.esp-cover-beat { color: var(--studio-purple); }
+.esp-cover-empty { margin: 8px 0 0; font-size: 13px; color: var(--studio-ink-muted); }
+.esp-truth-list { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 0; }
+.esp-truth-list > div { display: flex; flex-direction: column; gap: 2px; }
+.esp-truth-list dt { display: inline-flex; align-items: center; gap: 6px; font-family: 'DM Mono', var(--font-mono); font-size: 11px; letter-spacing: 0.03em; text-transform: uppercase; color: var(--studio-ink-muted); }
+.esp-truth-list dd { margin: 0; min-width: 0; font-size: 14px; font-weight: 600; color: var(--studio-ink); overflow-wrap: anywhere; }
+.esp-truth-note { display: block; margin-top: 2px; font-size: 11px; font-weight: 400; color: var(--studio-ink-muted); }
 
 /* Version history and the kept draft (Script tab audit, 2026-10-15). */
-.esp-history { position: fixed; inset: 0 0 0 auto; width: min(420px, 100vw); z-index: 60; overflow-y: auto; padding: 16px; background: var(--lala-parchment); border-left: 1px solid var(--lala-gold); box-shadow: -8px 0 24px color-mix(in srgb, var(--lala-ink) 12%, transparent); }
+.esp-history { position: fixed; inset: 0 0 0 auto; width: min(420px, 100vw); z-index: 60; box-sizing: border-box; overflow-y: auto; padding: 16px; background: var(--studio-page); border-left: 1px solid var(--studio-line-strong); box-shadow: -8px 0 24px color-mix(in srgb, var(--studio-ink) 12%, transparent); }
 .esp-history-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.esp-history-title { margin: 0; font-family: var(--font-prose); font-size: 18px; color: var(--lala-ink); }
+.esp-history-title { margin: 0; font-family: var(--font-prose); font-size: 18px; color: var(--studio-ink); }
 .esp-history-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.esp-history-item { display: grid; gap: 4px; width: 100%; text-align: left; padding: 10px; border: 1px solid var(--lala-gold-soft, var(--lala-gold)); border-radius: 8px; background: transparent; color: var(--lala-ink); cursor: pointer; }
-.esp-history-item:focus-visible { outline: 2px solid var(--lala-gold); outline-offset: 2px; }
-.esp-history-meta { font-family: var(--font-mono, 'DM Mono', monospace); font-size: 11px; color: var(--lala-ink-muted); }
+.esp-history-item { display: grid; gap: 4px; width: 100%; text-align: left; padding: 10px; border: 1px solid var(--studio-line); border-radius: 10px; background: var(--studio-card); color: var(--studio-ink); cursor: pointer; }
+.esp-history-item:hover { border-color: var(--studio-magenta); }
+.esp-history-item:focus-visible { outline: 2px solid var(--studio-magenta); outline-offset: 2px; }
+.esp-history-meta { font-family: var(--font-mono, 'DM Mono', monospace); font-size: 11px; color: var(--studio-ink-muted); }
 .esp-history-preview { font-family: var(--font-prose); font-size: 13px; overflow-wrap: anywhere; }
-.esp-history-text { max-height: 50vh; overflow: auto; white-space: pre-wrap; font-size: 12px; padding: 10px; border-radius: 6px; background: var(--lala-parchment-2, var(--lala-parchment)); color: var(--lala-ink); }
+.esp-history-text { max-height: 50vh; overflow: auto; white-space: pre-wrap; font-size: 12px; padding: 10px; border-radius: 8px; background: var(--studio-card); color: var(--studio-ink); }
 .esp-history-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
-.esp-history-note, .esp-history-empty { font-size: 12px; color: var(--lala-ink-muted); }
-.esp-draft { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--lala-gold); border-radius: 8px; background: var(--lala-parchment); font-size: 13px; color: var(--lala-ink); }
+.esp-history-note, .esp-history-empty { font-size: 12px; color: var(--studio-ink-muted); }
+.esp-draft { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--studio-line-strong); border-radius: 10px; background: var(--studio-magenta-soft); font-size: 13px; color: var(--studio-ink); }
 .esp-draft-text { flex: 1 1 220px; }
 
 /* What the writer covered after generating (Script tab, 2026-10-15). */
-.esp-coverage { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--lala-gold); border-radius: 8px; background: var(--lala-parchment); font-size: 13px; color: var(--lala-ink); }
-.esp-coverage.is-gaps { border-color: var(--warning-text, var(--lala-gold)); }
+.esp-coverage { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--studio-line-strong); border-radius: 10px; background: var(--studio-card); font-size: 13px; color: var(--studio-ink); }
+.esp-coverage.is-gaps { border-color: var(--warning-text, var(--studio-line-strong)); }
 .esp-coverage-line { margin: 0 0 6px; }
 .esp-coverage-list { margin: 0 0 8px; padding-left: 18px; }
 .esp-coverage-list li { overflow-wrap: anywhere; }
@@ -487,14 +478,99 @@
 .esp-beat14-name { margin: 0 0 6px; overflow-wrap: anywhere; }
 .esp-beat14-form { display: flex; flex-direction: column; gap: 8px; }
 .esp-beat14-modes { display: flex; gap: 6px; flex-wrap: wrap; }
-.esp-beat14-modes [aria-pressed="true"] { border-color: var(--lala-gold-line); color: var(--lala-gold-text); }
-.esp-beat14-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.esp-beat14-modes [aria-pressed="true"] { border-color: var(--studio-magenta); background: var(--studio-magenta-soft); color: var(--studio-magenta); }
+.esp-beat14-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--studio-ink); }
 .esp-beat14-field input,
 .esp-beat14-field select,
 /* A visible field, as the ask box (Script page audit, 2026-10-19). */
-.esp-beat14-field textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 6px 8px; border: 1px solid var(--lala-lavender-line); border-radius: 8px; background: var(--surface-card); color: var(--lala-ink); }
+.esp-beat14-field textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 6px 8px; border: 1px solid var(--studio-line-strong); border-radius: 8px; background: var(--studio-card); color: var(--studio-ink); }
 .esp-beat14-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+
+/* ── Pills, context chips, the bottom bar and the Context sheet (Task #2881) ── */
+.esp-pills, .esp-chips, .esp-mobilebar, .esp-side-close { display: none; }
+.esp-pills { gap: 6px; margin: 0 0 10px; padding: 2px 2px 6px; list-style: none; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
+.esp-pills > li { flex: none; display: flex; }
+.esp-pill { flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; border: 1px solid var(--studio-line-strong); border-radius: 999px; background: var(--studio-card); color: var(--studio-ink); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; }
+.esp-pill.is-open { background: var(--studio-magenta); border-color: var(--studio-magenta); color: var(--text-inverse); font-weight: 700; }
+.esp-chips { flex-wrap: wrap; gap: 6px; margin: 0 0 10px; padding: 0; list-style: none; }
+.esp-chips li { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; background: var(--studio-purple-soft); color: var(--studio-purple); font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.esp-mobilebar-btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; border: 1px solid var(--studio-line-strong); border-radius: 12px; background: var(--studio-card); color: var(--studio-purple); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.esp-mobilebar-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.esp-mobilebar-btn.is-on { background: var(--studio-magenta); border-color: var(--studio-magenta); color: var(--text-inverse); }
+.esp-side-close { align-self: flex-end; align-items: center; gap: 4px; min-height: 44px; padding: 0 14px; border: 1px solid var(--studio-line-strong); border-radius: 999px; background: var(--studio-card); color: var(--studio-purple); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+
+/* responsive.css sizes every h3/h4 on small screens with !important; the
+   panel's small caps and the cards' titles keep their size. */
+.esp .esp-side-title { font-size: 12px !important; }
+.esp .esp-empty-title { font-size: 17px !important; }
+.esp .esp-beatlist-title { font-size: 19px !important; }
+.esp .esp-section-title { font-size: 18px !important; }
+.esp .esp-card-title { font-size: 16px !important; }
+
+/* Below 1440: the three cards wrap in two. */
+@media (max-width: 1360px) {
+  .esp-beat-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .esp-beat-cards > .esp-checklist { grid-column: 1 / -1; }
+}
+/* ≤1100: the beats list folds into the pills; the side goes beside the beat. */
+@media (max-width: 1100px) {
+  .esp.has-beatlist { grid-template-columns: minmax(0, 1fr) minmax(240px, 300px); grid-template-areas: "top top" "main side"; grid-template-rows: auto 1fr; }
+  .esp-beatlist { display: none; }
+  .esp-pills { display: flex; }
+  .esp-visuals-grid.has-thumbs { grid-template-columns: minmax(0, 1fr); }
+  .esp-thumbs { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+  .esp-tags { padding-left: 18px; }
+}
+@media (max-width: 900px) {
+  .esp, .esp.has-beatlist { grid-template-columns: minmax(0, 1fr); grid-template-areas: "top" "main" "side"; }
+}
 @media (max-width: 760px) {
+  .esp.has-beatlist { padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
+  .esp-chips { display: flex; }
+  .esp.has-beatlist .esp-beat:not(.is-open) { display: none; }
+  .esp.has-beatlist .esp-order-hint { display: none; }
+  .esp-mobilebar {
+    display: flex; gap: 8px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 55; /* above the episode's sticky header (50) */
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+    background: var(--studio-card); border-top: 1px solid var(--studio-line); box-shadow: 0 -4px 16px color-mix(in srgb, var(--studio-ink) 8%, transparent);
+  }
+  .esp.has-beatlist .esp-savebar { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+  .esp.has-beatlist .esp-side { display: none; }
+  .esp.has-beatlist.is-context-open .esp-side {
+    display: flex; position: fixed; left: 0; right: 0; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); z-index: 56;
+    max-height: 70vh; overflow-y: auto; overscroll-behavior: contain; padding: 12px 16px;
+    background: var(--studio-page); border-top: 1px solid var(--studio-line); box-shadow: 0 -8px 24px color-mix(in srgb, var(--studio-ink) 14%, transparent);
+  }
+  .esp.is-context-open .esp-side-close { display: inline-flex; }
+  /* Every control on the tab is at least a 44px tap target at phone width. */
+  .esp button, .esp summary, .esp-rowmenu-btn { min-height: 44px; }
+  .esp-step { width: 44px; }
+  .esp-head { flex-direction: column; align-items: stretch; padding: 14px; }
+  .esp-head > button { width: 100%; }
+  .esp-beat-top { flex-wrap: wrap; padding: 10px 10px 4px; }
+  .esp-beat-head { flex: 1 1 100%; gap: 10px; }
+  .esp-thumbs { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .esp-beat-name { font-size: 19px; }
+  .esp-beat-steps { margin-left: auto; margin-top: -4px; }
+  .esp-beat-body { padding: 4px 10px 12px; }
+  .esp-tags { padding: 4px 12px 10px; }
+  .esp-section { padding: 12px 10px; }
+  .esp-line-row { flex-wrap: wrap; gap: 8px; padding: 10px; }
+  .esp-line-row > .esp-line { flex-basis: calc(100% - 34px); }
+  .esp-line-meta { margin-left: 32px; }
+  .esp-rewrite { margin-left: auto; }
+  .esp-beat-cards { grid-template-columns: minmax(0, 1fr); }
+  .esp-health-list li { flex-wrap: wrap; }
+  .esp-health-open { margin-left: 22px; }
+  .esp-ask { flex-basis: 100%; }
+  .esp-ask-input { min-height: 44px; font-size: 16px; /* iOS zooms into smaller inputs */ }
+  /* The line editor, the adders' words and "Put it after" too (Script page audit, 2026-10-19). */
+  .esp-line-input, .esp-picker-where select { font-size: 16px; }
+  /* Ready to film? opened on a phone scrolls in its own box, so the beat stays near. */
+  .esp-health-list { max-height: 50vh; overflow-y: auto; overscroll-behavior: contain; }
+  .esp-line-edit-actions { flex-wrap: wrap; }
+  /* Links are tap targets too (Script page re-audit, 2026-10-19). */
+  .esp-link { display: inline-flex; align-items: center; min-height: 44px; }
   .esp-beat14-field input,
   .esp-beat14-field select,
   .esp-beat14-field textarea { min-height: 44px; font-size: 16px; /* iOS zooms into smaller inputs */ }
