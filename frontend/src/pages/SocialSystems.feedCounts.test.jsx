@@ -45,12 +45,12 @@ describe('the Archetypes sub-tab counts the LalaVerse Feed', () => {
   test('each card counts the profiles that have it; those made before and names off the list are said apart', async () => {
     serve({ composition: { society_archetypes: { 'The Trendsetter': 3, 'The Educator': 1, 'The Old Name': 2 }, society_archetype_unset: 40 } });
     renderPage();
-    await waitFor(() => expect(within(card('The Trendsetter')).getByTestId('ss-arch-count').textContent).toBe('3 in the Feed'));
-    expect(within(card('The Educator')).getByTestId('ss-arch-count').textContent).toBe('1 in the Feed');
-    expect(within(card('The Rebel')).getByTestId('ss-arch-count').textContent).toBe('0 in the Feed');
+    await waitFor(() => expect(within(card('The Trendsetter')).getByTestId('ss-arch-count').textContent).toBe('3 in The Pulse'));
+    expect(within(card('The Educator')).getByTestId('ss-arch-count').textContent).toBe('1 in The Pulse');
+    expect(within(card('The Rebel')).getByTestId('ss-arch-count').textContent).toBe('0 in The Pulse');
     const note = screen.getByTestId('ss-arch-feed').textContent;
-    expect(note).toContain('Each card counts the LalaVerse Feed profiles that have it.');
-    expect(note).toContain("40 profiles have none yet: made before the Feed used these. Suggest theirs below, or set one on a character's page (Known for on The Pulse).");
+    expect(note).toContain('Each card counts the LalaVerse Pulse profiles that have it.');
+    expect(note).toContain("40 profiles have none yet: made before The Pulse used these. Suggest theirs below, or set one on a character's page (Known for on The Pulse).");
     expect(note).toContain('2 profiles carry an archetype no longer in this list.');
     expect(api.get).toHaveBeenCalledWith(COMPOSITION);
   });
@@ -61,18 +61,18 @@ describe('the Archetypes sub-tab counts the LalaVerse Feed', () => {
       page: { ARCHETYPES: [{ num: '01', name: 'The Night Owl', icon: '🦉', content: 'Posts at 3am' }] },
     });
     renderPage();
-    await waitFor(() => expect(within(card('The Night Owl')).getByTestId('ss-arch-count').textContent).toBe('5 in the Feed'));
+    await waitFor(() => expect(within(card('The Night Owl')).getByTestId('ss-arch-count').textContent).toBe('5 in The Pulse'));
     expect(screen.queryByText('The Trendsetter', { selector: '.ss-card-title' })).toBeNull();
     const note = screen.getByTestId('ss-arch-feed').textContent;
     expect(note).toContain('3 profiles carry an archetype no longer in this list.');
     expect(note).not.toContain('none yet');
   });
 
-  test('while counting, and when the Feed cannot be read, the cards carry no count', async () => {
+  test('while counting, and when The Pulse cannot be read, the cards carry no count', async () => {
     let finish;
     vi.mocked(api.get).mockImplementation((url) => (url === COMPOSITION ? new Promise((resolve) => { finish = resolve; }) : Promise.resolve({ data: {} })));
     const { unmount } = renderPage();
-    expect(screen.getByTestId('ss-arch-feed').textContent).toBe('Counting the LalaVerse Feed…');
+    expect(screen.getByTestId('ss-arch-feed').textContent).toBe('Counting The Pulse…');
     expect(screen.queryByTestId('ss-arch-count')).toBeNull();
     finish({ data: { society_archetypes: {} } });
     await waitFor(() => expect(screen.getAllByTestId('ss-arch-count')).toHaveLength(15));
@@ -81,7 +81,7 @@ describe('the Archetypes sub-tab counts the LalaVerse Feed', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     serve({ composition: Object.assign(new Error('down'), { response: { status: 500 } }) });
     renderPage();
-    await waitFor(() => expect(screen.getByTestId('ss-arch-feed').textContent).toBe('The LalaVerse Feed could not be counted just now.'));
+    await waitFor(() => expect(screen.getByTestId('ss-arch-feed').textContent).toBe('The Pulse could not be counted just now.'));
     expect(screen.queryByTestId('ss-arch-count')).toBeNull();
     expect(spy).toHaveBeenCalledWith('[Society] the Feed profiles could not be counted:', 500);
     spy.mockRestore();
@@ -116,10 +116,10 @@ describe('the Archetypes sub-tab counts the LalaVerse Feed', () => {
       { profile_id: 'p1', name: 'The Rebel' },
       { profile_id: 'p3', name: 'The Rebel', character_id: 'c3', gap: 'A bank teller who posts riot fashion.' },
     ] });
-    await waitFor(() => expect(within(card('The Rebel')).getByTestId('ss-arch-count').textContent).toBe('2 in the Feed'));
+    await waitFor(() => expect(within(card('The Rebel')).getByTestId('ss-arch-count').textContent).toBe('2 in The Pulse'));
   });
 
-  test('the Feed\'s balance: a crowded type and the types nobody has are said, and their cards marked', async () => {
+  test('The Pulse\'s balance: a crowded type and the types nobody has are said, and their cards marked', async () => {
     const page = { ARCHETYPES: [
       { num: '01', name: 'The A', content: 'a' }, { num: '02', name: 'The B', content: 'b' },
       { num: '03', name: 'The C', content: 'c' }, { num: '04', name: 'The D', content: 'd' },
@@ -128,8 +128,8 @@ describe('the Archetypes sub-tab counts the LalaVerse Feed', () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId('ss-arch-balance').textContent).toContain('Crowded: The A (6 of 8, 75%).'));
     const note = screen.getByTestId('ss-arch-balance').textContent;
-    expect(note).toContain('Nobody on the Feed is known as The C or The D yet.');
-    expect(note).toContain('New creators from the Feed get the least-used types first');
+    expect(note).toContain('Nobody on The Pulse is known as The C or The D yet.');
+    expect(note).toContain('New creators from The Pulse get the least-used types first');
     expect(within(card('The A')).getByTestId('ss-arch-count').className).toContain('is-crowded');
     expect(within(card('The C')).getByTestId('ss-arch-count').className).toContain('is-empty');
     expect(within(card('The B')).getByTestId('ss-arch-count').className).not.toMatch(/is-crowded|is-empty/);
@@ -145,6 +145,6 @@ describe('the Archetypes sub-tab counts the LalaVerse Feed', () => {
     const page = { ARCHETYPES: [{ num: '01', name: 'The A', content: 'a' }, { num: '02', name: 'The B', content: 'b' }] };
     serve({ composition: { society_archetypes: { 'The A': 1, 'The B': 1 } }, page });
     renderPage();
-    await waitFor(() => expect(screen.getByTestId('ss-arch-balance').textContent).toBe('The Feed is balanced: every type has someone and none crowds it.'));
+    await waitFor(() => expect(screen.getByTestId('ss-arch-balance').textContent).toBe('The Pulse is balanced: every type has someone and none crowds it.'));
   });
 });

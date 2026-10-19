@@ -31,7 +31,7 @@ const DOMAINS = [
   { key: 'ECONOMY_STREAMS', kind: 'economy', label: 'Economy Stream', id: 'stream',
     fields: { what: 'What it is', who: 'Who uses it', narrative: 'Narrative use' } },
   { key: 'FASHION_TREND_STAGES', kind: 'fashion-trend-stage', label: 'Fashion Trend Stage', id: 'name',
-    fields: { stage: 'Stage', who: 'Who', feed: 'On the Feed', story: 'Story' } },
+    fields: { stage: 'Stage', who: 'Who', feed: 'On The Pulse', story: 'Story' } },
   { key: 'BEAUTY_TREND_STAGES', kind: 'beauty-trend-stage', label: 'Beauty Trend Stage', id: 'name',
     fields: { stage: 'Stage', where: 'Where', story: 'Story' } },
   { key: 'MOMENTUM_WAVES', kind: 'momentum-wave', label: 'Momentum Wave', id: 'event',

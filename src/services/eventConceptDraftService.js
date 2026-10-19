@@ -163,15 +163,15 @@ function buildDraftPrompt(profile, context = {}) {
     : !!ctxBlock;
   const creator = words(p.display_name) || words(p.handle);
   const facts = [
-    creator ? (isHost ? `Host (a Feed creator): ${creator}` : `Started from Feed creator: ${creator}`) : null,
+    creator ? (isHost ? `Host (a Pulse creator): ${creator}` : `Started from Pulse creator: ${creator}`) : null,
     words(p.content_category) ? `Creator's niche: ${words(p.content_category)}` : null,
     words(p.archetype) ? `Creator's archetype: ${words(p.archetype)}` : null,
     words(context.venueName) ? `Venue: ${words(context.venueName)}` : null,
   ].filter(Boolean);
 
   const opening = isHost
-    ? 'Draft a fictional social event in Lala\'s world, hosted by the Feed creator below.'
-    : 'Draft a fictional social event in Lala\'s world, fitting the Feed creator it was started from.';
+    ? 'Draft a fictional social event in Lala\'s world, hosted by the Pulse creator below.'
+    : 'Draft a fictional social event in Lala\'s world, fitting the Pulse creator it was started from.';
   const hostRule = isHost ? '' : '- Do not call the creator the event\'s organizer or host.\n';
 
   return `${opening}

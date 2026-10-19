@@ -111,7 +111,7 @@ module.exports = {
         pattern: 'annual:02-01',
         category: 'lifestyle',
         district: 'The Rose Quarter',
-        world: 'Romance, relationships, and emotional storytelling. The Feed turns soft and vulnerable.',
+        world: 'Romance, relationships, and emotional storytelling. The Pulse turns soft and vulnerable.',
         secret: 'Going public during Heart Bloom Week is a strategic move. Everyone knows the engagement spike is real.',
         activities: [
           'Relationship reveals — going public for the first time',
@@ -196,7 +196,7 @@ module.exports = {
         activities: [
           'Salons launch seasonal trend looks',
           'Beauty brand product drops — the year\'s most anticipated launches',
-          'Glow-up challenges trending across the Feed',
+          'Glow-up challenges trending across The Pulse',
           'Before/after beauty transformations',
           'Beauty creators at peak visibility — brand deals closing',
         ],
@@ -216,7 +216,7 @@ module.exports = {
         activities: [
           'Pet outfit contests and styling challenges',
           'Pet influencer meetups and collab content',
-          'Viral pet moments dominate the Feed',
+          'Viral pet moments dominate The Pulse',
           'Brand partnerships: pet brands, lifestyle crossovers',
           'Characters who own pets get visibility boost',
         ],
@@ -298,7 +298,7 @@ module.exports = {
         world: 'Music discovery and emerging sound culture. Where fashion and music cross over.',
         secret: 'Soundwave placements are a leading indicator — the creator who gets the soundtrack credit here controls the summer aesthetic.',
         activities: [
-          'Emerging musicians trending across the Feed',
+          'Emerging musicians trending across The Pulse',
           'DJ showcases in LalaVerse nightlife districts',
           'Music creators getting first major placements',
           'Fashion and music crossover moments',
@@ -516,7 +516,7 @@ module.exports = {
           'The conversation about next year begins here',
         ],
         phrases: [
-          'Trend Summit said color is dead. The Feed disagreed by Friday.',
+          'Trend Summit said color is dead. The Pulse disagreed by Friday.',
         ],
       }),
 
@@ -693,7 +693,7 @@ module.exports = {
         start: storyDate(1, 1), end: null,
         recurring: true, pattern: 'annual:TBD',
         category: 'fashion',
-        world: 'Themed outfit posts across the Feed. Her aesthetic becomes a challenge. Characters who align with her gain visibility.',
+        world: 'Themed outfit posts across The Pulse. Her aesthetic becomes a challenge. Characters who align with her gain visibility.',
         secret: 'The Style Queen\'s birthday is not personal — it is institutional. Fashion houses plan their calendar around it.',
         activities: ['Themed outfit challenges', 'Aesthetic tribute posts', 'Aligned characters gain visibility'],
       }),
@@ -711,8 +711,8 @@ module.exports = {
         start: storyDate(1, 1), end: null,
         recurring: true, pattern: 'annual:TBD',
         category: 'entrepreneur',
-        world: 'Mentorship content. Creators share how he influenced their path. Aspiration and gratitude dominate the Feed.',
-        secret: 'The Creator King\'s birthday is the one day the Feed is genuinely grateful. The rest of the year is combat.',
+        world: 'Mentorship content. Creators share how he influenced their path. Aspiration and gratitude dominate The Pulse.',
+        secret: 'The Creator King\'s birthday is the one day The Pulse is genuinely grateful. The rest of the year is combat.',
         activities: ['Mentorship storytelling', 'Gratitude posts dominate', 'Origin story tributes'],
       }),
 

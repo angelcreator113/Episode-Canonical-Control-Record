@@ -208,9 +208,9 @@ function societyArchetypeMenu(list, counts = null) {
   const used = countsByKey(counts);
   const line = (a) => {
     const n = used.get(nameKey(a.name)) || 0;
-    return `- ${menuLine(a)} [${n ? `${n} on the Feed` : 'nobody on the Feed yet'}${crowded.has(nameKey(a.name)) ? ', CROWDED' : ''}]`;
+    return `- ${menuLine(a)} [${n ? `${n} on The Pulse` : 'nobody on The Pulse yet'}${crowded.has(nameKey(a.name)) ? ', CROWDED' : ''}]`;
   };
-  return `\n\nSOCIETY ARCHETYPE: ${NOT_THE_TEN}. Choose the one below that fits this creator best, write the creator as it, and add "society_archetype" to the JSON with its name exactly as written here. The Feed needs range: when two fit about equally well, choose the one with fewer on the Feed, and choose one marked CROWDED only when it plainly fits best:\n${list.map(line).join('\n')}`;
+  return `\n\nSOCIETY ARCHETYPE: ${NOT_THE_TEN}. Choose the one below that fits this creator best, write the creator as it, and add "society_archetype" to the JSON with its name exactly as written here. The Pulse needs range: when two fit about equally well, choose the one with fewer on The Pulse, and choose one marked CROWDED only when it plainly fits best:\n${list.map(line).join('\n')}`;
 }
 
 /** The scheduler's sparks, one archetype each, in order. */

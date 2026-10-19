@@ -128,7 +128,7 @@ function buildPitchPrompt(inputs) {
 
 ${lines.join('\n')}
 
-Creators on the Feed (use ids exactly):
+Creators on The Pulse (use ids exactly):
 ${creatorBlock}
 
 Brands:

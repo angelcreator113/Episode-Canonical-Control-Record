@@ -99,7 +99,7 @@ const CROSS_INDUSTRY = [
 ];
 
 const ENGINE_QUESTIONS = [
-  'What layer of the Feed is this content landing in — personal circle, interest cluster, cultural moment, or viral wave?',
+  'What layer of The Pulse is this content landing in — personal circle, interest cluster, cultural moment, or viral wave?',
   'What stage of viral spread is this post at — seed, cluster, platform, or cultural moment?',
   'What engagement signals is this generating — strong (comments, shares, saves) or weak (views, likes)?',
   'Is this happening during a cultural event override — and is the content aligned or deliberately counter-programmed?',
@@ -290,7 +290,7 @@ function TabTrends() {
 function TabMomentum() {
   return (
     <div className="st-tab-content">
-      <p className="st-intro">Creators build and lose momentum over time. Momentum determines how easily their posts spread — it's the compound interest of the Feed.</p>
+      <p className="st-intro">Creators build and lose momentum over time. Momentum determines how easily their posts spread — it's the compound interest of The Pulse.</p>
       <div className="st-table-wrap">
         <table className="st-table">
           <thead>
@@ -364,7 +364,7 @@ function TabShocks() {
 function TabMemory() {
   return (
     <div className="st-tab-content">
-      <p className="st-intro">Major events become part of JustAWoman's online world history. The Feed has a memory, and that memory has power.</p>
+      <p className="st-intro">Major events become part of JustAWoman's online world history. The Pulse has a memory, and that memory has power.</p>
       <div className="st-table-wrap">
         <table className="st-table">
           <thead>
@@ -490,7 +490,7 @@ function TabSimulator() {
 
   return (
     <div className="st-tab-content">
-      <p className="st-intro">Simulate how a post spreads through the LalaVerse Feed. Choose a post type, creator momentum, and cultural event to see projected viral stages.</p>
+      <p className="st-intro">Simulate how a post spreads through The Pulse. Choose a post type, creator momentum, and cultural event to see projected viral stages.</p>
 
       <div className="st-sim-controls" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 12, marginBottom: 20, alignItems: 'end' }}>
         <div>
@@ -580,7 +580,7 @@ function TabMetrics() {
 
   return (
     <div className="st-tab-content">
-      <p className="st-intro">Engagement metrics preview — see projected engagement distribution, cluster health, and event impact across the LalaVerse Feed.</p>
+      <p className="st-intro">Engagement metrics preview — see projected engagement distribution, cluster health, and event impact across The Pulse.</p>
 
       <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, color: '#1a1a1a' }}>Cluster Health</h3>
       <div className="st-table-wrap" style={{ marginBottom: 24 }}>
@@ -687,7 +687,7 @@ export default function SocialTimeline() {
             <BrainUpdate source="social_timeline" data={data} ready={loaded} />
           </span>
         </div>
-        <p className="st-subtitle">Doc 05 · v1.0 · March 2026 — How the Feed works, spreads, amplifies, and remembers</p>
+        <p className="st-subtitle">Doc 05 · v1.0 · March 2026 — How The Pulse works, spreads, amplifies, and remembers</p>
       </header>
 
       <nav className="st-tabs" role="tablist">
