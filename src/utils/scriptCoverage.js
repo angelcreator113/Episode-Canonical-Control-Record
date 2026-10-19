@@ -12,7 +12,8 @@
  *     frontend/src/lib/episodeScript.js mustCover, ported as is). What she
  *     owes is not: deliverables are not always shown in the show (Evoni,
  *     2026-10-18; beat 12 is The Fashion Challenge);
- *   - each piece of the locked look has its `[WEAR: id]` line;
+ *   - each piece of the locked look has its `[WEAR: id]` line in the closet
+ *     beat;
  *   - each canonical beat played on Lala's phone has a `[UI:]` moment;
  *   - every canonical beat is there (a reply cut off at its token limit
  *     loses the last beats).
@@ -94,7 +95,9 @@ function scriptCoverage(script, facts = {}) {
   for (const p of facts.lockedPieces || []) {
     if (!p?.id) continue;
     const cue = new RegExp(`^\\s*\\[WEAR:\\s*${String(p.id).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\]\\s*$`, 'im');
-    const at = beats.find((b) => cue.test(b.text));
+    // Put on in the closet beat (Script page audit, 2026-10-19): a cue in
+    // another beat (the Fashion Challenge's) is not the look going on.
+    const at = beats.find((b) => b.number === closet && cue.test(b.text));
     items.push({ kind: 'wear', label: p.name || String(p.id), id: String(p.id), beat: at ? at.number : null, target: closet });
   }
 

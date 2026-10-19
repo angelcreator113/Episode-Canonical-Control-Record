@@ -71,7 +71,8 @@ test("a piece's coin line goes in after its wear cue when the writer left it out
 test('beat 12 is The Fashion Challenge, judged on her standing, and the old name still reads as beat 12', async () => {
   const { prompt } = await write();
   expect(prompt).toContain('## BEAT: 12 · Fashion Challenge');
-  expect(prompt).toContain('Beat 12 (Fashion Challenge): someone at the event sets Lala a styling challenge');
+  // A surprise runway walk in the cutscene (Evoni, 2026-10-19).
+  expect(prompt).toContain('Beat 12 (Fashion Challenge): still the cutscene. The challenge is a surprise runway walk at the event');
   expect(prompt).toContain('[STAT: reputation ±n], [STAT: brand_trust ±n], [STAT: influence ±n] and [STAT: stress ±n] lines, never coins');
   const { beatNumberForLabel } = require('../../../src/utils/beatLabelNumber');
   expect(beatNumberForLabel('Deliverable Creation')).toBe(12);

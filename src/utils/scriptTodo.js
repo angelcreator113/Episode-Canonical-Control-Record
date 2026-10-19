@@ -11,9 +11,10 @@
  *   that isn't one of the event's deliverables ticks nothing. A tick never
  *   changes the deliverable's status; approval stays manual in Money.
  * - `[TODO_MODE: shopping|deal|career]` in a beat sets that beat's list.
- * - Otherwise, by beat: the Shopping list through the closet beat; then the
- *   deal checklist when the event's terms are locked to this episode; else
- *   the Career list.
+ * - Otherwise, by beat: the Shopping list through the closet beat and at
+ *   canonical beat 9, which reads the approved list (Script page audit,
+ *   2026-10-19); then the deal checklist when the event's terms
+ *   are locked to this episode; else the Career list.
  */
 
 const { closetIndex } = require('./scriptWear');
@@ -21,6 +22,8 @@ const { closetIndex } = require('./scriptWear');
 const DELIVER_LINE = /^\s*\[DELIVER:\s*([^\]\s]+)\s*\]\s*$/i;
 const TODO_MODE_LINE = /^\s*\[TODO_MODE:\s*([^\]\s]*)\s*\]\s*$/i;
 const TODO_MODES = ['shopping', 'deal', 'career'];
+// The beat that reads the approved Shopping list (canonicalBeats TODO_LIST).
+const SHOPPING_READ_BEAT = (require('../constants/canonicalBeats').CANONICAL_BEATS.find((b) => b.screen_action === 'TODO_LIST') || { number: 9 }).number;
 
 /** Every [DELIVER] cue in order: { beatIndex, lineIndex, id, deliverable (or null) }. */
 function deliverCues(beats, deliverables) {
@@ -61,6 +64,7 @@ function todoModeAt(beats, beatIndex, { dealLocked = false } = {}) {
   if (cue) return { mode: cue, source: 'cue' };
   const closet = closetIndex(beats);
   if (closet >= 0 && beatIndex <= closet) return { mode: 'shopping', source: 'auto' };
+  if (beats[beatIndex]?.number === SHOPPING_READ_BEAT) return { mode: 'shopping', source: 'auto' };
   return { mode: dealLocked ? 'deal' : 'career', source: 'auto' };
 }
 

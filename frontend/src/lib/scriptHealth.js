@@ -6,8 +6,8 @@
  * dealCueFlags as the side panel does, only over every beat instead of the
  * open one.
  */
-import { phoneCheck, uncuedPieces, wearFlags, dealCueFlags, lastGettingReadyIndex } from './scriptMoments';
-import { REVEAL_BEAT, voiceOffLines, revealCheck } from './scriptShowRules';
+import { phoneCheck, phoneStartScreens, uncuedPieces, wearFlags, dealCueFlags, lastGettingReadyIndex } from './scriptMoments';
+import { REVEAL_BEAT, voiceOffLines, revealCheck, isCutsceneBeat } from './scriptShowRules';
 import { invitationLine, beat14Outcome, BEAT } from './beat14Invitation';
 import { atHandle } from '../pages/feed/feedConstants';
 
@@ -58,11 +58,12 @@ export function scriptHealth({
   // Phone check, every beat (the side panel checks the open one).
   let moments = 0;
   const phoneFlags = [];
-  // Each beat starts where the one before left the phone, as the side panel reads it.
-  let at = null;
+  // Each beat starts where the one before left the phone, as the side panel
+  // reads it; at home when the phone was put away (from beat 11; Script page
+  // audit, 2026-10-19).
+  const starts = phoneStartScreens(beats, onScreen);
   beats.forEach((b, beatIndex) => {
-    const check = phoneCheck(b.lines, onScreen, { startAt: at });
-    at = check.endAt;
+    const check = phoneCheck(b.lines, onScreen, { startAt: starts[beatIndex] });
     moments += check.moments;
     for (const t of check.taps) if (!t.ok) phoneFlags.push({ beatIndex, text: t.why, fix: t.onName && t.onName !== 'Every screen' ? t.onName : null });
     for (const m of check.missing) phoneFlags.push({ beatIndex, text: `${m.name} isn't made yet` });
@@ -74,7 +75,9 @@ export function scriptHealth({
   // Lala's voice (Evoni, 2026-10-17; lib/scriptShowRules): she talks only
   // after her voice icon is clicked, unless she answers a notification or
   // message, or is being dressed.
-  const quiet = beats.map((b, i) => ({ b, i, off: voiceOffLines(b.lines || []) })).filter((x) => x.off.length);
+  // Not in the cutscene, beats 11-13, where the characters speak their own
+  // lines (Evoni, 2026-10-19).
+  const quiet = beats.map((b, i) => ({ b, i, off: isCutsceneBeat(b.number) ? [] : voiceOffLines(b.lines || []) })).filter((x) => x.off.length);
   for (const { b, i, off } of quiet) {
     rows.push({
       key: `voice-${b.id || i}`, ok: false, beatId: b.id || null,

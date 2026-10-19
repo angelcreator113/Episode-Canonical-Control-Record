@@ -21,14 +21,26 @@
 import { beatSpeakers } from './scriptMoments';
 import { resolveEventVenueAndDate } from '../utils/eventReadiness';
 
-const STAT_COINS = /^\s*\[STAT:\s*coins\s*([+-]?\d+(?:\.\d+)?)\s*\]\s*$/i;
+// A coin line in any form the writer uses (Script page audit, 2026-10-19):
+// `[STAT: coins -50]`, `coins: -50`, a Unicode minus or dash, `- 50`,
+// `-1,200`, and coins inside a tag with other stats
+// (`[STAT: coins -50, reputation +2]`). src/utils/scriptMoney.js reads the
+// same forms.
+const STAT_TAG = /^\s*\[STAT\s*:\s*(.*?)\s*\]\s*$/i;
+const COINS_IN_TAG = /(?:^|[\s,;])coins\s*:?\s*([+\-\u2212\u2013\u2014]?)\s*(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)/i;
+
+/** The coin change a [STAT:] line makes, or null when it makes none. */
+export function coinChange(line) {
+  const tag = String(line || '').match(STAT_TAG);
+  const m = tag ? tag[1].match(COINS_IN_TAG) : null;
+  if (!m) return null;
+  const n = Number(m[2].replace(/,/g, ''));
+  return m[1] && m[1] !== '+' ? -n : n;
+}
 
 /** The sum of a beat's [STAT: coins ±n] tags. */
 export function beatCoins(lines = []) {
-  return (lines || []).reduce((sum, line) => {
-    const m = String(line || '').match(STAT_COINS);
-    return m ? sum + Number(m[1]) : sum;
-  }, 0);
+  return (lines || []).reduce((sum, line) => sum + (coinChange(line) ?? 0), 0);
 }
 
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})/;

@@ -101,7 +101,9 @@ test('the writer reads the show rules', async () => {
   await generateGroundedScript('ep1', 'show-1', models());
   const prompt = create.mock.calls[0][0].messages[0].content;
   expect(prompt).toContain('═══ SHOW RULES ═══');
-  expect(prompt).toContain("Lala's phone is on screen from the moment the Start button is clicked in Beat 1 until she travels to the event in Beat 10");
+  expect(prompt).toContain("It is on screen from the moment the Start button is clicked in Beat 1 until she travels to the event in Beat 10");
+  // Beats 11-13 are the cutscene (Evoni, 2026-10-19).
+  expect(prompt).toContain('Beats 11–13 are the cutscene');
   expect(prompt).toContain('JAWIHP reads the whole invitation aloud, every word of it');
   expect(prompt).toContain('every piece of the look is picked and put on one at a time');
 });

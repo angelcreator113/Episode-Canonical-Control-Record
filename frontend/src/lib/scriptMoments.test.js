@@ -231,7 +231,11 @@ describe('the phone from the Start button to Event Travel', () => {
     expect(phoneUpAtBeat(2, false, 1)).toBe(true);
     expect(phoneUpAtBeat(10, false, 9)).toBe(true);
     expect(phoneUpAtBeat(11, true, 10)).toBe(false);
-    expect(phoneUpAtBeat(12, true, 11)).toBe(true);
+    // Beats 11-13 are the cutscene, no phone; 14 is gameplay again (Evoni, 2026-10-19).
+    expect(phoneUpAtBeat(12, true, 11)).toBe(false);
+    expect(phoneUpAtBeat(13, true, 12)).toBe(false);
+    expect(phoneUpAtBeat(14, false, 13)).toBe(true);
+    expect(phoneUpAtBeat(14, false, null)).toBe(true);
   });
   test('the Start button brings the phone up in beat 1', () => {
     expect(beatOnScreen(['[UI:DISPLAY Show Main Title]', '[UI:DISPLAY Start button]'], {}).phoneUpAtEnd).toBe(true);

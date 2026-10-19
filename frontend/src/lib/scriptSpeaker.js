@@ -9,6 +9,14 @@ export const NOT_SPEAKERS = new Set(['location', 'scene', 'setting', 'time', 'no
 
 const KNOWN = { me: 'Prime', prime: 'Prime', lala: 'Lala', kelli: 'Kelli', guest: 'Guest' };
 
+// Narration with a colon, not a person (Script page audit, 2026-10-19:
+// "Suddenly: the lights go out." was read as Suddenly speaking, and Suddenly
+// was listed among the people in the script).
+export const NARRATION_WORDS = new Set(['suddenly', 'then', 'later', 'meanwhile', 'finally', 'now', 'again', 'elsewhere', 'outside', 'inside', 'afterwards', 'afterward', 'moments later', 'cut to', 'smash cut', 'flashback', 'montage', 'insert', 'title', 'super', 'pause', 'silence', 'fade in', 'fade out', 'on screen', 'onscreen', 'back to']);
+// A name that is not one of the show's people, followed by unquoted words
+// that start in lower case and run on (three words or more) is narration.
+const NARRATION = /^\p{Ll}\S*(?:\s+\S+){2,}/u;
+
 // A name (one or two capitalised words, any letters), an optional note in
 // parentheses, a colon, the words.
 // `\p{Lu}`: a capital in any language (`Émile:`; re-audit 2).
@@ -23,7 +31,8 @@ const SPEAKER_LINE = /^(Me|Prime|Lala|Kelli|Guest|\p{Lu}[\p{L}'’.-]*(?: \p{Lu}
 export function speakerLine(line) {
   const t = String(line ?? '').trim();
   const m = t.match(SPEAKER_LINE);
-  if (!m || NOT_SPEAKERS.has(m[1].toLowerCase())) return null;
+  if (!m || NOT_SPEAKERS.has(m[1].toLowerCase()) || NARRATION_WORDS.has(m[1].toLowerCase())) return null;
+  if (!KNOWN[m[1].toLowerCase()] && !m[2] && NARRATION.test(m[3].trim())) return null;
   return {
     speaker: KNOWN[m[1].toLowerCase()] || m[1],
     label: m[1],

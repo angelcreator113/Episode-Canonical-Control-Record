@@ -11,7 +11,7 @@ import Beat14Opportunity from './Beat14Opportunity';
 import { beat14Outcome } from '../../lib/beat14Invitation';
 import { beatState } from '../../lib/beatState';
 import { moveBeat, moveLine, dropIndex, replaceBeat, appendLine, insertLine } from '../../lib/scriptBeatOrder';
-import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, phoneUpAtBeat, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers, phoneCheck, messageLine, closetBeat, wearFlags, uncuedPieces, lastGettingReadyIndex, todoModeAt, deliveredAt, dealCueFlags, TODO_MODE_LABELS } from '../../lib/scriptMoments';
+import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, phoneUpAtBeat, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers, phoneCheck, phoneStartScreens, messageLine, closetBeat, wearFlags, uncuedPieces, lastGettingReadyIndex, todoModeAt, deliveredAt, dealCueFlags, TODO_MODE_LABELS } from '../../lib/scriptMoments';
 import { isScreen, isIcon, isProduction } from '../../lib/overlayUtils';
 import { draftLine, lalaLine, lalaLineSlots } from '../../lib/lalaLineDraft';
 import { headerNumber, BEAT_SPLIT, HAS_BEAT_HEADER, normalizeBeatHeaders } from '../../lib/beatLabelNumber';
@@ -20,7 +20,7 @@ import { beatImage, beatImageLabel } from '../BeatPlan/BeatPlanParts';
 import { beatSeconds, scriptSeconds, formatRuntime } from '../../lib/scriptRuntime';
 import { scriptHealth } from '../../lib/scriptHealth';
 import { scriptWithPhonePaths } from '../../lib/phonePaths';
-import { scriptWithShowRules } from '../../lib/scriptShowRules';
+import { scriptWithShowRules, isCutsceneBeat } from '../../lib/scriptShowRules';
 import ScriptHealthPanel from './ScriptHealthPanel';
 import ScriptReadActions from './ScriptReadActions';
 import ScriptHistory from './ScriptHistory';
@@ -360,7 +360,7 @@ function MomentCard({ moment, shown, alongside = [], phoneDown = false, beatNumb
           </span>
         )}
         {!shown && <span className="esp-moment-missing">No icon, screen or overlay by this name yet</span>}
-        {phoneDown && <span className="esp-moment-missing" data-testid="script-moment-phone-down">Lala&apos;s phone isn&apos;t on screen here. Bring it up first: Phone / overlay, The phone itself.</span>}
+        {phoneDown && <span className="esp-moment-missing" data-testid="script-moment-phone-down">{isCutsceneBeat(beatNumber) ? 'Beats 11–13 are the cutscene: no phone.' : <>Lala&apos;s phone isn&apos;t on screen here. Bring it up first: Phone / overlay, The phone itself.</>}</span>}
         {alongside.length > 0 && <span className="esp-moment-with" data-testid="script-moment-with">With: {alongside.join(', ')}</span>}
       </span>
     </div>
@@ -702,7 +702,7 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
   // The lines the beat shows, by their place in the beat (hidden tags left out).
   const shownLines = beat.lines.map((l, i) => { const p = parseLine(l); return p && !p.hidden ? i : -1; }).filter((i) => i >= 0);
   // What is on screen through the beat, line by line, and everything it uses (Task #2793).
-  const { withByLine, used: usedHere, phoneDownAt } = beatOnScreen(beat.lines, onScreen, { phoneUp: phoneUpAtStart });
+  const { withByLine, used: usedHere, phoneDownAt } = beatOnScreen(beat.lines, onScreen, { phoneUp: phoneUpAtStart, cutscene: isCutsceneBeat(beat.number) });
   // The phone carries in from an earlier beat (Task #2797): it builds this scene too.
   const used = phoneUpAtStart
     ? [{ name: PHONE_NAME, kind: 'device', url: onScreen.phoneFrame || null }, ...usedHere.filter((u) => u.kind !== 'device')] : usedHere;
@@ -1569,7 +1569,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   beats.reduce((up, b, i) => {
     const start = phoneUpAtBeat(b.number, up, i > 0 ? beats[i - 1].number : null);
     phoneUpAtStart[i] = start;
-    return beatOnScreen(b.lines, onScreen, { phoneUp: start }).phoneUpAtEnd;
+    return beatOnScreen(b.lines, onScreen, { phoneUp: start, cutscene: isCutsceneBeat(b.number) }).phoneUpAtEnd;
   }, false);
 
   // The beat list and pills (Task #2881): the script's own beats, each marked
@@ -1630,9 +1630,9 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // 2026-10-19; lib/beat14Invitation beat14Outcome).
   const cover = mustCover({ beats, event: source?.event || null, brief, opportunity: beat14Outcome(beat14?.opportunity, brief?.designed_intent || null) === 'invitation' ? beat14.opportunity : null });
   // The phone starts each beat where the beat before left it, not on the
-  // home screen (Script tab audit, 2026-10-15).
-  const phoneScreenAt = [];
-  beats.reduce((at, b, i) => { phoneScreenAt[i] = at; return phoneCheck(b.lines, onScreen, { startAt: at }).endAt; }, null);
+  // home screen (Script tab audit, 2026-10-15); at home when it was put
+  // away (from beat 11; Script page audit, 2026-10-19).
+  const phoneScreenAt = phoneStartScreens(beats, onScreen);
   const openIndex = openBeat ? beats.indexOf(openBeat) : -1;
   const check = openBeat ? phoneCheck(openBeat.lines, onScreen, { startAt: phoneScreenAt[openIndex] }) : null;
   // Wear cues that name no single piece of the locked look (Task #3180):
