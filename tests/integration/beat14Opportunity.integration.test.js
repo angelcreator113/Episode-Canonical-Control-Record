@@ -89,6 +89,22 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(read.status).toBe(200);
   });
 
+  test('every other deal write is ADMIN only too; the list still reads for anyone signed in', async () => {
+    const id = uuid();
+    const base = `/api/v1/opportunities/${show}`;
+    const writes = [
+      request(app).post(base).send({ name: 'Not allowed' }),
+      request(app).put(`${base}/${id}`).send({ name: 'Not allowed' }),
+      request(app).post(`${base}/${id}/advance`).send({ status: 'considering' }),
+      request(app).post(`${base}/${id}/to-event`).send({}),
+      request(app).delete(`${base}/${id}`),
+      request(app).post(`${base}/episode-complete/${ep}`).send({}),
+    ];
+    for (const w of writes) expect((await asEditor(w)).status).toBe(403);
+    expect((await rows("SELECT id FROM opportunities WHERE show_id = :show AND name = 'Not allowed'", { show })).length).toBe(0);
+    expect((await asEditor(request(app).get(base))).status).toBe(200);
+  });
+
   test('the invitation comes from someone at the event', async () => {
     const res = await auth(request(app).put(url())).send({ create: { name: 'Sable Campaign Shoot', connector_profile_id: profiles.outsider } });
     expect(res.status).toBe(400);

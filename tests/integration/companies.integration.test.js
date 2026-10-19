@@ -157,16 +157,18 @@ const columns = async (table) => (await q('SELECT column_name FROM information_s
     const made = [];
     const dealEvent = uuid();
     try {
-      for (const [caption, status, visibility] of [['Velour lookbook', 'approved', 'internal'], ['Velour private', 'approved', 'private'], ['Velour draft', 'draft', 'internal']]) {
+      for (const [caption, status, visibility] of [['Velour campaign', 'approved', 'public'], ['Velour lookbook', 'approved', 'internal'], ['Velour private', 'approved', 'private'], ['Velour draft', 'draft', 'internal']]) {
         made.push((await media.createAsset(models, { url: `https://img.test/${caption.replace(/\s/g, '-')}-${tag}.png`, caption, status, visibility, links: link })).asset.id);
       }
       const url = `/api/v1/media?entity_type=brand&entity_id=${velour.id}`;
       const asUser = (await as(request(app).get(url), user)).body.items.map((a) => a.caption);
-      expect(asUser).toContain('Velour lookbook');
+      expect(asUser).toContain('Velour campaign');
+      // Internal pictures on a brand's page are an ADMIN's only (Evoni, 2026-10-19).
+      expect(asUser).not.toContain('Velour lookbook');
       expect(asUser).not.toContain('Velour private');
       expect(asUser).not.toContain('Velour draft');
       const asAdmin = (await as(request(app).get(url))).body.items.map((a) => a.caption);
-      expect(asAdmin).toEqual(expect.arrayContaining(['Velour lookbook', 'Velour private', 'Velour draft']));
+      expect(asAdmin).toEqual(expect.arrayContaining(['Velour campaign', 'Velour lookbook', 'Velour private', 'Velour draft']));
 
       await run(`INSERT INTO world_events (id, show_id, name, created_at, updated_at) VALUES (:dealEvent, :show, 'Velour cover shoot', NOW(), NOW())`, { ...ids, dealEvent });
       await run(`INSERT INTO event_deliverables (id, event_id, description, deliverable_type, quantity, owed_to, created_at, updated_at)
