@@ -228,6 +228,8 @@ async function generateRippleEffects(postId, models) {
         poster_display_name: reactor.display_name,
         poster_platform: require('../utils/pulsePlatform').postPlatformFor(reactor, 'twitter'),
         post_type: reactionType === 'comparison_post' ? 'post' : 'tweet',
+        // A ripple is a typed reaction: words only, so it never waits on a picture (services/postFormatMix).
+        post_format: 'text',
         content_text: content,
         likes: Math.floor(Math.random() * (post.likes || 100) * 0.3),
         comments_count: Math.floor(Math.random() * 20),
