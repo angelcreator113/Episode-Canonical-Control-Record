@@ -459,3 +459,15 @@
 .esp-coverage-line { margin: 0 0 6px; }
 .esp-coverage-list { margin: 0 0 8px; padding-left: 18px; }
 .esp-coverage-list li { overflow-wrap: anywhere; }
+
+/* Beat 14's opportunity (Evoni, 2026-10-19; Beat14Opportunity.jsx). */
+.esp-beat14 .esp-side-title { display: flex; align-items: center; gap: 6px; }
+.esp-beat14-name { margin: 0 0 6px; }
+.esp-beat14-form { display: flex; flex-direction: column; gap: 8px; }
+.esp-beat14-modes { display: flex; gap: 6px; flex-wrap: wrap; }
+.esp-beat14-modes .is-active { border-color: var(--lala-gold-line); color: var(--lala-gold-text); }
+.esp-beat14-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.esp-beat14-field input,
+.esp-beat14-field select,
+.esp-beat14-field textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 6px 8px; }
+.esp-beat14-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
