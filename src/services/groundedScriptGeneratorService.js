@@ -794,7 +794,7 @@ Turn each beat's "UI action" above into one or more of these lines (CLOSET_OPEN 
 
 RULES:
 1. Beat 8 MUST reference specific wardrobe items by name
-2. JAWIHP reacts in real time to what she has seen, and sometimes lets a moment play in silence (JUSTAWOMAN ON CAMERA)
+2. JAWIHP reacts in real time to what she has seen (JUSTAWOMAN ON CAMERA)
 3. Lala's lines are ALWAYS short and punchy — max 2-3 sentences
 4. Community engagement: ask audience to react in comments at least twice
 5. A change to her stats appears only as a [STAT:] tag; she may say her coin balance in her own words when she checks it
@@ -811,7 +811,7 @@ JustAWoman (Me:) is playing the game on camera from her corner: she sees the gam
   - sound and edit cues, optional: [SFX: notification ping], [EDIT: punch-in on her corner frame].
 - Two modes. While playing (beats 1–12) she is emotionally involved and invested in Lala's business: "We cannot afford to embarrass ourselves tonight." While reviewing (beats 13–14) she briefly evaluates what happened: "That warning came after I spent the coins. You could've told me sooner." Write new lines; never reuse these.
 - In the cutscene (beats 11–13) she is still on screen, watching it play like a cutscene in a video game: she comments a little between the characters' lines, a reaction here and there, never narrating every line, and she clicks nothing.
-- Vary her energy and leave room to watch: let Lala's line finish before she reacts, and at least once let Lala's scene play while she watches in silence, (JustAWoman watches, silent.).
+- Vary her energy and leave room to watch: let Lala's line finish before she reacts.
 - She may talk to viewers as "besties" or "chat" and ask them to comment, but never invents viewer messages or comments.
 - Her humor, opinions, small grudges, favorite characters and investment in Lala carry on from PREVIOUS EPISODE when it is given; never invent a past grudge or favorite.
 
