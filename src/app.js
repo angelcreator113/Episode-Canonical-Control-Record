@@ -1704,6 +1704,9 @@ try {
   console.error('✗ Failed to load Cast routes:', e.message);
 }
 
+// Visual Memory: the shared picture library (services/mediaLibrary)
+try { app.use('/api/v1/media', require('./routes/mediaRoutes')); console.log('✓ Media library loaded at /api/v1/media'); } catch (e) { console.error('✗ Failed to load Media library routes:', e.message); }
+
 // The daily update — since yesterday, waiting for Evoni, the next three days, AI spend
 try {
   const dailyUpdateRoutes = require('./routes/dailyUpdateRoutes');
