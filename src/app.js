@@ -1370,6 +1370,8 @@ try {
 
 // Brands on The Pulse (Evoni, 2026-10-18; services/brandPulse)
 try { app.use('/api/v1/brand-pulse', require('./routes/brandPulseRoutes')); console.log('✓ Brand Pulse routes loaded at /api/v1/brand-pulse'); } catch (e) { console.error('✗ Failed to load Brand Pulse routes:', e.message); }
+// Brand and company profiles (Evoni, 2026-10-18; services/brandProfile)
+try { app.use('/api/v1/companies', require('./routes/companyRoutes')); console.log('✓ Company routes loaded at /api/v1/companies'); } catch (e) { console.error('✗ Failed to load Company routes:', e.message); }
 
 // The Consciousness Layer routes (/api/v1/consciousness) were retired
 // 2026-10-18 (Evoni: "retire the two you suggested"): no page called them,

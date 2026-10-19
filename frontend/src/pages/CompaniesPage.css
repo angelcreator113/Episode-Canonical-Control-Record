@@ -1,0 +1,35 @@
+/* Brands and companies (pages/CompaniesPage; Evoni, 2026-10-18). Tokens
+   only; one column at phone width. */
+
+.co { display: flex; flex-direction: column; gap: 16px; max-width: 980px; margin: 0 auto; padding: 20px 16px 48px; min-width: 0; color: var(--text-primary); }
+.co *, .co *::before, .co *::after { box-sizing: border-box; }
+.co button:focus-visible, .co input:focus-visible, .co select:focus-visible, .co textarea:focus-visible, .co a:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 2px; }
+
+.co-head { display: flex; flex-direction: column; gap: 6px; }
+.co .co-title { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-family: var(--font-prose); font-size: 28px; font-weight: 700; color: var(--text-primary); }
+.co-title svg { color: var(--accent-dark); }
+.co-muted { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+
+.co-filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.co-chip { min-height: 34px; padding: 4px 14px; border-radius: 999px; border: 1.5px solid var(--lala-gold-line); background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.co-chip.is-on { border-color: var(--accent-dark); background: var(--accent-dark); color: var(--text-inverse); }
+
+.co-new { display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 18px; border: 1.5px solid var(--lala-gold-line); background: var(--surface-card); color: var(--text-primary); }
+.co-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: var(--text-secondary); }
+.co-input { width: 100%; min-height: 38px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 14px; font-weight: 400; }
+.co-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; align-self: flex-start; min-height: 36px; padding: 6px 12px; border-radius: 12px; border: 1.5px solid var(--accent-light); background: var(--surface-card); color: var(--accent-dark); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.co-btn.is-primary { border-color: var(--accent-dark); background: var(--accent-dark); color: var(--text-inverse); }
+.co-btn:disabled { opacity: .55; cursor: default; }
+.co-error { margin: 0; padding: 8px 12px; border-radius: 12px; font-size: 13px; background: var(--danger-bg); color: var(--danger-text); }
+
+.co-cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.co-card { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 16px; border-radius: 18px; border: 1.5px solid var(--lala-gold-line); background: var(--surface-card); color: var(--text-primary); }
+.co-kind { align-self: flex-start; padding: 2px 10px; border-radius: 999px; background: var(--lala-lavender-soft); color: var(--lala-lavender-text); font-family: var(--font-mono); font-size: 11px; font-weight: 600; }
+.co-name { font-family: var(--font-prose); font-size: 19px; font-weight: 600; color: var(--accent-dark); text-decoration: none; }
+.co-name:hover { text-decoration: underline; }
+.co-meta { display: flex; gap: 10px; flex-wrap: wrap; margin: 0; font-size: 12px; color: var(--text-secondary); }
+
+@media (max-width: 640px) {
+  .co .co-title { font-size: 24px; }
+  .co-cards { grid-template-columns: minmax(0, 1fr); }
+}

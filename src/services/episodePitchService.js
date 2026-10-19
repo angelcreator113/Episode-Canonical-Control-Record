@@ -71,7 +71,7 @@ async function loadPitchInputs(models, showId) {
 
   const brands = await safe('brands', async () => {
     if (!LalaverseBrand) return [];
-    const rows = await LalaverseBrand.findAll({ attributes: ['name', 'category'], order: [['name', 'ASC']], limit: LIMITS.brands });
+    const rows = await LalaverseBrand.findAll({ where: { kind: 'brand' }, attributes: ['name', 'category'], order: [['name', 'ASC']], limit: LIMITS.brands });
     return rows.map((r) => (r.toJSON ? r.toJSON() : r)).filter((b) => b.name);
   }, []);
 
