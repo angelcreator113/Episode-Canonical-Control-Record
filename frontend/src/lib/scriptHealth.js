@@ -6,7 +6,7 @@
  * dealCueFlags as the side panel does, only over every beat instead of the
  * open one.
  */
-import { phoneCheck, uncuedPieces, wearFlags, dealCueFlags, lastGettingReadyIndex } from './scriptMoments';
+import { phoneCheck, phoneStartScreens, uncuedPieces, wearFlags, dealCueFlags, lastGettingReadyIndex } from './scriptMoments';
 import { REVEAL_BEAT, voiceOffLines, revealCheck } from './scriptShowRules';
 
 const list = (items) => (items.length <= 2 ? items.join(' and ') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`);
@@ -56,11 +56,12 @@ export function scriptHealth({
   // Phone check, every beat (the side panel checks the open one).
   let moments = 0;
   const phoneFlags = [];
-  // Each beat starts where the one before left the phone, as the side panel reads it.
-  let at = null;
+  // Each beat starts where the one before left the phone, as the side panel
+  // reads it; at home when the phone was put away (from beat 11; Script page
+  // audit, 2026-10-19).
+  const starts = phoneStartScreens(beats, onScreen);
   beats.forEach((b, beatIndex) => {
-    const check = phoneCheck(b.lines, onScreen, { startAt: at });
-    at = check.endAt;
+    const check = phoneCheck(b.lines, onScreen, { startAt: starts[beatIndex] });
     moments += check.moments;
     for (const t of check.taps) if (!t.ok) phoneFlags.push({ beatIndex, text: t.why, fix: t.onName && t.onName !== 'Every screen' ? t.onName : null });
     for (const m of check.missing) phoneFlags.push({ beatIndex, text: `${m.name} isn't made yet` });

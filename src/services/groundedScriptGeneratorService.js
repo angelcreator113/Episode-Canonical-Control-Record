@@ -52,6 +52,10 @@ const SPEAKS = {
 // and reacts from her corner, so she speaks there too.
 // Beat 13: Lala says how the outcome feels (Evoni, 2026-10-17); the numbers
 // stay on the stat card, which she does not see.
+// The back half by the canonical beats' own names (Script page audit,
+// 2026-10-19: the prompt still said "Beats 9-13: Result/Aftermath").
+const BACK_HALF = `Beats 9-13: ${CANONICAL_BEATS.filter((b) => b.number >= 9 && b.number <= 13).map((b) => b.name).join(', ')}`;
+const RECAP_NUMBER = (CANONICAL_BEATS.find((b) => /recap/i.test(b.name)) || { number: 13 }).number;
 const BEAT_TEMPLATES = Object.fromEntries(CANONICAL_BEATS.map((b) => [b.number, {
   name: b.name, ui: b.screen_action, jawihp: SPEAKS[b.number][0], lala: SPEAKS[b.number][1],
 }]));
@@ -80,7 +84,11 @@ async function groundedScriptInputs(episodeId, showId, models) {
   }
 
   // 1. Load Episode Brief
-  const brief = await EpisodeBrief.findOne({ where: { episode_id: episodeId } }).catch(() => null);
+  // Every failed read here is logged (Script page audit, 2026-10-19).
+  const brief = await EpisodeBrief.findOne({ where: { episode_id: episodeId } }).catch((err) => {
+    console.error('[ScriptGen] brief read failed (non-blocking):', err.message);
+    return null;
+  });
 
   // 2. Load Scene Plan with scene context
   const scenePlan = await ScenePlan.findAll({
@@ -96,7 +104,10 @@ async function groundedScriptInputs(episodeId, showId, models) {
         required: false,
       }] : [],
     }],
-  }).catch(() => []);
+  }).catch((err) => {
+    console.error('[ScriptGen] scene plan read failed (non-blocking):', err.message);
+    return [];
+  });
 
   // 3. Show Brain rules: the same deterministic selection the episode
   //    script writer records (services/brainRules.js, 2026-10-04).
@@ -160,7 +171,9 @@ async function groundedScriptInputs(episodeId, showId, models) {
     if (scoreRows.length > 0) {
       outfitScore = { items: scoreRows, count: scoreRows.length };
     }
-  } catch { /* non-blocking */ }
+  } catch (err) {
+    console.error('[ScriptGen] episode outfit read failed (non-blocking):', err.message);
+  }
 
   // 6. Load Lala's stats
   // The newest snapshot of the show's universe (or of none); the old
@@ -229,6 +242,8 @@ async function groundedScriptInputs(episodeId, showId, models) {
 
 const MODELS = ['claude-sonnet-4-6'];
 
+const isBudgetOrRateLimit = (err) => err?.code === 'AI_BUDGET_EXCEEDED' || err?.status === 429;
+
 // A Sonnet call: { text, cut }. The whole script tries once, as it always
 // has (a second 8000-token try doubles a wait that already runs long); one
 // beat tries twice, the retry the AI routes use. `cut` is a reply stopped at
@@ -245,6 +260,9 @@ async function writeWith(prompt, maxTokens, attempts) {
       } catch (err) {
         lastErr = err;
         console.error(`[ScriptGen] ${model} attempt ${attempt} failed:`, err.message);
+        // A refused budget or a rate limit is not tried again (Script page
+        // audit, 2026-10-19): the route answers it as a 429.
+        if (isBudgetOrRateLimit(err)) throw err;
       }
     }
   }
@@ -448,11 +466,45 @@ async function generateGroundedBeat(episodeId, showId, models, { beatNumber, cur
   const canon = CANONICAL_BEATS.find((b) => b.number === beatNumber);
   if (!canon) throw new Error(`No canonical beat ${beatNumber}`);
   const direction = typeof instruction === 'string' ? instruction.trim().slice(0, 300) : '';
-  const prompt = buildScriptPrompt(await groundedScriptInputs(episodeId, showId, models), {
+  const inputs = await groundedScriptInputs(episodeId, showId, models);
+  const prompt = buildScriptPrompt(inputs, {
     only: { beat: canon, currentScript: String(currentScript || ''), instruction: direction },
   });
-  return beatFromReply((await writeWith(prompt, 1500, 2)).text, beatNumber);
+  const beat = beatFromReply((await writeWith(prompt, 1500, 2)).text, beatNumber);
+  return beat ? beatAfterWriting(beat, beatNumber, inputs, currentScript) : beat;
 }
+
+// The fixes the whole script gets after writing, for one beat (Script page
+// audit, 2026-10-19: a regenerated beat had none of them): the coin line
+// after each costing [WEAR: id] when it is the closet beat of the script as
+// it stands (utils/scriptWear.js closetIndex), and the show's rules, Lala's
+// voice click and beat 5's invitation. The phone steps are left out: they
+// need where the beat before left the phone. Each fix that fails is logged
+// and the beat is kept as written.
+function beatAfterWriting(beat, beatNumber, inputs, currentScript) {
+  let text = beat;
+  if (inputs.money) {
+    try {
+      const { scriptBeats, closetIndex } = require('../utils/scriptWear');
+      const beats = scriptBeats(String(currentScript || ''));
+      const at = closetIndex(beats);
+      const closetNumber = at >= 0 ? beats[at].number : CLOSET_NUMBER;
+      if (beatNumber === closetNumber) {
+        text = require('../utils/scriptMoney').scriptWithCoinLines(text, inputs.money, { closetNumber }).script;
+      }
+    } catch (err) {
+      console.error('[ScriptGen] coin lines for one beat failed (non-blocking):', err.message);
+    }
+  }
+  try {
+    const { scriptWithShowRules } = require('../utils/scriptShowRules');
+    text = scriptWithShowRules(text, rulesPhone(inputs.phone, inputs.onScreen || [])).script;
+  } catch (err) {
+    console.error('[ScriptGen] show rules for one beat failed (non-blocking):', err.message);
+  }
+  return text;
+}
+const CLOSET_NUMBER = (CANONICAL_BEATS.find((b) => b.screen_action === 'CLOSET_OPEN') || { number: 8 }).number;
 
 // The Script Writer's blocks for what `story` holds: money, career, the
 // people at the event, the content she must make, continuity and her
@@ -606,14 +658,21 @@ function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrob
 
   let eventContext;
   if (eventData) {
-    eventContext = `Event: ${eventData.name}\nPrestige: ${eventData.prestige}/10\nDress code: ${eventData.dress_code || 'Not specified'}\nCost: ${eventData.cost_coins} coins\nNarrative stakes: ${eventData.narrative_stakes || ''}`;
+    // The entry cost comes off in the Recap Panel only (Evoni, 2026-10-18;
+    // Script page audit, 2026-10-19): said here when LALA'S COINS does not
+    // say it, so a bare "Cost: N coins" is not charged on arrival.
+    const entry = Number(eventData.cost_coins) > 0
+      ? `Cost: ${eventData.cost_coins} coins${money ? '' : `, which comes off in the Recap Panel (Beat ${RECAP_NUMBER}) only, as [STAT: coins -${eventData.cost_coins}]; never earlier`}`
+      : `Cost: ${eventData.cost_coins ?? 0} coins`;
+    eventContext = `Event: ${eventData.name}\nPrestige: ${eventData.prestige}/10\nDress code: ${eventData.dress_code || 'Not specified'}\n${entry}\nNarrative stakes: ${eventData.narrative_stakes || ''}`;
     if (eventData.invitation_asset_id) {
       eventContext += '\nInvitation: GENERATED — use in Beat 5 (Reveal). JAWIHP opens the mail and reads the invitation aloud. The InviteLetterOverlay should float up on screen.';
     }
     // Outcomes — creator-authored narrative threads this event opens. The
     // Rewards editor in WorldAdmin populates rewards.outcomes (one per line).
     // Surfacing them here gives the writer concrete success-state hooks to
-    // weave into the back half of the episode (Beats 9-13: Result/Aftermath)
+    // weave into the back half of the episode (Beats 9-13, by their canonical
+    // names: BACK_HALF)
     // without inventing them on its own. Lenient parse handles JSON-string
     // legacy rows.
     const rewardsObj = (typeof eventData.rewards === 'string'
@@ -621,7 +680,7 @@ function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrob
       : (eventData.rewards || {}));
     const outcomes = Array.isArray(rewardsObj.outcomes) ? rewardsObj.outcomes.filter(Boolean) : [];
     if (outcomes.length > 0) {
-      eventContext += `\nIf this episode lands SLAY or PASS, these threads should be visibly opened in the back half (Beats 9-13). Reference them through dialogue, reactions, or a closing tag — not exposition:\n${outcomes.map(o => `  • ${o}`).join('\n')}`;
+      eventContext += `\nIf this episode lands SLAY or PASS, these threads should be visibly opened in the back half (${BACK_HALF}). Reference them through dialogue, reactions, or a closing tag — not exposition:\n${outcomes.map(o => `  • ${o}`).join('\n')}`;
     }
   } else {
     eventContext = 'No event assigned';
@@ -699,7 +758,7 @@ Do not add, merge, rename or skip beats. Under each header:`}
 Me: [JAWIHP dialogue]
 (Action description)
 Lala: [Lala dialogue]
-[STAT: coins +X]
+[STAT: coins -X] (a cost, only where LALA'S COINS puts one; other stats the same way, [STAT: reputation +1])
 [TRANSITION: description]
 [SFX: sound] / [EDIT: editing cue] (optional, for JustAWoman's moments; not on every line)
 ${people ? 'Another character at the event speaks as their name: [their words], in their own voice (CHARACTERS AT THE EVENT).\n' : ''}
@@ -716,7 +775,7 @@ RULES:
 3. Lala's lines are ALWAYS short and punchy — max 2-3 sentences
 4. Community engagement: ask audience to react in comments at least twice
 5. A change to her stats appears only as a [STAT:] tag; she may say her coin balance in her own words when she checks it
-${!only || only.beat.number === 14 ? `6. ${only ? 'This beat ends' : 'Beat 14 ends'} on ${hook ? `the forward hook: "${hook}"` : 'a forward hook seeding the next episode'}\n` : ''}${told.career ? "7. Lala's career is on the page: name the deal, what she owes and what she wants from the event in the beats the CAREER block gives them, in her words, never as a list\n" : ''}
+${!only || only.beat.number === 14 ? `6. ${only ? 'This beat ends' : 'Beat 14 ends'} on ${hook ? `the forward hook: "${hook}"` : 'a forward hook seeding the next episode'}\n` : ''}${told.career ? "7. Lala's career is on the page: name the deal and what she wants from the event in the beats the CAREER block gives them, in her words, never as a list; what she owes need not be shown on screen\n" : ''}
 
 ═══ JUSTAWOMAN ON CAMERA ═══
 JustAWoman (Me:) is playing the game on camera from her corner: she sees the game interface and reacts to it; Lala lives the experience. Two perspectives on the same moment. Lala cannot hear her commentary or see the audience's game interface.

@@ -74,8 +74,11 @@ const sharedStart = (a, b) => { let n = 0; while (n < a.length && a[n] === b[n])
  * generic words, contained in a key or sharing its first five letters
  * ("InviteLetterOverlay" finds the Invitation), the closest match first.
  */
-export function resolveMoment(moment, on = {}) {
-  const { screens = [], overlays = [], icons = [] } = on;
+export function resolveMoment(moment, on = {}, { at = null } = {}) {
+  const { screens = [], overlays = [], icons: allIcons = [] } = on;
+  // Two icons with one name (a Back on each screen): the one on the screen
+  // showing, `at`, first (Script page audit, 2026-10-19).
+  const icons = at ? [...allIcons.filter((i) => i?.on === at), ...allIcons.filter((i) => i?.on !== at)] : allIcons;
   if (!moment) return null;
   // A notification, a DM or a post (Task #2885) names no screen: it is what
   // the phone shows, with who and the words from the line itself.
@@ -412,11 +415,15 @@ export function phoneCheck(lines = [], on = {}, { startAt = null } = {}) {
     const moment = parseMoment(line);
     if (!moment) return;
     moments += 1;
-    const shown = resolveMoment(moment, on);
+    const shown = resolveMoment(moment, on, { at });
     const target = String(moment.target || '').replace(/\s+x\d+$/i, '').trim();
     if (TAP_VERBS.has(moment.verb)) {
       if (shown?.kind !== 'icon') { missing.push({ i, name: target }); return; }
-      const icon = (on.icons || []).find((ic) => ic.name === shown.name) || null;
+      // Of the icons with this name, the one on the screen showing, else one
+      // on every screen, else the first (Script page audit, 2026-10-19: the
+      // first was taken, so a Back on the screen showing was flagged).
+      const named = (on.icons || []).filter((ic) => ic.name === shown.name);
+      const icon = named.find((ic) => at && ic.on === at) || named.find((ic) => ic.onName === 'Every screen') || named[0] || null;
       const everywhere = icon?.onName === 'Every screen';
       const ok = !icon || everywhere || !at || icon.on === at;
       taps.push({ i, name: shown.name, ok, why: ok ? null : `${shown.name} is on ${icon.onName || nameOf(icon.on)}, but the phone shows ${nameOf(at)}`, on: icon?.on || null, onName: icon?.onName || null });
@@ -435,6 +442,27 @@ export function phoneCheck(lines = [], on = {}, { startAt = null } = {}) {
     if (shown.kind === 'overlay' && !shown.url && !OFF_VERBS.has(moment.verb)) missing.push({ i, name: shown.name });
   });
   return { moments, taps, missing, endAt: at };
+}
+
+/**
+ * The screen the phone shows as each beat starts (its index): where the beat
+ * before left it, or home (null) when the phone is down as the beat starts
+ * (phoneUpAtBeat): from beat 11 it is put away, so a script bringing it back
+ * starts at home, not on the screen beat 10 left (Script page audit,
+ * 2026-10-19). The Script tab and the Ready to film list read it the same.
+ */
+export function phoneStartScreens(beats = [], on = {}) {
+  const starts = [];
+  let at = null;
+  let up = false;
+  (beats || []).forEach((b, i) => {
+    const upAtStart = phoneUpAtBeat(b?.number, up, i > 0 ? beats[i - 1]?.number ?? null : null);
+    if (!upAtStart) at = null;
+    starts[i] = at;
+    at = phoneCheck(b?.lines || [], on, { startAt: at }).endAt;
+    up = beatOnScreen(b?.lines || [], on, { phoneUp: upAtStart }).phoneUpAtEnd;
+  });
+  return starts;
 }
 
 // ── What Lala has put on, line by line (Task #3180) ──
@@ -544,7 +572,8 @@ export function wearFlags(beats = [], look = []) {
 // `[DELIVER: <deliverable id>]` ticks that deal item from its line. A tick
 // never changes the deliverable's status; approval stays manual in Money.
 // `[TODO_MODE: shopping|deal|career]` sets the list Lala's phone shows in
-// its beat; otherwise the Shopping list through the closet beat, the deal
+// its beat; otherwise the Shopping list through the closet beat and beat 9
+// after it (Script page audit, 2026-10-19), the deal
 // checklist at a deal whose terms are locked, else the Career list. The
 // server reads them the same way (src/utils/scriptTodo.js).
 
@@ -591,6 +620,9 @@ export function deliveredAt(beats = [], beatIndex = 0, lineIndex = Infinity, del
   return ids;
 }
 
+// The beat that reads the approved Shopping list: canonical beat 9 (TODO_LIST).
+const SHOPPING_READ_BEAT = Number(Object.keys(EXPECTED_ON_SCREEN).find((n) => EXPECTED_ON_SCREEN[n].action === 'TODO_LIST'));
+
 /** The list shown at a beat (its index): { mode, source: 'cue' | 'auto' }. `closetNumber` is closetBeat's. */
 export function todoModeAt(beats = [], beatIndex = 0, { closetNumber = null, dealLocked = false } = {}) {
   let cue = null;
@@ -600,7 +632,11 @@ export function todoModeAt(beats = [], beatIndex = 0, { closetNumber = null, dea
   }
   if (cue) return { mode: cue, source: 'cue' };
   const closet = closetNumber == null ? -1 : beats.findIndex((b) => b.number === closetNumber);
+  // Through the closet beat, and canonical beat 9 after it, which reads the
+  // approved Shopping list (Evoni, 2026-10-18; Script page audit, 2026-10-19:
+  // beat 9 showed the career or deal list).
   if (closet >= 0 && beatIndex <= closet) return { mode: 'shopping', source: 'auto' };
+  if (beats[beatIndex]?.number === SHOPPING_READ_BEAT) return { mode: 'shopping', source: 'auto' };
   return { mode: dealLocked ? 'deal' : 'career', source: 'auto' };
 }
 

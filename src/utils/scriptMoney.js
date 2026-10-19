@@ -13,6 +13,9 @@
  * - Beat 9 reads the approved shopping list overlay, line by line.
  */
 
+const { headerNumber } = require('./beatLabelNumber');
+const { closetIndex } = require('./scriptWear');
+
 const coins = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
 // The episode overlay's own name for the approved list (episodeOverlaysService DOCUMENT_PIECES).
 const SHOPPING_LIST_OVERLAY = 'Shopping list';
@@ -51,7 +54,13 @@ function moneyContext(money) {
 }
 
 const WEAR_LINE = /^\s*\[WEAR:\s*([^\]\s]+)\s*\]\s*$/i;
-const COIN_LINE = /^\s*\[STAT:\s*coins\s*([+-]?\d+(?:\.\d+)?)\s*\]\s*$/i;
+// A coin line in any form, as the Script tab adds them up
+// (frontend/src/lib/beatState.js coinChange; Script page audit, 2026-10-19):
+// `coins: -50`, a Unicode minus, `- 50`, `-1,200`, or coins in a tag with
+// other stats. Otherwise a written coin line was missed and a second added.
+const STAT_TAG = /^\s*\[STAT\s*:\s*(.*?)\s*\]\s*$/i;
+const COINS_IN_TAG = /(?:^|[\s,;])coins\s*:?\s*([+\-\u2212\u2013\u2014]?)\s*(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)/i;
+const isCoinLine = (line) => { const tag = String(line || '').match(STAT_TAG); return !!tag && COINS_IN_TAG.test(tag[1]); };
 const BEAT_SPLIT = /(?=^[ \t]*##[ \t]*BEAT:)/im;
 const HEADER = /^\s*##\s*BEAT:/i;
 
@@ -60,17 +69,31 @@ const HEADER = /^\s*##\s*BEAT:/i;
  * line, where the writer left it out (the next two lines hold no coin line).
  * `skip`: beat positions never changed (approved beats). Returns
  * { script, added }.
+ *
+ * Only in the closet beat (Script page audit, 2026-10-19): the look is
+ * paid for as it goes on in the closet, so a [WEAR:] in any other beat (the
+ * Fashion Challenge's) charges nothing. The closet beat is the one that
+ * opens the closet, else canonical beat 8 (utils/scriptWear.js closetIndex);
+ * `closetNumber` names it instead, for one beat written on its own.
  */
-function scriptWithCoinLines(scriptText, money, { skip = [] } = {}) {
+function scriptWithCoinLines(scriptText, money, { skip = [], closetNumber = null } = {}) {
   const text = String(scriptText || '');
   const cost = new Map((money?.look || []).filter((p) => p.id).map((p) => [String(p.id), p.amount]));
   if (!cost.size) return { script: text, added: 0 };
   const parts = text.split(BEAT_SPLIT);
   const preamble = parts.length && !HEADER.test(parts[0]) ? parts.shift().trimEnd() : '';
+  const beats = parts.map((part, i) => {
+    const lines = part.split('\n');
+    const label = ((lines[0] || '').match(/##\s*BEAT:\s*(.+)/i)?.[1] || '').trim();
+    return { number: headerNumber(label) || i + 1, lines: lines.slice(1).filter((l) => l.trim()) };
+  });
+  const closet = closetNumber == null ? closetIndex(beats) : beats.findIndex((b) => b.number === Number(closetNumber));
+  if (closet < 0) return { script: text, added: 0 };
   const charged = new Set();
   let added = 0;
   const sections = parts.map((part, beatIndex) => {
     const section = part.trimEnd();
+    if (beatIndex !== closet) return section;
     if (skip.includes(beatIndex)) {
       for (const l of section.split('\n')) { const m = l.match(WEAR_LINE); if (m) charged.add(m[1]); }
       return section;
@@ -84,7 +107,7 @@ function scriptWithCoinLines(scriptText, money, { skip = [] } = {}) {
       if (!m || !cost.has(m[1]) || charged.has(m[1])) return;
       charged.add(m[1]);
       const after = lines.slice(i + 1).filter((l) => l.trim()).slice(0, 2);
-      if (after.some((l) => COIN_LINE.test(l))) return;
+      if (after.some(isCoinLine)) return;
       next.push(`[STAT: coins -${cost.get(m[1])}]`);
       added += 1;
       changed = true;

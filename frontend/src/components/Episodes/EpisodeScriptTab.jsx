@@ -10,7 +10,7 @@ import { scriptInputs, mustCover, scriptPeople } from '../../lib/episodeScript';
 import Beat14Opportunity from './Beat14Opportunity';
 import { beatState } from '../../lib/beatState';
 import { moveBeat, moveLine, dropIndex, replaceBeat, appendLine, insertLine } from '../../lib/scriptBeatOrder';
-import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, phoneUpAtBeat, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers, phoneCheck, messageLine, closetBeat, wearFlags, uncuedPieces, lastGettingReadyIndex, todoModeAt, deliveredAt, dealCueFlags, TODO_MODE_LABELS } from '../../lib/scriptMoments';
+import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, phoneUpAtBeat, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers, phoneCheck, phoneStartScreens, messageLine, closetBeat, wearFlags, uncuedPieces, lastGettingReadyIndex, todoModeAt, deliveredAt, dealCueFlags, TODO_MODE_LABELS } from '../../lib/scriptMoments';
 import { isScreen, isIcon, isProduction } from '../../lib/overlayUtils';
 import { draftLine, lalaLine, lalaLineSlots } from '../../lib/lalaLineDraft';
 import { headerNumber, BEAT_SPLIT, HAS_BEAT_HEADER, normalizeBeatHeaders } from '../../lib/beatLabelNumber';
@@ -1572,9 +1572,9 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // phone check (Task #2884).
   const cover = mustCover({ beats, event: source?.event || null, brief, opportunity: brief?.designed_intent === 'fail' ? null : beat14?.opportunity || null });
   // The phone starts each beat where the beat before left it, not on the
-  // home screen (Script tab audit, 2026-10-15).
-  const phoneScreenAt = [];
-  beats.reduce((at, b, i) => { phoneScreenAt[i] = at; return phoneCheck(b.lines, onScreen, { startAt: at }).endAt; }, null);
+  // home screen (Script tab audit, 2026-10-15); at home when it was put
+  // away (from beat 11; Script page audit, 2026-10-19).
+  const phoneScreenAt = phoneStartScreens(beats, onScreen);
   const openIndex = openBeat ? beats.indexOf(openBeat) : -1;
   const check = openBeat ? phoneCheck(openBeat.lines, onScreen, { startAt: phoneScreenAt[openIndex] }) : null;
   // Wear cues that name no single piece of the locked look (Task #3180):
