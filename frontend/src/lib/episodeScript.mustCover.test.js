@@ -14,7 +14,9 @@ const beats = [
 const event = { canon_consequences: { automation: { relationship_goals: [{ label: 'Follow up with STUDIO BY SABLE' }, { label: '' }] } } };
 
 describe('must cover', () => {
-  test('deliverables, goals and the hook, each with the beat that mentions it', () => {
+  // What she owes is not on the list (Evoni, 2026-10-18): deliverables are
+  // not always shown in the show; beat 12 is The Fashion Challenge.
+  test('goals and the hook, each with the beat that mentions it; deliverables are not listed', () => {
     const items = mustCover({
       beats,
       deliverables: [{ id: 'd1', description: 'Instagram reel for the brand' }, { id: 'd2', platform: 'TikTok', deliverable_type: 'video' }],
@@ -22,8 +24,6 @@ describe('must cover', () => {
       brief: { forward_hook: '  A second invitation arrives.  ' },
     });
     expect(items.map((i) => [i.source, i.label, i.beat])).toEqual([
-      ['Deliverable', 'Instagram reel for the brand', 12],
-      ['Deliverable', 'TikTok video', null],
       ['Goal', 'Follow up with STUDIO BY SABLE', 11],
       ['Forward hook', 'A second invitation arrives.', null],
     ]);

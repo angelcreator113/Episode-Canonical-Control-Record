@@ -30,7 +30,7 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
 
 (shouldSkip ? describe.skip : describe)('Visual Memory: the shared picture library', () => {
   const tag = uuid().slice(0, 8);
-  const ids = { reg: uuid(), maren: uuid(), sable: uuid(), livePost: uuid(), draftPost: uuid() };
+  const ids = { reg: uuid(), maren: uuid(), sable: uuid(), livePost: uuid(), draftPost: uuid(), venue: uuid(), set: uuid() };
   const url = (name) => `https://cdn.test/${tag}/${name}.jpg`;
   let admin;
   let user;
@@ -58,12 +58,18 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
                VALUES (:livePost, :show, :pid, '@m', 'bread is rising', 'live', :live, NOW(), NOW(), NOW()),
                       (:draftPost, :show, :pid, '@m', 'not yet', 'draft', :draft, NULL, NOW(), NOW())`,
     { ...ids, pid, live: url('live-post'), draft: url('draft-post') });
+    // A venue with its own photo, and a scene set there.
+    await run('INSERT INTO world_locations (id, name, venue_photo_url) VALUES (:venue, :name, :photo)', { venue: ids.venue, name: `Media venue ${tag}`, photo: url('venue-photo') });
+    await run(`INSERT INTO scene_sets (id, name, scene_type, world_location_id, created_at, updated_at)
+               VALUES (:set, :name, 'EVENT_LOCATION', :venue, NOW(), NOW())`, { set: ids.set, name: `Media studio ${tag}`, venue: ids.venue });
   });
 
   afterAll(async () => {
     await run(`DELETE FROM media_asset_links WHERE asset_id IN (SELECT id FROM media_assets WHERE url LIKE :pre)`, { pre: `https://cdn.test/${tag}/%` });
     await run('DELETE FROM media_assets WHERE url LIKE :pre', { pre: `https://cdn.test/${tag}/%` });
     await run('DELETE FROM feed_posts WHERE id IN (:livePost, :draftPost)', ids);
+    await run('DELETE FROM scene_sets WHERE id = :set', ids);
+    await run('DELETE FROM world_locations WHERE id = :venue', ids);
     await run('DELETE FROM registry_characters WHERE id IN (:maren, :sable)', ids);
     await run('DELETE FROM social_profiles WHERE id = :pid', { pid });
     await run('DELETE FROM character_registries WHERE id = :reg', ids);
@@ -142,6 +148,10 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
       { url: url('live-post'), source: 'post', status: 'approved', visibility: 'public' },
       { url: url('maren-portrait'), source: 'portrait', status: 'approved', visibility: 'internal' },
     ]);
+    // The venue's own photo comes in too, tagged with the scene set at that venue.
+    const [venue] = await q(`SELECT ma.source, ma.status, ma.visibility, l.entity_type, l.entity_id, l.role FROM media_assets ma
+      JOIN media_asset_links l ON l.asset_id = ma.id AND l.deleted_at IS NULL WHERE ma.url = :u AND ma.deleted_at IS NULL`, { u: url('venue-photo') });
+    expect(venue).toEqual({ source: 'venue', status: 'approved', visibility: 'internal', entity_type: 'scene_set', entity_id: ids.set, role: 'location' });
     const links = await q(`SELECT ma.url, l.entity_type, l.entity_id, l.role FROM media_asset_links l JOIN media_assets ma ON ma.id = l.asset_id
       WHERE ma.url IN (:urls) AND l.deleted_at IS NULL ORDER BY ma.url, l.entity_type`, { urls: [url('maren-portrait'), url('live-post')] });
     expect(links).toEqual([

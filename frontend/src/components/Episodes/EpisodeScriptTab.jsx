@@ -58,7 +58,7 @@ const BEAT_NAMES = [
   { number: 9,  name: 'Reminder / Deadline',    icon: '⏰', color: 'var(--accent-dark)' },
   { number: 10, name: 'Event Travel',           icon: '✈️', color: 'var(--info-text)' },
   { number: 11, name: 'Event Outcome',          icon: '🏆', color: 'var(--info-text)' },
-  { number: 12, name: 'Deliverable Creation',   icon: '🎨', color: 'var(--info-text)' },
+  { number: 12, name: 'Fashion Challenge',   icon: '🎨', color: 'var(--info-text)' },
   { number: 13, name: 'Recap Panel',            icon: '📊', color: 'var(--success-text)' },
   { number: 14, name: 'Cliffhanger',            icon: '🔥', color: 'var(--success-text)' },
 ];
@@ -1553,7 +1553,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   const inputs = scriptInputs({ brief, plan, outfit, event: source?.event || null, deliverables });
   // What the episode must cover, ticked from the script, and the open beat's
   // phone check (Task #2884).
-  const cover = mustCover({ beats, deliverables, event: source?.event || null, brief });
+  const cover = mustCover({ beats, event: source?.event || null, brief });
   // The phone starts each beat where the beat before left it, not on the
   // home screen (Script tab audit, 2026-10-15).
   const phoneScreenAt = [];
@@ -1654,11 +1654,12 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
         )}
       </section>
       {genError && <div className="esp-error" role="alert">{genError}</div>}
-      {coverage && (coverage.missing?.length > 0 || coverage.fixed_beats?.length > 0 || coverage.phone_steps > 0 || coverage.voice_clicks > 0 || coverage.reveal_fixed || coverage.story_gaps?.length > 0) && (
+      {coverage && (coverage.missing?.length > 0 || coverage.fixed_beats?.length > 0 || coverage.phone_steps > 0 || coverage.voice_clicks > 0 || coverage.reveal_fixed || coverage.coin_lines > 0 || coverage.story_gaps?.length > 0) && (
         <div className={`esp-coverage${coverage.missing?.length ? ' is-gaps' : ''}`} role="status" data-testid="script-coverage">
           {coverage.fixed_beats?.length > 0 && <p className="esp-coverage-line">✦ The writer rewrote beat{coverage.fixed_beats.length === 1 ? '' : 's'} {coverage.fixed_beats.join(', ')} to cover what the episode needs.</p>}
           {coverage.phone_steps > 0 && <p className="esp-coverage-line" data-testid="script-coverage-phone">✦ The writer added {coverage.phone_steps} phone step{coverage.phone_steps === 1 ? '' : 's'}, so every tap is on the screen its icon is on.</p>}
           {coverage.voice_clicks > 0 && <p className="esp-coverage-line" data-testid="script-coverage-voice">✦ The writer added {coverage.voice_clicks} voice click{coverage.voice_clicks === 1 ? '' : 's'}, so Lala talks only once her voice icon is clicked.</p>}
+          {coverage.coin_lines > 0 && <p className="esp-coverage-line" data-testid="script-coverage-coins">✦ The writer added {coverage.coin_lines} coin line{coverage.coin_lines === 1 ? '' : 's'}, so each piece Lala buys comes off her coins as it goes on.</p>}
           {coverage.reveal_fixed && <p className="esp-coverage-line" data-testid="script-coverage-reveal">✦ Beat 5 now shows the invitation letter, not the login screen.</p>}
           {coverage.missing?.length > 0 && (
             <>
@@ -1821,7 +1822,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
               ))}
             </ul>
           ) : (
-            <p className="esp-cover-empty" data-testid="script-cover-empty">Nothing to cover: the event has no deliverables or goals, and the brief has no forward hook.</p>
+            <p className="esp-cover-empty" data-testid="script-cover-empty">Nothing to cover: the event has no goals, and the brief has no forward hook.</p>
           )}
           <p className="esp-uses-note">From the event package and the brief. Ticked when the script mentions it.</p>
         </section>
