@@ -62,7 +62,8 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
       ADD COLUMN IF NOT EXISTS quality_review jsonb,
       ADD COLUMN IF NOT EXISTS enhanced_still_url text`);
     token = TokenService.generateTokenPair({
-      id: 'test-user-routes4', email: 'user@routes4.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      // Scene-set writes are ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only).
+      id: 'test-admin-routes4', email: 'admin@routes4.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
   beforeEach(() => {
@@ -177,6 +178,17 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
       expect(ok.status).toBe(201);
       setIds.push(ok.body.data.id);
     });
+  });
+
+  it('a signed-in non-admin may not edit a set or make it a version', async () => {
+    const set = await makeSet();
+    const editor = TokenService.generateTokenPair({
+      id: 'test-user-routes4', email: 'user@routes4.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+    }).accessToken;
+    const as = (r) => r.set('Authorization', `Bearer ${editor}`);
+    expect((await as(request(app).put(`/api/v1/scene-sets/${set.id}`)).send({ name: 'Not allowed' })).status).toBe(403);
+    expect((await as(request(app).put(`/api/v1/scene-sets/${set.id}/version`)).send({})).status).toBe(403);
+    expect((await models.SceneSet.findByPk(set.id)).name).toBe(set.name);
   });
 
   it('a set another show uses does not move to this show; it can be left with no show', async () => {
