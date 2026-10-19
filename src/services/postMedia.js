@@ -166,6 +166,15 @@ async function attachPictures(db, postId, { assetIds = [], format = null, by = n
 async function approvePictures(db, postId) {
   const post = await loadPost(db, postId);
   const problems = await publishProblems(db, post);
+  // Approving never makes a private camera-roll photo public: its moment has
+  // to be marked posted first (services/cameraRoll; Evoni, 2026-10-19).
+  const assets = await Promise.all(problems.map((p) => media.getAsset(db, p.id)));
+  const privateRoll = assets.filter((a) => media.isPrivateCameraRoll(a));
+  if (privateRoll.length) {
+    const err = new MediaError(409, `${privateRoll.length === 1 ? 'A picture is' : `${privateRoll.length} pictures are`} from a private camera roll. Mark the moment as posted on their Gallery tab first.`);
+    err.pictures = privateRoll.map((a) => ({ id: a.id, url: a.url, status: a.status, visibility: a.visibility }));
+    throw err;
+  }
   for (const p of problems) await media.updateAsset(db, p.id, { status: 'approved', visibility: 'public' });
   return { approved: problems.map((p) => p.id) };
 }
@@ -264,7 +273,9 @@ async function suggestFor(db, postId, { limit = 6 } = {}) {
   const post = await loadPost(db, postId);
   const poster = await posterOf(db, post);
   if (!poster) return { post_id: post.id, suggestions: [], note: 'This post has no character in the registry, so there is no library to suggest from.' };
-  const library = await media.listFor(db, { entityType: 'character', entityId: poster.id, audience: 'admin' });
+  // A camera-roll photo they did not post is never offered for a post (private stays private).
+  const library = (await media.listFor(db, { entityType: 'character', entityId: poster.id, audience: 'admin' }))
+    .filter((a) => !media.isPrivateCameraRoll(a));
   const ranked = rankPictures(post.content_text, library).filter((r) => r.score > 0).slice(0, Math.min(Number(limit) || 6, 20));
   return {
     post_id: post.id,
