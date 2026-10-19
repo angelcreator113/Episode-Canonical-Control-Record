@@ -29,7 +29,10 @@
  *                    those episodes' events, deal dates, and each posting
  *                    schedule's next open time (services/postingSchedule;
  *                    Evoni, 2026-10-18: "yes do the two posting schedule
- *                    follow-ups")
+ *                    follow-ups"), and deals going public whose deliverables
+ *                    are not all posted yet (services/deliverableProgress;
+ *                    Evoni, 2026-10-19). Since yesterday also lists the deals
+ *                    whose deliverables all went out.
  *   cost             today's AI spend (UTC day) against the daily budget,
  *                    and the features it went to
  *
@@ -150,7 +153,18 @@ async function sinceYesterday(db, { start, end }, shows) {
       voices_built: voices.map((v) => ({ id: v.id, character_id: v.registry_character_id, name: v.name, built_at: iso(v.built_at), approved: Boolean(v.approved_at) })),
       findings_resolved: Object.fromEntries(resolved.map((x) => [x.status, num(x.n)])),
     },
+    deals_done: (await deliverablesRead('deals done', () => require('./deliverableProgress').dealsDone(db, { start, end }))).map((d) => ({ ...d, show: shows.get(d.show_id) || null })),
   };
+}
+
+/** A deliverable read that never sinks the update: on a fault, logged and empty. */
+async function deliverablesRead(label, fn) {
+  try {
+    return await fn();
+  } catch (err) {
+    console.error(`[dailyUpdate] ${label} could not be read:`, err.message);
+    return [];
+  }
 }
 
 async function waiting(db, shows) {
@@ -251,6 +265,8 @@ async function comingUp(db, { end }, shows) {
       ].filter(Boolean),
     })),
     slots,
+    deliverables_due: (await deliverablesRead('deliverables due', () => require('./deliverableProgress').dueSoon(db, { now: end, until })))
+      .map((d) => ({ ...d, show: shows.get(d.show_id) || null })),
   };
 }
 

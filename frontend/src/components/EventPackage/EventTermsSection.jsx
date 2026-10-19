@@ -68,7 +68,10 @@ import {
   bonusDraftNote, relationshipGoalsOf, relationshipGoalsDraftNote, buildRelationshipGoalRemove,
 } from '../../utils/eventTerms';
 import EventCostsTerm from './EventCostsTerm';
+import DeliverableProgress from '../Deliverables/DeliverableProgress';
 
+// The deliverable formats that go out as a Pulse post (services/postMedia FORMAT_FOR_DELIVERABLE).
+const POSTED_DELIVERABLES = new Set(['pulse_post', 'carousel_post', 'pulse_stories', 'pulse_video', 'grwm_video', 'try_on_haul', 'go_live']);
 const deliverablesUrl = (showId, eventId) => `/api/v1/world/${showId}/events/${eventId}/deliverables`;
 
 export const listDeliverablesApi = (showId, eventId) => api.get(deliverablesUrl(showId, eventId));
@@ -560,6 +563,10 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
               })}
             </ul>
           ) : <div className="epp-empty">None set</div>}
+          {/* Deliverables that check themselves (2026-10-19): the Pulse posts that count. */}
+          {deliverables.some((d) => POSTED_DELIVERABLES.has(d.deliverable_type)) && (
+            <DeliverableProgress key={deliverables.map((d) => `${d.id}:${d.quantity}`).join(',')} eventId={eventId} />
+          )}
           {locked && deliverables.length > 0 && (
             <p className="epp-term-note">
               Record each step as it happens. Completing the episode does not change these.

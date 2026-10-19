@@ -291,6 +291,7 @@ function SinceYesterday({ s }) {
     [plural(facts.length, 'fact changed', 'facts changed')],
     [plural(s.automatic.voices_built.length, 'voice built', 'voices built')],
     [plural(resolved, 'finding resolved', 'findings resolved')],
+    ...((s.deals_done || []).length ? [[plural(s.deals_done.length, 'deal delivered', 'deals delivered')]] : []),
   ];
   return (
     <section className="du-section" aria-labelledby="du-since" data-testid="du-since">
@@ -309,6 +310,16 @@ function SinceYesterday({ s }) {
                   <p className="du-text">{p.text}</p>
                 </div>
               </li>
+            ))}
+          </ul>
+        </details>
+      )}
+      {(s.deals_done || []).length > 0 && (
+        <details className="du-more" open data-testid="du-deals-done">
+          <summary>Deals with all deliverables done</summary>
+          <ul className="du-names">
+            {s.deals_done.map((d) => (
+              <li key={d.id}><Briefcase size={13} aria-hidden /> <strong>{d.brand || d.name}</strong> {d.brand && d.name !== d.brand ? <span className="du-muted">{d.name} · </span> : null}<span className="du-muted">{d.lines.join(' · ')}</span></li>
             ))}
           </ul>
         </details>
@@ -347,7 +358,8 @@ function SinceYesterday({ s }) {
 
 function ComingUp({ c }) {
   const slots = c.slots || [];
-  const empty = !c.posts.length && !c.episodes.length && !c.events.length && !c.deals.length && !slots.length;
+  const due = c.deliverables_due || [];
+  const empty = !c.posts.length && !c.episodes.length && !c.events.length && !c.deals.length && !slots.length && !due.length;
   return (
     <section className="du-section" aria-labelledby="du-coming" data-testid="du-coming">
       <h2 id="du-coming"><CalendarDays size={18} aria-hidden /> Coming up <span className="du-muted">the next three days</span></h2>
@@ -362,6 +374,16 @@ function ComingUp({ c }) {
         <ul className="du-names">
           {c.deals.map((d) => <li key={d.id}><Briefcase size={13} aria-hidden /> {d.brand || d.name}: {d.dates.map((x) => `${x.kind} ${day(x.date)}`).join(' · ')}</li>)}
         </ul>
+      )}
+      {due.length > 0 && (
+        <>
+          <h3 className="du-sub">Deliverables still to post</h3>
+          <ul className="du-names" data-testid="du-deliverables-due">
+            {due.map((d) => (
+              <li key={d.id}><Briefcase size={13} aria-hidden /> <strong>{d.brand || d.name}</strong> goes public {day(d.publish_date)}<span className="du-muted"> · {d.left.join(' · ')}</span></li>
+            ))}
+          </ul>
+        </>
       )}
       {c.posts.length > 0 && (
         <>

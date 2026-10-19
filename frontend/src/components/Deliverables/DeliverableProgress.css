@@ -1,0 +1,20 @@
+/* Deliverables that check themselves (components/Deliverables). */
+.dp { display: grid; gap: 8px; margin-top: 8px; }
+.dp-head { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.dp-list, .dp-posts, .dp-suggest { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.dp-item { display: grid; gap: 6px; }
+.dp-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; color: var(--text-primary); }
+.dp-posts li, .dp-suggest li { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 6px 8px; border-radius: 8px; background: var(--surface-subtle, var(--lala-parchment-2)); }
+.dp-post { font-size: 12px; line-height: 1.45; color: var(--text-primary); min-width: 0; overflow-wrap: anywhere; }
+.dp-muted { color: var(--text-secondary); font-size: 12px; margin: 0; }
+.dp-error { color: var(--error-text, var(--text-primary)); font-size: 12px; margin: 0; }
+.dp-done { color: var(--success-text, var(--text-primary)); display: inline-flex; align-items: center; gap: 4px; }
+.dp-left { color: var(--text-secondary); }
+.dp-link, .dp-btn, .dp-icon { display: inline-flex; align-items: center; gap: 4px; border: none; border-radius: 999px; font: inherit; font-size: 12px; cursor: pointer; }
+.dp-link { background: none; color: var(--lala-lavender-text); padding: 2px 6px; }
+.dp-btn { background: var(--lala-lavender); color: var(--text-inverse); padding: 4px 10px; flex-shrink: 0; }
+.dp-icon { background: none; color: var(--text-secondary); padding: 2px; flex-shrink: 0; }
+.dp-btn:disabled, .dp-icon:disabled { opacity: 0.5; cursor: default; }
+.dp-compact { display: inline-flex; flex-wrap: wrap; gap: 6px; font-size: 11px; }
+.dp-spin { animation: dp-spin 1s linear infinite; }
+@keyframes dp-spin { to { transform: rotate(360deg); } }

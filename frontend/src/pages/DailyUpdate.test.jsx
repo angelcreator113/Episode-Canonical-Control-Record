@@ -150,6 +150,19 @@ describe('DailyUpdate', () => {
     expect(slots).toContain('Mon–Fri mornings');
   });
 
+  test('deals whose deliverables all went out, and deliverables still to post', async () => {
+    const u = update();
+    u.since_yesterday.deals_done = [{ id: 'o-9', name: 'Velour cover', brand: 'Velour', lines: ['Pulse stories: 3 of 3', 'Pulse video: 1 of 1'] }];
+    u.coming_up.deliverables_due = [{ id: 'o-8', name: 'Aura launch', brand: 'Aura', publish_date: '2026-10-20', left: ['Pulse post: 0 of 1'] }];
+    vi.mocked(api.get).mockResolvedValue({ data: u });
+    renderPage();
+    const done = await screen.findByTestId('du-deals-done');
+    expect(done.textContent).toContain('Velour');
+    expect(done.textContent).toContain('Pulse stories: 3 of 3 · Pulse video: 1 of 1');
+    expect(screen.getByTestId('du-since').textContent).toContain('1 deal delivered');
+    expect(screen.getByTestId('du-deliverables-due').textContent).toContain('Pulse post: 0 of 1');
+  });
+
   test('when the update cannot load it says so', async () => {
     vi.mocked(api.get).mockRejectedValue({ response: { data: { error: 'Forbidden' } } });
     renderPage();
