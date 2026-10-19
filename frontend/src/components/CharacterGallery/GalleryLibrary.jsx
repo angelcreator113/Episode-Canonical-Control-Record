@@ -18,6 +18,7 @@
 import { useState, useEffect } from 'react';
 import { ImagePlus, Tag, X, Search, Library } from 'lucide-react';
 import api from '../../services/api';
+import { MakeVariation, PictureFamily } from '../MediaVariations/MakeVariation';
 import './GalleryLibrary.css';
 
 const errorText = (err, fallback) => err?.response?.data?.error || fallback;
@@ -27,8 +28,8 @@ const STATUS_WORDS = { draft: 'Draft', approved: 'Approved', archived: 'Archived
 // Where a gallery picture came from, as the library's source.
 const SOURCE_OF = { profile_photo: 'portrait', cover_photo: 'cover', portrait: 'portrait', scene_set: 'scene_set', venue: 'venue', invitation: 'invitation', event_set: 'event_set', post: 'post', draft_post: 'post' };
 
-/** A search box over characters, places, events and brands; picking one calls onPick. */
-function TagSearch({ onPick, exclude = [], label = 'Tag who or what else is in it' }) {
+/** A search box over characters, places, events and brands (or only `only`, a kind); picking one calls onPick. */
+export function TagSearch({ onPick, exclude = [], label = 'Tag who or what else is in it', only = null }) {
   const [q, setQ] = useState('');
   const [found, setFound] = useState([]);
   // By value, so a new list with the same tags does not search again.
@@ -41,14 +42,14 @@ function TagSearch({ onPick, exclude = [], label = 'Tag who or what else is in i
     const t = setTimeout(async () => {
       try {
         const { data } = await api.get(`/api/v1/media/taggables?q=${encodeURIComponent(term)}`);
-        if (live) setFound((data.items || []).filter((i) => !skip.has(`${i.entity_type}:${i.entity_id}`)));
+        if (live) setFound((data.items || []).filter((i) => !skip.has(`${i.entity_type}:${i.entity_id}`) && (!only || i.entity_type === only)));
       } catch (err) {
         console.error('[GalleryLibrary] the tag search failed:', err);
         if (live) setFound([]);
       }
     }, 250);
     return () => { live = false; clearTimeout(t); };
-  }, [q, excludeKey]);
+  }, [q, excludeKey, only]);
   return (
     <div className="gl-search">
       <label className="gl-label">
@@ -213,6 +214,9 @@ export function PictureLibrary({ item, character, onChanged }) {
         </label>
       </div>
       {error && <p className="gl-error" role="alert">{error}</p>}
+      {/* Visual Memory phase 3: a variation of this picture, and the family it belongs to. */}
+      <MakeVariation asset={asset} onMade={onChanged} />
+      <PictureFamily assetId={asset.id} />
     </div>
   );
 }
