@@ -345,7 +345,7 @@ export const EXPECTED_ON_SCREEN = {
   // Back to gameplay after the cutscene: her phone, and the invitation
   // someone at the event sends (Script page re-audit, 2026-10-19). The
   // action key stays the canonical beat's.
-  14: { action: 'FADE_OUT', what: 'Back to gameplay: the invitation on her phone', where: "Lala's Phone" },
+  14: { action: 'FADE_OUT', what: 'Back to gameplay: the invitation on her phone', where: 'Full Screen' },
 };
 
 /**
