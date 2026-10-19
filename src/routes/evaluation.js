@@ -282,6 +282,13 @@ router.post('/episodes/:id/evaluate', requireAuth, async (req, res) => {
     // Load episode
     const episode = await models.Episode.findByPk(id);
     if (!episode) return res.status(404).json({ error: 'Episode not found' });
+    // A completed episode keeps its accepted evaluation: computing again
+    // overwrote 'accepted' with 'computed', so the episode no longer read as
+    // completed and its beat 14 could be attached and offered a second time
+    // (Script page re-audit, 2026-10-19).
+    if (episode.evaluation_status === 'accepted') {
+      return res.status(409).json({ error: 'This episode is completed: its evaluation was accepted and is not computed again.', code: 'EPISODE_ALREADY_ACCEPTED' });
+    }
 
     // Parse event from script
     const scriptContent = episode.script_content || '';
@@ -561,7 +568,7 @@ router.post('/episodes/:id/accept', requireAuth, async (req, res) => {
     if (!episode) return res.status(404).json({ error: 'Episode not found' });
 
     if (episode.evaluation_status === 'accepted') {
-      return res.status(400).json({ error: 'Episode already accepted. Use re-evaluate first.' });
+      return res.status(400).json({ error: 'Episode already accepted; a completed episode is not evaluated again.' });
     }
 
     const showId = episode.show_id;

@@ -40,8 +40,9 @@ test('the writer is told how JustAWoman plays on camera', async () => {
   expect(prompt).toContain('never an interchangeable line like "This is exciting!"');
   expect(prompt).toContain('Only to what she has actually seen');
   expect(prompt).toContain('[SFX: notification ping], [EDIT: punch-in on her corner frame]');
-  expect(prompt).toContain('While playing (beats 1–12)');
-  expect(prompt).toContain('While reviewing (beats 13–14)');
+  // Playing is the gameplay, 1–10 and 14; 11–13 is the cutscene (Script page re-audit, 2026-10-19).
+  expect(prompt).toContain('While playing (beats 1–10 and 14)');
+  expect(prompt).toContain('While the cutscene plays and is recapped (beats 11–13)');
   // The silent watch is dropped (Evoni, 2026-10-19): in the cutscene she comments.
   expect(prompt).not.toContain('(JustAWoman watches, silent.)');
   expect(prompt).toContain('never invents viewer messages or comments');

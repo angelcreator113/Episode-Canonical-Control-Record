@@ -124,7 +124,7 @@ describe('the prompt says the show as it is now', () => {
     const prompt = buildScriptPrompt(inputs({ story: STORY }));
     expect(prompt).toContain("7. Lala's career is on the page");
     expect(prompt).not.toContain('name the deal, what she owes');
-    expect(prompt).toContain('what she owes need not be shown on screen');
+    expect(prompt).toContain('the content she owes need not be shown on screen');
   });
 });
 
