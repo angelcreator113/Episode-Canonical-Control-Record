@@ -214,8 +214,17 @@ async function groundedScriptInputs(episodeId, showId, models) {
     }
   }
 
+  // Beat 14's opportunity (Evoni, 2026-10-19; services/beat14Opportunity):
+  // the invitation someone at the event offers. A failed read leaves it out.
+  let beat14 = null;
+  try {
+    beat14 = await require('./beat14Opportunity').loadForScript(models, { episodeId });
+  } catch (err) {
+    console.error('[ScriptGen] beat 14 opportunity read failed (non-blocking):', err.message);
+  }
+
   console.log(`[ScriptGen] Prompt for episode ${episodeId} with ${scenePlan.length} planned beats`);
-  return { brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext, onScreen, story, phone, worldNow, money };
+  return { brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext, onScreen, story, phone, worldNow, money, beat14 };
 }
 
 const MODELS = ['claude-sonnet-4-6'];
@@ -265,7 +274,7 @@ async function writeWith(prompt, maxTokens, attempts) {
 //   so a reply that is not the beat never replaces one that was.
 const MAX_FIX_BEATS = 5;
 const MIN_DRAFT_BEATS = CANONICAL_BEATS.length - MAX_FIX_BEATS;
-const GAP_RANK = { beat: 0, cut: 1, hook: 2, deliverable: 3, goal: 4, wear: 5, phone: 6 };
+const GAP_RANK = { beat: 0, cut: 1, hook: 2, opportunity: 2, deliverable: 3, goal: 4, wear: 5, phone: 6 };
 
 class DraftIncompleteError extends Error {
   constructor(found) {
@@ -399,6 +408,11 @@ function coverageFacts(inputs) {
     goals: career?.goals || [],
     forwardHook: inputs?.brief?.forward_hook || '',
     lockedPieces: (inputs?.outfitScore?.items || []).filter((p) => p?.id).map((p) => ({ id: p.id, name: p.name })),
+    // Beat 14's opportunity, when the episode is not designed to fail (Evoni,
+    // 2026-10-19): it must arrive in the script.
+    opportunity: inputs?.beat14 && inputs?.brief?.designed_intent !== 'fail'
+      ? { name: inputs.beat14.name, from: inputs.beat14.contact_name || inputs.beat14.connector_handle || null }
+      : null,
   };
 }
 
@@ -556,7 +570,7 @@ function seasonPurposeLines(sc) {
     ...purposes.map((p, n) => `${n + 1}. ${p.primary ? '[Primary] ' : ''}${p.text}${p.story_thread ? ` (thread: ${p.story_thread})` : ''}`)].join('\n');
 }
 
-function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext = null, onScreen = [], story = null, phone = null, worldNow = '', money = null }, { only = null, lockedBeats = [] } = {}) {
+function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext = null, onScreen = [], story = null, phone = null, worldNow = '', money = null, beat14 = null }, { only = null, lockedBeats = [] } = {}) {
   // Every canonical beat, in order, whether or not the plan has its row
   // (§8(j): Generate Script instantiates all 14; it never invents its own).
   const planByBeat = new Map(scenePlan.map((b) => [Number(b.beat_number), b]));
@@ -667,7 +681,7 @@ ${statsContext ? `═══ LALA'S STATE ═══\n${statsContext}\n` : ''}${wo
 ═══ WARDROBE ═══
 ${wardrobeContext}
 ${outfitScore ? `\n═══ LOCKED OUTFIT ═══\nLala is wearing ${outfitScore.count} pieces for this event:\n${outfitScore.items.map(i => `- ${i.name} (${i.clothing_category}, ${i.tier})${i.id ? ` [WEAR: ${i.id}]` : ''}`).join('\n')}\nBeat 8 (Transformation): Reference these SPECIFIC items by name as Lala gets dressed. Right after the line where she puts a piece on, write that piece's [WEAR: id] line exactly as shown above, once per piece.\nBeat 11 (Event Outcome): Her outfit choice affects how the event goes — she is wearing what she chose.` : ''}
-${moneyText(money)}${onScreenContext(onScreen)}${phone ? require('../utils/phonePaths').phoneMapContext(phone) : ''}${layersText({ brief, eventData, seasonContext, story })}
+${moneyText(money)}${require('./beat14Opportunity').beat14Context(beat14, brief?.designed_intent || null)}${onScreenContext(onScreen)}${phone ? require('../utils/phonePaths').phoneMapContext(phone) : ''}${layersText({ brief, eventData, seasonContext, story })}
 
 ═══ SCENE PLAN — 14 BEATS ═══
 ${beatContext}

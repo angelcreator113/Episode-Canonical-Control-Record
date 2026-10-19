@@ -251,6 +251,53 @@ router.post('/opportunities/:showId/:id/to-event', requireAuth, async (req, res)
 });
 
 // ═══════════════════════════════════════════
+// Beat 14's opportunity (Evoni, 2026-10-19; services/beat14Opportunity):
+// the invitation someone at the event offers at the end of the episode.
+//   GET    — what is attached, who at the event can offer, open ones to attach
+//   PUT    — { opportunity_id, connector_profile_id } or { create: { … } }
+//   DELETE — nothing attached
+// ═══════════════════════════════════════════
+
+const beat14Error = (res, err, what) => {
+  console.error(`[Beat14] ${what} failed:`, err.message);
+  return res.status(err.status || 500).json({ success: false, error: err.message });
+};
+
+router.get('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, async (req, res) => {
+  try {
+    const { getBeat14 } = require('../services/beat14Opportunity');
+    return res.json({ success: true, data: await getBeat14(await getModels(req), req.params) });
+  } catch (err) {
+    return beat14Error(res, err, 'read');
+  }
+});
+
+router.put('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, async (req, res) => {
+  try {
+    const { attachBeat14 } = require('../services/beat14Opportunity');
+    const body = req.body || {};
+    const opportunity = await attachBeat14(await getModels(req), {
+      ...req.params,
+      opportunity_id: body.opportunity_id || null,
+      connector_profile_id: body.connector_profile_id ?? null,
+      create: body.create && typeof body.create === 'object' ? body.create : null,
+    });
+    return res.json({ success: true, data: { opportunity } });
+  } catch (err) {
+    return beat14Error(res, err, 'attach');
+  }
+});
+
+router.delete('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, async (req, res) => {
+  try {
+    const { detachBeat14 } = require('../services/beat14Opportunity');
+    return res.json({ success: true, data: await detachBeat14(await getModels(req), req.params) });
+  } catch (err) {
+    return beat14Error(res, err, 'detach');
+  }
+});
+
+// ═══════════════════════════════════════════
 // DELETE /opportunities/:showId/:id
 // ═══════════════════════════════════════════
 
