@@ -35,7 +35,10 @@ const draft = NAMES.map((name, i) => {
   // Lala talks once her voice icon is clicked; beat 5 brings up the invitation (show rules, 2026-10-17).
   if (n === 5) return beat(5, name, '[UI:OPEN Invitation]');
   if (n === 11) return beat(11, name, '[UI:CLICK Voice Icon]', 'Lala: what a room');
-  if (n === 12) return beat(12, name, '[UI:OPEN Camera]', '[UI:CLICK Voice Icon]', 'Lala: a quiet moment');
+  // Beat 12 is judged on four stats; in beat 13 Lala says how it feels, and
+  // JustAWoman watches in silence once (the show's rules, 2026-10-17/18).
+  if (n === 12) return beat(12, name, '[UI:OPEN Camera]', '[UI:CLICK Voice Icon]', 'Lala: a quiet moment', '[STAT: reputation +2]', '[STAT: brand_trust +1]', '[STAT: influence +1]', '[STAT: stress -1]');
+  if (n === 13) return beat(13, name, 'Me: hi', '[UI:CLICK Voice Icon]', 'Lala: that felt good', '(JustAWoman watches, silent.)');
   if (n === 14) return beat(14, name, 'Me: and then the DM arrives');
   return beat(n, name, [4, 5, 7, 9, 10].includes(n) ? '[UI:OPEN Mail]' : 'Me: hi');
 }).join('\n\n');

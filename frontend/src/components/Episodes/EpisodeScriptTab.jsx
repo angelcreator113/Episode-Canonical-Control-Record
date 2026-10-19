@@ -18,6 +18,7 @@ import { speakerLine, unquote } from '../../lib/scriptSpeaker';
 import { beatImage, beatImageLabel } from '../BeatPlan/BeatPlanParts';
 import { beatSeconds, scriptSeconds, formatRuntime } from '../../lib/scriptRuntime';
 import { scriptHealth } from '../../lib/scriptHealth';
+import { scriptMoneyFrom, shoppingListApproved } from '../../lib/scriptRuleChecks';
 import { scriptWithPhonePaths } from '../../lib/phonePaths';
 import { scriptWithShowRules } from '../../lib/scriptShowRules';
 import ScriptHealthPanel from './ScriptHealthPanel';
@@ -919,6 +920,18 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // open beat, and whether the context panel is open. `balance` is the
   // balance before this episode (Task #2882).
   const [balance, setBalance] = useState(null);
+  // Lala's money as the show's rules read it (lib/scriptRuleChecks; Evoni,
+  // 2026-10-18): the look's costs and the event's, from the Money page's
+  // lines (null: not read, so no coin rows).
+  const [scriptMoney, setScriptMoney] = useState(null);
+  useEffect(() => {
+    if (!showId || !episodeId) { setScriptMoney(null); return undefined; }
+    let cancelled = false;
+    api.get(`/api/v1/world/${showId}/episodes/${episodeId}/money`)
+      .then((res) => { if (!cancelled) setScriptMoney(scriptMoneyFrom(res?.data?.data)); })
+      .catch((err) => { console.error('[EpisodeScript] money load failed:', err); if (!cancelled) setScriptMoney(null); });
+    return () => { cancelled = true; };
+  }, [showId, episodeId]);
   const [barRequest, setBarRequest] = useState(null);
   const clearBarRequest = useCallback(() => setBarRequest(null), []);
   const [contextOpen, setContextOpen] = useState(false);
@@ -1603,6 +1616,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // Ready to film? (Script tab audit, 2026-10-15): the checks above, script-wide.
   const healthRows = showBeatList ? scriptHealth({
     beats, canonical: BEAT_NAMES, cover, onScreen, outfit, dealItems,
+    rules: { money: scriptMoney, shoppingApproved: shoppingListApproved(source?.event || null) },
     closetNumber: closetBeat(scriptText), dirty: scriptText !== savedScript, unsaved,
     beat14, designedIntent: brief?.designed_intent || null,
   }) : [];
