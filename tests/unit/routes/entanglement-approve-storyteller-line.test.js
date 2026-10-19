@@ -23,7 +23,7 @@ const CHAPTER = '11111111-1111-4111-8111-111111111111';
 function passAuth() {
   jest.doMock(AUTH, () => {
     const actual = jest.requireActual(AUTH);
-    return { ...actual, requireAuth: (req, _res, next) => { req.user = { id: 'u1' }; next(); } };
+    return { ...actual, requireAuth: (req, _res, next) => { req.user = { id: 'u1', groups: ['ADMIN'] }; /* the writes are ADMIN only (Evoni, 2026-10-19) */ next(); } };
   });
 }
 

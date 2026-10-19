@@ -29,6 +29,9 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { optionalAuth, requireAuth } = require('../middleware/auth');
 // ADMIN for the posting schedule writes (Evoni, 2026-10-18).
 const { authorize } = require('../middleware/auth');
+// The character steps (cross, bulk cross, approve, reject crossing, a character's
+// follow of a profile) are ADMIN only (Evoni, 2026-10-19: "this whole part of the
+// site is admin only").
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -1429,7 +1432,7 @@ router.post('/bulk/finalize', requireAuth, async (req, res) => {
 
 // ── POST /bulk/cross ─────────────────────────────────────────────────────────
 // Cross (promote) multiple finalized profiles at once
-router.post('/bulk/cross', requireAuth, async (req, res) => {
+router.post('/bulk/cross', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { ids } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) {
@@ -1590,7 +1593,7 @@ router.get('/:id/followers', optionalAuth, async (req, res) => {
 
 // ── POST /:id/followers ──────────────────────────────────────────────────────
 // Add or update a character following this profile
-router.post('/:id/followers', requireAuth, async (req, res) => {
+router.post('/:id/followers', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { character_key, character_name, follow_context, emotional_reaction, influence_type, influence_level } = req.body;
   if (!character_key || !character_name) {
@@ -1616,7 +1619,7 @@ router.post('/:id/followers', requireAuth, async (req, res) => {
 
 // ── DELETE /:id/followers/:characterKey ───────────────────────────────────────
 // Remove a character from following this profile
-router.delete('/:id/followers/:characterKey', requireAuth, async (req, res) => {
+router.delete('/:id/followers/:characterKey', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (!db.SocialProfileFollower) return res.status(501).json({ error: 'SocialProfileFollower model not available' });
   try {
@@ -1644,7 +1647,7 @@ router.post('/:id/finalize', requireAuth, guardJustAWomanRecord, async (req, res
 
 // ── POST /:id/cross ─────────────────────────────────────────────────────────
 // Promotes a social profile into a world character — auto-creates RegistryCharacter
-router.post('/:id/cross', requireAuth, guardJustAWomanRecord, async (req, res) => {
+router.post('/:id/cross', requireAuth, authorize(['ADMIN']), guardJustAWomanRecord, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { crossing_note, registry_id, show_id } = req.body;
   try {
@@ -1703,13 +1706,9 @@ router.post('/:id/cross', requireAuth, guardJustAWomanRecord, async (req, res) =
           writer_notes: crossedWriterNotes(profile),
           description: `${isPulseLayer(profile.feed_layer) ? 'Creator on The Pulse' : `Social media creator (${platformLabel(profile.platform)})`}. ${profile.content_persona || ''}`.trim(),
           personality: profile.real_signal || null,
-          metadata: {
-            source: 'social_profile_crossing',
-            social_profile_id: profile.id,
-            platform: profile.platform,
-            archetype: profile.archetype,
-            follower_tier: profile.follower_tier,
-          },
+          // Made from the feed (registry_characters has no metadata column, so
+          // the old metadata.source was dropped; Evoni, 2026-10-19).
+          created_from: 'feed_cross',
         });
       }
     }
@@ -2676,7 +2675,7 @@ router.get('/analytics/composition', requireAuth, async (req, res) => {
 
 // ── POST /:id/approve ──────────────────────────────────────────────────────
 // Approve a finalized profile for crossing (adds approval gate before cross)
-router.post('/:id/approve', requireAuth, guardJustAWomanRecord, async (req, res) => {
+router.post('/:id/approve', requireAuth, authorize(['ADMIN']), guardJustAWomanRecord, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { approval_notes } = req.body;
 
@@ -2704,7 +2703,7 @@ router.post('/:id/approve', requireAuth, guardJustAWomanRecord, async (req, res)
 
 // ── POST /:id/reject-crossing ──────────────────────────────────────────────
 // Reject a profile from crossing (clears approval, adds notes)
-router.post('/:id/reject-crossing', requireAuth, guardJustAWomanRecord, async (req, res) => {
+router.post('/:id/reject-crossing', requireAuth, authorize(['ADMIN']), guardJustAWomanRecord, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { rejection_reason } = req.body;
 

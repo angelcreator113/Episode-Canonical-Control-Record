@@ -99,11 +99,12 @@ async function cleanup(ids) {
   const auth = () => `Bearer ${token}`;
 
   beforeAll(async () => {
+    // The registry writes are ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only).
     token = TokenService.generateTokenPair({
       id: 'test-user-registry-json',
       email: 'test@registry-json.dev',
       name: 'Registry JSON Test',
-      groups: ['USER', 'EDITOR'],
+      groups: ['ADMIN'],
       role: 'USER',
     }).accessToken;
   });

@@ -71,11 +71,12 @@ const rowOf = async (ids, cols) => {
   const auth = () => `Bearer ${token}`;
 
   beforeAll(() => {
+    // The registry writes are ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only).
     token = TokenService.generateTokenPair({
       id: 'test-user-rmw-part-2',
       email: 'test@rmw-part-2.dev',
       name: 'RMW Part 2 Test',
-      groups: ['USER', 'EDITOR'],
+      groups: ['ADMIN'],
       role: 'USER',
     }).accessToken;
   });

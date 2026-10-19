@@ -101,7 +101,6 @@ src/routes/scriptGenerator.js	ShowConfig.create	values	target_duration
 src/routes/scriptGenerator.js	ShowConfig.create	values	target_scene_count
 src/routes/scriptParse.js	Scene.create	values	metadata
 src/routes/scriptParse.js	Scene.create	values	status
-src/routes/socialProfileRoutes.js	RegistryCharacter.create	values	metadata
 src/routes/storyEvaluationRoutes.js	StorytellerStory.create	values	book_id
 src/routes/storyEvaluationRoutes.js	StorytellerStory.create	values	chapter_id
 src/routes/storyEvaluationRoutes.js	StorytellerStory.create	values	must_include

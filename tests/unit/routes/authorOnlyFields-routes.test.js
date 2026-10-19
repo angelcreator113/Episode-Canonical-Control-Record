@@ -155,9 +155,10 @@ describe('writes — only the admin group writes the four fields', () => {
     ['put', '/api/v1/character-depth/c1', (fields) => fields, (b) => b.depth, ALL, true],
     ['post', '/api/v1/character-depth/c1/confirm', (fields) => ({ proposed: fields }), (b) => b.depth, ALL, true],
     ['put', '/api/v1/character-registry/characters/c1', (fields) => fields, (b) => b.character, ROW, true],
-    // characterGenerationRoutes /confirm spreads `proposed` into update()
+    // characterGenerationRoutes /confirm spreads `proposed` into update(); ADMIN
+    // only since the profile follow-up (Evoni, 2026-10-19).
     ['post', '/api/v1/character-generation/confirm', (fields) => ({ character_id: 'c1', proposed: fields }),
-      (b) => b.character, ROW],
+      (b) => b.character, ROW, true],
   ];
 
   beforeEach(() => resetRow(false));

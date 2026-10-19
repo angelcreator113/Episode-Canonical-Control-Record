@@ -23,7 +23,7 @@ jest.mock('../../../src/middleware/auth', () => {
   return {
     ...actual,
     requireAuth: (req, res, next) => {
-      if (req.headers['x-test-user']) { req.user = { id: 'u1' }; return next(); }
+      if (req.headers['x-test-user']) { req.user = { id: 'u1', groups: ['ADMIN'] }; /* the writes are ADMIN only (Evoni, 2026-10-19) */ return next(); }
       return actual.requireAuth(req, res, next);
     },
   };

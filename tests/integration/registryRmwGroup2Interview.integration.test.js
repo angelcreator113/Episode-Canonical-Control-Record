@@ -38,11 +38,12 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   const auth = () => `Bearer ${token}`;
 
   beforeAll(async () => {
+    // The registry writes are ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only).
     token = TokenService.generateTokenPair({
       id: 'test-user-rmw-interview',
       email: 'test@rmw-interview.dev',
       name: 'RMW Interview Test',
-      groups: ['USER', 'EDITOR'],
+      groups: ['ADMIN'],
       role: 'USER',
     }).accessToken;
     await run(`INSERT INTO character_registries (id, title, created_at, updated_at) VALUES (:reg, 'RMW interview registry', NOW(), NOW())`, ids);
