@@ -1552,7 +1552,7 @@ export default function EventPackagePage() {
             <div className="epp-suggestion" data-testid="organizer-suggestion">
               <span className="epp-suggestion-text">
                 <Lightbulb size={12} aria-hidden="true" /> Suggestion: <strong>{startedFrom.name}</strong> as organizer
-                <span className="epp-suggestion-basis">You started this event from their Feed profile</span>
+                <span className="epp-suggestion-basis">You started this event from their Pulse profile</span>
               </span>
               <button
                 type="button" className="epp-btn epp-btn-small epp-suggestion-accept" data-testid="organizer-suggestion-accept"
@@ -1566,7 +1566,7 @@ export default function EventPackagePage() {
             <div className="epp-suggestion" data-testid="attendee-suggestion">
               <span className="epp-suggestion-text">
                 <Lightbulb size={12} aria-hidden="true" /> Suggestion: <strong>{startedFrom.name}</strong> as a featured attendee
-                <span className="epp-suggestion-basis">You started this event from their Feed profile</span>
+                <span className="epp-suggestion-basis">You started this event from their Pulse profile</span>
               </span>
               <button
                 type="button" className="epp-btn epp-btn-small epp-suggestion-accept" data-testid="attendee-suggestion-accept"
@@ -1600,7 +1600,7 @@ export default function EventPackagePage() {
               <div className="epp-fields-label">Featured Attendees ({featuredGuests.length}/{MAX_FEATURED_GUESTS})</div>
               {!used && (
                 <button className="epp-btn epp-btn-small" onClick={() => setGuestFeedPickerOpen(true)}>
-                  <UserPlus size={14} /> Add from Feed
+                  <UserPlus size={14} /> Add from The Pulse
                 </button>
               )}
             </div>
@@ -2465,7 +2465,7 @@ export default function EventPackagePage() {
         <div className="epp-modal-backdrop" onClick={() => setGuestFeedPickerOpen(false)}>
           <div className="epp-modal" onClick={(e) => e.stopPropagation()}>
             <div className="epp-modal-header">
-              <h3>Add from Lala's Feed</h3>
+              <h3>Add from The Pulse</h3>
               <button className="epp-icon-btn" onClick={() => setGuestFeedPickerOpen(false)} aria-label="Close">
                 <X size={16} />
               </button>

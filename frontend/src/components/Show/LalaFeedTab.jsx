@@ -180,12 +180,12 @@ export default function LalaFeedTab({ showId, episodes = [], onCountChanged }) {
 
   const shown = postsFor(view, drafts, live, deletedPosts);
   const counts = { queue: postsFor('queue', drafts, live).length, scheduled: postsFor('scheduled', drafts, live).length, live: (live || []).length, deleted: (deletedPosts || []).length };
-  const heading = { queue: 'Waiting for your approval', scheduled: 'From episodes, waiting for your approval', live: 'On her feed', deleted: 'Deleted posts' }[view];
+  const heading = { queue: 'Waiting for your approval', scheduled: 'From episodes, waiting for your approval', live: 'Live on The Pulse', deleted: 'Deleted posts' }[view];
 
   return (
     <div className="wa-lf" data-testid="lala-feed">
       <div className="wa-lf-head">
-        <h2>Lala&apos;s Feed</h2>
+        <h2>Lala&apos;s posts</h2>
         <div className="wa-lf-views" role="group" aria-label="Which posts">
           {FEED_VIEWS.map((v) => (
             <button key={v.key} type="button" className={`wa-lf-view${view === v.key ? ' active' : ''}`} aria-pressed={view === v.key}
@@ -210,9 +210,9 @@ export default function LalaFeedTab({ showId, episodes = [], onCountChanged }) {
             </p>
           )}
           <h3 className="wa-lf-section">{heading} {drafts != null && <span>{shown.length} {view === 'live' || view === 'deleted' ? `post${shown.length === 1 ? '' : 's'}` : `draft${shown.length === 1 ? '' : 's'}`}</span>}</h3>
-          {drafts == null ? <p className="wa-lf-empty">Loading the feed…</p> : shown.length === 0 ? (
+          {drafts == null ? <p className="wa-lf-empty">Loading her posts…</p> : shown.length === 0 ? (
             <p className="wa-lf-empty">
-              {{ queue: 'Nothing waiting for approval.', scheduled: 'No episode drafts waiting. An episode\'s feed posts are made on its feed timeline.', live: 'Nothing posted yet.', deleted: 'Nothing deleted.' }[view]}
+              {{ queue: 'Nothing waiting for approval.', scheduled: 'No episode drafts waiting. An episode\'s Pulse posts are made on its post timeline.', live: 'Nothing posted yet.', deleted: 'Nothing deleted.' }[view]}
             </p>
           ) : (
             <ul className="wa-lf-list">
@@ -236,7 +236,7 @@ export default function LalaFeedTab({ showId, episodes = [], onCountChanged }) {
                 </span>
               </div>
             ))}
-            {live && !live.length && <p className="wa-lf-empty pad">Her feed is quiet.</p>}
+            {live && !live.length && <p className="wa-lf-empty pad">Nothing of hers is live yet.</p>}
           </div>
           <Link className="wa-lf-link" to="/pulse">Open the full page</Link>
         </aside>

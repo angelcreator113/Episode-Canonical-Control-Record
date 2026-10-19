@@ -56,7 +56,7 @@ export { Reactions, BeatPicker, PostCard } from '../components/Admin/PulseReview
 /** World Studio's Feed tab, where Feed profiles are made, on the LalaVerse; at one profile when given. */
 export const profileHome = (p) => `/world-studio?tab=feed&layer=lalaverse${p?.id ? `&profile=${p.id}` : ''}`;
 export const TABS = [
-  { key: 'posts', label: 'Feed' },
+  { key: 'posts', label: 'Posts' },
   { key: 'events', label: 'Events' },
   { key: 'people', label: 'Characters' },
   { key: 'profile', label: 'Profile' },
@@ -131,7 +131,7 @@ function PulseHeader({ cover, lala, search, onSearch, director, showSearch, cove
 }
 
 const NAV = [
-  { key: 'posts', label: 'Feed', Icon: Home },
+  { key: 'posts', label: 'Posts', Icon: Home },
   { key: 'cities', label: 'Dream Cities', Icon: MapPin },
   { key: 'events', label: 'Events', Icon: Calendar },
   { key: 'people', label: 'Characters', Icon: Users },

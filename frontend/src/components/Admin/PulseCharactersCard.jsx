@@ -48,7 +48,7 @@ function MeetsLala({ met, name, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
   if (!ctx || met === undefined) return null; // undefined: not read yet
-  if (!met) return <p className="pulse-met" data-testid="pulse-met">Not linked to a Feed profile, so not on The Pulse yet.</p>;
+  if (!met) return <p className="pulse-met" data-testid="pulse-met">Not linked to a Pulse profile, so not on The Pulse yet.</p>;
   const run = async (fn) => {
     setBusy(true); setNote(null);
     try { await fn(); setOpen(false); await onChanged(); } catch (err) {

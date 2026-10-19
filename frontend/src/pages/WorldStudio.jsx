@@ -619,7 +619,7 @@ function CharacterFollowsTab({ characterKey, characterName }) {
           Following ({follows.length} creator{follows.length !== 1 ? 's' : ''})
         </div>
         {follows.length === 0 ? (
-          <div style={{ fontSize: 12, color: '#9999b3', fontStyle: 'italic' }}>No follows yet — they'll be assigned as feed profiles are generated.</div>
+          <div style={{ fontSize: 12, color: '#9999b3', fontStyle: 'italic' }}>No follows yet — they'll be assigned as Pulse profiles are generated.</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {follows.map(f => {
@@ -1189,7 +1189,7 @@ export default function WorldStudio() {
         <button
           className={`ws4-studio-tab${studioTab === 'feed' ? ' ws4-studio-tab--active' : ''}`}
           onClick={() => setStudioTab('feed')}
-        >Feed</button>
+        >Pulse people</button>
         <button
           className={`ws4-studio-tab${studioTab === 'relationships' ? ' ws4-studio-tab--active' : ''}`}
           onClick={() => setStudioTab('relationships')}
@@ -1199,13 +1199,13 @@ export default function WorldStudio() {
       {/* ── Feed tab ────────────────────────────────────────────── */}
       {studioTab === 'feed' && (
         <div className="ws4-feed-tab">
-          <div className="ws4-feed-layers" role="tablist" aria-label="Which feed">
+          <div className="ws4-feed-layers" role="tablist" aria-label="Which world">
             {[['lalaverse', 'LalaVerse'], ['real_world', 'Real world']].map(([key, label]) => (
               <button key={key} type="button" role="tab" aria-selected={feedLayer === key} data-testid={`ws4-feed-layer-${key}`}
                 className={`ws4-feed-layer${feedLayer === key ? ' ws4-feed-layer--active' : ''}`} onClick={() => setFeedLayer(key)}>{label}</button>
             ))}
           </div>
-          <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading Feed Generator…</div>}>
+          <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading Pulse people…</div>}>
             <SocialProfileGenerator key={feedLayer} embedded={true} worldTag={worldTag} defaultFeedLayer={feedLayer}
               initialProfileId={linkedProfileId} />
           </Suspense>

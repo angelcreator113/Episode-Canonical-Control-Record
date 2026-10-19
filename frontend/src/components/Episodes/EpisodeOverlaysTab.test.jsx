@@ -226,7 +226,7 @@ describe('EpisodeOverlaysTab — one card per overlay', () => {
     const menu = screen.getByTestId('eot-new-menu');
     expect(within(menu).getByRole('menuitem', { name: /From a document/ })).toBeTruthy();
     expect(within(menu).getByRole('menuitem', { name: /From the show library/ })).toBeTruthy();
-    expect(within(menu).getByRole('menuitem', { name: /From Lala's Feed/ }).getAttribute('href')).toBe('/shows/sh-1/world?tab=feed');
+    expect(within(menu).getByRole('menuitem', { name: /From Lala's posts/ }).getAttribute('href')).toBe('/shows/sh-1/world?tab=feed');
     expect(within(menu).getByRole('menuitem', { name: /Notification or stat pop/ }).getAttribute('href')).toBe('/shows/sh-1/world?tab=overlays-tab');
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByTestId('eot-new-menu')).toBeNull();
