@@ -1,7 +1,8 @@
 /**
  * Pulse profiles and follows (Evoni, 2026-10-19; services/pulseFollows.js,
  * routes/pulseFollowsRoutes.js, migrations 20261019190000/190001):
- * - someone crossing from the feed follows Lala, one way;
+ * - someone crossing from the feed follows Lala, one way; a character made
+ *   some other way (created_from, migration 20261019200001) does not;
  * - the seed makes Lala's old friends mutual follows and feed people
  *   followers of Lala, idempotently; down removes only its own rows;
  * - Evoni sets either direction; anyone else gets a 403;
@@ -56,9 +57,12 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await profile('crossed', { status: 'crossed' });  // came from the feed before follows existed
     await profile('maren', { status: 'finalized', persona: 'baker and early riser', city: 'velour_city' });
     await profile('stranger');
+    await profile('made', { status: 'generated' });   // "Make one for me": their character was made on The Cast
     // Lala's registry character links her profile: lalaFeedProfile finds her through it.
     await run(`INSERT INTO registry_characters (id, registry_id, character_key, display_name, feed_profile_id, created_at, updated_at)
                VALUES (:id, :reg, 'lala', 'Lala', :feed, NOW(), NOW() + interval '1 day')`, { id: ids.lalaChar, reg: ids.reg, feed: p.lala });
+    await run(`INSERT INTO registry_characters (id, registry_id, character_key, display_name, feed_profile_id, created_from, created_at, updated_at)
+               VALUES (:id, :reg, :key, 'Made', :feed, 'cast_generate', NOW(), NOW())`, { id: uuid(), reg: ids.reg, key: `made_${tag}`, feed: p.made });
   });
 
   afterAll(async () => {
@@ -99,6 +103,17 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect((await live(p.maren, p.lala))[0]?.source).toBe('auto_feed');
     expect(await live(p.lala, p.maren)).toHaveLength(0);
     expect(await follows.relationToLala(models, p.maren)).toEqual({ follows_lala: true, lala_follows: false, friends: false });
+  });
+
+  // created_from (Evoni, 2026-10-19): only someone made from the feed follows
+  // Lala on their own; a "Make one for me" person crossed later does not.
+  test('a character made some other way does not follow Lala when its profile is crossed', async () => {
+    expect(await follows.followLalaFromFeed(models, [p.made])).toBe(0);
+    expect(await live(p.made, p.lala)).toHaveLength(0);
+    // Their origin is what decides: recorded as from the feed, they follow her.
+    await run("UPDATE registry_characters SET created_from = 'feed_cross' WHERE feed_profile_id = :id", { id: p.made });
+    expect(await follows.followLalaFromFeed(models, [p.made])).toBe(1);
+    expect((await live(p.made, p.lala))[0]?.source).toBe('auto_feed');
   });
 
   test('Evoni sets either direction; friends are both; anyone else is refused', async () => {
