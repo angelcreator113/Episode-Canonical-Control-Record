@@ -100,7 +100,7 @@ describe('one instruction for how beat 14 ends', () => {
 
   test('nothing attached: as before', async () => {
     const prompt = await promptWith({ opp: null });
-    expect(prompt).toContain('6. Beat 14 ends on the forward hook: "and then the DM arrives"\n');
+    expect(prompt).toContain('6. Beat 14 ends on the forward hook: "and then the DM arrives". It may land on her phone, as one [UI:DM …] or [UI:NOTIFY …], or in person; one, never both\n');
     expect(prompt).toContain('- Beat 14: end on the forward hook, "and then the DM arrives", told through her career: a follow-up offer');
   });
 });
