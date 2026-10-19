@@ -731,12 +731,20 @@ if (process.env.PULSE_ENGINE_ENABLED === 'true' && process.env.NODE_ENV !== 'tes
   require('./services/pulseVoices').startScheduler(db);
   // The weekly recap (Task #3008): each hour, last week's draft if it has none (never AI; never published by itself).
   require('./services/pulseRecap').startScheduler(db);
+  // World moments' press and trend posts (services/worldMoments): drafted here, never in a request.
+  require('./services/worldMoments').registerHandlers();
 }
 
 // Release time (Character Consistency Engine step 6c, services/postRelease):
 // each minute, drafts Evoni scheduled whose time has come go live. Not under
 // the posting engine's switch (she chose each time herself); never in tests.
 if (process.env.NODE_ENV !== 'test') require('./services/postRelease').startScheduler(db);
+
+// Scheduled world moments (services/worldMoments; Evoni, 2026-10-18): the routes, and
+// the automatic run, which starts only when the server sets WORLD_MOMENTS_ENABLED=true
+// (Evoni's .env change) and drafts only for shows whose switch is on; never in tests.
+try { app.use('/api/v1/world-moments', require('./routes/worldMomentsRoutes')); console.log('✓ World moments routes loaded at /api/v1/world-moments'); } catch (e) { console.error('✗ Failed to load World moments routes:', e.message); }
+if (process.env.NODE_ENV !== 'test') require('./services/worldMoments').startScheduler(db);
 
 // Phase 2 routes
 app.use('/api/v1/files', filesRoutes);
@@ -1362,6 +1370,8 @@ try {
 
 // Brands on The Pulse (Evoni, 2026-10-18; services/brandPulse)
 try { app.use('/api/v1/brand-pulse', require('./routes/brandPulseRoutes')); console.log('✓ Brand Pulse routes loaded at /api/v1/brand-pulse'); } catch (e) { console.error('✗ Failed to load Brand Pulse routes:', e.message); }
+// Brand and company profiles (Evoni, 2026-10-18; services/brandProfile)
+try { app.use('/api/v1/companies', require('./routes/companyRoutes')); console.log('✓ Company routes loaded at /api/v1/companies'); } catch (e) { console.error('✗ Failed to load Company routes:', e.message); }
 
 // The Consciousness Layer routes (/api/v1/consciousness) were retired
 // 2026-10-18 (Evoni: "retire the two you suggested"): no page called them,
@@ -1719,6 +1729,9 @@ try {
 } catch (e) {
   console.error('✗ Failed to load Daily update routes:', e.message);
 }
+
+// Trust per character (services/pulseTrust)
+try { app.use('/api/v1/pulse-trust', require('./routes/pulseTrustRoutes')); console.log('✓ Pulse trust loaded at /api/v1/pulse-trust'); } catch (e) { console.error('✗ Failed to load Pulse trust routes:', e.message); }
 
 // The book follows the show — episode → short story → chapter (docs/CANON.md)
 try {

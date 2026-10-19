@@ -25,6 +25,8 @@ module.exports = (sequelize) => {
     ai_generated: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     generation_model: { type: DataTypes.STRING(60), allowNull: true },
     voice_note: { type: DataTypes.TEXT, allowNull: true },
+    // Went out on trust (services/pulseTrust): { level, waived, flags, at, undone_at? }.
+    released_on_trust: { type: DataTypes.JSONB, allowNull: true },
     // When Evoni changed the text of this AI draft (Task #3070, migration 20261013040000).
     edited_at: { type: DataTypes.DATE, allowNull: true },
   }, {

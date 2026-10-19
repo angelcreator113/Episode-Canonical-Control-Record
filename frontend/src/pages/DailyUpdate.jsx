@@ -281,12 +281,60 @@ function ScheduledPost({ post }) {
   );
 }
 
+/**
+ * Went out on trust (services/pulseTrust): a fully trusted poster's post the
+ * gate would have held, and their comments too. Undo puts a post back in
+ * Review (POST /pulse-trust/undo/:id) and a comment back to a draft
+ * (POST /pulse-trust/undo-comment/:id).
+ */
+function OnTrust({ group }) {
+  const [undone, setUndone] = useState({});
+  const [busy, setBusy] = useState(null);
+  const [error, setError] = useState(null);
+  const undo = async (p) => {
+    setBusy(p.id); setError(null);
+    try {
+      await api.post(p.kind === 'comment' ? `/api/v1/pulse-trust/undo-comment/${p.id}` : `/api/v1/pulse-trust/undo/${p.id}`);
+      setUndone((u) => ({ ...u, [p.id]: true }));
+    } catch (err) {
+      console.error('[DailyUpdate] undo on trust failed:', err);
+      setError(errorText(err, 'That could not be undone. Try again.'));
+    } finally { setBusy(null); }
+  };
+  if (!group?.items?.length) return null;
+  return (
+    <details className="du-more" open data-testid="du-on-trust">
+      <summary>Went out on trust ({group.total})</summary>
+      {error && <p className="du-error" role="alert">{error}</p>}
+      <ul className="du-items">
+        {group.items.map((p) => (
+          <li key={p.id} className="du-item">
+            <div className="du-item-body">
+              <span className="du-who">{p.handle || 'A post'}{p.kind === 'comment' && <span className="du-tag">Comment</span>}{p.show && <span className="du-muted"> · {p.show}</span>}</span>
+              <p className="du-text">{p.text}</p>
+              {p.waived_flags?.length > 0 && <span className="du-muted">Let through: {p.waived_flags.map((f) => TRUST_FLAG_WORDS[f] || f).join(', ')}</span>}
+            </div>
+            <div className="du-item-actions">
+              {undone[p.id]
+                ? <span className="du-muted">Back in Review</span>
+                : <button type="button" className="du-btn is-quiet" disabled={!!busy} onClick={() => undo(p)}><Undo2 size={13} aria-hidden /> Undo</button>}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+const TRUST_FLAG_WORDS = { voice: 'voice match', off_lane: 'off their usual content', banned_phrase: 'an AI-sounding phrase' };
+
 function SinceYesterday({ s }) {
   const facts = s.automatic.facts;
   const resolved = Object.values(s.automatic.findings_resolved || {}).reduce((a, b) => a + b, 0);
   const chips = [
     [`${s.went_live.total} went live`, s.went_live.auto ? `${s.went_live.auto} on their own` : null],
     [`${s.scheduled.total} scheduled`],
+    ...(s.on_trust?.total ? [[`${s.on_trust.total} on trust`]] : []),
     [plural(s.new_characters.total, 'new character')],
     [plural(facts.length, 'fact changed', 'facts changed')],
     [plural(s.automatic.voices_built.length, 'voice built', 'voices built')],
@@ -324,6 +372,7 @@ function SinceYesterday({ s }) {
           </ul>
         </details>
       )}
+      <OnTrust group={s.on_trust} />
       {s.new_characters.items.length > 0 && (
         <details className="du-more">
           <summary>New characters</summary>
