@@ -47,6 +47,26 @@ export function scrollerOf(el) {
   return document.scrollingElement || document.documentElement;
 }
 
+// A dialog or sheet on the page (Script page audit, 2026-10-19): while it
+// is open, Escape closes it (unless something inside answered it already,
+// a line editor's Escape), focus goes to `focusRef`, and it goes back to
+// what opened it when it closes.
+export function useDialogKeys(open, onClose, focusRef = null) {
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    if (!open) return undefined;
+    const opener = document.activeElement;
+    focusRef?.current?.focus?.();
+    const onKey = (e) => { if (e.key === 'Escape' && !e.defaultPrevented) { e.preventDefault(); closeRef.current(); } };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      if (opener && opener !== document.body && opener.isConnected && typeof opener.focus === 'function') opener.focus();
+    };
+  }, [open, focusRef]);
+}
+
 const BEAT_NAMES = [
   { number: 1,  name: 'Opening Ritual',        icon: '🎬', color: 'var(--primary-text)' },
   { number: 2,  name: 'Login Sequence',         icon: '🔐', color: 'var(--primary-text)' },
@@ -252,6 +272,12 @@ function ScriptLine({ line, beatId, beatNumber = null, lineIndex, onEdit, onDele
   const parsed = parseLine(lineStr);
   if (!parsed || parsed.hidden) return null;
   const sc = { Prime: 'var(--primary-text)', Lala: 'var(--accent-dark)', Kelli: 'var(--info-text)', Guest: 'var(--success-text)' };
+  // Focus goes back to the line's row once its editor closes, found by its
+  // place, since a changed line is drawn anew (Script page audit, 2026-10-19).
+  const closeEditor = () => {
+    setEditing(false);
+    setTimeout(() => document.querySelector(`[data-beat-id="${beatId}"] [data-line-index="${lineIndex}"]`)?.focus(), 0);
+  };
 
   if (editing) return (
     <div className="esp-line-edit">
@@ -259,16 +285,16 @@ function ScriptLine({ line, beatId, beatNumber = null, lineIndex, onEdit, onDele
           to the tab's own save (Script tab audit, 2026-10-15). */}
       <textarea className="esp-line-input" value={editText} onChange={e => setEditText(e.target.value)} autoFocus rows={3} aria-label="Edit line"
         onKeyDown={(e) => {
-          if (e.key === 'Escape') { e.preventDefault(); setEditing(false); }
-          else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if (onEdit(beatId, lineIndex, editText) !== false) setEditing(false); }
+          if (e.key === 'Escape') { e.preventDefault(); closeEditor(); }
+          else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if (onEdit(beatId, lineIndex, editText) !== false) closeEditor(); }
           // The line goes in first, then the tab saves (Script tab re-audit,
           // 2026-10-15: the save left the open line out).
-          else if (e.key.toLowerCase() === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.stopPropagation(); if (onEdit(beatId, lineIndex, editText, { thenSave: true }) !== false) setEditing(false); }
+          else if (e.key.toLowerCase() === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.stopPropagation(); if (onEdit(beatId, lineIndex, editText, { thenSave: true }) !== false) closeEditor(); }
         }} />
       <div className="esp-line-edit-actions">
         {/* A refused edit (a new script is being written) keeps the editor open. */}
-        <button type="button" className="esp-btn-primary is-small" onClick={() => { if (onEdit(beatId, lineIndex, editText) !== false) setEditing(false); }}>Save</button>
-        <button type="button" className="esp-btn is-small" onClick={() => setEditing(false)}>Cancel</button>
+        <button type="button" className="esp-btn-primary is-small" onClick={() => { if (onEdit(beatId, lineIndex, editText) !== false) closeEditor(); }}>Save</button>
+        <button type="button" className="esp-btn is-small" onClick={closeEditor}>Cancel</button>
         {onDelete && <button type="button" className="esp-btn is-small esp-line-delete" data-testid="script-line-delete" onClick={() => { if (!window.confirm('Delete this line?')) return; if (onDelete(beatId, lineIndex) !== false) setEditing(false); }}><Trash2 size={13} aria-hidden="true" /> Delete line</button>}
         {/* Moving without dragging (touch screens, keyboards). */}
         <span className="esp-move esp-move--end">
@@ -281,10 +307,14 @@ function ScriptLine({ line, beatId, beatNumber = null, lineIndex, onEdit, onDele
     </div>
   );
 
+  // Rewrite sits beside the row, not inside its role="button" (Script page
+  // audit, 2026-10-19: a button in a button).
   return (
+    <div className="esp-line-row">
     <div
       className={`esp-line${locked ? ' is-locked' : ''}${dropAt ? ` esp-drop-${dropAt}` : ''}`}
       data-testid="script-line"
+      data-line-index={lineIndex}
       draggable={!locked}
       onDragStart={locked ? undefined : (e) => { e.stopPropagation(); drag.start(e, { kind: 'line', beatId, from: lineIndex }); }}
       onDragEnd={() => drag.end()}
@@ -301,16 +331,17 @@ function ScriptLine({ line, beatId, beatNumber = null, lineIndex, onEdit, onDele
       }}
     >
       {parsed.type === 'dialogue' && (
-        <div className="esp-line-dialogue">
+        <div>
           <span className="esp-line-speaker" style={{ '--speaker': sc[parsed.speaker] || 'var(--text-primary)' }}>{parsed.speaker}</span>
           <span className="esp-line-text">"{parsed.text}"</span>
-          {!locked && <button type="button" className="esp-rewrite" onClick={e => { e.stopPropagation(); onRewrite(beatId, lineIndex, lineStr); }} disabled={rewriting}>{rewriting ? '⏳' : '✦ Rewrite'}</button>}
         </div>
       )}
       {parsed.type === 'moment' && <MomentCard moment={parsed} shown={resolveMoment(parsed, onScreen)} alongside={withOnScreen} phoneDown={phoneDown} beatNumber={beatNumber} postDrafts={onScreen.postDrafts} />}
       {parsed.type === 'action' && <div className="esp-line-action">{parsed.text}</div>}
       {parsed.type === 'narration' && <div className="esp-line-text">{parsed.text}</div>}
       {parsed.type === 'cue' && <div className="esp-line-cue">{parsed.text}</div>}
+    </div>
+    {parsed.type === 'dialogue' && !locked && <button type="button" className="esp-rewrite" onClick={() => onRewrite(beatId, lineIndex, lineStr)} disabled={rewriting} aria-label={rewriting ? 'Rewriting…' : undefined}>{rewriting ? '⏳' : '✦ Rewrite'}</button>}
     </div>
   );
 }
@@ -432,7 +463,7 @@ function MomentPicker({ screens, icons = [], overlays, look = [], production = [
       <p className="esp-picker-group">Lala&apos;s Phone</p>
       <div className="esp-pick-grid">{phoneItems.map(tile)}</div>
       {iconGroups.map((g) => (
-        <div key={g.title} className="esp-pick-icons" data-testid="script-pick-icon-group">
+        <div key={g.title} data-testid="script-pick-icon-group">
           <p className="esp-picker-sub">{g.title}</p>
           <div className="esp-pick-grid is-icons">{g.items.map(tile)}</div>
         </div>
@@ -659,6 +690,8 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
   // Each bottom-bar tap acts once: collapsing and reopening the beat no
   // longer opens the adder again (Script tab audit, 2026-10-15).
   const handledRequest = useRef(null);
+  // The adder or picker a bar tap opened, to be shown (Script page audit, 2026-10-19).
+  const [reveal, setReveal] = useState(null);
   // Ask for a change (Script tab audit, 2026-10-15): words for Regenerate beat.
   const [ask, setAsk] = useState('');
   // One beat is written at a time, and none while a new script is: Regenerate
@@ -674,7 +707,22 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
     setPicking(request.kind === 'phone' ? {} : false);
     // Answered, so a remount (Raw editor and back) doesn't open it again.
     onRequestDone?.();
+    setReveal({ kind: request.kind, n: request.n });
   }, [request, expanded, beat.approved, onRequestDone]);
+  // The adder opens at the end of the beat, often below the screen: it is
+  // scrolled to the middle and its first control takes focus, so the bar's
+  // tap shows where it went (Script page audit, 2026-10-19).
+  useEffect(() => {
+    const kind = reveal?.kind;
+    if (!kind) return;
+    const box = cardRef.current?.querySelector(kind === 'line' ? '[data-testid="script-line-adder"]' : '[data-testid="script-moment-picker"]');
+    if (!box) return;
+    box.scrollIntoView?.({ block: 'center' });
+    (box.querySelector(kind === 'line' ? 'textarea' : '.esp-pick-tile') || box.querySelector('button'))?.focus({ preventScroll: true });
+  }, [reveal]);
+  // The scene picture, larger: Escape closes it; focus goes to its Close and back.
+  const zoomCloseRef = useRef(null);
+  useDialogKeys(zoomed && !!scene?.image, () => setZoomed(false), zoomCloseRef);
   const picture = scene?.image || null;
   const expects = EXPECTED_ON_SCREEN[beat.number] || null;
   // The lines the beat shows, by their place in the beat (hidden tags left out).
@@ -726,12 +774,14 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
             <span className="esp-beat-name">{beat.name}</span>
             {beat.approved && <span className="esp-chip-approved" title="Approved beats are locked: they can't be edited, and Regenerate keeps them as they are.">🔒 APPROVED</span>}
           </div>
-          {scene?.scene_set_name && <button type="button" className="esp-beat-scene" onClick={(e) => { e.stopPropagation(); onOpenMap(); }} title="Open DREAM Map">📍 {scene.scene_set_name}{scene?.angle_label ? ` · ${scene.angle_label}` : ''}</button>}
         </div>
         {picture && <span className="esp-beat-thumb" aria-hidden="true"><img src={picture} alt="" loading="lazy" /></span>}
         <span className="esp-beat-count">{visibleLines} line{visibleLines === 1 ? '' : 's'}<span className="esp-beat-runtime" data-testid={`script-beat-runtime-${beat.number}`} title="Rough length: words at 150 a minute, a few seconds per action or moment">{formatRuntime(beatSeconds(beat.lines))}</span></span>
         <span className="esp-beat-chev" aria-hidden="true">▼</span>
       </div>
+      {/* The scene's map link sits under the head, not inside its
+          role="button" (Script page audit, 2026-10-19). */}
+      {scene?.scene_set_name && <button type="button" className="esp-beat-scene" onClick={(e) => { e.stopPropagation(); onOpenMap(); }} title="Open DREAM Map">📍 {scene.scene_set_name}{scene?.angle_label ? ` · ${scene.angle_label}` : ''}</button>}
       {expanded && (
         <div className="esp-beat-body">
           {proposal && <ProposalCard proposal={proposal} onAccept={onAcceptProposal} onDiscard={onDiscardProposal} />}
@@ -829,7 +879,7 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
       {zoomed && picture && (
         <div className="esp-zoom" role="dialog" aria-modal="true" aria-label="The scene" data-testid="script-picture-zoom" onClick={(e) => { e.stopPropagation(); setZoomed(false); }}>
           <img src={picture} alt={scene?.image_label || scene?.scene_set_name || 'The scene'} />
-          <button type="button" className="esp-zoom-close" aria-label="Close" onClick={(e) => { e.stopPropagation(); setZoomed(false); }}><X size={20} aria-hidden="true" /></button>
+          <button type="button" ref={zoomCloseRef} className="esp-zoom-close" aria-label="Close" onClick={(e) => { e.stopPropagation(); setZoomed(false); }}><X size={20} aria-hidden="true" /></button>
         </div>
       )}
     </div>
@@ -886,6 +936,9 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // save. It lives here as a draft until Save keeps it; the reason is shown.
   const [unsaved, setUnsaved] = useState(null);
   const [showMap, setShowMap] = useState(false);
+  // The DREAM Map closes on Escape, focus in and back (Script page audit, 2026-10-19).
+  const mapCloseRef = useRef(null);
+  useDialogKeys(showMap, () => setShowMap(false), mapCloseRef);
   const [mapLocations, setMapLocations] = useState([]);
   const [mapImageUrl, setMapImageUrl] = useState(null);
   // What the script will use (Evoni's Episode mock): the brief and the
@@ -922,6 +975,9 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   const [barRequest, setBarRequest] = useState(null);
   const clearBarRequest = useCallback(() => setBarRequest(null), []);
   const [contextOpen, setContextOpen] = useState(false);
+  // The phone's Context sheet closes on Escape too (Script page audit, 2026-10-19).
+  const contextCloseRef = useRef(null);
+  useDialogKeys(contextOpen, () => setContextOpen(false), contextCloseRef);
   // Lala's posts in the script (Task #2885): each Post line's draft in her
   // Feed, as the server has it (null: not read yet, or could not be).
   const [postDrafts, setPostDrafts] = useState(null);
@@ -1196,7 +1252,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       if (stored !== scriptText && scriptRef.current === scriptText) { setScriptText(stored); }
       setSavedScript(stored); reportSaved(stored, lockedRef.current);
       setUnsaved(null); setSaved(true); setTimeout(() => setSaved(false), 3000);
-      if (kept.length) flash(`Saved. ${keptNote(kept)}.`, 'error', 5000);
+      // Saved, and the lock held: shown as news, not in red (Script page audit, 2026-10-19).
+      if (kept.length) flash(`Saved. ${keptNote(kept)}.`, 'success', 5000);
       if (/\[UI:\s*POST\s/i.test(stored) && !(await syncPostDrafts())) flash("Saved, but Lala's post drafts could not be made. Save again to retry.", 'error', 6000);
     }
     catch (err) { console.error('[EpisodeScript] save failed:', err); flash('Save failed', 'error'); }
@@ -1409,7 +1466,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
         if (/\[UI:\s*POST\s/i.test(stored) && !(await syncPostDrafts())) flash("Saved, but Lala's post drafts could not be made. Save again to retry.", 'error', 6000);
       }
       const kept = res?.data?.locked_beats_kept || [];
-      if (kept.length) flash(`${keptNote(kept)}.`, 'error', 5000);
+      if (kept.length) flash(`${keptNote(kept)}.`, 'success', 5000);
     } catch (err) {
       console.error('[EpisodeScript] lock failed:', err);
       flash(err.response?.data?.error || (beat.approved ? 'Could not unlock the beat' : 'Could not approve the beat'), 'error');
@@ -1519,7 +1576,10 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
 
   // The beat list and pills (Task #2881): the script's own beats, each marked
   // when it has a phone moment; the open beat's context for the chips.
-  const openId = expandedBeat === undefined ? beats[0]?.id : expandedBeat;
+  // A chosen beat whose id is gone (renumbered, removed) falls back to the
+  // first: at phone width only the open beat shows, so none was on screen
+  // (Script page audit, 2026-10-19). null (closed on a desktop) stays closed.
+  const openId = expandedBeat === undefined || (expandedBeat !== null && !beats.some((b) => b.id === expandedBeat)) ? beats[0]?.id : expandedBeat;
   const openBeat = beats.find((b) => b.id === openId) || null;
   // The Shopping list as of the open beat, from the saved script (Task
   // #3188): crossed off from the line each piece is put on.
@@ -1718,15 +1778,18 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
           context from the episode's own data. */}
       {showBeatList && (
         <>
-          <div className="esp-pills" role="list" aria-label="Beats" data-testid="script-pills">
+          {/* A list of buttons, not buttons playing list items (Script page audit, 2026-10-19). */}
+          <ul className="esp-pills" aria-label="Beats" data-testid="script-pills">
             {beats.map((b) => (
-              <button key={b.id} type="button" role="listitem" className={`esp-pill${b.id === openId ? ' is-open' : ''}`} aria-current={b.id === openId ? 'true' : undefined}
-                data-testid={`script-pill-${b.number}`} onClick={() => chooseBeat(b.id)}>
-                {b.number} · {b.name}
-                {phoneBeats.has(b.id) && <Smartphone size={13} aria-label="Has a phone moment" />}
-              </button>
+              <li key={b.id}>
+                <button type="button" className={`esp-pill${b.id === openId ? ' is-open' : ''}`} aria-current={b.id === openId ? 'true' : undefined}
+                  data-testid={`script-pill-${b.number}`} onClick={() => chooseBeat(b.id)}>
+                  {b.number} · {b.name}
+                  {phoneBeats.has(b.id) && <Smartphone size={13} aria-label="Has a phone moment" />}
+                </button>
+              </li>
             ))}
-          </div>
+          </ul>
           <ul className="esp-chips" data-testid="script-chips">
             <li data-testid="script-chip-coins"><Coins size={13} aria-hidden="true" />{truth?.coins.value != null ? `Lala has ${truth.coins.value.toLocaleString()} coins` : 'Coins not read'}</li>
             <li data-testid="script-chip-look"><Shirt size={13} aria-hidden="true" />{truth?.wearing.beforeCloset ? truth.wearing.text : outfit === null ? 'Look not read' : outfit.length ? `Dressed · ${outfit.length} piece${outfit.length === 1 ? '' : 's'}` : 'Not dressed yet'}</li>
@@ -1747,7 +1810,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
         <div className={busy ? 'esp-beats is-busy' : 'esp-beats'} aria-busy={busy || undefined} data-testid="script-beats">
           {beats.length > 1 && <p className="esp-order-hint">Drag a beat by its handle, or a line within its beat, to change the order. A beat keeps its number and name wherever it goes. Approved beats stay where they are.</p>}
           {beats.map((beat, index) => {
-            const open = (expandedBeat === undefined ? beats[0]?.id : expandedBeat) === beat.id;
+            const open = openId === beat.id;
             const phoneUp = phoneUpAtStart[index] || false;
             return <BeatSection key={beat.id} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open && !isPhoneWidth() ? null : beat.id)} onApprove={handleApprove} proposal={proposal?.beatId === beat.id ? proposal : null} onAcceptProposal={acceptProposal} onDiscardProposal={() => setProposal(null)} onEdit={handleEditLine} onDeleteLine={handleDeleteLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking || busy} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} writing={!!regeneratingBeat || busy} onRequestDone={clearBarRequest} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} phoneUpAtStart={phoneUp} people={people} lalaSlots={lineSlots.filter((s) => s.beatIndex === index)} dressCode={source?.event?.dress_code || ''} />;
           })}
@@ -1810,7 +1873,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     {/* What generation reads, and where the voices come from (Evoni's Episode mock). */}
     <aside className="esp-side" data-testid="script-side">
       {contextOpen && (
-        <button type="button" className="esp-side-close" onClick={() => setContextOpen(false)} data-testid="script-context-close"><X size={16} aria-hidden="true" /> Close</button>
+        <button type="button" ref={contextCloseRef} className="esp-side-close" onClick={() => setContextOpen(false)} data-testid="script-context-close"><X size={16} aria-hidden="true" /> Close</button>
       )}
       <section className="esp-uses" data-testid="script-uses">
         <h3 className="esp-side-title">What the script will use</h3>
@@ -1934,10 +1997,10 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       {/* DREAM Map Modal */}
       {showMap && (
         <div className="esp-map-backdrop" onClick={() => setShowMap(false)}>
-          <div className="esp-map" role="dialog" aria-label="DREAM Map" onClick={e => e.stopPropagation()}>
+          <div className="esp-map" role="dialog" aria-modal="true" aria-label="DREAM Map" onClick={e => e.stopPropagation()}>
             <div className="esp-map-bar">
               <span className="esp-map-title">DREAM MAP</span>
-              <button type="button" className="esp-map-close" aria-label="Close map" onClick={() => setShowMap(false)}>×</button>
+              <button type="button" ref={mapCloseRef} className="esp-map-close" aria-label="Close map" onClick={() => setShowMap(false)}>×</button>
             </div>
             <Suspense fallback={<div className="esp-map-loading">Loading map...</div>}>
               <DreamMap locations={mapLocations} mapImageUrl={mapImageUrl} />
