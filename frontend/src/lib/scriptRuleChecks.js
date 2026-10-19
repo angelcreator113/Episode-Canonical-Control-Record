@@ -8,17 +8,30 @@
 //   2026-10-18; src/utils/scriptMoney.js moneyContext).
 // - Beat 9 reads the approved shopping list on screen, [UI:DISPLAY Shopping
 //   list] … [UI:HIDE Shopping list] (Evoni, 2026-10-18; scriptMoney.js).
-// - Beat 12, The Fashion Challenge, is judged on her standing, never on
-//   money: [STAT: reputation ±n], [STAT: brand_trust ±n], [STAT: influence
-//   ±n], [STAT: stress ±n] (Evoni, 2026-10-18; canonicalBeats beat 12).
+// - The cutscene (Evoni, 2026-10-19): beats 1-10 are gameplay, beats 11-13
+//   a cutscene (AI video) where the characters speak their lines directly
+//   and JustAWoman (Me:) stays on screen and comments a little between
+//   them; beat 14 is gameplay again.
+// - Beat 11: the cutscene begins; Lala has a conversation with the event's
+//   host and two featured guests (Evoni, 2026-10-19): each has a line, and
+//   so does Lala.
+// - Beat 12, The Fashion Challenge, is a surprise runway walk at the event
+//   ("beat 12 runway is the challenge", Evoni, 2026-10-19), judged on her
+//   standing, never on money (Evoni, 2026-10-18; canonicalBeats beat 12).
+//   The [STAT: reputation ±n], [STAT: brand_trust ±n], [STAT: influence
+//   ±n] and [STAT: stress ±n] lines may come in beat 12 or on beat 13's
+//   stats panel ("we get evaluated as Lala does her runway walk", Evoni,
+//   2026-10-19).
 // - Beat 13: Lala says how the outcome feels (Evoni, 2026-10-17), and the
 //   event's own costs come off there only, never earlier; what she is owed
-//   is not paid in this episode, so it is never a coin line (Evoni,
-//   2026-10-18). Coins change only in beat 8 and beat 13.
-// - JustAWoman on camera (Evoni, 2026-10-17; PR #3347): at least once she
-//   lets Lala's scene play while she watches in silence, (JustAWoman
-//   watches, silent.). The only part of that rule a script shows by its
-//   lines; her reactions themselves are the writer's to judge.
+//   is paid next episode, so it is never a + coin line (Evoni, 2026-10-18,
+//   and "coins paid next episode", 2026-10-19). Coins change only in beat 8
+//   and beat 13.
+// - JustAWoman on camera (Evoni, 2026-10-17; PR #3347), in the cutscene
+//   (Evoni, 2026-10-19): she comments on it, a Me: line in each of beats
+//   11, 12 and 13. This replaces the check that she once watched Lala's
+//   scene in silence: the scene that played without her is now the
+//   cutscene, where she comments.
 //
 // Coin lines are read here with their own tolerant reading: `coins -50`,
 // `coins: -50`, a typographic minus, `-1,200`, and several stats in one tag.
@@ -29,14 +42,17 @@ const STAT_ENTRY = /([a-z][a-z_]*(?:[ \t]+[a-z][a-z_]*)?)\s*:?\s*([+\-−–]?)\
 const WEAR_CUE = /^\s*\[\s*WEAR\s*:\s*([^\]]*?)\s*\]\s*$/i;
 const UI_CUE = /^\s*\[\s*UI\s*:\s*([A-Za-z_]+)\s*(.*?)\s*\]\s*$/i;
 const LALA_SAYS = /^\s*lala\s*(?:\(([^)]*)\))?\s*:\s*\S/i;
-const SILENT_WATCH = /^\s*(?:(?:me|justawoman|jawihp|prime)\s*:\s*)?\((?=[^)]*\bsilen(?:t|ce|tly)\b)[^)]*\)\s*\.?\s*$/i;
+// JustAWoman's comment: `Me:` (or her name) with words beyond a stage direction.
+const JAW_SAYS = /^\s*(?:me|justawoman|jawihp|prime)\s*(?:\([^)]*\))?\s*:\s*(.*)$/i;
+// A speaker's line: a name (no cue, no stage direction) before a colon.
+const SPEAKER = /^\s*([^:[\]()]{1,60}?)\s*(?:\([^)]*\))?\s*:\s*\S/;
+const RUNWAY = /\b(?:runway|catwalk|walk(?:s|ed|ing)?)\b/i;
 // The episode overlay's own name for the approved list (src/utils/scriptMoney.js SHOPPING_LIST_OVERLAY).
 const SHOPPING_LIST = 'Shopping list';
 const CLOSET_BEAT = 8;
 const LIST_BEAT = 9;
-// JustAWoman's silent watch has no beat of its own; it is asked of beat 11,
-// the beat the event's people carry, not the phone (canonicalBeats beat 11).
-const PLAYS_BEAT = 11;
+const CUTSCENE = [11, 12, 13];
+const TALK_BEAT = 11;
 const CHALLENGE_BEAT = 12;
 const RECAP_BEAT = 13;
 const JUDGED_ON = ['reputation', 'brand_trust', 'influence', 'stress'];
@@ -65,6 +81,50 @@ const beatAt = (beats, n) => beats.find((b) => b.number === n) || null;
 const ui = (line) => { const m = line.match(UI_CUE); return m ? { verb: m[1].toUpperCase(), target: m[2] } : null; };
 const isList = (target) => target.trim().toLowerCase() === SHOPPING_LIST.toLowerCase();
 const more = (list) => (list.length > 1 ? ` (+${list.length - 1} more)` : '');
+const list = (items) => (items.length <= 2 ? items.join(' and ') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`);
+const norm = (v) => String(v ?? '').trim().replace(/^@/, '').replace(/\s+/g, ' ').toLowerCase();
+// A speaker is the person when the name as written is one of theirs, or
+// their first name (`Declan:` for Declan Ferris).
+const speaks = (who, c) => {
+  const w = norm(who);
+  return [c.name, ...(c.aliases || [])].map(norm).filter(Boolean)
+    .some((n) => n === w || (w.length >= 3 && !w.includes(' ') && n.split(' ')[0] === w));
+};
+
+/**
+ * The event's host and two featured guests, as the writer names them
+ * (episodeScriptWriterService: creator_name, else display_name, else
+ * handle): [{ name, role, aliases }]. The host is the creator organizer
+ * (source_profile_id, else automation.host_profile_id); the featured
+ * guests are the Event Package's guests marked featured (automation
+ * guest_profiles). `profiles`: the social profiles read for them, by id.
+ */
+function eventCast(event, profiles = []) {
+  let cc = event?.canon_consequences;
+  if (typeof cc === 'string') {
+    try { cc = JSON.parse(cc); } catch (err) { console.error('[scriptRuleChecks] canon_consequences unreadable:', err.message); cc = null; }
+  }
+  const auto = cc?.automation && typeof cc.automation === 'object' ? cc.automation : {};
+  const byId = new Map((profiles || []).filter((p) => p && p.id != null).map((p) => [String(p.id), p]));
+  const person = (role, id, own = []) => {
+    const p = id != null ? byId.get(String(id)) : null;
+    const names = [p?.creator_name, p?.display_name, p?.handle, ...own].filter((n) => typeof n === 'string' && n.trim());
+    return names.length ? { name: names[0].trim(), role, aliases: names.slice(1) } : null;
+  };
+  const out = [];
+  const hostId = event?.source_profile_id ?? auto.host_profile_id ?? null;
+  if (hostId != null && hostId !== '') {
+    const same = auto.host_profile_id != null && String(auto.host_profile_id) === String(hostId);
+    const host = person('host', hostId, same ? [auto.host_display_name, auto.host_handle] : []);
+    if (host) out.push(host);
+  }
+  const guests = (Array.isArray(auto.guest_profiles) ? auto.guest_profiles : []).filter((g) => g && g.featured).slice(0, 2);
+  for (const g of guests) {
+    const guest = person('featured guest', g.profile_id ?? g.id ?? null, [g.creator_name, g.display_name, g.handle]);
+    if (guest && !out.some((c) => norm(c.name) === norm(guest.name))) out.push(guest);
+  }
+  return out;
+}
 
 // The closet beat: the one given, else the one that opens the closet, else beat 8.
 function closetOf(beats, closetNumber) {
@@ -79,12 +139,12 @@ function closetOf(beats, closetNumber) {
  * [{ label, amount }] } or null when not read (no coin checks then);
  * `shoppingApproved`: true when the event's shopping list is approved (beat
  * 9 is checked only then); `closetNumber`: the closet beat, when known;
- * `complete`: every canonical beat is in the script (the "at least once"
- * rule is judged only then). Each finding: { key, ok, beat, text, label,
+ * `cast`: the event's host and featured guests (eventCast), [] when not
+ * known (no beat 11 check then). Each finding: { key, ok, beat, text, label,
  * ask } where beat is the beat that carries it and ask, when not ok, is
  * what the writer is asked to write in that beat.
  */
-function scriptRuleFindings(beats = [], { money = null, shoppingApproved = null, closetNumber = null, complete = false } = {}) {
+function scriptRuleFindings(beats = [], { money = null, shoppingApproved = null, closetNumber = null, cast = [] } = {}) {
   const out = [];
   const look = (money?.look || []).filter((p) => p && p.id != null && Math.round(Number(p.amount)) > 0)
     .map((p) => ({ id: String(p.id), name: p.name || String(p.id), amount: Math.round(Number(p.amount)) }));
@@ -142,21 +202,37 @@ function scriptRuleFindings(beats = [], { money = null, shoppingApproved = null,
     else out.push({ key: 'beat9', ok: true, beat: LIST_BEAT, label: 'The shopping list is read', text: `Beat ${LIST_BEAT}: JustAWoman reads the approved shopping list on screen.`, ask: null });
   }
 
-  // Beat 12: judged on her standing, never on money.
+  // Beat 11: the cutscene begins with Lala's conversation with the event's
+  // host and two featured guests; each says a line, and so does Lala.
+  const talk = beatAt(beats, TALK_BEAT);
+  const people = (cast || []).filter((c) => c && c.name);
+  if (talk && people.length) {
+    const lines = linesOf(talk);
+    const speakers = lines.map((l) => (l.match(SPEAKER) || [])[1]).filter(Boolean);
+    const lalaSays = lines.some((l) => { const m = l.match(LALA_SAYS); return !!m && !/v\.?\s*o\.?/i.test(m[1] || ''); });
+    const quiet = people.filter((c) => !speakers.some((who) => speaks(who, c)));
+    for (const c of quiet) {
+      out.push({
+        key: `beat11-${c.role === 'host' ? 'host' : 'guest'}-${norm(c.name).replace(/[^a-z0-9]+/g, '-')}`, ok: false, beat: TALK_BEAT, label: `${c.name} (${c.role})`,
+        text: `Beat ${TALK_BEAT}: Lala doesn't talk with ${c.name} (${c.role}).`,
+        ask: `Lala has a conversation with ${c.name} (${c.role}), who speaks directly as ${c.name}: [their words], in their own voice.`,
+      });
+    }
+    if (!lalaSays) {
+      out.push({ key: 'beat11-lala', ok: false, beat: TALK_BEAT, label: "Lala's side of the conversation", text: `Beat ${TALK_BEAT}: Lala never speaks in her conversation with the host and guests.`, ask: 'Lala speaks in the conversation in her own voice (Lala: …), answering the host and the featured guests.' });
+    }
+    if (!quiet.length && lalaSays) {
+      out.push({ key: 'beat11', ok: true, beat: TALK_BEAT, label: 'Lala talks with the host and guests', text: `Beat ${TALK_BEAT}: Lala talks with ${list(people.map((c) => c.name))}.`, ask: null });
+    }
+  }
+
+  // Beat 12: the Fashion Challenge is her runway walk, never money.
   const challenge = beatAt(beats, CHALLENGE_BEAT);
   if (challenge) {
     const lines = linesOf(challenge);
-    const moved = new Set(lines.flatMap((l) => (statEntries(l) || []).map((e) => e.stat)));
-    const unmoved = JUDGED_ON.filter((s) => !moved.has(s));
-    if (unmoved.length) {
-      out.push({
-        key: 'beat12', ok: false, beat: CHALLENGE_BEAT, label: unmoved.map((s) => `[STAT: ${s} ±n]`).join(' '),
-        text: `Beat ${CHALLENGE_BEAT}: the room's verdict doesn't move her ${unmoved.join(', ')}: ${unmoved.map((s) => `[STAT: ${s} ±n]`).join(' ')}.`,
-        ask: `The room's verdict on the challenge look moves her standing, each on its own line: ${JUDGED_ON.map((s) => `[STAT: ${s} ±n]`).join(', ')}; never coins.`,
-      });
-    } else {
-      out.push({ key: 'beat12', ok: true, beat: CHALLENGE_BEAT, label: 'Judged on her standing', text: `Beat ${CHALLENGE_BEAT} is judged on her reputation, brand trust, influence and stress.`, ask: null });
-    }
+    out.push(lines.some((l) => RUNWAY.test(l))
+      ? { key: 'beat12-runway', ok: true, beat: CHALLENGE_BEAT, label: 'The runway walk', text: `Beat ${CHALLENGE_BEAT}: the Fashion Challenge is her runway walk.`, ask: null }
+      : { key: 'beat12-runway', ok: false, beat: CHALLENGE_BEAT, label: 'The runway walk', text: `Beat ${CHALLENGE_BEAT}: the Fashion Challenge is a runway walk — it isn't in the beat yet.`, ask: 'The Fashion Challenge is a surprise runway walk at the event: Lala walks the runway in the look, and the room watches.' });
     const coins = lines.map(coinChange).filter((n) => n !== null);
     if (coins.length) {
       out.push({
@@ -165,6 +241,22 @@ function scriptRuleFindings(beats = [], { money = null, shoppingApproved = null,
         ask: 'No coin line in this beat: the challenge is judged on her standing (reputation, brand_trust, influence, stress), never on money.',
       });
     }
+  }
+
+  // Her standing moves in beat 12 or on beat 13's stats panel; the row is
+  // beat 13's (beat 12's when there is no beat 13).
+  const judged = [CHALLENGE_BEAT, RECAP_BEAT].map((n) => beatAt(beats, n)).filter(Boolean);
+  if (judged.length) {
+    const at = judged[judged.length - 1].number;
+    const moved = new Set(judged.flatMap((b) => linesOf(b).flatMap((l) => (statEntries(l) || []).map((e) => e.stat))));
+    const unmoved = JUDGED_ON.filter((st) => !moved.has(st));
+    out.push(unmoved.length
+      ? {
+        key: 'stats', ok: false, beat: at, label: unmoved.map((st) => `[STAT: ${st} ±n]`).join(' '),
+        text: `Beat ${at}: the runway's verdict doesn't move her ${unmoved.join(', ')}: ${unmoved.map((st) => `[STAT: ${st} ±n]`).join(' ')}.`,
+        ask: `The room's verdict on her runway walk moves her standing, each on its own line: ${JUDGED_ON.map((st) => `[STAT: ${st} ±n]`).join(', ')}; never coins.`,
+      }
+      : { key: 'stats', ok: true, beat: at, label: 'Judged on her standing', text: `Beat ${at}: her runway is judged on her reputation, brand trust, influence and stress.`, ask: null });
   }
 
   // Beat 13: Lala says how the outcome feels, in her own words.
@@ -216,12 +308,15 @@ function scriptRuleFindings(beats = [], { money = null, shoppingApproved = null,
     }
   }
 
-  // JustAWoman on camera: at least once she watches Lala's scene in silence.
-  if (complete) {
-    const silent = beats.some((b) => linesOf(b).some((l) => SILENT_WATCH.test(l)));
-    out.push(silent
-      ? { key: 'silent', ok: true, beat: PLAYS_BEAT, label: 'JustAWoman watches in silence', text: "JustAWoman watches Lala's scene in silence at least once.", ask: null }
-      : { key: 'silent', ok: false, beat: PLAYS_BEAT, label: '(JustAWoman watches, silent.)', text: "JustAWoman never watches in silence: at least once, Lala's scene plays while she watches, (JustAWoman watches, silent.).", ask: "Let Lala's line finish before JustAWoman reacts, and at least once let Lala's scene play while she watches in silence, on its own line: (JustAWoman watches, silent.)" });
+  // JustAWoman on camera, in the cutscene: she comments, a Me: line in each
+  // of beats 11 to 13.
+  const silentIn = CUTSCENE.map((n) => beatAt(beats, n)).filter(Boolean)
+    .filter((b) => !linesOf(b).some((l) => { const m = l.match(JAW_SAYS); return !!m && m[1].replace(/\([^)]*\)/g, '').trim().length > 0; }));
+  for (const b of silentIn) {
+    out.push({ key: `jaw-${b.number}`, ok: false, beat: b.number, label: 'JustAWoman comments (Me:)', text: `Beat ${b.number}: JustAWoman never comments on the cutscene (a Me: line).`, ask: "JustAWoman stays on screen and comments a little between the characters' lines, at least one line of her own: Me: …" });
+  }
+  if (!silentIn.length && CUTSCENE.some((n) => beatAt(beats, n))) {
+    out.push({ key: 'jaw', ok: true, beat: CUTSCENE.find((n) => beatAt(beats, n)), label: 'JustAWoman comments', text: 'JustAWoman comments on the cutscene in each of its beats.', ask: null });
   }
   return out;
 }
@@ -265,15 +360,14 @@ export function shoppingListApproved(event) {
 
 /**
  * The rules as "Ready to film?" rows ({ key, ok, beatId, text }), each on
- * the beat that carries it. `rules`: { money, shoppingApproved }, null when
- * the tab has not read them (no rows). `canonical`: the canonical beats, so
- * the "at least once" rule is judged on a whole script only.
+ * the beat that carries it. `rules`: { money, shoppingApproved, cast },
+ * null when the tab has not read them (no rows); `cast` is eventCast of the
+ * event the tab loads ([] or absent: no beat 11 check).
  */
-export function scriptRuleRows(beats = [], rules = null, { canonical = [], closetNumber = null } = {}) {
+export function scriptRuleRows(beats = [], rules = null, { closetNumber = null } = {}) {
   if (!rules) return [];
-  const complete = canonical.length > 0 && canonical.every((c) => beats.some((b) => b.number === c.number));
-  return scriptRuleFindings(beats, { money: rules.money || null, shoppingApproved: rules.shoppingApproved ?? null, closetNumber, complete })
+  return scriptRuleFindings(beats, { money: rules.money || null, shoppingApproved: rules.shoppingApproved ?? null, closetNumber, cast: rules.cast || [] })
     .map((f) => ({ key: `rule-${f.key}`, ok: f.ok, beatId: beatAt(beats, f.beat)?.id || null, text: f.text }));
 }
 
-export { statEntries, coinChange, scriptRuleFindings, SHOPPING_LIST, JUDGED_ON };
+export { statEntries, coinChange, scriptRuleFindings, eventCast, SHOPPING_LIST, JUDGED_ON };

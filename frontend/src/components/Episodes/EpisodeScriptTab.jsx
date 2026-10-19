@@ -18,7 +18,7 @@ import { speakerLine, unquote } from '../../lib/scriptSpeaker';
 import { beatImage, beatImageLabel } from '../BeatPlan/BeatPlanParts';
 import { beatSeconds, scriptSeconds, formatRuntime } from '../../lib/scriptRuntime';
 import { scriptHealth } from '../../lib/scriptHealth';
-import { scriptMoneyFrom, shoppingListApproved } from '../../lib/scriptRuleChecks';
+import { scriptMoneyFrom, shoppingListApproved, eventCast } from '../../lib/scriptRuleChecks';
 import { scriptWithPhonePaths } from '../../lib/phonePaths';
 import { scriptWithShowRules } from '../../lib/scriptShowRules';
 import ScriptHealthPanel from './ScriptHealthPanel';
@@ -1616,7 +1616,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // Ready to film? (Script tab audit, 2026-10-15): the checks above, script-wide.
   const healthRows = showBeatList ? scriptHealth({
     beats, canonical: BEAT_NAMES, cover, onScreen, outfit, dealItems,
-    rules: { money: scriptMoney, shoppingApproved: shoppingListApproved(source?.event || null) },
+    rules: { money: scriptMoney, shoppingApproved: shoppingListApproved(source?.event || null), cast: source?.event ? eventCast(source.event, [source.sourceProfile]) : [] },
     closetNumber: closetBeat(scriptText), dirty: scriptText !== savedScript, unsaved,
     beat14, designedIntent: brief?.designed_intent || null,
   }) : [];

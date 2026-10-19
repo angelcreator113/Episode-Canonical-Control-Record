@@ -1,8 +1,9 @@
 /**
- * The show's rules, checked in the script (Evoni, 2026-10-17 and
- * 2026-10-18): beat 8's coin lines, beat 9 reads the approved shopping
- * list, beat 12 judged on four stats, beat 13 Lala's line and the event's
- * costs, JustAWoman watches in silence once. The server's copy
+ * The show's rules, checked in the script (Evoni, 2026-10-17 to
+ * 2026-10-19): beat 8's coin lines, beat 9 reads the approved shopping
+ * list; the cutscene: beat 11 Lala talks with the host and two featured
+ * guests, beat 12 is the runway walk, her stats move in 12 or 13, beat 13
+ * Lala's line and the event's costs, JustAWoman comments in 11 to 13. The server's copy
  * (src/utils/scriptRuleChecks.js) is the same code.
  */
 import { describe, test, expect } from 'vitest';
@@ -71,13 +72,55 @@ describe('beat 9 reads the approved shopping list', () => {
   });
 });
 
-describe('beat 12 is judged on her standing, never on money', () => {
-  test('the four stats pass; a missing one and any coin line are flagged', () => {
+// The cutscene (Evoni, 2026-10-19): beats 11 to 13.
+const EVENT = {
+  source_profile_id: 5,
+  canon_consequences: { automation: { guest_profiles: [
+    { profile_id: 7, display_name: 'Declan Ferris', featured: true },
+    { profile_id: 8, handle: 'mira', featured: true },
+    { profile_id: 9, display_name: 'Not Featured' },
+    { profile_id: 10, display_name: 'Third Featured', featured: true },
+  ] } },
+};
+const PROFILES = [{ id: 5, creator_name: 'Sable Reyes', handle: 'sable' }, { id: 8, creator_name: 'Mira Holt', handle: 'mira' }];
+
+describe("beat 11: Lala talks with the event's host and two featured guests", () => {
+  test('the cast is the host and the first two featured guests, as the writer names them', () => {
+    expect(rules.eventCast(EVENT, PROFILES).map((c) => [c.name, c.role])).toEqual([['Sable Reyes', 'host'], ['Declan Ferris', 'featured guest'], ['Mira Holt', 'featured guest']]);
+    expect(rules.eventCast({ canon_consequences: JSON.stringify({ automation: { host_profile_id: 3, host_display_name: 'Ava Lune' } }) }, [])).toEqual([{ name: 'Ava Lune', role: 'host', aliases: [] }]);
+    expect(rules.eventCast(null)).toEqual([]);
+  });
+  test('each says a line (a first name will do), and so does Lala', () => {
+    const cast = rules.eventCast(EVENT, PROFILES);
+    const ok = rules.scriptRuleFindings([at(11, 'Sable: welcome, darling', 'Declan Ferris (smiling): love the look', '@mira: iconic', 'Lala: bestie, thank you')], { cast });
+    expect(find(ok, 'beat11')).toMatchObject({ ok: true, text: 'Beat 11: Lala talks with Sable Reyes, Declan Ferris and Mira Holt.' });
+    const quiet = rules.scriptRuleFindings([at(11, 'Sable: welcome', 'Me: here we go')], { cast });
+    expect(find(quiet, 'beat11-guest-declan-ferris')).toMatchObject({ ok: false, beat: 11, text: "Beat 11: Lala doesn't talk with Declan Ferris (featured guest)." });
+    expect(find(quiet, 'beat11-guest-mira-holt').ok).toBe(false);
+    expect(find(quiet, 'beat11-host-sable-reyes')).toBeUndefined();
+    expect(find(quiet, 'beat11-lala').ok).toBe(false);
+    expect(rules.scriptRuleFindings([at(11, 'Me: hi')], { cast: [] }).some((f) => f.key.startsWith('beat11'))).toBe(false);
+  });
+});
+
+describe('beat 12 is the runway walk, never money; her stats move in 12 or 13', () => {
+  test('the runway walk passes; without it, flagged', () => {
+    expect(find(rules.scriptRuleFindings([at(12, '(Lala walks the runway as the room turns.)')]), 'beat12-runway').ok).toBe(true);
+    expect(find(rules.scriptRuleFindings([at(12, 'Lala: a catwalk? now?')]), 'beat12-runway').ok).toBe(true);
+    expect(find(rules.scriptRuleFindings([at(12, 'Lala: a quiet moment')]), 'beat12-runway'))
+      .toMatchObject({ ok: false, text: "Beat 12: the Fashion Challenge is a runway walk — it isn't in the beat yet." });
+  });
+  test('any coin line in beat 12 is flagged', () => {
+    expect(find(rules.scriptRuleFindings([at(12, 'runway', '[STAT: coins -50]')]), 'beat12-coins'))
+      .toMatchObject({ ok: false, text: 'Beat 12: a coin line [STAT: coins -50]; the challenge is judged on her standing, never on money.' });
+  });
+  test('the four stats in beat 12, on beat 13, or split between them; missing from both is beat 13 row', () => {
     const four = ['[STAT: reputation +2]', '[STAT: brand_trust +1]', '[STAT: influence +1]', '[STAT: stress -1]'];
-    expect(find(rules.scriptRuleFindings([at(12, ...four)]), 'beat12').ok).toBe(true);
-    const short = rules.scriptRuleFindings([at(12, '[STAT: reputation +2, influence +1]', '[STAT: coins -50]')]);
-    expect(find(short, 'beat12')).toMatchObject({ ok: false, text: "Beat 12: the room's verdict doesn't move her brand_trust, stress: [STAT: brand_trust ±n] [STAT: stress ±n]." });
-    expect(find(short, 'beat12-coins')).toMatchObject({ ok: false, text: 'Beat 12: a coin line [STAT: coins -50]; the challenge is judged on her standing, never on money.' });
+    expect(find(rules.scriptRuleFindings([at(12, ...four), at(13, 'Lala: wow')]), 'stats')).toMatchObject({ ok: true, beat: 13 });
+    expect(find(rules.scriptRuleFindings([at(12, 'runway'), at(13, ...four)]), 'stats').ok).toBe(true);
+    expect(find(rules.scriptRuleFindings([at(12, '[STAT: reputation +2, influence +1]'), at(13, '[STAT: stress +1]')]), 'stats'))
+      .toMatchObject({ ok: false, beat: 13, text: "Beat 13: the runway's verdict doesn't move her brand_trust: [STAT: brand_trust ±n]." });
+    expect(find(rules.scriptRuleFindings([at(12, '[STAT: reputation +2]')]), 'stats').beat).toBe(12);
   });
 });
 
@@ -104,12 +147,17 @@ describe("beat 13: Lala's line, and the event's costs there only", () => {
   });
 });
 
-describe('JustAWoman on camera: she watches in silence at least once', () => {
-  test('judged on a whole script only', () => {
-    expect(find(rules.scriptRuleFindings([at(3, '(JustAWoman watches, silent.)')], { complete: true }), 'silent')).toMatchObject({ ok: true, beat: 11 });
-    expect(find(rules.scriptRuleFindings([at(3, 'Me: (stunned silence)')], { complete: true }), 'silent').ok).toBe(true);
-    expect(find(rules.scriptRuleFindings([at(3, 'Me: "silent night"')], { complete: true }), 'silent').ok).toBe(false);
-    expect(find(rules.scriptRuleFindings([at(3, 'Me: hi')], { complete: false }), 'silent')).toBeUndefined();
+describe('JustAWoman on camera: she comments on the cutscene', () => {
+  test('a Me: line with words in each of beats 11 to 13', () => {
+    const all = rules.scriptRuleFindings([at(11, 'Me: here we go'), at(12, 'JustAWoman: walk, Lala!'), at(13, 'Me (whispering): we did it')]);
+    expect(find(all, 'jaw')).toMatchObject({ ok: true, beat: 11 });
+    const some = rules.scriptRuleFindings([at(11, 'Me: here we go'), at(12, 'Me: (stunned silence)'), at(13, 'Lala: wow'), at(14, 'Lala: next')]);
+    expect(find(some, 'jaw-12')).toMatchObject({ ok: false, text: 'Beat 12: JustAWoman never comments on the cutscene (a Me: line).' });
+    expect(find(some, 'jaw-13').ok).toBe(false);
+    expect(find(some, 'jaw-11')).toBeUndefined();
+    expect(find(some, 'jaw')).toBeUndefined();
+    // Outside the cutscene, no check of hers.
+    expect(rules.scriptRuleFindings([at(3, 'Lala: hi')]).some((f) => f.key.startsWith('jaw'))).toBe(false);
   });
 });
 
@@ -144,20 +192,23 @@ describe('"Ready to film?" rows', () => {
   test('each rule is a row on its beat; none without the rules read', () => {
     const beats = canonical.map((c) => at(c.number, 'Me: hi'));
     beats[7] = at(8, '[UI:OPEN Closet]', '[WEAR: p1]', 'Me: yes');
-    const rows = scriptHealth({ beats, canonical, rules: { money: MONEY, shoppingApproved: true } });
+    const cast = rules.eventCast(EVENT, PROFILES);
+    const rows = scriptHealth({ beats, canonical, rules: { money: MONEY, shoppingApproved: true, cast } });
     expect(rows.find((r) => r.key === 'rule-beat8-p1')).toEqual({ key: 'rule-beat8-p1', ok: false, beatId: 'beat-8', text: 'Beat 8: the Velvet Blazer goes on without its coin line [STAT: coins -120].' });
     expect(rows.find((r) => r.key === 'rule-beat9')).toMatchObject({ ok: false, beatId: 'beat-9' });
-    expect(rows.find((r) => r.key === 'rule-beat12')).toMatchObject({ ok: false, beatId: 'beat-12' });
+    expect(rows.find((r) => r.key === 'rule-beat11-guest-declan-ferris')).toEqual({ key: 'rule-beat11-guest-declan-ferris', ok: false, beatId: 'beat-11', text: "Beat 11: Lala doesn't talk with Declan Ferris (featured guest)." });
+    expect(rows.find((r) => r.key === 'rule-beat12-runway')).toMatchObject({ ok: false, beatId: 'beat-12' });
+    expect(rows.find((r) => r.key === 'rule-stats')).toMatchObject({ ok: false, beatId: 'beat-13' });
     expect(rows.find((r) => r.key === 'rule-beat13')).toMatchObject({ ok: false, beatId: 'beat-13' });
     expect(rows.find((r) => r.key === 'rule-beat13-costs')).toMatchObject({ ok: false, beatId: 'beat-13' });
-    expect(rows.find((r) => r.key === 'rule-silent')).toMatchObject({ ok: false, beatId: 'beat-11' });
+    expect(rows.find((r) => r.key === 'rule-jaw')).toMatchObject({ ok: true, beatId: 'beat-11' });
     // Before "approved" and "saved", as the other checks are.
-    expect(rows.findIndex((r) => r.key === 'rule-silent')).toBeLessThan(rows.findIndex((r) => r.key === 'approved'));
+    expect(rows.findIndex((r) => r.key === 'rule-stats')).toBeLessThan(rows.findIndex((r) => r.key === 'approved'));
     expect(scriptHealth({ beats, canonical }).some((r) => r.key.startsWith('rule-'))).toBe(false);
-    // No money read: no coin rows, the other rules still.
-    const noMoney = scriptHealth({ beats, canonical, rules: { money: null, shoppingApproved: null } });
-    expect(noMoney.some((r) => /^rule-(beat8|beat9|coins|beat13-costs)/.test(r.key))).toBe(false);
-    expect(noMoney.some((r) => r.key === 'rule-beat12')).toBe(true);
+    // No money or cast read: no coin or beat 11 rows, the other rules still.
+    const unread = scriptHealth({ beats, canonical, rules: { money: null, shoppingApproved: null } });
+    expect(unread.some((r) => /^rule-(beat8|beat9|beat11|coins|beat13-costs)/.test(r.key))).toBe(false);
+    expect(unread.some((r) => r.key === 'rule-beat12-runway')).toBe(true);
   });
 });
 
@@ -167,6 +218,8 @@ test("the server's copy is the same code and finds the same", () => {
   const there = readFileSync(require.resolve('../../../src/utils/scriptRuleChecks.js'), 'utf8');
   expect(shared(here).length).toBeGreaterThan(100);
   expect(shared(there)).toBe(shared(here));
-  const beats = [at(8, '[WEAR: p1]'), at(12, '[STAT: coins -5]'), at(13, 'Me: hi')];
-  expect(server.scriptRuleFindings(beats, { money: MONEY, complete: true })).toEqual(rules.scriptRuleFindings(beats, { money: MONEY, complete: true }));
+  const beats = [at(8, '[WEAR: p1]'), at(11, 'Sable: hi'), at(12, '[STAT: coins -5]'), at(13, 'Me: hi')];
+  const cast = rules.eventCast(EVENT, PROFILES);
+  expect(server.eventCast(EVENT, PROFILES)).toEqual(cast);
+  expect(server.scriptRuleFindings(beats, { money: MONEY, cast })).toEqual(rules.scriptRuleFindings(beats, { money: MONEY, cast }));
 });

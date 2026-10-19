@@ -1,12 +1,13 @@
 // ============================================================================
-// The show's rules, checked in the script (Evoni, 2026-10-17 and
-// 2026-10-18), on the server: beat 8's coin lines, beat 9 reads the
-// approved shopping list, beat 12 judged on four stats, beat 13 Lala's line
-// and the event's costs, JustAWoman watches in silence once. Each finding is
+// The show's rules, checked in the script (Evoni, 2026-10-17 to
+// 2026-10-19), on the server: beat 8's coin lines, beat 9 reads the
+// approved shopping list; the cutscene: beat 11 Lala talks with the host
+// and two featured guests, beat 12 the runway walk, her stats in 12 or 13,
+// beat 13 Lala's line and the event's costs, JustAWoman comments in 11-13. Each finding is
 // a coverage item the fix pass asks the writer for. Pure; no database.
 // ============================================================================
 
-const { scriptRuleFindings, scriptRuleItems, coinChange, statEntries } = require('../../../src/utils/scriptRuleChecks');
+const { scriptRuleFindings, scriptRuleItems, coinChange, statEntries, eventCast } = require('../../../src/utils/scriptRuleChecks');
 const { splitScriptBeats } = require('../../../src/utils/scriptBeatLocks');
 const { CANONICAL_BEATS } = require('../../../src/constants/canonicalBeats');
 
@@ -37,11 +38,22 @@ describe('each rule passes and fails', () => {
     expect(find(scriptRuleFindings([at(9, 'Me: to do')], { shoppingApproved: true }), 'beat9').ok).toBe(false);
     expect(find(scriptRuleFindings([at(9, 'Me: to do')], { shoppingApproved: false }), 'beat9')).toBeUndefined();
   });
-  test('beat 12: four stats, no coins', () => {
-    expect(find(scriptRuleFindings([at(12, '[STAT: reputation +1, brand_trust +1, influence +1, stress -1]')]), 'beat12').ok).toBe(true);
-    const found = scriptRuleFindings([at(12, '[STAT: reputation +1]', '[STAT: coins -20]')]);
-    expect(find(found, 'beat12').ok).toBe(false);
-    expect(find(found, 'beat12-coins').ok).toBe(false);
+  test('beat 11 (the cutscene, 2026-10-19): Lala talks with the host and two featured guests', () => {
+    const event = { source_profile_id: 5, canon_consequences: JSON.stringify({ automation: { guest_profiles: [{ profile_id: 7, display_name: 'Declan Ferris', featured: true }, { profile_id: 8, display_name: 'Mira Holt', featured: true }] } }) };
+    const cast = eventCast(event, [{ id: 5, creator_name: 'Sable Reyes', handle: 'sable' }]);
+    expect(cast.map((c) => c.name)).toEqual(['Sable Reyes', 'Declan Ferris', 'Mira Holt']);
+    expect(find(scriptRuleFindings([at(11, 'Sable: welcome', 'Declan: hi', 'Mira Holt: love it', 'Lala: bestie!')], { cast }), 'beat11').ok).toBe(true);
+    const found = scriptRuleFindings([at(11, 'Sable: welcome', 'Lala: hi')], { cast });
+    expect(find(found, 'beat11-guest-declan-ferris').text).toBe("Beat 11: Lala doesn't talk with Declan Ferris (featured guest).");
+    expect(find(found, 'beat11-guest-mira-holt').ok).toBe(false);
+    expect(scriptRuleFindings([at(11, 'Lala: hi')]).some((f) => f.key.startsWith('beat11'))).toBe(false);
+  });
+  test('beat 12: the runway walk, no coins; the four stats in 12 or 13', () => {
+    expect(find(scriptRuleFindings([at(12, '(Lala walks the runway.)')]), 'beat12-runway').ok).toBe(true);
+    expect(find(scriptRuleFindings([at(12, 'Lala: hm')]), 'beat12-runway').ok).toBe(false);
+    expect(find(scriptRuleFindings([at(12, 'runway', '[STAT: coins -20]')]), 'beat12-coins').ok).toBe(false);
+    expect(find(scriptRuleFindings([at(12, '[STAT: reputation +1, brand_trust +1]'), at(13, '[STAT: influence +1, stress -1]')]), 'stats')).toMatchObject({ ok: true, beat: 13 });
+    expect(find(scriptRuleFindings([at(12, '[STAT: reputation +1]'), at(13, 'Lala: ok')]), 'stats')).toMatchObject({ ok: false, beat: 13 });
   });
   test("beat 13: Lala's line; the event's costs there and nowhere else", () => {
     expect(find(scriptRuleFindings([at(13, 'Lala: that was us')]), 'beat13').ok).toBe(true);
@@ -51,9 +63,9 @@ describe('each rule passes and fails', () => {
     expect(find(found, 'beat13-costs').ok).toBe(false);
     expect(find(scriptRuleFindings([at(13, 'Lala: ok', '[STAT: coins -45]')], { money: MONEY }), 'beat13-costs').ok).toBe(true);
   });
-  test('JustAWoman watches in silence at least once, on a whole script', () => {
-    expect(find(scriptRuleFindings([at(2, '(JustAWoman watches, silent.)')], { complete: true }), 'silent').ok).toBe(true);
-    expect(find(scriptRuleFindings([at(2, 'Me: wow')], { complete: true }), 'silent').ok).toBe(false);
+  test('JustAWoman comments on the cutscene, a Me: line in each of beats 11 to 13', () => {
+    expect(find(scriptRuleFindings([at(11, 'Me: ooh'), at(12, 'Me: walk!'), at(13, 'Me: we did it')]), 'jaw').ok).toBe(true);
+    expect(find(scriptRuleFindings([at(11, 'Me: ooh'), at(12, '(JustAWoman watches, silent.)')]), 'jaw-12').ok).toBe(false);
   });
 });
 
@@ -62,9 +74,9 @@ describe('coverage items', () => {
     const script = CANONICAL_BEATS.map((c) => beat(c.number, c.number === 8 ? '[WEAR: p1]' : 'Me: hi')).join('\n\n');
     const { beats } = splitScriptBeats(script);
     expect(scriptRuleItems(beats)).toEqual([]);
-    const items = scriptRuleItems(beats, { money: MONEY, shoppingApproved: true });
+    const items = scriptRuleItems(beats, { money: MONEY, shoppingApproved: true, cast: [{ name: 'Declan Ferris', role: 'featured guest', aliases: [] }] });
     const missing = items.filter((i) => i.beat === null).map((i) => [i.rule, i.target]);
-    expect(missing).toEqual([['beat8-p1', 8], ['beat9', 9], ['beat12', 12], ['beat13', 13], ['beat13-costs', 13], ['silent', 11]]);
+    expect(missing).toEqual([['beat8-p1', 8], ['beat9', 9], ['beat11-guest-declan-ferris', 11], ['beat11-lala', 11], ['beat12-runway', 12], ['stats', 13], ['beat13', 13], ['beat13-costs', 13]]);
     expect(items.every((i) => i.kind === 'rule')).toBe(true);
     expect(items.find((i) => i.rule === 'beat8-p1').ask).toBe('Right after the [WEAR: p1] line, write the coin line for "Velvet Blazer" on its own line, exactly: [STAT: coins -120]');
   });

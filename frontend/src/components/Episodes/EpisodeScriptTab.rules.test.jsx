@@ -1,6 +1,6 @@
 /**
  * The show's rules in "Ready to film?" (lib/scriptRuleChecks; Evoni,
- * 2026-10-17 and 2026-10-18): the tab reads Lala's money from the Money
+ * 2026-10-17 to 2026-10-19): the tab reads Lala's money from the Money
  * page's lines and the event's shopping list, and each rule is a row on
  * its beat.
  */
@@ -18,6 +18,7 @@ import EpisodeScriptTab from './EpisodeScriptTab';
 const SCRIPT = [
   '## BEAT: 8 · Transformation Loop', '[UI:OPEN Closet]', '[WEAR: p1]', 'Me: yes',
   '', '## BEAT: 9 · Reminder/Deadline', 'Me: reminders',
+  '', '## BEAT: 11 · Event Outcome', 'Lala: what a room', 'Me: ooh',
   '', '## BEAT: 13 · Recap Panel', 'Me: what a night',
 ].join('\n');
 
@@ -29,7 +30,7 @@ beforeEach(() => {
     }
     if (url === '/api/v1/episode-brief/ep-1') return { data: { data: { event_id: 'ev-1' } } };
     if (url === '/api/v1/world/show-1/events/ev-1') {
-      return { data: { event: { id: 'ev-1', show_id: 'show-1', name: 'Studio Session', host_brand: 'STUDIO BY SABLE', canon_consequences: { documents: { shopping_list: { status: 'approved' } } } } } };
+      return { data: { event: { id: 'ev-1', show_id: 'show-1', name: 'Studio Session', host_brand: 'STUDIO BY SABLE', canon_consequences: { documents: { shopping_list: { status: 'approved' } }, automation: { guest_profiles: [{ profile_id: 7, display_name: 'Declan Ferris', featured: true }] } } } } };
     }
     return { data: { data: [] } };
   });
@@ -41,5 +42,7 @@ test("beat 8's coin line, beat 9's shopping list and Lala's beat 13 line are row
     .toContain('Beat 8: the Velvet Blazer goes on without its coin line [STAT: coins -120].'));
   await waitFor(() => expect(screen.getByTestId('script-health-rule-beat9').textContent).toContain('the approved shopping list never comes up'));
   expect(screen.getByTestId('script-health-rule-beat13').textContent).toContain('Lala never says how the outcome feels.');
+  // The cutscene (Evoni, 2026-10-19): beat 11 is her talk with the host and featured guests.
+  expect(screen.getByTestId('script-health-rule-beat11-guest-declan-ferris').textContent).toContain("Beat 11: Lala doesn't talk with Declan Ferris (featured guest).");
   expect(screen.getByTestId('script-health-rule-beat8-p1').getAttribute('data-ok')).toBe('false');
 });

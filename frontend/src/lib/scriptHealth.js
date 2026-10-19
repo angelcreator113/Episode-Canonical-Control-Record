@@ -124,8 +124,8 @@ export function scriptHealth({
     else rows.push({ key: 'beat14', ok: true, beatId: last.id || null, text: designedIntent === 'fail' ? `Beat 14's opportunity, ${opp.name}, does not come: the episode is designed to fail.` : `Beat 14 offers ${opp.name}${opp.contact_name ? `, from ${opp.contact_name}` : ''}.` });
   }
 
-  // The show's rules, beat by beat (lib/scriptRuleChecks; Evoni, 2026-10-17 and 2026-10-18).
-  rows.push(...scriptRuleRows(beats, rules, { canonical, closetNumber }));
+  // The show's rules, beat by beat (lib/scriptRuleChecks; Evoni, 2026-10-17 to 2026-10-19).
+  rows.push(...scriptRuleRows(beats, rules, { closetNumber }));
   const approved = beats.filter((b) => b.approved).length;
   rows.push({ key: 'approved', ok: beats.length > 0 && approved === beats.length, beatId: null, text: `${approved} of ${beats.length} ${plural(beats.length, 'beat', 'beats')} approved.` });
 
