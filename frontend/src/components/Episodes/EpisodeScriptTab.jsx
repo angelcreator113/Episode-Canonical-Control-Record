@@ -197,7 +197,7 @@ function cueLabel(text) {
   return `${kind === 'EVENT' ? 'Event' : 'Episode intent'}${rest ? `: ${rest}` : ''}`;
 }
 
-const COVERAGE_KINDS = { deliverable: 'Deliverable', goal: 'Goal', hook: 'Forward hook', opportunity: 'Opportunity', wear: 'Wear cue', phone: 'Phone moment', beat: 'Beat missing' };
+const COVERAGE_KINDS = { deliverable: 'Deliverable', goal: 'Goal', hook: 'Forward hook', opportunity: 'Opportunity', wear: 'Wear cue', phone: 'Phone moment', beat: 'Beat missing', rule: 'Show rule' };
 
 function parseLine(line) {
   const t = (typeof line === 'string' ? line : '').trim();
