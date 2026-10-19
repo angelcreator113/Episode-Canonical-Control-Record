@@ -39,6 +39,11 @@
 .du-cost-line { margin: 0; font-family: 'DM Mono', monospace; font-size: 16px; }
 .du-bar { height: 10px; border-radius: 999px; background: var(--lala-gold-soft, #f6efdc); overflow: hidden; }
 .du-bar span { display: block; height: 100%; background: var(--lala-gold, #B8962E); }
+.du-alerts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.du-alert { display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px; border-radius: 12px; font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; }
+.du-alert svg { flex: none; margin-top: 2px; }
+.du-alert.is-warn { background: var(--lala-gold-soft, #f6efdc); color: var(--lala-gold-text, #7a5f17); border: 1px solid var(--lala-gold-line, #e8dcc0); }
+.du-alert.is-over { background: #fdecea; color: var(--lala-danger, #b42318); border: 1px solid #f5c2bc; }
 .du-bar span.is-high { background: var(--lala-danger, #b42318); }
 .du-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
