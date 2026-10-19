@@ -180,26 +180,38 @@ async function addedCharacter(db, characterId) {
   };
 }
 
-/** One images/edits call through the image budget gate; the first image is the one edited. */
-async function editImage(prompt, images) {
+/**
+ * One image call through the image budget gate: images/edits when there are
+ * reference images (the first is the one edited), images/generations when
+ * there are none (phase 4: a new picture with no person and no place to
+ * keep). routeName is what ai_usage_logs records it under.
+ */
+async function editImage(prompt, images, { routeName = 'media-variation' } = {}) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new MediaError(503, 'The image tool is not set up (OPENAI_API_KEY).');
-  const FormData = require('form-data');
-  const form = new FormData();
-  form.append('model', MODEL);
-  const field = images.length > 1 ? 'image[]' : 'image';
-  images.forEach((img, i) => form.append(field, img.buffer, { filename: `reference-${i}.png`, contentType: img.mimetype }));
-  form.append('prompt', prompt.length > 4000 ? `${prompt.slice(0, 3997)}...` : prompt);
-  form.append('n', '1');
-  form.append('size', `${SIZE.width}x${SIZE.height}`);
-  form.append('quality', 'high');
+  const text = prompt.length > 4000 ? `${prompt.slice(0, 3997)}...` : prompt;
   const axios = require('axios');
   const imageCost = require('./imageCostService');
-  const response = await imageCost.runImageCall(
-    { model: MODEL, ...SIZE, quality: 'high', count: 1, inputImages: true, routeName: 'media-variation' },
-    () => axios.post('https://api.openai.com/v1/images/edits', form,
-      { headers: { Authorization: `Bearer ${apiKey}`, ...form.getHeaders() }, timeout: 180000 }),
-  );
+  const plan = { model: MODEL, ...SIZE, quality: 'high', count: 1, inputImages: images.length > 0, routeName };
+  let call;
+  if (images.length) {
+    const FormData = require('form-data');
+    const form = new FormData();
+    form.append('model', MODEL);
+    const field = images.length > 1 ? 'image[]' : 'image';
+    images.forEach((img, i) => form.append(field, img.buffer, { filename: `reference-${i}.png`, contentType: img.mimetype }));
+    form.append('prompt', text);
+    form.append('n', '1');
+    form.append('size', `${SIZE.width}x${SIZE.height}`);
+    form.append('quality', 'high');
+    call = () => axios.post('https://api.openai.com/v1/images/edits', form,
+      { headers: { Authorization: `Bearer ${apiKey}`, ...form.getHeaders() }, timeout: 180000 });
+  } else {
+    call = () => axios.post('https://api.openai.com/v1/images/generations',
+      { model: MODEL, prompt: text, n: 1, size: `${SIZE.width}x${SIZE.height}`, quality: 'high' },
+      { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 180000 });
+  }
+  const response = await imageCost.runImageCall(plan, call);
   const item = response?.data?.data?.[0];
   if (item?.b64_json) return Buffer.from(item.b64_json, 'base64');
   if (item?.url) return (await imageBytes(item.url)).buffer;
@@ -241,7 +253,23 @@ async function createVariation(db, { assetId, change, locks, by = null } = {}) {
     details: detailsFor(parent.details, req, added), generation, links: tagsFor(parent.links, added),
     parentAssetId: parent.id, by,
   });
+  // What it was made from, structured (phase 4): the parent, and any portraits used.
+  const used = added ? added.portraitUrls.slice(0, portraits.length) : [];
+  await media.addSources(db, created.asset.id, [
+    { role: 'parent', source_asset_id: parent.id },
+    ...(await portraitSources(db, added?.id, used)),
+  ], { by });
   return { asset: created.asset, parent_id: parent.id, review };
+}
+
+/** Portrait references as source rows: the library picture when the portrait is in it, else its address. */
+async function portraitSources(db, characterId, urls) {
+  if (!characterId || !urls?.length) return [];
+  const inLibrary = await require('./mediaLibrary').assetsByUrl(db, urls);
+  return urls.map((url) => {
+    const a = inLibrary.get(url);
+    return a ? { role: 'portrait', source_asset_id: a.id, character_id: characterId } : { role: 'portrait', source_url: url, character_id: characterId };
+  });
 }
 
 /** The original at the top of this picture's family, and every variation under it. */
@@ -267,4 +295,6 @@ async function familyOf(db, assetId, { audience = 'admin' } = {}) {
 
 module.exports = {
   KINDS, LOCKS, MODEL, normalizeRequest, buildPrompt, reviewFor, detailsFor, tagsFor, createVariation, familyOf,
+  // Phase 4 (services/pictureSuggestions) makes new pictures through the same path.
+  editImage, imageBytes, addedCharacter, portraitSources,
 };

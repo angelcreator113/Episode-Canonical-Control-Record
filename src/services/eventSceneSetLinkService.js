@@ -28,12 +28,19 @@ const STATUS = Object.freeze({
   NEEDS_RECONNECTING: 'needs_reconnecting',
 });
 
+// The attached event's set is the episode's Event location when it has none
+// yet (eighth audit: linked with no role, it read as an unnamed extra, the
+// plan placed no beat at it, and the Locations step could not be saved).
 async function insertEpisodeLink(sequelize, { sceneSetId, episodeId, transaction }) {
+  const [[hasEvent]] = await sequelize.query(
+    "SELECT 1 AS y FROM scene_set_episodes WHERE episode_id = :episodeId AND role = 'event' AND deleted_at IS NULL LIMIT 1",
+    { replacements: { episodeId }, transaction });
+  const [[set]] = await sequelize.query('SELECT name FROM scene_sets WHERE id = :sceneSetId', { replacements: { sceneSetId }, transaction });
   await sequelize.query(
-    `INSERT INTO scene_set_episodes (id, scene_set_id, episode_id, created_at, updated_at)
-     VALUES (gen_random_uuid(), :sceneSetId, :episodeId, NOW(), NOW())
+    `INSERT INTO scene_set_episodes (id, scene_set_id, episode_id, role, role_name, created_at, updated_at)
+     VALUES (gen_random_uuid(), :sceneSetId, :episodeId, :role, :roleName, NOW(), NOW())
      ON CONFLICT (scene_set_id, episode_id) WHERE deleted_at IS NULL DO NOTHING`,
-    { replacements: { sceneSetId, episodeId }, transaction });
+    { replacements: { sceneSetId, episodeId, role: hasEvent ? 'extra' : 'event', roleName: hasEvent ? (set?.name || 'Event place') : null }, transaction });
 }
 
 async function liveSceneSet(sequelize, sceneSetId, transaction) {
@@ -46,9 +53,10 @@ async function liveSceneSet(sequelize, sceneSetId, transaction) {
 /** The live scene sets at the event's venue World Location, by name. */
 async function venueSceneSets(sequelize, locationId, transaction) {
   if (!locationId) return [];
+  // Event versions are other events' photos, not the venue's sets (eighth audit).
   const [rows] = await sequelize.query(
     `SELECT id, name, base_still_url FROM scene_sets
-      WHERE world_location_id = :locationId AND deleted_at IS NULL
+      WHERE world_location_id = :locationId AND deleted_at IS NULL AND version_of_set_id IS NULL
       ORDER BY name ASC, created_at ASC`,
     { replacements: { locationId }, transaction });
   return rows;
@@ -87,6 +95,9 @@ async function linkEventSceneSet(sequelize, { event, episodeId, transaction, cho
         await sequelize.query(
           'UPDATE world_events SET scene_set_id = :sceneSetId, updated_at = NOW() WHERE id = :eventId',
           { replacements: { sceneSetId, eventId: event.id }, transaction: sp });
+        // Its other draft episodes follow too (eighth audit).
+        await require('./eventPlaceSync').syncEpisodeEventLocation(sequelize,
+          { eventId: event.id, fromSetId: event.scene_set_id || null, toSetId: sceneSetId, transaction: sp });
       }
       await insertEpisodeLink(sequelize, { sceneSetId, episodeId, transaction: sp });
       return { status: STATUS.LINKED, scene_set_id: sceneSetId, scene_set_name: set.name };

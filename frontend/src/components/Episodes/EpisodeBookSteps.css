@@ -1,6 +1,10 @@
-/* ThisWeekPage — "This week's episode" (pages/ThisWeekPage.jsx). */
+/* EpisodeBookSteps — the book follows the show, on an episode's Results › Story (components/Episodes/EpisodeBookSteps.jsx); pages/ThisWeekPage only redirects there. */
 .tw-page { max-width: 860px; margin: 0 auto; padding: 24px 16px 48px; color: var(--text-primary); }
 .tw-head { margin-bottom: 16px; }
+.tw-book { margin-top: 20px; padding: 18px 16px; border: 1px solid var(--lala-parchment-3); border-radius: 14px; background: var(--surface-card); color: var(--text-primary); display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.tw-book-h { margin: 0; font-family: 'Lora', Georgia, serif; font-size: 20px; font-weight: 600; }
+.tw-book .tw-step { background: var(--lala-parchment); }
+.tw-book .tw-pickers { margin-bottom: 0; }
 .tw-h1 { margin: 0 0 6px; font-family: 'Lora', Georgia, serif; font-size: 26px; font-weight: 600; }
 .tw-note { margin: 0; font-size: 14px; line-height: 1.55; color: var(--text-secondary); }
 .tw-error { margin: 12px 0; padding: 8px 12px; border-radius: 8px; background: var(--danger-bg); color: var(--danger-text); font-size: 14px; }

@@ -39,7 +39,7 @@ class DressedAngleError extends Error {
 async function episodeEvent(sequelize, episodeId) {
   if (!episodeId) return null;
   const [[event]] = await sequelize.query(
-    `SELECT id, show_id, name, venue_location_id, canon_consequences FROM world_events
+    `SELECT id, show_id, name, scene_set_id, venue_location_id, canon_consequences FROM world_events
       WHERE id = ${require('../utils/episodeEventSql').EPISODE_EVENT_ID_SQL}`,
     { replacements: { episodeId } });
   return event || null;
@@ -64,6 +64,10 @@ async function episodeLooks(sequelize, episodeId) {
       -- A look being made again keeps its image in use until the new one is
       -- in: the episode lost its look for the whole run (fourth audit).
       WHERE sl.event_id = :eventId AND sl.status IN ('complete', 'generating') AND sl.image_url IS NOT NULL AND sl.deleted_at IS NULL
+        -- Only the look on the set the event is held at now: a look left on
+        -- the everyday set after the event moved to its own photos dressed
+        -- that set's beats (eighth audit).
+        AND (CAST(:eventSetId AS uuid) IS NULL OR sl.scene_set_id = CAST(:eventSetId AS uuid))
         AND (sl.source <> 'generated'
              OR sl.brief->'approved_base'->>'image_url' IS NULL
              OR sl.brief->'approved_base'->>'image_url' = l.approved_base_image_url
@@ -75,7 +79,7 @@ async function episodeLooks(sequelize, episodeId) {
         AND (CAST(:venueId AS uuid) IS NULL
              OR COALESCE(NULLIF(sl.brief->>'world_location_id', '')::uuid, s.world_location_id) IS NULL
              OR COALESCE(NULLIF(sl.brief->>'world_location_id', '')::uuid, s.world_location_id) = CAST(:venueId AS uuid))`,
-    { replacements: { eventId: event.id, episodeId, venueId: require('./venueGenerationService').venueLocationId(event) } });
+    { replacements: { eventId: event.id, episodeId, eventSetId: event.scene_set_id || null, venueId: require('./venueGenerationService').venueLocationId(event) } });
   for (const r of rows) out.set(r.scene_set_id, { id: r.id, image_url: r.image_url, event_id: r.event_id });
   return out;
 }

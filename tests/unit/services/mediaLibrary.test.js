@@ -47,10 +47,11 @@ describe('mediaLibrary', () => {
     expect(() => media.checkUrl('')).toThrow(/needs a url/);
   });
 
-  test('a picture is not a story fact: the library writes only its own two tables', () => {
+  // Its own tables: the pictures, their tags, and (phase 4) what a made picture was made from.
+  test('a picture is not a story fact: the library writes only its own tables', () => {
     const src = fs.readFileSync(path.join(__dirname, '../../../src/services/mediaLibrary.js'), 'utf8');
     const written = [...src.matchAll(/\b(?:INSERT INTO|UPDATE|DELETE FROM)\s+([a-z_]+)/gi)].map((m) => m[1]);
     expect(written.length).toBeGreaterThan(0);
-    expect([...new Set(written)].sort()).toEqual(['media_asset_links', 'media_assets']);
+    expect([...new Set(written)].sort()).toEqual(['media_asset_links', 'media_asset_sources', 'media_assets']);
   });
 });

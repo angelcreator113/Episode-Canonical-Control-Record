@@ -10,6 +10,9 @@
  *                   original, with what to check; Approve (with who may see
  *                   it) or Discard. The original never changes.
  *   PictureFamily   the original and every variation made from it.
+ *   MadeFrom        phase 4: what a made picture was made from (the place it
+ *                   keeps, the portraits, the original), from
+ *                   GET /api/v1/media/:id/sources.
  *
  * A picture is not a story fact: a variation never records that anything happened.
  */
@@ -229,3 +232,33 @@ export function PictureFamily({ assetId }) {
 }
 
 export default MakeVariation;
+
+const SOURCE_WORDS = { place: 'the place picture', portrait: 'the portrait of', parent: 'the original' };
+
+/** "Made from": the place it keeps, the portraits, the original. */
+export function madeFromLine(sources = []) {
+  return sources.map((s) => {
+    if (s.role === 'portrait') return `${SOURCE_WORDS.portrait} ${s.character_name || 'them'}`;
+    return `${SOURCE_WORDS[s.role] || 'a picture'}${s.caption ? ` "${s.caption}"` : ''}`;
+  }).join(', ');
+}
+
+/** One line under a picture: what it was made from, when it was made from anything. */
+export function MadeFrom({ assetId }) {
+  const [items, setItems] = useState(null);
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        const { data } = await api.get(`/api/v1/media/${assetId}/sources`);
+        if (live) setItems(Array.isArray(data?.items) ? data.items : []);
+      } catch (err) {
+        console.error('[MakeVariation] what it was made from could not be read:', err);
+        if (live) setItems([]);
+      }
+    })();
+    return () => { live = false; };
+  }, [assetId]);
+  if (!items?.length) return null;
+  return <p className="mv-muted" data-testid="picture-made-from">Made from {madeFromLine(items)}.</p>;
+}

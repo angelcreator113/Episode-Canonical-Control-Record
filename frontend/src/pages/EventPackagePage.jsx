@@ -1754,7 +1754,7 @@ export default function EventPackagePage() {
               <dt>Scene set</dt>
               <dd data-testid="place-scene-set">
                 {sceneSet ? (
-                  <Link to={sceneSetPath(showId, sceneSet.id)} className="epp-scene-set-link" data-testid="place-scene-set-link">
+                  <Link to={sceneSetPath(showId, sceneSet.id, { from: `/shows/${showId}/events/${eventId}`, fromLabel: 'Event Package' })} className="epp-scene-set-link" data-testid="place-scene-set-link">
                     {sceneSet.name}
                   </Link>
                 ) : 'Not set'}
