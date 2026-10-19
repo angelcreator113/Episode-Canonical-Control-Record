@@ -44,6 +44,7 @@ const {
 } = require('../utils/eventTermsLock');
 const { syncDraftedDealType } = require('../services/dealTypeDraftService');
 const { findMissingPrices, dealPriceRequiredError, dealPriceRequiredBody, DEAL_PRICE_REQUIRED_CODE } = require('../services/dealPricingService');
+const { takePriceSnapshot } = require('../services/dealPriceSnapshot');
 const { DEAL_TYPES } = require('../models/WorldEvent');
 
 // A deal_type body value as the PUT loop reads it: '', 'null' and
@@ -2816,10 +2817,15 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
         continue;
       }
       try {
-        await models.sequelize.query(
-          `UPDATE world_events SET used_in_episode_id = :episodeId, status = 'used', updated_at = NOW() WHERE id = :evId`,
-          { replacements: { episodeId: newEpisodeId, evId: ev.id } }
-        );
+        // Linked, its terms lock: the link and its frozen prices commit
+        // together (services/dealPriceSnapshot).
+        await models.sequelize.transaction(async (transaction) => {
+          await models.sequelize.query(
+            `UPDATE world_events SET used_in_episode_id = :episodeId, status = 'used', updated_at = NOW() WHERE id = :evId`,
+            { replacements: { episodeId: newEpisodeId, evId: ev.id }, transaction }
+          );
+          await takePriceSnapshot(models.sequelize, ev.id, { transaction, reason: 'linked_episode' });
+        });
         linkedExtras.push({ id: ev.id, name: ev.name });
       } catch (linkErr) {
         skippedExtras.push({ id: ev.id, name: ev.name, reason: linkErr.message });

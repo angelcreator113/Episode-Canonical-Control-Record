@@ -2,7 +2,10 @@
  * Deal pricing routes (deal build PR 3; docs/DEAL_DESIGN.md §3.2, §11.1;
  * Task #2341).
  *
- * GET  /api/v1/deal-rates                                    — the newest rate card (read-only)
+ * GET  /api/v1/deal-rates                                    — the newest rate card
+ * GET  /api/v1/deal-rates/editor                             — the card as a table, with its versions
+ * PUT  /api/v1/deal-rates                                    — ADMIN: save edited cells as the next version
+ * GET  /api/v1/world/:showId/events/:eventId/price-snapshot  — an agreed deal's frozen prices
  * POST /api/v1/world/:showId/events/:eventId/propose-terms   — draft the deal's numbers
  *
  * Propose terms (Evoni's QUESTION 4 answer, §8(cc): "Rates are baselines,
@@ -23,6 +26,13 @@
  * Body: { premiums: { appearance?, partnership_base?, performance?: [{kind,key}],
  *                     deliverables?: { <id>: [{kind,key}] } } }
  *
+ * The rate card editor (Evoni, 2026-10-19; services/rateCard): an edit
+ * writes the next version and never changes one in place, so a deal keeps
+ * naming what priced it. Locked deals are never repriced; a draft takes the
+ * new prices the next time Propose terms runs.
+ * PUT body: { based_on: <version shown>, note?, changes: { anchors?:
+ * [{ component, career_tier, amount }], premiums?: [{ kind, key, percent }] } }
+ *
  * Location: src/routes/dealPricing.js
  */
 
@@ -31,12 +41,14 @@
 const express = require('express');
 const router = express.Router();
 
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const { listEventDeliverables } = require('../services/eventTermsService');
 const { findTermsWriteLock, termsLockedBody } = require('../utils/eventTermsLock');
 const { loadRateCard, EVENT_COMPONENTS } = require('../services/dealPricingService');
 const { listEventCosts } = require('../services/eventCostsService');
 const { draftTerms } = require('../services/dealTermsDraftService');
+const { cardTable, listVersions, saveRateCard } = require('../services/rateCard');
+const { readPriceSnapshot } = require('../services/dealPriceSnapshot');
 
 async function getModels() {
   try { return require('../models'); } catch (err) {
@@ -58,6 +70,74 @@ router.get('/deal-rates', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Load rate card error:', error);
     return res.status(500).json({ success: false, error: 'Failed to load the rate card', message: error.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// GET /api/v1/deal-rates/editor — the card as the editor shows it
+// ═══════════════════════════════════════════
+
+router.get('/deal-rates/editor', requireAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const card = await loadRateCard(models.sequelize);
+    return res.json({ success: true, table: cardTable(card), versions: await listVersions(models.sequelize) });
+  } catch (error) {
+    console.error('Load rate card editor error:', error);
+    return res.status(500).json({ success: false, error: 'Failed to load the rate card', message: error.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// PUT /api/v1/deal-rates — save edited cells as the next version (ADMIN)
+// ═══════════════════════════════════════════
+
+router.put('/deal-rates', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    let saved;
+    try {
+      saved = await saveRateCard(models.sequelize, {
+        changes: body.changes, note: body.note, basedOn: body.based_on, user: req.user,
+      });
+    } catch (saveErr) {
+      if (saveErr.status === 400 || saveErr.status === 409) {
+        console.warn(`[DealPricing] rate card not saved (${saveErr.status}): ${saveErr.message}`);
+        return res.status(saveErr.status).json({ success: false, error: saveErr.message, errors: saveErr.errors || [], version: saveErr.version });
+      }
+      throw saveErr;
+    }
+    const card = await loadRateCard(models.sequelize);
+    return res.json({ success: true, saved, table: cardTable(card), versions: await listVersions(models.sequelize) });
+  } catch (error) {
+    console.error('Save rate card error:', error);
+    return res.status(500).json({ success: false, error: 'Failed to save the rate card', message: error.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// GET /api/v1/world/:showId/events/:eventId/price-snapshot
+// ═══════════════════════════════════════════
+// The prices frozen when the deal was agreed (services/dealPriceSnapshot):
+// [] for a deal not agreed yet, or agreed before snapshots existed.
+
+router.get('/world/:showId/events/:eventId/price-snapshot', requireAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const [rows] = await models.sequelize.query(
+      'SELECT id FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1',
+      { replacements: { eventId, showId } }
+    );
+    if (!rows?.length) return res.status(404).json({ success: false, error: 'Event not found' });
+    return res.json({ success: true, snapshot: await readPriceSnapshot(models.sequelize, eventId) });
+  } catch (error) {
+    console.error('Load price snapshot error:', error);
+    return res.status(500).json({ success: false, error: 'Failed to load the price snapshot', message: error.message });
   }
 });
 
