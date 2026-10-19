@@ -326,6 +326,35 @@ async function fixAll(db, registryIds, { by = null } = {}) {
   };
 }
 
+// ── One character's findings, fixed in one click ────────────────────────────
+/**
+ * Fix their profile (Evoni, 2026-10-19: "when i click Check their profile
+ * against these facts it tell me to fix but i want it to automatically fix
+ * it for me inside character profiles"): every finding on one character,
+ * fixed at once from their page — the one-right-wording fixes, then the
+ * suggested rewrites applied and the "fine as written" ones kept as
+ * intentional, without a separate Apply all. Each change comes back with
+ * what Undo needs (POST /api/v1/cast/consistency/undo). What could not be
+ * fixed is left, with why. One AI call (the suggestions).
+ */
+async function fixCharacter(db, characterId) {
+  const found = await loadFound(db, characterId);
+  if (isCounselor(found.character)) throw new FixAllError(403, 'That character is not changed here.');
+  const findings = await fixFindings(db, found);
+  const changes = findings.changes.map((c) => ({ id: changeId(), character_id: found.character.id, ...c }));
+  const left = [...findings.left];
+  if (findings.queued.length) {
+    for (const r of await applyQueued(db, findings.queued)) {
+      if (r.ok) changes.push(r.change);
+      else left.push(`A finding could not be fixed: ${r.error}`);
+    }
+  }
+  const { checkCharacter } = require('./characterConsistency');
+  const check = await checkCharacter(db, await loadFound(db, found.character.id));
+  await require('./flagLog').logCheck(db, found.character, check);
+  return { changes, left, check };
+}
+
 // ── Apply all (her one click) ────────────────────────────────────────────────
 async function applyQueued(db, items) {
   if (!Array.isArray(items) || !items.length || items.length > 200) throw new FixAllError(400, 'items must be a list of 1 to 200 suggestions.');
@@ -431,4 +460,4 @@ async function undoChange(db, change, { by = null } = {}) {
   }
 }
 
-module.exports = { fixAll, applyQueued, undoChange, matchFeedProfile, FixAllError, isBudgetStop };
+module.exports = { fixAll, fixCharacter, applyQueued, undoChange, matchFeedProfile, FixAllError, isBudgetStop };
