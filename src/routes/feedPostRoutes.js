@@ -119,6 +119,19 @@ function applyPostReveal(post, reveals) {
   return out;
 }
 
+/**
+ * Visual Memory phase 2 (services/postMedia): anyone but an ADMIN reads a
+ * feed with no library picture that is not approved and public, and no story
+ * past its 24 hours. An ADMIN (Review, the director's view) sees everything.
+ */
+async function forReader(req, posts) {
+  // optionalAuth reads only cognito:groups; a local token carries its own groups claim.
+  const raw = req.user?.raw || {};
+  const groups = [...(req.user?.groups || []), ...(Array.isArray(raw.groups) ? raw.groups : [])];
+  if (require('../services/mediaLibrary').audienceOf({ groups }) === 'admin') return posts;
+  return require('../services/postMedia').publicPosts(require('../models'), posts);
+}
+
 // ── GET FEED TIMELINE (QUERY COMPAT) ────────────────────────────────────────
 // GET /api/v1/feed-posts?show_id=...&episode_id=...&limit=...&offset=...
 router.get('/', optionalAuth, async (req, res) => {
@@ -243,6 +256,7 @@ router.get('/', optionalAuth, async (req, res) => {
     // Likes and shares as they stand at the story moment, on the growth
     // curve; without ?at=, the final numbers (Task #2955, services/pulseNumbers.js).
     data = await require('../services/pulseNumbers').applyNumbers(require('../models'), data, atOrder);
+    data = await forReader(req, data);
 
     return res.json({
       data,
@@ -411,9 +425,10 @@ router.get('/:showId/timeline', optionalAuth, async (req, res) => {
     });
 
     const total = await FeedPost.count({ where });
+    const data = await forReader(req, posts.map((p) => p.toJSON()));
 
     return res.json({
-      data: posts,
+      data,
       count: posts.length,
       total,
       hasMore: (parseInt(offset) || 0) + posts.length < total,
@@ -438,6 +453,8 @@ router.get('/post/:postId', optionalAuth, async (req, res) => {
       order: FeedComment ? [[{ model: FeedComment, as: 'comments' }, 'sort_order', 'ASC']] : [],
     });
     if (!post) return res.status(404).json({ error: 'Post not found' });
+    const [shown] = await forReader(req, [post.toJSON()]);
+    if (!shown) return res.status(404).json({ error: 'Post not found' });
     // Which beats show this post (feed_moments.feed_post_id), for the wall.
     const { FeedMoment, Episode } = require('../models');
     const beats = FeedMoment ? await FeedMoment.findAll({
@@ -446,7 +463,7 @@ router.get('/post/:postId', optionalAuth, async (req, res) => {
       include: Episode ? [{ model: Episode, as: 'episode', attributes: ['id', 'episode_number', 'title'], required: false }] : [],
       order: [['beat_number', 'ASC']],
     }) : [];
-    return res.json({ data: { ...post.toJSON(), beats: beats.map((b) => ({ moment_id: b.id, episode_id: b.episode_id, beat_number: b.beat_number, episode_number: b.episode?.episode_number ?? null, episode_title: b.episode?.title ?? null })) } });
+    return res.json({ data: { ...shown, beats: beats.map((b) => ({ moment_id: b.id, episode_id: b.episode_id, beat_number: b.beat_number, episode_number: b.episode?.episode_number ?? null, episode_title: b.episode?.title ?? null })) } });
   } catch (err) {
     console.error('[FeedPosts] Get post error:', err);
     return res.status(500).json({ error: err.message });
@@ -675,6 +692,13 @@ router.put('/:postId', requireAuth, async (req, res) => {
     if (post.ai_generated && updates.content_text !== undefined && String(updates.content_text).trim() !== String(post.content_text || '').trim()) {
       updates.edited_at = new Date();
     }
+    // Its library pictures must be approved and public before it goes out (Visual Memory phase 2).
+    if (updates.status === 'live' && post.status !== 'live') {
+      const pictures = await require('../services/postMedia').publishProblems(require('../models'), post);
+      if (pictures.length) {
+        return res.status(409).json({ error: 'Its pictures are not approved and public yet.', code: 'pictures_not_public', pictures });
+      }
+    }
     // Releasing Lala's post, or one about her, is Review's: an admin's (Task #3047).
     if (updates.status === 'live' && post.status !== 'live') {
       const held = await releaseHold(req, { ...post.get(), ...updates });
@@ -889,6 +913,11 @@ router.put('/:postId/release-time', requireAuth, authorize(['ADMIN']), async (re
     const models = require('../models');
     const post = await models.FeedPost.findByPk(req.params.postId);
     try {
+      // Scheduled to go out: its library pictures must be approved and public (Visual Memory phase 2).
+      if (req.body?.mode === 'schedule' && post && !post.deleted_at) {
+        const pictures = await require('../services/postMedia').publishProblems(models, post);
+        if (pictures.length) return res.status(409).json({ error: 'Its pictures are not approved and public yet.', code: 'pictures_not_public', pictures });
+      }
       // A time that breaks the story order waits for her "Schedule anyway".
       if (req.body?.mode === 'schedule' && req.body?.at && !req.body?.anyway && post && post.status === 'draft' && !post.deleted_at) {
         const problems = await checkReleaseTime(models, post, req.body.at, { tzOffset: Number(req.body?.tz_offset) || 0 });
