@@ -8107,7 +8107,7 @@ export function OpportunitiesTab({ showId, api, S, setToast, loadData, episodes 
     try {
       const res = await api.post(`/api/v1/opportunities/${showId}`, oppForm);
       if (res.data.success) { setOpps(prev => [res.data.opportunity, ...prev]); setOppForm(null); setToast('Opportunity created'); }
-    } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+    } catch (err) { console.error('[OpportunitiesTab] create failed:', err); setToast('Failed: ' + (err.response?.data?.error || err.message)); }
   };
 
   // Ask before the steps that do more than move a status (Evoni,
@@ -8119,7 +8119,7 @@ export function OpportunitiesTab({ showId, api, S, setToast, loadData, episodes 
     try {
       const res = await api.post(`/api/v1/opportunities/${showId}/${opp.id}/advance`, { to_status: toStatus });
       if (res.data.success) { setOpps(prev => prev.map(o => o.id === opp.id ? res.data.opportunity : o)); setToast(`${opp.name} → ${toStatus}`); }
-    } catch (err) { setToast(err.response?.data?.error || 'Failed'); }
+    } catch (err) { console.error('[OpportunitiesTab] advance failed:', err); setToast(err.response?.data?.error || 'Failed'); }
   };
 
   // Undo the last step (POST …/undo): only the status goes back; what the
@@ -8141,7 +8141,7 @@ export function OpportunitiesTab({ showId, api, S, setToast, loadData, episodes 
         loadData();
         setToast(`"${opp.name}" scheduled — event created with ${res.data.data.guests || 0} guests`);
       }
-    } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+    } catch (err) { console.error('[OpportunitiesTab] schedule as event failed:', err); setToast('Failed: ' + (err.response?.data?.error || err.message)); }
   };
 
   const pipeline = {};
@@ -8213,7 +8213,7 @@ export function OpportunitiesTab({ showId, api, S, setToast, loadData, episodes 
                   {parseFloat(opp.payment_amount) > 0 && <div style={{ fontSize: 16, fontWeight: 800, color: '#16a34a' }}>${parseFloat(opp.payment_amount).toLocaleString()}</div>}
                 </div>
                 {opp.narrative_stakes && <div style={{ fontSize: 11, color: '#666', marginBottom: 6 }}>{opp.narrative_stakes}</div>}
-                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                <div className="ob14-card-actions" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                   {NEXT[opp.status] && <button onClick={() => advanceOpp(opp, NEXT[opp.status])} data-testid={`opp-move-${opp.id}`} style={{ padding: '3px 10px', borderRadius: 4, border: `1px solid ${sc}`, background: 'transparent', color: sc, fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>Move to {NEXT[opp.status]}</button>}
                   {canAttachToBeat14(opp) && attachingId !== opp.id && (
                     <button type="button" className="ob14-btn" onClick={() => setAttachingId(opp.id)} data-testid={`opp-beat14-open-${opp.id}`}>Attach to beat 14…</button>
@@ -8223,14 +8223,14 @@ export function OpportunitiesTab({ showId, api, S, setToast, loadData, episodes 
                   )}
                   {opp.status === 'offered' && <button onClick={() => advanceOpp(opp, 'declined')} style={{ padding: '3px 10px', borderRadius: 4, border: '1px solid #dc2626', background: 'transparent', color: '#dc2626', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>Decline</button>}
                   {!opp.event_id && ['offered','considering','negotiating','booked','preparing','active'].includes(opp.status) && (
-                    <button onClick={() => toEvent(opp)} style={{ padding: '3px 10px', borderRadius: 4, border: 'none', background: '#B8962E', color: '#fff', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>📅 Schedule as Event</button>
+                    <button type="button" className="ob14-btn-gold" onClick={() => toEvent(opp)} data-testid={`opp-schedule-${opp.id}`}>📅 Schedule as Event</button>
                   )}
                   {opp.event_id && <span style={{ fontSize: 9, color: '#16a34a', padding: '3px 8px', background: '#f0fdf4', borderRadius: 4, fontWeight: 600 }}>✓ Event scheduled</span>}
                 </div>
                 {attachingId === opp.id && (
                   <Beat14AttachForm showId={showId} opp={opp} episodes={episodes} api={api}
                     onCancel={() => setAttachingId(null)}
-                    onDone={async () => { setAttachingId(null); setToast(`${opp.name} is beat 14's opportunity`); await loadOpps(); }} />
+                    onDone={async (ep) => { setAttachingId(null); setToast(`${opp.name} is beat 14's opportunity in ${ep?.title || (ep?.episode_number != null ? `Episode ${ep.episode_number}` : 'the episode')}`); await loadOpps(); }} />
                 )}
                 {/* Deliverables that check themselves (Evoni, 2026-10-19): "Pulse stories: 2 of 3". */}
                 {opp.event_id && <DeliverableProgress opportunityId={opp.id} compact />}
