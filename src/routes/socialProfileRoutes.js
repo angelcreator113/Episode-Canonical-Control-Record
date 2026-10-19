@@ -1456,7 +1456,11 @@ router.post('/bulk/cross', requireAuth, authorize(['ADMIN']), async (req, res) =
       { where: { id: { [Op.in]: allowedIds }, status: 'finalized' } }
     );
     const skipped = ids.length - changed;
-    return res.json({ crossed: changed, skipped, total: ids.length, locked });
+    // Those now crossed came from the feed: each follows Lala, one way
+    // (services/pulseFollows; Evoni, 2026-10-19).
+    const nowCrossed = await db.SocialProfile.findAll({ where: { id: { [Op.in]: allowedIds }, status: 'crossed' }, attributes: ['id'], raw: true });
+    const followedLala = await require('../services/pulseFollows').followLalaFromFeed(db, nowCrossed.map((r) => r.id), { by: req.user?.email || null });
+    return res.json({ crossed: changed, skipped, total: ids.length, locked, followed_lala: followedLala });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -1724,6 +1728,10 @@ router.post('/:id/cross', requireAuth, authorize(['ADMIN']), guardJustAWomanReco
       crossing_trigger: crossing_note || profile.crossing_trigger,
     });
 
+    // Someone who came from the feed follows Lala, one way (services/pulseFollows;
+    // Evoni, 2026-10-19). Never fails the crossing.
+    const followedLala = await require('../services/pulseFollows').followLalaFromFeed(db, [profile.id], { by: req.user?.email || null });
+
     // Log the crossing as a world timeline event (once: a profile crossed
     // before, now only given its character, already has one).
     if (!alreadyCrossed) try {
@@ -1754,6 +1762,7 @@ router.post('/:id/cross', requireAuth, authorize(['ADMIN']), guardJustAWomanReco
       registry_character: registryCharacter,
       registry_note: registryNote,
       crossed: true,
+      followed_lala: followedLala,
       social_leverage: syncResult?.socialLeverage || null,
     });
   } catch (err) {

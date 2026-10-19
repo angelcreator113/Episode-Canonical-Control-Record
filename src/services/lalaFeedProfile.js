@@ -17,9 +17,12 @@
  *   followers   her canon follower count at the moment and its audience
  *               tier (pulseFollowers, pulseAudience; Task #3062), else the
  *               profile's estimate marked estimated.
- *   friends     the LalaVerse profiles she knows directly
- *               (social_profiles.lala_relationship = 'direct'; Evoni's
- *               choice of 2026-10-11), the first six and the total.
+ *   friends     the LalaVerse profiles she and they both follow on The
+ *               Pulse (pulse_follows; Evoni, 2026-10-19), the first six and
+ *               the total. They were seeded from her old friends,
+ *               social_profiles.lala_relationship = 'direct' (Evoni's
+ *               choice of 2026-10-11), which a server not yet migrated
+ *               still reads.
  *
  * Relationship status is not here: it is her newest relationship post
  * (docs/FEED_POSTS.md rule 8), which the page reads with the posts.
@@ -61,7 +64,24 @@ async function lalaProfile(sequelize, linkedId) {
       ORDER BY id LIMIT 1`, {}, 'lala profile');
 }
 
+/**
+ * Lala's friends: the people she and they both follow on The Pulse
+ * (services/pulseFollows.friendsOfLala; Evoni, 2026-10-19). Before the
+ * follows table exists (a server not yet migrated), the old list,
+ * lala_relationship = 'direct', which the follows were seeded from.
+ */
 async function friendsOf(sequelize, ownerId, limit, hidden = []) {
+  if (ownerId) {
+    try {
+      return await require('./pulseFollows').friendsOfLala({ sequelize }, { lalaId: ownerId, limit, hidden });
+    } catch (err) {
+      console.error('[LalaFeedProfile] follows could not be read; using the old friends list:', err.message);
+    }
+  }
+  return directFriendsOf(sequelize, ownerId, limit, hidden);
+}
+
+async function directFriendsOf(sequelize, ownerId, limit, hidden = []) {
   // `hidden`: profiles Lala has not met yet at the moment read (Task #2939).
   const where = `deleted_at IS NULL AND feed_layer = 'lalaverse' AND lala_relationship = 'direct'
     AND COALESCE(is_justawoman_record, false) = false AND (CAST(:owner AS INTEGER) IS NULL OR id <> CAST(:owner AS INTEGER))
@@ -131,4 +151,4 @@ async function lalaProfileId(sequelize) {
   return (await lalaProfile(sequelize, character?.feed_profile_id))?.id || null;
 }
 
-module.exports = { getLalaFeedProfile, lalaProfileId, FRIENDS_SHOWN, FRIENDS_ALL };
+module.exports = { getLalaFeedProfile, lalaProfileId, followersOf, FRIENDS_SHOWN, FRIENDS_ALL };
