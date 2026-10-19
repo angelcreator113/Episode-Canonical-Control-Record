@@ -117,7 +117,7 @@ describe('WorldAdmin ?tab=<main tab> opens a sub-tab (#2289)', () => {
       return el;
     });
     expect([...bar.querySelectorAll('button .wa-tab-label')].map((b) => b.textContent)).toEqual(
-      ['Overview', 'Episodes', 'Events', 'Opportunities', 'Assets', 'Cast & Continuity', "Lala's Feed", 'Release'],
+      ['Overview', 'Episodes', 'Events', 'Opportunities', 'World moments', 'Assets', 'Cast & Continuity', "Lala's Feed", 'Release'],
     );
   });
 });

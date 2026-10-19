@@ -22,7 +22,7 @@ import api from '../../services/api';
 import './PulseEngine.css';
 
 const STATUS_LABELS = { queued: 'Waiting', running: 'Running', done: 'Done', failed: 'Failed', skipped: 'Skipped' };
-const KIND_LABELS = { event: 'Event post', ambient: 'Ambient post', comment: 'Comment', dm: 'DM', storyline: 'Storyline beat', voice: 'Voice build' };
+const KIND_LABELS = { event: 'Event post', ambient: 'Ambient post', comment: 'Comment', dm: 'DM', storyline: 'Storyline beat', voice: 'Voice build', moment: 'World moment' };
 const LIMIT_MAX = 100;
 
 // The switches, in the mock's order (ambient first: it was the only one).
