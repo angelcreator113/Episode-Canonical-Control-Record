@@ -124,7 +124,7 @@ describe('the counts and one pick', () => {
 describe('the prompts', () => {
   const [mainCharacter] = normalizeArchetypes(DEFAULT_ARCHETYPES);
 
-  test('a profile\'s own archetype, apart from the Feed\'s ten, with what it posts, does and means', () => {
+  test('a profile\'s own archetype, apart from The Pulse\'s ten, with what it posts, does and means', () => {
     const line = societyArchetypeLine(mainCharacter);
     expect(line).toContain('SOCIETY ARCHETYPE: The Main Character');
     expect(line).toContain('not the "archetype" field');
@@ -150,7 +150,7 @@ describe('the prompts', () => {
   });
 });
 
-describe('the Feed\'s balance (idea 6, 2026-10-17)', () => {
+describe('The Pulse\'s balance (idea 6, 2026-10-17)', () => {
   const { societyBalance } = require('../../../src/services/societyArchetypes');
   const five = list('The A', 'The B', 'The C', 'The D', 'The E');
 
@@ -168,14 +168,14 @@ describe('the Feed\'s balance (idea 6, 2026-10-17)', () => {
 
   test('with counts, the menu says how many have each, marks the crowded, and asks for range', () => {
     const menu = societyArchetypeMenu(five, { 'The A': 6, 'the b': 2 });
-    expect(menu).toContain('- The A: The A posts [6 on the Feed, CROWDED]');
-    expect(menu).toContain('- The B: The B posts [2 on the Feed]');
-    expect(menu).toContain('- The C: The C posts [nobody on the Feed yet]');
-    expect(menu).toMatch(/The Feed needs range: when two fit about equally well, choose the one with fewer on the Feed/);
+    expect(menu).toContain('- The A: The A posts [6 on The Pulse, CROWDED]');
+    expect(menu).toContain('- The B: The B posts [2 on The Pulse]');
+    expect(menu).toContain('- The C: The C posts [nobody on The Pulse yet]');
+    expect(menu).toMatch(/The Pulse needs range: when two fit about equally well, choose the one with fewer on The Pulse/);
   });
 
   test('without counts, or with an empty Feed, the menu is as before', () => {
     expect(societyArchetypeMenu(five, {})).toBe(societyArchetypeMenu(five));
-    expect(societyArchetypeMenu(five)).not.toMatch(/on the Feed/);
+    expect(societyArchetypeMenu(five)).not.toMatch(/on The Pulse/);
   });
 });

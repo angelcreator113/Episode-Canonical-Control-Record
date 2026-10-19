@@ -6,7 +6,7 @@
  */
 export const LEGENDARY_GROUPS = [
   { group: 'Fashion Icons', icon: '👗', color: '#d4789a', roles: [
-    { role: 'The Style Queen', fn: 'Defines what is fashionable this season', signature: 'Her opinion reshapes the Feed overnight' },
+    { role: 'The Style Queen', fn: 'Defines what is fashionable this season', signature: 'Her opinion reshapes The Pulse overnight' },
     { role: 'Dazzle Muse', fn: 'The living embodiment of Dazzle District\'s aesthetic', signature: 'Every Dazzle Season moment is built around her' },
     { role: 'The Runway Architect', fn: 'Designs the shows that define the Atelier Circuit', signature: 'Their runway is the reference point for the year' },
     { role: 'Street Style Sovereign', fn: 'Bridges street style and high fashion', signature: 'Discovered at Style Market, now front row at every show' },
@@ -14,7 +14,7 @@ export const LEGENDARY_GROUPS = [
   ]},
   { group: 'Beauty Legends', icon: '✨', color: '#a889c8', roles: [
     { role: 'The Glow Guru', fn: 'Defines beauty standards — recommendations sell out in hours', signature: 'The beauty world waits for her review' },
-    { role: 'Skin Scientist', fn: 'Makes skincare evidence-based and aspirational', signature: 'Translates beauty lab science into the Feed\'s language' },
+    { role: 'Skin Scientist', fn: 'Makes skincare evidence-based and aspirational', signature: 'Translates beauty lab science into The Pulse\'s language' },
     { role: 'The Makeup Oracle', fn: 'Predicts beauty trends before they surface', signature: 'The look she posts in January becomes March\'s trend' },
     { role: 'Lash Empress', fn: 'Rules the lash and eye beauty space', signature: 'Started in Radiance Row salons' },
     { role: 'The Aesthetic Alchemist', fn: 'Combines beauty, fashion, and art', signature: 'Impossible to copy because the source is interior life' },
@@ -28,7 +28,7 @@ export const LEGENDARY_GROUPS = [
   ]},
   { group: 'Entertainment Stars', icon: '🎤', color: '#b89060', roles: [
     { role: 'The Viral Comedian', fn: 'Makes the platform laugh', signature: 'The meme that defined the year was hers' },
-    { role: 'The Music Architect', fn: 'Builds sonic worlds, not just songs', signature: 'Her sound lives in half the Feed\'s content' },
+    { role: 'The Music Architect', fn: 'Builds sonic worlds, not just songs', signature: 'Her sound lives in half The Pulse\'s content' },
     { role: 'The Nightlife Queen', fn: 'Controls what happens after midnight', signature: 'Her guest list is the event' },
     { role: 'The Performance Icon', fn: 'Elevates creator content to performance art', signature: 'Live videos feel like theater' },
     { role: 'The Stage Rebel', fn: 'Breaks every entertainment convention', signature: 'The performance nobody can explain' },
@@ -43,7 +43,7 @@ export const LEGENDARY_GROUPS = [
   { group: 'Commentators', icon: '📝', color: '#7ab3d4', roles: [
     { role: 'The Culture Analyst', fn: 'Makes sense of what\'s happening in real time', signature: 'Analysis drops within hours — always definitive' },
     { role: 'The Trend Oracle', fn: 'Predicts cultural shifts — always right, always cryptic', signature: 'The post from six months ago that predicted this' },
-    { role: 'The Social Philosopher', fn: 'Asks questions the platform avoids', signature: 'The thread that stopped the Feed' },
+    { role: 'The Social Philosopher', fn: 'Asks questions the platform avoids', signature: 'The thread that stopped The Pulse' },
     { role: 'The Media Critic', fn: 'Holds media networks accountable', signature: 'The only creator gossip outlets fear' },
     { role: 'The Gossip Empress', fn: 'Knows everything, shares strategically', signature: 'She knew before the announcement' },
   ]},
@@ -59,7 +59,7 @@ export const LEGENDARY_GROUPS = [
     { role: 'The New Wave Designer', fn: 'Bringing the next aesthetic', signature: 'Style Market discovery. Atelier Circuit in two years.' },
     { role: 'The Beauty Prodigy', fn: 'Doing things that shouldn\'t be possible at her age', signature: 'Found during Glow Week' },
     { role: 'The Street Innovator', fn: 'Rewriting what street style means', signature: 'The look everyone copied' },
-    { role: 'The Viral Wildcard', fn: 'Nobody predicted her', signature: 'The post that broke the Feed. Twice.' },
+    { role: 'The Viral Wildcard', fn: 'Nobody predicted her', signature: 'The post that broke The Pulse. Twice.' },
   ]},
   { group: 'Cultural Legends', icon: '🏆', color: '#a889c8', roles: [
     { role: 'The Legacy Builder', fn: 'Everything she built outlasted the platforms', signature: 'The creator other creators cite' },

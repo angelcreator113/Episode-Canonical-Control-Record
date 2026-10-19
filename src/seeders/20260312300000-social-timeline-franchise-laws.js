@@ -30,7 +30,7 @@ module.exports = {
         content: JSON.stringify({
           summary: "Every character's Feed is built from four blended layers. Understanding which layer content comes from tells you what it means narratively.",
           layers: [
-            { layer: 1, name: 'Personal Circle',   feedWeight: '~30%', contains: 'People a character personally knows — friends, family, coworkers, collaborators', narrativeFunction: 'Creates emotional realism. Baby announcements. Relationship updates. Everyday life. The things that make the Feed feel like a world and not a performance.' },
+            { layer: 1, name: 'Personal Circle',   feedWeight: '~30%', contains: 'People a character personally knows — friends, family, coworkers, collaborators', narrativeFunction: 'Creates emotional realism. Baby announcements. Relationship updates. Everyday life. The things that make The Pulse feel like a world and not a performance.' },
             { layer: 2, name: 'Interest Clusters',  feedWeight: '~30%', contains: 'Communities the character engages with — fashion, beauty, fitness, entrepreneurship, gaming, nightlife', narrativeFunction: "Tells you who a character is by what they've trained the algorithm to show them. The clusters reveal identity before the character says a word." },
             { layer: 3, name: 'Cultural Moments',   feedWeight: '~20%', contains: 'Content tied to global events — Velvet Season, Glow Week, Starlight Awards, any calendar event', narrativeFunction: 'The world pressing in. During Glow Week, beauty posts dominate. A character who ignores it is making a choice.' },
             { layer: 4, name: 'Viral Waves',        feedWeight: '~20%', contains: 'Posts spreading rapidly across the network — dances, memes, scandals, celebrity moments', narrativeFunction: "The feed's unconscious. These posts appear whether you follow the creator or not. You cannot opt out of what the network has decided everyone sees." }
@@ -166,7 +166,7 @@ module.exports = {
       {
         title: 'Creator Momentum',
         content: JSON.stringify({
-          summary: "Creators build and lose momentum scores over time. Momentum determines how easily their posts spread — it's the compound interest of the Feed.",
+          summary: "Creators build and lose momentum scores over time. Momentum determines how easily their posts spread — it's the compound interest of The Pulse.",
           actions: [
             { action: 'Consistent posting',                 effect: 'Steady momentum accumulation',                                     storyImplication: 'The creator who shows up every day while everyone else waits for inspiration.' },
             { action: 'Going viral',                        effect: 'Momentum spike — algorithm favor increases significantly',          storyImplication: 'The spike creates pressure. Maintain it or lose more than you gained.' },
@@ -237,7 +237,7 @@ module.exports = {
       {
         title: 'Cultural Memory',
         content: JSON.stringify({
-          summary: 'Major events become part of LalaVerse history. Future creators reference them. The Feed has a memory, and that memory has power.',
+          summary: 'Major events become part of LalaVerse history. Future creators reference them. The Pulse has a memory, and that memory has power.',
           types: [
             { type: 'Drama',          lifespan: '1–3 days active',             entersCulturalMemory: 'The drama becomes a reference point for future drama of the same type',           storyImplication: "'Remember the Velvet Season meltdown?' — three years later, still the benchmark." },
             { type: 'Trends',         lifespan: '1–2 weeks active',            entersCulturalMemory: 'The trend gets a name — naming it preserves it',                                  storyImplication: 'Who named it becomes part of the myth. Usually not who started it.' },
@@ -285,7 +285,7 @@ module.exports = {
         content: JSON.stringify({
           summary: 'The Social Timeline Engine is not background — it is active narrative infrastructure. Before generating any Feed scene, the story engine asks these questions.',
           questions: [
-            'What layer of the Feed is this content landing in — personal circle, interest cluster, cultural moment, or viral wave?',
+            'What layer of The Pulse is this content landing in — personal circle, interest cluster, cultural moment, or viral wave?',
             'What stage of viral spread is this post at — seed, cluster, platform, or cultural moment?',
             'What engagement signals is this generating — strong (comments, shares, saves) or weak (views, likes)?',
             'Is this happening during a cultural event override — and is the content aligned or deliberately counter-programmed?',

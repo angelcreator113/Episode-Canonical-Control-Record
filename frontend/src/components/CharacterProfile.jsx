@@ -383,7 +383,7 @@ function TabOnline({ character, feedProfile }) {
             <section className="content-section">
               <h3 className="section-title">Mask Status</h3>
               <p className="mask-note">
-                This character&rsquo;s Feed profile IS their mask. The gap between
+                This character&rsquo;s Pulse profile IS their mask. The gap between
                 who they perform online and who they actually are is the story.
               </p>
             </section>

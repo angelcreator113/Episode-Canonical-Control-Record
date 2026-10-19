@@ -9,7 +9,7 @@ const T = {
 };
 
 export const CELEBRITY_HIERARCHY = [
-  { tier: 1, name: 'Cultural Icons', followers: '10M+', color: T.gold, desc: 'Platform-defining figures. Define trends. Headline global events. Their opinion reshapes the Feed.' },
+  { tier: 1, name: 'Cultural Icons', followers: '10M+', color: T.gold, desc: 'Platform-defining figures. Define trends. Headline global events. Their opinion reshapes The Pulse.' },
   { tier: 2, name: 'Industry Titans', followers: '5M-10M', color: T.rose, desc: 'Major designers, beauty founders, entertainment stars. Shape industry direction. Sponsor major events.' },
   { tier: 3, name: 'Major Influencers', followers: '1M-5M', color: T.orchid, desc: 'Fashion creators, lifestyle influencers. Move culture at scale. Front row at everything.' },
   { tier: 4, name: 'Rising Creators', followers: '100K-1M', color: T.steel, desc: 'Viral creators, niche experts. The dangerous tier — where careers accelerate or collapse.' },
@@ -28,7 +28,7 @@ export const FASHION_TIERS = [
 export const BEAUTY_TIERS = [
   { tier: 1, name: 'Beauty Empires', color: T.gold, desc: 'Major cosmetics and skincare companies that define the category.', examples: 'Their launches become cultural events. Glow Week belongs to them.' },
   { tier: 2, name: 'Beauty Labs', color: T.rose, desc: 'Innovation companies developing ingredients, formulas, and tools.', examples: 'Emerging brands partner with them to establish credibility.' },
-  { tier: 3, name: 'Salon Owners', color: T.orchid, desc: 'Local beauty powerhouses — lash studios, nail salons, skin clinics.', examples: 'The look starts in their chair before it\'s on the Feed.' },
+  { tier: 3, name: 'Salon Owners', color: T.orchid, desc: 'Local beauty powerhouses — lash studios, nail salons, skin clinics.', examples: 'The look starts in their chair before it\'s on The Pulse.' },
   { tier: 4, name: 'Beauty Creators', color: T.steel, desc: 'Makeup artists, skincare influencers, tutorial creators.', examples: 'Their reviews move product. Brands court them constantly.' },
   { tier: 5, name: 'Beauty Students', color: T.mint, desc: 'Emerging talent, often discovered during Glow Week.', examples: 'One viral moment changes everything.' },
 ];
@@ -64,7 +64,7 @@ export const GOSSIP_MEDIA = [
 ];
 
 export const FAMOUS_CHARACTERS = [
-  { rank: 1, title: 'The Style Queen', role: 'Defines what is fashionable. Her opinion reshapes the Feed.', icon: '👑', color: T.rose },
+  { rank: 1, title: 'The Style Queen', role: 'Defines what is fashionable. Her opinion reshapes The Pulse.', icon: '👑', color: T.rose },
   { rank: 2, title: 'The Glow Guru', role: 'Defines beauty standards. Her recommendations sell out in hours.', icon: '✨', color: T.orchid },
   { rank: 3, title: 'The Creator King', role: 'Represents success culture. Entrepreneurs model themselves on him.', icon: '🎯', color: T.gold },
   { rank: 4, title: 'The Trend Oracle', role: 'Predicts cultural shifts before they happen. Always right, always cryptic.', icon: '🔮', color: T.orchid },
@@ -88,11 +88,11 @@ export const FAMOUS_CHARACTERS = [
   { rank: 22, title: 'The Storytelling Master', role: 'Narrative above everything. Makes content feel like literature.', icon: '📖', color: T.orchid },
   { rank: 23, title: 'The Culture Commentator', role: 'Names what everyone is feeling but hasn\'t articulated yet.', icon: '🗣️', color: T.gold },
   { rank: 24, title: 'The Creator Mentor', role: 'Grows other creators. Legacy through multiplication.', icon: '🤝', color: T.mint },
-  { rank: 25, title: 'The Fashion Archivist', role: 'Preserves what the Feed forgets. Memory as power.', icon: '📚', color: T.amber },
+  { rank: 25, title: 'The Fashion Archivist', role: 'Preserves what The Pulse forgets. Memory as power.', icon: '📚', color: T.amber },
 ];
 
 export const BIRTHDAY_TEMPLATES = [
-  { name: 'The Style Queen', icon: '👑', community: 'Fashion', desc: 'Themed outfit posts across the Feed. Her aesthetic becomes a challenge.' },
+  { name: 'The Style Queen', icon: '👑', community: 'Fashion', desc: 'Themed outfit posts across The Pulse. Her aesthetic becomes a challenge.' },
   { name: 'The Glow Guru', icon: '✨', community: 'Beauty', desc: 'Tutorial tributes honoring her techniques. Beauty creators compete.' },
   { name: 'The Creator King', icon: '🎯', community: 'Entrepreneur', desc: 'Mentorship content. Creators share how he influenced their path.' },
   { name: 'The Icon Twins', icon: '♊', community: 'All Communities', desc: 'Two legendary influencers born the same day. The annual debate: which one is greater?' },
