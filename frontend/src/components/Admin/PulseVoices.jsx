@@ -351,8 +351,9 @@ export default function PulseVoices({ showId }) {
         : <ul className="pulse-voices-list">{rows.map((r) => <VoiceCard key={r.registry_character_id} row={r} onVoice={onVoice} onReload={load} />)}</ul>}
       {notMet.length > 0 && (
         <section className="pulse-voices-unmet" data-testid="pulse-voices-unmet" aria-labelledby="pulse-voices-unmet-h">
-          <h3 id="pulse-voices-unmet-h" className="pulse-voices-unmet-h">Lala hasn&rsquo;t met them yet ({notMet.length})</h3>
-          <p className="pulse-voices-muted">Build and approve their voice now. They post on their own only once Lala has met them; a character&rsquo;s page can still draft their posts for Review. A public figure Lala knows of can post in public before they meet.</p>
+          {/* Heading renamed (Evoni, 2026-10-19). Since 2026-10-18 they post whether or not Lala has met them (pulseVoices); only reactions to Lala's events and storylines with her wait for the meeting. */}
+          <h3 id="pulse-voices-unmet-h" className="pulse-voices-unmet-h">Not in Lala&rsquo;s world yet ({notMet.length})</h3>
+          <p className="pulse-voices-muted">Build and approve their voice now. They post on The Pulse already; reacting to Lala&rsquo;s events and storylines with her wait until they meet.</p>
           <ul className="pulse-voices-list">{notMet.map((r) => <VoiceCard key={r.registry_character_id} row={r} onVoice={onVoice} onReload={load} unmet />)}</ul>
         </section>
       )}

@@ -13,12 +13,14 @@
 .lvh-tone-society  { --tone-soft: var(--danger-bg);          --tone-line: var(--danger-border);      --tone-text: var(--danger-text);        --tone-dot: var(--danger); }
 .lvh-tone-culture  { --tone-soft: var(--accent-subtle);      --tone-line: var(--accent-light);       --tone-text: var(--accent-dark);        --tone-dot: var(--accent); }
 .lvh-tone-state    { --tone-soft: var(--info-bg);            --tone-line: var(--info-border);        --tone-text: var(--info-text);          --tone-dot: var(--info); }
+/* Brands (Evoni, 2026-10-19): the companies tab, in the warm warning amber. */
+.lvh-tone-brands   { --tone-soft: var(--warning-bg);         --tone-line: var(--warning-border);     --tone-text: var(--warning-text);       --tone-dot: var(--warning-text); }
 
 .lvh-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--tone-dot, var(--lala-lavender)); flex-shrink: 0; }
 
 /* ── Tab cards ── */
 .lvh-tabs {
-  display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px;
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px;
   margin-bottom: 16px; padding: 2px 2px 8px;
 }
 .lvh-tab {
@@ -93,6 +95,14 @@
 .lvh-footnote { margin: 12px 0 0; font-size: 11px; color: var(--text-secondary); }
 
 /* ── Narrow screens ── */
+/* Seven tabs (Brands joined, 2026-10-19) are too tight in a grid below
+   about 1100px, so the strip scrolls sideways from there, as it does on
+   phones. */
+@media (max-width: 1100px) {
+  .lvh-tabs { display: flex; overflow-x: auto; scroll-snap-type: x proximity; }
+  .lvh-tab { flex-shrink: 0; width: 168px; scroll-snap-align: start; }
+  .lvh-tab-desc { white-space: nowrap; }
+}
 @media (max-width: 900px) {
   .lvh-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .lvh-columns { grid-template-columns: 1fr; }

@@ -126,8 +126,8 @@ const StoryThreadTracker = lazy(() => import('./pages/StoryThreadTracker'));
 const StoryCalendar = lazy(() => import('./pages/StoryCalendar'));
 const StoryHealthDashboard = lazy(() => import('./pages/StoryHealthDashboard'));
 const CharacterProfile = lazy(() => import('./pages/CharacterProfilePage'));
-// Brands and companies (Evoni, 2026-10-18): the list and each profile.
-const CompaniesPage = lazy(() => import('./pages/CompaniesPage'));
+// Brands and companies (Evoni, 2026-10-18): each profile. The list is the
+// LalaVerse hub's Brands tab (Evoni, 2026-10-19); /brands redirects there.
 const BrandProfilePage = lazy(() => import('./pages/BrandProfilePage'));
 const SetupWizard = lazy(() => import('./pages/SetupWizard'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
@@ -444,7 +444,7 @@ function AppContent() {
           {/* PNOS Character Registry */}
           <Route path="/character-registry" element={<CharacterRegistryPage />} />
           <Route path="/character/:id" element={<CharacterProfile />} />
-          <Route path="/brands" element={<CompaniesPage />} />
+          <Route path="/brands" element={<Navigate to="/universe?tab=brands" replace />} />
           <Route path="/brands/:slug" element={<BrandProfilePage />} />
           <Route path="/setup" element={<SetupWizard />} />
           

@@ -12,7 +12,10 @@
  *   People          its founder and representatives with their authority
  *   On The Pulse    its account, posting schedule, posts and replies waiting,
  *                   and "Draft a post" (/api/v1/brand-pulse)
- *   Business        its deals
+ *   Business        its deals, each with its deliverables' progress
+ *                   (DeliverableProgress, compact; Evoni, 2026-10-19)
+ *   Pictures        its library pictures (GET /api/v1/media, entity 'brand'),
+ *                   by the library's own visibility rules (Evoni, 2026-10-19)
  *   Wardrobe        the pieces that are its
  *   Press & events  coverage of it and events it hosted (an outlet: what it
  *                   published; a venue: events held there)
@@ -20,13 +23,14 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { Building2, Pencil, Sparkles, Users, Store, Shirt, Newspaper, Handshake, Link2, Radio } from 'lucide-react';
+import { Building2, Pencil, Sparkles, Users, Store, Shirt, Newspaper, Handshake, Link2, Radio, Image as ImageIcon } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { isAdmin } from '../utils/authGroups';
 import { rememberedShowId } from '../utils/activeShow';
 import { atHandle } from './feed/feedConstants';
 import PostingSchedule from '../components/PostingSchedule/PostingSchedule';
+import DeliverableProgress from '../components/Deliverables/DeliverableProgress';
 import './BrandProfilePage.css';
 
 const errorOf = (err, fallback) => err?.response?.data?.error || fallback;
@@ -34,7 +38,7 @@ const words = (v) => String(v || '').replace(/_/g, ' ');
 const day = (d) => (d ? new Date(`${String(d).slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '');
 const when = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '');
 
-const TAB_ICONS = { identity: Building2, people: Users, pulse: Radio, business: Handshake, wardrobe: Shirt, press: Newspaper, relationships: Link2 };
+const TAB_ICONS = { identity: Building2, people: Users, pulse: Radio, business: Handshake, pictures: ImageIcon, wardrobe: Shirt, press: Newspaper, relationships: Link2 };
 
 // What each authority level means, in words (constants/brandPersonalities).
 export const AUTHORITY_WORDS = Object.freeze({
@@ -242,6 +246,7 @@ function Business({ deals }) {
                 {d.amount != null && <span className="bp-muted"> · ${d.amount.toLocaleString()}</span>}
                 {d.dates.length > 0 && <span className="bp-muted"> · {d.dates.map((x) => `${x.kind} ${day(x.date)}`).join(' · ')}</span>}
                 {!d.linked && <span className="bp-muted"> · named, not linked</span>}
+                {d.event_id && <span className="bp-progress"><DeliverableProgress opportunityId={d.id} compact canEdit={false} /></span>}
               </span>
               <span className="bp-state">{words(d.status)}</span>
             </li>
@@ -249,6 +254,44 @@ function Business({ deals }) {
         </ul>
       ) : <p className="bp-muted">No deals yet.</p>}
       <Link className="bp-link" to="/admin?tab=opportunities">Open Opportunities</Link>
+    </div>
+  );
+}
+
+// Its library pictures; who sees what is the library's rule (mediaLibrary
+// visibilityWhere): an ADMIN sees drafts and private ones, marked.
+const PRIVATE_WORDS = { private: 'Studio only', internal: null, public: null };
+
+function Pictures({ company, admin }) {
+  const [items, setItems] = useState(null);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    let live = true;
+    api.get('/api/v1/media', { params: { entity_type: 'brand', entity_id: company.id } })
+      .then(({ data }) => { if (live) setItems(data.items || []); })
+      .catch((err) => {
+        console.error('[BrandProfilePage] its pictures could not be read:', err);
+        if (live) setError(errorOf(err, 'Its pictures could not be loaded.'));
+      });
+    return () => { live = false; };
+  }, [company.id]);
+  if (error) return <div className="bp-tab" data-testid="bp-pictures"><p className="bp-error" role="alert">{error}</p></div>;
+  if (!items) return <div className="bp-tab" data-testid="bp-pictures"><p className="bp-muted">Loading…</p></div>;
+  return (
+    <div className="bp-tab" data-testid="bp-pictures">
+      {items.length ? (
+        <ul className="bp-grid">
+          {items.map((a) => (
+            <li key={a.id} className="bp-piece" data-testid="bp-picture">
+              <img src={a.thumbnail_url || a.url} alt={a.caption || company.name} loading="lazy" />
+              {a.caption && <span className="bp-piece-name">{a.caption}</span>}
+              {admin && (a.status !== 'approved' || PRIVATE_WORDS[a.visibility]) && (
+                <span className="bp-muted bp-small">{[a.status !== 'approved' && words(a.status), PRIVATE_WORDS[a.visibility]].filter(Boolean).join(' · ')}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : <p className="bp-muted">No library pictures are tagged with {company.name} yet.</p>}
     </div>
   );
 }
@@ -349,7 +392,7 @@ export default function BrandProfilePage() {
   }, [slug]);
   useEffect(() => { load(); }, [load]);
 
-  if (error && !data) return <div className="bp"><p className="bp-error" role="alert">{error}</p><Link className="bp-link" to="/brands">All brands and companies</Link></div>;
+  if (error && !data) return <div className="bp"><p className="bp-error" role="alert">{error}</p><Link className="bp-link" to="/universe?tab=brands">← LalaVerse › Brands</Link></div>;
   if (!data) return <div className="bp"><p className="bp-muted">Loading…</p></div>;
 
   const { company, sections } = data;
@@ -358,7 +401,7 @@ export default function BrandProfilePage() {
 
   return (
     <div className="bp" data-testid="brand-profile">
-      <Link className="bp-link bp-back" to="/brands">All brands and companies</Link>
+      <Link className="bp-link bp-back" to="/universe?tab=brands">← LalaVerse › Brands</Link>
       <header className="bp-head">
         <p className="bp-kind"><Store size={14} aria-hidden /> {company.kind_label}{company.category ? ` · ${words(company.category)}` : ''}</p>
         <h1 className="bp-title">{company.name}</h1>
@@ -380,6 +423,7 @@ export default function BrandProfilePage() {
         {tab === 'people' && data.people && <People people={data.people} />}
         {tab === 'pulse' && data.pulse && <Pulse data={data} admin={admin} onChanged={load} />}
         {tab === 'business' && data.business && <Business deals={data.business} />}
+        {tab === 'pictures' && <Pictures company={company} admin={admin} />}
         {tab === 'wardrobe' && data.wardrobe && <Wardrobe pieces={data.wardrobe} />}
         {tab === 'press' && data.press && <Press press={data.press} kind={company.kind} />}
         {tab === 'relationships' && data.relationships && <Relationships list={data.relationships} />}

@@ -4,14 +4,15 @@
  * The world in one place (2026-10-04): an Overview of the active show's
  * world at a glance, then the world pages as tabs — Show Bible (the canon:
  * knowledge, decisions, documents, guard), World (the DREAM map and
- * locations), Society (archetypes, legends, rules, trends), Culture (the
+ * locations), Society (archetypes, legends, rules, trends), Brands (every
+ * fashion house, press outlet, agency and venue; Evoni, 2026-10-19), Culture (the
  * calendar, awards and media, history) and State (snapshots, timeline,
  * tensions). Each tab mounts its page in embedded mode; `?tab=` names the
  * tab and `?sub=` the page's own tab (utils/worldRedirects.js). The
  * Sidebar's LalaVerse row opens the hub; the Bible is its Bible tab.
  *
  * To Evoni's mock (Lalas_Social_Media_Page_3, 2026-10-06): the tabs are
- * six colored cards, and every tab opens on a banner in its color (kicker,
+ * seven colored cards, and every tab opens on a banner in its color (kicker,
  * title, one line). The three-line orientation strip (components/
  * TabOrientation, copy in lalaverseOrientation.js) stays under the banner,
  * dismissable per tab. The Overview is four tiles that open where the
@@ -38,6 +39,7 @@ import WorldFoundation from './WorldFoundation';
 import SocialSystems from './SocialSystems';
 import CultureEvents from './CultureEvents';
 import WorldDashboard from './WorldDashboard';
+import CompaniesPage from './CompaniesPage';
 import WorldSetupProgress from '../components/WorldSetupProgress';
 import TabOrientation from '../components/TabOrientation';
 import { ORIENTATION } from './lalaverseOrientation';
@@ -51,6 +53,9 @@ export const HUB_TABS = [
     title: 'The five DREAM cities', line: 'The cities, their places, companies and people. Everything an event needs a location for starts here.' },
   { key: 'society', label: 'Society', desc: 'Archetypes, legends, trends',
     title: 'How influence works', line: 'Who people are, how they rise, and what everyone is talking about this season.' },
+  // Evoni, 2026-10-19: Brands & companies is a hub tab, not a sidebar row.
+  { key: 'brands', label: 'Brands', desc: 'Houses, press, agencies, venues',
+    title: 'Brands & companies', line: 'Every company in Lala\u2019s world: the fashion houses, the press, agencies and venues. Open one to see its profile.' },
   { key: 'culture', label: 'Culture', desc: 'Calendar, awards, history',
     title: 'The yearly rhythm', line: 'What happens when, in every season: the calendar, the awards and the history the world remembers.' },
   { key: 'state', label: 'State', desc: 'Snapshots, timeline, tensions',
@@ -95,6 +100,7 @@ export default function UniversePage() {
         {tab === 'bible' && <ShowBiblePage embedded />}
         {tab === 'world' && <WorldFoundation embedded />}
         {tab === 'society' && <SocialSystems embedded />}
+        {tab === 'brands' && <CompaniesPage embedded />}
         {tab === 'culture' && <CultureEvents embedded />}
         {tab === 'state' && <WorldDashboard embedded />}
       </div>
