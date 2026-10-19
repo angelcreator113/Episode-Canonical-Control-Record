@@ -67,12 +67,17 @@ async function eventPeople(sequelize, event) {
     .sort((a, b) => (a.role === b.role ? a.name.localeCompare(b.name) : a.role === 'host' ? -1 : 1));
 }
 
+// `completion_status`: what completion decided, 'offered' or 'expired'
+// (utils/beat14Invitation beat14Decided), so the writer and the Script tab
+// read it whatever the status became later (Script page audit 3,
+// 2026-10-19: an expired one archived read as offered).
 const slim = (o) => (o ? {
   id: o.id, name: o.name, opportunity_type: o.opportunity_type, status: o.status,
   brand_or_company: o.brand_or_company || null, connector_profile_id: o.connector_profile_id ?? null,
   connector_handle: o.connector_handle || null, contact_name: o.contact_name || null,
   narrative_stakes: o.narrative_stakes || null, payment_amount: o.payment_amount != null ? Number(o.payment_amount) : null,
   response_deadline: o.response_deadline || null,
+  completion_status: require('../utils/beat14Invitation').beat14Decided(o),
 } : null);
 
 const isCompleted = (episode) => episode?.evaluation_status === 'accepted';
@@ -106,19 +111,13 @@ async function attached(models, episodeId) {
 
 /** GET: the attached opportunity, who at the event can offer, and the show's open opportunities to attach. */
 async function getBeat14(models, { showId, episodeId }) {
-  const { episode, event } = await episodeAndEvent(models, { showId, episodeId });
-  let opp = await attached(models, episodeId);
-  // Still held on a completed episode: completion's resolve failed, so it is
-  // resolved now, as completion would have (Script page re-audit,
-  // 2026-10-19: it stayed held for good).
-  if (opp && opp.status === HELD && isCompleted(episode) && completedTier(episode)) {
-    try {
-      await resolveAtCompletion(models, { episodeId, event, tierFinal: completedTier(episode) });
-      opp = await attached(models, episodeId);
-    } catch (err) {
-      console.error('[Beat14] late resolve on read failed (non-blocking):', err.message);
-    }
-  }
+  const { event } = await episodeAndEvent(models, { showId, episodeId });
+  // A read writes nothing (Script page audit 3, 2026-10-19: it resolved a
+  // held one on a completed episode, unlocked, so two reads or a read and a
+  // completion each wrote it). One completion could not resolve stays held
+  // until the episode's Complete is called again, which resolves it
+  // (resolveHeldAfterCompletion).
+  const opp = await attached(models, episodeId);
   const { Op } = require('sequelize');
   const open = await models.Opportunity.findAll({
     where: { show_id: showId, status: { [Op.in]: OPEN_STATUSES }, offered_in_episode_id: null },
@@ -236,9 +235,19 @@ async function release(opp, transaction) {
 /** DELETE: nothing attached any more. */
 async function detachBeat14(models, { showId, episodeId }) {
   const { episode } = await episodeAndEvent(models, { showId, episodeId });
-  await models.sequelize.transaction(async (transaction) => {
+  const { sequelize } = models;
+  await sequelize.transaction(async (transaction) => {
+    // Under the episode's lock, as attach reads it (Script page audit 3,
+    // 2026-10-19): completion marks the episode accepted under this lock
+    // and resolves beat 14 after it commits, so a detach in between let
+    // the opportunity go and a random offer was made in its place.
+    const [locked] = await sequelize.query(
+      'SELECT evaluation_status FROM episodes WHERE id = :episodeId FOR UPDATE',
+      { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT, transaction }
+    );
     const opp = await models.Opportunity.findOne({ where: { offered_in_episode_id: episodeId }, transaction });
     assertStillHeld(opp, episode);
+    if (opp && isCompleted(locked)) throw new Beat14Error(409, "The episode is completed: completion offers or expires its beat 14 opportunity, so it can't be removed now.");
     if (opp) await release(opp, transaction);
   });
   return { opportunity: null };
@@ -302,7 +311,7 @@ async function loadForScript(models, { episodeId }) {
 
 module.exports = { getBeat14, attachBeat14, detachBeat14, resolveAtCompletion, resolveHeldAfterCompletion, loadForScript, eventPeople, Beat14Error, HELD, TYPES };
 
-const { beat14Outcome } = require('../utils/beat14Invitation');
+const { beat14Outcome, beat14Decided } = require('../utils/beat14Invitation');
 
 /**
  * The writer's BEAT 14 OPPORTUNITY block for the attached opportunity, ''
@@ -322,7 +331,7 @@ function beat14Context(opp, designedIntent = null) {
   ];
   if (opp.narrative_stakes) lines.push(`What it is about: ${opp.narrative_stakes}`);
   if (outcome === 'withheld') {
-    const why = opp.status === 'expired' ? 'This episode did not land' : 'This episode is designed not to land';
+    const why = beat14Decided(opp) === 'expired' || opp.status === 'expired' ? 'This episode did not land' : 'This episode is designed not to land';
     lines.push(`${why}, so the invitation does not come: Beat 14 never delivers it, no other offer comes in its place, and its question is what she does now.`);
   } else {
     lines.push(`Beat 14 ends on it: the invitation arrives from ${from} as one private message or notification ([UI:DM ${from}: …] or [UI:NOTIFY ${from}: …]), naming "${opp.name}" in their own voice. How warm it is follows how the episode went. Whether Lala says yes stays open. When a forward hook is set, this invitation is how it is told. What it pays is never a coin line.`);
