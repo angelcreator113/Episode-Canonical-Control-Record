@@ -20,7 +20,7 @@
 
 const HELD = 'held';
 const CREATED_HERE = 'beat14';
-const OPEN_STATUSES = ['offered', 'considering'];
+const OPEN_STATUSES = ['offered', 'considering', 'negotiating'];
 const TYPES = ['modeling', 'runway', 'editorial', 'campaign', 'ambassador', 'brand_deal', 'podcast', 'interview', 'panel', 'award_show', 'pr_gifting', 'casting_call'];
 
 class Beat14Error extends Error {
@@ -134,7 +134,7 @@ async function attachBeat14(models, { showId, episodeId, opportunity_id = null, 
       opp = await models.Opportunity.findOne({ where: { id: opportunity_id, show_id: showId }, transaction });
       if (!opp) throw new Beat14Error(404, 'Opportunity not found.');
       if (opp.offered_in_episode_id && String(opp.offered_in_episode_id) !== String(episodeId)) throw new Beat14Error(409, 'That opportunity is already beat 14 of another episode.');
-      if (!OPEN_STATUSES.includes(opp.status)) throw new Beat14Error(409, `Only an open opportunity can be offered in beat 14; this one is ${opp.status}.`);
+      if (!OPEN_STATUSES.includes(opp.status)) throw new Beat14Error(409, `Only an opportunity that is offered, considering or negotiating can be offered in beat 14; this one is ${opp.status}.`);
       await opp.update({
         status: HELD,
         offered_in_episode_id: episodeId,
