@@ -67,7 +67,7 @@ const BEAT_TEMPLATES = {
   9:  { name: 'Reminder/Deadline',    jawihp: true,  lala: false, ui: 'TODO_LIST',                 mood: 'urgency' },
   10: { name: 'Event Travel',         jawihp: true,  lala: false, ui: 'LOCATION_ICON',             mood: 'anticipation' },
   11: { name: 'Event Outcome',        jawihp: true,  lala: true,  ui: 'ARRIVAL',                   mood: 'climax' },
-  12: { name: 'Deliverable Creation', jawihp: false, lala: true,  ui: 'CONTENT_CREATE',            mood: 'accomplishment' },
+  12: { name: 'Fashion Challenge',    jawihp: true,  lala: true,  ui: 'FASHION_CHALLENGE',         mood: 'performance' },
   13: { name: 'Recap Panel',          jawihp: true,  lala: false, ui: 'STATS_UPDATE',              mood: 'reflection' },
   14: { name: 'Cliffhanger',          jawihp: true,  lala: false, ui: 'FADE_OUT',                  mood: 'suspense' },
 };

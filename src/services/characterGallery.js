@@ -22,6 +22,15 @@
  *              else image_url), drafts included and marked
  *
  * A character with no feed profile has no events or posts yet.
+ *
+ * Visual Memory, phase 1 (services/mediaLibrary, 2026-10-18): a "Tagged"
+ * group holds the library's pictures tagged with them that are not already
+ * shown above (deduped by URL), and an ADMIN's read carries each picture's
+ * library entry (`asset`: id, status, visibility, tags) so its tags can be
+ * edited; `can_edit` says which read it was. Another reader sees only
+ * approved, non-private library pictures.
+ *
+ *   galleryFor(db, characterId, { audience })   audience: admin | member
  */
 
 const PER_GROUP = 60;
@@ -128,7 +137,14 @@ async function postsOf(sequelize, profileId) {
   return items.slice(0, PER_GROUP);
 }
 
-async function galleryFor(db, characterId) {
+function assetView(a) {
+  return {
+    id: a.id, status: a.status, visibility: a.visibility, caption: a.caption, source: a.source,
+    links: (a.links || []).map((l) => ({ id: l.id, entity_type: l.entity_type, entity_id: l.entity_id, role: l.role, name: l.name })),
+  };
+}
+
+async function galleryFor(db, characterId, { audience = 'member' } = {}) {
   const { sequelize } = db;
   const character = await db.RegistryCharacter.findByPk(characterId, {
     attributes: ['id', 'character_key', 'display_name', 'selected_name', 'portrait_url', 'cover_url', 'appearance', 'feed_profile_id'],
@@ -141,16 +157,29 @@ async function galleryFor(db, characterId) {
     eventsOf(sequelize, profileId),
     postsOf(sequelize, profileId),
   ]);
-  return {
-    linked: profileId != null,
-    groups: [
-      { key: 'portraits', label: 'Portraits', items: portraitsOf(character) },
-      { key: 'places', label: 'Places', items: places },
-      { key: 'wardrobe', label: 'Wardrobe', items: wardrobe },
-      { key: 'events', label: 'Events', items: events },
-      { key: 'posts', label: 'Posts', items: posts },
-    ],
-  };
+  const groups = [
+    { key: 'portraits', label: 'Portraits', items: portraitsOf(character) },
+    { key: 'places', label: 'Places', items: places },
+    { key: 'wardrobe', label: 'Wardrobe', items: wardrobe },
+    { key: 'events', label: 'Events', items: events },
+    { key: 'posts', label: 'Posts', items: posts },
+  ];
+  const library = require('./mediaLibrary');
+  const shown = new Set(groups.flatMap((g) => g.items.map((i) => i.url)));
+  const tagged = (await library.listFor(db, { entityType: 'character', entityId: character.id, audience, limit: PER_GROUP }))
+    .filter((a) => !shown.has(a.url))
+    .map((a) => ({ id: `media:${a.id}`, url: a.url, caption: a.caption || 'A tagged picture', source: 'library', ...(audience === 'admin' ? { asset: assetView(a) } : {}) }));
+  groups.push({ key: 'tagged', label: 'Tagged', items: tagged });
+  if (audience === 'admin') {
+    const byUrl = await library.assetsByUrl(db, [...shown], { audience });
+    for (const g of groups) {
+      for (const item of g.items) {
+        const a = byUrl.get(item.url);
+        if (a && !item.asset) item.asset = assetView(a);
+      }
+    }
+  }
+  return { linked: profileId != null, can_edit: audience === 'admin', groups };
 }
 
 module.exports = { galleryFor, GalleryError, PER_GROUP };

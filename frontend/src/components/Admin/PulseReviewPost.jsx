@@ -22,6 +22,8 @@ import { posterOf, whenLabel, initial, toneOf } from '../../lib/pulsePosts';
 import RevealPicker from './RevealPicker';
 import { atHandle } from '../../pages/feed/feedConstants';
 import { PinAsExample } from './PulseVoices';
+import PostPictures from '../PostMedia/PostPictures';
+import PostDeal from '../Deliverables/PostDeal';
 import './PulseReviewPost.css';
 
 const Tile = ({ name, size = 'sm', tone = 'c' }) => <span className={`prv-tile prv-tile-${size} prv-tone-${tone}`} aria-hidden="true">{initial(name)}</span>;
@@ -287,14 +289,26 @@ export function PostCard({ post, onChange, showId }) {
   const [text, setText] = useState(post.content_text || '');
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState(null);
+  // Visual Memory phase 2: its pictures from the poster's library, and its format.
+  const [picturesOpen, setPicturesOpen] = useState(false);
+  const [notPublic, setNotPublic] = useState(null);
   const isDeleted = !!post.deleted_at;
   const isDraft = post.status === 'draft' && !isDeleted;
   const act = async (label, call) => {
-    setBusy(true); setActionError(null);
+    setBusy(true); setActionError(null); setNotPublic(null);
     try { await call(); setEditing(false); onChange?.(); }
-    catch (err) { console.error(`[SocialMedia] ${label} failed:`, err.response?.status || err.message); setActionError(err.response?.data?.error || `${label} failed.`); }
+    catch (err) {
+      console.error(`[SocialMedia] ${label} failed:`, err.response?.status || err.message);
+      if (err.response?.data?.code === 'pictures_not_public') setNotPublic(err.response.data.pictures || []);
+      setActionError(err.response?.data?.error || `${label} failed.`);
+    }
     finally { setBusy(false); }
   };
+  // Its pictures aren't approved and public yet: one click, then out it goes.
+  const approveAndRelease = () => act('Approve and release', async () => {
+    await api.post(`/api/v1/post-media/posts/${post.id}/approve-pictures`);
+    await api.put(`/api/v1/feed-posts/${post.id}`, { status: 'live' });
+  });
   const release = () => act('Release', () => api.put(`/api/v1/feed-posts/${post.id}`, { status: 'live' }));
   const saveEdit = () => act('Save', () => api.put(`/api/v1/feed-posts/${post.id}`, { content_text: text.trim() }));
   const remove = () => { if (window.confirm('Delete this draft? It is kept under Deleted and can be restored.')) act('Delete', () => api.delete(`/api/v1/feed-posts/${post.id}`)); };
@@ -352,6 +366,19 @@ export function PostCard({ post, onChange, showId }) {
         </p>
         {!isDeleted && post.social_profile_id && post.content_text && <p className="prv-item-pin"><PinAsExample postId={post.id} /></p>}
         {actionError && <p className="prv-error" role="alert">{actionError}</p>}
+        {notPublic && notPublic.length > 0 && isDraft && (
+          <p className="prv-item-pin"><button type="button" className="prv-btn" disabled={busy} onClick={approveAndRelease} data-testid="prv-approve-pictures">Approve its pictures, make them public and release</button></p>
+        )}
+        {!isDeleted && post.social_profile_id && (
+          <p className="prv-item-pin">
+            <button type="button" className="prv-tag" aria-expanded={picturesOpen} onClick={() => setPicturesOpen((v) => !v)} data-testid="prv-pictures-toggle">
+              {post.image_url ? 'Pictures & format' : 'Add a picture'}
+            </button>
+          </p>
+        )}
+        {picturesOpen && <PostPictures postId={post.id} onSaved={onChange} />}
+        {/* Deliverables that check themselves (2026-10-19): what deal it counts toward. */}
+        {picturesOpen && <PostDeal postId={post.id} />}
         {(likes > 0 || commentsN > 0) && (
           <p className="prv-item-likes">
             {likes > 0 && <span>[{likes}] like this.</span>}{likes > 0 && commentsN > 0 && ' '}

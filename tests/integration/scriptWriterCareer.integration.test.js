@@ -73,8 +73,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(prompt).toContain('- 3x story: Tag the brand in a story set (owed to the brand)');
     expect(prompt).not.toMatch(/instagram|tiktok/i);
     expect(prompt).toContain('- Get Maison Rue to book her again: Sable decides the next campaign');
-    expect(prompt).toContain('- Beat 12: she makes what she owes');
-    expect(prompt).toContain('- Beat 13: whether she earned the bonus');
+    // Beat 12 is The Fashion Challenge; what she owes need not be shown and is
+    // not paid in this episode (Evoni, 2026-10-18).
+    expect(prompt).toContain('- What she owes may be mentioned (Beat 9 may remind her it is due), but it need not be made on camera');
+    expect(prompt).toContain('- Beat 13: whether she earned the bonus is not known yet');
     expect(prompt).toContain("11. Lala's career is on the page");
     expect(prompt).not.toContain('A removed deliverable');
   });

@@ -66,7 +66,9 @@
  *                                                  of their portraits (ADMIN)
  *   GET    /api/v1/cast/characters/:id/gallery      every picture already linked to them,
  *                                                  grouped: portraits, places, wardrobe,
- *                                                  events, posts (services/characterGallery)
+ *                                                  events, posts, and the library's
+ *                                                  pictures tagged with them
+ *                                                  (services/characterGallery, mediaLibrary)
  *   GET    /api/v1/cast/characters/:id/typology     their typology seed (Enneagram type and
  *                                                  wing, MBTI, why) and its label
  *   PUT    /api/v1/cast/characters/:id/typology     set it (ADMIN), or { clear: true }
@@ -1027,7 +1029,8 @@ router.get('/characters/:id/gallery', requireAuth, async (req, res) => {
   try {
     if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
     const { galleryFor } = require('../services/characterGallery');
-    return res.json({ success: true, ...(await galleryFor(getModels(), req.params.id)) });
+    const { audienceOf } = require('../services/mediaLibrary');
+    return res.json({ success: true, ...(await galleryFor(getModels(), req.params.id, { audience: audienceOf(req.user) })) });
   } catch (err) {
     const { GalleryError } = require('../services/characterGallery');
     if (err instanceof GalleryError) return res.status(err.status).json({ success: false, error: err.message });

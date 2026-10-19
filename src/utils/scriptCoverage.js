@@ -7,16 +7,18 @@
  * checklist showed the rest to Evoni after the fact. This reads the script
  * the same way the tab does, so the writer can fix a gap before saving:
  *
- *   - each deliverable Lala owes, each goal she has at the event, and the
- *     brief's forward hook is mentioned in some beat (the key-word rule of
- *     frontend/src/lib/episodeScript.js mustCover, ported as is);
+ *   - each goal she has at the event and the brief's forward hook is
+ *     mentioned in some beat (the key-word rule of
+ *     frontend/src/lib/episodeScript.js mustCover, ported as is). What she
+ *     owes is not: deliverables are not always shown in the show (Evoni,
+ *     2026-10-18; beat 12 is The Fashion Challenge);
  *   - each piece of the locked look has its `[WEAR: id]` line;
  *   - each canonical beat played on Lala's phone has a `[UI:]` moment;
  *   - every canonical beat is there (a reply cut off at its token limit
  *     loses the last beats).
  *
  * Each gap names the beat that should carry it (the career block's beats:
- * goals in 11, deliverables in 12, the hook in 14; wear cues in the closet
+ * goals in 11, the hook in 14; wear cues in the closet
  * beat). Pure; no I/O.
  */
 
@@ -40,8 +42,6 @@ function mentionedIn(beats, text) {
   return null;
 }
 
-const deliverableLabel = (d) => String(d?.description || '').trim()
-  || [d?.platform, d?.deliverable_type].filter(Boolean).join(' ').trim();
 
 const surfaceHasPhone = (surface) => (typeof surface === 'string'
   ? surface === "Lala's Phone"
@@ -69,10 +69,6 @@ function scriptCoverage(script, facts = {}) {
   const numbers = new Set(beats.map((b) => b.number));
   const items = [];
 
-  for (const d of facts.deliverables || []) {
-    const label = deliverableLabel(d);
-    if (label) items.push({ kind: 'deliverable', label, beat: mentionedIn(beats, label), target: 12 });
-  }
   for (const g of facts.goals || []) {
     const label = String(g?.label || '').trim();
     if (label) items.push({ kind: 'goal', label, beat: mentionedIn(beats, label), target: 11 });
@@ -105,7 +101,6 @@ function scriptCoverage(script, facts = {}) {
 /** What to ask of one beat so it covers its gaps (for the writer's one-beat prompt). */
 function beatRequirements(gaps) {
   return gaps.map((g) => {
-    if (g.kind === 'deliverable') return `Lala makes or plans what she owes, named so it reads: "${g.label}".`;
     if (g.kind === 'goal') return `Lala works toward her goal, named so it reads: "${g.label}".`;
     if (g.kind === 'hook') return `End on the forward hook: "${g.label}".`;
     if (g.kind === 'wear') return `Right after the line where Lala puts on "${g.label}", write its own line exactly: [WEAR: ${g.id}]`;
