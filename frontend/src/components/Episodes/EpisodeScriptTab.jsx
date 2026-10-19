@@ -19,7 +19,7 @@ import { speakerLine, unquote } from '../../lib/scriptSpeaker';
 import { beatImage, beatImageLabel } from '../BeatPlan/BeatPlanParts';
 import { beatSeconds, scriptSeconds, formatRuntime } from '../../lib/scriptRuntime';
 import { scriptHealth } from '../../lib/scriptHealth';
-import { scriptMoneyFrom, shoppingListApproved, eventCast } from '../../lib/scriptRuleChecks';
+import { scriptMoneyFrom, shoppingListApproved, eventCast, featuredGuestIds } from '../../lib/scriptRuleChecks';
 import { scriptWithPhonePaths } from '../../lib/phonePaths';
 import { scriptWithShowRules, isCutsceneBeat } from '../../lib/scriptShowRules';
 import ScriptHealthPanel from './ScriptHealthPanel';
@@ -1041,6 +1041,18 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // brief's source event, as the Overview reads them.
   const [brief, setBrief] = useState(null);
   const [source, setSource] = useState(null);
+  // The featured guests' profiles, so beat 11 names them as the writer does,
+  // creator_name first (Script page audit 3, 2026-10-19).
+  const [guestProfiles, setGuestProfiles] = useState([]);
+  const guestKey = featuredGuestIds(source?.event).join(',');
+  useEffect(() => {
+    let live = true;
+    Promise.all(guestKey.split(',').filter(Boolean).map((id) => api.get(`/api/v1/social-profiles/${id}`)
+      .then((res) => res.data?.profile || null)
+      .catch((err) => { console.error('[EpisodeScript] guest profile load failed:', err); return null; })))
+      .then((list) => { if (live) setGuestProfiles(list.filter(Boolean)); });
+    return () => { live = false; };
+  }, [guestKey]);
   const [deliverables, setDeliverables] = useState([]);
   // Beat 14's opportunity (Evoni, 2026-10-19; Beat14Opportunity): null until
   // read; a read that fails or answers in another shape leaves it null, so
@@ -1830,7 +1842,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // Ready to film? (Script tab audit, 2026-10-15): the checks above, script-wide.
   const healthRows = showBeatList ? scriptHealth({
     beats, canonical: BEAT_NAMES, cover, onScreen, outfit, dealItems,
-    rules: { money: scriptMoney, shoppingApproved: shoppingListApproved(source?.event || null), cast: source?.event ? eventCast(source.event, [source.sourceProfile]) : [] },
+    rules: { money: scriptMoney, shoppingApproved: shoppingListApproved(source?.event || null), cast: source?.event ? eventCast(source.event, [source.sourceProfile, ...guestProfiles]) : [] },
     closetNumber: closetBeat(scriptText), dirty: scriptText !== savedScript, unsaved,
     beat14, designedIntent: brief?.designed_intent || null,
   }) : [];

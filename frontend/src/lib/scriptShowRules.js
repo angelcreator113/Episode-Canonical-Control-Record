@@ -11,11 +11,12 @@
 // - Beat 5 (Reveal) shows the invitation letter, never the login screen or
 //   the Start button, which belong to beats 1 and 2.
 
-import { headerNumber } from './beatLabelNumber';
+import { headerNumber, normalizeBeatHeaders } from './beatLabelNumber';
 
 // BEGIN SHARED
 const UI = /^\s*\[UI:\s*([A-Za-z_]+)\s*(.*?)\s*\]\s*$/i;
-const LALA = /^\s*lala\s*(?:\(([^)]*)\))?\s*:\s*\S/i;
+// `**Lala:**` and `__Lala__:` are her lines too (Script page audit 3, 2026-10-19).
+const LALA = /^\s*(?:\*\*|__)?\s*lala\s*(?:\(([^)]*)\))?\s*(?:\*\*|__)?\s*:\s*(?:\*\*|__)?\s*\S/i;
 const TAPS = new Set(['CLICK', 'TAP', 'SELECT']);
 // `[UI:NOTIFICATION …]`, as the script skeleton writes it, is a notification
 // too (Script page re-audit, 2026-10-19: her answer to it needed a click).
@@ -157,7 +158,11 @@ const beatNumberOf = (header, position) => {
  * Reveal beat changed.
  */
 function scriptWithShowRules(scriptText, on = {}, { only = null, skip = [], voice = true, reveal = true } = {}) {
-  const text = String(scriptText || '');
+  // Headers in any spelling (`## Beat 5: Reveal`, `### BEAT: 5`, bold) are
+  // read as headers (Script page audit 3, 2026-10-19: on the server, which
+  // fixes the writer's text as it comes, they were none, and no click went in).
+  const original = String(scriptText || '');
+  const text = normalizeBeatHeaders(original);
   const parts = text.split(SPLIT);
   const preamble = parts.length && !BEAT_HEADER.test(parts[0].split('\n')[0]) ? parts.shift().trimEnd() : '';
   const sections = parts.map((p) => p.trimEnd());
@@ -180,7 +185,7 @@ function scriptWithShowRules(scriptText, on = {}, { only = null, skip = [], voic
     }
     return changed ? [header, ...lines].join('\n') : section;
   });
-  if (!clicks && !revealed) return { script: text, voice_clicks: 0, reveal: false };
+  if (!clicks && !revealed) return { script: original, voice_clicks: 0, reveal: false };
   const body = fixed.join('\n\n');
   return { script: preamble ? `${preamble}\n\n${body}` : body, voice_clicks: clicks, reveal: revealed };
 }

@@ -43,7 +43,7 @@ function namesIt(text, name) {
   return keys.filter((k) => set.has(k)).length >= need;
 }
 
-const MESSAGE = /\[UI:\s*(DM|NOTIFY)\b([^\]]*)\]/gi;
+const MESSAGE = /\[UI:\s*(DM|NOTIFY|NOTIFICATION)\b([^\]]*)\]/gi;
 
 /** The first line that is a DM or notification naming the opportunity, else null. */
 function invitationLine(lines = [], name) {

@@ -43,17 +43,20 @@ import { statEntries, coinChange } from './scriptStats';
 // BEGIN SHARED
 const WEAR_CUE = /^\s*\[\s*WEAR\s*:\s*([^\]]*?)\s*\]\s*$/i;
 const UI_CUE = /^\s*\[\s*UI\s*:\s*([A-Za-z_]+)\s*(.*?)\s*\]\s*$/i;
-const LALA_SAYS = /^\s*lala\s*(?:\(([^)]*)\))?\s*:\s*\S/i;
+// `**Lala:**` and `__Lala__:` are her lines too (Script page audit 3, 2026-10-19).
+const LALA_SAYS = /^\s*(?:\*\*|__)?\s*lala\s*(?:\(([^)]*)\))?\s*(?:\*\*|__)?\s*:\s*(?:\*\*|__)?\s*\S/i;
 // `Lala (V.O.):` is her thoughts; "(devoted)", "(nervously)" and "(voice
 // cracking)" are her speaking (Script page re-audit, 2026-10-19: an
 // unanchored v.o. matched inside them; lib/scriptShowRules VOICE_OVER).
 const VOICE_OVER = /^\s*v\.?\s*o\.?\s*(?:[,;].*)?$/i;
 const lalaSpeaks = (l) => { const m = l.match(LALA_SAYS); return !!m && !VOICE_OVER.test(m[1] || ''); };
 // JustAWoman's comment: `Me:` (or her name) with words beyond a stage direction.
-const JAW_SAYS = /^\s*(?:me|justawoman|jawihp|prime)\s*(?:\([^)]*\))?\s*:\s*(.*)$/i;
+const JAW_SAYS = /^\s*(?:\*\*|__)?\s*(?:me|justawoman|jawihp|prime)\s*(?:\([^)]*\))?\s*(?:\*\*|__)?\s*:\s*(?:\*\*|__)?(.*)$/i;
 // A speaker's line: a name (no cue, no stage direction) before a colon.
 const SPEAKER = /^\s*([^:[\]()]{1,60}?)\s*(?:\([^)]*\))?\s*:\s*\S/;
-const RUNWAY = /\b(?:runway|catwalk|walk(?:s|ed|ing)?)\b/i;
+// The runway itself: "walks over to the bar" is no runway walk (Script page
+// audit 3, 2026-10-19).
+const RUNWAY = /\b(?:runway|catwalk)\b/i;
 // The episode overlay's own name for the approved list (src/utils/scriptMoney.js SHOPPING_LIST_OVERLAY).
 const SHOPPING_LIST = 'Shopping list';
 const CLOSET_BEAT = 8;
@@ -68,7 +71,20 @@ const JUDGED_ON = ['reputation', 'brand_trust', 'influence', 'stress'];
 // screen opened, closed or scrolled, a voice click, or the phone itself
 // coming up (putting it away is not using it). Overlays on the video ([UI:DISPLAY Stats Panel]) and
 // [TRANSITION: …] stay.
-const PHONE_VERBS = new Set(['CLICK', 'TAP', 'SELECT', 'OPEN', 'CLOSE', 'SCROLL', 'SWIPE', 'TYPE', 'VOICE_ACTIVATE', 'VOICEACTIVATE']);
+// A notification, a DM or a post is the phone too (Script page audit 3,
+// 2026-10-19: [UI:NOTIFY …] in beat 12 was never flagged).
+const PHONE_VERBS = new Set(['CLICK', 'TAP', 'SELECT', 'OPEN', 'CLOSE', 'SCROLL', 'SWIPE', 'TYPE', 'VOICE_ACTIVATE', 'VOICEACTIVATE', 'NOTIFY', 'NOTIFICATION', 'DM', 'POST']);
+// The closet is the screen named Closet ("Lala's Closet", "ClosetCategory
+// Outfit"): Closet, then only words that name a part of it. "Closet Sale
+// Alert" in beat 7 was the closet (Script page audit 3, 2026-10-19).
+// lib/scriptMoments closetBeat, utils/scriptWear closetIndex and
+// utils/scriptCoverage read it the same.
+const CLOSET_PARTS = new Set(['screen', 'app', 'page', 'ui', 'tab', 'view', 'grid', 'panel', 'window', 'overlay', 'icon', 'category', 'categories', 'item', 'items', 'outfit', 'outfits', 'look', 'looks', 'rack', 'wardrobe']);
+const isClosetScreen = (target) => {
+  const w = String(target || '').replace(/\s+x\d+$/i, '').replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  while (w.length && ['lala', 'lalas', 's', 'the'].includes(w[0])) w.shift();
+  return w[0] === 'closet' && w.slice(1).every((x) => CLOSET_PARTS.has(x));
+};
 const PHONE_ITSELF = new Set(['phone', 'thephone', 'lalasphone', 'lalaphone', 'phonedevice']);
 const PHONE_UP = new Set(['SHOW', 'DISPLAY']);
 
@@ -81,7 +97,11 @@ const ui = (line) => { const m = line.match(UI_CUE); return m ? { verb: m[1].toU
 const isList = (target) => target.trim().toLowerCase() === SHOPPING_LIST.toLowerCase();
 const more = (list) => (list.length > 1 ? ` (+${list.length - 1} more)` : '');
 const list = (items) => (items.length <= 2 ? items.join(' and ') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`);
-const norm = (v) => String(v ?? '').trim().replace(/^@/, '').replace(/\s+/g, ' ').toLowerCase();
+// A curly apostrophe is a straight one, an accent is let go and Markdown bold
+// is not the name (Script page audit 3, 2026-10-19: `D’Angelo:` was not
+// D'Angelo Price).
+const norm = (v) => String(v ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[\u2018\u2019\u02BC]/g, "'")
+  .replace(/^[\s*_]+|[\s*_]+$/g, '').replace(/^@/, '').replace(/\s+/g, ' ').toLowerCase();
 // A speaker is the person when the name as written is one of theirs, or
 // their first name (`Declan:` for Declan Ferris).
 const speaks = (who, c) => {
@@ -130,7 +150,7 @@ function closetOf(beats, closetNumber) {
   if (closetNumber) return closetNumber;
   // The screen named Closet, as closetBeat and utils/scriptWear read it (Script
   // page re-audit, 2026-10-19: "Closet Sale Alert" in beat 7 was the closet).
-  const opens = beats.find((b) => linesOf(b).some((l) => { const m = ui(l); return !!m && m.verb === 'OPEN' && m.target.toLowerCase().replace(/[^a-z0-9]/g, '').startsWith('closet'); }));
+  const opens = beats.find((b) => linesOf(b).some((l) => { const m = ui(l); return !!m && m.verb === 'OPEN' && isClosetScreen(m.target); }));
   return opens ? opens.number : CLOSET_BEAT;
 }
 
@@ -147,7 +167,7 @@ function cutsceneFindings(beats = []) {
   return cutscenePhoneLines(beats).map((c) => ({
     key: `cutscene-${c.beat}`, ok: false, beat: c.beat, label: c.lines[0],
     text: `Beat ${c.beat}: Beats 11–13 are the cutscene: no phone — remove ${c.lines[0]}${more(c.lines)}.`,
-    ask: `Take out ${list(c.lines)}: beats 11 to 13 are the cutscene, an AI video with no phone, no phone screens and no voice-icon click. Overlays on the video ([UI:DISPLAY Stats Panel], [UI:HIDE Stats Panel]) and [TRANSITION: …] stay.`,
+    ask: `Take out ${list(c.lines)}: beats 11 to 13 are the cutscene, an AI video with no phone, no phone screens, no notifications or messages and no voice-icon click. Overlays on the video ([UI:DISPLAY Stats Panel], [UI:HIDE Stats Panel]) and [TRANSITION: …] stay.`,
   }));
 }
 
@@ -173,8 +193,10 @@ function scriptRuleFindings(beats = [], { money = null, shoppingApproved = null,
   // The closet beat's coin lines that belong to a piece of the look.
   const pieceCoins = new Set();
 
-  // Beat 8: each costing piece's coin line right after its [WEAR: id] line,
-  // before the next piece goes on (within the next two lines).
+  // Beat 8: each costing piece's coin line after its [WEAR: id] line, before
+  // the next piece goes on, and only one (Script page audit 3, 2026-10-19:
+  // a coin line three lines on was missed, and the server's coin pass then
+  // charged the piece twice).
   const closetBeat = beatAt(beats, closet);
   if (money && look.length && closetBeat) {
     const lines = linesOf(closetBeat);
@@ -184,11 +206,14 @@ function scriptRuleFindings(beats = [], { money = null, shoppingApproved = null,
       if (at < 0) continue; // not put on here: the look's own checks say so
       checked += 1;
       let coin = null;
-      for (let i = at + 1; i < Math.min(lines.length, at + 3) && !WEAR_CUE.test(lines[i]); i += 1) {
+      let again = null;
+      for (let i = at + 1; i < lines.length && !WEAR_CUE.test(lines[i]); i += 1) {
         const c = coinChange(lines[i]);
-        if (c !== null) { coin = { value: c, i }; break; }
+        if (c === null) continue;
+        // An event cost written here is that cost in the wrong beat (its
+        // own row below), not this piece charged again.
+        if (!coin) { coin = { value: c, i }; pieceCoins.add(i); } else if (!again && !(recapFor(c) && c !== -p.amount)) { again = { value: c, i }; pieceCoins.add(i); }
       }
-      if (coin) pieceCoins.add(coin.i);
       if (!coin) {
         out.push({
           key: `beat8-${p.id}`, ok: false, beat: closet, label: `${p.name}: ${coinTag(-p.amount)}`,
@@ -200,6 +225,12 @@ function scriptRuleFindings(beats = [], { money = null, shoppingApproved = null,
           key: `beat8-${p.id}`, ok: false, beat: closet, label: `${p.name}: ${coinTag(-p.amount)}`,
           text: `Beat ${closet}: ${the(p.name)} comes off as ${signed(coin.value)} coins; it costs ${coinTag(-p.amount)}.`,
           ask: `The coin line right after [WEAR: ${p.id}] ("${p.name}") is exactly ${coinTag(-p.amount)}, not ${coinTag(coin.value)}.`,
+        });
+      } else if (again) {
+        out.push({
+          key: `beat8-${p.id}`, ok: false, beat: closet, label: `${p.name}: ${coinTag(-p.amount)}`,
+          text: `Beat ${closet}: ${the(p.name)} comes off twice, ${coinTag(coin.value)} and ${coinTag(again.value)}; it costs ${coinTag(-p.amount)} once.`,
+          ask: `Take out the second coin line after [WEAR: ${p.id}] ("${p.name}"): it comes off once, ${coinTag(-p.amount)}.`,
         });
       }
     }
@@ -288,24 +319,26 @@ function scriptRuleFindings(beats = [], { money = null, shoppingApproved = null,
 
   // Coins change only in beat 8 (the look) and beat 13 (the event's own
   // costs); what she is owed is never a coin line. Beat 12 has its own row.
-  if (money) {
-    for (const b of beats) {
-      if (b.number === CHALLENGE_BEAT) continue;
-      const flags = [];
-      linesOf(b).forEach((l, i) => {
-        const n = coinChange(l);
-        if (n === null) return;
-        const cost = recapFor(n);
-        if (n > 0) flags.push({ text: `a coin line pays her ${coinTag(n)}; what she is owed is not paid in this episode`, ask: `Take out the coin line ${coinTag(n)}: what Lala is owed is not paid in this episode.` });
-        else if (b.number === RECAP_BEAT) return;
-        else if (b.number === closet && pieceCoins.has(i)) return;
-        else if (cost) flags.push({ text: `${the(cost.label)} comes off here ${coinTag(n)}; it comes off in beat ${RECAP_BEAT} only`, ask: `Take out the coin line ${coinTag(n)}: ${the(cost.label)} comes off in beat ${RECAP_BEAT} (the Recap Panel) only.` });
-        else if (b.number !== closet) flags.push({ text: `a coin line ${coinTag(n)}; her coins change only in beat ${closet} (the look) and beat ${RECAP_BEAT} (the event's costs)`, ask: `Take out the coin line ${coinTag(n)}: Lala's coins change only in beat ${closet} (each piece of the look) and beat ${RECAP_BEAT} (the event's own costs).` });
-      });
-      if (flags.length) {
-        out.push({ key: `coins-${b.number}`, ok: false, beat: b.number, label: flags[0].text, text: `Beat ${b.number}: ${flags[0].text}${more(flags)}.`, ask: flags.map((f) => f.ask).join(' ') });
-      }
+  // These need no money read (Script page audit 3, 2026-10-19: with the
+  // Money page unread a + coin line passed).
+  for (const b of beats) {
+    if (b.number === CHALLENGE_BEAT) continue;
+    const flags = [];
+    linesOf(b).forEach((l, i) => {
+      const n = coinChange(l);
+      if (n === null) return;
+      const cost = recapFor(n);
+      if (n > 0) flags.push({ text: `a coin line pays her ${coinTag(n)}; what she is owed is not paid in this episode`, ask: `Take out the coin line ${coinTag(n)}: what Lala is owed is not paid in this episode.` });
+      else if (b.number === RECAP_BEAT) return;
+      else if (b.number === closet && pieceCoins.has(i)) return;
+      else if (cost) flags.push({ text: `${the(cost.label)} comes off here ${coinTag(n)}; it comes off in beat ${RECAP_BEAT} only`, ask: `Take out the coin line ${coinTag(n)}: ${the(cost.label)} comes off in beat ${RECAP_BEAT} (the Recap Panel) only.` });
+      else if (b.number !== closet) flags.push({ text: `a coin line ${coinTag(n)}; her coins change only in beat ${closet} (the look) and beat ${RECAP_BEAT} (the event's costs)`, ask: `Take out the coin line ${coinTag(n)}: Lala's coins change only in beat ${closet} (each piece of the look) and beat ${RECAP_BEAT} (the event's own costs).` });
+    });
+    if (flags.length) {
+      out.push({ key: `coins-${b.number}`, ok: false, beat: b.number, label: flags[0].text, text: `Beat ${b.number}: ${flags[0].text}${more(flags)}.`, ask: flags.map((f) => f.ask).join(' ') });
     }
+  }
+  if (money) {
     // The event's own costs come off in beat 13: each its own line, or all
     // of them together.
     if (recap.length && recapBeat) {
@@ -366,6 +399,21 @@ export function scriptMoneyFrom(data) {
     }
   }
   return out;
+}
+
+/**
+ * The ids of the event's featured guests eventCast reads (the first two), as
+ * strings: the tab reads their profiles so a guest is named as the writer
+ * names them, creator_name first (Script page audit 3, 2026-10-19: the tab
+ * named them by display_name and flagged "Jessica Chen:" as nobody).
+ */
+export function featuredGuestIds(event) {
+  let cc = event?.canon_consequences;
+  if (typeof cc === 'string') {
+    try { cc = JSON.parse(cc); } catch (err) { console.error('[scriptRuleChecks] guest list unreadable:', err); return []; }
+  }
+  const guests = Array.isArray(cc?.automation?.guest_profiles) ? cc.automation.guest_profiles : [];
+  return guests.filter((g) => g && g.featured).slice(0, 2).map((g) => g.profile_id ?? g.id).filter((id) => id != null && id !== '').map(String);
 }
 
 /** Whether the event's shopping list is approved: true / false, null when the event is not read. */

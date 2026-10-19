@@ -44,8 +44,10 @@ describe('beat 8: each piece that costs her comes off as it goes on', () => {
     expect(find(found, 'beat8')).toMatchObject({ ok: true, beat: 8 });
     expect(found.some((f) => f.key.startsWith('beat8-'))).toBe(false);
   });
+  // Its coin line is anywhere before the next piece goes on (Evoni's rule;
+  // Script page audit 3, 2026-10-19: three lines on was read as missing).
   test('a piece worn without its coin line, or with the wrong amount, is flagged', () => {
-    const found = rules.scriptRuleFindings([at(8, '[WEAR: p1]', 'Me: gorgeous', 'Lala: yes', '[STAT: coins -120]', '[WEAR: p2]', '[STAT: coins -60]')], { money: MONEY });
+    const found = rules.scriptRuleFindings([at(8, '[WEAR: p1]', 'Me: gorgeous', 'Lala: yes', '[WEAR: p2]', '[STAT: coins -60]')], { money: MONEY });
     expect(find(found, 'beat8-p1')).toMatchObject({ ok: false, beat: 8, text: 'Beat 8: the Velvet Blazer goes on without its coin line [STAT: coins -120].' });
     expect(find(found, 'beat8-p1').ask).toContain('[STAT: coins -120]');
     expect(find(found, 'beat8-p2')).toMatchObject({ ok: false, text: 'Beat 8: the Gold Heels comes off as -60 coins; it costs [STAT: coins -80].' });
