@@ -13,7 +13,7 @@
  * - Beat 9 reads the approved shopping list overlay, line by line.
  */
 
-const { headerNumber } = require('./beatLabelNumber');
+const { headerNumber, normalizeBeatHeaders } = require('./beatLabelNumber');
 const { closetIndex } = require('./scriptWear');
 const { isCoinLine } = require('./scriptStats');
 
@@ -73,9 +73,12 @@ const HEADER = /^\s*##\s*BEAT:/i;
  * `closetNumber` names it instead, for one beat written on its own.
  */
 function scriptWithCoinLines(scriptText, money, { skip = [], closetNumber = null } = {}) {
-  const text = String(scriptText || '');
+  const original = String(scriptText || '');
   const cost = new Map((money?.look || []).filter((p) => p.id).map((p) => [String(p.id), p.amount]));
-  if (!cost.size) return { script: text, added: 0 };
+  if (!cost.size) return { script: original, added: 0 };
+  // Headers in any spelling are read as headers (Script page audit 3,
+  // 2026-10-19: `### BEAT: 8` was none, and no coin line went in).
+  const text = normalizeBeatHeaders(original);
   const parts = text.split(BEAT_SPLIT);
   const preamble = parts.length && !HEADER.test(parts[0]) ? parts.shift().trimEnd() : '';
   const beats = parts.map((part, i) => {
@@ -84,7 +87,7 @@ function scriptWithCoinLines(scriptText, money, { skip = [], closetNumber = null
     return { number: headerNumber(label) || i + 1, lines: lines.slice(1).filter((l) => l.trim()) };
   });
   const closet = closetNumber == null ? closetIndex(beats) : beats.findIndex((b) => b.number === Number(closetNumber));
-  if (closet < 0) return { script: text, added: 0 };
+  if (closet < 0) return { script: original, added: 0 };
   const charged = new Set();
   let added = 0;
   const sections = parts.map((part, beatIndex) => {
@@ -102,10 +105,12 @@ function scriptWithCoinLines(scriptText, money, { skip = [], closetNumber = null
       const m = line.match(WEAR_LINE);
       if (!m || !cost.has(m[1]) || charged.has(m[1])) return;
       charged.add(m[1]);
-      // Its own coin line is in the next two lines, before the next piece
-      // goes on, as the rule reads it (utils/scriptRuleChecks; Script page
-      // re-audit, 2026-10-19: the next piece's coin line was taken for it).
-      const after = lines.slice(i + 1).filter((l) => l.trim()).slice(0, 2);
+      // Its own coin line is anywhere before the next piece goes on, as the
+      // rule reads it (utils/scriptRuleChecks; Script page re-audit,
+      // 2026-10-19: the next piece's coin line was taken for it; Script page
+      // audit 3, 2026-10-19: one three lines on was missed and the piece
+      // was charged twice).
+      const after = lines.slice(i + 1).filter((l) => l.trim());
       const before = after.findIndex((l) => /^\s*\[\s*WEAR\s*:/i.test(l));
       if ((before < 0 ? after : after.slice(0, before)).some(isCoinLine)) return;
       next.push(`[STAT: coins -${cost.get(m[1])}]`);
@@ -114,7 +119,7 @@ function scriptWithCoinLines(scriptText, money, { skip = [], closetNumber = null
     });
     return changed ? next.join('\n') : section;
   });
-  if (!added) return { script: text, added: 0 };
+  if (!added) return { script: original, added: 0 };
   const body = sections.join('\n\n');
   return { script: preamble ? `${preamble}\n\n${body}` : body, added };
 }

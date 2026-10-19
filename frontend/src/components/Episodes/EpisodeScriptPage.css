@@ -195,7 +195,8 @@
 .esp-beat-locked-note { font-size: 12px; color: var(--lala-ink-muted); }
 .esp-lock-btn { padding: 7px 18px; border: none; border-radius: 8px; background: var(--lala-lavender); color: var(--text-inverse); font-size: 12px; font-weight: 700; cursor: pointer; }
 .esp-lock-btn.is-locked { background: var(--lala-gold-soft); color: var(--lala-gold-text); border: 1px solid var(--lala-gold); }
-.esp-lock-btn:disabled { cursor: wait; opacity: 0.7; }
+/* aria-disabled, not disabled: a disabled button drops the focus (Script page audit 3, 2026-10-19). */
+.esp-lock-btn:disabled, .esp-lock-btn[aria-disabled="true"] { cursor: wait; opacity: 0.7; }
 .esp-regen-btn { padding: 7px 14px; border: 1px solid var(--lala-lavender-line); border-radius: 8px; background: var(--surface-card); color: var(--lala-lavender-text); font-size: 12px; font-weight: 600; cursor: pointer; }
 .esp-regen-btn:disabled { cursor: wait; opacity: 0.7; }
 

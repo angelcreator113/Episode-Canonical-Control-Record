@@ -41,7 +41,8 @@ describe('ScriptTableRead', () => {
     render(<ScriptTableRead scriptText={SCRIPT} title="The Gala" onClose={() => {}} />);
     const dialog = screen.getByRole('dialog');
     expect(dialog.getAttribute('aria-modal')).toBe('true');
-    expect([...dialog.querySelectorAll('.str-beat-head')].map((h) => h.textContent)).toEqual(['1 · Opening Ritual', '5 · Reveal', '11 · Event Outcome']);
+    expect([...dialog.querySelectorAll('.str-beat-head')].map((h) => h.textContent)).toEqual(['1 · Opening Ritual', '5 · Reveal', '11 · The Event']);
+    // The saved header says "Event Outcome"; Table read uses today's name (Script page audit 3, 2026-10-19).
     const text = dialog.textContent;
     expect(text).toContain('Okay besties.');
     expect(text).not.toContain('"Okay');

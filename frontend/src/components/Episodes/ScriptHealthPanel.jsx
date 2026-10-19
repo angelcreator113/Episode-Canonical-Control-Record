@@ -8,6 +8,10 @@ import { Check, AlertTriangle, ChevronDown } from 'lucide-react';
 
 const STORE_KEY = 'esp-health-collapsed';
 
+// A stat's key reads as words ("brand trust"); a [STAT: …] tag keeps it as
+// the script writes it (Script page audit 3, 2026-10-19).
+export const shownText = (text) => String(text ?? '').replace(/(\[STAT:[^\]]*\])|\bbrand_trust\b/g, (m, tag) => tag || 'brand trust');
+
 // At phone width it starts folded: open, its list pushed the beat about
 // 1700px down (Script page audit, 2026-10-19).
 function isPhoneWidth() {
@@ -52,7 +56,7 @@ export default function ScriptHealthPanel({ rows = [], beatNumbers = {}, onOpenB
         {!collapsed && rows.map((r) => (
           <li key={r.key} className={r.ok ? 'is-ok' : 'is-gap'} data-testid={`script-health-${r.key}`} data-ok={r.ok ? 'true' : 'false'}>
             {r.ok ? <Check size={14} aria-label="OK" /> : <AlertTriangle size={14} aria-label="To check" />}
-            <span className="esp-health-text">{r.text}</span>
+            <span className="esp-health-text">{shownText(r.text)}</span>
             {r.fix && onFix && (
               <button type="button" className="esp-health-open esp-health-fix" data-testid={`script-health-fix-${r.key}`} disabled={busy} onClick={() => onFix(r.fix)}>
                 {r.fix.label}

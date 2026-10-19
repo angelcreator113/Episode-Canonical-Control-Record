@@ -75,8 +75,11 @@ export function scriptHealth({
     if (isCutsceneBeat(b.number)) return;
     const check = phoneCheck(b.lines, onScreen, { startAt: starts[beatIndex] });
     moments += check.moments;
-    for (const t of check.taps) if (!t.ok) phoneFlags.push({ beatIndex, text: t.why, fix: t.onName && t.onName !== 'Every screen' ? t.onName : null });
-    for (const m of check.missing) phoneFlags.push({ beatIndex, text: `${m.name} isn't made yet` });
+    // Beat 5's login moments are the reveal row's, whose fix takes them out:
+    // one cause, one row (Script page audit 3, 2026-10-19).
+    const login = new Set(b.number === REVEAL_BEAT ? revealCheck(b.lines || []).login : []);
+    for (const t of check.taps) if (!t.ok && !login.has(t.i)) phoneFlags.push({ beatIndex, text: t.why, fix: t.onName && t.onName !== 'Every screen' ? t.onName : null });
+    for (const m of check.missing) if (!login.has(m.i)) phoneFlags.push({ beatIndex, text: `${m.name} isn't made yet` });
   });
   const home = (onScreen.screens || []).find((s) => s.is_home);
   if (phoneFlags.length) rows.push(...perBeat(phoneFlags, beats, 'phone', home ? (home.name || home.id) : null));
@@ -97,7 +100,7 @@ export function scriptHealth({
   }
   // Only where the rule applies: Lala speaking in the cutscene alone is no
   // voice row (Script page re-audit, 2026-10-19).
-  if (!quiet.length && beats.some((b) => !isCutsceneBeat(b.number) && (b.lines || []).some((l) => /^\s*lala\s*(\([^)]*\))?\s*:/i.test(l)))) {
+  if (!quiet.length && beats.some((b) => !isCutsceneBeat(b.number) && (b.lines || []).some((l) => /^\s*(?:\*\*|__)?\s*lala\s*(\([^)]*\))?\s*(?:\*\*|__)?\s*:/i.test(l)))) {
     rows.push({ key: 'voice', ok: true, beatId: null, text: "Lala's voice icon is clicked before she talks." });
   }
 

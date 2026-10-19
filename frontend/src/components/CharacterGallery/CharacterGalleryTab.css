@@ -1,28 +1,110 @@
-.gal { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
-.gal-head h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; font-family: 'Lora', serif; font-size: 20px; color: var(--text-primary); }
+/* The Gallery tab (CharacterGalleryTab.jsx) and its camera-roll planner (CameraRollPlanner.jsx).
+   Laid out as Evoni's 2026-10-19 mockup: albums, tools and rules on the left; portraits,
+   recent photos, albums and the planner on the right. One column at 900px and below. */
+.gal { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 18px; align-items: start; min-width: 0; }
+.gal-side, .gal-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+.gal-card, .gal-panel { display: flex; flex-direction: column; gap: 10px; padding: 16px; border: 1px solid var(--lala-lavender-line); border-radius: 16px; background: var(--surface-card); min-width: 0; }
+.gal-card-title, .gal-panel-title { display: flex; align-items: center; gap: 8px; margin: 0; font-family: 'Lora', serif; font-size: 18px; font-weight: 600; color: var(--text-primary); }
+.gal-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.gal-panel-head > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+
 .gal-muted { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.gal-summary { padding: 0 2px; }
+.gal-note { padding: 10px 12px; border-radius: 12px; background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
 .gal-error { margin: 0; font-size: 13px; color: var(--error-text, #b42318); }
+
+/* The album list. */
+.gal-nav { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.gal-nav-heading { margin: 8px 0 0; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary); }
+.gal-nav-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 6px 10px; border: none; border-radius: 10px; background: none; font: inherit; font-size: 14px; color: var(--text-primary); text-align: left; cursor: pointer; }
+.gal-nav-item:hover { background: var(--lala-lavender-soft); }
+.gal-nav-item.is-active { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); font-weight: 700; }
+.gal-nav-item:focus-visible { outline: 2px solid var(--lala-gold); outline-offset: 1px; }
+.gal-nav-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gal-nav-count { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text-secondary); }
+
+/* Tools and rules. */
+.gal-tool { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 8px 14px; border: 1px solid var(--lala-lavender-line); border-radius: 12px; background: var(--surface-card); font: inherit; font-size: 14px; font-weight: 700; color: var(--lala-lavender-text); cursor: pointer; }
+.gal-tool:hover { background: var(--lala-lavender-soft); }
+.gal-organize { display: flex; flex-direction: column; gap: 6px; }
+.gal-rules .gal-muted { font-size: 12.5px; }
+
+/* Pictures. */
 .gal-group { display: flex; flex-direction: column; gap: 8px; }
+.gal-world { display: flex; flex-direction: column; gap: 18px; }
 .gal-group-title { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 14px; font-weight: 700; color: var(--lala-lavender-text); }
 .gal-count { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
-.gal-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.gal-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+.gal-grid.is-row { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 .gal-item { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.gal-thumb { display: block; width: 100%; aspect-ratio: 1 / 1; padding: 0; border: 1px solid var(--lala-lavender-line); border-radius: 12px; overflow: hidden; background: var(--lala-parchment-2, #f5f0e6); cursor: zoom-in; }
+.gal-thumb-wrap { position: relative; }
+.gal-thumb { display: block; width: 100%; aspect-ratio: 4 / 5; padding: 0; border: 1px solid var(--lala-lavender-line); border-radius: 12px; overflow: hidden; background: var(--lala-parchment-2, #f5f0e6); cursor: zoom-in; }
 .gal-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .gal-thumb:focus-visible { outline: 2px solid var(--lala-gold); outline-offset: 2px; }
+.gal-badge { position: absolute; left: 8px; bottom: 8px; padding: 3px 8px; border-radius: 999px; background: var(--lala-gold); color: var(--text-inverse, #fff); font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 600; pointer-events: none; }
 .gal-caption { font-size: 12px; line-height: 1.35; color: var(--text-secondary); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.gal-link { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: none; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--lala-lavender-text); text-decoration: underline; cursor: pointer; }
+.gal-link { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: none; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--lala-lavender-text); text-decoration: underline; cursor: pointer; align-self: flex-start; }
+.gal-pill { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 14px; border: 1px solid var(--lala-lavender-line); border-radius: 999px; background: var(--surface-card); font: inherit; font-size: 13px; font-weight: 700; color: var(--lala-lavender-text); cursor: pointer; }
+
+/* Albums. */
+.gal-albums { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+/* Wide screens: the seven recent photos and the seven albums each fill one row, as in Evoni's mockup. */
+@media (min-width: 1100px) {
+  .gal-recent .gal-grid, .gal-albums { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+}
+.gal-album { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 0 0 8px; border: 1px solid var(--lala-lavender-line); border-radius: 12px; overflow: hidden; background: var(--surface-card); font: inherit; text-align: left; cursor: pointer; }
+.gal-album:focus-visible { outline: 2px solid var(--lala-gold); outline-offset: 2px; }
+.gal-album-cover { display: flex; align-items: center; justify-content: center; aspect-ratio: 4 / 3; background: var(--lala-parchment-2, #f5f0e6); color: var(--text-secondary); }
+.gal-album-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gal-album-label { padding: 6px 10px 0; font-size: 13px; font-weight: 700; color: var(--text-primary); }
+.gal-album-count { padding: 0 10px; font-size: 12px; color: var(--text-secondary); }
+
+/* The larger view. */
 .gal-viewer { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(20, 16, 28, 0.82); }
-.gal-viewer-inner { margin: 0; max-width: min(960px, 100%); max-height: 100%; display: flex; flex-direction: column; gap: 8px; }
-.gal-viewer-inner img { max-width: 100%; max-height: calc(100vh - 120px); object-fit: contain; border-radius: 12px; background: var(--surface-card); }
+.gal-viewer-inner { margin: 0; max-width: min(960px, 100%); max-height: 100%; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+.gal-viewer-inner img { max-width: 100%; max-height: calc(100vh - 160px); object-fit: contain; border-radius: 12px; background: var(--surface-card); }
 .gal-viewer-inner figcaption { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 12px; border-radius: 12px; background: var(--surface-card); font-size: 13px; color: var(--text-primary); }
 .gal-viewer-inner figcaption > span { flex: 1 1 200px; }
 .gal-close { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: none; border-radius: 999px; background: var(--lala-lavender-soft); color: var(--lala-lavender-text); cursor: pointer; }
+.gal-reason { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 0; padding: 8px 12px; border-radius: 12px; background: var(--surface-card); }
+.gal-reason div { display: flex; flex-direction: column; min-width: 0; }
+.gal-reason dt { font-family: 'DM Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-secondary); }
+.gal-reason dd { margin: 0; font-size: 13px; color: var(--text-primary); }
 
-@media (max-width: 480px) {
-  .gal-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+/* The camera-roll planner. */
+.cr-plan { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.cr-plan .cr-label { flex: 1 1 240px; }
+.cr-label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: var(--text-secondary); min-width: 0; }
+.cr-input { width: 100%; min-width: 0; box-sizing: border-box; min-height: 36px; padding: 6px 10px; border: 1px solid var(--lala-lavender-line); border-radius: 10px; background: var(--surface-card); font: inherit; font-size: 14px; font-weight: 400; color: var(--text-primary); }
+.cr-check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-primary); }
+.cr-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 14px; border: none; border-radius: 999px; background: var(--lala-lavender); color: var(--text-inverse, #fff); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.cr-btn.is-quiet { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.cr-btn:disabled { opacity: .55; cursor: default; }
+.cr-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.cr-card { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--lala-lavender-line); border-radius: 12px; background: var(--lala-parchment, #faf7f0); min-width: 0; }
+.cr-card.is-kept { border-color: var(--lala-gold); }
+.cr-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cr-status, .cr-chip { padding: 2px 8px; border-radius: 999px; font-family: 'DM Mono', monospace; font-size: 11px; }
+.cr-status { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.cr-status.is-kept { background: var(--lala-gold); color: var(--text-inverse, #fff); }
+.cr-status.is-failed { background: var(--error-bg, #fde8e8); color: var(--error-text, #b42318); }
+.cr-chip { border: 1px solid var(--lala-lavender-line); color: var(--text-secondary); }
+.cr-moment { margin: 0; font-family: 'Lora', serif; font-size: 15px; line-height: 1.45; color: var(--text-primary); }
+.cr-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; margin: 0; }
+.cr-facts div { min-width: 0; }
+.cr-facts dt { font-family: 'DM Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-secondary); }
+.cr-facts dd { margin: 0; font-size: 13px; color: var(--text-primary); overflow-wrap: anywhere; }
+.cr-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.cr-make { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; border-top: 1px solid var(--lala-lavender-line); }
+.cr-edit { display: flex; flex-direction: column; gap: 8px; }
+.cr-edit-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; align-items: end; }
+
+@media (max-width: 900px) {
+  .gal { grid-template-columns: minmax(0, 1fr); }
 }
-
-/* Visual Memory, phase 1: the ADMIN's library tools under the heading, and the panel in the larger view. */
-.gal-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 8px; }
-.gal-viewer-inner { overflow-y: auto; }
+@media (max-width: 480px) {
+  .gal-card, .gal-panel { padding: 12px; }
+  .gal-grid, .gal-grid.is-row, .gal-albums { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .cr-list { grid-template-columns: minmax(0, 1fr); }
+}

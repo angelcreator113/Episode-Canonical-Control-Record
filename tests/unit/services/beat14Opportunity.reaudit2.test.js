@@ -2,7 +2,7 @@
 // Beat 14 stays final, second pass (Script page re-audit, 2026-10-19): an
 // attach that raced a completion is refused under the episode's lock; one
 // left held on a completed episode (its resolve failed) is resolved on the
-// next read or completion call; after an evaluation reset the 409 says what
+// next completion call (the read resolved it too until Script page audit 3); after an evaluation reset the 409 says what
 // happened. Mocked models; no database.
 // ============================================================================
 
@@ -60,13 +60,16 @@ test('after an evaluation reset, the 409 says it was offered at completion, not 
   expect(current.update).not.toHaveBeenCalled();
 });
 
-test('a read of a completed episode with its opportunity still held resolves it by the recorded tier', async () => {
+// Script page audit 3, 2026-10-19: the read no longer resolves it (it wrote
+// unlocked, on a GET); the next Complete call does (resolveHeldAfterCompletion).
+test('a read of a completed episode with its opportunity still held leaves it for the next Complete', async () => {
   const current = opp('held', [{ status: 'held', source: 'beat14' }]);
   const m = models({ first: 'accepted', evaluation: JSON.stringify({ tier_final: 'slay' }), current });
   const out = await getBeat14(m, ids);
-  expect(current.status).toBe('offered');
+  expect(current.update).not.toHaveBeenCalled();
+  expect(out.opportunity.status).toBe('held');
+  await resolveHeldAfterCompletion(m, { episodeId: 'ep-1' });
   expect(current.status_history[current.status_history.length - 1]).toMatchObject({ status: 'offered', tier: 'slay', source_event_id: 'ev-1' });
-  expect(out.opportunity.status).toBe('offered');
 });
 
 test('a failed tier expires it; with no recorded tier it stays held', async () => {

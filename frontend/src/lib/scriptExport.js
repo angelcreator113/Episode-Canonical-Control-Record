@@ -112,7 +112,10 @@ export function scriptSections(scriptText) {
       const n = headerNumber(label);
       const canon = n != null && n <= 14;
       const number = n != null ? n : beats.length + 1;
-      const name = (m && n != null && m[2].trim()) || (canon ? beatName(n) : (n == null && beats.length < 14 ? beatName(beats.length + 1) : label)) || `Beat ${number}`;
+      // Beats 1-14 take today's name, as the page shows it: a saved
+      // `## BEAT: 11 · Event Outcome` reads "The Event" (Script page audit 3,
+      // 2026-10-19: Table read and the export kept the old names).
+      const name = (canon ? beatName(n) : null) || (m && n != null && m[2].trim()) || (n == null && beats.length < 14 ? beatName(beats.length + 1) : label) || `Beat ${number}`;
       beats.push({ number, name, label, lines: [] });
     } else if (line.trim()) {
       (beats.length ? beats[beats.length - 1].lines : preamble).push(line);
