@@ -130,6 +130,17 @@ async function attachBeat14(models, { showId, episodeId, opportunity_id = null, 
   return sequelize.transaction(async (transaction) => {
     const current = await models.Opportunity.findOne({ where: { offered_in_episode_id: episodeId }, transaction });
     assertStillHeld(current);
+    // The card's Change on what is already attached: only who offers it
+    // changes. Releasing first would remove one made here (Script page
+    // audit, 2026-10-19).
+    if (current && !create && String(current.id) === String(opportunity_id)) {
+      await current.update({
+        connector_profile_id: person.profile_id,
+        connector_handle: person.handle,
+        contact_name: person.name,
+      }, { transaction });
+      return slim(current);
+    }
     if (current) await release(current, transaction);
     let opp;
     if (create) {

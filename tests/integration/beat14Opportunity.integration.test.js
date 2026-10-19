@@ -87,6 +87,11 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(made.body.data.opportunity).toMatchObject({ name: 'Sable Campaign Shoot', status: 'held', contact_name: `Guest ${TAG}`, narrative_stakes: 'Lead the campaign' });
     const madeId = made.body.data.opportunity.id;
 
+    // Change on what is attached: only who offers it changes; the one made here stays.
+    const resent = await auth(request(app).put(url())).send({ opportunity_id: madeId, connector_profile_id: profiles.host });
+    expect(resent.status).toBe(200);
+    expect(resent.body.data.opportunity).toMatchObject({ id: madeId, status: 'held', connector_profile_id: profiles.host, contact_name: `Host ${TAG}` });
+
     const [open] = await rows("SELECT id FROM opportunities WHERE show_id = :show AND name = 'Velour Cover'", { show });
     const swapped = await auth(request(app).put(url())).send({ opportunity_id: open.id, connector_profile_id: profiles.host });
     expect(swapped.status).toBe(200);
