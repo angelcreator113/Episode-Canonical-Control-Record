@@ -35,7 +35,7 @@ function perBeat(flags, beats, keyPrefix, homeName = null) {
 
 export function scriptHealth({
   beats = [], canonical = [], cover = [], onScreen = {}, outfit = [], dealItems = [],
-  closetNumber = null, dirty = false, unsaved = null,
+  closetNumber = null, dirty = false, unsaved = null, beat14 = null, designedIntent = null,
 } = {}) {
   const rows = [];
 
@@ -112,6 +112,15 @@ export function scriptHealth({
 
   // [DELIVER] and [TODO_MODE] cues that do nothing.
   rows.push(...perBeat(dealCueFlags(beats, dealItems), beats, 'deal'));
+
+  // Beat 14's opportunity (Evoni, 2026-10-19): the invitation someone at the
+  // event offers. Only when it was read (beat14 null: not known, no row).
+  const last = beats.find((b) => b.number === 14);
+  if (beat14 && last) {
+    const opp = beat14.opportunity;
+    if (!opp) rows.push({ key: 'beat14', ok: false, beatId: last.id || null, text: 'Beat 14 has no opportunity attached: open beat 14 to attach the invitation someone at the event offers.' });
+    else rows.push({ key: 'beat14', ok: true, beatId: last.id || null, text: designedIntent === 'fail' ? `Beat 14's opportunity, ${opp.name}, does not come: the episode is designed to fail.` : `Beat 14 offers ${opp.name}${opp.contact_name ? `, from ${opp.contact_name}` : ''}.` });
+  }
 
   const approved = beats.filter((b) => b.approved).length;
   rows.push({ key: 'approved', ok: beats.length > 0 && approved === beats.length, beatId: null, text: `${approved} of ${beats.length} ${plural(beats.length, 'beat', 'beats')} approved.` });

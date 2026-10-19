@@ -34,6 +34,28 @@ export function TaggedText({ text }) {
     : <React.Fragment key={i}>{part}</React.Fragment>));
 }
 
+/**
+ * How a post looks on The Pulse (Visual Memory phase 2, services/postMedia
+ * FORMATS): its post_format, else the older post_type story / live / reel.
+ */
+const OLD_TYPES = { story: 'story', live: 'live', reel: 'video' };
+export const formatOf = (post) => post.post_format || OLD_TYPES[post.post_type] || 'post';
+export const STORY_HOURS = 24;
+
+/** The badge a story, a live or a Pulse video wears: a story counts down its 24 hours. */
+export function formatBadge(post, now = Date.now()) {
+  const format = formatOf(post);
+  if (format === 'live') return { kind: 'live', text: 'Live' };
+  if (format === 'video') return { kind: 'video', text: 'Pulse video' };
+  if (format !== 'story') return null;
+  const posted = post.posted_at ? new Date(post.posted_at).getTime() : NaN;
+  if (!Number.isFinite(posted)) return { kind: 'story', text: 'Story' };
+  const left = posted + STORY_HOURS * 3600000 - now;
+  if (left <= 0) return { kind: 'story', text: 'Story · ended' };
+  const hours = Math.floor(left / 3600000);
+  return { kind: 'story', text: hours >= 1 ? `Story · ${hours}h left` : `Story · ${Math.max(1, Math.round(left / 60000))}m left` };
+}
+
 /** The post's photos: image_urls when a post has several, else its one image_url. */
 export const photosOf = (post) => {
   const many = Array.isArray(post.image_urls) ? post.image_urls.filter(Boolean) : [];
@@ -88,8 +110,9 @@ export default function PulsePost({ post, revealLabel = null, onCity = null }) {
   const more = comments ? comments.length - shown.length : 0;
   const photos = photoItemsOf(post);
   const when = whenLabel(post.posted_at);
+  const badge = formatBadge(post);
   return (
-    <article className="pl-post" data-testid="pl-post">
+    <article className={`pl-post${badge ? ` is-${badge.kind}` : ''}`} data-testid="pl-post">
       <header className="pl-post-head">
         <Avatar name={who.name} url={post.author_portrait_url} size={46} />
         <div>
@@ -102,6 +125,7 @@ export default function PulsePost({ post, revealLabel = null, onCity = null }) {
                 : <span data-testid="pl-post-place">{place.label}</span>)}
             </p>
           )}
+          {badge && <span className={`pl-format pl-format-${badge.kind}`} data-testid="pl-format">{badge.text}</span>}
           <RevealChip label={revealLabel} />
         </div>
       </header>

@@ -12,6 +12,9 @@
  *        stale ones skipped (ADMIN)
  *   POST /api/v1/cast/consistency/undo { change }   one change from a run put
  *        back, unless it has changed since (409) (ADMIN)
+ *   POST /api/v1/cast/consistency/fix-character/:id   one character's findings
+ *        fixed at once from their page: rewrites applied, "fine" ones kept as
+ *        written; { changes (each undoable), left, check } (ADMIN; one AI call)
  */
 
 const express = require('express');
@@ -40,6 +43,16 @@ router.post('/fix-all', requireAuth, authorize(['ADMIN']), aiRateLimiter, async 
     return res.json({ success: true, ...result });
   } catch (err) {
     return sendError(res, err, 'POST /consistency/fix-all');
+  }
+});
+
+router.post('/fix-character/:id', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const result = await require('../services/castFixAll').fixCharacter(getModels(), req.params.id);
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return sendError(res, err, 'POST /consistency/fix-character/:id');
   }
 });
 

@@ -1716,6 +1716,10 @@ try {
 
 // Visual Memory: the shared picture library (services/mediaLibrary)
 try { app.use('/api/v1/media', require('./routes/mediaRoutes')); console.log('✓ Media library loaded at /api/v1/media'); } catch (e) { console.error('✗ Failed to load Media library routes:', e.message); }
+// Visual Memory phase 2: a post's pictures and formats (services/postMedia)
+try { app.use('/api/v1/post-media', require('./routes/postMediaRoutes')); console.log('✓ Post media loaded at /api/v1/post-media'); } catch (e) { console.error('✗ Failed to load Post media routes:', e.message); }
+// Deliverables that check themselves (Evoni, 2026-10-19; services/deliverableProgress)
+try { app.use('/api/v1/deliverable-progress', require('./routes/deliverableProgressRoutes')); console.log('✓ Deliverable progress loaded at /api/v1/deliverable-progress'); } catch (e) { console.error('✗ Failed to load Deliverable progress routes:', e.message); }
 
 // The daily update — since yesterday, waiting for Evoni, the next three days, AI spend
 try {

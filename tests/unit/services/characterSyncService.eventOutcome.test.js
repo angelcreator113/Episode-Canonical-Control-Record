@@ -96,6 +96,8 @@ function makeStore({ host = {}, guest = {} } = {}) {
     SocialProfile: { findByPk: jest.fn(async (id) => profiles[id] || null) },
     Opportunity: {
       create: jest.fn(async (row) => { const saved = JSON.parse(JSON.stringify(row)); opportunities.push(saved); return saved; }),
+      // Nothing attached to beat 14 (services/beat14Opportunity): the random offer is made.
+      findOne: jest.fn(async () => null),
     },
     sequelize: {
       QueryTypes: { SELECT: 'SELECT' },

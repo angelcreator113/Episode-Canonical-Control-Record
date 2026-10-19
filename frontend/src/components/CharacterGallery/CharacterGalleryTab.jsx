@@ -17,6 +17,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Images, UserRound, MapPin, Shirt, CalendarDays, FileText, X, ExternalLink, Tag } from 'lucide-react';
 import api from '../../services/api';
 import { AddPicture, PictureLibrary, BringExisting } from './GalleryLibrary';
+import NeedsPicture from '../PostMedia/NeedsPicture';
 import './CharacterGalleryTab.css';
 
 const GROUP_ICONS = { portraits: UserRound, places: MapPin, wardrobe: Shirt, events: CalendarDays, posts: FileText, tagged: Tag };
@@ -76,6 +77,7 @@ export default function CharacterGalleryTab({ character, openTab, hide = [] }) {
         )}
       </header>
       {error && <p className="gal-error" role="alert">{error}</p>}
+      {state.canEdit && state.linked && <NeedsPicture characterId={character.id} />}
 
       {groups.map((g) => {
         const Icon = GROUP_ICONS[g.key] || Images;

@@ -54,7 +54,7 @@ function fakeAi({ budget = false } = {}) {
 
 (shouldSkip ? describe.skip : describe)('Fix what can be fixed', () => {
   const tag = uuid().slice(0, 8);
-  const ids = { show: uuid(), reg: uuid(), reg2: uuid(), sable: uuid(), lala: uuid(), twin: uuid(), echo: uuid(), owner: uuid(), dr: uuid(), late1: uuid(), late2: uuid() };
+  const ids = { show: uuid(), reg: uuid(), reg2: uuid(), sable: uuid(), lala: uuid(), twin: uuid(), echo: uuid(), owner: uuid(), dr: uuid(), late1: uuid(), late2: uuid(), reg3: uuid(), mira: uuid() };
   const p = {};
   let admin;
   let user;
@@ -78,6 +78,7 @@ function fakeAi({ budget = false } = {}) {
     await run('INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:show, :name, :slug, NOW(), NOW())', { show: ids.show, name: `Fixall ${tag}`, slug: `fixall-${tag}` });
     await run("INSERT INTO character_registries (id, title, show_id, created_at, updated_at) VALUES (:reg, 'Fixall', :show, NOW(), NOW())", ids);
     await run("INSERT INTO character_registries (id, title, show_id, created_at, updated_at) VALUES (:reg2, 'Fixall late', :show, NOW(), NOW())", ids);
+    await run("INSERT INTO character_registries (id, title, show_id, created_at, updated_at) VALUES (:reg3, 'Fixall one page', :show, NOW(), NOW())", ids);
 
     p.sable = await profile(`@sable${tag}`, `Sable${tag}`, { approx: '1.2M' });
     await addCharacter(ids.sable, ids.reg, `Sable${tag}`, {
@@ -103,8 +104,8 @@ function fakeAi({ budget = false } = {}) {
     await run('DELETE FROM pulse_followers WHERE show_id = :show', ids);
     await run('DELETE FROM character_fact_changes WHERE registry_character_id IN (:chars)', { chars }).catch((err) => console.error('cleanup', err.message));
     await run('DELETE FROM consistency_flag_log WHERE registry_character_id IN (:chars)', { chars }).catch((err) => console.error('cleanup', err.message));
-    await run('DELETE FROM registry_characters WHERE registry_id IN (:reg, :reg2)', ids);
-    await run('DELETE FROM character_registries WHERE id IN (:reg, :reg2)', ids);
+    await run('DELETE FROM registry_characters WHERE registry_id IN (:reg, :reg2, :reg3)', ids);
+    await run('DELETE FROM character_registries WHERE id IN (:reg, :reg2, :reg3)', ids);
     await run('DELETE FROM social_profiles WHERE id IN (:a)', { a: Object.values(p) });
     await run('DELETE FROM shows WHERE id = :show', ids);
     await sequelize.close();
@@ -206,6 +207,32 @@ function fakeAi({ budget = false } = {}) {
     expect((await character(ids.lala)).feed_profile_id).toBeNull();
 
     expect((await post('undo', { change: { ...type, character_id: ids.dr } })).status).toBe(403);
+  });
+
+  it('Check and fix on one character\'s page: every finding fixed in one click, rewrites applied, each change undoable', async () => {
+    fakeAi();
+    p.mira = await profile(`@mira${tag}`, `Mira${tag}`, { approx: '1.2M' });
+    await addCharacter(ids.mira, ids.reg3, `Mira${tag}`, { depth: 'active', feed: p.mira, description: `She has 900K followers. ${YACHT}`, facts: { occupation: 'Studio owner' } });
+    expect((await post(`fix-character/${ids.mira}`, {}, user)).status).toBe(403);
+    expect((await post('fix-character/nope', {})).status).toBe(400);
+    expect((await post(`fix-character/${ids.dr}`, {})).status).toBe(403);
+
+    const res = await post(`fix-character/${ids.mira}`, {});
+    expect(res.status).toBe(200);
+    const { description } = await character(ids.mira);
+    expect(description).not.toContain('900K');
+    expect(description).toContain('1.2M');
+    expect(res.body.changes.length).toBeGreaterThan(0);
+    expect(res.body.changes.every((c) => c.id && c.character_id === ids.mira)).toBe(true);
+    expect(Array.isArray(res.body.check.flags)).toBe(true);
+    expect(res.body.check.flags.some((f) => f.check === 'followers')).toBe(false);
+
+    // Undo the last change and the one before it puts the text back as it was.
+    for (const change of [...res.body.changes].reverse()) {
+      const undone = await post('undo', { change });
+      expect(undone.status).toBe(200);
+    }
+    expect((await character(ids.mira)).description).toBe(`She has 900K followers. ${YACHT}`);
   });
 
   it('the AI budget stopping the run keeps what was done and says why', async () => {

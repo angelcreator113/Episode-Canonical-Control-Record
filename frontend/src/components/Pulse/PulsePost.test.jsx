@@ -7,7 +7,7 @@
 import React from 'react';
 import { describe, test, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import PulsePost, { TaggedText, photosOf, photoItemsOf, cityName } from './PulsePost';
+import PulsePost, { TaggedText, photosOf, photoItemsOf, cityName, formatBadge } from './PulsePost';
 
 const base = { id: 'p1', poster_handle: 'lala', poster_display_name: 'Lala', likes: 5, shares: 2, posted_at: null, socialProfile: { city: 'echo_park' } };
 const comment = (id, name, text) => ({ id, handle: name.toLowerCase(), display_name: name, text, portrait_url: id === 'c1' ? 'https://cdn/m.jpg' : null });
@@ -92,5 +92,23 @@ describe('PulsePost', () => {
     rerender(<PulsePost post={base} />);
     expect(screen.getByTestId('pl-post-place').tagName).toBe('SPAN');
     expect(screen.getByTestId('pl-post-place').textContent).toBe('Echo Park');
+  });
+});
+
+describe('PulsePost formats (Visual Memory phase 2)', () => {
+  const now = new Date('2026-10-19T12:00:00Z').getTime();
+  test('a story counts down its 24 hours, then has ended; a live and a Pulse video wear their badge; a post wears none', () => {
+    expect(formatBadge({ post_format: 'story', posted_at: '2026-10-19T02:00:00Z' }, now)).toEqual({ kind: 'story', text: 'Story · 14h left' });
+    expect(formatBadge({ post_format: 'story', posted_at: '2026-10-18T12:30:00Z' }, now)).toEqual({ kind: 'story', text: 'Story · 30m left' });
+    expect(formatBadge({ post_format: 'story', posted_at: '2026-10-17T00:00:00Z' }, now)).toEqual({ kind: 'story', text: 'Story · ended' });
+    expect(formatBadge({ post_type: 'live' }, now)).toEqual({ kind: 'live', text: 'Live' });
+    expect(formatBadge({ post_type: 'reel' }, now)).toEqual({ kind: 'video', text: 'Pulse video' });
+    expect(formatBadge({ post_format: 'carousel' }, now)).toBeNull();
+    expect(formatBadge({ post_type: 'relationship' }, now)).toBeNull();
+  });
+
+  test('the badge shows on the post', () => {
+    render(<PulsePost post={{ id: 'p-live', poster_handle: 'maren', content_text: 'come hang', post_format: 'live', posted_at: new Date().toISOString() }} />);
+    expect(screen.getByTestId('pl-format').textContent).toBe('Live');
   });
 });
