@@ -37,7 +37,7 @@
  * GET /shows/:showId/character-places; a read that fails offers none.
  *   onCancel, busy
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import api from '../services/api';
 import OpenInSceneSets from './OpenInSceneSets';
 import { sceneSetThumb } from '../utils/sceneSets';
@@ -68,13 +68,19 @@ function SetThumb({ set }) {
     : <div className="els-thumb els-thumb-empty" aria-hidden="true">No image</div>;
 }
 
-function SetPicker({ showId, sets, role, onPick, onClose, setSets }) {
+// Eighth audit: another event's photos (an event version) are named as such
+// and listed after the everyday sets, and the current choice is marked.
+const versionLabel = (s) => (s.version_of ? `Event photos${s.version_event?.name ? ` · ${s.version_event.name}` : ''}` : null);
+function SetPicker({ showId, sets, role, onPick, onClose, setSets, currentId = null }) {
   const [search, setSearch] = useState('');
   const [newName, setNewName] = useState('');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState(null);
   const q = search.trim().toLowerCase();
-  const shown = sets.filter((s) => !q || (s.name || '').toLowerCase().includes(q));
+  const shown = sets.filter((s) => !q || (s.name || '').toLowerCase().includes(q))
+    .map((s, i) => ({ s, i }))
+    .sort((a, b) => (role === 'event' ? 0 : Number(Boolean(a.s.version_of)) - Number(Boolean(b.s.version_of))) || a.i - b.i)
+    .map(({ s }) => s);
 
   const create = async () => {
     const name = newName.trim();
@@ -102,9 +108,11 @@ function SetPicker({ showId, sets, role, onPick, onClose, setSets }) {
         value={search} onChange={(e) => setSearch(e.target.value)} />
       <div className="els-grid">
         {shown.map((s) => (
-          <button key={s.id} type="button" className="els-option" onClick={() => onPick(s)} data-testid={`els-option-${s.id}`}>
+          <button key={s.id} type="button" className={`els-option${String(s.id) === String(currentId) ? ' is-current' : ''}`} onClick={() => onPick(s)}
+            aria-pressed={String(s.id) === String(currentId)} data-testid={`els-option-${s.id}`}>
             <SetThumb set={s} />
             <span className="els-option-name">{s.name}</span>
+            {versionLabel(s) && <span className="els-option-tag" data-testid={`els-option-version-${s.id}`}>{versionLabel(s)}</span>}
           </button>
         ))}
         {shown.length === 0 && <p className="els-note">No scene set matches.</p>}
@@ -130,6 +138,9 @@ export default function EpisodeLocationsStep({
   const [sets, setSets] = useState([]);
   const [picking, setPicking] = useState(null); // 'home' | 'closet' | 'event' | extra key
   const [places, setPlaces] = useState(null); // { lead_character_id, characters }
+  // Focus starts in the dialog, and Escape closes it (eighth audit).
+  const titleRef = useRef(null);
+  useEffect(() => { titleRef.current?.focus?.(); }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -141,7 +152,8 @@ export default function EpisodeLocationsStep({
   const lead = (places?.characters || []).find((c) => c.is_lead) || null;
   const characterHomes = (places?.characters || []).filter((c) => !c.is_lead).flatMap((c) => {
     const home = c.places.find((p) => p.role === 'home');
-    return home ? [{ key: `${c.id}`, name: `${c.name}'s home`, scene_set: { id: home.scene_set_id, name: home.scene_set_name } }] : [];
+    // The home's full set when it is listed, so its picture shows (eighth audit).
+    return home ? [{ key: `${c.id}`, name: `${c.name}'s home`, scene_set: sets.find((s) => String(s.id) === String(home.scene_set_id)) || { id: home.scene_set_id, name: home.scene_set_name } }] : [];
   });
   const fixedLabel = (r) => (lead && (r === 'home' || r === 'closet') ? `${ROLE_LABELS[r]} (${lead.name}'s)` : ROLE_LABELS[r]);
 
@@ -224,16 +236,17 @@ export default function EpisodeLocationsStep({
       </button>
       {extra && <div className="els-row-extra">{extra}</div>}
       {picking === key && (
-        <SetPicker showId={showId} sets={offered} setSets={setSets} role={FIXED_ROLES.includes(key) ? key : 'extra'}
+        <SetPicker showId={showId} sets={offered} setSets={setSets} role={FIXED_ROLES.includes(key) ? key : 'extra'} currentId={value?.scene_set_id || null}
           onPick={(set) => { onPick(set); setPicking(null); }} onClose={() => setPicking(null)} />
       )}
     </div>
   );
 
   return (
-    <div className="els-overlay" role="dialog" aria-modal="true" aria-labelledby="els-title">
+    <div className="els-overlay" role="dialog" aria-modal="true" aria-labelledby="els-title"
+      onKeyDown={(e) => { if (e.key === 'Escape' && !busy) { e.stopPropagation(); onCancel?.(); } }}>
       <div className="els-panel" data-testid="episode-locations-step">
-        <h2 id="els-title" className="els-title">{title}</h2>
+        <h2 id="els-title" className="els-title" tabIndex={-1} ref={titleRef}>{title}</h2>
         <p className="els-sub">Where this episode happens. Each can be changed; images can come later.</p>
 
         {FIXED_ROLES.map((r) => row(r, fixedLabel(r), byRole[r], { onPick: (set) => setFixed(r, set) }))}

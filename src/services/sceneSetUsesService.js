@@ -152,7 +152,8 @@ async function moveUses(sequelize, fromId, toId, { episodeId = null, transaction
                  AND EXISTS (SELECT 1 FROM scene_set_episodes keep
                               WHERE keep.scene_set_id = :toId AND keep.episode_id = old.episode_id AND keep.deleted_at IS NULL)`);
   const locations = await exec(`UPDATE scene_set_episodes SET scene_set_id = :toId, updated_at = NOW() WHERE scene_set_id = :fromId AND deleted_at IS NULL${ep}`);
-  const beats = await exec(`UPDATE scene_plans SET scene_set_id = :toId, updated_at = NOW() WHERE scene_set_id = :fromId AND deleted_at IS NULL${ep}`);
+  // Their angle is placed again on the replacement (eighth audit).
+  const beats = await exec(`UPDATE scene_plans SET scene_set_id = :toId, angle_label = NULL, updated_at = NOW() WHERE scene_set_id = :fromId AND deleted_at IS NULL${ep}`);
   const eventScope = `scene_set_id = :fromId AND deleted_at IS NULL${episodeId ? ' AND used_in_episode_id = :episodeId' : ''}`;
   // The events' looks go with them, unless the event already has a look on
   // the replacement: left on the old set, the paid look was unreachable
