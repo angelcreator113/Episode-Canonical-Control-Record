@@ -23,11 +23,13 @@ const COMPANY_KINDS = Object.freeze({
   venue: 'Venue',
 });
 
+// Pictures: its library pictures (media_asset_links, entity 'brand'), for
+// every kind (Evoni, 2026-10-19), read by the page from GET /api/v1/media.
 const SECTIONS_BY_KIND = Object.freeze({
-  brand: ['identity', 'people', 'pulse', 'business', 'wardrobe', 'press', 'relationships'],
-  outlet: ['identity', 'people', 'pulse', 'business', 'press'],
-  agency: ['identity', 'people', 'pulse', 'business'],
-  venue: ['identity', 'business', 'press'],
+  brand: ['identity', 'people', 'pulse', 'business', 'pictures', 'wardrobe', 'press', 'relationships'],
+  outlet: ['identity', 'people', 'pulse', 'business', 'pictures', 'press'],
+  agency: ['identity', 'people', 'pulse', 'business', 'pictures'],
+  venue: ['identity', 'business', 'pictures', 'press'],
 });
 
 const SECTION_LABELS = Object.freeze({
@@ -35,6 +37,7 @@ const SECTION_LABELS = Object.freeze({
   people: 'People',
   pulse: 'On The Pulse',
   business: 'Business',
+  pictures: 'Pictures',
   wardrobe: 'Wardrobe',
   press: { brand: 'Press & events', outlet: 'What it published', venue: 'Events held here' },
   relationships: 'Relationships',
