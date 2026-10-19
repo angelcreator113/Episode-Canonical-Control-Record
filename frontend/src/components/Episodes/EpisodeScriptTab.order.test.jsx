@@ -60,10 +60,12 @@ describe('Script reordering', () => {
     fireEvent.dragStart(lines()[1]);
     fireEvent.dragOver(lines()[0]);
     fireEvent.drop(lines()[0]);
-    expect(lines().map((l) => l.textContent)).toEqual(['Lala"Two b."✦ Rewrite', 'Lala"Two a."✦ Rewrite']);
+    // Rewrite sits beside the line's row, not inside it (Script page audit, 2026-10-19).
+    expect(lines().map((l) => l.textContent)).toEqual(['Lala"Two b."', 'Lala"Two a."']);
+    expect(lines().map((l) => l.parentElement.textContent)).toEqual(['Lala"Two b."✦ Rewrite', 'Lala"Two a."✦ Rewrite']);
     fireEvent.click(lines()[0]);
     fireEvent.click(screen.getByRole('button', { name: 'Move line down' }));
-    expect(lines().map((l) => l.textContent)).toEqual(['Lala"Two a."✦ Rewrite', 'Lala"Two b."✦ Rewrite']);
+    expect(lines().map((l) => l.textContent)).toEqual(['Lala"Two a."', 'Lala"Two b."']);
   });
 
   test("a line can't be dropped into another beat", () => {
