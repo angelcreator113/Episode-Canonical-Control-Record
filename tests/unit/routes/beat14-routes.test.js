@@ -13,7 +13,7 @@ const OPP = '33333333-3333-4333-8333-333333333333';
 
 function app(attach) {
   jest.resetModules();
-  jest.doMock('../../../src/middleware/auth', () => ({ requireAuth: (req, res, next) => next() }));
+  jest.doMock('../../../src/middleware/auth', () => ({ requireAuth: (req, res, next) => next(), authorize: () => (req, res, next) => next() }));
   jest.doMock('../../../src/services/beat14Opportunity', () => ({
     getBeat14: jest.fn(async () => ({ opportunity: null, people: [], candidates: [], event: null })),
     attachBeat14: attach,

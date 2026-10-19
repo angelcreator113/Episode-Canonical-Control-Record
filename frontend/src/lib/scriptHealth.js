@@ -9,6 +9,7 @@
 import { phoneCheck, uncuedPieces, wearFlags, dealCueFlags, lastGettingReadyIndex } from './scriptMoments';
 import { REVEAL_BEAT, voiceOffLines, revealCheck } from './scriptShowRules';
 import { invitationLine, beat14Outcome, BEAT } from './beat14Invitation';
+import { atHandle } from '../pages/feed/feedConstants';
 
 const list = (items) => (items.length <= 2 ? items.join(' and ') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`);
 const plural = (n, one, many) => (n === 1 ? one : many);
@@ -126,7 +127,7 @@ export function scriptHealth({
     if (!opp) rows.push({ key: 'beat14', ok: false, beatId: id, text: 'Beat 14 has no opportunity attached: open beat 14 to attach the invitation someone at the event offers.' });
     else {
       const there = invitationLine(last.lines || [], opp.name) !== null;
-      const from = opp.contact_name || (opp.connector_handle ? `@${opp.connector_handle}` : null);
+      const from = opp.contact_name || (atHandle(opp.connector_handle) || null);
       if (beat14Outcome(opp, designedIntent) === 'withheld') {
         const why = opp.status === 'expired' ? 'the episode did not land' : 'the episode is designed to fail';
         rows.push(there
