@@ -183,14 +183,18 @@ async function waitFor(fn, timeoutMs = 20000) {
   it('PUT base_model validates the value; null means the default', async () => {
     const set = await models.SceneSet.create({ name: 'itest-2396 put', scene_type: 'OTHER' });
     createdSetIds.push(set.id);
+    // Editing a set is ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only).
+    const refused = await request(app).put(`/api/v1/scene-sets/${set.id}`)
+      .set('Authorization', `Bearer ${userToken}`).send({ base_model: 'gpt-image-1.5' });
+    expect(refused.status).toBe(403);
     const bad = await request(app).put(`/api/v1/scene-sets/${set.id}`)
-      .set('Authorization', `Bearer ${userToken}`).send({ base_model: 'midjourney' });
+      .set('Authorization', `Bearer ${adminToken}`).send({ base_model: 'midjourney' });
     expect(bad.status).toBe(400);
     const ok = await request(app).put(`/api/v1/scene-sets/${set.id}`)
-      .set('Authorization', `Bearer ${userToken}`).send({ base_model: 'gpt-image-1.5' });
+      .set('Authorization', `Bearer ${adminToken}`).send({ base_model: 'gpt-image-1.5' });
     expect(ok.status).toBe(200);
     const cleared = await request(app).put(`/api/v1/scene-sets/${set.id}`)
-      .set('Authorization', `Bearer ${userToken}`).send({ base_model: '' });
+      .set('Authorization', `Bearer ${adminToken}`).send({ base_model: '' });
     expect(cleared.status).toBe(200);
     expect((await models.SceneSet.findByPk(set.id, { attributes: ['base_model'] })).base_model).toBeNull();
   });

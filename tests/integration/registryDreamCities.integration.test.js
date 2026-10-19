@@ -55,9 +55,10 @@ const name = (n) => `City Test ${TAG} ${n}`;
 
   beforeAll(async () => {
     process.env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || 'test-key';
+    // An ADMIN: these writes are ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only).
     token = TokenService.generateTokenPair({
       id: 'test-user-registry-dream-cities', email: 'test@registry-dream-cities.dev', name: 'Registry DREAM Cities Test',
-      groups: ['USER', 'EDITOR'], role: 'USER',
+      groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     // World Studio files each world's characters in the registry tagged
     // with it, making one if there is none.

@@ -17,7 +17,8 @@ const SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'route
 describe('Step 3 CP6 — characterRegistry.js anchor file Tier 1 sweep', () => {
   test('imports requireAuth from middleware/auth (lazy-noop dual fallback removed)', () => {
     // #1699: userInGroup joins the same import for the isAuthor field filter.
-    expect(SRC).toMatch(/const\s*\{\s*requireAuth\s*,\s*userInGroup\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
+    // Evoni, 2026-10-19: authorize joins it for the ADMIN-only profile writes.
+    expect(SRC).toMatch(/const\s*\{\s*requireAuth\s*,\s*userInGroup\s*,\s*authorize\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
   });
 
   test('imports aiRateLimiter (preserved — used by reference handler)', () => {
@@ -72,8 +73,23 @@ describe('Step 3 CP6 — characterRegistry.js anchor file Tier 1 sweep', () => {
       expect(SRC).toMatch(/isAuthor\s*=\s*userInGroup\(req\.user,\s*'admin'\)/);
       expect(SRC).not.toMatch(/req\.user\??\.role/);
     });
-    test('no authorize\\(\\[\'ADMIN\'\\]\\) calls were added (Item 16 NOT escalated)', () => {
-      expect(SRC).not.toMatch(/authorize\(\[?'ADMIN'\]?\)/);
+    // Superseded by Evoni's ruling of 2026-10-19 ("this whole part of the
+    // site is admin only"; the profile audit): the profile's writes and AI
+    // calls are ADMIN only, the rest of the file stays requireAuth.
+    test('the profile writes and AI calls are ADMIN only, and only those', () => {
+      const gated = [
+        ['put', '/registries/:id'], ['put', '/characters/:id'], ['delete', '/characters/:id'],
+        ['post', '/characters/:id/select-name'], ['post', '/characters/:id/set-status'],
+        ['post', '/characters/:id/portrait'], ['post', '/characters/:id/photo'],
+        ['delete', '/characters/:id/photo'], ['delete', '/characters/:id/portrait'],
+        ['post', '/characters/:id/interior/generate'], ['post', '/characters/:id/interior/apply'],
+        ['post', '/characters/:id/writer-paragraph/generate'],
+      ];
+      gated.forEach(([verb, route]) => {
+        const escaped = route.replace(/\//g, '\\/');
+        expect(SRC).toMatch(new RegExp(`router\\.${verb}\\('${escaped}',\\s*requireAuth,\\s*authorize\\(\\['ADMIN'\\]\\)`));
+      });
+      expect((SRC.match(/authorize\(\['ADMIN'\]\)/g) || []).length).toBe(gated.length);
     });
   });
 

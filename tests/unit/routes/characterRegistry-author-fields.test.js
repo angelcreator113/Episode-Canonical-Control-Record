@@ -3,7 +3,10 @@
 // ============================================================================
 // The filter used to test req.user.role, which no user has, so the four
 // author-only fields were dropped for everyone. It now reads the Cognito admin
-// group. Editors, viewers and group-less users are still filtered.
+// group. Editors, viewers and group-less users are still filtered. Since
+// Evoni's ruling of 2026-10-19 ("this whole part of the site is admin only";
+// the profile audit) the PUT itself is ADMIN only, so they are refused and
+// nothing is saved at all.
 
 const express = require('express');
 const request = require('supertest');
@@ -65,18 +68,20 @@ describe('PUT /characters/:id author-only fields', () => {
     expect(mockCharacter.blind_spot).toBe(AUTHOR_ONLY.de_blind_spot);
   });
 
-  test('editor-group user: author-only fields still filtered, other fields saved', async () => {
+  test('editor-group user: refused, and nothing is saved', async () => {
     const res = await put('editor');
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(403);
     for (const k of Object.keys(AUTHOR_ONLY)) expect(mockCharacter[k]).toBeUndefined();
     expect(mockCharacter.blind_spot).toBeUndefined();
-    expect(mockCharacter.subtitle).toBe('kept');
+    expect(mockCharacter.subtitle).toBeUndefined();
+    expect(mockCharacter.save).not.toHaveBeenCalled();
   });
 
-  test('user with no groups: author-only fields still filtered', async () => {
+  test('user with no groups: refused, and nothing is saved', async () => {
     const res = await put();
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(403);
     for (const k of Object.keys(AUTHOR_ONLY)) expect(mockCharacter[k]).toBeUndefined();
-    expect(mockCharacter.subtitle).toBe('kept');
+    expect(mockCharacter.subtitle).toBeUndefined();
+    expect(mockCharacter.save).not.toHaveBeenCalled();
   });
 });

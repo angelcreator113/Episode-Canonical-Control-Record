@@ -94,7 +94,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       ADD COLUMN IF NOT EXISTS variation_count integer DEFAULT 1,
       ADD COLUMN IF NOT EXISTS cover_angle_id uuid`);
     for (const m of [baseModelMigration, approvedMigration]) await m.up(qi, Sequelize);
-    token = TokenService.generateTokenPair({ id: 'test-user-desc-review', email: 'u@desc.dev', name: 'Editor', groups: ['USER'], role: 'USER' }).accessToken;
+    // An ADMIN: these writes are ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only).
+    token = TokenService.generateTokenPair({ id: 'test-user-desc-review', email: 'u@desc.dev', name: 'Editor', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
   });
   beforeEach(() => {
     for (const k of ['ANTHROPIC_API_KEY', 'FAL_KEY', 'AI_DAILY_IMAGE_BUDGET_USD', 'AI_DAILY_BUDGET_USD', 'SCENE_BASE_MODEL_DEFAULT']) saved[k] = process.env[k];

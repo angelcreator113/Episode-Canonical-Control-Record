@@ -1,6 +1,7 @@
 // frontend/src/components/Breadcrumbs.jsx
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { usePageTitle } from '../lib/pageTitle';
 import './Breadcrumbs.css';
 
 /**
@@ -55,9 +56,18 @@ const ROUTE_LABELS = {
 function Breadcrumbs({ items }) {
   const navigate = useNavigate();
   const location = useLocation();
+  // A page's own name for its last crumb (lib/pageTitle), e.g. a character's.
+  const titled = usePageTitle(location.pathname);
+
+  // A character's page sits under The Cast, named for them (the profile audit, 2026-10-19).
+  const characterCrumbs = /^\/character\/[^/]+\/?$/.test(location.pathname) ? [
+    { label: 'Home', path: '/' },
+    { label: 'The Cast', path: '/character-registry' },
+    { label: titled || 'Character', path: location.pathname },
+  ] : null;
 
   // Auto-generate breadcrumbs from URL path if no manual items
-  const crumbs = items || (() => {
+  const crumbs = items || characterCrumbs || (() => {
     const segments = location.pathname.split('/').filter(Boolean);
     const result = [{ label: 'Home', path: '/' }];
     let currentPath = '';

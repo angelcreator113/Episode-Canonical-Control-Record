@@ -19,7 +19,7 @@ const router  = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
 
 // ── Auth middleware ──
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const {
   AUTHOR_ONLY_FIELDS,
   canAccessAuthorFields,
@@ -265,7 +265,8 @@ router.get('/:charId', requireAuth, async (req, res) => {
 /* ═══════════════════════════════════════════════════════════════════════════════
    PUT /:charId — Update depth dimensions
    ═══════════════════════════════════════════════════════════════════════════════ */
-router.put('/:charId', requireAuth, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.put('/:charId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const character = await RegistryCharacter.findByPk(req.params.charId);
     if (!character) {
@@ -313,7 +314,8 @@ router.put('/:charId', requireAuth, async (req, res) => {
 /* ═══════════════════════════════════════════════════════════════════════════════
    POST /:charId/generate — Generate all 10 dimensions via Claude
    ═══════════════════════════════════════════════════════════════════════════════ */
-router.post('/:charId/generate', requireAuth, aiRateLimiter, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.post('/:charId/generate', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const character = await RegistryCharacter.findByPk(req.params.charId, {
       include: [{ model: CharacterRegistry, as: 'registry' }],
@@ -346,6 +348,7 @@ router.post('/:charId/generate', requireAuth, aiRateLimiter, async (req, res) =>
     });
   } catch (err) {
     console.error('POST /character-depth/:charId/generate error:', err);
+    if (require('../utils/aiFailure').aiFailure(res, err)) return undefined;
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -354,7 +357,8 @@ router.post('/:charId/generate', requireAuth, aiRateLimiter, async (req, res) =>
 /* ═══════════════════════════════════════════════════════════════════════════════
    POST /:charId/generate/:dimension — Generate a single dimension
    ═══════════════════════════════════════════════════════════════════════════════ */
-router.post('/:charId/generate/:dimension', requireAuth, aiRateLimiter, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.post('/:charId/generate/:dimension', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const { charId, dimension } = req.params;
     const fields = DIMENSION_FIELDS[dimension];
@@ -397,6 +401,7 @@ router.post('/:charId/generate/:dimension', requireAuth, aiRateLimiter, async (r
     });
   } catch (err) {
     console.error(`POST /character-depth/:charId/generate/${req.params.dimension} error:`, err);
+    if (require('../utils/aiFailure').aiFailure(res, err)) return undefined;
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -405,7 +410,8 @@ router.post('/:charId/generate/:dimension', requireAuth, aiRateLimiter, async (r
 /* ═══════════════════════════════════════════════════════════════════════════════
    POST /:charId/confirm — Accept proposed values and write to DB
    ═══════════════════════════════════════════════════════════════════════════════ */
-router.post('/:charId/confirm', requireAuth, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.post('/:charId/confirm', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const character = await RegistryCharacter.findByPk(req.params.charId);
     if (!character) {

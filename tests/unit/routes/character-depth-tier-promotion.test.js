@@ -6,6 +6,9 @@
 // Surface-correction: /confirm at L379 is data persistence, not AI — does NOT
 // get aiRateLimiter (surface §6 listed it as "READ MORE" — confirmed non-AI).
 // Lazy-noop fallback at L22-27 removed.
+// Evoni, 2026-10-19 ("this whole part of the site is admin only"; the
+// profile audit): the writes and the AI POSTs add authorize(['ADMIN']); the
+// read stays requireAuth.
 
 const fs = require('fs');
 const path = require('path');
@@ -14,15 +17,18 @@ const SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'route
 
 describe('Step 3 CP6 — characterDepthRoutes.js PROMOTE shape', () => {
   test('imports requireAuth + aiRateLimiter', () => {
-    expect(SRC).toMatch(/const\s*\{\s*requireAuth\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
+    expect(SRC).toMatch(/const\s*\{\s*requireAuth,\s*authorize\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
     expect(SRC).toMatch(/const\s*\{\s*aiRateLimiter\s*\}\s*=\s*require\(['"]\.\.\/middleware\/aiRateLimiter['"]\)/);
   });
 
-  describe('Tier 1 non-AI handlers (3 — requireAuth only)', () => {
-    [['get', '/:charId'], ['put', '/:charId'], ['post', '/:charId/confirm']].forEach(([verb, route]) => {
-      test(`${verb.toUpperCase()} ${route} → requireAuth (no aiRateLimiter)`, () => {
+  describe('Tier 1 non-AI handlers (the read requireAuth; the 2 writes ADMIN)', () => {
+    test('GET /:charId → requireAuth (no aiRateLimiter)', () => {
+      expect(SRC).toMatch(/router\.get\('\/:charId',\s*requireAuth,\s*async/);
+    });
+    [['put', '/:charId'], ['post', '/:charId/confirm']].forEach(([verb, route]) => {
+      test(`${verb.toUpperCase()} ${route} → requireAuth + ADMIN (no aiRateLimiter)`, () => {
         const escaped = route.replace(/\//g, '\\/');
-        const re = new RegExp(`router\\.${verb}\\('${escaped}',\\s*requireAuth,\\s*async`);
+        const re = new RegExp(`router\\.${verb}\\('${escaped}',\\s*requireAuth,\\s*authorize\\(\\['ADMIN'\\]\\),\\s*async`);
         expect(SRC).toMatch(re);
       });
     });
@@ -30,9 +36,9 @@ describe('Step 3 CP6 — characterDepthRoutes.js PROMOTE shape', () => {
 
   describe('Tier 1 + aiRateLimiter (2 AI POSTs PROMOTE)', () => {
     ['/:charId/generate', '/:charId/generate/:dimension'].forEach((route) => {
-      test(`POST ${route} → requireAuth + aiRateLimiter`, () => {
+      test(`POST ${route} → requireAuth + ADMIN + aiRateLimiter`, () => {
         const escaped = route.replace(/\//g, '\\/');
-        const re = new RegExp(`router\\.post\\('${escaped}',\\s*requireAuth,\\s*aiRateLimiter,\\s*async`);
+        const re = new RegExp(`router\\.post\\('${escaped}',\\s*requireAuth,\\s*authorize\\(\\['ADMIN'\\]\\),\\s*aiRateLimiter,\\s*async`);
         expect(SRC).toMatch(re);
       });
     });

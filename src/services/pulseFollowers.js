@@ -154,6 +154,8 @@ async function decide(db, row, { adjustTo = null, adjustBy = null, reason = null
     }, { transaction });
     if (row.cause === 'episode') await writeDecisionLog(db, row, { adjusted: adjusting, transaction });
   });
+  // The profile's stored label and tier follow the accepted count (services/characterFacts).
+  await require('./characterFacts').syncFollowerCopies(db, row.show_id, row.social_profile_id);
   // A big accepted jump can move the season plan (services/seasonArcProposals): a proposal, never awaited.
   if (row.cause !== 'start' && Math.abs(row.change) >= BIG_JUMP) require('./seasonArcProposals').proposeLater(db, row.show_id, 'follower_jump');
   return row;
@@ -182,10 +184,13 @@ async function override(db, { showId, profileId, change, reason, at, by = null }
   if (before === null) throw new LedgerError(409, 'This character has no accepted starting count yet.');
   const countAfter = before + change;
   if (countAfter < 0) throw new LedgerError(400, 'That would take the count below 0.');
-  return db.PulseFollower.create({
+  const row = await db.PulseFollower.create({
     show_id: showId, social_profile_id: profileId, story_order: at, change, count_after: countAfter,
     cause: 'override', reason: reason.trim().slice(0, 500), status: 'accepted', decided_by: by, decided_at: new Date(),
   });
+  // The profile's stored label and tier follow the accepted count (services/characterFacts).
+  await require('./characterFacts').syncFollowerCopies(db, showId, profileId);
+  return row;
 }
 
 // ── The episode follower change (Task #2956) ────────────────────────────────

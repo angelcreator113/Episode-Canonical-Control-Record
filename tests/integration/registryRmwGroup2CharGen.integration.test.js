@@ -64,12 +64,13 @@ function interleave(second, waitMs = 600) {
   const auth = () => `Bearer ${token}`;
 
   beforeAll(() => {
+    // An ADMIN: these writes are ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only).
     token = TokenService.generateTokenPair({
       id: 'test-user-rmw-chargen',
       email: 'test@rmw-chargen.dev',
       name: 'RMW Chargen Test',
-      groups: ['USER', 'EDITOR'],
-      role: 'USER',
+      groups: ['ADMIN'],
+      role: 'ADMIN',
     }).accessToken;
   });
 

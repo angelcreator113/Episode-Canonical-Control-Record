@@ -51,7 +51,8 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
   beforeAll(async () => {
     await migration.up(sequelize.getQueryInterface(), Sequelize);
     await placesMigration.up(sequelize.getQueryInterface(), Sequelize);
-    token = TokenService.generateTokenPair({ id: 'test-user-venue', email: 'u@venue.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    // An ADMIN: these writes are ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only).
+    token = TokenService.generateTokenPair({ id: 'test-user-venue', email: 'u@venue.dev', name: 'Editor', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
   });
   beforeEach(() => {
     mockS3Send.mockClear();

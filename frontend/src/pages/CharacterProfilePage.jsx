@@ -35,7 +35,8 @@ import { platformLabel, atHandle, followersOf } from './feed/feedConstants';
 import apiClient from '../services/api';
 import { ROLE_LABELS } from '../constants/characterConstants';
 import { findLala } from '../lib/theCast';
-import { DEPTH_STEPS, depthOf, depthLevelOf, cityOf, archetypeOf, showUpRows, withLala, voiceOf, DREAM_CITIES, dreamCityOf, eventPurpose } from '../lib/characterPage';
+import { setPageTitle, clearPageTitle } from '../lib/pageTitle';
+import { DEPTH_STEPS, depthOf, depthStageOf, cityOf, archetypeOf, showUpRows, withLala, voiceOf, DREAM_CITIES, dreamCityOf, eventPurpose } from '../lib/characterPage';
 import {
   GROUPS, TENSION, groupOf, closenessOf, nameOf, typeLabel, noteOf, connectionStats, SORTS,
   filterConnections, keyRelationships, connectionHistory, mapPoints,
@@ -57,6 +58,14 @@ export const getCharacterEntanglementsApi = (id) =>
 // Their places (home, closet, other; #3228) with pictures, and sharing one
 // on The Pulse as a draft (castRoutes, services/characterPlaceShare).
 // Their Pulse posts, and the short stories and chapters they are in (routes/castRoutes.js).
+/**
+ * One follower count on the page (the profile audit, 2026-10-19): their
+ * facts' count (the follower ledger, as Quick facts shows it), else the
+ * profile's stored label.
+ */
+export const followerLabelOf = (facts, feedProfile) =>
+  facts?.followers?.label || (feedProfile ? followersOf(feedProfile) : '') || '';
+
 export const getFactsApi = (id) =>
   apiClient.get(`${API_URL}/cast/characters/${id}/facts`);
 export const putFactsApi = (id, body) =>
@@ -1720,11 +1729,13 @@ function TheirPlaces({ character }) {
  */
 function TabOverview({ character, appearances, feedProfile, relationships, entanglements, onSaved, onFeedSaved, gen, openTab }) {
   const [editingFacts, setEditingFacts] = useState(false);
+  // Quick facts' facts, so Key stats shows the same follower count (the profile audit, 2026-10-19).
+  const [facts, setFacts] = useState(null);
   const trail = useStoryTrail(character.id);
   return (
     <div className="ch-overview">
       <div className="ch-col">
-        <QuickFacts character={character} feedProfile={feedProfile} appearances={appearances} editing={editingFacts} onEdit={setEditingFacts} />
+        <QuickFacts character={character} feedProfile={feedProfile} appearances={appearances} editing={editingFacts} onEdit={setEditingFacts} onFacts={setFacts} />
         {editingFacts && (
           <>
             <TheirNames character={character} feedProfile={feedProfile} onSaved={onSaved} onFeedSaved={onFeedSaved} gen={gen} />
@@ -1740,7 +1751,7 @@ function TabOverview({ character, appearances, feedProfile, relationships, entan
         <TheirStory character={character} trail={trail} />
       </div>
       <div className="ch-col">
-        <TheirStats feedProfile={feedProfile} appearances={appearances} relationships={relationships} entanglements={entanglements} />
+        <TheirStats feedProfile={feedProfile} facts={facts} appearances={appearances} relationships={relationships} entanglements={entanglements} />
         <TheirVoice character={character} feedProfile={feedProfile} openTab={openTab} />
         <RecentActivity appearances={appearances} trail={trail} />
         <WithLala appearances={appearances} />
@@ -1751,8 +1762,14 @@ function TabOverview({ character, appearances, feedProfile, relationships, entan
   );
 }
 
+/** Their saved stage, and "ready to be …" when their fields already reach further (lib/characterPage depthStageOf). */
+export function aliveLine(character) {
+  const { level, ready } = depthStageOf(character);
+  return `${depthOf(level).step.label}${ready ? ` · ready to be ${depthOf(ready).step.label}` : ''}`;
+}
+
 /* ── Quick facts: who they are at a glance; Edit opens their names and facts ── */
-export function QuickFacts({ character, feedProfile, appearances, editing, onEdit }) {
+export function QuickFacts({ character, feedProfile, appearances, editing, onEdit, onFacts }) {
   const [facts, setFacts] = useState(null);
   const [type, setType] = useState(null);
   const id = character.id;
@@ -1761,7 +1778,11 @@ export function QuickFacts({ character, feedProfile, appearances, editing, onEdi
     if (editing) return undefined;
     let live = true;
     getFactsApi(id)
-      .then((res) => { if (live) setFacts(res.data?.facts || {}); })
+      .then((res) => {
+        if (!live) return;
+        setFacts(res.data?.facts || {});
+        onFacts?.(res.data?.facts || {});
+      })
       .catch((err) => {
         console.error('[CharacterProfilePage] quick facts load failed:', err);
         if (live) setFacts({});
@@ -1781,7 +1802,8 @@ export function QuickFacts({ character, feedProfile, appearances, editing, onEdi
   const rows = [
     { key: 'real', label: 'Real name', icon: IdCard, value: realNameOf(character, feedProfile) },
     { key: 'type', label: 'Type', icon: Crown, value: loading(type) },
-    { key: 'status', label: 'Status', icon: Heart, value: depthOf(depthLevelOf(character)).step.label },
+    // "How alive", not "Status": Settings' Status is draft / accepted / finalized (the profile audit, 2026-10-19).
+    { key: 'status', label: 'How alive', icon: Heart, value: aliveLine(character) },
     { key: 'first', label: 'First appearance', icon: CalendarDays, value: !appearances ? '…' : firstEp != null ? `Episode ${firstEp}` : null },
     { key: 'known', label: 'Known as', icon: Star, value: archetypeOf(feedProfile) },
     { key: 'role', label: 'Role', icon: Users, value: roleOf(character) },
@@ -1927,9 +1949,9 @@ export function ProfileImages({ character, onSaved }) {
 }
 
 /* ── Stats: counts the page already loads, nothing invented ─────────────────── */
-export function TheirStats({ feedProfile, appearances, relationships, entanglements }) {
+export function TheirStats({ feedProfile, facts = null, appearances, relationships, entanglements }) {
   const ties = listOf(relationships).length + listOf(entanglements).length;
-  const followers = feedProfile ? followersOf(feedProfile) : '';
+  const followers = followerLabelOf(facts, feedProfile);
   const stats = [
     { key: 'followers', label: 'Followers', value: followers || '—', icon: Users, tone: 'pink' },
     { key: 'posts', label: 'Posts', value: appearances?.feed?.posts ?? (appearances ? 0 : '…'), icon: FileText, tone: 'lavender' },
@@ -2509,6 +2531,17 @@ export function FeedBehavior({ character, feedProfile, appearances, onFeedSaved 
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
+  // The follower count from their facts (the ledger), as Quick facts shows it.
+  const [facts, setFacts] = useState(null);
+  const hasProfile = Boolean(feedProfile);
+  useEffect(() => {
+    if (!hasProfile) return undefined;
+    let live = true;
+    Promise.resolve(getFactsApi(character.id))
+      .then((res) => { if (live) setFacts(res?.data?.facts || null); })
+      .catch((err) => console.error('[CharacterProfilePage] feed behavior facts load failed:', err));
+    return () => { live = false; };
+  }, [character.id, hasProfile]);
   // Whether they are on the feed at all, not how their account is doing
   // (Evoni, 2026-10-16: it said "Active" beside "Gone Dark").
   const onFeed = character.social_presence || character.feed_profile_id;
@@ -2553,7 +2586,7 @@ export function FeedBehavior({ character, feedProfile, appearances, onFeedSaved 
   const tags = asList(feedProfile.aesthetic_dna?.vibe_tags);
   const tiles = [
     { key: 'freq', label: 'How often', icon: CalendarDays, text: textOf(feedProfile.post_frequency) },
-    { key: 'followers', label: 'Followers', icon: Users, text: followersOf(feedProfile) || null },
+    { key: 'followers', label: 'Followers', icon: Users, text: followerLabelOf(facts, feedProfile) || null },
     { key: 'posts', label: 'Posts', icon: FileText, text: appearances?.feed ? String(appearances.feed.posts ?? 0) : null },
     { key: 'state', label: 'Account', icon: TrendingUp, text: feedProfile.current_state ? ACCOUNT_STATES[feedProfile.current_state]?.label || words(feedProfile.current_state) : null },
   ].filter((t) => t.text);
@@ -3561,15 +3594,31 @@ export default function CharacterProfilePage() {
   const tabBarRef = useRef(null);
   const [loading, setLoading]             = useState(true);
   const [error, setError]                 = useState(null);
+  // An archived character opened by an ADMIN: shown with "Bring back" (the profile audit, 2026-10-19).
+  const [archived, setArchived]           = useState(false);
+  const [restoring, setRestoring]         = useState(null);
 
   const load = useCallback(async () => {
     if (!id) return;
     setLoading(true);
     setError(null);
     setAppearances(null);
+    setArchived(false);
     try {
+      // Everything starts at once (the profile audit, 2026-10-19): where they
+      // show up needs only the id, and their Pulse profile starts as soon as
+      // the character says which one, not after relationships and
+      // entanglements too.
+      getAppearancesApi(id)
+        .then((res) => setAppearances(res.data))
+        .catch((err) => { console.error('[CharacterProfilePage] appearances load failed:', err); setAppearances({ linked: false, events: [], episodes: [] }); });
+      const charP = getCharacterApi(id);
+      const feedP = charP.then((res) => {
+        const fid = (res.data?.character || res.data)?.feed_profile_id;
+        return fid ? getSocialProfileApi(fid) : null;
+      }).catch((err) => { console.error('[CharacterProfilePage] feed profile load failed:', err); return null; });
       const [charRes, relRes, entRes] = await Promise.all([
-        getCharacterApi(id),
+        charP,
         getCharacterRelationshipsApi(id).catch((err) => { console.error('[CharacterProfilePage] relationships load failed:', err); return null; }),
         getCharacterEntanglementsApi(id).catch((err) => { console.error('[CharacterProfilePage] entanglements load failed:', err); return null; }),
       ]);
@@ -3577,6 +3626,7 @@ export default function CharacterProfilePage() {
       const charData = charRes.data;
       const char = charData.character || charData;
       setCharacter(char);
+      setArchived(Boolean(charData.archived));
 
       if (relRes) {
         const relData = relRes.data;
@@ -3588,16 +3638,11 @@ export default function CharacterProfilePage() {
         setEntanglements(entData.entanglements || entData || []);
       }
 
-      // Where they show up (through the feed profile) and the profile itself.
-      getAppearancesApi(id)
-        .then((res) => setAppearances(res.data))
-        .catch((err) => { console.error('[CharacterProfilePage] appearances load failed:', err); setAppearances({ linked: false, events: [], episodes: [] }); });
-      if (char.feed_profile_id) {
-        const feedRes = await getSocialProfileApi(char.feed_profile_id).catch((err) => { console.error('[CharacterProfilePage] feed profile load failed:', err); return null; });
-        if (feedRes) {
-          const feedData = feedRes.data;
-          setFeedProfile(feedData.profile || feedData);
-        }
+      // Their profile, already on its way.
+      const feedRes = await feedP;
+      if (feedRes) {
+        const feedData = feedRes.data;
+        setFeedProfile(feedData.profile || feedData);
       }
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Character not found');
@@ -3608,10 +3653,23 @@ export default function CharacterProfilePage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // On a phone the tab bar scrolls sideways: keep the open tab in view.
+  // The breadcrumb names them (components/Breadcrumbs, lib/pageTitle).
+  const crumbName = character ? (character.display_name || character.selected_name || null) : null;
+  const crumbPath = `/character/${id}`;
   useEffect(() => {
-    const el = tabBarRef.current?.querySelector('.ch-tab.is-on');
-    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'nearest', inline: 'center' });
+    setPageTitle(crumbPath, crumbName);
+    return () => clearPageTitle(crumbPath);
+  }, [crumbPath, crumbName]);
+
+  // The tab bar scrolls sideways when its tabs don't fit: keep the open tab
+  // in view by scrolling the bar itself. scrollIntoView also scrolled the
+  // page's own layout sideways at laptop width (the profile audit, 2026-10-19).
+  useEffect(() => {
+    const bar = tabBarRef.current;
+    const el = bar?.querySelector('.ch-tab.is-on');
+    if (!bar || !el) return;
+    const target = el.offsetLeft - (bar.clientWidth - el.offsetWidth) / 2;
+    bar.scrollLeft = Math.max(0, target);
   }, [activeTab, loading]);
 
   const onSaved = useCallback((patch) => setCharacter((prev) => ({ ...prev, ...patch })), []);
@@ -3645,7 +3703,11 @@ export default function CharacterProfilePage() {
   // Their real name when known; else the name they go by.
   const socialName = feedProfile?.display_name || character.display_name || null;
   const name = realNameOf(character, feedProfile) || character.display_name || character.name || 'Unnamed';
-  const { index: depthIndex, step, next } = depthOf(depthLevelOf(character));
+  // The saved stage, with what their fields already reach beside it (lib/characterPage depthStageOf).
+  const { level: savedLevel, ready } = depthStageOf(character);
+  const { index: depthIndex, step } = depthOf(savedLevel);
+  // Deepen names the step after what their fields already reach.
+  const { next } = depthOf(ready || savedLevel);
   // Inner life shows its own note for the same run.
   const deepenNote = gen.note?.key === 'all' && activeTab !== 'inner' ? gen.note : null;
   const handle = feedProfile?.handle ? `@${feedProfile.handle.replace(/^@/, '')}` : null;
@@ -3660,6 +3722,23 @@ export default function CharacterProfilePage() {
 
   return (
     <div className="ch-page">
+      {archived && (
+        <div className="ch-archived" role="status" data-testid="ch-archived">
+          <strong>Archived.</strong> They are off The Cast and out of every writer until you bring them back.
+          <button type="button" className="ch-pill-btn" disabled={!!restoring} onClick={async () => {
+            setRestoring('busy');
+            try {
+              await restoreApi(character.id);
+              await load();
+              setRestoring(null);
+            } catch (err) {
+              console.error('[CharacterProfilePage] bring back failed:', err);
+              setRestoring(err.response?.data?.error || 'Could not bring them back.');
+            }
+          }}>{restoring === 'busy' ? 'Bringing back…' : 'Bring back'}</button>
+          {restoring && restoring !== 'busy' && <span className="ch-note is-error">{restoring}</span>}
+        </div>
+      )}
       <header className={`ch-hero${character.cover_url ? ' has-cover' : ''}`}>
         {character.cover_url && <img className="ch-hero-cover" src={character.cover_url} alt="" aria-hidden="true" />}
         <div className="ch-avatar" aria-hidden="true">
@@ -3709,6 +3788,7 @@ export default function CharacterProfilePage() {
               {gen.busy === 'all' ? 'Deepening… (about a minute)' : <>&uarr; Deepen to {next.label}</>}
             </button>
           )}
+          {ready && <p className="ch-note" data-testid="ch-ready">Ready to be {depthOf(ready).step.label}</p>}
           {deepenNote && <p className={`ch-note${deepenNote.error ? ' is-error' : ''}`} role="status">{deepenNote.text}</p>}
           <button type="button" className="ch-btn-export" onClick={exportJson}><Download size={16} aria-hidden /> Export Profile</button>
         </div>
@@ -3740,7 +3820,7 @@ export default function CharacterProfilePage() {
         {activeTab === 'world' && <TabWorld character={character} feedProfile={feedProfile} appearances={appearances} onSaved={onSaved} gen={gen} openTab={setActiveTab} />}
         {activeTab === 'places' && (
           <>
-            <div className="ch-card"><CharacterPlacesTab key={character.id} character={character} /></div>
+            <div className="ch-card"><CharacterPlacesTab key={character.id} character={character} appearances={appearances} /></div>
             <div className="ch-card"><CharacterGalleryTab key={character.id} character={character} openTab={setActiveTab} hide={['places']} /></div>
           </>
         )}

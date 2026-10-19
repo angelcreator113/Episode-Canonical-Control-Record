@@ -35,7 +35,9 @@ describe('Quick facts', () => {
     await waitFor(() => expect(card.textContent).toContain('Occupation'));
     await waitFor(() => expect(card.textContent).toContain('Designer'));
     const rows = within(card).getAllByRole('definition').map((dd) => dd.textContent);
-    expect(rows).toEqual(['Sable Okafor', '3w4, The Achiever', 'Active', 'Episode 1', 'Polished curator', 'Supporting', 'Designer', '28.4K (estimate)', 'Rising']);
+    // Their saved stage, with what their fields reach beside it, under "How alive" (the profile audit, 2026-10-19).
+    expect(rows).toEqual(['Sable Okafor', '3w4, The Achiever', 'Sparked · ready to be Active', 'Episode 1', 'Polished curator', 'Supporting', 'Designer', '28.4K (estimate)', 'Rising']);
+    expect(within(card).getAllByRole('term').map((dt) => dt.textContent)).toContain('How alive');
   });
 
   test('no type, no facts: Not set; Edit asks to open the editors, and closing reads the facts again', async () => {

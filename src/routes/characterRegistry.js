@@ -10,7 +10,7 @@ const express = require('express');
 const { SECTION_SCHEMAS } = require('../utils/characterSectionSchemas');
 const router = express.Router();
 
-const { requireAuth, userInGroup } = require('../middleware/auth');
+const { requireAuth, userInGroup, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { hideAuthorOnlyFieldsFromNonAdmins } = require('../middleware/authorOnlyFields');
 const { Op } = require('sequelize');
@@ -224,7 +224,8 @@ router.get('/registries/:id', requireAuth, async (req, res) => {
  * PUT /registries/:id
  * Update registry metadata
  */
-router.put('/registries/:id', requireAuth, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.put('/registries/:id', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { CharacterRegistry, RegistryCharacter } = getModels();
     const registry = await CharacterRegistry.findByPk(req.params.id);
@@ -468,8 +469,13 @@ router.get('/characters/scene-context/:characterKey', requireAuth, async (req, r
 router.get('/characters/:id', requireAuth, async (req, res) => {
   try {
     const { RegistryCharacter } = getModels();
-    const character = await RegistryCharacter.findByPk(req.params.id);
+    // An ADMIN opening an archived character's link gets it, flagged, so the
+    // page can offer "Bring back"; anyone else still gets 404 (the profile
+    // audit, 2026-10-19: an archived link was a dead end).
+    const admin = userInGroup(req.user, 'admin');
+    const character = await RegistryCharacter.findByPk(req.params.id, admin ? { paranoid: false } : {});
     if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+    if (typeof character.isSoftDeleted === 'function' && character.isSoftDeleted()) return res.json({ success: true, character, archived: true });
     return res.json({ success: true, character });
   } catch (err) {
     console.error('[CharacterRegistry] GET /characters/:id error:', err);
@@ -641,7 +647,8 @@ router.delete('/characters/:id/plot-threads/:threadId', requireAuth, async (req,
  * PUT /characters/:id
  * Update any character fields
  */
-router.put('/characters/:id', requireAuth, express.json(), async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.put('/characters/:id', requireAuth, authorize(['ADMIN']), express.json(), async (req, res) => {
   try {
     if (!req.body || typeof req.body !== 'object') {
       return res.status(400).json({ success: false, error: 'Request body is required' });
@@ -762,7 +769,8 @@ router.put('/characters/:id', requireAuth, express.json(), async (req, res) => {
  * DELETE /characters/:id
  * Soft-delete character
  */
-router.delete('/characters/:id', requireAuth, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.delete('/characters/:id', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { RegistryCharacter } = getModels();
     const character = await RegistryCharacter.findByPk(req.params.id);
@@ -892,7 +900,8 @@ router.post('/characters/:id/clone', requireAuth, async (req, res) => {
  * POST /characters/:id/select-name
  * Select one of the name_options
  */
-router.post('/characters/:id/select-name', requireAuth, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.post('/characters/:id/select-name', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { RegistryCharacter } = getModels();
     const character = await RegistryCharacter.findByPk(req.params.id);
@@ -916,7 +925,8 @@ router.post('/characters/:id/select-name', requireAuth, async (req, res) => {
  * POST /characters/:id/set-status
  * Accept / Decline / Finalize a character
  */
-router.post('/characters/:id/set-status', requireAuth, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.post('/characters/:id/set-status', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { RegistryCharacter } = getModels();
     const character = await RegistryCharacter.findByPk(req.params.id);
@@ -1268,7 +1278,8 @@ const portraitUpload = multer({
  * POST /characters/:id/portrait
  * Upload a portrait image for a character
  */
-router.post('/characters/:id/portrait', requireAuth, portraitUpload.single('portrait'), async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.post('/characters/:id/portrait', requireAuth, authorize(['ADMIN']), portraitUpload.single('portrait'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, error: 'No image uploaded' });
 
@@ -1306,7 +1317,8 @@ const onePhoto = (req, res, next) => photoUpload(req, res, (err) => {
   return res.status(400).json({ success: false, error: err.code === 'LIMIT_FILE_SIZE' ? 'The photo is 15 MB at most.' : err.message });
 });
 
-router.post('/characters/:id/photo', requireAuth, onePhoto, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.post('/characters/:id/photo', requireAuth, authorize(['ADMIN']), onePhoto, async (req, res) => {
   const { storePulseImage, PulseImageError } = require('../services/pulseImageService');
   try {
     const kind = PHOTO_KINDS[req.query.kind];
@@ -1325,7 +1337,8 @@ router.post('/characters/:id/photo', requireAuth, onePhoto, async (req, res) => 
   }
 });
 
-router.delete('/characters/:id/photo', requireAuth, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.delete('/characters/:id/photo', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const kind = PHOTO_KINDS[req.query.kind];
     if (!kind) return res.status(400).json({ success: false, error: 'kind is portrait or cover.', code: 'BAD_KIND' });
@@ -1345,7 +1358,8 @@ router.delete('/characters/:id/photo', requireAuth, async (req, res) => {
  * DELETE /characters/:id/portrait
  * Remove portrait image
  */
-router.delete('/characters/:id/portrait', requireAuth, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.delete('/characters/:id/portrait', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { RegistryCharacter } = getModels();
     const character = await RegistryCharacter.findByPk(req.params.id);
@@ -1956,7 +1970,8 @@ ${config.schema}`,
  * would write, for POST /interior/apply (Evoni, 2026-10-17, step 3: see
  * what Generate All would fill before it is saved).
  */
-router.post('/characters/:id/interior/generate', requireAuth, aiRateLimiter, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.post('/characters/:id/interior/generate', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   const { id } = req.params;
   const requested = req.body?.fields;
   const db = getModels();
@@ -2027,6 +2042,7 @@ router.post('/characters/:id/interior/generate', requireAuth, aiRateLimiter, asy
     });
   } catch (err) {
     console.error('[CharacterRegistry] POST /interior/generate error:', err);
+    if (require('../utils/aiFailure').aiFailure(res, err)) return undefined;
     return res.status(500).json({ error: err.message });
   }
 });
@@ -2065,7 +2081,8 @@ async function writeEmptyInterior(db, id, updates) {
  * and `skipped` (written meanwhile, or not a value the field takes).
  * Body: { values: { field: value } }.
  */
-router.post('/characters/:id/interior/apply', requireAuth, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.post('/characters/:id/interior/apply', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const { id } = req.params;
   const values = req.body?.values;
   const gen = require('../services/characterGenerationService');
@@ -2687,7 +2704,8 @@ Return ONLY a JSON object with 14 dimensions: life_stage, the_body, class_and_mo
  * POST /characters/:id/writer-paragraph/generate
  * Generate a writer-friendly narrative paragraph from the character's deep_profile + registry data.
  */
-router.post('/characters/:id/writer-paragraph/generate', requireAuth, aiRateLimiter, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.post('/characters/:id/writer-paragraph/generate', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   const { id } = req.params;
   const db = getModels();
   try {
@@ -2724,10 +2742,17 @@ router.post('/characters/:id/writer-paragraph/generate', requireAuth, aiRateLimi
 
     // Their facts (Character Consistency Engine step 5): the portrait agrees with them.
     const { block: factsBlock } = await require('../services/characterFile').characterFilePrompt(db, { character });
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2000,
-      system: `You are writing a rich, literary character paragraph for a writer's reference.
+    // The house loop: MODELS with a second attempt, no second try after a
+    // budget refusal (the profile audit, 2026-10-19).
+    const MODELS = ['claude-sonnet-4-6'];
+    let response;
+    for (let attempt = 0; attempt < 2 && !response; attempt++) {
+      for (const model of MODELS) {
+        try {
+          response = await anthropic.messages.create({
+            model,
+            max_tokens: 2000,
+            system: `You are writing a rich, literary character paragraph for a writer's reference.
 
 CHARACTER REGISTRY DATA:
 ${JSON.stringify(charData, null, 2)}
@@ -2735,8 +2760,15 @@ ${factsBlock ? `\n${factsBlock}\n` : ''}
 ${hasProfile ? `DEEP PROFILE (14-dimension anthropology):\n${JSON.stringify(dp, null, 2)}` : 'No deep profile available — work only with registry data.'}
 
 Write a single, flowing paragraph (200–400 words) that captures who this person IS — not a list of traits but a lived-in portrait. Write it as a writer's reference paragraph, the kind of text a novelist pins above their desk. Include specific sensory details, behavioral tells, contradictions, and emotional textures. Do NOT use bullet points, headers, or labels. Write prose.`,
-      messages: [{ role: 'user', content: `Write the writer paragraph for ${charData.name || 'this character'}.` }],
-    });
+            messages: [{ role: 'user', content: `Write the writer paragraph for ${charData.name || 'this character'}.` }],
+          });
+          break;
+        } catch (modelErr) {
+          console.warn(`[CharacterRegistry] writer paragraph with ${model}, attempt ${attempt + 1}, failed:`, modelErr.message);
+          if (modelErr.code === 'AI_BUDGET_EXCEEDED' || attempt === 1) throw modelErr;
+        }
+      }
+    }
 
     const paragraph = extractAIText(response).trim();
 
@@ -2748,6 +2780,7 @@ Write a single, flowing paragraph (200–400 words) that captures who this perso
     });
   } catch (err) {
     console.error('[CharacterRegistry] POST /writer-paragraph/generate error:', err);
+    if (require('../utils/aiFailure').aiFailure(res, err)) return undefined;
     return res.status(500).json({ error: err.message });
   }
 });
