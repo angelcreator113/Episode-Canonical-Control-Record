@@ -344,11 +344,25 @@ async function cost(db, { end }) {
   const features = await rows(db, `SELECT COALESCE(route_name, 'other') AS feature, SUM(cost_usd) AS usd, COUNT(*) AS calls
     FROM ai_usage_logs WHERE created_at >= :day GROUP BY COALESCE(route_name, 'other') ORDER BY usd DESC LIMIT 8`, { day }, 'AI usage');
   const budget = tracker.DAILY_BUDGET;
+  // Both budgets the gates enforce, and a warning past 80% (the cost page,
+  // Evoni 2026-10-19). Never fails the daily update.
+  let budgets = null;
+  let alerts = [];
+  try {
+    const co = require('./costOverview');
+    budgets = await co.todayBudgets();
+    alerts = co.budgetAlerts(budgets);
+  } catch (err) {
+    console.error('[dailyUpdate] today\'s budgets could not be read:', err.message);
+  }
   return {
     spent_usd: Math.round(spent * 100) / 100,
     budget_usd: budget,
     left_usd: Math.max(0, Math.round((budget - spent) * 100) / 100),
     share: budget ? Math.min(1, spent / budget) : 0,
+    image_spent_usd: budgets ? Math.round(budgets.images.spent_usd * 100) / 100 : null,
+    image_budget_usd: budgets ? budgets.images.cap_usd : null,
+    alerts,
     features: features.map((f) => ({ feature: f.feature, usd: Math.round(num(f.usd) * 100) / 100, calls: num(f.calls) })),
   };
 }

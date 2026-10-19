@@ -7,11 +7,14 @@
  * GET /api/v1/ai-usage/daily          — daily spend chart data
  * GET /api/v1/ai-usage/recent         — last N API calls
  * GET /api/v1/ai-usage/optimizations  — cost-saving recommendations
+ * GET /api/v1/ai-usage/cost-overview  — ADMIN: today against both daily
+ *                                       budgets, spend by feature, post
+ *                                       pictures, the last N days (services/costOverview)
  */
 
 const express = require('express');
 const { Op } = require('sequelize');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -33,6 +36,19 @@ function getDaysFilter(req) {
     created_at: { [Op.gte]: new Date(Date.now() - days * 86400000) },
   };
 }
+
+// ─── GET /cost-overview ────────────────────────────────────────
+// The cost page (Evoni, 2026-10-19): ADMIN only. Reads ai_usage_logs only.
+router.get('/cost-overview', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const { costOverview } = require('../services/costOverview');
+    const data = await costOverview(getDb(), { days: req.query.days });
+    return res.json({ success: true, data });
+  } catch (err) {
+    console.error('[AI Usage] cost-overview error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // ─── GET /summary ──────────────────────────────────────────────
 router.get('/summary', requireAuth, async (req, res) => {
