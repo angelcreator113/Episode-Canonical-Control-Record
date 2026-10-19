@@ -13,6 +13,8 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
+const auth = { user: { groups: ['admin'] } };
+vi.mock('../contexts/AuthContext', () => ({ useAuth: () => auth }));
 
 import api from '../services/api';
 import CharacterRegistryPage, { chooseRegistry, duplicateIn } from './CharacterRegistryPage';
@@ -307,5 +309,17 @@ describe('CharacterRegistryPage: Make one for me (Evoni, 2026-10-19)', () => {
     })));
     const sent = api.post.mock.calls.find((c) => c[0].endsWith('/characters'))[1];
     expect(sent.pulse).toBeUndefined();
+  });
+
+  test('a signed-in non-admin does not see the button', async () => {
+    auth.user = { groups: ['user'] };
+    try {
+      renderAt();
+      await waitFor(() => expect(cardNames().length).toBeGreaterThan(0));
+      expect(screen.getByTestId('new-character')).toBeTruthy();
+      expect(screen.queryByTestId('make-for-me')).toBeNull();
+    } finally {
+      auth.user = { groups: ['admin'] };
+    }
   });
 });
