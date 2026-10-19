@@ -14,6 +14,7 @@
 
 import { headerNumber, BEAT_SPLIT, HAS_BEAT_HEADER, normalizeBeatHeaders } from './beatLabelNumber';
 import { speakerLine } from './scriptSpeaker';
+import { isCutsceneBeat, CUTSCENE_UNTIL } from './scriptShowRules';
 
 // `[ui:open closet]` is a moment too (Script tab re-audit, 2026-10-15: it was
 // hidden on the tab, yet counted in the runtime and the export).
@@ -242,17 +243,25 @@ const isStartButton = (moment) => /^start(button)?$/.test(normKey(moment?.target
 
 /**
  * Whether the phone is on screen as a beat starts: always from beat 2 through
- * beat 10 (the show's rule above), down from beat 11 on unless the script
- * brings it back, and otherwise as the beat before left it (`carried`).
+ * beat 10 (the show's rule above); never in the cutscene, beats 11-13 (Evoni,
+ * 2026-10-19: an AI video, the characters speaking; no phone); up again in
+ * beat 14, back to gameplay, after the cutscene; otherwise as the beat before
+ * left it (`carried`).
  */
 export function phoneUpAtBeat(beatNumber, carried = false, prevNumber = null) {
   const n = Number(beatNumber);
   if (n >= PHONE_UP_FROM_BEAT && n <= PHONE_UP_UNTIL_BEAT) return true;
-  if (n > PHONE_UP_UNTIL_BEAT && (prevNumber === null || Number(prevNumber) <= PHONE_UP_UNTIL_BEAT)) return false;
+  if (isCutsceneBeat(n)) return false;
+  if (n > CUTSCENE_UNTIL && (prevNumber === null || Number(prevNumber) <= CUTSCENE_UNTIL)) return true;
   return carried;
 }
 
-export function beatOnScreen(lines = [], on = {}, { phoneUp = false } = {}) {
+// In the cutscene (`cutscene`: beats 11-13) a phone screen, an icon tap or
+// the phone coming up is listed in phoneDownAt and puts nothing on screen:
+// there is no phone in the video. Overlays on the video (the stats panel)
+// still show.
+export function beatOnScreen(lines = [], on = {}, { phoneUp = false, cutscene = false } = {}) {
+  if (cutscene) phoneUp = false;
   const showing = new Map(); // name -> kind, in the order they came on
   if (phoneUp) showing.set(PHONE_NAME, 'device');
   let up = phoneUp;
@@ -265,6 +274,11 @@ export function beatOnScreen(lines = [], on = {}, { phoneUp = false } = {}) {
     const shown = resolveMoment(moment, on);
     const name = shown ? shown.name : moment.target;
     if (shown && !used.has(name)) used.set(name, shown);
+    if (cutscene && (shown?.kind === 'icon' || shown?.kind === 'phone' || (shown?.kind === 'device' && DEVICE_ON.has(moment.verb)) || isStartButton(moment))) {
+      phoneDownAt.push(i);
+      withByLine[i] = [...showing.keys()];
+      return;
+    }
     // The Start button brings the phone up (the show's rule above).
     if (isStartButton(moment) && !up) { up = true; showing.set(PHONE_NAME, 'device'); }
     if (shown?.kind === 'icon') {
@@ -322,7 +336,7 @@ export const EXPECTED_ON_SCREEN = {
   9: { action: 'TODO_LIST', what: 'The to-do list', where: "Lala's Phone" },
   10: { action: 'LOCATION_ICON', what: 'The location', where: "Lala's Phone" },
   11: { action: 'ARRIVAL', what: 'Arriving', where: "Lala's Environment" },
-  12: { action: 'FASHION_CHALLENGE', what: 'The fashion challenge', where: "Lala's Phone" },
+  12: { action: 'FASHION_CHALLENGE', what: 'The fashion challenge', where: "Lala's Environment" },
   13: { action: 'STATS_UPDATE', what: 'The stats update', where: 'Full Screen' },
   14: { action: 'FADE_OUT', what: 'The fade out', where: 'Full Screen' },
 };
@@ -456,11 +470,14 @@ export function phoneStartScreens(beats = [], on = {}) {
   let at = null;
   let up = false;
   (beats || []).forEach((b, i) => {
-    const upAtStart = phoneUpAtBeat(b?.number, up, i > 0 ? beats[i - 1]?.number ?? null : null);
-    if (!upAtStart) at = null;
+    const prev = i > 0 ? beats[i - 1]?.number ?? null : null;
+    const upAtStart = phoneUpAtBeat(b?.number, up, prev);
+    // Back from the cutscene, the phone starts at home.
+    if (!upAtStart || isCutsceneBeat(prev)) at = null;
     starts[i] = at;
-    at = phoneCheck(b?.lines || [], on, { startAt: at }).endAt;
-    up = beatOnScreen(b?.lines || [], on, { phoneUp: upAtStart }).phoneUpAtEnd;
+    const cutscene = isCutsceneBeat(b?.number);
+    at = cutscene ? null : phoneCheck(b?.lines || [], on, { startAt: at }).endAt;
+    up = beatOnScreen(b?.lines || [], on, { phoneUp: upAtStart, cutscene }).phoneUpAtEnd;
   });
   return starts;
 }

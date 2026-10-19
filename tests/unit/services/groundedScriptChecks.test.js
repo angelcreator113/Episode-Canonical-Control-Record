@@ -53,12 +53,20 @@ describe('generateGroundedBeat runs the fixes after writing', () => {
     expect(beat).not.toContain('[UI:CLICK');
   });
 
-  test('another beat with a wear cue is not charged; her line gets its click', async () => {
+  test('another beat with a wear cue is not charged; in the cutscene her line gets no click', async () => {
     const create = jest.fn(async () => ({ content: [{ text: '## BEAT: 12 · Fashion Challenge\n[UI:OPEN Closet]\n[WEAR: jacket-1]\n[UI:CLOSE Closet]\nMe: wow\nLala: the room is mine' }] }));
     const { generateGroundedBeat } = withReply(create);
     const beat = await generateGroundedBeat('ep1', 'show-1', models(), { beatNumber: 12, currentScript: '## BEAT: 8 · Transformation Loop\n[UI:OPEN Closet]\n[WEAR: jacket-1]' });
     expect(beat).not.toContain('[STAT: coins');
-    expect(beat).toContain('[UI:CLICK Voice Icon]\nLala: the room is mine');
+    // Beats 11-13 are the cutscene (Evoni, 2026-10-19).
+    expect(beat).not.toContain('[UI:CLICK');
+  });
+
+  test('beat 14, gameplay again, gets the click', async () => {
+    const create = jest.fn(async () => ({ content: [{ text: '## BEAT: 14 · Cliffhanger\nMe: wait\nLala: who is that' }] }));
+    const { generateGroundedBeat } = withReply(create);
+    const beat = await generateGroundedBeat('ep1', 'show-1', models(), { beatNumber: 14, currentScript: '' });
+    expect(beat).toContain('[UI:CLICK Voice Icon]\nLala: who is that');
   });
 
   test('beat 5 gets the invitation letter', async () => {

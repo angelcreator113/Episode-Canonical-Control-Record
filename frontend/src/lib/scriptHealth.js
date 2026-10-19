@@ -7,7 +7,7 @@
  * open one.
  */
 import { phoneCheck, phoneStartScreens, uncuedPieces, wearFlags, dealCueFlags, lastGettingReadyIndex } from './scriptMoments';
-import { REVEAL_BEAT, voiceOffLines, revealCheck } from './scriptShowRules';
+import { REVEAL_BEAT, voiceOffLines, revealCheck, isCutsceneBeat } from './scriptShowRules';
 
 const list = (items) => (items.length <= 2 ? items.join(' and ') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`);
 const plural = (n, one, many) => (n === 1 ? one : many);
@@ -73,7 +73,9 @@ export function scriptHealth({
   // Lala's voice (Evoni, 2026-10-17; lib/scriptShowRules): she talks only
   // after her voice icon is clicked, unless she answers a notification or
   // message, or is being dressed.
-  const quiet = beats.map((b, i) => ({ b, i, off: voiceOffLines(b.lines || []) })).filter((x) => x.off.length);
+  // Not in the cutscene, beats 11-13, where the characters speak their own
+  // lines (Evoni, 2026-10-19).
+  const quiet = beats.map((b, i) => ({ b, i, off: isCutsceneBeat(b.number) ? [] : voiceOffLines(b.lines || []) })).filter((x) => x.off.length);
   for (const { b, i, off } of quiet) {
     rows.push({
       key: `voice-${b.id || i}`, ok: false, beatId: b.id || null,

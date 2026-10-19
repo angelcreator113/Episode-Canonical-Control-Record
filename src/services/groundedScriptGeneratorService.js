@@ -622,6 +622,29 @@ function seasonPurposeLines(sc) {
     ...purposes.map((p, n) => `${n + 1}. ${p.primary ? '[Primary] ' : ''}${p.text}${p.story_thread ? ` (thread: ${p.story_thread})` : ''}`)].join('\n');
 }
 
+// Who Lala talks with when the cutscene begins (Evoni, 2026-10-19: "beat 11
+// is when the cutscene begins, she should have a conversation with the host
+// and 2 featured guest"): the event's host (its creator organizer, else its
+// host field) and its first two featured guests
+// (canon_consequences.automation.guest_profiles, `featured`; all guests when
+// none is featured). A line for the prompt.
+function cutsceneCast(eventData) {
+  let cc = eventData?.canon_consequences;
+  if (typeof cc === 'string') {
+    try { cc = JSON.parse(cc); } catch (err) { console.error('[ScriptGen] canon_consequences is not valid JSON:', err.message); cc = null; }
+  }
+  const guests = Array.isArray(cc?.automation?.guest_profiles) ? cc.automation.guest_profiles.filter(Boolean) : [];
+  const featured = guests.filter((g) => g.featured);
+  const named = (featured.length ? featured : guests).map((g) => g.display_name || g.handle).filter(Boolean).slice(0, 2);
+  let organizer = null;
+  try { organizer = require('../utils/eventOrganizer').eventCreatorOrganizer(eventData); } catch (err) { console.error('[ScriptGen] event organizer read failed (non-blocking):', err.message); }
+  const host = organizer?.displayName || organizer?.handle || eventData?.host || null;
+  const hostText = host ? `the host, ${host}${eventData?.host_brand ? ` (${eventData.host_brand})` : ''}` : "the event's host";
+  const guestText = named.length === 2 ? `the two featured guests, ${named[0]} and ${named[1]}`
+    : named.length === 1 ? `the featured guest ${named[0]} and one more featured guest` : 'two featured guests of the event';
+  return `${hostText} and ${guestText}`;
+}
+
 function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext = null, onScreen = [], story = null, phone = null, worldNow = '', money = null, beat14 = null }, { only = null, lockedBeats = [] } = {}) {
   // Every canonical beat, in order, whether or not the plan has its row
   // (§8(j): Generate Script instantiates all 14; it never invents its own).
@@ -739,7 +762,7 @@ ${eventContext}
 ${statsContext ? `═══ LALA'S STATE ═══\n${statsContext}\n` : ''}${worldNow}${told.text}
 ═══ WARDROBE ═══
 ${wardrobeContext}
-${outfitScore ? `\n═══ LOCKED OUTFIT ═══\nLala is wearing ${outfitScore.count} pieces for this event:\n${outfitScore.items.map(i => `- ${i.name} (${i.clothing_category}, ${i.tier})${i.id ? ` [WEAR: ${i.id}]` : ''}`).join('\n')}\nBeat 8 (Transformation): Reference these SPECIFIC items by name as Lala gets dressed. Right after the line where she puts a piece on, write that piece's [WEAR: id] line exactly as shown above, once per piece.\nBeat 11 (Event Outcome): Her outfit choice affects how the event goes — she is wearing what she chose.` : ''}
+${outfitScore ? `\n═══ LOCKED OUTFIT ═══\nLala is wearing ${outfitScore.count} pieces for this event:\n${outfitScore.items.map(i => `- ${i.name} (${i.clothing_category}, ${i.tier})${i.id ? ` [WEAR: ${i.id}]` : ''}`).join('\n')}\nBeat 8 (Transformation): Reference these SPECIFIC items by name as Lala gets dressed. Right after the line where she puts a piece on, write that piece's [WEAR: id] line exactly as shown above, once per piece.\nBeat 11 (Event Outcome): Her outfit choice affects how the event goes — she is wearing what she chose, on camera in the cutscene.` : ''}
 ${moneyText(money)}${require('./beat14Opportunity').beat14Context(beat14, brief?.designed_intent || null)}${onScreenContext(onScreen)}${phone ? require('../utils/phonePaths').phoneMapContext(phone) : ''}${layersText({ brief, eventData, seasonContext, story })}
 
 ═══ SCENE PLAN — 14 BEATS ═══
@@ -787,16 +810,21 @@ JustAWoman (Me:) is playing the game on camera from her corner: she sees the gam
   - player actions: the [UI:] lines she makes happen, and her hesitation, (hovers over Confirm, then pulls back);
   - sound and edit cues, optional: [SFX: notification ping], [EDIT: punch-in on her corner frame].
 - Two modes. While playing (beats 1–12) she is emotionally involved and invested in Lala's business: "We cannot afford to embarrass ourselves tonight." While reviewing (beats 13–14) she briefly evaluates what happened: "That warning came after I spent the coins. You could've told me sooner." Write new lines; never reuse these.
+- In the cutscene (beats 11–13) she is still on screen, watching it play like a cutscene in a video game: she comments a little between the characters' lines, a reaction here and there, never narrating every line, and she clicks nothing.
 - Vary her energy and leave room to watch: let Lala's line finish before she reacts, and at least once let Lala's scene play while she watches in silence, (JustAWoman watches, silent.).
 - She may talk to viewers as "besties" or "chat" and ask them to comment, but never invents viewer messages or comments.
 - Her humor, opinions, small grudges, favorite characters and investment in Lala carry on from PREVIOUS EPISODE when it is given; never invent a past grudge or favorite.
 
 ═══ SHOW RULES ═══
-- Lala's phone is on screen from the moment the Start button is clicked in Beat 1 until she travels to the event in Beat 10. Never write [UI:SHOW phone] or [UI:HIDE phone] in between; the phone is already there.
+- Beats 1–10 are gameplay: everything stems from Lala's phone. It is on screen from the moment the Start button is clicked in Beat 1 until she travels to the event in Beat 10. Never write [UI:SHOW phone] or [UI:HIDE phone] in between; the phone is already there.
+- Beats 11–13 are the cutscene: an AI video, like a play moment in a video game, where the characters say their own lines to each other: Lala, ${cutsceneCast(eventData)}, and anyone else present, each as their name: [their words]. No phone and no phone UI: no [UI:SHOW phone], [UI:CLICK …], [UI:OPEN …] or [UI:SCROLL …] of phone screens, and no voice-icon click. What the video shows goes in (parentheses). Overlays that sit on the video are allowed: [UI:DISPLAY Stats Panel] / [UI:HIDE Stats Panel], and [TRANSITION: …]. JustAWoman (Me:) stays on screen and comments a little between their lines.
+- Beat 11 (Event Outcome): the cutscene begins. Lala has a real conversation with ${cutsceneCast(eventData)}.
+- Beat 13 (Recap Panel): still the cutscene, with [UI:DISPLAY Stats Panel] over the video. The event's own costs come off here only (unless covered); what she is owed is paid next episode, so never a + coin line in this episode. Lala says how it went in her own words.
+- Beat 14 (Cliffhanger): back to gameplay: her phone and the voice icon again.
 - Beat 5 (Reveal): the invitation letter comes up, ${showRules.invitationLine(rulesOn)}, never the login screen or the Start button (those are beats 1 and 2). JAWIHP reads the whole invitation aloud, every word of it, not a summary.
-- Lala talks only after JustAWoman clicks her voice icon: ${`[UI:CLICK ${showRules.voiceIconName(rulesOn.icons)}]`} on its own line right before every line Lala says: one click, one line. No click is needed for the line where she answers a notification or message ([UI:NOTIFY …], [UI:DM …]), or while she is being dressed (the closet, [WEAR:] lines). Her thoughts, Lala (V.O.):, need no click.
+- In the gameplay beats (1–10 and 14) Lala talks only after JustAWoman clicks her voice icon: ${`[UI:CLICK ${showRules.voiceIconName(rulesOn.icons)}]`} on its own line right before every line Lala says: one click, one line. In the cutscene (11–13) she speaks with no click. No click is needed for the line where she answers a notification or message ([UI:NOTIFY …], [UI:DM …]), or while she is being dressed (the closet, [WEAR:] lines). Her thoughts, Lala (V.O.):, need no click.
 - Beat 8 (Transformation Loop): every piece of the look is picked and put on one at a time: its own pick, its own line, its own [WEAR: id] line, and its own coin line right after when it costs her (LALA'S COINS). Never several pieces at once.
-- Beat 12 (Fashion Challenge): someone at the event sets Lala a styling challenge; her phone comes back for it ([UI:SHOW phone], the closet) and goes away after ([UI:HIDE phone]). Each piece of the challenge look is picked and put on one at a time; [WEAR: id] only for pieces of her locked look, and a piece the studio or brand lends is named in an action line and costs her nothing. The room's verdict moves her standing with [STAT: reputation ±n], [STAT: brand_trust ±n], [STAT: influence ±n] and [STAT: stress ±n] lines, never coins.
+- Beat 12 (Fashion Challenge): still the cutscene. The challenge is a surprise runway walk at the event: stage it (a model doesn't show, and Lala is asked to walk), in the characters' own lines and (actions); no phone, no closet, no coin line. Anything the brand hands her to wear is named in an action line and costs her nothing. She may film the brand's reel here too, but it need not be shown. The room's verdict moves her standing with [STAT: reputation ±n], [STAT: brand_trust ±n], [STAT: influence ±n] and [STAT: stress ±n] lines, never coins.
 ${only ? `═══ THE SCRIPT AS IT STANDS ═══
 ${only.currentScript.trim() || '(empty)'}
 

@@ -27,7 +27,7 @@ function moneyContext(money) {
   if (money.balanceBefore != null || money.look.length) {
     const spent = money.look.reduce((n, p) => n + p.amount, 0);
     out.push("═══ LALA'S COINS ═══");
-    if (money.balanceBefore != null) out.push(`Lala starts this episode with ${coins(money.balanceBefore)} coins. Every change to her coins is a [STAT: coins ±n] line; the Script tab adds them up from this number, so never say any other balance.`);
+    if (money.balanceBefore != null) out.push(`Lala starts this episode with ${coins(money.balanceBefore)} coins. Every change to her coins is a [STAT: coins -n] line, a cost: what she is owed is paid next episode, so never a + coin line in this one (Evoni, 2026-10-19); the Script tab adds them up from this number, so never say any other balance.`);
     if (money.look.length) {
       out.push('Her look costs her, piece by piece, as it goes on in the closet (Beat 8): right after the piece\'s [WEAR: id] line, its own coin line, exactly as written here:');
       for (const p of money.look) out.push(`- ${p.name}${p.id ? ` [WEAR: ${p.id}]` : ''}: [STAT: coins -${p.amount}]`);
