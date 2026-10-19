@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   Calendar, Camera, Clapperboard, Compass, Home, ImagePlus, Inbox, MapPin, MessageCircle,
-  PlusSquare, Search, User, Users, X,
+  PlusSquare, Search, User, Users,
 } from 'lucide-react';
 import api from '../services/api';
 import useActiveShow from '../hooks/useActiveShow';
@@ -15,6 +15,7 @@ import { addPhotos, photosFormData, MAX_PHOTOS } from '../lib/composerPhotos';
 import PulseStories, { recentPosters } from '../components/Pulse/PulseStories';
 import PulseCity from '../components/Pulse/PulseCity';
 import PulseMessages from '../components/Pulse/PulseMessages';
+import PulsePerson from '../components/Pulse/PulsePerson';
 import { CitiesCard, CityStrip, TrendingCard, UpcomingCard, UpcomingRow, LatestFitCard, UPLOADS } from '../components/Pulse/PulseSides';
 import { RevealChip } from '../components/Pulse/PulseReveal';
 import { revealKey, loadRevealLabels } from '../lib/pulseReveals';
@@ -50,6 +51,8 @@ export { Reactions, BeatPicker, PostCard } from '../components/Admin/PulseReview
  * Views (?tab=): posts (Feed, default), events, people (Characters), profile,
  * messages (Lala's DMs at the story moment, Task 2985), cities (Dream
  * Cities; ?city=<key> opens one city's feed and local trends, Task 2987).
+ * ?tab=profile&who=<handle> is someone else's profile (PulsePerson; Evoni,
+ * 2026-10-19): tapping a person's photo or name anywhere here opens it.
  * The old ?layer= and ?profile= links open Characters, as they always did.
  */
 
@@ -290,12 +293,11 @@ function Composer({ show, lala, director, onShared }) {
   );
 }
 
-function Feed({ show, lala, director, search, cities, labels, cityStates, viewAt, onCity }) {
+function Feed({ show, lala, director, search, cities, labels, cityStates, viewAt, onCity, onPerson }) {
   const [posts, setPosts] = useState([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [person, setPerson] = useState(null); // { handle, name } the feed is filtered to
 
   const load = useCallback(async (offset = 0) => {
     if (!show?.id) return;
@@ -318,33 +320,26 @@ function Feed({ show, lala, director, search, cities, labels, cityStates, viewAt
   const lalaHandle = owner?.handle || 'lala';
   const people = useMemo(() => recentPosters(posts, { lalaHandle }), [posts, lalaHandle]);
   const lalaStory = { handle: lalaHandle, name: owner?.display_name || 'Lala', photo: lala?.portrait_url || null, city: lala?.home_city || null };
-  const pick = (handle, name) => setPerson((cur) => (cur?.handle === handle ? null : { handle, name }));
 
   const q = search.trim().toLowerCase();
-  const byPerson = person ? posts.filter((p) => (p.poster_handle || p.socialProfile?.handle) === person.handle) : posts;
   const visible = q
-    ? byPerson.filter((p) => (p.content_text || '').toLowerCase().includes(q) || posterOf(p).name.toLowerCase().includes(q) || posterOf(p).handle.toLowerCase().includes(q))
-    : byPerson;
+    ? posts.filter((p) => (p.content_text || '').toLowerCase().includes(q) || posterOf(p).name.toLowerCase().includes(q) || posterOf(p).handle.toLowerCase().includes(q))
+    : posts;
 
   return (
     <>
-      <PulseStories lala={lalaStory} people={people} cities={cities} active={person?.handle} onPerson={pick} cityStates={cityStates} onCity={onCity} />
+      {/* A person in the stories row opens their profile (Evoni, 2026-10-19); their posts are there. */}
+      <PulseStories lala={lalaStory} people={people} cities={cities} active={null} onPerson={onPerson} cityStates={cityStates} onCity={onCity} />
       <CityStrip cities={cities} onCity={onCity} />
       <Composer show={show} lala={lala} director={director} />
-      {person && (
-        <p className="pl-filter" data-testid="pl-filter">
-          Showing {person.name}
-          <button type="button" aria-label={`Show everyone, not only ${person.name}`} onClick={() => setPerson(null)}><X size={14} aria-hidden="true" /></button>
-        </p>
-      )}
       {error && <p className="pl-error" role="alert">{error}</p>}
       {loading && posts.length === 0 && <p className="pl-quiet">Loading…</p>}
       {!loading && !error && posts.length === 0 && <p className="pl-empty" data-testid="pl-empty">Nothing posted yet.</p>}
       {!loading && posts.length > 0 && visible.length === 0 && (
-        <p className="pl-empty">{q ? `No posts match “${search.trim()}”.` : `Nothing from ${person?.name} yet.`}</p>
+        <p className="pl-empty">{`No posts match “${search.trim()}”.`}</p>
       )}
       {visible.map((p) => (
-        <PulsePost key={p.id} post={p} onCity={onCity}
+        <PulsePost key={p.id} post={p} onCity={onCity} onPerson={onPerson}
           revealLabel={director ? (labels?.get(revealKey('post', p.id)) || labels?.get(revealKey('image', p.id, 'post_photo'))) : null} />
       ))}
       {hasMore && !loading && <button type="button" className="pl-button pl-more" onClick={() => load(posts.length)}>Older posts</button>}
@@ -362,7 +357,16 @@ function EventsView({ events }) {
   );
 }
 
-function CharactersView({ show, director, viewAt }) {
+/** A person's photo and name that opens their Pulse profile (Evoni, 2026-10-19). */
+function PersonOpen({ person, size, onPerson, children = null }) {
+  const name = person.display_name || person.handle;
+  const inner = <><Avatar name={name} url={person.portrait_url} size={size} />{children || <b>{name}</b>}</>;
+  return person.handle && onPerson
+    ? <button type="button" className="pl-person-open" onClick={() => onPerson(person.handle, name)} aria-label={`Open ${name}'s profile`}>{inner}</button>
+    : inner;
+}
+
+function CharactersView({ show, director, viewAt, onPerson }) {
   const [friends, setFriends] = useState(null);
   useEffect(() => {
     if (!show?.id) return undefined;
@@ -387,8 +391,9 @@ function CharactersView({ show, director, viewAt }) {
         <ul className="pl-people">
           {friends.list.map((p) => (
             <li key={p.id} className="pl-person" data-testid="pl-friend">
-              <Avatar name={p.display_name || p.handle} size={40} />
-              <span><b>{p.display_name || p.handle}</b>{p.handle && <small className="pl-meta">@{String(p.handle).replace(/^@/, '')}</small>}</span>
+              <PersonOpen person={p} size={40} onPerson={onPerson}>
+                <span><b>{p.display_name || p.handle}</b>{p.handle && <small className="pl-meta">@{String(p.handle).replace(/^@/, '')}</small>}</span>
+              </PersonOpen>
               {director && <Link className="pl-studio-link" to={profileHome(p)}>Open profile</Link>}
             </li>
           ))}
@@ -399,7 +404,7 @@ function CharactersView({ show, director, viewAt }) {
   );
 }
 
-function ProfileView({ lala, relationship, director }) {
+function ProfileView({ lala, relationship, director, onPerson }) {
   const owner = lala?.profile || null;
   const name = owner?.display_name || 'Lala';
   const friends = lala?.friends;
@@ -422,7 +427,11 @@ function ProfileView({ lala, relationship, director }) {
         <>
           <p className="pl-nav-label">Friends · {friends.total}</p>
           <ul className="pl-friend-grid">
-            {friends.list.map((p) => <li key={p.id} data-testid="pl-profile-friend"><Avatar name={p.display_name || p.handle} size={44} /><span>{p.display_name || p.handle}</span></li>)}
+            {friends.list.map((p) => (
+              <li key={p.id} data-testid="pl-profile-friend">
+                <PersonOpen person={p} size={44} onPerson={onPerson}><span>{p.display_name || p.handle}</span></PersonOpen>
+              </li>
+            ))}
           </ul>
         </>
       )}
@@ -431,7 +440,7 @@ function ProfileView({ lala, relationship, director }) {
   );
 }
 
-function RightColumn({ cities, trending, events, mayKnow, director, labels, cityStates, onCity }) {
+function RightColumn({ cities, trending, events, mayKnow, director, labels, cityStates, onCity, onPerson }) {
   return (
     <>
       <CitiesCard cities={cities} director={director} states={cityStates} labels={labels} onCity={onCity} />
@@ -441,7 +450,7 @@ function RightColumn({ cities, trending, events, mayKnow, director, labels, city
         <section className="pl-card" aria-labelledby="pl-may-know-heading" data-testid="pl-may-know">
           <h2 id="pl-may-know-heading" className="pl-card-title">People you may know</h2>
           <ul className="pl-people">
-            {mayKnow.map((p) => <li key={p.id} className="pl-person" data-testid="pl-may-know-person"><Avatar name={p.display_name || p.handle} size={36} /><b>{p.display_name || p.handle}</b></li>)}
+            {mayKnow.map((p) => <li key={p.id} className="pl-person" data-testid="pl-may-know-person"><PersonOpen person={p} size={36} onPerson={onPerson} /></li>)}
           </ul>
         </section>
       )}
@@ -499,6 +508,7 @@ export default function SocialMediaPage() {
     next.delete('layer');
     next.delete('profile');
     next.delete('city');
+    next.delete('who');
     return next;
   });
   // A Dream City's feed (Task 2987): ?tab=cities&city=<key>; null goes back to the list.
@@ -508,6 +518,7 @@ export default function SocialMediaPage() {
     next.delete('layer');
     next.delete('profile');
     if (key) next.set('city', key); else next.delete('city');
+    next.delete('who');
     return next;
   });
 
@@ -581,6 +592,20 @@ export default function SocialMediaPage() {
   };
 
   const owner = lala?.profile || null;
+  // Someone's Pulse profile (Evoni, 2026-10-19): ?tab=profile&who=<handle>; Lala's own is ProfileView.
+  const lalaHandle = String(owner?.handle || 'lala').replace(/^@/, '').toLowerCase();
+  const whoParam = params.get('who');
+  const who = whoParam && whoParam.replace(/^@/, '').toLowerCase() !== lalaHandle ? whoParam.replace(/^@/, '') : null;
+  const openPerson = (handle) => setParams((prev) => {
+    const next = new URLSearchParams(prev);
+    const h = String(handle || '').replace(/^@/, '');
+    next.set('tab', 'profile');
+    next.delete('layer');
+    next.delete('profile');
+    next.delete('city');
+    if (h && h.toLowerCase() !== lalaHandle) next.set('who', h); else next.delete('who');
+    return next;
+  });
   const relationship = useMemo(() => latestStatus(relPosts, owner?.handle || 'lala') || owner?.relationship_status || null, [relPosts, owner]);
 
   return (
@@ -607,14 +632,15 @@ export default function SocialMediaPage() {
         <div className="pl-grid">
           <aside className="pl-left"><LeftNav tab={tab} onTab={switchTab} /><LatestFitCard fit={fit} director={director} revealLabel={fit?.source === 'fit' && fit.id ? labels?.get(revealKey('image', fit.id, 'fit')) : null} /></aside>
           <main className="pl-center">
-            {tab === 'posts' && <Feed show={show} lala={lala} director={director} search={search} cities={cities} labels={labels} cityStates={cityStates} viewAt={viewAt} onCity={openCity} />}
-            {tab === 'cities' && <PulseCity show={show} cities={cities} cityKey={params.get('city')} viewAt={viewAt} onCity={openCity} />}
+            {tab === 'posts' && <Feed show={show} lala={lala} director={director} search={search} cities={cities} labels={labels} cityStates={cityStates} viewAt={viewAt} onCity={openCity} onPerson={openPerson} />}
+            {tab === 'cities' && <PulseCity show={show} cities={cities} cityKey={params.get('city')} viewAt={viewAt} onCity={openCity} onPerson={openPerson} />}
             {tab === 'events' && <EventsView events={events} />}
-            {tab === 'people' && <CharactersView show={show} director={director} viewAt={viewAt} />}
-            {tab === 'profile' && <ProfileView lala={lala} relationship={relationship} director={director} />}
+            {tab === 'people' && <CharactersView show={show} director={director} viewAt={viewAt} onPerson={openPerson} />}
+            {tab === 'profile' && !who && <ProfileView lala={lala} relationship={relationship} director={director} onPerson={openPerson} />}
+            {tab === 'profile' && who && <PulsePerson show={show} handle={who} viewAt={viewAt} admin={admin} onBack={() => window.history.back()} />}
             {tab === 'messages' && <PulseMessages show={show} lala={lala} viewAt={viewAt} />}
           </main>
-          <aside className="pl-right"><RightColumn cities={cities} trending={trending} events={events} mayKnow={mayKnow} director={director} labels={labels} cityStates={cityStates} onCity={openCity} /></aside>
+          <aside className="pl-right"><RightColumn cities={cities} trending={trending} events={events} mayKnow={mayKnow} director={director} labels={labels} cityStates={cityStates} onCity={openCity} onPerson={openPerson} /></aside>
         </div>
       )}
       <BottomNav tab={tab} onTab={switchTab} onCreate={onCreate} />

@@ -103,6 +103,7 @@ let PulseVoice; // Each posting character's Voice Profile (Task #2967)
 let PulseJob; // The Pulse's posting queue (Task #2968)
 let PulseRequest; // The Pulse's daily request ledger (Task #3031)
 let PulseCloseness; // The closeness ledger (Task #2983)
+let PulseFollow; // Who follows whom on The Pulse (Evoni, 2026-10-19)
 let PulseDmThread; // DM conversations on The Pulse (Task #2984)
 let PulseDmMessage; // DM messages on The Pulse (Task #2984)
 let PulseStoryline; // Storylines on The Pulse (Task #2989)
@@ -384,6 +385,7 @@ try {
   PulseJob = require('./PulseJob')(sequelize, DataTypes);
   PulseRequest = require('./PulseRequest')(sequelize, DataTypes);
   PulseCloseness = require('./PulseCloseness')(sequelize, DataTypes);
+  PulseFollow = require('./PulseFollow')(sequelize, DataTypes);
   PulseDmThread = require('./PulseDmThread')(sequelize, DataTypes);
   PulseDmMessage = require('./PulseDmMessage')(sequelize, DataTypes);
   PulseStoryline = require('./PulseStoryline')(sequelize, DataTypes);
@@ -584,6 +586,7 @@ const requiredModels = {
   PulseJob,
   PulseRequest,
   PulseCloseness,
+  PulseFollow,
   PulseDmThread,
   PulseDmMessage,
   PulseStoryline,
@@ -2124,6 +2127,7 @@ module.exports.PulseVoice = PulseVoice;
 module.exports.PulseJob = PulseJob;
 module.exports.PulseRequest = PulseRequest;
 module.exports.PulseCloseness = PulseCloseness;
+module.exports.PulseFollow = PulseFollow;
 module.exports.PulseDmThread = PulseDmThread;
 module.exports.PulseDmMessage = PulseDmMessage;
 module.exports.PulseStoryline = PulseStoryline;
