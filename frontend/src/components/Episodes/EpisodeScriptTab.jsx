@@ -80,7 +80,7 @@ const BEAT_NAMES = [
   { number: 8,  name: 'Transformation Loop',    icon: '👗', color: 'var(--accent-dark)' },
   { number: 9,  name: 'Reminder / Deadline',    icon: '⏰', color: 'var(--accent-dark)' },
   { number: 10, name: 'Event Travel',           icon: '✈️', color: 'var(--info-text)' },
-  { number: 11, name: 'Event Outcome',          icon: '🏆', color: 'var(--info-text)' },
+  { number: 11, name: 'The Event',              icon: '🏆', color: 'var(--info-text)' },
   { number: 12, name: 'Fashion Challenge',   icon: '🎨', color: 'var(--info-text)' },
   { number: 13, name: 'Recap Panel',            icon: '📊', color: 'var(--success-text)' },
   { number: 14, name: 'Cliffhanger',            icon: '🔥', color: 'var(--success-text)' },

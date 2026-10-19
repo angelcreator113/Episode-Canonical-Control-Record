@@ -18,7 +18,7 @@ const lines = {
   8: ['[UI:OPEN Closet]', '[WEAR: p1]', '[STAT: coins -120]'],
   9: ['[UI:DISPLAY Shopping list]', 'Me: the blazer, 120', '[UI:HIDE Shopping list]'],
   11: ['Sable: welcome, darling', 'Lala: bestie, this room!', 'Declan: love the blazer', 'Me: oh he noticed', 'Mira Holt: iconic'],
-  12: ['[UI:SHOW phone]', '(A surprise runway walk: Lala walks it.)', 'Me: walk, Lala!', '[STAT: reputation +2]', '[STAT: brand_trust +1]', '[UI:HIDE phone]'],
+  12: ['(A surprise runway walk: Lala walks it.)', 'Me: walk, Lala!', '[STAT: reputation +2]', '[STAT: brand_trust +1]'],
   13: ['[UI:DISPLAY Stats Panel]', '[STAT: influence +1, stress -1]', 'Lala: that felt like me', 'Me: we did it', '[STAT: coins -45]', '[UI:HIDE Stats Panel]'],
 };
 const script = (over = {}) => CANONICAL_BEATS.map((c) => beat(c.number, ...(over[c.number] || lines[c.number] || ['[UI:OPEN Mail]']))).join('\n\n');
@@ -40,8 +40,10 @@ test('each broken rule is missing in its beat, and the writer is asked for it', 
   expect(missing.map((g) => [g.kind, g.rule, g.target])).toEqual([
     ['rule', 'beat8-p1', 8], ['rule', 'beat9', 9], ['rule', 'beat11-guest-declan-ferris', 11],
     ['rule', 'beat12-runway', 12], ['rule', 'beat12-coins', 12], ['rule', 'stats', 13], ['rule', 'beat13', 13],
-    ['rule', 'coins-4', 4], ['rule', 'coins-13', 13], ['rule', 'beat13-costs', 13], ['rule', 'jaw-12', 12],
+    ['rule', 'coins-4', 4], ['rule', 'coins-13', 13], ['rule', 'beat13-costs', 13], ['rule', 'cutscene-12', 12], ['rule', 'jaw-12', 12],
   ]);
+  // No phone in the cutscene (Script page re-audit, 2026-10-19).
+  expect(beatRequirements(missing.filter((g) => g.rule === 'cutscene-12'))[0]).toContain('Take out [UI:SHOW phone]');
   expect(beatRequirements(missing.filter((g) => g.target === 8))).toEqual(['Right after the [WEAR: p1] line, write the coin line for "Velvet Blazer" on its own line, exactly: [STAT: coins -120]']);
   expect(beatRequirements(missing.filter((g) => g.target === 9))[0]).toContain('[UI:DISPLAY Shopping list]');
   expect(beatRequirements(missing.filter((g) => g.target === 11))).toEqual(['Lala has a conversation with Declan Ferris (featured guest), who speaks directly as Declan Ferris: [their words], in their own voice.']);

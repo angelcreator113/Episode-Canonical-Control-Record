@@ -16,7 +16,7 @@ export const BEATS = [
   { number: 8, name: 'Transformation Loop', phone: true },
   { number: 9, name: 'Reminder/Deadline', phone: true },
   { number: 10, name: 'Event Travel', phone: true },
-  { number: 11, name: 'Event Outcome', phone: false },
+  { number: 11, name: 'The Event', phone: false },
   { number: 12, name: 'Fashion Challenge', phone: false },
   { number: 13, name: 'Recap Panel', phone: false },
   { number: 14, name: 'Cliffhanger', phone: false },

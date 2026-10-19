@@ -1,7 +1,7 @@
 /**
  * Beat11Piece — the short story's beat 11 piece, on the Stories page.
  *
- * Beat 11 (Event Outcome) of Styling Adventures with Lala plays a short
+ * Beat 11 (The Event) of Styling Adventures with Lala plays a short
  * animated piece of the episode's short story: the hook that leaves the
  * viewer asking "what happened at that event?" (Evoni, 2026-10-15;
  * docs/CANON.md). Cut it from the story, edit it, keep it for animation.

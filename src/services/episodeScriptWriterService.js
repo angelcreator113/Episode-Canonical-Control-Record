@@ -66,7 +66,7 @@ const BEAT_TEMPLATES = {
   8:  { name: 'Transformation Loop',  jawihp: true,  lala: true,  ui: 'CLOSET_OPEN',               mood: 'transformation' },
   9:  { name: 'Reminder/Deadline',    jawihp: true,  lala: false, ui: 'TODO_LIST',                 mood: 'urgency' },
   10: { name: 'Event Travel',         jawihp: true,  lala: false, ui: 'LOCATION_ICON',             mood: 'anticipation' },
-  11: { name: 'Event Outcome',        jawihp: true,  lala: true,  ui: 'ARRIVAL',                   mood: 'climax' },
+  11: { name: 'The Event',            jawihp: true,  lala: true,  ui: 'ARRIVAL',                   mood: 'climax' },
   12: { name: 'Fashion Challenge',    jawihp: true,  lala: true,  ui: 'FASHION_CHALLENGE',         mood: 'performance' },
   13: { name: 'Recap Panel',          jawihp: true,  lala: false, ui: 'STATS_UPDATE',              mood: 'reflection' },
   14: { name: 'Cliffhanger',          jawihp: true,  lala: false, ui: 'FADE_OUT',                  mood: 'suspense' },
@@ -727,7 +727,7 @@ function buildFullPrompt(context) {
       if (item.lala_reaction_own) wardrobeContext += `\n    Lala: "${item.lala_reaction_own}"`;
     }
     wardrobeContext += `\n\nBeat 8 (Transformation): Reference EACH piece by name as Lala gets dressed.`;
-    wardrobeContext += `\nBeat 11 (Event Outcome): Her outfit choice affects how the event goes.`;
+    wardrobeContext += `\nBeat 11 (The Event): Her outfit choice affects how the event goes.`;
   }
 
   // Wardrobe Intelligence (repeat detection, brand loyalty, match score, feed triggers)

@@ -112,7 +112,7 @@ describe('the prompt says the show as it is now', () => {
   test('the back half is named by the canonical beats, not "Result/Aftermath"', () => {
     const prompt = buildScriptPrompt(inputs());
     expect(prompt).not.toContain('Result/Aftermath');
-    expect(prompt).toContain('(Beats 9-13: Reminder/Deadline, Event Travel, Event Outcome, Fashion Challenge, Recap Panel)');
+    expect(prompt).toContain('(Beats 9-13: Reminder/Deadline, Event Travel, The Event, Fashion Challenge, Recap Panel)');
   });
 
   test('without a money block, the entry cost comes off in the recap', () => {

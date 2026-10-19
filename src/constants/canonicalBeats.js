@@ -290,7 +290,7 @@ const CANONICAL_BEATS = [
   // and comments a little; overlays on the video (the stats panel) stay.
   {
     number: 11,
-    name: 'Event Outcome',
+    name: 'The Event',
     story_job: "The cutscene begins (an AI video, a play moment in a video game): the characters speak their own lines, no phone and no voice-icon click. Lala has a real conversation with the event's host and its two featured guests, who notice something specific about her when the show holds it (a look she posted, the last episode); Lala answers honestly; a small test she passes or fails without knowing it; the connection or consequence lands before the result. JustAWoman stays on screen and comments a little between their lines.",
     typical_location: 'EVENT_LOCATION',
     description: 'The main event — what happens when Lala arrives and performs',

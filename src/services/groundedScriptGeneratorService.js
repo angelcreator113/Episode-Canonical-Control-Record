@@ -789,7 +789,7 @@ ${eventContext}
 ${statsContext ? `═══ LALA'S STATE ═══\n${statsContext}\n` : ''}${worldNow}${told.text}
 ═══ WARDROBE ═══
 ${wardrobeContext}
-${outfitScore ? `\n═══ LOCKED OUTFIT ═══\nLala is wearing ${outfitScore.count} pieces for this event:\n${outfitScore.items.map(i => `- ${i.name} (${i.clothing_category}, ${i.tier})${i.id ? ` [WEAR: ${i.id}]` : ''}`).join('\n')}\nBeat 8 (Transformation): Reference these SPECIFIC items by name as Lala gets dressed. Right after the line where she puts a piece on, write that piece's [WEAR: id] line exactly as shown above, once per piece.\nBeat 11 (Event Outcome): Her outfit choice affects how the event goes — she is wearing what she chose, on camera in the cutscene.` : ''}
+${outfitScore ? `\n═══ LOCKED OUTFIT ═══\nLala is wearing ${outfitScore.count} pieces for this event:\n${outfitScore.items.map(i => `- ${i.name} (${i.clothing_category}, ${i.tier})${i.id ? ` [WEAR: ${i.id}]` : ''}`).join('\n')}\nBeat 8 (Transformation): Reference these SPECIFIC items by name as Lala gets dressed. Right after the line where she puts a piece on, write that piece's [WEAR: id] line exactly as shown above, once per piece.\nBeat 11 (The Event): Her outfit choice affects how the event goes — she is wearing what she chose, on camera in the cutscene.` : ''}
 ${moneyText(money)}${require('./beat14Opportunity').beat14Context(beat14, brief?.designed_intent || null)}${onScreenContext(onScreen)}${phone ? require('../utils/phonePaths').phoneMapContext(phone) : ''}${layersText({ brief, eventData, seasonContext, story })}
 
 ═══ SCENE PLAN — 14 BEATS ═══
@@ -845,7 +845,7 @@ JustAWoman (Me:) is playing the game on camera from her corner: she sees the gam
 ═══ SHOW RULES ═══
 - Beats 1–10 are gameplay: everything stems from Lala's phone. It is on screen from the moment the Start button is clicked in Beat 1 until she travels to the event in Beat 10. Never write [UI:SHOW phone] or [UI:HIDE phone] in between; the phone is already there.
 - Beats 11–13 are the cutscene: an AI video, like a play moment in a video game, where the characters say their own lines to each other: Lala, ${cutsceneCast(eventData)}, and anyone else present, each as their name: [their words]. No phone and no phone UI: no [UI:SHOW phone], [UI:CLICK …], [UI:OPEN …] or [UI:SCROLL …] of phone screens, and no voice-icon click. What the video shows goes in (parentheses). Overlays that sit on the video are allowed: [UI:DISPLAY Stats Panel] / [UI:HIDE Stats Panel], and [TRANSITION: …]. JustAWoman (Me:) stays on screen and comments a little between their lines.
-- Beat 11 (Event Outcome): the cutscene begins. Lala has a real conversation with ${cutsceneCast(eventData)}.
+- Beat 11 (The Event): the cutscene begins. Lala has a real conversation with ${cutsceneCast(eventData)}.
 - Beat 13 (Recap Panel): still the cutscene, with [UI:DISPLAY Stats Panel] over the video. The event's own costs come off here only (unless covered); what she is owed is paid next episode, so never a + coin line in this episode. Lala says how it went in her own words.
 - Beat 14 (Cliffhanger): back to gameplay: her phone and the voice icon again.
 - Beat 5 (Reveal): the invitation letter comes up, ${showRules.invitationLine(rulesOn)}, never the login screen or the Start button (those are beats 1 and 2). JAWIHP reads the whole invitation aloud, every word of it, not a summary.
