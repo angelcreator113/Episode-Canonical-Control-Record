@@ -26,6 +26,10 @@
  *                                        saved as a new private draft linked to
  *                                        it (services/mediaVariations) (ADMIN)
  *   GET    /:id/family                   the original and its variations
+ *   GET    /:id/sources                  phase 4: what it was made from (the
+ *                                        place it keeps, the portraits, the
+ *                                        picture it varies), each one the
+ *                                        reader may see
  */
 const express = require('express');
 const multer = require('multer');
@@ -111,6 +115,16 @@ router.get('/:id/family', requireAuth, async (req, res) => {
     return res.json({ success: true, ...(await require('../services/mediaVariations').familyOf(models(), req.params.id, { audience: media().audienceOf(req.user) })) });
   } catch (err) {
     return sendError(res, err, 'GET /:id/family');
+  }
+});
+
+router.get('/:id/sources', requireAuth, async (req, res) => {
+  try {
+    const audience = media().audienceOf(req.user);
+    await media().getAsset(models(), req.params.id, { audience });
+    return res.json({ success: true, items: await media().sourcesOf(models(), req.params.id, { audience }) });
+  } catch (err) {
+    return sendError(res, err, 'GET /:id/sources');
   }
 });
 

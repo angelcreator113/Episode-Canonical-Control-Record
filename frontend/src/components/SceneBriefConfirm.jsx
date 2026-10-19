@@ -91,10 +91,18 @@ export default function SceneBriefConfirm({ setId, angleId = null, title, note =
   const isBase = !angleId && !fixedEvent;
   // The latest requestBrief, so a caller's inline function does not re-ask.
   const requestRef = useRef(requestBrief);
+  // Focus moves into the brief when it opens (eighth audit).
+  const modalRef = useRef(null);
+  useEffect(() => { modalRef.current?.focus?.(); }, []);
   requestRef.current = requestBrief;
 
   // chosen: the event to ask the brief for (S3); undefined asks for the base's own.
+  // Only the newest brief is shown, and loading ends with it (eighth audit:
+  // two quick edits could show the older brief and its cost, and re-enable
+  // Generate while the newer one was still coming).
+  const loadSeq = useRef(0);
   const load = useCallback(async (next, chosen) => {
+    const seq = ++loadSeq.current;
     setLoading(true);
     try {
       const body = {};
@@ -104,15 +112,16 @@ export default function SceneBriefConfirm({ setId, angleId = null, title, note =
       if (next) body.overrides = next;
       if (typeof description === 'string') body.canonical_description = description;
       const res = requestRef.current ? await requestRef.current(body) : await sceneBriefApi(setId, body);
+      if (seq !== loadSeq.current) return;
       const d = res.data?.data || null;
       setData(d);
       if (!next) setOverrides(d?.brief?.overrides || {});
       setError(null);
     } catch (err) {
       console.error('[SceneBriefConfirm] brief load failed:', err);
-      setError(errorText(err));
+      if (seq === loadSeq.current) setError(errorText(err));
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
   }, [setId, angleId, description, refine, isBase]);
 
@@ -180,6 +189,8 @@ export default function SceneBriefConfirm({ setId, angleId = null, title, note =
         aria-labelledby="sbc-title"
         onClick={(e) => e.stopPropagation()}
         data-testid="scene-brief-confirm"
+        tabIndex={-1}
+        ref={modalRef}
       >
         <header className="sbc-head">
           <div>
@@ -280,17 +291,17 @@ export default function SceneBriefConfirm({ setId, angleId = null, title, note =
                             {isMissing && <span className="sbc-flag">Missing</span>}
                             <span className="sbc-actions">
                               {!isEditing && (
-                                <button type="button" className="sbc-icon" onClick={() => setEditing({ key: line.key, text: line.text })} aria-label={`Edit ${line.label}`}>
+                                <button type="button" className="sbc-icon" disabled={loading} onClick={() => setEditing({ key: line.key, text: line.text })} aria-label={`Edit ${line.label}`}>
                                   <Pencil size={13} />
                                 </button>
                               )}
                               {line.source === 'override' && (
-                                <button type="button" className="sbc-icon" onClick={() => resetLine(line.key)} aria-label={`Reset ${line.label}`}>
+                                <button type="button" className="sbc-icon" disabled={loading} onClick={() => resetLine(line.key)} aria-label={`Reset ${line.label}`}>
                                   <RotateCcw size={13} />
                                 </button>
                               )}
                               {!line.essential && line.source !== 'override' && (
-                                <button type="button" className="sbc-icon" onClick={() => removeLine(line.key)} aria-label={`Remove ${line.label}`}>
+                                <button type="button" className="sbc-icon" disabled={loading} onClick={() => removeLine(line.key)} aria-label={`Remove ${line.label}`}>
                                   <Trash2 size={13} />
                                 </button>
                               )}
@@ -331,7 +342,7 @@ export default function SceneBriefConfirm({ setId, angleId = null, title, note =
                         <span className="sbc-line-label">{key.replace(/_/g, ' ')}</span>
                         <span className="sbc-source sbc-source-override">Your override</span>
                         <span className="sbc-actions">
-                          <button type="button" className="sbc-icon" onClick={() => resetLine(key)} aria-label={`Restore ${key}`}>
+                          <button type="button" className="sbc-icon" disabled={loading} onClick={() => resetLine(key)} aria-label={`Restore ${key}`}>
                             <RotateCcw size={13} />
                           </button>
                         </span>

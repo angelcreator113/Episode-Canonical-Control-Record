@@ -274,6 +274,6 @@ async function suggestFor(db, postId, { limit = 6 } = {}) {
 
 module.exports = {
   FORMATS, FORMAT_LABELS, PICTURES, STORY_HOURS, FORMAT_FOR_DELIVERABLE, SETTINGS,
-  formatOf, checkFormat, storyExpired, urlsOf, stems, rankPictures,
+  formatOf, checkFormat, storyExpired, urlsOf, stems, rankPictures, assetText, notPublic, loadPost, posterOf,
   pictureEditor, attachPictures, publishProblems, approvePictures, blockedUrls, publicPosts, needsPicture, suggestFor,
 };

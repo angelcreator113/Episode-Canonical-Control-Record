@@ -43,6 +43,7 @@ const {
   loadRateCard, lalaPricingTier, proposeTerms, draftDeliverablesForDeal, planFor,
   PRICING_SOURCE, DRAFTED_DELIVERABLES_SOURCE,
 } = require('./dealPricingService');
+const { pricedFrom } = require('./rateCard');
 const { listEventDeliverables, insertDeliverableRow } = require('./eventTermsService');
 const { listEventCosts, draftedCostLines } = require('./eventCostsService');
 const { normalizeBonusTerms } = require('./dealPayoutService');
@@ -389,7 +390,9 @@ async function draftTerms(sequelize, eventId, { transaction, premiums = {}, over
       ...nextAutomation,
       auto_drafted: autoDrafted,
       drafted_values: draftedValues,
-      ...(proposal.ok && changes.fees ? { pricing_version: proposal.pricing_version } : {}),
+      // What priced it (the rate card editor, 2026-10-19; services/rateCard.pricedFrom):
+      // each fee's rate row, its amount then, and the band.
+      ...(proposal.ok && changes.fees ? { pricing_version: proposal.pricing_version, priced_from: pricedFrom(proposal) } : {}),
     },
   };
   const sets = ['canon_consequences = :cc', 'updated_at = NOW()'];
