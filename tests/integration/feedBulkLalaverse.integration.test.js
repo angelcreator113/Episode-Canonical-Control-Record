@@ -52,7 +52,8 @@ const links = (h) => q(
   beforeAll(async () => {
     token = TokenService.generateTokenPair({
       id: 'test-user-feed-bulk-lalaverse', email: 'test@feed-bulk-lalaverse.dev', name: 'Feed Bulk LalaVerse Test',
-      groups: ['USER', 'EDITOR'], role: 'USER',
+      // ADMIN: the Pulse people tools are admin only (Evoni, 2026-10-19).
+      groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     // One Show Bible rule in every prompt, the franchise's own.
     [{ id: ruleId }] = await q(

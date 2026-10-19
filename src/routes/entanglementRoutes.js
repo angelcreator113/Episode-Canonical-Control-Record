@@ -34,6 +34,9 @@ const express  = require('express');
 const router   = express.Router();
 const { Op: _Op }   = require('sequelize');
 const { requireAuth } = require('../middleware/auth');
+const { authorize } = require('../middleware/auth');
+// The character writes here (entanglements, unfollows, a character's proposal) are
+// ADMIN only (Evoni, 2026-10-19: "this whole part of the site is admin only").
 const { fireRipple, resolveEvent } = require('../services/rippleEngine');
 
 // Apply requireAuth to all routes
@@ -85,7 +88,7 @@ router.get('/profiles/:profileId/orbit', async (req, res) => {
 });
 
 // POST /characters/:characterId/entanglements
-router.post('/characters/:characterId/entanglements', async (req, res) => {
+router.post('/characters/:characterId/entanglements', authorize(['ADMIN']), async (req, res) => {
   const models = getModels(req);
   const { CharacterEntanglement } = models;
   const { characterId: character_id } = req.params;
@@ -121,7 +124,7 @@ router.post('/characters/:characterId/entanglements', async (req, res) => {
 });
 
 // PATCH /entanglements/:id
-router.patch('/entanglements/:id', async (req, res) => {
+router.patch('/entanglements/:id', authorize(['ADMIN']), async (req, res) => {
   const models = getModels(req);
   const { CharacterEntanglement } = models;
   const allowed = ['dimension', 'intensity', 'directionality', 'entanglement_type', 'notes', 'is_active', 'amber_proposed'];
@@ -142,7 +145,7 @@ router.patch('/entanglements/:id', async (req, res) => {
 });
 
 // DELETE /entanglements/:id  (soft delete — sets is_active false)
-router.delete('/entanglements/:id', async (req, res) => {
+router.delete('/entanglements/:id', authorize(['ADMIN']), async (req, res) => {
   const models = getModels(req);
   const { CharacterEntanglement } = models;
 
@@ -262,7 +265,7 @@ router.post('/events/:id/resolve', async (req, res) => {
 
 // POST /events/:eventId/proposals/:characterId/approve
 // Approve a scene proposal → sends to StoryTeller as pending line
-router.post('/events/:eventId/proposals/:characterId/approve', async (req, res) => {
+router.post('/events/:eventId/proposals/:characterId/approve', authorize(['ADMIN']), async (req, res) => {
   const models = getModels(req);
   const { EntanglementEvent } = models;
   const { book_id, chapter_id } = req.body;
@@ -331,7 +334,7 @@ router.get('/characters/:characterId/unfollows', async (req, res) => {
 });
 
 // POST /characters/:characterId/unfollows
-router.post('/characters/:characterId/unfollows', async (req, res) => {
+router.post('/characters/:characterId/unfollows', authorize(['ADMIN']), async (req, res) => {
   const models = getModels(req);
   const { EntanglementUnfollow, CharacterEntanglement } = models;
   const { profile_id, reason, story_timestamp, visibility, noticed_by } = req.body;
@@ -366,7 +369,7 @@ router.post('/characters/:characterId/unfollows', async (req, res) => {
 });
 
 // PATCH /unfollows/:id/confirm
-router.patch('/unfollows/:id/confirm', async (req, res) => {
+router.patch('/unfollows/:id/confirm', authorize(['ADMIN']), async (req, res) => {
   const models = getModels(req);
   const { EntanglementUnfollow } = models;
   const { reason, visibility, story_timestamp, noticed_by } = req.body;

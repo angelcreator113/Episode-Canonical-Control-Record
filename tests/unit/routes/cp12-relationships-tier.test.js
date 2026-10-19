@@ -18,10 +18,11 @@ describe('CP12 — relationships.js lazy-noop closure + AI overlay', () => {
     expect(SRC).not.toMatch(/optionalAuth/);
   });
   test('AI POST /generate carries requireAuth + aiRateLimiter', () => {
-    expect(SRC).toMatch(/router\.post\('\/generate', requireAuth, aiRateLimiter,/);
+    // ADMIN joins (Evoni, 2026-10-19: every relationships write is ADMIN only).
+    expect(SRC).toMatch(/router\.post\('\/generate', requireAuth, authorize\(\['ADMIN'\]\), aiRateLimiter,/);
   });
   test('AI POST /generate-family carries requireAuth + aiRateLimiter', () => {
-    expect(SRC).toMatch(/router\.post\('\/generate-family', requireAuth, aiRateLimiter,/);
+    expect(SRC).toMatch(/router\.post\('\/generate-family', requireAuth, authorize\(\['ADMIN'\]\), aiRateLimiter,/);
   });
   test('GET / carries requireAuth (Tier 1)', () => {
     expect(SRC).toMatch(/router\.get\('\/', requireAuth,/);

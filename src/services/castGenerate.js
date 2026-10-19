@@ -190,6 +190,7 @@ async function keep(db, { registryId, proposal, by = null } = {}) {
       status: 'draft', appearance_mode: 'on_page', sort_order: count,
       // Where it came from: not the feed, so following Lala is Evoni's choice.
       extra_fields: { made_by: 'cast_generate', made_at: new Date().toISOString(), made_for: by },
+      created_from: 'cast_generate',
     }, { transaction });
 
     let profile = null;

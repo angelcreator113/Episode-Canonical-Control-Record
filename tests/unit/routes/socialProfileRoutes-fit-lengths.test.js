@@ -21,7 +21,8 @@ jest.mock('../../../src/middleware/auth', () => {
   return {
     ...actual,
     requireAuth: (req, res, next) => {
-      if (req.headers['x-test-user']) { req.user = { id: 'u1' }; return next(); }
+      // ADMIN: the Pulse people tools are admin only (Evoni, 2026-10-19).
+      if (req.headers['x-test-user']) { req.user = { id: 'u1', groups: ['ADMIN'] }; return next(); }
       return actual.requireAuth(req, res, next);
     },
   };

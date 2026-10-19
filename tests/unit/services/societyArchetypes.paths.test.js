@@ -23,7 +23,7 @@ const mockCreate = jest.fn();
 jest.mock('@anthropic-ai/sdk', () => jest.fn().mockImplementation(() => ({ messages: { create: mockCreate } })));
 jest.mock('../../../src/middleware/auth', () => {
   const actual = jest.requireActual('../../../src/middleware/auth');
-  return { ...actual, requireAuth: (req, _res, next) => { req.user = { id: 'u1' }; next(); } };
+  return { ...actual, requireAuth: (req, _res, next) => { req.user = { id: 'u1', groups: ['ADMIN'] }; /* the writes are ADMIN only (Evoni, 2026-10-19) */ next(); } };
 });
 const mockModels = {};
 jest.mock('../../../src/models', () => mockModels);

@@ -71,11 +71,12 @@ async function column(ids, name) {
   const seeded = [];
   const auth = () => `Bearer ${token}`;
   beforeAll(async () => {
+    // The registry writes are ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only).
     token = TokenService.generateTokenPair({
       id: 'test-user-registry-json-2',
       email: 'test@registry-json-2.dev',
       name: 'Registry JSON Test 2',
-      groups: ['USER', 'EDITOR'],
+      groups: ['ADMIN'],
       role: 'USER',
     }).accessToken;
   });
