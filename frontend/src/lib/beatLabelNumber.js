@@ -61,9 +61,15 @@ export const HAS_BEAT_HEADER = /^[ \t]*##[ \t]*BEAT:/im;
 // are written plainly too.
 const HEADER_VARIANT = /^[^\S\n]*(\*\*|__)?[^\S\n]*(#{2,3})[^\S\n]*BEAT[^\S\n]*:[^\S\n]*(.*?)[^\S\n]*(?:\*\*|__)?[^\S\n]*$/gim;
 const ODD_SPACE = /[^\S\n \t]/;
+// `## Beat 5: Name` (the number before the colon) is a header too, written
+// `## BEAT: 5 · Name` (Script page audit, 2026-10-19: it was not read as a
+// header, so the whole script was cut into 14 by place and every beat
+// passed). A separator or the line's end must follow the number.
+const HEADER_NUMBER_FIRST = /^[^\S\n]*(?:\*\*|__)?[^\S\n]*#{2,3}[^\S\n]*BEAT[^\S\n]+(\d{1,3})[^\S\n]*(?:(?:[:.\u00B7|\u2014\u2013-])[^\S\n]*(.*?))?[^\S\n]*(?:\*\*|__)?[^\S\n]*$/gim;
 export function normalizeBeatHeaders(text) {
   return String(text ?? '').replace(/^\uFEFF/, '').replace(/\r\n?|[\u2028\u2029\u0085]/g, '\n')
-    .replace(HEADER_VARIANT, (line, bold, hashes, label) => (bold || hashes.length === 3 || ODD_SPACE.test(line) ? `## BEAT: ${label}` : line));
+    .replace(HEADER_VARIANT, (line, bold, hashes, label) => (bold || hashes.length === 3 || ODD_SPACE.test(line) ? `## BEAT: ${label}` : line))
+    .replace(HEADER_NUMBER_FIRST, (line, n, name) => `## BEAT: ${n}${name && name.trim() ? ` · ${name.trim()}` : ''}`);
 }
 
 // The number a header gives its beat: its own leading number, of any size
@@ -71,6 +77,9 @@ export function normalizeBeatHeaders(text) {
 // or the canonical beat its name names; null when it names neither, and the
 // beat is numbered by its place (re-audit 2, 2026-10-15).
 export function headerNumber(label) {
-  const n = Number((String(label || '').trim().match(/^(\d{1,3})\b/) || [])[1]);
-  return n >= 1 ? n : beatNumberForLabel(label);
+  // `## BEAT: Beat 4 · Pulse` names beat 4 (Script page audit, 2026-10-19:
+  // it was numbered by its place).
+  const text = String(label || '').trim().replace(/^beat\b[\s#:.-]*(?=\d)/i, '');
+  const n = Number((text.match(/^(\d{1,3})\b/) || [])[1]);
+  return n >= 1 ? n : beatNumberForLabel(text);
 }

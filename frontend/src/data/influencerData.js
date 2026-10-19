@@ -45,7 +45,7 @@ export const ECONOMY_STREAMS = [
 ];
 
 export const FASHION_TREND_STAGES = [
-  { stage: 1, name: 'Underground', color: T.orchid, who: 'Tier 5-6 creators experimenting, street style icons', feed: 'Invisible to most of the Feed — too niche to surface', story: 'The character who found it here and didn\'t tell anyone. That decision is the story.' },
+  { stage: 1, name: 'Underground', color: T.orchid, who: 'Tier 5-6 creators experimenting, street style icons', feed: 'Invisible to most of The Pulse — too niche to surface', story: 'The character who found it here and didn\'t tell anyone. That decision is the story.' },
   { stage: 2, name: 'Rising', color: T.mint, who: 'Micro-creators adopting and spreading the aesthetic', feed: 'Starting to appear in interest clusters', story: 'The moment it could still be yours if you moved fast enough.' },
   { stage: 3, name: 'Mainstream', color: T.gold, who: 'Tier 3-4 major influencers adopting', feed: 'Algorithm starts pushing it — suddenly everywhere', story: 'The creators who were early watch it get credited to someone else.' },
   { stage: 4, name: 'Saturation', color: T.rose, who: 'Everyone — trend has no owner left', feed: 'Feed oversaturated — engagement dropping on trend content', story: 'The trend becomes invisible by being everywhere. The early adopter moves on.' },

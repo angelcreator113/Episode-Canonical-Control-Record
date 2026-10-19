@@ -34,8 +34,12 @@ const draft = NAMES.map((name, i) => {
   if (n === 8) return beat(8, name, '[UI:OPEN Closet]', 'Lala: the gold slip dress');
   // Lala talks once her voice icon is clicked; beat 5 brings up the invitation (show rules, 2026-10-17).
   if (n === 5) return beat(5, name, '[UI:OPEN Invitation]');
-  if (n === 11) return beat(11, name, '[UI:CLICK Voice Icon]', 'Lala: what a room');
-  if (n === 12) return beat(12, name, '[UI:OPEN Camera]', '[UI:CLICK Voice Icon]', 'Lala: a quiet moment');
+  if (n === 11) return beat(11, name, '[UI:CLICK Voice Icon]', 'Lala: what a room', 'Me: ooh');
+  // The cutscene (the show's rules, 2026-10-17 to 2026-10-19): JustAWoman
+  // comments in beats 11 to 13; beat 12 is the runway walk, judged on four
+  // stats; in beat 13 Lala says how it feels.
+  if (n === 12) return beat(12, name, '[UI:OPEN Camera]', '[UI:CLICK Voice Icon]', 'Lala: a quiet moment', '(Lala walks the runway.)', 'Me: walk, Lala!', '[STAT: reputation +2]', '[STAT: brand_trust +1]', '[STAT: influence +1]', '[STAT: stress -1]');
+  if (n === 13) return beat(13, name, 'Me: hi', '[UI:CLICK Voice Icon]', 'Lala: that felt good');
   if (n === 14) return beat(14, name, 'Me: and then the DM arrives');
   return beat(n, name, [4, 5, 7, 9, 10].includes(n) ? '[UI:OPEN Mail]' : 'Me: hi');
 }).join('\n\n');
@@ -89,7 +93,7 @@ describe("the Script tab's writer", () => {
 
   test('rewrites the beats missing what the episode needs, and reports nothing left', async () => {
     const create = jest.fn(async (call) => whenBeat(8, beat(8, 'Transformation Loop', '[UI:OPEN Closet]', 'Lala: the gold slip dress', `[WEAR: ${PIECE}]`))(call)
-      || whenBeat(11, beat(11, 'Event Outcome', '[UI:CLICK Voice Icon]', 'Lala: I finally get to meet Marcus Reed'))(call)
+      || whenBeat(11, beat(11, 'Event Outcome', '[UI:CLICK Voice Icon]', 'Lala: I finally get to meet Marcus Reed', 'Me: ooh'))(call)
       || reply(draft));
     mockAnthropic(create);
     const { generateGroundedScript } = require('../../../src/services/groundedScriptGeneratorService');
@@ -107,7 +111,7 @@ describe("the Script tab's writer", () => {
     const create = jest.fn(async (call) => whenBeat(8, beat(8, 'Transformation Loop', '[UI:OPEN Closet]', `[WEAR: ${PIECE}]`))(call) || reply(draft));
     mockAnthropic(create);
     const { generateGroundedScript } = require('../../../src/services/groundedScriptGeneratorService');
-    const locked = [{ number: 11, text: beat(11, 'Event Outcome', '[UI:CLICK Voice Icon]', 'Lala: approved words') }];
+    const locked = [{ number: 11, text: beat(11, 'Event Outcome', '[UI:CLICK Voice Icon]', 'Lala: approved words', 'Me: ooh') }];
     const out = await generateGroundedScript('ep1', 'show-1', models(), { lockedBeats: locked });
     const asks = create.mock.calls.slice(1).map((c) => c[0].messages[0].content);
     expect(asks.some((p) => p.includes('Write ONLY beat 11 again'))).toBe(false);
@@ -115,11 +119,25 @@ describe("the Script tab's writer", () => {
     expect(out.coverage.missing).toEqual([expect.objectContaining({ kind: 'goal', target: 11 })]);
   });
 
+  // Script page audit (2026-10-19): a reply with two headers for an approved
+  // beat saved the second copy as an extra beat.
+  test('a reply that drafts an approved beat twice keeps it once, as approved', async () => {
+    const twice = draft.replace('## BEAT: 12 · Fashion Challenge', `${beat(11, 'Event Outcome', 'Lala: a second drafted copy')}\n\n## BEAT: 12 · Fashion Challenge`);
+    const create = jest.fn(async () => reply(twice));
+    mockAnthropic(create);
+    const { generateGroundedScript } = require('../../../src/services/groundedScriptGeneratorService');
+    const locked = [{ number: 11, text: beat(11, 'Event Outcome', '[UI:CLICK Voice Icon]', 'Lala: approved words') }];
+    const out = await generateGroundedScript('ep1', 'show-1', models(), { lockedBeats: locked });
+    expect(out.script.match(/^## BEAT: 11\b/gm)).toHaveLength(1);
+    expect(out.script).toContain('Lala: approved words');
+    expect(out.script).not.toContain('a second drafted copy');
+  });
+
   test('a beat that did not come back is written and put in its place', async () => {
     const cut = draft.split('## BEAT: 14')[0].trimEnd();
     const create = jest.fn(async (call) => whenBeat(14, beat(14, 'Cliffhanger', 'Me: and then the DM arrives'))(call)
       || whenBeat(8, beat(8, 'Transformation Loop', '[UI:OPEN Closet]', `[WEAR: ${PIECE}]`))(call)
-      || whenBeat(11, beat(11, 'Event Outcome', '[UI:CLICK Voice Icon]', 'Lala: I finally get to meet Marcus Reed'))(call)
+      || whenBeat(11, beat(11, 'Event Outcome', '[UI:CLICK Voice Icon]', 'Lala: I finally get to meet Marcus Reed', 'Me: ooh'))(call)
       || reply(cut));
     mockAnthropic(create);
     const { generateGroundedScript } = require('../../../src/services/groundedScriptGeneratorService');
@@ -172,7 +190,7 @@ describe("the Script tab's writer", () => {
     const cut = draft.replace(/## BEAT: 10[^#]*/, '').trimEnd();
     const create = jest.fn(async (call) => whenBeat(10, beat(10, 'Event Travel', 'Me: off to the gala'))(call)
       || whenBeat(8, beat(8, 'Transformation Loop', '[UI:OPEN Closet]', `[WEAR: ${PIECE}]`))(call)
-      || whenBeat(11, beat(11, 'Event Outcome', '[UI:CLICK Voice Icon]', 'Lala: I finally get to meet Marcus Reed'))(call)
+      || whenBeat(11, beat(11, 'Event Outcome', '[UI:CLICK Voice Icon]', 'Lala: I finally get to meet Marcus Reed', 'Me: ooh'))(call)
       || reply(cut));
     mockAnthropic(create);
     const { generateGroundedScript } = require('../../../src/services/groundedScriptGeneratorService');

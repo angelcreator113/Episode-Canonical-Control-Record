@@ -10,6 +10,7 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { latestWorldSnapshotForShow } = require('./worldSnapshotForShow');
 const { careerBlock } = require('./scriptCareerService');
+const { beat14Outcome } = require('../utils/beat14Invitation');
 
 let client = null;
 function getClient() {
@@ -52,6 +53,10 @@ const SPEAKS = {
 // and reacts from her corner, so she speaks there too.
 // Beat 13: Lala says how the outcome feels (Evoni, 2026-10-17); the numbers
 // stay on the stat card, which she does not see.
+// The back half by the canonical beats' own names (Script page audit,
+// 2026-10-19: the prompt still said "Beats 9-13: Result/Aftermath").
+const BACK_HALF = `Beats 9-13: ${CANONICAL_BEATS.filter((b) => b.number >= 9 && b.number <= 13).map((b) => b.name).join(', ')}`;
+const RECAP_NUMBER = (CANONICAL_BEATS.find((b) => /recap/i.test(b.name)) || { number: 13 }).number;
 const BEAT_TEMPLATES = Object.fromEntries(CANONICAL_BEATS.map((b) => [b.number, {
   name: b.name, ui: b.screen_action, jawihp: SPEAKS[b.number][0], lala: SPEAKS[b.number][1],
 }]));
@@ -80,7 +85,11 @@ async function groundedScriptInputs(episodeId, showId, models) {
   }
 
   // 1. Load Episode Brief
-  const brief = await EpisodeBrief.findOne({ where: { episode_id: episodeId } }).catch(() => null);
+  // Every failed read here is logged (Script page audit, 2026-10-19).
+  const brief = await EpisodeBrief.findOne({ where: { episode_id: episodeId } }).catch((err) => {
+    console.error('[ScriptGen] brief read failed (non-blocking):', err.message);
+    return null;
+  });
 
   // 2. Load Scene Plan with scene context
   const scenePlan = await ScenePlan.findAll({
@@ -96,7 +105,10 @@ async function groundedScriptInputs(episodeId, showId, models) {
         required: false,
       }] : [],
     }],
-  }).catch(() => []);
+  }).catch((err) => {
+    console.error('[ScriptGen] scene plan read failed (non-blocking):', err.message);
+    return [];
+  });
 
   // 3. Show Brain rules: the same deterministic selection the episode
   //    script writer records (services/brainRules.js, 2026-10-04).
@@ -160,7 +172,9 @@ async function groundedScriptInputs(episodeId, showId, models) {
     if (scoreRows.length > 0) {
       outfitScore = { items: scoreRows, count: scoreRows.length };
     }
-  } catch { /* non-blocking */ }
+  } catch (err) {
+    console.error('[ScriptGen] episode outfit read failed (non-blocking):', err.message);
+  }
 
   // 6. Load Lala's stats
   // The newest snapshot of the show's universe (or of none); the old
@@ -229,6 +243,8 @@ async function groundedScriptInputs(episodeId, showId, models) {
 
 const MODELS = ['claude-sonnet-4-6'];
 
+const isBudgetOrRateLimit = (err) => err?.code === 'AI_BUDGET_EXCEEDED' || err?.status === 429;
+
 // A Sonnet call: { text, cut }. The whole script tries once, as it always
 // has (a second 8000-token try doubles a wait that already runs long); one
 // beat tries twice, the retry the AI routes use. `cut` is a reply stopped at
@@ -245,6 +261,9 @@ async function writeWith(prompt, maxTokens, attempts) {
       } catch (err) {
         lastErr = err;
         console.error(`[ScriptGen] ${model} attempt ${attempt} failed:`, err.message);
+        // A refused budget or a rate limit is not tried again (Script page
+        // audit, 2026-10-19): the route answers it as a 429.
+        if (isBudgetOrRateLimit(err)) throw err;
       }
     }
   }
@@ -291,7 +310,7 @@ async function generateGroundedScript(episodeId, showId, models, { lockedBeats =
   const facts = coverageFacts(inputs);
   const locked = new Set(lockedBeats.map((b) => b.number));
   const { scriptCoverage, beatRequirements, replaceBeatByNumber, insertBeatByNumber } = require('../utils/scriptCoverage');
-  const { splitScriptBeats } = require('../utils/scriptBeatLocks');
+  const { splitScriptBeats, withoutExtraCopies } = require('../utils/scriptBeatLocks');
 
   const drafted = splitScriptBeats(script).beats.map((b) => b.number);
   const isCanon = (n) => CANONICAL_BEATS.some((c) => c.number === n);
@@ -305,7 +324,13 @@ async function generateGroundedScript(episodeId, showId, models, { lockedBeats =
     throw new DraftIncompleteError(found);
   }
   // Approved beats are read as approved (the route puts them back word for
-  // word anyway), so what they already cover is not written twice.
+  // word anyway), so what they already cover is not written twice. A reply
+  // that drafts an approved beat twice keeps only as many copies as are
+  // approved (Script page audit, 2026-10-19: the second was saved as an
+  // extra beat).
+  const approvedCopies = new Map();
+  for (const b of lockedBeats) approvedCopies.set(b.number, (approvedCopies.get(b.number) || 0) + 1);
+  script = withoutExtraCopies(script, approvedCopies);
   for (const b of lockedBeats) {
     const withIt = replaceBeatByNumber(script, b.number, b.text);
     script = withIt !== script ? withIt : insertBeatByNumber(script, b.number, b.text);
@@ -400,17 +425,30 @@ async function generateGroundedScript(episodeId, showId, models, { lockedBeats =
   return { script, coverage: { missing, fixed_beats: fixedBeats.sort((a, b) => a - b), phone_steps: phoneSteps, voice_clicks: voiceClicks, reveal_fixed: revealFixed, coin_lines: coinLines, story_gaps: storyGaps }, facts };
 }
 
+// Rule 6, how beat 14 ends: one instruction (Script page audit, 2026-10-19).
+// With the invitation coming it ends on it and the forward hook is told
+// through it; withheld, the hook comes and no offer does; with nothing
+// attached, the forward hook as before.
+function beat14Ending(ending, hook) {
+  if (ending === 'invitation') return `the invitation in the BEAT 14 OPPORTUNITY block${hook ? `; the forward hook, "${hook}", is told through it` : ''}`;
+  const told = hook ? `the forward hook: "${hook}"` : 'a forward hook seeding the next episode';
+  return ending === 'withheld' ? `${told}; the BEAT 14 OPPORTUNITY does not come, and no other offer comes in its place` : told;
+}
+
 // What the coverage check needs from the writer's inputs.
 function coverageFacts(inputs) {
   const career = inputs?.story?.career || null;
   return {
     deliverables: career?.deliverables || [],
+    // The show's rules checked after writing (utils/scriptRuleChecks.js).
+    rules: { money: inputs?.money || null, shoppingApproved: Boolean(inputs?.money?.shopping), cast: require('../utils/scriptRuleChecks').eventCast(inputs?.eventData || null, inputs?.story?.socialProfiles || []) },
     goals: career?.goals || [],
     forwardHook: inputs?.brief?.forward_hook || '',
     lockedPieces: (inputs?.outfitScore?.items || []).filter((p) => p?.id).map((p) => ({ id: p.id, name: p.name })),
-    // Beat 14's opportunity, when the episode is not designed to fail (Evoni,
-    // 2026-10-19): it must arrive in the script.
-    opportunity: inputs?.beat14 && inputs?.brief?.designed_intent !== 'fail'
+    // Beat 14's opportunity, when it comes (Evoni, 2026-10-19): it must
+    // arrive in the script. Not when the episode is designed to fail, nor once
+    // it expired at completion (Script page audit, 2026-10-19).
+    opportunity: beat14Outcome(inputs?.beat14, inputs?.brief?.designed_intent || null) === 'invitation'
       ? { name: inputs.beat14.name, from: inputs.beat14.contact_name || inputs.beat14.connector_handle || null }
       : null,
   };
@@ -448,11 +486,45 @@ async function generateGroundedBeat(episodeId, showId, models, { beatNumber, cur
   const canon = CANONICAL_BEATS.find((b) => b.number === beatNumber);
   if (!canon) throw new Error(`No canonical beat ${beatNumber}`);
   const direction = typeof instruction === 'string' ? instruction.trim().slice(0, 300) : '';
-  const prompt = buildScriptPrompt(await groundedScriptInputs(episodeId, showId, models), {
+  const inputs = await groundedScriptInputs(episodeId, showId, models);
+  const prompt = buildScriptPrompt(inputs, {
     only: { beat: canon, currentScript: String(currentScript || ''), instruction: direction },
   });
-  return beatFromReply((await writeWith(prompt, 1500, 2)).text, beatNumber);
+  const beat = beatFromReply((await writeWith(prompt, 1500, 2)).text, beatNumber);
+  return beat ? beatAfterWriting(beat, beatNumber, inputs, currentScript) : beat;
 }
+
+// The fixes the whole script gets after writing, for one beat (Script page
+// audit, 2026-10-19: a regenerated beat had none of them): the coin line
+// after each costing [WEAR: id] when it is the closet beat of the script as
+// it stands (utils/scriptWear.js closetIndex), and the show's rules, Lala's
+// voice click and beat 5's invitation. The phone steps are left out: they
+// need where the beat before left the phone. Each fix that fails is logged
+// and the beat is kept as written.
+function beatAfterWriting(beat, beatNumber, inputs, currentScript) {
+  let text = beat;
+  if (inputs.money) {
+    try {
+      const { scriptBeats, closetIndex } = require('../utils/scriptWear');
+      const beats = scriptBeats(String(currentScript || ''));
+      const at = closetIndex(beats);
+      const closetNumber = at >= 0 ? beats[at].number : CLOSET_NUMBER;
+      if (beatNumber === closetNumber) {
+        text = require('../utils/scriptMoney').scriptWithCoinLines(text, inputs.money, { closetNumber }).script;
+      }
+    } catch (err) {
+      console.error('[ScriptGen] coin lines for one beat failed (non-blocking):', err.message);
+    }
+  }
+  try {
+    const { scriptWithShowRules } = require('../utils/scriptShowRules');
+    text = scriptWithShowRules(text, rulesPhone(inputs.phone, inputs.onScreen || [])).script;
+  } catch (err) {
+    console.error('[ScriptGen] show rules for one beat failed (non-blocking):', err.message);
+  }
+  return text;
+}
+const CLOSET_NUMBER = (CANONICAL_BEATS.find((b) => b.screen_action === 'CLOSET_OPEN') || { number: 8 }).number;
 
 // The Script Writer's blocks for what `story` holds: money, career, the
 // people at the event, the content she must make, continuity and her
@@ -470,7 +542,7 @@ async function generateGroundedBeat(episodeId, showId, models, { beatNumber, cur
 // never the rest (re-audit 2, 2026-10-15: one guest's bad JSON dropped her
 // career, money and stats together). Returns { text, career, stats }: what
 // rendered, so the rules and the fallback stats read only what is there.
-function storyContext(story, { hasSeason = false, hook = '', balanceBefore = null } = {}) {
+function storyContext(story, { hasSeason = false, hook = '', balanceBefore = null, beat14 = null } = {}) {
   const none = { text: '', career: false, stats: false };
   if (!story) return none;
   const { storyContextBlocks, financialContextText } = require('./episodeScriptWriterService');
@@ -488,10 +560,14 @@ function storyContext(story, { hasSeason = false, hook = '', balanceBefore = nul
     arcPhase: hasSeason ? null : story.arcPhase,
   };
   const financial = story.financial ? block('financial', () => `═══ FINANCIAL CONTEXT ═══\n${financialContextText(before ? { ...story.financial, balance, total_income: 0, total_expenses: 0 } : story.financial)}`) : '';
-  // A function, so a `$` in the hook is written as it is.
+  // A function, so a `$` in the hook is written as it is. With beat 14's
+  // invitation coming, the career block leaves beat 14 to it; with it
+  // withheld, no offer comes (careerBlock; Script page audit, 2026-10-19).
   const career = block('career', () => {
-    const text = careerBlock(story.career);
-    return text && hook ? text.replace(/^- Beat 14: .*$/m, () => `- Beat 14: end on the forward hook, "${hook}", told through her career: a follow-up offer, a goal still open, or what this deal could lead to.`) : text;
+    const text = careerBlock(story.career, { beat14 });
+    if (!text || !hook) return text;
+    const instead = beat14 === 'withheld' ? 'no offer comes: a goal still open, or what she does now' : 'a follow-up offer, a goal still open, or what this deal could lead to';
+    return text.replace(/^- Beat 14: .*$/m, () => `- Beat 14: end on the forward hook, "${hook}", told through her career: ${instead}.`);
   });
   // The guests are the block most likely to hold bad data; without them the
   // rest (her stats, the last episode, the arc) still goes in.
@@ -570,6 +646,29 @@ function seasonPurposeLines(sc) {
     ...purposes.map((p, n) => `${n + 1}. ${p.primary ? '[Primary] ' : ''}${p.text}${p.story_thread ? ` (thread: ${p.story_thread})` : ''}`)].join('\n');
 }
 
+// Who Lala talks with when the cutscene begins (Evoni, 2026-10-19: "beat 11
+// is when the cutscene begins, she should have a conversation with the host
+// and 2 featured guest"): the event's host (its creator organizer, else its
+// host field) and its first two featured guests
+// (canon_consequences.automation.guest_profiles, `featured`; all guests when
+// none is featured). A line for the prompt.
+function cutsceneCast(eventData) {
+  let cc = eventData?.canon_consequences;
+  if (typeof cc === 'string') {
+    try { cc = JSON.parse(cc); } catch (err) { console.error('[ScriptGen] canon_consequences is not valid JSON:', err.message); cc = null; }
+  }
+  const guests = Array.isArray(cc?.automation?.guest_profiles) ? cc.automation.guest_profiles.filter(Boolean) : [];
+  const featured = guests.filter((g) => g.featured);
+  const named = (featured.length ? featured : guests).map((g) => g.display_name || g.handle).filter(Boolean).slice(0, 2);
+  let organizer = null;
+  try { organizer = require('../utils/eventOrganizer').eventCreatorOrganizer(eventData); } catch (err) { console.error('[ScriptGen] event organizer read failed (non-blocking):', err.message); }
+  const host = organizer?.displayName || organizer?.handle || eventData?.host || null;
+  const hostText = host ? `the host, ${host}${eventData?.host_brand ? ` (${eventData.host_brand})` : ''}` : "the event's host";
+  const guestText = named.length === 2 ? `the two featured guests, ${named[0]} and ${named[1]}`
+    : named.length === 1 ? `the featured guest ${named[0]} and one more featured guest` : 'two featured guests of the event';
+  return `${hostText} and ${guestText}`;
+}
+
 function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext = null, onScreen = [], story = null, phone = null, worldNow = '', money = null, beat14 = null }, { only = null, lockedBeats = [] } = {}) {
   // Every canonical beat, in order, whether or not the plan has its row
   // (§8(j): Generate Script instantiates all 14; it never invents its own).
@@ -606,14 +705,21 @@ function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrob
 
   let eventContext;
   if (eventData) {
-    eventContext = `Event: ${eventData.name}\nPrestige: ${eventData.prestige}/10\nDress code: ${eventData.dress_code || 'Not specified'}\nCost: ${eventData.cost_coins} coins\nNarrative stakes: ${eventData.narrative_stakes || ''}`;
+    // The entry cost comes off in the Recap Panel only (Evoni, 2026-10-18;
+    // Script page audit, 2026-10-19): said here when LALA'S COINS does not
+    // say it, so a bare "Cost: N coins" is not charged on arrival.
+    const entry = Number(eventData.cost_coins) > 0
+      ? `Cost: ${eventData.cost_coins} coins${money ? '' : `, which comes off in the Recap Panel (Beat ${RECAP_NUMBER}) only, as [STAT: coins -${eventData.cost_coins}]; never earlier`}`
+      : `Cost: ${eventData.cost_coins ?? 0} coins`;
+    eventContext = `Event: ${eventData.name}\nPrestige: ${eventData.prestige}/10\nDress code: ${eventData.dress_code || 'Not specified'}\n${entry}\nNarrative stakes: ${eventData.narrative_stakes || ''}`;
     if (eventData.invitation_asset_id) {
       eventContext += '\nInvitation: GENERATED — use in Beat 5 (Reveal). JAWIHP opens the mail and reads the invitation aloud. The InviteLetterOverlay should float up on screen.';
     }
     // Outcomes — creator-authored narrative threads this event opens. The
     // Rewards editor in WorldAdmin populates rewards.outcomes (one per line).
     // Surfacing them here gives the writer concrete success-state hooks to
-    // weave into the back half of the episode (Beats 9-13: Result/Aftermath)
+    // weave into the back half of the episode (Beats 9-13, by their canonical
+    // names: BACK_HALF)
     // without inventing them on its own. Lenient parse handles JSON-string
     // legacy rows.
     const rewardsObj = (typeof eventData.rewards === 'string'
@@ -621,7 +727,7 @@ function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrob
       : (eventData.rewards || {}));
     const outcomes = Array.isArray(rewardsObj.outcomes) ? rewardsObj.outcomes.filter(Boolean) : [];
     if (outcomes.length > 0) {
-      eventContext += `\nIf this episode lands SLAY or PASS, these threads should be visibly opened in the back half (Beats 9-13). Reference them through dialogue, reactions, or a closing tag — not exposition:\n${outcomes.map(o => `  • ${o}`).join('\n')}`;
+      eventContext += `\nIf this episode lands SLAY or PASS, these threads should be visibly opened in the back half (${BACK_HALF}). Reference them through dialogue, reactions, or a closing tag — not exposition:\n${outcomes.map(o => `  • ${o}`).join('\n')}`;
     }
   } else {
     eventContext = 'No event assigned';
@@ -634,7 +740,10 @@ function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrob
   const rulesOn = rulesPhone(phone, onScreen);
   const hook = typeof brief?.forward_hook === 'string' ? brief.forward_hook.trim() : '';
   const balanceBefore = money?.balanceBefore ?? null;
-  const told = storyContext(story, { hasSeason: !!seasonContext?.label, hook, balanceBefore });
+  // How beat 14 ends (Script page audit, 2026-10-19): on the invitation,
+  // with the hook told through it; or, withheld, with no offer at all.
+  const ending = beat14Outcome(beat14, brief?.designed_intent || null);
+  const told = storyContext(story, { hasSeason: !!seasonContext?.label, hook, balanceBefore, beat14: ending });
   const statsContext = told.stats ? ''
     : lalaStats?.character_states ? JSON.stringify(snapshotStates(lalaStats.character_states, balanceBefore ?? story?.financial?.balance)).slice(0, 1500)
     : 'Stats not loaded';
@@ -680,7 +789,7 @@ ${eventContext}
 ${statsContext ? `═══ LALA'S STATE ═══\n${statsContext}\n` : ''}${worldNow}${told.text}
 ═══ WARDROBE ═══
 ${wardrobeContext}
-${outfitScore ? `\n═══ LOCKED OUTFIT ═══\nLala is wearing ${outfitScore.count} pieces for this event:\n${outfitScore.items.map(i => `- ${i.name} (${i.clothing_category}, ${i.tier})${i.id ? ` [WEAR: ${i.id}]` : ''}`).join('\n')}\nBeat 8 (Transformation): Reference these SPECIFIC items by name as Lala gets dressed. Right after the line where she puts a piece on, write that piece's [WEAR: id] line exactly as shown above, once per piece.\nBeat 11 (Event Outcome): Her outfit choice affects how the event goes — she is wearing what she chose.` : ''}
+${outfitScore ? `\n═══ LOCKED OUTFIT ═══\nLala is wearing ${outfitScore.count} pieces for this event:\n${outfitScore.items.map(i => `- ${i.name} (${i.clothing_category}, ${i.tier})${i.id ? ` [WEAR: ${i.id}]` : ''}`).join('\n')}\nBeat 8 (Transformation): Reference these SPECIFIC items by name as Lala gets dressed. Right after the line where she puts a piece on, write that piece's [WEAR: id] line exactly as shown above, once per piece.\nBeat 11 (Event Outcome): Her outfit choice affects how the event goes — she is wearing what she chose, on camera in the cutscene.` : ''}
 ${moneyText(money)}${require('./beat14Opportunity').beat14Context(beat14, brief?.designed_intent || null)}${onScreenContext(onScreen)}${phone ? require('../utils/phonePaths').phoneMapContext(phone) : ''}${layersText({ brief, eventData, seasonContext, story })}
 
 ═══ SCENE PLAN — 14 BEATS ═══
@@ -699,7 +808,7 @@ Do not add, merge, rename or skip beats. Under each header:`}
 Me: [JAWIHP dialogue]
 (Action description)
 Lala: [Lala dialogue]
-[STAT: coins +X]
+[STAT: coins -X] (a cost, only where LALA'S COINS puts one; other stats the same way, [STAT: reputation +1])
 [TRANSITION: description]
 [SFX: sound] / [EDIT: editing cue] (optional, for JustAWoman's moments; not on every line)
 ${people ? 'Another character at the event speaks as their name: [their words], in their own voice (CHARACTERS AT THE EVENT).\n' : ''}
@@ -712,11 +821,11 @@ Turn each beat's "UI action" above into one or more of these lines (CLOSET_OPEN 
 
 RULES:
 1. Beat 8 MUST reference specific wardrobe items by name
-2. JAWIHP reacts in real time to what she has seen, and sometimes lets a moment play in silence (JUSTAWOMAN ON CAMERA)
+2. JAWIHP reacts in real time to what she has seen (JUSTAWOMAN ON CAMERA)
 3. Lala's lines are ALWAYS short and punchy — max 2-3 sentences
 4. Community engagement: ask audience to react in comments at least twice
 5. A change to her stats appears only as a [STAT:] tag; she may say her coin balance in her own words when she checks it
-${!only || only.beat.number === 14 ? `6. ${only ? 'This beat ends' : 'Beat 14 ends'} on ${hook ? `the forward hook: "${hook}"` : 'a forward hook seeding the next episode'}\n` : ''}${told.career ? "7. Lala's career is on the page: name the deal, what she owes and what she wants from the event in the beats the CAREER block gives them, in her words, never as a list\n" : ''}
+${!only || only.beat.number === 14 ? `6. ${only ? 'This beat ends' : 'Beat 14 ends'} on ${beat14Ending(ending, hook)}\n` : ''}${told.career ? "7. Lala's career is on the page: name the deal and what she wants from the event in the beats the CAREER block gives them, in her words, never as a list; what she owes need not be shown on screen\n" : ''}
 
 ═══ JUSTAWOMAN ON CAMERA ═══
 JustAWoman (Me:) is playing the game on camera from her corner: she sees the game interface and reacts to it; Lala lives the experience. Two perspectives on the same moment. Lala cannot hear her commentary or see the audience's game interface.
@@ -728,16 +837,21 @@ JustAWoman (Me:) is playing the game on camera from her corner: she sees the gam
   - player actions: the [UI:] lines she makes happen, and her hesitation, (hovers over Confirm, then pulls back);
   - sound and edit cues, optional: [SFX: notification ping], [EDIT: punch-in on her corner frame].
 - Two modes. While playing (beats 1–12) she is emotionally involved and invested in Lala's business: "We cannot afford to embarrass ourselves tonight." While reviewing (beats 13–14) she briefly evaluates what happened: "That warning came after I spent the coins. You could've told me sooner." Write new lines; never reuse these.
-- Vary her energy and leave room to watch: let Lala's line finish before she reacts, and at least once let Lala's scene play while she watches in silence, (JustAWoman watches, silent.).
+- In the cutscene (beats 11–13) she is still on screen, watching it play like a cutscene in a video game: she comments a little between the characters' lines, a reaction here and there, never narrating every line, and she clicks nothing.
+- Vary her energy and leave room to watch: let Lala's line finish before she reacts.
 - She may talk to viewers as "besties" or "chat" and ask them to comment, but never invents viewer messages or comments.
 - Her humor, opinions, small grudges, favorite characters and investment in Lala carry on from PREVIOUS EPISODE when it is given; never invent a past grudge or favorite.
 
 ═══ SHOW RULES ═══
-- Lala's phone is on screen from the moment the Start button is clicked in Beat 1 until she travels to the event in Beat 10. Never write [UI:SHOW phone] or [UI:HIDE phone] in between; the phone is already there.
+- Beats 1–10 are gameplay: everything stems from Lala's phone. It is on screen from the moment the Start button is clicked in Beat 1 until she travels to the event in Beat 10. Never write [UI:SHOW phone] or [UI:HIDE phone] in between; the phone is already there.
+- Beats 11–13 are the cutscene: an AI video, like a play moment in a video game, where the characters say their own lines to each other: Lala, ${cutsceneCast(eventData)}, and anyone else present, each as their name: [their words]. No phone and no phone UI: no [UI:SHOW phone], [UI:CLICK …], [UI:OPEN …] or [UI:SCROLL …] of phone screens, and no voice-icon click. What the video shows goes in (parentheses). Overlays that sit on the video are allowed: [UI:DISPLAY Stats Panel] / [UI:HIDE Stats Panel], and [TRANSITION: …]. JustAWoman (Me:) stays on screen and comments a little between their lines.
+- Beat 11 (Event Outcome): the cutscene begins. Lala has a real conversation with ${cutsceneCast(eventData)}.
+- Beat 13 (Recap Panel): still the cutscene, with [UI:DISPLAY Stats Panel] over the video. The event's own costs come off here only (unless covered); what she is owed is paid next episode, so never a + coin line in this episode. Lala says how it went in her own words.
+- Beat 14 (Cliffhanger): back to gameplay: her phone and the voice icon again.
 - Beat 5 (Reveal): the invitation letter comes up, ${showRules.invitationLine(rulesOn)}, never the login screen or the Start button (those are beats 1 and 2). JAWIHP reads the whole invitation aloud, every word of it, not a summary.
-- Lala talks only after JustAWoman clicks her voice icon: ${`[UI:CLICK ${showRules.voiceIconName(rulesOn.icons)}]`} on its own line right before every line Lala says: one click, one line. No click is needed for the line where she answers a notification or message ([UI:NOTIFY …], [UI:DM …]), or while she is being dressed (the closet, [WEAR:] lines). Her thoughts, Lala (V.O.):, need no click.
+- In the gameplay beats (1–10 and 14) Lala talks only after JustAWoman clicks her voice icon: ${`[UI:CLICK ${showRules.voiceIconName(rulesOn.icons)}]`} on its own line right before every line Lala says: one click, one line. In the cutscene (11–13) she speaks with no click. No click is needed for the line where she answers a notification or message ([UI:NOTIFY …], [UI:DM …]), or while she is being dressed (the closet, [WEAR:] lines). Her thoughts, Lala (V.O.):, need no click.
 - Beat 8 (Transformation Loop): every piece of the look is picked and put on one at a time: its own pick, its own line, its own [WEAR: id] line, and its own coin line right after when it costs her (LALA'S COINS). Never several pieces at once.
-- Beat 12 (Fashion Challenge): someone at the event sets Lala a styling challenge; her phone comes back for it ([UI:SHOW phone], the closet) and goes away after ([UI:HIDE phone]). Each piece of the challenge look is picked and put on one at a time; [WEAR: id] only for pieces of her locked look, and a piece the studio or brand lends is named in an action line and costs her nothing. The room's verdict moves her standing with [STAT: reputation ±n], [STAT: brand_trust ±n], [STAT: influence ±n] and [STAT: stress ±n] lines, never coins.
+- Beat 12 (Fashion Challenge): still the cutscene. The challenge is a surprise runway walk at the event: stage it (a model doesn't show, and Lala is asked to walk), in the characters' own lines and (actions); no phone, no closet, no coin line. Anything the brand hands her to wear is named in an action line and costs her nothing. She may film the brand's reel here too, but it need not be shown. The room's verdict moves her standing with [STAT: reputation ±n], [STAT: brand_trust ±n], [STAT: influence ±n] and [STAT: stress ±n] lines, never coins.
 ${only ? `═══ THE SCRIPT AS IT STANDS ═══
 ${only.currentScript.trim() || '(empty)'}
 

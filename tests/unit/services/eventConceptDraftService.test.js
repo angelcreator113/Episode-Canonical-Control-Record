@@ -370,9 +370,9 @@ describe('buildDraftPrompt context (Task #2154)', () => {
   test('from-profile prompt unchanged: exact text up to "Write these:"', () => {
     const prompt = buildDraftPrompt(PROFILE, { venueName: 'The Loft', userId: 'u1' });
     expect(prompt.slice(0, prompt.indexOf('Write these:') + 'Write these:'.length)).toBe(
-      "Draft a fictional social event in Lala's world, fitting the Feed creator it was started from.\n"
+      "Draft a fictional social event in Lala's world, fitting the Pulse creator it was started from.\n"
       + '\n'
-      + 'Started from Feed creator: Maya Moves\n'
+      + 'Started from Pulse creator: Maya Moves\n'
       + "Creator's niche: fitness\n"
       + "Creator's archetype: soft life\n"
       + 'Venue: The Loft\n'
@@ -403,15 +403,15 @@ describe('buildDraftPrompt context (Task #2154)', () => {
 
   test('with context the creator is the host: host wording allowed, the no-host rule dropped', () => {
     const prompt = buildDraftPrompt(PROFILE, { venueName: 'The Loft', context: CAL });
-    expect(prompt.startsWith("Draft a fictional social event in Lala's world, hosted by the Feed creator below.\n")).toBe(true);
-    expect(prompt).toContain('Host (a Feed creator): Maya Moves');
-    expect(prompt).not.toContain('Started from Feed creator');
+    expect(prompt.startsWith("Draft a fictional social event in Lala's world, hosted by the Pulse creator below.\n")).toBe(true);
+    expect(prompt).toContain('Host (a Pulse creator): Maya Moves');
+    expect(prompt).not.toContain('Started from Pulse creator');
     expect(prompt).not.toMatch(/Do not call the creator the event's organizer or host/);
     // Without context the rule and the "started from" wording stay.
     const plain = buildDraftPrompt(PROFILE, { venueName: 'The Loft' });
     expect(plain).toContain("- Do not call the creator the event's organizer or host.");
-    expect(plain).toContain('Started from Feed creator: Maya Moves');
-    expect(plain).not.toContain('Host (a Feed creator)');
+    expect(plain).toContain('Started from Pulse creator: Maya Moves');
+    expect(plain).not.toContain('Host (a Pulse creator)');
   });
 
   test('context fields are capped like the draft fields; a missing one is left out', () => {
@@ -442,9 +442,9 @@ describe('buildDraftPrompt opportunity context and creatorRole (Task #2156)', ()
       context: { title: 'Holiday Gala', theme: 'luxury_prestige', description: "The season's biggest night." },
     });
     expect(head(prompt)).toBe(
-      "Draft a fictional social event in Lala's world, hosted by the Feed creator below.\n"
+      "Draft a fictional social event in Lala's world, hosted by the Pulse creator below.\n"
       + '\n'
-      + 'Host (a Feed creator): Maya Moves\n'
+      + 'Host (a Pulse creator): Maya Moves\n'
       + "Creator's niche: fitness\n"
       + "Creator's archetype: soft life\n"
       + 'Venue: The Loft\n'
@@ -474,16 +474,16 @@ describe('buildDraftPrompt opportunity context and creatorRole (Task #2156)', ()
 
   test("creatorRole 'started_from' keeps from-profile's wording and the no-host rule, even with a context", () => {
     const prompt = buildDraftPrompt(PROFILE, { venueName: 'The Loft', context: OPP, creatorRole: 'started_from' });
-    expect(prompt.startsWith("Draft a fictional social event in Lala's world, fitting the Feed creator it was started from.\n")).toBe(true);
-    expect(prompt).toContain('Started from Feed creator: Maya Moves');
+    expect(prompt.startsWith("Draft a fictional social event in Lala's world, fitting the Pulse creator it was started from.\n")).toBe(true);
+    expect(prompt).toContain('Started from Pulse creator: Maya Moves');
     expect(prompt).toContain("- Do not call the creator the event's organizer or host.");
-    expect(prompt).not.toContain('Host (a Feed creator)');
+    expect(prompt).not.toContain('Host (a Pulse creator)');
   });
 
   test("creatorRole 'host' uses the host wording and drops the rule", () => {
     const prompt = buildDraftPrompt(PROFILE, { venueName: 'The Loft', context: { ...OPP, brand: null }, creatorRole: 'host' });
-    expect(prompt.startsWith("Draft a fictional social event in Lala's world, hosted by the Feed creator below.\n")).toBe(true);
-    expect(prompt).toContain('Host (a Feed creator): Maya Moves');
+    expect(prompt.startsWith("Draft a fictional social event in Lala's world, hosted by the Pulse creator below.\n")).toBe(true);
+    expect(prompt).toContain('Host (a Pulse creator): Maya Moves');
     expect(prompt).not.toMatch(/Do not call the creator/);
     expect(prompt).not.toContain('Brand:');
   });

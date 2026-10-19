@@ -387,7 +387,7 @@ router.post('/generate', requireAuth, authorize(['ADMIN']), aiRateLimiter, async
   }
 
   if (layer === 'lalaverse' && !city) {
-    return res.status(400).json({ error: 'city is required for LalaVerse Feed profiles' });
+    return res.status(400).json({ error: 'city is required for LalaVerse Pulse profiles' });
   }
   // A DREAM city; an old name is read as the July unification mapped it
   // (utils/feedCities). Anything else would fail the column's ENUM.

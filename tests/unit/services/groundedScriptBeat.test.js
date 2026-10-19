@@ -64,7 +64,9 @@ describe('generateGroundedBeat', () => {
     mockAnthropic(create);
     const { generateGroundedBeat } = require('../../../src/services/groundedScriptGeneratorService');
     const beat = await generateGroundedBeat('ep1', 'show-1', models(), { beatNumber: 5, currentScript: '## BEAT: 4 · Interruption Pulse 1\nMe: the old four' });
-    expect(beat).toBe(`${beatHeader(CANONICAL_BEATS[4])}\nMe: new reveal`);
+    // Beat 5 shows the invitation letter: the show rules run on one beat too
+    // (Script page audit, 2026-10-19).
+    expect(beat).toBe(`${beatHeader(CANONICAL_BEATS[4])}\n[UI:OPEN Invitation]\nMe: new reveal`);
     const call = create.mock.calls[0][0];
     expect(call.max_tokens).toBe(1500);
     expect(call.messages[0].content).toContain('Me: the old four');

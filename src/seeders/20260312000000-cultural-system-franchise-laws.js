@@ -41,7 +41,7 @@ module.exports = {
         title: 'Celebrity & Creator Hierarchy — 6 Status Tiers',
         content: `The social ecosystem operates in status tiers. Where a character sits determines what they can access, who notices them, and what cultural events mean for their arc.
 
-TIER 1 — CULTURAL ICONS (10M+ followers): Platform-defining figures. Define trends. Headline global events. Appear at Starlight Awards. Their opinion reshapes the Feed.
+TIER 1 — CULTURAL ICONS (10M+ followers): Platform-defining figures. Define trends. Headline global events. Appear at Starlight Awards. Their opinion reshapes The Pulse.
 
 TIER 2 — INDUSTRY TITANS (5M–10M followers): Major designers, beauty founders, entertainment stars. Shape industry direction. Sponsor major events.
 
@@ -107,7 +107,7 @@ TIER 1 — BEAUTY EMPIRES: Major cosmetics and skincare companies that define th
 
 TIER 2 — BEAUTY LABS: Innovation companies developing ingredients, formulas, and tools. The science behind the beauty. Emerging brands partner with them to establish credibility.
 
-TIER 3 — SALON OWNERS: Local beauty powerhouses — lash studios, nail salons, skin clinics. Ground-level trend creation. The look starts in their chair before it's on the Feed.
+TIER 3 — SALON OWNERS: Local beauty powerhouses — lash studios, nail salons, skin clinics. Ground-level trend creation. The look starts in their chair before it's on The Pulse.
 
 TIER 4 — BEAUTY CREATORS: Makeup artists, skincare influencers, tutorial creators. Translate beauty trends into desire. Their reviews move product. Brands court them constantly.
 
@@ -189,7 +189,7 @@ SCANDALS: Leaks, rumors, accusations. Feed-dominating — pushes everything else
 
       {
         title: 'LalaVerse Award Systems — Four Major Shows',
-        content: `Four major award shows. Each has its own culture, politics, and snubs that the Feed argues about for weeks.
+        content: `Four major award shows. Each has its own culture, politics, and snubs that The Pulse argues about for weeks.
 
 STARLIGHT AWARDS (November) — The main event. Creator recognition across all categories.
 Categories: Creator of the Year, Fashion Icon, Beauty Innovator, Storyteller of the Year, Breakout Creator, Entrepreneur of the Year.
@@ -257,7 +257,7 @@ AUTOMATIC STORY PRESSURE: Every major event generates a pressure wave. When a ca
 • Is this character in the celebrity/creator tier that participates in this event?
 • Did they attend, skip, crash, or get excluded?
 • Who did they see there? Who saw them?
-• What did their attendance or absence signal to the Feed?
+• What did their attendance or absence signal to The Pulse?
 • How does this event touch their Deep Profile dimensions?
 • What drama type might this event trigger (breakup, feud, rivalry, scandal)?
 
@@ -287,7 +287,7 @@ ALGORITHM AWARENESS: The social algorithm shapes what characters see and what go
         title: 'The 25 Most Famous Characters — Cultural Icons',
         content: `These figures shape the culture of LalaVerse. All placeholders — names assigned when characters are generated through the Character Registry.
 
-1. THE STYLE QUEEN — Defines what is fashionable. Her opinion reshapes the Feed.
+1. THE STYLE QUEEN — Defines what is fashionable. Her opinion reshapes The Pulse.
 2. THE GLOW GURU — Defines beauty standards. Her recommendations sell out in hours.
 3. THE CREATOR KING — Represents success culture. Entrepreneurs model themselves on him.
 4. THE TREND ORACLE — Predicts cultural shifts before they happen. Always right, always cryptic.
@@ -311,7 +311,7 @@ ALGORITHM AWARENESS: The social algorithm shapes what characters see and what go
 22. THE STORYTELLING MASTER — Narrative above everything. Makes content feel like literature.
 23. THE CULTURE COMMENTATOR — Names what everyone is feeling but hasn't articulated yet.
 24. THE CREATOR MENTOR — Grows other creators. Legacy through multiplication.
-25. THE FASHION ARCHIVIST — Preserves what the Feed forgets. Memory as power.`,
+25. THE FASHION ARCHIVIST — Preserves what The Pulse forgets. Memory as power.`,
         category: 'franchise_law',
         severity: 'critical',
         always_inject: true,
@@ -331,13 +331,13 @@ ALGORITHM AWARENESS: The social algorithm shapes what characters see and what go
 
       {
         title: 'Major Birthdays — Cultural Icon Events',
-        content: `Certain characters in LalaVerse become cultural icons. Their birthdays become mini-events that organize the Feed for days. These are not personal celebrations — they are cultural rituals.
+        content: `Certain characters in LalaVerse become cultural icons. Their birthdays become mini-events that organize The Pulse for days. These are not personal celebrations — they are cultural rituals.
 
-THE STYLE QUEEN (Fashion): Themed outfit posts across the Feed. Her aesthetic becomes a challenge. Characters who align with her gain visibility.
+THE STYLE QUEEN (Fashion): Themed outfit posts across The Pulse. Her aesthetic becomes a challenge. Characters who align with her gain visibility.
 
 THE GLOW GURU (Beauty): Tutorial tributes honoring her techniques. Beauty creators compete to produce the best tribute content.
 
-THE CREATOR KING (Entrepreneur): Mentorship content. Creators share how he influenced their path. Aspiration and gratitude dominate the Feed.
+THE CREATOR KING (Entrepreneur): Mentorship content. Creators share how he influenced their path. Aspiration and gratitude dominate The Pulse.
 
 THE ICON TWINS (All Communities): Two legendary influencers born the same day. Fan edits, nostalgic posts, and the annual debate: which one is greater?
 

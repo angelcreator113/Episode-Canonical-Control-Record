@@ -10,7 +10,7 @@ export const ORIENTATION = {
   overview: {
     title: 'The LalaVerse, at a glance',
     what: 'The world your show and novel live in: one hub, seven tabs. This tab is the summary: the active show, its counts, and how far the world is set up.',
-    reads: 'Nothing reads this tab; it reads everything else. The seven setup steps below check the other tabs and the Feed.',
+    reads: 'Nothing reads this tab; it reads everything else. The seven setup steps below check the other tabs and The Pulse.',
     doHere: 'Follow the steps in order. Each one opens the tab that does the work; a green check means that part of the world exists.',
   },
   bible: {

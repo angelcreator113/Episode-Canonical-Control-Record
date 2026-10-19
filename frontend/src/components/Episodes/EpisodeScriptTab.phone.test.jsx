@@ -47,27 +47,24 @@ describe("Script tab: Lala's phone itself on screen", () => {
     expect(vi.mocked(api.put).mock.calls[0][1].script_content).toBe('## BEAT: 4 · Interruption Pulse 1\nLala: Mail!\n[UI:SHOW phone]');
   });
 
-  test('the phone stays up into the next beat, builds its scene, and a screen with no phone is flagged', async () => {
-    // After Event Travel (beat 10) the script brings the phone up itself
-    // (the show's rule, Evoni 2026-10-16: it is up from the Start button to Event Travel).
-    renderTab('## BEAT: 11 · Event Outcome\n[UI:OPEN closet]\n[UI:SHOW phone]\n\n## BEAT: 12 · Deliverable Creation\n[UI:OPEN closet]\n[UI:HIDE phone]\n\n## BEAT: 13 · Recap Panel\n[UI:OPEN closet]');
-    // Beat 11: the closet opens before the phone is up.
+  test('beats 11-13 are the cutscene: a phone moment there is flagged; beat 14 has the phone again', async () => {
+    // Evoni, 2026-10-19: beats 11-13 are an AI video, the characters
+    // speaking; no phone. Beat 14 is gameplay again.
+    renderTab('## BEAT: 11 · Event Outcome\n[UI:OPEN closet]\n[UI:SHOW phone]\n\n## BEAT: 12 · Fashion Challenge\n[UI:OPEN closet]\n\n## BEAT: 13 · Recap Panel\n[UI:OPEN closet]\n\n## BEAT: 14 · Cliffhanger\n[UI:OPEN closet]');
     await waitFor(() => expect(within(screen.getByTestId('script-beat-11')).getAllByTestId('script-moment')[0].querySelector('.esp-moment-thumb img')).toBeTruthy());
     const beat11 = within(screen.getByTestId('script-beat-11')).getAllByTestId('script-moment');
-    expect(within(beat11[0]).getByTestId('script-moment-phone-down')).toBeTruthy();
-    expect(within(beat11[1]).queryByTestId('script-moment-phone-down')).toBeNull();
+    // Showing the phone does not bring it up in the cutscene.
+    for (const m of beat11) expect(within(m).getByTestId('script-moment-phone-down').textContent).toBe('Beats 11–13 are the cutscene: no phone.');
 
-    // Beat 12: the phone carried in, so the closet is fine, and it builds the scene.
-    fireEvent.click(screen.getByTestId('script-beat-12').querySelector('.esp-beat-head'));
-    const beat12 = within(screen.getByTestId('script-beat-12')).getAllByTestId('script-moment');
-    expect(within(beat12[0]).queryByTestId('script-moment-phone-down')).toBeNull();
-    expect(beat12[0].textContent).toContain("With: Lala's phone");
-    expect([...screen.getByTestId('script-build-12').querySelectorAll('.esp-build-item span')].map((n) => n.textContent)).toEqual(["Lala's phone", 'Closet']);
-    expect(beat12[1].textContent).toContain('Goes away');
+    for (const n of [12, 13]) {
+      fireEvent.click(screen.getByTestId(`script-beat-${n}`).querySelector('.esp-beat-head'));
+      expect(within(screen.getByTestId(`script-beat-${n}`)).getByTestId('script-moment-phone-down').textContent).toBe('Beats 11–13 are the cutscene: no phone.');
+    }
 
-    // Beat 13: the phone went away in beat 12.
-    fireEvent.click(screen.getByTestId('script-beat-13').querySelector('.esp-beat-head'));
-    expect(within(screen.getByTestId('script-beat-13')).getByTestId('script-moment-phone-down')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('script-beat-14').querySelector('.esp-beat-head'));
+    const beat14 = within(screen.getByTestId('script-beat-14')).getAllByTestId('script-moment');
+    expect(within(beat14[0]).queryByTestId('script-moment-phone-down')).toBeNull();
+    expect(beat14[0].textContent).toContain("With: Lala's phone");
   });
 
   test('from the Start button to Event Travel the phone is up without a line for it', async () => {

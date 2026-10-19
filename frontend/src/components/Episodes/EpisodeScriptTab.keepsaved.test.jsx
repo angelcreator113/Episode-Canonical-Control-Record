@@ -49,7 +49,7 @@ describe('saved work reaches the episode page', () => {
     fireEvent.click(screen.getByTestId('script-savebar-save'));
     view.unmount();
     await act(async () => { reply.resolve({ data: { data: { script_content: `${SCRIPT}\nLala: One more.` } } }); });
-    expect(onSaved).toHaveBeenCalledWith({ script_content: `${SCRIPT}\nLala: One more.`, script_locked_beats: [] });
+    expect(onSaved).toHaveBeenCalledWith({ id: 'ep-1', script_content: `${SCRIPT}\nLala: One more.`, script_locked_beats: [] });
   });
 
   test('the tab reads the saved script as it opens', async () => {
@@ -60,7 +60,7 @@ describe('saved work reaches the episode page', () => {
     const onSaved = vi.fn();
     renderTab({ onSaved });
     await waitFor(() => expect(screen.getByTestId('script-beat-1').textContent).toContain('Written after you left.'));
-    expect(onSaved).toHaveBeenCalledWith({ script_content: NEW, script_locked_beats: [1] });
+    expect(onSaved).toHaveBeenCalledWith({ id: 'ep-1', script_content: NEW, script_locked_beats: [1] });
     expect(screen.queryByTestId('script-savebar')).toBeNull();
   });
 });

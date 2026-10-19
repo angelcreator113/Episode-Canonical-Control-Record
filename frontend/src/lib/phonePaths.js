@@ -8,6 +8,8 @@
 
 import { phoneCheck, momentLine } from './scriptMoments';
 import { splitSections, insertLine } from './scriptBeatOrder';
+import { headerNumber } from './beatLabelNumber';
+import { isCutsceneBeat } from './scriptShowRules';
 
 const everywhere = (t) => t.onName === 'Every screen';
 
@@ -48,6 +50,10 @@ export function scriptWithPhonePaths(scriptText, on = {}, { only = null, skip = 
   let added = 0;
   sections.forEach((section, beatIndex) => {
     const lines = section.split('\n').slice(1).filter((l) => l.trim());
+    // The cutscene, beats 11-13, has no phone (Evoni, 2026-10-19): no step
+    // goes in, and beat 14 starts the phone at home.
+    const label = ((section.split('\n')[0] || '').match(/##\s*BEAT:\s*(.+)/i)?.[1] || '').trim();
+    if (isCutsceneBeat(headerNumber(label) || beatIndex + 1)) { at = null; return; }
     const change = !skip.includes(beatIndex) && (only === null || only.includes(beatIndex));
     if (!change) { at = phoneCheck(lines, on, { startAt: at }).endAt; return; }
     const fixed = beatWithPhonePaths(lines, on, { startAt: at });

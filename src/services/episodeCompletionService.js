@@ -766,14 +766,19 @@ ${narrativeLines.short || ''}`,
     // Beat 14's opportunity (Evoni, 2026-10-19; services/beat14Opportunity):
     // offered when the episode lands, expired when it fails, in place of the
     // random post-event offer. Only an episode with none gets the random one.
+    // A beat 14 that could not be resolved may still have one, so no random
+    // offer is made beside it (Script page audit, 2026-10-19: a failed
+    // resolve read as "none", and both were offered).
     let beat14 = null;
+    let beat14Failed = false;
     try {
       beat14 = await require('./beat14Opportunity').resolveAtCompletion(require('../models'), { episodeId, event, tierFinal: evalResult.tier_final });
       eventSync.beat14_opportunity = beat14;
     } catch (beat14Err) {
-      console.error('[EpisodeCompletion] Beat 14 opportunity failed (non-blocking):', beat14Err?.message);
+      beat14Failed = true;
+      console.error('[EpisodeCompletion] Beat 14 opportunity failed (non-blocking); random post-event opportunities skipped:', beat14Err?.message);
     }
-    if (!beat14) {
+    if (!beat14 && !beat14Failed) {
       try {
         const opps = await characterSync.generatePostEventOpportunities(event, evalResult.tier_final, require('../models'));
         eventSync.opportunities_generated = (opps || []).map(o => ({ id: o.id, name: o.name }));

@@ -506,7 +506,7 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
               </button>
             )}
             <button onClick={() => { localStorage.removeItem(STORAGE_KEY); onDone(); }} style={{ flex: 1, padding: '12px', background: C.text, border: 'none', borderRadius: '10px', color: C.bg, fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Georgia, serif' }}>
-              Back to The Feed →
+              Back to The Pulse →
             </button>
           </div>
         </div>

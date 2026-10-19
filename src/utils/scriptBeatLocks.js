@@ -79,7 +79,10 @@ function withNumberedHeader(text, number) {
  * before (or first, when none of those is there). A number held by more
  * than one beat keeps every one of them, the first copy in place of the
  * first, the second of the second (Script tab re-audit, 2026-10-15: the tab
- * shows each copy approved, and only the first was kept). A locked number
+ * shows each copy approved, and only the first was kept). A copy the next
+ * script has beyond the approved count is dropped (Script page audit,
+ * 2026-10-19: a reply with two headers for an approved beat saved the
+ * second as an extra beat). A locked number
  * the previous script has no beat for is ignored. Returns
  *   { script, kept: [numbers put back], changed: [numbers whose text differed or was missing] }.
  */
@@ -98,6 +101,7 @@ function keepLockedBeats(nextScript, prevScript, lockedBeats) {
   const beats = split.beats.slice();
   const changed = [];
   const prevOrder = prev.beats.map((b) => b.number);
+  const extra = new Set();
   for (const n of toKeep) {
     let differs = false;
     let placed = null;
@@ -127,11 +131,13 @@ function keepLockedBeats(nextScript, prevScript, lockedBeats) {
       beats.splice(anchor === undefined ? 0 : anchor + 1, 0, kept);
       placed = kept;
     });
+    // Drafted copies past the approved ones are not beats of their own.
+    for (const i of at.slice(prevCopies.get(n).length)) { extra.add(beats[i]); differs = true; }
     if (differs) changed.push(n);
   }
   if (changed.length === 0) return { script: next, kept: toKeep, changed };
 
-  const body = beats.map((b) => b.text).join('\n\n');
+  const body = beats.filter((b) => !extra.has(b)).map((b) => b.text).join('\n\n');
   const preamble = split.preamble.replace(/\s+$/, '');
   return { script: preamble ? `${preamble}\n\n${body}` : body, kept: toKeep, changed };
 }
@@ -150,3 +156,29 @@ function scriptKeepingLocks(episode, nextScript) {
 }
 
 module.exports.scriptKeepingLocks = scriptKeepingLocks;
+
+/**
+ * The script with no more than `counts.get(n)` beats numbered n, for each n
+ * in `counts`: later copies are dropped (Script page audit, 2026-10-19: a
+ * writer's reply with two headers for an approved beat kept the second as an
+ * extra beat). A copy is a beat whose header names n; one numbered n only
+ * by its place is another beat, and stays. Other beats and the preamble
+ * stay as they are.
+ */
+function withoutExtraCopies(script, counts) {
+  const split = splitScriptBeats(script);
+  const seen = new Map();
+  const names = (b) => headerNumber((b.text.split('\n')[0].match(HEADER_LINE_RE) || [])[1]) === b.number;
+  const beats = split.beats.filter((b) => {
+    if (!counts.has(b.number) || !names(b)) return true;
+    const k = (seen.get(b.number) || 0) + 1;
+    seen.set(b.number, k);
+    return k <= counts.get(b.number);
+  });
+  if (beats.length === split.beats.length) return String(script ?? '');
+  const body = beats.map((b) => b.text).join('\n\n');
+  const preamble = split.preamble.replace(/\s+$/, '');
+  return preamble ? `${preamble}\n\n${body}` : body;
+}
+
+module.exports.withoutExtraCopies = withoutExtraCopies;

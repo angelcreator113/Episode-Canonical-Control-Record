@@ -1,0 +1,317 @@
+'use strict';
+
+// The show's rules the writer is told, checked in the script (Evoni's
+// rulings: beat 8's coin lines and beat 9's shopping list, 2026-10-18,
+// utils/scriptMoney.js; the cutscene, 2026-10-19: beat 11 Lala talks with
+// the host and two featured guests, beat 12 is the runway walk, her stats
+// move in beat 12 or 13, JustAWoman comments in 11 to 13; beat 13 Lala's
+// line, 2026-10-17, and the event's costs there only, 2026-10-18; owed
+// coins paid next episode, 2026-10-19), the server's copy of
+// frontend/src/lib/scriptRuleChecks.js: the code between BEGIN SHARED and
+// END SHARED is the same word for word (a parity test in
+// frontend/src/lib/scriptRuleChecks.test.js checks it). Each finding
+// becomes a coverage item (utils/scriptCoverage.js), so the fix pass after
+// writing asks the writer to mend a missing one in its beat, never an
+// approved one (groundedScriptGeneratorService).
+
+// BEGIN SHARED
+const STAT_TAG = /^\s*\[\s*STAT\s*:\s*(.*?)\s*\]\s*$/i;
+const STAT_ENTRY = /([a-z][a-z_]*(?:[ \t]+[a-z][a-z_]*)?)\s*:?\s*([+\-−–]?)\s*((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)/gi;
+const WEAR_CUE = /^\s*\[\s*WEAR\s*:\s*([^\]]*?)\s*\]\s*$/i;
+const UI_CUE = /^\s*\[\s*UI\s*:\s*([A-Za-z_]+)\s*(.*?)\s*\]\s*$/i;
+const LALA_SAYS = /^\s*lala\s*(?:\(([^)]*)\))?\s*:\s*\S/i;
+// JustAWoman's comment: `Me:` (or her name) with words beyond a stage direction.
+const JAW_SAYS = /^\s*(?:me|justawoman|jawihp|prime)\s*(?:\([^)]*\))?\s*:\s*(.*)$/i;
+// A speaker's line: a name (no cue, no stage direction) before a colon.
+const SPEAKER = /^\s*([^:[\]()]{1,60}?)\s*(?:\([^)]*\))?\s*:\s*\S/;
+const RUNWAY = /\b(?:runway|catwalk|walk(?:s|ed|ing)?)\b/i;
+// The episode overlay's own name for the approved list (src/utils/scriptMoney.js SHOPPING_LIST_OVERLAY).
+const SHOPPING_LIST = 'Shopping list';
+const CLOSET_BEAT = 8;
+const LIST_BEAT = 9;
+const CUTSCENE = [11, 12, 13];
+const TALK_BEAT = 11;
+const CHALLENGE_BEAT = 12;
+const RECAP_BEAT = 13;
+const JUDGED_ON = ['reputation', 'brand_trust', 'influence', 'stress'];
+
+/** A [STAT:] tag's entries as [{ stat, value }], else null when the line is no stat tag. */
+function statEntries(line) {
+  const m = String(line ?? '').match(STAT_TAG);
+  if (!m) return null;
+  return [...m[1].matchAll(STAT_ENTRY)].map((e) => {
+    const n = Number(e[3].replace(/,/g, ''));
+    return { stat: e[1].toLowerCase().replace(/\s+/g, '_'), value: e[2] && e[2] !== '+' ? -n : n };
+  });
+}
+
+/** The coins a line changes (signed), else null. */
+function coinChange(line) {
+  const c = (statEntries(line) || []).find((e) => e.stat === 'coins');
+  return c ? c.value : null;
+}
+
+const signed = (n) => `${n > 0 ? '+' : ''}${n}`;
+const coinTag = (n) => `[STAT: coins ${signed(n)}]`;
+const the = (name) => (/^the\s/i.test(String(name)) ? String(name) : `the ${name}`);
+const linesOf = (b) => (b?.lines || []).map((l) => String(l ?? '')).filter((l) => l.trim());
+const beatAt = (beats, n) => beats.find((b) => b.number === n) || null;
+const ui = (line) => { const m = line.match(UI_CUE); return m ? { verb: m[1].toUpperCase(), target: m[2] } : null; };
+const isList = (target) => target.trim().toLowerCase() === SHOPPING_LIST.toLowerCase();
+const more = (list) => (list.length > 1 ? ` (+${list.length - 1} more)` : '');
+const list = (items) => (items.length <= 2 ? items.join(' and ') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`);
+const norm = (v) => String(v ?? '').trim().replace(/^@/, '').replace(/\s+/g, ' ').toLowerCase();
+// A speaker is the person when the name as written is one of theirs, or
+// their first name (`Declan:` for Declan Ferris).
+const speaks = (who, c) => {
+  const w = norm(who);
+  return [c.name, ...(c.aliases || [])].map(norm).filter(Boolean)
+    .some((n) => n === w || (w.length >= 3 && !w.includes(' ') && n.split(' ')[0] === w));
+};
+
+/**
+ * The event's host and two featured guests, as the writer names them
+ * (episodeScriptWriterService: creator_name, else display_name, else
+ * handle): [{ name, role, aliases }]. The host is the creator organizer
+ * (source_profile_id, else automation.host_profile_id); the featured
+ * guests are the Event Package's guests marked featured (automation
+ * guest_profiles). `profiles`: the social profiles read for them, by id.
+ */
+function eventCast(event, profiles = []) {
+  let cc = event?.canon_consequences;
+  if (typeof cc === 'string') {
+    try { cc = JSON.parse(cc); } catch (err) { console.error('[scriptRuleChecks] canon_consequences unreadable:', err.message); cc = null; }
+  }
+  const auto = cc?.automation && typeof cc.automation === 'object' ? cc.automation : {};
+  const byId = new Map((profiles || []).filter((p) => p && p.id != null).map((p) => [String(p.id), p]));
+  const person = (role, id, own = []) => {
+    const p = id != null ? byId.get(String(id)) : null;
+    const names = [p?.creator_name, p?.display_name, p?.handle, ...own].filter((n) => typeof n === 'string' && n.trim());
+    return names.length ? { name: names[0].trim(), role, aliases: names.slice(1) } : null;
+  };
+  const out = [];
+  const hostId = event?.source_profile_id ?? auto.host_profile_id ?? null;
+  if (hostId != null && hostId !== '') {
+    const same = auto.host_profile_id != null && String(auto.host_profile_id) === String(hostId);
+    const host = person('host', hostId, same ? [auto.host_display_name, auto.host_handle] : []);
+    if (host) out.push(host);
+  }
+  const guests = (Array.isArray(auto.guest_profiles) ? auto.guest_profiles : []).filter((g) => g && g.featured).slice(0, 2);
+  for (const g of guests) {
+    const guest = person('featured guest', g.profile_id ?? g.id ?? null, [g.creator_name, g.display_name, g.handle]);
+    if (guest && !out.some((c) => norm(c.name) === norm(guest.name))) out.push(guest);
+  }
+  return out;
+}
+
+// The closet beat: the one given, else the one that opens the closet, else beat 8.
+function closetOf(beats, closetNumber) {
+  if (closetNumber) return closetNumber;
+  const opens = beats.find((b) => linesOf(b).some((l) => { const m = ui(l); return !!m && m.verb === 'OPEN' && /closet/i.test(m.target); }));
+  return opens ? opens.number : CLOSET_BEAT;
+}
+
+/**
+ * What the show's rules find in the script. `beats`: [{ number, lines }]
+ * (lines under the header). `money`: { look: [{ id, name, amount }], recap:
+ * [{ label, amount }] } or null when not read (no coin checks then);
+ * `shoppingApproved`: true when the event's shopping list is approved (beat
+ * 9 is checked only then); `closetNumber`: the closet beat, when known;
+ * `cast`: the event's host and featured guests (eventCast), [] when not
+ * known (no beat 11 check then). Each finding: { key, ok, beat, text, label,
+ * ask } where beat is the beat that carries it and ask, when not ok, is
+ * what the writer is asked to write in that beat.
+ */
+function scriptRuleFindings(beats = [], { money = null, shoppingApproved = null, closetNumber = null, cast = [] } = {}) {
+  const out = [];
+  const look = (money?.look || []).filter((p) => p && p.id != null && Math.round(Number(p.amount)) > 0)
+    .map((p) => ({ id: String(p.id), name: p.name || String(p.id), amount: Math.round(Number(p.amount)) }));
+  const recap = (money?.recap || []).filter((c) => c && Math.round(Number(c.amount)) > 0)
+    .map((c) => ({ label: c.label || 'the event cost', amount: Math.round(Number(c.amount)) }));
+  const recapFor = (n) => recap.find((c) => -c.amount === n) || null;
+  const closet = closetOf(beats, closetNumber);
+  // The closet beat's coin lines that belong to a piece of the look.
+  const pieceCoins = new Set();
+
+  // Beat 8: each costing piece's coin line right after its [WEAR: id] line,
+  // before the next piece goes on (within the next two lines).
+  const closetBeat = beatAt(beats, closet);
+  if (money && look.length && closetBeat) {
+    const lines = linesOf(closetBeat);
+    let checked = 0;
+    for (const p of look) {
+      const at = lines.findIndex((l) => { const m = l.match(WEAR_CUE); return !!m && m[1] === p.id; });
+      if (at < 0) continue; // not put on here: the look's own checks say so
+      checked += 1;
+      let coin = null;
+      for (let i = at + 1; i < Math.min(lines.length, at + 3) && !WEAR_CUE.test(lines[i]); i += 1) {
+        const c = coinChange(lines[i]);
+        if (c !== null) { coin = { value: c, i }; break; }
+      }
+      if (coin) pieceCoins.add(coin.i);
+      if (!coin) {
+        out.push({
+          key: `beat8-${p.id}`, ok: false, beat: closet, label: `${p.name}: ${coinTag(-p.amount)}`,
+          text: `Beat ${closet}: ${the(p.name)} goes on without its coin line ${coinTag(-p.amount)}.`,
+          ask: `Right after the [WEAR: ${p.id}] line, write the coin line for "${p.name}" on its own line, exactly: ${coinTag(-p.amount)}`,
+        });
+      } else if (coin.value !== -p.amount) {
+        out.push({
+          key: `beat8-${p.id}`, ok: false, beat: closet, label: `${p.name}: ${coinTag(-p.amount)}`,
+          text: `Beat ${closet}: ${the(p.name)} comes off as ${signed(coin.value)} coins; it costs ${coinTag(-p.amount)}.`,
+          ask: `The coin line right after [WEAR: ${p.id}] ("${p.name}") is exactly ${coinTag(-p.amount)}, not ${coinTag(coin.value)}.`,
+        });
+      }
+    }
+    if (checked && !out.some((f) => f.key.startsWith('beat8-'))) {
+      out.push({ key: 'beat8', ok: true, beat: closet, label: 'The look comes off her coins', text: `Beat ${closet}: each piece Lala buys comes off her coins as it goes on.`, ask: null });
+    }
+  }
+
+  // Beat 9: JustAWoman reads the approved shopping list on screen.
+  const listBeat = beatAt(beats, LIST_BEAT);
+  if (shoppingApproved === true && listBeat) {
+    const lines = linesOf(listBeat);
+    const shown = lines.findIndex((l) => { const m = ui(l); return !!m && m.verb === 'DISPLAY' && isList(m.target); });
+    const hidden = shown >= 0 && lines.slice(shown + 1).some((l) => { const m = ui(l); return !!m && m.verb === 'HIDE' && isList(m.target); });
+    const ask = `JustAWoman reads off the approved shopping list on screen: [UI:DISPLAY ${SHOPPING_LIST}] on its own line, each line of the list, the piece that filled it and its cost, then the total, and [UI:HIDE ${SHOPPING_LIST}] when she is done. The list is read, not rewritten.`;
+    if (shown < 0) out.push({ key: 'beat9', ok: false, beat: LIST_BEAT, label: `[UI:DISPLAY ${SHOPPING_LIST}]`, text: `Beat ${LIST_BEAT}: the approved shopping list never comes up: [UI:DISPLAY ${SHOPPING_LIST}].`, ask });
+    else if (!hidden) out.push({ key: 'beat9', ok: false, beat: LIST_BEAT, label: `[UI:HIDE ${SHOPPING_LIST}]`, text: `Beat ${LIST_BEAT}: the shopping list comes up and is never put away: [UI:HIDE ${SHOPPING_LIST}].`, ask });
+    else out.push({ key: 'beat9', ok: true, beat: LIST_BEAT, label: 'The shopping list is read', text: `Beat ${LIST_BEAT}: JustAWoman reads the approved shopping list on screen.`, ask: null });
+  }
+
+  // Beat 11: the cutscene begins with Lala's conversation with the event's
+  // host and two featured guests; each says a line, and so does Lala.
+  const talk = beatAt(beats, TALK_BEAT);
+  const people = (cast || []).filter((c) => c && c.name);
+  if (talk && people.length) {
+    const lines = linesOf(talk);
+    const speakers = lines.map((l) => (l.match(SPEAKER) || [])[1]).filter(Boolean);
+    const lalaSays = lines.some((l) => { const m = l.match(LALA_SAYS); return !!m && !/v\.?\s*o\.?/i.test(m[1] || ''); });
+    const quiet = people.filter((c) => !speakers.some((who) => speaks(who, c)));
+    for (const c of quiet) {
+      out.push({
+        key: `beat11-${c.role === 'host' ? 'host' : 'guest'}-${norm(c.name).replace(/[^a-z0-9]+/g, '-')}`, ok: false, beat: TALK_BEAT, label: `${c.name} (${c.role})`,
+        text: `Beat ${TALK_BEAT}: Lala doesn't talk with ${c.name} (${c.role}).`,
+        ask: `Lala has a conversation with ${c.name} (${c.role}), who speaks directly as ${c.name}: [their words], in their own voice.`,
+      });
+    }
+    if (!lalaSays) {
+      out.push({ key: 'beat11-lala', ok: false, beat: TALK_BEAT, label: "Lala's side of the conversation", text: `Beat ${TALK_BEAT}: Lala never speaks in her conversation with the host and guests.`, ask: 'Lala speaks in the conversation in her own voice (Lala: …), answering the host and the featured guests.' });
+    }
+    if (!quiet.length && lalaSays) {
+      out.push({ key: 'beat11', ok: true, beat: TALK_BEAT, label: 'Lala talks with the host and guests', text: `Beat ${TALK_BEAT}: Lala talks with ${list(people.map((c) => c.name))}.`, ask: null });
+    }
+  }
+
+  // Beat 12: the Fashion Challenge is her runway walk, never money.
+  const challenge = beatAt(beats, CHALLENGE_BEAT);
+  if (challenge) {
+    const lines = linesOf(challenge);
+    out.push(lines.some((l) => RUNWAY.test(l))
+      ? { key: 'beat12-runway', ok: true, beat: CHALLENGE_BEAT, label: 'The runway walk', text: `Beat ${CHALLENGE_BEAT}: the Fashion Challenge is her runway walk.`, ask: null }
+      : { key: 'beat12-runway', ok: false, beat: CHALLENGE_BEAT, label: 'The runway walk', text: `Beat ${CHALLENGE_BEAT}: the Fashion Challenge is a runway walk — it isn't in the beat yet.`, ask: 'The Fashion Challenge is a surprise runway walk at the event: Lala walks the runway in the look, and the room watches.' });
+    const coins = lines.map(coinChange).filter((n) => n !== null);
+    if (coins.length) {
+      out.push({
+        key: 'beat12-coins', ok: false, beat: CHALLENGE_BEAT, label: coinTag(coins[0]),
+        text: `Beat ${CHALLENGE_BEAT}: a coin line ${coinTag(coins[0])}${more(coins)}; the challenge is judged on her standing, never on money.`,
+        ask: 'No coin line in this beat: the challenge is judged on her standing (reputation, brand_trust, influence, stress), never on money.',
+      });
+    }
+  }
+
+  // Her standing moves in beat 12 or on beat 13's stats panel; the row is
+  // beat 13's (beat 12's when there is no beat 13).
+  const judged = [CHALLENGE_BEAT, RECAP_BEAT].map((n) => beatAt(beats, n)).filter(Boolean);
+  if (judged.length) {
+    const at = judged[judged.length - 1].number;
+    const moved = new Set(judged.flatMap((b) => linesOf(b).flatMap((l) => (statEntries(l) || []).map((e) => e.stat))));
+    const unmoved = JUDGED_ON.filter((st) => !moved.has(st));
+    out.push(unmoved.length
+      ? {
+        key: 'stats', ok: false, beat: at, label: unmoved.map((st) => `[STAT: ${st} ±n]`).join(' '),
+        text: `Beat ${at}: the runway's verdict doesn't move her ${unmoved.join(', ')}: ${unmoved.map((st) => `[STAT: ${st} ±n]`).join(' ')}.`,
+        ask: `The room's verdict on her runway walk moves her standing, each on its own line: ${JUDGED_ON.map((st) => `[STAT: ${st} ±n]`).join(', ')}; never coins.`,
+      }
+      : { key: 'stats', ok: true, beat: at, label: 'Judged on her standing', text: `Beat ${at}: her runway is judged on her reputation, brand trust, influence and stress.`, ask: null });
+  }
+
+  // Beat 13: Lala says how the outcome feels, in her own words.
+  const recapBeat = beatAt(beats, RECAP_BEAT);
+  if (recapBeat) {
+    const says = linesOf(recapBeat).some((l) => { const m = l.match(LALA_SAYS); return !!m && !/v\.?\s*o\.?/i.test(m[1] || ''); });
+    out.push(says
+      ? { key: 'beat13', ok: true, beat: RECAP_BEAT, label: 'Lala has her line', text: `Beat ${RECAP_BEAT}: Lala says how the outcome feels.`, ask: null }
+      : { key: 'beat13', ok: false, beat: RECAP_BEAT, label: "Lala's line", text: `Beat ${RECAP_BEAT}: Lala never says how the outcome feels.`, ask: 'Lala says how the outcome feels, in her own words, as one spoken line (Lala: …); the numbers stay on the stat card, which she does not see.' });
+  }
+
+  // Coins change only in beat 8 (the look) and beat 13 (the event's own
+  // costs); what she is owed is never a coin line. Beat 12 has its own row.
+  if (money) {
+    for (const b of beats) {
+      if (b.number === CHALLENGE_BEAT) continue;
+      const flags = [];
+      linesOf(b).forEach((l, i) => {
+        const n = coinChange(l);
+        if (n === null) return;
+        const cost = recapFor(n);
+        if (n > 0) flags.push({ text: `a coin line pays her ${coinTag(n)}; what she is owed is not paid in this episode`, ask: `Take out the coin line ${coinTag(n)}: what Lala is owed is not paid in this episode.` });
+        else if (b.number === RECAP_BEAT) return;
+        else if (b.number === closet && pieceCoins.has(i)) return;
+        else if (cost) flags.push({ text: `${the(cost.label)} comes off here ${coinTag(n)}; it comes off in beat ${RECAP_BEAT} only`, ask: `Take out the coin line ${coinTag(n)}: ${the(cost.label)} comes off in beat ${RECAP_BEAT} (the Recap Panel) only.` });
+        else if (b.number !== closet) flags.push({ text: `a coin line ${coinTag(n)}; her coins change only in beat ${closet} (the look) and beat ${RECAP_BEAT} (the event's costs)`, ask: `Take out the coin line ${coinTag(n)}: Lala's coins change only in beat ${closet} (each piece of the look) and beat ${RECAP_BEAT} (the event's own costs).` });
+      });
+      if (flags.length) {
+        out.push({ key: `coins-${b.number}`, ok: false, beat: b.number, label: flags[0].text, text: `Beat ${b.number}: ${flags[0].text}${more(flags)}.`, ask: flags.map((f) => f.ask).join(' ') });
+      }
+    }
+    // The event's own costs come off in beat 13: each its own line, or all
+    // of them together.
+    if (recap.length && recapBeat) {
+      const lines = linesOf(recapBeat);
+      const taken = lines.map(coinChange).filter((n) => n !== null && n < 0);
+      const left = taken.slice();
+      const unpaid = recap.filter((c) => { const at = left.indexOf(-c.amount); if (at < 0) return true; left.splice(at, 1); return false; });
+      const total = recap.reduce((s, c) => s + c.amount, 0);
+      if (unpaid.length && taken.reduce((s, n) => s - n, 0) !== total) {
+        out.push({
+          key: 'beat13-costs', ok: false, beat: RECAP_BEAT, label: unpaid.map((c) => `${c.label} ${coinTag(-c.amount)}`).join('; '),
+          text: `Beat ${RECAP_BEAT}: ${unpaid.map((c) => `${the(c.label)} ${coinTag(-c.amount)}`).join(' and ')} ${unpaid.length === 1 ? "doesn't" : "don't"} come off.`,
+          ask: `The event's own costs come off here, each its own coin line: ${recap.map((c) => `${c.label} ${coinTag(-c.amount)}`).join('; ')}.`,
+        });
+      } else {
+        out.push({ key: 'beat13-costs', ok: true, beat: RECAP_BEAT, label: "The event's costs come off", text: `Beat ${RECAP_BEAT}: the event's own costs come off here.`, ask: null });
+      }
+    }
+  }
+
+  // JustAWoman on camera, in the cutscene: she comments, a Me: line in each
+  // of beats 11 to 13.
+  const silentIn = CUTSCENE.map((n) => beatAt(beats, n)).filter(Boolean)
+    .filter((b) => !linesOf(b).some((l) => { const m = l.match(JAW_SAYS); return !!m && m[1].replace(/\([^)]*\)/g, '').trim().length > 0; }));
+  for (const b of silentIn) {
+    out.push({ key: `jaw-${b.number}`, ok: false, beat: b.number, label: 'JustAWoman comments (Me:)', text: `Beat ${b.number}: JustAWoman never comments on the cutscene (a Me: line).`, ask: "JustAWoman stays on screen and comments a little between the characters' lines, at least one line of her own: Me: …" });
+  }
+  if (!silentIn.length && CUTSCENE.some((n) => beatAt(beats, n))) {
+    out.push({ key: 'jaw', ok: true, beat: CUTSCENE.find((n) => beatAt(beats, n)), label: 'JustAWoman comments', text: 'JustAWoman comments on the cutscene in each of its beats.', ask: null });
+  }
+  return out;
+}
+// END SHARED
+
+/**
+ * The rules' coverage items for a script split by splitScriptBeats
+ * (`beats`: [{ number, text }], header first). `rules`: { money,
+ * shoppingApproved, cast } from the writer's inputs (coverageFacts); none
+ * when not given, so a caller that reads no rules gets no items. Each item:
+ * { kind: 'rule', rule, label, beat (where it is, or null), target, ask }.
+ */
+function scriptRuleItems(beats = [], rules = null) {
+  if (!rules) return [];
+  const read = beats.map((b) => ({ number: b.number, lines: String(b.text || '').split('\n').slice(1) }));
+  return scriptRuleFindings(read, { money: rules.money || null, shoppingApproved: rules.shoppingApproved ?? null, cast: rules.cast || [] })
+    .map((f) => ({ kind: 'rule', rule: f.key, label: f.label, beat: f.ok ? f.beat : null, target: f.beat, ask: f.ask }));
+}
+
+module.exports = { statEntries, coinChange, scriptRuleFindings, scriptRuleItems, eventCast, SHOPPING_LIST, JUDGED_ON };

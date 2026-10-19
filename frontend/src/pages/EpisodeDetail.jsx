@@ -83,6 +83,16 @@ export const reorderEpisodeLibrarySceneApi = (epId, sceneId, payload) =>
 export const removeEpisodeLibrarySceneApi = (epId, sceneId) =>
   api.delete(`/api/v1/episodes/${epId}/library-scenes/${sceneId}`);
 
+// A script the Script tab saved, merged into the episode the page holds. A
+// save, a lock or a Regenerate can land after the page has moved to another
+// episode (Script page audit, 2026-10-19: episode A's new script was merged
+// into episode B), so a report for another episode is ignored.
+export function withSavedScript(prev, fields) {
+  if (!prev || !fields) return prev;
+  const { id, ...rest } = fields;
+  if (id !== undefined && id !== prev.id) return prev;
+  return { ...prev, ...rest };
+}
 
 const EpisodeDetail = () => {
   const { episodeId } = useParams();
@@ -130,7 +140,7 @@ const EpisodeDetail = () => {
   // A save on the Script tab updates the episode the page holds, so coming
   // back to the tab (or the Wardrobe tab's closet beat) reads the saved script.
   const handleScriptSaved = useCallback((fields) => {
-    setEpisode((prev) => (prev ? { ...prev, ...fields } : prev));
+    setEpisode((prev) => withSavedScript(prev, fields));
   }, []);
 
   // Keyboard shortcuts for tab navigation

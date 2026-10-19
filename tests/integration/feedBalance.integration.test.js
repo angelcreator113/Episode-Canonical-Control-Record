@@ -23,11 +23,11 @@ const shouldSkip =
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 const reply = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }], usage: { input_tokens: 1, output_tokens: 1 } });
 const archivistCount = (prompt) => {
-  const m = prompt.match(/- The Archivist:[^\n]*\[(\d+) on the Feed|- The Archivist:[^\n]*\[nobody on the Feed yet/);
+  const m = prompt.match(/- The Archivist:[^\n]*\[(\d+) on The Pulse|- The Archivist:[^\n]*\[nobody on The Pulse yet/);
   return m ? Number(m[1] || 0) : null;
 };
 
-(shouldSkip ? describe.skip : describe)('the Feed\'s balance in the content-type batch', () => {
+(shouldSkip ? describe.skip : describe)('The Pulse\'s balance in the content-type batch', () => {
   const tag = crypto.randomUUID().slice(0, 8);
   const pids = [];
   let admin;
@@ -53,7 +53,7 @@ const archivistCount = (prompt) => {
     expect(res.status).toBe(200);
     expect(res.body.suggestions).toHaveLength(2);
     const [first, second] = mockCreate.mock.calls.map((c) => c[0].messages[0].content);
-    expect(second).toMatch(/The Feed needs range/);
+    expect(second).toMatch(/The Pulse needs range/);
     expect(archivistCount(second)).toBe((archivistCount(first) || 0) + 1);
   });
 });

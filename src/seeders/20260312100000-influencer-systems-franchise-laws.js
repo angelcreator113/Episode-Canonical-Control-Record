@@ -147,15 +147,15 @@ PAY-FOR-ATTENTION: DM access, CashApp tipping, direct financial relationships wi
         title: 'The Fashion Trend Engine — Five Stages',
         content: `Fashion spreads through a five-stage cycle in LalaVerse. Where a character sits in this cycle determines whether they're a leader, a follower, or someone who missed it entirely.
 
-STAGE 1 — UNDERGROUND: Who — Tier 5–6 creators experimenting, street style icons. Feed Behavior — Invisible to most of the Feed — too niche to surface. Story Moment — The character who found it here and didn't tell anyone. That decision is the story.
+STAGE 1 — UNDERGROUND: Who — Tier 5–6 creators experimenting, street style icons. Pulse Behavior — Invisible to most of The Pulse — too niche to surface. Story Moment — The character who found it here and didn't tell anyone. That decision is the story.
 
-STAGE 2 — RISING: Who — Micro-creators adopting and spreading the aesthetic. Feed Behavior — Starting to appear in interest clusters. Story Moment — The moment it could still be yours if you moved fast enough.
+STAGE 2 — RISING: Who — Micro-creators adopting and spreading the aesthetic. Pulse Behavior — Starting to appear in interest clusters. Story Moment — The moment it could still be yours if you moved fast enough.
 
-STAGE 3 — MAINSTREAM: Who — Tier 3–4 major influencers adopting. Feed Behavior — Algorithm starts pushing it — suddenly everywhere. Story Moment — The creators who were early watch it get credited to someone else.
+STAGE 3 — MAINSTREAM: Who — Tier 3–4 major influencers adopting. Pulse Behavior — Algorithm starts pushing it — suddenly everywhere. Story Moment — The creators who were early watch it get credited to someone else.
 
-STAGE 4 — SATURATION: Who — Everyone — trend has no owner left. Feed Behavior — Feed oversaturated — engagement dropping on trend content. Story Moment — The trend becomes invisible by being everywhere. The early adopter moves on.
+STAGE 4 — SATURATION: Who — Everyone — trend has no owner left. Pulse Behavior — Feed oversaturated — engagement dropping on trend content. Story Moment — The trend becomes invisible by being everywhere. The early adopter moves on.
 
-STAGE 5 — REPLACEMENT: Who — New underground trend emerging as the old one dies. Feed Behavior — Saturation content drops; new aesthetic starts appearing at the edges. Story Moment — Back to Stage 1. But now the cycle is faster than it was before.`,
+STAGE 5 — REPLACEMENT: Who — New underground trend emerging as the old one dies. Pulse Behavior — Saturation content drops; new aesthetic starts appearing at the edges. Story Moment — Back to Stage 1. But now the cycle is faster than it was before.`,
         category: 'franchise_law',
         severity: 'critical',
         always_inject: true,
@@ -175,7 +175,7 @@ STAGE 5 — REPLACEMENT: Who — New underground trend emerging as the old one d
 
       {
         title: 'The Beauty Trend Engine — Four Stages',
-        content: `Beauty trends spread differently from fashion — they originate in professional spaces before they reach the Feed. The distance between invention and adoption is the story.
+        content: `Beauty trends spread differently from fashion — they originate in professional spaces before they reach The Pulse. The distance between invention and adoption is the story.
 
 STAGE 1 — SALON DISCOVERY: Where — Professionals invent techniques — lash studios, skin clinics, nail artists. Story Moment — The technique exists but has no name yet. The artist who invented it is anonymous.
 
@@ -203,7 +203,7 @@ STAGE 4 — VIRAL ADOPTION: Where — Trend spreads across feeds — everyone do
 
       {
         title: 'Cultural Momentum Waves — Five Event Types',
-        content: `Some moments cause massive global attention — they dominate the Feed and reshape what's possible for every character in range.
+        content: `Some moments cause massive global attention — they dominate The Pulse and reshape what's possible for every character in range.
 
 AWARD WINS: Feed Effect — Immediate career trajectory jump. Every brand reassesses. Duration — 1–2 weeks of peak attention. What It Changes Permanently — The winner's tier. They move up. The snubbed nominee's relationship to the institution.
 

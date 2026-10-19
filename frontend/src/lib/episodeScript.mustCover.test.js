@@ -45,3 +45,27 @@ describe('must cover', () => {
     expect(mentionedIn(beats, 'the and for')).toBeNull();
   });
 });
+
+// Beat 14's opportunity (Script page audit, 2026-10-19): ticked only when
+// beat 14 delivers it as a DM or notification naming it.
+describe("beat 14's opportunity", () => {
+  const opp = { name: 'Sable Campaign Shoot' };
+  const cover = (b, o = opp) => mustCover({ beats: b, opportunity: o }).find((i) => i.key === 'opportunity');
+  test('a [UI:DM] or [UI:NOTIFY] line in beat 14 naming it ticks it, at beat 14', () => {
+    expect(cover([{ number: 14, lines: ['[UI:DM Sable Reyes: The Sable campaign shoot is yours if you want it.]'] }]).beat).toBe(14);
+    expect(cover([{ number: 14, lines: ['[UI:NOTIFY Sable Reyes: sable CAMPAIGN shoots, next month]'] }]).beat).toBe(14);
+  });
+  test('a mention in another beat, or a spoken line in beat 14, does not', () => {
+    expect(cover([{ number: 11, lines: ['[UI:DM Sable Reyes: The Sable campaign shoot is yours.]'] }, { number: 14, lines: ['Me: wow'] }]).beat).toBeNull();
+    expect(cover([{ number: 14, lines: ['Lala: "The Sable campaign shoot!"'] }]).beat).toBeNull();
+    expect(cover([{ number: 14, lines: ['[UI:DM Sable Reyes: see you soon]'] }]).beat).toBeNull();
+  });
+  test('a short name is matched as a phrase, plural or not', () => {
+    expect(cover([{ number: 14, lines: ['[UI:DM Marcus: Two VIPs passes for you.]'] }], { name: 'VIP' }).beat).toBe(14);
+    expect(cover([{ number: 14, lines: ['[UI:NOTIFY Marcus: A seat at The Met, darling.]'] }], { name: 'The Met' }).beat).toBe(14);
+    expect(cover([{ number: 14, lines: ['[UI:NOTIFY Marcus: We met at the gala.]'] }], { name: 'The Met' }).beat).toBeNull();
+  });
+  test('no opportunity passed, no item', () => {
+    expect(mustCover({ beats: [{ number: 14, lines: [] }], opportunity: null })).toEqual([]);
+  });
+});

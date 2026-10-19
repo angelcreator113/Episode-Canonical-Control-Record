@@ -16,6 +16,8 @@
 
 'use strict';
 
+const { normalizeBeatHeaders } = require('./beatLabelNumber');
+
 // ─── CANONICAL TYPES ───
 
 const BEAT_TYPES = [
@@ -90,7 +92,10 @@ function parseScript(scriptContent, options = {}) {
     };
   }
 
-  const lines = scriptContent.split('\n');
+  // Headers read as the Script tab reads them (utils/beatLabelNumber.js;
+  // Script page audit, 2026-10-19): `## Beat 5: Reveal`, `### BEAT: 5` and
+  // Windows line ends are headers here too.
+  const lines = normalizeBeatHeaders(scriptContent).split('\n');
   const rawBeats = [];
   let currentBeat = null;
   let lineBuffer = [];

@@ -8,7 +8,15 @@ import { Check, AlertTriangle, ChevronDown } from 'lucide-react';
 
 const STORE_KEY = 'esp-health-collapsed';
 
+// At phone width it starts folded: open, its list pushed the beat about
+// 1700px down (Script page audit, 2026-10-19).
+function isPhoneWidth() {
+  try { return window.matchMedia?.('(max-width: 760px)').matches || false; }
+  catch (err) { console.error('[ScriptHealth] width check failed:', err); return false; }
+}
+
 function readCollapsed() {
+  if (isPhoneWidth()) return true;
   try { return window.localStorage.getItem(STORE_KEY) === '1'; }
   catch (err) { console.error('[ScriptHealth] could not read the remembered state:', err); return false; }
 }
@@ -38,26 +46,26 @@ export default function ScriptHealthPanel({ rows = [], beatNumbers = {}, onOpenB
           </button>
         </div>
       )}
-      {!collapsed && (
-        <ul className="esp-health-list" id="esp-health-list">
-          {rows.map((r) => (
-            <li key={r.key} className={r.ok ? 'is-ok' : 'is-gap'} data-testid={`script-health-${r.key}`} data-ok={r.ok ? 'true' : 'false'}>
-              {r.ok ? <Check size={14} aria-label="OK" /> : <AlertTriangle size={14} aria-label="To check" />}
-              <span className="esp-health-text">{r.text}</span>
-              {r.fix && onFix && (
-                <button type="button" className="esp-health-open esp-health-fix" data-testid={`script-health-fix-${r.key}`} disabled={busy} onClick={() => onFix(r.fix)}>
-                  {r.fix.label}
-                </button>
-              )}
-              {r.beatId && onOpenBeat && (
-                <button type="button" className="esp-health-open" data-testid={`script-health-open-${r.key}`} onClick={() => onOpenBeat(r.beatId)}>
-                  Open beat{beatNumbers[r.beatId] != null ? ` ${beatNumbers[r.beatId]}` : ''}
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+      {/* The list is always there, hidden while folded, so aria-controls
+          names an element (Script page audit, 2026-10-19). */}
+      <ul className="esp-health-list" id="esp-health-list" hidden={collapsed}>
+        {!collapsed && rows.map((r) => (
+          <li key={r.key} className={r.ok ? 'is-ok' : 'is-gap'} data-testid={`script-health-${r.key}`} data-ok={r.ok ? 'true' : 'false'}>
+            {r.ok ? <Check size={14} aria-label="OK" /> : <AlertTriangle size={14} aria-label="To check" />}
+            <span className="esp-health-text">{r.text}</span>
+            {r.fix && onFix && (
+              <button type="button" className="esp-health-open esp-health-fix" data-testid={`script-health-fix-${r.key}`} disabled={busy} onClick={() => onFix(r.fix)}>
+                {r.fix.label}
+              </button>
+            )}
+            {r.beatId && onOpenBeat && (
+              <button type="button" className="esp-health-open" data-testid={`script-health-open-${r.key}`} onClick={() => onOpenBeat(r.beatId)}>
+                Open beat{beatNumbers[r.beatId] != null ? ` ${beatNumbers[r.beatId]}` : ''}
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

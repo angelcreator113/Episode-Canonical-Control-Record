@@ -9,15 +9,15 @@
  * page's actions lavender and adds the script's card and the side panel
  * (EpisodeScriptPage.css). The Script tab restyle (2026-10-08) moved the
  * tab's inline styles into EpisodeScriptPage.css classes; the same pairs
- * are checked there.
+ * are checked there. EpisodeScriptTab.css, imported nowhere, was deleted
+ * (Script page audit, 2026-10-19); the stylesheet checked is the page's.
  */
 import { describe, test, expect } from 'vitest';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 import { contrast, readToken, stripTaskRefs } from '../../styles/contrast';
 
 const jsx = readFileSync(resolve(__dirname, 'EpisodeScriptTab.jsx'), 'utf8');
-const css = readFileSync(resolve(__dirname, 'EpisodeScriptTab.css'), 'utf8');
 const page = readFileSync(resolve(__dirname, 'EpisodeScriptPage.css'), 'utf8');
 const tokens = readFileSync(resolve(__dirname, '../../styles/design-tokens.css'), 'utf8');
 const HEX = /#[0-9a-f]{3,8}\b/i;
@@ -25,9 +25,19 @@ const HEX = /#[0-9a-f]{3,8}\b/i;
 describe('Episode Script theme', () => {
   test('the tab and its stylesheet carry no color literal and no gradient', () => {
     expect(stripTaskRefs(jsx)).not.toMatch(HEX);
-    expect(stripTaskRefs(css)).not.toMatch(HEX);
+    expect(stripTaskRefs(page)).not.toMatch(HEX);
     expect(jsx).not.toMatch(/linear-gradient/);
-    expect(css).not.toMatch(/linear-gradient/);
+    expect(page).not.toMatch(/linear-gradient/);
+    // No raw rgb()/rgba()/hsl() either: translucent colours mix a token
+    // (Script page audit, 2026-10-19).
+    expect(page).not.toMatch(/\b(?:rgba?|hsla?)\(/);
+    expect(stripTaskRefs(jsx)).not.toMatch(/\b(?:rgba?|hsla?)\(/);
+  });
+
+  test('the dead EpisodeScriptTab.css is gone and nothing imports it', () => {
+    expect(existsSync(resolve(__dirname, 'EpisodeScriptTab.css'))).toBe(false);
+    expect(jsx).not.toMatch(/EpisodeScriptTab\.css/);
+    expect(jsx).toMatch(/import '\.\/EpisodeScriptPage\.css';/);
   });
 
   test('acts and speakers read the text-safe family tokens', () => {
@@ -56,8 +66,6 @@ describe('Episode Script theme', () => {
     expect(page).not.toMatch(/color: var\(--lala-gold-text\)[^}]*background: var\(--gray-900\)/);
     // No inline colour left in the tab but the two act/speaker variables.
     expect((jsx.match(/style=\{\{/g) || []).length).toBe(2);
-    expect(css).toMatch(/\.btn-save\s*\{[^}]*background: var\(--primary\);/);
-    expect(css).toMatch(/\.preview-character\s*\{[^}]*color: var\(--primary-text\);/);
   });
 
   test('the toast, guard result and generate error read text tokens on their surfaces', () => {

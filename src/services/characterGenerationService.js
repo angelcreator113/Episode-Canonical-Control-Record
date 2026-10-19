@@ -479,7 +479,7 @@ Their mask: ${maskDesc}
 Their ambition: ${ambition}
 
 Generate their social media profile. The profile should reflect their mask, not their deep interior.
-The gap between the Feed profile and the Deep Profile is where the story lives.
+The gap between the Pulse profile and the Deep Profile is where the story lives.
 ${onPulse ? pulsePromptRules('lalaverse') : ''}
 Return JSON only:
 {

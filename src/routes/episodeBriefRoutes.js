@@ -626,6 +626,8 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
     return res.json(body);
   } catch (err) {
     console.error('[ScriptGen] Error:', err.message);
+    // A refused budget is a 429 with its code, not a 500 (Script page audit, 2026-10-19).
+    if (err?.code === 'AI_BUDGET_EXCEEDED' || err?.status === 429) return res.status(429).json({ error: err.message, code: 'AI_BUDGET_EXCEEDED' });
     return res.status(500).json({ error: err.message });
   }
 });
@@ -665,11 +667,16 @@ router.post('/:episodeId/regenerate-beat', requireAuth, aiRateLimiter, async (re
     return res.json({ success: true, beatNumber, beat });
   } catch (err) {
     console.error('[RegenerateBeat] Error:', err.message);
+    // A refused budget is a 429 with its code, not a 500 (Script page audit, 2026-10-19).
+    if (err?.code === 'AI_BUDGET_EXCEEDED' || err?.status === 429) return res.status(429).json({ error: err.message, code: 'AI_BUDGET_EXCEEDED' });
     return res.status(500).json({ error: err.message });
   }
 });
 
 // ── REWRITE SINGLE LINE (with Show Brain voice DNA) ───────────────────────────
+
+// A line rewrite is a side call, on Haiku 4.5 (CLAUDE.md: Haiku for side calls).
+const REWRITE_MODELS = ['claude-haiku-4-5-20251001'];
 
 router.post('/:episodeId/rewrite-line', requireAuth, aiRateLimiter, async (req, res) => {
   try {
@@ -727,12 +734,27 @@ Return ONLY the rewritten dialogue. No speaker prefix, no quotes, no explanation
 
     const Anthropic = require('@anthropic-ai/sdk');
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const response = await client.messages.create({ model: 'claude-haiku-4-5-20251001', max_tokens: 200, messages: [{ role: 'user', content: prompt }] });
+    // Two attempts, as the AI routes try (Script page audit, 2026-10-19); a
+    // refused budget or a rate limit is not tried again.
+    let response = null;
+    for (const model of REWRITE_MODELS) {
+      for (let attempt = 1; attempt <= 2 && !response; attempt += 1) {
+        try {
+          response = await client.messages.create({ model, max_tokens: 200, messages: [{ role: 'user', content: prompt }] });
+        } catch (modelErr) {
+          console.error(`[RewriteLine] ${model} attempt ${attempt} failed:`, modelErr.message);
+          if (modelErr?.code === 'AI_BUDGET_EXCEEDED' || modelErr?.status === 429 || (model === REWRITE_MODELS[REWRITE_MODELS.length - 1] && attempt === 2)) throw modelErr;
+        }
+      }
+      if (response) break;
+    }
     const rewrittenLine = response.content[0]?.text?.trim() || line;
 
     return res.json({ rewrittenLine, original: line });
   } catch (err) {
     console.error('[RewriteLine] Error:', err.message);
+    // A refused budget is a 429 with its code, not a 500 (Script page audit, 2026-10-19).
+    if (err?.code === 'AI_BUDGET_EXCEEDED' || err?.status === 429) return res.status(429).json({ error: err.message, code: 'AI_BUDGET_EXCEEDED' });
     return res.status(500).json({ error: err.message });
   }
 });
@@ -754,6 +776,7 @@ router.get('/:episodeId/script-context', requireAuth, async (req, res) => {
     else message = 'All beats locked — ready for script generation.';
     return res.json({ data: context, count: context.length, coverage, ready, message });
   } catch (err) {
+    console.error('[ScriptContext] Error:', err.message);
     return res.status(500).json({ error: err.message });
   }
 });

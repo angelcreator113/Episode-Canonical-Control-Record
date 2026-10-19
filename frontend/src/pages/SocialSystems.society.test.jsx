@@ -29,12 +29,12 @@ beforeEach(() => {
 });
 
 describe('Society tab', () => {
-  test('Archetypes says each new LalaVerse Feed profile gets one, and carries the Social Systems button only', async () => {
+  test('Archetypes says each new LalaVerse Pulse profile gets one, and carries the Social Systems button only', async () => {
     window.history.pushState({}, '', '/universe?tab=society');
     renderAt('/universe?tab=society');
     const note = screen.getByTestId('society-reads-archetypes').textContent;
     // Fix-list item 26 (2026-10-08): the Feed also uses these, Evoni's edits included.
-    expect(note).toContain('Each new LalaVerse Feed profile gets one of these archetypes, your edits included, beside the Feed\'s own ten');
+    expect(note).toContain('Each new LalaVerse Pulse profile gets one of these archetypes, your edits included, beside The Pulse\'s own ten');
     expect(note).not.toContain('own built-in list');
     // Card by card (fix-list item 24): a card reaches the generators when marked in the Show Bible.
     expect(note).toContain('A card reaches the generators only when you mark it “In every prompt” in the Show Bible; Brain Update keeps that mark when it updates the card.');
