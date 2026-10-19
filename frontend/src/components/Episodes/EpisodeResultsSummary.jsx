@@ -104,7 +104,7 @@ export default function EpisodeResultsSummary({ episode, showId, onOpenTab }) {
       </div>
 
       <section className="ers-card ers-share" data-testid="results-share">
-        <div className="ers-share-head"><h3 className="ers-card-title">Share</h3><span className="ers-sub">What viewers and Lala's feed see about this episode</span></div>
+        <div className="ers-share-head"><h3 className="ers-card-title">Share</h3><span className="ers-sub">What viewers and The Pulse see about this episode</span></div>
         <div className={`ers-teaser${share.teaser ? '' : ' is-missing'}`} data-testid="results-teaser">
           <div>
             <strong>Viewer teaser</strong> {!share.teaser && <span className="ers-chip is-warn">Missing</span>}
@@ -119,9 +119,9 @@ export default function EpisodeResultsSummary({ episode, showId, onOpenTab }) {
             <button type="button" className="ers-link" onClick={() => onOpenTab?.('distribution')}>Open Distribution</button>
           </div>
           <div className="ers-share-box is-pink">
-            <strong>Feed posts</strong>
+            <strong>Pulse posts</strong>
             <p>{share.posts ? `${share.posts} post${share.posts === 1 ? '' : 's'} · ${share.live} live` : "Lala's post plus reactions that match the result"}</p>
-            {showId && <Link className="ers-link" to={`/shows/${showId}/world?tab=feed`}>Open Lala's Feed</Link>}
+            {showId && <Link className="ers-link" to={`/shows/${showId}/world?tab=feed`}>Open Lala's posts</Link>}
           </div>
         </div>
       </section>

@@ -28,16 +28,16 @@ import './EventPackage/EventDocuments.css';
 
 // ── Content type registry — maps type keys to renderer components and metadata ──
 export const CONTENT_TYPES = [
-  { key: 'feed_posts', label: 'Feed Posts', icon: '📰', desc: 'Social timeline posts', group: 'social' },
+  { key: 'feed_posts', label: 'Pulse posts', icon: '📰', desc: 'Social timeline posts', group: 'social' },
   { key: 'pulse_feed', label: 'The Pulse', icon: '💗', desc: 'The Pulse as of this beat\u2019s story time: the same posts, numbers and reveals Lala sees then', group: 'social' },
-  { key: 'feed_post', label: 'One Post', icon: '📌', desc: 'A single post, drawn live from the feed (the post lives in one place)', group: 'social' },
+  { key: 'feed_post', label: 'One Post', icon: '📌', desc: 'A single post, drawn live from The Pulse (the post lives in one place)', group: 'social' },
   { key: 'profile_header', label: 'Profile Header', icon: '👤', desc: 'Name, handle, avatar, bio', group: 'social' },
   { key: 'profile_stats', label: 'Profile Stats', icon: '📊', desc: 'Followers, posts, following', group: 'social' },
   { key: 'pulse_messages', label: "Lala's Messages", icon: '💌', desc: 'Lala\u2019s DMs on The Pulse as of this beat\u2019s story time: approved messages only, never drafts', group: 'messages' },
   { key: 'dm_thread', label: 'DM Thread', icon: '💬', desc: 'Message conversation', group: 'messages' },
   { key: 'notifications', label: 'Notifications', icon: '🔔', desc: 'Alert list', group: 'messages' },
-  { key: 'relationship_changes', label: 'Relationship Changes', icon: '💞', desc: '"changed her relationship status", "are now friends", from the feed', group: 'social' },
-  { key: 'feed_notifications', label: 'Feed Notifications', icon: '🔔', desc: '"Marcus commented on your status", from the feed records', group: 'messages' },
+  { key: 'relationship_changes', label: 'Relationship Changes', icon: '💞', desc: '"changed her relationship status", "are now friends", from The Pulse', group: 'social' },
+  { key: 'feed_notifications', label: 'Pulse notifications', icon: '🔔', desc: '"Marcus commented on your status", from The Pulse records', group: 'messages' },
   { key: 'story_ring', label: 'Story Avatars', icon: '⭕', desc: 'Row of story circles', group: 'social' },
   // Named wardrobe categories — surface the four creators actually think
   // in ("I want a shoes screen") instead of the technical "grid + category

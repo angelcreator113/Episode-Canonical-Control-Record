@@ -56,13 +56,13 @@ export default function SocietySummary({ legendGroups = [], onOpen }) {
       <div className="soc-col">
         <section className="soc-card" aria-labelledby="soc-arch-heading">
           <div className="soc-head">
-            <h2 id="soc-arch-heading" className="soc-title">Archetypes in the Feed</h2>
+            <h2 id="soc-arch-heading" className="soc-title">Archetypes on The Pulse</h2>
             {data?.archetypes && <span className="soc-sub">{plural(data.archetypes.total, 'LalaVerse profile')}</span>}
             <Link className="soc-link" to="/world-studio?tab=feed&layer=lalaverse">See the people →</Link>
           </div>
           {!data ? <p className="soc-note">Counting the profiles…</p>
-            : !data.archetypes ? <p className="soc-note">The Feed profiles could not be read just now.</p>
-            : data.archetypes.total === 0 ? <p className="soc-note" data-testid="soc-arch-empty">No LalaVerse profiles yet. Generate the Feed and each profile lands in one of these ten.</p>
+            : !data.archetypes ? <p className="soc-note">The Pulse profiles could not be read just now.</p>
+            : data.archetypes.total === 0 ? <p className="soc-note" data-testid="soc-arch-empty">No LalaVerse profiles yet. Make Pulse people and each profile lands in one of these ten.</p>
             : (
               <ul className="soc-arch" data-testid="soc-archetypes">
                 {data.archetypes.rows.map((a, i) => (
@@ -82,8 +82,8 @@ export default function SocietySummary({ legendGroups = [], onOpen }) {
             <h2 id="soc-trend-heading" className="soc-title">Trending now</h2>
             <Link className="soc-btn" to={feedTab}>Post about a trend</Link>
           </div>
-          {!data ? <p className="soc-note">Reading the Feed…</p>
-            : !data.trends ? <p className="soc-note">{show?.id ? "The Feed's trends could not be read just now." : 'Choose a show to see what its Feed is talking about.'}</p>
+          {!data ? <p className="soc-note">Reading The Pulse…</p>
+            : !data.trends ? <p className="soc-note">{show?.id ? "The Pulse's trends could not be read just now." : 'Choose a show to see what its Pulse is talking about.'}</p>
             : data.trends.length === 0 ? <p className="soc-note" data-testid="soc-trends-empty">Nothing is trending yet: trends come from the hashtags and topics of the show's Feed posts.</p>
             : (
               <ul className="soc-trends" data-testid="soc-trends">
@@ -96,7 +96,7 @@ export default function SocietySummary({ legendGroups = [], onOpen }) {
                 ))}
               </ul>
             )}
-          <p className="soc-foot">Ranked by how many of the show's Feed posts carry them. The Feed counts posts and reactions, not whether a trend is rising or fading.</p>
+          <p className="soc-foot">Ranked by how many of the show's Pulse posts carry them. The Pulse counts posts and reactions, not whether a trend is rising or fading.</p>
         </section>
       </div>
 

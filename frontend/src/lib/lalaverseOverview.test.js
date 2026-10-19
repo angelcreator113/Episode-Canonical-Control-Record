@@ -54,7 +54,7 @@ describe('the LalaVerse Overview helpers', () => {
     const empty = worldIdeas({ calendarEvents: [], trending: [], tensions: [], showId: 'show-b', now: NOW });
     expect(empty.map((i) => i.empty)).toEqual([
       'Nothing on the cultural calendar ahead yet.',
-      'No trending topics in the Feed yet.',
+      'No trending topics on The Pulse yet.',
       'No tensions between characters yet.',
     ]);
     expect(empty.every((i) => !i.action)).toBe(true);

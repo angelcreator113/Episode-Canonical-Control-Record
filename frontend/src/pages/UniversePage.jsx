@@ -256,7 +256,7 @@ function Overview() {
           <section className="lvh-card" aria-labelledby="lvh-ideas-heading">
             <div className="lvh-card-head">
               <h2 id="lvh-ideas-heading" className="lvh-card-title">What the world is handing you</h2>
-              <span className="lvh-card-sub">Ideas from the calendar, the Feed and the tensions</span>
+              <span className="lvh-card-sub">Ideas from the calendar, The Pulse and the tensions</span>
             </div>
             <ul className="lvh-ideas">
               {data.ideas.map((idea) => (

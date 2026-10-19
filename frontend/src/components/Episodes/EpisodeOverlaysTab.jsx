@@ -173,7 +173,7 @@ function NewOverlayMenu({ feedPath, phoneHubPath }) {
           </button>
           {feedPath && (
             <Link role="menuitem" className="eot-add-option is-feed" to={feedPath}>
-              <strong>From Lala&apos;s Feed</strong> <span>a post, comment or friend request</span>
+              <strong>From Lala&apos;s posts</strong> <span>a post, comment or friend request</span>
             </Link>
           )}
           <Link role="menuitem" className="eot-add-option is-pop" to={phoneHubPath}>

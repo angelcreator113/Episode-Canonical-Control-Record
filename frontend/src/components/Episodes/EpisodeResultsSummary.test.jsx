@@ -58,6 +58,6 @@ describe('Results summary', () => {
     expect(onOpenTab).toHaveBeenCalledWith('overview');
     fireEvent.click(screen.getByRole('button', { name: 'Open Distribution' }));
     expect(onOpenTab).toHaveBeenCalledWith('distribution');
-    expect(screen.getByText("Open Lala's Feed").getAttribute('href')).toBe('/shows/show-1/world?tab=feed');
+    expect(screen.getByText("Open Lala's posts").getAttribute('href')).toBe('/shows/show-1/world?tab=feed');
   });
 });

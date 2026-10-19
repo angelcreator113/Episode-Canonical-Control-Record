@@ -274,7 +274,7 @@ const TABS = [
   ]},
   // Lala's Feed is back in Producer Mode (Evoni's redesign, 2026-10-05: "bring
   // the feed back"); the Sidebar's Social Media page stays.
-  { key: 'feed', Icon: MessageSquare, label: "Lala's Feed" },
+  { key: 'feed', Icon: MessageSquare, label: "Lala's posts" },
   { key: 'release', Icon: Heart, label: 'Release', subs: [
     // The next episode out the door (Evoni's redesign, 2026-10-05); the release tab opens on it.
     { key: 'release-next', label: 'Next release' },
@@ -830,7 +830,7 @@ function WorldAdmin() {
         api.get(`/api/v1/world/${showId}/decisions`).then(r => setDecisions(r.data?.decisions || [])).catch(miss('decisions', () => setDecisions([]))),
         api.get(`/api/v1/feed-posts?show_id=${encodeURIComponent(showId)}&status=draft&limit=100`)
           .then(r => setFeedWaiting(Array.isArray(r.data?.data) ? r.data.data.filter((p) => !p.episode_id).length : null))
-          .catch(miss('feed drafts', () => setFeedWaiting(null))),
+          .catch(miss('post drafts', () => setFeedWaiting(null))),
         api.get(`/api/v1/world/${showId}/events`).then(r => setWorldEvents(r.data?.events || [])).catch(miss('events', () => setWorldEvents([]))),
         // This show's sets plus the shared ones (audit CTX-03: the list is
         // scoped on the server); the pickers offer those, the Overview counts
@@ -2273,7 +2273,7 @@ The revised event should feel like a completely different experience from the si
                   in a drawer (Evoni, 2026-09-30). */}
               <button type="button" data-testid="events-ideas-button" aria-haspopup="dialog" aria-expanded={eventsIdeasOpen}
                 onClick={() => setEventsIdeasOpen(true)}
-                style={S.smBtn} title="Feed opportunities and event ideas">
+                style={S.smBtn} title="Pulse opportunities and event ideas">
                 <Lightbulb size={14} style={{ verticalAlign: -2, marginRight: 4 }} aria-hidden="true" />Ideas
               </button>
               <button onClick={() => setEventsHeaderMenuOpen(o => !o)} style={S.smBtn} title="More actions" aria-label="More actions">
@@ -2431,7 +2431,7 @@ The revised event should feel like a completely different experience from the si
                     profile rather than this event for new traits. */}
                 {eventForm.source_profile_id && (
                   <span
-                    title="Created from a feed profile — edit the profile to change brand, lifestyle, or persona traits."
+                    title="Created from a Pulse profile — edit the profile to change brand, lifestyle, or persona traits."
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', background: 'var(--accent-subtle)', color: 'var(--accent-dark)', border: '1px solid var(--accent-light)', borderRadius: 4, fontSize: 10, fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 0.4 }}
                   >
                     🌐 FROM FEED · profile #{eventForm.source_profile_id}
@@ -3123,7 +3123,7 @@ The revised event should feel like a completely different experience from the si
                 <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: 'var(--text-primary)' }}>No events yet</div>
                 <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20, maxWidth: 400, margin: '0 auto 20px', lineHeight: 1.5 }}>
                   Events are the story moments — parties, brand deals, collabs, drama.
-                  Auto-fill generates events from your Cultural Calendar with hosts from Lala's Feed.
+                  Auto-fill generates events from your Cultural Calendar with hosts from The Pulse's people.
                 </div>
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
                   <button onClick={async () => {
@@ -3196,7 +3196,7 @@ The revised event should feel like a completely different experience from the si
               <div className="wa-ev-drawer-backdrop" data-testid="events-ideas-backdrop" onClick={() => setEventsIdeasOpen(false)} />
               <aside className="wa-ev-drawer" role="dialog" aria-modal="true" aria-labelledby="events-ideas-title" data-testid="events-ideas">
                 <div className="wa-ev-drawer-head">
-                  <h3 id="events-ideas-title" className="wa-ev-drawer-title">Ideas — Feed opportunities &amp; event templates</h3>
+                  <h3 id="events-ideas-title" className="wa-ev-drawer-title">Ideas — Pulse opportunities &amp; event templates</h3>
                   <button type="button" className="wa-ev-drawer-close" data-testid="events-ideas-close" aria-label="Close Ideas" onClick={() => setEventsIdeasOpen(false)}>
                     <X size={18} aria-hidden="true" />
                   </button>
@@ -3206,21 +3206,21 @@ The revised event should feel like a completely different experience from the si
                 <div style={{ background: 'var(--surface-bg)', border: '1px solid var(--lala-parchment-3)', borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
                     <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: 'var(--lala-gold-text)' }}>
-                      Pipeline — Feed → Opportunities → Events
+                      Pipeline — The Pulse → Opportunities → Events
                     </div>
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button onClick={async () => {
-                        setToast('Scanning feed for opportunities...');
+                        setToast('Scanning The Pulse for opportunities...');
                         try {
                           const res = await api.post(`/api/v1/feed-pipeline/${showId}/generate-opportunities`);
                           if (res.data.success) {
-                            setToast(`${res.data.count} opportunities generated from feed profiles`);
+                            setToast(`${res.data.count} opportunities generated from Pulse profiles`);
                             loadData();
                           }
                         } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
                         setTimeout(() => setToast(null), 3000);
                       }} style={{ ...S.smBtn, background: 'var(--primary)', color: 'var(--text-inverse)', border: 'none', fontSize: 10 }}>
-                        🔍 Scan Feed
+                        🔍 Scan The Pulse
                       </button>
                       <button onClick={() => setOppQuickForm({ name: '', opportunity_type: 'modeling', prestige: 5, narrative_stakes: '' })} style={{ ...S.smBtn, fontSize: 10 }}>
                         + New Opportunity
@@ -3228,7 +3228,7 @@ The revised event should feel like a completely different experience from the si
                     </div>
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                    Scan Lala's feed for opportunities, or pick a template below.
+                    Scan The Pulse for opportunities, or pick a template below.
                   </div>
                 </div>
 
@@ -4815,7 +4815,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             {/* Feed Activity */}
             {episodeBlueprint.feedPosts?.length > 0 && (
               <div style={{ marginBottom: 16 }}>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: 'var(--lala-gold-text)', marginBottom: 8 }}>📢 Feed Activity ({episodeBlueprint.feedPosts.length} posts)</div>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: 'var(--lala-gold-text)', marginBottom: 8 }}>📢 Pulse activity ({episodeBlueprint.feedPosts.length} posts)</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {episodeBlueprint.feedPosts.map((post, i) => (
                     <div key={i} style={{ padding: '8px 12px', background: 'var(--surface-bg)', borderRadius: 8, borderLeft: '3px solid var(--lala-gold)' }}>
@@ -7875,7 +7875,7 @@ function SeasonTab({ showId, api, S, episodes, events = [], setToast }) {
             Narrative Debt ({debt.length})
           </h3>
           <p style={{ ...S.muted, marginBottom: 12 }}>
-            Failed goals that carry emotional weight. These feed into AI-generated scripts, feed posts, and event stakes.
+            Failed goals that carry emotional weight. These feed into AI-generated scripts, Pulse posts, and event stakes.
           </p>
           {debt.map((d, i) => (
             <div key={i} style={{
@@ -7942,7 +7942,7 @@ function SeasonTab({ showId, api, S, episodes, events = [], setToast }) {
               {/* Feed behavior */}
               {phase.feed_behavior && (
                 <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 10, padding: '6px 10px', background: 'var(--surface-bg)', borderRadius: 6 }}>
-                  <strong>Feed:</strong> {phase.feed_behavior.feed_tone || `Follow bias: ${phase.feed_behavior.follow_bias}`}
+                  <strong>Pulse:</strong> {phase.feed_behavior.feed_tone || `Follow bias: ${phase.feed_behavior.follow_bias}`}
                   {phase.feed_behavior.event_prestige_max && <span> &middot; Max prestige: {phase.feed_behavior.event_prestige_max}</span>}
                 </div>
               )}

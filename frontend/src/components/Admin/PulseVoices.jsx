@@ -341,13 +341,13 @@ export default function PulseVoices({ showId }) {
   const below = data.not_posting || [];
   return (
     <div className="pulse-voices" data-testid="pulse-voices">
-      <p className="pulse-voices-muted">Characters at the Active or Alive stage with a Feed profile, whom Lala has met or knows of (a public figure). Active characters post; Alive characters also talk in DMs, move relationships and react to events. A voice is built from their public face only; private feelings never go in.</p>
+      <p className="pulse-voices-muted">Characters at the Active or Alive stage with a Pulse profile, whom Lala has met or knows of (a public figure). Active characters post; Alive characters also talk in DMs, move relationships and react to events. A voice is built from their public face only; private feelings never go in.</p>
       {rows.length === 0
         ? <p className="pulse-voices-muted" data-testid="pulse-voices-empty">{notMet.length
           ? 'No posting characters yet: Lala has not met anyone below at the story clock\'s present.'
           : below.length
-            ? 'No posting characters yet: the people on the feed below are not at the Active stage. Make one Active to build their voice.'
-            : 'No posting characters yet. A character posts once they reach the Active stage with a Feed profile.'}</p>
+            ? 'No posting characters yet: the people on The Pulse below are not at the Active stage. Make one Active to build their voice.'
+            : 'No posting characters yet. A character posts once they reach the Active stage with a Pulse profile.'}</p>
         : <ul className="pulse-voices-list">{rows.map((r) => <VoiceCard key={r.registry_character_id} row={r} onVoice={onVoice} onReload={load} />)}</ul>}
       {notMet.length > 0 && (
         <section className="pulse-voices-unmet" data-testid="pulse-voices-unmet" aria-labelledby="pulse-voices-unmet-h">
@@ -358,7 +358,7 @@ export default function PulseVoices({ showId }) {
       )}
       {below.length > 0 && (
         <section className="pulse-voices-unmet" data-testid="pulse-voices-below" aria-labelledby="pulse-voices-below-h">
-          <h3 id="pulse-voices-below-h" className="pulse-voices-unmet-h">On the feed, not posting yet ({below.length})</h3>
+          <h3 id="pulse-voices-below-h" className="pulse-voices-unmet-h">On The Pulse, not posting yet ({below.length})</h3>
           <p className="pulse-voices-muted">Their stage is below Active, so they have no voice and do not post. Make Active to give them one: they then appear above, where you build and approve their voice.</p>
           <ul className="pulse-voices-list">{below.map((r) => <NotPostingRow key={r.registry_character_id} row={r} onReload={load} />)}</ul>
         </section>
