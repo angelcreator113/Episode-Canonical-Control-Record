@@ -471,7 +471,10 @@ function deterministicFixes(scriptText, inputs, locked) {
 function beat14Ending(ending, hook) {
   if (ending === 'invitation') return `the invitation in the BEAT 14 OPPORTUNITY block${hook ? `; the forward hook, "${hook}", is told through it` : ''}`;
   const told = hook ? `the forward hook: "${hook}"` : 'a forward hook seeding the next episode';
-  return ending === 'withheld' ? `${told}; the BEAT 14 OPPORTUNITY does not come, and no other offer comes in its place` : told;
+  // Beat 14 is gameplay again, so her phone is one way to end it, never the
+  // only one (Evoni, 2026-10-19: "not required but an option as an ending").
+  const how = '. It may land on her phone, as one [UI:DM …] or [UI:NOTIFY …], or in person; one, never both';
+  return ending === 'withheld' ? `${told}; the BEAT 14 OPPORTUNITY does not come, and no other offer comes in its place` : `${told}${how}`;
 }
 
 // What the coverage check needs from the writer's inputs.

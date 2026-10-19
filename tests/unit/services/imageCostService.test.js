@@ -112,6 +112,9 @@ describe('rate table and estimate', () => {
     expect(est('dall-e-3', 1024, 1024, 'standard')).toMatchObject({ usd: null, priced: false });
     expect(est('gpt-image-1', 1536, 1024, 'high')).toMatchObject({ usd: 0.25, priced: true, inputImageTokenUsdPerMillion: 10 });
     expect(est('gpt-image-1', 1024, 1024, 'medium')).toMatchObject({ usd: null, priced: false });
+    // gpt-image-1.5: landscape, and portrait for the camera roll (Evoni, 2026-10-19: the same price).
+    expect(est('gpt-image-1.5', 1536, 1024, 'high')).toMatchObject({ usd: 0.2, priced: true });
+    expect(est('gpt-image-1.5', 1024, 1536, 'high')).toMatchObject({ usd: 0.2, priced: true });
   });
 
   test('megapixels are rounded up per image; per-image models bill the count', () => {

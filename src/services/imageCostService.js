@@ -78,11 +78,12 @@ const RATE_TABLE = {
   // the agent session, so these sizes are UNCONFIRMED against the primary doc.
   'gpt-image-1.5': {
     provider: 'openai', model: 'gpt-image-1.5', unit: 'image', usd: null,
-    bySizeQuality: { 'high:1536x1024': 0.20 },
+    // Portrait (a phone's camera roll) costs the same: Evoni, 2026-10-19.
+    bySizeQuality: { 'high:1536x1024': 0.20, 'high:1024x1536': 0.20 },
     inputImageTokenUsdPerMillion: 8,
     cachedInputImageTokenUsdPerMillion: 2,
     outputImageTokenUsdPerMillion: 32,
-    source: `Evoni, 2026-09-30 (Task #2396): high quality 1536x1024 $0.20 per image output (the pre-call estimate). Evoni, 2026-09-30: image input $8 per 1M tokens ($2 cached); output $32 per 1M. Used by sceneGenerationService (base still choice 'gpt-image-1.5', cropAndOutpaint)`,
+    source: `Evoni, 2026-09-30 (Task #2396): high quality 1536x1024 $0.20 per image output (the pre-call estimate); Evoni, 2026-10-19: portrait 1024x1536 the same. Evoni, 2026-09-30: image input $8 per 1M tokens ($2 cached); output $32 per 1M. Used by sceneGenerationService (base still choice 'gpt-image-1.5', cropAndOutpaint)`,
   },
   // ── Replicate ─────────────────────────────────────────────────────────────
   'meta/sam-2-large': {
