@@ -16,7 +16,7 @@ describe('roleFor', () => {
     expect(roleFor({ careerPressure: 'ahead' }).role).toBe('mentor');
     expect(roleFor({ lalaRelationship: 'aware' }).role).toBe('opportunity');
     expect(roleFor({ lalaRelationship: 'mutual_unaware' }).role).toBe('wildcard');
-    expect(roleFor({})).toEqual({ role: 'opportunity', reason: 'Relevant to Lala on the Feed' });
+    expect(roleFor({})).toEqual({ role: 'opportunity', reason: 'Relevant to Lala on The Pulse' });
   });
 });
 
