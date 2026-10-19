@@ -56,7 +56,11 @@ export function scrollerOf(el) {
 // what opened it when it closes.
 // Only the dialog on top answers Escape (Script page re-audit, 2026-10-19:
 // one Escape closed the map and History under it; hooks/useDialogLayer).
-export function useDialogKeys(open, onClose, focusRef = null) {
+// `trapRef`: a modal sheet's box; while it is on top, Tab and Shift+Tab stay
+// in it (Script page audit 3, 2026-10-19: Tab left the phone's Context sheet
+// for the page behind it).
+const TRAP_FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+export function useDialogKeys(open, onClose, focusRef = null, trapRef = null) {
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   const isTop = useDialogLayer(open);
@@ -66,13 +70,29 @@ export function useDialogKeys(open, onClose, focusRef = null) {
     if (!open) return undefined;
     const opener = document.activeElement;
     focusRef?.current?.focus?.();
-    const onKey = (e) => { if (e.key === 'Escape' && !e.defaultPrevented && isTopRef.current()) { e.preventDefault(); closeRef.current(); } };
+    const onKey = (e) => {
+      if (e.defaultPrevented || !isTopRef.current()) return;
+      if (e.key === 'Escape') { e.preventDefault(); closeRef.current(); return; }
+      const box = trapRef?.current;
+      if (e.key !== 'Tab' || !box) return;
+      const all = [...box.querySelectorAll(TRAP_FOCUSABLE)];
+      // Hidden controls are skipped where there is layout to tell.
+      const shown = all.filter((el) => el.getClientRects().length > 0);
+      const items = shown.length ? shown : all;
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const at = document.activeElement;
+      const inside = box.contains(at);
+      if (e.shiftKey && (!inside || at === first)) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && (!inside || at === last)) { e.preventDefault(); first.focus(); }
+    };
     document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('keydown', onKey);
       if (opener && opener !== document.body && opener.isConnected && typeof opener.focus === 'function') opener.focus();
     };
-  }, [open, focusRef]);
+  }, [open, focusRef, trapRef]);
 }
 
 const BEAT_NAMES = [
@@ -487,7 +507,9 @@ function MomentPicker({ screens, icons = [], overlays, look = [], production = [
   const lookItems = look.map(asOverlay);
   const productionItems = production.map(asOverlay);
   return (
-    <div className="esp-picker" data-testid="script-moment-picker" onClick={(e) => e.stopPropagation()}>
+    <div className="esp-picker" data-testid="script-moment-picker" onClick={(e) => e.stopPropagation()}
+      // Escape closes it (Script page audit 3, 2026-10-19).
+      onKeyDown={(e) => { if (e.key === 'Escape' && !e.defaultPrevented) { e.preventDefault(); onClose(); } }}>
       <div className="esp-picker-head">
         <span className="esp-picker-title">{preset?.title || 'Add to this beat'}</span>
         <button type="button" className="esp-picker-close" aria-label="Close" onClick={onClose}><X size={16} aria-hidden="true" /></button>
@@ -572,17 +594,23 @@ function LineAdder({ lines = [], onScreen, onAdd, onClose, initialKind = 'Lala' 
   const [text, setText] = useState('');
   const [after, setAfter] = useState('end');
   const [added, setAdded] = useState(0);
+  const textRef = useRef(null);
   const words = text.trim().replace(/\s+/g, ' ');
   const add = () => {
     if (!words) return;
     const at = after === 'end' ? null : Number(after);
     if (onAdd(LINE_KINDS.find((k) => k.key === kind).write(words), at) === false) return;
+    // Add goes disabled once the words clear, so focus goes back to the
+    // words for the next line (Script page audit 3, 2026-10-19: it fell to the page).
+    textRef.current?.focus();
     setText('');
     setAdded((n) => n + 1);
     if (at !== null) setAfter(String(at + 1));
   };
   return (
-    <div className="esp-picker esp-adder" data-testid="script-line-adder" onClick={(e) => e.stopPropagation()}>
+    <div className="esp-picker esp-adder" data-testid="script-line-adder" onClick={(e) => e.stopPropagation()}
+      // Escape closes it (Script page audit 3, 2026-10-19).
+      onKeyDown={(e) => { if (e.key === 'Escape' && !e.defaultPrevented) { e.preventDefault(); onClose(); } }}>
       <div className="esp-picker-head">
         <span className="esp-picker-title">Add a line</span>
         <button type="button" className="esp-picker-close" aria-label="Close" onClick={onClose}><X size={16} aria-hidden="true" /></button>
@@ -592,7 +620,7 @@ function LineAdder({ lines = [], onScreen, onAdd, onClose, initialKind = 'Lala' 
           <button key={k.key} type="button" className={`esp-verb${kind === k.key ? ' is-on' : ''}`} aria-pressed={kind === k.key} onClick={() => setKind(k.key)}>{k.label}</button>
         ))}
       </span>
-      <textarea className="esp-line-input esp-adder-text" data-testid="script-line-adder-text" aria-label="The line" rows={3} value={text}
+      <textarea ref={textRef} className="esp-line-input esp-adder-text" data-testid="script-line-adder-text" aria-label="The line" rows={3} value={text}
         placeholder={kind === 'action' ? 'What happens' : kind === 'narration' ? 'Narration' : `What ${LINE_KINDS.find((k) => k.key === kind).label} says`}
         onChange={(e) => setText(e.target.value)} />
       <div className="esp-picker-do">
@@ -629,16 +657,21 @@ function MessageAdder({ kind, people = [], lines = [], onScreen, onAdd, onClose 
   const [added, setAdded] = useState(0);
   const line = messageLine(kind, info.who ? who : null, text);
   const listId = `esp-people-${kind}`;
+  const textRef = useRef(null);
   const add = () => {
     if (!line) return;
     const at = after === 'end' ? null : Number(after);
     if (onAdd(line, at) === false) return;
+    // As the line adder's (Script page audit 3, 2026-10-19).
+    textRef.current?.focus();
     setText('');
     setAdded((n) => n + 1);
     if (at !== null) setAfter(String(at + 1));
   };
   return (
-    <div className="esp-picker esp-adder" data-testid={`script-message-adder-${kind}`} onClick={(e) => e.stopPropagation()}>
+    <div className="esp-picker esp-adder" data-testid={`script-message-adder-${kind}`} onClick={(e) => e.stopPropagation()}
+      // Escape closes it (Script page audit 3, 2026-10-19).
+      onKeyDown={(e) => { if (e.key === 'Escape' && !e.defaultPrevented) { e.preventDefault(); onClose(); } }}>
       <div className="esp-picker-head">
         <span className="esp-picker-title">{info.title}</span>
         <button type="button" className="esp-picker-close" aria-label="Close" onClick={onClose}><X size={16} aria-hidden="true" /></button>
@@ -650,7 +683,7 @@ function MessageAdder({ kind, people = [], lines = [], onScreen, onAdd, onClose 
           <datalist id={listId}>{people.map((p) => <option key={p} value={p} />)}</datalist>
         </label>
       )}
-      <textarea className="esp-line-input esp-adder-text" data-testid="script-message-text" aria-label="The words" rows={3} value={text}
+      <textarea ref={textRef} className="esp-line-input esp-adder-text" data-testid="script-message-text" aria-label="The words" rows={3} value={text}
         placeholder={info.placeholder} onChange={(e) => setText(e.target.value)} />
       {kind === 'post' && <p className="esp-picker-empty">Saving the script drafts this post in Lala&apos;s posts; it goes live when you approve it there (Requests).</p>}
       <div className="esp-picker-do">
@@ -781,6 +814,17 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
   const handledRequest = useRef(null);
   // The adder or picker a bar tap opened, to be shown (Script page audit, 2026-10-19).
   const [reveal, setReveal] = useState(null);
+  // An "Add:" chip shows its adder and focuses it as the bar does, and focus
+  // goes back to the chip when the adder closes (Script page audit 3,
+  // 2026-10-19: the adder opened above the chip, out of Tab's reach).
+  const chipRef = useRef(null);
+  const openFromChip = (e) => { chipRef.current = e.currentTarget; setReveal({ n: Date.now() }); };
+  const closeAdder = (close) => {
+    close();
+    const back = chipRef.current?.isConnected ? chipRef.current : cardRef.current?.querySelector(`[data-testid="script-add-line-${beat.number}"]`);
+    chipRef.current = null;
+    if (back) setTimeout(() => back.focus(), 0);
+  };
   // Ask for a change (Script tab audit, 2026-10-15): words for Regenerate beat.
   const [ask, setAsk] = useState('');
   // One beat is written at a time, and none while a new script is: Regenerate
@@ -940,16 +984,16 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
             );
           })}</div>
           {adding && !beat.approved && (
-            <LineAdder key={`adder-${adding}`} initialKind={typeof adding === 'string' ? adding : 'Lala'} lines={beat.lines} onScreen={onScreen} onClose={() => setAdding(false)}
+            <LineAdder key={`adder-${adding}`} initialKind={typeof adding === 'string' ? adding : 'Lala'} lines={beat.lines} onScreen={onScreen} onClose={() => closeAdder(() => setAdding(false))}
               onAdd={(line, after) => onAddMoment(beat.id, line, after)} />
           )}
           {messaging && !beat.approved && (
             <MessageAdder key={`message-${messaging}`} kind={messaging} people={people} lines={beat.lines} onScreen={onScreen}
-              onClose={() => setMessaging(null)} onAdd={(line, after) => onAddMoment(beat.id, line, after)} />
+              onClose={() => closeAdder(() => setMessaging(null))} onAdd={(line, after) => onAddMoment(beat.id, line, after)} />
           )}
           {picking && !beat.approved && (
             <MomentPicker key={`picker-${picking?.verb || 'open'}`} preset={picking?.verb ? picking : null} screens={onScreen.screens} icons={onScreen.icons} overlays={onScreen.overlays} look={onScreen.look} production={onScreen.production} lines={beat.lines} onScreen={onScreen} phoneFrame={onScreen.phoneFrame}
-              onClose={() => setPicking(false)}
+              onClose={() => closeAdder(() => setPicking(false))}
               onAdd={(line, after) => onAddMoment(beat.id, line, after)} />
           )}
           <div className="esp-beat-foot">
@@ -964,17 +1008,17 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
             {!beat.approved && (
               <span className="esp-add-chips" role="group" aria-label="Add" data-testid={`script-add-chips-${beat.number}`}>
                 <span className="esp-add-label">Add:</span>
-                <button type="button" className="esp-moment-btn" data-testid={`script-add-action-${beat.number}`} onClick={e => { e.stopPropagation(); setPicking(false); setMessaging(null); setAdding('action'); }}>Action</button>
-                <button type="button" className="esp-moment-btn" data-testid={`script-add-line-${beat.number}`} onClick={e => { e.stopPropagation(); setPicking(false); setMessaging(null); setAdding('Lala'); }}>Dialogue</button>
+                <button type="button" className="esp-moment-btn" data-testid={`script-add-action-${beat.number}`} onClick={e => { e.stopPropagation(); openFromChip(e); setPicking(false); setMessaging(null); setAdding('action'); }}>Action</button>
+                <button type="button" className="esp-moment-btn" data-testid={`script-add-line-${beat.number}`} onClick={e => { e.stopPropagation(); openFromChip(e); setPicking(false); setMessaging(null); setAdding('Lala'); }}>Dialogue</button>
                 {/* No phone in the cutscene, beats 11–13 (Script page re-audit,
                     2026-10-19): its chips are not offered there, and it says why. */}
                 {cutsceneBeat && <span className="esp-beat-nophone" data-testid={`script-cutscene-note-${beat.number}`}>{CUTSCENE_NO_PHONE}</span>}
-                {!cutsceneBeat && <button type="button" className="esp-moment-btn" data-testid={`script-add-moment-${beat.number}`} onClick={e => { e.stopPropagation(); setAdding(false); setMessaging(null); setPicking({}); }}>Open a screen</button>}
-                {!cutsceneBeat && <button type="button" className="esp-moment-btn" data-testid={`script-add-scroll-${beat.number}`} onClick={e => { e.stopPropagation(); setAdding(false); setMessaging(null); setPicking({ verb: 'SCROLL', title: 'Scroll the feed', feed: true }); }}>Scroll the feed</button>}
+                {!cutsceneBeat && <button type="button" className="esp-moment-btn" data-testid={`script-add-moment-${beat.number}`} onClick={e => { e.stopPropagation(); openFromChip(e); setAdding(false); setMessaging(null); setPicking({}); }}>Open a screen</button>}
+                {!cutsceneBeat && <button type="button" className="esp-moment-btn" data-testid={`script-add-scroll-${beat.number}`} onClick={e => { e.stopPropagation(); openFromChip(e); setAdding(false); setMessaging(null); setPicking({ verb: 'SCROLL', title: 'Scroll the feed', feed: true }); }}>Scroll the feed</button>}
                 {/* Task #2885: a notification, a DM or a post. */}
                 {!cutsceneBeat && Object.keys(MESSAGE_KINDS).map((k) => (
                   <button key={k} type="button" className="esp-moment-btn" data-testid={`script-add-${k}-${beat.number}`}
-                    onClick={e => { e.stopPropagation(); setAdding(false); setPicking(false); setMessaging(k); }}>
+                    onClick={e => { e.stopPropagation(); openFromChip(e); setAdding(false); setPicking(false); setMessaging(k); }}>
                     {k === 'notify' ? 'Notification' : k === 'dm' ? 'DM' : 'Post'}
                   </button>
                 ))}
@@ -989,7 +1033,7 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
                 <button type="button" className="esp-regen-btn" data-testid={`script-ask-send-${beat.number}`} disabled={cantWrite || !ask.trim()} onClick={(e) => { e.stopPropagation(); askChange(); }}>Ask</button>
               </span>
             )}
-            <button type="button" className={`esp-lock-btn${beat.approved ? ' is-locked' : ''}`} data-testid={`script-lock-${beat.number}`} disabled={locking} onClick={e => { e.stopPropagation(); onApprove(beat.id); }}>{beat.approved ? 'Unlock' : '✓ Approve & lock'}</button>
+            <button type="button" className={`esp-lock-btn${beat.approved ? ' is-locked' : ''}`} data-testid={`script-lock-${beat.number}`} aria-disabled={locking || undefined} onClick={e => { e.stopPropagation(); if (locking) return; onApprove(beat.id); }}>{beat.approved ? 'Unlock' : '✓ Approve & lock'}</button>
           </div>
         </div>
       )}
@@ -1125,7 +1169,9 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   const [contextOpen, setContextOpen] = useState(false);
   // The phone's Context sheet closes on Escape too (Script page audit, 2026-10-19).
   const contextCloseRef = useRef(null);
-  useDialogKeys(contextOpen, () => setContextOpen(false), contextCloseRef);
+  // A modal sheet: Tab stays in it while it is on top (Script page audit 3, 2026-10-19).
+  const contextSheetRef = useRef(null);
+  useDialogKeys(contextOpen, () => setContextOpen(false), contextCloseRef, contextSheetRef);
   // Lala's posts in the script (Task #2885): each Post line's draft in her
   // Feed, as the server has it (null: not read yet, or could not be).
   const [postDrafts, setPostDrafts] = useState(null);
@@ -2136,7 +2182,9 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     </div>
 
     {/* What generation reads, and where the voices come from (Evoni's Episode mock). */}
-    <aside className="esp-side" data-testid="script-side">
+    {/* On a phone, open, it is a modal sheet (Script page audit 3, 2026-10-19). */}
+    <aside className="esp-side" data-testid="script-side" ref={contextSheetRef}
+      {...(contextOpen ? { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Context' } : {})}>
       {contextOpen && (
         <button type="button" ref={contextCloseRef} className="esp-side-close" onClick={() => setContextOpen(false)} data-testid="script-context-close"><X size={16} aria-hidden="true" /> Close</button>
       )}

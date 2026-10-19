@@ -146,3 +146,10 @@ describe('who speaks, as the Script tab reads it', () => {
   });
 });
 
+
+describe("today's beat names (Script page audit 3, 2026-10-19)", () => {
+  test('a saved header with an old name reads as the beat is called now', () => {
+    const { beats } = scriptSections('## BEAT: 11 · Event Outcome\nLala: Here.\n\n## BEAT: 12 · Deliverable Creation\nLala: Walk.\n\n## BEAT: 15 · Bonus Scene\nLala: Extra.');
+    expect(beats.map((b) => `${b.number} · ${b.name}`)).toEqual(['11 · The Event', '12 · Fashion Challenge', '15 · Bonus Scene']);
+  });
+});

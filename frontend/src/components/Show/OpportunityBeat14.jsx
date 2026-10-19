@@ -6,7 +6,7 @@
 // episode's event offers it (GET/PUT …/episode/:episodeId/beat14,
 // services/beat14Opportunity). One held for beat 14 says which episode, with
 // a link to its Script tab.
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Gift } from 'lucide-react';
 import './OpportunityBeat14.css';
@@ -57,7 +57,10 @@ export function HeldForBeat14({ opp }) {
 
 // The GET payload does not say whether the attached one was made for beat 14
 // (then removed when replaced) or brought from the list (then put back).
-const replaceText = (epName, cur) => `Beat 14 of ${epName} already offers ${cur.name}; attaching replaces it. ${cur.name} goes back to its earlier status, or is deleted if it was made for beat 14.`;
+// Shared with the Script page's beat 14 panel, so Remove and Change say the
+// same (Script page audit 3, 2026-10-19).
+export const letGoText = (cur) => `${cur.name} goes back to its earlier status, or is deleted if it was made for beat 14.`;
+export const replaceText = (epName, cur) => `Beat 14 of ${epName} already offers ${cur.name}; attaching replaces it. ${letGoText(cur)}`;
 
 /**
  * The inline form: episode, then who at its event offers it, then attach.
@@ -79,6 +82,10 @@ export function Beat14AttachForm({ showId, opp, episodes = [], api, onDone, onCa
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const url = (id) => `/api/v1/opportunities/${showId}/episode/${id}/beat14`;
+  // Focus goes into the form when it opens (Script page audit 3, 2026-10-19:
+  // the button that opened it went away and focus fell to the page).
+  const episodeRef = useRef(null);
+  useEffect(() => { episodeRef.current?.focus(); }, []);
 
   const chooseEpisode = async (id) => {
     const seq = readRef.current + 1;
@@ -116,7 +123,7 @@ export function Beat14AttachForm({ showId, opp, episodes = [], api, onDone, onCa
   return (
     <div className="ob14-form" data-testid={`opp-beat14-form-${opp.id}`}>
       <label className="ob14-field">Episode
-        <select value={episodeId} onChange={(e) => chooseEpisode(e.target.value)} data-testid="opp-beat14-episode">
+        <select ref={episodeRef} value={episodeId} onChange={(e) => chooseEpisode(e.target.value)} data-testid="opp-beat14-episode">
           <option value="">Choose…</option>
           {/* Completed episodes are left out: their beat 14 was already decided (Script page re-audit, 2026-10-19). */}
           {open.map((ep) => (
