@@ -94,7 +94,8 @@ function resolveMoment(moment, on = {}, { at = null } = {}) {
 
 const TAP_VERBS = new Set(['CLICK', 'TAP', 'SELECT']);
 
-const MESSAGE_VERBS = { NOTIFY: 'notify', DM: 'dm', POST: 'post' };
+// `[UI:NOTIFICATION …]` is a notification (Script page audit 3, 2026-10-19).
+const MESSAGE_VERBS = { NOTIFY: 'notify', DM: 'dm', POST: 'post', NOTIFICATION: 'notify' };
 
 function messageOf(moment) {
   const kind = MESSAGE_VERBS[String(moment?.verb || '').toUpperCase()];

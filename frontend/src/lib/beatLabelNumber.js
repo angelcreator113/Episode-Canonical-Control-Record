@@ -62,16 +62,20 @@ export const HAS_BEAT_HEADER = /^[ \t]*##[ \t]*BEAT:/im;
 // Re-audit 2 (2026-10-15): a byte-order mark, Unicode line breaks and odd
 // spaces in a header (no-break, tab-like) read one way on each side, so they
 // are written plainly too.
-const HEADER_VARIANT = /^[^\S\n]*(\*\*|__)?[^\S\n]*(#{2,3})[^\S\n]*BEAT[^\S\n]*:[^\S\n]*(.*?)[^\S\n]*(?:\*\*|__)?[^\S\n]*$/gim;
+// Script page audit 3 (2026-10-19): `##  BEAT : 11` (a space before the
+// colon) and `# BEAT 11:` (one hash) were no headers, so beat 11 was read
+// as part of beat 10; they are written plainly too.
+const HEADER_VARIANT = /^[^\S\n]*(\*\*|__)?[^\S\n]*(#{1,3})[^\S\n]*BEAT[^\S\n]*:[^\S\n]*(.*?)[^\S\n]*(?:\*\*|__)?[^\S\n]*$/gim;
 const ODD_SPACE = /[^\S\n \t]/;
+const SPACE_BEFORE_COLON = /BEAT[^\S\n]+:/i;
 // `## Beat 5: Name` (the number before the colon) is a header too, written
 // `## BEAT: 5 · Name` (Script page audit, 2026-10-19: it was not read as a
 // header, so the whole script was cut into 14 by place and every beat
 // passed). A separator or the line's end must follow the number.
-const HEADER_NUMBER_FIRST = /^[^\S\n]*(?:\*\*|__)?[^\S\n]*#{2,3}[^\S\n]*BEAT[^\S\n]+(\d{1,3})[^\S\n]*(?:(?:[:.\u00B7|\u2014\u2013-])[^\S\n]*(.*?))?[^\S\n]*(?:\*\*|__)?[^\S\n]*$/gim;
+const HEADER_NUMBER_FIRST = /^[^\S\n]*(?:\*\*|__)?[^\S\n]*#{1,3}[^\S\n]*BEAT[^\S\n]+(\d{1,3})[^\S\n]*(?:(?:[:.\u00B7|\u2014\u2013-])[^\S\n]*(.*?))?[^\S\n]*(?:\*\*|__)?[^\S\n]*$/gim;
 export function normalizeBeatHeaders(text) {
   return String(text ?? '').replace(/^\uFEFF/, '').replace(/\r\n?|[\u2028\u2029\u0085]/g, '\n')
-    .replace(HEADER_VARIANT, (line, bold, hashes, label) => (bold || hashes.length === 3 || ODD_SPACE.test(line) ? `## BEAT: ${label}` : line))
+    .replace(HEADER_VARIANT, (line, bold, hashes, label) => (bold || hashes.length !== 2 || ODD_SPACE.test(line) || SPACE_BEFORE_COLON.test(line) ? `## BEAT: ${label}` : line))
     .replace(HEADER_NUMBER_FIRST, (line, n, name) => `## BEAT: ${n}${name && name.trim() ? ` · ${name.trim()}` : ''}`);
 }
 

@@ -48,6 +48,9 @@ router.post('/:episodeId/generate', requireAuth, aiRateLimiter, async (req, res)
     });
   } catch (err) {
     console.error('[ScriptWriter] Generate error:', err);
+    // A refused budget or a rate limit is a 429 with its code, as the
+    // grounded routes answer it (Script page audit 3, 2026-10-19).
+    if (err?.code === 'AI_BUDGET_EXCEEDED' || err?.status === 429) return res.status(429).json({ error: err.message, code: 'AI_BUDGET_EXCEEDED' });
     return res.status(500).json({ error: err.message });
   }
 });

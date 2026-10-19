@@ -30,7 +30,9 @@ describe('reading coin lines', () => {
 describe('each rule passes and fails', () => {
   test('beat 8: a costing piece without its coin line, or with the wrong amount', () => {
     expect(find(scriptRuleFindings([at(8, '[WEAR: p1]', '[STAT: coins -120]')], { money: MONEY }), 'beat8').ok).toBe(true);
-    expect(find(scriptRuleFindings([at(8, '[WEAR: p1]', 'Me: wow', 'Lala: yes', '[STAT: coins -120]')], { money: MONEY }), 'beat8-p1').ok).toBe(false);
+    // Anywhere before the next piece is its own (Script page audit 3, 2026-10-19).
+    expect(find(scriptRuleFindings([at(8, '[WEAR: p1]', 'Me: wow', 'Lala: yes', '[STAT: coins -120]')], { money: MONEY }), 'beat8').ok).toBe(true);
+    expect(find(scriptRuleFindings([at(8, '[WEAR: p1]', 'Me: wow', 'Lala: yes')], { money: MONEY }), 'beat8-p1').ok).toBe(false);
     expect(find(scriptRuleFindings([at(8, '[WEAR: p1]', '[STAT: coins -100]')], { money: MONEY }), 'beat8-p1').text).toContain('comes off as -100 coins');
   });
   test('beat 9: the approved shopping list, shown and put away', () => {

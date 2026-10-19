@@ -28,6 +28,10 @@ describe('beat14Invitation', () => {
     expect(beat14Outcome({ status: 'expired' }, 'pass')).toBe('withheld');
     expect(beat14Outcome({ status: 'offered' }, 'fail')).toBe('invitation');
     expect(beat14Outcome({ status: 'considering' }, null)).toBe('invitation');
+    // Script page audit 3, 2026-10-19: what completion decided stands after the status moves on.
+    expect(beat14Outcome({ status: 'archived', status_history: [{ status: 'held' }, { status: 'expired', tier: 'fail' }, { status: 'archived' }] }, 'pass')).toBe('withheld');
+    expect(beat14Outcome({ status: 'archived', completion_status: 'expired' }, 'pass')).toBe('withheld');
+    expect(beat14Outcome({ status: 'archived', status_history: [{ status: 'held' }, { status: 'offered', tier: 'pass' }, { status: 'declined' }, { status: 'archived' }] }, 'fail')).toBe('invitation');
   });
   test('the server has the same code', () => {
     const shared = (text) => text.slice(text.search(/^\/\/ BEGIN SHARED$/m), text.search(/^\/\/ END SHARED$/m));

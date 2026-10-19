@@ -68,9 +68,12 @@ describe('Beat14Opportunity', () => {
     const onChange = renderIt({ opportunity: OPP, people: PEOPLE, candidates: [] });
     expect(screen.getByTestId('script-beat14-attached').textContent).toContain('Studio by Sable campaign · from Sable Reyes');
     expect(screen.getByTestId('script-beat14-attached').textContent).toMatch(/if the episode lands/);
-    fireEvent.click(screen.getByTestId('script-beat14-remove'));
-    await waitFor(() => expect(onChange).toHaveBeenCalled());
-    expect(api.delete).toHaveBeenCalledWith(URL);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    try {
+      fireEvent.click(screen.getByTestId('script-beat14-remove'));
+      await waitFor(() => expect(onChange).toHaveBeenCalled());
+      expect(api.delete).toHaveBeenCalledWith(URL);
+    } finally { confirm.mockRestore(); }
   });
 
   test('an episode designed to fail says the invitation does not come', () => {
@@ -156,5 +159,54 @@ describe('beat 14 in must cover and health', () => {
     // Designed to fail, a beat 14 that delivers it is flagged (Script page audit, 2026-10-19).
     expect(row({ beat14: { opportunity: OPP }, designedIntent: 'fail' })).toMatchObject({ ok: false, text: 'Beat 14 delivers Studio by Sable campaign, but the episode is designed to fail: the invitation does not come.' });
     expect(row({ beat14: null })).toBeUndefined();
+  });
+});
+
+describe('third pass (Script page audit 3, 2026-10-19)', () => {
+  test('Remove asks first, saying it may be deleted; No sends nothing', () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    try {
+      renderIt({ opportunity: OPP, people: PEOPLE, candidates: [] });
+      fireEvent.click(screen.getByTestId('script-beat14-remove'));
+      expect(confirm.mock.calls[0][0]).toBe('Remove Studio by Sable campaign from beat 14? Studio by Sable campaign goes back to its earlier status, or is deleted if it was made for beat 14.');
+      expect(api.delete).not.toHaveBeenCalled();
+    } finally { confirm.mockRestore(); }
+  });
+
+  test('Change to another one asks first, with the show tab\'s words; No sends nothing', () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    try {
+      renderIt({ opportunity: OPP, people: PEOPLE, candidates: [{ id: 'o2', name: 'Panel talk' }] });
+      fireEvent.click(screen.getByTestId('script-beat14-change'));
+      fireEvent.change(screen.getByTestId('script-beat14-pick'), { target: { value: 'o2' } });
+      fireEvent.click(screen.getByTestId('script-beat14-save'));
+      expect(confirm.mock.calls[0][0]).toMatch(/^Beat 14 of this episode already offers Studio by Sable campaign; attaching replaces it\. .*deleted if it was made for beat 14\. Save the new one instead\?$/);
+      expect(api.put).not.toHaveBeenCalled();
+    } finally { confirm.mockRestore(); }
+  });
+
+  test('changing only who offers it saves without asking', async () => {
+    const confirm = vi.spyOn(window, 'confirm');
+    api.put.mockResolvedValue({ data: {} });
+    try {
+      const onChange = renderIt({ opportunity: OPP, people: PEOPLE, candidates: [] });
+      fireEvent.click(screen.getByTestId('script-beat14-change'));
+      fireEvent.change(screen.getByTestId('script-beat14-from'), { target: { value: '9' } });
+      fireEvent.click(screen.getByTestId('script-beat14-save'));
+      await waitFor(() => expect(onChange).toHaveBeenCalled());
+      expect(confirm).not.toHaveBeenCalled();
+    } finally { confirm.mockRestore(); }
+  });
+
+  test('Change focuses the form; Cancel and Save give focus back to Change', async () => {
+    api.put.mockResolvedValue({ data: {} });
+    renderIt({ opportunity: OPP, people: PEOPLE, candidates: [] });
+    fireEvent.click(screen.getByTestId('script-beat14-change'));
+    expect(document.activeElement).toBe(screen.getByTestId('script-beat14-pick'));
+    fireEvent.click(screen.getByTestId('script-beat14-cancel'));
+    expect(document.activeElement).toBe(screen.getByTestId('script-beat14-change'));
+    fireEvent.click(screen.getByTestId('script-beat14-change'));
+    fireEvent.click(screen.getByTestId('script-beat14-save'));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('script-beat14-change')));
   });
 });
