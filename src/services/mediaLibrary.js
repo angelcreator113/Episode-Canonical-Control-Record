@@ -35,7 +35,11 @@ const { notConfidentialSql } = require('../utils/confidentialCharacters');
 
 const STATUSES = Object.freeze(['draft', 'approved', 'archived']);
 const VISIBILITIES = Object.freeze(['private', 'internal', 'public']);
-const ROLES = Object.freeze(['pictured', 'owner', 'location']);
+// 'headshot' is a character's one official headshot (the camera roll,
+// 2026-10-19); it is set only through services/cameraRoll.setHeadshot, never
+// as an ordinary tag, so normalizeLink refuses it here.
+const ROLES = Object.freeze(['pictured', 'owner', 'location', 'headshot']);
+const TAG_ROLES = Object.freeze(ROLES.filter((r) => r !== 'headshot'));
 const SOURCES = Object.freeze(['upload', 'generated', 'portrait', 'cover', 'scene_set', 'venue', 'invitation', 'event_set', 'post']);
 const DETAIL_KEYS = Object.freeze(['objects', 'wardrobe', 'style', 'season', 'time_of_day', 'camera_angle', 'notes']);
 
@@ -82,7 +86,8 @@ function normalizeLink(link) {
   const id = String(link?.entity_id ?? '').trim();
   if (ENTITIES[type].id === 'uuid' ? !UUID_RE.test(id) : !/^\d+$/.test(id)) throw new MediaError(400, `entity_id is not a ${type} id.`);
   const role = link?.role == null ? 'pictured' : String(link.role);
-  if (!ROLES.includes(role)) throw new MediaError(400, `role must be one of ${ROLES.join(', ')}.`);
+  if (role === 'headshot') throw new MediaError(400, 'The official headshot is set from the character\'s camera roll, not as a tag.');
+  if (!TAG_ROLES.includes(role)) throw new MediaError(400, `role must be one of ${TAG_ROLES.join(', ')}.`);
   return { entity_type: type, entity_id: id, role };
 }
 
@@ -422,7 +427,27 @@ async function sourceUseCounts(db, assetIds, role = 'place') {
   return out;
 }
 
+/**
+ * A camera-roll photo its character did not post (generation.camera_roll,
+ * services/cameraRoll): private, sent, work, memory or a screenshot. It is
+ * never suggested for a post or made public by approving a post's pictures
+ * (Evoni, 2026-10-19: private stays private); marking the moment posted is
+ * what makes it public.
+ */
+function isPrivateCameraRoll(asset) {
+  let g = asset?.generation;
+  if (typeof g === 'string') {
+    try { g = JSON.parse(g); } catch (err) {
+      console.error('[mediaLibrary] a picture\'s generation is not JSON:', err.message);
+      return false;
+    }
+  }
+  const roll = g && typeof g === 'object' ? g.camera_roll : null;
+  return Boolean(roll && roll.purpose !== 'posted');
+}
+
 module.exports = {
+  isPrivateCameraRoll, TAG_ROLES,
   STATUSES, VISIBILITIES, ROLES, SOURCES, ENTITIES, DETAIL_KEYS, MediaError,
   visibilityWhere, audienceOf, normalizeLink, normalizeDetails, checkUrl,
   createAsset, updateAsset, removeAsset, linkAsset, unlinkLink, getAsset, listFor, assetsByUrl, taggables, bringExisting,

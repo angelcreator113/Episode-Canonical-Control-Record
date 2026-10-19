@@ -114,6 +114,7 @@ let PulsePollVote; // Poll votes, hashed (Task #3005)
 let PulseRecap; // The weekly Pulse recap (Task #3008)
 let PostPictureSuggestion; // Visual Memory phase 4: a caption's picture reading and what was chosen
 let MediaAssetSource; // Visual Memory phase 4: what a made picture was made from
+let CameraRollMoment; // A character's camera roll (Evoni, 2026-10-19)
 let WardrobeOrderLine; // Imported Amazon order lines (Task #3102)
 let EpisodeScriptVersion; // Scripts the Script tab replaced (Script tab audit, 2026-10-15)
 let WritingRhythm; // Writing rhythm tracking
@@ -396,6 +397,7 @@ try {
   PulseRecap = require('./PulseRecap')(sequelize, DataTypes);
   PostPictureSuggestion = require('./PostPictureSuggestion')(sequelize, DataTypes);
   MediaAssetSource = require('./MediaAssetSource')(sequelize, DataTypes);
+  CameraRollMoment = require('./CameraRollMoment')(sequelize, DataTypes);
   WardrobeOrderLine = require('./WardrobeOrderLine')(sequelize, DataTypes);
   EpisodeScriptVersion = require('./EpisodeScriptVersion')(sequelize, DataTypes);
   WritingRhythm = require('./WritingRhythm')(sequelize, DataTypes);
@@ -597,6 +599,7 @@ const requiredModels = {
   PulseRecap,
   PostPictureSuggestion,
   MediaAssetSource,
+  CameraRollMoment,
   WardrobeOrderLine,
   EpisodeScriptVersion,
   WritingRhythm,
@@ -2138,6 +2141,7 @@ module.exports.PulsePollVote = PulsePollVote;
 module.exports.PulseRecap = PulseRecap;
 module.exports.PostPictureSuggestion = PostPictureSuggestion;
 module.exports.MediaAssetSource = MediaAssetSource;
+module.exports.CameraRollMoment = CameraRollMoment;
 module.exports.WardrobeOrderLine = WardrobeOrderLine;
 module.exports.EpisodeScriptVersion = EpisodeScriptVersion;
 module.exports.WritingRhythm = WritingRhythm;
