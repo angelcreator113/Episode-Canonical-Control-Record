@@ -49,20 +49,23 @@ describe('Episode Script theme', () => {
     expect(jsx).toMatch(/const sc = \{ Prime: 'var\(--primary-text\)', Lala: 'var\(--accent-dark\)', Kelli: 'var\(--info-text\)', Guest: 'var\(--success-text\)' \};/);
   });
 
-  test('every action is lavender (the mock) and gold is never under white nor text', () => {
+  // The studio look (Evoni's mockup, 2026-10-19) replaced the lavender
+  // actions and the gold approved chip: primary actions are the studio's
+  // magenta, Unlock and APPROVED are the studio's green on its tint, NEEDS
+  // REVISION and DRAFT read their own pairs.
+  test('every action is the studio magenta (the mockup) and each status badge reads its own pair', () => {
     expect(stripTaskRefs(page)).not.toMatch(HEX);
-    // Save, Save now, Generate, Save Final Script and Approve & lock are
-    // the lavender primary; saved reads success; Unlock is gold text on
-    // the gold tint; the approved chip is ink on gold.
-    expect(page).toMatch(/\.esp-btn-primary \{[^}]*background: var\(--lala-lavender\);\s*color: var\(--text-inverse\);/);
+    expect(page).toMatch(/\.esp-btn-primary \{[^}]*background: var\(--studio-gradient\);\s*color: var\(--text-inverse\);/);
     expect(page).toMatch(/\.esp-btn-primary\.is-saved \{ background: var\(--success-bg\); color: var\(--success-text\); \}/);
-    expect(page).toMatch(/\.esp-lock-btn \{[^}]*background: var\(--lala-lavender\); color: var\(--text-inverse\);/);
-    expect(page).toMatch(/\.esp-lock-btn\.is-locked \{ background: var\(--lala-gold-soft\); color: var\(--lala-gold-text\);/);
-    expect(page).toMatch(/\.esp-chip-approved \{[^}]*background: var\(--lala-gold\); color: var\(--text-primary\);/);
+    expect(page).toMatch(/\.esp-lock-btn \{[^}]*background: var\(--studio-magenta\); color: var\(--text-inverse\);/);
+    expect(page).toMatch(/\.esp-lock-btn\.is-locked \{ background: var\(--studio-ok-soft\); color: var\(--studio-ok\);/);
+    expect(page).toMatch(/\.esp-status\.is-approved \{ background: var\(--studio-ok-soft\); color: var\(--studio-ok\); \}/);
+    expect(page).toMatch(/\.esp-status\.is-revision \{ background: var\(--studio-warn-soft\); color: var\(--studio-warn\); \}/);
+    expect(page).toMatch(/\.esp-status\.is-draft \{ background: var\(--studio-draft-soft\); color: var\(--studio-draft\); \}/);
     for (const label of ["'Save'", '💾 Save now', 'Generate Script', '💾 Save Final Script']) {
       expect(jsx).toMatch(new RegExp(`className=\\{?[\`"]esp-btn-primary[^>]*>[^<]*${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
     }
-    expect(page).toMatch(/\.esp-btn \{[^}]*background: var\(--surface-card\);\s*color: var\(--lala-lavender-text\);/);
+    expect(page).toMatch(/\.esp-btn \{[^}]*background: var\(--studio-card\);\s*color: var\(--studio-purple\);/);
     expect(page).not.toMatch(/color: var\(--lala-gold-text\)[^}]*background: var\(--gray-900\)/);
     // No inline colour left in the tab but the two act/speaker variables.
     expect((jsx.match(/style=\{\{/g) || []).length).toBe(2);
@@ -108,11 +111,31 @@ describe('Episode Script theme', () => {
       ['--lala-ink-muted', '--lala-gold-soft'],
       ['--lala-ink', '--lala-lavender-soft'],
       ['--lala-gold-text', '--lala-gold-soft'],
+      // The studio look (Evoni's mockup, 2026-10-19).
+      ['--text-inverse', '--studio-magenta'],
+      ['--text-inverse', '--studio-magenta-hover'],
+      ['--text-inverse', '--studio-purple'],
+      ['--text-inverse', '--studio-ok'],
+      ['--studio-ink', '--studio-card'],
+      ['--studio-ink', '--studio-page'],
+      ['--studio-ink', '--studio-magenta-soft'],
+      ['--studio-ink-muted', '--studio-card'],
+      ['--studio-ink-muted', '--studio-page'],
+      ['--studio-ink-muted', '--studio-magenta-soft'],
+      ['--studio-magenta', '--studio-card'],
+      ['--studio-magenta', '--studio-magenta-soft'],
+      ['--studio-purple', '--studio-card'],
+      ['--studio-purple', '--studio-purple-soft'],
+      ['--studio-ok', '--studio-ok-soft'],
+      ['--studio-warn', '--studio-warn-soft'],
+      ['--studio-draft', '--studio-draft-soft'],
     ]) {
       const ratio = contrast(readToken(sources, fg), readToken(sources, bg));
       expect({ fg, bg, ratio }).toMatchObject({ ratio: expect.any(Number) });
       expect(ratio).toBeGreaterThanOrEqual(4.5);
     }
+    // White on the lightest end of the studio gradient (the primary buttons).
+    expect(contrast('#ffffff', '#D01C80')).toBeGreaterThanOrEqual(4.5);
     // White on the old gold save gradient and on the old purple, kept
     // below 4.5 so they are never reused.
     expect(contrast('#ffffff', '#C9A83A')).toBeLessThan(4.5);

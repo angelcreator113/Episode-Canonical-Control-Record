@@ -272,6 +272,33 @@
   --lala-radius: 8px;
 
   /* ════════════════════════════════════════════════════════════
+     STUDIO — the episode workspace (episode header + Script tab),
+     Evoni's mockup, 2026-10-19: soft pink page, white cards, magenta
+     marks. Text pairs are checked for 4.5:1 on their own backgrounds.
+     ════════════════════════════════════════════════════════════ */
+  --studio-page:        #FDF2F8;  /* page background, soft pink */
+  --studio-page-2:      #F9E4F1;  /* hover / track */
+  --studio-card:        #FFFFFF;  /* cards */
+  --studio-line:        #F1D3E6;  /* borders, dividers */
+  --studio-line-strong: #E3A9CD;  /* selected card outline */
+  --studio-ink:         #2C2233;  /* body text */
+  --studio-ink-muted:   #6E5C72;  /* labels, meta (5.9:1 on white) */
+  --studio-magenta:     #C2177A;  /* primary mark; white text on it 5.6:1; as text on white 5.6:1 */
+  --studio-magenta-hover: #A3125F;
+  --studio-magenta-soft:  #FCE7F3;  /* selected row / chip bg */
+  --studio-purple:      #6B2FA0;  /* section icons, links (8.6:1 on white) */
+  --studio-purple-soft: #F1E8FA;
+  --studio-gradient:    linear-gradient(90deg, #D01C80 0%, #C2177A 100%);  /* primary buttons, white text (5.0:1 at its lightest) */
+  --studio-ok:          #2F6B2A;  /* APPROVED text (6.6:1 on its soft) */
+  --studio-ok-soft:     #DDF2D6;
+  --studio-warn:        #9A4A0E;  /* NEEDS REVISION text (5.9:1 on its soft) */
+  --studio-warn-soft:   #FDE8D6;
+  --studio-draft:       #5D4590;  /* DRAFT text (7.4:1 on its soft) */
+  --studio-draft-soft:  #EEE7F8;
+  --studio-shadow:      0 2px 10px rgba(194, 23, 122, 0.08);
+  --studio-radius:      12px;
+
+  /* ════════════════════════════════════════════════════════════
      THE PULSE — LalaVerse's social network (pages/SocialMediaPage;
      docs/design/2026-10-the-pulse.md; Evoni's mockup, Task 2926).
      Text tokens are AA on the card and the soft fill; pink and
