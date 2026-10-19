@@ -64,7 +64,8 @@ const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
     await run(`INSERT INTO feed_posts (id, show_id, poster_handle, content_text, status, created_at, updated_at)
                VALUES (:post, :show, '@vary', 'still here. the bread is rising.', 'draft', NOW(), NOW())`, { post: ids.post, show: show.id });
     parent = (await media.createAsset(models, {
-      url: `${PNG}${tag}`, // its own picture: the same URL is never stored twice caption: `Dough rising ${tag}`, status: 'approved', visibility: 'internal',
+      url: `${PNG}${tag}`, // its own picture: the same URL is never stored twice
+      caption: `Dough rising ${tag}`, status: 'approved', visibility: 'internal',
       details: { objects: ['ceramic bowl'] },
       links: [{ entity_type: 'character', entity_id: ids.maren }, { entity_type: 'post', entity_id: ids.post, role: 'owner' }],
     })).asset;
@@ -126,6 +127,17 @@ const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
     const dr = await vary(parent.id, { change: { kind: 'add_character', character_id: ids.dr }, locks: [] });
     expect(dr.status).toBe(403);
     expect((await vary(parent.id, { change: { kind: 'object', text: 'a cup' }, locks: ['props'] })).status).toBe(400);
+  });
+
+  it('a picture with Dr. Sinclair in it is never varied, before any image call', async () => {
+    const withDr = (await media.createAsset(models, {
+      url: `https://cdn.test/${tag}/with-dr.jpg`, caption: 'A session room', status: 'approved', visibility: 'internal',
+      links: [{ entity_type: 'character', entity_id: ids.dr }],
+    })).asset;
+    const calls = axios.post.mock.calls.length;
+    const res = await vary(withDr.id, { change: { kind: 'time', text: 'dusk' }, locks: ['face', 'wardrobe', 'location', 'props'] });
+    expect(res.status).toBe(403);
+    expect(axios.post.mock.calls.length).toBe(calls);
   });
 
   it('the image budget refusing stops it with a 429 and stores nothing', async () => {

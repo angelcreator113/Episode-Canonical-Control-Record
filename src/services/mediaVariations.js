@@ -147,6 +147,17 @@ async function imageBytes(url) {
   return { buffer: Buffer.from(res.data), mimetype: /^image\/(png|jpeg|webp)$/.test(type) ? type : 'image/png' };
 }
 
+/**
+ * A picture with a confidential professional in it (Dr. Sinclair) is never
+ * varied (Evoni, 2026-10-19), before any image call is made.
+ */
+async function refuseConfidential(db, parent) {
+  const ids = (parent.links || []).filter((l) => l.entity_type === 'character').map((l) => l.entity_id);
+  if (!ids.length) return;
+  const people = await db.RegistryCharacter.findAll({ where: { id: ids } });
+  if (people.some((c) => isConfidential(c))) throw new MediaError(403, 'This picture has a confidential character in it, so it is not varied.');
+}
+
 /** The added character: who they are, their look, and up to two approved portraits. */
 async function addedCharacter(db, characterId) {
   const character = await db.RegistryCharacter.findByPk(characterId);
@@ -198,6 +209,7 @@ async function editImage(prompt, images) {
 async function createVariation(db, { assetId, change, locks, by = null } = {}) {
   const media = require('./mediaLibrary');
   const parent = await media.getAsset(db, assetId);
+  await refuseConfidential(db, parent);
   const req = normalizeRequest({ change, locks });
   const added = req.kind === 'add_character' ? await addedCharacter(db, req.characterId) : null;
   const pictured = (parent.links || []).filter((l) => l.entity_type === 'character').length;
