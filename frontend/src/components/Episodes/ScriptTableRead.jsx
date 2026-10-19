@@ -108,6 +108,9 @@ export default function ScriptTableRead({ scriptText, title = '', onScreen = nul
     if (!box) return;
     let at = 0;
     beatRefs.current.forEach((el, i) => { if (el && el.offsetTop - box.offsetTop <= box.scrollTop + 48) at = i; });
+    // Scrolled to the end: the last beat, whose top can't reach the top of
+    // the box (Script page re-audit, 2026-10-19: it read one beat behind).
+    if (box.scrollHeight > box.clientHeight && box.scrollTop + box.clientHeight >= box.scrollHeight - 2) at = Math.max(0, beats.length - 1);
     if (at !== current) setCurrent(at);
   };
 

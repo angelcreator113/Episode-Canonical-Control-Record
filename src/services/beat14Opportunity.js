@@ -41,7 +41,7 @@ const history = (opp) => (Array.isArray(opp?.status_history) ? opp.status_histor
 async function episodeAndEvent(models, { showId, episodeId }) {
   const { sequelize } = models;
   const [episode] = await sequelize.query(
-    'SELECT id, show_id, title, evaluation_status FROM episodes WHERE id = :episodeId AND deleted_at IS NULL',
+    'SELECT id, show_id, title, evaluation_status, evaluation_json FROM episodes WHERE id = :episodeId AND deleted_at IS NULL',
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
   );
   if (!episode || String(episode.show_id) !== String(showId)) throw new Beat14Error(404, 'Episode not found.');
@@ -77,11 +77,27 @@ const slim = (o) => (o ? {
 
 const isCompleted = (episode) => episode?.evaluation_status === 'accepted';
 
-// The attached opportunity can still change only while it is held.
-function assertStillHeld(opp) {
+// The attached opportunity can still change only while it is held. An
+// episode whose evaluation was reset after completion (show reset, a new
+// Evaluate) no longer reads as completed, but what completion did to its
+// beat 14 stands, and the message says so (Script page re-audit, 2026-10-19:
+// it said "The episode is completed" of an episode that was not).
+function assertStillHeld(opp, episode = null) {
   if (opp && opp.status !== HELD) {
-    throw new Beat14Error(409, `The episode is completed: its beat 14 opportunity was already ${opp.status === 'expired' ? 'expired' : 'offered'}, so it can't be changed or removed here.`);
+    const what = opp.status === 'expired' ? 'expired' : 'offered';
+    throw new Beat14Error(409, episode && !isCompleted(episode)
+      ? `Its beat 14 opportunity was already ${what} when the episode was completed (its evaluation has been reset since), so it can't be changed or removed here.`
+      : `The episode is completed: its beat 14 opportunity was already ${what}, so it can't be changed or removed here.`);
   }
+}
+
+// The tier completion recorded (episodes.evaluation_json.tier_final), or null.
+function completedTier(episode) {
+  let ev = episode?.evaluation_json;
+  if (typeof ev === 'string') {
+    try { ev = JSON.parse(ev); } catch (err) { console.error('[Beat14] evaluation_json is not valid JSON:', err.message); ev = null; }
+  }
+  return ev?.tier_final || null;
 }
 
 async function attached(models, episodeId) {
@@ -90,8 +106,19 @@ async function attached(models, episodeId) {
 
 /** GET: the attached opportunity, who at the event can offer, and the show's open opportunities to attach. */
 async function getBeat14(models, { showId, episodeId }) {
-  const { event } = await episodeAndEvent(models, { showId, episodeId });
-  const opp = await attached(models, episodeId);
+  const { episode, event } = await episodeAndEvent(models, { showId, episodeId });
+  let opp = await attached(models, episodeId);
+  // Still held on a completed episode: completion's resolve failed, so it is
+  // resolved now, as completion would have (Script page re-audit,
+  // 2026-10-19: it stayed held for good).
+  if (opp && opp.status === HELD && isCompleted(episode) && completedTier(episode)) {
+    try {
+      await resolveAtCompletion(models, { episodeId, event, tierFinal: completedTier(episode) });
+      opp = await attached(models, episodeId);
+    } catch (err) {
+      console.error('[Beat14] late resolve on read failed (non-blocking):', err.message);
+    }
+  }
   const { Op } = require('sequelize');
   const open = await models.Opportunity.findAll({
     where: { show_id: showId, status: { [Op.in]: OPEN_STATUSES }, offered_in_episode_id: null },
@@ -128,8 +155,17 @@ async function attachBeat14(models, { showId, episodeId, opportunity_id = null, 
   const note = `Beat 14 of ${episode.title || 'the episode'}: offered if the episode lands`;
   const sequelize = models.sequelize;
   return sequelize.transaction(async (transaction) => {
+    // Completion locks the episode row and marks it accepted under the lock;
+    // read again here under the same lock, so an attach that raced a
+    // completion is refused rather than left held on a completed episode
+    // (Script page re-audit, 2026-10-19).
+    const [locked] = await sequelize.query(
+      'SELECT evaluation_status FROM episodes WHERE id = :episodeId FOR UPDATE',
+      { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT, transaction }
+    );
+    if (isCompleted(locked)) throw new Beat14Error(409, 'The episode is completed: its beat 14 opportunity was already offered or expired, so nothing can be attached now.');
     const current = await models.Opportunity.findOne({ where: { offered_in_episode_id: episodeId }, transaction });
-    assertStillHeld(current);
+    assertStillHeld(current, episode);
     // The card's Change on what is already attached: only who offers it
     // changes. Releasing first would remove one made here (Script page
     // audit, 2026-10-19).
@@ -199,10 +235,10 @@ async function release(opp, transaction) {
 
 /** DELETE: nothing attached any more. */
 async function detachBeat14(models, { showId, episodeId }) {
-  await episodeAndEvent(models, { showId, episodeId });
+  const { episode } = await episodeAndEvent(models, { showId, episodeId });
   await models.sequelize.transaction(async (transaction) => {
     const opp = await models.Opportunity.findOne({ where: { offered_in_episode_id: episodeId }, transaction });
-    assertStillHeld(opp);
+    assertStillHeld(opp, episode);
     if (opp) await release(opp, transaction);
   });
   return { opportunity: null };
@@ -234,6 +270,29 @@ async function resolveAtCompletion(models, { episodeId, event, tierFinal }) {
   return { id: opp.id, name: opp.name, status };
 }
 
+/**
+ * After completion, for one whose resolve failed (Script page re-audit,
+ * 2026-10-19): an episode completed with its beat 14 opportunity still held
+ * gets it offered or expired by the tier completion recorded. Returns what
+ * resolveAtCompletion returns, or null when there is nothing to do.
+ * Completion calls it when it finds the episode already completed.
+ */
+async function resolveHeldAfterCompletion(models, { episodeId }) {
+  if (!models?.Opportunity || !models?.sequelize) return null;
+  const opp = await attached(models, episodeId);
+  if (!opp || opp.status !== HELD) return null;
+  const { sequelize } = models;
+  const [episode] = await sequelize.query(
+    'SELECT id, evaluation_status, evaluation_json FROM episodes WHERE id = :episodeId AND deleted_at IS NULL',
+    { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
+  );
+  // Without the recorded tier there is nothing to decide by; it stays held.
+  if (!isCompleted(episode) || !completedTier(episode)) return null;
+  const { findSourceEvent } = require('./episodeMoneyService');
+  const event = await findSourceEvent(sequelize, episodeId);
+  return resolveAtCompletion(models, { episodeId, event, tierFinal: completedTier(episode) });
+}
+
 /** What the writer reads: the attached opportunity and its sender's name, or null. */
 async function loadForScript(models, { episodeId }) {
   if (!models?.Opportunity) return null;
@@ -241,7 +300,7 @@ async function loadForScript(models, { episodeId }) {
   return slim(opp);
 }
 
-module.exports = { getBeat14, attachBeat14, detachBeat14, resolveAtCompletion, loadForScript, eventPeople, Beat14Error, HELD, TYPES };
+module.exports = { getBeat14, attachBeat14, detachBeat14, resolveAtCompletion, resolveHeldAfterCompletion, loadForScript, eventPeople, Beat14Error, HELD, TYPES };
 
 const { beat14Outcome } = require('../utils/beat14Invitation');
 

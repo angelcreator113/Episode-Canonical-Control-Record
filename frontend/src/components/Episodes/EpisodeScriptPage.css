@@ -205,7 +205,8 @@
 .esp-line.is-locked { cursor: default; }
 .esp-line.is-locked:hover { background: none; }
 .esp-line-speaker { margin-right: 8px; font-family: 'DM Mono', var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--speaker, var(--text-primary)); }
-.esp-line-text { font-family: var(--font-prose); font-size: 15px; line-height: 1.65; color: var(--lala-ink); }
+/* A long unbroken word wraps, not under Rewrite (Script page re-audit, 2026-10-19). */
+.esp-line-text { font-family: var(--font-prose); font-size: 15px; line-height: 1.65; color: var(--lala-ink); overflow-wrap: anywhere; }
 .esp-line-action { font-family: var(--font-prose); font-size: 14px; font-style: italic; color: var(--lala-ink-muted); }
 .esp-line-cue { font-family: var(--font-mono, 'DM Mono', monospace); font-size: 11px; letter-spacing: 0.02em; color: var(--lala-ink-muted); }
 .esp-rewrite { margin-left: 8px; padding: 0; border: none; background: none; color: var(--lala-lavender-text); font-size: 11px; font-weight: 600; cursor: pointer; opacity: 0; transition: opacity 0.15s; }
@@ -361,6 +362,7 @@
 
 /* "Add:" chips, must-cover checklist and phone check (2026-10-11). */
 .esp-add-chips { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.esp-beat-nophone { font-size: 12px; color: var(--lala-ink-muted); }
 .esp-add-label { font-family: 'DM Mono', var(--font-mono); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--lala-ink-muted); }
 .esp-cover, .esp-phonecheck { padding: 14px 16px; border: 1px solid var(--lala-lavender-line); border-radius: 14px; background: var(--surface-card); }
 .esp-cover-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
@@ -445,6 +447,8 @@
   /* Ready to film? opened on a phone scrolls in its own box, so the beat stays near. */
   .esp-health-list { max-height: 50vh; overflow-y: auto; overscroll-behavior: contain; }
   .esp-line-edit-actions { flex-wrap: wrap; }
+  /* Links are tap targets too (Script page re-audit, 2026-10-19). */
+  .esp-link { display: inline-flex; align-items: center; min-height: 44px; }
 }
 
 /* A rewrite or regenerated beat before it goes in (Script tab audit, 2026-10-15). */
@@ -479,10 +483,10 @@
 
 /* Beat 14's opportunity (Evoni, 2026-10-19; Beat14Opportunity.jsx). */
 .esp-beat14 .esp-side-title { display: flex; align-items: center; gap: 6px; }
-.esp-beat14-name { margin: 0 0 6px; }
+.esp-beat14-name { margin: 0 0 6px; overflow-wrap: anywhere; }
 .esp-beat14-form { display: flex; flex-direction: column; gap: 8px; }
 .esp-beat14-modes { display: flex; gap: 6px; flex-wrap: wrap; }
-.esp-beat14-modes .is-active { border-color: var(--lala-gold-line); color: var(--lala-gold-text); }
+.esp-beat14-modes [aria-pressed="true"] { border-color: var(--lala-gold-line); color: var(--lala-gold-text); }
 .esp-beat14-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .esp-beat14-field input,
 .esp-beat14-field select,

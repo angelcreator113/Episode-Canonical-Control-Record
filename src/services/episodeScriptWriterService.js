@@ -66,7 +66,7 @@ const BEAT_TEMPLATES = {
   8:  { name: 'Transformation Loop',  jawihp: true,  lala: true,  ui: 'CLOSET_OPEN',               mood: 'transformation' },
   9:  { name: 'Reminder/Deadline',    jawihp: true,  lala: false, ui: 'TODO_LIST',                 mood: 'urgency' },
   10: { name: 'Event Travel',         jawihp: true,  lala: false, ui: 'LOCATION_ICON',             mood: 'anticipation' },
-  11: { name: 'Event Outcome',        jawihp: true,  lala: true,  ui: 'ARRIVAL',                   mood: 'climax' },
+  11: { name: 'The Event',            jawihp: true,  lala: true,  ui: 'ARRIVAL',                   mood: 'climax' },
   12: { name: 'Fashion Challenge',    jawihp: true,  lala: true,  ui: 'FASHION_CHALLENGE',         mood: 'performance' },
   13: { name: 'Recap Panel',          jawihp: true,  lala: false, ui: 'STATS_UPDATE',              mood: 'reflection' },
   14: { name: 'Cliffhanger',          jawihp: true,  lala: false, ui: 'FADE_OUT',                  mood: 'suspense' },
@@ -518,7 +518,7 @@ function storyContextBlocks(context, { withSeason = true } = {}) {
   let charBlock = '';
   if (context.characterState) {
     const cs = context.characterState;
-    charBlock = `═══ LALA'S STATS ═══\n🪙 ${cs.coins} coins | ⭐ ${cs.reputation}/10 rep | 🤝 ${cs.brand_trust}/10 trust | 📣 ${cs.influence}/10 influence | 😰 ${cs.stress}/10 stress\nSCRIPT DIRECTIVE: Use the exact coin number in Lala's internal monologue when she checks her balance.\n`;
+    charBlock = `═══ LALA'S STATS ═══\n🪙 ${cs.coins} coins | ⭐ ${cs.reputation}/10 rep | 🤝 ${cs.brand_trust}/10 trust | 📣 ${cs.influence}/10 influence | 😰 ${cs.stress}/10 stress\nSCRIPT DIRECTIVE: When she checks her balance, use the exact number as it stands at that point: this one before any coin line, and after the coin lines the number they leave (after the look, LALA'S COINS gives it when it is given); never another.\n`;
   }
 
   const pulseBlock = require('./scriptPulsePosts').pulseScriptBlock(context.pulsePosts);
@@ -727,7 +727,7 @@ function buildFullPrompt(context) {
       if (item.lala_reaction_own) wardrobeContext += `\n    Lala: "${item.lala_reaction_own}"`;
     }
     wardrobeContext += `\n\nBeat 8 (Transformation): Reference EACH piece by name as Lala gets dressed.`;
-    wardrobeContext += `\nBeat 11 (Event Outcome): Her outfit choice affects how the event goes.`;
+    wardrobeContext += `\nBeat 11 (The Event): Her outfit choice affects how the event goes.`;
   }
 
   // Wardrobe Intelligence (repeat detection, brand loyalty, match score, feed triggers)

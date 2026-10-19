@@ -68,7 +68,7 @@ function CANON_RULES(format) {
       ? '- Stay in the world: nothing about a show, an episode, a game, filming, a player or a studio.'
       : '- This recap speaks to the viewer, so it may name the show and the episode; it still never says Lala knows she is in one.',
     format === 'short_story'
-      ? '- At the event, give one vivid moment that leaves a question hanging (who, what, why) before the story answers it. A short animated piece of it plays in the episode at beat 11 (Event Outcome).'
+      ? '- At the event, give one vivid moment that leaves a question hanging (who, what, why) before the story answers it. A short animated piece of it plays in the episode at beat 11 (The Event).'
       : '',
   ].filter(Boolean).join('\n');
 }

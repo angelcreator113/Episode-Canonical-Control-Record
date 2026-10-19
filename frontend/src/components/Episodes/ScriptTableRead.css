@@ -56,7 +56,7 @@ body.str-open { overflow: hidden; }
   color: var(--str-speaker, var(--lala-ink));
 }
 .str-paren { display: block; font-size: 0.85em; font-style: italic; color: var(--lala-ink-muted); }
-.str-words { margin: 0.1em 0 0; }
+.str-words { margin: 0.1em 0 0; overflow-wrap: anywhere; }
 .str-action, .str-narration { margin: 0 0 1em; }
 .str-action { font-style: italic; color: var(--lala-ink-muted); }
 .str-moment {

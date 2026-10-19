@@ -44,7 +44,7 @@ describe('Episode Script theme', () => {
     expect(jsx).toMatch(/name: 'Opening Ritual',\s+icon: '🎬', color: 'var\(--primary-text\)'/);
     expect(jsx).toMatch(/name: 'Reveal',\s+icon: '✨', color: 'var\(--lala-gold-text\)'/);
     expect(jsx).toMatch(/name: 'Transformation Loop',\s+icon: '👗', color: 'var\(--accent-dark\)'/);
-    expect(jsx).toMatch(/name: 'Event Outcome',\s+icon: '🏆', color: 'var\(--info-text\)'/);
+    expect(jsx).toMatch(/name: 'The Event',\s+icon: '🏆', color: 'var\(--info-text\)'/);
     expect(jsx).toMatch(/name: 'Cliffhanger',\s+icon: '🔥', color: 'var\(--success-text\)'/);
     expect(jsx).toMatch(/const sc = \{ Prime: 'var\(--primary-text\)', Lala: 'var\(--accent-dark\)', Kelli: 'var\(--info-text\)', Guest: 'var\(--success-text\)' \};/);
   });

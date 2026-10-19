@@ -69,7 +69,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(prompt).toContain("═══ LALA'S CAREER IN THIS EPISODE ═══");
     expect(prompt).toContain('THE DEAL: Maison Rue is offering Lala Paid to appear (400 coins), Paid for content, Gifted items (worth 150 coins).');
     // A format reads by its phrase; an untyped row by its stored type. No real app is named.
-    expect(prompt).toContain('- 1 Pulse video: A get-ready-with-me video in the Maison Rue dress (owed to the brand, 300 coins, due Day 3)');
+    expect(prompt).toContain('- 1 Pulse video: A get-ready-with-me video in the Maison Rue dress (owed to the brand, pays her 300 coins, next episode, due Day 3)');
     expect(prompt).toContain('- 3x story: Tag the brand in a story set (owed to the brand)');
     expect(prompt).not.toMatch(/instagram|tiktok/i);
     expect(prompt).toContain('- Get Maison Rue to book her again: Sable decides the next campaign');
