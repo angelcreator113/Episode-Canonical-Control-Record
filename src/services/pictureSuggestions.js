@@ -224,7 +224,9 @@ async function candidatesFor(db, poster) {
       }
     }
   }
-  const all = [...byId.values()];
+  // A camera-roll photo they did not post stays out of their posts (Evoni,
+  // 2026-10-19: private stays private).
+  const all = [...byId.values()].filter((a) => !media.isPrivateCameraRoll(a));
   const people = [...new Set(all.flatMap((a) => (a.links || []).filter((l) => l.entity_type === 'character').map((l) => String(l.entity_id))))];
   if (!people.length) return all;
   const rows = await db.RegistryCharacter.findAll({ where: { id: people } });
@@ -232,10 +234,12 @@ async function candidatesFor(db, poster) {
   return all.filter((a) => !(a.links || []).some((l) => l.entity_type === 'character' && hidden.has(String(l.entity_id))));
 }
 
+// A character's official headshot is a picture of them too (the camera roll, 2026-10-19).
+const PICTURED = new Set(['pictured', 'headshot']);
 const isPortrait = (a) => a.source === 'portrait' || a.source === 'cover';
 const isWardrobe = (a) => (a.links || []).some((l) => l.entity_type === 'wardrobe');
 const isPlace = (a) => ['scene_set', 'venue'].includes(a.source) || (a.links || []).some((l) => l.entity_type === 'scene_set');
-const pictures = (a, posterId) => (a.links || []).some((l) => l.entity_type === 'character' && String(l.entity_id) === String(posterId) && l.role === 'pictured');
+const pictures = (a, posterId) => (a.links || []).some((l) => l.entity_type === 'character' && String(l.entity_id) === String(posterId) && PICTURED.has(l.role));
 const editable = (a) => /^(https?:\/\/|data:image\/)/i.test(String(a?.url || ''));
 
 /** What the reading adds to one picture's score, and why. */
@@ -267,11 +271,20 @@ function readingScore(reading, asset, posterId = null) {
     if (isWardrobe(asset) && !wantsOutfit) { score -= 2; why.push('an outfit, and this post is not about one'); }
   } else {
     if (isPortrait(asset)) score += 1;
-    if (posterId && (asset.links || []).some((l) => l.entity_type === 'character' && String(l.entity_id) === String(posterId) && l.role === 'pictured')) {
+    if (posterId && (asset.links || []).some((l) => l.entity_type === 'character' && String(l.entity_id) === String(posterId) && PICTURED.has(l.role))) {
       score += 2; why.push('they are in it');
     }
   }
   return { score, why, shown };
+}
+
+const ROLL_BONUS = 3;
+
+/** A camera-roll photo of the poster that the moment says they posted. */
+function postedFromRoll(asset, posterId) {
+  const g = asset?.generation && typeof asset.generation === 'object' ? asset.generation : null;
+  if (!g?.camera_roll || g.camera_roll.purpose !== 'posted') return false;
+  return !posterId || (asset.links || []).some((l) => l.entity_type === 'character' && String(l.entity_id) === String(posterId));
 }
 
 /** The candidates ranked for this reading: the same reading and pictures always give the same order. */
@@ -280,7 +293,10 @@ function rank(reading, caption, candidates, { posterId = null } = {}) {
   return rankPictures(caption, candidates).map((r) => {
     const add = readingScore(reading, r.asset, posterId);
     const words = r.why.filter((w) => !/portrait/.test(w));
-    return { asset: r.asset, score: r.score + add.score, ready: r.ready, shown: add.shown, why: [...add.why, ...words] };
+    // A photo they posted from their own camera roll is a moment that happened: it comes first among equals.
+    const fromRoll = postedFromRoll(r.asset, posterId);
+    if (fromRoll) add.why.push('a moment from their camera roll');
+    return { asset: r.asset, score: r.score + add.score + (fromRoll ? ROLL_BONUS : 0), ready: r.ready, shown: add.shown, why: [...add.why, ...words] };
   }).sort((x, y) => (y.score - x.score) || (Number(y.ready) - Number(x.ready))
     || (new Date(y.asset.created_at || 0) - new Date(x.asset.created_at || 0)) || String(x.asset.id).localeCompare(String(y.asset.id)));
 }
@@ -292,7 +308,7 @@ function editFor(reading, best) {
     return { kind: 'object', text: `add ${missing.slice(0, 3).join(' and ')}`, locks: ['face', 'wardrobe', 'location'] };
   }
   const doing = best.why.some((w) => w.startsWith('the activity'));
-  const pictured = (best.asset.links || []).some((l) => l.entity_type === 'character' && l.role === 'pictured');
+  const pictured = (best.asset.links || []).some((l) => l.entity_type === 'character' && PICTURED.has(l.role));
   if (reading.activity && !doing && pictured) return { kind: 'action', text: reading.activity, locks: ['face', 'wardrobe', 'location', 'props'] };
   return { kind: 'framing', text: `closer on ${reading.subject || reading.objects[0] || 'the subject'}`, locks: ['face', 'wardrobe', 'location', 'props'] };
 }

@@ -1719,6 +1719,8 @@ try {
 
 // Visual Memory: the shared picture library (services/mediaLibrary)
 try { app.use('/api/v1/media', require('./routes/mediaRoutes')); console.log('✓ Media library loaded at /api/v1/media'); } catch (e) { console.error('✗ Failed to load Media library routes:', e.message); }
+// A character's camera roll: the official headshot and moments from their life (Evoni, 2026-10-19; services/cameraRoll)
+try { app.use('/api/v1/camera-roll', require('./routes/cameraRollRoutes')); console.log('✓ Camera roll loaded at /api/v1/camera-roll'); } catch (e) { console.error('✗ Failed to load Camera roll routes:', e.message); }
 // Visual Memory phase 2: a post's pictures and formats (services/postMedia)
 try { app.use('/api/v1/post-media', require('./routes/postMediaRoutes')); console.log('✓ Post media loaded at /api/v1/post-media'); } catch (e) { console.error('✗ Failed to load Post media routes:', e.message); }
 // Deliverables that check themselves (Evoni, 2026-10-19; services/deliverableProgress)
