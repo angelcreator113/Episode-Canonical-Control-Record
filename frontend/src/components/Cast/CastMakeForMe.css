@@ -1,0 +1,29 @@
+/* CastMakeForMe — "Make one for me" on The Cast. Uses TheCast.css's modal, buttons and chips. */
+.cmfm { max-height: 90vh; overflow-y: auto; }
+.cmfm-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cmfm-head .cast-modal-title { display: flex; align-items: center; gap: 8px; }
+.cmfm-close {
+  min-width: 44px; min-height: 44px; border: none; background: transparent; color: var(--lala-lavender-text);
+  border-radius: 999px; cursor: pointer;
+}
+.cmfm-close:hover { background: var(--lala-lavender-soft); }
+.cmfm-hint { margin: 6px 0 0; }
+.cmfm-make { display: flex; flex-wrap: wrap; gap: 8px; }
+.cmfm-make button { display: inline-flex; align-items: center; gap: 6px; }
+.cmfm-error { margin: 0; color: var(--lala-danger); font-size: 14px; }
+.cmfm-list { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 12px; }
+.cmfm-card {
+  padding: 14px; border-radius: 14px; border: 1.5px solid var(--lala-gold-line);
+  background: var(--lala-parchment); display: grid; gap: 10px; min-width: 0;
+}
+.cmfm-card-head { display: flex; align-items: center; gap: 10px; }
+.cmfm-icon { font-size: 26px; }
+.cmfm-name { display: block; font-family: var(--font-prose); font-size: 18px; color: var(--lala-lavender-text); }
+.cmfm-real { display: block; font-size: 13px; color: var(--text-secondary); }
+.cmfm-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.cmfm-summary { margin: 0; font-family: var(--font-prose); font-size: 15px; line-height: 1.5; color: var(--lala-ink); overflow-wrap: anywhere; }
+.cmfm-traits { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 14px; }
+.cmfm-traits dt { font-weight: 700; color: var(--lala-lavender-text); }
+.cmfm-traits dd { margin: 0; color: var(--lala-ink); overflow-wrap: anywhere; }
+.cmfm-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.cmfm-actions button { display: inline-flex; align-items: center; gap: 6px; }
