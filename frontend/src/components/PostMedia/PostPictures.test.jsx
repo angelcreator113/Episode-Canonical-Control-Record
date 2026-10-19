@@ -59,14 +59,21 @@ describe('PostPictures', () => {
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/media/a-1', { status: 'approved', visibility: 'public' }));
   });
 
-  test('suggestions for the caption come from their library, with why', async () => {
-    vi.mocked(api.get)
-      .mockResolvedValueOnce({ data: editor() })
-      .mockResolvedValueOnce({ data: { success: true, suggestions: [{ ...dough, score: 4, ready: false, why: ['shares bread'] }] } });
+  test('suggestions for the caption read it, rank their pictures with why, and Use this puts one with the post', async () => {
+    vi.mocked(api.get).mockResolvedValueOnce({ data: editor() });
+    vi.mocked(api.post).mockResolvedValueOnce({ data: {
+      success: true, cached: false, fallback: false,
+      reading: { subject: 'bread dough', activity: 'baking bread', mood: 'quiet', setting: 'home kitchen', person_in_frame: 'optional', objects: ['dough'], avoid: [] },
+      ranked: [{ ...dough, score: 12, ready: false, why: ['shows dough, ceramic bowl'] }],
+      plan: { recommended: 'use', use: { action: 'use', asset_id: 'a-1', ready: false }, edit: null, create: { action: 'create', references: [], blocked: null } },
+    } });
     render(<PostPictures postId="p-1" />);
     fireEvent.click(await screen.findByRole('button', { name: /Suggest for this caption/ }));
     const list = await screen.findByTestId('pp-suggestions');
-    expect(list.textContent).toContain('shares bread');
-    expect(api.get).toHaveBeenLastCalledWith('/api/v1/post-media/posts/p-1/suggestions');
+    expect(list.textContent).toContain('shows dough, ceramic bowl');
+    expect(api.post).toHaveBeenCalledWith('/api/v1/post-media/posts/p-1/suggestions', {});
+    fireEvent.click(screen.getByTestId('cs-action'));
+    expect(within(screen.getByTestId('pp-chosen')).getByAltText('Dough rising')).toBeTruthy();
+    expect(api.put).not.toHaveBeenCalled(); // nothing saved until Save
   });
 });

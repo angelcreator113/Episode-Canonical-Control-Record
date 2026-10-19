@@ -5,13 +5,15 @@
  * the post points at the library picture. The caption never changes.
  * A live or scheduled post can only use pictures that are approved and
  * public; when one isn't, "Approve and make public" does it in one click
- * (GET/PUT /api/v1/post-media/posts/:id, .../approve-pictures,
- * .../suggestions; services/postMedia).
+ * (GET/PUT /api/v1/post-media/posts/:id, .../approve-pictures;
+ * services/postMedia). "Suggest for this caption" is phase 4
+ * (CaptionSuggestions): use, edit or create, each only on her click.
  */
 import { useState, useEffect, useCallback } from 'react';
 import { Images, ArrowUp, ArrowDown, X, Check, Sparkles, Wand2 } from 'lucide-react';
 import api from '../../services/api';
 import { MakeVariation } from '../MediaVariations/MakeVariation';
+import CaptionSuggestions from './CaptionSuggestions';
 import './PostPictures.css';
 
 const errorText = (err, fallback) => err?.response?.data?.error || fallback;
@@ -22,7 +24,7 @@ export default function PostPictures({ postId, onSaved }) {
   const [data, setData] = useState(null);
   const [chosen, setChosen] = useState([]);
   const [format, setFormat] = useState('post');
-  const [suggested, setSuggested] = useState(null);
+  const [suggesting, setSuggesting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [blocked, setBlocked] = useState(null);
@@ -57,6 +59,7 @@ export default function PostPictures({ postId, onSaved }) {
   const rules = data.formats.find((f) => f.key === format) || { min: 0, max: 4, label: 'Post' };
   const isChosen = (a) => chosen.some((c) => c.id === a.id);
   const toggle = (a) => setChosen((list) => (isChosen(a) ? list.filter((c) => c.id !== a.id) : [...list, a]));
+  const use = (a) => setChosen((list) => (list.some((c) => c.id === a.id) ? list : [...list, a]));
   const move = (i, by) => setChosen((list) => {
     const next = [...list];
     const j = i + by;
@@ -92,17 +95,6 @@ export default function PostPictures({ postId, onSaved }) {
     } catch (err) {
       console.error('[PostPictures] the pictures could not be approved:', err);
       setError(errorText(err, 'They could not be approved. Try again.'));
-    } finally { setBusy(false); }
-  };
-
-  const suggest = async () => {
-    setBusy(true); setError(null);
-    try {
-      const { data: d } = await api.get(`/api/v1/post-media/posts/${postId}/suggestions`);
-      setSuggested(d.suggestions || []);
-    } catch (err) {
-      console.error('[PostPictures] no suggestions:', err);
-      setError(errorText(err, 'No suggestions came back. Try again.'));
     } finally { setBusy(false); }
   };
 
@@ -144,25 +136,11 @@ export default function PostPictures({ postId, onSaved }) {
 
       <div className="pp-row">
         <h4 className="pp-title">{data.poster ? `${data.poster.name}'s library` : 'Library'}</h4>
-        <button type="button" className="pp-btn is-quiet" disabled={busy || !data.poster} onClick={suggest}><Sparkles size={14} aria-hidden /> Suggest for this caption</button>
+        <button type="button" className="pp-btn is-quiet" disabled={busy || !data.poster} onClick={() => setSuggesting((v) => !v)} aria-expanded={suggesting}><Sparkles size={14} aria-hidden /> Suggest for this caption</button>
       </div>
       {!data.poster && <p className="pp-muted">This post has no character in the registry, so there is no library to pick from.</p>}
-      {suggested && (
-        suggested.length ? (
-          <ul className="pp-grid" data-testid="pp-suggestions">
-            {suggested.map((s) => {
-              const a = data.library.find((x) => x.id === s.id) || s;
-              return (
-                <li key={s.id} className="pp-pick">
-                  <button type="button" className={isChosen(a) ? 'pp-thumb is-on' : 'pp-thumb'} aria-pressed={isChosen(a)} onClick={() => toggle(a)} aria-label={`Suggested: ${s.caption || 'a picture'}`}>
-                    <img src={s.url} alt={s.caption || ''} loading="lazy" />
-                  </button>
-                  <span className="pp-why">{s.why.join('; ') || 'From their library'}</span>
-                </li>
-              );
-            })}
-          </ul>
-        ) : <p className="pp-muted" data-testid="pp-suggestions">Nothing in their library matches this caption yet.</p>
+      {suggesting && data.poster && (
+        <CaptionSuggestions postId={postId} library={data.library} isChosen={isChosen} onUse={use} onToggle={toggle} onMade={refreshLibrary} />
       )}
       {data.library.length ? (
         <ul className="pp-grid" data-testid="pp-library">
