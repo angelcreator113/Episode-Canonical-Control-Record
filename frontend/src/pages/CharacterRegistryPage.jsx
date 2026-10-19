@@ -24,6 +24,7 @@ import { chooseRegistry, findLala, feedPeople, oldSystem, otherProtagonists } fr
 import CastFacts from '../components/Cast/CastFacts';
 import CastFlagLog from '../components/Cast/CastFlagLog';
 import CastCrossCheck from '../components/Cast/CastCrossCheck';
+import CastMakeForMe from '../components/Cast/CastMakeForMe';
 import './TheCast.css';
 
 const ROLE_CONFIG = {
@@ -70,6 +71,8 @@ export default function CharacterRegistryPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({ display_name: '', role_type: 'pressure', icon: '👤' });
   const [creating, setCreating] = useState(false);
+  // "Make one for me" (Evoni, 2026-10-19; components/Cast/CastMakeForMe).
+  const [showMake, setShowMake] = useState(false);
   const [toast, setToast] = useState(null);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
@@ -215,6 +218,9 @@ export default function CharacterRegistryPage() {
           <button type="button" onClick={openCreate} data-testid="new-character" className="cast-btn-new">
             <Plus size={18} aria-hidden /> New character
           </button>
+          <button type="button" onClick={() => setShowMake(true)} data-testid="make-for-me" className="cast-btn-new">
+            <Sparkles size={18} aria-hidden /> Make one for me
+          </button>
         </div>
       </header>
 
@@ -331,6 +337,23 @@ export default function CharacterRegistryPage() {
       <CastFacts registryIds={registryId ? [registryId] : registries.map((r) => r.id)} />
       <CastFlagLog registryIds={registryId ? [registryId] : registries.map((r) => r.id)} />
       <CastCrossCheck registryIds={registryId ? [registryId] : registries.map((r) => r.id)} />
+
+      {showMake && (
+        <CastMakeForMe
+          registries={registries}
+          registryId={registryId}
+          onClose={() => setShowMake(false)}
+          onKept={(c, reg) => { showToast(`${c?.display_name || 'The character'} was made in ${reg?.title || 'the registry'}`); loadCharacters(); loadProfiles(); }}
+          // Edit: the proposal in the New character form, prefilled (it saves through the form, with no Pulse profile).
+          onEdit={(p, reg) => {
+            const { pulse: _pulse, world: _world, ...fields } = p;
+            setShowMake(false);
+            setCreateRegistryId(reg?.id || registryId);
+            setCreateForm({ role_type: 'pressure', icon: '👤', ...fields });
+            setShowCreate(true);
+          }}
+        />
+      )}
 
       {/* Create Modal */}
       {showCreate && (
