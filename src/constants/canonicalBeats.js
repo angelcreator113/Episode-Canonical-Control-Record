@@ -290,11 +290,11 @@ const CANONICAL_BEATS = [
   // and comments a little; overlays on the video (the stats panel) stay.
   {
     number: 11,
-    name: 'Event Outcome',
+    name: 'The Event',
     story_job: "The cutscene begins (an AI video, a play moment in a video game): the characters speak their own lines, no phone and no voice-icon click. Lala has a real conversation with the event's host and its two featured guests, who notice something specific about her when the show holds it (a look she posted, the last episode); Lala answers honestly; a small test she passes or fails without knowing it; the connection or consequence lands before the result. JustAWoman stays on screen and comments a little between their lines.",
     typical_location: 'EVENT_LOCATION',
     description: 'The main event — what happens when Lala arrives and performs',
-    narrative_purpose: 'The evaluation resolves. Pass or fail. Stats update.',
+    narrative_purpose: 'The cutscene begins. The evaluation resolves: pass or fail.',
     screen_action: 'ARRIVAL',
     actor: 'none',
     surface: "Lala's Environment",
@@ -330,7 +330,7 @@ const CANONICAL_BEATS = [
     story_job: "Still the cutscene, with the stats panel over the video: close this episode's question: results, rewards, costs and any obligation still open. Lala says how the outcome feels, in her own words, with no voice-icon click; the numbers stay on the stat card, which she does not see. The event's own costs (entry, drinks) come off here, never earlier, unless covered; what she is owed is paid next episode, never here. No new drama.",
     typical_location: 'HOME_BASE',
     description: 'Reflecting on what happened — audience engagement moment',
-    narrative_purpose: 'Cinematic stat card. Coins changed. Brand trust updated. Dream Fund moved.',
+    narrative_purpose: "Cinematic stat card over the video. The event's own costs come off; her standing moves; what she is owed waits for next episode.",
     screen_action: 'STATS_UPDATE',
     // The stats update is the system, not a person. — Evoni's ruling,
     // Task #1614. Full Screen, diegetic no — Task #1615, Evoni's ruling:

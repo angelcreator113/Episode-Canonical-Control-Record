@@ -17,7 +17,9 @@ const { headerNumber } = require('./beatLabelNumber');
 const UI = /^\s*\[UI:\s*([A-Za-z_]+)\s*(.*?)\s*\]\s*$/i;
 const LALA = /^\s*lala\s*(?:\(([^)]*)\))?\s*:\s*\S/i;
 const TAPS = new Set(['CLICK', 'TAP', 'SELECT']);
-const MESSAGES = new Set(['NOTIFY', 'DM']);
+// `[UI:NOTIFICATION …]`, as the script skeleton writes it, is a notification
+// too (Script page re-audit, 2026-10-19: her answer to it needed a click).
+const MESSAGES = new Set(['NOTIFY', 'DM', 'NOTIFICATION']);
 const MAIL = /^\s*\[MAIL\s*:/i;
 const WEAR = /^\s*\[WEAR\s*:/i;
 const VOICE = /voice/i;

@@ -29,14 +29,16 @@ function eventOutcomes(eventData) {
  * { text, gaps } for the writer's prompt. `gaps`: [{ layer, label }], one
  * per layer the show holds nothing for.
  */
-function storyLayers({ brief = null, eventData = null, seasonContext = null, story = null } = {}) {
+function storyLayers({ brief = null, eventData = null, seasonContext = null, story = null, beat14 = null } = {}) {
   const { LALA_TIES } = require('../services/episodeScriptWriterService');
   const gaps = [];
   const lines = [];
 
   if (eventData?.name) {
     lines.push(`Main plot: can Lala succeed at ${eventData.name}?${eventData.narrative_stakes ? ` Stakes: ${eventData.narrative_stakes}` : ''}`);
-    lines.push('  Runs: invitation (4–5) → strategy (6) → styling (8) → event outcome (11) → deliverable (12).');
+    // Beat 12 is the runway walk (Evoni, 2026-10-19; Script page re-audit,
+    // 2026-10-19: this still said "deliverable (12)").
+    lines.push('  Runs: invitation (4–5) → strategy (6) → styling (8) → event outcome (11) → runway walk (12).');
   } else {
     gaps.push({ layer: 'main', label: 'No event is assigned, so the main plot has no event to resolve.' });
     lines.push('Main plot: NOT GIVEN (no event is assigned).');
@@ -72,13 +74,19 @@ function storyLayers({ brief = null, eventData = null, seasonContext = null, sto
     lines.push('Beat 7 message: NO ESTABLISHED SENDER. Whoever sends it is someone Lala does not know well yet; give them no shared history.');
   }
 
+  // Beat 14's second message is the attached opportunity's invitation when
+  // it comes, not optional (Script page re-audit, 2026-10-19).
+  const { beat14Outcome } = require('./beat14Invitation');
+  const second = beat14Outcome(beat14, brief?.designed_intent || null) === 'invitation'
+    ? 'a second at beat 14 is the invitation (BEAT 14 OPPORTUNITY), and only that'
+    : 'a second at beat 14 optional';
   const text = `
 ═══ STORY LAYERS ═══
 ${lines.join('\n')}
 
 - Use what is given here and above without forcing it. Where a layer is NOT GIVEN, never invent established history for it (an old friendship, a past event, a running feud); keep it to this episode.
 - What the writer knows is not what the characters know. Lala's private worry may shape how she reacts; whoever messages her mentions only what they could plausibly know.
-- Messages: one private exchange at beat 7 is the default, a second at beat 14 optional. The invitation, the closet, the to-do list, travel and the post already keep the phone busy; never add messages to fill a quota.
+- Messages: one private exchange at beat 7 is the default, ${second}. The invitation, the closet, the to-do list, travel and the post already keep the phone busy; never add messages to fill a quota.
 - Beat 11 resolves this episode's main event before beat 14 opens the next question. The cliffhanger deepens the larger story; it never stands in for this episode's payoff.
 - Each beat does its own Story job (SCENE PLAN below) and does not repeat what an earlier beat already said.
 `;

@@ -47,7 +47,7 @@ describe('Script tab layout', () => {
   test('the beat list: the beats the script has, a phone where a beat has a phone moment, and the legend', async () => {
     renderTab();
     const list = await screen.findByTestId('script-beatlist');
-    expect([...list.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['1Opening Ritual', '4Interruption Pulse 1', '11Event Outcome']);
+    expect([...list.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['1Opening Ritual', '4Interruption Pulse 1', '11The Event']);
     await waitFor(() => expect(within(list).getByTestId('script-nav-phone-4')).toBeTruthy());
     expect(within(list).queryByTestId('script-nav-phone-1')).toBeNull();
     expect(within(list).queryByTestId('script-nav-phone-11')).toBeNull();
@@ -62,14 +62,14 @@ describe('Script tab layout', () => {
     expect(screen.getByTestId('script-beat-1').className).not.toContain('is-open');
     expect(screen.getByTestId('script-nav-11').getAttribute('aria-current')).toBe('true');
     expect(screen.getByTestId('script-beat-label-11').textContent).toBe('Beat 11');
-    expect(screen.getByTestId('script-beat-11').querySelector('.esp-beat-name').textContent).toBe('Event Outcome');
+    expect(screen.getByTestId('script-beat-11').querySelector('.esp-beat-name').textContent).toBe('The Event');
   });
 
   test('the pills open a beat too, and mark the phone moments', async () => {
     renderTab();
     const pills = screen.getByTestId('script-pills');
     await waitFor(() => expect(within(screen.getByTestId('script-pill-4')).getByLabelText('Has a phone moment')).toBeTruthy());
-    expect([...pills.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['1 · Opening Ritual', '4 · Interruption Pulse 1', '11 · Event Outcome']);
+    expect([...pills.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['1 · Opening Ritual', '4 · Interruption Pulse 1', '11 · The Event']);
     fireEvent.click(screen.getByTestId('script-pill-4'));
     expect(screen.getByTestId('script-beat-4').className).toContain('is-open');
   });

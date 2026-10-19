@@ -120,3 +120,77 @@ describe('safer steps', () => {
     await waitFor(() => expect(toast).toHaveBeenCalledWith('Runway Walk → back to offered'));
   });
 });
+
+describe('second pass (Script page re-audit, 2026-10-19)', () => {
+  const withAttached = (opportunity) => api.get.mockImplementation(async (url) => {
+    if (url === `/api/v1/opportunities/${SHOW}`) return { data: { opportunities: [OPEN] } };
+    if (url.endsWith('/beat14')) return { data: { data: { opportunity, people: PEOPLE, candidates: [] } } };
+    return { data: {} };
+  });
+  const renderWith = (episodes = EPISODES) => render(
+    <MemoryRouter>
+      <OpportunitiesTab showId={SHOW} api={api} S={S} setToast={toast} loadData={vi.fn()} episodes={episodes} />
+    </MemoryRouter>,
+  );
+
+  test('an episode whose beat 14 already offers one warns, and attaching asks first; No sends nothing', async () => {
+    withAttached({ id: 'o9', name: 'Panel Talk', status: 'held' });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderWith();
+    fireEvent.click(await screen.findByTestId('opp-beat14-open-o1'));
+    fireEvent.change(screen.getByTestId('opp-beat14-episode'), { target: { value: 'ep-1' } });
+    const warn = await screen.findByTestId('opp-beat14-replacing');
+    expect(warn.textContent).toBe('Beat 14 of The Gala already offers Panel Talk; attaching replaces it. Panel Talk goes back to its earlier status, or is deleted if it was made for beat 14.');
+    fireEvent.change(await screen.findByTestId('opp-beat14-from'), { target: { value: '7' } });
+    fireEvent.click(screen.getByTestId('opp-beat14-attach'));
+    expect(confirm.mock.calls[0][0]).toMatch(/^Beat 14 of The Gala already offers Panel Talk; .* Attach Velour Cover instead\?$/);
+    expect(api.put).not.toHaveBeenCalled();
+    confirm.mockReturnValue(true);
+    api.put.mockResolvedValue({ data: { success: true } });
+    fireEvent.click(screen.getByTestId('opp-beat14-attach'));
+    await waitFor(() => expect(api.put).toHaveBeenCalled());
+    await waitFor(() => expect(toast).toHaveBeenCalledWith("Velour Cover is beat 14's opportunity in The Gala"));
+  });
+
+  test('an episode with nothing attached, or with this one, attaches without asking', async () => {
+    withAttached(null);
+    const confirm = vi.spyOn(window, 'confirm');
+    api.put.mockResolvedValue({ data: { success: true } });
+    renderWith();
+    fireEvent.click(await screen.findByTestId('opp-beat14-open-o1'));
+    fireEvent.change(screen.getByTestId('opp-beat14-episode'), { target: { value: 'ep-1' } });
+    fireEvent.change(await screen.findByTestId('opp-beat14-from'), { target: { value: '7' } });
+    expect(screen.queryByTestId('opp-beat14-replacing')).toBeNull();
+    fireEvent.click(screen.getByTestId('opp-beat14-attach'));
+    await waitFor(() => expect(api.put).toHaveBeenCalled());
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  test('completed episodes are not in the list', async () => {
+    withAttached(null);
+    renderWith([...EPISODES, { id: 'ep-2', title: 'Done One', episode_number: 2, evaluation_status: 'accepted' }]);
+    fireEvent.click(await screen.findByTestId('opp-beat14-open-o1'));
+    const options = [...screen.getByTestId('opp-beat14-episode').querySelectorAll('option')].map((o) => o.textContent);
+    expect(options).toEqual(['Choose…', '3. The Gala']);
+  });
+
+  test('Undo is not offered when the last step came from beat 14, or once expired', async () => {
+    const released = { id: 'r1', name: 'Let Go', status: 'offered', opportunity_type: 'campaign', status_history: [{ status: 'offered' }, { status: 'held', previous_status: 'offered' }, { status: 'offered', note: 'No longer beat 14 of the episode' }] };
+    const expired = { id: 'x1', name: 'Gone', status: 'expired', opportunity_type: 'campaign', status_history: history('offered', 'held', 'expired') };
+    const undone = { id: 'u1', name: 'Back Again', status: 'considering', opportunity_type: 'campaign', status_history: [...history('offered', 'considering', 'negotiating'), { status: 'considering', note: 'Undone', undone_from: 'negotiating' }] };
+    renderTab([released, expired, undone, ACTIVE]);
+    await screen.findByTestId('opp-undo-o2');
+    expect(screen.queryByTestId('opp-undo-r1')).toBeNull();
+    expect(screen.queryByTestId('opp-undo-x1')).toBeNull();
+    expect(screen.getByTestId('opp-undo-u1')).toBeTruthy();
+  });
+
+  test('a failed step logs', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    api.post.mockRejectedValue({ response: { data: { error: 'Nope' } } });
+    renderTab();
+    fireEvent.click(await screen.findByTestId('opp-move-o1'));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('Nope'));
+    expect(err).toHaveBeenCalledWith('[OpportunitiesTab] advance failed:', expect.anything());
+  });
+});

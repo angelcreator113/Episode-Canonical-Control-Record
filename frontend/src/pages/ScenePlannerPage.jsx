@@ -11,7 +11,7 @@ import './ScenePlannerPage.css';
 const BEAT_NAMES = [
   'Opening Ritual', 'Login Sequence', 'Welcome', 'Interruption Pulse 1',
   'Reveal', 'Strategic Reaction', 'Interruption Pulse 2', 'Transformation Loop',
-  'Reminder/Deadline', 'Event Travel', 'Event Outcome',
+  'Reminder/Deadline', 'Event Travel', 'The Event',
   'Fashion Challenge', 'Recap Panel', 'Cliffhanger',
 ];
 
@@ -43,7 +43,7 @@ function ChangeInScenes({ episodeId, className }) {
   return <Link className={className} to={scenesPath(episodeId)}>Change on the Beat Plan →</Link>;
 }
 
-// Beat 11 (Event Outcome) plays an animated piece of the episode's short
+// Beat 11 (The Event) plays an animated piece of the episode's short
 // story (Evoni, 2026-10-15; docs/CANON.md). Cut on the Stories page.
 function Beat11Piece({ beat, piece }) {
   if (beat.beat_number !== 11 || !piece?.text) return null;
