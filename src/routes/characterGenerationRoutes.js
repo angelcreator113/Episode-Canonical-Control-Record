@@ -13,6 +13,8 @@
  *   POST /promote-ghost/:id — promote ghost character to full registry entry
  *   PATCH /depth/:id        — manually set depth_level (with warning for alive→lower)
  *   GET  /depth/:id         — get current depth_level + what's needed to go deeper
+ *   POST /cast/propose      — "Make one for me" on The Cast: 1 or 3 proposals, nothing saved (services/castGenerate)
+ *   POST /cast/keep         — save one kept proposal: the character and its Pulse profile
  *
  * 403 REPLACEMENT:
  *   The old hard block on finalized characters is replaced with a warning system.
@@ -24,6 +26,7 @@
 const express = require('express');
 const router  = express.Router();
 const { requireAuth } = require('../middleware/auth');
+const { authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const {
   canAccessAuthorFields,
@@ -415,6 +418,39 @@ router.patch('/depth/:id', async (req, res) => {
   } catch (err) {
     console.error('[character-generation] depth PATCH error:', err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// "Make one for me" on The Cast (Evoni, 2026-10-19; services/castGenerate)
+// ────────────────────────────────────────────────────────────────────────────
+function castError(res, label, err) {
+  console.error(`[characterGenerationRoutes] ${label}:`, err.message);
+  const { CastGenerateError } = require('../services/castGenerate');
+  if (err instanceof CastGenerateError) return res.status(err.status).json({ error: err.message });
+  return res.status(500).json({ error: 'That could not be done; nothing was saved.' });
+}
+
+router.post('/cast/propose', authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  try {
+    const { registry_id: registryId, idea, count } = req.body || {};
+    if (!registryId) return res.status(400).json({ error: 'registry_id is required.' });
+    const result = await require('../services/castGenerate').propose(getModels(req), { registryId, idea, count });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    castError(res, '/cast/propose', err);
+  }
+});
+
+router.post('/cast/keep', authorize(['ADMIN']), async (req, res) => {
+  try {
+    const { registry_id: registryId, proposal } = req.body || {};
+    if (!registryId || !proposal) return res.status(400).json({ error: 'registry_id and proposal are required.' });
+    const by = String(req.user?.email || req.user?.id || '').slice(0, 255) || null;
+    const { character, profile } = await require('../services/castGenerate').keep(getModels(req), { registryId, proposal, by });
+    res.status(201).json({ success: true, character, profile });
+  } catch (err) {
+    castError(res, '/cast/keep', err);
   }
 });
 
