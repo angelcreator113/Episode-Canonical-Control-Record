@@ -26,7 +26,8 @@ const TIER_COLORS = { opus: '#ef4444', sonnet: '#f59e0b', haiku: '#22c55e', unkn
 const TIER_LABELS = { opus: 'Opus', sonnet: 'Sonnet', haiku: 'Haiku', unknown: 'Other' };
 const SEVERITY_COLORS = { high: '#ef4444', medium: '#f59e0b', info: '#3b82f6' };
 
-function fmt$(v) { return '$' + Number(v || 0).toFixed(4); }
+// Two decimals from $1 up (the stat cards); four below, where one call's cost lives.
+function fmt$(v) { const n = Number(v || 0); return '$' + n.toFixed(Math.abs(n) >= 1 ? 2 : 4); }
 function fmtK(v) { const n = Number(v || 0); return n >= 1_000_000 ? (n/1_000_000).toFixed(1)+'M' : n >= 1000 ? (n/1000).toFixed(1)+'k' : n.toString(); }
 
 export default function AICostTracker() {
