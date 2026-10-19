@@ -438,6 +438,9 @@ async function relockTerms(sequelize, { showId, eventId, user }) {
     delete cc[TERMS_REOPEN_KEY];
     cc[TERMS_HISTORY_KEY] = [...(Array.isArray(cc[TERMS_HISTORY_KEY]) ? cc[TERMS_HISTORY_KEY] : []), entry];
     await writeCanonConsequences(sequelize, eventId, cc, transaction);
+    // Agreed again: the frozen prices follow the relocked terms, and stay as
+    // they were when no agreed number changed (services/dealPriceSnapshot).
+    await require('./dealPriceSnapshot').takePriceSnapshot(sequelize, eventId, { transaction, reason: 'relocked' });
 
     const hasScript = typeof episodeRows?.[0]?.script_content === 'string' && episodeRows[0].script_content.trim() !== '';
     return {

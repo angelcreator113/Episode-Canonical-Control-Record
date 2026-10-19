@@ -349,7 +349,7 @@ export default function BrandProfilePage() {
   }, [slug]);
   useEffect(() => { load(); }, [load]);
 
-  if (error && !data) return <div className="bp"><p className="bp-error" role="alert">{error}</p><Link className="bp-link" to="/brands">All brands and companies</Link></div>;
+  if (error && !data) return <div className="bp"><p className="bp-error" role="alert">{error}</p><Link className="bp-link" to="/universe?tab=brands">← LalaVerse › Brands</Link></div>;
   if (!data) return <div className="bp"><p className="bp-muted">Loading…</p></div>;
 
   const { company, sections } = data;
@@ -358,7 +358,7 @@ export default function BrandProfilePage() {
 
   return (
     <div className="bp" data-testid="brand-profile">
-      <Link className="bp-link bp-back" to="/brands">All brands and companies</Link>
+      <Link className="bp-link bp-back" to="/universe?tab=brands">← LalaVerse › Brands</Link>
       <header className="bp-head">
         <p className="bp-kind"><Store size={14} aria-hidden /> {company.kind_label}{company.category ? ` · ${words(company.category)}` : ''}</p>
         <h1 className="bp-title">{company.name}</h1>
