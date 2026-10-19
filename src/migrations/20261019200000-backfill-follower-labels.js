@@ -13,9 +13,15 @@
  * with characterFacts.followerCopies (pure; it loads no models) from the
  * latest accepted ledger row, the count pulseFollowers.countAt reads.
  *
- * A profile with ledger rows in more than one show is left alone: which
- * show's count is "the" count is not this migration's to choose. One with
- * no accepted row is left alone too.
+ * A profile with ledger rows in more than one show takes the main show's
+ * count (Evoni, 2026-10-19: "Styling Adventures with Lala is the main show;
+ * any other show is bouncing off it"). The shows table has no main-show
+ * marker, so the main show is the one show whose slug is
+ * styling-adventures-with-lala (or the older seed slug styling-adventure-lala)
+ * or whose name is Styling Adventures with Lala, as the franchise-knowledge
+ * scope migration finds it. No such show, more than one, or no accepted row
+ * in it for that profile: the profile is left alone and logged. One with no
+ * accepted row at all is left alone too.
  *
  * Before changing a profile its old values are kept in
  * follower_label_backups, so down() puts them back and drops the table.
@@ -23,6 +29,18 @@
  */
 
 const BACKUPS = 'follower_label_backups';
+const MAIN_SHOW_SLUGS = ['styling-adventures-with-lala', 'styling-adventure-lala'];
+const MAIN_SHOW_NAME = 'Styling Adventures with Lala';
+
+// The main show's id, or null when no single show matches.
+const mainShowId = async (sequelize, transaction) => {
+  const [shows] = await sequelize.query(
+    `SELECT id FROM shows
+      WHERE deleted_at IS NULL AND (slug IN (:slugs) OR name ILIKE :name)
+      ORDER BY id LIMIT 2`,
+    { replacements: { slugs: MAIN_SHOW_SLUGS, name: MAIN_SHOW_NAME }, transaction });
+  return shows.length === 1 ? shows[0].id : null;
+};
 
 module.exports = {
   async up(queryInterface, Sequelize) {
@@ -48,19 +66,41 @@ module.exports = {
         });
       }
 
-      // The latest accepted ledger row per profile, and how many shows it has rows in.
+      const mainShow = await mainShowId(sequelize, transaction);
+      if (!mainShow) console.log('[backfill-follower-labels] no single main show (Styling Adventures with Lala) found; profiles in more than one show are left alone.');
+
+      // The latest accepted ledger row per profile and show, and how many shows the profile has rows in.
       const [latest] = await sequelize.query(
-        `SELECT DISTINCT ON (pf.social_profile_id) pf.social_profile_id, pf.count_after,
+        `SELECT DISTINCT ON (pf.social_profile_id, pf.show_id) pf.social_profile_id, pf.show_id, pf.count_after,
                 (SELECT COUNT(DISTINCT x.show_id) FROM pulse_followers x
                   WHERE x.social_profile_id = pf.social_profile_id AND x.status = 'accepted' AND x.deleted_at IS NULL) AS shows
            FROM pulse_followers pf
           WHERE pf.status = 'accepted' AND pf.deleted_at IS NULL
-          ORDER BY pf.social_profile_id, pf.story_order DESC, pf.decided_at DESC NULLS LAST, pf.created_at DESC`,
+          ORDER BY pf.social_profile_id, pf.show_id, pf.story_order DESC, pf.decided_at DESC NULLS LAST, pf.created_at DESC`,
         { transaction });
 
-      let fixed = 0; let agreed = 0; let several = 0; let missing = 0;
+      // One row per profile: its only show's, or the main show's when it has several.
+      const byProfile = new Map();
       for (const row of latest) {
-        if (Number(row.shows) > 1) { several += 1; continue; }
+        const rows = byProfile.get(row.social_profile_id) || [];
+        rows.push(row);
+        byProfile.set(row.social_profile_id, rows);
+      }
+      const chosen = [];
+      let fixed = 0; let agreed = 0; let fromMain = 0; let skipped = 0; let missing = 0;
+      for (const [profileId, rows] of byProfile) {
+        if (rows.length === 1) { chosen.push(rows[0]); continue; }
+        const main = mainShow ? rows.find((r) => String(r.show_id) === String(mainShow)) : null;
+        if (!main) {
+          skipped += 1;
+          console.log(`[backfill-follower-labels] profile ${profileId} left alone: ledger rows in ${rows.length} shows, none of them ${mainShow ? 'the main show' : 'a main show found'}.`);
+          continue;
+        }
+        fromMain += 1;
+        chosen.push(main);
+      }
+
+      for (const row of chosen) {
         const [[profile]] = await sequelize.query(
           `SELECT id, platform, follower_count_approx, follower_tier, full_profile, platform_presences
              FROM social_profiles WHERE id = :id AND deleted_at IS NULL`,
@@ -90,7 +130,8 @@ module.exports = {
         fixed += 1;
       }
       console.log(`[backfill-follower-labels] ${fixed} profile(s) brought to their ledger count; ${agreed} already agreed; `
-        + `${several} left alone (ledger rows in more than one show); ${missing} ledger profile(s) not found.`);
+        + `${fromMain} in more than one show took the main show's count; ${skipped} left alone (several shows, no main-show row); `
+        + `${missing} ledger profile(s) not found.`);
     });
   },
 

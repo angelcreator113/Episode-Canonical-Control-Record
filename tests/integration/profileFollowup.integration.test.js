@@ -9,8 +9,10 @@
  *     and change nothing; the reads stay open
  *   - the one-time follower label backfill (migration 20261019200000) brings
  *     a disagreeing label to the ledger count, changes nothing on a second
- *     run, leaves a profile with ledger rows in two shows alone, and down()
- *     gives the old label back
+ *     run, gives a profile with ledger rows in two shows the main show's
+ *     count ("Styling Adventures with Lala is the main show; any other show
+ *     is bouncing off it"), leaves one in two shows neither of them the main
+ *     show alone, and down() gives the old label back
  *   - created_from (migration 20261019200001): crossing a feed profile and
  *     The Cast's New character record how the character was made, and the
  *     backfill marks an older crossed character
@@ -44,6 +46,9 @@ const one = async (sql, replacements = {}) => (await run(sql, replacements))[0][
     maren: crypto.randomUUID(), noor: crypto.randomUUID(), older: crypto.randomUUID(),
   };
   const profiles = {};
+  // The main show: the test database's own, else one made here and removed after.
+  let mainShow;
+  let madeMainShow = false;
   let adminToken;
   let editorToken;
   const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
@@ -72,11 +77,21 @@ const one = async (sql, replacements = {}) => (await run(sql, replacements))[0][
       await run(`INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:show, :name, :slug, NOW(), NOW())`,
         { show, name: `Followup ${TAG} ${n}`, slug: `followup-${TAG}-${n}` });
     }
+    const [found] = await run(
+      `SELECT id FROM shows WHERE deleted_at IS NULL
+         AND (slug IN ('styling-adventures-with-lala', 'styling-adventure-lala') OR name ILIKE 'Styling Adventures with Lala')`);
+    if (found.length === 1) mainShow = found[0].id;
+    else if (found.length === 0) {
+      mainShow = crypto.randomUUID();
+      madeMainShow = true;
+      await run(`INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:id, 'Styling Adventures with Lala', 'styling-adventures-with-lala', NOW(), NOW())`, { id: mainShow });
+    } else throw new Error('the test database has more than one main show');
     await run(`INSERT INTO character_registries (id, title, show_id, created_at, updated_at) VALUES (:reg, :title, :show, NOW(), NOW())`,
       { ...ids, title: `Followup ${TAG}` });
     await addProfile('maren');
     await addProfile('twoShows', { label: '10k', tier: 'micro' });
     await addProfile('agreed', { label: '2M', tier: 'mega' });
+    await addProfile('withMain', { label: '40K', tier: 'micro' });
     await addProfile('toCross');
     await addProfile('crossedBefore', { status: 'crossed' });
     await addCharacter(ids.maren, 'Maren', profiles.maren);
@@ -92,12 +107,13 @@ const one = async (sql, replacements = {}) => (await run(sql, replacements))[0][
   afterEach(() => jest.restoreAllMocks());
 
   afterAll(async () => {
-    await run('DELETE FROM pulse_followers WHERE show_id IN (:show, :show2)', ids);
+    await run('DELETE FROM pulse_followers WHERE social_profile_id IN (:p)', { p: Object.values(profiles) });
     await run('DELETE FROM character_relationships WHERE character_id_a IN (:maren, :noor) OR character_id_b IN (:maren, :noor)', ids);
     await run('DELETE FROM registry_characters WHERE registry_id = :reg', ids);
     await run('DELETE FROM character_registries WHERE id = :reg', ids);
     await run('DELETE FROM social_profiles WHERE id IN (:p)', { p: Object.values(profiles) });
     await run('DELETE FROM shows WHERE id IN (:show, :show2)', ids);
+    if (madeMainShow) await run('DELETE FROM shows WHERE id = :id', { id: mainShow });
   });
 
   it('a signed-in non-admin is refused on the remaining character writes, nothing changes, and reads stay open', async () => {
@@ -133,6 +149,36 @@ const one = async (sql, replacements = {}) => (await run(sql, replacements))[0][
     expect((await asEditor(request(app).get(`${base}/registries/${ids.reg}`))).status).toBe(200);
   });
 
+  it('a signed-in non-admin is refused on the Pulse people tools, no profile changes, and reads stay open', async () => {
+    const sp = '/api/v1/social-profiles';
+    const id = profiles.agreed;
+    const writes = [
+      request(app).post(`${sp}/generate`).send({ handle: `@no${TAG}`, platform: 'instagram', vibe_sentence: 'not allowed' }),
+      request(app).post(`${sp}/autofill-draft`).send({ handle: `@no${TAG}` }),
+      request(app).post(`${sp}/bulk/finalize`).send({ ids: [id] }),
+      request(app).post(`${sp}/bulk/archive`).send({ ids: [id] }),
+      request(app).post(`${sp}/bulk/delete`).send({ ids: [id] }),
+      request(app).post(`${sp}/${id}/finalize`),
+      request(app).post(`${sp}/${id}/regenerate`).send({}),
+      request(app).delete(`${sp}/${id}`),
+      request(app).post(`${sp}/${id}/add-moment`).send({ moment: 'not allowed' }),
+      request(app).post(`${sp}/follow-engine/run`).send({}),
+      request(app).post(`${sp}/${id}/relationships`).send({ target_profile_id: profiles.maren, relationship_type: 'friend' }),
+      request(app).post(`${sp}/templates`).send({ name: `No ${TAG}`, template_data: {} }),
+      request(app).post(`${sp}/relationships/suggestions/accept`).send({ profile_a_id: id, profile_b_id: profiles.maren, relationship_type: 'friend' }),
+      request(app).post(`${sp}/bulk/parse-paste`).send({ text: '@nobody' }),
+      request(app).post(`${sp}/bulk/generate`).send({ profiles: [{ handle: `@no${TAG}` }] }),
+      request(app).post(`${sp}/bulk/generate-job`).send({ profiles: [{ handle: `@no${TAG}` }] }),
+    ];
+    for (const w of writes) expect((await asEditor(w)).status).toBe(403);
+    const profile = await one('SELECT status, deleted_at, follower_count_approx FROM social_profiles WHERE id = :id', { id });
+    expect(profile).toEqual({ status: 'finalized', deleted_at: null, follower_count_approx: '2M' });
+    const made = await one('SELECT COUNT(*)::int AS n FROM social_profiles WHERE handle ILIKE :h', { h: `%no${TAG}%` });
+    expect(made.n).toBe(0);
+    expect((await asEditor(request(app).get(`${sp}/${id}`))).status).toBe(200);
+    expect((await asEditor(request(app).get(`${sp}/templates`))).status).toBe(200);
+  });
+
   it('created_from: crossing a feed profile and The Cast\'s New character record how the character was made', async () => {
     const crossed = await asAdmin(request(app).post(`/api/v1/social-profiles/${profiles.toCross}/cross`).send({ registry_id: ids.reg }));
     expect(crossed.status).toBe(200);
@@ -157,17 +203,26 @@ const one = async (sql, replacements = {}) => (await run(sql, replacements))[0][
     expect((await one('SELECT created_from FROM registry_characters WHERE id = :older', ids)).created_from).toBe('feed_cross');
   });
 
-  it('the follower label backfill fixes a disagreeing label, is idempotent, leaves two-show profiles alone, and down restores', async () => {
+  it('the follower label backfill fixes a disagreeing label, is idempotent, takes the main show\'s count, and down restores', async () => {
     await ledger(ids.show, profiles.maren, 1500000);
     await ledger(ids.show, profiles.twoShows, 40000);
     await ledger(ids.show2, profiles.twoShows, 60000);
     await ledger(ids.show, profiles.agreed, 2000000);
+    await ledger(ids.show2, profiles.withMain, 40000);
+    await ledger(mainShow, profiles.withMain, 2000000);
 
     await labels.up(qi(), Sequelize);
     let maren = await one('SELECT follower_count_approx, follower_tier::text AS tier FROM social_profiles WHERE id = :id', { id: profiles.maren });
     expect(maren).toEqual({ follower_count_approx: '1.5M', tier: 'mega' });
+    // Two shows, neither the main show: left alone.
     const two = await one('SELECT follower_count_approx FROM social_profiles WHERE id = :id', { id: profiles.twoShows });
     expect(two.follower_count_approx).toBe('10k');
+    expect(await one('SELECT COUNT(*)::int AS n FROM follower_label_backups WHERE social_profile_id = :id', { id: profiles.twoShows })).toEqual({ n: 0 });
+    // Two shows, one of them the main show: the main show's count wins.
+    const withMain = await one('SELECT follower_count_approx, follower_tier::text AS tier FROM social_profiles WHERE id = :id', { id: profiles.withMain });
+    expect(withMain).toEqual({ follower_count_approx: '2M', tier: 'mega' });
+    expect(await one('SELECT ledger_count FROM follower_label_backups WHERE social_profile_id = :id AND deleted_at IS NULL', { id: profiles.withMain }))
+      .toEqual({ ledger_count: '2000000' });
     const agreed = await one('SELECT follower_count_approx FROM social_profiles WHERE id = :id', { id: profiles.agreed });
     expect(agreed.follower_count_approx).toBe('2M');
     const backup = await one('SELECT follower_count_approx, follower_tier, ledger_count FROM follower_label_backups WHERE social_profile_id = :id AND deleted_at IS NULL', { id: profiles.maren });
@@ -181,10 +236,12 @@ const one = async (sql, replacements = {}) => (await run(sql, replacements))[0][
     await labels.down(qi());
     maren = await one('SELECT follower_count_approx, follower_tier::text AS tier FROM social_profiles WHERE id = :id', { id: profiles.maren });
     expect(maren).toEqual({ follower_count_approx: '900K', tier: 'macro' });
+    expect(await one('SELECT follower_count_approx, follower_tier::text AS tier FROM social_profiles WHERE id = :id', { id: profiles.withMain }))
+      .toEqual({ follower_count_approx: '40K', tier: 'micro' });
     expect((await one("SELECT to_regclass('public.follower_label_backups') AS reg")).reg).toBeNull();
 
     // Leave the database migrated, as the suite found it.
-    await run('DELETE FROM pulse_followers WHERE show_id IN (:show, :show2)', ids);
+    await run('DELETE FROM pulse_followers WHERE social_profile_id IN (:p)', { p: Object.values(profiles) });
     await labels.up(qi(), Sequelize);
     expect((await one("SELECT to_regclass('public.follower_label_backups') AS reg")).reg).not.toBeNull();
   });

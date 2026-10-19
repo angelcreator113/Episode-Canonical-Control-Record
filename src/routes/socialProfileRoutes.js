@@ -31,7 +31,11 @@ const { optionalAuth, requireAuth } = require('../middleware/auth');
 const { authorize } = require('../middleware/auth');
 // The character steps (cross, bulk cross, approve, reject crossing, a character's
 // follow of a profile) are ADMIN only (Evoni, 2026-10-19: "this whole part of the
-// site is admin only").
+// site is admin only"). So are the Pulse people tools that make, change or
+// remove a profile (generate, autofill, finalize, regenerate, delete, add-moment,
+// the bulk steps, follow-engine/run, profile relationships, templates, accepted
+// suggestions); the reads and crossing-preview, which writes nothing and calls
+// no AI, stay requireAuth (Evoni, 2026-10-19, the profile follow-up).
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -364,7 +368,7 @@ async function refuseTakenRename(db, profile, body, res) {
 // ── POST /generate ───────────────────────────────────────────────────────────
 // Three inputs + optional advanced context → full profile generated
 // Supports feed_layer: 'real_world' (default) or 'lalaverse'
-router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/generate', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   if (!checkRateLimit(req, res)) return;
   const {
     handle, vibe_sentence, series_id,
@@ -668,7 +672,7 @@ function parseAutofillReply(response, { platforms, cities, relationships, career
   };
 }
 
-router.post('/autofill-draft', requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/autofill-draft', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   const body = req.body || {};
   const layer = body.layer === 'lalaverse' ? 'lalaverse' : 'real_world';
   const allowed = body.allowed && typeof body.allowed === 'object' ? body.allowed : {};
@@ -1404,7 +1408,7 @@ async function splitLockedIds(db, ids) {
 
 // ── POST /bulk/finalize ──────────────────────────────────────────────────────
 // Finalize multiple profiles at once
-router.post('/bulk/finalize', requireAuth, async (req, res) => {
+router.post('/bulk/finalize', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { ids } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) {
@@ -1460,7 +1464,7 @@ router.post('/bulk/cross', requireAuth, authorize(['ADMIN']), async (req, res) =
 
 // ── POST /bulk/archive ───────────────────────────────────────────────────────
 // Archive multiple profiles at once
-router.post('/bulk/archive', requireAuth, async (req, res) => {
+router.post('/bulk/archive', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { ids } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) {
@@ -1488,7 +1492,7 @@ router.post('/bulk/archive', requireAuth, async (req, res) => {
 
 // ── POST /bulk/delete ────────────────────────────────────────────────────────
 // Delete multiple profiles at once
-router.post('/bulk/delete', requireAuth, async (req, res) => {
+router.post('/bulk/delete', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { ids } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) {
@@ -1633,7 +1637,7 @@ router.delete('/:id/followers/:characterKey', requireAuth, authorize(['ADMIN']),
 });
 
 // ── POST /:id/finalize ──────────────────────────────────────────────────────
-router.post('/:id/finalize', requireAuth, guardJustAWomanRecord, async (req, res) => {
+router.post('/:id/finalize', requireAuth, authorize(['ADMIN']), guardJustAWomanRecord, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
     const profile = await db.SocialProfile.findByPk(req.params.id);
@@ -1853,7 +1857,7 @@ router.patch('/:id', requireAuth, authorize(['ADMIN']), guardJustAWomanRecord, a
 
 // ── POST /:id/regenerate ──────────────────────────────────────────────────
 // Re-generate a profile using the same handle/platform/vibe (or overrides)
-router.post('/:id/regenerate', requireAuth, aiRateLimiter, guardJustAWomanRecord, async (req, res) => {
+router.post('/:id/regenerate', requireAuth, authorize(['ADMIN']), aiRateLimiter, guardJustAWomanRecord, async (req, res) => {
   if (!checkRateLimit(req, res)) return;
   const db = req.app.locals.db || require('../models');
   let attempted = null;
@@ -2047,7 +2051,7 @@ router.post('/:id/crossing-preview', requireAuth, async (req, res) => {
 
 // ── DELETE /:id ──────────────────────────────────────────────────────────────
 // Soft-delete a profile: SocialProfile is paranoid, so destroy() sets deleted_at. Restorable by clearing it.
-router.delete('/:id', requireAuth, guardJustAWomanRecord, async (req, res) => {
+router.delete('/:id', requireAuth, authorize(['ADMIN']), guardJustAWomanRecord, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
     const profile = await db.SocialProfile.findByPk(req.params.id);
@@ -2061,7 +2065,7 @@ router.delete('/:id', requireAuth, guardJustAWomanRecord, async (req, res) => {
 
 // ── POST /:id/add-moment ─────────────────────────────────────────────────────
 // Add a new encounter moment to the moment log
-router.post('/:id/add-moment', requireAuth, async (req, res) => {
+router.post('/:id/add-moment', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
     const profile = await db.SocialProfile.findByPk(req.params.id);
@@ -2200,7 +2204,7 @@ router.get('/follow-engine/evaluate/:id', requireAuth, async (req, res) => {
 });
 
 // ── POST /follow-engine/run — re-evaluate and auto-follow for ALL existing profiles ─
-router.post('/follow-engine/run', requireAuth, async (req, res) => {
+router.post('/follow-engine/run', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (!db.SocialProfileFollower) return res.status(404).json({ error: 'Follower model not available' });
 
@@ -2486,7 +2490,7 @@ router.get('/:id/relationships', requireAuth, async (req, res) => {
 });
 
 // ── POST /:id/relationships — manually add a relationship ───────────────────
-router.post('/:id/relationships', requireAuth, async (req, res) => {
+router.post('/:id/relationships', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (!db.SocialProfileRelationship) return res.status(404).json({ error: 'Relationship model not available' });
 
@@ -2530,7 +2534,7 @@ router.post('/:id/relationships', requireAuth, async (req, res) => {
 });
 
 // ── DELETE /relationships/:relId — remove a relationship ────────────────────
-router.delete('/relationships/:relId', requireAuth, async (req, res) => {
+router.delete('/relationships/:relId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (!db.SocialProfileRelationship) return res.status(404).json({ error: 'Relationship model not available' });
 
@@ -2810,7 +2814,7 @@ router.get('/templates', requireAuth, async (req, res) => {
 
 // ── POST /templates ─────────────────────────────────────────────────────────
 // Save a profile as a reusable template
-router.post('/templates', requireAuth, async (req, res) => {
+router.post('/templates', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { profile_id, name, description } = req.body;
 
@@ -2870,7 +2874,7 @@ router.post('/templates', requireAuth, async (req, res) => {
 
 // ── POST /templates/:templateId/apply ───────────────────────────────────────
 // Generate a new profile using a template's settings as starting context
-router.post('/templates/:templateId/apply', requireAuth, async (req, res) => {
+router.post('/templates/:templateId/apply', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const templateId = req.params.templateId;
   let template;
@@ -2901,7 +2905,7 @@ router.post('/templates/:templateId/apply', requireAuth, async (req, res) => {
 });
 
 // ── DELETE /templates/:templateId ───────────────────────────────────────────
-router.delete('/templates/:templateId', requireAuth, async (req, res) => {
+router.delete('/templates/:templateId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const templateId = req.params.templateId;
 
@@ -3017,7 +3021,7 @@ router.get('/relationships/suggestions', requireAuth, async (req, res) => {
 
 // ── POST /relationships/suggestions/accept ──────────────────────────────────
 // Accept a relationship suggestion and create the relationship
-router.post('/relationships/suggestions/accept', requireAuth, async (req, res) => {
+router.post('/relationships/suggestions/accept', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { source_id, target_id, relationship_type, description } = req.body;
 

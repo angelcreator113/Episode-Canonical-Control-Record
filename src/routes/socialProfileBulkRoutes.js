@@ -42,7 +42,9 @@ const { DREAM_CITY_CULTURE, feedCity, randomFeedCity } = require('../utils/feedC
 const { cityCultures } = require('../services/dreamCityText');
 const { profileWorldBlock } = require('../services/cultureCanon');
 
-const { requireAuth } = require('../middleware/auth');
+// Every POST here is ADMIN only; the job reads stay requireAuth (Evoni,
+// 2026-10-19, the profile follow-up: the Pulse people tools are her admin screen).
+const { requireAuth, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -339,7 +341,7 @@ async function runWithConcurrency(tasks, concurrency) {
 }
 
 // ── POST /parse-paste ────────────────────────────────────────────────────────
-router.post('/parse-paste', requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/parse-paste', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const layer = layerOf(req);
     const { text } = req.body;
@@ -418,7 +420,7 @@ ${text.slice(0, 20000)}`,
 });
 
 // ── POST /parse-csv — CSV/TSV spreadsheet import (#3) ────────────────────────
-router.post('/parse-csv', requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/parse-csv', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const layer = layerOf(req);
     const { text, column_map } = req.body;
@@ -486,7 +488,7 @@ router.post('/parse-csv', requireAuth, aiRateLimiter, async (req, res) => {
 });
 
 // ── POST /parse-file ─────────────────────────────────────────────────────────
-router.post('/parse-file', requireAuth, aiRateLimiter, upload.single('file'), async (req, res) => {
+router.post('/parse-file', requireAuth, authorize(['ADMIN']), aiRateLimiter, upload.single('file'), async (req, res) => {
   try {
     const layer = layerOf(req);
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
@@ -639,7 +641,7 @@ ${chunks[i]}`,
 });
 
 // ── POST /generate — Sync with parallel concurrency (#2, #4) ─────────────────
-router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/generate', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const { creators, series_id, character_context, character_key, feed_layer, concurrency } = req.body;
     if (!Array.isArray(creators) || creators.length === 0) {
@@ -694,7 +696,7 @@ router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
 
 // ── POST /generate-job ───────────────────────────────────────────────────────
 // Create a background job for bulk generation — returns immediately
-router.post('/generate-job', requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/generate-job', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const { creators, series_id, character_context, character_key, feed_layer, concurrency } = req.body;
     if (!Array.isArray(creators) || creators.length === 0) {
@@ -808,7 +810,7 @@ router.get('/jobs/:id/stream', requireAuth, (req, res) => {
 });
 
 // ── POST /jobs/:id/cancel — Cancel a running job (#5) ───────────────────────
-router.post('/jobs/:id/cancel', requireAuth, async (req, res) => {
+router.post('/jobs/:id/cancel', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const db = getModels();
     if (!db || !db.BulkImportJob) {
