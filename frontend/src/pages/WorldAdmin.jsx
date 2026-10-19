@@ -20,6 +20,7 @@ import { getEpisodeAnchorEvent } from '../services/episodeEventsApi';
 import showService from '../services/showService';
 import { rememberShow } from '../utils/activeShow';
 import ShowEpisodesBoard from '../components/Show/ShowEpisodesBoard';
+import WorldMomentsTab from '../components/WorldMoments/WorldMomentsTab';
 import SeasonProposals from '../components/Show/SeasonProposals';
 import SeasonRevealPlan from '../components/Show/SeasonRevealPlan';
 import ShowOverview, { episodesInProduction, eventsNeedingAttention } from '../components/Show/ShowOverview';
@@ -48,7 +49,7 @@ import {
 import {
   createEventSaveQueue, putEventVersioned, isStaleSaveError, saveErrorMessage,
 } from '../utils/eventSaveVersion';
-import { MoreHorizontal, ArrowRight, ArrowLeft, Plus, Calendar, CalendarDays, Sparkles, Lightbulb, AlertTriangle, Loader2, RotateCw, X, Mail, Gem, Crown, Heart, ChevronDown, Search, MessageSquare, FileUp, Briefcase } from 'lucide-react';
+import { MoreHorizontal, ArrowRight, ArrowLeft, Plus, Calendar, CalendarDays, Sparkles, Lightbulb, AlertTriangle, Loader2, RotateCw, X, Mail, Gem, Crown, Heart, ChevronDown, Search, MessageSquare, FileUp, Briefcase, Globe2 } from 'lucide-react';
 import useWardrobeProcessing from '../hooks/useWardrobeProcessing';
 import { backgroundRemovalStarted, PROCESSING_STATES } from '../utils/wardrobeProcessingState';
 import AddPieceDialog from '../components/Wardrobe/AddPieceDialog';
@@ -257,6 +258,8 @@ const TABS = [
   { key: 'events', Icon: Mail, label: 'Events' },
   // Its page was there with no tab (the quick wins, 2026-10-18): a brand's offers and bookings.
   { key: 'opportunities', Icon: Briefcase, label: 'Opportunities' },
+  // Evoni, 2026-10-18: the world moves on its own calendar (services/worldMoments).
+  { key: 'moments', Icon: Globe2, label: 'World moments' },
   { key: 'wardrobe', Icon: Gem, label: 'Assets', subs: [
     { key: 'scene-sets', label: 'Scene Sets' },
     { key: 'wardrobe-items', label: 'Wardrobe' },
@@ -4489,6 +4492,11 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
       {/* ════════════════════════ OPPORTUNITIES ════════════════════════ */}
       {activeTab === 'opportunities' && (
         <OpportunitiesTab showId={showId} api={api} S={S} setToast={setToast} loadData={loadData} />
+      )}
+
+      {/* ════════════════════════ WORLD MOMENTS ════════════════════════ */}
+      {activeTab === 'moments' && (
+        <div style={S.content}><WorldMomentsTab showId={showId} /></div>
       )}
 
 
