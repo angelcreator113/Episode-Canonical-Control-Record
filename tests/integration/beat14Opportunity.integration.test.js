@@ -99,6 +99,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
       request(app).post(`${base}/${id}/to-event`).send({}),
       request(app).delete(`${base}/${id}`),
       request(app).post(`${base}/episode-complete/${ep}`).send({}),
+      request(app).post(`${base}/${id}/undo`).send({}),
     ];
     for (const w of writes) expect((await asEditor(w)).status).toBe(403);
     expect((await rows("SELECT id FROM opportunities WHERE show_id = :show AND name = 'Not allowed'", { show })).length).toBe(0);
@@ -116,6 +117,11 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(made.status).toBe(200);
     expect(made.body.data.opportunity).toMatchObject({ name: 'Sable Campaign Shoot', status: 'held', contact_name: `Guest ${TAG}`, narrative_stakes: 'Lead the campaign' });
     const madeId = made.body.data.opportunity.id;
+
+    // Change on what is attached: only who offers it changes; the one made here stays.
+    const resent = await auth(request(app).put(url())).send({ opportunity_id: madeId, connector_profile_id: profiles.host });
+    expect(resent.status).toBe(200);
+    expect(resent.body.data.opportunity).toMatchObject({ id: madeId, status: 'held', connector_profile_id: profiles.host, contact_name: `Host ${TAG}` });
 
     const [open] = await rows("SELECT id FROM opportunities WHERE show_id = :show AND name = 'Velour Cover'", { show });
     const swapped = await auth(request(app).put(url())).send({ opportunity_id: open.id, connector_profile_id: profiles.host });
@@ -154,5 +160,65 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     const out = await beat14.resolveAtCompletion(models, { episodeId: ep, event: { id: ev, name: 'Studio Session' }, tierFinal: 'fail' });
     expect(out).toMatchObject({ name: 'Sable Lookbook', status: 'expired' });
     expect(await beat14.resolveAtCompletion(models, { episodeId: ep2, event: null, tierFinal: 'pass' })).toBeNull();
+  });
+
+  // Script page audit (2026-10-19): once completion offered or expired it,
+  // detaching or replacing it deleted it or rolled it back, and one attached
+  // after completion stayed held for good.
+  test('once the episode is completed, beat 14 is final: attach and detach answer 409 and change nothing', async () => {
+    await run("UPDATE episodes SET evaluation_status = 'accepted' WHERE id = :ep", { ep });
+    try {
+      const [before] = await rows('SELECT id, status, deleted_at FROM opportunities WHERE offered_in_episode_id = :ep', { ep });
+      expect(before.status).toBe('expired');
+
+      const removed = await auth(request(app).delete(url()));
+      expect(removed.status).toBe(409);
+      expect(removed.body.error).toContain('The episode is completed');
+      const replaced = await auth(request(app).put(url())).send({ create: { name: 'Too Late', connector_profile_id: profiles.guest } });
+      expect(replaced.status).toBe(409);
+
+      const [after] = await rows('SELECT id, status, deleted_at FROM opportunities WHERE id = :id', { id: before.id });
+      expect(after).toEqual(before);
+      expect(await rows("SELECT id FROM opportunities WHERE show_id = :show AND name = 'Too Late'", { show })).toEqual([]);
+    } finally {
+      await run("UPDATE episodes SET evaluation_status = NULL WHERE id = :ep", { ep });
+    }
+  });
+
+  // The show tab's opportunities (Evoni, 2026-10-19): a negotiating one can
+  // be beat 14's; the list names the episode; held is not undone here.
+  test('a negotiating one is attached, the list names its episode, and held cannot be undone', async () => {
+    await run('UPDATE opportunities SET offered_in_episode_id = NULL WHERE offered_in_episode_id = :ep', { ep });
+    const id = uuid();
+    await run(`INSERT INTO opportunities (id, show_id, name, opportunity_type, status, status_history, created_at, updated_at)
+      VALUES (:id, :show, 'Velour Runway', 'runway', 'negotiating', CAST(:h AS jsonb), NOW(), NOW())`,
+    { id, show, h: JSON.stringify([{ status: 'offered' }, { status: 'considering' }, { status: 'negotiating' }]) });
+    const put = await auth(request(app).put(url())).send({ opportunity_id: id, connector_profile_id: profiles.host });
+    expect(put.status).toBe(200);
+    expect(put.body.data.opportunity).toMatchObject({ id, status: 'held' });
+
+    const list = await auth(request(app).get(`/api/v1/opportunities/${show}`));
+    expect(list.body.opportunities.find((o) => o.id === id).beat14_episode).toEqual({ id: ep, title: 'The Studio' });
+
+    const held = await auth(request(app).post(`/api/v1/opportunities/${show}/${id}/undo`));
+    expect(held.status).toBe(409);
+    expect((await auth(request(app).delete(url()))).status).toBe(200);
+    const [back] = await rows('SELECT status FROM opportunities WHERE id = :id', { id });
+    expect(back.status).toBe('negotiating');
+  });
+
+  test('undo takes the last step back and says so in the history', async () => {
+    const id = uuid();
+    await run(`INSERT INTO opportunities (id, show_id, name, opportunity_type, status, status_history, created_at, updated_at)
+      VALUES (:id, :show, 'Velour Fitting', 'runway', 'preparing', CAST(:h AS jsonb), NOW(), NOW())`,
+    { id, show, h: JSON.stringify([{ status: 'offered' }, { status: 'preparing' }]) });
+    expect((await auth(request(app).post(`/api/v1/opportunities/${show}/${id}/advance`)).send({ to_status: 'active' })).status).toBe(200);
+    const res = await auth(request(app).post(`/api/v1/opportunities/${show}/${id}/undo`));
+    expect(res.status).toBe(200);
+    expect(res.body.undone).toEqual({ from: 'active', to: 'preparing' });
+    const [row] = await rows('SELECT status, status_history FROM opportunities WHERE id = :id', { id });
+    expect(row.status).toBe('preparing');
+    expect(row.status_history[row.status_history.length - 1]).toMatchObject({ status: 'preparing', note: 'Undone', undone_from: 'active' });
+    expect((await auth(request(app).post(`/api/v1/opportunities/${show}/not-an-id/undo`))).status).toBe(400);
   });
 });

@@ -42,7 +42,8 @@ test('the writer is told how JustAWoman plays on camera', async () => {
   expect(prompt).toContain('[SFX: notification ping], [EDIT: punch-in on her corner frame]');
   expect(prompt).toContain('While playing (beats 1–12)');
   expect(prompt).toContain('While reviewing (beats 13–14)');
-  expect(prompt).toContain('(JustAWoman watches, silent.)');
+  // The silent watch is dropped (Evoni, 2026-10-19): in the cutscene she comments.
+  expect(prompt).not.toContain('(JustAWoman watches, silent.)');
   expect(prompt).toContain('never invents viewer messages or comments');
   expect(prompt).toContain('never invent a past grudge or favorite');
   expect(prompt).toContain('[SFX: sound] / [EDIT: editing cue]');

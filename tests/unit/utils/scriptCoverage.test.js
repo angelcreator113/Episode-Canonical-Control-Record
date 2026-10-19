@@ -35,7 +35,8 @@ describe('scriptCoverage', () => {
     expect(items.find((i) => i.kind === 'goal')).toMatchObject({ beat: 11, target: 11 });
     expect(items.find((i) => i.kind === 'hook')).toMatchObject({ beat: 14, target: 14 });
     expect(items.find((i) => i.kind === 'wear')).toMatchObject({ beat: 8, target: 8 });
-    expect(PHONE_BEATS).toEqual([4, 5, 7, 8, 9, 10, 12]);
+    // Beat 12 is in the cutscene, not on her phone (Evoni, 2026-10-19).
+    expect(PHONE_BEATS).toEqual([4, 5, 7, 8, 9, 10]);
   });
 
   test('names each gap and the beat it belongs in', () => {
@@ -45,7 +46,7 @@ describe('scriptCoverage', () => {
       14: beat(14, 'Cliffhanger', 'Me: bye'),
     });
     const kinds = scriptCoverage(script, facts).missing.map((m) => [m.kind, m.target]);
-    expect(kinds).toEqual([['hook', 14], ['wear', 8], ['phone', 8], ['phone', 12]]);
+    expect(kinds).toEqual([['hook', 14], ['wear', 8], ['phone', 8]]);
   });
 
   test('a reply cut off loses its last beats, and each is missing', () => {
@@ -78,4 +79,27 @@ describe('putting a beat in its place', () => {
 test('Windows line ends do not hide the beats', () => {
   const crlf = Array.from({ length: 14 }, (_, i) => `## BEAT: ${i + 1}\r\nMe: hi`).join('\r\n\r\n');
   expect(scriptCoverage(crlf).missing.filter((g) => g.kind === 'beat')).toEqual([]);
+});
+
+// Beat 14's opportunity, checked for real (Script page audit, 2026-10-19):
+// there only when beat 14 has a [UI:DM …] or [UI:NOTIFY …] line naming it.
+describe("scriptCoverage: beat 14's opportunity", () => {
+  const opp = { opportunity: { name: 'Sable Campaign Shoot', from: 'Sable Reyes' } };
+  const at = (script) => scriptCoverage(script, opp).items.find((i) => i.kind === 'opportunity').beat;
+  test('a DM or notification in beat 14 naming it covers it', () => {
+    expect(at(full({ 14: beat(14, 'Cliffhanger', '[UI:DM Sable Reyes: The Sable campaign shoot is yours.]') }))).toBe(14);
+    expect(at(full({ 14: beat(14, 'Cliffhanger', '[UI:NOTIFY Sable Reyes: Sable campaign shoots, next month?]') }))).toBe(14);
+  });
+  test('named in another beat, or spoken in beat 14, it is not delivered', () => {
+    expect(at(full({ 11: beat(11, 'Event Outcome', '[UI:DM Sable Reyes: The Sable campaign shoot is yours.]') }))).toBeNull();
+    expect(at(full({ 14: beat(14, 'Cliffhanger', 'Lala: the Sable campaign shoot!') }))).toBeNull();
+  });
+  test('the hook is told through the invitation, not a second ending', () => {
+    const { missing } = scriptCoverage(full({ 14: beat(14, 'Cliffhanger', 'Me: bye') }), { ...opp, forwardHook: 'A second invitation arrives' });
+    const hook = missing.find((g) => g.kind === 'hook');
+    expect(hook.via).toBe('invitation');
+    expect(beatRequirements([hook])).toEqual(['Tell the forward hook through the invitation the beat ends on: "A second invitation arrives".']);
+    const alone = scriptCoverage(full({ 14: beat(14, 'Cliffhanger', 'Me: bye') }), { forwardHook: 'A second invitation arrives' }).missing.find((g) => g.kind === 'hook');
+    expect(beatRequirements([alone])).toEqual(['End on the forward hook: "A second invitation arrives".']);
+  });
 });

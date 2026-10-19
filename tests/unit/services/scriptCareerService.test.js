@@ -31,3 +31,21 @@ describe('scriptCareerService', () => {
     expect(block).not.toContain('THE DEAL');
   });
 });
+
+// Beat 14's opportunity decides the career block's beat 14 (Script page
+// audit, 2026-10-19).
+describe("careerBlock and beat 14's opportunity", () => {
+  const block = careerBlock;
+  const career = { deal: null, deliverables: [], goals: [{ label: 'Meet Marcus Reed' }] };
+  test('invitation coming: no beat 14 line of its own', () => {
+    expect(block(career, { beat14: 'invitation' })).not.toMatch(/Beat 14/);
+  });
+  test('withheld: no offer comes', () => {
+    const text = block(career, { beat14: 'withheld' });
+    expect(text).toContain('- Beat 14: the hook comes from her career, and no offer comes');
+    expect(text).not.toContain('follow-up offer');
+  });
+  test('nothing attached: the follow-up offer as before', () => {
+    expect(block(career)).toContain('a follow-up offer');
+  });
+});

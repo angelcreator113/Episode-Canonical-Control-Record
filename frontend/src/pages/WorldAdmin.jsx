@@ -17,6 +17,7 @@ import { createPortal } from 'react-dom';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import DeliverableProgress from '../components/Deliverables/DeliverableProgress';
+import { Beat14AttachForm, HeldForBeat14, canAttachToBeat14, canUndo } from '../components/Show/OpportunityBeat14';
 import { getEpisodeAnchorEvent } from '../services/episodeEventsApi';
 import showService from '../services/showService';
 import { rememberShow } from '../utils/activeShow';
@@ -4495,7 +4496,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
       {/* ════════════════════════ OPPORTUNITIES ════════════════════════ */}
       {activeTab === 'opportunities' && (
-        <OpportunitiesTab showId={showId} api={api} S={S} setToast={setToast} loadData={loadData} />
+        <OpportunitiesTab showId={showId} api={api} S={S} setToast={setToast} loadData={loadData} episodes={episodes} />
       )}
 
       {/* ════════════════════════ RATE CARD ════════════════════════ */}
@@ -8078,16 +8079,19 @@ export const S = {
 };
 
 // ─── OPPORTUNITIES TAB COMPONENT ─────────────────────────────────────────────
-function OpportunitiesTab({ showId, api, S, setToast, loadData }) {
+export function OpportunitiesTab({ showId, api, S, setToast, loadData, episodes = [] }) {
   const [opps, setOpps] = useState([]);
   const [oppLoading, setOppLoading] = useState(true);
   const [oppForm, setOppForm] = useState(null);
+  // The card whose "Attach to beat 14…" form is open (Evoni, 2026-10-19).
+  const [attachingId, setAttachingId] = useState(null);
   const OPP_TYPES = ['modeling', 'runway', 'editorial', 'campaign', 'ambassador', 'brand_deal', 'podcast', 'interview', 'award_show'];
   const OPP_STATUS_COLORS = { offered: '#f59e0b', considering: '#6366f1', negotiating: '#8b5cf6', booked: '#22c55e', preparing: '#3b82f6', active: '#16a34a', completed: '#059669', paid: '#0d9488', declined: '#94a3b8', cancelled: '#dc2626', archived: '#666' };
 
-  useEffect(() => {
-    api.get(`/api/v1/opportunities/${showId}`).then(r => { setOpps(r.data.opportunities || []); setOppLoading(false); }).catch(() => setOppLoading(false));
-  }, [showId]);
+  const loadOpps = useCallback(() => api.get(`/api/v1/opportunities/${showId}`)
+    .then(r => { setOpps(r.data.opportunities || []); setOppLoading(false); })
+    .catch((err) => { console.error('[OpportunitiesTab] the opportunities could not be read:', err); setOppLoading(false); }), [showId, api]);
+  useEffect(() => { loadOpps(); }, [loadOpps]);
 
   // The companies a deal can be with (Evoni, 2026-10-18: brand and company
   // profiles): picked from the list, or typed; the server links a typed name
@@ -8106,14 +8110,29 @@ function OpportunitiesTab({ showId, api, S, setToast, loadData }) {
     } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
   };
 
+  // Ask before the steps that do more than move a status (Evoni,
+  // 2026-10-19: a click meant to set one up marked it complete): completed
+  // and paid run the career pipeline.
   const advanceOpp = async (opp, toStatus) => {
+    if (['completed', 'paid'].includes(toStatus)
+      && !window.confirm(`Mark ${opp.name} ${toStatus}? This also checks career goals and can unlock new opportunities.`)) return;
     try {
       const res = await api.post(`/api/v1/opportunities/${showId}/${opp.id}/advance`, { to_status: toStatus });
       if (res.data.success) { setOpps(prev => prev.map(o => o.id === opp.id ? res.data.opportunity : o)); setToast(`${opp.name} → ${toStatus}`); }
     } catch (err) { setToast(err.response?.data?.error || 'Failed'); }
   };
 
+  // Undo the last step (POST …/undo): only the status goes back; what the
+  // career pipeline did is not undone.
+  const undoOpp = async (opp) => {
+    try {
+      const res = await api.post(`/api/v1/opportunities/${showId}/${opp.id}/undo`);
+      if (res.data.success) { setOpps(prev => prev.map(o => o.id === opp.id ? { ...o, ...res.data.opportunity } : o)); setToast(`${opp.name} → back to ${res.data.opportunity.status}`); }
+    } catch (err) { console.error('[OpportunitiesTab] undo failed:', err); setToast(err.response?.data?.error || 'Could not undo'); }
+  };
+
   const toEvent = async (opp) => {
+    if (!window.confirm(`Schedule ${opp.name} as an event? This creates a world event for it and marks it booked.`)) return;
     try {
       setToast(`Scheduling "${opp.name}" as event...`);
       const res = await api.post(`/api/v1/feed-pipeline/${showId}/schedule/${opp.id}`);
@@ -8140,9 +8159,10 @@ function OpportunitiesTab({ showId, api, S, setToast, loadData }) {
         <button onClick={() => setOppForm({ name: '', opportunity_type: 'modeling', category: 'fashion', prestige: 5, payment_amount: 0 })} style={S.primaryBtn}>+ New Opportunity</button>
       </div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
-        {['offered','considering','negotiating','booked','preparing','active','completed','paid'].map(s => {
+        {['offered','considering','negotiating','held','booked','preparing','active','completed','paid'].map(s => {
           const count = pipeline[s]?.length || 0;
           if (!count) return null;
+          if (s === 'held') return <span key={s} className="ob14-chip-held">held for beat 14: {count}</span>;
           return <span key={s} style={{ padding: '3px 10px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: OPP_STATUS_COLORS[s] + '20', color: OPP_STATUS_COLORS[s] }}>{s}: {count}</span>;
         })}
       </div>
@@ -8172,7 +8192,8 @@ function OpportunitiesTab({ showId, api, S, setToast, loadData }) {
       {oppLoading ? <div style={{ padding: 20, textAlign: 'center', color: '#999' }}>Loading...</div> : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {opps.map(opp => {
-            const sc = OPP_STATUS_COLORS[opp.status] || '#999';
+            const held = opp.status === 'held';
+            const sc = held ? 'var(--lala-gold)' : (OPP_STATUS_COLORS[opp.status] || '#999');
             const NEXT = { offered: 'considering', considering: 'negotiating', negotiating: 'booked', booked: 'preparing', preparing: 'active', active: 'completed', completed: 'paid' };
             return (
               <div key={opp.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderLeft: `4px solid ${sc}`, borderRadius: 10, padding: '12px 16px' }}>
@@ -8180,7 +8201,9 @@ function OpportunitiesTab({ showId, api, S, setToast, loadData }) {
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{opp.name}</div>
                     <div style={{ fontSize: 11, color: '#666', display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
-                      <span style={{ padding: '1px 6px', borderRadius: 4, background: sc + '20', color: sc, fontWeight: 600, fontSize: 10 }}>{opp.status}</span>
+                      {held
+                        ? <HeldForBeat14 opp={opp} />
+                        : <span style={{ padding: '1px 6px', borderRadius: 4, background: sc + '20', color: sc, fontWeight: 600, fontSize: 10 }}>{opp.status}</span>}
                       <span>{opp.opportunity_type?.replace(/_/g, ' ')}</span>
                       {opp.company_id && companyById.get(opp.company_id)
                         ? <Link to={`/brands/${companyById.get(opp.company_id).slug}`}>{opp.brand_or_company || companyById.get(opp.company_id).name}</Link>
@@ -8191,13 +8214,24 @@ function OpportunitiesTab({ showId, api, S, setToast, loadData }) {
                 </div>
                 {opp.narrative_stakes && <div style={{ fontSize: 11, color: '#666', marginBottom: 6 }}>{opp.narrative_stakes}</div>}
                 <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                  {NEXT[opp.status] && <button onClick={() => advanceOpp(opp, NEXT[opp.status])} style={{ padding: '3px 10px', borderRadius: 4, border: `1px solid ${sc}`, background: 'transparent', color: sc, fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>Advance to {NEXT[opp.status]}</button>}
+                  {NEXT[opp.status] && <button onClick={() => advanceOpp(opp, NEXT[opp.status])} data-testid={`opp-move-${opp.id}`} style={{ padding: '3px 10px', borderRadius: 4, border: `1px solid ${sc}`, background: 'transparent', color: sc, fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>Move to {NEXT[opp.status]}</button>}
+                  {canAttachToBeat14(opp) && attachingId !== opp.id && (
+                    <button type="button" className="ob14-btn" onClick={() => setAttachingId(opp.id)} data-testid={`opp-beat14-open-${opp.id}`}>Attach to beat 14…</button>
+                  )}
+                  {canUndo(opp) && (
+                    <button type="button" className="ob14-btn" onClick={() => undoOpp(opp)} data-testid={`opp-undo-${opp.id}`} title="Puts its status back one step. What completing or paying did (career goals, unlocked opportunities) stays.">Undo last step</button>
+                  )}
                   {opp.status === 'offered' && <button onClick={() => advanceOpp(opp, 'declined')} style={{ padding: '3px 10px', borderRadius: 4, border: '1px solid #dc2626', background: 'transparent', color: '#dc2626', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>Decline</button>}
                   {!opp.event_id && ['offered','considering','negotiating','booked','preparing','active'].includes(opp.status) && (
                     <button onClick={() => toEvent(opp)} style={{ padding: '3px 10px', borderRadius: 4, border: 'none', background: '#B8962E', color: '#fff', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>📅 Schedule as Event</button>
                   )}
                   {opp.event_id && <span style={{ fontSize: 9, color: '#16a34a', padding: '3px 8px', background: '#f0fdf4', borderRadius: 4, fontWeight: 600 }}>✓ Event scheduled</span>}
                 </div>
+                {attachingId === opp.id && (
+                  <Beat14AttachForm showId={showId} opp={opp} episodes={episodes} api={api}
+                    onCancel={() => setAttachingId(null)}
+                    onDone={async () => { setAttachingId(null); setToast(`${opp.name} is beat 14's opportunity`); await loadOpps(); }} />
+                )}
                 {/* Deliverables that check themselves (Evoni, 2026-10-19): "Pulse stories: 2 of 3". */}
                 {opp.event_id && <DeliverableProgress opportunityId={opp.id} compact />}
               </div>

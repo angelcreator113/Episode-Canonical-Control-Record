@@ -11,6 +11,8 @@
 //   per line. Her thoughts, `Lala (V.O.):`, are not talking.
 // - Beat 5 (Reveal) shows the invitation letter, never the login screen.
 
+const { headerNumber } = require('./beatLabelNumber');
+
 // BEGIN SHARED
 const UI = /^\s*\[UI:\s*([A-Za-z_]+)\s*(.*?)\s*\]\s*$/i;
 const LALA = /^\s*lala\s*(?:\(([^)]*)\))?\s*:\s*\S/i;
@@ -20,8 +22,27 @@ const MAIL = /^\s*\[MAIL\s*:/i;
 const WEAR = /^\s*\[WEAR\s*:/i;
 const VOICE = /voice/i;
 const INVITATION = /invit/i;
-const LOGIN = /log\s*-?\s*in|sign\s*-?\s*in|start\s*button|^\s*start\s*$|password|username/i;
+// Word by word, CamelCase split first (Script page audit, 2026-10-19):
+// "Blog Index" and "Catalog Insert" were read as the login screen.
+const LOGIN = /\blog\s*-?\s*in\b|\bsign\s*-?\s*in\b|start\s*button|^\s*start\s*$|password|username/i;
+const words = (target) => String(target || '').replace(/([a-z0-9])([A-Z])/g, '$1 $2');
+// Only a moment that brings the letter up shows it: a notification about it,
+// or hiding it, does not (Script page audit, 2026-10-19).
+const SHOWS = new Set(['DISPLAY', 'OPEN', 'SHOW']);
+// `Lala (V.O.):` is her thoughts; "(nervously)" and "(devoted)" are not
+// (Script page audit, 2026-10-19: an unanchored v.o. matched inside them).
+const VOICE_OVER = /^\s*v\.?\s*o\.?\s*(?:[,;].*)?$/i;
+// The server's parser reads [UI:VOICE_ACTIVATE Lala] as her voice coming on
+// (src/utils/scriptBeatParser.js normalizeUiAction).
+const isVoiceOn = (m) => (TAPS.has(m.verb) && VOICE.test(m.target)) || m.verb.replace(/_/g, '') === 'VOICEACTIVATE';
+const STAT = /^\s*\[STAT\s*:/i;
 const REVEAL_BEAT = 5;
+// Beats 11-13 are the cutscene (Evoni, 2026-10-19): an AI video where the
+// characters say their own lines, so Lala needs no voice-icon click there
+// and there is no phone; beat 14 is gameplay again.
+const CUTSCENE_FROM = 11;
+const CUTSCENE_UNTIL = 13;
+const isCutsceneBeat = (n) => Number(n) >= CUTSCENE_FROM && Number(n) <= CUTSCENE_UNTIL;
 const BEAT_HEADER = /^\s*##\s*BEAT:\s*(.*)$/i;
 const SPLIT = /(?=^[ \t]*##[ \t]*BEAT:)/im;
 
@@ -46,20 +67,40 @@ function invitationLine(on = {}) {
   return `[UI:${found && (isProductionEntry(found) || on.production?.includes(found)) ? 'DISPLAY' : 'OPEN'} ${name}]`;
 }
 
-// She is being dressed in this beat: a [WEAR:] cue, or the closet opens.
-const dressing = (lines) => lines.some((l) => WEAR.test(l) || (() => { const m = moment(l); return !!m && m.verb === 'OPEN' && /closet/i.test(m.target); })());
+// She is being dressed at a line: the closet is open (from its [UI:OPEN
+// Closet] until it is closed), or the line is right before a [WEAR:] cue or
+// right after one and its coin lines. One wear cue no longer frees the whole
+// beat (Script page audit, 2026-10-19).
+const isCloset = (m, verbs) => !!m && verbs.includes(m.verb) && /closet/i.test(m.target);
+function dressedAt(lines) {
+  const at = new Set();
+  let open = false;
+  lines.forEach((line, i) => {
+    const m = moment(line);
+    if (isCloset(m, ['OPEN', 'SHOW', 'DISPLAY'])) open = true;
+    else if (isCloset(m, ['CLOSE', 'HIDE'])) open = false;
+    if (open) at.add(i);
+    if (!WEAR.test(line)) return;
+    if (i > 0) at.add(i - 1);
+    let j = i + 1;
+    while (j < lines.length && STAT.test(lines[j])) j += 1;
+    at.add(j);
+  });
+  return at;
+}
 
 /** The lines of one beat Lala says with her voice off. */
 function voiceOffLines(lines = []) {
   const off = [];
-  if (dressing(lines)) return off;
+  const dressed = dressedAt(lines);
   let on = false;
   lines.forEach((line, i) => {
     const m = moment(line);
-    if (m) { if ((TAPS.has(m.verb) && VOICE.test(m.target)) || MESSAGES.has(m.verb)) on = true; return; }
+    if (m) { if (isVoiceOn(m) || MESSAGES.has(m.verb)) on = true; return; }
     if (MAIL.test(line)) { on = true; return; }
     const lala = String(line || '').match(LALA);
-    if (!lala || /v\.?\s*o\.?/i.test(lala[1] || '')) return;
+    if (!lala || VOICE_OVER.test(lala[1] || '')) return;
+    if (dressed.has(i)) { on = false; return; }
     // Each line she says needs its own click (Evoni, 2026-10-17: per line,
     // not per beat); a notification or message covers the line answering it.
     if (!on) off.push(i);
@@ -83,8 +124,8 @@ function revealCheck(lines = []) {
   lines.forEach((line, i) => {
     const m = moment(line);
     if (!m) return;
-    if (INVITATION.test(m.target)) invitation = true;
-    else if (LOGIN.test(m.target)) login.push(i);
+    if (INVITATION.test(m.target)) { if (SHOWS.has(m.verb)) invitation = true; }
+    else if (LOGIN.test(words(m.target))) login.push(i);
   });
   return { login, invitation };
 }
@@ -98,14 +139,16 @@ function revealWithInvitation(lines = [], on = {}) {
   return { lines: next, changed: true };
 }
 
+// The beat's number as the Script tab reads it (headerNumber: its own
+// number, or the canonical beat its name names), else its place.
 const beatNumberOf = (header, position) => {
   const m = String(header || '').match(BEAT_HEADER);
-  const n = m ? Number((m[1].match(/^\s*(\d+)/) || [])[1]) : NaN;
-  return Number.isFinite(n) ? n : position + 1;
+  return (m && headerNumber(m[1])) || position + 1;
 };
 
 /**
- * The script with both rules fixed, beat by beat. `only`: the beat positions
+ * The script with both rules fixed, beat by beat (the voice rule in beats
+ * 1-10 and 14; the cutscene, 11-13, has none). `only`: the beat positions
  * to change (all when null); `skip`: positions never changed (approved
  * beats); `voice` / `reveal`: which fixes to make. Returns { script,
  * voice_clicks, reveal }: how many clicks were added, and whether the
@@ -128,7 +171,8 @@ function scriptWithShowRules(scriptText, on = {}, { only = null, skip = [], voic
       const r = revealWithInvitation(lines, on);
       if (r.changed) { lines = r.lines; changed = true; revealed = true; }
     }
-    if (voice) {
+    // No click in the cutscene, beats 11-13 (Evoni, 2026-10-19).
+    if (voice && !isCutsceneBeat(beatNumberOf(header, beatIndex))) {
       const v = beatWithVoiceClicks(lines, icon);
       if (v.added) { lines = v.lines; changed = true; clicks += v.added; }
     }
@@ -140,4 +184,4 @@ function scriptWithShowRules(scriptText, on = {}, { only = null, skip = [], voic
 }
 // END SHARED
 
-module.exports = { REVEAL_BEAT, voiceIconName, invitationLine, voiceOffLines, beatWithVoiceClicks, revealCheck, revealWithInvitation, scriptWithShowRules };
+module.exports = { REVEAL_BEAT, CUTSCENE_FROM, CUTSCENE_UNTIL, isCutsceneBeat, voiceIconName, invitationLine, voiceOffLines, beatWithVoiceClicks, revealCheck, revealWithInvitation, scriptWithShowRules };

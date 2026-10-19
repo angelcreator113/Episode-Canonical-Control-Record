@@ -281,10 +281,17 @@ const CANONICAL_BEATS = [
     phase: 'during',
     emotional_intent: 'awe_or_intimidation',
   },
+  // Beats 11-13 are the cutscene (Evoni, 2026-10-19): "beats 11 through 14
+  // just the woman will still be on the screen, but now we're going to have
+  // the AI video where the characters are actually saying the lines. And
+  // it's almost like a play moment in a video game ... And then during beat
+  // 14, we are back to the regular gameplay." The characters speak their
+  // own lines (no voice-icon click, no phone); JustAWoman stays on screen
+  // and comments a little; overlays on the video (the stats panel) stay.
   {
     number: 11,
     name: 'Event Outcome',
-    story_job: "The payoff, given room: a real conversation with the host or a featured guest, who notices something specific about Lala when the show holds it (a look she posted, the last episode); Lala answers honestly; a small test she passes or fails without knowing it; the connection or consequence lands before the result. The event and its people carry this beat, not the phone; JustAWoman reacts from her corner with an occasional sound cue.",
+    story_job: "The cutscene begins (an AI video, a play moment in a video game): the characters speak their own lines, no phone and no voice-icon click. Lala has a real conversation with the event's host and its two featured guests, who notice something specific about her when the show holds it (a look she posted, the last episode); Lala answers honestly; a small test she passes or fails without knowing it; the connection or consequence lands before the result. JustAWoman stays on screen and comments a little between their lines.",
     typical_location: 'EVENT_LOCATION',
     description: 'The main event — what happens when Lala arrives and performs',
     narrative_purpose: 'The evaluation resolves. Pass or fail. Stats update.',
@@ -303,16 +310,16 @@ const CANONICAL_BEATS = [
     // episode), so the challenge is judged on her standing, not on money.
     // The old name still reads as beat 12 (utils/beatLabelNumber.js).
     name: 'Fashion Challenge',
-    story_job: "Someone at the event (a brand, the host or a guest) sets Lala a styling challenge on the spot; she answers in her own voice; the wardrobe opens and the look for it is picked and put on one piece at a time; the room judges it. It is judged on her standing, never on money: [STAT: reputation ±n], [STAT: brand_trust ±n], [STAT: influence ±n], [STAT: stress ±n]. Content she owes need not be shown; it is not paid in this episode.",
+    story_job: "Still the cutscene: the challenge is a surprise runway walk at the event (a model doesn't show and Lala is asked to walk), staged by the characters in their own lines; no phone and no voice-icon click. She may film the brand's reel here too, but it need not be shown. The room judges the walk on her standing, never on money: [STAT: reputation ±n], [STAT: brand_trust ±n], [STAT: influence ±n], [STAT: stress ±n]; no coin line. JustAWoman comments a little from her corner.",
     typical_location: 'EVENT_LOCATION',
-    description: 'A styling challenge at the event — Lala is styled on the spot and the room judges the look',
-    narrative_purpose: 'The challenge lands. The look is judged. Reputation, brand trust, influence and stress move.',
-    // The wardrobe opens on her phone, as in beat 8: JustAWoman styles from
-    // her corner, but Lala is the one who performs the challenge, so the
-    // beat's performer (its clip, productionCoverage) stays Lala.
+    description: 'A surprise runway walk at the event — Lala is asked to walk and the room judges her',
+    narrative_purpose: 'The challenge lands. The walk is judged. Reputation, brand trust, influence and stress move.',
+    // Part of the cutscene (Evoni, 2026-10-19): the runway walk plays in the
+    // event's own space, not on her phone. Lala performs it, so the beat's
+    // performer (its clip, productionCoverage) stays Lala.
     screen_action: 'FASHION_CHALLENGE',
     actor: 'lala',
-    surface: "Lala's Phone",
+    surface: "Lala's Environment",
     diegetic: true,
     phase: 'during',
     emotional_intent: 'performance',
@@ -320,7 +327,7 @@ const CANONICAL_BEATS = [
   {
     number: 13,
     name: 'Recap Panel',
-    story_job: "Close this episode's question: results, rewards, costs and any obligation still open. Lala says how the outcome feels, in her own words; the numbers stay on the stat card, which she does not see. The event's own costs (entry, drinks) come off here, never earlier; what she is owed for content is not paid in this episode. No new drama.",
+    story_job: "Still the cutscene, with the stats panel over the video: close this episode's question: results, rewards, costs and any obligation still open. Lala says how the outcome feels, in her own words, with no voice-icon click; the numbers stay on the stat card, which she does not see. The event's own costs (entry, drinks) come off here, never earlier, unless covered; what she is owed is paid next episode, never here. No new drama.",
     typical_location: 'HOME_BASE',
     description: 'Reflecting on what happened — audience engagement moment',
     narrative_purpose: 'Cinematic stat card. Coins changed. Brand trust updated. Dream Fund moved.',
@@ -338,7 +345,7 @@ const CANONICAL_BEATS = [
   {
     number: 14,
     name: 'Cliffhanger',
-    story_job: "With this episode's question answered, open one specific question for what comes next: one private message, a future invitation or an in-person discovery, never more than one. The larger story moves forward; it need not be solved.",
+    story_job: "Back to gameplay after the cutscene: her phone and Lala's voice icon again. With this episode's question answered, open one specific question for what comes next: one private message, a future invitation or an in-person discovery, never more than one. The larger story moves forward; it need not be solved.",
     typical_location: 'HOME_BASE',
     description: 'Unresolved thread — drives viewer to next episode',
     narrative_purpose: 'Next episode is seeded. The world keeps going.',

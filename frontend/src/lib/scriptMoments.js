@@ -14,6 +14,7 @@
 
 import { headerNumber, BEAT_SPLIT, HAS_BEAT_HEADER, normalizeBeatHeaders } from './beatLabelNumber';
 import { speakerLine } from './scriptSpeaker';
+import { isCutsceneBeat, CUTSCENE_UNTIL } from './scriptShowRules';
 
 // `[ui:open closet]` is a moment too (Script tab re-audit, 2026-10-15: it was
 // hidden on the tab, yet counted in the runtime and the export).
@@ -74,8 +75,11 @@ const sharedStart = (a, b) => { let n = 0; while (n < a.length && a[n] === b[n])
  * generic words, contained in a key or sharing its first five letters
  * ("InviteLetterOverlay" finds the Invitation), the closest match first.
  */
-export function resolveMoment(moment, on = {}) {
-  const { screens = [], overlays = [], icons = [] } = on;
+export function resolveMoment(moment, on = {}, { at = null } = {}) {
+  const { screens = [], overlays = [], icons: allIcons = [] } = on;
+  // Two icons with one name (a Back on each screen): the one on the screen
+  // showing, `at`, first (Script page audit, 2026-10-19).
+  const icons = at ? [...allIcons.filter((i) => i?.on === at), ...allIcons.filter((i) => i?.on !== at)] : allIcons;
   if (!moment) return null;
   // A notification, a DM or a post (Task #2885) names no screen: it is what
   // the phone shows, with who and the words from the line itself.
@@ -239,17 +243,25 @@ const isStartButton = (moment) => /^start(button)?$/.test(normKey(moment?.target
 
 /**
  * Whether the phone is on screen as a beat starts: always from beat 2 through
- * beat 10 (the show's rule above), down from beat 11 on unless the script
- * brings it back, and otherwise as the beat before left it (`carried`).
+ * beat 10 (the show's rule above); never in the cutscene, beats 11-13 (Evoni,
+ * 2026-10-19: an AI video, the characters speaking; no phone); up again in
+ * beat 14, back to gameplay, after the cutscene; otherwise as the beat before
+ * left it (`carried`).
  */
 export function phoneUpAtBeat(beatNumber, carried = false, prevNumber = null) {
   const n = Number(beatNumber);
   if (n >= PHONE_UP_FROM_BEAT && n <= PHONE_UP_UNTIL_BEAT) return true;
-  if (n > PHONE_UP_UNTIL_BEAT && (prevNumber === null || Number(prevNumber) <= PHONE_UP_UNTIL_BEAT)) return false;
+  if (isCutsceneBeat(n)) return false;
+  if (n > CUTSCENE_UNTIL && (prevNumber === null || Number(prevNumber) <= CUTSCENE_UNTIL)) return true;
   return carried;
 }
 
-export function beatOnScreen(lines = [], on = {}, { phoneUp = false } = {}) {
+// In the cutscene (`cutscene`: beats 11-13) a phone screen, an icon tap or
+// the phone coming up is listed in phoneDownAt and puts nothing on screen:
+// there is no phone in the video. Overlays on the video (the stats panel)
+// still show.
+export function beatOnScreen(lines = [], on = {}, { phoneUp = false, cutscene = false } = {}) {
+  if (cutscene) phoneUp = false;
   const showing = new Map(); // name -> kind, in the order they came on
   if (phoneUp) showing.set(PHONE_NAME, 'device');
   let up = phoneUp;
@@ -262,6 +274,11 @@ export function beatOnScreen(lines = [], on = {}, { phoneUp = false } = {}) {
     const shown = resolveMoment(moment, on);
     const name = shown ? shown.name : moment.target;
     if (shown && !used.has(name)) used.set(name, shown);
+    if (cutscene && (shown?.kind === 'icon' || shown?.kind === 'phone' || (shown?.kind === 'device' && DEVICE_ON.has(moment.verb)) || isStartButton(moment))) {
+      phoneDownAt.push(i);
+      withByLine[i] = [...showing.keys()];
+      return;
+    }
     // The Start button brings the phone up (the show's rule above).
     if (isStartButton(moment) && !up) { up = true; showing.set(PHONE_NAME, 'device'); }
     if (shown?.kind === 'icon') {
@@ -319,7 +336,7 @@ export const EXPECTED_ON_SCREEN = {
   9: { action: 'TODO_LIST', what: 'The to-do list', where: "Lala's Phone" },
   10: { action: 'LOCATION_ICON', what: 'The location', where: "Lala's Phone" },
   11: { action: 'ARRIVAL', what: 'Arriving', where: "Lala's Environment" },
-  12: { action: 'FASHION_CHALLENGE', what: 'The fashion challenge', where: "Lala's Phone" },
+  12: { action: 'FASHION_CHALLENGE', what: 'The fashion challenge', where: "Lala's Environment" },
   13: { action: 'STATS_UPDATE', what: 'The stats update', where: 'Full Screen' },
   14: { action: 'FADE_OUT', what: 'The fade out', where: 'Full Screen' },
 };
@@ -412,11 +429,15 @@ export function phoneCheck(lines = [], on = {}, { startAt = null } = {}) {
     const moment = parseMoment(line);
     if (!moment) return;
     moments += 1;
-    const shown = resolveMoment(moment, on);
+    const shown = resolveMoment(moment, on, { at });
     const target = String(moment.target || '').replace(/\s+x\d+$/i, '').trim();
     if (TAP_VERBS.has(moment.verb)) {
       if (shown?.kind !== 'icon') { missing.push({ i, name: target }); return; }
-      const icon = (on.icons || []).find((ic) => ic.name === shown.name) || null;
+      // Of the icons with this name, the one on the screen showing, else one
+      // on every screen, else the first (Script page audit, 2026-10-19: the
+      // first was taken, so a Back on the screen showing was flagged).
+      const named = (on.icons || []).filter((ic) => ic.name === shown.name);
+      const icon = named.find((ic) => at && ic.on === at) || named.find((ic) => ic.onName === 'Every screen') || named[0] || null;
       const everywhere = icon?.onName === 'Every screen';
       const ok = !icon || everywhere || !at || icon.on === at;
       taps.push({ i, name: shown.name, ok, why: ok ? null : `${shown.name} is on ${icon.onName || nameOf(icon.on)}, but the phone shows ${nameOf(at)}`, on: icon?.on || null, onName: icon?.onName || null });
@@ -435,6 +456,30 @@ export function phoneCheck(lines = [], on = {}, { startAt = null } = {}) {
     if (shown.kind === 'overlay' && !shown.url && !OFF_VERBS.has(moment.verb)) missing.push({ i, name: shown.name });
   });
   return { moments, taps, missing, endAt: at };
+}
+
+/**
+ * The screen the phone shows as each beat starts (its index): where the beat
+ * before left it, or home (null) when the phone is down as the beat starts
+ * (phoneUpAtBeat): from beat 11 it is put away, so a script bringing it back
+ * starts at home, not on the screen beat 10 left (Script page audit,
+ * 2026-10-19). The Script tab and the Ready to film list read it the same.
+ */
+export function phoneStartScreens(beats = [], on = {}) {
+  const starts = [];
+  let at = null;
+  let up = false;
+  (beats || []).forEach((b, i) => {
+    const prev = i > 0 ? beats[i - 1]?.number ?? null : null;
+    const upAtStart = phoneUpAtBeat(b?.number, up, prev);
+    // Back from the cutscene, the phone starts at home.
+    if (!upAtStart || isCutsceneBeat(prev)) at = null;
+    starts[i] = at;
+    const cutscene = isCutsceneBeat(b?.number);
+    at = cutscene ? null : phoneCheck(b?.lines || [], on, { startAt: at }).endAt;
+    up = beatOnScreen(b?.lines || [], on, { phoneUp: upAtStart, cutscene }).phoneUpAtEnd;
+  });
+  return starts;
 }
 
 // ── What Lala has put on, line by line (Task #3180) ──
@@ -544,7 +589,8 @@ export function wearFlags(beats = [], look = []) {
 // `[DELIVER: <deliverable id>]` ticks that deal item from its line. A tick
 // never changes the deliverable's status; approval stays manual in Money.
 // `[TODO_MODE: shopping|deal|career]` sets the list Lala's phone shows in
-// its beat; otherwise the Shopping list through the closet beat, the deal
+// its beat; otherwise the Shopping list through the closet beat and beat 9
+// after it (Script page audit, 2026-10-19), the deal
 // checklist at a deal whose terms are locked, else the Career list. The
 // server reads them the same way (src/utils/scriptTodo.js).
 
@@ -591,6 +637,9 @@ export function deliveredAt(beats = [], beatIndex = 0, lineIndex = Infinity, del
   return ids;
 }
 
+// The beat that reads the approved Shopping list: canonical beat 9 (TODO_LIST).
+const SHOPPING_READ_BEAT = Number(Object.keys(EXPECTED_ON_SCREEN).find((n) => EXPECTED_ON_SCREEN[n].action === 'TODO_LIST'));
+
 /** The list shown at a beat (its index): { mode, source: 'cue' | 'auto' }. `closetNumber` is closetBeat's. */
 export function todoModeAt(beats = [], beatIndex = 0, { closetNumber = null, dealLocked = false } = {}) {
   let cue = null;
@@ -600,7 +649,11 @@ export function todoModeAt(beats = [], beatIndex = 0, { closetNumber = null, dea
   }
   if (cue) return { mode: cue, source: 'cue' };
   const closet = closetNumber == null ? -1 : beats.findIndex((b) => b.number === closetNumber);
+  // Through the closet beat, and canonical beat 9 after it, which reads the
+  // approved Shopping list (Evoni, 2026-10-18; Script page audit, 2026-10-19:
+  // beat 9 showed the career or deal list).
   if (closet >= 0 && beatIndex <= closet) return { mode: 'shopping', source: 'auto' };
+  if (beats[beatIndex]?.number === SHOPPING_READ_BEAT) return { mode: 'shopping', source: 'auto' };
   return { mode: dealLocked ? 'deal' : 'career', source: 'auto' };
 }
 

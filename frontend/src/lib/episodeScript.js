@@ -22,6 +22,7 @@ import { briefState } from './episodeOverview';
 import { dealLabelFor, relationshipGoalsOf } from '../utils/eventTerms';
 import { describeEventOrganizer } from '../utils/eventOrganizer';
 import { beatSpeakers } from './scriptMoments';
+import { beat14Delivers, BEAT } from './beat14Invitation';
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -123,13 +124,16 @@ export function mustCover({ beats = [], event = null, brief = null, opportunity 
   relationshipGoalsOf(event).forEach((g, n) => {
     items.push({ key: `goal-${n}`, label: String(g.label).trim(), source: 'Goal' });
   });
-  // Beat 14's opportunity (Evoni, 2026-10-19), when one is attached and the
-  // episode is not designed to fail (the caller passes null then).
+  // Beat 14's opportunity (Evoni, 2026-10-19), when one is attached and it
+  // comes (the caller passes null when the episode is designed to fail or the
+  // offer expired). Ticked only when beat 14 has a [UI:DM …] or [UI:NOTIFY …]
+  // line naming it; a mention in another beat is not the invitation (Script
+  // page audit, 2026-10-19; lib/beat14Invitation).
   const opp = typeof opportunity?.name === 'string' ? opportunity.name.trim() : '';
-  if (opp) items.push({ key: 'opportunity', label: opp, source: 'Opportunity' });
+  if (opp) items.push({ key: 'opportunity', label: opp, source: 'Opportunity', beat: beat14Delivers(beats, opp) ? BEAT : null });
   const hook = typeof brief?.forward_hook === 'string' ? brief.forward_hook.trim() : '';
   if (hook) items.push({ key: 'hook', label: hook, source: 'Forward hook' });
-  return items.map((i) => ({ ...i, beat: mentionedIn(beats, i.label) }));
+  return items.map((i) => ('beat' in i ? i : { ...i, beat: mentionedIn(beats, i.label) }));
 }
 
 /**

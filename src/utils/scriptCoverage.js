@@ -12,7 +12,8 @@
  *     frontend/src/lib/episodeScript.js mustCover, ported as is). What she
  *     owes is not: deliverables are not always shown in the show (Evoni,
  *     2026-10-18; beat 12 is The Fashion Challenge);
- *   - each piece of the locked look has its `[WEAR: id]` line;
+ *   - each piece of the locked look has its `[WEAR: id]` line in the closet
+ *     beat;
  *   - each canonical beat played on Lala's phone has a `[UI:]` moment;
  *   - every canonical beat is there (a reply cut off at its token limit
  *     loses the last beats).
@@ -24,6 +25,8 @@
 
 const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
 const { splitScriptBeats } = require('./scriptBeatLocks');
+const { beat14Delivers } = require('./beat14Invitation');
+const { scriptRuleItems } = require('./scriptRuleChecks');
 
 // ─── The tab's must-cover rule (frontend/src/lib/episodeScript.js) ───────────
 const STOP = new Set(['the', 'and', 'for', 'with', 'from', 'that', 'this', 'into', 'her', 'his', 'their', 'your', 'about', 'post', 'piece', 'content', 'make', 'made', 'lala', 'episode', 'event']);
@@ -59,7 +62,7 @@ const OPENS_CLOSET = /^\s*\[UI:\s*OPEN\s+closet/i;
  *   deliverables: [{ description, platform, deliverable_type }]
  *   goals: [{ label }]
  *   forwardHook: string
- *   opportunity: { name, from } (beat 14's, or null)
+ *   opportunity: { name, from } (beat 14's when it is delivered, or null)
  *   lockedPieces: [{ id, name }]
  * Each item: { kind, label, beat (where it is, or null), target (where it
  * belongs) }. missing is the items with no beat, plus every canonical beat
@@ -75,17 +78,27 @@ function scriptCoverage(script, facts = {}) {
     if (label) items.push({ kind: 'goal', label, beat: mentionedIn(beats, label), target: 11 });
   }
   const hook = typeof facts.forwardHook === 'string' ? facts.forwardHook.trim() : '';
-  if (hook) items.push({ kind: 'hook', label: hook, beat: mentionedIn(beats, hook), target: 14 });
-  // Beat 14's opportunity (Evoni, 2026-10-19), named in some beat.
   const opp = facts.opportunity && String(facts.opportunity.name || '').trim();
-  if (opp) items.push({ kind: 'opportunity', label: opp, from: facts.opportunity.from || null, beat: mentionedIn(beats, opp), target: 14 });
+  // With an invitation to deliver, beat 14 ends on it and the hook is told
+  // through it: one ending, not two (Script page audit, 2026-10-19).
+  if (hook) items.push({ kind: 'hook', label: hook, beat: mentionedIn(beats, hook), target: 14, ...(opp ? { via: 'invitation' } : {}) });
+  // Beat 14's opportunity (Evoni, 2026-10-19): there only when beat 14 has a
+  // [UI:DM …] or [UI:NOTIFY …] line naming it (utils/beat14Invitation); a
+  // mention in another beat is not the invitation (Script page audit,
+  // 2026-10-19).
+  if (opp) {
+    const lined = beats.map((b) => ({ number: b.number, lines: b.text.split('\n').slice(1) }));
+    items.push({ kind: 'opportunity', label: opp, from: facts.opportunity.from || null, beat: beat14Delivers(lined, opp) ? 14 : null, target: 14 });
+  }
 
   // The closet beat: the one that opens the closet, else the canonical one.
   const closet = (beats.find((b) => b.text.split('\n').some((l) => OPENS_CLOSET.test(l))) || {}).number || CLOSET_BEAT;
   for (const p of facts.lockedPieces || []) {
     if (!p?.id) continue;
     const cue = new RegExp(`^\\s*\\[WEAR:\\s*${String(p.id).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\]\\s*$`, 'im');
-    const at = beats.find((b) => cue.test(b.text));
+    // Put on in the closet beat (Script page audit, 2026-10-19): a cue in
+    // another beat (the Fashion Challenge's) is not the look going on.
+    const at = beats.find((b) => b.number === closet && cue.test(b.text));
     items.push({ kind: 'wear', label: p.name || String(p.id), id: String(p.id), beat: at ? at.number : null, target: closet });
   }
 
@@ -97,6 +110,8 @@ function scriptCoverage(script, facts = {}) {
     items.push({ kind: 'phone', label: canon?.screen_action || `Beat ${n}`, beat: has ? n : null, target: n });
   }
 
+  // The show's rules (utils/scriptRuleChecks.js; facts.rules: { money, shoppingApproved }).
+  items.push(...scriptRuleItems(beats, facts.rules));
   const missing = items.filter((i) => i.beat === null);
   for (const c of CANONICAL_BEATS) if (!numbers.has(c.number)) missing.push({ kind: 'beat', label: c.name, beat: null, target: c.number });
   return { items, missing };
@@ -106,11 +121,12 @@ function scriptCoverage(script, facts = {}) {
 function beatRequirements(gaps) {
   return gaps.map((g) => {
     if (g.kind === 'goal') return `Lala works toward her goal, named so it reads: "${g.label}".`;
-    if (g.kind === 'hook') return `End on the forward hook: "${g.label}".`;
+    if (g.kind === 'hook') return g.via === 'invitation' ? `Tell the forward hook through the invitation the beat ends on: "${g.label}".` : `End on the forward hook: "${g.label}".`;
     if (g.kind === 'opportunity') return `End on the invitation${g.from ? ` from ${g.from}` : ''}, as one private message or notification that names it: "${g.label}".`;
     if (g.kind === 'wear') return `Right after the line where Lala puts on "${g.label}", write its own line exactly: [WEAR: ${g.id}]`;
     if (g.kind === 'phone') return 'Show what happens on Lala\'s phone in this beat with at least one [UI:VERB Target] line.';
     if (g.kind === 'cut') return 'Write this beat in full: the first draft stopped partway through it.';
+    if (g.kind === 'rule') return g.ask;
     // A missing beat played on her phone needs its phone moment too (re-audit 2).
     if (g.kind === 'beat' && PHONE_BEATS.includes(g.target)) return 'Show what happens on Lala\'s phone in this beat with at least one [UI:VERB Target] line.';
     return null;

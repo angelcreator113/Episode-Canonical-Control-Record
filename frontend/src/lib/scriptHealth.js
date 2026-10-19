@@ -6,8 +6,11 @@
  * dealCueFlags as the side panel does, only over every beat instead of the
  * open one.
  */
-import { phoneCheck, uncuedPieces, wearFlags, dealCueFlags, lastGettingReadyIndex } from './scriptMoments';
-import { REVEAL_BEAT, voiceOffLines, revealCheck } from './scriptShowRules';
+import { phoneCheck, phoneStartScreens, uncuedPieces, wearFlags, dealCueFlags, lastGettingReadyIndex } from './scriptMoments';
+import { REVEAL_BEAT, voiceOffLines, revealCheck, isCutsceneBeat } from './scriptShowRules';
+import { invitationLine, beat14Outcome, BEAT } from './beat14Invitation';
+import { atHandle } from '../pages/feed/feedConstants';
+import { scriptRuleRows } from './scriptRuleChecks';
 
 const list = (items) => (items.length <= 2 ? items.join(' and ') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`);
 const plural = (n, one, many) => (n === 1 ? one : many);
@@ -35,6 +38,7 @@ function perBeat(flags, beats, keyPrefix, homeName = null) {
 
 export function scriptHealth({
   beats = [], canonical = [], cover = [], onScreen = {}, outfit = [], dealItems = [],
+  rules = null,
   closetNumber = null, dirty = false, unsaved = null, beat14 = null, designedIntent = null,
 } = {}) {
   const rows = [];
@@ -56,11 +60,12 @@ export function scriptHealth({
   // Phone check, every beat (the side panel checks the open one).
   let moments = 0;
   const phoneFlags = [];
-  // Each beat starts where the one before left the phone, as the side panel reads it.
-  let at = null;
+  // Each beat starts where the one before left the phone, as the side panel
+  // reads it; at home when the phone was put away (from beat 11; Script page
+  // audit, 2026-10-19).
+  const starts = phoneStartScreens(beats, onScreen);
   beats.forEach((b, beatIndex) => {
-    const check = phoneCheck(b.lines, onScreen, { startAt: at });
-    at = check.endAt;
+    const check = phoneCheck(b.lines, onScreen, { startAt: starts[beatIndex] });
     moments += check.moments;
     for (const t of check.taps) if (!t.ok) phoneFlags.push({ beatIndex, text: t.why, fix: t.onName && t.onName !== 'Every screen' ? t.onName : null });
     for (const m of check.missing) phoneFlags.push({ beatIndex, text: `${m.name} isn't made yet` });
@@ -72,7 +77,9 @@ export function scriptHealth({
   // Lala's voice (Evoni, 2026-10-17; lib/scriptShowRules): she talks only
   // after her voice icon is clicked, unless she answers a notification or
   // message, or is being dressed.
-  const quiet = beats.map((b, i) => ({ b, i, off: voiceOffLines(b.lines || []) })).filter((x) => x.off.length);
+  // Not in the cutscene, beats 11-13, where the characters speak their own
+  // lines (Evoni, 2026-10-19).
+  const quiet = beats.map((b, i) => ({ b, i, off: isCutsceneBeat(b.number) ? [] : voiceOffLines(b.lines || []) })).filter((x) => x.off.length);
   for (const { b, i, off } of quiet) {
     rows.push({
       key: `voice-${b.id || i}`, ok: false, beatId: b.id || null,
@@ -115,13 +122,32 @@ export function scriptHealth({
 
   // Beat 14's opportunity (Evoni, 2026-10-19): the invitation someone at the
   // event offers. Only when it was read (beat14 null: not known, no row).
-  const last = beats.find((b) => b.number === 14);
+  // Checked for real (Script page audit, 2026-10-19): it is there only when
+  // beat 14 has a [UI:DM …] or [UI:NOTIFY …] line naming it; when it does not
+  // come (designed to fail, or expired at completion) beat 14 must not have one.
+  const last = beats.find((b) => b.number === BEAT);
   if (beat14 && last) {
     const opp = beat14.opportunity;
-    if (!opp) rows.push({ key: 'beat14', ok: false, beatId: last.id || null, text: 'Beat 14 has no opportunity attached: open beat 14 to attach the invitation someone at the event offers.' });
-    else rows.push({ key: 'beat14', ok: true, beatId: last.id || null, text: designedIntent === 'fail' ? `Beat 14's opportunity, ${opp.name}, does not come: the episode is designed to fail.` : `Beat 14 offers ${opp.name}${opp.contact_name ? `, from ${opp.contact_name}` : ''}.` });
+    const id = last.id || null;
+    if (!opp) rows.push({ key: 'beat14', ok: false, beatId: id, text: 'Beat 14 has no opportunity attached: open beat 14 to attach the invitation someone at the event offers.' });
+    else {
+      const there = invitationLine(last.lines || [], opp.name) !== null;
+      const from = opp.contact_name || (atHandle(opp.connector_handle) || null);
+      if (beat14Outcome(opp, designedIntent) === 'withheld') {
+        const why = opp.status === 'expired' ? 'the episode did not land' : 'the episode is designed to fail';
+        rows.push(there
+          ? { key: 'beat14', ok: false, beatId: id, text: `Beat 14 delivers ${opp.name}, but ${why}: the invitation does not come.` }
+          : { key: 'beat14', ok: true, beatId: id, text: `Beat 14's opportunity, ${opp.name}, does not come: ${why}.` });
+      } else {
+        rows.push(there
+          ? { key: 'beat14', ok: true, beatId: id, text: `Beat 14 offers ${opp.name}${from ? `, from ${from}` : ''}.` }
+          : { key: 'beat14', ok: false, beatId: id, text: `Beat 14 doesn't deliver ${opp.name} yet: end it on one [UI:DM …] or [UI:NOTIFY …] line${from ? ` from ${from}` : ''} that names it.` });
+      }
+    }
   }
 
+  // The show's rules, beat by beat (lib/scriptRuleChecks; Evoni, 2026-10-17 to 2026-10-19).
+  rows.push(...scriptRuleRows(beats, rules, { closetNumber }));
   const approved = beats.filter((b) => b.approved).length;
   rows.push({ key: 'approved', ok: beats.length > 0 && approved === beats.length, beatId: null, text: `${approved} of ${beats.length} ${plural(beats.length, 'beat', 'beats')} approved.` });
 

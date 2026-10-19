@@ -106,15 +106,27 @@ export function draftLine(piece, opts = {}) {
 /** The script line Insert writes: `Lala: "<draft>"`, inner double quotes made single. */
 export const lalaLine = (text) => `Lala: "${String(text || '').trim().replace(/"/g, "'")}"`;
 
-const LALA_SPEAKS = /^\s*lala\s*:/i;
+// `Lala:` or `Lala (twirling):` (Script page audit, 2026-10-19).
+const LALA_SPEAKS = /^\s*lala\s*(?:\([^)]*\))?\s*:/i;
+const STAT_LINE = /^\s*\[STAT\s*:/i;
 
 /**
  * Where a Lala line slot goes: each wear cue naming exactly one piece of the
  * look (a [WEAR] id, or a legacy select by its one name) whose next line in
- * the beat is not Lala speaking. [{ beatIndex, lineIndex, piece }].
+ * the beat, past its [STAT:] lines, is not Lala speaking. `lineIndex` is the
+ * line the draft goes after: the cue's last [STAT:] line, so a draft never
+ * comes between a [WEAR] and its coin line (Script page audit, 2026-10-19).
+ * [{ beatIndex, lineIndex, piece }].
  */
 export function lalaLineSlots(beats = [], look = []) {
   return wearCues(beats, look)
-    .filter((c) => c.piece && !LALA_SPEAKS.test(String(beats[c.beatIndex]?.lines?.[c.lineIndex + 1] || '')))
-    .map((c) => ({ beatIndex: c.beatIndex, lineIndex: c.lineIndex, piece: c.piece }));
+    .filter((c) => c.piece)
+    .map((c) => {
+      const lines = beats[c.beatIndex]?.lines || [];
+      let last = c.lineIndex;
+      while (last + 1 < lines.length && STAT_LINE.test(String(lines[last + 1] || ''))) last += 1;
+      return { c, last, next: String(lines[last + 1] || '') };
+    })
+    .filter(({ next }) => !LALA_SPEAKS.test(next))
+    .map(({ c, last }) => ({ beatIndex: c.beatIndex, lineIndex: last, piece: c.piece }));
 }

@@ -360,6 +360,34 @@ describe('completeEpisode step 19 — the completion part runs with the real tie
     expect(store.models.Opportunity.create).not.toHaveBeenCalled();
   });
 
+  // Script page audit (2026-10-19): a beat 14 that could not be resolved read
+  // as "no beat 14 opportunity", so the random offers were made beside it.
+  it('a beat 14 resolve that fails makes no random post-event offer, and says so', async () => {
+    const store = makeStore();
+    useStore(store);
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    const beat14 = require('../../../src/services/beat14Opportunity');
+    jest.spyOn(beat14, 'resolveAtCompletion').mockRejectedValue(new Error('opportunities down'));
+    const svc = require('../../../src/services/characterSyncService');
+    const random = jest.spyOn(svc, 'generatePostEventOpportunities');
+    const r = await completeEpisode('episode-1', SHOW_ID, makeCompletionSequelize({ episodeId: 'episode-1', event: makeEvent() }));
+    expect(r.episode_id).toBe('episode-1');
+    expect(random).not.toHaveBeenCalled();
+    expect(r.event_sync.opportunities_generated).toEqual([]);
+    expect(store.models.Opportunity.create).not.toHaveBeenCalled();
+    expect(console.error).toHaveBeenCalledWith('[EpisodeCompletion] Beat 14 opportunity failed (non-blocking); random post-event opportunities skipped:', 'opportunities down');
+  });
+
+  it('with no beat 14 opportunity the random post-event offer is still made', async () => {
+    const store = makeStore();
+    useStore(store);
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    const beat14 = require('../../../src/services/beat14Opportunity');
+    jest.spyOn(beat14, 'resolveAtCompletion').mockResolvedValue(null);
+    const r = await completeEpisode('episode-1', SHOW_ID, makeCompletionSequelize({ episodeId: 'episode-1', event: makeEvent() }));
+    expect(r.event_sync.opportunities_generated).toHaveLength(1);
+  });
+
   it('an event-sync failure is logged with [EpisodeCompletion] and completion still succeeds', async () => {
     const store = makeStore();
     useStore(store);

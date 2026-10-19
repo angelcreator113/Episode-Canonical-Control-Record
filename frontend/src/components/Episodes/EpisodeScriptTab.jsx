@@ -8,9 +8,10 @@ import api from '../../services/api';
 import { episodePlanning } from '../../utils/episodePlanning';
 import { scriptInputs, mustCover, scriptPeople } from '../../lib/episodeScript';
 import Beat14Opportunity from './Beat14Opportunity';
+import { beat14Outcome } from '../../lib/beat14Invitation';
 import { beatState } from '../../lib/beatState';
 import { moveBeat, moveLine, dropIndex, replaceBeat, appendLine, insertLine } from '../../lib/scriptBeatOrder';
-import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, phoneUpAtBeat, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers, phoneCheck, messageLine, closetBeat, wearFlags, uncuedPieces, lastGettingReadyIndex, todoModeAt, deliveredAt, dealCueFlags, TODO_MODE_LABELS } from '../../lib/scriptMoments';
+import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, phoneUpAtBeat, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers, phoneCheck, phoneStartScreens, messageLine, closetBeat, wearFlags, uncuedPieces, lastGettingReadyIndex, todoModeAt, deliveredAt, dealCueFlags, TODO_MODE_LABELS } from '../../lib/scriptMoments';
 import { isScreen, isIcon, isProduction } from '../../lib/overlayUtils';
 import { draftLine, lalaLine, lalaLineSlots } from '../../lib/lalaLineDraft';
 import { headerNumber, BEAT_SPLIT, HAS_BEAT_HEADER, normalizeBeatHeaders } from '../../lib/beatLabelNumber';
@@ -18,8 +19,9 @@ import { speakerLine, unquote } from '../../lib/scriptSpeaker';
 import { beatImage, beatImageLabel } from '../BeatPlan/BeatPlanParts';
 import { beatSeconds, scriptSeconds, formatRuntime } from '../../lib/scriptRuntime';
 import { scriptHealth } from '../../lib/scriptHealth';
+import { scriptMoneyFrom, shoppingListApproved, eventCast } from '../../lib/scriptRuleChecks';
 import { scriptWithPhonePaths } from '../../lib/phonePaths';
-import { scriptWithShowRules } from '../../lib/scriptShowRules';
+import { scriptWithShowRules, isCutsceneBeat } from '../../lib/scriptShowRules';
 import ScriptHealthPanel from './ScriptHealthPanel';
 import ScriptReadActions from './ScriptReadActions';
 import ScriptHistory from './ScriptHistory';
@@ -45,6 +47,26 @@ export function scrollerOf(el) {
     if ((oy === 'auto' || oy === 'scroll') && n.scrollHeight > n.clientHeight) return n;
   }
   return document.scrollingElement || document.documentElement;
+}
+
+// A dialog or sheet on the page (Script page audit, 2026-10-19): while it
+// is open, Escape closes it (unless something inside answered it already,
+// a line editor's Escape), focus goes to `focusRef`, and it goes back to
+// what opened it when it closes.
+export function useDialogKeys(open, onClose, focusRef = null) {
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    if (!open) return undefined;
+    const opener = document.activeElement;
+    focusRef?.current?.focus?.();
+    const onKey = (e) => { if (e.key === 'Escape' && !e.defaultPrevented) { e.preventDefault(); closeRef.current(); } };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      if (opener && opener !== document.body && opener.isConnected && typeof opener.focus === 'function') opener.focus();
+    };
+  }, [open, focusRef]);
 }
 
 const BEAT_NAMES = [
@@ -196,7 +218,7 @@ function cueLabel(text) {
   return `${kind === 'EVENT' ? 'Event' : 'Episode intent'}${rest ? `: ${rest}` : ''}`;
 }
 
-const COVERAGE_KINDS = { deliverable: 'Deliverable', goal: 'Goal', hook: 'Forward hook', opportunity: 'Opportunity', wear: 'Wear cue', phone: 'Phone moment', beat: 'Beat missing' };
+const COVERAGE_KINDS = { deliverable: 'Deliverable', goal: 'Goal', hook: 'Forward hook', opportunity: 'Opportunity', wear: 'Wear cue', phone: 'Phone moment', beat: 'Beat missing', rule: 'Show rule' };
 
 function parseLine(line) {
   const t = (typeof line === 'string' ? line : '').trim();
@@ -252,23 +274,33 @@ function ScriptLine({ line, beatId, beatNumber = null, lineIndex, onEdit, onDele
   const parsed = parseLine(lineStr);
   if (!parsed || parsed.hidden) return null;
   const sc = { Prime: 'var(--primary-text)', Lala: 'var(--accent-dark)', Kelli: 'var(--info-text)', Guest: 'var(--success-text)' };
+  // Focus goes back to the line's row once its editor closes, found by its
+  // place, since a changed line is drawn anew (Script page audit, 2026-10-19).
+  const closeEditor = () => {
+    setEditing(false);
+    setTimeout(() => document.querySelector(`[data-beat-id="${beatId}"] [data-line-index="${lineIndex}"]`)?.focus(), 0);
+  };
 
   if (editing) return (
     <div className="esp-line-edit">
+      {/* The beat was approved while the line was open (Script page audit,
+          2026-10-19: Save then dropped the typed words without a word). The
+          words stay here until Cancel; unlocking the beat lets Save put them in. */}
+      {locked && <p className="esp-line-edit-note" role="alert" data-testid="script-line-locked-note">This beat was approved while you were editing, so this line can&apos;t change. Your words are still here: unlock the beat to put them in, or copy them.</p>}
       {/* Escape cancels, Ctrl/Cmd+Enter keeps the line; Ctrl/Cmd+S goes on
           to the tab's own save (Script tab audit, 2026-10-15). */}
       <textarea className="esp-line-input" value={editText} onChange={e => setEditText(e.target.value)} autoFocus rows={3} aria-label="Edit line"
         onKeyDown={(e) => {
-          if (e.key === 'Escape') { e.preventDefault(); setEditing(false); }
-          else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if (onEdit(beatId, lineIndex, editText) !== false) setEditing(false); }
+          if (e.key === 'Escape') { e.preventDefault(); closeEditor(); }
+          else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if (onEdit(beatId, lineIndex, editText) !== false) closeEditor(); }
           // The line goes in first, then the tab saves (Script tab re-audit,
           // 2026-10-15: the save left the open line out).
-          else if (e.key.toLowerCase() === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.stopPropagation(); if (onEdit(beatId, lineIndex, editText, { thenSave: true }) !== false) setEditing(false); }
+          else if (e.key.toLowerCase() === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.stopPropagation(); if (onEdit(beatId, lineIndex, editText, { thenSave: true }) !== false) closeEditor(); }
         }} />
       <div className="esp-line-edit-actions">
         {/* A refused edit (a new script is being written) keeps the editor open. */}
-        <button type="button" className="esp-btn-primary is-small" onClick={() => { if (onEdit(beatId, lineIndex, editText) !== false) setEditing(false); }}>Save</button>
-        <button type="button" className="esp-btn is-small" onClick={() => setEditing(false)}>Cancel</button>
+        <button type="button" className="esp-btn-primary is-small" onClick={() => { if (onEdit(beatId, lineIndex, editText) !== false) closeEditor(); }}>Save</button>
+        <button type="button" className="esp-btn is-small" onClick={closeEditor}>Cancel</button>
         {onDelete && <button type="button" className="esp-btn is-small esp-line-delete" data-testid="script-line-delete" onClick={() => { if (!window.confirm('Delete this line?')) return; if (onDelete(beatId, lineIndex) !== false) setEditing(false); }}><Trash2 size={13} aria-hidden="true" /> Delete line</button>}
         {/* Moving without dragging (touch screens, keyboards). */}
         <span className="esp-move esp-move--end">
@@ -281,10 +313,14 @@ function ScriptLine({ line, beatId, beatNumber = null, lineIndex, onEdit, onDele
     </div>
   );
 
+  // Rewrite sits beside the row, not inside its role="button" (Script page
+  // audit, 2026-10-19: a button in a button).
   return (
+    <div className="esp-line-row">
     <div
       className={`esp-line${locked ? ' is-locked' : ''}${dropAt ? ` esp-drop-${dropAt}` : ''}`}
       data-testid="script-line"
+      data-line-index={lineIndex}
       draggable={!locked}
       onDragStart={locked ? undefined : (e) => { e.stopPropagation(); drag.start(e, { kind: 'line', beatId, from: lineIndex }); }}
       onDragEnd={() => drag.end()}
@@ -301,16 +337,17 @@ function ScriptLine({ line, beatId, beatNumber = null, lineIndex, onEdit, onDele
       }}
     >
       {parsed.type === 'dialogue' && (
-        <div className="esp-line-dialogue">
+        <div>
           <span className="esp-line-speaker" style={{ '--speaker': sc[parsed.speaker] || 'var(--text-primary)' }}>{parsed.speaker}</span>
           <span className="esp-line-text">"{parsed.text}"</span>
-          {!locked && <button type="button" className="esp-rewrite" onClick={e => { e.stopPropagation(); onRewrite(beatId, lineIndex, lineStr); }} disabled={rewriting}>{rewriting ? '⏳' : '✦ Rewrite'}</button>}
         </div>
       )}
       {parsed.type === 'moment' && <MomentCard moment={parsed} shown={resolveMoment(parsed, onScreen)} alongside={withOnScreen} phoneDown={phoneDown} beatNumber={beatNumber} postDrafts={onScreen.postDrafts} />}
       {parsed.type === 'action' && <div className="esp-line-action">{parsed.text}</div>}
       {parsed.type === 'narration' && <div className="esp-line-text">{parsed.text}</div>}
       {parsed.type === 'cue' && <div className="esp-line-cue">{parsed.text}</div>}
+    </div>
+    {parsed.type === 'dialogue' && !locked && <button type="button" className="esp-rewrite" onClick={() => onRewrite(beatId, lineIndex, lineStr)} disabled={rewriting} aria-label={rewriting ? 'Rewriting…' : undefined}>{rewriting ? '⏳' : '✦ Rewrite'}</button>}
     </div>
   );
 }
@@ -355,7 +392,7 @@ function MomentCard({ moment, shown, alongside = [], phoneDown = false, beatNumb
           </span>
         )}
         {!shown && <span className="esp-moment-missing">No icon, screen or overlay by this name yet</span>}
-        {phoneDown && <span className="esp-moment-missing" data-testid="script-moment-phone-down">Lala&apos;s phone isn&apos;t on screen here. Bring it up first: Phone / overlay, The phone itself.</span>}
+        {phoneDown && <span className="esp-moment-missing" data-testid="script-moment-phone-down">{isCutsceneBeat(beatNumber) ? 'Beats 11–13 are the cutscene: no phone.' : <>Lala&apos;s phone isn&apos;t on screen here. Bring it up first: Phone / overlay, The phone itself.</>}</span>}
         {alongside.length > 0 && <span className="esp-moment-with" data-testid="script-moment-with">With: {alongside.join(', ')}</span>}
       </span>
     </div>
@@ -432,7 +469,7 @@ function MomentPicker({ screens, icons = [], overlays, look = [], production = [
       <p className="esp-picker-group">Lala&apos;s Phone</p>
       <div className="esp-pick-grid">{phoneItems.map(tile)}</div>
       {iconGroups.map((g) => (
-        <div key={g.title} className="esp-pick-icons" data-testid="script-pick-icon-group">
+        <div key={g.title} data-testid="script-pick-icon-group">
           <p className="esp-picker-sub">{g.title}</p>
           <div className="esp-pick-grid is-icons">{g.items.map(tile)}</div>
         </div>
@@ -649,6 +686,16 @@ function ProposalCard({ proposal, onAccept, onDiscard }) {
   );
 }
 
+// Each line's key: its words, and which time those words come in the beat.
+export function lineKeysOf(lines) {
+  const seen = new Map();
+  return lines.map((line) => {
+    const n = (seen.get(line) || 0) + 1;
+    seen.set(line, n);
+    return `${n}:${line}`;
+  });
+}
+
 function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, proposal = null, onAcceptProposal, onDiscardProposal, onEdit, onDeleteLine, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, writing = false, onScreen, onAddMoment, phoneUpAtStart = false, request = null, onRequestDone, people = [], lalaSlots = [], dressCode = '' }) {
   const scene = scenePlan?.find(p => p.beat_number === beat.number);
   const cardRef = useRef(null);
@@ -659,13 +706,22 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
   // Each bottom-bar tap acts once: collapsing and reopening the beat no
   // longer opens the adder again (Script tab audit, 2026-10-15).
   const handledRequest = useRef(null);
+  // The adder or picker a bar tap opened, to be shown (Script page audit, 2026-10-19).
+  const [reveal, setReveal] = useState(null);
   // Ask for a change (Script tab audit, 2026-10-15): words for Regenerate beat.
   const [ask, setAsk] = useState('');
   // One beat is written at a time, and none while a new script is: Regenerate
   // and Ask wait (Script tab re-audit, 2026-10-15: Ask cleared the words and
   // sent nothing).
   const cantWrite = regenerating || writing || locking;
-  const askChange = () => { const words = ask.trim(); if (!words || cantWrite) return; onRegenerate(beat.id, words); setAsk(''); };
+  // The words are cleared only once a new version came back, and only if they
+  // weren't changed meanwhile (Script page audit, 2026-10-19: a failed
+  // request lost them).
+  const askChange = async () => {
+    const words = ask.trim();
+    if (!words || cantWrite) return;
+    if (await onRegenerate(beat.id, words)) setAsk((now) => (now.trim() === words ? '' : now));
+  };
   useEffect(() => {
     if (!request || !expanded || beat.approved || handledRequest.current === request.n) return;
     handledRequest.current = request.n;
@@ -674,18 +730,37 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
     setPicking(request.kind === 'phone' ? {} : false);
     // Answered, so a remount (Raw editor and back) doesn't open it again.
     onRequestDone?.();
+    setReveal({ kind: request.kind, n: request.n });
   }, [request, expanded, beat.approved, onRequestDone]);
+  // The adder opens at the end of the beat, often below the screen: it is
+  // scrolled to the middle and its first control takes focus, so the bar's
+  // tap shows where it went (Script page audit, 2026-10-19).
+  useEffect(() => {
+    const kind = reveal?.kind;
+    if (!kind) return;
+    const box = cardRef.current?.querySelector(kind === 'line' ? '[data-testid="script-line-adder"]' : '[data-testid="script-moment-picker"]');
+    if (!box) return;
+    box.scrollIntoView?.({ block: 'center' });
+    (box.querySelector(kind === 'line' ? 'textarea' : '.esp-pick-tile') || box.querySelector('button'))?.focus({ preventScroll: true });
+  }, [reveal]);
+  // The scene picture, larger: Escape closes it; focus goes to its Close and back.
+  const zoomCloseRef = useRef(null);
+  useDialogKeys(zoomed && !!scene?.image, () => setZoomed(false), zoomCloseRef);
   const picture = scene?.image || null;
   const expects = EXPECTED_ON_SCREEN[beat.number] || null;
   // The lines the beat shows, by their place in the beat (hidden tags left out).
   const shownLines = beat.lines.map((l, i) => { const p = parseLine(l); return p && !p.hidden ? i : -1; }).filter((i) => i >= 0);
   // What is on screen through the beat, line by line, and everything it uses (Task #2793).
-  const { withByLine, used: usedHere, phoneDownAt } = beatOnScreen(beat.lines, onScreen, { phoneUp: phoneUpAtStart });
+  const { withByLine, used: usedHere, phoneDownAt } = beatOnScreen(beat.lines, onScreen, { phoneUp: phoneUpAtStart, cutscene: isCutsceneBeat(beat.number) });
   // The phone carries in from an earlier beat (Task #2797): it builds this scene too.
   const used = phoneUpAtStart
     ? [{ name: PHONE_NAME, kind: 'device', url: onScreen.phoneFrame || null }, ...usedHere.filter((u) => u.kind !== 'device')] : usedHere;
   const [dropAt, setDropAt] = useState(null);
   const visibleLines = beat.lines.filter(l => { const p = parseLine(l); return p && !p.hidden && p.type !== 'cue'; }).length;
+  // A line is keyed by its words and which time they come in the beat, not
+  // its place: a line added above an open line editor moved every place down,
+  // remounted the editor and lost what was typed (Script page audit, 2026-10-19).
+  const lineKeys = lineKeysOf(beat.lines);
   return (
     <div
       ref={cardRef}
@@ -726,12 +801,14 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
             <span className="esp-beat-name">{beat.name}</span>
             {beat.approved && <span className="esp-chip-approved" title="Approved beats are locked: they can't be edited, and Regenerate keeps them as they are.">🔒 APPROVED</span>}
           </div>
-          {scene?.scene_set_name && <button type="button" className="esp-beat-scene" onClick={(e) => { e.stopPropagation(); onOpenMap(); }} title="Open DREAM Map">📍 {scene.scene_set_name}{scene?.angle_label ? ` · ${scene.angle_label}` : ''}</button>}
         </div>
         {picture && <span className="esp-beat-thumb" aria-hidden="true"><img src={picture} alt="" loading="lazy" /></span>}
         <span className="esp-beat-count">{visibleLines} line{visibleLines === 1 ? '' : 's'}<span className="esp-beat-runtime" data-testid={`script-beat-runtime-${beat.number}`} title="Rough length: words at 150 a minute, a few seconds per action or moment">{formatRuntime(beatSeconds(beat.lines))}</span></span>
         <span className="esp-beat-chev" aria-hidden="true">▼</span>
       </div>
+      {/* The scene's map link sits under the head, not inside its
+          role="button" (Script page audit, 2026-10-19). */}
+      {scene?.scene_set_name && <button type="button" className="esp-beat-scene" onClick={(e) => { e.stopPropagation(); onOpenMap(); }} title="Open DREAM Map">📍 {scene.scene_set_name}{scene?.angle_label ? ` · ${scene.angle_label}` : ''}</button>}
       {expanded && (
         <div className="esp-beat-body">
           {proposal && <ProposalCard proposal={proposal} onAccept={onAcceptProposal} onDiscard={onDiscardProposal} />}
@@ -769,7 +846,7 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
             const slot = beat.approved ? null : lalaSlots.find((s) => s.lineIndex === i);
             const at = shownLines.indexOf(i);
             return (
-              <Fragment key={`${i}:${line}`}>
+              <Fragment key={lineKeys[i]}>
                 <ScriptLine line={line} beatId={beat.id} lineIndex={i} prevLine={at > 0 ? shownLines[at - 1] : null} nextLine={at >= 0 && at < shownLines.length - 1 ? shownLines[at + 1] : null} onEdit={onEdit} onDelete={onDeleteLine} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${i}`} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} onScreen={onScreen} withOnScreen={withByLine[i]} phoneDown={phoneDownAt.includes(i)} beatNumber={beat.number} />
                 {slot && <LalaLineSlot piece={slot.piece} dressCode={dressCode} onInsert={(text) => onAddMoment(beat.id, text, i)} />}
               </Fragment>
@@ -829,7 +906,7 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
       {zoomed && picture && (
         <div className="esp-zoom" role="dialog" aria-modal="true" aria-label="The scene" data-testid="script-picture-zoom" onClick={(e) => { e.stopPropagation(); setZoomed(false); }}>
           <img src={picture} alt={scene?.image_label || scene?.scene_set_name || 'The scene'} />
-          <button type="button" className="esp-zoom-close" aria-label="Close" onClick={(e) => { e.stopPropagation(); setZoomed(false); }}><X size={20} aria-hidden="true" /></button>
+          <button type="button" ref={zoomCloseRef} className="esp-zoom-close" aria-label="Close" onClick={(e) => { e.stopPropagation(); setZoomed(false); }}><X size={20} aria-hidden="true" /></button>
         </div>
       )}
     </div>
@@ -886,6 +963,9 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // save. It lives here as a draft until Save keeps it; the reason is shown.
   const [unsaved, setUnsaved] = useState(null);
   const [showMap, setShowMap] = useState(false);
+  // The DREAM Map closes on Escape, focus in and back (Script page audit, 2026-10-19).
+  const mapCloseRef = useRef(null);
+  useDialogKeys(showMap, () => setShowMap(false), mapCloseRef);
   const [mapLocations, setMapLocations] = useState([]);
   const [mapImageUrl, setMapImageUrl] = useState(null);
   // What the script will use (Evoni's Episode mock): the brief and the
@@ -897,15 +977,22 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // read; a read that fails or answers in another shape leaves it null, so
   // nothing is claimed about it.
   const [beat14, setBeat14] = useState(null);
+  // A failed read says so in the side panel, not nothing (Script page audit,
+  // 2026-10-19).
+  const [beat14Failed, setBeat14Failed] = useState(false);
   const loadBeat14 = useCallback(async () => {
     if (!showId || !episodeId) return;
     try {
       const res = await api.get(`/api/v1/opportunities/${showId}/episode/${episodeId}/beat14`);
       const d = res?.data?.data;
-      setBeat14(d && typeof d === 'object' && !Array.isArray(d) && 'opportunity' in d ? d : null);
+      const ok = d && typeof d === 'object' && !Array.isArray(d) && 'opportunity' in d;
+      if (!ok) console.error('[EpisodeScript] beat 14 opportunity answered in another shape:', d);
+      setBeat14(ok ? d : null);
+      setBeat14Failed(!ok);
     } catch (err) {
       console.error('[EpisodeScript] beat 14 opportunity load failed:', err);
       setBeat14(null);
+      setBeat14Failed(true);
     }
   }, [showId, episodeId]);
   useEffect(() => { loadBeat14(); }, [loadBeat14]);
@@ -919,9 +1006,24 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // open beat, and whether the context panel is open. `balance` is the
   // balance before this episode (Task #2882).
   const [balance, setBalance] = useState(null);
+  // Lala's money as the show's rules read it (lib/scriptRuleChecks; Evoni,
+  // 2026-10-18): the look's costs and the event's, from the Money page's
+  // lines (null: not read, so no coin rows).
+  const [scriptMoney, setScriptMoney] = useState(null);
+  useEffect(() => {
+    if (!showId || !episodeId) { setScriptMoney(null); return undefined; }
+    let cancelled = false;
+    api.get(`/api/v1/world/${showId}/episodes/${episodeId}/money`)
+      .then((res) => { if (!cancelled) setScriptMoney(scriptMoneyFrom(res?.data?.data)); })
+      .catch((err) => { console.error('[EpisodeScript] money load failed:', err); if (!cancelled) setScriptMoney(null); });
+    return () => { cancelled = true; };
+  }, [showId, episodeId]);
   const [barRequest, setBarRequest] = useState(null);
   const clearBarRequest = useCallback(() => setBarRequest(null), []);
   const [contextOpen, setContextOpen] = useState(false);
+  // The phone's Context sheet closes on Escape too (Script page audit, 2026-10-19).
+  const contextCloseRef = useRef(null);
+  useDialogKeys(contextOpen, () => setContextOpen(false), contextCloseRef);
   // Lala's posts in the script (Task #2885): each Post line's draft in her
   // Feed, as the server has it (null: not read yet, or could not be).
   const [postDrafts, setPostDrafts] = useState(null);
@@ -1196,7 +1298,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       if (stored !== scriptText && scriptRef.current === scriptText) { setScriptText(stored); }
       setSavedScript(stored); reportSaved(stored, lockedRef.current);
       setUnsaved(null); setSaved(true); setTimeout(() => setSaved(false), 3000);
-      if (kept.length) flash(`Saved. ${keptNote(kept)}.`, 'error', 5000);
+      // Saved, and the lock held: shown as news, not in red (Script page audit, 2026-10-19).
+      if (kept.length) flash(`Saved. ${keptNote(kept)}.`, 'success', 5000);
       if (/\[UI:\s*POST\s/i.test(stored) && !(await syncPostDrafts())) flash("Saved, but Lala's post drafts could not be made. Save again to retry.", 'error', 6000);
     }
     catch (err) { console.error('[EpisodeScript] save failed:', err); flash('Save failed', 'error'); }
@@ -1210,20 +1313,24 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // can't set the tab's state any more (Script tab re-audit, 2026-10-15:
   // coming back showed the old script, and the next Save wrote it over the
   // new one), so each success path also reports straight to the page.
+  // Each report names its episode (Script page audit, 2026-10-19): one that
+  // lands after the page has moved to another episode was merged into that
+  // one, so the page ignores a report for an episode it no longer holds
+  // (EpisodeDetail withSavedScript).
   const reportedRef = useRef(null);
   const reportSaved = (script, locks) => {
     const now = JSON.stringify([script, locks]);
     if (now === reportedRef.current) return;
     reportedRef.current = now;
-    onSaved?.({ script_content: script, script_locked_beats: locks });
+    onSaved?.({ id: episodeId, script_content: script, script_locked_beats: locks });
   };
   useEffect(() => {
     const now = JSON.stringify([savedScript, lockedBeats]);
     if (reportedRef.current === null) { reportedRef.current = now; return; }
     if (now === reportedRef.current) return;
     reportedRef.current = now;
-    onSaved?.({ script_content: savedScript, script_locked_beats: lockedBeats });
-  }, [savedScript, lockedBeats, onSaved]);
+    onSaved?.({ id: episodeId, script_content: savedScript, script_locked_beats: lockedBeats });
+  }, [savedScript, lockedBeats, onSaved]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Unsaved edits: the episode page asks before another tab is opened, the
   // browser asks before the page is closed or reloaded, and Ctrl/Cmd+S saves.
@@ -1270,7 +1377,18 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     // A line saved as it was leaves the script as it was.
     if (beats.find(b => b.id === beatId)?.lines[lineIndex] === newText) return true;
     const next = scriptWithLine(scriptText, lockedBeats, beatId, lineIndex, newText);
-    if (next !== null) setScriptText(next);
+    // A beat approved (or gone) while its line was open keeps the editor open
+    // with the typed words, and says why (Script page audit, 2026-10-19:
+    // they vanished without a word).
+    if (next === null) {
+      if (thenSave) setSaveAfterEdit(false);
+      flash(beats.find(b => b.id === beatId)?.approved
+        ? 'This beat is approved, so the line was not changed. Your words are still in the editor; unlock the beat to put them in.'
+        : 'This line\'s beat is no longer in the script, so the line was not changed. Your words are still in the editor.', 'error', 6000);
+      return false;
+    }
+    setScriptText(next);
+    return true;
   };
   // Waits for a save already running, then saves (re-audit 2: the line was
   // committed, and the save it asked for was dropped).
@@ -1285,7 +1403,10 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   const handleDeleteLine = (beatId, lineIndex) => {
     if (busy) { flash('Wait for the new script before editing it.', 'error'); return false; }
     const next = scriptWithoutLine(scriptText, lockedBeats, beatId, lineIndex);
-    if (next !== null) setScriptText(next);
+    // Refused (the beat was approved meanwhile): the editor stays open, and says why.
+    if (next === null) { flash('This beat is approved, so the line was not deleted. Unlock the beat to change it.', 'error', 6000); return false; }
+    setScriptText(next);
+    return true;
   };
 
   // Rewrite one line (Evoni, 2026-10-08: "when i click rewrite in script
@@ -1325,29 +1446,33 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // to regenerate a line or a beat?"). The beat is written again against the
   // script as the page has it and put in place; Save keeps it.
   // `instruction`: Evoni's words from Ask for a change, sent with the beat.
+  // true when a new version is waiting for "Use it" (Ask for a change then
+  // clears its words); false otherwise.
   const handleRegenerateBeat = async (beatId, instruction = '') => {
     const beat = beats.find(b => b.id === beatId);
-    if (busy || !beat || beat.approved || regeneratingBeat) return;
+    if (busy || !beat || beat.approved || regeneratingBeat) return false;
     setRegeneratingBeat(beatId);
     const requested = parseScriptIntoBeats(withBeatHeaders(scriptText, lockedBeats), lockedBeats).find(b => b.id === beatId);
     const seq = genSeqRef.current;
     try {
       const res = await api.post(`/api/v1/episode-brief/${episodeId}/regenerate-beat`, { showId, beatNumber: beat.number, script: withBeatHeaders(scriptText, lockedBeats), ...(instruction ? { instruction } : {}) });
-      if (!mountedRef.current) return;
+      if (!mountedRef.current) return false;
       const proposed = String(res.data?.beat || '');
       const nowBeat = parseScriptIntoBeats(withBeatHeaders(scriptRef.current, lockedRef.current), lockedRef.current).find(b => b.id === beatId);
-      if (!nowBeat || nowBeat.approved) { flash(`Beat ${beat.number} was approved or removed while it was being written, so the new version was not put in.`, 'error', 6000); return; }
-      if (!/^\s*##\s*BEAT:/i.test(proposed) || (nowBeat && nowBeat.raw.trimEnd() === proposed.trimEnd())) { flash('The beat came back the same; try again.', 'error'); return; }
+      if (!nowBeat || nowBeat.approved) { flash(`Beat ${beat.number} was approved or removed while it was being written, so the new version was not put in.`, 'error', 6000); return false; }
+      if (!/^\s*##\s*BEAT:/i.test(proposed) || (nowBeat && nowBeat.raw.trimEnd() === proposed.trimEnd())) { flash('The beat came back the same; try again.', 'error'); return false; }
       // Shown in the beat first; "Use it" puts it in (acceptProposal).
       // `base`: the beat as it was asked for, so "Use it" can tell whether
       // it has changed since.
-      if (seq !== genSeqRef.current) { flash(`A new script was written while beat ${beat.number} was being rewritten, so the rewrite was not kept.`, 'error', 6000); return; }
+      if (seq !== genSeqRef.current) { flash(`A new script was written while beat ${beat.number} was being rewritten, so the rewrite was not kept.`, 'error', 6000); return false; }
       // `base`: the beat's lines as it was asked for (its lines, not its
       // header, which an edit to a header-less script writes another way).
       setProposal({ kind: 'beat', beatId, number: beat.number, text: proposed, base: requested ? requested.lines.join('\n') : null });
+      return true;
     } catch (err) {
       console.error('[EpisodeScript] beat regenerate failed:', err);
       flash(`Regenerate failed: ${err.response?.data?.error || err.message || 'no answer'}`, 'error', 6000);
+      return false;
     } finally { if (mountedRef.current) setRegeneratingBeat(null); }
   };
 
@@ -1409,7 +1534,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
         if (/\[UI:\s*POST\s/i.test(stored) && !(await syncPostDrafts())) flash("Saved, but Lala's post drafts could not be made. Save again to retry.", 'error', 6000);
       }
       const kept = res?.data?.locked_beats_kept || [];
-      if (kept.length) flash(`${keptNote(kept)}.`, 'error', 5000);
+      if (kept.length) flash(`${keptNote(kept)}.`, 'success', 5000);
     } catch (err) {
       console.error('[EpisodeScript] lock failed:', err);
       flash(err.response?.data?.error || (beat.approved ? 'Could not unlock the beat' : 'Could not approve the beat'), 'error');
@@ -1514,12 +1639,15 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   beats.reduce((up, b, i) => {
     const start = phoneUpAtBeat(b.number, up, i > 0 ? beats[i - 1].number : null);
     phoneUpAtStart[i] = start;
-    return beatOnScreen(b.lines, onScreen, { phoneUp: start }).phoneUpAtEnd;
+    return beatOnScreen(b.lines, onScreen, { phoneUp: start, cutscene: isCutsceneBeat(b.number) }).phoneUpAtEnd;
   }, false);
 
   // The beat list and pills (Task #2881): the script's own beats, each marked
   // when it has a phone moment; the open beat's context for the chips.
-  const openId = expandedBeat === undefined ? beats[0]?.id : expandedBeat;
+  // A chosen beat whose id is gone (renumbered, removed) falls back to the
+  // first: at phone width only the open beat shows, so none was on screen
+  // (Script page audit, 2026-10-19). null (closed on a desktop) stays closed.
+  const openId = expandedBeat === undefined || (expandedBeat !== null && !beats.some((b) => b.id === expandedBeat)) ? beats[0]?.id : expandedBeat;
   const openBeat = beats.find((b) => b.id === openId) || null;
   // The Shopping list as of the open beat, from the saved script (Task
   // #3188): crossed off from the line each piece is put on.
@@ -1570,11 +1698,14 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   const inputs = scriptInputs({ brief, plan, outfit, event: source?.event || null, deliverables });
   // What the episode must cover, ticked from the script, and the open beat's
   // phone check (Task #2884).
-  const cover = mustCover({ beats, event: source?.event || null, brief, opportunity: brief?.designed_intent === 'fail' ? null : beat14?.opportunity || null });
+  // Beat 14's opportunity is on the list only when it comes: not when the
+  // episode is designed to fail, nor once it expired (Script page audit,
+  // 2026-10-19; lib/beat14Invitation beat14Outcome).
+  const cover = mustCover({ beats, event: source?.event || null, brief, opportunity: beat14Outcome(beat14?.opportunity, brief?.designed_intent || null) === 'invitation' ? beat14.opportunity : null });
   // The phone starts each beat where the beat before left it, not on the
-  // home screen (Script tab audit, 2026-10-15).
-  const phoneScreenAt = [];
-  beats.reduce((at, b, i) => { phoneScreenAt[i] = at; return phoneCheck(b.lines, onScreen, { startAt: at }).endAt; }, null);
+  // home screen (Script tab audit, 2026-10-15); at home when it was put
+  // away (from beat 11; Script page audit, 2026-10-19).
+  const phoneScreenAt = phoneStartScreens(beats, onScreen);
   const openIndex = openBeat ? beats.indexOf(openBeat) : -1;
   const check = openBeat ? phoneCheck(openBeat.lines, onScreen, { startAt: phoneScreenAt[openIndex] }) : null;
   // Wear cues that name no single piece of the locked look (Task #3180):
@@ -1603,6 +1734,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // Ready to film? (Script tab audit, 2026-10-15): the checks above, script-wide.
   const healthRows = showBeatList ? scriptHealth({
     beats, canonical: BEAT_NAMES, cover, onScreen, outfit, dealItems,
+    rules: { money: scriptMoney, shoppingApproved: shoppingListApproved(source?.event || null), cast: source?.event ? eventCast(source.event, [source.sourceProfile]) : [] },
     closetNumber: closetBeat(scriptText), dirty: scriptText !== savedScript, unsaved,
     beat14, designedIntent: brief?.designed_intent || null,
   }) : [];
@@ -1648,13 +1780,17 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
         {hasWork ? (
           <div className="esp-actions">
             {/* Table read and Export (Script tab audit, 2026-10-15): the script as on the page. */}
+            {/* false: refused, so History stays open on the version (Script page audit, 2026-10-19). */}
             <ScriptHistory episodeId={episodeId} dirty={scriptText !== savedScript} onRestore={(text) => {
-              if (busy) { flash('Wait for the new script before putting a version back.', 'error'); return; }
+              if (busy) { flash('Wait for the new script before putting a version back.', 'error'); return false; }
               setScriptText(text); setProposal(null);
               flash('An earlier version is on the page ✦ Save to keep it.', 'success', 5000);
+              return true;
             }} />
             <ScriptReadActions scriptText={scriptText} title={episode?.title || (episode?.episode_number ? `Episode ${episode.episode_number}` : 'Script')} dirty={scriptText !== savedScript} onScreen={onScreenWithDrafts} scenePlan={scenePlan} startBeat={Math.max(0, beats.indexOf(openBeat))} />
             <button type="button" className={`esp-btn${developerMode ? ' is-on' : ''}`} onClick={() => setDeveloperMode(d => !d)}>{developerMode ? 'Beat view' : 'Raw editor'}</button>
+            {/* Not while a lock or a save is on its way (Script page audit,
+                2026-10-19: the new script landed over the lock's or save's answer). */}
             <button type="button" className="esp-btn" data-testid="script-regenerate" onClick={() => {
               const ask = approvedCount > 0
                 ? `Regenerate the unlocked beats? The ${approvedCount} approved beat${approvedCount === 1 ? '' : 's'} stay${approvedCount === 1 ? 's' : ''} exactly as ${approvedCount === 1 ? 'it is' : 'they are'}; the rest of the script is replaced.`
@@ -1662,7 +1798,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
               if (!window.confirm(ask)) return;
               // Already confirmed here, so the server's own "replace it?" is answered.
               handleGenerate(true);
-            }} disabled={generating || !!regeneratingBeat}>{waitingForScript ? 'Still writing…' : generating ? 'Generating…' : approvedCount > 0 ? 'Regenerate unlocked' : 'Regenerate'}</button>
+            }} disabled={busy || !!regeneratingBeat || locking || saving}>{waitingForScript ? 'Still writing…' : generating ? 'Generating…' : approvedCount > 0 ? 'Regenerate unlocked' : 'Regenerate'}</button>
             <button type="button" className={`esp-btn-primary${saved ? ' is-saved' : ''}`} onClick={handleSave} disabled={saving || busy}>{saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}</button>
           </div>
         ) : (
@@ -1718,15 +1854,18 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
           context from the episode's own data. */}
       {showBeatList && (
         <>
-          <div className="esp-pills" role="list" aria-label="Beats" data-testid="script-pills">
+          {/* A list of buttons, not buttons playing list items (Script page audit, 2026-10-19). */}
+          <ul className="esp-pills" aria-label="Beats" data-testid="script-pills">
             {beats.map((b) => (
-              <button key={b.id} type="button" role="listitem" className={`esp-pill${b.id === openId ? ' is-open' : ''}`} aria-current={b.id === openId ? 'true' : undefined}
-                data-testid={`script-pill-${b.number}`} onClick={() => chooseBeat(b.id)}>
-                {b.number} · {b.name}
-                {phoneBeats.has(b.id) && <Smartphone size={13} aria-label="Has a phone moment" />}
-              </button>
+              <li key={b.id}>
+                <button type="button" className={`esp-pill${b.id === openId ? ' is-open' : ''}`} aria-current={b.id === openId ? 'true' : undefined}
+                  data-testid={`script-pill-${b.number}`} onClick={() => chooseBeat(b.id)}>
+                  {b.number} · {b.name}
+                  {phoneBeats.has(b.id) && <Smartphone size={13} aria-label="Has a phone moment" />}
+                </button>
+              </li>
             ))}
-          </div>
+          </ul>
           <ul className="esp-chips" data-testid="script-chips">
             <li data-testid="script-chip-coins"><Coins size={13} aria-hidden="true" />{truth?.coins.value != null ? `Lala has ${truth.coins.value.toLocaleString()} coins` : 'Coins not read'}</li>
             <li data-testid="script-chip-look"><Shirt size={13} aria-hidden="true" />{truth?.wearing.beforeCloset ? truth.wearing.text : outfit === null ? 'Look not read' : outfit.length ? `Dressed · ${outfit.length} piece${outfit.length === 1 ? '' : 's'}` : 'Not dressed yet'}</li>
@@ -1747,7 +1886,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
         <div className={busy ? 'esp-beats is-busy' : 'esp-beats'} aria-busy={busy || undefined} data-testid="script-beats">
           {beats.length > 1 && <p className="esp-order-hint">Drag a beat by its handle, or a line within its beat, to change the order. A beat keeps its number and name wherever it goes. Approved beats stay where they are.</p>}
           {beats.map((beat, index) => {
-            const open = (expandedBeat === undefined ? beats[0]?.id : expandedBeat) === beat.id;
+            const open = openId === beat.id;
             const phoneUp = phoneUpAtStart[index] || false;
             return <BeatSection key={beat.id} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open && !isPhoneWidth() ? null : beat.id)} onApprove={handleApprove} proposal={proposal?.beatId === beat.id ? proposal : null} onAcceptProposal={acceptProposal} onDiscardProposal={() => setProposal(null)} onEdit={handleEditLine} onDeleteLine={handleDeleteLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking || busy} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} writing={!!regeneratingBeat || busy} onRequestDone={clearBarRequest} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} phoneUpAtStart={phoneUp} people={people} lalaSlots={lineSlots.filter((s) => s.beatIndex === index)} dressCode={source?.event?.dress_code || ''} />;
           })}
@@ -1810,7 +1949,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     {/* What generation reads, and where the voices come from (Evoni's Episode mock). */}
     <aside className="esp-side" data-testid="script-side">
       {contextOpen && (
-        <button type="button" className="esp-side-close" onClick={() => setContextOpen(false)} data-testid="script-context-close"><X size={16} aria-hidden="true" /> Close</button>
+        <button type="button" ref={contextCloseRef} className="esp-side-close" onClick={() => setContextOpen(false)} data-testid="script-context-close"><X size={16} aria-hidden="true" /> Close</button>
       )}
       <section className="esp-uses" data-testid="script-uses">
         <h3 className="esp-side-title">What the script will use</h3>
@@ -1840,9 +1979,9 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
               ))}
             </ul>
           ) : (
-            <p className="esp-cover-empty" data-testid="script-cover-empty">Nothing to cover: the event has no goals, and the brief has no forward hook.</p>
+            <p className="esp-cover-empty" data-testid="script-cover-empty">Nothing to cover: the event has no goals, the brief has no forward hook, and beat 14 has no opportunity coming.</p>
           )}
-          <p className="esp-uses-note">From the event package and the brief. Ticked when the script mentions it.</p>
+          <p className="esp-uses-note">From the event package, the brief and beat 14&apos;s opportunity. Ticked when the script mentions it; the opportunity, when beat 14 delivers it as a DM or notification.</p>
         </section>
       )}
       {hasScript && truth && (
@@ -1876,6 +2015,9 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       )}
       {hasScript && openBeatNumber === 14 && beat14 && (
         <Beat14Opportunity showId={showId} episodeId={episodeId} data={beat14} onChange={loadBeat14} designedIntent={brief?.designed_intent || null} />
+      )}
+      {hasScript && openBeatNumber === 14 && !beat14 && beat14Failed && (
+        <p className="esp-cover-empty" role="status" data-testid="script-beat14-unread">Couldn&apos;t read beat 14&apos;s opportunity.</p>
       )}
       {hasScript && openBeat && check && (
         <section className="esp-phonecheck" data-testid="script-phone-check">
@@ -1934,10 +2076,10 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       {/* DREAM Map Modal */}
       {showMap && (
         <div className="esp-map-backdrop" onClick={() => setShowMap(false)}>
-          <div className="esp-map" role="dialog" aria-label="DREAM Map" onClick={e => e.stopPropagation()}>
+          <div className="esp-map" role="dialog" aria-modal="true" aria-label="DREAM Map" onClick={e => e.stopPropagation()}>
             <div className="esp-map-bar">
               <span className="esp-map-title">DREAM MAP</span>
-              <button type="button" className="esp-map-close" aria-label="Close map" onClick={() => setShowMap(false)}>×</button>
+              <button type="button" ref={mapCloseRef} className="esp-map-close" aria-label="Close map" onClick={() => setShowMap(false)}>×</button>
             </div>
             <Suspense fallback={<div className="esp-map-loading">Loading map...</div>}>
               <DreamMap locations={mapLocations} mapImageUrl={mapImageUrl} />
