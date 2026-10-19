@@ -82,7 +82,7 @@ function BrandCard({ brand, showId, onChanged }) {
   return (
     <li className="pb-card" data-testid={`pb-brand-${brand.slug}`}>
       <div className="pb-card-head">
-        <h4 className="pb-name">{brand.name}</h4>
+        <h4 className="pb-name"><Link to={`/brands/${brand.slug}`}>{brand.name}</Link></h4>
         {brand.account ? <span className="pb-handle">{atHandle(brand.account.handle)}</span> : <span className="pb-muted">No Pulse account yet</span>}
       </div>
       {brand.principle && <p className="pb-principle">{brand.principle}</p>}

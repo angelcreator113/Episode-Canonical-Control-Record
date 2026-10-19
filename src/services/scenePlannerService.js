@@ -129,7 +129,7 @@ async function generateScenePlan(episodeId, showId, briefData, options = {}) {
 - Strictness: ${ev.strictness}/10
 ${ev.scene_set_id ? `- Preferred Scene Set ID: ${ev.scene_set_id} (use this for EVENT beats 10-12)` : ''}
 
-IMPORTANT: The Event Travel (beat 10), Event Outcome (beat 11), and Deliverable Creation (beat 12) should use the event's location/scene set. The event's dress code and prestige level should inform the visual tone.`;
+IMPORTANT: The Event Travel (beat 10), Event Outcome (beat 11), and Fashion Challenge (beat 12) should use the event's location/scene set. The event's dress code and prestige level should inform the visual tone.`;
     }
   } catch (e) { /* world_events may not exist */ }
 
