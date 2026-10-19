@@ -1642,6 +1642,12 @@ router.post(
       return res.status(404).json({ success: false, error: 'Episode not found' });
     }
 
+    // An accepted episode's locations are locked (eighth audit: this route
+    // added links to one the Locations step refused).
+    if (episode.evaluation_status === 'accepted') {
+      return res.status(409).json({ success: false, code: 'EPISODE_ACCEPTED', error: 'This episode is accepted: its locations are locked' });
+    }
+
     const { sceneSetIds } = req.body;
     if (!sceneSetIds || !Array.isArray(sceneSetIds) || sceneSetIds.length === 0) {
       return res.status(400).json({ success: false, error: 'sceneSetIds array required' });
@@ -1655,9 +1661,13 @@ router.post(
         ? parseInt(raw.sortOrder, 10)
         : i;
       if (!setId) continue;
+      // A new link is an extra named after its set: with no role or name it
+      // read as an unnamed extra, and the Locations step would not save
+      // until it was named (eighth audit).
+      const named = models.SceneSet ? await models.SceneSet.findByPk(setId, { attributes: ['name'] }) : null;
       const [link, wasCreated] = await SceneSetEpisode.findOrCreate({
         where: { episode_id: req.params.episodeId, scene_set_id: setId },
-        defaults: { sort_order: Number.isNaN(requestedOrder) ? i : requestedOrder },
+        defaults: { sort_order: Number.isNaN(requestedOrder) ? i : requestedOrder, role: 'extra', role_name: String(named?.name || 'Extra location').slice(0, 80) },
       });
       if (!wasCreated && link.sort_order !== (Number.isNaN(requestedOrder) ? i : requestedOrder)) {
         await link.update({ sort_order: Number.isNaN(requestedOrder) ? i : requestedOrder });

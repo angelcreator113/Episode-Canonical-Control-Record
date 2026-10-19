@@ -154,6 +154,8 @@ export function BeatEditor({ beat, library, linkedIds, onSave, onRelease, onCanc
                 <span className="beat-editor-set-name">{x.name}</span>
                 <span className="beat-editor-set-meta">
                   {fmtType(x.scene_type)}{linkedIds.has(x.id) ? ' · In this episode' : ''}
+                  {/* Another event's photos say so (eighth audit). */}
+                  {x.version_of ? ` · Event photos${x.version_event?.name ? `: ${x.version_event.name}` : ''}` : ''}
                 </span>
               </span>
             </button>

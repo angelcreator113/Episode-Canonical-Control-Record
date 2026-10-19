@@ -149,6 +149,9 @@ async function makeEventVersion(sequelize, { setId, everydaySetId, eventId }) {
     await sequelize.query(
       'UPDATE world_events SET scene_set_id = :id, updated_at = NOW() WHERE id = :eventId',
       { replacements: { id: set.id, eventId: event.id }, transaction });
+    // Its draft episode follows: the Event location and its beats (eighth audit).
+    await require('./eventPlaceSync').syncEpisodeEventLocation(sequelize,
+      { eventId: event.id, fromSetId: event.scene_set_id, toSetId: set.id, transaction });
     return {
       scene_set_id: set.id,
       version_of: { id: everyday.id, name: everyday.name },
@@ -200,6 +203,10 @@ async function makeEveryday(sequelize, setId, { returnEvent = false } = {}) {
         await sequelize.query(
           'UPDATE world_events SET scene_set_id = :everydayId, updated_at = NOW() WHERE scene_set_id = :id AND deleted_at IS NULL',
           { replacements: { id: set.id, everydayId }, transaction });
+        for (const e of events) {
+          await require('./eventPlaceSync').syncEpisodeEventLocation(sequelize,
+            { eventId: e.id, fromSetId: set.id, toSetId: everydayId, transaction });
+        }
         returned = { scene_set_id: everydayId, events: events.map((e) => ({ id: e.id, name: e.name })) };
       }
     }

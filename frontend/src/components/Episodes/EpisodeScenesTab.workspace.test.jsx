@@ -115,7 +115,7 @@ describe('EpisodeScenesTab: the one scene workspace (L12, L12a)', () => {
     expect(home.textContent).toContain("Lala's Apartment");
     expect(home.textContent).toContain('Base image and 3 more views');
     expect(home.querySelector('img').getAttribute('src')).toBe('https://x/home.jpg');
-    expect(within(home).getByRole('link', { name: 'Open in Scene Sets' }).getAttribute('href')).toBe('/shows/show-1/world?tab=scene-sets&set=set-home');
+    expect(within(home).getByRole('link', { name: 'Open in Scene Sets' }).getAttribute('href')).toMatch(/^\/shows\/show-1\/world\?tab=scene-sets&set=set-home&from=%2Fepisodes%2F/);
     fireEvent.click(screen.getByTestId('est-location-chip-set-venue'));
     expect(screen.getByTestId('est-location-detail-set-venue').textContent).toContain('Base image and 1 more view');
     expect(screen.getByTestId('est-edit-locations')).toBeTruthy();

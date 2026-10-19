@@ -43,8 +43,13 @@ export default function RemovedSetsBanner({ episodeId, showId, onMoved }) {
     if (!removed.length || !showId) return;
     // Every set, not the first 200 (lib/fetchAllPages).
     fetchAllSceneSets(api, showId)
-      .then(({ items }) => setLibrary(items))
-      .catch((err) => console.error('[RemovedSets] library load failed:', err));
+      // Only sets the move will take: this show's and shared ones, not
+      // another show's franchise sets (eighth audit: refused after the click).
+      .then(({ items }) => setLibrary((items || []).filter((l) => !l.show_id || String(l.show_id) === String(showId))))
+      .catch((err) => {
+        console.error('[RemovedSets] library load failed:', err);
+        setError('Could not load the scene sets to move them to. Reload the page to try again.');
+      });
   }, [removed.length, showId]);
 
   if (!removed.length) return null;

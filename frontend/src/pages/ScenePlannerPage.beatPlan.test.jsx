@@ -72,8 +72,9 @@ describe('ScenePlannerPage: the Beat Plan (L11)', () => {
     const strip = await screen.findByTestId('beat-plan-locations');
     const links = within(strip).getAllByRole('link');
     expect(links.map((l) => l.textContent)).toEqual(['Home: Lala apartment', 'Car: Town car']);
-    expect(links[0].getAttribute('href')).toBe('/shows/show-1/world?tab=scene-sets&set=set-home');
-    expect(links[1].getAttribute('href')).toBe('/shows/show-1/world?tab=scene-sets&set=set-car');
+    // Each with the way back to this page (eighth audit).
+    expect(links[0].getAttribute('href')).toMatch(/^\/shows\/show-1\/world\?tab=scene-sets&set=set-home&from=%2Fepisodes%2F[^&]+%2Fplan&fromLabel=Scene%20planner$/);
+    expect(links[1].getAttribute('href')).toMatch(/^\/shows\/show-1\/world\?tab=scene-sets&set=set-car&from=/);
   });
 
   test('a beat Evoni chose is marked "Chosen by you"; the others are not', async () => {

@@ -78,4 +78,25 @@ describe('RemovedSetsBanner (D2)', () => {
     await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/v1/episodes/ep-2/removed-sets'));
     expect(container.innerHTML).toBe('');
   });
+
+  // Eighth audit (2026-10-19).
+  test("another show's sets are not offered, and a failed list says so", async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/episodes/ep-1/removed-sets') return { data: { data: REMOVED } };
+      if (url.startsWith('/api/v1/scene-sets?show_id=show-1')) return { data: { data: [...LIBRARY, { id: 'franchise', name: 'Other show loft', show_id: 'show-9' }] } };
+      return { data: {} };
+    });
+    const first = render(<RemovedSetsBanner episodeId="ep-1" showId="show-1" />);
+    const select = await screen.findByLabelText("Replacement for Lala's Closet");
+    await waitFor(() => expect(select.querySelectorAll('option').length).toBe(4));
+    expect([...select.querySelectorAll('option')].map((o) => o.value)).not.toContain('franchise');
+    first.unmount();
+
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/episodes/ep-1/removed-sets') return { data: { data: REMOVED } };
+      throw new Error('network');
+    });
+    render(<RemovedSetsBanner episodeId="ep-1" showId="show-1" />);
+    expect((await screen.findByText(/Could not load the scene sets/)).textContent).toMatch(/Reload the page/);
+  });
 });

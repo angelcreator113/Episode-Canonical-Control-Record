@@ -76,9 +76,13 @@ describe('EpisodeScenesTab — Edit locations (L6)', () => {
   test('an accepted episode does not open the step', async () => {
     locationsBody = { ...locationsBody, editable: false };
     const onToast = renderTab();
-    fireEvent.click(await screen.findByTestId('est-edit-locations'));
-    await waitFor(() => expect(onToast).toHaveBeenCalledWith('This episode is accepted; its locations are fixed.', 'error'));
+    // Said before any click, and the button is not offered (eighth audit).
+    expect((await screen.findByTestId('est-locations-locked')).textContent).toBe('This episode is accepted: its locations are fixed.');
+    const button = screen.getByTestId('est-edit-locations');
+    expect(button.disabled).toBe(true);
+    fireEvent.click(button);
     expect(screen.queryByTestId('episode-locations-step')).toBeNull();
+    expect(onToast).not.toHaveBeenCalled();
   });
 
   test('a refused save keeps the step open and shows the reason', async () => {
