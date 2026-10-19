@@ -1723,6 +1723,9 @@ try {
   console.error('✗ Failed to load Daily update routes:', e.message);
 }
 
+// Trust per character (services/pulseTrust)
+try { app.use('/api/v1/pulse-trust', require('./routes/pulseTrustRoutes')); console.log('✓ Pulse trust loaded at /api/v1/pulse-trust'); } catch (e) { console.error('✗ Failed to load Pulse trust routes:', e.message); }
+
 // The book follows the show — episode → short story → chapter (docs/CANON.md)
 try {
   const bookFromShowRoutes = require('./routes/bookFromShowRoutes');
