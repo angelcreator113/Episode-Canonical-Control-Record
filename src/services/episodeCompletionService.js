@@ -207,7 +207,16 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
 
   // Check if already completed
   if (episode.evaluation_status === 'accepted') {
-    return { already_completed: true, message: 'Episode already completed', evaluation: episode.evaluation_json };
+    // A beat 14 opportunity completion could not resolve is still held: a
+    // repeat call resolves it by the recorded tier (Script page re-audit,
+    // 2026-10-19: it stayed held for good, as nothing retried it).
+    let beat14 = null;
+    try {
+      beat14 = await require('./beat14Opportunity').resolveHeldAfterCompletion(require('../models'), { episodeId });
+    } catch (beat14Err) {
+      console.error('[EpisodeCompletion] Beat 14 late resolve failed (non-blocking):', beat14Err?.message);
+    }
+    return { already_completed: true, message: 'Episode already completed', evaluation: episode.evaluation_json, ...(beat14 ? { beat14_opportunity: beat14 } : {}) };
   }
 
   // Reopened terms (Reopen ruling, §8(cc); Task #2378): refused before any

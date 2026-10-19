@@ -112,7 +112,7 @@ describe('the prompt says the show as it is now', () => {
   test('the back half is named by the canonical beats, not "Result/Aftermath"', () => {
     const prompt = buildScriptPrompt(inputs());
     expect(prompt).not.toContain('Result/Aftermath');
-    expect(prompt).toContain('(Beats 9-13: Reminder/Deadline, Event Travel, Event Outcome, Fashion Challenge, Recap Panel)');
+    expect(prompt).toContain('(Beats 9-13: Reminder/Deadline, Event Travel, The Event, Fashion Challenge, Recap Panel)');
   });
 
   test('without a money block, the entry cost comes off in the recap', () => {
@@ -124,7 +124,7 @@ describe('the prompt says the show as it is now', () => {
     const prompt = buildScriptPrompt(inputs({ story: STORY }));
     expect(prompt).toContain("7. Lala's career is on the page");
     expect(prompt).not.toContain('name the deal, what she owes');
-    expect(prompt).toContain('what she owes need not be shown on screen');
+    expect(prompt).toContain('the content she owes need not be shown on screen');
   });
 });
 

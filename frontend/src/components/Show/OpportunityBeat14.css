@@ -5,13 +5,20 @@
 .ob14-form { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; padding: 10px 12px; border: 1px solid var(--lala-gold-line); border-radius: 8px; background: var(--lala-parchment); }
 .ob14-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--lala-ink); }
 .ob14-field select { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid var(--lala-lavender-line); border-radius: 8px; background: var(--surface-card); color: var(--lala-ink); font: inherit; }
-.ob14-note { margin: 0; font-size: 12px; color: var(--lala-ink-muted); }
+.ob14-note { margin: 0; font-size: 12px; color: var(--lala-ink-muted); overflow-wrap: anywhere; }
 .ob14-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .ob14-btn { padding: 4px 10px; border: 1px solid var(--lala-lavender-line); border-radius: 6px; background: var(--surface-card); color: var(--lala-ink); font-size: 11px; font-weight: 600; cursor: pointer; }
-.ob14-btn.is-primary { border-color: var(--lala-gold-line); background: var(--lala-gold); color: var(--text-inverse); }
+/* Ink on gold: white on --lala-gold is 2.82:1 (Script page re-audit, 2026-10-19). */
+.ob14-btn.is-primary { border-color: var(--lala-gold-line); background: var(--lala-gold); color: var(--lala-ink); }
+/* The card's Schedule as Event, gold as the other primary steps. */
+.ob14-btn-gold { padding: 3px 10px; border: none; border-radius: 4px; background: var(--lala-gold); color: var(--lala-ink); font-size: 10px; font-weight: 600; cursor: pointer; }
+.ob14-warn { padding: 6px 8px; border-radius: 6px; background: var(--warning-bg); color: var(--warning-text); }
 .ob14-btn:disabled { opacity: 0.6; cursor: default; }
 .ob14-error { margin: 0; font-size: 12px; color: var(--lala-danger); }
 @media (max-width: 760px) {
   .ob14-field select { min-height: 44px; font-size: 16px; /* iOS zooms into smaller inputs */ }
   .ob14-btn { min-height: 44px; }
+  /* The held link and the card's own steps are tap targets too (Script page re-audit, 2026-10-19). */
+  .ob14-held a { display: inline-flex; align-items: center; min-height: 44px; font-size: 12px; }
+  .ob14-card-actions > button { min-height: 44px; }
 }

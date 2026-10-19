@@ -13,7 +13,7 @@ const draft = CANONICAL_BEATS.map((c) => {
   if (c.number === 5) return beat(5, '[UI:OPEN Invitation]');
   // The cutscene (Evoni, 2026-10-19): JustAWoman comments in 11 to 13; beat 12 is the runway.
   if (c.number === 11) return beat(11, 'Lala: what a room', 'Me: ooh');
-  if (c.number === 12) return beat(12, '[UI:SHOW phone]', '(Lala walks the runway.)', 'Me: walk!', '[STAT: reputation +2, brand_trust +1, influence +1, stress -1]', '[UI:HIDE phone]');
+  if (c.number === 12) return beat(12, '(Lala walks the runway.)', 'Me: walk!', '[STAT: reputation +2, brand_trust +1, influence +1, stress -1]');
   if (c.number === 13) return beat(13, 'Me: what a night');
   return beat(c.number, [4, 7, 8, 9, 10].includes(c.number) ? '[UI:OPEN Mail]' : 'Me: hi');
 }).join('\n\n');

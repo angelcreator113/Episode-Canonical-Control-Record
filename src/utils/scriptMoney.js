@@ -15,6 +15,7 @@
 
 const { headerNumber } = require('./beatLabelNumber');
 const { closetIndex } = require('./scriptWear');
+const { isCoinLine } = require('./scriptStats');
 
 const coins = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
 // The episode overlay's own name for the approved list (episodeOverlaysService DOCUMENT_PIECES).
@@ -54,13 +55,8 @@ function moneyContext(money) {
 }
 
 const WEAR_LINE = /^\s*\[WEAR:\s*([^\]\s]+)\s*\]\s*$/i;
-// A coin line in any form, as the Script tab adds them up
-// (frontend/src/lib/beatState.js coinChange; Script page audit, 2026-10-19):
-// `coins: -50`, a Unicode minus, `- 50`, `-1,200`, or coins in a tag with
-// other stats. Otherwise a written coin line was missed and a second added.
-const STAT_TAG = /^\s*\[STAT\s*:\s*(.*?)\s*\]\s*$/i;
-const COINS_IN_TAG = /(?:^|[\s,;])coins\s*:?\s*([+\-\u2212\u2013\u2014]?)\s*(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)/i;
-const isCoinLine = (line) => { const tag = String(line || '').match(STAT_TAG); return !!tag && COINS_IN_TAG.test(tag[1]); };
+// A coin line in any form, read by the one reader the Script tab shares
+// (utils/scriptStats; Script page re-audit, 2026-10-19).
 const BEAT_SPLIT = /(?=^[ \t]*##[ \t]*BEAT:)/im;
 const HEADER = /^\s*##\s*BEAT:/i;
 
@@ -106,8 +102,12 @@ function scriptWithCoinLines(scriptText, money, { skip = [], closetNumber = null
       const m = line.match(WEAR_LINE);
       if (!m || !cost.has(m[1]) || charged.has(m[1])) return;
       charged.add(m[1]);
+      // Its own coin line is in the next two lines, before the next piece
+      // goes on, as the rule reads it (utils/scriptRuleChecks; Script page
+      // re-audit, 2026-10-19: the next piece's coin line was taken for it).
       const after = lines.slice(i + 1).filter((l) => l.trim()).slice(0, 2);
-      if (after.some(isCoinLine)) return;
+      const before = after.findIndex((l) => /^\s*\[\s*WEAR\s*:/i.test(l));
+      if ((before < 0 ? after : after.slice(0, before)).some(isCoinLine)) return;
       next.push(`[STAT: coins -${cost.get(m[1])}]`);
       added += 1;
       changed = true;

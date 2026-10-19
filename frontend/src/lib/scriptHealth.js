@@ -51,8 +51,11 @@ export function scriptHealth({
     : { key: 'beats', ok: true, beatId: null, text: `All ${canonical.length} beats are in the script.` });
 
   // What the episode must cover, from the event and the brief.
-  if (cover.length) {
-    const open = cover.filter((c) => !c.beat);
+  // Beat 14's opportunity is the beat 14 row below, so it is not a second
+  // row here (Script page re-audit, 2026-10-19: one miss, two rows).
+  const covers = beat14 ? cover.filter((c) => c.key !== 'opportunity') : cover;
+  if (covers.length) {
+    const open = covers.filter((c) => !c.beat);
     if (!open.length) rows.push({ key: 'cover', ok: true, beatId: null, text: 'Everything the episode must cover is in the script.' });
     for (const c of open) rows.push({ key: `cover-${c.key}`, ok: false, beatId: null, text: `${c.source} not in the script yet: ${c.label}` });
   }
@@ -65,6 +68,11 @@ export function scriptHealth({
   // audit, 2026-10-19).
   const starts = phoneStartScreens(beats, onScreen);
   beats.forEach((b, beatIndex) => {
+    // The cutscene, beats 11-13, has no phone: its phone lines are the
+    // cutscene rows (lib/scriptRuleChecks cutsceneFindings), never a phone
+    // path to fix (Script page re-audit, 2026-10-19: a tap there was passed,
+    // or offered "Go home first", which the fix skips).
+    if (isCutsceneBeat(b.number)) return;
     const check = phoneCheck(b.lines, onScreen, { startAt: starts[beatIndex] });
     moments += check.moments;
     for (const t of check.taps) if (!t.ok) phoneFlags.push({ beatIndex, text: t.why, fix: t.onName && t.onName !== 'Every screen' ? t.onName : null });
@@ -87,7 +95,9 @@ export function scriptHealth({
       ...(!b.approved ? { fix: { kind: 'voice', beatIndex: i, label: 'Click her voice icon first' } } : {}),
     });
   }
-  if (!quiet.length && beats.some((b) => (b.lines || []).some((l) => /^\s*lala\s*(\([^)]*\))?\s*:/i.test(l)))) {
+  // Only where the rule applies: Lala speaking in the cutscene alone is no
+  // voice row (Script page re-audit, 2026-10-19).
+  if (!quiet.length && beats.some((b) => !isCutsceneBeat(b.number) && (b.lines || []).some((l) => /^\s*lala\s*(\([^)]*\))?\s*:/i.test(l)))) {
     rows.push({ key: 'voice', ok: true, beatId: null, text: "Lala's voice icon is clicked before she talks." });
   }
 

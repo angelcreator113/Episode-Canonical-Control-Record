@@ -260,6 +260,7 @@ export function phoneUpAtBeat(beatNumber, carried = false, prevNumber = null) {
 // the phone coming up is listed in phoneDownAt and puts nothing on screen:
 // there is no phone in the video. Overlays on the video (the stats panel)
 // still show.
+const CUTSCENE_PHONE_VERBS = new Set(['OPEN', 'CLICK', 'TAP', 'SCROLL', 'SWIPE', 'TYPE', 'SELECT']);
 export function beatOnScreen(lines = [], on = {}, { phoneUp = false, cutscene = false } = {}) {
   if (cutscene) phoneUp = false;
   const showing = new Map(); // name -> kind, in the order they came on
@@ -274,7 +275,10 @@ export function beatOnScreen(lines = [], on = {}, { phoneUp = false, cutscene = 
     const shown = resolveMoment(moment, on);
     const name = shown ? shown.name : moment.target;
     if (shown && !used.has(name)) used.set(name, shown);
-    if (cutscene && (shown?.kind === 'icon' || shown?.kind === 'phone' || (shown?.kind === 'device' && DEVICE_ON.has(moment.verb)) || isStartButton(moment))) {
+    // A notification, DM or post, and a screen not made yet opened, tapped
+    // or scrolled, are the phone too (Script page re-audit, 2026-10-19).
+    if (cutscene && (shown?.kind === 'icon' || shown?.kind === 'phone' || (shown?.kind === 'device' && DEVICE_ON.has(moment.verb)) || isStartButton(moment)
+      || Object.values(MESSAGE_VERBS).includes(shown?.kind) || MESSAGE_VERBS[moment.verb] || (!shown && CUTSCENE_PHONE_VERBS.has(moment.verb)))) {
       phoneDownAt.push(i);
       withByLine[i] = [...showing.keys()];
       return;
@@ -338,7 +342,10 @@ export const EXPECTED_ON_SCREEN = {
   11: { action: 'ARRIVAL', what: 'Arriving', where: "Lala's Environment" },
   12: { action: 'FASHION_CHALLENGE', what: 'The fashion challenge', where: "Lala's Environment" },
   13: { action: 'STATS_UPDATE', what: 'The stats update', where: 'Full Screen' },
-  14: { action: 'FADE_OUT', what: 'The fade out', where: 'Full Screen' },
+  // Back to gameplay after the cutscene: her phone, and the invitation
+  // someone at the event sends (Script page re-audit, 2026-10-19). The
+  // action key stays the canonical beat's.
+  14: { action: 'FADE_OUT', what: 'Back to gameplay: the invitation on her phone', where: 'Full Screen' },
 };
 
 /**
