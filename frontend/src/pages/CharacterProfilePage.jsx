@@ -25,6 +25,7 @@ import CharacterPlacesTab from '../components/CharacterPlaces/CharacterPlacesTab
 import KnownFor from '../components/Cast/KnownFor';
 import CharacterAppearanceTab from '../components/CharacterAppearance/CharacterAppearanceTab';
 import PostingSchedule from '../components/PostingSchedule/PostingSchedule';
+import PulseTrust from '../components/PulseTrust/PulseTrust';
 import CharacterTalkTab from '../components/CharacterTalk/CharacterTalkTab';
 import CharacterGalleryTab from '../components/CharacterGallery/CharacterGalleryTab';
 import { API_URL } from '../config/api';
@@ -2677,6 +2678,7 @@ function TabVoice({ character, feedProfile, appearances, onSaved, onFeedSaved })
       <div className="ch-col">
         <FeedBehavior character={character} feedProfile={feedProfile} appearances={appearances} onFeedSaved={onFeedSaved} />
         {character.feed_profile_id && <PostingSchedule profileId={character.feed_profile_id} />}
+        {character.feed_profile_id && <PulseTrust profileId={character.feed_profile_id} />}
       </div>
       <div className="ch-col">
         <OnThePulse character={character} />

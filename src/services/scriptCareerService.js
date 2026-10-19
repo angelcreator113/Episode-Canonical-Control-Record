@@ -129,8 +129,10 @@ function careerBlock(career) {
     out.push('- Beats 4-6: the invite lands. In Beat 6 Lala weighs what it will cost her against what it could open for her.');
   }
   if (goals.length) out.push(`- Beat 11: she works the room toward ${goals.length === 1 ? 'her goal' : 'her goals'} by name; at least one moment with the person each goal is about.`);
-  if (deliverables.length) out.push('- Beat 12: she makes what she owes, on camera, naming the piece of content and who it is for. Beat 9 may remind her it is due.');
-  if (deal?.bonus) out.push('- Beat 13: whether she earned the bonus, in coins.');
+  // Beat 12 is The Fashion Challenge, and what she owes is not always shown;
+  // whether she is paid is known the next episode (Evoni, 2026-10-18).
+  if (deliverables.length) out.push('- What she owes may be mentioned (Beat 9 may remind her it is due), but it need not be made on camera, and she is not paid for it in this episode.');
+  if (deal?.bonus) out.push('- Beat 13: whether she earned the bonus is not known yet; never give it in coins.');
   out.push('- Beat 14: the hook comes from her career: a follow-up offer, a goal still open, or what this deal could lead to.');
   return out.join('\n');
 }

@@ -37,6 +37,8 @@ module.exports = (sequelize, DataTypes) => {
 
     // ── Who & Where ──────────────────────────────────────────────────────
     brand_or_company: { type: DataTypes.STRING(200), allowNull: true },   // "Velour Magazine", "Maison Belle"
+    // The company the deal is with (lalaverse_brands.id; migration 20261019100000).
+    company_id: { type: DataTypes.UUID, allowNull: true },
     contact_name: { type: DataTypes.STRING(200), allowNull: true },       // "Creative Director"
     connector_profile_id: { type: DataTypes.INTEGER, allowNull: true },   // feed profile who connected Lala
     connector_handle: { type: DataTypes.STRING(100), allowNull: true },   // @handle of connector

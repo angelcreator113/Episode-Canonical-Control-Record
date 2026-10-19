@@ -1370,6 +1370,8 @@ try {
 
 // Brands on The Pulse (Evoni, 2026-10-18; services/brandPulse)
 try { app.use('/api/v1/brand-pulse', require('./routes/brandPulseRoutes')); console.log('✓ Brand Pulse routes loaded at /api/v1/brand-pulse'); } catch (e) { console.error('✗ Failed to load Brand Pulse routes:', e.message); }
+// Brand and company profiles (Evoni, 2026-10-18; services/brandProfile)
+try { app.use('/api/v1/companies', require('./routes/companyRoutes')); console.log('✓ Company routes loaded at /api/v1/companies'); } catch (e) { console.error('✗ Failed to load Company routes:', e.message); }
 
 // The Consciousness Layer routes (/api/v1/consciousness) were retired
 // 2026-10-18 (Evoni: "retire the two you suggested"): no page called them,
@@ -1712,6 +1714,9 @@ try {
   console.error('✗ Failed to load Cast routes:', e.message);
 }
 
+// Visual Memory: the shared picture library (services/mediaLibrary)
+try { app.use('/api/v1/media', require('./routes/mediaRoutes')); console.log('✓ Media library loaded at /api/v1/media'); } catch (e) { console.error('✗ Failed to load Media library routes:', e.message); }
+
 // The daily update — since yesterday, waiting for Evoni, the next three days, AI spend
 try {
   const dailyUpdateRoutes = require('./routes/dailyUpdateRoutes');
@@ -1720,6 +1725,9 @@ try {
 } catch (e) {
   console.error('✗ Failed to load Daily update routes:', e.message);
 }
+
+// Trust per character (services/pulseTrust)
+try { app.use('/api/v1/pulse-trust', require('./routes/pulseTrustRoutes')); console.log('✓ Pulse trust loaded at /api/v1/pulse-trust'); } catch (e) { console.error('✗ Failed to load Pulse trust routes:', e.message); }
 
 // The book follows the show — episode → short story → chapter (docs/CANON.md)
 try {

@@ -8,13 +8,18 @@
  * Evoni, 2026-10-18: "maybe the gallery and places tab should be one": it
  * sits under their places there, with `hide` leaving out the places group
  * the place editor above already shows.
+ * Visual Memory, phase 1 (2026-10-18): a "Tagged" group holds the shared
+ * library's pictures tagged with them; an ADMIN (the read's `can_edit`) can
+ * add a picture, tag it with whoever else is in it, and in the larger view
+ * edit its tags, status and who may see it (GalleryLibrary).
  */
 import { useState, useEffect, useCallback } from 'react';
-import { Images, UserRound, MapPin, Shirt, CalendarDays, FileText, X, ExternalLink } from 'lucide-react';
+import { Images, UserRound, MapPin, Shirt, CalendarDays, FileText, X, ExternalLink, Tag } from 'lucide-react';
 import api from '../../services/api';
+import { AddPicture, PictureLibrary, BringExisting } from './GalleryLibrary';
 import './CharacterGalleryTab.css';
 
-const GROUP_ICONS = { portraits: UserRound, places: MapPin, wardrobe: Shirt, events: CalendarDays, posts: FileText };
+const GROUP_ICONS = { portraits: UserRound, places: MapPin, wardrobe: Shirt, events: CalendarDays, posts: FileText, tagged: Tag };
 // Where each kind of picture is added, for a group with none yet.
 const EMPTY = {
   portraits: ['No portraits yet. Make one on the Appearance tab.', 'appearance'],
@@ -22,11 +27,12 @@ const EMPTY = {
   wardrobe: ['No wardrobe pieces name them yet.', null],
   events: ['No event invitations or event sets yet.', 'story'],
   posts: ['No posts with photos yet.', 'voice'],
+  tagged: ['No other pictures are tagged with them yet.', null],
 };
 const TAB_WORDS = { appearance: 'Appearance', places: 'Places & Gallery', story: 'Story & Events', voice: 'Voice & Feed' };
 
 export default function CharacterGalleryTab({ character, openTab, hide = [] }) {
-  const [state, setState] = useState({ loading: true, groups: [], linked: false });
+  const [state, setState] = useState({ loading: true, groups: [], linked: false, canEdit: false });
   const [error, setError] = useState(null);
   const [open, setOpen] = useState(null);
   const name = character.selected_name || character.display_name;
@@ -34,10 +40,10 @@ export default function CharacterGalleryTab({ character, openTab, hide = [] }) {
   const load = useCallback(async () => {
     try {
       const { data } = await api.get(`/api/v1/cast/characters/${character.id}/gallery`);
-      setState({ loading: false, groups: data.groups || [], linked: !!data.linked });
+      setState({ loading: false, groups: data.groups || [], linked: !!data.linked, canEdit: !!data.can_edit });
     } catch (err) {
       console.error('[CharacterGalleryTab] the gallery could not be read:', err);
-      setState({ loading: false, groups: [], linked: false });
+      setState({ loading: false, groups: [], linked: false, canEdit: false });
       setError(err?.response?.data?.error || 'The gallery could not be loaded.');
     }
   }, [character.id]);
@@ -62,6 +68,12 @@ export default function CharacterGalleryTab({ character, openTab, hide = [] }) {
           {total ? `${total} picture${total === 1 ? '' : 's'} of ${name} and their world, from across the app.` : `No pictures of ${name} yet.`}
           {!state.linked && ' With no feed profile, their events and posts are not here yet.'}
         </p>
+        {state.canEdit && (
+          <div className="gal-tools">
+            <AddPicture character={character} onAdded={load} />
+            <BringExisting onDone={load} />
+          </div>
+        )}
       </header>
       {error && <p className="gal-error" role="alert">{error}</p>}
 
@@ -106,6 +118,7 @@ export default function CharacterGalleryTab({ character, openTab, hide = [] }) {
               <a href={open.url} target="_blank" rel="noreferrer" className="gal-link"><ExternalLink size={13} aria-hidden /> Open image</a>
               <button type="button" className="gal-close" onClick={() => setOpen(null)} aria-label="Close"><X size={16} aria-hidden /></button>
             </figcaption>
+            {state.canEdit && <PictureLibrary item={open} character={character} onChanged={load} />}
           </figure>
         </div>
       )}

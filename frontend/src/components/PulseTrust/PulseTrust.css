@@ -1,0 +1,10 @@
+.pt { display: flex; flex-direction: column; gap: 8px; }
+.pt-title { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 15px; color: var(--text-primary); }
+.pt-muted { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.pt-error { margin: 0; font-size: 13px; color: var(--error-text); }
+.pt-levels { display: flex; flex-direction: column; gap: 6px; }
+.pt-level { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: start; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--lala-lavender-line); background: var(--surface-card); cursor: pointer; }
+.pt-level.is-on { border-color: var(--lala-lavender); background: var(--lala-lavender-soft); }
+.pt-level input { margin-top: 3px; }
+.pt-label { font-size: 13px; font-weight: 700; color: var(--lala-lavender-text); }
+.pt-why { grid-column: 2; font-size: 12px; line-height: 1.45; color: var(--text-secondary); }

@@ -50,6 +50,17 @@ const TYPE_DEFAULTS = {
   award_show: { wardrobe: { style_direction: 'Red carpet — statement piece', dress_code: 'black_tie' }, deliverables: ['Red carpet appearance', 'Pulse coverage'] },
 };
 
+/** The body with its company linked (services/brandProfile.linkDeal), or null with a 400 sent. */
+async function linkDealOr400(res, models, body) {
+  const { linkDeal, CompanyError } = require('../services/brandProfile');
+  try {
+    return await linkDeal(models, body);
+  } catch (err) {
+    if (err instanceof CompanyError) { res.status(err.status).json({ success: false, error: err.message }); return null; }
+    throw err;
+  }
+}
+
 // ═══════════════════════════════════════════
 // GET /opportunities/:showId — List
 // ═══════════════════════════════════════════
@@ -103,7 +114,12 @@ router.post('/opportunities/:showId', requireAuth, async (req, res) => {
     // Set offer date if not provided
     if (!body.offer_date) body.offer_date = new Date().toISOString().split('T')[0];
 
-    const data = { id: uuidv4(), show_id: showId, ...body, status_history: [{ status: 'offered', date: new Date().toISOString() }] };
+    // The company the deal is with (services/brandProfile.linkDeal; Evoni,
+    // 2026-10-18): a picked company, or the one whose name was typed.
+    const linked = await linkDealOr400(res, models, body);
+    if (!linked) return undefined;
+
+    const data = { id: uuidv4(), show_id: showId, ...linked, status_history: [{ status: 'offered', date: new Date().toISOString() }] };
 
     let opp;
     if (models.Opportunity) {
@@ -147,7 +163,9 @@ router.put('/opportunities/:showId/:id', requireAuth, async (req, res) => {
     if (models.Opportunity) {
       const opp = await models.Opportunity.findOne({ where: { id, show_id: showId } });
       if (!opp) return res.status(404).json({ success: false, error: 'Opportunity not found' });
-      await opp.update(body);
+      const linked = await linkDealOr400(res, models, body);
+      if (!linked) return undefined;
+      await opp.update(linked);
       return res.json({ success: true, opportunity: opp.toJSON() });
     }
 
