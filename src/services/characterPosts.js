@@ -127,7 +127,7 @@ function mixLines(pillars, plan, count) {
   return `\n${pillarsLine(pillars)}${planned}\n`;
 }
 
-function buildPrompt({ character, profile, voice, facts, mask, wound, known, hosting, recent, label, about, count, contentType = null, pillars = [], plan = [] }) {
+function buildPrompt({ character, profile, voice, facts, mask, wound, known, hosting, recent, label, about, count, contentType = null, pillars = [], plan = [], formats = [] }) {
   const { BANNED_PHRASES } = require('./pulseVoices');
   const examples = (voice.examples_json || []).slice(0, 8).map((e) => `- ${e.text}`).join('\n') || '(none yet)';
   const name = profile.display_name || character.display_name;
@@ -163,7 +163,7 @@ Rules:
 - Nothing that happens after this moment.
 - Never use these phrases: ${BANNED_PHRASES.join(', ')}.
 - The length and style this person really posts.
-
+${formats.length ? `The shape of each post (services/postFormatMix):\n${formats.map((f, i) => `- Post ${i + 1}: ${require('./postFormatMix').promptLine(f)}`).join('\n')}\n` : ''}
 Answer with JSON only, one entry per post, numbered 1 to ${count}:
 {"items": [{"n": 1, "text": "the post", "hashtag": "#OneTag or null", "weight": "load_bearing or ambient", "why": "for load_bearing: what in the story reacts to it", "reveals_story": true or false${pillars.length ? ', "pillar": "the pillar from their content mix, its name exactly"' : ''}}]}`;
 }
@@ -210,9 +210,12 @@ async function generatePosts(db, { characterId, count = DEFAULT_COUNT, about = n
   const pillars = contentType ? await mix.pillarsFor(db, contentType.name) : [];
   // With nothing asked for, each post is the pillar furthest below its share.
   const plan = pillars.length && !what ? mix.planPillars(pillars, await mix.recentPillarCounts(db, feedProfile.id), n) : [];
+  // Text, quote, photo or carousel for each, to fit who they are (services/postFormatMix; Evoni, 2026-10-19).
+  const formatMix = require('./postFormatMix');
+  const formats = Array.from({ length: n }, () => formatMix.formatFor(feedProfile, { lala: character.character_key === 'lala' }));
   const prompt = buildPrompt({
     character, profile: feedProfile, voice, facts, mask: maskLines(character, feedProfile), wound: woundOf(character),
-    known, hosting, recent: recentRows.map((r) => r.content_text), label: clock.label(at), about: what, count: n, contentType, pillars, plan,
+    known, hosting, recent: recentRows.map((r) => r.content_text), label: clock.label(at), about: what, count: n, contentType, pillars, plan, formats,
   });
   await require('./pulseRequests').take(db, { showId, lane: 'manual', kind: 'character_posts' });
   const parsed = parseBatch(await askBatch(prompt, 500 * n), n);
@@ -231,7 +234,7 @@ async function generatePosts(db, { characterId, count = DEFAULT_COUNT, about = n
     const post = await db.FeedPost.create({
       show_id: showId, social_profile_id: feedProfile.id, poster_handle: String(feedProfile.handle).replace(/^@+/, ''),
       poster_display_name: feedProfile.display_name || character.display_name, poster_platform: 'lalaverse',
-      post_type: 'post', content_text: got.text.slice(0, 2000), trending_topic: tag,
+      post_type: 'post', post_format: formats[i - 1], content_text: got.text.slice(0, 2000), trending_topic: tag,
       likes: 0, comments_count: 0, shares: 0, sample_comments: [], story_order: at,
       ai_generated: true, generation_model: MODELS[0], status: 'draft', sort_order: 0,
       post_weight: weight, post_weight_why: why,

@@ -102,6 +102,9 @@ async function releaseDue(db, now = new Date()) {
       await post.update({ status: 'live', posted_at: post.posted_at || post.release_at, release_state: null, release_at: null });
       require('./pulseNumbers').proposeLater(post);
       require('./pulseCloseness').proposeLater(post.id);
+      // Its picture: made when it was scheduled by her; one scheduled by the
+      // engine (world moments, a brand's week) gets it now (services/postPictures).
+      await require('./postPictures').afterRelease(db, post, { by: 'scheduled release' });
       if (learn && post.social_profile_id) {
         await require('./pulseVoices').learnFromEdit(db, { socialProfileId: post.social_profile_id, text: post.content_text, postId: post.id, by: 'scheduled release' });
       }

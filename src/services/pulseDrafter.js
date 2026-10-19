@@ -85,7 +85,10 @@ async function loadPoster(db, characterId) {
   character.pulsePrivateKnowledge = await require('./pulseKnowledge').privateKnowledge(db, character.id);
   if (!character.feed_profile_id) throw new DraftError(`${character.display_name} has no Feed profile to post from.`);
   const [[profile]] = await db.sequelize.query(
-    'SELECT id, handle, display_name FROM social_profiles WHERE id = :id AND deleted_at IS NULL',
+    // The persona fields pick their post format (services/postFormatMix).
+    `SELECT id, handle, display_name, platform::text AS platform, content_category, content_persona, public_persona,
+            society_archetype, vibe_sentence, archetype::text AS archetype, full_profile
+       FROM social_profiles WHERE id = :id AND deleted_at IS NULL`,
     { replacements: { id: character.feed_profile_id } });
   if (!profile) throw new DraftError(`${character.display_name}'s Feed profile is gone.`);
   const voice = await db.PulseVoice.findOne({ where: { registry_character_id: character.id } });
@@ -136,7 +139,7 @@ async function mediaBlock(db) {
   return gossipMediaBlock(await loadCultureList(db, 'GOSSIP_MEDIA')) + trendsBlock(await loadTrends(db));
 }
 
-function buildPrompt({ character, profile, voice, label, context, known = null, hosting = '', mix = null, world = '', bible = null, media = '' }) {
+function buildPrompt({ character, profile, voice, label, context, known = null, hosting = '', mix = null, world = '', bible = null, media = '', format = null }) {
   const { BANNED_PHRASES } = require('./pulseVoices');
   const examples = (voice.examples_json || []).slice(0, 8).map((e) => `- ${e.text}`).join('\n') || '(none yet)';
   return `You write one post on The Pulse, LalaVerse's social network, as ${profile.display_name || character.display_name} (@${profile.handle}).
@@ -158,7 +161,7 @@ Rules:
 - Nothing that happens after this moment.
 - Never use these phrases: ${BANNED_PHRASES.join(', ')}.
 - One post, the length and style this person really posts.
-
+${format ? `- ${require('./postFormatMix').promptLine(format)}\n` : ''}
 Answer with JSON only:
 {"text": "the post", "hashtag": "#OneTag or null", "reveals_story": true or false (does it reveal a secret or a plot turn?)${mix?.pillars?.length ? ', "pillar": "the pillar from their mix, its name exactly"' : ''}}`;
 }
@@ -198,6 +201,8 @@ async function draftPost(db, { showId, characterId, moment, context = {}, reques
   const known = await require('./pulseKnowledge').knowledgeLine(db, showId, profile.id, at);
   const hosting = await hostedEventLines(db, profile.id);
   const mix = await posterMix(db, profile.id, { about: context.about || null, at });
+  // Text, quote, photo or carousel, to fit who they are (services/postFormatMix; Evoni, 2026-10-19).
+  const format = require('./postFormatMix').formatFor(profile, { lala: character.character_key === 'lala' });
   const { posterWorldLine, showBible } = require('./posterWorld');
   const world = await posterWorldLine(db, profile.id);
   const bible = await showBible(db, showId);
@@ -209,7 +214,7 @@ async function draftPost(db, { showId, characterId, moment, context = {}, reques
     try {
       message = await getClient().messages.create({
         model, max_tokens: 600,
-        messages: [{ role: 'user', content: buildPrompt({ character, profile, voice, label: clock.label(at), context, known, hosting, mix, world, bible: bible.block, media }) }],
+        messages: [{ role: 'user', content: buildPrompt({ character, profile, voice, label: clock.label(at), context, known, hosting, mix, world, bible: bible.block, media, format }) }],
       });
       break;
     } catch (modelErr) {
@@ -239,6 +244,7 @@ async function draftPost(db, { showId, characterId, moment, context = {}, reques
     poster_display_name: profile.display_name || character.display_name,
     poster_platform: 'lalaverse',
     post_type: 'post',
+    post_format: format,
     content_text: text,
     trending_topic: tag,
     likes: 0, comments_count: 0, shares: 0, sample_comments: [],
@@ -251,11 +257,18 @@ async function draftPost(db, { showId, characterId, moment, context = {}, reques
   return { post, revealsStory: parsed.reveals_story === true, privateState: privateOf(character), voice, pillar: pillarOf(mix, parsed.pillar) };
 }
 
-/** Releases a draft the way PUT /feed-posts/:id does: live, posted now, numbers proposed (#2953). */
-async function release(post) {
+/**
+ * Releases a draft the way PUT /feed-posts/:id does: live, posted now, numbers
+ * proposed (#2953). A post that goes live this way (the gate passed, their
+ * trust let it out, a brand's everyday post) gets its picture too, under the
+ * day's limit (services/postPictures.afterRelease; Evoni, 2026-10-19); the
+ * release never waits for it or fails on it.
+ */
+async function release(post, db = null) {
   await post.update({ status: 'live', posted_at: post.posted_at || new Date() });
   require('./pulseNumbers').proposeLater(post);
   require('./pulseCloseness').proposeLater(post.id);   // Task #2983
+  await require('./postPictures').afterRelease(db || require('../models'), post, { by: 'auto release' });
   return post;
 }
 
@@ -459,7 +472,8 @@ async function draftPostBatch(db, { showId, items, moment, context = {}, request
     e.known = await knowledge.knowledgeLine(db, showId, e.profile.id, at);
     e.hosting = await hostedEventLines(db, e.profile.id);
     e.mix = await posterMix(db, e.profile.id, { about: context.about || null, at });
-    e.extra = `${e.mix?.line ? `${e.mix.line}\n` : ''}${await require('./posterWorld').posterWorldLine(db, e.profile.id)}`;
+    e.format = require('./postFormatMix').formatFor(e.profile, { lala: e.character.character_key === 'lala' });
+    e.extra = `${e.mix?.line ? `${e.mix.line}\n` : ''}${await require('./posterWorld').posterWorldLine(db, e.profile.id)}${require('./postFormatMix').promptLine(e.format)}\n`;
   }
   if (!entries.length) return { drafted: [], failed };
   const bible = await require('./posterWorld').showBible(db, showId);
@@ -475,7 +489,7 @@ async function draftPostBatch(db, { showId, items, moment, context = {}, request
       show_id: showId, episode_id: context.episode_id || null, event_id: context.event_id || null,
       social_profile_id: e.profile.id, poster_handle: String(e.profile.handle).replace(/^@/, ''),
       poster_display_name: e.profile.display_name || e.character.display_name, poster_platform: 'lalaverse',
-      post_type: 'post', content_text: got.text.slice(0, 2000), trending_topic: tag,
+      post_type: 'post', post_format: e.format, content_text: got.text.slice(0, 2000), trending_topic: tag,
       likes: 0, comments_count: 0, shares: 0, sample_comments: [], story_order: at,
       ai_generated: true, generation_model: MODELS[0], status: 'draft', sort_order: 0,
     });
@@ -541,7 +555,7 @@ async function routePost(db, { post, revealsStory, privateState, voice, pillar =
   const { review, released_on_trust: onTrust } = await require('./pulseTrust').trustedReview(db, post, reasons, gate);
   // The pillar it is (services/contentPillars), so the next posts keep the mix.
   await post.update({ gate_json: { ...gate, review, ...(pillar ? { pillar } : {}), ...(onTrust ? { released_on_trust: onTrust } : {}), checked_at: new Date().toISOString() } });
-  if (review.length === 0) await release(post);
+  if (review.length === 0) await release(post, db);
   return { post, gate, review, published: review.length === 0 };
 }
 

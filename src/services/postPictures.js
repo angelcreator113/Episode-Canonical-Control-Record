@@ -37,6 +37,7 @@
  *   wanted(post)                      how many pictures its format takes now (0 when it has some)
  *   queue(db, post)                   approval: marks it pending (with the estimate); null when none is wanted
  *   afterApproval(db, post, { by })   queue, then make after the response
+ *   afterRelease(db, post, { by })    the same for a post that went live without her click
  *   run(db, postId, { by, makeNow })  reuse or make, and put the pictures on the post
  *   runWaiting(db)                    the waiting ones, while the day's count allows
  *   statusOf(db, postId)              its job, the estimate, and photos that could be reused
@@ -369,6 +370,29 @@ async function afterApproval(db, post, { by = null } = {}) {
   return job;
 }
 
+/**
+ * A post that went live without Evoni's click also gets its picture (Evoni,
+ * 2026-10-19: "yes … with your recommendations"): the gate passed and their
+ * trust let it out (pulseDrafter.release, a brand's everyday post), or a
+ * post scheduled by the engine (world moments, a brand's week) reached its
+ * time (postRelease.releaseDue). Same rules as approval: the day's limit,
+ * reuse first, the same people left out. A post whose picture already has a
+ * job (made, being made, pending, waiting for the limit, skipped, or failed
+ * and left for her Retry) is left as it is, so nothing is made twice and a
+ * failure is never retried on its own. Never throws: the release never fails
+ * on its picture.
+ */
+async function afterRelease(db, post, { by = 'auto release' } = {}) {
+  try {
+    const fresh = await postMedia.loadPost(db, post.id);
+    if (fresh.picture_job?.state) return fresh.picture_job;
+    return await afterApproval(db, fresh, { by });
+  } catch (err) {
+    console.error(`[postPictures] post ${post?.id}'s picture after its release:`, err.message);
+    return null;
+  }
+}
+
 let running = false;
 /** The waiting ones (and any left pending by a restart), oldest first, while today's count allows. */
 async function runWaiting(db, { limit = 10 } = {}) {
@@ -424,5 +448,5 @@ async function statusOf(db, postId) {
 module.exports = {
   PostPictureError, ROUTE, COUNT, PER_DAY_DEFAULT,
   dailyCap, wanted, estimate, madeToday, posterFor, reusable, episodeWardrobe, momentFor,
-  queue, run, afterApproval, runWaiting, statusOf,
+  queue, run, afterApproval, afterRelease, runWaiting, statusOf,
 };
