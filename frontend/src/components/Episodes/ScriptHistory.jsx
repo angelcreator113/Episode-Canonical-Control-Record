@@ -6,6 +6,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { History, X } from 'lucide-react';
 import api from '../../services/api';
+import useDialogLayer from '../../hooks/useDialogLayer';
 
 const SOURCE_LABELS = { save: 'Before a save', lock: 'Before a lock', generate: 'Before Regenerate' };
 
@@ -33,12 +34,18 @@ export default function ScriptHistory({ episodeId, dirty = false, onRestore }) {
   const openerRef = useRef(null);
   const dialogRef = useRef(null);
   const wasOpen = useRef(false);
+  // Escape and Tab are History's only while it is the dialog on top, and its
+  // Escape is answered (Script page re-audit, 2026-10-19: one Escape closed
+  // the DREAM Map over it and History too; Tab pulled focus behind the map).
+  const isTop = useDialogLayer(open);
+  const isTopRef = useRef(isTop);
+  isTopRef.current = isTop;
   useEffect(() => {
     if (open) {
       wasOpen.current = true;
       const onKey = (e) => {
-        if (e.defaultPrevented) return;
-        if (e.key === 'Escape') { close(); return; }
+        if (e.defaultPrevented || !isTopRef.current()) return;
+        if (e.key === 'Escape') { e.preventDefault(); close(); return; }
         if (e.key !== 'Tab') return;
         const box = dialogRef.current;
         const items = [...(box?.querySelectorAll(FOCUSABLE) || [])];

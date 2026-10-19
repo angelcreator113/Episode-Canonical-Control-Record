@@ -48,7 +48,7 @@ describe('the writer prompt', () => {
   const prompt = buildScriptPrompt(inputs());
   test('describes the cutscene and names the host and the first two featured guests', () => {
     expect(prompt).toContain('Beats 11–13 are the cutscene');
-    expect(prompt).toContain('Beat 11 (Event Outcome): the cutscene begins. Lala has a real conversation with the host, Sable Reyes (STUDIO BY SABLE) and the two featured guests, Mira Vance and noor.styles.');
+    expect(prompt).toContain('Beat 11 (The Event): the cutscene begins. Lala has a real conversation with the host, Sable Reyes (STUDIO BY SABLE) and the two featured guests, Mira Vance and noor.styles.');
     expect(prompt).not.toContain('Extra Person');
     expect(prompt).toContain('Beat 12 (Fashion Challenge): still the cutscene. The challenge is a surprise runway walk');
     expect(prompt).toContain('[UI:DISPLAY Stats Panel]');

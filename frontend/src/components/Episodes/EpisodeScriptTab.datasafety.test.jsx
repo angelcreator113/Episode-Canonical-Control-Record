@@ -18,7 +18,7 @@ vi.mock('../../services/api', () => ({
 }));
 
 import api from '../../services/api';
-import EpisodeScriptTab, { lineKeysOf } from './EpisodeScriptTab';
+import EpisodeScriptTab, { nextLineIds } from './EpisodeScriptTab';
 import { withSavedScript } from '../../pages/EpisodeDetail';
 
 const SCRIPT = '## BEAT: 1 · Opening Ritual\nLala: Hi besties.\nLala: Second line.\n\n## BEAT: 2 · Login Sequence\nLala: Logging in.';
@@ -96,9 +96,9 @@ describe('typed words are never lost', () => {
     expect(raw()).toContain('Lala: Hi besties.\nLala: Squeeze in\nLala: Half typed\n');
   });
 
-  test('lineKeysOf keys a line by its words and their occurrence', () => {
-    expect(lineKeysOf(['a', 'b', 'a'])).toEqual(['1:a', '1:b', '2:a']);
-    expect(lineKeysOf(['new', 'a', 'b', 'a']).slice(1)).toEqual(['1:a', '1:b', '2:a']);
+  test('nextLineIds keeps each line its id when a line is added above (re-audit: by id, not words)', () => {
+    let n = 0;
+    expect(nextLineIds(['a', 'b', 'a'], ['x', 'y', 'z'], ['new', 'a', 'b', 'a'], null, () => `n${++n}`)).toEqual(['n1', 'x', 'y', 'z']);
   });
 });
 

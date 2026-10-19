@@ -49,8 +49,11 @@ function targetStem(target) {
 
 const sharedStart = (a, b) => { let n = 0; while (n < a.length && a[n] === b[n]) n += 1; return n; };
 
-function resolveMoment(moment, on = {}) {
-  const { screens = [], overlays = [], icons = [] } = on;
+function resolveMoment(moment, on = {}, { at = null } = {}) {
+  const { screens = [], overlays = [], icons: allIcons = [] } = on;
+  // Two icons with one name (a Back on each screen): the one on the screen
+  // showing, `at`, first (Script page audit, 2026-10-19).
+  const icons = at ? [...allIcons.filter((i) => i?.on === at), ...allIcons.filter((i) => i?.on !== at)] : allIcons;
   if (!moment) return null;
   // A notification, a DM or a post (Task #2885) names no screen: it is what
   // the phone shows, with who and the words from the line itself.
@@ -176,11 +179,15 @@ function phoneCheck(lines = [], on = {}, { startAt = null } = {}) {
     const moment = parseMoment(line);
     if (!moment) return;
     moments += 1;
-    const shown = resolveMoment(moment, on);
+    const shown = resolveMoment(moment, on, { at });
     const target = String(moment.target || '').replace(/\s+x\d+$/i, '').trim();
     if (TAP_VERBS.has(moment.verb)) {
       if (shown?.kind !== 'icon') { missing.push({ i, name: target }); return; }
-      const icon = (on.icons || []).find((ic) => ic.name === shown.name) || null;
+      // Of the icons with this name, the one on the screen showing, else one
+      // on every screen, else the first (Script page audit, 2026-10-19: the
+      // first was taken, so a Back on the screen showing was flagged).
+      const named = (on.icons || []).filter((ic) => ic.name === shown.name);
+      const icon = named.find((ic) => at && ic.on === at) || named.find((ic) => ic.onName === 'Every screen') || named[0] || null;
       const everywhere = icon?.onName === 'Every screen';
       const ok = !icon || everywhere || !at || icon.on === at;
       taps.push({ i, name: shown.name, ok, why: ok ? null : `${shown.name} is on ${icon.onName || nameOf(icon.on)}, but the phone shows ${nameOf(at)}`, on: icon?.on || null, onName: icon?.onName || null });

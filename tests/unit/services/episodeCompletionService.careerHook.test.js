@@ -293,7 +293,9 @@ describe('completeEpisode career hook (Task #1817)', () => {
     expect(result.already_completed).toBe(true);
     expect(queries).toHaveLength(1); // only the episode load
     expect(mockModels.Episode.findByPk).not.toHaveBeenCalled();
-    expect(mockModels.Opportunity.findOne).not.toHaveBeenCalled();
+    // The only read is beat 14's, for one still held (Script page re-audit,
+    // 2026-10-19); nothing is held here, so nothing changes.
+    expect(mockModels.Opportunity.findOne.mock.calls.every(([q]) => q?.where?.offered_in_episode_id === EPISODE_ID)).toBe(true);
     expect(opp.update).not.toHaveBeenCalled();
   });
 
