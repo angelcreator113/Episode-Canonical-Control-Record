@@ -4,6 +4,8 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import apiClient from '../services/api';
+import { TodayBudgets, PostPictures, SpendChart, TopLists, FeatureTable } from '../components/AICosts/CostOverview';
+import './AICostTracker.css';
 
 const API = '/api/v1/ai-usage';
 
@@ -17,6 +19,8 @@ export const getByRouteApi = (days) => apiClient.get(`${API}/by-route?days=${day
 export const getDailyApi = (days) => apiClient.get(`${API}/daily?days=${days}`);
 export const getOptimizationsApi = () => apiClient.get(`${API}/optimizations`);
 export const getRecentApi = (limit) => apiClient.get(`${API}/recent?limit=${limit}`);
+// The cost page (Evoni, 2026-10-19): budgets, features, post pictures, days. ADMIN.
+export const getCostOverviewApi = (days) => apiClient.get(`${API}/cost-overview?days=${Math.min(days, 90)}`);
 
 const TIER_COLORS = { opus: '#ef4444', sonnet: '#f59e0b', haiku: '#22c55e', unknown: '#6b7280' };
 const TIER_LABELS = { opus: 'Opus', sonnet: 'Sonnet', haiku: 'Haiku', unknown: 'Other' };
@@ -33,6 +37,8 @@ export default function AICostTracker() {
   const [daily, setDaily] = useState([]);
   const [recent, setRecent] = useState([]);
   const [optimizations, setOptimizations] = useState(null);
+  const [overview, setOverview] = useState(null);
+  const [overviewError, setOverviewError] = useState(null);
   const [tab, setTab] = useState('overview');
   const [loading, setLoading] = useState(true);
 
@@ -53,6 +59,16 @@ export default function AICostTracker() {
       setOptimizations(optRes.data);
     } catch (err) {
       console.error('Failed to load AI usage data:', err);
+    }
+    // Loaded on its own so a refusal or failure here never empties the rest.
+    try {
+      const oRes = await getCostOverviewApi(days);
+      setOverview(oRes.data?.data || null);
+      setOverviewError(null);
+    } catch (err) {
+      console.error('Failed to load the cost overview:', err);
+      setOverview(null);
+      setOverviewError(err?.response?.status === 403 ? 'Only an admin can see the budgets.' : 'The budgets could not be loaded.');
     }
     setLoading(false);
   }, [days]);
@@ -76,11 +92,11 @@ export default function AICostTracker() {
   ];
 
   // Styles — light theme
-  const pageStyle = { padding: '24px 32px', minHeight: '100vh', color: '#1f2937', fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif' };
-  const cardStyle = { background: '#ffffff', borderRadius: 12, padding: 20, border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' };
+  const pageStyle = { padding: 'clamp(16px, 3vw, 24px) clamp(16px, 4vw, 32px)', minHeight: '100vh', color: '#1f2937', fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif' };
+  const cardStyle = { background: '#ffffff', borderRadius: 12, padding: 20, border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', overflowX: 'auto' };
   const statCard = { ...cardStyle, textAlign: 'center', flex: 1, minWidth: 140 };
-  const tabBar = { display: 'flex', gap: 4, marginBottom: 24, borderBottom: '1px solid #e5e7eb', paddingBottom: 8 };
-  const tabBtn = (active) => ({ padding: '8px 16px', background: active ? '#ffffff' : 'transparent', color: active ? '#1f2937' : '#6b7280', border: active ? '1px solid #e5e7eb' : '1px solid transparent', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: active ? 600 : 400, boxShadow: active ? '0 1px 2px rgba(0,0,0,0.05)' : 'none' });
+  const tabBar = { display: 'flex', gap: 4, marginBottom: 24, borderBottom: '1px solid #e5e7eb', paddingBottom: 8, overflowX: 'auto' };
+  const tabBtn = (active) => ({ flex: 'none', padding: '8px 16px', background: active ? '#ffffff' : 'transparent', color: active ? '#1f2937' : '#6b7280', border: active ? '1px solid #e5e7eb' : '1px solid transparent', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: active ? 600 : 400, boxShadow: active ? '0 1px 2px rgba(0,0,0,0.05)' : 'none' });
   const tableStyle = { width: '100%', borderCollapse: 'collapse', fontSize: 13 };
   const thStyle = { textAlign: 'left', padding: '8px 12px', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 500 };
   const tdStyle = { padding: '8px 12px', borderBottom: '1px solid #f3f4f6' };
@@ -95,7 +111,7 @@ export default function AICostTracker() {
 
   return (
     <div style={pageStyle}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>💰 AI Cost Tracker</h1>
           <p style={{ margin: '4px 0 0', color: '#6b7280', fontSize: 14 }}>Monitor spend, optimize models, save money</p>
@@ -123,6 +139,16 @@ export default function AICostTracker() {
       ) : tab === 'overview' ? (
         /* ─── OVERVIEW ──────────────────────────────── */
         <div>
+          {overview ? (
+            <div className="aic-stack" data-testid="aic-overview">
+              <div className="aic-two">
+                <TodayBudgets data={overview} />
+                <PostPictures data={overview} />
+              </div>
+              <SpendChart daily={overview.daily} />
+              <TopLists data={overview} />
+            </div>
+          ) : overviewError && <p className="aic-note" role="status">{overviewError}</p>}
           {/* Stat cards */}
           <div style={{ display: 'flex', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
             <div style={statCard}>
@@ -153,8 +179,8 @@ export default function AICostTracker() {
             </div>
           </div>
 
-          {/* Daily spend chart (simple text-based) */}
-          <div style={cardStyle}>
+          {/* Daily spend chart (simple text-based); the cost page's chart replaces it when it loads */}
+          {!overview && <div style={cardStyle}>
             <h3 style={{ margin: '0 0 16px', fontSize: 16 }}>Daily Spend</h3>
             {daily.length === 0 ? (
               <div style={{ color: '#6b7280', padding: 20, textAlign: 'center' }}>No data yet — costs will appear here once AI calls are made</div>
@@ -173,7 +199,7 @@ export default function AICostTracker() {
                 })}
               </div>
             )}
-          </div>
+          </div>}
         </div>
 
       ) : tab === 'models' ? (
@@ -214,8 +240,10 @@ export default function AICostTracker() {
 
       ) : tab === 'routes' ? (
         /* ─── BY ROUTE/FEATURE ──────────────────────── */
+        <div className="aic-stack">
+        {overview && <FeatureTable data={overview} />}
         <div style={cardStyle}>
-          <h3 style={{ margin: '0 0 16px', fontSize: 16 }}>Cost by Feature / Route</h3>
+          <h3 style={{ margin: '0 0 16px', fontSize: 16 }}>All route names</h3>
           {byRoute.length === 0 ? (
             <div style={{ color: '#6b7280', padding: 20, textAlign: 'center' }}>No usage data yet</div>
           ) : (
@@ -253,6 +281,7 @@ export default function AICostTracker() {
               </tbody>
             </table>
           )}
+        </div>
         </div>
 
       ) : tab === 'optimize' ? (

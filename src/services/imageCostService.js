@@ -515,6 +515,9 @@ module.exports = {
   getImageBudgetStatus,
   isBudgetError,
   readTodaySpend,
+  // The cost page reads the caps the gates use (services/costOverview).
+  dailyBudget,
+  dailyImageBudget,
   inputImageTokenCost,
   outputImageTokenCost,
 };

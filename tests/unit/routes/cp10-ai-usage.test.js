@@ -11,7 +11,12 @@ const SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'route
 
 describe('Step 3 CP10 — aiUsageRoutes.js', () => {
   test('requireAuth import present', () => {
-    expect(SRC).toMatch(/const\s*\{\s*requireAuth\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
+    // authorize joined it for the cost page's ADMIN endpoint (Evoni, 2026-10-19).
+    expect(SRC).toMatch(/const\s*\{\s*requireAuth,\s*authorize\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
+  });
+
+  test('GET /cost-overview is ADMIN only', () => {
+    expect(SRC).toMatch(/router\.get\('\/cost-overview',\s*requireAuth,\s*authorize\(\['ADMIN'\]\),/);
   });
 
   test('GET /summary carries requireAuth', () => {

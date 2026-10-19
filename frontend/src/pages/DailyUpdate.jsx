@@ -466,6 +466,19 @@ function Cost({ cost }) {
       <div className="du-bar" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="Today's AI budget used">
         <span className={pct >= 80 ? 'is-high' : ''} style={{ width: `${pct}%` }} />
       </div>
+      {cost.image_budget_usd != null && (
+        <p className="du-muted">Images: {usd(cost.image_spent_usd)} of {usd(cost.image_budget_usd)}</p>
+      )}
+      {(cost.alerts || []).length > 0 && (
+        <ul className="du-alerts" data-testid="du-cost-alerts">
+          {cost.alerts.map((a) => (
+            <li key={a.budget} className={`du-alert is-${a.level}`} role={a.level === 'over' ? 'alert' : 'status'}>
+              <AlertTriangle size={16} aria-hidden />
+              <span>{a.message} <Link className="du-link" to="/ai-costs">Open AI Costs</Link></span>
+            </li>
+          ))}
+        </ul>
+      )}
       {cost.features.length > 0 && (
         <ul className="du-names">
           {cost.features.map((f) => <li key={f.feature}><span className="du-mono">{f.feature}</span> {usd(f.usd)} <span className="du-muted">· {plural(f.calls, 'call')}</span></li>)}
