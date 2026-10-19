@@ -167,6 +167,12 @@
 .esp-grip:active { cursor: grabbing; }
 .esp-grip.is-locked { cursor: default; }
 .esp-grip.is-locked:hover { background: none; }
+/* The head's own handle shows only where the beat list is hidden, as does
+   the hint for it; a pill takes the drop (Script page audit 4, 2026-10-19). */
+.esp-head-grip { display: none; }
+.esp-order-hint-pills { display: none; }
+.esp-pill-drop-before { box-shadow: -3px 0 0 0 var(--studio-magenta) !important; }
+.esp-pill-drop-after { box-shadow: 3px 0 0 0 var(--studio-magenta) !important; }
 .esp-move { display: inline-flex; gap: 6px; }
 .esp-move-btn { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 4px 10px; border: 1px solid var(--studio-line-strong); border-radius: 8px; background: var(--studio-card); color: var(--studio-purple); font-size: 12px; font-weight: 600; cursor: pointer; }
 .esp-move-btn:disabled { opacity: 0.4; cursor: default; }
@@ -517,6 +523,9 @@
   .esp.has-beatlist { grid-template-columns: minmax(0, 1fr) minmax(240px, 300px); grid-template-areas: "top top" "main side"; grid-template-rows: auto 1fr; }
   .esp-beatlist { display: none; }
   .esp-pills { display: flex; }
+  .esp-head-grip { display: inline-flex; }
+  .esp-order-hint-list { display: none; }
+  .esp-order-hint-pills { display: inline; }
   .esp-visuals-grid.has-thumbs { grid-template-columns: minmax(0, 1fr); }
   .esp-thumbs { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
   .esp-tags { padding-left: 18px; }

@@ -3413,7 +3413,10 @@
 
 /* S9 (b): while scrolling, the header is the title and navigation only. */
 .ed-page.ed-studio .ed-header-new.is-compact { padding-top: 6px; padding-bottom: 6px; }
-.ed-page.ed-studio .ed-header-new.is-compact .eds-crumbs,
+/* The Episodes crumb, the way back to the show, stays at every width;
+   Home, the separators and the title crumb fold away (Script page audit 4,
+   2026-10-19). */
+.ed-page.ed-studio .ed-header-new.is-compact .eds-crumbs li:not(.eds-crumb-episodes) { display: none; }
 .ed-page.ed-studio .ed-header-new.is-compact .eds-cover,
 .ed-page.ed-studio .ed-header-new.is-compact .eds-show-pill,
 .ed-page.ed-studio .ed-header-new.is-compact .eds-meta,

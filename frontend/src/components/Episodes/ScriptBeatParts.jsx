@@ -28,7 +28,15 @@ function BeatRowMenu({ beat, index, count, onMoveBeat, onApprove, locking }) {
     return () => document.removeEventListener('pointerdown', away);
   }, [open]);
   const close = () => { if (ref.current) ref.current.open = false; };
-  const act = (fn) => () => { close(); fn(); };
+  // Focus goes back to the ⋮ once an item acts, and again after a move has
+  // put the row in its new place (Script page audit 4, 2026-10-19: it fell
+  // to the page with the item that was pressed).
+  const back = () => {
+    const summary = ref.current?.querySelector('summary');
+    summary?.focus();
+    setTimeout(() => { if (summary?.isConnected && document.activeElement !== summary) summary.focus(); }, 0);
+  };
+  const act = (fn) => () => { close(); fn(); back(); };
   return (
     <details ref={ref} className="esp-rowmenu" onToggle={(e) => setOpen(e.currentTarget.open)}
       onKeyDown={(e) => { if (e.key === 'Escape' && open) { e.preventDefault(); close(); ref.current?.querySelector('summary')?.focus(); } }}>
@@ -38,7 +46,7 @@ function BeatRowMenu({ beat, index, count, onMoveBeat, onApprove, locking }) {
         {!beat.approved && <button type="button" className="esp-rowmenu-item" disabled={index === 0 || locking} onClick={act(() => onMoveBeat(index, index - 1))}>Move up</button>}
         {!beat.approved && <button type="button" className="esp-rowmenu-item" disabled={index >= count - 1 || locking} onClick={act(() => onMoveBeat(index, index + 1))}>Move down</button>}
         {/* aria-disabled while a lock saves, as the beat's own button (Script page audit 3, 2026-10-19). */}
-        <button type="button" className="esp-rowmenu-item" aria-disabled={locking || undefined} onClick={() => { if (locking) return; close(); onApprove(beat.id); }}>
+        <button type="button" className="esp-rowmenu-item" aria-disabled={locking || undefined} onClick={() => { if (locking) return; close(); onApprove(beat.id); back(); }}>
           {beat.approved ? 'Unlock' : 'Approve & lock'}
         </button>
       </div>}

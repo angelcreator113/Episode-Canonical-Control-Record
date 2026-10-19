@@ -142,3 +142,13 @@ describe('Episode shell theme', () => {
     expect(contrast('#ffffff', '#3b82f6')).toBeLessThan(4.5);
   });
 });
+
+// Script page audit 4 (2026-10-19): the compact header keeps the Episodes
+// crumb, the way back to the show, at every width.
+describe('the compact header keeps Episodes', () => {
+  test('the crumbs stay; only Home and the title crumb fold away', () => {
+    expect(css).not.toMatch(/\.is-compact \.eds-crumbs\s*[,{]/);
+    expect(css).toMatch(/\.is-compact \.eds-crumbs li:not\(\.eds-crumb-episodes\)\s*\{[^}]*display:\s*none/);
+    expect(jsx).toMatch(/className="eds-crumb-episodes"/);
+  });
+});

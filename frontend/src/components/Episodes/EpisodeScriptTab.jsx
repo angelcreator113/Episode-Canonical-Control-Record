@@ -3,7 +3,7 @@
 
 import { Fragment, useState, useEffect, useLayoutEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { Link } from 'react-router-dom';
-import { PenLine, ArrowUp, ArrowDown, Smartphone, Image as ImageIcon, X, Plus, Coins, Shirt, MapPin, Users, ListChecks, Check, Circle, AlertTriangle, Bell, MessageCircle, Send, Clock, Trash2, ChevronLeft, ChevronRight, AudioLines, ScrollText, Images, Sparkles, Camera, Home } from 'lucide-react';
+import { PenLine, GripVertical, ArrowUp, ArrowDown, Smartphone, Image as ImageIcon, X, Plus, Coins, Shirt, MapPin, Users, ListChecks, Check, Circle, AlertTriangle, Bell, MessageCircle, Send, Clock, Trash2, ChevronLeft, ChevronRight, AudioLines, ScrollText, Images, Sparkles, Camera, Home } from 'lucide-react';
 import api from '../../services/api';
 import { episodePlanning } from '../../utils/episodePlanning';
 import { scriptInputs, mustCover, scriptPeople } from '../../lib/episodeScript';
@@ -959,6 +959,15 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
       onDrop={(e) => { const d = drag.current(); setDropAt(null); if (d?.kind !== 'beat') return; e.preventDefault(); onMoveBeat(d.from, dropIndex(d.from, index, drag.half(e) === 'after')); drag.end(); }}
     >
       <div className="esp-beat-top">
+        {/* Where the beat list is hidden (1100px and below) the beat is
+            dragged by its own head, onto a pill or another beat (Script page
+            audit 4, 2026-10-19); the CSS shows this handle only there. */}
+        {!beat.approved && (
+          <span className="esp-grip esp-head-grip" data-testid={`script-drag-head-${beat.number}`} draggable
+            title="Drag to move this beat onto a beat pill. It keeps its number and name."
+            onDragStart={(e) => { if (cardRef.current) e.dataTransfer?.setDragImage?.(cardRef.current, 24, 24); drag.start(e, { kind: 'beat', from: index }); }}
+            onDragEnd={() => drag.end()}><GripVertical size={16} aria-hidden="true" /></span>
+        )}
         <div
           className="esp-beat-head"
           role="button"
@@ -984,8 +993,8 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
         {/* The beat before and after, beside the head, not inside its role="button". */}
         {expanded && onStep && (
           <span className="esp-beat-steps">
-            <button type="button" className="esp-step" aria-label="Previous beat" data-testid="script-beat-prev" disabled={!prevBeatId} onClick={() => onStep(prevBeatId)}><ChevronLeft size={18} aria-hidden="true" /></button>
-            <button type="button" className="esp-step" aria-label="Next beat" data-testid="script-beat-next" disabled={!nextBeatId} onClick={() => onStep(nextBeatId)}><ChevronRight size={18} aria-hidden="true" /></button>
+            <button type="button" className="esp-step" aria-label="Previous beat" data-testid="script-beat-prev" disabled={!prevBeatId} onClick={() => onStep(prevBeatId, 'prev')}><ChevronLeft size={18} aria-hidden="true" /></button>
+            <button type="button" className="esp-step" aria-label="Next beat" data-testid="script-beat-next" disabled={!nextBeatId} onClick={() => onStep(nextBeatId, 'next')}><ChevronRight size={18} aria-hidden="true" /></button>
           </span>
         )}
       </div>
@@ -1179,6 +1188,16 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // written against the script it replaced (re-audit 2, 2026-10-15).
   const genSeqRef = useRef(0);
   const [developerMode, setDeveloperMode] = useState(false);
+  // The Raw editor / Beat view toggle sits in the open beat or on the
+  // script's card, so each switch draws it anew: focus follows it (Script
+  // page audit 4, 2026-10-19: it fell to the page).
+  const rawToggleRef = useRef(null);
+  const rawRefocusRef = useRef(false);
+  useLayoutEffect(() => {
+    if (!rawRefocusRef.current) return;
+    rawRefocusRef.current = false;
+    rawToggleRef.current?.focus({ preventScroll: true });
+  }, [developerMode]);
   const [toast, setToast] = useState(null);
   const [generating, setGenerating] = useState(false);
   // While a new script is being written (or awaited), the page's script is
@@ -1364,6 +1383,19 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // scrolls to it only when its card is off screen, never otherwise.
   const chosenRef = useRef(null);
   const chooseBeat = (id) => { chosenRef.current = id; setExpandedBeat(id); };
+  // The previous / next arrows keep focus: on the new beat's same arrow, or
+  // its head where that arrow is off at the end (Script page audit 4,
+  // 2026-10-19: the arrow pressed went away with the beat it was on).
+  const stepRef = useRef(null);
+  const stepBeat = (id, which) => { stepRef.current = { id, which }; chooseBeat(id); };
+  useLayoutEffect(() => {
+    const step = stepRef.current;
+    if (!step) return;
+    stepRef.current = null;
+    const card = document.querySelector(`[data-beat-id="${step.id}"]`);
+    const arrow = card?.querySelector(`[data-testid="script-beat-${step.which}"]`);
+    (arrow && !arrow.disabled ? arrow : card?.querySelector('.esp-beat-head'))?.focus({ preventScroll: true });
+  });
   useLayoutEffect(() => {
     const id = chosenRef.current;
     if (!id) return;
@@ -1469,6 +1501,11 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     if (expandedBeat === undefined) setExpandedBeat(beats[0]?.id ?? null);
     setScriptText(next);
   };
+  // The pills are drop targets for a beat dragged by its head where the beat
+  // list is hidden (Script page audit 4, 2026-10-19): a pill's left half is
+  // before it, its right half after.
+  const [pillDrop, setPillDrop] = useState(null);
+  const pillHalf = (e) => { const r = e.currentTarget.getBoundingClientRect(); return Number.isFinite(e.clientX) && r.width > 0 && e.clientX > r.left + r.width / 2 ? 'after' : 'before'; };
   const handleMoveLine = (beatId, from, to) => {
     const at = beats.findIndex(b => b.id === beatId);
     if (busy) { flash('Wait for the new script before editing it.', 'error'); return false; }
@@ -2074,7 +2111,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // Table read, Export and the raw editor sit on the open beat's Script
   // Lines card; with no beat open, or in the raw editor, on the script's card.
   const readActions = <ScriptReadActions scriptText={scriptText} title={episode?.title || (episode?.episode_number ? `Episode ${episode.episode_number}` : 'Script')} dirty={scriptText !== savedScript} onScreen={onScreenWithDrafts} scenePlan={scenePlan} startBeat={Math.max(0, beats.indexOf(openBeat))} />;
-  const rawToggle = <button type="button" className={`esp-btn${developerMode ? ' is-on' : ''}`} onClick={() => setDeveloperMode(d => !d)}>{developerMode ? 'Beat view' : 'Raw editor'}</button>;
+  const rawToggle = <button type="button" ref={rawToggleRef} className={`esp-btn${developerMode ? ' is-on' : ''}`} onClick={() => { rawRefocusRef.current = true; setDeveloperMode(d => !d); }}>{developerMode ? 'Beat view' : 'Raw editor'}</button>;
   const toolsInBeat = showBeatList && !!openBeat;
   return (
     <div className={`esp${showBeatList ? ' has-beatlist' : ''}${contextOpen ? ' is-context-open' : ''}`}>
@@ -2190,8 +2227,11 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
           <ul className="esp-pills" aria-label="Beats" data-testid="script-pills">
             {beats.map((b) => (
               <li key={b.id}>
-                <button type="button" className={`esp-pill${b.id === openId ? ' is-open' : ''}`} aria-current={b.id === openId ? 'true' : undefined}
-                  data-testid={`script-pill-${b.number}`} onClick={() => chooseBeat(b.id)}>
+                <button type="button" className={`esp-pill${b.id === openId ? ' is-open' : ''}${pillDrop?.id === b.id ? ` esp-pill-drop-${pillDrop.half}` : ''}`} aria-current={b.id === openId ? 'true' : undefined}
+                  data-testid={`script-pill-${b.number}`} onClick={() => chooseBeat(b.id)}
+                  onDragOver={(e) => { if (drag.current()?.kind !== 'beat') return; e.preventDefault(); setPillDrop({ id: b.id, half: pillHalf(e) }); }}
+                  onDragLeave={() => setPillDrop(null)}
+                  onDrop={(e) => { const d = drag.current(); setPillDrop(null); if (d?.kind !== 'beat') return; e.preventDefault(); handleMoveBeat(d.from, dropIndex(d.from, beats.indexOf(b), pillHalf(e) === 'after')); drag.end(); }}>
                   {b.number} · {b.name}
                   {phoneBeats.has(b.id) && <Smartphone size={13} aria-label="Has a phone moment" />}
                 </button>
@@ -2214,14 +2254,23 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
 
       {!developerMode && (hasScript ? (
         <div className={`esp-beats${busy ? ' is-busy' : ''}${openBeat ? ' has-open' : ''}`} aria-busy={busy || undefined} data-testid="script-beats">
-          {beats.length > 1 && <p className="esp-order-hint">Drag a beat by its handle in the beat list, or a line within its beat, to change the order. A beat keeps its number and name wherever it goes. Approved beats stay where they are.</p>}
+          {/* Says how at each width (Script page audit 4, 2026-10-19): the
+              beat list's handles, or the beat's own handle onto a pill where
+              the list is hidden, and Up and Down where nothing drags. */}
+          {beats.length > 1 && (
+            <p className="esp-order-hint" data-testid="script-order-hint">
+              <span className="esp-order-hint-list" data-testid="script-order-hint-list">Drag a beat by its handle in the beat list, or a line within its beat, to change the order. </span>
+              <span className="esp-order-hint-pills" data-testid="script-order-hint-pills">Drag the beat by the handle on its head onto a beat pill, or a line within its beat, to change the order. </span>
+              On a touch screen, use Up and Down at the foot of the open beat. A beat keeps its number and name wherever it goes. Approved beats stay where they are.
+            </p>
+          )}
           {beats.map((beat, index) => {
             const open = openId === beat.id;
             const phoneUp = phoneUpAtStart[index] || false;
             return <BeatSection key={beat.id} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open && !isPhoneWidth() ? null : beat.id)} onApprove={handleApprove} proposal={proposal?.beatId === beat.id ? proposal : null} onAcceptProposal={acceptProposal} onDiscardProposal={() => setProposal(null)} onEdit={handleEditLine} onDeleteLine={handleDeleteLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking || busy} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} writing={!!regeneratingBeat || busy} onRequestDone={clearBarRequest} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} lineOpRef={lineOpRef} lineIdsRef={lineIdsRef} onOpenEdit={trackOpenEdit} onFocusLater={focusLineLater} phoneUpAtStart={phoneUp} people={people} lalaSlots={lineSlots.filter((s) => s.beatIndex === index)} dressCode={source?.event?.dress_code || ''}
               status={statuses[beat.id]} healthRows={open ? healthRows : []} hasPhone={phoneBeats.has(beat.id)} worn={open ? wornInOpen : []}
               storyTime={open && truth?.eventTimed ? truth.storyTime : null} linesTools={open && toolsInBeat ? <>{readActions}{rawToggle}</> : null}
-              onStep={chooseBeat} prevBeatId={index > 0 ? beats[index - 1].id : null} nextBeatId={index < beats.length - 1 ? beats[index + 1].id : null} />;
+              onStep={stepBeat} prevBeatId={index > 0 ? beats[index - 1].id : null} nextBeatId={index < beats.length - 1 ? beats[index + 1].id : null} />;
           })}
           {/* Franchise Guard Results */}
           {guardResult && (

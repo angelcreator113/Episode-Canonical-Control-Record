@@ -755,7 +755,8 @@ const EpisodeDetail = () => {
             <li><Link to="/" onClick={guardLeave}>Home</Link></li>
             <li aria-hidden="true" className="eds-crumb-sep"><ChevronRight size={14} /></li>
             {/* The show's page lists its episodes; it was "← Back to Show". */}
-            <li>
+            {/* The way back stays in the compact header (Script page audit 4, 2026-10-19). */}
+            <li className="eds-crumb-episodes">
               <Link to={showIdForLinks ? `/shows/${showIdForLinks}` : '/episodes'} onClick={guardLeave}
                 className="ed-back-btn" title="Back to Show">Episodes</Link>
             </li>
