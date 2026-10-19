@@ -291,7 +291,7 @@ async function generateGroundedScript(episodeId, showId, models, { lockedBeats =
   const facts = coverageFacts(inputs);
   const locked = new Set(lockedBeats.map((b) => b.number));
   const { scriptCoverage, beatRequirements, replaceBeatByNumber, insertBeatByNumber } = require('../utils/scriptCoverage');
-  const { splitScriptBeats } = require('../utils/scriptBeatLocks');
+  const { splitScriptBeats, withoutExtraCopies } = require('../utils/scriptBeatLocks');
 
   const drafted = splitScriptBeats(script).beats.map((b) => b.number);
   const isCanon = (n) => CANONICAL_BEATS.some((c) => c.number === n);
@@ -305,7 +305,13 @@ async function generateGroundedScript(episodeId, showId, models, { lockedBeats =
     throw new DraftIncompleteError(found);
   }
   // Approved beats are read as approved (the route puts them back word for
-  // word anyway), so what they already cover is not written twice.
+  // word anyway), so what they already cover is not written twice. A reply
+  // that drafts an approved beat twice keeps only as many copies as are
+  // approved (Script page audit, 2026-10-19: the second was saved as an
+  // extra beat).
+  const approvedCopies = new Map();
+  for (const b of lockedBeats) approvedCopies.set(b.number, (approvedCopies.get(b.number) || 0) + 1);
+  script = withoutExtraCopies(script, approvedCopies);
   for (const b of lockedBeats) {
     const withIt = replaceBeatByNumber(script, b.number, b.text);
     script = withIt !== script ? withIt : insertBeatByNumber(script, b.number, b.text);

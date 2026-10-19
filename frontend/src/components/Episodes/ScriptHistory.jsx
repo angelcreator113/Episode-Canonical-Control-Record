@@ -3,7 +3,7 @@
 // lock or Regenerate replaced is kept on the server (GET
 // /episodes/:id/script-versions); one can be read and put back on the page,
 // where Save keeps it as any edit.
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { History, X } from 'lucide-react';
 import api from '../../services/api';
 
@@ -19,8 +19,13 @@ export default function ScriptHistory({ episodeId, dirty = false, onRestore }) {
   const [versions, setVersions] = useState(null);
   const [shown, setShown] = useState(null);
   const [error, setError] = useState(null);
+  // The latest read asked for: an earlier one answering late is dropped
+  // (Script page audit, 2026-10-19: clicking version 1 then 2 could show,
+  // and put back, version 1).
+  const readRef = useRef(0);
 
   const openPanel = async () => {
+    readRef.current += 1;
     setOpen(true); setShown(null); setError(null); setVersions(null);
     try {
       const res = await api.get(`/api/v1/episodes/${episodeId}/script-versions`);
@@ -32,20 +37,27 @@ export default function ScriptHistory({ episodeId, dirty = false, onRestore }) {
     }
   };
   const show = async (id) => {
+    const seq = readRef.current + 1;
+    readRef.current = seq;
     setError(null);
     try {
       const res = await api.get(`/api/v1/episodes/${episodeId}/script-versions/${id}`);
+      if (seq !== readRef.current) return;
       setShown(res.data?.data || null);
     } catch (err) {
       console.error('[ScriptHistory] version read failed:', err);
-      setError('That version could not be read.');
+      if (seq === readRef.current) setError('That version could not be read.');
     }
   };
+  const back = () => { readRef.current += 1; setShown(null); };
+  const close = () => { readRef.current += 1; setOpen(false); };
+  // The panel closes only when the page took the version: a refusal (a new
+  // script is being written) leaves it open on it (Script page audit, 2026-10-19).
   const restore = () => {
     if (!shown) return;
     if (dirty && !window.confirm('Put this version on the page? Your unsaved changes will be replaced.')) return;
-    onRestore(shown.script_content);
-    setOpen(false);
+    if (onRestore(shown.script_content) === false) return;
+    close();
   };
 
   return (
@@ -53,10 +65,10 @@ export default function ScriptHistory({ episodeId, dirty = false, onRestore }) {
       <button type="button" className="esp-btn" data-testid="script-history" onClick={openPanel}><History size={14} aria-hidden="true" /> History</button>
       {open && (
         <div className="esp-history" role="dialog" aria-modal="true" aria-label="Script history" data-testid="script-history-panel"
-          onKeyDown={(e) => { if (e.key === 'Escape') setOpen(false); }}>
+          onKeyDown={(e) => { if (e.key === 'Escape') close(); }}>
           <div className="esp-history-head">
             <h3 className="esp-history-title">History</h3>
-            <button type="button" className="esp-btn is-small" aria-label="Close" autoFocus onClick={() => setOpen(false)}><X size={14} aria-hidden="true" /></button>
+            <button type="button" className="esp-btn is-small" aria-label="Close" autoFocus onClick={close}><X size={14} aria-hidden="true" /></button>
           </div>
           {error && <p className="esp-error" role="alert">{error}</p>}
           {versions === null && <p className="esp-history-empty">Reading…</p>}
@@ -67,7 +79,7 @@ export default function ScriptHistory({ episodeId, dirty = false, onRestore }) {
               <pre className="esp-history-text" data-testid="script-history-text">{shown.script_content}</pre>
               <div className="esp-history-actions">
                 <button type="button" className="esp-btn-primary is-small" data-testid="script-history-restore" onClick={restore}>Put this version on the page</button>
-                <button type="button" className="esp-btn is-small" onClick={() => setShown(null)}>Back to the list</button>
+                <button type="button" className="esp-btn is-small" onClick={back}>Back to the list</button>
               </div>
               <p className="esp-history-note">It replaces the page&apos;s script as an unsaved change; Save keeps it. Approved beats stay locked as they are now.</p>
             </div>

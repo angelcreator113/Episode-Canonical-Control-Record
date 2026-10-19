@@ -39,3 +39,79 @@ describe('coverage', () => {
     expect(scriptCoverage(named, { opportunity: { name: 'Sable Campaign Shoot' } }).missing.some((g) => g.kind === 'opportunity')).toBe(false);
   });
 });
+
+// ============================================================================
+// Beat 14 is final once completion has offered or expired it (Script page
+// audit, 2026-10-19): detaching or replacing it then deleted an offered
+// opportunity or rolled back an accepted one, and one attached after
+// completion stayed held for good. Mocked models; no database.
+// ============================================================================
+jest.mock('../../../src/services/episodeMoneyService', () => ({
+  findSourceEvent: jest.fn(async () => ({ id: 'ev-1', name: 'Studio Session', canon_consequences: { automation: { guest_profiles: [{ profile_id: 7 }] } } })),
+}));
+
+describe('attach and detach after completion', () => {
+  const { attachBeat14, detachBeat14, Beat14Error } = require('../../../src/services/beat14Opportunity');
+
+  const opp = (status, history = []) => ({
+    id: 'opp-1', name: 'Sable Campaign Shoot', status, status_history: history,
+    update: jest.fn(async function update(v) { Object.assign(this, v); return this; }),
+    destroy: jest.fn(async () => {}),
+  });
+  const models = ({ evaluationStatus = 'draft', current = null } = {}) => ({
+    sequelize: {
+      QueryTypes: { SELECT: 'SELECT' },
+      query: jest.fn(async (sql) => {
+        if (/FROM episodes/.test(sql)) return [{ id: 'ep-1', show_id: 'show-1', title: 'The Studio', evaluation_status: evaluationStatus }];
+        if (/FROM social_profiles/.test(sql)) return [{ id: 7, handle: 'sable', display_name: 'Sable Reyes' }];
+        return [];
+      }),
+      transaction: async (fn) => fn({ id: 'tx' }),
+    },
+    Opportunity: {
+      findOne: jest.fn(async ({ where }) => (where.offered_in_episode_id ? current : null)),
+      create: jest.fn(async (row) => ({ id: 'opp-new', ...row })),
+    },
+  });
+  const ids = { showId: 'show-1', episodeId: 'ep-1' };
+
+  test.each(['offered', 'accepted', 'expired'])('detaching one already %s answers 409 and changes nothing', async (status) => {
+    const current = opp(status, [{ status: 'held', source: 'beat14' }, { status }]);
+    const m = models({ evaluationStatus: 'accepted', current });
+    const err = await detachBeat14(m, ids).catch((e) => e);
+    expect(err).toBeInstanceOf(Beat14Error);
+    expect(err.status).toBe(409);
+    expect(err.message).toMatch(/^The episode is completed: its beat 14 opportunity was already (offered|expired)/);
+    expect(current.update).not.toHaveBeenCalled();
+    expect(current.destroy).not.toHaveBeenCalled();
+  });
+
+  test('replacing an offered one answers 409, even before the episode reads as completed', async () => {
+    const current = opp('offered', [{ status: 'held', source: 'beat14' }, { status: 'offered' }]);
+    const m = models({ current });
+    const err = await attachBeat14(m, { ...ids, create: { name: 'Another', connector_profile_id: 7 } }).catch((e) => e);
+    expect(err).toBeInstanceOf(Beat14Error);
+    expect(err.status).toBe(409);
+    expect(current.destroy).not.toHaveBeenCalled();
+    expect(m.Opportunity.create).not.toHaveBeenCalled();
+  });
+
+  test('nothing is attached to a completed episode', async () => {
+    const m = models({ evaluationStatus: 'accepted' });
+    const err = await attachBeat14(m, { ...ids, create: { name: 'Late', connector_profile_id: 7 } }).catch((e) => e);
+    expect(err).toBeInstanceOf(Beat14Error);
+    expect(err.status).toBe(409);
+    expect(err.message).toContain('The episode is completed');
+    expect(m.Opportunity.create).not.toHaveBeenCalled();
+  });
+
+  test('while it is held, detaching and replacing work as before', async () => {
+    const held = opp('held', [{ status: 'held', source: 'beat14' }]);
+    await expect(detachBeat14(models({ current: held }), ids)).resolves.toEqual({ opportunity: null });
+    expect(held.destroy).toHaveBeenCalled();
+    const again = opp('held', [{ status: 'held', previous_status: 'considering' }]);
+    const out = await attachBeat14(models({ current: again }), { ...ids, create: { name: 'New one', connector_profile_id: 7 } });
+    expect(out).toMatchObject({ name: 'New one', status: 'held' });
+    expect(again.update).toHaveBeenCalledWith(expect.objectContaining({ status: 'considering', offered_in_episode_id: null }), expect.anything());
+  });
+});

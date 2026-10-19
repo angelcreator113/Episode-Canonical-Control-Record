@@ -209,6 +209,8 @@
 .esp-line-edit { padding: 6px 0; }
 .esp-line-input { display: block; box-sizing: border-box; width: 100%; padding: 8px 12px; border: 1.5px solid var(--lala-lavender); border-radius: 8px; font-family: var(--font-prose); font-size: 15px; line-height: 1.6; resize: vertical; outline: none; }
 .esp-line-edit-actions { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+/* The beat was approved while its line was open (Script page audit, 2026-10-19). */
+.esp-line-edit-note { margin: 0 0 6px; font-size: 12px; color: var(--lala-gold-text); }
 .esp-move--end { margin-left: auto; }
 
 /* Reordering (drag and drop, and the Up/Down buttons for touch). */

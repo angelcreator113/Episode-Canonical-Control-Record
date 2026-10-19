@@ -115,6 +115,20 @@ describe("the Script tab's writer", () => {
     expect(out.coverage.missing).toEqual([expect.objectContaining({ kind: 'goal', target: 11 })]);
   });
 
+  // Script page audit (2026-10-19): a reply with two headers for an approved
+  // beat saved the second copy as an extra beat.
+  test('a reply that drafts an approved beat twice keeps it once, as approved', async () => {
+    const twice = draft.replace('## BEAT: 12 · Fashion Challenge', `${beat(11, 'Event Outcome', 'Lala: a second drafted copy')}\n\n## BEAT: 12 · Fashion Challenge`);
+    const create = jest.fn(async () => reply(twice));
+    mockAnthropic(create);
+    const { generateGroundedScript } = require('../../../src/services/groundedScriptGeneratorService');
+    const locked = [{ number: 11, text: beat(11, 'Event Outcome', '[UI:CLICK Voice Icon]', 'Lala: approved words') }];
+    const out = await generateGroundedScript('ep1', 'show-1', models(), { lockedBeats: locked });
+    expect(out.script.match(/^## BEAT: 11\b/gm)).toHaveLength(1);
+    expect(out.script).toContain('Lala: approved words');
+    expect(out.script).not.toContain('a second drafted copy');
+  });
+
   test('a beat that did not come back is written and put in its place', async () => {
     const cut = draft.split('## BEAT: 14')[0].trimEnd();
     const create = jest.fn(async (call) => whenBeat(14, beat(14, 'Cliffhanger', 'Me: and then the DM arrives'))(call)

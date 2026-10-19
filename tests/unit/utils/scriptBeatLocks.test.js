@@ -5,7 +5,7 @@
  * and drop"): a whole-script writer keeps each locked beat word for word.
  */
 
-const { splitScriptBeats, normalizeLockedBeats, keepLockedBeats, scriptKeepingLocks } = require('../../../src/utils/scriptBeatLocks');
+const { splitScriptBeats, normalizeLockedBeats, keepLockedBeats, scriptKeepingLocks, withoutExtraCopies } = require('../../../src/utils/scriptBeatLocks');
 
 const beat = (n, name, body) => `## BEAT: ${n} · ${name}\n${body}`;
 const script = (...beats) => `[EVENT: gala]\n\n${beats.join('\n\n')}`;
@@ -101,5 +101,31 @@ describe('scriptBeatLocks', () => {
     const prev = '## BEAT: 1\nLala: "keep me"\n\u00a0## BEAT: 2\nLala: "and me"';
     expect(keepLockedBeats('## BEAT: 1\nLala: "regen"\n## BEAT: 2\nLala: "regen 2"', prev, [1]).script).toContain('keep me');
   });
-});
 
+  // Script page audit (2026-10-19): a writer's reply with two headers for an
+  // approved beat kept the second as an extra beat.
+  test('a drafted copy of an approved beat beyond the approved count is dropped', () => {
+    const prev = script(beat(1, 'Opening Ritual', 'A'), beat(2, 'Login Sequence', 'APPROVED'), beat(3, 'Welcome', 'C'));
+    const next = script(beat(1, 'Opening Ritual', 'A2'), beat(2, 'Login Sequence', 'DRAFT ONE'), beat(2, 'Login Sequence', 'DRAFT TWO'), beat(3, 'Welcome', 'C2'));
+    const out = keepLockedBeats(next, prev, [2]);
+    expect(out.script).toBe(script(beat(1, 'Opening Ritual', 'A2'), beat(2, 'Login Sequence', 'APPROVED'), beat(3, 'Welcome', 'C2')));
+    expect(out.changed).toEqual([2]);
+    // The approved beat drafted word for word, then again: still one.
+    const same = script(beat(1, 'Opening Ritual', 'A2'), beat(2, 'Login Sequence', 'APPROVED'), beat(2, 'Login Sequence', 'APPROVED'), beat(3, 'Welcome', 'C2'));
+    expect(keepLockedBeats(same, prev, [2]).script.match(/APPROVED/g)).toHaveLength(1);
+  });
+
+  test('two approved copies keep two; a third drafted copy is dropped', () => {
+    const prev = script(beat(2, 'Login Sequence', 'FIRST'), beat(2, 'Login Sequence', 'SECOND'));
+    const next = script(beat(2, 'Login Sequence', 'x'), beat(2, 'Login Sequence', 'y'), beat(2, 'Login Sequence', 'z'));
+    expect(keepLockedBeats(next, prev, [2]).script).toBe(script(beat(2, 'Login Sequence', 'FIRST'), beat(2, 'Login Sequence', 'SECOND')));
+  });
+
+  test('withoutExtraCopies keeps as many copies as are counted, and a beat numbered only by its place', () => {
+    const text = script(beat(1, 'Opening Ritual', 'A'), beat(1, 'Opening Ritual', 'A again'), beat(2, 'Login Sequence', 'B'));
+    expect(withoutExtraCopies(text, new Map([[1, 1]]))).toBe(script(beat(1, 'Opening Ritual', 'A'), beat(2, 'Login Sequence', 'B')));
+    expect(withoutExtraCopies(text, new Map([[2, 1]]))).toBe(text);
+    const placed = '## BEAT: 1\nA\n\n## BEAT: Bonus\nB\n\n## BEAT: 2\nC';
+    expect(withoutExtraCopies(placed, new Map([[2, 1]]))).toBe(placed);
+  });
+});

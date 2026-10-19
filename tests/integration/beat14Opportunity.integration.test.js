@@ -125,4 +125,27 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(out).toMatchObject({ name: 'Sable Lookbook', status: 'expired' });
     expect(await beat14.resolveAtCompletion(models, { episodeId: ep2, event: null, tierFinal: 'pass' })).toBeNull();
   });
+
+  // Script page audit (2026-10-19): once completion offered or expired it,
+  // detaching or replacing it deleted it or rolled it back, and one attached
+  // after completion stayed held for good.
+  test('once the episode is completed, beat 14 is final: attach and detach answer 409 and change nothing', async () => {
+    await run("UPDATE episodes SET evaluation_status = 'accepted' WHERE id = :ep", { ep });
+    try {
+      const [before] = await rows('SELECT id, status, deleted_at FROM opportunities WHERE offered_in_episode_id = :ep', { ep });
+      expect(before.status).toBe('expired');
+
+      const removed = await auth(request(app).delete(url()));
+      expect(removed.status).toBe(409);
+      expect(removed.body.error).toContain('The episode is completed');
+      const replaced = await auth(request(app).put(url())).send({ create: { name: 'Too Late', connector_profile_id: profiles.guest } });
+      expect(replaced.status).toBe(409);
+
+      const [after] = await rows('SELECT id, status, deleted_at FROM opportunities WHERE id = :id', { id: before.id });
+      expect(after).toEqual(before);
+      expect(await rows("SELECT id FROM opportunities WHERE show_id = :show AND name = 'Too Late'", { show })).toEqual([]);
+    } finally {
+      await run("UPDATE episodes SET evaluation_status = NULL WHERE id = :ep", { ep });
+    }
+  });
 });

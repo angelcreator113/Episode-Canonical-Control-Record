@@ -68,7 +68,7 @@ describe('EpisodeScriptTab: saved work', () => {
 
     fireEvent.keyDown(window, { key: 's', ctrlKey: true });
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/episodes/ep-1', { script_content: next }));
-    await waitFor(() => expect(onSaved).toHaveBeenLastCalledWith({ script_content: next, script_locked_beats: [] }));
+    await waitFor(() => expect(onSaved).toHaveBeenLastCalledWith({ id: 'ep-1', script_content: next, script_locked_beats: [] }));
     await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false));
   });
 
@@ -86,6 +86,6 @@ describe('EpisodeScriptTab: saved work', () => {
     vi.mocked(api.put).mockResolvedValue({ data: { success: true, data: { script_locked_beats: [1] } } });
     renderTab({ onSaved });
     fireEvent.click(await screen.findByRole('button', { name: /Approve/ }));
-    await waitFor(() => expect(onSaved).toHaveBeenLastCalledWith({ script_content: SCRIPT, script_locked_beats: [1] }));
+    await waitFor(() => expect(onSaved).toHaveBeenLastCalledWith({ id: 'ep-1', script_content: SCRIPT, script_locked_beats: [1] }));
   });
 });

@@ -16,6 +16,14 @@
  *
  * Attaching an open opportunity holds it; detaching gives it back its
  * status. One created here, for beat 14, is removed when detached.
+ *
+ * Once completion has offered or expired it, beat 14 is final (Script page
+ * audit, 2026-10-19: detaching or replacing it then deleted an offered
+ * opportunity or rolled back an accepted one, and one attached after
+ * completion stayed held for good): attach and detach answer 409 when the
+ * attached opportunity is no longer held, and attach answers 409 for a
+ * completed episode (episodes.evaluation_status 'accepted', as
+ * episodeCompletionService records it).
  */
 
 const HELD = 'held';
@@ -33,7 +41,7 @@ const history = (opp) => (Array.isArray(opp?.status_history) ? opp.status_histor
 async function episodeAndEvent(models, { showId, episodeId }) {
   const { sequelize } = models;
   const [episode] = await sequelize.query(
-    'SELECT id, show_id, title FROM episodes WHERE id = :episodeId AND deleted_at IS NULL',
+    'SELECT id, show_id, title, evaluation_status FROM episodes WHERE id = :episodeId AND deleted_at IS NULL',
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
   );
   if (!episode || String(episode.show_id) !== String(showId)) throw new Beat14Error(404, 'Episode not found.');
@@ -66,6 +74,15 @@ const slim = (o) => (o ? {
   narrative_stakes: o.narrative_stakes || null, payment_amount: o.payment_amount != null ? Number(o.payment_amount) : null,
   response_deadline: o.response_deadline || null,
 } : null);
+
+const isCompleted = (episode) => episode?.evaluation_status === 'accepted';
+
+// The attached opportunity can still change only while it is held.
+function assertStillHeld(opp) {
+  if (opp && opp.status !== HELD) {
+    throw new Beat14Error(409, `The episode is completed: its beat 14 opportunity was already ${opp.status === 'expired' ? 'expired' : 'offered'}, so it can't be changed or removed here.`);
+  }
+}
 
 async function attached(models, episodeId) {
   return models.Opportunity.findOne({ where: { offered_in_episode_id: episodeId } });
@@ -106,11 +123,13 @@ async function sender(models, event, profileId) {
 async function attachBeat14(models, { showId, episodeId, opportunity_id = null, connector_profile_id = null, create = null }) {
   const { episode, event } = await episodeAndEvent(models, { showId, episodeId });
   if (!event) throw new Beat14Error(400, 'This episode has no event, so nobody at an event can offer the opportunity.');
+  if (isCompleted(episode)) throw new Beat14Error(409, 'The episode is completed: its beat 14 opportunity was already offered or expired, so nothing can be attached now.');
   const person = await sender(models, event, create ? create.connector_profile_id : connector_profile_id);
   const note = `Beat 14 of ${episode.title || 'the episode'}: offered if the episode lands`;
   const sequelize = models.sequelize;
   return sequelize.transaction(async (transaction) => {
     const current = await models.Opportunity.findOne({ where: { offered_in_episode_id: episodeId }, transaction });
+    assertStillHeld(current);
     if (current) await release(current, transaction);
     let opp;
     if (create) {
@@ -172,6 +191,7 @@ async function detachBeat14(models, { showId, episodeId }) {
   await episodeAndEvent(models, { showId, episodeId });
   await models.sequelize.transaction(async (transaction) => {
     const opp = await models.Opportunity.findOne({ where: { offered_in_episode_id: episodeId }, transaction });
+    assertStillHeld(opp);
     if (opp) await release(opp, transaction);
   });
   return { opportunity: null };
