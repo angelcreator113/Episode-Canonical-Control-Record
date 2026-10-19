@@ -67,6 +67,16 @@ describe('PulseBrands', () => {
     await waitFor(() => expect(api.get.mock.calls.some(([url]) => /\/social-profiles\/.+\/posting-schedule$/.test(url))).toBe(true));
   });
 
+  test('the brand account\'s trust opens on its card', async () => {
+    renderIt();
+    const card = await screen.findByTestId('pb-brand-velour_atelier');
+    const summary = within(card).getByText('Trust on The Pulse');
+    expect(api.get.mock.calls.some(([url]) => /pulse-trust/.test(url))).toBe(false);
+    summary.closest('details').open = true;
+    fireEvent(summary.closest('details'), new Event('toggle'));
+    await waitFor(() => expect(api.get.mock.calls.some(([url]) => url === '/api/v1/pulse-trust/profiles/9')).toBe(true));
+  });
+
   test('a post that passes the gate is scheduled, not posted at once', async () => {
     vi.mocked(api.post).mockResolvedValueOnce({ data: { success: true, published: false, review: [], scheduled_at: '2026-10-20T15:00:00Z' } });
     renderIt();

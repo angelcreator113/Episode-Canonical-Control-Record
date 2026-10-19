@@ -147,6 +147,23 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }], 
     expect(wrongHouse.status).toBe(400);
   });
 
+  it('a fully trusted brand account: a post held only for its voice is scheduled anyway, marked released_on_trust', async () => {
+    const [account] = await q("SELECT id FROM social_profiles WHERE deleted_at IS NULL AND full_profile->>'lalaverse_brand_id' = :b", { b: brands.velour_atelier.id });
+    await run("UPDATE social_profiles SET pulse_trust = 'full' WHERE id = :id", { id: account.id });
+    try {
+      drafts.push({ text: 'Quiet tailoring, loud intent.', hashtag: null });
+      scores.push({ score: 0.2, why: 'off' });
+      const res = await as(request(app).post(`/api/v1/brand-pulse/brands/${brands.velour_atelier.id}/draft`)).send({ show_id: ids.show });
+      expect(res.body.review).toEqual([]);
+      expect(res.body.scheduled_at).toBeTruthy();
+      const [post] = await q('SELECT release_state, gate_json FROM feed_posts WHERE id = :id', { id: res.body.post.id });
+      expect(post.release_state).toBe('scheduled');
+      expect(post.gate_json.released_on_trust).toMatchObject({ level: 'full', waived: ['gate'], flags: ['voice'] });
+    } finally {
+      await run('UPDATE social_profiles SET pulse_trust = NULL WHERE id = :id', { id: account.id });
+    }
+  });
+
   it('this week for every brand: passing posts are scheduled, flagged ones wait, unreadable ones fail', async () => {
     drafts.push({ posts: [
       { brand: 'the_column', rep: null, text: 'Fewer pieces, worn better.', hashtag: null },

@@ -1,0 +1,134 @@
+// Beat 14's opportunity (Evoni, 2026-10-19: "during beat 14 we should include
+// an opportunity invitation from someone at the event, so I need to be able
+// to attach an opportunity to beat 14"). Shown in the Script tab's side panel
+// when beat 14 is open: what is attached, or a picker to attach an open
+// opportunity or make a new one. Whoever offers it is someone at the event,
+// its host or a guest. It is offered when the episode lands, expires when it
+// fails, in place of the random follow-up offer (services/beat14Opportunity).
+import { useState } from 'react';
+import { Gift } from 'lucide-react';
+import api from '../../services/api';
+
+const TYPES = [
+  ['brand_deal', 'Brand deal'], ['campaign', 'Campaign'], ['editorial', 'Editorial'], ['modeling', 'Modeling'],
+  ['runway', 'Runway'], ['ambassador', 'Ambassador'], ['podcast', 'Podcast'], ['interview', 'Interview'],
+  ['panel', 'Panel'], ['award_show', 'Award show'], ['pr_gifting', 'PR gifting'], ['casting_call', 'Casting call'],
+];
+
+export default function Beat14Opportunity({ showId, episodeId, data, onChange, designedIntent = null }) {
+  const [editing, setEditing] = useState(false);
+  const [mode, setMode] = useState('new');
+  const [pick, setPick] = useState('');
+  const [from, setFrom] = useState('');
+  const [name, setName] = useState('');
+  const [type, setType] = useState('brand_deal');
+  const [pitch, setPitch] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  if (!data) return null;
+  const { opportunity, people = [], candidates = [] } = data;
+  const url = `/api/v1/opportunities/${showId}/episode/${episodeId}/beat14`;
+  const fail = designedIntent === 'fail';
+
+  const save = async () => {
+    setError(null);
+    if (!from) { setError('Choose who at the event offers it.'); return; }
+    if (mode === 'new' && !name.trim()) { setError('Name the opportunity.'); return; }
+    if (mode === 'pick' && !pick) { setError('Choose an opportunity.'); return; }
+    setBusy(true);
+    try {
+      const body = mode === 'new'
+        ? { create: { name: name.trim(), opportunity_type: type, pitch: pitch.trim(), connector_profile_id: Number(from) } }
+        : { opportunity_id: pick, connector_profile_id: Number(from) };
+      await api.put(url, body);
+      setEditing(false);
+      setName(''); setPitch(''); setPick('');
+      await onChange();
+    } catch (err) {
+      console.error('[Beat14Opportunity] attach failed:', err);
+      setError(err?.response?.data?.error || 'Could not attach the opportunity.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      await api.delete(url);
+      await onChange();
+    } catch (err) {
+      console.error('[Beat14Opportunity] remove failed:', err);
+      setError(err?.response?.data?.error || 'Could not remove the opportunity.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const showForm = editing || !opportunity;
+  return (
+    <section className="esp-cover esp-beat14" data-testid="script-beat14-opportunity">
+      <h3 className="esp-side-title"><Gift size={14} aria-hidden="true" /> Opportunity · Beat 14</h3>
+      {opportunity && !editing && (
+        <div data-testid="script-beat14-attached">
+          <p className="esp-beat14-name"><strong>{opportunity.name}</strong>{opportunity.contact_name ? ` · from ${opportunity.contact_name}` : ''}</p>
+          <p className="esp-uses-note">
+            {fail
+              ? 'This episode is designed to fail, so the invitation does not come in beat 14, and it expires when the episode is completed.'
+              : 'Beat 14 ends on this invitation. It is offered when the episode is completed, if the episode lands; if it fails, it expires.'}
+          </p>
+          <div className="esp-beat14-actions">
+            <button type="button" className="esp-btn is-small" disabled={busy} onClick={() => { setEditing(true); setFrom(String(opportunity.connector_profile_id || '')); }} data-testid="script-beat14-change">Change</button>
+            <button type="button" className="esp-btn is-small" disabled={busy} onClick={remove} data-testid="script-beat14-remove">Remove</button>
+          </div>
+        </div>
+      )}
+      {showForm && (people.length === 0 ? (
+        <p className="esp-cover-empty" data-testid="script-beat14-nobody">Nobody at this episode&apos;s event can offer it yet: add the host or guests in the Event Package.</p>
+      ) : (
+        <div className="esp-beat14-form" data-testid="script-beat14-form">
+          {!opportunity && <p className="esp-uses-note">The invitation someone at the event offers at the end of the episode. It is offered if the episode lands, and replaces the random follow-up offer.</p>}
+          <div className="esp-beat14-modes" role="tablist" aria-label="Opportunity">
+            <button type="button" role="tab" aria-selected={mode === 'new'} className={`esp-btn is-small${mode === 'new' ? ' is-active' : ''}`} onClick={() => setMode('new')} data-testid="script-beat14-mode-new">New</button>
+            <button type="button" role="tab" aria-selected={mode === 'pick'} className={`esp-btn is-small${mode === 'pick' ? ' is-active' : ''}`} onClick={() => setMode('pick')} disabled={!candidates.length} data-testid="script-beat14-mode-pick">Open ones ({candidates.length})</button>
+          </div>
+          {mode === 'pick' ? (
+            <label className="esp-beat14-field">Opportunity
+              <select value={pick} onChange={(e) => setPick(e.target.value)} data-testid="script-beat14-pick">
+                <option value="">Choose…</option>
+                {candidates.map((c) => <option key={c.id} value={c.id}>{c.name}{c.brand_or_company ? ` · ${c.brand_or_company}` : ''}</option>)}
+              </select>
+            </label>
+          ) : (
+            <>
+              <label className="esp-beat14-field">What it is
+                <input type="text" value={name} maxLength={255} onChange={(e) => setName(e.target.value)} placeholder="Studio by Sable campaign shoot" data-testid="script-beat14-name" />
+              </label>
+              <label className="esp-beat14-field">Kind
+                <select value={type} onChange={(e) => setType(e.target.value)} data-testid="script-beat14-type">
+                  {TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </label>
+              <label className="esp-beat14-field">The pitch (optional)
+                <textarea rows={2} value={pitch} maxLength={2000} onChange={(e) => setPitch(e.target.value)} data-testid="script-beat14-pitch" />
+              </label>
+            </>
+          )}
+          <label className="esp-beat14-field">From
+            <select value={from} onChange={(e) => setFrom(e.target.value)} data-testid="script-beat14-from">
+              <option value="">Who at the event…</option>
+              {people.map((p) => <option key={p.profile_id} value={p.profile_id}>{p.name}{p.role === 'host' ? ' (host)' : ''}</option>)}
+            </select>
+          </label>
+          <div className="esp-beat14-actions">
+            <button type="button" className="esp-btn-primary is-small" disabled={busy} onClick={save} data-testid="script-beat14-save">{opportunity ? 'Save' : 'Attach to Beat 14'}</button>
+            {editing && <button type="button" className="esp-btn is-small" disabled={busy} onClick={() => { setEditing(false); setError(null); }}>Cancel</button>}
+          </div>
+        </div>
+      ))}
+      {error && <p className="esp-error" role="alert" data-testid="script-beat14-error">{error}</p>}
+    </section>
+  );
+}

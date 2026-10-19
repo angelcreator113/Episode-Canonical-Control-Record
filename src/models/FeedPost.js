@@ -27,6 +27,10 @@ module.exports = (sequelize) => {
       // post | story | reel | tweet | tiktok | live | dm_screenshot | notification
     },
 
+    // How it looks on The Pulse (migration 20261019130000; services/postMedia
+    // FORMATS): post | carousel | story | video | live. Null is a post.
+    post_format: { type: DataTypes.STRING(20), allowNull: true },
+
     content_text: { type: DataTypes.TEXT, allowNull: true },
     image_description: { type: DataTypes.TEXT, allowNull: true },
     image_url: { type: DataTypes.TEXT, allowNull: true },

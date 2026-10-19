@@ -86,6 +86,10 @@ module.exports = (sequelize, DataTypes) => {
     // ── Linked Episode ───────────────────────────────────────────────────
     event_id: { type: DataTypes.UUID, allowNull: true },                  // world event if created
     episode_id: { type: DataTypes.UUID, allowNull: true },                // episode if produced
+    // The episode whose beat 14 offers it (Evoni, 2026-10-19; migration
+    // 20261019140000, services/beat14Opportunity): 'held' until that episode
+    // is completed, then offered when it lands, expired when it fails.
+    offered_in_episode_id: { type: DataTypes.UUID, allowNull: true },
     // Task #1870: migration 20260719000000; in the 2026-09-17 canon capture
     // (uuid, nullable). careerPipelineService's spawned opportunities set it.
     career_goal_id: { type: DataTypes.UUID, allowNull: true },            // goal whose completion spawned this

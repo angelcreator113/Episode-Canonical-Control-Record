@@ -82,9 +82,10 @@ const CONTENT_LENSES = {
 //    reading the rendered icon's `diegetic: false` literally; Evoni's
 //    ruling is that Lala does see the travel icon, on her phone — it
 //    reads like her maps.
-// 12 Deliverable Creation — surface Lala's Phone, diegetic yes, actor lala:
-//    she is filming content, on her phone. Carried from legacy "The
-//    Content Moment".
+// 12 Fashion Challenge (named Deliverable Creation until Evoni's ruling of
+//    2026-10-18) — surface Lala's Phone, diegetic yes: she is styled for a
+//    challenge at the event, and the room sees the look. Its feed moment is
+//    still the one carried from legacy "The Content Moment".
 // 13 Recap Panel — restored, Task #1614: legacy "The Aftermath"'s moment
 //    ("phone blowing up"). Task #1613 had dropped this too, reading
 //    `diegetic: false` literally; Evoni's ruling restores it.
@@ -122,7 +123,7 @@ const BEAT_PHONE_MOMENTS = {
   9: null,
   10: { likelihood: 0.50, type: 'notification', context: 'A post/comment disrupts the moment — drama notification' },
   11: null,
-  12: { likelihood: 0.85, type: 'live', context: 'She films the key content moment — go live, post, capture' },
+  12: { likelihood: 0.85, type: 'live', context: 'The fashion challenge: her look is judged in the room — go live, post, capture' },
   13: { likelihood: 0.90, type: 'notification', context: 'Phone blowing up — reactions, DMs, tagged posts flooding in' },
   14: null,
 };

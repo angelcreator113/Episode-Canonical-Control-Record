@@ -763,11 +763,23 @@ ${narrativeLines.short || ''}`,
     } catch (syncErr) {
       console.error('[EpisodeCompletion] Event outcome sync failed (non-blocking):', syncErr?.message);
     }
+    // Beat 14's opportunity (Evoni, 2026-10-19; services/beat14Opportunity):
+    // offered when the episode lands, expired when it fails, in place of the
+    // random post-event offer. Only an episode with none gets the random one.
+    let beat14 = null;
     try {
-      const opps = await characterSync.generatePostEventOpportunities(event, evalResult.tier_final, require('../models'));
-      eventSync.opportunities_generated = (opps || []).map(o => ({ id: o.id, name: o.name }));
-    } catch (oppGenErr) {
-      console.error('[EpisodeCompletion] Post-event opportunity generation failed (non-blocking):', oppGenErr?.message);
+      beat14 = await require('./beat14Opportunity').resolveAtCompletion(require('../models'), { episodeId, event, tierFinal: evalResult.tier_final });
+      eventSync.beat14_opportunity = beat14;
+    } catch (beat14Err) {
+      console.error('[EpisodeCompletion] Beat 14 opportunity failed (non-blocking):', beat14Err?.message);
+    }
+    if (!beat14) {
+      try {
+        const opps = await characterSync.generatePostEventOpportunities(event, evalResult.tier_final, require('../models'));
+        eventSync.opportunities_generated = (opps || []).map(o => ({ id: o.id, name: o.name }));
+      } catch (oppGenErr) {
+        console.error('[EpisodeCompletion] Post-event opportunity generation failed (non-blocking):', oppGenErr?.message);
+      }
     }
   }
 

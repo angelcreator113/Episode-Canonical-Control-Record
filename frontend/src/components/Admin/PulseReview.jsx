@@ -34,6 +34,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ArrowRight, LayoutGrid, List, Search } from 'lucide-react';
 import api from '../../services/api';
 import { PostCard, RequestPost } from './PulseReviewPost';
+import NeedsPicture from '../PostMedia/NeedsPicture';
 import RevealPicker from './RevealPicker';
 import PulseScheduleAll from './PulseScheduleAll';
 import PulseReleaseCalendar from './PulseReleaseCalendar';
@@ -213,6 +214,7 @@ export default function PulseReview({ showId, onCount }) {
   return (
     <div className="prv-review" data-testid="pulse-review">
       <PulseScheduleAll showId={showId} drafts={data.wall.total + data.episode.total} onChange={load} />
+      <div className="prv-section"><NeedsPicture showId={showId} /></div>
       <details className="prv-section" data-testid="prv-calendar-section">
         <summary className="prv-section-title">Release calendar</summary>
         <PulseReleaseCalendar showId={showId} refreshKey={data} onChange={load} />

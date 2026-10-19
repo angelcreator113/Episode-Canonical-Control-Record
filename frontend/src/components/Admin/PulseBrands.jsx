@@ -15,6 +15,7 @@ import { CalendarPlus, Handshake, Megaphone, MessageSquareReply, Sparkles, Store
 import api from '../../services/api';
 import { atHandle } from '../../pages/feed/feedConstants';
 import PostingSchedule from '../PostingSchedule/PostingSchedule';
+import PulseTrust from '../PulseTrust/PulseTrust';
 import './PulseBrands.css';
 
 const REVIEW = '/admin?tab=pulse&sub=review';
@@ -35,6 +36,8 @@ export function postState(p) {
 function BrandCard({ brand, showId, onChanged }) {
   // The brand account's posting schedule, read only once it is opened.
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  // The brand account's trust (services/pulseTrust), read only once it is opened.
+  const [trustOpen, setTrustOpen] = useState(false);
   const [rep, setRep] = useState('');
   const [about, setAbout] = useState('');
   const [busy, setBusy] = useState(null);
@@ -97,6 +100,10 @@ function BrandCard({ brand, showId, onChanged }) {
           <details className="pb-schedule" onToggle={(e) => setScheduleOpen(e.currentTarget.open)}>
             <summary>Posting schedule</summary>
             {scheduleOpen && <PostingSchedule profileId={brand.account.id} />}
+          </details>
+          <details className="pb-schedule" onToggle={(e) => setTrustOpen(e.currentTarget.open)}>
+            <summary>Trust on The Pulse</summary>
+            {trustOpen && <PulseTrust profileId={brand.account.id} />}
           </details>
           <div className="pb-draft">
             <label className="pb-label" htmlFor={`pb-who-${brand.slug}`}>Who posts</label>

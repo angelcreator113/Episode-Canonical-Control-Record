@@ -8,6 +8,7 @@
  *   - events: the invitation and event set of an event they host
  *   - posts: their posts' photos, drafts marked; a post with no picture is not here
  *   - no feed profile: no events or posts, and linked is false
+ *   - the library's pictures tagged with them come last (Tagged; mediaLibrary tests)
  */
 jest.unmock('uuid');
 
@@ -94,7 +95,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   it('groups their portraits, places, wardrobe, events and posts', async () => {
     const { linked, groups, by } = await gallery(ids.maren);
     expect(linked).toBe(true);
-    expect(groups.map((g) => g.key)).toEqual(['portraits', 'places', 'wardrobe', 'events', 'posts']);
+    expect(groups.map((g) => g.key)).toEqual(['portraits', 'places', 'wardrobe', 'events', 'posts', 'tagged']);
     expect(by.portraits.map((i) => i.url)).toEqual(['https://img/photo.png', 'https://img/cover.png', 'https://img/portrait-1.png']);
     expect(by.places.map((i) => [i.url, i.caption])).toEqual([['https://img/studio.png', 'Home: Maren studio']]);
     expect(by.wardrobe.map((i) => i.caption)).toEqual(['Linen set']);

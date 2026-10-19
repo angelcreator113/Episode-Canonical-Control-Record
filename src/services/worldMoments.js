@@ -462,8 +462,10 @@ async function handleMoment(db, job) {
   const gateApi = require('./pulseGate');
   const lalaProfileId = await require('./lalaFeedProfile').lalaProfileId(db.sequelize);
   const gate = await gateApi.check(db, post, { voice: drafted.voice, privateState: drafted.privateState, lalaProfileId });
-  const review = gateApi.reviewReasons(post, gate, { lalaProfileId, revealsStory: drafted.revealsStory });
-  await post.update({ gate_json: { ...gate, review, world_moment: p.key, checked_at: new Date().toISOString() } });
+  const reasons = gateApi.reviewReasons(post, gate, { lalaProfileId, revealsStory: drafted.revealsStory });
+  // The poster's trust (services/pulseTrust), as for their other posts.
+  const { review, released_on_trust: onTrust } = await require('./pulseTrust').trustedReview(db, post, reasons, gate);
+  await post.update({ gate_json: { ...gate, review, world_moment: p.key, ...(onTrust ? { released_on_trust: onTrust } : {}), checked_at: new Date().toISOString() } });
   let scheduledAt = null;
   if (!review.length) {
     const postRelease = require('./postRelease');

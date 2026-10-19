@@ -9,7 +9,7 @@ const BEAT_NAMES = [
   'Opening Ritual', 'Login Sequence', 'Welcome', 'Interruption Pulse 1',
   'Reveal', 'Strategic Reaction', 'Interruption Pulse 2', 'Transformation Loop',
   'Reminder/Deadline', 'Event Travel', 'Event Outcome',
-  'Deliverable Creation', 'Recap Panel', 'Cliffhanger',
+  'Fashion Challenge', 'Recap Panel', 'Cliffhanger',
 ];
 
 /**

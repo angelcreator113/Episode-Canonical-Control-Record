@@ -46,8 +46,10 @@ const { beatHeader } = require('../utils/canonicalScriptBeats');
 const SPEAKS = {
   1: [true, false], 2: [true, true], 3: [true, false], 4: [true, true], 5: [true, true],
   6: [true, true], 7: [true, true], 8: [true, true], 9: [true, false], 10: [true, false],
-  11: [true, true], 12: [false, true], 13: [true, true], 14: [true, false],
+  11: [true, true], 12: [true, true], 13: [true, true], 14: [true, false],
 };
+// Beat 12, The Fashion Challenge (Evoni, 2026-10-18): JustAWoman styles
+// and reacts from her corner, so she speaks there too.
 // Beat 13: Lala says how the outcome feels (Evoni, 2026-10-17); the numbers
 // stay on the stat card, which she does not see.
 const BEAT_TEMPLATES = Object.fromEntries(CANONICAL_BEATS.map((b) => [b.number, {
@@ -200,8 +202,29 @@ async function groundedScriptInputs(episodeId, showId, models) {
     }
   }
 
+  // Lala's coins and the approved shopping list (Evoni, 2026-10-18;
+  // scriptMoneyContext): the balance before the episode, each piece's cost,
+  // the recap's costs. A failed read leaves the script without them.
+  let money = null;
+  if (showId) {
+    try {
+      money = await require('./scriptMoneyContext').loadScriptMoney(models.sequelize, { showId, episodeId, event: eventData });
+    } catch (err) {
+      console.error('[ScriptGen] money read failed (non-blocking):', err.message);
+    }
+  }
+
+  // Beat 14's opportunity (Evoni, 2026-10-19; services/beat14Opportunity):
+  // the invitation someone at the event offers. A failed read leaves it out.
+  let beat14 = null;
+  try {
+    beat14 = await require('./beat14Opportunity').loadForScript(models, { episodeId });
+  } catch (err) {
+    console.error('[ScriptGen] beat 14 opportunity read failed (non-blocking):', err.message);
+  }
+
   console.log(`[ScriptGen] Prompt for episode ${episodeId} with ${scenePlan.length} planned beats`);
-  return { brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext, onScreen, story, phone, worldNow };
+  return { brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext, onScreen, story, phone, worldNow, money, beat14 };
 }
 
 const MODELS = ['claude-sonnet-4-6'];
@@ -251,7 +274,7 @@ async function writeWith(prompt, maxTokens, attempts) {
 //   so a reply that is not the beat never replaces one that was.
 const MAX_FIX_BEATS = 5;
 const MIN_DRAFT_BEATS = CANONICAL_BEATS.length - MAX_FIX_BEATS;
-const GAP_RANK = { beat: 0, cut: 1, hook: 2, deliverable: 3, goal: 4, wear: 5, phone: 6 };
+const GAP_RANK = { beat: 0, cut: 1, hook: 2, opportunity: 2, deliverable: 3, goal: 4, wear: 5, phone: 6 };
 
 class DraftIncompleteError extends Error {
   constructor(found) {
@@ -324,6 +347,20 @@ async function generateGroundedScript(episodeId, showId, models, { lockedBeats =
     }
     script = next; fixedBeats.push(n);
   }
+  // Each costing piece's coin line right after its [WEAR: id] line
+  // (utils/scriptMoney.js; Evoni, 2026-10-18), where the writer left it out;
+  // approved beats are left as they are.
+  let coinLines = 0;
+  if (inputs.money) {
+    try {
+      const { scriptWithCoinLines } = require('../utils/scriptMoney');
+      const skip = splitScriptBeats(script).beats.map((b, i) => (locked.has(b.number) ? i : -1)).filter((i) => i >= 0);
+      const coined = scriptWithCoinLines(script, inputs.money, { skip });
+      script = coined.script; coinLines = coined.added;
+    } catch (err) {
+      console.error('[ScriptGen] coin lines failed (non-blocking):', err.message);
+    }
+  }
   // The show's rules (utils/scriptShowRules.js; Evoni, 2026-10-17): Lala's
   // voice click before she talks, and the invitation in beat 5, never the
   // login screen; approved beats are left as they are. Before the phone
@@ -360,7 +397,7 @@ async function generateGroundedScript(episodeId, showId, models, { lockedBeats =
   // writer kept them to this episode; the Script tab shows them.
   let storyGaps = [];
   try { storyGaps = require('../utils/storyLayers').storyLayers(inputs).gaps; } catch (err) { console.error('[ScriptGen] story gaps failed (non-blocking):', err.message); }
-  return { script, coverage: { missing, fixed_beats: fixedBeats.sort((a, b) => a - b), phone_steps: phoneSteps, voice_clicks: voiceClicks, reveal_fixed: revealFixed, story_gaps: storyGaps }, facts };
+  return { script, coverage: { missing, fixed_beats: fixedBeats.sort((a, b) => a - b), phone_steps: phoneSteps, voice_clicks: voiceClicks, reveal_fixed: revealFixed, coin_lines: coinLines, story_gaps: storyGaps }, facts };
 }
 
 // What the coverage check needs from the writer's inputs.
@@ -371,6 +408,11 @@ function coverageFacts(inputs) {
     goals: career?.goals || [],
     forwardHook: inputs?.brief?.forward_hook || '',
     lockedPieces: (inputs?.outfitScore?.items || []).filter((p) => p?.id).map((p) => ({ id: p.id, name: p.name })),
+    // Beat 14's opportunity, when the episode is not designed to fail (Evoni,
+    // 2026-10-19): it must arrive in the script.
+    opportunity: inputs?.beat14 && inputs?.brief?.designed_intent !== 'fail'
+      ? { name: inputs.beat14.name, from: inputs.beat14.contact_name || inputs.beat14.connector_handle || null }
+      : null,
   };
 }
 
@@ -428,20 +470,24 @@ async function generateGroundedBeat(episodeId, showId, models, { beatNumber, cur
 // never the rest (re-audit 2, 2026-10-15: one guest's bad JSON dropped her
 // career, money and stats together). Returns { text, career, stats }: what
 // rendered, so the rules and the fallback stats read only what is there.
-function storyContext(story, { hasSeason = false, hook = '' } = {}) {
+function storyContext(story, { hasSeason = false, hook = '', balanceBefore = null } = {}) {
   const none = { text: '', career: false, stats: false };
   if (!story) return none;
   const { storyContextBlocks, financialContextText } = require('./episodeScriptWriterService');
   const block = (name, render) => {
     try { return render() || ''; } catch (err) { console.error(`[ScriptGen] story block "${name}" failed (non-blocking):`, err.message); return ''; }
   };
-  const balance = story.financial?.balance;
+  // Her coins as the episode starts (Evoni, 2026-10-18): the ledger already
+  // holds this episode's posted pieces, so the balance it gives is the one
+  // after the closet, and the script said "768" before she had shopped.
+  const before = balanceBefore != null;
+  const balance = before ? balanceBefore : story.financial?.balance;
   const told = {
     ...story,
     characterState: story.characterState && balance != null ? { ...story.characterState, coins: balance } : story.characterState,
     arcPhase: hasSeason ? null : story.arcPhase,
   };
-  const financial = story.financial ? block('financial', () => `═══ FINANCIAL CONTEXT ═══\n${financialContextText(story.financial)}`) : '';
+  const financial = story.financial ? block('financial', () => `═══ FINANCIAL CONTEXT ═══\n${financialContextText(before ? { ...story.financial, balance, total_income: 0, total_expenses: 0 } : story.financial)}`) : '';
   // A function, so a `$` in the hook is written as it is.
   const career = block('career', () => {
     const text = careerBlock(story.career);
@@ -504,6 +550,12 @@ function layersText(inputs) {
   try { return require('../utils/storyLayers').storyLayers(inputs).text; } catch (err) { console.error('[ScriptGen] story layers failed (non-blocking):', err.message); return ''; }
 }
 
+// Lala's coins and the approved shopping list (utils/scriptMoney.js; Evoni,
+// 2026-10-18). Left out, logged, when it cannot be built.
+function moneyText(money) {
+  try { return require('../utils/scriptMoney').moneyContext(money); } catch (err) { console.error('[ScriptGen] money block failed (non-blocking):', err.message); return ''; }
+}
+
 function seasonPurposeLines(sc) {
   // A purpose may name only a thread; it then reads as continuing that thread.
   const list = (Array.isArray(sc?.story_purposes) ? sc.story_purposes : [])
@@ -518,7 +570,7 @@ function seasonPurposeLines(sc) {
     ...purposes.map((p, n) => `${n + 1}. ${p.primary ? '[Primary] ' : ''}${p.text}${p.story_thread ? ` (thread: ${p.story_thread})` : ''}`)].join('\n');
 }
 
-function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext = null, onScreen = [], story = null, phone = null, worldNow = '' }, { only = null, lockedBeats = [] } = {}) {
+function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext = null, onScreen = [], story = null, phone = null, worldNow = '', money = null, beat14 = null }, { only = null, lockedBeats = [] } = {}) {
   // Every canonical beat, in order, whether or not the plan has its row
   // (§8(j): Generate Script instantiates all 14; it never invents its own).
   const planByBeat = new Map(scenePlan.map((b) => [Number(b.beat_number), b]));
@@ -581,9 +633,10 @@ function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrob
   const showRules = require('../utils/scriptShowRules');
   const rulesOn = rulesPhone(phone, onScreen);
   const hook = typeof brief?.forward_hook === 'string' ? brief.forward_hook.trim() : '';
-  const told = storyContext(story, { hasSeason: !!seasonContext?.label, hook });
+  const balanceBefore = money?.balanceBefore ?? null;
+  const told = storyContext(story, { hasSeason: !!seasonContext?.label, hook, balanceBefore });
   const statsContext = told.stats ? ''
-    : lalaStats?.character_states ? JSON.stringify(snapshotStates(lalaStats.character_states, story?.financial?.balance)).slice(0, 1500)
+    : lalaStats?.character_states ? JSON.stringify(snapshotStates(lalaStats.character_states, balanceBefore ?? story?.financial?.balance)).slice(0, 1500)
     : 'Stats not loaded';
   const people = (story?.socialProfiles || []).length > 0;
 
@@ -628,7 +681,7 @@ ${statsContext ? `═══ LALA'S STATE ═══\n${statsContext}\n` : ''}${wo
 ═══ WARDROBE ═══
 ${wardrobeContext}
 ${outfitScore ? `\n═══ LOCKED OUTFIT ═══\nLala is wearing ${outfitScore.count} pieces for this event:\n${outfitScore.items.map(i => `- ${i.name} (${i.clothing_category}, ${i.tier})${i.id ? ` [WEAR: ${i.id}]` : ''}`).join('\n')}\nBeat 8 (Transformation): Reference these SPECIFIC items by name as Lala gets dressed. Right after the line where she puts a piece on, write that piece's [WEAR: id] line exactly as shown above, once per piece.\nBeat 11 (Event Outcome): Her outfit choice affects how the event goes — she is wearing what she chose.` : ''}
-${onScreenContext(onScreen)}${phone ? require('../utils/phonePaths').phoneMapContext(phone) : ''}${layersText({ brief, eventData, seasonContext, story })}
+${moneyText(money)}${require('./beat14Opportunity').beat14Context(beat14, brief?.designed_intent || null)}${onScreenContext(onScreen)}${phone ? require('../utils/phonePaths').phoneMapContext(phone) : ''}${layersText({ brief, eventData, seasonContext, story })}
 
 ═══ SCENE PLAN — 14 BEATS ═══
 ${beatContext}
@@ -683,7 +736,8 @@ JustAWoman (Me:) is playing the game on camera from her corner: she sees the gam
 - Lala's phone is on screen from the moment the Start button is clicked in Beat 1 until she travels to the event in Beat 10. Never write [UI:SHOW phone] or [UI:HIDE phone] in between; the phone is already there.
 - Beat 5 (Reveal): the invitation letter comes up, ${showRules.invitationLine(rulesOn)}, never the login screen or the Start button (those are beats 1 and 2). JAWIHP reads the whole invitation aloud, every word of it, not a summary.
 - Lala talks only after JustAWoman clicks her voice icon: ${`[UI:CLICK ${showRules.voiceIconName(rulesOn.icons)}]`} on its own line right before every line Lala says: one click, one line. No click is needed for the line where she answers a notification or message ([UI:NOTIFY …], [UI:DM …]), or while she is being dressed (the closet, [WEAR:] lines). Her thoughts, Lala (V.O.):, need no click.
-- Beat 8 (Transformation Loop): every piece of the look is picked and put on one at a time: its own pick, its own line, its own [WEAR: id] line. Never several pieces at once.
+- Beat 8 (Transformation Loop): every piece of the look is picked and put on one at a time: its own pick, its own line, its own [WEAR: id] line, and its own coin line right after when it costs her (LALA'S COINS). Never several pieces at once.
+- Beat 12 (Fashion Challenge): someone at the event sets Lala a styling challenge; her phone comes back for it ([UI:SHOW phone], the closet) and goes away after ([UI:HIDE phone]). Each piece of the challenge look is picked and put on one at a time; [WEAR: id] only for pieces of her locked look, and a piece the studio or brand lends is named in an action line and costs her nothing. The room's verdict moves her standing with [STAT: reputation ±n], [STAT: brand_trust ±n], [STAT: influence ±n] and [STAT: stress ±n] lines, never coins.
 ${only ? `═══ THE SCRIPT AS IT STANDS ═══
 ${only.currentScript.trim() || '(empty)'}
 

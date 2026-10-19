@@ -83,11 +83,12 @@ describe('Script tab: Add chips, must cover, phone check', () => {
     expect(within(picker).getByTestId('script-moment-add').textContent).toContain('Scrolls Feed');
   });
 
-  test("must cover: the event's deliverables and goals and the brief's hook, ticked when the script mentions them", async () => {
+  // What she owes is not on the list (Evoni, 2026-10-18): deliverables are
+  // not always shown in the show.
+  test("must cover: the event's goals and the brief's hook, ticked when the script mentions them; not what she owes", async () => {
     renderTab();
-    await waitFor(() => expect(screen.getByTestId('script-cover-deliverable-d1').dataset.covered).toBe('true'));
-    expect(screen.getByTestId('script-cover-deliverable-d1').textContent).toContain('Beat 12');
-    expect(screen.getByTestId('script-cover-goal-0').dataset.covered).toBe('false');
+    await waitFor(() => expect(screen.getByTestId('script-cover-goal-0').dataset.covered).toBe('false'));
+    expect(screen.queryByTestId('script-cover-deliverable-d1')).toBeNull();
     expect(screen.getByTestId('script-cover-hook').textContent).toContain('A second invitation arrives.');
     expect(screen.getByTestId('script-cover').textContent).toContain('From the event package and the brief');
   });

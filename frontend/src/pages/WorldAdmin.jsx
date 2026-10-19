@@ -16,6 +16,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspens
 import { createPortal } from 'react-dom';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import DeliverableProgress from '../components/Deliverables/DeliverableProgress';
 import { getEpisodeAnchorEvent } from '../services/episodeEventsApi';
 import showService from '../services/showService';
 import { rememberShow } from '../utils/activeShow';
@@ -8189,6 +8190,8 @@ function OpportunitiesTab({ showId, api, S, setToast, loadData }) {
                   )}
                   {opp.event_id && <span style={{ fontSize: 9, color: '#16a34a', padding: '3px 8px', background: '#f0fdf4', borderRadius: 4, fontWeight: 600 }}>✓ Event scheduled</span>}
                 </div>
+                {/* Deliverables that check themselves (Evoni, 2026-10-19): "Pulse stories: 2 of 3". */}
+                {opp.event_id && <DeliverableProgress opportunityId={opp.id} compact />}
               </div>
             );
           })}
