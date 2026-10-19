@@ -1,0 +1,34 @@
+/* Visual Memory, phase 3: make a variation of a library picture (MakeVariation.jsx). */
+.mv { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--lala-lavender-line); border-radius: 12px; background: var(--surface-card); min-width: 0; }
+.mv-label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: var(--text-secondary); min-width: 0; }
+.mv-label > span { display: inline-flex; align-items: center; gap: 4px; }
+.mv-input { width: 100%; box-sizing: border-box; min-height: 36px; padding: 6px 10px; border: 1px solid var(--lala-lavender-line); border-radius: 10px; background: var(--surface-card); font: inherit; font-size: 14px; color: var(--text-primary); }
+.mv-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; }
+.mv-row > .mv-label { flex: 1 1 160px; }
+.mv-btn { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; min-height: 36px; padding: 6px 14px; border: none; border-radius: 999px; background: var(--lala-lavender); color: var(--text-inverse); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.mv-btn.is-quiet { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.mv-btn:disabled { opacity: .55; cursor: default; }
+.mv-locks { display: flex; flex-wrap: wrap; gap: 6px; }
+.mv-lock { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 3px 12px; border: 1px solid var(--lala-lavender-line); border-radius: 999px; background: var(--surface-card); color: var(--text-secondary); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.mv-lock.is-on { background: var(--lala-lavender-soft); color: var(--lala-lavender-text); border-color: transparent; }
+.mv-lock:disabled { opacity: .55; cursor: default; }
+.mv-pick { display: flex; flex-direction: column; gap: 4px; }
+.mv-found { list-style: none; margin: 0; padding: 4px; display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--lala-lavender-line); border-radius: 10px; background: var(--surface-card); }
+.mv-found-btn { width: 100%; padding: 6px 8px; border: none; border-radius: 8px; background: none; font: inherit; font-size: 13px; text-align: left; color: var(--text-primary); cursor: pointer; }
+.mv-found-btn:hover, .mv-found-btn:focus-visible { background: var(--lala-lavender-soft); }
+.mv-made { display: flex; flex-direction: column; gap: 10px; }
+.mv-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.mv-pair figure { margin: 0; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.mv-pair img { width: 100%; aspect-ratio: 3 / 2; object-fit: cover; border-radius: 10px; background: var(--lala-lavender-soft); }
+.mv-pair figcaption { font-size: 12px; color: var(--text-secondary); }
+.mv-review ul { margin: 4px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.45; color: var(--text-primary); }
+.mv-muted { margin: 0; font-size: 12px; line-height: 1.45; color: var(--text-secondary); }
+.mv-note { margin: 0; font-size: 13px; color: var(--text-primary); }
+.mv-error { margin: 0; font-size: 13px; color: var(--error-text); }
+.mv-family { display: flex; flex-direction: column; gap: 6px; }
+.mv-title { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: 13px; font-weight: 700; color: var(--text-primary); }
+.mv-family-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.mv-family-item { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.mv-family-item img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; border: 2px solid transparent; }
+.mv-family-item.is-here img { border-color: var(--lala-lavender); }
+@media (max-width: 420px) { .mv-pair { grid-template-columns: 1fr; } }

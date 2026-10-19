@@ -163,6 +163,7 @@ async function linksOf(db, assetIds) {
 async function createAsset(db, {
   url, thumbnailUrl = null, storageKey = null, width = null, height = null, caption = null, source = 'upload',
   status = 'approved', visibility = 'internal', usageRights = null, details = null, generation = null, links = [], by = null,
+  parentAssetId = null,
 }) {
   const u = checkUrl(url);
   if (!SOURCES.includes(source)) throw new MediaError(400, `source must be one of ${SOURCES.join(', ')}.`);
@@ -171,13 +172,14 @@ async function createAsset(db, {
   const normalized = (Array.isArray(links) ? links : []).map(normalizeLink);
   for (const l of normalized) if (!(await entityExists(db, l))) throw new MediaError(404, `That ${l.entity_type} was not found.`);
   const [inserted] = await db.sequelize.query(
-    `INSERT INTO media_assets (url, thumbnail_url, storage_key, width, height, caption, source, status, visibility, usage_rights, details, generation, created_by)
-     VALUES (:url, :thumb, :key, :width, :height, :caption, :source, :status, :visibility, :rights, CAST(:details AS JSONB), CAST(:generation AS JSONB), :by)
+    `INSERT INTO media_assets (url, thumbnail_url, storage_key, width, height, caption, source, status, visibility, usage_rights, details, generation, parent_asset_id, created_by)
+     VALUES (:url, :thumb, :key, :width, :height, :caption, :source, :status, :visibility, :rights, CAST(:details AS JSONB), CAST(:generation AS JSONB), :parent, :by)
      ON CONFLICT ((md5(url))) WHERE deleted_at IS NULL DO NOTHING RETURNING id`,
     {
       replacements: {
         url: u, thumb: thumbnailUrl, key: storageKey, width, height, caption: clean(caption, 500), source, status, visibility,
-        rights: clean(usageRights, 500), details: JSON.stringify(normalizeDetails(details)), generation: generation ? JSON.stringify(generation) : null, by,
+        rights: clean(usageRights, 500), details: JSON.stringify(normalizeDetails(details)), generation: generation ? JSON.stringify(generation) : null,
+        parent: parentAssetId && UUID_RE.test(String(parentAssetId)) ? parentAssetId : null, by,
       },
     });
   let id = inserted[0]?.id;
