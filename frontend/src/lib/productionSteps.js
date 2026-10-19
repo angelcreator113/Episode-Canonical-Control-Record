@@ -5,7 +5,7 @@
  * (EpisodeProductionHeader) reads it.
  *
  *   1 Event & Brief   the checklist's brief and event sections      → Overview
- *   2 Script          a script written, or the status past Draft     → Script
+ *   2 Script          all 14 beats approved, or the status past Draft → Script
  *   3 Scenes          the checklist's scene section                  → Production › Scenes
  *   4 Files           at least one raw clip uploaded                 → Production › Files
  *   5 Edit & Assemble every scene has a clip linked to it            → the timeline editor
@@ -27,6 +27,20 @@ export function sectionDone(sections, checks, id) {
   return (required.length ? required : items).every((i) => checks[i.id]);
 }
 
+/**
+ * The beats approved on the Script tab (episodes.script_locked_beats, beat
+ * numbers 1-14). A script is finished when every beat is approved, not when
+ * any text is written (Evoni, 2026-10-19: "script is being marked completed
+ * before it's finished").
+ */
+export function approvedBeats(episode = {}) {
+  let locked = episode.script_locked_beats;
+  if (typeof locked === 'string') {
+    try { locked = JSON.parse(locked); } catch (err) { console.error('[productionSteps] script_locked_beats unreadable:', err); locked = []; }
+  }
+  return new Set((Array.isArray(locked) ? locked : []).map(Number).filter((n) => n >= 1 && n <= SCENE_COUNT));
+}
+
 /** The scenes (beat numbers) with at least one clip linked. */
 export function linkedScenes(clips) {
   return new Set((clips || []).map((c) => Number(c.beat_number)).filter((n) => n >= 1 && n <= SCENE_COUNT));
@@ -40,9 +54,11 @@ export function productionSteps({ episode = {}, checks = null, sections = null, 
   const status = String(episode.status || 'draft').toLowerCase();
   const linked = linkedScenes(clips).size;
   const id = episode.id;
+  const written = Boolean(String(episode.script_content || '').trim());
+  const approved = approvedBeats(episode).size;
   const steps = [
     { key: 'brief', label: 'Event & Brief', done: sectionDone(sections, checks, 'brief') && sectionDone(sections, checks, 'world'), open: { tab: 'overview' } },
-    { key: 'script', label: 'Script', done: Boolean(String(episode.script_content || '').trim()) || PAST_DRAFT.includes(status), open: { tab: 'scripts' } },
+    { key: 'script', label: 'Script', done: (written && approved >= SCENE_COUNT) || PAST_DRAFT.includes(status), detail: written && approved < SCENE_COUNT ? `${approved} of ${SCENE_COUNT} beats approved` : null, open: { tab: 'scripts' } },
     { key: 'scenes', label: 'Scenes', done: sectionDone(sections, checks, 'scene'), open: { tab: 'scenes' } },
     { key: 'files', label: 'Files', done: (clips || []).length > 0, detail: (clips || []).length ? `${clips.length} ${clips.length === 1 ? 'clip' : 'clips'}` : null, open: { tab: 'files' } },
     { key: 'edit', label: 'Edit & Assemble', done: linked >= SCENE_COUNT, detail: linked ? `${linked} of ${SCENE_COUNT} scenes have a clip` : null, open: { href: `/episodes/${id}/timeline` } },
