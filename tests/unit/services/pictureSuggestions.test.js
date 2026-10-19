@@ -2,7 +2,9 @@
  * Visual Memory phase 4 (services/pictureSuggestions): reading a caption,
  * ranking the poster's pictures for that reading (Evoni's example: Maren's
  * "still here. the bread is rising." wants the dough, not a gown or a
- * portrait), and the plan's use / edit / create thresholds.
+ * portrait), and the plan's use / edit / create thresholds. Evoni's rulings
+ * (2026-10-19): every choice is always offered, an optional person can be
+ * included, and a new picture keeps the place picture earlier ones kept.
  */
 const ps = require('../../../src/services/pictureSuggestions');
 
@@ -21,6 +23,9 @@ const library = [
 ];
 
 describe('pictureSuggestions', () => {
+  beforeEach(() => { jest.spyOn(console, 'error').mockImplementation(() => {}); });
+  afterEach(() => { jest.restoreAllMocks(); });
+
   test("Maren's dough beats a gown and a portrait, the same way every time", () => {
     const ranked = ps.rank(READING, CAPTION, library, { posterId: MAREN });
     const ids = ranked.map((r) => r.asset.id);
@@ -49,16 +54,20 @@ describe('pictureSuggestions', () => {
     const db = {};
     const poster = { id: MAREN, name: 'Maren' };
     const ranked = ps.rank(READING, CAPTION, library, { posterId: MAREN });
-    expect(ranked[0].score).toBeGreaterThanOrEqual(ps.USE_AT);
+    expect(ranked[0].score).toBeGreaterThanOrEqual(ps.THRESHOLDS.use);
     const strong = await ps.planFor(db, { reading: READING, caption: CAPTION, ranked, poster });
     expect(strong.recommended).toBe('use');
     expect(strong.use).toEqual({ action: 'use', asset_id: 'dough', ready: false });
     expect(strong.edit).toBeNull();
+    // The recommendation guides; every choice is still offered, and a new picture says what it would cost.
+    expect(strong.actions).toEqual(['use', 'edit', 'create', 'upload']);
+    expect(strong.create_note).toMatch(/A fitting picture already exists; generating costs about \$0.20/);
+    expect(strong.thresholds).toEqual({ use: 10, edit: 4 });
 
     // Only the kitchen: set right, no dough in it. An object edit, place kept.
     const kitchenOnly = ps.rank({ ...READING, activity: '' }, CAPTION, [library[3]], { posterId: MAREN });
-    expect(kitchenOnly[0].score).toBeGreaterThanOrEqual(ps.EDIT_AT);
-    expect(kitchenOnly[0].score).toBeLessThan(ps.USE_AT);
+    expect(kitchenOnly[0].score).toBeGreaterThanOrEqual(ps.THRESHOLDS.edit);
+    expect(kitchenOnly[0].score).toBeLessThan(ps.THRESHOLDS.use);
     const near = await ps.planFor(db, { reading: { ...READING, activity: '' }, caption: CAPTION, ranked: kitchenOnly, poster });
     expect(near.recommended).toBe('edit');
     expect(near.edit).toEqual({ action: 'edit', asset_id: 'kitchen', change: { kind: 'object', text: 'add dough and ceramic bowl' }, locks: ['face', 'wardrobe', 'location'] });
@@ -105,5 +114,53 @@ describe('pictureSuggestions', () => {
     expect(fb).toMatchObject({ setting: 'kitchen', person_in_frame: 'optional', avoid: [] });
     expect(fb.objects).toEqual(expect.arrayContaining(['bread']));
     expect(ps.fallbackReading('outfit check in the mirror').person_in_frame).toBe('yes');
+  });
+
+  test('the thresholds are one adjustable config object', async () => {
+    const poster = { id: MAREN, name: 'Maren' };
+    const ranked = ps.rank(READING, CAPTION, library, { posterId: MAREN });
+    const before = ps.THRESHOLDS.use;
+    try {
+      ps.THRESHOLDS.use = ranked[0].score + 1;
+      const plan = await ps.planFor({}, { reading: READING, caption: CAPTION, ranked, poster });
+      expect(plan.recommended).toBe('edit');
+      expect(plan.create_note).toBeNull();
+    } finally {
+      ps.THRESHOLDS.use = before;
+    }
+  });
+
+  test('an optional person is left out by default and included when asked', async () => {
+    const poster = { id: MAREN, name: 'Maren' };
+    const db = { RegistryCharacter: { findByPk: jest.fn().mockResolvedValue({ id: MAREN, display_name: 'Maren', portrait_url: 'https://img/p.jpg', appearance: null }) }, sequelize: { query: jest.fn().mockResolvedValue([[]]) } };
+    const out = await ps.planFor(db, { reading: READING, caption: CAPTION, ranked: [], poster });
+    expect(out.create.include_person).toBe(false);
+    expect(out.create.references).toEqual([]);
+    expect(out.create.prompt).toContain('No people in the frame.');
+    expect(out.person).toEqual({ name: 'Maren', in_frame: 'optional', included: false, portraits: 1 });
+    const inc = await ps.planFor(db, { reading: READING, caption: CAPTION, ranked: [], poster, includePerson: true });
+    expect(inc.create.include_person).toBe(true);
+    expect(inc.create.references).toEqual([{ kind: 'portrait', character_id: MAREN, url: 'https://img/p.jpg' }]);
+    expect(inc.create.prompt).toContain('must look exactly like the person in the reference portrait');
+  });
+
+  test('a new picture keeps the place picture earlier ones kept, and never one made from it', () => {
+    const second = { ...library[3], id: 'kitchen-2', url: 'https://img/k2.jpg', created_at: at(20) };
+    const made = { ...library[3], id: 'kitchen-made', url: 'https://img/k3.jpg', source: 'generated', created_at: at(21) };
+    const ranked = ps.rank(READING, CAPTION, [library[3], second, made], { posterId: MAREN });
+    expect(ps.placeFor(READING, ranked).asset.id).not.toBe('kitchen-made');
+    expect(ps.placeFor(READING, ranked, new Map([['kitchen', 3], ['kitchen-2', 1]])).asset.id).toBe('kitchen');
+    expect(ps.placeFor(READING, ranked, new Map([['kitchen-2', 2]])).asset.id).toBe('kitchen-2');
+    expect(ps.placeFor({ ...READING, setting: '' }, ranked)).toBeNull();
+  });
+
+  test('an edit that includes them adds them when they are not in it yet', () => {
+    const poster = { id: MAREN, name: 'Maren' };
+    const choice = { change: { kind: 'object', text: 'add candle' }, locks: ['face', 'wardrobe', 'location', 'props'] };
+    expect(ps.editChange({ ...choice, include_person: true }, { reading: READING, asset: library[2], poster }))
+      .toEqual({ change: { kind: 'add_character', character_id: MAREN, text: 'add candle; baking bread' }, locks: ['face', 'wardrobe', 'location'] });
+    // Already in it, or not asked: the edit as given.
+    expect(ps.editChange({ ...choice, include_person: true }, { reading: READING, asset: library[0], poster })).toEqual({ change: choice.change, locks: choice.locks });
+    expect(ps.editChange({ ...choice, include_person: false }, { reading: READING, asset: library[2], poster })).toEqual({ change: choice.change, locks: choice.locks });
   });
 });

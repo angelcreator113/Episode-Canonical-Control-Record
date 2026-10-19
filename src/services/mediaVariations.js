@@ -253,7 +253,23 @@ async function createVariation(db, { assetId, change, locks, by = null } = {}) {
     details: detailsFor(parent.details, req, added), generation, links: tagsFor(parent.links, added),
     parentAssetId: parent.id, by,
   });
+  // What it was made from, structured (phase 4): the parent, and any portraits used.
+  const used = added ? added.portraitUrls.slice(0, portraits.length) : [];
+  await media.addSources(db, created.asset.id, [
+    { role: 'parent', source_asset_id: parent.id },
+    ...(await portraitSources(db, added?.id, used)),
+  ], { by });
   return { asset: created.asset, parent_id: parent.id, review };
+}
+
+/** Portrait references as source rows: the library picture when the portrait is in it, else its address. */
+async function portraitSources(db, characterId, urls) {
+  if (!characterId || !urls?.length) return [];
+  const inLibrary = await require('./mediaLibrary').assetsByUrl(db, urls);
+  return urls.map((url) => {
+    const a = inLibrary.get(url);
+    return a ? { role: 'portrait', source_asset_id: a.id, character_id: characterId } : { role: 'portrait', source_url: url, character_id: characterId };
+  });
 }
 
 /** The original at the top of this picture's family, and every variation under it. */
@@ -280,5 +296,5 @@ async function familyOf(db, assetId, { audience = 'admin' } = {}) {
 module.exports = {
   KINDS, LOCKS, MODEL, normalizeRequest, buildPrompt, reviewFor, detailsFor, tagsFor, createVariation, familyOf,
   // Phase 4 (services/pictureSuggestions) makes new pictures through the same path.
-  editImage, imageBytes, addedCharacter,
+  editImage, imageBytes, addedCharacter, portraitSources,
 };

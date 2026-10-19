@@ -4,12 +4,18 @@
  * and .../suggestions/run), against the test database through the routes.
  * The text AI, the image tool and the storage upload are faked; nothing goes
  * to the network.
- *   - the reading is one text call, cached on the post: asking again costs
- *     nothing, and the post's other gate notes stay
+ *   - the reading is one text call, kept in post_picture_suggestions apart
+ *     from the post's review notes: asking again costs nothing, and a
+ *     re-review that rewrites gate_json neither erases it nor pays again
  *   - Maren's dough comes first; a picture with Dr. Sinclair in it is never
  *     suggested
  *   - 'create' stores a private draft with its provenance and does not put it
  *     on the post; 'edit' is a phase-3 variation of one of their pictures
+ *   - a made picture keeps a structured record of what it was made from
+ *     (media_asset_sources: the place, the portraits, the parent)
+ *   - an optional person is left out unless she includes them
+ *   - use, edit, create and upload are always offered; what she chose is
+ *     recorded and summarised
  *   - a budget refusal (text or image) is a 429 and stores nothing
  *   - ADMIN only
  */
@@ -60,6 +66,8 @@ const CANDLE = {
   const as = (req, token = admin) => req.set('Authorization', `Bearer ${token}`);
   const suggest = (postId, token = admin) => as(request(app).post(`/api/v1/post-media/posts/${postId}/suggestions`), token).send({});
   const runIt = (postId, choice, token = admin) => as(request(app).post(`/api/v1/post-media/posts/${postId}/suggestions/run`), token).send({ choice });
+  const sources = (assetId) => q('SELECT role, source_asset_id, character_id, source_url FROM media_asset_sources WHERE asset_id = :id AND deleted_at IS NULL ORDER BY role', { id: assetId });
+  const row = async (postId) => (await q('SELECT * FROM post_picture_suggestions WHERE post_id = :id AND deleted_at IS NULL', { id: postId }))[0];
   const count = async () => (await q('SELECT COUNT(*)::int AS n FROM media_assets WHERE url LIKE :pre', { pre: `https://cdn.test/${tag}/%` }))[0].n;
 
   beforeAll(async () => {
@@ -104,6 +112,8 @@ const CANDLE = {
 
   afterAll(async () => {
     jest.restoreAllMocks();
+    await run('DELETE FROM media_asset_sources WHERE asset_id IN (SELECT id FROM media_assets WHERE url LIKE :pre OR url = :png)', { pre: `https://cdn.test/${tag}/%`, png: PNG + tag });
+    await run('DELETE FROM post_picture_suggestions WHERE post_id IN (SELECT id FROM feed_posts WHERE show_id = :show)', ids);
     await run('DELETE FROM media_asset_links WHERE asset_id IN (SELECT id FROM media_assets WHERE url LIKE :pre OR url = :png)', { pre: `https://cdn.test/${tag}/%`, png: PNG + tag });
     await run('DELETE FROM media_assets WHERE url LIKE :pre OR url = :png', { pre: `https://cdn.test/${tag}/%`, png: PNG + tag });
     await run("DELETE FROM ai_usage_logs WHERE route_name IN ('picture-suggestion', 'media-variation') AND created_at > NOW() - INTERVAL '1 hour'");
@@ -123,7 +133,7 @@ const CANDLE = {
     expect(axios.post).not.toHaveBeenCalled();
   });
 
-  it("reads the caption once, caches it on the post, and puts Maren's dough first; Dr. Sinclair's picture is never suggested", async () => {
+  it("reads the caption once, keeps it apart from the review notes, and puts Maren's dough first; Dr. Sinclair's picture is never suggested", async () => {
     mockCreate.mockResolvedValueOnce(answer(BREAD));
     const res = await suggest(ids.bread);
     expect(res.status).toBe(200);
@@ -138,8 +148,33 @@ const CANDLE = {
     const again = await suggest(ids.bread);
     expect(again.body).toMatchObject({ cached: true, reading: BREAD });
     expect(mockCreate).toHaveBeenCalledTimes(1);
-    const [row] = await q('SELECT gate_json FROM feed_posts WHERE id = :id', { id: ids.bread });
-    expect(row.gate_json).toMatchObject({ review: ['schedule'], pillar: 'home', picture_reading: { reading: BREAD, model: 'claude-sonnet-4-6' } });
+    // Its own row, with the plan; the post's review notes are untouched.
+    const kept = await row(ids.bread);
+    expect(kept).toMatchObject({ reading: BREAD, model: 'claude-sonnet-4-6', recommended_action: 'use', recommended_asset_id: pics.dough.id, chosen_action: null });
+    expect(kept.score).toBe(res.body.plan.score);
+    const [post] = await q('SELECT gate_json FROM feed_posts WHERE id = :id', { id: ids.bread });
+    expect(post.gate_json).toEqual({ review: ['schedule'], pillar: 'home' });
+  });
+
+  it('a re-review that rewrites the gate notes keeps the reading and costs no new call', async () => {
+    await run(`UPDATE feed_posts SET gate_json = '{"review":["voice"]}'::jsonb WHERE id = :id`, { id: ids.bread });
+    const res = await suggest(ids.bread);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ cached: true, reading: BREAD });
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('use, edit, create and upload are always offered; a new picture when a fitting one exists says what it costs', async () => {
+    const res = await suggest(ids.bread);
+    expect(res.body.plan).toMatchObject({
+      recommended: 'use', actions: ['use', 'edit', 'create', 'upload'],
+      create_note: 'A fitting picture already exists; generating costs about $0.20.',
+      person: { name: 'PS Maren', in_frame: 'optional', included: false, portraits: 0 },
+      thresholds: { use: 10, edit: 4 },
+    });
+    // Every ranked picture comes with the edit that would bring it to the caption.
+    expect(res.body.ranked.find((r) => r.id === pics.kitchen.id).edit).toMatchObject({ change: { kind: 'object' } });
+    expect(res.body.plan.create.blocked).toBeNull();
   });
 
   it("'create' stores a private draft with its provenance and does not put it on the post", async () => {
@@ -174,6 +209,13 @@ const CANDLE = {
     expect(post.image_url).toBeNull();
     expect(post.photos === null || (Array.isArray(post.photos) && post.photos.length === 0)).toBe(true);
     expect(asset.links.some((l) => l.entity_type === 'post')).toBe(false);
+    // Made from the kitchen, kept as a structured source (not a variation of it).
+    expect(await sources(asset.id)).toEqual([{ role: 'place', source_asset_id: pics.kitchen.id, character_id: null, source_url: null }]);
+    expect(made.body.sources).toMatchObject([{ role: 'place', source_asset_id: pics.kitchen.id, caption: 'Home kitchen' }]);
+    const read = await as(request(app).get(`/api/v1/media/${asset.id}/sources`));
+    expect(read.status).toBe(200);
+    expect(read.body.items).toMatchObject([{ role: 'place', source_asset_id: pics.kitchen.id }]);
+    expect(await row(ids.candle)).toMatchObject({ recommended_action: 'edit', chosen_action: 'create', result_asset_id: asset.id });
   });
 
   it("'edit' is a phase-3 variation of one of their pictures, and only theirs", async () => {
@@ -183,10 +225,77 @@ const CANDLE = {
     expect(res.body.asset.generation).toMatchObject({ kind: 'time', locks: ['face', 'wardrobe', 'location', 'props'], parent_id: pics.dough.id });
     const [log] = await q("SELECT route_name FROM ai_usage_logs WHERE route_name IN ('picture-suggestion', 'media-variation') ORDER BY created_at DESC LIMIT 1");
     expect(log.route_name).toBe('media-variation');
+    expect(await sources(res.body.asset.id)).toEqual([{ role: 'parent', source_asset_id: pics.dough.id, character_id: null, source_url: null }]);
+    expect(await row(ids.bread)).toMatchObject({ chosen_action: 'edit', chosen_asset_id: pics.dough.id, result_asset_id: res.body.asset.id });
     const calls = axios.post.mock.calls.length;
     const dr = await runIt(ids.bread, { action: 'edit', asset_id: pics.session.id, change: { kind: 'time', text: 'dusk' }, locks: [] });
     expect(dr.status).toBe(400);
     expect(axios.post.mock.calls.length).toBe(calls);
+  });
+
+  it('an optional person is left out unless she includes them, and then their approved portrait holds the face', async () => {
+    // No approved portrait yet: including them is refused before any image call.
+    const calls = axios.post.mock.calls.length;
+    const none = await runIt(ids.bread, { action: 'create', include_person: true });
+    expect(none.status).toBe(409);
+    expect(none.body.error).toMatch(/no approved portrait of PS Maren/);
+    expect(axios.post.mock.calls.length).toBe(calls);
+
+    const left = await runIt(ids.bread, { action: 'create' });
+    expect(left.status).toBe(201);
+    expect(left.body.asset.generation).toMatchObject({ include_person: false });
+    expect(left.body.asset.generation.prompt).toContain('No people in the frame.');
+    expect((await sources(left.body.asset.id)).map((r) => r.role)).toEqual(['place']);
+
+    await run('UPDATE registry_characters SET portrait_url = :u WHERE id = :maren', { u: url('face'), maren: ids.maren });
+    const plan = await suggest(ids.bread);
+    expect(plan.body.plan.person).toMatchObject({ included: false, portraits: 1 });
+    const inc = await runIt(ids.bread, { action: 'create', include_person: true });
+    expect(inc.status).toBe(201);
+    expect(inc.body.asset.generation.include_person).toBe(true);
+    expect(inc.body.asset.generation.references.map((r) => r.kind)).toEqual(['place', 'portrait']);
+    expect(inc.body.asset.links.find((l) => l.entity_type === 'character')).toMatchObject({ entity_id: ids.maren, role: 'pictured' });
+    expect(await sources(inc.body.asset.id)).toEqual([
+      { role: 'place', source_asset_id: pics.kitchen.id, character_id: null, source_url: null },
+      { role: 'portrait', source_asset_id: null, character_id: ids.maren, source_url: url('face') },
+    ]);
+
+    // An edit that includes them adds them to a picture they are not in yet.
+    const edit = await runIt(ids.bread, { action: 'edit', asset_id: pics.dough.id, change: { kind: 'object', text: 'add a tea towel' }, locks: ['face', 'wardrobe', 'location'], include_person: true });
+    expect(edit.status).toBe(201);
+    expect(edit.body.asset.generation).toMatchObject({ kind: 'add_character', added_character_id: ids.maren });
+    expect((await sources(edit.body.asset.id)).map((r) => r.role).sort()).toEqual(['parent', 'portrait']);
+  });
+
+  it('a later picture of the place keeps the kitchen earlier pictures kept', async () => {
+    // Another approved kitchen picture, newer; the one already kept still comes first.
+    await (async () => { pics.kitchen2 = (await media.createAsset(models, { url: url('kitchen2'), caption: 'Home kitchen, by the window', source: 'scene_set', status: 'approved', visibility: 'internal', links: [{ entity_type: 'scene_set', entity_id: ids.set, role: 'location' }] })).asset; })();
+    const res = await suggest(ids.candle);
+    expect(res.body.plan.create.references.find((r) => r.kind === 'place').asset_id).toBe(pics.kitchen.id);
+  });
+
+  it('what she chose is recorded and summarised by recommendation', async () => {
+    const used = await as(request(app).post(`/api/v1/post-media/posts/${ids.bread}/suggestions/choice`)).send({ action: 'use', asset_id: pics.dough.id });
+    expect(used.body).toMatchObject({ success: true, recorded: true });
+    expect(await row(ids.bread)).toMatchObject({ chosen_action: 'use', chosen_asset_id: pics.dough.id });
+    // Not theirs (Dr. Sinclair is in it): refused.
+    const dr = await as(request(app).post(`/api/v1/post-media/posts/${ids.bread}/suggestions/choice`)).send({ action: 'use', asset_id: pics.session.id });
+    expect(dr.status).toBe(400);
+
+    const summary = async () => (await as(request(app).get('/api/v1/post-media/suggestions/acceptance'))).body;
+    const before = await summary();
+    expect(before.by_recommendation.use.accepted).toBeGreaterThanOrEqual(1);
+
+    // An upload instead: tagged with them, recorded as the result.
+    const up = (await media.createAsset(models, { url: url('upload'), caption: 'Her own photo', links: [{ entity_type: 'character', entity_id: ids.maren, role: 'owner' }] })).asset;
+    const rec = await as(request(app).post(`/api/v1/post-media/posts/${ids.bread}/suggestions/choice`)).send({ action: 'upload', result_asset_id: up.id });
+    expect(rec.body.recorded).toBe(true);
+    expect(await row(ids.bread)).toMatchObject({ chosen_action: 'upload', result_asset_id: up.id });
+    const after = await summary();
+    expect(after.by_recommendation.use.accepted).toBe(before.by_recommendation.use.accepted - 1);
+    expect(after.by_recommendation.use.instead.upload).toBe((before.by_recommendation.use.instead.upload || 0) + 1);
+    expect(after.thresholds).toEqual({ use: 10, edit: 4 });
+    expect((await as(request(app).get('/api/v1/post-media/suggestions/acceptance'), user)).status).toBe(403);
   });
 
   it('a budget refusal is a 429 and stores nothing', async () => {
@@ -207,8 +316,7 @@ const CANDLE = {
     const text = await suggest(ids.broke);
     expect(text.status).toBe(429);
     expect(mockCreate).toHaveBeenCalledTimes(3); // no second attempt after a budget refusal
-    const [row] = await q('SELECT gate_json FROM feed_posts WHERE id = :id', { id: ids.broke });
-    expect(row.gate_json?.picture_reading).toBeUndefined();
+    expect(await row(ids.broke)).toBeUndefined();
   });
 
   it('an unreadable answer gives a plainer reading from the caption, not cached', async () => {
@@ -218,7 +326,6 @@ const CANDLE = {
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ fallback: true, cached: false });
     expect(res.body.reading.person_in_frame).toBe('yes'); // "same me"
-    const [row] = await q('SELECT gate_json FROM feed_posts WHERE id = :id', { id: ids.garbled });
-    expect(row.gate_json?.picture_reading).toBeUndefined();
+    expect(await row(ids.garbled)).toBeUndefined();
   });
 });

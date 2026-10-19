@@ -16,13 +16,21 @@
  *   GET  /posts/:postId/suggestions     the poster's pictures ranked for its caption
  *   POST /posts/:postId/suggestions     phase 4 (services/pictureSuggestions):
  *                                       the caption's reading (one text call,
- *                                       cached on the post), their pictures
- *                                       ranked for it, and the plan: use,
- *                                       edit or create. Nothing is made.
+ *                                       kept in post_picture_suggestions), their
+ *                                       pictures ranked for it, and the plan:
+ *                                       a recommendation, with use, edit,
+ *                                       create and upload always offered.
+ *                                       Nothing is made.
  *   POST /posts/:postId/suggestions/run { choice: { action: 'edit', asset_id,
- *                                       change, locks } | { action: 'create' } }
+ *                                       change, locks, include_person? } |
+ *                                       { action: 'create', include_person? } }
  *                                       one image call; a private draft in
  *                                       their library, not put on the post
+ *   POST /posts/:postId/suggestions/choice  { action: 'use' | 'upload',
+ *                                       asset_id | result_asset_id }: what she
+ *                                       chose in the panel, recorded
+ *   GET  /suggestions/acceptance        per recommendation, how often it was
+ *                                       taken and what was chosen instead
  *   GET  /needs-picture?show_id=&character_id=   posts with no picture
  */
 const express = require('express');
@@ -110,6 +118,22 @@ router.post('/posts/:postId/suggestions', ...admin, aiRateLimiter, async (req, r
     return res.json({ success: true, ...(await require('../services/pictureSuggestions').suggest(models(), req.params.postId)) });
   } catch (err) {
     return sendError(res, err, 'POST /posts/:postId/suggestions');
+  }
+});
+
+router.post('/posts/:postId/suggestions/choice', ...admin, async (req, res) => {
+  try {
+    return res.json({ success: true, ...(await require('../services/pictureSuggestions').recordChoice(models(), req.params.postId, req.body || {})) });
+  } catch (err) {
+    return sendError(res, err, 'POST /posts/:postId/suggestions/choice');
+  }
+});
+
+router.get('/suggestions/acceptance', ...admin, async (req, res) => {
+  try {
+    return res.json({ success: true, ...(await require('../services/pictureSuggestions').acceptance(models())) });
+  } catch (err) {
+    return sendError(res, err, 'GET /suggestions/acceptance');
   }
 });
 

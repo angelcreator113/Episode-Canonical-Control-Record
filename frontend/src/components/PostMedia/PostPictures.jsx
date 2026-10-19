@@ -7,7 +7,7 @@
  * public; when one isn't, "Approve and make public" does it in one click
  * (GET/PUT /api/v1/post-media/posts/:id, .../approve-pictures;
  * services/postMedia). "Suggest for this caption" is phase 4
- * (CaptionSuggestions): use, edit or create, each only on her click.
+ * (CaptionSuggestions): use, edit, generate new or upload, each only on her click.
  */
 import { useState, useEffect, useCallback } from 'react';
 import { Images, ArrowUp, ArrowDown, X, Check, Sparkles, Wand2 } from 'lucide-react';
@@ -140,7 +140,7 @@ export default function PostPictures({ postId, onSaved }) {
       </div>
       {!data.poster && <p className="pp-muted">This post has no character in the registry, so there is no library to pick from.</p>}
       {suggesting && data.poster && (
-        <CaptionSuggestions postId={postId} library={data.library} isChosen={isChosen} onUse={use} onToggle={toggle} onMade={refreshLibrary} />
+        <CaptionSuggestions postId={postId} library={data.library} isChosen={isChosen} onUse={use} onMade={refreshLibrary} />
       )}
       {data.library.length ? (
         <ul className="pp-grid" data-testid="pp-library">

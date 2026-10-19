@@ -65,14 +65,14 @@ describe('PostPictures', () => {
       success: true, cached: false, fallback: false,
       reading: { subject: 'bread dough', activity: 'baking bread', mood: 'quiet', setting: 'home kitchen', person_in_frame: 'optional', objects: ['dough'], avoid: [] },
       ranked: [{ ...dough, score: 12, ready: false, why: ['shows dough, ceramic bowl'] }],
-      plan: { recommended: 'use', use: { action: 'use', asset_id: 'a-1', ready: false }, edit: null, create: { action: 'create', references: [], blocked: null } },
+      plan: { recommended: 'use', use: { action: 'use', asset_id: 'a-1', ready: false }, edit: null, create: { action: 'create', references: [], blocked: null }, actions: ['use', 'edit', 'create', 'upload'], person: { name: 'Maren', in_frame: 'optional', included: false, portraits: 0 }, create_note: 'A fitting picture already exists; generating costs about $0.20.' },
     } });
     render(<PostPictures postId="p-1" />);
     fireEvent.click(await screen.findByRole('button', { name: /Suggest for this caption/ }));
     const list = await screen.findByTestId('pp-suggestions');
     expect(list.textContent).toContain('shows dough, ceramic bowl');
     expect(api.post).toHaveBeenCalledWith('/api/v1/post-media/posts/p-1/suggestions', {});
-    fireEvent.click(screen.getByTestId('cs-action'));
+    fireEvent.click(screen.getByTestId('cs-use'));
     expect(within(screen.getByTestId('pp-chosen')).getByAltText('Dough rising')).toBeTruthy();
     expect(api.put).not.toHaveBeenCalled(); // nothing saved until Save
   });

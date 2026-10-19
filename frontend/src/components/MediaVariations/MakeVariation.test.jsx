@@ -12,7 +12,7 @@ vi.mock('../../services/api', () => ({
 }));
 
 import api from '../../services/api';
-import { MakeVariation, PictureFamily } from './MakeVariation';
+import { MakeVariation, PictureFamily, MadeFrom } from './MakeVariation';
 
 const original = { id: 'a-1', url: 'https://img/dough.png', caption: 'Dough rising', status: 'approved', visibility: 'internal' };
 const made = { id: 'a-2', url: 'https://img/cup.png', caption: 'Dough rising (variation)', status: 'draft', visibility: 'private', parent_asset_id: 'a-1' };
@@ -102,6 +102,27 @@ describe('PictureFamily', () => {
   test('a picture with no variations shows nothing', async () => {
     api.get.mockResolvedValueOnce({ data: { success: true, root_id: 'a-1', items: [original] } });
     const { container } = render(<PictureFamily assetId="a-1" />);
+    await waitFor(() => expect(api.get).toHaveBeenCalled());
+    expect(container.textContent).toBe('');
+  });
+});
+
+describe('MadeFrom', () => {
+  beforeEach(() => { Object.values(api).forEach((fn) => fn.mockReset()); });
+
+  test('names the place picture and the portrait a made picture came from', async () => {
+    vi.mocked(api.get).mockResolvedValueOnce({ data: { success: true, items: [
+      { role: 'place', source_asset_id: 'k-1', caption: 'Home kitchen' },
+      { role: 'portrait', character_id: 'm-1', character_name: 'Maren' },
+    ] } });
+    render(<MadeFrom assetId="n-1" />);
+    expect((await screen.findByTestId('picture-made-from')).textContent).toBe('Made from the place picture "Home kitchen", the portrait of Maren.');
+    expect(api.get).toHaveBeenCalledWith('/api/v1/media/n-1/sources');
+  });
+
+  test('shows nothing when it was made from nothing', async () => {
+    vi.mocked(api.get).mockResolvedValueOnce({ data: { success: true, items: [] } });
+    const { container } = render(<MadeFrom assetId="n-2" />);
     await waitFor(() => expect(api.get).toHaveBeenCalled());
     expect(container.textContent).toBe('');
   });

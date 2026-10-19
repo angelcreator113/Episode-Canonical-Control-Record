@@ -18,7 +18,7 @@
 import { useState, useEffect } from 'react';
 import { ImagePlus, Tag, X, Search, Library } from 'lucide-react';
 import api from '../../services/api';
-import { MakeVariation, PictureFamily } from '../MediaVariations/MakeVariation';
+import { MakeVariation, PictureFamily, MadeFrom } from '../MediaVariations/MakeVariation';
 import './GalleryLibrary.css';
 
 const errorText = (err, fallback) => err?.response?.data?.error || fallback;
@@ -214,6 +214,8 @@ export function PictureLibrary({ item, character, onChanged }) {
         </label>
       </div>
       {error && <p className="gl-error" role="alert">{error}</p>}
+      {/* Visual Memory phase 4: what a made picture was made from. */}
+      {asset.source === 'generated' && <MadeFrom assetId={asset.id} />}
       {/* Visual Memory phase 3: a variation of this picture, and the family it belongs to. */}
       <MakeVariation asset={asset} onMade={onChanged} />
       <PictureFamily assetId={asset.id} />
