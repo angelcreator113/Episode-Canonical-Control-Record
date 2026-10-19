@@ -37,16 +37,21 @@ export function orderPosts(posts, pinned = []) {
   return [...first, ...posts.filter((p) => !at.has(String(p.id)))];
 }
 
-/** Where a post's picture stands, for an ADMIN: a line, and the button that moves it on. */
+/**
+ * Where a post's picture stands, for an ADMIN: a short word for the tile, the
+ * whole sentence (shown on hover and read aloud), and the button that moves it on.
+ */
 export function pictureLine(job) {
   if (!job || !job.state) return null;
   switch (job.state) {
     case 'pending':
-    case 'making': return { text: 'Picture being made…' };
-    case 'waiting_cap': return { text: job.reason || "Today's post-picture limit is reached; it will be made tomorrow.", action: 'make_now' };
-    case 'failed': return { text: job.error || 'The picture could not be made.', action: 'retry' };
-    case 'made': return { text: job.reused ? 'Picture from their camera roll (no cost)' : `Picture made${money(job.cost_usd) ? ` · ${money(job.cost_usd)}` : ''}` };
-    case 'skipped': return { text: job.reason || 'No picture for this post.' };
+    case 'making': return { short: 'Making…', text: 'Its picture is being made.' };
+    case 'waiting_cap': return { short: 'Waiting', text: job.reason || "Today's post-picture limit is reached; it will be made tomorrow.", action: 'make_now' };
+    case 'failed': return { short: 'Failed', text: job.error || 'The picture could not be made.', action: 'retry' };
+    case 'made': return job.reused
+      ? { short: 'From roll', text: 'A photo already in their camera roll (no cost).' }
+      : { short: money(job.cost_usd) || 'Made', text: `Picture made${money(job.cost_usd) ? `, ${money(job.cost_usd)}` : ''}.` };
+    case 'skipped': return { short: 'No picture', text: job.reason || 'No picture for this post.' };
     default: return null;
   }
 }
@@ -248,8 +253,9 @@ export default function PulsePerson({ show, handle, viewAt = null, admin = false
                           {pinned ? <PinOff size={14} aria-hidden="true" /> : <Pin size={14} aria-hidden="true" />}
                         </button>
                         {line && (
-                          <span className="pp-picture" data-testid="pp-picture">
-                            {line.text}
+                          <span className="pp-picture" data-testid="pp-picture" title={line.text}>
+                            <span aria-hidden="true">{line.short}</span>
+                            <span className="pp-sr">{line.text}</span>
                             {line.action === 'make_now' && (
                               <button type="button" className="pp-picture-btn" disabled={busy} onClick={() => makePicture(p, true)}
                                 title="Makes it now: today's post-picture limit does not apply, the image budget still does" data-testid="pp-make-now">Make now</button>

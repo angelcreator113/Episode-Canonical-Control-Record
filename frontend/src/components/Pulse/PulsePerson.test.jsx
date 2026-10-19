@@ -56,11 +56,11 @@ describe('orderPosts and pictureLine', () => {
   });
   test('where a picture stands, and what moves it on', () => {
     expect(pictureLine(null)).toBeNull();
-    expect(pictureLine({ state: 'pending' }).text).toMatch(/being made/);
-    expect(pictureLine({ state: 'waiting_cap', reason: 'Limit reached.' })).toEqual({ text: 'Limit reached.', action: 'make_now' });
-    expect(pictureLine({ state: 'failed', error: 'Budget used up.' })).toEqual({ text: 'Budget used up.', action: 'retry' });
-    expect(pictureLine({ state: 'made', cost_usd: 0.2 }).text).toBe('Picture made · $0.20');
-    expect(pictureLine({ state: 'made', reused: true }).text).toMatch(/no cost/);
+    expect(pictureLine({ state: 'pending' })).toEqual({ short: 'Making…', text: 'Its picture is being made.' });
+    expect(pictureLine({ state: 'waiting_cap', reason: 'Limit reached.' })).toEqual({ short: 'Waiting', text: 'Limit reached.', action: 'make_now' });
+    expect(pictureLine({ state: 'failed', error: 'Budget used up.' })).toEqual({ short: 'Failed', text: 'Budget used up.', action: 'retry' });
+    expect(pictureLine({ state: 'made', cost_usd: 0.2 })).toEqual({ short: '$0.20', text: 'Picture made, $0.20.' });
+    expect(pictureLine({ state: 'made', reused: true })).toMatchObject({ short: 'From roll', text: expect.stringMatching(/no cost/) });
   });
 });
 
@@ -167,7 +167,8 @@ describe('PulsePerson', () => {
     renderIt({ admin: true });
     await screen.findAllByTestId('pp-post');
     const lines = await screen.findAllByTestId('pp-picture');
-    expect(lines.map((l) => l.textContent)).toEqual(['Picture made · $0.20', expect.stringMatching(/limit \(20\) is reached.*Make now$/)]);
+    expect(lines.map((l) => l.getAttribute('title'))).toEqual(['Picture made, $0.20.', expect.stringMatching(/limit \(20\) is reached/)]);
+    expect(lines[1].textContent).toMatch(/^Waiting.*Make now$/);
     fireEvent.click(screen.getAllByTestId('pp-pin')[0]);
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/pulse-follows/posts/a/pin'));
     fireEvent.click(screen.getByTestId('pp-make-now'));

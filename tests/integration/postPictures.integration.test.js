@@ -166,6 +166,9 @@ const sleep = (ms) => new Promise((r) => { setTimeout(r, ms); });
     expect(job).toMatchObject({ state: 'made', count: 1, reused: false });
     expect(job.cost_usd).toBeGreaterThan(0);
     expect(imageCalls()).toEqual([expect.stringMatching(/images\/edits$/)]);     // the headshot is the reference
+    // A person's photo is a phone's portrait (both sizes are priced; Evoni, 2026-10-19).
+    const form = axios.post.mock.calls.find((c) => /edits$/.test(c[0]))[1];
+    expect(form.getBuffer().toString()).toMatch(/1024x1536/);
 
     const [m] = await q('SELECT * FROM camera_roll_moments WHERE post_id = :id', { id });
     expect(m).toMatchObject({ purpose: 'posted', status: 'made', character_id: ids.maren, album: 'fashion', shows_face: true });
@@ -270,6 +273,7 @@ const sleep = (ms) => new Promise((r) => { setTimeout(r, ms); });
     expect(imageCalls()).toEqual([expect.stringMatching(/images\/generations$/)]);   // no person, no reference
     const body = axios.post.mock.calls.find((c) => /generations$/.test(c[0]))[1];
     expect(body.prompt).toMatch(/No person/);
+    expect(body.size).toBe('1536x1024');                                          // a brand's product shot stays landscape
     const [link] = await q("SELECT entity_type, role FROM media_asset_links WHERE asset_id = :a AND entity_type = 'brand'", { a: job.asset_ids[0] });
     expect(link).toMatchObject({ entity_type: 'brand', role: 'owner' });
   });
