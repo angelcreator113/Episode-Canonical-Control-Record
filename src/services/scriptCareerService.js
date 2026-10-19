@@ -89,7 +89,9 @@ function deliverableLine(d) {
     || [d.quantity > 1 ? `${d.quantity}x` : null, d.deliverable_type ? d.deliverable_type.replace(/_/g, ' ') : null].filter(Boolean).join(' ');
   const terms = [
     d.owed_to ? `owed to the ${d.owed_to}` : null,
-    d.fee > 0 ? `${d.fee} coins` : null,
+    // What it pays her, next episode; never a cost (Script page re-audit,
+    // 2026-10-19: "100 coins" beside "owed" read as a charge).
+    d.fee > 0 ? `pays her ${d.fee} coins, next episode` : null,
     d.due_date ? `due ${d.due_date}` : null,
     d.required ? null : 'optional',
     d.status && d.status !== 'pending' ? d.status : null,
@@ -119,7 +121,7 @@ function careerBlock(career, { beat14 = null } = {}) {
     if (deal.bonus) out.push(`  Bonus if she delivers: ${deal.bonus.join(', ')}.`);
   }
   if (deliverables.length) {
-    out.push('WHAT SHE OWES:');
+    out.push('WHAT SHE OWES (content she makes for the deal; none of it costs her coins):');
     out.push(...deliverables.map(deliverableLine));
   }
   if (goals.length) {

@@ -518,7 +518,7 @@ function storyContextBlocks(context, { withSeason = true } = {}) {
   let charBlock = '';
   if (context.characterState) {
     const cs = context.characterState;
-    charBlock = `═══ LALA'S STATS ═══\n🪙 ${cs.coins} coins | ⭐ ${cs.reputation}/10 rep | 🤝 ${cs.brand_trust}/10 trust | 📣 ${cs.influence}/10 influence | 😰 ${cs.stress}/10 stress\nSCRIPT DIRECTIVE: Use the exact coin number in Lala's internal monologue when she checks her balance.\n`;
+    charBlock = `═══ LALA'S STATS ═══\n🪙 ${cs.coins} coins | ⭐ ${cs.reputation}/10 rep | 🤝 ${cs.brand_trust}/10 trust | 📣 ${cs.influence}/10 influence | 😰 ${cs.stress}/10 stress\nSCRIPT DIRECTIVE: When she checks her balance, use the exact number as it stands at that point: this one before any coin line, and after the coin lines the number they leave (after the look, LALA'S COINS gives it when it is given); never another.\n`;
   }
 
   const pulseBlock = require('./scriptPulsePosts').pulseScriptBlock(context.pulsePosts);
