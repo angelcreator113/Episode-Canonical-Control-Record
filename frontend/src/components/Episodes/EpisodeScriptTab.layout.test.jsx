@@ -47,7 +47,8 @@ describe('Script tab layout', () => {
   test('the beat list: the beats the script has, a phone where a beat has a phone moment, and the legend', async () => {
     renderTab();
     const list = await screen.findByTestId('script-beatlist');
-    expect([...list.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['1Opening Ritual', '4Interruption Pulse 1', '11The Event']);
+    // The studio rows (Evoni's mockup, 2026-10-19): each row's button names its beat and status.
+    expect([...list.querySelectorAll('[data-testid^="script-nav-"]:not([data-testid^="script-nav-phone"]):not([data-testid^="script-nav-status"])')].map((b) => b.querySelector('.esp-beatlist-num').textContent + b.querySelector('.esp-beatlist-name').textContent)).toEqual(['1Opening Ritual', '4Interruption Pulse 1', '11The Event']);
     await waitFor(() => expect(within(list).getByTestId('script-nav-phone-4')).toBeTruthy());
     expect(within(list).queryByTestId('script-nav-phone-1')).toBeNull();
     expect(within(list).queryByTestId('script-nav-phone-11')).toBeNull();

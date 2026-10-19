@@ -50,8 +50,9 @@ beforeEach(() => {
 });
 
 const openBeat = async (n) => {
-  const list = await screen.findByTestId('script-beatlist');
-  fireEvent.click([...list.querySelectorAll('button')].find((b) => b.textContent.includes(String(n))));
+  // A beat row's text now carries its length too, so the row is found by its number.
+  await screen.findByTestId('script-beatlist');
+  fireEvent.click(screen.getByTestId(`script-nav-${n}`));
 };
 
 test('through the closet beat her phone shows the Shopping list', async () => {
