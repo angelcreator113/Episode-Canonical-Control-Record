@@ -173,17 +173,21 @@ async function readCaption(db, post, poster) {
     console.error('[pictureSuggestions] the character file could not be read; reading without it:', err.message);
   }
   let message;
+  let unavailable = false;
   for (const model of MODELS) {
     try {
       message = await getClient().messages.create({ model, max_tokens: 500, messages: [{ role: 'user', content: readingPrompt(caption, block, poster.name) }] });
       break;
     } catch (modelErr) {
       console.warn(`[pictureSuggestions] reading with ${model} failed:`, modelErr.message);
-      if (modelErr.code === 'AI_BUDGET_EXCEEDED' || model === MODELS[MODELS.length - 1]) throw modelErr;
+      if (modelErr.code === 'AI_BUDGET_EXCEEDED') throw modelErr;
+      // The AI down or without a key (end-to-end check, 2026-10-19): the
+      // caption's own words, not the SDK's raw error; nothing is kept.
+      if (model === MODELS[MODELS.length - 1]) unavailable = true;
     }
   }
-  const reading = parseReading(message?.content?.[0]?.text);
-  if (!reading) return { reading: fallbackReading(caption), cached: false, fallback: true, suggestion_id: null };
+  const reading = unavailable ? null : parseReading(message?.content?.[0]?.text);
+  if (!reading) return { reading: fallbackReading(caption), cached: false, fallback: true, ai_unavailable: unavailable, suggestion_id: null };
   // Its own row, apart from the post's review notes. Two clicks at once keep one row.
   await db.sequelize.query(
     `INSERT INTO post_picture_suggestions (post_id, caption_hash, model, reading)
