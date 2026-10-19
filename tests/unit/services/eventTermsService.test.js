@@ -50,19 +50,34 @@ describe('deliverablesFromOpportunity', () => {
     ]);
   });
 
-  test('D15: a format key is kept, free text stays untyped', () => {
+  test('D15: a format key is kept at its default quantity, free text stays untyped', () => {
     const rows = deliverablesFromOpportunity({
       deliverables: [
         { type: 'pulse_video', description: 'Unboxing' },
         { type: 'Sponsored story', description: 'Story mention' },
         { type: 'story_set_3', description: 'Three stories' },
+        { type: 'pulse_stories', description: 'Stories in the coat' },
       ],
     });
     expect(rows.map((r) => [r.deliverable_type, r.platform, r.quantity])).toEqual([
-      ['pulse_video', undefined, undefined],
+      ['pulse_video', undefined, 1],
       ['Sponsored story', undefined, undefined],
       ['pulse_stories', 'pulse', 3],
+      // Not 1: Pulse stories are priced per 3, and counted done at 3.
+      ['pulse_stories', undefined, 3],
     ]);
+  });
+
+  test('a typed entry keeps the quantity it states; an invalid one falls back to the default', () => {
+    const rows = deliverablesFromOpportunity({
+      deliverables: [
+        { type: 'pulse_stories', description: 'Six stories', quantity: 6 },
+        { type: 'pulse_stories', description: 'Bad count', quantity: 0 },
+        { type: 'story_set_3', description: 'Legacy, stated', quantity: 2 },
+        { type: 'Sponsored story', description: 'Untyped', quantity: 4 },
+      ],
+    });
+    expect(rows.map((r) => r.quantity)).toEqual([6, 3, 2, undefined]);
   });
 
   test('accepts the JSONB column as a string (raw SQL rows) and tolerates junk', () => {

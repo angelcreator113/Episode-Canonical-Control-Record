@@ -49,12 +49,13 @@ const DELIVERABLE_TYPE_LABELS = Object.freeze(
   Object.fromEntries(Object.entries(DELIVERABLE_FORMATS).map(([k, f]) => [k, f.label]))
 );
 
-// An opportunity's type: a format key as it is, a pre-D15 key as its
+// An opportunity's type: a format key as it is (at its default quantity,
+// so "Pulse stories" is the 3 the card prices, not 1), a pre-D15 key as its
 // format, anything else kept as free text (untyped).
 function formatFromOpportunityType(raw) {
   const t = text(raw).slice(0, TYPE_MAX);
   if (!t) return { deliverable_type: null };
-  if (DELIVERABLE_TYPES.includes(t)) return { deliverable_type: t };
+  if (DELIVERABLE_TYPES.includes(t)) return { deliverable_type: t, quantity: DELIVERABLE_FORMATS[t].defaultQuantity };
   const legacy = LEGACY_TYPE_MAP[t];
   if (legacy) return { deliverable_type: legacy.deliverable_type, platform: legacy.platform, quantity: legacy.quantity };
   return { deliverable_type: t };
@@ -111,9 +112,13 @@ function deliverablesFromOpportunity(opp) {
     const entry = typeof item === 'string' ? { description: item } : (item || {});
     const description = text(entry.description);
     if (!description) continue;
+    const format = formatFromOpportunityType(entry.type);
+    // A typed entry's own quantity, when it states a valid one, over the format's.
+    const stated = Number(entry.quantity);
+    if (format.quantity != null && Number.isInteger(stated) && stated >= QUANTITY_MIN && stated <= QUANTITY_MAX) format.quantity = stated;
     rows.push({
       description: description.slice(0, DESCRIPTION_MAX),
-      ...formatFromOpportunityType(entry.type),
+      ...format,
       due_date: text(entry.due_date).slice(0, DUE_DATE_MAX) || null,
       required: true,
       owed_to: 'brand',

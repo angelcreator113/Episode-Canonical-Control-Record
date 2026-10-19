@@ -8,6 +8,7 @@ import { Crown, BookOpen, Smartphone, Scissors, RotateCcw, Sparkles, Library } f
 import api from '../../services/api';
 import EpisodeStoryRecord from './EpisodeStoryRecord';
 import EpisodeStoryCanon from './EpisodeStoryCanon';
+import EpisodeBookSteps from './EpisodeBookSteps';
 import './EpisodeResultsSummary.css';
 
 const TIER_STYLES = {
@@ -226,6 +227,13 @@ export function EpisodeResultsStory({ episode }) {
         {error && <p className="ers-error" role="alert">{error}</p>}
         <p className="ers-note"><Sparkles size={13} aria-hidden="true" /> Uses the episode's script and result.</p>
       </section>
+
+      {/* What was "This week's episode" (Evoni, 2026-10-19): the short
+          story, beat 11 piece, chapter and "Plan the next chapters", for
+          this episode (EpisodeBookSteps). */}
+      {episode?.id && (
+        <EpisodeBookSteps episode={episode} refreshKey={written} onStoryWritten={() => setWritten((n) => n + 1)} />
+      )}
     </div>
   );
 }

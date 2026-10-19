@@ -37,10 +37,15 @@ function buildNav() {
         // culture, setup and state) are the LalaVerse hub's tabs
         // (2026-10-04), not rows here. The Show Bible row is gone too
         // (Evoni, 2026-10-04): the Bible is the hub's Bible tab.
-        { icon: '◈', label: 'LalaVerse', route: '/universe', hint: 'Bible, world, society, culture, state' },
+        { icon: '◈', label: 'LalaVerse', route: '/universe', hint: 'Bible, world, society, brands, culture, state' },
+        // Evoni, 2026-10-19: Characters go under LalaVerse, before The
+        // Pulse (the world's people, then what they post); Relationships
+        // comes with them from WRITE.
+        { icon: '👥', label: 'Characters', route: '/character-registry?view=world' },
+        { icon: '🔗', label: 'Relationships', route: '/relationships' },
         { icon: '📱', label: 'The Pulse', route: '/pulse', hint: 'Every city has a story' },
-        // Evoni, 2026-10-18: every brand and company has its own profile.
-        { icon: '🏛️', label: 'Brands & companies', route: '/brands', hint: 'Fashion houses, press, agencies, venues' },
+        // Brands & companies is the LalaVerse hub's Brands tab (Evoni,
+        // 2026-10-19), not a row here; /brands redirects to it.
         // The Website page is Admin's Website tab (Task #2913); Admin is in the footer.
       ],
     },
@@ -56,7 +61,8 @@ function buildNav() {
       items: [
         { icon: '🗃️', label: 'Assets', route: '/assets' },
         { icon: '🧩', label: 'Templates', route: '/template-studio' },
-        { icon: '📱', label: "Lala's Phone", route: '/phone-hub' },
+        // Lala's Phone (/phone-hub) left the sidebar (Evoni, 2026-10-19);
+        // Home's phone card and each episode's Overlays tab still open it.
       ],
     },
     {
@@ -64,10 +70,11 @@ function buildNav() {
       items: [
         { icon: '✍️', label: 'Stories', route: '/stories',
           children: [
-            // The book follows the show: one episode through episode, short story, beat 11, chapter.
-            { icon: '📺', label: "This week's episode", route: '/this-week' },
-            // "Structure" (/story-engine) only redirected to Stories; the book's
-            // plan is now "Plan the next chapters" on This week's episode.
+            // "This week's episode" left (Evoni, 2026-10-19): an episode's
+            // short story, beat 11 piece, chapter and "Plan the next
+            // chapters" are on its Results › Story tab (EpisodeBookSteps);
+            // /this-week opens the episode that still owes something there.
+            // "Structure" (/story-engine) only redirected to Stories.
             { icon: '🧵', label: 'Threads', route: '/story-threads' },
             // Story Calendar: the novel's dates. The cultural calendar is Culture &
             // Events; the production schedule is Producer Mode's Season Plan (IA-04).
@@ -76,8 +83,6 @@ function buildNav() {
             { icon: '⚖️', label: 'Story Evaluation', route: '/story-evaluation' },
           ],
         },
-        { icon: '👥', label: 'Characters', route: '/character-registry?view=world' },
-        { icon: '🔗', label: 'Relationships', route: '/relationships' },
       ],
     },
   ];
@@ -148,7 +153,7 @@ function Sidebar({ isOpen, onClose }) {
 
   // Auto-expand Stories sub-nav
   useEffect(() => {
-    if (['/this-week', '/story-engine', '/scene-proposer', '/assembler', '/continuity', '/narrative-control'].some(p => location.pathname.startsWith(p))) {
+    if (['/story-engine', '/scene-proposer', '/assembler', '/continuity', '/narrative-control'].some(p => location.pathname.startsWith(p))) {
       setStoriesOpen(true);
     }
   }, [location.pathname]);

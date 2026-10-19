@@ -3,7 +3,8 @@
  * opens a tab, `?sub=` the page's own tab; the Overview keeps the show's
  * world at a glance and has lost its jump buttons (the tabs and the
  * Sidebar are the doorways); an embedded page shows no page heading of
- * its own, since the tab is the heading.
+ * its own, since the tab is the heading. Brands & companies is the seventh
+ * tab, after Society (Evoni, 2026-10-19).
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
@@ -13,6 +14,7 @@ import { MemoryRouter } from 'react-router-dom';
 vi.mock('../services/api', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), patch: vi.fn() },
 }));
+vi.mock('../contexts/AuthContext', () => ({ useAuth: () => ({ user: { groups: ['admin'] } }) }));
 
 import api from '../services/api';
 import UniversePage, { HUB_TABS } from './UniversePage';
@@ -31,11 +33,11 @@ beforeEach(() => {
 });
 
 describe('UniversePage: the LalaVerse hub', () => {
-  test('six tabs, Overview first, with the show at a glance and no jump buttons', async () => {
+  test('seven tabs, Overview first, with the show at a glance and no jump buttons', async () => {
     renderAt('/universe');
-    expect(HUB_TABS.map((t) => t.key)).toEqual(['overview', 'bible', 'world', 'society', 'culture', 'state']);
+    expect(HUB_TABS.map((t) => t.key)).toEqual(['overview', 'bible', 'world', 'society', 'brands', 'culture', 'state']);
     const tabs = screen.getAllByRole('tab');
-    expect(tabs.map((t) => t.textContent)).toEqual(['OverviewThe world at a glance', 'Show BibleCanon, decisions, guard', 'WorldMap, cities, venues', 'SocietyArchetypes, legends, trends', 'CultureCalendar, awards, history', 'StateSnapshots, timeline, tensions']);
+    expect(tabs.map((t) => t.textContent)).toEqual(['OverviewThe world at a glance', 'Show BibleCanon, decisions, guard', 'WorldMap, cities, venues', 'SocietyArchetypes, legends, trends', 'BrandsHouses, press, agencies, venues', 'CultureCalendar, awards, history', 'StateSnapshots, timeline, tensions']);
     expect(tabs[0].getAttribute('aria-current')).toBe('page');
     await waitFor(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Styling Adventures'));
     for (const label of ['Producer Mode', 'Show Dashboard', 'Show Bible', 'World Dashboard']) {
@@ -68,6 +70,22 @@ describe('UniversePage: the LalaVerse hub', () => {
     await new Promise((r) => setTimeout(r, 30));
     expect(screen.queryByText('Loading LalaVerse...')).toBeNull();
     expect(screen.getByTestId('world-setup-count')).toBeTruthy();
+  });
+
+  test('?tab=brands is Brands & companies: the hub banner, then the list with no page heading of its own', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/shows') return { data: { success: true, data: SHOWS } };
+      if (url.startsWith('/api/v1/companies')) return { data: { success: true, companies: [{ id: 'b-1', slug: 'velour_atelier', name: 'Velour Atelier', kind: 'brand', kind_label: 'Fashion brand', deals: 0 }] } };
+      return { data: { data: [] } };
+    });
+    renderAt('/universe?tab=brands');
+    expect(screen.getByRole('tab', { name: /Brands/ }).getAttribute('aria-current')).toBe('page');
+    expect(screen.getByTestId('lalaverse-banner').textContent).toContain('The LalaVerse · Brands');
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Brands & companies');
+    const link = await screen.findByRole('link', { name: 'Velour Atelier' });
+    expect(link.getAttribute('href')).toBe('/brands/velour_atelier');
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByTestId('companies').className).toContain('is-embedded');
   });
 
   test('the State tab holds its front page, World State and Tensions; setup is gone from it', async () => {
