@@ -44,6 +44,7 @@ const {
 } = require('../utils/eventTermsLock');
 const { syncDraftedDealType } = require('../services/dealTypeDraftService');
 const { findMissingPrices, dealPriceRequiredError, dealPriceRequiredBody, DEAL_PRICE_REQUIRED_CODE } = require('../services/dealPricingService');
+const { takePriceSnapshot } = require('../services/dealPriceSnapshot');
 const { DEAL_TYPES } = require('../models/WorldEvent');
 
 // A deal_type body value as the PUT loop reads it: '', 'null' and
@@ -853,9 +854,15 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
     // L13 (§8(hh)): the scene set is part of the Place, editable after Start
     // Episode while the episode is a draft, locked once it is accepted. The
     // stored value re-sent is not a change.
+    // The event's set before this save, for the version check and so its
+    // draft episode's Event location follows a change (eighth audit).
+    let storedSceneSetId = null;
+    let sceneSetChanged = false;
     if (updates.scene_set_id !== undefined) {
       const [[stored]] = await models.sequelize.query(
         'SELECT scene_set_id FROM world_events WHERE id = :eventId AND show_id = :showId', { replacements: { eventId, showId } });
+      storedSceneSetId = stored?.scene_set_id || null;
+      sceneSetChanged = Boolean(stored && updates.scene_set_id && String(stored.scene_set_id || '') !== String(updates.scene_set_id));
       if (stored && String(stored.scene_set_id || '') !== String(updates.scene_set_id || '')) {
         const { isPlaceLocked, PLACE_LOCKED_CODE, PLACE_LOCKED_MESSAGE } = require('../utils/placeLock');
         if (await isPlaceLocked(models.sequelize, eventId)) {
@@ -1078,6 +1085,10 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
               code: 'SCENE_SET_SHOW_MISMATCH',
             });
           }
+          // Another event's version is that event's photos (eighth audit).
+          const versionRefusal = await require('../services/eventPlaceSync').refuseEventSet(
+            models.sequelize, { event: { id: eventId, scene_set_id: storedSceneSetId, show_id: showId }, setId: val, showId });
+          if (versionRefusal) return res.status(versionRefusal.status).json({ error: versionRefusal.error, message: versionRefusal.error, code: versionRefusal.code });
         }
 
         setClauses.push(`${field} = :${field}`);
@@ -1204,6 +1215,13 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       } else {
         throw updateErr;
       }
+    }
+
+    // A new place for the event: its draft episode's Event location and
+    // beats follow (eighth audit).
+    if (sceneSetChanged) {
+      await require('../services/eventPlaceSync').syncEpisodeEventLocation(models.sequelize,
+        { eventId, fromSetId: storedSceneSetId, toSetId: updates.scene_set_id });
     }
 
     // Deal type (Task #2330): an Auto-drafted deal type follows the rule's
@@ -1415,6 +1433,18 @@ router.post('/world/:showId/events/:eventId/scene-set-link', requireAuth, async 
     const chosenSceneSetId = req.body?.scene_set_id || null;
     if (chosenSceneSetId && typeof chosenSceneSetId !== 'string') {
       return res.status(400).json({ success: false, error: 'scene_set_id must be a string' });
+    }
+    // A chosen set changes the event's Place: locked once its episode is
+    // accepted, of this show or shared, and not another event's version
+    // (eighth audit: this route skipped all three).
+    if (chosenSceneSetId && String(chosenSceneSetId) !== String(event.scene_set_id || '')) {
+      const { isPlaceLocked, PLACE_LOCKED_CODE, PLACE_LOCKED_MESSAGE } = require('../utils/placeLock');
+      if (await isPlaceLocked(models.sequelize, event.id)) {
+        return res.status(409).json({ success: false, code: PLACE_LOCKED_CODE, error: PLACE_LOCKED_MESSAGE });
+      }
+      const refusal = await require('../services/eventPlaceSync').refuseEventSet(models.sequelize, { event, setId: chosenSceneSetId, showId });
+      // A set that does not exist is answered by the link itself (needs reconnecting).
+      if (refusal && refusal.code !== 'INVALID_SCENE_SET_ID') return res.status(refusal.status).json({ success: false, code: refusal.code, error: refusal.error });
     }
     const sceneSet = await models.sequelize.transaction((t) => linkEventSceneSet(models.sequelize, {
       event, episodeId: event.used_in_episode_id, transaction: t, chosenSceneSetId,
@@ -2816,10 +2846,15 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
         continue;
       }
       try {
-        await models.sequelize.query(
-          `UPDATE world_events SET used_in_episode_id = :episodeId, status = 'used', updated_at = NOW() WHERE id = :evId`,
-          { replacements: { episodeId: newEpisodeId, evId: ev.id } }
-        );
+        // Linked, its terms lock: the link and its frozen prices commit
+        // together (services/dealPriceSnapshot).
+        await models.sequelize.transaction(async (transaction) => {
+          await models.sequelize.query(
+            `UPDATE world_events SET used_in_episode_id = :episodeId, status = 'used', updated_at = NOW() WHERE id = :evId`,
+            { replacements: { episodeId: newEpisodeId, evId: ev.id }, transaction }
+          );
+          await takePriceSnapshot(models.sequelize, ev.id, { transaction, reason: 'linked_episode' });
+        });
         linkedExtras.push({ id: ev.id, name: ev.name });
       } catch (linkErr) {
         skippedExtras.push({ id: ev.id, name: ev.name, reason: linkErr.message });

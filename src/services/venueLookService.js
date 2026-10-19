@@ -182,11 +182,15 @@ async function loadLookEvent(sequelize, { showId, eventId }) {
       WHERE e.id = :eventId AND e.show_id = :showId AND e.deleted_at IS NULL`,
     { replacements: { eventId, showId } });
   if (!event) throw new VenueLookError('Event not found', 404, 'EVENT_NOT_FOUND');
+  // Locked by the Place lock's own rule (the brief's episode first, then
+  // used_in_episode_id): the stamp alone locked a draft and missed an
+  // accepted episode named by its brief (eighth audit).
+  event.place_locked = await require('../utils/placeLock').isPlaceLocked(sequelize, event.id);
   return event;
 }
 
 function assertEditable(event) {
-  if (event.evaluation_status === 'accepted') {
+  if (event.place_locked) {
     throw new VenueLookError("This event's episode is accepted: its venue look is locked", 409, 'VENUE_LOOK_LOCKED');
   }
 }
@@ -203,12 +207,12 @@ async function withReferenceUrls(sequelize, look) {
   return { ...look, references: look.references.map((r) => ({ ...r, url: urls.get(r.asset_id) || null })) };
 }
 
-async function writeLook(sequelize, eventId, look) {
+async function writeLook(sequelize, eventId, look, transaction = null) {
   const stored = { ...look, references: look.references.map(({ asset_id, use_as_reference }) => ({ asset_id, use_as_reference })) };
   const [[row]] = await sequelize.query(
     `UPDATE world_events SET venue_look = CAST(:look AS jsonb), updated_at = NOW()
       WHERE id = :eventId RETURNING updated_at`,
-    { replacements: { look: JSON.stringify(stored), eventId } });
+    { replacements: { look: JSON.stringify(stored), eventId }, ...(transaction ? { transaction } : {}) });
   return row?.updated_at || null;
 }
 
@@ -216,7 +220,7 @@ async function getVenueLook(sequelize, { showId, eventId }) {
   const event = await loadLookEvent(sequelize, { showId, eventId });
   return {
     venue_look: await withReferenceUrls(sequelize, readVenueLook(event.venue_look)),
-    editable: event.evaluation_status !== 'accepted',
+    editable: !event.place_locked,
   };
 }
 
@@ -306,8 +310,14 @@ async function draftVenueLook(sequelize, { showId, eventId, anthropic } = {}) {
     try {
       const response = await api.messages.create({ model: MODELS[0], max_tokens: 700, messages: [{ role: 'user', content: prompt }] });
       const draft = parseDraft(response?.content?.[0]?.text);
-      const { look, keptEdited } = mergeDraft(current, draft);
-      const updatedAt = await writeLook(sequelize, eventId, look);
+      // Merged into the look as it is now, read again under a lock: an edit
+      // saved while the draft was being written was overwritten (eighth audit).
+      const { look, keptEdited, updatedAt } = await sequelize.transaction(async (transaction) => {
+        const [[fresh]] = await sequelize.query('SELECT venue_look FROM world_events WHERE id = :eventId FOR UPDATE',
+          { replacements: { eventId }, transaction });
+        const merged = mergeDraft(fresh ? readVenueLook(fresh.venue_look) : current, draft);
+        return { ...merged, updatedAt: await writeLook(sequelize, eventId, merged.look, transaction) };
+      });
       return { venue_look: await withReferenceUrls(sequelize, look), kept_edited: keptEdited, updated_at: updatedAt };
     } catch (err) {
       if (err?.status === 429) throw new VenueLookError(err.message, 429, 'AI_BUDGET_EXCEEDED');
