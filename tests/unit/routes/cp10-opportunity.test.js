@@ -11,7 +11,8 @@ const SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'route
 
 describe('Step 3 CP10 — opportunityRoutes.js', () => {
   test('requireAuth import (lazy-noop removed)', () => {
-    expect(SRC).toMatch(/const\s*\{\s*requireAuth\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
+    // authorize joined the import when Beat 14's attach and detach became ADMIN only (Evoni, 2026-10-19).
+    expect(SRC).toMatch(/const\s*\{\s*requireAuth\s*(?:,\s*authorize\s*)?\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
   });
 
   test('no lazy-noop fallback (final elimination)', () => {

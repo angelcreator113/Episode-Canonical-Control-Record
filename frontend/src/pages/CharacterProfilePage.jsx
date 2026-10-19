@@ -161,7 +161,7 @@ export const TABS = [
   { id: 'inner',       label: 'Inner Life',   icon: Heart },
   // Evoni, 2026-10-17: how they look, a generator for it, and portraits.
   { id: 'appearance',  label: 'Appearance',   icon: Palette },
-  { id: 'voice',       label: 'Voice & Feed', icon: Mic },
+  { id: 'voice',       label: 'Voice & Pulse', icon: Mic },
   { id: 'connections', label: 'Connections',  icon: Users },
   { id: 'world',       label: 'In the World', icon: Globe2 },
   // Evoni, 2026-10-17: their home, closet and place of work, and the events they host.
@@ -434,7 +434,7 @@ function WhereTheyShowUp({ appearances, feedProfile }) {
         <span className="ch-note">Everything in the show that points at them</span>
       </div>
       {!appearances ? <p className="ch-note">Loading…</p>
-        : !appearances.linked ? <p className="ch-note">No feed profile yet, so nothing in the show points at them. Match them to a feed person on <Link to="/character-registry">The cast</Link>.</p>
+        : !appearances.linked ? <p className="ch-note">No Pulse profile yet, so nothing in the show points at them. Match them to a Pulse person on <Link to="/character-registry">The cast</Link>.</p>
         : rows.length === 0 ? <p className="ch-note">Not in the show yet: no event, home or posts.</p>
         : (
           <ul className="ch-shows" data-testid="ch-shows">
@@ -466,7 +466,7 @@ function TheirVoice({ character, feedProfile, openTab }) {
         <h2 id="ch-voice" className="ch-h2"><Quote size={20} aria-hidden="true" className="ch-h2-icon" /> Their voice</h2>
         {openTab && <button type="button" className="ch-pill-btn" onClick={() => openTab('voice')}>View all</button>}
       </div>
-      {!voice ? <p className="ch-note">No voice yet. It comes from their feed profile and voice signature.</p> : (<>
+      {!voice ? <p className="ch-note">No voice yet. It comes from their Pulse profile and voice signature.</p> : (<>
         {voice.sample && (
           <p className="ch-sample">
             <span className="ch-sample-mark" aria-hidden="true"><Quote size={16} /></span>
@@ -480,7 +480,7 @@ function TheirVoice({ character, feedProfile, openTab }) {
           {voice.innerVoice && <span className="ch-chip">inner voice: {voice.innerVoice}</span>}
           {voice.neverSays && <span className="ch-chip">never says outright: {voice.neverSays}</span>}
         </div>
-        <p className="ch-note">How they sound on the feed and in their head.</p>
+        <p className="ch-note">How they sound on The Pulse and in their head.</p>
       </>)}
       {openTab && voice && (
         <button type="button" className="ch-link ch-more" onClick={() => openTab('voice')}>More examples <ArrowRight size={14} aria-hidden="true" /></button>
@@ -570,7 +570,7 @@ function TheirNames({ character, feedProfile, onSaved, onFeedSaved, gen }) {
       ) : (
         <div className="ch-name-row">
           <span className="ch-name-label">Social media name</span>
-          <p className="ch-note">No feed profile yet. Match them to a feed person on <Link to="/character-registry">The cast</Link>.</p>
+          <p className="ch-note">No Pulse profile yet. Match them to a Pulse person on <Link to="/character-registry">The cast</Link>.</p>
         </div>
       )}
     </section>
@@ -769,7 +769,7 @@ export function TheirFacts({ character, onFeedSaved }) {
                   </select>
                 </label>
               </>
-            ) : <p className="ch-note">No feed profile yet, so no handle, followers or account status.</p>}
+            ) : <p className="ch-note">No Pulse profile yet, so no handle, followers or account status.</p>}
             <label>Income
               <span className="ch-facts-row">
                 <input type="number" min="0" value={form.income_amount} onChange={set('income_amount')} placeholder="Amount" />
@@ -1701,7 +1701,7 @@ function TheirPlaces({ character }) {
           ) : (
             <button type="button" className="ch-link" onClick={openPicker}>Choose their home</button>
           ))}
-          {places.length > 0 && !character.feed_profile_id && <p className="ch-note">Sharing on The Pulse needs a feed profile.</p>}
+          {places.length > 0 && !character.feed_profile_id && <p className="ch-note">Sharing on The Pulse needs a Pulse profile.</p>}
         </>)}
       {note && (
         <p className={`ch-note${note.error ? ' is-error' : ''}`} role="status">
@@ -1819,7 +1819,7 @@ const activityWhen = (d) => d.toLocaleDateString('en-US', { month: 'short', day:
 export function activityOf(appearances, trail) {
   const items = [];
   for (const p of trail?.posts || []) {
-    items.push({ key: `post-${p.id}`, kind: 'post', title: p.status === 'draft' ? 'Drafted a post' : 'Posted to the feed', sub: shortText(p.text, 70) || null, at: activityDate(p.at) });
+    items.push({ key: `post-${p.id}`, kind: 'post', title: p.status === 'draft' ? 'Drafted a post' : 'Posted to The Pulse', sub: shortText(p.text, 70) || null, at: activityDate(p.at) });
   }
   for (const ev of appearances?.events || []) {
     items.push({
@@ -1949,7 +1949,7 @@ export function TheirStats({ feedProfile, appearances, relationships, entangleme
           </li>
         ))}
       </ul>
-      {!feedProfile && <p className="ch-note">Followers and posts come from their feed profile.</p>}
+      {!feedProfile && <p className="ch-note">Followers and posts come from their Pulse profile.</p>}
     </section>
   );
 }
@@ -2004,7 +2004,7 @@ export function ConnectionsCard({ relationships: rels, entanglements: ents, open
         {total > 0 && <button type="button" className="ch-pill-btn" onClick={() => openTab('connections')}>See all {total}</button>}
       </div>
       {rows.length === 0 ? (
-        <p className="ch-note">{entanglements.length ? `${entanglements.length} feed tie${entanglements.length === 1 ? '' : 's'}, no relationships yet.` : 'No relationships yet.'}</p>
+        <p className="ch-note">{entanglements.length ? `${entanglements.length} Pulse tie${entanglements.length === 1 ? '' : 's'}, no relationships yet.` : 'No relationships yet.'}</p>
       ) : (
         <ul className="ch-ties">
           {rows.map((r) => {
@@ -2263,9 +2263,9 @@ export function FeedTies({ entanglements }) {
   const { pageItems, pager } = usePaged(rows);
   return (
     <section className="ch-card" aria-labelledby="ch-ft" data-testid="ch-feed-ties">
-      <h2 id="ch-ft" className="ch-h2"><Link2 size={20} aria-hidden="true" className="ch-h2-icon" /> Feed ties</h2>
-      <p className="ch-note">Feed people whose posts reach them, and how.</p>
-      {rows.length === 0 ? <p className="ch-note">No feed ties yet.</p> : (
+      <h2 id="ch-ft" className="ch-h2"><Link2 size={20} aria-hidden="true" className="ch-h2-icon" /> Pulse ties</h2>
+      <p className="ch-note">Pulse people whose posts reach them, and how.</p>
+      {rows.length === 0 ? <p className="ch-note">No Pulse ties yet.</p> : (
         <ul className="ch-ft">
           {pageItems.map((e, i) => (
             <li key={e.id || i} className="ch-ft-item">
@@ -2273,7 +2273,7 @@ export function FeedTies({ entanglements }) {
                 <Link className="ch-conn-name" to={`/pulse?profile=${e.profile.id}`}>
                   {e.profile.display_name || `@${String(e.profile.handle || '').replace(/^@/, '')}`}
                 </Link>
-              ) : <strong className="ch-conn-name">Someone on the feed</strong>}
+              ) : <strong className="ch-conn-name">Someone on The Pulse</strong>}
               <span className="ch-ft-meta">
                 {[words(e.dimension), e.directionality ? words(e.directionality) : null].filter(Boolean).join(' · ')}
               </span>
@@ -2286,7 +2286,7 @@ export function FeedTies({ entanglements }) {
           ))}
         </ul>
       )}
-      <Pager {...pager} label="Feed ties" />
+      <Pager {...pager} label="Pulse ties" />
     </section>
   );
 }
@@ -2419,7 +2419,7 @@ export function VoiceProfile({ character, feedProfile, onSaved }) {
           <span><strong>{name}</strong> {sample}</span>
           <button type="button" className="ch-icon-btn ch-sample-copy" aria-label="Copy the sample post" onClick={copy}><Copy size={15} aria-hidden /></button>
         </div>
-      ) : <p className="ch-note">No sample post yet. It comes from their feed profile.</p>}
+      ) : <p className="ch-note">No sample post yet. It comes from their Pulse profile.</p>}
       {phrases.length > 0 && (
         <div className="ch-chips" role="group" aria-label="Their catchphrases">
           {phrases.map((p) => <span key={p} className="ch-chip">{p}</span>)}
@@ -2469,7 +2469,7 @@ export function PublicPrivateVoice({ character, feedProfile }) {
       <div className="ch-wfs">
         <div className="ch-wf is-want">
           <h3 className="ch-wf-h"><Eye size={16} aria-hidden="true" /> Public voice</h3>
-          <span className="ch-wf-kind">What the feed sees</span>
+          <span className="ch-wf-kind">What The Pulse sees</span>
           <p className="ch-pp-text">{pub || 'Not written yet.'}</p>
         </div>
         <div className="ch-wf is-fear">
@@ -2479,7 +2479,7 @@ export function PublicPrivateVoice({ character, feedProfile }) {
         </div>
       </div>
       {mask.feed_profile_is_mask && (
-        <p className="ch-note">Their feed profile is their mask: the gap between who they perform online and who they are is the story.</p>
+        <p className="ch-note">Their Pulse profile is their mask: the gap between who they perform online and who they are is the story.</p>
       )}
     </section>
   );
@@ -2512,12 +2512,12 @@ export function FeedBehavior({ character, feedProfile, appearances, onFeedSaved 
   // Whether they are on the feed at all, not how their account is doing
   // (Evoni, 2026-10-16: it said "Active" beside "Gone Dark").
   const onFeed = character.social_presence || character.feed_profile_id;
-  const presence = <span className={`ch-presence${onFeed ? ' is-on' : ''}`}>{onFeed ? 'On the feed' : 'Not on the feed'}</span>;
+  const presence = <span className={`ch-presence${onFeed ? ' is-on' : ''}`}>{onFeed ? 'On The Pulse' : 'Not on The Pulse'}</span>;
   const head = (
     <div className="ch-card-head">
       <span className="ch-head-icon" aria-hidden="true"><Smartphone size={20} /></span>
       <span className="ch-head-text">
-        <h2 id="ch-fb" className="ch-h2">Feed behavior</h2>
+        <h2 id="ch-fb" className="ch-h2">Pulse behavior</h2>
         <span className="ch-note">What they post, how often, and how they come across</span>
       </span>
       {feedProfile && !form && <button type="button" className="ch-pill-btn" onClick={() => setForm(Object.fromEntries(FEED_EDIT.map(([k]) => [k, textOf(feedProfile[k])])))}>Edit</button>}
@@ -2530,8 +2530,8 @@ export function FeedBehavior({ character, feedProfile, appearances, onFeedSaved 
         <p className="ch-fb-who">{presence}</p>
         <p className="ch-note">
           {character.feed_profile_id
-            ? 'Their feed profile could not be loaded. Reload the page to try again.'
-            : <>Not on the feed yet. Match them to a feed person on <Link to="/character-registry">The cast</Link>.</>}
+            ? 'Their Pulse profile could not be loaded. Reload the page to try again.'
+            : <>Not on The Pulse yet. Match them to a Pulse person on <Link to="/character-registry">The cast</Link>.</>}
         </p>
       </section>
     );
@@ -2629,7 +2629,7 @@ export function PostExamples({ character, feedProfile, trail, onDraft }) {
         <span className="ch-head-icon" aria-hidden="true"><ImagePlus size={20} /></span>
         <span className="ch-head-text">
           <h2 id="ch-px" className="ch-h2">Post examples</h2>
-          <span className="ch-note">How they sound on the feed</span>
+          <span className="ch-note">How they sound on The Pulse</span>
         </span>
       </div>
       <div className="ch-filter" role="group" aria-label="Show posts">
@@ -2656,7 +2656,7 @@ export function PostExamples({ character, feedProfile, trail, onDraft }) {
       <Pager {...pager} label="Posts" />
       <div className="ch-px-actions">
         {character.feed_profile_id && <button type="button" className="ch-btn" onClick={onDraft}><Plus size={15} aria-hidden="true" /> Draft new posts</button>}
-        {feedProfile && <Link className="ch-btn-soft ch-px-link" to={feedProfileLink(feedProfile)}><ExternalLink size={15} aria-hidden="true" /> View feed profile</Link>}
+        {feedProfile && <Link className="ch-btn-soft ch-px-link" to={feedProfileLink(feedProfile)}><ExternalLink size={15} aria-hidden="true" /> View Pulse profile</Link>}
       </div>
     </section>
   );
@@ -2819,7 +2819,7 @@ export function WorldPresence({ character, feedProfile, appearances, onSaved }) 
           </span>
         </li>
       </ul>
-      {city.differs && <p className="ch-note is-error">Their feed says {city.differs.feed}; their profile says {city.differs.own}.</p>}
+      {city.differs && <p className="ch-note is-error">Their Pulse profile says {city.differs.feed}; their character record says {city.differs.own}.</p>}
       {note && <p className="ch-note is-error" role="alert">{note}</p>}
     </section>
   );
@@ -2844,7 +2844,7 @@ export function LalaVerseMap({ character, feedProfile }) {
           </span>
         ))}
       </div>
-      {!home && <p className="ch-note">No home city in the LalaVerse yet. Set it in their facts or feed profile.</p>}
+      {!home && <p className="ch-note">No home city in the LalaVerse yet. Set it in their facts or Pulse profile.</p>}
     </section>
   );
 }
@@ -2981,7 +2981,7 @@ export function WorldFeed({ trail, openTab }) {
   return (
     <section className="ch-card" aria-labelledby="ch-wf" data-testid="ch-world-feed">
       <div className="ch-card-head">
-        <h2 id="ch-wf" className="ch-h2"><Radio size={20} aria-hidden="true" className="ch-h2-icon" /> On the feed lately</h2>
+        <h2 id="ch-wf" className="ch-h2"><Radio size={20} aria-hidden="true" className="ch-h2-icon" /> On The Pulse lately</h2>
         {openTab && <button type="button" className="ch-pill-btn" onClick={() => openTab('voice')}>View all</button>}
       </div>
       {!trail ? <p className="ch-note">Loading…</p>
@@ -3085,7 +3085,7 @@ const STORY_SECTIONS = [
   { key: 'overview', label: 'Overview', icon: LayoutDashboard },
   { key: 'events', label: 'Events', icon: CalendarDays },
   { key: 'episodes', label: 'Episodes', icon: CirclePlay },
-  { key: 'posts', label: 'Feed posts', icon: FileText },
+  { key: 'posts', label: 'Pulse posts', icon: FileText },
   { key: 'stories', label: 'Stories & chapters', icon: BookOpen },
   { key: 'timeline', label: 'Timeline', icon: Activity },
 ];
@@ -3103,7 +3103,7 @@ function StoryTiles({ appearances, trail, now }) {
   const tiles = [
     { key: 'episodes', label: 'Episodes', n: (appearances?.episodes || []).length, sub: null, icon: CirclePlay, tone: 'pink' },
     { key: 'events', label: 'Events', n: (appearances?.events || []).length, sub: `${upcomingOf(appearances, now).length} upcoming`, icon: CalendarDays, tone: 'green' },
-    { key: 'posts', label: 'Feed posts', n: posts.length, sub: `${live} posted`, icon: FileText, tone: 'lavender' },
+    { key: 'posts', label: 'Pulse posts', n: posts.length, sub: `${live} posted`, icon: FileText, tone: 'lavender' },
     { key: 'goals', label: "Lala's goals", n: goalsOf(appearances).length, sub: 'at their events', icon: Star, tone: 'gold' },
     { key: 'stories', label: 'Stories & chapters', n: (trail?.stories || []).length + (trail?.chapters || []).length, sub: null, icon: BookOpen, tone: 'pink' },
   ];
@@ -3332,7 +3332,7 @@ export function TabStory({ character, feedProfile, appearances, openTab, now = D
               </StoryCard>
             </div>
             <div className="ch-col">
-              <StoryCard id="ch-st-posts" title="Recent feed posts" icon={FileText} testid="ch-st-posts" action={go('posts')}>
+              <StoryCard id="ch-st-posts" title="Recent Pulse posts" icon={FileText} testid="ch-st-posts" action={go('posts')}>
                 {!trail ? <p className="ch-note">Loading…</p> : recent.length === 0 ? <p className="ch-note">No posts yet.</p> : (
                   <ul className="ch-px">
                     {recent.map((p) => (
@@ -3442,7 +3442,7 @@ export function TabSettings({ character, feedProfile, onSaved, onExport, onDelet
   }, next ? 'Kept in the cast.' : 'No longer marked as kept.');
   const copyLink = () => act('copy', () => navigator.clipboard.writeText(link), 'Link copied.');
   const archive = () => act('archive', async () => { await archiveApi(character.id); setArchived(true); },
-    `${name} is archived: out of the cast, the feed and this page once you leave it.`);
+    `${name} is archived: out of the cast, The Pulse and this page once you leave it.`);
   const restore = () => act('restore', async () => { await restoreApi(character.id); setArchived(false); setConfirming(false); setTyped(''); },
     `${name} is back.`);
   const removeForGood = async () => {
@@ -3471,13 +3471,13 @@ export function TabSettings({ character, feedProfile, onSaved, onExport, onDelet
 
       <div className="ch-col">
         <section className="ch-card" aria-labelledby="ch-set-feed">
-          <h2 id="ch-set-feed" className="ch-h2"><Smartphone size={20} aria-hidden="true" className="ch-h2-icon" /> Feed profile</h2>
-          <SettingRow label="On the feed as" hint="One feed person per character.">
+          <h2 id="ch-set-feed" className="ch-h2"><Smartphone size={20} aria-hidden="true" className="ch-h2-icon" /> Pulse profile</h2>
+          <SettingRow label="On The Pulse as" hint="One Pulse person per character.">
             {feedProfile
               ? <span className="ch-set-value"><strong>{atHandle(feedProfile.handle)}</strong>{feedProfile.display_name ? ` · ${feedProfile.display_name}` : ''}</span>
-              : <span className="ch-note">No feed profile.</span>}
+              : <span className="ch-note">No Pulse profile.</span>}
           </SettingRow>
-          <Link className="ch-btn-soft ch-px-link" to="/character-registry">{feedProfile ? 'Match a different feed person on The cast' : 'Match them to a feed person on The cast'}</Link>
+          <Link className="ch-btn-soft ch-px-link" to="/character-registry">{feedProfile ? 'Match a different Pulse person on The cast' : 'Match them to a Pulse person on The cast'}</Link>
         </section>
         <section className="ch-card" aria-labelledby="ch-set-share">
           <h2 id="ch-set-share" className="ch-h2"><LinkIcon size={20} aria-hidden="true" className="ch-h2-icon" /> Sharing and export</h2>
@@ -3497,7 +3497,7 @@ export function TabSettings({ character, feedProfile, onSaved, onExport, onDelet
         <section className="ch-card ch-danger" aria-labelledby="ch-set-danger" data-testid="ch-danger">
           <h2 id="ch-set-danger" className="ch-h2"><AlertTriangle size={20} aria-hidden="true" className="ch-h2-icon" /> Danger zone</h2>
           {!archived ? (
-            <SettingRow label="Archive" hint="Takes them out of the cast and the feed. You can bring them back.">
+            <SettingRow label="Archive" hint="Takes them out of the cast and The Pulse. You can bring them back.">
               <button type="button" className="ch-danger-btn" disabled={!!busy} onClick={archive}>
                 <Archive size={14} aria-hidden="true" /> {busy === 'archive' ? 'Archiving…' : `Archive ${name}`}
               </button>
@@ -3683,10 +3683,10 @@ export default function CharacterProfilePage() {
           <div className="ch-chips">
             {firstEpisode && <span className="ch-chip is-green">In Episode {firstEpisode.episode_number ?? '?'}</span>}
             {hasVoice && <span className="ch-chip is-gold">Has voice</span>}
-            {character.feed_profile_id && <span className="ch-chip is-blue">Feed profile</span>}
+            {character.feed_profile_id && <span className="ch-chip is-blue">Pulse profile</span>}
             {cityDiffers && (
               <span className="ch-chip is-warn" data-testid="ch-city-differs"
-                title="Their feed profile and their character record name different cities. Change one so they agree.">
+                title="Their Pulse profile and their character record name different cities. Change one so they agree.">
                 City differs: feed says {cityDiffers.feed}, character says {cityDiffers.own}
               </span>
             )}

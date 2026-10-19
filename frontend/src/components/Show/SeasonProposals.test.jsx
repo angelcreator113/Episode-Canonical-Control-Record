@@ -44,7 +44,7 @@ describe('From the feed', () => {
     expect(await screen.findByText(/Applied 1 change to the season/)).toBeTruthy();
   });
 
-  test('Dismiss changes nothing; with nothing open, Check the feed now asks for one', async () => {
+  test('Dismiss changes nothing; with nothing open, Check The Pulse now asks for one', async () => {
     api.post.mockResolvedValue({ data: {} });
     render(<SeasonProposals showId="s1" api={api} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }));
@@ -52,9 +52,9 @@ describe('From the feed', () => {
 
     api.get.mockResolvedValue({ data: { open: null, recent: [] } });
     api.post.mockResolvedValue({ data: { skipped: 'unchanged' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Check the feed now' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Check The Pulse now' }));
     await waitFor(() => expect(api.post).toHaveBeenLastCalledWith('/api/v1/world/s1/season/proposals'));
-    expect(await screen.findByText('Nothing new on the feed.')).toBeTruthy();
+    expect(await screen.findByText('Nothing new on The Pulse.')).toBeTruthy();
     expect(screen.getByText(/Nothing proposed right now/)).toBeTruthy();
   });
 

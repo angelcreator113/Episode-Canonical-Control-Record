@@ -193,7 +193,13 @@ export default function CaptionSuggestions({ postId, library = [], isChosen, onU
     <div className="cs" data-testid="cs">
       <p className="cs-reading" data-testid="cs-reading">
         <strong>The caption reads as:</strong> {readingLine(reading)}
-        {data.fallback && <span className="cs-muted"> (read from its words only; ask again for a fuller reading)</span>}
+        {data.fallback && (
+          <span className="cs-muted" data-testid="cs-fallback">
+            {data.ai_unavailable
+              ? ' (the AI could not be reached, so this is read from its words only; nothing was spent)'
+              : ' (read from its words only; ask again for a fuller reading)'}
+          </span>
+        )}
       </p>
       <p className="cs-recommend" data-testid="cs-recommend">
         <Sparkles size={14} aria-hidden /> <strong>Recommended: {ACTION_WORDS[plan.recommended]}.</strong> {why()}

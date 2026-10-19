@@ -490,7 +490,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
   const finalizeProfile = async id=>{try{const res=await finalizeProfileApi(id);const d=res.data;setProfiles(p=>p.map(x=>x.id===id?d.profile:x));if(selected?.id===id)setSelected(d.profile);}catch(err){setError(err.response?.data?.error||err.message);}};
   const crossProfile   = async id=>{try{const res=await crossProfileApi(id, showId || showIdFromPath(window.location.pathname) || rememberedShowId());const d=res.data;setProfiles(p=>p.map(x=>x.id===id?d.profile:x));if(selected?.id===id)setSelected(d.profile);}catch(err){setError(err.response?.data?.error||err.message);}};
   const editProfile    = async(id,updates)=>{try{const res=await editProfileApi(id,updates);const d=res.data;setProfiles(p=>p.map(x=>x.id===id?d.profile:x));if(selected?.id===id)setSelected(d.profile);}catch(err){setError(err.response?.data?.error||err.message);}};
-  const deleteProfile  = async id=>{if(!window.confirm("Delete this profile? It'll be hidden from the Feed. It can be restored, though not from this screen yet."))return;try{await deleteProfileById(id);setProfiles(p=>p.filter(x=>x.id!==id));if(selected?.id===id)setSelected(null);}catch(err){setError(err.response?.data?.error||err.message);}};
+  const deleteProfile  = async id=>{if(!window.confirm("Delete this profile? It'll be hidden everywhere. It can be restored, though not from this screen yet."))return;try{await deleteProfileById(id);setProfiles(p=>p.filter(x=>x.id!==id));if(selected?.id===id)setSelected(null);}catch(err){setError(err.response?.data?.error||err.message);}};
 
   // ── Regenerate profile ────────────────────────────────────────────
   const regenerateProfile = async (id, overrides={})=>{
@@ -747,7 +747,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
       <div className="spg-header" style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'16px 24px',flexShrink:0}}>
         <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',flexWrap:'wrap',gap:12,marginBottom:14}}>
           <div>
-            <div className="spg-header-title" style={{fontSize:18,fontWeight:700,color:C.ink,marginBottom:2}}>📱 The Feed <span style={{fontSize:12,fontWeight:600,color:C.pink,background:'#f9e4ec',padding:'2px 8px',borderRadius:4,marginLeft:6,verticalAlign:'middle',letterSpacing:'0.3px'}}>{protagonist.icon} {protagonist.context.name}</span></div>
+            <div className="spg-header-title" style={{fontSize:18,fontWeight:700,color:C.ink,marginBottom:2}}>📱 {protagonist.context.name === 'Lala' ? 'Pulse people' : "JustAWoman's feed"} <span style={{fontSize:12,fontWeight:600,color:C.pink,background:'#f9e4ec',padding:'2px 8px',borderRadius:4,marginLeft:6,verticalAlign:'middle',letterSpacing:'0.3px'}}>{protagonist.icon} {protagonist.context.name}</span></div>
             <div className="spg-header-sub" style={{fontSize:13,color:C.inkLight}}>Parasocial Creator Profiles — {protagonist.context.name === 'Lala' ? "Lala's inherited digital world" : "JustAWoman's real-world online ecosystem"}</div>
           </div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
@@ -762,7 +762,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
               ))}
             </div>}
             {!chooseHost && <button onClick={()=>setView(view==='feed'?'bulk':'feed')} style={{padding:'7px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.inkMid,border:`1px solid ${C.border}`,cursor:'pointer'}}>
-              {view==='feed'?'⊞ Bulk Import':'← Back to Feed'}
+              {view==='feed'?'⊞ Bulk Import':'← Back to the people'}
             </button>}
             {view==='feed' && !chooseHost && (
               <div style={{display:'flex',gap:4}}>
@@ -787,7 +787,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
           </button>
           <button onClick={()=>{setFeedLayer('lalaverse');setPage(1);setProtagonist(PROTAGONISTS[1]);}} style={{padding:'6px 14px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',border:'none',
             background:feedLayer==='lalaverse'?C.lavender:'transparent',color:feedLayer==='lalaverse'?'#fff':C.inkLight,transition:'all 0.15s'}}>
-            Lala's Feed <span style={{fontSize:10,fontWeight:600,opacity:0.8,marginLeft:4}}>{feedLayer==='lalaverse'?`${nativeTotal}/${feedCap}`:''}</span>
+            Lala's Pulse people <span style={{fontSize:10,fontWeight:600,opacity:0.8,marginLeft:4}}>{feedLayer==='lalaverse'?`${nativeTotal}/${feedCap}`:''}</span>
           </button>
         </div>}
 
@@ -1295,7 +1295,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
                 ) : (
                   <>
                     <div style={{fontSize:18,fontWeight:700,color:C.ink}}>
-                      {feedLayer==='lalaverse'?"Lala's Feed is empty":"JustAWoman's Feed is empty"}
+                      {feedLayer==='lalaverse'?"No Pulse people yet":"JustAWoman's Feed is empty"}
                     </div>
                     <div style={{fontSize:13,color:C.inkMid,lineHeight:1.6}}>
                       {feedLayer==='lalaverse'
@@ -1483,7 +1483,7 @@ function ProfileEventSection({ profileId, profileName, showId, showToast, onNavi
               </div>
               <button onClick={() => onNavigateToEvent(ev)} style={{ marginTop: 4, padding: '3px 8px', borderRadius: 4, border: '1px solid #B8962E', background: 'transparent', color: '#B8962E', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}
               >
-                {ev.status === 'draft' ? 'Complete in Feed Events →' : 'View in Events Library →'}
+                {ev.status === 'draft' ? 'Complete in Events →' : 'View in Events Library →'}
               </button>
             </div>
           ))}
@@ -1511,8 +1511,8 @@ function BulkDeleteDialog({ count, onCancel, onConfirm }) {
     <div className="spg-delete-overlay" role="dialog" aria-modal="true" aria-labelledby="spg-delete-title" onClick={e=>{if(e.target===e.currentTarget&&!busy)onCancel();}}>
       <div className="spg-delete-dialog">
         <div id="spg-delete-title" className="spg-delete-title">Delete {count} profile{count===1?'':'s'}? {count===1
-          ? "It'll be hidden from the Feed. Its follows and relationships are kept. It can be restored, though not from this screen yet."
-          : "They'll be hidden from the Feed. Their follows and relationships are kept. They can be restored, though not from this screen yet."}</div>
+          ? "It'll be hidden everywhere. Its follows and relationships are kept. It can be restored, though not from this screen yet."
+          : "They'll be hidden everywhere. Their follows and relationships are kept. They can be restored, though not from this screen yet."}</div>
         <p className="spg-delete-note">Locked, crossed and entangled profiles are kept automatically.</p>
         <label className="spg-delete-label" htmlFor="spg-delete-input">Type <strong>{count}</strong> to confirm</label>
         <input id="spg-delete-input" className="spg-delete-input" inputMode="numeric" autoFocus value={typed} disabled={busy}

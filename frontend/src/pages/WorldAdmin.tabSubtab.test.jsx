@@ -89,10 +89,10 @@ describe('WorldAdmin ?tab=<main tab> opens a sub-tab (#2289)', () => {
     expect(isActive('Season Plan')).toBe(true);
   });
 
-  test("?tab=feed opens Lala's Feed here, not the standalone page", async () => {
+  test("?tab=feed opens Lala's posts here, not the standalone page", async () => {
     renderAt('feed');
     expect(await screen.findByTestId('lala-feed')).toBeTruthy();
-    expect(isActive("Lala's Feed")).toBe(true);
+    expect(isActive("Lala's posts")).toBe(true);
   });
 
   test('Release opens on Next release', async () => {
@@ -117,7 +117,7 @@ describe('WorldAdmin ?tab=<main tab> opens a sub-tab (#2289)', () => {
       return el;
     });
     expect([...bar.querySelectorAll('button .wa-tab-label')].map((b) => b.textContent)).toEqual(
-      ['Overview', 'Episodes', 'Events', 'Opportunities', 'Rate card', 'World moments', 'Assets', 'Cast & Continuity', "Lala's Feed", 'Release'],
+      ['Overview', 'Episodes', 'Events', 'Opportunities', 'Rate card', 'World moments', 'Assets', 'Cast & Continuity', "Lala's posts", 'Release'],
     );
   });
 });

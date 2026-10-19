@@ -508,7 +508,7 @@ export default function FeedViewContent({
                           {t.template_data?.archetype&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.lavLight,color:C.lavender}}>{(ARCHETYPE_LABELS[t.template_data.archetype]||t.template_data.archetype)}</span>}
                           {t.template_data?.follower_tier&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.pinkLight,color:C.pink}}>{t.template_data.follower_tier}</span>}
                           {t.template_data?.content_category&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.surfaceAlt,color:C.inkMid}}>{t.template_data.content_category}</span>}
-                          {t.template_data?.feed_layer&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:t.template_data.feed_layer==='lalaverse'?C.lavLight:C.blueLight,color:t.template_data.feed_layer==='lalaverse'?C.lavender:C.blue}}>{t.template_data.feed_layer==='lalaverse'?"Lala's Feed":"JustAWoman's Feed"}</span>}
+                          {t.template_data?.feed_layer&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:t.template_data.feed_layer==='lalaverse'?C.lavLight:C.blueLight,color:t.template_data.feed_layer==='lalaverse'?C.lavender:C.blue}}>{t.template_data.feed_layer==='lalaverse'?"Lala's Pulse people":"JustAWoman's Feed"}</span>}
                         </div>
                       </div>
                     ))}
@@ -563,7 +563,7 @@ export default function FeedViewContent({
                       {Object.entries(layerStatus).map(([layer,ls])=>(
                         <div key={layer} style={{marginBottom:10}}>
                           <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
-                            <span style={{fontSize:12,fontWeight:700,color:C.ink}}>{layer==='real_world'?"JustAWoman's Feed":"Lala's Feed"}</span>
+                            <span style={{fontSize:12,fontWeight:700,color:C.ink}}>{layer==='real_world'?"JustAWoman's Feed":"Lala's Pulse people"}</span>
                             <span style={{fontSize:12,color:C.inkLight}}>{ls.total}/{ls.cap} ({ls.fill_pct}%)</span>
                           </div>
                           <div style={{height:8,borderRadius:4,background:C.surfaceAlt,border:`1px solid ${C.border}`,overflow:'hidden'}}>

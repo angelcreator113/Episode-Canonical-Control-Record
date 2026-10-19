@@ -285,12 +285,12 @@ describe('category and format suggestions (Task #1888)', () => {
         .toEqual({ value: 'fitness', basis: 'From organizer: fitness creator' });
       // Lifestyle suggested nothing before R6; it now maps to community_local.
       expect(suggestEventCategory({ canon_consequences: { automation: { content_category: 'lifestyle' } } }, { content_category: 'drama' }))
-        .toEqual({ value: 'community_local', basis: 'From Feed creator: lifestyle creator' });
+        .toEqual({ value: 'community_local', basis: 'From Pulse creator: lifestyle creator' });
     });
 
     test('from the Feed creator the event was started from (from-profile)', () => {
       expect(suggestEventCategory(fromProfile, null))
-        .toEqual({ value: 'fashion', basis: 'From Feed creator: fashion creator' });
+        .toEqual({ value: 'fashion', basis: 'From Pulse creator: fashion creator' });
     });
 
     test('the organizer wins over the Feed creator', () => {

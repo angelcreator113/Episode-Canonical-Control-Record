@@ -615,7 +615,7 @@ function AppContent() {
             '/brands': 'Brands & companies',
             '/social-timeline': 'Social Timeline Engine',
             '/social-personality': 'Social Personality Engine',
-            '/feed-relationships': 'Feed Relationship Map',
+            '/feed-relationships': 'Pulse Relationship Map',
             '/world-setup': 'World Setup Guide',
             '/property-manager': 'Property Manager',
             '/cultural-calendar': 'Cultural Calendar',

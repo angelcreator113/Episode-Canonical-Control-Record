@@ -219,11 +219,16 @@ async function removeAsset(db, id) {
   return { removed: true };
 }
 
+// A brand's own page shows the studio's internal pictures to an ADMIN only
+// (Evoni, 2026-10-19); anyone else sees its approved public ones.
+const INTERNAL_ADMIN_ONLY = new Set(['brand']);
+
 async function listFor(db, { entityType, entityId, audience = 'member', limit = 200 }) {
   const { entity_type: type, entity_id: eid } = normalizeLink({ entity_type: entityType, entity_id: entityId });
+  const who = audience === 'member' && INTERNAL_ADMIN_ONLY.has(type) ? 'public' : audience;
   const [rows] = await db.sequelize.query(
     `SELECT ma.*, l.role AS link_role FROM media_asset_links l JOIN media_assets ma ON ma.id = l.asset_id
-      WHERE l.entity_type = :type AND l.entity_id = :eid AND l.deleted_at IS NULL AND ${visibilityWhere(audience)}
+      WHERE l.entity_type = :type AND l.entity_id = :eid AND l.deleted_at IS NULL AND ${visibilityWhere(who)}
       ORDER BY ma.created_at DESC LIMIT ${Math.min(Number(limit) || 200, 500)}`, { replacements: { type, eid } });
   const links = await linksOf(db, rows.map((a) => a.id));
   return rows.map((a) => ({ ...a, links: links.get(a.id) || [] }));

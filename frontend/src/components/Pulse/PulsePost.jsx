@@ -97,8 +97,10 @@ function PhotoCarousel({ photos }) {
 /**
  * revealLabel: Director view's "Reveals: …" chip for the post (or its photos).
  * onCity(key): opens a Dream City's feed from the post's place.
+ * onPerson(handle, name): opens the author's Pulse profile from their photo or
+ * name (Evoni, 2026-10-19).
  */
-export default function PulsePost({ post, revealLabel = null, onCity = null }) {
+export default function PulsePost({ post, revealLabel = null, onCity = null, onPerson = null }) {
   const [allComments, setAllComments] = useState(false);
   const who = posterOf(post);
   const place = placeOfPost(post);
@@ -114,9 +116,16 @@ export default function PulsePost({ post, revealLabel = null, onCity = null }) {
   return (
     <article className={`pl-post${badge ? ` is-${badge.kind}` : ''}`} data-testid="pl-post">
       <header className="pl-post-head">
-        <Avatar name={who.name} url={post.author_portrait_url} size={46} />
+        {onPerson && who.handle ? (
+          <button type="button" className="pl-post-who" onClick={() => onPerson(who.handle, who.name)}
+            aria-label={`Open ${who.name}'s profile`} data-testid="pl-post-who">
+            <Avatar name={who.name} url={post.author_portrait_url} size={46} />
+          </button>
+        ) : <Avatar name={who.name} url={post.author_portrait_url} size={46} />}
         <div>
-          <p className="pl-post-name">{who.name}</p>
+          {onPerson && who.handle
+            ? <p className="pl-post-name"><button type="button" className="pl-post-name-link" onClick={() => onPerson(who.handle, who.name)} data-testid="pl-post-name">{who.name}</button></p>
+            : <p className="pl-post-name">{who.name}</p>}
           {(when || place) && (
             <p className="pl-meta">
               {when}{when && place ? ' · ' : ''}

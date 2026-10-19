@@ -290,7 +290,7 @@ function HostedEvents({ character, showId, onNote }) {
     <section className="cpl-role" data-testid="places-hosted-events">
       <h3 className="cpl-role-title"><CalendarDays size={16} aria-hidden="true" /> Hosted events</h3>
       {!character.feed_profile_id ? (
-        <p className="cpl-note">Hosting events needs a feed profile. Match them to a feed person on The cast.</p>
+        <p className="cpl-note">Hosting events needs a Pulse profile. Match them to a Pulse person on The cast.</p>
       ) : (
         <>
           {events === null && <p className="cpl-note">Loading…</p>}

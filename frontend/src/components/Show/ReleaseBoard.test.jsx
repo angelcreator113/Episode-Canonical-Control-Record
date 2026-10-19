@@ -51,7 +51,7 @@ describe('Release board', () => {
     expect(post.textContent).toContain('Draft');
     expect(screen.getByTestId('release-post-p2').textContent).toContain('Next day');
     expect(screen.getByTestId('release-post-p2').textContent).toContain('Live');
-    expect(screen.getByText("Drafts wait for approval under Requests in Lala's Feed.")).toBeTruthy();
+    expect(screen.getByText("Drafts wait for approval under Requests in Lala's posts.")).toBeTruthy();
   });
 
   test('the calendar and the results', async () => {

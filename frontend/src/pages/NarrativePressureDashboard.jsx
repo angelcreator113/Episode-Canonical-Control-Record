@@ -510,7 +510,7 @@ function PressureWavePanel({ feedRelationships, loading }) {
     <div>
       <SectionHeader count={pressureRels.length} accent="#d4789a">Pressure Wave</SectionHeader>
       {pressureRels.length === 0 ? (
-        <EmptyZone message="No active feed conflicts. Tension is dormant." />
+        <EmptyZone message="No active Pulse conflicts. Tension is dormant." />
       ) : (
         pressureRels.map(r => {
           const caught = ripples[r.id] || [];
