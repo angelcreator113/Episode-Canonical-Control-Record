@@ -41,6 +41,24 @@ beforeEach(() => {
 });
 
 describe('Script tab: Notification, DM and Post', () => {
+  // Evoni, 2026-10-19: switching adders keeps the words; closing lets them go.
+  test('words typed in an adder survive switching to another adder, and go when it is closed', async () => {
+    renderTab();
+    fireEvent.click(screen.getByTestId('script-add-dm-4'));
+    fireEvent.change(screen.getByTestId('script-message-who'), { target: { value: 'Nia' } });
+    fireEvent.change(screen.getByTestId('script-message-text'), { target: { value: 'Half typed' } });
+    fireEvent.click(screen.getByTestId('script-add-line-4'));
+    fireEvent.change(screen.getByTestId('script-line-adder-text'), { target: { value: 'A line too' } });
+    fireEvent.click(screen.getByTestId('script-add-dm-4'));
+    expect(screen.getByTestId('script-message-text').value).toBe('Half typed');
+    expect(screen.getByTestId('script-message-who').value).toBe('Nia');
+    fireEvent.click(screen.getByTestId('script-add-action-4'));
+    expect(screen.getByTestId('script-line-adder-text').value).toBe('A line too');
+    fireEvent.click(screen.getByTestId('script-line-adder-done'));
+    fireEvent.click(screen.getByTestId('script-add-line-4'));
+    expect(screen.getByTestId('script-line-adder-text').value).toBe('');
+  });
+
   test('"Add:" has Notification, DM and Post', () => {
     renderTab();
     const chips = [...screen.getByTestId('script-add-chips-4').querySelectorAll('button')].map((b) => b.textContent);

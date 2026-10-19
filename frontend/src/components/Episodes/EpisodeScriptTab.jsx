@@ -589,9 +589,12 @@ const LINE_KINDS = [
 // Add a line anywhere in a beat (Evoni, 2026-10-09; Task #2795): who it is
 // for, the words, and where it goes. It stays open for the next line, which
 // goes after this one; Save keeps them.
-function LineAdder({ lines = [], onScreen, onAdd, onClose, initialKind = 'Lala' }) {
+function LineAdder({ lines = [], onScreen, onAdd, onClose, initialKind = 'Lala', draft = null, onDraft }) {
   const [kind, setKind] = useState(initialKind);
-  const [text, setText] = useState('');
+  // What was typed outlives switching to another adder (Evoni, 2026-10-19):
+  // it starts from the beat's draft and keeps it current.
+  const [text, setTextState] = useState(draft?.text || '');
+  const setText = (t) => { setTextState(t); onDraft?.({ text: t }); };
   const [after, setAfter] = useState('end');
   const [added, setAdded] = useState(0);
   const textRef = useRef(null);
@@ -649,10 +652,13 @@ const MESSAGE_KINDS = {
   dm: { title: 'Add a DM', who: 'With', placeholder: 'What the message says' },
   post: { title: 'Add a post', who: null, placeholder: 'What Lala posts' },
 };
-function MessageAdder({ kind, people = [], lines = [], onScreen, onAdd, onClose }) {
+function MessageAdder({ kind, people = [], lines = [], onScreen, onAdd, onClose, draft = null, onDraft }) {
   const info = MESSAGE_KINDS[kind];
-  const [who, setWho] = useState('');
-  const [text, setText] = useState('');
+  // As the line adder's: the draft outlives switching adders.
+  const [who, setWhoState] = useState(draft?.who || '');
+  const [text, setTextState] = useState(draft?.text || '');
+  const setWho = (w) => { setWhoState(w); onDraft?.({ who: w, text }); };
+  const setText = (t) => { setTextState(t); onDraft?.({ who, text: t }); };
   const [after, setAfter] = useState('end');
   const [added, setAdded] = useState(0);
   const line = messageLine(kind, info.who ? who : null, text);
@@ -808,6 +814,11 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
   const [picking, setPicking] = useState(false);
   const [adding, setAdding] = useState(false);
   const [messaging, setMessaging] = useState(null);
+  // Words typed in an adder, by adder (the line adder, or one per message
+  // kind): opening another adder keeps them; closing one lets them go
+  // (Evoni, 2026-10-19: Line over a half-typed DM lost it).
+  const drafts = useRef({});
+  const draftProps = (key) => ({ draft: drafts.current[key] || null, onDraft: (d) => { drafts.current[key] = d; } });
   const [zoomed, setZoomed] = useState(false);
   // Each bottom-bar tap acts once: collapsing and reopening the beat no
   // longer opens the adder again (Script tab audit, 2026-10-15).
@@ -984,12 +995,13 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
             );
           })}</div>
           {adding && !beat.approved && (
-            <LineAdder key={`adder-${adding}`} initialKind={typeof adding === 'string' ? adding : 'Lala'} lines={beat.lines} onScreen={onScreen} onClose={() => closeAdder(() => setAdding(false))}
+            <LineAdder key={`adder-${adding}`} initialKind={typeof adding === 'string' ? adding : 'Lala'} lines={beat.lines} onScreen={onScreen} {...draftProps('line')}
+              onClose={() => { delete drafts.current.line; closeAdder(() => setAdding(false)); }}
               onAdd={(line, after) => onAddMoment(beat.id, line, after)} />
           )}
           {messaging && !beat.approved && (
-            <MessageAdder key={`message-${messaging}`} kind={messaging} people={people} lines={beat.lines} onScreen={onScreen}
-              onClose={() => closeAdder(() => setMessaging(null))} onAdd={(line, after) => onAddMoment(beat.id, line, after)} />
+            <MessageAdder key={`message-${messaging}`} kind={messaging} people={people} lines={beat.lines} onScreen={onScreen} {...draftProps(`msg-${messaging}`)}
+              onClose={() => { delete drafts.current[`msg-${messaging}`]; closeAdder(() => setMessaging(null)); }} onAdd={(line, after) => onAddMoment(beat.id, line, after)} />
           )}
           {picking && !beat.approved && (
             <MomentPicker key={`picker-${picking?.verb || 'open'}`} preset={picking?.verb ? picking : null} screens={onScreen.screens} icons={onScreen.icons} overlays={onScreen.overlays} look={onScreen.look} production={onScreen.production} lines={beat.lines} onScreen={onScreen} phoneFrame={onScreen.phoneFrame}
