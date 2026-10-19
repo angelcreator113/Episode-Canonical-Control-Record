@@ -137,7 +137,7 @@ describe('the Voices tab', () => {
     render(<PulseVoices showId="show-1" />);
     expect((await screen.findByTestId('pulse-voices-empty')).textContent).toMatch(/Lala has not met anyone below/);
     const group = screen.getByTestId('pulse-voices-unmet');
-    expect(within(group).getByRole('heading').textContent).toBe('Lala hasn’t met them yet (2)');
+    expect(within(group).getByRole('heading').textContent).toBe('Not in Lala’s world yet (2)');
     const [card, later] = within(group).getAllByTestId('pulse-voices-card');
     expect(within(card).getByTestId('pulse-voices-meets').textContent).toBe('Meets Lala in Episode 1');
     expect(within(later).getByTestId('pulse-voices-meets').textContent).toBe('Meets Lala later in the story');
