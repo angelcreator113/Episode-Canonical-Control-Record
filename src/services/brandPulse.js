@@ -87,7 +87,7 @@ function brandSchedule(brand) {
 
 /** "Give the brands their Pulse accounts": makes the missing ones, and gives each one a posting schedule. */
 async function ensureAccounts(db) {
-  const brands = await db.LalaverseBrand.findAll({ order: [['name', 'ASC']] });
+  const brands = await db.LalaverseBrand.findAll({ where: { kind: 'brand' }, order: [['name', 'ASC']] });
   const have = await accountsByBrand(db);
   const created = [];
   const existing = [];
@@ -342,7 +342,7 @@ Answer with JSON only: {"text": "the post", "hashtag": "#OneTag or null"}`, 600)
 async function draftWeek(db, { showId, perBrand = WEEK_PER_BRAND }) {
   if (!showId) throw new BrandPulseError(400, 'show_id is required.');
   const accounts = await accountsByBrand(db);
-  const brands = (await db.LalaverseBrand.findAll({ order: [['name', 'ASC']] })).filter((b) => accounts.has(b.id));
+  const brands = (await db.LalaverseBrand.findAll({ where: { kind: 'brand' }, order: [['name', 'ASC']] })).filter((b) => accounts.has(b.id));
   if (!brands.length) throw new BrandPulseError(409, 'No brand has a Pulse account yet. Give the brands their Pulse accounts first.');
   const n = Math.max(1, Math.min(5, Number(perBrand) || WEEK_PER_BRAND));
   const clock = require('./storyClock');
@@ -439,7 +439,9 @@ async function dealsFor(db, { showId, brandId }) {
   const { brand } = await brandAndAccount(db, brandId);
   const { Op } = require('sequelize');
   const deals = await db.Opportunity.findAll({
-    where: { show_id: showId, brand_or_company: { [Op.iLike]: `%${brand.name}%` } },
+    // The deals linked to this company (opportunities.company_id), and ones
+    // that only name it, as before.
+    where: { show_id: showId, [Op.or]: [{ company_id: brand.id }, { brand_or_company: { [Op.iLike]: `%${brand.name}%` } }] },
     order: [['created_at', 'DESC']], limit: 30,
   });
   return deals.map((d) => ({
@@ -453,7 +455,7 @@ async function draftDealAnnouncement(db, { dealId, brandId, repKey = null }) {
   const { brand, account } = await brandAndAccount(db, brandId);
   const rep = repFor(brand, repKey);
   const deal = await db.Opportunity.findByPk(dealId);
-  if (!deal || !String(deal.brand_or_company || '').toLowerCase().includes(brand.name.toLowerCase())) {
+  if (!deal || (deal.company_id !== brand.id && !String(deal.brand_or_company || '').toLowerCase().includes(brand.name.toLowerCase()))) {
     throw new BrandPulseError(404, `No ${brand.name} deal with that id.`);
   }
   const gate = canAnnounce({ deal, brand, rep });
@@ -481,7 +483,7 @@ ${rep ? `Do not add a signature: ${firstName(rep)}'s name is added after the pos
 /** The Brands area: each brand, its account, reps, recent posts and replies waiting. */
 async function overview(db, { showId }) {
   const accounts = await accountsByBrand(db);
-  const brands = await db.LalaverseBrand.findAll({ order: [['name', 'ASC']] });
+  const brands = await db.LalaverseBrand.findAll({ where: { kind: 'brand' }, order: [['name', 'ASC']] });
   const [repRows] = await db.sequelize.query(
     `SELECT id, character_key, status FROM registry_characters
       WHERE deleted_at IS NULL AND character_key IN (:keys)`,

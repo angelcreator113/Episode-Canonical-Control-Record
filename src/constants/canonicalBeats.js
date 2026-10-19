@@ -284,7 +284,7 @@ const CANONICAL_BEATS = [
   {
     number: 11,
     name: 'Event Outcome',
-    story_job: "The payoff, given room: a real interaction with someone there, Lala's decision and its consequence, all before the result. The event and its people carry this beat, not the phone.",
+    story_job: "The payoff, given room: a real conversation with the host or a featured guest, who notices something specific about Lala when the show holds it (a look she posted, the last episode); Lala answers honestly; a small test she passes or fails without knowing it; the connection or consequence lands before the result. The event and its people carry this beat, not the phone; JustAWoman reacts from her corner with an occasional sound cue.",
     typical_location: 'EVENT_LOCATION',
     description: 'The main event — what happens when Lala arrives and performs',
     narrative_purpose: 'The evaluation resolves. Pass or fail. Stats update.',
@@ -297,14 +297,20 @@ const CANONICAL_BEATS = [
   },
   {
     number: 12,
-    name: 'Deliverable Creation',
-    story_job: "She makes and posts the content the event asked for, showing how she presents the experience publicly.",
+    // Renamed from 'Deliverable Creation' — Evoni's ruling, 2026-10-18:
+    // beat 12 is The Fashion Challenge in every episode. Deliverables are
+    // not always shown in the show (whether she got paid is known the next
+    // episode), so the challenge is judged on her standing, not on money.
+    // The old name still reads as beat 12 (utils/beatLabelNumber.js).
+    name: 'Fashion Challenge',
+    story_job: "Someone at the event (a brand, the host or a guest) sets Lala a styling challenge on the spot; she answers in her own voice; the wardrobe opens and the look for it is picked and put on one piece at a time; the room judges it. It is judged on her standing, never on money: [STAT: reputation ±n], [STAT: brand_trust ±n], [STAT: influence ±n], [STAT: stress ±n]. Content she owes need not be shown; it is not paid in this episode.",
     typical_location: 'EVENT_LOCATION',
-    description: 'Creating the content/product — the work output of the episode',
-    narrative_purpose: 'Lala creates brand content. This exports as real Instagram stories.',
-    screen_action: 'CONTENT_CREATE',
-    // CONTENT_CREATE is Lala filming content as a creator in her own
-    // world — Evoni's ruling.
+    description: 'A styling challenge at the event — Lala is styled on the spot and the room judges the look',
+    narrative_purpose: 'The challenge lands. The look is judged. Reputation, brand trust, influence and stress move.',
+    // The wardrobe opens on her phone, as in beat 8: JustAWoman styles from
+    // her corner, but Lala is the one who performs the challenge, so the
+    // beat's performer (its clip, productionCoverage) stays Lala.
+    screen_action: 'FASHION_CHALLENGE',
     actor: 'lala',
     surface: "Lala's Phone",
     diegetic: true,
@@ -314,7 +320,7 @@ const CANONICAL_BEATS = [
   {
     number: 13,
     name: 'Recap Panel',
-    story_job: "Close this episode's question: results, rewards, costs and any obligation still open. Lala says how the outcome feels, in her own words; the numbers stay on the stat card, which she does not see. No new drama.",
+    story_job: "Close this episode's question: results, rewards, costs and any obligation still open. Lala says how the outcome feels, in her own words; the numbers stay on the stat card, which she does not see. The event's own costs (entry, drinks) come off here, never earlier; what she is owed for content is not paid in this episode. No new drama.",
     typical_location: 'HOME_BASE',
     description: 'Reflecting on what happened — audience engagement moment',
     narrative_purpose: 'Cinematic stat card. Coins changed. Brand trust updated. Dream Fund moved.',

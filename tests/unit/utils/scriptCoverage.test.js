@@ -30,7 +30,8 @@ describe('scriptCoverage', () => {
   test('a script that covers everything has nothing missing', () => {
     const { items, missing } = scriptCoverage(full(), facts);
     expect(missing).toEqual([]);
-    expect(items.find((i) => i.kind === 'deliverable')).toMatchObject({ beat: 12, target: 12 });
+    // What she owes is not required on screen (Evoni, 2026-10-18).
+    expect(items.find((i) => i.kind === 'deliverable')).toBeUndefined();
     expect(items.find((i) => i.kind === 'goal')).toMatchObject({ beat: 11, target: 11 });
     expect(items.find((i) => i.kind === 'hook')).toMatchObject({ beat: 14, target: 14 });
     expect(items.find((i) => i.kind === 'wear')).toMatchObject({ beat: 8, target: 8 });
@@ -44,7 +45,7 @@ describe('scriptCoverage', () => {
       14: beat(14, 'Cliffhanger', 'Me: bye'),
     });
     const kinds = scriptCoverage(script, facts).missing.map((m) => [m.kind, m.target]);
-    expect(kinds).toEqual([['deliverable', 12], ['hook', 14], ['wear', 8], ['phone', 8], ['phone', 12]]);
+    expect(kinds).toEqual([['hook', 14], ['wear', 8], ['phone', 8], ['phone', 12]]);
   });
 
   test('a reply cut off loses its last beats, and each is missing', () => {
