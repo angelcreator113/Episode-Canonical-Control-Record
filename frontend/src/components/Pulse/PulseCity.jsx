@@ -17,7 +17,7 @@ import { TrendingCard, cityVars } from './PulseSides';
 
 const PAGE = 30;
 
-export default function PulseCity({ show, cities, cityKey, viewAt, onCity }) {
+export default function PulseCity({ show, cities, cityKey, viewAt, onCity, onPerson = null }) {
   const city = cities.find((c) => c.key === cityKey) || null;
   const [posts, setPosts] = useState(null);
   const [trends, setTrends] = useState([]);
@@ -82,7 +82,7 @@ export default function PulseCity({ show, cities, cityKey, viewAt, onCity }) {
       {error && <p className="pl-error" role="alert">{error}</p>}
       {!posts && !error && <p className="pl-quiet">Loading…</p>}
       {posts && posts.length === 0 && !error && <p className="pl-empty" data-testid="pl-cityfeed-empty">Nothing posted in {city.name} yet.</p>}
-      {(posts || []).map((p) => <PulsePost key={p.id} post={p} onCity={onCity} />)}
+      {(posts || []).map((p) => <PulsePost key={p.id} post={p} onCity={onCity} onPerson={onPerson} />)}
     </div>
   );
 }
