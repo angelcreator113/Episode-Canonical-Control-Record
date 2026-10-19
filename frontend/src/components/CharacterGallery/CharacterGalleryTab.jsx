@@ -231,7 +231,7 @@ export default function CharacterGalleryTab({ character, openTab, hide = [] }) {
   );
 
   const recent = roll && (
-    <section className="gal-panel" aria-labelledby="gal-h-recent" data-testid="gallery-recent">
+    <section className="gal-panel gal-recent" aria-labelledby="gal-h-recent" data-testid="gallery-recent">
       <header className="gal-panel-head">
         <div>
           <h4 id="gal-h-recent" className="gal-panel-title"><Camera size={18} aria-hidden /> Recent Photos</h4>

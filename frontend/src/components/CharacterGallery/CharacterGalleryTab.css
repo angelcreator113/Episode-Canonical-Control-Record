@@ -49,6 +49,10 @@
 
 /* Albums. */
 .gal-albums { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+/* Wide screens: the seven recent photos and the seven albums each fill one row, as in Evoni's mockup. */
+@media (min-width: 1100px) {
+  .gal-recent .gal-grid, .gal-albums { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+}
 .gal-album { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 0 0 8px; border: 1px solid var(--lala-lavender-line); border-radius: 12px; overflow: hidden; background: var(--surface-card); font: inherit; text-align: left; cursor: pointer; }
 .gal-album:focus-visible { outline: 2px solid var(--lala-gold); outline-offset: 2px; }
 .gal-album-cover { display: flex; align-items: center; justify-content: center; aspect-ratio: 4 / 3; background: var(--lala-parchment-2, #f5f0e6); color: var(--text-secondary); }
