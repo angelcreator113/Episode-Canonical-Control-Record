@@ -292,13 +292,22 @@ const EpisodeDetail = () => {
   const [characterState, setCharacterState] = useState({});
 
   // Fetch episode data - extracted for reuse
+  // Only the latest load answers (Script page re-audit, 2026-10-19): Back
+  // pressed while episode B was loading left B, answering late, on the page
+  // under episode A's URL, and the Script tab saved into B.
+  const loadSeqRef = useRef(0);
   const fetchEpisode = useCallback(async () => {
+    loadSeqRef.current += 1;
+    const seq = loadSeqRef.current;
     try {
       setLoading(true);
       setError(null);
       const data = await episodeService.getEpisode(episodeId);
+      if (seq !== loadSeqRef.current) return;
       setEpisode(data);
     } catch (err) {
+      console.error('[EpisodeDetail] episode load failed:', err);
+      if (seq !== loadSeqRef.current) return;
       const msg = err.message || '';
       if (msg.includes('Not Found') || msg.includes('404')) {
         toast.showError('Episode not found — it may have been deleted.');
@@ -307,7 +316,7 @@ const EpisodeDetail = () => {
       }
       setError(msg || 'Failed to load episode');
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) setLoading(false);
     }
   }, [episodeId, navigate, toast]);
 
