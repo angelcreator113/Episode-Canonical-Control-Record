@@ -186,6 +186,33 @@ describe('DailyUpdate', () => {
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/pulse-trust/undo-comment/c-trust'));
   });
 
+  // The cost page (Evoni, 2026-10-19): both budgets and a warning past 80%.
+  test('cost: the image budget, and a warning past 80% that opens AI Costs', async () => {
+    const u = update();
+    u.cost = {
+      ...u.cost, image_spent_usd: 8.6, image_budget_usd: 10,
+      alerts: [
+        { budget: 'images', level: 'warn', percent: 86, message: "Today's image budget is at 86% ($8.60 of $10.00)." },
+        { budget: 'all', level: 'over', percent: 102, message: "Today's AI budget (text and images) is used up ($51.00 of $50.00): new calls are refused until tomorrow (UTC)." },
+      ],
+    };
+    vi.mocked(api.get).mockResolvedValue({ data: u });
+    renderPage();
+    const cost = await screen.findByTestId('du-cost');
+    expect(cost.textContent).toContain('Images: $8.60 of $10.00');
+    const alerts = [...screen.getByTestId('du-cost-alerts').querySelectorAll('li')];
+    expect(alerts).toHaveLength(2);
+    expect(alerts[0].textContent).toContain('86%');
+    expect(alerts[1].getAttribute('role')).toBe('alert');
+    expect(within(alerts[0]).getByRole('link', { name: 'Open AI Costs' }).getAttribute('href')).toBe('/ai-costs');
+  });
+
+  test('cost: no warnings, no warning list', async () => {
+    renderPage();
+    await screen.findByTestId('du-cost');
+    expect(screen.queryByTestId('du-cost-alerts')).toBeNull();
+  });
+
   test('when the update cannot load it says so', async () => {
     vi.mocked(api.get).mockRejectedValue({ response: { data: { error: 'Forbidden' } } });
     renderPage();
