@@ -201,7 +201,7 @@ async function keep(db, { registryId, proposal, by = null } = {}) {
         handle: `@${p.pulse.handle}`, display_name: p.display_name, creator_name: p.selected_name,
         platform: 'pulse', feed_layer: 'lalaverse', vibe_sentence: p.pulse.bio || p.description || p.display_name,
         city: DREAM_CITY_KEYS.includes(p.current_city) ? p.current_city : null,
-        current_state: 'rising', status: 'generated', auto_generated: true,
+        current_state: 'rising', status: 'generated',
         follower_count_approx: p.pulse.follower_count ? formatCount(p.pulse.follower_count) : null,
         follower_tier: p.pulse.follower_count ? require('./pulseAudience').tierFor(p.pulse.follower_count).key : null,
       }, { transaction });
