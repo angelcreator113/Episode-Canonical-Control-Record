@@ -366,7 +366,11 @@ async function generateGroundedScript(episodeId, showId, models, { lockedBeats =
     return { n, text: beatFromReply((await writeWith(prompt, 1500, 2)).text, n) };
   }));
   const fixedBeats = [];
-  const gapsIn = (s) => scriptCoverage(s, facts).missing.length;
+  // A rewrite is judged as it will be saved, after the free fixes (Script
+  // page audit 3, 2026-10-19: a beat 8 that put the missing piece on but
+  // left its coin lines to code read as two gaps, not none, and was thrown
+  // away).
+  const gapsIn = (s) => scriptCoverage(deterministicFixes(s, inputs, locked).script, facts).missing.length;
   for (const r of written) {
     if (r.status !== 'fulfilled') { console.error('[ScriptGen] coverage fix failed (non-blocking):', r.reason?.message); continue; }
     const { n, text } = r.value;
@@ -391,6 +395,7 @@ async function generateGroundedScript(episodeId, showId, models, { lockedBeats =
   const coinLines = before.coinLines + after.coinLines;
   const voiceClicks = before.voiceClicks + after.voiceClicks;
   const revealFixed = before.revealFixed || after.revealFixed;
+  const autoFixed = before.autoFixed + after.autoFixed;
   // Before each tap the phone can't make from where it is, a step to the
   // icon's screen (utils/phonePaths.js, the Script tab's own check); approved
   // beats are left as they are, and read for where they leave the phone.
@@ -413,7 +418,7 @@ async function generateGroundedScript(episodeId, showId, models, { lockedBeats =
   // writer kept them to this episode; the Script tab shows them.
   let storyGaps = [];
   try { storyGaps = require('../utils/storyLayers').storyLayers(inputs).gaps; } catch (err) { console.error('[ScriptGen] story gaps failed (non-blocking):', err.message); }
-  return { script, coverage: { missing, fixed_beats: fixedBeats.sort((a, b) => a - b), phone_steps: phoneSteps, voice_clicks: voiceClicks, reveal_fixed: revealFixed, coin_lines: coinLines, story_gaps: storyGaps }, facts };
+  return { script, coverage: { missing, fixed_beats: fixedBeats.sort((a, b) => a - b), phone_steps: phoneSteps, voice_clicks: voiceClicks, reveal_fixed: revealFixed, coin_lines: coinLines, auto_fixed: autoFixed, story_gaps: storyGaps }, facts };
 }
 
 // Each costing piece's coin line right after its [WEAR: id] line
@@ -421,12 +426,24 @@ async function generateGroundedScript(episodeId, showId, models, { lockedBeats =
 // then the show's rules (utils/scriptShowRules.js; Evoni, 2026-10-17): Lala's
 // voice click before she talks, and the invitation in beat 5, never the login
 // screen. Approved beats are left as they are. Each fix that fails is logged
-// and the script kept. Both are idempotent, so they run before the fix pass
-// and again after it. Returns { script, coinLines, voiceClicks, revealFixed }.
+// and the script kept. All are idempotent, so they run before the fix pass
+// and again after it. Returns { script, coinLines, voiceClicks, revealFixed,
+// autoFixed }.
 function deterministicFixes(scriptText, inputs, locked) {
   const { splitScriptBeats } = require('../utils/scriptBeatLocks');
   const skipFor = (s) => splitScriptBeats(s).beats.map((b, i) => (locked.has(b.number) ? i : -1)).filter((i) => i >= 0);
   let script = scriptText;
+  // What the paid fix pass used to be asked for (Script page audit 3,
+  // 2026-10-19): a wrong beat 8 coin amount, a + coin line, the phone in the
+  // cutscene (utils/scriptAutoFixes.js), first, so the coin lines below read
+  // the corrected beat.
+  let autoFixed = 0;
+  try {
+    const auto = require('../utils/scriptAutoFixes').scriptWithAutoFixes(script, inputs.money, { skip: skipFor(script) });
+    script = auto.script; autoFixed = auto.coin_amounts + auto.plus_coins + auto.cutscene_lines;
+  } catch (err) {
+    console.error('[ScriptGen] auto fixes failed (non-blocking):', err.message);
+  }
   let coinLines = 0;
   if (inputs.money) {
     try {
@@ -444,7 +461,7 @@ function deterministicFixes(scriptText, inputs, locked) {
   } catch (err) {
     console.error('[ScriptGen] show rules failed (non-blocking):', err.message);
   }
-  return { script, coinLines, voiceClicks, revealFixed };
+  return { script, coinLines, voiceClicks, revealFixed, autoFixed };
 }
 
 // Rule 6, how beat 14 ends: one instruction (Script page audit, 2026-10-19).
@@ -525,15 +542,25 @@ async function generateGroundedBeat(episodeId, showId, models, { beatNumber, cur
 // and the beat is kept as written.
 function beatAfterWriting(beat, beatNumber, inputs, currentScript) {
   let text = beat;
-  if (inputs.money) {
+  let closetNumber = CLOSET_NUMBER;
+  try {
+    const { scriptBeats, closetIndex } = require('../utils/scriptWear');
+    const beats = scriptBeats(String(currentScript || ''));
+    const at = closetIndex(beats);
+    if (at >= 0) closetNumber = beats[at].number;
+  } catch (err) {
+    console.error('[ScriptGen] closet beat read for one beat failed (non-blocking):', err.message);
+  }
+  // The free fixes the whole script gets (Script page audit 3, 2026-10-19):
+  // a wrong closet coin amount, a + coin line, the phone in the cutscene.
+  try {
+    text = require('../utils/scriptAutoFixes').scriptWithAutoFixes(text, beatNumber === closetNumber ? inputs.money : null, { closetNumber: beatNumber === closetNumber ? closetNumber : null }).script;
+  } catch (err) {
+    console.error('[ScriptGen] auto fixes for one beat failed (non-blocking):', err.message);
+  }
+  if (inputs.money && beatNumber === closetNumber) {
     try {
-      const { scriptBeats, closetIndex } = require('../utils/scriptWear');
-      const beats = scriptBeats(String(currentScript || ''));
-      const at = closetIndex(beats);
-      const closetNumber = at >= 0 ? beats[at].number : CLOSET_NUMBER;
-      if (beatNumber === closetNumber) {
-        text = require('../utils/scriptMoney').scriptWithCoinLines(text, inputs.money, { closetNumber }).script;
-      }
+      text = require('../utils/scriptMoney').scriptWithCoinLines(text, inputs.money, { closetNumber }).script;
     } catch (err) {
       console.error('[ScriptGen] coin lines for one beat failed (non-blocking):', err.message);
     }
@@ -564,7 +591,7 @@ const CLOSET_NUMBER = (CANONICAL_BEATS.find((b) => b.screen_action === 'CLOSET_O
 // never the rest (re-audit 2, 2026-10-15: one guest's bad JSON dropped her
 // career, money and stats together). Returns { text, career, stats }: what
 // rendered, so the rules and the fallback stats read only what is there.
-function storyContext(story, { hasSeason = false, hook = '', balanceBefore = null, beat14 = null } = {}) {
+function storyContext(story, { hasSeason = false, hook = '', balanceBefore = null, afterLook = null, beat14 = null } = {}) {
   const none = { text: '', career: false, stats: false };
   if (!story) return none;
   const { storyContextBlocks, financialContextText } = require('./episodeScriptWriterService');
@@ -581,7 +608,10 @@ function storyContext(story, { hasSeason = false, hook = '', balanceBefore = nul
     characterState: story.characterState && balance != null ? { ...story.characterState, coins: balance } : story.characterState,
     arcPhase: hasSeason ? null : story.arcPhase,
   };
-  const financial = story.financial ? block('financial', () => `═══ FINANCIAL CONTEXT ═══\n${financialContextText(before ? { ...story.financial, balance, total_income: 0, total_expenses: 0 } : story.financial)}`) : '';
+  // "Can afford" is the entry against what the look leaves her (Script page
+  // audit 3, 2026-10-19), the number LALA'S COINS gives.
+  const affords = before && story.financial?.event_cost && afterLook != null ? { can_afford: afterLook >= Number(story.financial.event_cost) } : {};
+  const financial = story.financial ? block('financial', () => `═══ FINANCIAL CONTEXT ═══\n${financialContextText(before ? { ...story.financial, balance, total_income: 0, total_expenses: 0, ...affords } : story.financial)}`) : '';
   // A function, so a `$` in the hook is written as it is. With beat 14's
   // invitation coming, the career block leaves beat 14 to it; with it
   // withheld, no offer comes (careerBlock; Script page audit, 2026-10-19).
@@ -691,6 +721,54 @@ function cutsceneCast(eventData) {
   return `${hostText} and ${guestText}`;
 }
 
+// The prompt's blocks the old Script Writer reads too (Script page audit 3,
+// 2026-10-19: its prompt had no cutscene, no voice clicks and no beat 14
+// opportunity), so both writers say the show's rules in the same words.
+
+/** How a moment on screen is written: the [UI:] lines. */
+function screenLinesText() {
+  return `What happens on screen goes on its own line, one moment per line, in this form (the Script tab reads these lines; write the name of a screen, icon or overlay exactly as it is listed under ON SCREEN when it is listed there):
+[UI:SHOW phone] / [UI:HIDE phone] (Lala's phone comes on screen / goes away)
+[UI:OPEN <screen>] [UI:CLICK <icon>] [UI:SCROLL <screen>] [UI:CLOSE <screen>]
+[UI:DISPLAY <overlay>] / [UI:HIDE <overlay>]
+[UI:NOTIFY <sender>: <words>] [UI:DM <sender>: <words>] [UI:POST <caption>]
+In the gameplay beats (1–10 and 14), turn each beat's "UI action" above into one or more of these lines (CLOSET_OPEN is [UI:OPEN Closet], MAIL_NOTIFICATION is a [UI:NOTIFY …] line). In the cutscene (11–13) the UI action is staged in (actions), and its only [UI:] lines are the overlays on the video (SHOW RULES). Never write the action's own name in brackets.`;
+}
+
+/** JustAWoman playing the game on camera, and watching the cutscene. */
+function justAWomanOnCamera() {
+  return `═══ JUSTAWOMAN ON CAMERA ═══
+JustAWoman (Me:) is playing the game on camera from her corner: she sees the game interface and reacts to it; Lala lives the experience. Two perspectives on the same moment. Lala cannot hear her commentary or see the audience's game interface.
+- She reacts to the specific thing on screen (this outfit, this message, this price, this person, this result), never an interchangeable line like "This is exciting!".
+- Only to what she has actually seen: nothing from a message before it arrives, or from the invitation before it is opened.
+- Her lines mix four things, each on its own line or inside hers:
+  - spoken commentary: jokes, predictions, doubts, celebrations, occasional criticism of the game;
+  - performance, in parentheses: Me: (side-eyes the camera) "…", (leans toward the screen), (stunned silence);
+  - player actions: the [UI:] lines she makes happen, and her hesitation, (hovers over Confirm, then pulls back);
+  - sound and edit cues, optional: [SFX: notification ping], [EDIT: punch-in on her corner frame].
+- Two modes. While playing (beats 1–10 and 14) she is emotionally involved and invested in Lala's business: "We cannot afford to embarrass ourselves tonight." While the cutscene plays and is recapped (beats 11–13) she watches, and in the Recap Panel briefly evaluates what happened: "That warning came after I spent the coins. You could've told me sooner." Write new lines; never reuse these.
+- In the cutscene (beats 11–13) she is still on screen, watching it play like a cutscene in a video game: she comments a little between the characters' lines, a reaction here and there, never narrating every line, and she clicks nothing.
+- Vary her energy and leave room to watch: let Lala's line finish before she reacts.
+- She may talk to viewers as "besties" or "chat" and ask them to comment, but never invents viewer messages or comments.
+- Her humor, opinions, small grudges, favorite characters and investment in Lala carry on from PREVIOUS EPISODE when it is given; never invent a past grudge or favorite.`;
+}
+
+/** The show's rules: gameplay and cutscene, the cast of beat 11, the invitation, the voice click, the closet, the runway. */
+function showRulesBlock({ eventData = null, phone = null, onScreen = [] } = {}) {
+  const showRules = require('../utils/scriptShowRules');
+  const rulesOn = rulesPhone(phone, onScreen);
+  return `═══ SHOW RULES ═══
+- Beats 1–10 are gameplay: everything stems from Lala's phone. It is on screen from the moment the Start button is clicked in Beat 1 until she travels to the event in Beat 10. Never write [UI:SHOW phone] or [UI:HIDE phone] in between; the phone is already there.
+- Beats 11–13 are the cutscene: an AI video, like a play moment in a video game, where the characters say their own lines to each other: Lala, ${cutsceneCast(eventData)}, and anyone else present, each as their name: [their words]. No phone and no phone UI: no [UI:SHOW phone], [UI:CLICK …], [UI:OPEN …] or [UI:SCROLL …] of phone screens, and no voice-icon click. What the video shows goes in (parentheses). Overlays that sit on the video are allowed: [UI:DISPLAY Stats Panel] / [UI:HIDE Stats Panel], and [TRANSITION: …]. JustAWoman (Me:) stays on screen and comments a little between their lines.
+- Beat 11 (The Event): the cutscene begins. Lala has a real conversation with ${cutsceneCast(eventData)}.
+- Beat 13 (Recap Panel): still the cutscene, with [UI:DISPLAY Stats Panel] over the video. The event's own costs come off here only (unless covered); what she is owed is paid next episode, so never a + coin line in this episode. Lala says how it went in her own words.
+- Beat 14 (Cliffhanger): back to gameplay: her phone and the voice icon again.
+- Beat 5 (Reveal): the invitation letter comes up, ${showRules.invitationLine(rulesOn)}, never the login screen or the Start button (those are beats 1 and 2). JAWIHP reads the whole invitation aloud, every word of it, not a summary.
+- In the gameplay beats (1–10 and 14) Lala talks only after JustAWoman clicks her voice icon: ${`[UI:CLICK ${showRules.voiceIconName(rulesOn.icons)}]`} on its own line right before every line Lala says: one click, one line. In the cutscene (11–13) she speaks with no click. No click is needed for the line where she answers a notification or message ([UI:NOTIFY …], [UI:DM …]), or while she is being dressed (the closet, [WEAR:] lines). Her thoughts, Lala (V.O.):, need no click.
+- Beat 8 (Transformation Loop): every piece of the look is picked and put on one at a time: its own pick, its own line, its own [WEAR: id] line, and its own coin line right after when it costs her (LALA'S COINS). Never several pieces at once.
+- Beat 12 (Fashion Challenge): still the cutscene. The challenge is a surprise runway walk at the event: stage it (a model doesn't show, and Lala is asked to walk), in the characters' own lines and (actions); no phone, no closet, no coin line. Anything the brand hands her to wear is named in an action line and costs her nothing. She may film the brand's reel here too, but it need not be shown. The room's verdict moves her standing with [STAT: reputation ±n], [STAT: brand_trust ±n], [STAT: influence ±n] and [STAT: stress ±n] lines, never coins.`;
+}
+
 function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore, seasonContext = null, onScreen = [], story = null, phone = null, worldNow = '', money = null, beat14 = null }, { only = null, lockedBeats = [] } = {}) {
   // Every canonical beat, in order, whether or not the plan has its row
   // (§8(j): Generate Script instantiates all 14; it never invents its own).
@@ -730,13 +808,18 @@ function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrob
   const showRules = require('../utils/scriptShowRules');
   const rulesOn = rulesPhone(phone, onScreen);
 
+  // Whether LALA'S COINS is in the prompt (utils/scriptMoney moneyContext
+  // writes it with a balance or a costing piece): money read with neither,
+  // only a shopping list, has no coins block, so the EVENT block says when
+  // the entry comes off (Script page audit 3, 2026-10-19).
+  const coinsTold = !!money && (money.balanceBefore != null || (money.look || []).length > 0);
   let eventContext;
   if (eventData) {
     // The entry cost comes off in the Recap Panel only (Evoni, 2026-10-18;
     // Script page audit, 2026-10-19): said here when LALA'S COINS does not
     // say it, so a bare "Cost: N coins" is not charged on arrival.
     const entry = Number(eventData.cost_coins) > 0
-      ? `Cost: ${eventData.cost_coins} coins${money ? '' : `, which comes off in the Recap Panel (Beat ${RECAP_NUMBER}) only, as [STAT: coins -${eventData.cost_coins}]; never earlier`}`
+      ? `Cost: ${eventData.cost_coins} coins${coinsTold ? '' : `, which comes off in the Recap Panel (Beat ${RECAP_NUMBER}) only, as [STAT: coins -${eventData.cost_coins}]; never earlier`}`
       : `Cost: ${eventData.cost_coins ?? 0} coins`;
     eventContext = `Event: ${eventData.name}\nPrestige: ${eventData.prestige}/10\nDress code: ${eventData.dress_code || 'Not specified'}\n${entry}\nNarrative stakes: ${eventData.narrative_stakes || ''}`;
     if (eventData.invitation_asset_id) {
@@ -770,7 +853,11 @@ function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrob
   // How beat 14 ends (Script page audit, 2026-10-19): on the invitation,
   // with the hook told through it; or, withheld, with no offer at all.
   const ending = beat14Outcome(beat14, brief?.designed_intent || null);
-  const told = storyContext(story, { hasSeason: !!seasonContext?.label, hook, balanceBefore, beat14: ending });
+  // What she has after the look (LALA'S COINS), for FINANCIAL CONTEXT's "Can
+  // afford" (Script page audit 3, 2026-10-19: it read the ledger's balance
+  // after the episode beside the balance before it).
+  const afterLook = balanceBefore != null ? balanceBefore - (money?.look || []).reduce((n, p) => n + (Number(p.amount) || 0), 0) : null;
+  const told = storyContext(story, { hasSeason: !!seasonContext?.label, hook, balanceBefore, afterLook, beat14: ending });
   const statsContext = told.stats ? ''
     : lalaStats?.character_states ? JSON.stringify(snapshotStates(lalaStats.character_states, balanceBefore ?? story?.financial?.balance)).slice(0, 1500)
     : 'Stats not loaded';
@@ -835,50 +922,22 @@ Do not add, merge, rename or skip beats. Under each header:`}
 Me: [JAWIHP dialogue]
 (Action description)
 Lala: [Lala dialogue]
-[STAT: coins -X] (a cost, only where ${money ? "LALA'S COINS" : 'the EVENT block'} puts one; other stats the same way, [STAT: reputation +1])
+[STAT: coins -X] (a cost, only where ${coinsTold ? "LALA'S COINS" : 'the EVENT block'} puts one; other stats the same way, [STAT: reputation +1])
 [TRANSITION: description]
 [SFX: sound] / [EDIT: editing cue] (optional, for JustAWoman's moments; not on every line)
 ${people ? 'Another character at the event speaks as their name: [their words], in their own voice (CHARACTERS AT THE EVENT).\n' : ''}
-What happens on screen goes on its own line, one moment per line, in this form (the Script tab reads these lines; write the name of a screen, icon or overlay exactly as it is listed under ON SCREEN when it is listed there):
-[UI:SHOW phone] / [UI:HIDE phone] (Lala's phone comes on screen / goes away)
-[UI:OPEN <screen>] [UI:CLICK <icon>] [UI:SCROLL <screen>] [UI:CLOSE <screen>]
-[UI:DISPLAY <overlay>] / [UI:HIDE <overlay>]
-[UI:NOTIFY <sender>: <words>] [UI:DM <sender>: <words>] [UI:POST <caption>]
-In the gameplay beats (1–10 and 14), turn each beat's "UI action" above into one or more of these lines (CLOSET_OPEN is [UI:OPEN Closet], MAIL_NOTIFICATION is a [UI:NOTIFY …] line). In the cutscene (11–13) the UI action is staged in (actions), and its only [UI:] lines are the overlays on the video (SHOW RULES). Never write the action's own name in brackets.
+${screenLinesText()}
 
 RULES:
 1. Beat 8 MUST reference specific wardrobe items by name
 2. JAWIHP reacts in real time to what she has seen (JUSTAWOMAN ON CAMERA)
 3. Lala's lines are ALWAYS short and punchy — max 2-3 sentences
-4. Community engagement: ask audience to react in comments at least twice
-5. A change to her stats appears only as a [STAT:] tag; she may say her coin balance in her own words when she checks it
+${only ? '' : '4. Community engagement: ask audience to react in comments at least twice\n'}5. A change to her stats appears only as a [STAT:] tag; she may say her coin balance in her own words when she checks it
 ${!only || only.beat.number === 14 ? `6. ${only ? 'This beat ends' : 'Beat 14 ends'} on ${beat14Ending(ending, hook)}\n` : ''}${told.career ? "7. Lala's career is on the page: name the deal and what she wants from the event in the beats the CAREER block gives them, in her words, never as a list; the content she owes need not be shown on screen\n" : ''}
 
-═══ JUSTAWOMAN ON CAMERA ═══
-JustAWoman (Me:) is playing the game on camera from her corner: she sees the game interface and reacts to it; Lala lives the experience. Two perspectives on the same moment. Lala cannot hear her commentary or see the audience's game interface.
-- She reacts to the specific thing on screen (this outfit, this message, this price, this person, this result), never an interchangeable line like "This is exciting!".
-- Only to what she has actually seen: nothing from a message before it arrives, or from the invitation before it is opened.
-- Her lines mix four things, each on its own line or inside hers:
-  - spoken commentary: jokes, predictions, doubts, celebrations, occasional criticism of the game;
-  - performance, in parentheses: Me: (side-eyes the camera) "…", (leans toward the screen), (stunned silence);
-  - player actions: the [UI:] lines she makes happen, and her hesitation, (hovers over Confirm, then pulls back);
-  - sound and edit cues, optional: [SFX: notification ping], [EDIT: punch-in on her corner frame].
-- Two modes. While playing (beats 1–10 and 14) she is emotionally involved and invested in Lala's business: "We cannot afford to embarrass ourselves tonight." While the cutscene plays and is recapped (beats 11–13) she watches, and in the Recap Panel briefly evaluates what happened: "That warning came after I spent the coins. You could've told me sooner." Write new lines; never reuse these.
-- In the cutscene (beats 11–13) she is still on screen, watching it play like a cutscene in a video game: she comments a little between the characters' lines, a reaction here and there, never narrating every line, and she clicks nothing.
-- Vary her energy and leave room to watch: let Lala's line finish before she reacts.
-- She may talk to viewers as "besties" or "chat" and ask them to comment, but never invents viewer messages or comments.
-- Her humor, opinions, small grudges, favorite characters and investment in Lala carry on from PREVIOUS EPISODE when it is given; never invent a past grudge or favorite.
+${justAWomanOnCamera()}
 
-═══ SHOW RULES ═══
-- Beats 1–10 are gameplay: everything stems from Lala's phone. It is on screen from the moment the Start button is clicked in Beat 1 until she travels to the event in Beat 10. Never write [UI:SHOW phone] or [UI:HIDE phone] in between; the phone is already there.
-- Beats 11–13 are the cutscene: an AI video, like a play moment in a video game, where the characters say their own lines to each other: Lala, ${cutsceneCast(eventData)}, and anyone else present, each as their name: [their words]. No phone and no phone UI: no [UI:SHOW phone], [UI:CLICK …], [UI:OPEN …] or [UI:SCROLL …] of phone screens, and no voice-icon click. What the video shows goes in (parentheses). Overlays that sit on the video are allowed: [UI:DISPLAY Stats Panel] / [UI:HIDE Stats Panel], and [TRANSITION: …]. JustAWoman (Me:) stays on screen and comments a little between their lines.
-- Beat 11 (The Event): the cutscene begins. Lala has a real conversation with ${cutsceneCast(eventData)}.
-- Beat 13 (Recap Panel): still the cutscene, with [UI:DISPLAY Stats Panel] over the video. The event's own costs come off here only (unless covered); what she is owed is paid next episode, so never a + coin line in this episode. Lala says how it went in her own words.
-- Beat 14 (Cliffhanger): back to gameplay: her phone and the voice icon again.
-- Beat 5 (Reveal): the invitation letter comes up, ${showRules.invitationLine(rulesOn)}, never the login screen or the Start button (those are beats 1 and 2). JAWIHP reads the whole invitation aloud, every word of it, not a summary.
-- In the gameplay beats (1–10 and 14) Lala talks only after JustAWoman clicks her voice icon: ${`[UI:CLICK ${showRules.voiceIconName(rulesOn.icons)}]`} on its own line right before every line Lala says: one click, one line. In the cutscene (11–13) she speaks with no click. No click is needed for the line where she answers a notification or message ([UI:NOTIFY …], [UI:DM …]), or while she is being dressed (the closet, [WEAR:] lines). Her thoughts, Lala (V.O.):, need no click.
-- Beat 8 (Transformation Loop): every piece of the look is picked and put on one at a time: its own pick, its own line, its own [WEAR: id] line, and its own coin line right after when it costs her (LALA'S COINS). Never several pieces at once.
-- Beat 12 (Fashion Challenge): still the cutscene. The challenge is a surprise runway walk at the event: stage it (a model doesn't show, and Lala is asked to walk), in the characters' own lines and (actions); no phone, no closet, no coin line. Anything the brand hands her to wear is named in an action line and costs her nothing. She may film the brand's reel here too, but it need not be shown. The room's verdict moves her standing with [STAT: reputation ±n], [STAT: brand_trust ±n], [STAT: influence ±n] and [STAT: stress ±n] lines, never coins.
+${showRulesBlock({ eventData, phone, onScreen })}
 ${only ? `═══ THE SCRIPT AS IT STANDS ═══
 ${only.currentScript.trim() || '(empty)'}
 
@@ -898,4 +957,9 @@ ${beatHeader(only.beat)}
 Return only that beat. No other beats, no preamble.` : 'Write the complete 14-beat script now. No preamble — just the script.'}`;
 }
 
-module.exports = { generateGroundedScript, generateGroundedBeat, buildScriptPrompt, beatFromReply, coverageFacts, DraftIncompleteError, MIN_DRAFT_BEATS };
+// The blocks, the free fixes, beat 14's ending and who speaks in each beat
+// are read by the old Script Writer too (Script page audit 3, 2026-10-19).
+module.exports = {
+  generateGroundedScript, generateGroundedBeat, buildScriptPrompt, beatFromReply, coverageFacts, DraftIncompleteError, MIN_DRAFT_BEATS,
+  screenLinesText, justAWomanOnCamera, showRulesBlock, deterministicFixes, beat14Ending, BEAT_TEMPLATES, MODELS, isBudgetOrRateLimit,
+};

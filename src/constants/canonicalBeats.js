@@ -53,7 +53,7 @@
  *     `true`, not `false`.
  *   - story_job — the one thing this beat adds to the story, so no two
  *     beats announce the same thing. Evoni's ruling, 2026-10-17: beat 3
- *     stays phone-free; beat 4 is the notification and its sender only,
+ *     stays phone-free (its voice click aside: Script page audit 3, 2026-10-19); beat 4 is the notification and its sender only,
  *     beat 5 the whole invitation; one private exchange at beat 7 is the
  *     default, a second at beat 14 optional; beat 11 gets a real
  *     interaction, her decision and its consequence before the result.
@@ -115,7 +115,10 @@ const CANONICAL_BEATS = [
   {
     number: 3,
     name: 'Welcome',
-    story_job: "Lala greets the audience. Her mood, her want or her worry comes through in what she says and does. No phone moment.",
+    // Beat 3 is gameplay (Script page audit 3, 2026-10-19: "No phone moment"
+    // read against the voice click before each line Lala says): no message
+    // and no app, and her line comes after JustAWoman's voice click.
+    story_job: "Lala greets the audience. Her mood, her want or her worry comes through in what she says and does. No message and no app: the only phone moment is the voice click before each line she says.",
     typical_location: 'HOME_BASE',
     description: 'Greeting the audience — introduces the episode question',
     narrative_purpose: 'Lala enters the frame. World state is visible. Tone is set.',

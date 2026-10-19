@@ -5,9 +5,10 @@
 // opportunity or make a new one. Whoever offers it is someone at the event,
 // its host or a guest. It is offered when the episode lands, expires when it
 // fails, in place of the random follow-up offer (services/beat14Opportunity).
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Gift } from 'lucide-react';
 import api from '../../services/api';
+import { letGoText, replaceText } from '../Show/OpportunityBeat14';
 
 const TYPES = [
   ['brand_deal', 'Brand deal'], ['campaign', 'Campaign'], ['editorial', 'Editorial'], ['modeling', 'Modeling'],
@@ -25,6 +26,20 @@ export default function Beat14Opportunity({ showId, episodeId, data, onChange, d
   const [pitch, setPitch] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // Where focus goes once the panel has redrawn (Script page audit 3,
+  // 2026-10-19: Change, Cancel, Save and Remove each left it on the page):
+  // 'form' its first control, 'change' the Change button.
+  const boxRef = useRef(null);
+  const focusNext = useRef(null);
+  useEffect(() => {
+    if (!focusNext.current || busy) return;
+    const box = boxRef.current;
+    const target = focusNext.current === 'change'
+      ? box?.querySelector('[data-testid="script-beat14-change"]')
+      : box?.querySelector('[data-testid="script-beat14-form"] select, [data-testid="script-beat14-form"] input, [data-testid="script-beat14-form"] textarea');
+    focusNext.current = null;
+    (target || box?.querySelector('button, select, input'))?.focus();
+  });
 
   if (!data) return null;
   const { opportunity, people = [], candidates = [] } = data;
@@ -35,19 +50,24 @@ export default function Beat14Opportunity({ showId, episodeId, data, onChange, d
   // only the sender can be changed.
   const choices = opportunity && !candidates.some((c) => c.id === opportunity.id) ? [opportunity, ...candidates] : candidates;
   const startChange = () => {
+    focusNext.current = 'form';
     setEditing(true);
     setError(null);
     setMode('pick');
     setPick(String(opportunity.id));
     setFrom(opportunity.connector_profile_id != null ? String(opportunity.connector_profile_id) : '');
   };
-  const cancel = () => { setEditing(false); setError(null); setMode('new'); setPick(''); };
+  const cancel = () => { focusNext.current = 'change'; setEditing(false); setError(null); setMode('new'); setPick(''); };
 
   const save = async () => {
     setError(null);
     if (!from) { setError('Choose who at the event offers it.'); return; }
     if (mode === 'new' && !name.trim()) { setError('Name the opportunity.'); return; }
     if (mode === 'pick' && !pick) { setError('Choose an opportunity.'); return; }
+    // Saving another one lets the attached one go: ask first, as the show
+    // tab does (Script page audit 3, 2026-10-19).
+    if (opportunity && (mode === 'new' || String(pick) !== String(opportunity.id))
+      && !window.confirm(`${replaceText('this episode', opportunity)} Save the new one instead?`)) return;
     setBusy(true);
     try {
       const body = mode === 'new'
@@ -56,6 +76,7 @@ export default function Beat14Opportunity({ showId, episodeId, data, onChange, d
       await api.put(url, body);
       setEditing(false);
       setName(''); setPitch(''); setPick(''); setMode('new');
+      focusNext.current = 'change';
       await onChange();
     } catch (err) {
       console.error('[Beat14Opportunity] attach failed:', err);
@@ -65,8 +86,12 @@ export default function Beat14Opportunity({ showId, episodeId, data, onChange, d
     }
   };
 
+  // Remove can delete it (one made for beat 14): it asks first (Script page
+  // audit 3, 2026-10-19: one tap deleted it without a word).
   const remove = async () => {
     setError(null);
+    if (!window.confirm(`Remove ${opportunity.name} from beat 14? ${letGoText(opportunity)}`)) return;
+    focusNext.current = 'form';
     setBusy(true);
     try {
       await api.delete(url);
@@ -81,7 +106,7 @@ export default function Beat14Opportunity({ showId, episodeId, data, onChange, d
 
   const showForm = editing || !opportunity;
   return (
-    <section className="esp-cover esp-beat14" data-testid="script-beat14-opportunity">
+    <section ref={boxRef} className="esp-cover esp-beat14" data-testid="script-beat14-opportunity">
       <h3 className="esp-side-title"><Gift size={14} aria-hidden="true" /> Opportunity · Beat 14</h3>
       {opportunity && !editing && (
         <div data-testid="script-beat14-attached">

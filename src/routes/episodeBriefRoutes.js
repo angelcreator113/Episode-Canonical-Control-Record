@@ -622,6 +622,8 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
         reveal_fixed: !!written.coverage?.reveal_fixed,
         // Each costing piece's coin line, added after its wear cue (utils/scriptMoney.js).
         coin_lines: written.coverage?.coin_lines || 0,
+        // What code mended that the fix pass used to pay for (utils/scriptAutoFixes.js; Script page audit 3, 2026-10-19).
+        auto_fixed: written.coverage?.auto_fixed || 0,
         // Story layers with nothing to draw on (utils/storyLayers.js).
         story_gaps: written.coverage?.story_gaps || [],
       };
@@ -660,6 +662,12 @@ router.post('/:episodeId/regenerate-beat', requireAuth, aiRateLimiter, async (re
     const episode = await Episode.findByPk(episodeId);
     // A deleted episode keeps its row (deleted_at set); nothing is written for it.
     if (!episode || episode.deleted_at) return res.status(404).json({ error: 'Episode not found' });
+    // The episode's own show, as Generate script checks (Script page audit 3,
+    // 2026-10-19): another show's phone, overlays and coins were read into
+    // the prompt.
+    if (episode.show_id && String(episode.show_id) !== String(showId)) {
+      return res.status(400).json({ error: 'showId is not this episode\'s show' });
+    }
     const { normalizeLockedBeats } = require('../utils/scriptBeatLocks');
     if (normalizeLockedBeats(episode.script_locked_beats).includes(beatNumber)) {
       return res.status(409).json({ error: `Beat ${beatNumber} is locked. Unlock it to regenerate it.`, code: 'BEAT_LOCKED' });

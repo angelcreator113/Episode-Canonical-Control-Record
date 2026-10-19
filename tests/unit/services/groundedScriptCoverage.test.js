@@ -102,7 +102,7 @@ describe("the Script tab's writer", () => {
     const asks = create.mock.calls.slice(1).map((c) => c[0].messages[0].content);
     expect(asks.find((p) => p.includes('Write ONLY beat 8 again'))).toContain(`[WEAR: ${PIECE}]`);
     expect(asks.find((p) => p.includes('Write ONLY beat 11 again'))).toContain('Meet Marcus Reed');
-    expect(out.coverage).toEqual({ missing: [], fixed_beats: [8, 11], phone_steps: 0, voice_clicks: 0, reveal_fixed: false, coin_lines: 0, story_gaps: expect.any(Array) });
+    expect(out.coverage).toEqual({ missing: [], fixed_beats: [8, 11], phone_steps: 0, voice_clicks: 0, reveal_fixed: false, coin_lines: 0, auto_fixed: 0, story_gaps: expect.any(Array) });
     expect(out.script).toContain(`[WEAR: ${PIECE}]`);
     expect(out.script).toContain('I finally get to meet Marcus Reed');
   });

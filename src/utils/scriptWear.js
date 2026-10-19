@@ -29,7 +29,16 @@ const WEAR_LINE = /^\s*\[WEAR:\s*([^\]\s]+)\s*\]\s*$/i;
 const UI_LINE = /^\s*\[UI:\s*([A-Za-z_]+)\s*(.*?)\s*\]\s*$/i;
 
 const nameKey = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
-const normKey = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+// The closet is the screen named Closet (Lala's Closet, Closet Screen), not
+// any screen whose name starts with it (Script page audit 3, 2026-10-19:
+// "Closet Sale Alert" in beat 7 was the closet; utils/scriptRuleChecks closetOf).
+// The same reading as utils/scriptRuleChecks isClosetScreen.
+const CLOSET_PARTS = new Set(['screen', 'app', 'page', 'ui', 'tab', 'view', 'grid', 'panel', 'window', 'overlay', 'icon', 'category', 'categories', 'item', 'items', 'outfit', 'outfits', 'look', 'looks', 'rack', 'wardrobe']);
+const isClosetScreen = (target) => {
+  const w = String(target || '').replace(/\s+x\d+$/i, '').replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  while (w.length && ['lala', 'lalas', 's', 'the'].includes(w[0])) w.shift();
+  return w[0] === 'closet' && w.slice(1).every((x) => CLOSET_PARTS.has(x));
+};
 
 /** The script's beats as the Script tab numbers them: [{ number, lines }]. */
 function scriptBeats(scriptText) {
@@ -84,7 +93,7 @@ function wearCues(beats, look) {
 function closetIndex(beats) {
   const opens = beats.findIndex((b) => b.lines.some((l) => {
     const m = String(l).match(UI_LINE);
-    return m && m[1].toUpperCase() === 'OPEN' && normKey(m[2]).startsWith('closet');
+    return m && m[1].toUpperCase() === 'OPEN' && isClosetScreen(m[2]);
   }));
   return opens >= 0 ? opens : beats.findIndex((b) => b.number === CLOSET_CANON);
 }
@@ -121,4 +130,4 @@ function wornByBeat(scriptText, look, beatNumber, lineIndex = Infinity) {
   return { worn: [...seen.values()], uncued, beatFound: true };
 }
 
-module.exports = { scriptBeats, wearCues, closetIndex, lastGettingReadyIndex, wornByBeat };
+module.exports = { scriptBeats, wearCues, closetIndex, lastGettingReadyIndex, wornByBeat, isClosetScreen };

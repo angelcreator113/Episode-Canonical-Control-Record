@@ -27,6 +27,7 @@ const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
 const { splitScriptBeats } = require('./scriptBeatLocks');
 const { beat14Delivers } = require('./beat14Invitation');
 const { scriptRuleItems } = require('./scriptRuleChecks');
+const { isClosetScreen } = require('./scriptWear');
 
 // ─── The tab's must-cover rule (frontend/src/lib/episodeScript.js) ───────────
 const STOP = new Set(['the', 'and', 'for', 'with', 'from', 'that', 'this', 'into', 'her', 'his', 'their', 'your', 'about', 'post', 'piece', 'content', 'make', 'made', 'lala', 'episode', 'event']);
@@ -55,7 +56,10 @@ const PHONE_BEATS = CANONICAL_BEATS.filter((b) => surfaceHasPhone(b.surface)).ma
 const CLOSET_BEAT = (CANONICAL_BEATS.find((b) => b.screen_action === 'CLOSET_OPEN') || { number: 8 }).number;
 
 const UI_LINE = /^\s*\[UI:/i;
-const OPENS_CLOSET = /^\s*\[UI:\s*OPEN\s+closet/i;
+// The screen named Closet, as utils/scriptWear closetIndex reads it (Script
+// page audit 3, 2026-10-19: `[UI:OPEN Closet Sale Alert]` was the closet).
+const OPEN_LINE = /^\s*\[UI:\s*OPEN\s+(.*?)\s*\]\s*$/i;
+const opensCloset = (line) => { const m = String(line).match(OPEN_LINE); return !!m && isClosetScreen(m[1]); };
 
 /**
  * { items, missing } for the script. `facts`:
@@ -92,7 +96,7 @@ function scriptCoverage(script, facts = {}) {
   }
 
   // The closet beat: the one that opens the closet, else the canonical one.
-  const closet = (beats.find((b) => b.text.split('\n').some((l) => OPENS_CLOSET.test(l))) || {}).number || CLOSET_BEAT;
+  const closet = (beats.find((b) => b.text.split('\n').some(opensCloset)) || {}).number || CLOSET_BEAT;
   for (const p of facts.lockedPieces || []) {
     if (!p?.id) continue;
     const cue = new RegExp(`^\\s*\\[WEAR:\\s*${String(p.id).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\]\\s*$`, 'im');

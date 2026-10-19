@@ -27,7 +27,7 @@ const { latestWorldSnapshotForShow } = require('./worldSnapshotForShow');
 const { loadScriptCareer, careerBlock } = require('./scriptCareerService');
 const { episodeEventId } = require('../utils/episodeEventSql');
 
-const CLAUDE_MODEL = 'claude-sonnet-4-6';
+// The model is the grounded writer's MODELS (writeScriptReply; Script page audit 3, 2026-10-19).
 let client = null;
 function getClient() {
   if (!client) client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -664,13 +664,32 @@ function eventContextBlock(event) {
   return lines.join('\n');
 }
 
+// Who speaks in a beat, as the Script tab's writer has it (its
+// BEAT_TEMPLATES, from canonicalBeats): Lala in 3, 10, 13 and 14 too
+// (Script page audit 3, 2026-10-19). Empty for a beat it does not know.
+function speakers(grounded, number) {
+  const t = grounded.BEAT_TEMPLATES[Number(number)];
+  return t ? { jawihp: t.jawihp, lala: t.lala } : {};
+}
+
 function buildFullPrompt(context) {
   const { brief, scenePlan, event, financial, wardrobe, franchiseLaws, worldState, worldNow = '' } = context;
+  // The show's rules as the Script tab's writer says them (Script page audit
+  // 3, 2026-10-19: this prompt had a "[STAT: coins +50]" example, no
+  // cutscene, no voice click and no beat 14 opportunity): its blocks, who
+  // speaks in each beat, and how beat 14 ends, read from it, not copied.
+  const grounded = require('./groundedScriptGeneratorService');
+  const { beat14Context, beat14Outcome } = require('./beat14Opportunity');
+  const intent = brief?.designed_intent || null;
+  const hook = typeof brief?.forward_hook === 'string' ? brief.forward_hook.trim() : '';
+  const ending = beat14Outcome(context.beat14 || null, intent);
+  const onScreen = context.onScreen || [];
+  const voiceIcon = require('../utils/scriptShowRules').voiceIconName(onScreen.filter((o) => o?.category === 'phone_icon' || o?.category === 'icon'));
 
   // Scene plan with full context
   const beatContext = scenePlan.length > 0
     ? scenePlan.map(b => {
-        const tpl = BEAT_TEMPLATES[b.beat_number] || {};
+        const tpl = { ...(BEAT_TEMPLATES[b.beat_number] || {}), ...speakers(grounded, b.beat_number) };
         const loc = b.sceneSet?.worldLocation;
         const feedMoment = b.feed_moment;
         const scriptLines = b.script_lines;
@@ -782,15 +801,23 @@ Allowed outcomes: ${JSON.stringify(brief?.allowed_outcomes || [])}
 
 ═══ FINANCIAL CONTEXT ═══
 ${financialContext}
-${careerBlock(context.career)}
+${careerBlock(context.career, { beat14: ending })}
 ${stateContext}
 ${worldNow}
 ═══ WARDROBE ═══
 ${wardrobeContext}
 
 ${storyContextBlocks(context)}
+${beat14Context(context.beat14 || null, intent)}
 ═══ 14-BEAT SCENE PLAN ═══
 ${beatContext}
+
+═══ WHAT HAPPENS ON SCREEN ═══
+${grounded.screenLinesText()}
+
+${grounded.justAWomanOnCamera()}
+
+${grounded.showRulesBlock({ eventData: event, phone: context.phone || null, onScreen })}
 
 ═══ OUTPUT FORMAT ═══
 Return a JSON array of 14 beats. Each beat object:
@@ -801,10 +828,11 @@ Return a JSON array of 14 beats. Each beat object:
   "angle": "wide",
   "lines": [
     { "speaker": "Me", "type": "dialogue", "text": "..." },
+    { "speaker": null, "type": "direction", "text": "[UI:CLICK ${voiceIcon}]" },
     { "speaker": "Lala", "type": "dialogue", "text": "..." },
     { "speaker": null, "type": "action", "text": "(Camera pans...)" },
     { "speaker": null, "type": "direction", "text": "[TRANSITION: glow dissolve]" },
-    { "speaker": null, "type": "stat", "text": "[STAT: coins +50]" },
+    { "speaker": null, "type": "stat", "text": "[STAT: reputation +1]" },
     { "speaker": "Lala", "type": "internal", "text": "She thinks: ..." },
     { "speaker": null, "type": "feed_moment", "text": "@handle posted: ..." }
   ]
@@ -812,13 +840,14 @@ Return a JSON array of 14 beats. Each beat object:
 
 ═══ SCRIPT RULES ═══
 1. Beat 8 MUST reference specific wardrobe items BY NAME
-2. Feed moments: When a beat has a FEED MOMENT, show Lala checking her phone, seeing the post, and reacting — both externally and internally
+Every [UI:], [WEAR:], [TRANSITION:] or [SFX:] line of the rules above is a "direction" line and every [STAT:] line a "stat" line, its text exactly the bracket.
+2. Feed moments: When a gameplay beat (1–10 and 14) has a FEED MOMENT, show Lala checking her phone, seeing the post, and reacting — both externally and internally; the cutscene (11–13) has no phone
 3. Financial pressure: If money is tight, show Lala's internal stress about costs — checking prices, calculating, second-guessing
-4. JAWIHP reacts to EVERYTHING in real time — she is the warm bridge between Lala and the audience
+4. JAWIHP reacts in real time while she plays (beats 1–10 and 14) — she is the warm bridge between Lala and the audience; in the cutscene she comments a little (JUSTAWOMAN ON CAMERA)
 5. Lala's lines are ALWAYS short and punchy — max 2-3 sentences
 6. Community engagement: ask audience to react in comments at least twice
 7. Stats only appear as "stat" type lines
-8. End Beat 14 with a forward hook that seeds the next episode
+8. Beat 14 ends on ${grounded.beat14Ending(ending, hook)}
 9. Each beat should have 3-8 lines minimum — make them ALIVE
 10. Inner monologue ("internal" type) reveals what Lala is REALLY feeling vs. what she shows
 ${context.career && careerBlock(context.career) ? "11. Lala's career is on the page: name the deal, what she owes and what she wants from the event in the beats the CAREER block gives them, in her words, never as a list\n" : ''}
@@ -828,8 +857,67 @@ Return ONLY the JSON array. No markdown, no preamble.`;
 /**
  * Generate a full episode script
  */
+// The Sonnet call: { text, usage, model }. Two attempts per model, as the AI
+// routes try; a refused budget or a rate limit is not tried again, and the
+// route answers it as a 429 (Script page audit 3, 2026-10-19).
+async function writeScriptReply(prompt) {
+  const { MODELS, isBudgetOrRateLimit } = require('./groundedScriptGeneratorService');
+  let lastErr = null;
+  for (const model of MODELS) {
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        const response = await getClient().messages.create({ model, max_tokens: 12000, messages: [{ role: 'user', content: prompt }] });
+        return { text: response.content?.[0]?.text || '', usage: response.usage || null, model };
+      } catch (err) {
+        lastErr = err;
+        console.error(`[ScriptWriter] ${model} attempt ${attempt} failed:`, err.message);
+        if (isBudgetOrRateLimit(err)) throw err;
+      }
+    }
+  }
+  throw lastErr;
+}
+
+// The script text after the grounded writer's free fixes (its
+// deterministicFixes), nothing approved to skip: the route puts the locked
+// beats back after. A failed fix is logged and the text kept.
+function scriptTextAfterFixes(scriptText, context) {
+  try {
+    const { deterministicFixes } = require('./groundedScriptGeneratorService');
+    return deterministicFixes(scriptText, { money: context.money || null, phone: context.phone || null, onScreen: context.onScreen || [] }, new Set()).script;
+  } catch (err) {
+    console.error('[ScriptWriter] free fixes failed (non-blocking):', err.message);
+    return scriptText;
+  }
+}
+
+// What the show's rules need that the old writer did not read (Script page
+// audit 3, 2026-10-19): beat 14's attached opportunity, the show's screens
+// and icons, Lala's coins. Each read that fails is logged and left out.
+async function loadRulesContext(context, episodeId, showId, models) {
+  try {
+    context.beat14 = await require('./beat14Opportunity').loadForScript(models, { episodeId });
+  } catch (err) {
+    console.error('[ScriptWriter] beat 14 opportunity read failed (non-blocking):', err.message);
+    context.beat14 = null;
+  }
+  try {
+    context.onScreen = showId ? await require('./uiOverlayService').getAllOverlayTypes(showId, models) : [];
+  } catch (err) {
+    console.error('[ScriptWriter] on-screen read failed (non-blocking):', err.message);
+    context.onScreen = [];
+  }
+  try {
+    context.money = showId ? await require('./scriptMoneyContext').loadScriptMoney(models.sequelize, { showId, episodeId, event: context.event || null }) : null;
+  } catch (err) {
+    console.error('[ScriptWriter] money read failed (non-blocking):', err.message);
+    context.money = null;
+  }
+  return context;
+}
+
 async function generateEpisodeScript(episodeId, showId, models) {
-  const context = await loadScriptContext(episodeId, showId, models);
+  const context = await loadRulesContext(await loadScriptContext(episodeId, showId, models), episodeId, showId, models);
 
   const prompt = buildFullPrompt(context);
   const promptHash = crypto.createHash('sha256').update(prompt).digest('hex').slice(0, 16);
@@ -838,14 +926,11 @@ async function generateEpisodeScript(episodeId, showId, models) {
   console.log(`[ScriptWriter] Context: ${context.scenePlan.length} beats, ${context.wardrobe.length} wardrobe items, ${context.feedMoments.length} feed moments`);
   console.log(`[ScriptWriter] Financial: ${context.financial?.pressure_level || 'unknown'}, Event: ${context.event?.name || 'none'}`);
 
-  const response = await getClient().messages.create({
-    model: CLAUDE_MODEL,
-    max_tokens: 12000,
-    messages: [{ role: 'user', content: prompt }],
-  });
+  const response = await writeScriptReply(prompt);
 
-  const rawText = response.content[0]?.text || '';
+  const rawText = response.text;
   const tokens = (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0);
+
 
   // Parse JSON from response
   let scriptJson = null;
@@ -864,6 +949,10 @@ async function generateEpisodeScript(episodeId, showId, models) {
   if (scriptJson) {
     scriptText = renderScriptText(scriptJson);
   }
+  // The free fixes the Script tab's writer makes, before it is saved
+  // (Script page audit 3, 2026-10-19): voice clicks, no phone in the
+  // cutscene, no + coin line, the closet's coin lines.
+  scriptText = scriptTextAfterFixes(scriptText, context);
 
   // Count words
   const wordCount = scriptText.split(/\s+/).filter(Boolean).length;
@@ -887,7 +976,7 @@ async function generateEpisodeScript(episodeId, showId, models) {
     title: context.event?.name ? `Script: ${context.event.name}` : `Script v${nextVersion}`,
     script_text: scriptText,
     script_json: scriptJson,
-    generation_model: CLAUDE_MODEL,
+    generation_model: response.model,
     generation_tokens: tokens,
     generation_cost: (tokens / 1000000) * 3, // approximate
     generation_prompt_hash: promptHash,
@@ -1005,8 +1094,14 @@ Return ONLY the JSON.` }],
 function renderScriptText(scriptJson) {
   if (!Array.isArray(scriptJson)) return '';
 
+  // Under the Script tab's own beat headers (Script page audit 3,
+  // 2026-10-19): the "═══ BEAT n ═══" headers it was saved with were not
+  // beats to the Script tab, nor to the free fixes.
+  const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
+  const { beatHeader } = require('../utils/canonicalScriptBeats');
   return scriptJson.map(beat => {
-    const header = `\n═══ BEAT ${beat.beat_number}: ${beat.beat_name} ═══`;
+    const canon = CANONICAL_BEATS.find((c) => c.number === Number(beat.beat_number));
+    const header = canon ? beatHeader(canon) : `## BEAT: ${beat.beat_number} · ${beat.beat_name || ''}`.trimEnd();
     const location = beat.location ? `[${beat.location} — ${beat.angle || 'wide'}]` : '';
     const lines = (beat.lines || []).map(line => {
       switch (line.type) {
@@ -1030,4 +1125,4 @@ function renderScriptText(scriptJson) {
   }).join('\n\n');
 }
 
-module.exports = { generateEpisodeScript, loadScriptContext, renderScriptText, buildFullPrompt, buildSeasonPositionBlock, eventContextBlock, storyContextBlocks, financialContextText, LALA_TIES };
+module.exports = { generateEpisodeScript, loadScriptContext, renderScriptText, buildFullPrompt, buildSeasonPositionBlock, eventContextBlock, storyContextBlocks, financialContextText, LALA_TIES, writeScriptReply, scriptTextAfterFixes };

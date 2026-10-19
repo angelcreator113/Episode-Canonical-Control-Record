@@ -116,13 +116,14 @@ describe('While a new script is written', () => {
       expect(await screen.findByTestId('script-generating')).toBeTruthy();
       expect(screen.getByTestId('script-savebar-save').disabled).toBe(true);
       // Beat 1 stays open where it moved, so its Approve button is on screen.
-      expect(screen.getByTestId('script-lock-1').disabled).toBe(true);
+      // aria-disabled, so focus stays on it (Script page audit 3, 2026-10-19).
+      expect(screen.getByTestId('script-lock-1').getAttribute('aria-disabled')).toBe('true');
       fireEvent.keyDown(window, { key: 's', ctrlKey: true });
       expect(api.put).not.toHaveBeenCalled();
 
       await act(async () => { reply.resolve({ data: { saved: true, script: SCRIPT } }); });
       await waitFor(() => expect(screen.queryByTestId('script-generating')).toBeNull());
-      expect(screen.getByTestId('script-lock-1').disabled).toBe(false);
+      expect(screen.getByTestId('script-lock-1').getAttribute('aria-disabled')).toBeNull();
     } finally { confirm.mockRestore(); }
   });
 });

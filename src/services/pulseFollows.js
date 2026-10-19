@@ -115,6 +115,14 @@ async function friendsOfLala(db, { lalaId, limit = 200, hidden = [] } = {}) {
  * Lala (source auto_feed), one way. LalaVerse profiles only, never Lala or
  * the JustAWoman record. A failure is logged and adds nothing: crossing
  * never fails for want of a follow.
+ *
+ * Where they came from is their character's created_from (migration
+ * 20261019200001). A profile whose character was made some other way
+ * ("Make one for me", The Cast's New character, a clone, a generator)
+ * did not come from the feed, even when Cross is pressed on it later: it
+ * follows Lala only when Evoni says so. A character with no recorded origin
+ * (made before the column) and a profile with no character count as from
+ * the feed, as the crossing says.
  */
 async function followLalaFromFeed(db, profileIds, { by = null } = {}) {
   const list = [...new Set((profileIds || []).filter(posInt).map(Number))];
@@ -127,6 +135,9 @@ async function followLalaFromFeed(db, profileIds, { by = null } = {}) {
        SELECT sp.id, :lala, 'auto_feed', :by FROM social_profiles sp
         WHERE sp.id IN (:list) AND sp.id <> :lala AND sp.deleted_at IS NULL AND sp.feed_layer = 'lalaverse'
           AND COALESCE(sp.is_justawoman_record, false) = false
+          AND NOT EXISTS (SELECT 1 FROM registry_characters rc
+                           WHERE rc.feed_profile_id = sp.id AND rc.deleted_at IS NULL
+                             AND rc.created_from IS NOT NULL AND rc.created_from <> 'feed_cross')
        ON CONFLICT (follower_profile_id, followed_profile_id) WHERE deleted_at IS NULL DO NOTHING
        RETURNING id`,
       { replacements: { lala: Number(lala), list, by } });

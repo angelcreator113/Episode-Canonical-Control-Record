@@ -194,3 +194,32 @@ describe('second pass (Script page re-audit, 2026-10-19)', () => {
     expect(err).toHaveBeenCalledWith('[OpportunitiesTab] advance failed:', expect.anything());
   });
 });
+
+describe('third pass (Script page audit 3, 2026-10-19)', () => {
+  test('the attach form takes focus; Cancel gives it back to the card\'s button', async () => {
+    renderTab();
+    fireEvent.click(await screen.findByTestId('opp-beat14-open-o1'));
+    expect(document.activeElement).toBe(screen.getByTestId('opp-beat14-episode'));
+    fireEvent.click(screen.getByTestId('opp-beat14-cancel'));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('opp-beat14-open-o1')));
+  });
+
+  test('after attaching, focus stays on the card', async () => {
+    api.put.mockResolvedValue({ data: { success: true } });
+    renderTab();
+    fireEvent.click(await screen.findByTestId('opp-beat14-open-o1'));
+    fireEvent.change(screen.getByTestId('opp-beat14-episode'), { target: { value: 'ep-1' } });
+    fireEvent.change(await screen.findByTestId('opp-beat14-from'), { target: { value: '7' } });
+    fireEvent.click(screen.getByTestId('opp-beat14-attach'));
+    await waitFor(() => expect(screen.queryByTestId('opp-beat14-form-o1')).toBeNull());
+    await waitFor(() => expect(document.activeElement?.closest('[data-opp-card="o1"]')).toBeTruthy());
+  });
+
+  test('payments read as coins, and status colours are text tokens', async () => {
+    renderTab([{ ...OPEN, status: 'offered', payment_amount: 500, status_history: history('offered') }]);
+    expect((await screen.findByTestId('opp-payment-o1')).textContent).toBe('500 coins');
+    expect(screen.getByText(/0 coins booked · 500 coins pipeline/)).toBeTruthy();
+    // jsdom drops var() colours; the amber of before (2.15:1) is gone. Contrast measured in Chromium.
+    expect(screen.getByTestId('opp-move-o1').getAttribute('style')).not.toMatch(/245, 158, 11|f59e0b/i);
+  });
+});

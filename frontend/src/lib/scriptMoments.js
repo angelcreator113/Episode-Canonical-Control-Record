@@ -126,7 +126,9 @@ const TAP_VERBS = new Set(['CLICK', 'TAP', 'SELECT']);
  * (src/utils/scriptBeatParser reads the same). Returns { kind, name, who,
  * text, url: null } or null for any other verb.
  */
-export const MESSAGE_VERBS = { NOTIFY: 'notify', DM: 'dm', POST: 'post' };
+// `[UI:NOTIFICATION …]`, as the script skeleton writes it, is a notification
+// (Script page audit 3, 2026-10-19: it opened the Mail screen in the phone check).
+export const MESSAGE_VERBS = { NOTIFY: 'notify', DM: 'dm', POST: 'post', NOTIFICATION: 'notify' };
 export function messageOf(moment) {
   const kind = MESSAGE_VERBS[String(moment?.verb || '').toUpperCase()];
   if (!kind) return null;
@@ -357,6 +359,16 @@ export const EXPECTED_ON_SCREEN = {
  * when the script has no beats, or no beat that opens the closet: then no
  * beat is named anywhere ("Beat 8 needs it" was written into the pages).
  */
+// The closet is the screen named Closet (Lala's Closet, Closet Screen), not
+// any screen whose name starts with it (Script page audit 3, 2026-10-19:
+// "Closet Sale Alert" in beat 7 was the closet).
+// The same reading as lib/scriptRuleChecks isClosetScreen.
+const CLOSET_PARTS = new Set(['screen', 'app', 'page', 'ui', 'tab', 'view', 'grid', 'panel', 'window', 'overlay', 'icon', 'category', 'categories', 'item', 'items', 'outfit', 'outfits', 'look', 'looks', 'rack', 'wardrobe']);
+export const isClosetScreen = (target) => {
+  const w = String(target || '').replace(/\s+x\d+$/i, '').replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  while (w.length && ['lala', 'lalas', 's', 'the'].includes(w[0])) w.shift();
+  return w[0] === 'closet' && w.slice(1).every((x) => CLOSET_PARTS.has(x));
+};
 const CLOSET_CANON = Number(Object.keys(EXPECTED_ON_SCREEN).find((n) => EXPECTED_ON_SCREEN[n].action === 'CLOSET_OPEN'));
 export function closetBeat(scriptText) {
   const script = normalizeBeatHeaders(scriptText || '');
@@ -369,7 +381,7 @@ export function closetBeat(scriptText) {
   });
   const opens = beats.find((b) => b.lines.some((l) => {
     const m = parseMoment(l);
-    return m && m.verb === 'OPEN' && normKey(m.target).startsWith('closet');
+    return m && m.verb === 'OPEN' && isClosetScreen(m.target);
   }));
   if (opens) return opens.number;
   return beats.some((b) => b.number === CLOSET_CANON) ? CLOSET_CANON : null;
