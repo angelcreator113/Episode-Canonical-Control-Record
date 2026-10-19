@@ -11,10 +11,11 @@ const { SECTIONS_BY_KIND, PRESS_OUTLETS, normalizeName, COMPANY_KINDS } = requir
 
 describe('brandProfile', () => {
   test('each kind shows only its own tabs', () => {
-    expect(bp.sectionsFor('brand').map((s) => s.key)).toEqual(['identity', 'people', 'pulse', 'business', 'wardrobe', 'press', 'relationships']);
-    expect(bp.sectionsFor('outlet').map((s) => s.key)).toEqual(['identity', 'people', 'pulse', 'business', 'press']);
-    expect(bp.sectionsFor('agency').map((s) => s.key)).toEqual(['identity', 'people', 'pulse', 'business']);
-    expect(bp.sectionsFor('venue').map((s) => s.key)).toEqual(['identity', 'business', 'press']);
+    expect(bp.sectionsFor('brand').map((s) => s.key)).toEqual(['identity', 'people', 'pulse', 'business', 'pictures', 'wardrobe', 'press', 'relationships']);
+    expect(bp.sectionsFor('outlet').map((s) => s.key)).toEqual(['identity', 'people', 'pulse', 'business', 'pictures', 'press']);
+    expect(bp.sectionsFor('agency').map((s) => s.key)).toEqual(['identity', 'people', 'pulse', 'business', 'pictures']);
+    expect(bp.sectionsFor('venue').map((s) => s.key)).toEqual(['identity', 'business', 'pictures', 'press']);
+    expect(bp.sectionsFor('agency').find((s) => s.key === 'pictures').label).toBe('Pictures');
     expect(bp.sectionsFor('nonsense')).toEqual(bp.sectionsFor('brand'));
     expect(bp.sectionsFor('brand').find((s) => s.key === 'press').label).toBe('Press & events');
     expect(bp.sectionsFor('outlet').find((s) => s.key === 'press').label).toBe('What it published');

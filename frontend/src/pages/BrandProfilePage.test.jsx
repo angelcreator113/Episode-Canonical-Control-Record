@@ -107,6 +107,48 @@ describe('BrandProfilePage', () => {
     expect(screen.queryByRole('button', { name: /Edit/ })).toBeNull();
   });
 
+  // Evoni, 2026-10-19: its library pictures, and each deal's deliverable progress.
+  const withPictures = () => ({ ...velour(), sections: [...velour().sections.slice(0, 4), { key: 'pictures', label: 'Pictures' }, ...velour().sections.slice(4)] });
+  test('Pictures reads its library pictures; an ADMIN sees which are drafts or studio only', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/media') {
+        return { data: { success: true, items: [
+          { id: 'm-1', url: 'https://img/look.png', caption: 'Velour lookbook', status: 'approved', visibility: 'internal' },
+          { id: 'm-2', url: 'https://img/priv.png', caption: 'Fitting room', status: 'draft', visibility: 'private' },
+        ] } };
+      }
+      return { data: withPictures() };
+    });
+    renderAt('/brands/velour_atelier?tab=pictures');
+    const pics = await screen.findAllByTestId('bp-picture');
+    expect(api.get).toHaveBeenCalledWith('/api/v1/media', { params: { entity_type: 'brand', entity_id: 'b-1' } });
+    expect(pics.map((p) => p.querySelector('img').getAttribute('alt'))).toEqual(['Velour lookbook', 'Fitting room']);
+    expect(pics[0].textContent).toBe('Velour lookbook');
+    expect(pics[1].textContent).toContain('draft · Studio only');
+  });
+
+  test('Pictures with none tagged says so', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => (url === '/api/v1/media' ? { data: { success: true, items: [] } } : { data: withPictures() }));
+    renderAt('/brands/velour_atelier?tab=pictures');
+    expect((await screen.findByTestId('bp-pictures')).textContent).toContain('No library pictures are tagged with Velour Atelier yet.');
+  });
+
+  test('Business: a deal with an event shows its deliverables\' progress; one without shows none', async () => {
+    const withEvent = { ...velour().business[0], id: 'o-2', name: 'Velour stories', event_id: 'e-9' };
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/deliverable-progress/opportunities/o-2') {
+        return { data: { success: true, opportunity_id: 'o-2', event_id: 'e-9', countable: 1, done: 0, all_done: false,
+          deliverables: [{ id: 'd-1', countable: true, done: false, line: 'Pulse stories: 2 of 3', posts: [] }] } };
+      }
+      return { data: { ...velour(), business: [...velour().business, withEvent] } };
+    });
+    renderAt('/brands/velour_atelier?tab=business');
+    const business = await screen.findByTestId('bp-business');
+    expect((await within(business).findByTestId('dp-compact')).textContent).toBe('Pulse stories: 2 of 3');
+    expect(within(business).getAllByTestId('dp-compact')).toHaveLength(1);
+    expect(api.get).not.toHaveBeenCalledWith('/api/v1/deliverable-progress/opportunities/o-1');
+  });
+
   test('a venue shows only its own tabs', async () => {
     vi.mocked(api.get).mockResolvedValueOnce({ data: { ...velour(), company: { ...velour().company, kind: 'venue', kind_label: 'Venue' }, sections: [{ key: 'identity', label: 'Identity' }, { key: 'business', label: 'Business' }, { key: 'press', label: 'Events held here' }], people: null, pulse: null, wardrobe: null, relationships: null } });
     renderAt('/brands/glass_room');
