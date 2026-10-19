@@ -581,8 +581,8 @@ Reconciled from Handoff v26 Sec 6.A/6.B (which itself rebuilt from Handoff v25 S
 | **STILL OWED, suggested (added by the 2026-10-19 refresh). A cost page:** what the AI and image calls spend each day against `AI_DAILY_BUDGET_USD` and `AI_DAILY_IMAGE_BUDGET_USD`, read from `ai_usage_logs`. Admin's AI Costs tool exists (§4.6); whether it shows image spend and the budgets is not re-derived here. | §4.7; §10 item 44 |
 
 **In review at the 2026-10-19 refresh's basis (open PRs; update this list when they merge).**
-- **Visual Memory phase 3, variations** — in review (#3403). No migration. `mediaVariations` (OpenAI `/v1/images/edits`, `gpt-image-1.5`, through `imageCostService.runImageCall`); a picture tagged with Dr. Sinclair is never varied.
-- **Visual Memory phase 4, picture suggestions** — in review (#3405, stacked on #3403). Migration `20261019160000-picture-suggestions.js` (tables `post_picture_suggestions`, `media_asset_sources`); `pictureSuggestions`; thresholds overridable by the server settings `PICTURE_SUGGEST_USE_AT` and `PICTURE_SUGGEST_EDIT_AT` (Evoni's).
+- **Visual Memory phase 3, variations** — merged (#3403, `fca18784`), after this refresh's basis. No migration. `mediaVariations` (OpenAI `/v1/images/edits`, `gpt-image-1.5`, through `imageCostService.runImageCall`); a picture tagged with Dr. Sinclair is never varied.
+- **Visual Memory phase 4, picture suggestions** — in review (#3405; based on main since #3403 merged). Migration `20261019160000-picture-suggestions.js` (tables `post_picture_suggestions`, `media_asset_sources`); `pictureSuggestions`; thresholds overridable by the server settings `PICTURE_SUGGEST_USE_AT` and `PICTURE_SUGGEST_EDIT_AT` (Evoni's).
 - **The editable rate card, price snapshots and their backfill** — in review (#3406). Migrations `20261019150000-rate-card-editor.js` (`deal_rate_card_versions`, `deal_price_snapshots`) and `20261019170000-backfill-deal-price-snapshots.js`; `rateCard`, `dealPriceSnapshot`.
 - **The eighth audit, an event's place and its episode kept as one** — open (#3404), another session's. No migration.
 
@@ -746,7 +746,7 @@ Product-adjacent, small, and reversible (would need Evoni's "scope creep" waiver
 39. **Evoni's decision, not agent work — should a creator-drafted event get that creator as its organizer automatically?** Unruled; an agent task follows only if she rules yes. (§6.5.) Added by Task #2168.
 40. **SUGGESTED, agent-doable — brand pages show their library pictures and each deal's deliverable progress.** `BrandProfilePage` reads neither `/api/v1/media` nor `/api/v1/deliverable-progress/brands` yet (§6.5). Added by the 2026-10-19 refresh.
 41. **SUGGESTED, agent-doable — the follower count misread from a description** ("A designer with 900K followers"; §6.5). Trace where the profile check's follower reading goes wrong before fixing. Added by the 2026-10-19 refresh.
-42. **SUGGESTED, agent-doable, no host contact — an end-to-end check of the new chain** (rate card → deal → deliverables → picture suggestions → posting → the daily update → trust) on one local app with test data, after #3403, #3405 and #3406 merge; fix what breaks. (§6.5.) Added by the 2026-10-19 refresh.
+42. **SUGGESTED, agent-doable, no host contact — an end-to-end check of the new chain** (rate card → deal → deliverables → picture suggestions → posting → the daily update → trust) on one local app with test data, after #3405 and #3406 merge (#3403 merged); fix what breaks. (§6.5.) Added by the 2026-10-19 refresh.
 43. **SUGGESTED, small — the "Lala hasn't met them yet" heading in `PulseVoices`.** Its new wording is Evoni's to choose. (§6.5.) Added by the 2026-10-19 refresh.
 44. **SUGGESTED — a cost page:** each day's AI and image spend against the two budgets, read from `ai_usage_logs`; first read what Admin's AI Costs tool already shows. (§6.5.) Added by the 2026-10-19 refresh.
 
