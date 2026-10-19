@@ -39,6 +39,8 @@ function buildNav() {
         // (Evoni, 2026-10-04): the Bible is the hub's Bible tab.
         { icon: '◈', label: 'LalaVerse', route: '/universe', hint: 'Bible, world, society, culture, state' },
         { icon: '📱', label: 'The Pulse', route: '/pulse', hint: 'Every city has a story' },
+        // Evoni, 2026-10-18: every brand and company has its own profile.
+        { icon: '🏛️', label: 'Brands & companies', route: '/brands', hint: 'Fashion houses, press, agencies, venues' },
         // The Website page is Admin's Website tab (Task #2913); Admin is in the footer.
       ],
     },

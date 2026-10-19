@@ -22,10 +22,12 @@ const row = (label) => screen.getByText(label).closest('a');
 beforeEach(() => { window.localStorage.clear(); });
 
 describe('Sidebar: the WORLD zone', () => {
-  test('two rows: LalaVerse and The Pulse; no Show Bible row', () => {
+  test('LalaVerse, The Pulse, and Brands & companies; no Show Bible row', () => {
     renderAt('/');
     expect(row('LalaVerse').getAttribute('href')).toBe('/universe');
     expect(row('The Pulse').getAttribute('href')).toBe('/pulse');
+    // Evoni, 2026-10-18: brand and company profiles.
+    expect(row('Brands & companies').getAttribute('href')).toBe('/brands');
     for (const gone of ['Show Bible', 'World Dashboard', 'World Foundation', 'Social Systems', 'Culture & Events']) {
       expect(screen.queryByText(gone)).toBeNull();
     }

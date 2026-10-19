@@ -1,0 +1,46 @@
+/* Admin › The Pulse › Brands (Evoni, 2026-10-18): each house's account,
+   its representative, drafts, replies and deals. Tokens only. */
+
+.pb { display: flex; flex-direction: column; gap: 14px; min-width: 0; color: var(--text-primary); }
+.pb *, .pb *::before, .pb *::after { box-sizing: border-box; }
+.pb button:focus-visible, .pb input:focus-visible, .pb select:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 2px; }
+
+.pb-head { display: flex; flex-direction: column; gap: 8px; }
+.pb .pb-h3 { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-family: var(--font-prose); font-size: 22px; font-weight: 700; color: var(--text-primary); }
+.pb-h3 svg { color: var(--accent-dark); }
+.pb .pb-h5 { margin: 0 0 6px; font-size: 13px; font-weight: 700; color: var(--text-secondary); }
+.pb-muted { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.pb-small { font-size: 12px; }
+.pb-note { margin: 0; padding: 8px 12px; border-radius: 12px; font-size: 13px; background: var(--success-bg); color: var(--success-text); }
+.pb-error { margin: 0; padding: 8px 12px; border-radius: 12px; font-size: 13px; background: var(--danger-bg); color: var(--danger-text); }
+
+.pb-cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.pb-card { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 16px; border-radius: 18px; border: 1.5px solid var(--lala-gold-line); background: var(--surface-card); box-shadow: var(--shadow-sm); }
+.pb-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.pb .pb-name { margin: 0; font-family: var(--font-prose); font-size: 19px; font-weight: 600; color: var(--text-primary); }
+.pb-handle { font-family: var(--font-ui); font-size: 13px; color: var(--lala-lavender-text); }
+.pb-principle { margin: 0; font-family: var(--font-prose); font-style: italic; font-size: 14px; color: var(--text-primary); }
+
+.pb-draft { display: flex; flex-direction: column; gap: 6px; }
+.pb-label { font-size: 12px; font-weight: 700; color: var(--text-secondary); }
+.pb-input { width: 100%; min-height: 38px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 14px; }
+.pb-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.pb-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; padding: 6px 12px; border-radius: 12px; border: 1.5px solid var(--accent-light); background: var(--surface-card); color: var(--accent-dark); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.pb-btn:hover { border-color: var(--accent-dark); }
+.pb-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.pb-btn.is-primary { border-color: var(--accent-dark); background: var(--accent-dark); color: var(--text-inverse); }
+
+.pb-section { padding-top: 10px; border-top: 1px solid var(--lala-parchment-3); }
+.pb-list { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.pb-item { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.pb-item-text { flex: 1 1 220px; min-width: 0; font-size: 14px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pb-state { flex-shrink: 0; padding: 2px 10px; border-radius: 999px; background: var(--lala-lavender-soft); color: var(--lala-lavender-text); font-size: 12px; font-weight: 600; }
+
+@media (max-width: 760px) {
+  .pb-cards { grid-template-columns: minmax(0, 1fr); }
+  .pb-btn { flex: 1 1 auto; }
+}
+
+/* The brand account's posting schedule (components/PostingSchedule), opened on demand. */
+.pb-schedule summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--accent-dark); }
+.pb-schedule[open] { padding-bottom: 8px; }
