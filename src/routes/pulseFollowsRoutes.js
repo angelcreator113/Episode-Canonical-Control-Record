@@ -40,6 +40,11 @@ const HANDLE_RE = /^@?[A-Za-z0-9_.-]{1,60}$/;
 const byOf = (req) => String(req.user?.email || req.user?.id || 'admin').slice(0, 255);
 
 /** A LalaVerse Pulse profile by id, never the JustAWoman record; null when there is none. */
+// Handles are stored with their "@" ("@slowsift": feedScheduler, castGenerate);
+// the URL carries it or not. Both sides are compared bare, case-insensitively.
+const HANDLE_MATCH = "LOWER(REGEXP_REPLACE(handle, '^@+', '')) = LOWER(:handle)";
+const bareHandle = (h) => String(h || '').replace(/^@+/, '');
+
 async function pulseProfile(db, where, replacements) {
   const [[row]] = await db.sequelize.query(
     `SELECT id, handle, display_name, creator_name, public_persona, vibe_sentence, city, geographic_base,
@@ -59,7 +64,7 @@ router.get('/profile/:handle', requireAuth, async (req, res) => {
   }
   try {
     const db = getModels();
-    const profile = await pulseProfile(db, 'LOWER(handle) = LOWER(:handle)', { handle: handle.replace(/^@/, '') });
+    const profile = await pulseProfile(db, HANDLE_MATCH, { handle: bareHandle(handle) });
     if (!profile) return res.status(404).json({ error: 'Nobody on The Pulse has that handle.' });
     let at;
     if (showId) {
@@ -105,7 +110,7 @@ router.get('/profile/:handle/media', requireAuth, async (req, res) => {
   if (!HANDLE_RE.test(handle)) return res.status(400).json({ error: 'handle is not a Pulse handle' });
   try {
     const db = getModels();
-    const profile = await pulseProfile(db, 'LOWER(handle) = LOWER(:handle)', { handle: handle.replace(/^@/, '') });
+    const profile = await pulseProfile(db, HANDLE_MATCH, { handle: bareHandle(handle) });
     if (!profile) return res.status(404).json({ error: 'Nobody on The Pulse has that handle.' });
     const [pins] = await db.sequelize.query(
       `SELECT id FROM feed_posts WHERE social_profile_id = :id AND pinned_at IS NOT NULL AND status = 'live' AND deleted_at IS NULL
