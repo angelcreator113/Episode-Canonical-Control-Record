@@ -113,6 +113,10 @@ module.exports = (sequelize) => {
     release_at: { type: DataTypes.DATE, allowNull: true },
     // Evoni's own labels (migration 20261017230000, utils/postTags; Story Clock).
     tags: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
+    // Pinned first on the poster's Pulse profile (migration 20261019230000).
+    pinned_at: { type: DataTypes.DATE, allowNull: true },
+    // Where its picture stands, made after approval (migration 20261019230001, services/postPictures).
+    picture_job: { type: DataTypes.JSONB, allowNull: true },
   }, {
     tableName: 'feed_posts',
     timestamps: true,

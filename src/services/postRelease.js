@@ -118,6 +118,8 @@ function startScheduler(db) {
   if (timer) return timer;
   timer = setInterval(() => {
     releaseDue(db).catch((err) => console.error('[postRelease] the release timer failed:', err.message));
+    // Approved posts whose picture waited for today's limit (services/postPictures).
+    require('./postPictures').runWaiting(db).catch((err) => console.error('[postRelease] the waiting post pictures failed:', err.message));
   }, TICK_MS);
   if (typeof timer.unref === 'function') timer.unref();
   return timer;

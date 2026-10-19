@@ -9,7 +9,7 @@ const { DELIVERABLE_FORMATS: DELIVERABLES } = require('../../../src/utils/delive
 
 describe('postMedia rules', () => {
   test('formats: a carousel takes 2 to 10 pictures; a story, a video and a live one at most', () => {
-    expect(pm.FORMATS).toEqual(['post', 'carousel', 'story', 'video', 'live']);
+    expect(pm.FORMATS).toEqual(['post', 'carousel', 'story', 'video', 'live', 'text', 'quote']);
     expect(() => pm.checkFormat('carousel', 1)).toThrow(/at least 2/);
     expect(pm.checkFormat('carousel', 2)).toBe('carousel');
     expect(pm.checkFormat('carousel', 10)).toBe('carousel');

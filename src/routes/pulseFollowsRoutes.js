@@ -11,6 +11,16 @@
  *                                          (requireAuth, like The Pulse's other
  *                                          reads). An ADMIN also gets their
  *                                          registry character's id.
+ *   GET    /profile/:handle/media          their profile's grid extras (Evoni, 2026-10-19:
+ *                                          "give each pulse profile a gallery just like a
+ *                                          real social media account"): the ids of their
+ *                                          pinned posts, the photos others posted with them
+ *                                          in it (Tagged), and their posted camera-roll
+ *                                          photos by album (Highlights). Public pictures
+ *                                          only, for everyone (requireAuth).
+ *   PUT    /posts/:postId/pin              pin a live post first on its poster's profile;
+ *                                          at most three (requireAuth + ADMIN)
+ *   DELETE /posts/:postId/pin              unpin it (requireAuth + ADMIN)
  *   PUT    /:profileId/follows-lala        they follow Lala       (requireAuth + ADMIN)
  *   DELETE /:profileId/follows-lala        they stop              (requireAuth + ADMIN)
  *   PUT    /:profileId/lala-follows        Lala follows them      (requireAuth + ADMIN)
@@ -85,6 +95,84 @@ router.get('/profile/:handle', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'That profile could not be read.' });
   }
 });
+
+const MAX_PINS = 3;
+const HIGHLIGHT_PHOTOS = 12;
+const TAGGED_LIMIT = 60;
+
+router.get('/profile/:handle/media', requireAuth, async (req, res) => {
+  const handle = String(req.params.handle || '');
+  if (!HANDLE_RE.test(handle)) return res.status(400).json({ error: 'handle is not a Pulse handle' });
+  try {
+    const db = getModels();
+    const profile = await pulseProfile(db, 'LOWER(handle) = LOWER(:handle)', { handle: handle.replace(/^@/, '') });
+    if (!profile) return res.status(404).json({ error: 'Nobody on The Pulse has that handle.' });
+    const [pins] = await db.sequelize.query(
+      `SELECT id FROM feed_posts WHERE social_profile_id = :id AND pinned_at IS NOT NULL AND status = 'live' AND deleted_at IS NULL
+        ORDER BY pinned_at DESC LIMIT ${MAX_PINS}`, { replacements: { id: profile.id } });
+    const [[character]] = await db.sequelize.query(
+      `SELECT id FROM registry_characters WHERE feed_profile_id = :id AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 1`,
+      { replacements: { id: profile.id } });
+    let tagged = [];
+    let highlights = [];
+    if (character) {
+      // Photos someone else posted with them in it: public pictures only, on live posts.
+      const [rows] = await db.sequelize.query(
+        `SELECT DISTINCT ON (ma.id) ma.id AS asset_id, ma.url, ma.caption, fp.id AS post_id, fp.poster_handle, fp.posted_at
+           FROM media_asset_links me
+           JOIN media_assets ma ON ma.id = me.asset_id AND ma.deleted_at IS NULL AND ma.status = 'approved' AND ma.visibility = 'public'
+           JOIN media_asset_links lp ON lp.asset_id = ma.id AND lp.entity_type = 'post' AND lp.deleted_at IS NULL
+           JOIN feed_posts fp ON fp.id::text = lp.entity_id AND fp.status = 'live' AND fp.deleted_at IS NULL
+          WHERE me.entity_type = 'character' AND me.entity_id = :cid AND me.role = 'pictured' AND me.deleted_at IS NULL
+            AND COALESCE(fp.social_profile_id, 0) <> :pid
+          ORDER BY ma.id, fp.posted_at DESC NULLS LAST`,
+        { replacements: { cid: String(character.id), pid: profile.id } });
+      tagged = rows.sort((a, b) => new Date(b.posted_at || 0) - new Date(a.posted_at || 0)).slice(0, TAGGED_LIMIT)
+        .map((r) => ({ ...r, poster_handle: String(r.poster_handle || '').replace(/^@/, '') }));
+      // Highlights: their posted camera-roll photos by album (services/cameraRoll; public only).
+      const roll = await require('../services/cameraRoll').rollFor(db, character.id, { audience: 'public' });
+      if (roll.eligible) {
+        highlights = roll.albums.filter((a) => a.count > 0).map((a) => {
+          const photos = roll.photos.filter((p) => p.album === a.key).slice(0, HIGHLIGHT_PHOTOS)
+            .map((p) => ({ asset_id: p.asset_id, url: p.url, caption: p.caption }));
+          return { key: a.key, label: a.label, count: a.count, cover: photos[0]?.url || null, photos };
+        });
+      }
+    }
+    return res.json({ data: { pinned: pins.map((p) => p.id), tagged, highlights } });
+  } catch (err) {
+    console.error('[pulseFollows] profile media read failed:', err);
+    return res.status(500).json({ error: 'Their photos could not be read.' });
+  }
+});
+
+async function setPin(req, res, on) {
+  const { postId } = req.params;
+  if (!UUID_RE.test(String(postId))) return res.status(400).json({ error: 'postId must be a post id' });
+  try {
+    const db = getModels();
+    const post = await db.FeedPost.findOne({ where: { id: postId, deleted_at: null } });
+    if (!post) return res.status(404).json({ error: 'Post not found.' });
+    if (on) {
+      if (post.status !== 'live') return res.status(409).json({ error: 'Only a post on The Pulse can be pinned.' });
+      if (!post.pinned_at) {
+        const [[row]] = await db.sequelize.query(
+          `SELECT COUNT(*)::int AS n FROM feed_posts WHERE social_profile_id = :pid AND pinned_at IS NOT NULL
+            AND status = 'live' AND deleted_at IS NULL AND id <> :id`, { replacements: { pid: post.social_profile_id, id: post.id } });
+        if ((row?.n || 0) >= MAX_PINS) return res.status(409).json({ error: `They already have ${MAX_PINS} pinned posts. Unpin one first.` });
+        await post.update({ pinned_at: new Date() });
+      }
+    } else if (post.pinned_at) {
+      await post.update({ pinned_at: null });
+    }
+    return res.json({ data: { id: post.id, pinned_at: post.pinned_at } });
+  } catch (err) {
+    console.error(`[pulseFollows] ${on ? 'pin' : 'unpin'} failed:`, err);
+    return res.status(500).json({ error: 'The pin could not be saved.' });
+  }
+}
+router.put('/posts/:postId/pin', requireAuth, authorize(['ADMIN']), (req, res) => setPin(req, res, true));
+router.delete('/posts/:postId/pin', requireAuth, authorize(['ADMIN']), (req, res) => setPin(req, res, false));
 
 /** PUT and DELETE for one direction of following Lala. */
 function lalaFollowRoutes(path, lalaIsFollower) {

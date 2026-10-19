@@ -7,7 +7,8 @@
  * (services/mediaLibrary): the file is never copied, only its URL is put on
  * the post. Its caption is never changed. A picture never makes a story fact.
  *
- *   FORMATS / formatOf(post)   post | carousel | story | video | live; null
+ *   FORMATS / formatOf(post)   post | carousel | story | video | live | text |
+ *                       quote (words only, no picture); null
  *                       post_format reads as the older post_type story / live
  *                       / reel, else 'post'
  *   checkFormat(format, n)     how many pictures each format takes
@@ -41,10 +42,12 @@ const { notConfidentialSql } = require('../utils/confidentialCharacters');
 
 const { MediaError } = media;
 
-const FORMATS = Object.freeze(['post', 'carousel', 'story', 'video', 'live']);
-const FORMAT_LABELS = Object.freeze({ post: 'Post', carousel: 'Carousel', story: 'Story', video: 'Pulse video', live: 'Live' });
+// text and quote are words only (Evoni, 2026-10-19: "text and quote stay text";
+// services/postPictures makes pictures for post and carousel only).
+const FORMATS = Object.freeze(['post', 'carousel', 'story', 'video', 'live', 'text', 'quote']);
+const FORMAT_LABELS = Object.freeze({ post: 'Post', carousel: 'Carousel', story: 'Story', video: 'Pulse video', live: 'Live', text: 'Text', quote: 'Quote' });
 // How many pictures each format takes: [fewest, most].
-const PICTURES = Object.freeze({ post: [0, 4], carousel: [2, 10], story: [0, 1], video: [0, 1], live: [0, 1] });
+const PICTURES = Object.freeze({ post: [0, 4], carousel: [2, 10], story: [0, 1], video: [0, 1], live: [0, 1], text: [0, 0], quote: [0, 0] });
 const STORY_HOURS = 24;
 // A deal deliverable (utils/deliverableFormats keys) → the format that delivers it.
 const FORMAT_FOR_DELIVERABLE = Object.freeze({
@@ -63,7 +66,7 @@ function checkFormat(format, count) {
   if (!FORMATS.includes(format)) throw new MediaError(400, `format must be one of ${FORMATS.join(', ')}.`);
   const [min, max] = PICTURES[format];
   if (count < min) throw new MediaError(400, `A ${FORMAT_LABELS[format].toLowerCase()} needs at least ${min} pictures.`);
-  if (count > max) throw new MediaError(400, `A ${FORMAT_LABELS[format].toLowerCase()} takes ${max === 1 ? 'one picture' : `up to ${max} pictures`}.`);
+  if (count > max) throw new MediaError(400, max === 0 ? `A ${FORMAT_LABELS[format].toLowerCase()} post is words only; it takes no picture.` : `A ${FORMAT_LABELS[format].toLowerCase()} takes ${max === 1 ? 'one picture' : `up to ${max} pictures`}.`);
   return format;
 }
 
