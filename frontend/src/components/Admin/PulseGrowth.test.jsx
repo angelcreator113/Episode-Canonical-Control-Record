@@ -114,9 +114,9 @@ describe('the Growth tab', () => {
       .toEqual(['+8,500After Ep 2 · Episode 2 result', '−500The day after Ep 1 · Set by hand: A quiet day.']);
   });
 
-  test('empty: no Feed profile for Lala; and with a profile but nothing yet, no chart and quiet lists', async () => {
+  test('empty: no Pulse profile for Lala; and with a profile but nothing yet, no chart and quiet lists', async () => {
     const { unmount } = renderGrowth({ success: true, profile: null, start: null, line: [], projection: [], best: [], worst: [], jumps: [] });
-    expect((await screen.findByTestId('pulse-growth-empty')).textContent).toMatch(/no Feed profile/);
+    expect((await screen.findByTestId('pulse-growth-empty')).textContent).toMatch(/no Pulse profile/);
     unmount();
     renderGrowth({ ...GROWTH, start: null, line: [], projection: [], best: [], worst: [], jumps: [] });
     expect((await screen.findByTestId('pulse-growth-summary')).textContent).toBe('No accepted follower count for @lala yet.');

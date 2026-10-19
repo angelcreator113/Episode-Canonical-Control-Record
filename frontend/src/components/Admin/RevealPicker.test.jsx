@@ -116,7 +116,7 @@ describe('Uploads › Characters: when Lala meets them', () => {
     await waitFor(() => expect(ava.getByTestId('pulse-met').textContent).toContain('Meets Lala in Ep 2 (from the guest list)'));
     const zara = within(screen.getByTestId('pulse-character-c2'));
     expect(zara.getByTestId('pulse-met').textContent).toContain('Meets Lala in Ep 3 (set)');
-    expect(within(screen.getByTestId('pulse-character-c3')).getByTestId('pulse-met').textContent).toBe('Not linked to a Feed profile, so not on The Pulse yet.');
+    expect(within(screen.getByTestId('pulse-character-c3')).getByTestId('pulse-met').textContent).toBe('Not linked to a Pulse profile, so not on The Pulse yet.');
 
     fireEvent.click(ava.getByRole('button', { name: 'Set when Lala meets Ava' }));
     fireEvent.change(ava.getByLabelText('Lala meets Ava in'), { target: { value: 'ep1' } });

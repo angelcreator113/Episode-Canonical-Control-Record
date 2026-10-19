@@ -80,7 +80,7 @@ export function worldIdeas({ calendarEvents, trending, tensions, showId, failed 
       : { key: 'culture', from: 'From Culture', empty: 'Nothing on the cultural calendar ahead yet.' });
   }
 
-  if (failed.includes('society')) ideas.push(unread('society', 'From Society', 'Feed\'s trends'));
+  if (failed.includes('society')) ideas.push(unread('society', 'From Society', 'The Pulse\'s trends'));
   else {
     const trend = topTrend(trending);
     ideas.push(trend
@@ -90,7 +90,7 @@ export function worldIdeas({ calendarEvents, trending, tensions, showId, failed 
         detail: plural(Number(trend.post_count) || 0, 'post'),
         action: 'Give Lala an opinion on it', to: producer('feed'),
       }
-      : { key: 'society', from: 'From Society', empty: 'No trending topics in the Feed yet.' });
+      : { key: 'society', from: 'From Society', empty: 'No trending topics on The Pulse yet.' });
   }
 
   if (failed.includes('state')) ideas.push(unread('state', 'From State', 'tensions'));

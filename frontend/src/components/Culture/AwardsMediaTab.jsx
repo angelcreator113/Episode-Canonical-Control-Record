@@ -60,7 +60,7 @@ export default function AwardsMediaTab({ data, lists }) {
       <div className="ce-two">
         <div>
           <h3 className="ce-h3">Algorithm forces</h3>
-          <p className="ce-note">What decides visibility on the Feed.</p>
+          <p className="ce-note">What decides visibility on The Pulse.</p>
           {listOf('ALGORITHM_FORCES', ALGORITHM_FORCES).map((f, i) => (
             <div key={`${i}-${f.name}`} className="ce-row ce-accent-left" style={accent(f.color)}>
               <strong><span aria-hidden="true">{f.icon}</span> {f.name}</strong>

@@ -241,14 +241,14 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
       const { saved = 0, failed = [] } = res.data?.data || {};
       const savedBeats = feedMomentCheck.missing.filter((b) => !failed.some((f) => Number(f.beat_number) === b));
       if (failed.length === 0) {
-        note = saved > 0 ? `Saved the feed moment for ${savedBeats.length === 1 ? 'beat' : 'beats'} ${listBeats(savedBeats)}.` : 'Nothing needed saving.';
+        note = saved > 0 ? `Saved the Pulse moment for ${savedBeats.length === 1 ? 'beat' : 'beats'} ${listBeats(savedBeats)}.` : 'Nothing needed saving.';
       } else {
         const failedBeats = failed.map((f) => Number(f.beat_number));
         note = `${saved > 0 ? `Saved ${saved} of ${saved + failed.length}. ` : ''}Still not saved for ${failedBeats.length === 1 ? 'beat' : 'beats'} ${listBeats(failedBeats)}: ${failed[0].error}`;
       }
     } catch (err) {
       console.error('Failed to retry feed moments:', err);
-      note = `Could not retry the feed moments: ${err.response?.data?.error || err.message || 'request failed'}`;
+      note = `Could not retry the Pulse moments: ${err.response?.data?.error || err.message || 'request failed'}`;
     }
     await loadPlan();
     setFeedMomentRetry({ running: false, note });
@@ -340,7 +340,7 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
             onClick={retryFeedMoments}
             disabled={feedMomentRetry.running}
           >
-            {feedMomentRetry.running ? <><Loader size={13} className="est-spin" /> Retrying…</> : 'Retry feed moments'}
+            {feedMomentRetry.running ? <><Loader size={13} className="est-spin" /> Retrying…</> : 'Retry Pulse moments'}
           </button>
         </div>
       )}
@@ -350,7 +350,7 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
       {feedMomentCheck.error && (
         <div className="est-warning" role="alert">
           <AlertTriangle size={16} className="est-warning-icon" />
-          <p>Could not check whether this episode's feed moments were saved: {feedMomentCheck.error}</p>
+          <p>Could not check whether this episode's Pulse moments were saved: {feedMomentCheck.error}</p>
         </div>
       )}
 

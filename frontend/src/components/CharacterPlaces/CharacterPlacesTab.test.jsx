@@ -88,7 +88,7 @@ describe('CharacterPlacesTab', () => {
 
   test('without a feed profile, hosting says what it needs', async () => {
     renderIt({ ...sable, feed_profile_id: null });
-    expect((await screen.findByTestId('places-hosted-events')).textContent).toMatch(/needs a feed profile/);
+    expect((await screen.findByTestId('places-hosted-events')).textContent).toMatch(/needs a Pulse profile/);
   });
 
   // Fifth audit.

@@ -65,12 +65,12 @@ export default function SeasonProposals({ showId, api, onApplied }) {
     try {
       const r = await api.post(`/api/v1/world/${showId}/season/proposals`);
       const p = r.data?.proposal;
-      if (!p) setNote(r.data?.skipped === 'no_season' ? 'Set up the season first.' : 'Nothing new on the feed.');
-      else if (p.status === 'no_change') setNote(p.summary || 'The feed does not call for changes to the season right now.');
+      if (!p) setNote(r.data?.skipped === 'no_season' ? 'Set up the season first.' : 'Nothing new on The Pulse.');
+      else if (p.status === 'no_change') setNote(p.summary || 'The Pulse does not call for changes to the season right now.');
       await load();
     } catch (err) {
       console.error('[SeasonProposals] check failed:', err);
-      setNote(err.response?.data?.error || err.message || 'Could not check the feed.');
+      setNote(err.response?.data?.error || err.message || 'Could not check The Pulse.');
     } finally { setBusy(null); }
   };
 
@@ -106,17 +106,17 @@ export default function SeasonProposals({ showId, api, onApplied }) {
     <section className="sp-card" aria-labelledby="sp-title" data-testid="season-proposals">
       <header className="sp-head">
         <div>
-          <h3 id="sp-title" className="sp-title"><Sparkles size={18} aria-hidden="true" /> From the feed</h3>
-          <p className="sp-about">As the feed characters grow, the season can grow with them. Nothing changes until you accept it.</p>
+          <h3 id="sp-title" className="sp-title"><Sparkles size={18} aria-hidden="true" /> From The Pulse</h3>
+          <p className="sp-about">As The Pulse's people grow, the season can grow with them. Nothing changes until you accept it.</p>
         </div>
-        <button type="button" className="sp-btn-soft" onClick={check} disabled={!!busy}>{busy === 'check' ? 'Reading the feed…' : 'Check the feed now'}</button>
+        <button type="button" className="sp-btn-soft" onClick={check} disabled={!!busy}>{busy === 'check' ? 'Reading The Pulse…' : 'Check The Pulse now'}</button>
       </header>
 
       {open ? (
         <div className="sp-open">
           {open.summary && <p className="sp-summary">{open.summary}</p>}
           {moved.length > 0 && (
-            <ul className="sp-moved" aria-label="What moved on the feed">
+            <ul className="sp-moved" aria-label="What moved on The Pulse">
               {moved.map((m) => (
                 <li key={m.key}>
                   {m.up === true && <TrendingUp size={14} aria-hidden="true" />}

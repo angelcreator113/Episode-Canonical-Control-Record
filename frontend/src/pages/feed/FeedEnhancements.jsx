@@ -319,7 +319,7 @@ export function FeedTimeline({ profiles, onSelectProfile }) {
 
   return (
     <div style={{ maxWidth: 480, margin: '0 auto', padding: '16px 0' }}>
-      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: C.gold, marginBottom: 12, padding: '0 16px' }}>Lala's Feed — Story Mode</div>
+      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: C.gold, marginBottom: 12, padding: '0 16px' }}>Lala's Pulse people — Story Mode</div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {posts.map((post, i) => {

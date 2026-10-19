@@ -144,6 +144,14 @@ describe('CaptionSuggestions', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('Nothing was made');
   });
 
+  test('with the AI unreachable it reads from the caption and says so', async () => {
+    const down = suggestions(plan());
+    down.data = { ...down.data, cached: false, fallback: true, ai_unavailable: true };
+    vi.mocked(api.post).mockResolvedValueOnce(down);
+    render(<CaptionSuggestions postId="p-3" library={[]} isChosen={() => false} onUse={vi.fn()} />);
+    expect((await screen.findByTestId('cs-fallback')).textContent).toContain('the AI could not be reached');
+  });
+
   test('"Made from" names the place, the portrait and the original', () => {
     expect(madeFromLine([{ role: 'place', caption: 'Home kitchen' }, { role: 'portrait', character_name: 'Maren' }, { role: 'parent' }]))
       .toBe('the place picture "Home kitchen", the portrait of Maren, the original');

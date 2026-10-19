@@ -110,13 +110,13 @@ describe("Lala's view", () => {
     // Her canon count at the moment, with her tier (Task 3062).
     expect((await screen.findByTestId('pl-followers')).textContent).toBe('12,400 followers · Micro tier');
     const nav = within(screen.getByRole('navigation', { name: 'The Pulse' }));
-    expect(nav.getByRole('button', { name: /Feed/ }).getAttribute('aria-current')).toBe('page');
+    expect(nav.getByRole('button', { name: /Posts/ }).getAttribute('aria-current')).toBe('page');
     // Messages (Task 2985) and Dream Cities (Task 2987) are live.
     expect(nav.getByRole('button', { name: /Messages/ })).toBeTruthy();
     expect(nav.getByRole('button', { name: /Dream Cities/ })).toBeTruthy();
     expect(within(screen.getByRole('navigation', { name: 'The Pulse on a phone' })).getByRole('button', { name: /Inbox/ }).disabled).toBe(false);
     // Only views that exist (Task 3073): no Stories or Explore placeholders.
-    expect(nav.getAllByRole('button').map((b) => b.textContent.trim())).toEqual(['Feed', 'Dream Cities', 'Events', 'Characters', 'Messages']);
+    expect(nav.getAllByRole('button').map((b) => b.textContent.trim())).toEqual(['Posts', 'Dream Cities', 'Events', 'Characters', 'Messages']);
     expect(nav.queryByText('Stories')).toBeNull();
     expect(nav.queryByText('Explore')).toBeNull();
     expect(nav.queryByText('Creator Hub')).toBeNull();

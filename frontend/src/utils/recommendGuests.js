@@ -35,7 +35,7 @@ export function roleFor({ lalaRelationship, hostRelationship, careerPressure }) 
   if (hostRelationship === 'mentor' || careerPressure === 'ahead') return { role: 'mentor', reason: 'Ahead of Lala in her career' };
   if (lalaRelationship === 'aware' || lalaRelationship === 'one_sided') return { role: 'opportunity', reason: 'Knows of Lala: a connection worth making' };
   if (lalaRelationship === 'mutual_unaware') return { role: 'wildcard', reason: "She and Lala don't know each other yet" };
-  return { role: 'opportunity', reason: hostRelationship ? "In the organizer's circle" : 'Relevant to Lala on the Feed' };
+  return { role: 'opportunity', reason: hostRelationship ? "In the organizer's circle" : 'Relevant to Lala on The Pulse' };
 }
 
 const idOf = (v) => (v === null || v === undefined ? null : String(v));

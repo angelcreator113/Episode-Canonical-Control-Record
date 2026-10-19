@@ -21,7 +21,10 @@
  *   pulse          its own Pulse account (services/brandPulse) with recent
  *                  posts and replies waiting; with none, its people's posts.
  *   business       its deals: linked by opportunities.company_id, or naming
- *                  it in brand_or_company.
+ *                  it in brand_or_company; event_id lets the page show each
+ *                  deal's deliverable progress (services/deliverableProgress).
+ *   pictures       read by the page itself from GET /api/v1/media (the
+ *                  library's own visibility rules); nothing here.
  *   wardrobe       pieces tagged with it (wardrobe_brand_tags) or naming it
  *                  (wardrobe.brand).
  *   press          a brand: coverage written about its pieces and Pulse
@@ -211,12 +214,12 @@ async function pulseOf(db, company, people) {
 
 async function businessOf(db, company) {
   const deals = await rows(db, `SELECT o.id, o.show_id, o.name, o.status, o.opportunity_type, o.brand_or_company, o.company_id,
-      o.payment_amount, o.response_deadline, o.shoot_date, o.publish_date, o.created_at, s.name AS show
+      o.payment_amount, o.response_deadline, o.shoot_date, o.publish_date, o.created_at, o.event_id, s.name AS show
     FROM opportunities o LEFT JOIN shows s ON s.id = o.show_id
     WHERE o.deleted_at IS NULL AND (o.company_id = :id OR (o.company_id IS NULL AND ${NORM('o.brand_or_company')} = ${NORM(':name')}))
     ORDER BY o.created_at DESC LIMIT ${LIMIT}`, { id: company.id, name: company.name }, 'deals');
   return deals.map((d) => ({
-    id: d.id, show_id: d.show_id, show: d.show || null, name: d.name, status: d.status, type: d.opportunity_type || null,
+    id: d.id, show_id: d.show_id, show: d.show || null, name: d.name, status: d.status, type: d.opportunity_type || null, event_id: d.event_id || null,
     amount: d.payment_amount == null ? null : Number(d.payment_amount), linked: d.company_id === company.id,
     dates: [
       d.response_deadline && { kind: 'Answer by', date: d.response_deadline },

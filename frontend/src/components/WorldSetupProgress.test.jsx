@@ -70,7 +70,7 @@ describe('WorldSetupProgress', () => {
     expect(screen.getByTestId('world-setup-count-calendar').textContent).toBe('3 cultural calendar events');
     expect(screen.getByTestId('world-setup-count-locations').textContent).toBe('1 locations');
     // The feed count is pagination.total, not a top-level count.
-    expect(screen.getByRole('button', { name: 'Step 6: Generate Feed (done)' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Step 6: Make Pulse people (done)' })).toBeTruthy();
     expect(screen.getByTestId('world-setup-count-feed').textContent).toBe('42 profiles');
     expect(screen.getByTestId('world-setup-count-events').textContent).toBe('1 draft events');
     // Done steps are checked circles (the mock, 2026-10-06); open ones show their number.

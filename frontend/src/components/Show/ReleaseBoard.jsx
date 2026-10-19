@@ -44,7 +44,7 @@ export default function ReleaseBoard({ showId, episodes = [], history = [] }) {
     <div className="wa-rel" data-testid="release-board">
       <div className="wa-rel-head">
         <h2>Release</h2>
-        <p>Getting finished episodes out the door, and onto Lala&apos;s feed</p>
+        <p>Getting finished episodes out the door, and onto The Pulse</p>
       </div>
 
       {ep ? (
@@ -77,11 +77,11 @@ export default function ReleaseBoard({ showId, episodes = [], history = [] }) {
       <div className="wa-rel-row">
         <section className="wa-rel-card" data-testid="release-posts">
           <div className="wa-rel-card-head">
-            <h2>Feed posts going out with this episode</h2>
-            <Link className="wa-rel-link" to={`/shows/${showId}/feed-timeline`}>Open the feed timeline</Link>
+            <h2>Pulse posts going out with this episode</h2>
+            <Link className="wa-rel-link" to={`/shows/${showId}/feed-timeline`}>Open the post timeline</Link>
           </div>
           {!ep ? <p className="wa-rel-empty">No episode to release.</p> : posts == null ? <p className="wa-rel-empty">Loading posts…</p> : posts.length === 0 ? (
-            <p className="wa-rel-empty">No feed posts for this episode yet. Make them on the feed timeline.</p>
+            <p className="wa-rel-empty">No Pulse posts for this episode yet. Make them on the post timeline.</p>
           ) : (
             <ul className="wa-rel-posts">
               {posts.map((p) => {
@@ -99,7 +99,7 @@ export default function ReleaseBoard({ showId, episodes = [], history = [] }) {
               })}
             </ul>
           )}
-          {posts?.some((p) => p.status !== 'live') && <p className="wa-rel-note">Drafts wait for approval under Requests in Lala&apos;s Feed.</p>}
+          {posts?.some((p) => p.status !== 'live') && <p className="wa-rel-note">Drafts wait for approval under Requests in Lala&apos;s posts.</p>}
         </section>
 
         <section className="wa-rel-card wa-rel-calendar" data-testid="release-calendar">

@@ -235,8 +235,8 @@ export default function FeedTimelinePage() {
           <ArrowLeft size={18} /> Back
         </button>
         <div className="feed-timeline-title">
-          <h1>Feed Timeline</h1>
-          {episodeId && <p className="feed-timeline-subtitle">Episode activity feed</p>}
+          <h1>Post timeline</h1>
+          {episodeId && <p className="feed-timeline-subtitle">This episode on The Pulse</p>}
         </div>
         <div className="feed-timeline-actions">
           <button
@@ -312,7 +312,7 @@ export default function FeedTimelinePage() {
           ) : (
             <div className="feed-timeline-empty">
               <MessageCircle size={48} />
-              <p>No feed posts yet</p>
+              <p>No Pulse posts yet</p>
               {episodeId && <p>Draft this episode's posts in Admin › The Pulse › Engine to see its activity here.</p>}
             </div>
           )

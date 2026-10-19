@@ -40,6 +40,14 @@ describe('World Studio Feed tab', () => {
     expect(screen.getByTestId('ws4-feed-layer-real_world').getAttribute('aria-selected')).toBe('true');
   });
 
+  test('the tab reads "Pulse people" (Evoni, 2026-10-19), and ?tab=feed still opens it', async () => {
+    renderAt('/world-studio?tab=feed&layer=lalaverse');
+    await screen.findByTestId('generator');
+    const tab = screen.getByRole('button', { name: 'Pulse people' });
+    expect(tab.className).toContain('ws4-studio-tab--active');
+    expect(screen.queryByRole('button', { name: 'Feed' })).toBeNull();
+  });
+
   test('with no ?layer= it opens on the real world, as before', async () => {
     renderAt('/world-studio?tab=feed');
     expect((await screen.findByTestId('generator')).textContent).toBe('layer=real_world embedded=true profile=null');

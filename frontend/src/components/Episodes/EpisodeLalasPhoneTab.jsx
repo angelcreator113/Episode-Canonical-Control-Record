@@ -392,12 +392,12 @@ function EpisodeLalasPhoneTab({ episode, onPreview, previewError = null }) {
           {/* ── Feed moments persisted for this episode ── */}
           <section className="lalas-phone-card" aria-labelledby="lalas-phone-moments">
             <h3 id="lalas-phone-moments" className="lalas-phone-section-title">
-              <MessageCircle size={14} aria-hidden="true" /> Feed and messages
+              <MessageCircle size={14} aria-hidden="true" /> Posts and messages
             </h3>
-            {momentsLoading && <div className="lalas-phone-muted">Loading feed moments…</div>}
+            {momentsLoading && <div className="lalas-phone-muted">Loading Pulse moments…</div>}
             {momentsError && <div className="lalas-phone-error">Error: {momentsError}</div>}
             {!momentsLoading && !momentsError && moments.length === 0 && (
-              <div className="lalas-phone-empty">No feed moments are saved for this episode.</div>
+              <div className="lalas-phone-empty">No Pulse moments are saved for this episode.</div>
             )}
             {!momentsLoading && !momentsError && moments.length > 0 && (
               <>
