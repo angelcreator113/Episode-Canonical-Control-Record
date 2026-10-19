@@ -285,9 +285,11 @@ async function routeEveryday(db, post, { brand, rep, release = 'now', alwaysRevi
   const gateApi = require('./pulseGate');
   const lalaProfileId = await require('./lalaFeedProfile').lalaProfileId(db.sequelize);
   const gate = await gateApi.check(db, post, { voice: voiceFor(brand, rep), privateState: null, lalaProfileId });
-  const review = gateApi.reviewReasons(post, gate, { lalaProfileId });
-  for (const r of alwaysReview) if (!review.includes(r)) review.push(r);
-  await post.update({ gate_json: { ...(post.gate_json || {}), ...gate, review, checked_at: new Date().toISOString() } });
+  const reasons = gateApi.reviewReasons(post, gate, { lalaProfileId });
+  for (const r of alwaysReview) if (!reasons.includes(r)) reasons.push(r);
+  // The brand account's trust (services/pulseTrust), as for characters' posts.
+  const { review, released_on_trust: onTrust } = await require('./pulseTrust').trustedReview(db, post, reasons, gate);
+  await post.update({ gate_json: { ...(post.gate_json || {}), ...gate, review, ...(onTrust ? { released_on_trust: onTrust } : {}), checked_at: new Date().toISOString() } });
   if (review.length) return { post, review, published: false, scheduled_at: null };
   if (release === 'schedule') {
     const postRelease = require('./postRelease');
