@@ -270,7 +270,7 @@ export function suggestEventCategory(event, organizer) {
 
   const feedCat = lower(auto.content_category);
   const fromFeed = allowed(CONTENT_CATEGORY_TO_CATEGORY[feedCat], EVENT_CATEGORIES);
-  if (fromFeed) return { value: fromFeed, basis: `From Feed creator: ${fmtFormat(feedCat)} creator` };
+  if (fromFeed) return { value: fromFeed, basis: `From Pulse creator: ${fmtFormat(feedCat)} creator` };
 
   const oppType = lower(auto.opportunity_type);
   const fromOpp = allowed(OPPORTUNITY_TYPE_TO_CATEGORY[oppType], EVENT_CATEGORIES);

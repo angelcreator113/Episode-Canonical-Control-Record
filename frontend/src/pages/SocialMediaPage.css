@@ -89,6 +89,11 @@
 .pl-post { padding: 18px; display: flex; flex-direction: column; gap: 12px; }
 .pl-post-head { display: flex; align-items: center; gap: 12px; }
 .pl-post-name { margin: 0; font-size: 15px; font-weight: 700; color: var(--pulse-heading); }
+/* A person opens their Pulse profile (PulsePerson; Evoni, 2026-10-19). */
+.pl-post-who, .pl-post-name-link, .pl-person-open { padding: 0; border: none; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.pl-post-who { border-radius: 50%; line-height: 0; }
+.pl-post-name-link:hover, .pl-person-open:hover b { text-decoration: underline; }
+.pl-person-open { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; min-width: 0; }
 .pl-post-text { margin: 0; font-size: 14.5px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
 .pl-post-photo { width: 100%; max-height: 520px; object-fit: cover; border-radius: 12px; background: var(--pulse-soft); }
 .pl-post-actions { margin: 0; display: flex; gap: 22px; font-size: 13px; color: var(--pulse-muted); }
@@ -178,8 +183,6 @@
 .pl-story-city-initial { background: linear-gradient(135deg, var(--ring-a, var(--pulse-lilac)), var(--pulse-blush)); }
 
 /* Feed filter chip */
-.pl-filter { display: inline-flex; align-self: flex-start; align-items: center; gap: 6px; margin: 0; padding: 4px 6px 4px 14px; border-radius: 999px; background: var(--pulse-card); border: 1px solid var(--pulse-line); font-weight: 700; color: var(--pulse-heading); }
-.pl-filter button { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: none; border-radius: 50%; background: var(--pulse-soft); color: var(--pulse-heading); cursor: pointer; }
 
 /* Composer tools still to come */
 /* The composer's Location picker and a post's place link (Task 3090). */

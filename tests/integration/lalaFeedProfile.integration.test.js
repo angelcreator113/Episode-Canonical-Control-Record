@@ -1,7 +1,8 @@
 /**
  * Lala's profile column on the Feed page (Task #2747): her profile through
  * her registry link, her portrait, the show's home city, her career level
- * and the LalaVerse profiles she knows directly. Every value is the data's
+ * and her friends: the LalaVerse profiles she and they both follow on The
+ * Pulse (pulse_follows; Evoni, 2026-10-19). Every value is the data's
  * own, or null. Her followers (Task #3062): her canon count at the moment
  * with its tier, else the estimate marked estimated.
  */
@@ -30,6 +31,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   let token;
 
   const get = (url) => request(app).get(url).set('Authorization', `Bearer ${token}`);
+  const follow = (a, b) => run(`INSERT INTO pulse_follows (follower_profile_id, followed_profile_id, source, created_by)
+    VALUES (:a, :b, 'evoni', 'test') ON CONFLICT (follower_profile_id, followed_profile_id) WHERE deleted_at IS NULL DO NOTHING`, { a, b });
+  const mutual = async (id) => { await follow(id, profiles.lala); await follow(profiles.lala, id); };
   const profile = async (key, handle, display, layer, rel) => {
     const [[row]] = await run(`INSERT INTO social_profiles (handle, platform, vibe_sentence, display_name, feed_layer, lala_relationship, created_at, updated_at)
       VALUES (:handle, 'instagram', 'test', :display, :layer, :rel, NOW(), NOW()) RETURNING id`, { handle, display, layer, rel });
@@ -56,9 +60,15 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await run(`INSERT INTO character_registries (id, title, created_at, updated_at) VALUES (:reg, 'Lala feed registry', NOW(), NOW())`, ids);
     await run(`INSERT INTO registry_characters (id, registry_id, character_key, display_name, feed_profile_id, portrait_url, created_at, updated_at)
       VALUES (:rc, :reg, 'lala', 'Lala', :feed, 'https://example.test/lala.png', NOW(), NOW() + INTERVAL '1 day')`, { ...ids, feed: profiles.lala });
+    // Friends follow each other; "aware" only follows her; the real-world profile is not on The Pulse.
+    await mutual(profiles.friendA);
+    await mutual(profiles.friendB);
+    await follow(profiles.aware, profiles.lala);
+    await mutual(profiles.realWorld);
   });
 
   afterAll(async () => {
+    await run('DELETE FROM pulse_follows WHERE follower_profile_id IN (:ids) OR followed_profile_id IN (:ids)', { ids: Object.values(profiles) });
     await run('DELETE FROM pulse_followers WHERE show_id IN (:show, :bare)', ids);
     await run('DELETE FROM registry_characters WHERE id = :rc', ids);
     await run('DELETE FROM character_registries WHERE id = :reg', ids);
@@ -80,7 +90,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(d.portrait_url).toBe('https://example.test/lala.png');
     expect(d.home_city).toBe('Echo Park');
     expect(d.career).toEqual({ tier: 2, label: 'Rising' });
-    // Friends: the LalaVerse profiles she knows directly; not her, not "aware", not real-world.
+    // Friends: the LalaVerse profiles she and they both follow; not her, not one way ("aware"), not real-world.
     const names = d.friends.list.map((p) => p.display_name);
     expect(names).toEqual(expect.arrayContaining([`AAA Friend A ${tag}`, `AAA Friend B ${tag}`]));
     expect(names).not.toContain(`AAA Aware ${tag}`);
@@ -95,6 +105,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       const [[row]] = await run(`INSERT INTO social_profiles (handle, platform, vibe_sentence, display_name, feed_layer, lala_relationship, created_at, updated_at)
         VALUES (:handle, 'instagram', 'test', :display, 'lalaverse', 'direct', NOW(), NOW()) RETURNING id`, { handle: `aaa-more-${i}-${tag}`, display: `AAA More ${i} ${tag}` });
       extra.push(row.id); profiles[`more${i}`] = row.id;
+      await mutual(row.id);
     }
     const six = (await get(`/api/v1/social-profiles/lala?show_id=${ids.show}`)).body.data.friends;
     const all = (await get(`/api/v1/social-profiles/lala?show_id=${ids.show}&friends=all`)).body.data.friends;

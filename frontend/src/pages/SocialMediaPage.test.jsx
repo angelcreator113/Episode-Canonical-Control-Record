@@ -110,13 +110,13 @@ describe("Lala's view", () => {
     // Her canon count at the moment, with her tier (Task 3062).
     expect((await screen.findByTestId('pl-followers')).textContent).toBe('12,400 followers · Micro tier');
     const nav = within(screen.getByRole('navigation', { name: 'The Pulse' }));
-    expect(nav.getByRole('button', { name: /Feed/ }).getAttribute('aria-current')).toBe('page');
+    expect(nav.getByRole('button', { name: /Posts/ }).getAttribute('aria-current')).toBe('page');
     // Messages (Task 2985) and Dream Cities (Task 2987) are live.
     expect(nav.getByRole('button', { name: /Messages/ })).toBeTruthy();
     expect(nav.getByRole('button', { name: /Dream Cities/ })).toBeTruthy();
     expect(within(screen.getByRole('navigation', { name: 'The Pulse on a phone' })).getByRole('button', { name: /Inbox/ }).disabled).toBe(false);
     // Only views that exist (Task 3073): no Stories or Explore placeholders.
-    expect(nav.getAllByRole('button').map((b) => b.textContent.trim())).toEqual(['Feed', 'Dream Cities', 'Events', 'Characters', 'Messages']);
+    expect(nav.getAllByRole('button').map((b) => b.textContent.trim())).toEqual(['Posts', 'Dream Cities', 'Events', 'Characters', 'Messages']);
     expect(nav.queryByText('Stories')).toBeNull();
     expect(nav.queryByText('Explore')).toBeNull();
     expect(nav.queryByText('Creator Hub')).toBeNull();
@@ -243,17 +243,49 @@ describe("Lala's view", () => {
     expect(screen.getAllByTestId('pl-profile-friend')).toHaveLength(2);
   });
 
-  test('stories: Lala, recent posters and the five cities; tapping a person filters the feed, x shows everyone', async () => {
+  test("stories: Lala, recent posters and the five cities; tapping Lala opens her profile (Evoni, 2026-10-19)", async () => {
     renderAt('/pulse');
     await screen.findAllByTestId('pl-post');
     const stories = within(screen.getByTestId('pl-stories'));
     expect(stories.getAllByTestId('pl-story-person').map((b) => b.querySelector('b').textContent)).toEqual(['Lala']);
     expect(stories.getAllByTestId('pl-story-city')).toHaveLength(5);
     fireEvent.click(stories.getAllByTestId('pl-story-person')[0]);
-    expect(screen.getByTestId('pl-filter').textContent).toBe('Showing Lala');
-    expect(screen.getAllByTestId('pl-post')).toHaveLength(1);
-    fireEvent.click(screen.getByRole('button', { name: 'Show everyone, not only Lala' }));
-    expect(screen.getAllByTestId('pl-post')).toHaveLength(2);
+    expect(await screen.findByTestId('pl-profile')).toBeTruthy();
+    expect(screen.queryByTestId('pl-person')).toBeNull();
+  });
+
+  test("tapping a post's author or a friend opens their Pulse profile, with how they and Lala follow each other", async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url.startsWith('/api/v1/pulse-follows/profile/rival')) {
+        return { data: { data: { profile: { id: 9, handle: 'rival', display_name: 'The Rival', bio: 'peaked early', city: 'dazzle_district', portrait_url: null },
+          is_lala: false, followers: { count: 5000, tier: null, estimated: false }, relation: { follows_lala: true, lala_follows: false, friends: false } } } };
+      }
+      if (url.includes('profile_id=9')) return { data: { data: [POSTS[1]], hasMore: false } };
+      if (url.startsWith('/api/v1/pulse-follows/profile/marcus.k')) {
+        return { data: { data: { profile: { id: 2, handle: 'marcus.k', display_name: 'Marcus', bio: null, city: null, portrait_url: null },
+          is_lala: false, followers: null, relation: { follows_lala: true, lala_follows: true, friends: true } } } };
+      }
+      if (url.includes('profile_id=2')) return { data: { data: [], hasMore: false } };
+      if (url.startsWith('/api/v1/social-profiles/lala?')) return { data: { data: lalaColumn } };
+      if (url.includes('/shows') && url.includes('pulse-cover')) return { data: { cover } };
+      if (url.includes('/shows')) return { data: { data: [SHOW] } };
+      if (url.includes('/feed-posts')) return { data: { data: posts, total: posts.length, hasMore: false } };
+      return { data: {} };
+    });
+    renderAt('/pulse');
+    await screen.findAllByTestId('pl-post');
+    fireEvent.click(screen.getAllByTestId('pl-post-name')[1]);
+    const person = await screen.findByTestId('pl-person');
+    expect(within(person).getByRole('heading', { name: 'The Rival' })).toBeTruthy();
+    expect(within(person).getByText(/@rival/).textContent).toBe('@rival · Dazzle District');
+    expect(screen.getAllByTestId('pp-badge').map((b) => b.textContent.trim())).toEqual(['Follows Lala']);
+    expect(await screen.findAllByTestId('pp-post')).toHaveLength(1);
+    expect(screen.queryByTestId('pp-admin')).toBeNull();   // not an admin
+
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'The Pulse' })).getByRole('button', { name: /Characters/ }));
+    fireEvent.click(await screen.findByRole('button', { name: "Open Marcus's profile" }));
+    await waitFor(() => expect(screen.getAllByTestId('pp-badge').map((b) => b.textContent.trim())).toEqual(['Friends']));
+    expect(await screen.findByTestId('pp-no-posts')).toBeTruthy();
   });
 
   test('the old ?layer= link opens Characters', async () => {

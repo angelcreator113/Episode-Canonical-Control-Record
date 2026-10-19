@@ -30,7 +30,7 @@ const EMPTY = {
   posts: ['No posts with photos yet.', 'voice'],
   tagged: ['No other pictures are tagged with them yet.', null],
 };
-const TAB_WORDS = { appearance: 'Appearance', places: 'Places & Gallery', story: 'Story & Events', voice: 'Voice & Feed' };
+const TAB_WORDS = { appearance: 'Appearance', places: 'Places & Gallery', story: 'Story & Events', voice: 'Voice & Pulse' };
 
 export default function CharacterGalleryTab({ character, openTab, hide = [] }) {
   const [state, setState] = useState({ loading: true, groups: [], linked: false, canEdit: false });
@@ -67,7 +67,7 @@ export default function CharacterGalleryTab({ character, openTab, hide = [] }) {
         <h3><Images size={18} aria-hidden /> Gallery</h3>
         <p className="gal-muted">
           {total ? `${total} picture${total === 1 ? '' : 's'} of ${name} and their world, from across the app.` : `No pictures of ${name} yet.`}
-          {!state.linked && ' With no feed profile, their events and posts are not here yet.'}
+          {!state.linked && ' With no Pulse profile, their events and posts are not here yet.'}
         </p>
         {state.canEdit && (
           <div className="gal-tools">

@@ -166,7 +166,7 @@ export default function PulseGrowth({ showId, chartWidth }) {
 
   if (error) return <p className="pulse-growth-error" role="alert">{error}</p>;
   if (!data) return <p className="pulse-growth-muted">Loading Growth…</p>;
-  if (!data.profile) return <p className="pulse-growth-muted" data-testid="pulse-growth-empty">Lala has no Feed profile yet, so there is no follower line to show.</p>;
+  if (!data.profile) return <p className="pulse-growth-muted" data-testid="pulse-growth-empty">Lala has no Pulse profile yet, so there is no follower line to show.</p>;
 
   const line = data.line || [];
   const projection = data.projection || [];

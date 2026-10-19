@@ -125,10 +125,10 @@ describe('feature a guest by clicking their name', () => {
   });
 });
 
-// Task #3138: Add from Feed is where Featured Attendees are chosen. A name
+// Task #3138: Add from The Pulse is where Featured Attendees are chosen. A name
 // already on the guest list was a disabled row and the handler refused it,
 // so picking an invited guest there never featured them.
-describe('Add from Feed features an invited guest', () => {
+describe('Add from The Pulse features an invited guest', () => {
   const feed = (profiles) => {
     const base = vi.mocked(api.get).getMockImplementation();
     vi.mocked(api.get).mockImplementation(async (url) => (
@@ -136,7 +136,7 @@ describe('Add from Feed features an invited guest', () => {
     ));
   };
   const openFeed = async () => {
-    fireEvent.click(await screen.findByRole('button', { name: /Add from Feed/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Add from The Pulse/ }));
   };
 
   test('picking an invited guest features them in place; the guest list is not added to', async () => {

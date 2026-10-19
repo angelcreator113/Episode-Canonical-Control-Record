@@ -68,7 +68,7 @@ function CityTextForm({ city, onSave, onCancel }) {
         <span>Big events (commas between)</span>
         <input value={form.majorEvents} onChange={(e) => setForm({ ...form, majorEvents: e.target.value })} />
       </label>
-      <p className="dce-note">The Feed, the post drafter and the place describer write {city.name} from these words.</p>
+      <p className="dce-note">The Pulse, the post drafter and the place describer write {city.name} from these words.</p>
       {error && <p className="dce-note dce-error" role="alert">{error}</p>}
       <div className="dce-form-actions">
         <button type="button" className="dce-btn" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>

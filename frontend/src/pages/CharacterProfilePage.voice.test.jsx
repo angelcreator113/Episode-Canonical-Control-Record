@@ -1,5 +1,5 @@
 /**
- * Voice & Feed to Evoni's mock (2026-10-18, step 3 of the character page):
+ * Voice & Pulse to Evoni's mock (2026-10-18, step 3 of the character page):
  * the voice profile and its edit, feed behavior and its edit, post examples
  * with a filter and pages, public and private voice, and drafting posts.
  */
@@ -64,7 +64,7 @@ describe('Voice profile', () => {
   });
 });
 
-describe('Feed behavior', () => {
+describe('Pulse behavior', () => {
   test('posting style, how often, what they post and their topics', () => {
     inRouter(<FeedBehavior character={CHARACTER} feedProfile={{ ...PROFILE, current_state: 'gone_dark' }} appearances={{ feed: { posts: 5 } }} onFeedSaved={vi.fn()} />);
     const card = screen.getByTestId('ch-feed-behavior');
@@ -72,7 +72,7 @@ describe('Feed behavior', () => {
     expect(card.textContent).toContain('How often3-5 per week');
     expect(card.textContent).toContain('Posts5');
     expect(card.textContent).toContain('AccountGone Dark');
-    expect(within(card).getByText('On the feed')).toBeTruthy();
+    expect(within(card).getByText('On The Pulse')).toBeTruthy();
     expect(within(card).getByText('Fabric & Form')).toBeTruthy();
   });
 
@@ -89,8 +89,8 @@ describe('Feed behavior', () => {
 
   test('no feed profile: where to make one', () => {
     inRouter(<FeedBehavior character={{ ...CHARACTER, feed_profile_id: null }} feedProfile={null} appearances={null} onFeedSaved={vi.fn()} />);
-    expect(screen.getByTestId('ch-feed-behavior').textContent).toContain('Not on the feed yet');
-    expect(screen.getByText('Not on the feed', { selector: '.ch-presence' })).toBeTruthy();
+    expect(screen.getByTestId('ch-feed-behavior').textContent).toContain('Not on The Pulse yet');
+    expect(screen.getByText('Not on The Pulse', { selector: '.ch-presence' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
   });
 });
@@ -109,7 +109,7 @@ describe('Post examples', () => {
     expect(within(card).getByRole('button', { name: 'Drafts' }).getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(within(card).getByRole('button', { name: /Draft new posts/ }));
     expect(onDraft).toHaveBeenCalled();
-    expect(within(card).getByRole('link', { name: /View feed profile/ }).getAttribute('href')).toBe('/world-studio?tab=feed&layer=lalaverse&profile=7');
+    expect(within(card).getByRole('link', { name: /View Pulse profile/ }).getAttribute('href')).toBe('/world-studio?tab=feed&layer=lalaverse&profile=7');
   });
 
   test('none yet', () => {
@@ -124,11 +124,11 @@ describe('Public and private voice', () => {
     const card = screen.getByTestId('ch-public-private');
     expect(card.textContent).toContain('Calm, intentional and artistic.');
     expect(card.textContent).toContain('Worries the work is never enough.');
-    expect(card.textContent).toContain('Their feed profile is their mask');
+    expect(card.textContent).toContain('Their Pulse profile is their mask');
   });
 });
 
-describe('the Voice & Feed tab', () => {
+describe('the Voice & Pulse tab', () => {
   test('opens with ?tab=voice; Draft new posts opens the drafter', async () => {
     vi.mocked(api.get).mockImplementation(async (url) => {
       if (url === '/api/v1/character-registry/characters/c1') return { data: { character: CHARACTER } };

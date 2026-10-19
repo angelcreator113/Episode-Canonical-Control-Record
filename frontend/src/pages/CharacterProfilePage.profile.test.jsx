@@ -63,7 +63,7 @@ describe('Key stats', () => {
     const card = screen.getByTestId('ch-stats');
     expect(within(card).getAllByRole('listitem')[0].textContent).toBe('—Followers');
     expect(within(card).getAllByRole('listitem')[4].textContent).toBe('0Connections');
-    expect(card.textContent).toContain('come from their feed profile');
+    expect(card.textContent).toContain('come from their Pulse profile');
   });
 });
 
@@ -103,6 +103,6 @@ describe('Their people', () => {
 
   test('with no relationships it says so, counting feed ties', () => {
     inRouter(<ConnectionsCard relationships={[]} entanglements={[{ id: 'e1' }]} openTab={vi.fn()} />);
-    expect(screen.getByTestId('ch-ties').textContent).toContain('1 feed tie, no relationships yet.');
+    expect(screen.getByTestId('ch-ties').textContent).toContain('1 Pulse tie, no relationships yet.');
   });
 });
