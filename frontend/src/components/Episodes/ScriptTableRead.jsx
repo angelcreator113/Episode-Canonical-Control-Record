@@ -8,6 +8,7 @@ import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight, Smartphone } from 'lucide-react';
 import { scriptSections, readLine } from '../../lib/scriptExport';
+import useDialogLayer from '../../hooks/useDialogLayer';
 import './ScriptTableRead.css';
 
 // The Script tab's own speaker colours (EpisodeScriptTab ScriptLine `sc`);
@@ -64,6 +65,9 @@ export default function ScriptTableRead({ scriptText, title = '', onScreen = nul
   const beatRefs = useRef([]);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  // A dialog on the page's stack, so History under it leaves its Escape and
+  // Tab alone (Script page audit 3, 2026-10-19; hooks/useDialogLayer).
+  useDialogLayer(true);
 
   // Focus goes into the dialog and back to whatever opened it; the page
   // behind does not scroll while it is open.
