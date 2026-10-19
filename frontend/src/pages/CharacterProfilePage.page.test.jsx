@@ -54,7 +54,7 @@ describe('the character page', () => {
     // cast says it (ROLE_LABELS: support is Supporting) and that they host on the next.
     expect(document.querySelector('.ch-sub').textContent).toBe('@studiobysableEcho Park');
     expect(document.querySelector('.ch-roles').textContent).toBe('The peer · Supporting · Event host');
-    expect(screen.getByText('Feed profile')).toBeTruthy();
+    expect(screen.getByText('Pulse profile')).toBeTruthy();
     expect(screen.getByText('Has voice')).toBeTruthy();
     // Saved as Breathing: the page says so, and that a feed profile already
     // makes them ready to be Active (the profile audit, 2026-10-19).
@@ -64,7 +64,7 @@ describe('the character page', () => {
     expect(screen.getByRole('button', { name: 'Export Profile' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'The cast' }).getAttribute('href')).toBe('/character-registry');
     const tabs = within(screen.getByRole('navigation', { name: 'Character sections' })).getAllByRole('link');
-    expect(tabs.map((t) => t.textContent)).toEqual(['Overview', 'Inner Life', 'Appearance', 'Voice & Feed', 'Connections', 'In the World', 'Places & Gallery', 'Story & Events', 'Talk', 'Settings']);
+    expect(tabs.map((t) => t.textContent)).toEqual(['Overview', 'Inner Life', 'Appearance', 'Voice & Pulse', 'Connections', 'In the World', 'Places & Gallery', 'Story & Events', 'Talk', 'Settings']);
     expect(tabs[0].getAttribute('aria-current')).toBe('page');
   });
 
@@ -142,8 +142,8 @@ describe('the character page', () => {
       return { data: {} };
     });
     renderIt();
-    await waitFor(() => expect(screen.getByText(/Match them to a feed person/)).toBeTruthy());
-    expect(screen.queryByText('Feed profile')).toBeNull();
+    await waitFor(() => expect(screen.getByText(/Match them to a Pulse person/)).toBeTruthy());
+    expect(screen.queryByText('Pulse profile')).toBeNull();
   });
 
   test('the other tabs hold the old sections', async () => {

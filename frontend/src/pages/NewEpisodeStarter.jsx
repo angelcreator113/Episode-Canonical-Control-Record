@@ -33,7 +33,7 @@ import './NewEpisodeStarter.css';
 const SocialProfileGenerator = lazy(() => import('./SocialProfileGenerator'));
 
 export const STARTING_POINTS = [
-  { key: 'creator', icon: UserRound, title: 'Creator Invitation', text: "Someone from Lala's Feed invites her." },
+  { key: 'creator', icon: UserRound, title: 'Creator Invitation', text: "Someone from The Pulse invites her." },
   { key: 'brand', icon: Tag, title: 'Brand Opportunity', text: 'A brand puts on the event.' },
   { key: 'world', icon: Globe2, title: 'World Event', text: 'A gala, premiere or cultural moment from the calendar.' },
   { key: 'opportunity', icon: Briefcase, title: 'Career Opportunity', text: 'A campaign, appearance or collaboration already offered.' },
@@ -356,7 +356,7 @@ export default function NewEpisodeStarter() {
         <button type="button" className="nes-back" onClick={() => choose(null)} data-testid="start-back">
           <ArrowLeft size={14} aria-hidden="true" /> All starting points
         </button>
-        <Suspense fallback={<p className="nes-note">Loading Lala&apos;s Feed…</p>}>
+        <Suspense fallback={<p className="nes-note">Loading The Pulse&apos;s people…</p>}>
           <SocialProfileGenerator chooseHost showId={showId} defaultFeedLayer="lalaverse" />
         </Suspense>
       </div>

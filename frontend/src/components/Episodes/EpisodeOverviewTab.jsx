@@ -48,7 +48,7 @@ const TIER_CONFIG = {
 const BAND_NOTES = {
   Identity: 'What this episode is and where it sits.',
   Production: "What's been made for it so far.",
-  Source: 'Where it came from on the Feed.',
+  Source: 'Where it came from on The Pulse.',
   Stakes: "What's at risk, and the money.",
   Reference: 'Snapshots from the event, for reading only.',
 };

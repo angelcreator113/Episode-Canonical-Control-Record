@@ -137,7 +137,7 @@ describe('the Voices tab', () => {
     render(<PulseVoices showId="show-1" />);
     expect((await screen.findByTestId('pulse-voices-empty')).textContent).toMatch(/Lala has not met anyone below/);
     const group = screen.getByTestId('pulse-voices-unmet');
-    expect(within(group).getByRole('heading').textContent).toBe('Lala hasn’t met them yet (2)');
+    expect(within(group).getByRole('heading').textContent).toBe('Not in Lala’s world yet (2)');
     const [card, later] = within(group).getAllByTestId('pulse-voices-card');
     expect(within(card).getByTestId('pulse-voices-meets').textContent).toBe('Meets Lala in Episode 1');
     expect(within(later).getByTestId('pulse-voices-meets').textContent).toBe('Meets Lala later in the story');
@@ -172,7 +172,7 @@ describe('the Voices tab', () => {
     render(<MemoryRouter><PulseVoices showId="show-1" /></MemoryRouter>);
     expect((await screen.findByTestId('pulse-voices-empty')).textContent).toMatch(/not at the Active stage\. Make one Active to build their voice/);
     const group = screen.getByTestId('pulse-voices-below');
-    expect(within(group).getByRole('heading').textContent).toBe('On the feed, not posting yet (2)');
+    expect(within(group).getByRole('heading').textContent).toBe('On The Pulse, not posting yet (2)');
     const [row, unset] = within(group).getAllByTestId('pulse-voices-below-row');
     expect(row.textContent).toMatch(/Maren.*@slowsift.*Stage: Breathing/);
     expect(unset.textContent).toMatch(/Stage: not set/);

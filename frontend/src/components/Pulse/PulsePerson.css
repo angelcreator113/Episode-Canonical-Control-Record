@@ -1,0 +1,34 @@
+/* Someone's profile on The Pulse (PulsePerson; Evoni, 2026-10-19).
+   Inside .pl-page, so it reads The Pulse's own --pulse-* tokens. */
+.pp { display: flex; flex-direction: column; gap: 12px; }
+.pp-back { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 4px 10px;
+  border: 1px solid var(--pulse-line); border-radius: 999px; background: var(--pulse-soft); color: var(--pulse-ink); font: inherit; font-size: 13px; cursor: pointer; }
+.pp-head { display: flex; align-items: center; gap: 16px; min-width: 0; }
+.pp-who { min-width: 0; }
+.pp-who .pl-card-title { margin: 0; overflow-wrap: anywhere; }
+.pp-followers { margin: 4px 0 0; font-size: 13px; font-weight: 700; color: var(--pulse-ink); }
+.pp-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; }
+.pp-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700;
+  background: var(--pulse-blush); color: var(--pulse-ink); border: 1px solid var(--pulse-line); }
+.pp-badge-friends { background: var(--pulse-lilac); }
+.pp-bio { margin: 0; color: var(--pulse-ink); line-height: 1.5; overflow-wrap: anywhere; }
+.pp-admin { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px; border-radius: 16px;
+  border: 1px dashed var(--pulse-line); background: var(--pulse-soft); }
+.pp-switch { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 4px 8px; border: none; background: none;
+  font: inherit; font-size: 14px; color: var(--pulse-ink); cursor: pointer; }
+.pp-switch:disabled { opacity: 0.55; cursor: default; }
+.pp-switch-track { position: relative; width: 38px; height: 22px; border-radius: 999px; background: var(--pulse-line); transition: background 0.15s; }
+.pp-switch-knob { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--pulse-card); transition: left 0.15s; }
+.pp-switch.on .pp-switch-track { background: var(--pulse-button); }
+.pp-switch.on .pp-switch-knob { left: 19px; }
+.pp-section { margin: 4px 0 0; font-size: 14px; font-weight: 700; color: var(--pulse-heading); }
+.pp-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.pp-tile { aspect-ratio: 1 / 1; overflow: hidden; border-radius: 10px; background: var(--pulse-soft); border: 1px solid var(--pulse-line); }
+.pp-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pp-tile-blur { filter: blur(10px); }
+.pp-tile p { margin: 0; padding: 8px; font-size: 12px; line-height: 1.35; color: var(--pulse-ink); overflow: hidden; display: -webkit-box;
+  -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+  .pp-head { gap: 12px; }
+  .pp-grid { gap: 4px; }
+}

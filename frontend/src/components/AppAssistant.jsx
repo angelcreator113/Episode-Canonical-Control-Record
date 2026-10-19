@@ -54,7 +54,7 @@ function timeAgo(ts) {
 
 const GREETING = {
   role: 'assistant',
-  text: "hey it's amber. whatever you're working on rn — characters, the book, the feed, navigation — just tell me and i'll pull it up. i've been watching the world while you were gone.",
+  text: "hey it's amber. whatever you're working on rn — characters, the book, the pulse, navigation — just tell me and i'll pull it up. i've been watching the world while you were gone.",
   ts: Date.now(),
 };
 

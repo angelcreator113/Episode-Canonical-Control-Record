@@ -101,7 +101,7 @@ export default function ProfileView({
       <div className="re-empty" role="status">
         <div className="re-empty-icon"><Users size={32} aria-hidden /></div>
         <div className="re-empty-title">No one in Lala's world yet</div>
-        <div className="re-empty-desc">The people here are Lala's feed profiles that have a character. Link one on the Characters page.</div>
+        <div className="re-empty-desc">The people here are Lala's Pulse profiles that have a character. Link one on the Characters page.</div>
       </div>
     );
   }

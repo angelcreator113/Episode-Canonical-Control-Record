@@ -48,6 +48,20 @@ describe('followerMentions', () => {
   test('"a follower" and "two followers" are not count claims', () => {
     expect(followerMentions('a follower wrote in; two followers left')).toEqual([]);
   });
+  // The "A designer with 900K followers" misread (2026-10-19): a match that
+  // starts at the article "A" swallowed the real count after it.
+  test.each([
+    ['A designer with 900K followers', 900000, '900K followers', '900K'],
+    ['An heiress with 2.5M followers', 2500000, '2.5M followers', '2.5M'],
+    ['She is a model with 47k followers', 47000, '47k followers', '47k'],
+  ])('a word count before the real one does not hide it: %s', (text, count, match, number) => {
+    expect(followerMentions(text).map((m) => [m.count, m.match, m.number])).toEqual([[count, match, number]]);
+  });
+  test('the real count is found at its own place in the text', () => {
+    const text = 'A designer with 900K followers';
+    const [m] = followerMentions(text);
+    expect(text.slice(m.index, m.index + m.match.length)).toBe('900K followers');
+  });
 });
 
 describe('zones', () => {

@@ -85,7 +85,7 @@ describe('Recent activity', () => {
 
   test('dated first, newest first; episodes after', () => {
     expect(activityOf(APPEARANCES, TRAIL).map((x) => x.title)).toEqual([
-      'Hosts an event', 'Drafted a post', 'Posted to the feed', 'Featured in Episode 1',
+      'Hosts an event', 'Drafted a post', 'Posted to The Pulse', 'Featured in Episode 1',
     ]);
     expect(activityOf(null, null)).toEqual([]);
   });

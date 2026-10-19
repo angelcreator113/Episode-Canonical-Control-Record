@@ -13,6 +13,8 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
+const auth = { user: { groups: ['admin'] } };
+vi.mock('../contexts/AuthContext', () => ({ useAuth: () => auth }));
 
 import api from '../services/api';
 import CharacterRegistryPage, { chooseRegistry, duplicateIn } from './CharacterRegistryPage';
@@ -282,3 +284,42 @@ describe('CharacterRegistryPage: every feed person, none archived', () => {
   });
 });
 
+
+describe('CharacterRegistryPage: Make one for me (Evoni, 2026-10-19)', () => {
+  test('opens the panel for the registry in view; Edit opens New character prefilled and saves through the form', async () => {
+    rememberShow('show-b');
+    vi.mocked(api.post).mockImplementation(async (url) => {
+      if (url === '/api/v1/character-generation/cast/propose') {
+        return { data: { success: true, proposals: [{ display_name: 'Sienna Vale', selected_name: 'Sienna Okafor-Vale', role_type: 'shadow', icon: '🦹', description: 'A rival stylist.', world: 'lalaverse', pulse: { handle: 'sienna_vale' } }] } };
+      }
+      return { data: { success: true } };
+    });
+    renderAt();
+    await waitFor(() => expect(cardNames()).toEqual(['Marcus', 'Nadia']));
+    fireEvent.click(screen.getByTestId('make-for-me'));
+    fireEvent.click(screen.getByTestId('cmfm-make-1'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/character-generation/cast/propose', { registry_id: 'reg-sal', idea: '', count: 1 }));
+    fireEvent.click(await screen.findByTestId('cmfm-edit'));
+    expect(screen.queryByTestId('cmfm')).toBeNull();
+    expect(screen.getByTestId('create-title').textContent).toBe('New Character in SAL Cast');
+    expect(screen.getByLabelText('Name').value).toBe('Sienna Vale');
+    fireEvent.click(screen.getByTestId('create-submit'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/character-registry/registries/reg-sal/characters', expect.objectContaining({
+      display_name: 'Sienna Vale', selected_name: 'Sienna Okafor-Vale', role_type: 'shadow', description: 'A rival stylist.', character_key: 'sienna_vale',
+    })));
+    const sent = api.post.mock.calls.find((c) => c[0].endsWith('/characters'))[1];
+    expect(sent.pulse).toBeUndefined();
+  });
+
+  test('a signed-in non-admin does not see the button', async () => {
+    auth.user = { groups: ['user'] };
+    try {
+      renderAt();
+      await waitFor(() => expect(cardNames().length).toBeGreaterThan(0));
+      expect(screen.getByTestId('new-character')).toBeTruthy();
+      expect(screen.queryByTestId('make-for-me')).toBeNull();
+    } finally {
+      auth.user = { groups: ['admin'] };
+    }
+  });
+});

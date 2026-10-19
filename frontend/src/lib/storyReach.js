@@ -44,7 +44,7 @@ export const READ_AS = {
 
 export const WRITERS = [
   {
-    key: 'posts', label: 'The Pulse: posts you generate', where: 'Generate posts, on their Voice & feed tab',
+    key: 'posts', label: 'The Pulse: posts you generate', where: 'Generate posts, on their Voice & Pulse tab',
     sources: ['src/services/characterPosts.js', 'src/services/pulseDrafter.js'],
     shows: ['the_mask', 'mask_persona', 'self_narrative'],
     private: ['wound', ...CORE, 'hidden_want', 'want_architecture', 'living_state'],
@@ -102,7 +102,7 @@ export const WRITERS = [
     unmarked: [],
   },
   {
-    key: 'follow', label: 'Who they follow', where: 'Follow suggestions on the Feed',
+    key: 'follow', label: 'Who they follow', where: 'Follow suggestions on The Pulse',
     sources: ['src/services/characterFollowService.js'],
     shows: ['mask_persona', 'self_narrative'], private: [],
     unmarked: [...CORE, 'hidden_want', 'truth_persona', 'change_capacity', 'operative_cosmology', 'de_operative_cosmology',
