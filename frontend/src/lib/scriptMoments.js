@@ -319,7 +319,7 @@ export const EXPECTED_ON_SCREEN = {
   9: { action: 'TODO_LIST', what: 'The to-do list', where: "Lala's Phone" },
   10: { action: 'LOCATION_ICON', what: 'The location', where: "Lala's Phone" },
   11: { action: 'ARRIVAL', what: 'Arriving', where: "Lala's Environment" },
-  12: { action: 'CONTENT_CREATE', what: 'Making the content', where: "Lala's Phone" },
+  12: { action: 'FASHION_CHALLENGE', what: 'The fashion challenge', where: "Lala's Phone" },
   13: { action: 'STATS_UPDATE', what: 'The stats update', where: 'Full Screen' },
   14: { action: 'FADE_OUT', what: 'The fade out', where: 'Full Screen' },
 };

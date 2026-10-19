@@ -64,3 +64,11 @@ test('names the story layers with nothing to draw on', async () => {
   expect(gaps.textContent).toContain('invented no history');
   expect(gaps.textContent).toContain('No one at the event has an established tie to Lala');
 });
+
+// Lala's coins (Evoni, 2026-10-18): a piece's coin line added after writing.
+test('says when the writer added coin lines for the pieces she buys', async () => {
+  vi.mocked(api.post).mockResolvedValue({ data: { saved: true, script: SCRIPT, coverage: { fixed_beats: [], missing: [], coin_lines: 2 } } });
+  render(<MemoryRouter><EpisodeScriptTab episode={{ id: 'ep-1', show_id: 'show-1', script_content: '' }} show={{ id: 'show-1' }} /></MemoryRouter>);
+  fireEvent.click(screen.getByRole('button', { name: /Generate Script/ }));
+  expect((await screen.findByTestId('script-coverage-coins')).textContent).toContain('added 2 coin lines');
+});
