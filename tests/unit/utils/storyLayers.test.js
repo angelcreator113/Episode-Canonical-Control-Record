@@ -24,7 +24,7 @@ test('every beat has its own story job', () => {
   expect(CANONICAL_BEATS.every((b) => typeof b.story_job === 'string' && b.story_job.length > 20)).toBe(true);
   expect(new Set(CANONICAL_BEATS.map((b) => b.story_job)).size).toBe(14);
   const job = (n) => CANONICAL_BEATS.find((b) => b.number === n).story_job;
-  expect(job(3)).toContain('No phone moment');
+  expect(job(3)).toContain('No message and no app: the only phone moment is the voice click');
   expect(job(4)).toContain('only who it is from');
   expect(job(5)).toContain('The full invitation');
   expect(job(11)).toContain('before the result');

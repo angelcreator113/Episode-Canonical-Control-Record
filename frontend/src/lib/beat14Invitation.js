@@ -60,14 +60,35 @@ function beat14Delivers(beats = [], name) {
 }
 
 /**
+ * What completion decided for it, 'offered' or 'expired', else null: the
+ * server's `completion_status` when the read carries it, else the history
+ * entry completion wrote (services/beat14Opportunity resolveAtCompletion;
+ * it carries the tier). Script page audit 3, 2026-10-19: an expired one
+ * archived later read as offered, and the failed episode's invitation came.
+ */
+function beat14Decided(opp) {
+  if (!opp) return null;
+  if (opp.completion_status === 'offered' || opp.completion_status === 'expired') return opp.completion_status;
+  const history = Array.isArray(opp.status_history) ? opp.status_history : [];
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const h = history[i];
+    if (h && (h.status === 'offered' || h.status === 'expired') && Object.prototype.hasOwnProperty.call(h, 'tier')) return h.status;
+  }
+  return null;
+}
+
+/**
  * How beat 14 plays its opportunity: 'invitation' (it arrives), 'withheld'
  * (it does not come), or null with nothing attached. Before completion it is
  * held and follows the brief's designed intent; once the episode is
- * completed its status says what happened (Script page audit, 2026-10-19):
- * expired is the episode that did not land, any other status was offered.
+ * completed, what completion decided says what happened (beat14Decided),
+ * whatever its status became later; without that, expired is the episode
+ * that did not land and any other status was offered.
  */
 function beat14Outcome(opp, designedIntent = null) {
   if (!opp) return null;
+  const decided = beat14Decided(opp);
+  if (decided) return decided === 'expired' ? 'withheld' : 'invitation';
   if (opp.status === 'expired') return 'withheld';
   if (opp.status && opp.status !== HELD) return 'invitation';
   return designedIntent === 'fail' ? 'withheld' : 'invitation';
@@ -75,4 +96,4 @@ function beat14Outcome(opp, designedIntent = null) {
 
 // END SHARED
 
-export { namesIt, invitationLine, beat14Delivers, beat14Outcome, BEAT };
+export { namesIt, invitationLine, beat14Delivers, beat14Outcome, beat14Decided, BEAT };
