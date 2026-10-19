@@ -275,11 +275,19 @@ export function rewrittenLine(original, words) {
   return next.trim() === String(original || '').trim() ? null : next;
 }
 
-function ScriptLine({ line, beatId, beatNumber = null, lineIndex, onEdit, onDelete, onRewrite, rewriting, locked, prevLine = null, nextLine = null, onMoveLine, drag, onScreen, withOnScreen, phoneDown = false }) {
+function ScriptLine({ line, beatId, lineId = null, onOpenEdit = null, onFocusLater = null, beatNumber = null, lineIndex, onEdit, onDelete, onRewrite, rewriting, locked, prevLine = null, nextLine = null, onMoveLine, drag, onScreen, withOnScreen, phoneDown = false }) {
   const [editing, setEditing] = useState(false);
   const [dropAt, setDropAt] = useState(null);
   const [editText, setEditText] = useState('');
   const lineStr = typeof line === 'string' ? line : '';
+  // An open editor with changed words is known to the tab, so nothing that
+  // replaces the beat or the script throws them away (Script page audit 3,
+  // 2026-10-19: "Use it" and History dropped them without a word).
+  const changed = editing && editText !== lineStr;
+  useEffect(() => {
+    if (!changed || !onOpenEdit) return undefined;
+    return onOpenEdit(beatId, lineId ?? lineIndex);
+  }, [changed, onOpenEdit, beatId, lineId, lineIndex]);
   const parsed = parseLine(lineStr);
   if (!parsed || parsed.hidden) return null;
   const sc = { Prime: 'var(--primary-text)', Lala: 'var(--accent-dark)', Kelli: 'var(--info-text)', Guest: 'var(--success-text)' };
@@ -287,8 +295,13 @@ function ScriptLine({ line, beatId, beatNumber = null, lineIndex, onEdit, onDele
   // place, since a changed line is drawn anew (Script page audit, 2026-10-19).
   // `at`: where the line is now (a moved line); Delete and Move give focus
   // back too (Script page re-audit, 2026-10-19: it fell to the page).
-  const closeEditor = (at = lineIndex) => {
+  // `changed`: the script changed, so the rows are drawn anew once the beat
+  // is parsed again; focus waits for them (onFocusLater, the tab's layout
+  // effect on its beats) instead of a timer that could land on a row about
+  // to be replaced, leaving focus on the page (Script page audit 3, 2026-10-19).
+  const closeEditor = (at = lineIndex, changed = false) => {
     setEditing(false);
+    if (changed && onFocusLater) { onFocusLater(beatId, at); return; }
     setTimeout(() => document.querySelector(`[data-beat-id="${beatId}"] [data-line-index="${at}"]`)?.focus(), 0);
   };
 
@@ -303,22 +316,22 @@ function ScriptLine({ line, beatId, beatNumber = null, lineIndex, onEdit, onDele
       <textarea className="esp-line-input" value={editText} onChange={e => setEditText(e.target.value)} autoFocus rows={3} aria-label="Edit line"
         onKeyDown={(e) => {
           if (e.key === 'Escape') { e.preventDefault(); closeEditor(); }
-          else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if (onEdit(beatId, lineIndex, editText) !== false) closeEditor(); }
+          else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if (onEdit(beatId, lineIndex, editText) !== false) closeEditor(lineIndex, editText !== lineStr); }
           // The line goes in first, then the tab saves (Script tab re-audit,
           // 2026-10-15: the save left the open line out).
-          else if (e.key.toLowerCase() === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.stopPropagation(); if (onEdit(beatId, lineIndex, editText, { thenSave: true }) !== false) closeEditor(); }
+          else if (e.key.toLowerCase() === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.stopPropagation(); if (onEdit(beatId, lineIndex, editText, { thenSave: true }) !== false) closeEditor(lineIndex, editText !== lineStr); }
         }} />
       <div className="esp-line-edit-actions">
         {/* A refused edit (a new script is being written) keeps the editor open. */}
-        <button type="button" className="esp-btn-primary is-small" onClick={() => { if (onEdit(beatId, lineIndex, editText) !== false) closeEditor(); }}>Save</button>
+        <button type="button" className="esp-btn-primary is-small" onClick={() => { if (onEdit(beatId, lineIndex, editText) !== false) closeEditor(lineIndex, editText !== lineStr); }}>Save</button>
         <button type="button" className="esp-btn is-small" onClick={() => closeEditor()}>Cancel</button>
-        {onDelete && <button type="button" className="esp-btn is-small esp-line-delete" data-testid="script-line-delete" onClick={() => { if (!window.confirm('Delete this line?')) return; if (onDelete(beatId, lineIndex) !== false) closeEditor(); }}><Trash2 size={13} aria-hidden="true" /> Delete line</button>}
+        {onDelete && <button type="button" className="esp-btn is-small esp-line-delete" data-testid="script-line-delete" onClick={() => { if (!window.confirm('Delete this line?')) return; if (onDelete(beatId, lineIndex) !== false) closeEditor(lineIndex, true); }}><Trash2 size={13} aria-hidden="true" /> Delete line</button>}
         {/* Moving without dragging (touch screens, keyboards). */}
         <span className="esp-move esp-move--end">
           {/* Past the next line shown, not a hidden [STAT:] line (Script tab re-audit, 2026-10-15). */}
           {/* Typed words go in with Save first (re-audit 2: a move threw them away). */}
-          <button type="button" className="esp-move-btn" aria-label="Move line up" title={editText !== lineStr ? 'Save the line first' : undefined} disabled={prevLine === null || editText !== lineStr} onClick={() => { if (onMoveLine(beatId, lineIndex, prevLine) !== false) closeEditor(prevLine); }}><ArrowUp size={14} aria-hidden="true" /></button>
-          <button type="button" className="esp-move-btn" aria-label="Move line down" title={editText !== lineStr ? 'Save the line first' : undefined} disabled={nextLine === null || editText !== lineStr} onClick={() => { if (onMoveLine(beatId, lineIndex, nextLine) !== false) closeEditor(nextLine); }}><ArrowDown size={14} aria-hidden="true" /></button>
+          <button type="button" className="esp-move-btn" aria-label="Move line up" title={editText !== lineStr ? 'Save the line first' : undefined} disabled={prevLine === null || editText !== lineStr} onClick={() => { if (onMoveLine(beatId, lineIndex, prevLine) !== false) closeEditor(prevLine, true); }}><ArrowUp size={14} aria-hidden="true" /></button>
+          <button type="button" className="esp-move-btn" aria-label="Move line down" title={editText !== lineStr ? 'Save the line first' : undefined} disabled={nextLine === null || editText !== lineStr} onClick={() => { if (onMoveLine(beatId, lineIndex, nextLine) !== false) closeEditor(nextLine, true); }}><ArrowDown size={14} aria-hidden="true" /></button>
         </span>
       </div>
     </div>
@@ -358,7 +371,7 @@ function ScriptLine({ line, beatId, beatNumber = null, lineIndex, onEdit, onDele
       {parsed.type === 'narration' && <div className="esp-line-text">{parsed.text}</div>}
       {parsed.type === 'cue' && <div className="esp-line-cue">{parsed.text}</div>}
     </div>
-    {parsed.type === 'dialogue' && !locked && <button type="button" className="esp-rewrite" onClick={() => onRewrite(beatId, lineIndex, lineStr)} disabled={rewriting} aria-label={rewriting ? 'Rewriting…' : undefined}>{rewriting ? '⏳' : '✦ Rewrite'}</button>}
+    {parsed.type === 'dialogue' && !locked && <button type="button" className="esp-rewrite" onClick={() => onRewrite(beatId, lineIndex, lineStr, lineId)} disabled={rewriting} aria-label={rewriting ? 'Rewriting…' : undefined}>{rewriting ? '⏳' : '✦ Rewrite'}</button>}
     </div>
   );
 }
@@ -756,7 +769,7 @@ function useLineIds(beatId, lines, opRef) {
   return held.current.ids;
 }
 
-function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, proposal = null, onAcceptProposal, onDiscardProposal, onEdit, onDeleteLine, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, writing = false, onScreen, onAddMoment, phoneUpAtStart = false, request = null, onRequestDone, people = [], lalaSlots = [], dressCode = '', lineOpRef = null }) {
+function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, proposal = null, onAcceptProposal, onDiscardProposal, onEdit, onDeleteLine, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, writing = false, onScreen, onAddMoment, phoneUpAtStart = false, request = null, onRequestDone, people = [], lalaSlots = [], dressCode = '', lineOpRef = null, lineIdsRef = null, onOpenEdit = null, onFocusLater = null }) {
   const scene = scenePlan?.find(p => p.beat_number === beat.number);
   const cardRef = useRef(null);
   const [picking, setPicking] = useState(false);
@@ -827,6 +840,14 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
   // A line is keyed by its own id, not its place (Script page audit,
   // 2026-10-19) nor its words (re-audit: identical lines swapped keys).
   const lineKeys = useLineIds(beat.id, beat.lines, lineOpRef);
+  // The tab finds a rewritten line again by its id, not its words (Script
+  // page audit 3, 2026-10-19: of two same lines, the first was rewritten).
+  useLayoutEffect(() => {
+    if (!lineIdsRef) return undefined;
+    const ids = lineIdsRef.current;
+    ids[beat.id] = lineKeys;
+    return () => { if (ids[beat.id] === lineKeys) delete ids[beat.id]; };
+  });
   return (
     <div
       ref={cardRef}
@@ -913,7 +934,7 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
             const at = shownLines.indexOf(i);
             return (
               <Fragment key={lineKeys[i]}>
-                <ScriptLine line={line} beatId={beat.id} lineIndex={i} prevLine={at > 0 ? shownLines[at - 1] : null} nextLine={at >= 0 && at < shownLines.length - 1 ? shownLines[at + 1] : null} onEdit={onEdit} onDelete={onDeleteLine} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${i}`} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} onScreen={onScreen} withOnScreen={withByLine[i]} phoneDown={phoneDownAt.includes(i)} beatNumber={beat.number} />
+                <ScriptLine line={line} beatId={beat.id} lineId={lineKeys[i]} onOpenEdit={onOpenEdit} onFocusLater={onFocusLater} lineIndex={i} prevLine={at > 0 ? shownLines[at - 1] : null} nextLine={at >= 0 && at < shownLines.length - 1 ? shownLines[at + 1] : null} onEdit={onEdit} onDelete={onDeleteLine} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${lineKeys[i]}`} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} onScreen={onScreen} withOnScreen={withByLine[i]} phoneDown={phoneDownAt.includes(i)} beatNumber={beat.number} />
                 {slot && <LalaLineSlot piece={slot.piece} dressCode={dressCode} onInsert={(text) => onAddMoment(beat.id, text, i)} />}
               </Fragment>
             );
@@ -935,8 +956,8 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
             {beat.approved && <span className="esp-beat-locked-note">Locked: unlock to edit it, move it, or let Regenerate rewrite it.</span>}
             {!beat.approved && (
               <span className="esp-move">
-                <button type="button" className="esp-move-btn" aria-label="Move beat up" data-testid={`script-beat-up-${beat.number}`} disabled={index === 0} onClick={e => { e.stopPropagation(); onMoveBeat(index, index - 1); }}><ArrowUp size={14} aria-hidden="true" /> Up</button>
-                <button type="button" className="esp-move-btn" aria-label="Move beat down" data-testid={`script-beat-down-${beat.number}`} disabled={index >= beatCount - 1} onClick={e => { e.stopPropagation(); onMoveBeat(index, index + 1); }}><ArrowDown size={14} aria-hidden="true" /> Down</button>
+                <button type="button" className="esp-move-btn" aria-label="Move beat up" data-testid={`script-beat-up-${beat.number}`} disabled={index === 0 || locking} onClick={e => { e.stopPropagation(); onMoveBeat(index, index - 1); }}><ArrowUp size={14} aria-hidden="true" /> Up</button>
+                <button type="button" className="esp-move-btn" aria-label="Move beat down" data-testid={`script-beat-down-${beat.number}`} disabled={index >= beatCount - 1 || locking} onClick={e => { e.stopPropagation(); onMoveBeat(index, index + 1); }}><ArrowDown size={14} aria-hidden="true" /> Down</button>
               </span>
             )}
             {/* "Add:" (Task #2884): one tap to each kind the parser knows. */}
@@ -1296,6 +1317,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // doesn't move itself, and its lines don't move (src/lib/scriptBeatOrder.js).
   const handleMoveBeat = (from, to) => {
     if (busy || beats[from]?.approved) return;
+    // Not while a lock saves (Script page audit 3, 2026-10-19).
+    if (refuseWhileLocking()) return;
     const base = withBeatHeaders(scriptText, lockedBeats);
     const next = moveBeat(base, from, to);
     if (next === base) return;
@@ -1323,6 +1346,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // invitation in beat 5), then the phone steps, so a new tap gets its path too.
   const handleFixPhonePaths = (fix) => {
     if (busy) { flash('Wait for the new script before editing it.', 'error'); return; }
+    // A fix could write into the beat being locked (Script page audit 3, 2026-10-19).
+    if (refuseWhileLocking()) return;
     let base = withBeatHeaders(scriptText, lockedBeats);
     const skip = parseScriptIntoBeats(base, lockedBeats).map((b, i) => (b.approved ? i : -1)).filter((i) => i >= 0);
     const only = fix ? [fix.beatIndex] : null;
@@ -1372,6 +1397,43 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     flash('Wait for the lock to finish.', 'error');
     return true;
   };
+  // Line editors open with changed words, by beat (ScriptLine onOpenEdit),
+  // and each line's id by beat (BeatSection lineIdsRef) (Script page audit 3,
+  // 2026-10-19). Replacing a beat, or the script, waits for an open line:
+  // refused, never confirmed, so typed words are never lost.
+  const openEditsRef = useRef(new Set());
+  const lineIdsRef = useRef({});
+  const trackOpenEdit = useCallback((beatId, lineId) => {
+    const key = `${beatId}\n${lineId}`;
+    openEditsRef.current.add(key);
+    return () => { openEditsRef.current.delete(key); };
+  }, []);
+  // A line's row to focus once the script it changed is parsed into beats
+  // and drawn (ScriptLine closeEditor; Script page audit 3, 2026-10-19).
+  const focusLineRef = useRef(null);
+  // A request no new beats answered (nothing changed after all) is answered
+  // two frames on, never by a later, unrelated change.
+  const focusLineLater = useCallback((beatId, at) => {
+    const f = { beatId, at };
+    focusLineRef.current = f;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (focusLineRef.current !== f) return;
+      focusLineRef.current = null;
+      document.querySelector(`[data-beat-id="${beatId}"] [data-line-index="${at}"]`)?.focus();
+    }));
+  }, []);
+  useLayoutEffect(() => {
+    const f = focusLineRef.current;
+    if (!f) return;
+    focusLineRef.current = null;
+    document.querySelector(`[data-beat-id="${f.beatId}"] [data-line-index="${f.at}"]`)?.focus();
+  }, [beats]);
+  // beatId null: any beat.
+  const refuseOpenEdit = (beatId = null) => {
+    const open = [...openEditsRef.current].some((k) => beatId === null || k.startsWith(`${beatId}\n`));
+    if (open) flash("Save or cancel the line you're editing first.", 'error', 6000);
+    return open;
+  };
 
   // One timer for the toast: an earlier toast's timer no longer clears a
   // later one early (Script tab audit, 2026-10-15).
@@ -1388,7 +1450,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   const keptNote = (kept) => `Beat${kept.length === 1 ? '' : 's'} ${kept.join(', ')} ${kept.length === 1 ? 'is' : 'are'} locked, so ${kept.length === 1 ? 'it was' : 'they were'} kept as approved`;
 
   const handleSave = useCallback(async () => {
-    if (busy) return;
+    // A save waits for a lock on its way (Script page audit 3, 2026-10-19).
+    if (busy || locking) return;
     setSaving(true);
     try {
       const res = await api.put(`/api/v1/episodes/${episodeId}`, { script_content: scriptText });
@@ -1404,7 +1467,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     }
     catch (err) { console.error('[EpisodeScript] save failed:', err); flash('Save failed', 'error'); }
     finally { setSaving(false); }
-  }, [busy, episodeId, scriptText, syncPostDrafts]);
+  }, [busy, locking, episodeId, scriptText, syncPostDrafts]);
 
   // The episode page holds the episode the tab started from. Each saved
   // script and lock goes back to it, so leaving the tab and coming back
@@ -1464,11 +1527,11 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     const onKey = (e) => {
       if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 's') return;
       e.preventDefault();
-      if (dirty && !saving && !busy) handleSave();
+      if (dirty && !saving && !busy && !locking) handleSave();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [dirty, saving, busy, handleSave]);
+  }, [dirty, saving, busy, locking, handleSave]);
 
   const [saveAfterEdit, setSaveAfterEdit] = useState(false);
   const handleEditLine = (beatId, lineIndex, newText, { thenSave = false } = {}) => {
@@ -1495,10 +1558,10 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // Waits for a save already running, then saves (re-audit 2: the line was
   // committed, and the save it asked for was dropped).
   useEffect(() => {
-    if (!saveAfterEdit || saving || busy) return;
+    if (!saveAfterEdit || saving || busy || locking) return;
     setSaveAfterEdit(false);
     if (scriptText !== savedScript) handleSave();
-  }, [saveAfterEdit, scriptText, savedScript, saving, busy, handleSave]);
+  }, [saveAfterEdit, scriptText, savedScript, saving, busy, locking, handleSave]);
 
   // Delete a line (Script tab audit, 2026-10-15): asked in the line's editor;
   // an approved beat keeps its lines. Save keeps it.
@@ -1519,10 +1582,12 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // route returns the words only, and putting them in place of the whole
   // line dropped "Prime:", so the line turned into narration and lost its
   // Rewrite button. A failure says why.
-  const handleRewriteLine = async (beatId, lineIndex, originalLine) => {
+  // `lineId`: the line's id in its beat, so the spinner and "Use it" stay
+  // with it when lines above it change (Script page audit 3, 2026-10-19).
+  const handleRewriteLine = async (beatId, lineIndex, originalLine, lineId = null) => {
     const beat = beats.find(b => b.id === beatId);
     if (busy || beat?.approved) return;
-    const key = `${beatId}-${lineIndex}`;
+    const key = `${beatId}-${lineId ?? lineIndex}`;
     setRewritingLine(key);
     const seq = genSeqRef.current;
     try {
@@ -1539,7 +1604,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       if (!next) { flash('The rewrite came back the same; try again.', 'error'); return; }
       if (parseScriptIntoBeats(scriptRef.current, lockedRef.current).find(b => b.id === beatId)?.approved !== false) { flash('The line changed or was approved while it was being rewritten, so the rewrite was not put in.', 'error', 6000); return; }
       // Shown in its beat first; "Use it" puts it in (acceptProposal).
-      setProposal({ kind: 'line', beatId, lineIndex, originalLine, text: next });
+      setProposal({ kind: 'line', beatId, lineIndex, lineId, originalLine, text: next });
     } catch (err) {
       console.error('[EpisodeScript] rewrite failed:', err);
       flash(`Rewrite failed: ${err.response?.data?.error || err.message || 'no answer'}`, 'error', 6000);
@@ -1590,13 +1655,25 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     if (!p || busy) return;
     // Kept for "Use it" once the lock is done (Script page re-audit, 2026-10-19).
     if (refuseWhileLocking()) return;
+    // A line open in this beat keeps its words; the suggestion waits (Script page audit 3, 2026-10-19).
+    if (refuseOpenEdit(p.beatId)) return;
     setProposal(null);
     if (p.kind === 'line') {
       const current = scriptRef.current;
       const nowBeat = parseScriptIntoBeats(current, lockedRef.current).find(b => b.id === p.beatId);
-      const at = nowBeat?.lines[p.lineIndex] === p.originalLine ? p.lineIndex : (nowBeat?.lines.indexOf(p.originalLine) ?? -1);
+      // Found by its id where it has one (of two same lines, the first was
+      // rewritten); by its words only for a proposal without one.
+      const ids = lineIdsRef.current[p.beatId];
+      let at;
+      if (p.lineId != null && ids) {
+        const i = ids.indexOf(p.lineId);
+        at = i >= 0 && nowBeat?.lines[i] === p.originalLine ? i : -1;
+      } else {
+        at = nowBeat?.lines[p.lineIndex] === p.originalLine ? p.lineIndex : (nowBeat?.lines.indexOf(p.originalLine) ?? -1);
+      }
       const written = at < 0 ? null : scriptWithLine(current, lockedRef.current, p.beatId, at, p.text);
       if (written === null) { flash('The line changed or was approved while it was being rewritten, so the rewrite was not put in.', 'error', 6000); return; }
+      noteLineOp(p.beatId, { kind: 'splice', at, removed: 1 });
       setScriptText(written);
       flash('Line rewritten ✦ Save to keep it.', 'success');
       return;
@@ -1874,7 +1951,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       {unsaved && (
         <div className="esp-unsaved-banner" data-testid="script-unsaved" role="alert">
           <span className="esp-unsaved-banner-text"><strong>Not saved.</strong> {unsaved} The draft is only on this page until it is saved.</span>
-          <button type="button" className="esp-btn-primary is-small" data-testid="script-unsaved-save" onClick={handleSave} disabled={saving || busy}>{saving ? '⏳ Saving…' : '💾 Save now'}</button>
+          <button type="button" className="esp-btn-primary is-small" data-testid="script-unsaved-save" onClick={handleSave} disabled={saving || busy || locking}>{saving ? '⏳ Saving…' : '💾 Save now'}</button>
         </div>
       )}
       {/* The script's card (Evoni's Episode mock): its state, and its actions. */}
@@ -1891,6 +1968,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
             {/* false: refused, so History stays open on the version (Script page audit, 2026-10-19). */}
             <ScriptHistory episodeId={episodeId} dirty={scriptText !== savedScript} onRestore={(text) => {
               if (busy) { flash('Wait for the new script before putting a version back.', 'error'); return false; }
+              // Not while a lock saves, nor over an open line's words (Script page audit 3, 2026-10-19).
+              if (refuseWhileLocking() || refuseOpenEdit()) return false;
               setScriptText(text); setProposal(null);
               flash('An earlier version is on the page ✦ Save to keep it.', 'success', 5000);
               return true;
@@ -1907,7 +1986,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
               // Already confirmed here, so the server's own "replace it?" is answered.
               handleGenerate(true);
             }} disabled={busy || !!regeneratingBeat || locking || saving}>{waitingForScript ? 'Still writing…' : generating ? 'Generating…' : approvedCount > 0 ? 'Regenerate unlocked' : 'Regenerate'}</button>
-            <button type="button" className={`esp-btn-primary${saved ? ' is-saved' : ''}`} onClick={handleSave} disabled={saving || busy}>{saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}</button>
+            <button type="button" className={`esp-btn-primary${saved ? ' is-saved' : ''}`} onClick={handleSave} disabled={saving || busy || locking}>{saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}</button>
           </div>
         ) : (
           <button type="button" className="esp-btn-primary is-large" onClick={() => handleGenerate()} disabled={generating}>
@@ -1950,6 +2029,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
           </span>
           <button type="button" className="esp-btn-primary is-small" data-testid="script-draft-restore" onClick={() => {
             if (busy) { flash('Wait for the new script before putting your changes back.', 'error'); return; }
+            if (refuseWhileLocking() || refuseOpenEdit()) return;
             if (scriptText !== savedScript && !window.confirm('Put the kept changes back? The unsaved changes on the page now are replaced.')) return;
             // Kept against an older saved script (re-audit 2: a newer one the tab had just taken was replaced without a word).
             if (scriptText === savedScript && draft.offer.baseChanged && !window.confirm('The saved script has changed since these changes were kept. Put them back over it? Save keeps them; History has the saved one.')) return;
@@ -1957,7 +2037,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
           <button type="button" className="esp-btn is-small" data-testid="script-draft-discard" onClick={draft.discard}>Discard</button>
         </div>
       )}
-      {showBeatList && <ScriptHealthPanel rows={healthRows} beatNumbers={Object.fromEntries(beats.map((b) => [b.id, b.number]))} onOpenBeat={chooseBeat} onFix={handleFixPhonePaths} busy={busy} />}
+      {showBeatList && <ScriptHealthPanel rows={healthRows} beatNumbers={Object.fromEntries(beats.map((b) => [b.id, b.number]))} onOpenBeat={chooseBeat} onFix={handleFixPhonePaths} busy={busy || locking} />}
       {/* At phone width (Task #2881): the beats as pills, and the open beat's
           context from the episode's own data. */}
       {showBeatList && (
@@ -1988,7 +2068,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       {hasScript && developerMode && approvedCount > 0 && <p className="esp-raw-note" data-testid="script-raw-locked-note">🔒 Approved beats are locked. Changes to them here are put back when the script is saved.</p>}
       {/* The raw editor is the script itself, so a line edit or rewrite shows
           here, and it stays open when its text is cleared. */}
-      {developerMode && <textarea className="esp-raw" aria-label="Raw script" value={scriptText} readOnly={busy} onChange={e => setScriptText(e.target.value)} rows={30} />}
+      {developerMode && <textarea className="esp-raw" aria-label="Raw script" value={scriptText} readOnly={busy || locking} onChange={e => setScriptText(e.target.value)} rows={30} />}
 
       {!developerMode && (hasScript ? (
         <div className={busy ? 'esp-beats is-busy' : 'esp-beats'} aria-busy={busy || undefined} data-testid="script-beats">
@@ -1996,7 +2076,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
           {beats.map((beat, index) => {
             const open = openId === beat.id;
             const phoneUp = phoneUpAtStart[index] || false;
-            return <BeatSection key={beat.id} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open && !isPhoneWidth() ? null : beat.id)} onApprove={handleApprove} proposal={proposal?.beatId === beat.id ? proposal : null} onAcceptProposal={acceptProposal} onDiscardProposal={() => setProposal(null)} onEdit={handleEditLine} onDeleteLine={handleDeleteLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking || busy} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} writing={!!regeneratingBeat || busy} onRequestDone={clearBarRequest} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} lineOpRef={lineOpRef} phoneUpAtStart={phoneUp} people={people} lalaSlots={lineSlots.filter((s) => s.beatIndex === index)} dressCode={source?.event?.dress_code || ''} />;
+            return <BeatSection key={beat.id} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open && !isPhoneWidth() ? null : beat.id)} onApprove={handleApprove} proposal={proposal?.beatId === beat.id ? proposal : null} onAcceptProposal={acceptProposal} onDiscardProposal={() => setProposal(null)} onEdit={handleEditLine} onDeleteLine={handleDeleteLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking || busy} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} writing={!!regeneratingBeat || busy} onRequestDone={clearBarRequest} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} lineOpRef={lineOpRef} lineIdsRef={lineIdsRef} onOpenEdit={trackOpenEdit} onFocusLater={focusLineLater} phoneUpAtStart={phoneUp} people={people} lalaSlots={lineSlots.filter((s) => s.beatIndex === index)} dressCode={source?.event?.dress_code || ''} />;
           })}
           {/* Franchise Guard Results */}
           {guardResult && (
@@ -2016,7 +2096,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
           {allApproved && (
             <div className="esp-done">
               <p className="esp-done-text">✦ All beats approved — script is ready</p>
-              <button type="button" className="esp-btn-primary" onClick={handleSave} disabled={saving || busy}>💾 Save Final Script</button>
+              <button type="button" className="esp-btn-primary" onClick={handleSave} disabled={saving || busy || locking}>💾 Save Final Script</button>
             </div>
           )}
         </div>
@@ -2037,7 +2117,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       {hasWork && scriptText !== savedScript && (
         <div className="esp-savebar" data-testid="script-savebar" role="region" aria-label="Unsaved changes">
           <span className="esp-savebar-text">Unsaved changes</span>
-          <button type="button" className="esp-btn-primary is-small" data-testid="script-savebar-save" onClick={handleSave} disabled={saving || busy}>{saving ? 'Saving…' : 'Save'}</button>
+          <button type="button" className="esp-btn-primary is-small" data-testid="script-savebar-save" onClick={handleSave} disabled={saving || busy || locking}>{saving ? 'Saving…' : 'Save'}</button>
         </div>
       )}
 
