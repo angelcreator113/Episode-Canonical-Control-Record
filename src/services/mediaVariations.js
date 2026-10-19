@@ -184,15 +184,16 @@ async function addedCharacter(db, characterId) {
  * One image call through the image budget gate: images/edits when there are
  * reference images (the first is the one edited), images/generations when
  * there are none (phase 4: a new picture with no person and no place to
- * keep). routeName is what ai_usage_logs records it under.
+ * keep). routeName is what ai_usage_logs records it under; size defaults to
+ * the library's landscape SIZE (the camera roll asks for a phone's portrait).
  */
-async function editImage(prompt, images, { routeName = 'media-variation' } = {}) {
+async function editImage(prompt, images, { routeName = 'media-variation', size = SIZE } = {}) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new MediaError(503, 'The image tool is not set up (OPENAI_API_KEY).');
   const text = prompt.length > 4000 ? `${prompt.slice(0, 3997)}...` : prompt;
   const axios = require('axios');
   const imageCost = require('./imageCostService');
-  const plan = { model: MODEL, ...SIZE, quality: 'high', count: 1, inputImages: images.length > 0, routeName };
+  const plan = { model: MODEL, ...size, quality: 'high', count: 1, inputImages: images.length > 0, routeName };
   let call;
   if (images.length) {
     const FormData = require('form-data');
@@ -202,13 +203,13 @@ async function editImage(prompt, images, { routeName = 'media-variation' } = {})
     images.forEach((img, i) => form.append(field, img.buffer, { filename: `reference-${i}.png`, contentType: img.mimetype }));
     form.append('prompt', text);
     form.append('n', '1');
-    form.append('size', `${SIZE.width}x${SIZE.height}`);
+    form.append('size', `${size.width}x${size.height}`);
     form.append('quality', 'high');
     call = () => axios.post('https://api.openai.com/v1/images/edits', form,
       { headers: { Authorization: `Bearer ${apiKey}`, ...form.getHeaders() }, timeout: 180000 });
   } else {
     call = () => axios.post('https://api.openai.com/v1/images/generations',
-      { model: MODEL, prompt: text, n: 1, size: `${SIZE.width}x${SIZE.height}`, quality: 'high' },
+      { model: MODEL, prompt: text, n: 1, size: `${size.width}x${size.height}`, quality: 'high' },
       { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 180000 });
   }
   const response = await imageCost.runImageCall(plan, call);
