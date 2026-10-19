@@ -80,9 +80,14 @@ function wanted(post) {
   return COUNT[postMedia.formatOf(post)] || 0;
 }
 
-function estimate(n) {
+// A person's photo is a phone's portrait (cameraRoll PHONE_SIZE); a brand's
+// product shot stays the library's landscape. Both sizes are priced.
+const BRAND_SIZE = Object.freeze({ width: 1536, height: 1024 });
+
+function estimate(n, { brand = false } = {}) {
   if (!n) return 0;
-  const e = require('./imageCostService').estimateImageCost({ model: cameraRoll.IMAGE_MODEL, width: 1536, height: 1024, quality: 'high', count: n });
+  const size = brand ? BRAND_SIZE : cameraRoll.PHONE_SIZE;
+  const e = require('./imageCostService').estimateImageCost({ model: cameraRoll.IMAGE_MODEL, ...size, quality: 'high', count: n });
   return e.usd;
 }
 
@@ -236,7 +241,7 @@ async function brandShot(db, post, brand, { index, of, by }) {
     'Natural light, real surroundings, editorial but believable. No text, no letters, no logos, no brand names, no watermark.',
   ].filter(Boolean).join(' ');
   let cost = null;
-  const buffer = await variations.editImage(prompt, [], { routeName: ROUTE, onLogged: (l) => { cost = l.costUsd; } });
+  const buffer = await variations.editImage(prompt, [], { routeName: ROUTE, size: BRAND_SIZE, onLogged: (l) => { cost = l.costUsd; } });
   const { isBlank } = require('./characterAppearance');
   if (await isBlank(buffer)) throw new PostPictureError(422, 'The image service blocked this picture (a black picture comes back when its filter flags one). Nothing was saved.');
   const { storePulseImage } = require('./pulseImageService');
@@ -249,7 +254,7 @@ async function brandShot(db, post, brand, { index, of, by }) {
     links: [{ entity_type: 'brand', entity_id: String(brand.id), role: 'owner' }],
     by,
   });
-  return { assetId: created.asset.id, cost: typeof cost === 'number' ? cost : estimate(1) };
+  return { assetId: created.asset.id, cost: typeof cost === 'number' ? cost : estimate(1, { brand: true }) };
 }
 
 /** Claim the post for making, so two runs never make it twice. */
@@ -293,7 +298,7 @@ async function run(db, postId, { by = null, makeNow = false } = {}) {
   const cap = dailyCap();
   if (!makeNow && (await madeToday(db)) + n > cap) {
     return setJob(post, {
-      state: 'waiting_cap', count: n, estimate_usd: estimate(n), error: null,
+      state: 'waiting_cap', count: n, estimate_usd: estimate(n, { brand: poster.kind === 'brand' }), error: null,
       reason: `Today's post-picture limit (${cap}) is reached; it will be made tomorrow, or press Make now.`,
     });
   }
@@ -408,7 +413,7 @@ async function statusOf(db, postId) {
     takes: n,
     approved: approved(post),
     job: post.picture_job || null,
-    estimate_usd: estimate(n),
+    estimate_usd: estimate(n, { brand: poster?.kind === 'brand' }),
     per_day: dailyCap(),
     made_today: await madeToday(db),
     poster: poster ? { kind: poster.kind, reason: poster.reason || null } : null,

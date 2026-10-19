@@ -124,3 +124,22 @@ describe('ScriptTableRead', () => {
     expect(screen.getByRole('dialog').className).toContain('is-print');
   });
 });
+
+describe('ScriptTableRead at the end (Script page re-audit, 2026-10-19)', () => {
+  test('scrolled to the bottom, the last beat is the one being read', () => {
+    render(<Opener />);
+    fireEvent.click(screen.getByText('Open read'));
+    const box = document.querySelector('.str-scroll');
+    Object.defineProperty(box, 'scrollHeight', { configurable: true, value: 2000 });
+    Object.defineProperty(box, 'clientHeight', { configurable: true, value: 800 });
+    // jsdom has no layout: every beat's offsetTop is 0, so the first rule alone picks the last
+    // beat too; set the beats' tops so only the bottom rule can pick it.
+    [...document.querySelectorAll('.str-beat')].forEach((el, i) => Object.defineProperty(el, 'offsetTop', { configurable: true, value: [0, 900, 1900][i] }));
+    box.scrollTop = 1200;
+    fireEvent.scroll(box);
+    expect(screen.getByTestId('table-read-jump').value).toBe('2');
+    box.scrollTop = 500;
+    fireEvent.scroll(box);
+    expect(screen.getByTestId('table-read-jump').value).toBe('0');
+  });
+});

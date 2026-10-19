@@ -3,7 +3,7 @@
 /**
  * The book follows the show (Evoni, 2026-10-15; docs/CANON.md "The books are
  * written from the show"):
- *   the episode      what the viewer sees; beat 11 (Event Outcome) plays an
+ *   the episode      what the viewer sees; beat 11 (The Event) plays an
  *                    animated piece of the short story
  *   the short story  the event in full (stories, format 'short_story')
  *   the chapter      everything the viewer does not see, in JustAWoman's
@@ -764,7 +764,7 @@ router.post('/stories/:storyId/beat11-excerpt', requireAuth, aiRateLimiter, asyn
 
     const raw = await ask({
       maxTokens: 800,
-      prompt: `In Styling Adventures with Lala, beat 11 (Event Outcome) plays a short animated piece of the episode's short story. It is the hook: the viewer should finish it asking "what happened at that event?" The full answer is the short story.
+      prompt: `In Styling Adventures with Lala, beat 11 (The Event) plays a short animated piece of the episode's short story. It is the hook: the viewer should finish it asking "what happened at that event?" The full answer is the short story.
 
 Cut that piece from the short story below: one continuous passage, 80 to 150 words, that can be animated in 30 to 60 seconds. Pick a moment that raises the question and does not answer it. Use the story's own words; you may trim within the passage, but do not add to it.
 

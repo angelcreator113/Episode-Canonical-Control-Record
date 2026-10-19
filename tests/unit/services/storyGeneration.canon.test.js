@@ -24,7 +24,7 @@ test('in-world formats stay in the world; the recap may name the show', () => {
 });
 
 test('only the short story is asked for the beat 11 moment', () => {
-  expect(CANON_RULES('short_story')).toMatch(/beat 11 \(Event Outcome\)/);
+  expect(CANON_RULES('short_story')).toMatch(/beat 11 \(The Event\)/);
   expect(CANON_RULES('snippet')).not.toMatch(/beat 11/);
 });
 

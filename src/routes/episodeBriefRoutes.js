@@ -504,6 +504,8 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
     if (!showId) {
       return res.status(400).json({ error: 'showId is required in request body' });
     }
+    // A show id, as Regenerate one beat checks (Script page re-audit, 2026-10-19).
+    if (!SHOW_ID_RE.test(String(showId))) return res.status(400).json({ error: 'showId must be a show id (UUID)' });
 
     if (!process.env.ANTHROPIC_API_KEY) {
       return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' });
@@ -519,6 +521,11 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
     // deleted episode keeps its brief and its row, deleted_at set); nothing
     // is written for it.
     if (!episodeForGuard || episodeForGuard.deleted_at) return res.status(404).json({ error: 'Episode not found' });
+    // The episode's own show: another show's overlays, phone and coins were
+    // read into the prompt (Script page re-audit, 2026-10-19).
+    if (episodeForGuard.show_id && String(episodeForGuard.show_id) !== String(showId)) {
+      return res.status(400).json({ error: 'showId is not this episode\'s show' });
+    }
     if (scriptOverwriteBlocked(episodeForGuard?.script_content, req.body)) {
       console.warn(`[ScriptGen] Refused overwrite for episode ${episodeId}: existing script_content present, no confirmOverwrite flag.`);
       return res.status(409).json(scriptOverwriteRefusalBody());

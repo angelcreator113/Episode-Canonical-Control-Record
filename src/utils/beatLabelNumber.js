@@ -26,6 +26,9 @@ const LABEL_NUMBERS = {
   TRANSFORMATIONLOOP: 8,
   REMINDERDEADLINE: 9,
   EVENTTRAVEL: 10,
+  THEEVENT: 11,
+  // Beat 11's name before Evoni's ruling of 2026-10-19 ("The Event"); saved
+  // scripts keep it.
   EVENTOUTCOME: 11,
   FASHIONCHALLENGE: 12,
   THEFASHIONCHALLENGE: 12,

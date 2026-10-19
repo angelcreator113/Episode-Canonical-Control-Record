@@ -8,7 +8,7 @@ import './EpisodeScriptWriterPage.css';
 const BEAT_NAMES = [
   'Opening Ritual', 'Login Sequence', 'Welcome', 'Interruption Pulse 1',
   'Reveal', 'Strategic Reaction', 'Interruption Pulse 2', 'Transformation Loop',
-  'Reminder/Deadline', 'Event Travel', 'Event Outcome',
+  'Reminder/Deadline', 'Event Travel', 'The Event',
   'Fashion Challenge', 'Recap Panel', 'Cliffhanger',
 ];
 

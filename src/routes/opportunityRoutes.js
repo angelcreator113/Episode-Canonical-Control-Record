@@ -53,6 +53,17 @@ const TYPE_DEFAULTS = {
   award_show: { wardrobe: { style_direction: 'Red carpet — statement piece', dress_code: 'black_tie' }, deliverables: ['Red carpet appearance', 'Pulse coverage'] },
 };
 
+// What only the pipeline and beat 14 set (Script page re-audit, 2026-10-19):
+// the status moves by Advance and Undo, held and offered_in_episode_id by
+// beat 14's attach, detach and completion. A create or update that sent them
+// could hold an opportunity, or free one beat 14 had already offered.
+const PIPELINE_ONLY = ['status', 'status_history', 'offered_in_episode_id'];
+const withoutPipelineFields = (body) => {
+  const out = { ...(body && typeof body === 'object' ? body : {}) };
+  for (const k of PIPELINE_ONLY) delete out[k];
+  return out;
+};
+
 /** The body with its company linked (services/brandProfile.linkDeal), or null with a 400 sent. */
 async function linkDealOr400(res, models, body) {
   const { linkDeal, CompanyError } = require('../services/brandProfile');
@@ -112,6 +123,7 @@ router.get('/opportunities/:showId', requireAuth, async (req, res) => {
     );
     return res.json({ success: true, opportunities: opps });
   } catch (err) {
+    console.error('[Opportunities] list failed:', err.message);
     if (err.message?.includes('does not exist')) return res.json({ success: true, opportunities: [] });
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -125,7 +137,7 @@ router.post('/opportunities/:showId', requireAuth, authorize(['ADMIN']), async (
   try {
     const { showId } = req.params;
     const models = await getModels(req);
-    const body = req.body;
+    const body = withoutPipelineFields(req.body);
 
     // Apply type defaults
     const typeDefaults = TYPE_DEFAULTS[body.opportunity_type] || {};
@@ -145,7 +157,7 @@ router.post('/opportunities/:showId', requireAuth, authorize(['ADMIN']), async (
     const linked = await linkDealOr400(res, models, body);
     if (!linked) return undefined;
 
-    const data = { id: uuidv4(), show_id: showId, ...linked, status_history: [{ status: 'offered', date: new Date().toISOString() }] };
+    const data = { id: uuidv4(), show_id: showId, ...linked, status: 'offered', status_history: [{ status: 'offered', date: new Date().toISOString() }] };
 
     let opp;
     if (models.Opportunity) {
@@ -165,6 +177,7 @@ router.post('/opportunities/:showId', requireAuth, authorize(['ADMIN']), async (
 
     return res.status(201).json({ success: true, opportunity: opp.toJSON ? opp.toJSON() : opp });
   } catch (err) {
+    console.error('[Opportunities] create failed:', err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -177,7 +190,7 @@ router.put('/opportunities/:showId/:id', requireAuth, authorize(['ADMIN']), asyn
   try {
     const { showId, id } = req.params;
     const models = await getModels(req);
-    const body = req.body;
+    const body = withoutPipelineFields(req.body);
 
     // Recalculate net value if payment changed
     if (body.payment_amount !== undefined || body.expenses !== undefined) {
@@ -197,6 +210,7 @@ router.put('/opportunities/:showId/:id', requireAuth, authorize(['ADMIN']), asyn
 
     return res.status(500).json({ success: false, error: 'Opportunity model not loaded' });
   } catch (err) {
+    console.error('[Opportunities] update failed:', err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -254,6 +268,7 @@ router.post('/opportunities/:showId/:id/advance', requireAuth, authorize(['ADMIN
       pipeline: pipelineResult,
     });
   } catch (err) {
+    console.error('[Opportunities] advance failed:', err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -335,6 +350,7 @@ router.post('/opportunities/:showId/:id/to-event', requireAuth, authorize(['ADMI
 
     return res.json({ success: true, event: result.event, opportunity: result.opportunity });
   } catch (err) {
+    console.error('[Opportunities] to-event failed:', err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -429,6 +445,7 @@ router.delete('/opportunities/:showId/:id', requireAuth, authorize(['ADMIN']), a
     }
     return res.json({ success: true });
   } catch (err) {
+    console.error('[Opportunities] delete failed:', err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -458,6 +475,7 @@ router.get('/opportunities/:showId/stats', requireAuth, async (req, res) => {
 
     return res.json({ success: true, stats });
   } catch (err) {
+    console.error('[Opportunities] stats failed:', err.message);
     if (err.message?.includes('does not exist')) return res.json({ success: true, stats: { pipeline: {}, total_opportunities: 0, total_value: 0, booked_value: 0 } });
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -500,6 +518,7 @@ router.get('/opportunities/:showId/career-tier', requireAuth, async (req, res) =
 
     return res.json({ success: true, career_tier: tier });
   } catch (err) {
+    console.error('[Opportunities] career tier failed:', err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

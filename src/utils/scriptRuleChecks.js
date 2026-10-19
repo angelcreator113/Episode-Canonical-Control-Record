@@ -14,12 +14,17 @@
 // writing asks the writer to mend a missing one in its beat, never an
 // approved one (groundedScriptGeneratorService).
 
+const { statEntries, coinChange } = require('./scriptStats');
+
 // BEGIN SHARED
-const STAT_TAG = /^\s*\[\s*STAT\s*:\s*(.*?)\s*\]\s*$/i;
-const STAT_ENTRY = /([a-z][a-z_]*(?:[ \t]+[a-z][a-z_]*)?)\s*:?\s*([+\-−–]?)\s*((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)/gi;
 const WEAR_CUE = /^\s*\[\s*WEAR\s*:\s*([^\]]*?)\s*\]\s*$/i;
 const UI_CUE = /^\s*\[\s*UI\s*:\s*([A-Za-z_]+)\s*(.*?)\s*\]\s*$/i;
 const LALA_SAYS = /^\s*lala\s*(?:\(([^)]*)\))?\s*:\s*\S/i;
+// `Lala (V.O.):` is her thoughts; "(devoted)", "(nervously)" and "(voice
+// cracking)" are her speaking (Script page re-audit, 2026-10-19: an
+// unanchored v.o. matched inside them; lib/scriptShowRules VOICE_OVER).
+const VOICE_OVER = /^\s*v\.?\s*o\.?\s*(?:[,;].*)?$/i;
+const lalaSpeaks = (l) => { const m = l.match(LALA_SAYS); return !!m && !VOICE_OVER.test(m[1] || ''); };
 // JustAWoman's comment: `Me:` (or her name) with words beyond a stage direction.
 const JAW_SAYS = /^\s*(?:me|justawoman|jawihp|prime)\s*(?:\([^)]*\))?\s*:\s*(.*)$/i;
 // A speaker's line: a name (no cue, no stage direction) before a colon.
@@ -34,22 +39,14 @@ const TALK_BEAT = 11;
 const CHALLENGE_BEAT = 12;
 const RECAP_BEAT = 13;
 const JUDGED_ON = ['reputation', 'brand_trust', 'influence', 'stress'];
-
-/** A [STAT:] tag's entries as [{ stat, value }], else null when the line is no stat tag. */
-function statEntries(line) {
-  const m = String(line ?? '').match(STAT_TAG);
-  if (!m) return null;
-  return [...m[1].matchAll(STAT_ENTRY)].map((e) => {
-    const n = Number(e[3].replace(/,/g, ''));
-    return { stat: e[1].toLowerCase().replace(/\s+/g, '_'), value: e[2] && e[2] !== '+' ? -n : n };
-  });
-}
-
-/** The coins a line changes (signed), else null. */
-function coinChange(line) {
-  const c = (statEntries(line) || []).find((e) => e.stat === 'coins');
-  return c ? c.value : null;
-}
+// The cutscene has no phone (Evoni, 2026-10-19; Script page re-audit,
+// 2026-10-19: these lines in beats 11-13 were never flagged): a tap, a
+// screen opened, closed or scrolled, a voice click, or the phone itself
+// coming up (putting it away is not using it). Overlays on the video ([UI:DISPLAY Stats Panel]) and
+// [TRANSITION: …] stay.
+const PHONE_VERBS = new Set(['CLICK', 'TAP', 'SELECT', 'OPEN', 'CLOSE', 'SCROLL', 'SWIPE', 'TYPE', 'VOICE_ACTIVATE', 'VOICEACTIVATE']);
+const PHONE_ITSELF = new Set(['phone', 'thephone', 'lalasphone', 'lalaphone', 'phonedevice']);
+const PHONE_UP = new Set(['SHOW', 'DISPLAY']);
 
 const signed = (n) => `${n > 0 ? '+' : ''}${n}`;
 const coinTag = (n) => `[STAT: coins ${signed(n)}]`;
@@ -107,8 +104,27 @@ function eventCast(event, profiles = []) {
 // The closet beat: the one given, else the one that opens the closet, else beat 8.
 function closetOf(beats, closetNumber) {
   if (closetNumber) return closetNumber;
-  const opens = beats.find((b) => linesOf(b).some((l) => { const m = ui(l); return !!m && m.verb === 'OPEN' && /closet/i.test(m.target); }));
+  // The screen named Closet, as closetBeat and utils/scriptWear read it (Script
+  // page re-audit, 2026-10-19: "Closet Sale Alert" in beat 7 was the closet).
+  const opens = beats.find((b) => linesOf(b).some((l) => { const m = ui(l); return !!m && m.verb === 'OPEN' && m.target.toLowerCase().replace(/[^a-z0-9]/g, '').startsWith('closet'); }));
   return opens ? opens.number : CLOSET_BEAT;
+}
+
+/** The lines of beats 11-13 that use the phone: [{ beat, lines }], one per beat that has any. */
+function cutscenePhoneLines(beats = []) {
+  return CUTSCENE.map((n) => beatAt(beats, n)).filter(Boolean).map((b) => ({
+    beat: b.number,
+    lines: linesOf(b).filter((l) => { const m = ui(l); return !!m && (PHONE_VERBS.has(m.verb) || (PHONE_UP.has(m.verb) && PHONE_ITSELF.has(m.target.toLowerCase().replace(/[^a-z0-9]/g, '')))); }).map((l) => l.trim()),
+  })).filter((c) => c.lines.length);
+}
+
+/** The cutscene's phone lines as findings, one per beat. */
+function cutsceneFindings(beats = []) {
+  return cutscenePhoneLines(beats).map((c) => ({
+    key: `cutscene-${c.beat}`, ok: false, beat: c.beat, label: c.lines[0],
+    text: `Beat ${c.beat}: Beats 11–13 are the cutscene: no phone — remove ${c.lines[0]}${more(c.lines)}.`,
+    ask: `Take out ${list(c.lines)}: beats 11 to 13 are the cutscene, an AI video with no phone, no phone screens and no voice-icon click. Overlays on the video ([UI:DISPLAY Stats Panel], [UI:HIDE Stats Panel]) and [TRANSITION: …] stay.`,
+  }));
 }
 
 /**
@@ -187,7 +203,7 @@ function scriptRuleFindings(beats = [], { money = null, shoppingApproved = null,
   if (talk && people.length) {
     const lines = linesOf(talk);
     const speakers = lines.map((l) => (l.match(SPEAKER) || [])[1]).filter(Boolean);
-    const lalaSays = lines.some((l) => { const m = l.match(LALA_SAYS); return !!m && !/v\.?\s*o\.?/i.test(m[1] || ''); });
+    const lalaSays = lines.some(lalaSpeaks);
     const quiet = people.filter((c) => !speakers.some((who) => speaks(who, c)));
     for (const c of quiet) {
       out.push({
@@ -240,7 +256,7 @@ function scriptRuleFindings(beats = [], { money = null, shoppingApproved = null,
   // Beat 13: Lala says how the outcome feels, in her own words.
   const recapBeat = beatAt(beats, RECAP_BEAT);
   if (recapBeat) {
-    const says = linesOf(recapBeat).some((l) => { const m = l.match(LALA_SAYS); return !!m && !/v\.?\s*o\.?/i.test(m[1] || ''); });
+    const says = linesOf(recapBeat).some(lalaSpeaks);
     out.push(says
       ? { key: 'beat13', ok: true, beat: RECAP_BEAT, label: 'Lala has her line', text: `Beat ${RECAP_BEAT}: Lala says how the outcome feels.`, ask: null }
       : { key: 'beat13', ok: false, beat: RECAP_BEAT, label: "Lala's line", text: `Beat ${RECAP_BEAT}: Lala never says how the outcome feels.`, ask: 'Lala says how the outcome feels, in her own words, as one spoken line (Lala: …); the numbers stay on the stat card, which she does not see.' });
@@ -286,6 +302,8 @@ function scriptRuleFindings(beats = [], { money = null, shoppingApproved = null,
     }
   }
 
+  out.push(...cutsceneFindings(beats));
+
   // JustAWoman on camera, in the cutscene: she comments, a Me: line in each
   // of beats 11 to 13.
   const silentIn = CUTSCENE.map((n) => beatAt(beats, n)).filter(Boolean)
@@ -303,15 +321,18 @@ function scriptRuleFindings(beats = [], { money = null, shoppingApproved = null,
 /**
  * The rules' coverage items for a script split by splitScriptBeats
  * (`beats`: [{ number, text }], header first). `rules`: { money,
- * shoppingApproved, cast } from the writer's inputs (coverageFacts); none
- * when not given, so a caller that reads no rules gets no items. Each item:
+ * shoppingApproved, cast } from the writer's inputs (coverageFacts); when
+ * not given, only the cutscene's phone lines (they need nothing read). Each item:
  * { kind: 'rule', rule, label, beat (where it is, or null), target, ask }.
  */
 function scriptRuleItems(beats = [], rules = null) {
-  if (!rules) return [];
   const read = beats.map((b) => ({ number: b.number, lines: String(b.text || '').split('\n').slice(1) }));
-  return scriptRuleFindings(read, { money: rules.money || null, shoppingApproved: rules.shoppingApproved ?? null, cast: rules.cast || [] })
+  // The cutscene's phone lines need nothing read (Script page re-audit, 2026-10-19).
+  const found = rules
+    ? scriptRuleFindings(read, { money: rules.money || null, shoppingApproved: rules.shoppingApproved ?? null, cast: rules.cast || [] })
+    : cutsceneFindings(read);
+  return found
     .map((f) => ({ kind: 'rule', rule: f.key, label: f.label, beat: f.ok ? f.beat : null, target: f.beat, ask: f.ask }));
 }
 
-module.exports = { statEntries, coinChange, scriptRuleFindings, scriptRuleItems, eventCast, SHOPPING_LIST, JUDGED_ON };
+module.exports = { statEntries, coinChange, scriptRuleFindings, cutsceneFindings, scriptRuleItems, eventCast, SHOPPING_LIST, JUDGED_ON };

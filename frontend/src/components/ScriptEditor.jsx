@@ -46,7 +46,7 @@ const BEAT_OPTIONS = [
   { value: 'CLIFFHANGER', label: 'Cliffhanger', icon: '🔥', act: 'RESOLUTION' },
   { value: 'TRANSITION', label: 'Transition', icon: '🔄', act: 'SETUP' },
   { value: 'EVENT_TRAVEL', label: 'Event Travel', icon: '✈️', act: 'CONFLICT' },
-  { value: 'EVENT_OUTCOME', label: 'Event Outcome', icon: '🏆', act: 'RESOLUTION' },
+  { value: 'EVENT_OUTCOME', label: 'The Event', icon: '🏆', act: 'RESOLUTION' },
 ];
 
 // ─── ACT COLORS ───

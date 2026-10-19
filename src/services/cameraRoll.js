@@ -42,6 +42,8 @@ const { isConfidential } = require('../utils/confidentialCharacters');
 
 const MODELS = ['claude-sonnet-4-6'];
 const ROUTE = 'camera-roll';
+// A phone's camera roll is portrait (Evoni, 2026-10-19: it costs the same as landscape).
+const PHONE_SIZE = { width: 1024, height: 1536 };
 const STATUSES = Object.freeze(['proposed', 'kept', 'dropped', 'made', 'failed']);
 const PURPOSES = Object.freeze(['posted', 'private', 'sent', 'work', 'memory', 'screenshot']);
 const TAKERS = Object.freeze(['selfie', 'mirror', 'friend', 'timer', 'photographer']);
@@ -511,7 +513,7 @@ async function make(db, momentId, { by = null, routeName = ROUTE, wearing = null
   let buffer;
   let actual = null;
   try {
-    buffer = await variations.editImage(prompt, refs, { routeName, onLogged: (l) => { actual = l.costUsd; } });
+    buffer = await variations.editImage(prompt, refs, { routeName, size: PHONE_SIZE, onLogged: (l) => { actual = l.costUsd; } });
   } catch (err) {
     if (err.code === 'AI_BUDGET_EXCEEDED') throw err;
     const status = err.status && err.status < 500 ? err.status : 502;
@@ -542,7 +544,7 @@ async function make(db, momentId, { by = null, routeName = ROUTE, wearing = null
       console.error('[cameraRoll] a tag was left off the photo:', err.message);
     }
   }
-  const estimate = require('./imageCostService').estimateImageCost({ model: IMAGE_MODEL, width: 1536, height: 1024, quality: 'high', count: 1 });
+  const estimate = require('./imageCostService').estimateImageCost({ model: IMAGE_MODEL, ...PHONE_SIZE, quality: 'high', count: 1 });
   let created;
   try {
     created = await media.createAsset(db, {
@@ -656,5 +658,5 @@ module.exports = {
   CameraRollError, STATUSES, PURPOSES, TAKERS, OUTFITS, ALBUMS, ALBUM_LABELS, TARGETS, EDITABLE,
   normalizeMoment, normalizePlan, photoPrompt, promptFor, parseMoments, refusalFor, targetFor,
   rollFor, setHeadshot, headshotOf, plan, updateMoment, keep, drop, make, makeKept,
-  load, nameOf, momentOut, photoOut, IMAGE_MODEL,
+  load, nameOf, momentOut, photoOut, IMAGE_MODEL, PHONE_SIZE,
 };

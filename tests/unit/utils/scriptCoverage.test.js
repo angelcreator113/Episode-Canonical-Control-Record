@@ -16,7 +16,7 @@ const full = (overrides = {}) => [
   overrides[8] || beat(8, 'Transformation Loop', '[UI:OPEN Closet]', 'Lala: the gold slip dress', `[WEAR: ${PIECE}]`),
   beat(9, 'Reminder / Deadline', '[UI:OPEN Todo]'), beat(10, 'Event Travel', '[UI:CLICK Location]'),
   overrides[11] || beat(11, 'Event Outcome', 'Lala: I finally get to meet Marcus Reed'),
-  overrides[12] || beat(12, 'Deliverable Creation', '[UI:OPEN Camera]', 'Lala: filming the TikTok outfit reveal for Sable'),
+  overrides[12] || beat(12, 'Deliverable Creation', 'Lala: filming the TikTok outfit reveal for Sable'),
   beat(13, 'Recap Panel', '[STAT: coins +300]'), overrides[14] || beat(14, 'Cliffhanger', 'Me: and then a DM from the Marcus agency'),
 ].join('\n\n');
 const facts = {
