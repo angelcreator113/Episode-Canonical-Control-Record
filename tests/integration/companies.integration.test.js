@@ -95,13 +95,13 @@ const columns = async (table) => (await q('SELECT column_name FROM information_s
     expect((await as(request(app).get('/api/v1/companies?kind=bank'), user)).status).toBe(400);
   });
 
-  it('a brand\'s profile: its seven tabs, identity in three layers, its deal and its relationships', async () => {
+  it('a brand\'s profile: its eight tabs, identity in three layers, its deal and its relationships', async () => {
     const res = await as(request(app).get('/api/v1/companies/velour_atelier'), user);
     expect(res.status).toBe(200);
-    expect(res.body.sections.map((s) => s.key)).toEqual(['identity', 'people', 'pulse', 'business', 'wardrobe', 'press', 'relationships']);
+    expect(res.body.sections.map((s) => s.key)).toEqual(['identity', 'people', 'pulse', 'business', 'pictures', 'wardrobe', 'press', 'relationships']);
     expect(res.body.identity.beliefs.find((f) => f.key === 'defining_principle').value).toBe('Nothing extraneous');
     expect(res.body.people.people.find((p) => p.key === 'vivienne_laurent')).toMatchObject({ title: 'Creative Director', authority: { finalize: 'none' } });
-    expect(res.body.business.find((d) => d.id === ids.velourDeal)).toMatchObject({ linked: true, name: 'Velour cover' });
+    expect(res.body.business.find((d) => d.id === ids.velourDeal)).toMatchObject({ linked: true, name: 'Velour cover', event_id: null });
     expect(res.body.relationships.map((r) => r.slug)).toContain('carte_blanche');
     expect(res.body.wardrobe).toEqual(expect.any(Array));
     expect(res.body.press).toMatchObject({ coverage: expect.any(Array), posts: expect.any(Array), events: expect.any(Array) });
@@ -112,7 +112,7 @@ const columns = async (table) => (await q('SELECT column_name FROM information_s
     const made = await as(request(app).post('/api/v1/companies')).send({ name: `The Glass Room ${tag}`, kind: 'venue', description: 'A rooftop.' });
     expect(made.status).toBe(201);
     expect(made.body.company).toMatchObject({ kind: 'venue', kind_label: 'Venue' });
-    expect(made.body.sections.map((s) => s.key)).toEqual(['identity', 'business', 'press']);
+    expect(made.body.sections.map((s) => s.key)).toEqual(['identity', 'business', 'pictures', 'press']);
     ids.venue = made.body.company.slug;
     expect((await as(request(app).post('/api/v1/companies')).send({ name: ` the glass  room ${tag} ` })).status).toBe(409);
     expect((await as(request(app).post('/api/v1/companies')).send({ name: 'X', kind: 'bank' })).status).toBe(400);
@@ -123,7 +123,7 @@ const columns = async (table) => (await q('SELECT column_name FROM information_s
     expect(venue.body.people).toBeNull();
 
     const outlet = await as(request(app).get('/api/v1/companies/the_real_rate'), user);
-    expect(outlet.body.sections.map((s) => s.key)).toEqual(['identity', 'people', 'pulse', 'business', 'press']);
+    expect(outlet.body.sections.map((s) => s.key)).toEqual(['identity', 'people', 'pulse', 'business', 'pictures', 'press']);
     expect(outlet.body.identity.history.find((f) => f.key === 'founder').value).toBe('Reyna Voss');
   });
 
@@ -146,5 +146,48 @@ const columns = async (table) => (await q('SELECT column_name FROM information_s
     const retyped = await as(request(app).put(`/api/v1/opportunities/${ids.show}/${typed.body.opportunity.id}`)).send({ brand_or_company: 'Someone else' });
     expect(retyped.body.opportunity.company_id).toBeNull();
     expect((await as(request(app).post(`/api/v1/opportunities/${ids.show}`)).send({ name: 'Bad', company_id: uuid() })).status).toBe(400);
+  });
+
+  // Evoni, 2026-10-19: a brand's page shows its library pictures and each deal's deliverable progress.
+  it('its Pictures read the library with its visibility rules, and a deal with an event carries its progress', async () => {
+    const media = require('../../src/services/mediaLibrary');
+    const models = require('../../src/models');
+    const [velour] = await q("SELECT id FROM lalaverse_brands WHERE slug = 'velour_atelier'");
+    const link = [{ entity_type: 'brand', entity_id: velour.id, role: 'owner' }];
+    const made = [];
+    const dealEvent = uuid();
+    try {
+      for (const [caption, status, visibility] of [['Velour campaign', 'approved', 'public'], ['Velour lookbook', 'approved', 'internal'], ['Velour private', 'approved', 'private'], ['Velour draft', 'draft', 'internal']]) {
+        made.push((await media.createAsset(models, { url: `https://img.test/${caption.replace(/\s/g, '-')}-${tag}.png`, caption, status, visibility, links: link })).asset.id);
+      }
+      const url = `/api/v1/media?entity_type=brand&entity_id=${velour.id}`;
+      const asUser = (await as(request(app).get(url), user)).body.items.map((a) => a.caption);
+      expect(asUser).toContain('Velour campaign');
+      // Internal pictures on a brand's page are an ADMIN's only (Evoni, 2026-10-19).
+      expect(asUser).not.toContain('Velour lookbook');
+      expect(asUser).not.toContain('Velour private');
+      expect(asUser).not.toContain('Velour draft');
+      const asAdmin = (await as(request(app).get(url))).body.items.map((a) => a.caption);
+      expect(asAdmin).toEqual(expect.arrayContaining(['Velour campaign', 'Velour lookbook', 'Velour private', 'Velour draft']));
+
+      await run(`INSERT INTO world_events (id, show_id, name, created_at, updated_at) VALUES (:dealEvent, :show, 'Velour cover shoot', NOW(), NOW())`, { ...ids, dealEvent });
+      await run(`INSERT INTO event_deliverables (id, event_id, description, deliverable_type, quantity, owed_to, created_at, updated_at)
+                 VALUES (:id, :dealEvent, 'Three stories from the shoot', 'pulse_stories', 3, 'brand', NOW(), NOW())`, { id: uuid(), dealEvent });
+      await run('UPDATE opportunities SET event_id = :dealEvent WHERE id = :velourDeal', { ...ids, dealEvent });
+      const profile = await as(request(app).get('/api/v1/companies/velour_atelier'), user);
+      expect(profile.body.sections.map((s) => s.key)).toContain('pictures');
+      expect(profile.body.business.find((d) => d.id === ids.velourDeal)).toMatchObject({ event_id: dealEvent });
+      const progress = await as(request(app).get(`/api/v1/deliverable-progress/opportunities/${ids.velourDeal}`), user);
+      expect(progress.status).toBe(200);
+      expect(progress.body).toMatchObject({ countable: 1, done: 0, all_done: false });
+    } finally {
+      if (made.length) {
+        await run('DELETE FROM media_asset_links WHERE asset_id IN (:made)', { made });
+        await run('DELETE FROM media_assets WHERE id IN (:made)', { made });
+      }
+      await run('UPDATE opportunities SET event_id = NULL WHERE id = :velourDeal', ids);
+      await run('DELETE FROM event_deliverables WHERE event_id = :dealEvent', { dealEvent });
+      await run('DELETE FROM world_events WHERE id = :dealEvent', { dealEvent });
+    }
   });
 });

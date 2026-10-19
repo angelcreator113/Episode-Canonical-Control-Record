@@ -123,7 +123,10 @@ const WORD_NUMBERS = {
   eleven: 11, twelve: 12, fifteen: 15, twenty: 20, thirty: 30, forty: 40, fifty: 50, hundred: 100, half: 0.5,
 };
 const SCALE = { k: 1e3, thousand: 1e3, m: 1e6, mil: 1e6, million: 1e6, b: 1e9, billion: 1e9 };
-const COUNT_RE = /\b(\d[\d,]*(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|hundred|half)(?:\s+a)?\s*(k|m|b|mil|thousand|million|billion)?\b[\s\w-]{0,24}?\bfollowers?\b/dgi;
+// The words between a count and "followers" hold no digit: a match starting
+// at "A" in "A designer with 900K followers" used to run across the 900K,
+// be dropped as "a", and hide the real count (2026-10-19).
+const COUNT_RE = /\b(\d[\d,]*(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|hundred|half)(?:\s+a)?\s*(k|m|b|mil|thousand|million|billion)?\b[\sA-Za-z_-]{0,24}?\bfollowers?\b/dgi;
 
 /** [{ count, match, index, number }] for every "N followers" in the text; `number` is the match's leading count ("4K"). */
 function followerMentions(text) {
