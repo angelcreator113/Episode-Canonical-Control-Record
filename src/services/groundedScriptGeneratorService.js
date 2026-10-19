@@ -440,6 +440,8 @@ function coverageFacts(inputs) {
   const career = inputs?.story?.career || null;
   return {
     deliverables: career?.deliverables || [],
+    // The show's rules checked after writing (utils/scriptRuleChecks.js).
+    rules: { money: inputs?.money || null, shoppingApproved: Boolean(inputs?.money?.shopping), cast: require('../utils/scriptRuleChecks').eventCast(inputs?.eventData || null, inputs?.story?.socialProfiles || []) },
     goals: career?.goals || [],
     forwardHook: inputs?.brief?.forward_hook || '',
     lockedPieces: (inputs?.outfitScore?.items || []).filter((p) => p?.id).map((p) => ({ id: p.id, name: p.name })),

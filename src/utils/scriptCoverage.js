@@ -26,6 +26,7 @@
 const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
 const { splitScriptBeats } = require('./scriptBeatLocks');
 const { beat14Delivers } = require('./beat14Invitation');
+const { scriptRuleItems } = require('./scriptRuleChecks');
 
 // ─── The tab's must-cover rule (frontend/src/lib/episodeScript.js) ───────────
 const STOP = new Set(['the', 'and', 'for', 'with', 'from', 'that', 'this', 'into', 'her', 'his', 'their', 'your', 'about', 'post', 'piece', 'content', 'make', 'made', 'lala', 'episode', 'event']);
@@ -109,6 +110,8 @@ function scriptCoverage(script, facts = {}) {
     items.push({ kind: 'phone', label: canon?.screen_action || `Beat ${n}`, beat: has ? n : null, target: n });
   }
 
+  // The show's rules (utils/scriptRuleChecks.js; facts.rules: { money, shoppingApproved }).
+  items.push(...scriptRuleItems(beats, facts.rules));
   const missing = items.filter((i) => i.beat === null);
   for (const c of CANONICAL_BEATS) if (!numbers.has(c.number)) missing.push({ kind: 'beat', label: c.name, beat: null, target: c.number });
   return { items, missing };
@@ -123,6 +126,7 @@ function beatRequirements(gaps) {
     if (g.kind === 'wear') return `Right after the line where Lala puts on "${g.label}", write its own line exactly: [WEAR: ${g.id}]`;
     if (g.kind === 'phone') return 'Show what happens on Lala\'s phone in this beat with at least one [UI:VERB Target] line.';
     if (g.kind === 'cut') return 'Write this beat in full: the first draft stopped partway through it.';
+    if (g.kind === 'rule') return g.ask;
     // A missing beat played on her phone needs its phone moment too (re-audit 2).
     if (g.kind === 'beat' && PHONE_BEATS.includes(g.target)) return 'Show what happens on Lala\'s phone in this beat with at least one [UI:VERB Target] line.';
     return null;
