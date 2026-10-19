@@ -1716,6 +1716,8 @@ try {
 
 // Visual Memory: the shared picture library (services/mediaLibrary)
 try { app.use('/api/v1/media', require('./routes/mediaRoutes')); console.log('✓ Media library loaded at /api/v1/media'); } catch (e) { console.error('✗ Failed to load Media library routes:', e.message); }
+// Visual Memory phase 2: a post's pictures and formats (services/postMedia)
+try { app.use('/api/v1/post-media', require('./routes/postMediaRoutes')); console.log('✓ Post media loaded at /api/v1/post-media'); } catch (e) { console.error('✗ Failed to load Post media routes:', e.message); }
 
 // The daily update — since yesterday, waiting for Evoni, the next three days, AI spend
 try {
