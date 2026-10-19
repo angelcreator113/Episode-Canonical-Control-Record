@@ -42,6 +42,8 @@ const { isConfidential } = require('../utils/confidentialCharacters');
 
 const MODELS = ['claude-sonnet-4-6'];
 const ROUTE = 'camera-roll';
+// A phone's camera roll is portrait (Evoni, 2026-10-19: it costs the same as landscape).
+const PHONE_SIZE = { width: 1024, height: 1536 };
 const STATUSES = Object.freeze(['proposed', 'kept', 'dropped', 'made', 'failed']);
 const PURPOSES = Object.freeze(['posted', 'private', 'sent', 'work', 'memory', 'screenshot']);
 const TAKERS = Object.freeze(['selfie', 'mirror', 'friend', 'timer', 'photographer']);
@@ -507,7 +509,7 @@ async function make(db, momentId, { by = null } = {}) {
 
   let buffer;
   try {
-    buffer = await variations.editImage(prompt, refs, { routeName: ROUTE });
+    buffer = await variations.editImage(prompt, refs, { routeName: ROUTE, size: PHONE_SIZE });
   } catch (err) {
     if (err.code === 'AI_BUDGET_EXCEEDED') throw err;
     const status = err.status && err.status < 500 ? err.status : 502;
@@ -538,7 +540,7 @@ async function make(db, momentId, { by = null } = {}) {
       console.error('[cameraRoll] a tag was left off the photo:', err.message);
     }
   }
-  const estimate = require('./imageCostService').estimateImageCost({ model: IMAGE_MODEL, width: 1536, height: 1024, quality: 'high', count: 1 });
+  const estimate = require('./imageCostService').estimateImageCost({ model: IMAGE_MODEL, ...PHONE_SIZE, quality: 'high', count: 1 });
   let created;
   try {
     created = await media.createAsset(db, {
