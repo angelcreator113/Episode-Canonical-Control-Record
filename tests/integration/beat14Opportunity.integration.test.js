@@ -32,12 +32,16 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
   const ev = uuid();
   const profiles = {};
   let token;
+  let editorToken;
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
+  const asEditor = (r) => r.set('Authorization', `Bearer ${editorToken}`);
   const url = (e = ep) => `/api/v1/opportunities/${show}/episode/${e}/beat14`;
 
   beforeAll(async () => {
     await migration.up(sequelize.getQueryInterface(), Sequelize);
-    token = TokenService.generateTokenPair({ id: 'test-user-beat14', email: 'user@beat14.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    // Attach and detach are ADMIN only (Evoni, 2026-10-19).
+    token = TokenService.generateTokenPair({ id: 'test-admin-beat14', email: 'admin@beat14.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+    editorToken = TokenService.generateTokenPair({ id: 'test-user-beat14', email: 'user@beat14.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
     await run(`INSERT INTO shows (id, name, slug, metadata, created_at, updated_at) VALUES (:show, :name, :slug, CAST('{}' AS jsonb), NOW(), NOW())`,
       { show, name: `Beat 14 ${TAG}`, slug: `beat14-${TAG}` });
     for (const who of ['host', 'guest', 'outsider']) {
@@ -73,6 +77,16 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(res.body.data.opportunity).toBeNull();
     expect(res.body.data.people.map((p) => [p.profile_id, p.role])).toEqual([[profiles.host, 'host'], [profiles.guest, 'guest']]);
     expect(res.body.data.candidates.map((c) => c.name)).toEqual(['Velour Cover']);
+  });
+
+  test('only an admin attaches or detaches it; a signed-in non-admin can still read it', async () => {
+    const put = await asEditor(request(app).put(url())).send({ create: { name: 'Sable Teaser', connector_profile_id: profiles.guest } });
+    expect(put.status).toBe(403);
+    const del = await asEditor(request(app).delete(url()));
+    expect(del.status).toBe(403);
+    expect((await rows('SELECT id FROM opportunities WHERE show_id = :show AND offered_in_episode_id = :ep', { show, ep })).length).toBe(0);
+    const read = await asEditor(request(app).get(url()));
+    expect(read.status).toBe(200);
   });
 
   test('the invitation comes from someone at the event', async () => {

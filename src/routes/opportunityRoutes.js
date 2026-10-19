@@ -16,7 +16,7 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 
 async function getModels(req) {
   return req?.app?.get('models') || req?.app?.locals?.db || require('../models');
@@ -272,7 +272,9 @@ router.get('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, asyn
   }
 });
 
-router.put('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, async (req, res) => {
+// Attach and detach are ADMIN only (Evoni, 2026-10-19: "make Beat 14 this
+// whole part of the site is admin only"); the read stays requireAuth.
+router.put('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { attachBeat14 } = require('../services/beat14Opportunity');
     const body = req.body || {};
@@ -288,7 +290,7 @@ router.put('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, asyn
   }
 });
 
-router.delete('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, async (req, res) => {
+router.delete('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { detachBeat14 } = require('../services/beat14Opportunity');
     return res.json({ success: true, data: await detachBeat14(await getModels(req), req.params) });
