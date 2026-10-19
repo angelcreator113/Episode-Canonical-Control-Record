@@ -78,7 +78,7 @@ export function readiness(ep, posts) {
     { key: 'cut', label: 'Final cut', ...cut },
     { key: 'thumbnail', label: 'Thumbnail', ...(ep?.thumbnail_url ? { state: 'ready', text: 'Ready' } : { state: 'todo', text: 'Missing' }) },
     { key: 'copy', label: 'Title & copy', ...words },
-    { key: 'feed', label: 'Feed posts', ...feed },
+    { key: 'feed', label: 'Pulse posts', ...feed },
     { key: 'schedule', label: 'Schedule', ...(when ? { state: 'ready', text: formatWhen(when) } : { state: 'todo', text: 'Not set' }) },
   ];
 }

@@ -48,7 +48,7 @@ describe('one follower number', () => {
 describe('presence is not account status', () => {
   test('the Social Presence badge says whether they are on the feed, not "Active"', () => {
     const page = read('pages/CharacterProfilePage.jsx');
-    expect(page).toMatch(/'On the feed' : 'Not on the feed'/);
+    expect(page).toMatch(/'On The Pulse' : 'Not on The Pulse'/);
     expect(page).not.toMatch(/\? 'Active' : 'None'/);
   });
   test('every account status has a label', () => {

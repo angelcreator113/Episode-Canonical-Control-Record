@@ -89,6 +89,6 @@ describe('the map, key relationships, history and feed ties', () => {
     expect(card.textContent).toContain('Turbulent');
     unmount();
     inRouter(<FeedTies entanglements={{}} />);
-    expect(screen.getByTestId('ch-feed-ties').textContent).toContain('No feed ties yet.');
+    expect(screen.getByTestId('ch-feed-ties').textContent).toContain('No Pulse ties yet.');
   });
 });

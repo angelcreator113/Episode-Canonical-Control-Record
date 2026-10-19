@@ -52,7 +52,7 @@ describe('Settings', () => {
   test('feed profile, export and the link', () => {
     const p = renderIt();
     expect(screen.getByText('@studiobysable')).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Match a different feed person/ }).getAttribute('href')).toBe('/character-registry');
+    expect(screen.getByRole('link', { name: /Match a different Pulse person/ }).getAttribute('href')).toBe('/character-registry');
     fireEvent.click(screen.getByRole('button', { name: /Export profile/ }));
     expect(p.onExport).toHaveBeenCalled();
     expect(screen.getByLabelText('Link to this page').value).toMatch(/\/character\/c1$/);

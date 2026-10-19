@@ -182,7 +182,7 @@ describe('EpisodeLalasPhoneTab — render', () => {
     mockGets({ overlays: [], moments: [], missions: [] });
     render(<EpisodeLalasPhoneTab episode={EPISODE} onPreview={() => {}} />);
     expect(await screen.findByText(/No phone screens are generated/)).toBeTruthy();
-    expect(await screen.findByText(/No feed moments are saved/)).toBeTruthy();
+    expect(await screen.findByText(/No Pulse moments are saved/)).toBeTruthy();
     expect(await screen.findByText('No missions yet.')).toBeTruthy();
     expect(screen.getByTestId('lalas-phone-deferred')).toBeTruthy();
   });

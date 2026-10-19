@@ -49,7 +49,7 @@ describe('Story & Events', () => {
     renderTab();
     await waitFor(() => expect(screen.getByTestId('ch-st-posts').textContent).toContain('the dress before it knew'));
     expect(within(screen.getByTestId('ch-story-tiles')).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
-      '2Episodes', '3Events2 upcoming', '2Feed posts1 posted', "1Lala's goalsat their events", '2Stories & chapters',
+      '2Episodes', '3Events2 upcoming', '2Pulse posts1 posted', "1Lala's goalsat their events", '2Stories & chapters',
     ]);
     expect(screen.getByTestId('ch-st-latest').textContent).toContain('Episode 2The Gala');
     const upcoming = screen.getByTestId('ch-st-upcoming');
@@ -60,7 +60,7 @@ describe('Story & Events', () => {
     expect(screen.getByTestId('ch-st-goals').textContent).toContain('Build her brandAt Wearable Experiments');
   });
 
-  test('each section in full; posts drafting goes to Voice & Feed', async () => {
+  test('each section in full; posts drafting goes to Voice & Pulse', async () => {
     const openTab = vi.fn();
     renderTab(openTab);
     const nav = screen.getByRole('navigation', { name: 'Story sections' });
@@ -74,7 +74,7 @@ describe('Story & Events', () => {
     fireEvent.click(within(nav).getByRole('button', { name: /Stories & chapters/ }));
     await waitFor(() => expect(screen.getByTestId('ch-st-stories').textContent).toContain('The Linen Swap'));
     expect(screen.getByTestId('ch-st-stories').textContent).toContain('Before Lala · not written yet');
-    fireEvent.click(within(nav).getByRole('button', { name: /Feed posts/ }));
+    fireEvent.click(within(nav).getByRole('button', { name: /Pulse posts/ }));
     fireEvent.click(screen.getByRole('button', { name: /Draft new posts/ }));
     expect(openTab).toHaveBeenCalledWith('voice');
   });
@@ -82,7 +82,7 @@ describe('Story & Events', () => {
   test('goals and the timeline in order', () => {
     expect(goalsOf(APPEARANCES).map((g) => g.label)).toEqual(['Build her brand']);
     expect(timelineOf(APPEARANCES, TRAIL).map((x) => x.title)).toEqual([
-      'Guest at an event', 'Posted to the feed', 'Drafted a post', 'Hosts an event', 'Guest at an event',
+      'Guest at an event', 'Posted to The Pulse', 'Drafted a post', 'Hosts an event', 'Guest at an event',
       'Featured in Episode 1', 'Featured in Episode 2',
     ]);
     // The overview's strip: from today on, else the latest.

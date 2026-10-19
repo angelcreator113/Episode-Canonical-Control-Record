@@ -254,11 +254,11 @@ export default function CharacterRegistryPage() {
       <section className="cast-world" aria-labelledby="cast-world-heading">
         <div className="cast-section-head">
           <h2 id="cast-world-heading" className="cast-h2">Lala&apos;s world</h2>
-          <span className="cast-note">{people.length} feed {people.length === 1 ? 'person' : 'people'}, each one a character</span>
+          <span className="cast-note">{people.length} Pulse {people.length === 1 ? 'person' : 'people'}, each one a character</span>
           <Link to="/pulse" className="cast-link"><Radio size={15} aria-hidden /> Open in The Pulse</Link>
         </div>
         {people.length === 0 ? (
-          <p className="cast-note cast-empty">No LalaVerse feed profiles yet. They are made in Lala&apos;s Feed.</p>
+          <p className="cast-note cast-empty">No Pulse profiles yet. They are made in World Studio&apos;s Pulse people tab.</p>
         ) : (
           <ul className="cast-people" data-testid="cast-people">
             {people.map((p) => (
@@ -300,7 +300,7 @@ export default function CharacterRegistryPage() {
         <section className="cast-world" aria-labelledby="cast-more-heading">
           <div className="cast-section-head">
             <h2 id="cast-more-heading" className="cast-h2">More characters</h2>
-            <span className="cast-note">{more.length} not in Lala&apos;s feed</span>
+            <span className="cast-note">{more.length} not on The Pulse</span>
           </div>
           <ul className="cast-people" data-testid="cast-more">
             {more.map((c) => {
