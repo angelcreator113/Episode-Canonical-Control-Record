@@ -54,8 +54,9 @@ const NAME = `One Link ${TAG}`;
   const linkOf = async (characterId) => (await q('SELECT feed_profile_id FROM registry_characters WHERE id = :characterId', { characterId }))[0]?.feed_profile_id;
 
   beforeAll(async () => {
+    // The registry writes are ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only).
     token = TokenService.generateTokenPair({
-      id: 'test-user-one-link', email: 'test@one-link.dev', name: 'One Link Test', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-one-link', email: 'test@one-link.dev', name: 'One Link Test', groups: ['ADMIN'], role: 'USER',
     }).accessToken;
     await run(`INSERT INTO character_registries (id, title, created_at, updated_at) VALUES (:reg, 'One link registry', NOW(), NOW())`, { reg });
   });

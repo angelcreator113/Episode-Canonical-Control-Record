@@ -51,9 +51,10 @@ const DEMO = 'class_origin, current_class, class_mobility_direction, family_stru
   };
 
   beforeAll(async () => {
+    // The registry writes are ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only).
     token = TokenService.generateTokenPair({
       id: 'test-user-registry-vocab', email: 'test@registry-vocab.dev', name: 'Registry Vocab Test',
-      groups: ['USER', 'EDITOR'], role: 'USER',
+      groups: ['ADMIN'], role: 'USER',
     }).accessToken;
     await run(`INSERT INTO character_registries (id, title, created_at, updated_at) VALUES (:registryId, :title, NOW(), NOW())`,
       { registryId, title: `Registry vocab ${TAG}` });

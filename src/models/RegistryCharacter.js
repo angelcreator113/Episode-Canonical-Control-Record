@@ -407,6 +407,14 @@ module.exports = (sequelize) => {
       type: DataTypes.INTEGER,
       allowNull: true,
     },
+    // How the character was made (migration 20261019200001; Evoni, 2026-10-19:
+    // someone made from the feed follows Lala, anyone else is her choice).
+    // NULL for characters made before it was recorded.
+    created_from: {
+      type: DataTypes.STRING(30),
+      allowNull: true,
+      validate: { isIn: [['feed_cross', 'cast_generate', 'manual', 'clone', 'promote_ghost', 'generator']] },
+    },
     // The cast's review of the old system (migration 20261008200000;
     // routes/castRoutes.js): 'kept', or NULL while still to review.
     cast_review: {

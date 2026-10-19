@@ -78,11 +78,12 @@ function interleave(Model, second, waitMs = 600) {
   const auth = () => `Bearer ${token}`;
 
   beforeAll(() => {
+    // The registry writes are ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only).
     token = TokenService.generateTokenPair({
       id: 'test-user-rmw-part-1',
       email: 'test@rmw-part-1.dev',
       name: 'RMW Part 1 Test',
-      groups: ['USER', 'EDITOR'],
+      groups: ['ADMIN'],
       role: 'USER',
     }).accessToken;
   });

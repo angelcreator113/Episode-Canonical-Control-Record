@@ -49,7 +49,8 @@ const PROFILE = { display_name: 'City Test', follower_tier: 'micro', archetype: 
   beforeAll(() => {
     token = TokenService.generateTokenPair({
       id: 'test-user-feed-dream-cities', email: 'test@feed-dream-cities.dev', name: 'Feed DREAM Cities Test',
-      groups: ['USER', 'EDITOR'], role: 'USER',
+      // ADMIN: the Pulse people tools are admin only (Evoni, 2026-10-19).
+      groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
 

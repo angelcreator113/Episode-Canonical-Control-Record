@@ -53,7 +53,8 @@ const PROFILE = { display_name: 'Society Test', follower_tier: 'micro', archetyp
   beforeAll(async () => {
     token = TokenService.generateTokenPair({
       id: 'test-user-society-archetypes', email: 'test@society-archetypes.dev', name: 'Society Archetypes Test',
-      groups: ['USER', 'EDITOR'], role: 'USER',
+      // ADMIN: the Pulse people tools are admin only (Evoni, 2026-10-19).
+      groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     [saved] = await q(`SELECT data FROM page_content WHERE page_name = 'influencer_systems' AND constant_key = 'ARCHETYPES'`);
     // As the Society tab saves it: the whole list, here Evoni's own edit.

@@ -39,10 +39,11 @@ describe('Step 3 CP8 — socialProfileRoutes.js anchor mixed Tier 1+4', () => {
 
   describe('AI POSTs (2 — D1 + D11 locks)', () => {
     test('POST /generate → requireAuth + aiRateLimiter (in-handler generateRateLimits preserved per §5.55)', () => {
-      expect(SRC).toMatch(/router\.post\('\/generate',\s*requireAuth,\s*aiRateLimiter,\s*async/);
+        // ADMIN before the AI limiter (Evoni, 2026-10-19, the profile follow-up).
+      expect(SRC).toMatch(/router\.post\('\/generate',\s*requireAuth,\s*authorize\(\['ADMIN'\]\),\s*aiRateLimiter,\s*async/);
     });
     test('POST /:id/regenerate → requireAuth + aiRateLimiter + guardJustAWomanRecord', () => {
-      expect(SRC).toMatch(/router\.post\('\/:id\/regenerate',\s*requireAuth,\s*aiRateLimiter,\s*guardJustAWomanRecord,\s*async/);
+      expect(SRC).toMatch(/router\.post\('\/:id\/regenerate',\s*requireAuth,\s*authorize\(\['ADMIN'\]\),\s*aiRateLimiter,\s*guardJustAWomanRecord,\s*async/);
     });
   });
 
@@ -91,6 +92,17 @@ describe('Step 3 CP8 — socialProfileRoutes.js anchor mixed Tier 1+4', () => {
   test('every write handler ends up requireAuth (zero optionalAuth survivors on writes)', () => {
     const writeHandlers = SRC.match(/^router\.(post|put|patch|delete)\([^\n]+/gm) || [];
     writeHandlers.forEach((line) => expect(line).not.toMatch(/^router\.(post|put|patch|delete)\([^,]+,\s*optionalAuth\b/));
+  });
+
+  // Evoni, 2026-10-19 (the profile follow-up): every Pulse people write is
+  // ADMIN only; crossing-preview writes nothing and calls no AI, so it is not.
+  test('every write but crossing-preview is ADMIN only, and no read is', () => {
+    const handlers = SRC.match(/^router\.(get|post|put|patch|delete)\([^\n]+/gm) || [];
+    const writes = handlers.filter((l) => !/^router\.get\(/.test(l));
+    writes.filter((l) => !/'\/:id\/crossing-preview'/.test(l))
+      .forEach((l) => expect(l).toMatch(/requireAuth,\s*authorize\(\['ADMIN'\]\)/));
+    expect(writes.find((l) => /'\/:id\/crossing-preview'/.test(l))).not.toMatch(/authorize\(/);
+    handlers.filter((l) => /^router\.get\(/.test(l)).forEach((l) => expect(l).not.toMatch(/authorize\(/));
   });
 
   describe('Sample Tier 1 handlers', () => {

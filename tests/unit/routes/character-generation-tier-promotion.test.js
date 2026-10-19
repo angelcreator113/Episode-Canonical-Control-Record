@@ -25,15 +25,17 @@ describe('Step 3 CP6 — characterGenerationRoutes.js router.use migration', () 
     expect(SRC).not.toMatch(/router\.use\(optionalAuth\)/);
   });
 
-  test('POST /generate (the sole AI POST) carries aiRateLimiter inline', () => {
-    expect(SRC).toMatch(/router\.post\('\/generate',\s*aiRateLimiter,\s*async/);
+  // Every write is ADMIN only (Evoni, 2026-10-19: "this whole part of the site is admin only").
+  test('POST /generate (the sole AI POST) is ADMIN only and carries aiRateLimiter inline', () => {
+    expect(SRC).toMatch(/router\.post\('\/generate',\s*authorize\(\['ADMIN'\]\),\s*aiRateLimiter,\s*async/);
   });
 
-  describe('Non-AI handlers (5) inherit auth from router.use, no inline aiRateLimiter', () => {
-    [['post', '/confirm'], ['post', '/confirm-feed'], ['get', '/depth/:id'], ['patch', '/depth/:id']].forEach(([verb, route]) => {
-      test(`${verb.toUpperCase()} ${route} has no inline aiRateLimiter`, () => {
+  describe('Non-AI handlers inherit auth from router.use, no inline aiRateLimiter; the writes are ADMIN only', () => {
+    [['post', '/confirm', true], ['post', '/confirm-feed', true], ['get', '/depth/:id', false], ['patch', '/depth/:id', true]].forEach(([verb, route, admin]) => {
+      test(`${verb.toUpperCase()} ${route} has no inline aiRateLimiter${admin ? ' and is ADMIN only' : ''}`, () => {
         const escaped = route.replace(/\//g, '\\/');
-        const re = new RegExp(`router\\.${verb}\\('${escaped}',\\s*async`);
+        const gate = admin ? "authorize\\(\\['ADMIN'\\]\\),\\s*" : '';
+        const re = new RegExp(`router\\.${verb}\\('${escaped}',\\s*${gate}async`);
         expect(SRC).toMatch(re);
       });
     });
@@ -42,7 +44,7 @@ describe('Step 3 CP6 — characterGenerationRoutes.js router.use migration', () 
   // Evoni, 2026-10-19 ("this whole part of the site is admin only"; the
   // profile audit): promoting a ghost is ADMIN only, still without aiRateLimiter.
   test('POST /promote-ghost/:characterId is ADMIN only, no inline aiRateLimiter', () => {
-    expect(SRC).toMatch(/router\.post\('\/promote-ghost\/:characterId',\s*require\('\.\.\/middleware\/auth'\)\.authorize\(\['ADMIN'\]\),\s*async/);
+    expect(SRC).toMatch(/router\.post\('\/promote-ghost\/:characterId',\s*authorize\(\['ADMIN'\]\),\s*async/);
   });
 
   test('no optionalAuth references remain', () => {

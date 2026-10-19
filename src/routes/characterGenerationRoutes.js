@@ -27,6 +27,8 @@ const express = require('express');
 const router  = express.Router();
 const { requireAuth } = require('../middleware/auth');
 const { authorize } = require('../middleware/auth');
+// Every write here is ADMIN only; the reads stay requireAuth (Evoni, 2026-10-19:
+// "this whole part of the site is admin only").
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const {
   canAccessAuthorFields,
@@ -59,7 +61,7 @@ function getModels(req) {
 // Takes a spark and returns a complete proposed interior architecture.
 // Nothing is written to DB. Author reviews the proposal first.
 // ────────────────────────────────────────────────────────────────────────────
-router.post('/generate', aiRateLimiter, async (req, res) => {
+router.post('/generate', authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   const { spark, world_id, book_id } = req.body;
   // The feed it is for, when the caller knows it: 'lalaverse' (The Pulse) or 'real_world'.
   const layer = FEED_LAYERS.includes(req.body.feed_layer) ? req.body.feed_layer : null;
@@ -119,7 +121,7 @@ router.post('/generate', aiRateLimiter, async (req, res) => {
 // POST /confirm
 // Author has reviewed the proposal. Writes to registry_characters.
 // ────────────────────────────────────────────────────────────────────────────
-router.post('/confirm', async (req, res) => {
+router.post('/confirm', authorize(['ADMIN']), async (req, res) => {
   const { character_id, registry_id } = req.body;
 
   if (!req.body.proposed) {
@@ -187,6 +189,7 @@ router.post('/confirm', async (req, res) => {
       registry_id,
       depth_level,
       status: 'accepted',  // keep status field populated for backwards compat
+      created_from: 'generator',
     });
 
     res.status(201).json({ character, depth_level });
@@ -200,7 +203,7 @@ router.post('/confirm', async (req, res) => {
 // POST /confirm-feed
 // Author confirms the Feed profile proposal → creates social_profile + links
 // ────────────────────────────────────────────────────────────────────────────
-router.post('/confirm-feed', async (req, res) => {
+router.post('/confirm-feed', authorize(['ADMIN']), async (req, res) => {
   const { character_id, feed_proposal, feed_layer } = req.body;
 
   if (!character_id || !feed_proposal) {
@@ -318,7 +321,7 @@ router.post('/confirm-feed', async (req, res) => {
 // Promote a ghost character to a full registry entry
 // ────────────────────────────────────────────────────────────────────────────
 // ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
-router.post('/promote-ghost/:characterId', require('../middleware/auth').authorize(['ADMIN']), async (req, res) => {
+router.post('/promote-ghost/:characterId', authorize(['ADMIN']), async (req, res) => {
   const { ghost_name, registry_id } = req.body;
   const models = getModels(req);
   const { RegistryCharacter } = models;
@@ -338,6 +341,7 @@ router.post('/promote-ghost/:characterId', require('../middleware/auth').authori
       status:        'draft',
       role_type:     'support',
       world_exists:  false,
+      created_from:  'promote_ghost',
     });
 
     // Remove the ghost from the original character's ghost_characters array.
@@ -401,7 +405,7 @@ router.get('/depth/:id', async (req, res) => {
 // PATCH /depth/:id
 // Manually set depth level
 // ────────────────────────────────────────────────────────────────────────────
-router.patch('/depth/:id', async (req, res) => {
+router.patch('/depth/:id', authorize(['ADMIN']), async (req, res) => {
   try {
     const { depth_level } = req.body;
     const valid = ['sparked', 'breathing', 'active', 'alive'];

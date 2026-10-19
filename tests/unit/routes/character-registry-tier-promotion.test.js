@@ -40,8 +40,9 @@ describe('Step 3 CP6 — characterRegistry.js anchor file Tier 1 sweep', () => {
   });
 
   describe('D9 — reference handler at /characters/:id/deep-profile/generate is preserved verbatim', () => {
-    test('preserves exact "requireAuth, aiRateLimiter" reference shape', () => {
-      expect(SRC).toMatch(/router\.post\('\/characters\/:id\/deep-profile\/generate',\s*requireAuth,\s*aiRateLimiter,\s*async/);
+    // ADMIN joins between them (Evoni, 2026-10-19: every write in this file is ADMIN only).
+    test('preserves the "requireAuth, …, aiRateLimiter" reference shape, ADMIN only', () => {
+      expect(SRC).toMatch(/router\.post\('\/characters\/:id\/deep-profile\/generate',\s*requireAuth,\s*authorize\(\['ADMIN'\]\),\s*aiRateLimiter,\s*async/);
     });
     test('reference handler has not been duplicated or re-applied', () => {
       const refMatches = SRC.match(/\/characters\/:id\/deep-profile\/generate'/g) || [];
@@ -74,22 +75,17 @@ describe('Step 3 CP6 — characterRegistry.js anchor file Tier 1 sweep', () => {
       expect(SRC).not.toMatch(/req\.user\??\.role/);
     });
     // Superseded by Evoni's ruling of 2026-10-19 ("this whole part of the
-    // site is admin only"; the profile audit): the profile's writes and AI
-    // calls are ADMIN only, the rest of the file stays requireAuth.
-    test('the profile writes and AI calls are ADMIN only, and only those', () => {
-      const gated = [
-        ['put', '/registries/:id'], ['put', '/characters/:id'], ['delete', '/characters/:id'],
-        ['post', '/characters/:id/select-name'], ['post', '/characters/:id/set-status'],
-        ['post', '/characters/:id/portrait'], ['post', '/characters/:id/photo'],
-        ['delete', '/characters/:id/photo'], ['delete', '/characters/:id/portrait'],
-        ['post', '/characters/:id/interior/generate'], ['post', '/characters/:id/interior/apply'],
-        ['post', '/characters/:id/writer-paragraph/generate'],
-      ];
-      gated.forEach(([verb, route]) => {
-        const escaped = route.replace(/\//g, '\\/');
-        expect(SRC).toMatch(new RegExp(`router\\.${verb}\\('${escaped}',\\s*requireAuth,\\s*authorize\\(\\['ADMIN'\\]\\)`));
-      });
-      expect((SRC.match(/authorize\(\['ADMIN'\]\)/g) || []).length).toBe(gated.length);
+    // site is admin only"): every write in this file is ADMIN only, first the
+    // profile's (the profile audit), then the rest (the profile follow-up);
+    // the reads stay requireAuth.
+    test('every write is ADMIN only, and no read is', () => {
+      const handlers = SRC.match(/^router\.(get|post|put|patch|delete)\([^\n]+/gm) || [];
+      const writes = handlers.filter((line) => !/^router\.get\(/.test(line));
+      const reads = handlers.filter((line) => /^router\.get\(/.test(line));
+      expect(writes.length).toBe(35);
+      writes.forEach((line) => expect(line).toMatch(/requireAuth,\s*authorize\(\['ADMIN'\]\)/));
+      reads.forEach((line) => expect(line).not.toMatch(/authorize\(/));
+      expect((SRC.match(/authorize\(\['ADMIN'\]\)/g) || []).length).toBe(writes.length);
     });
   });
 
