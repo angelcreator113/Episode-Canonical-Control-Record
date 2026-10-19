@@ -94,7 +94,7 @@ describe('Beat14Opportunity', () => {
     api.put.mockResolvedValue({ data: {} });
     const onChange = renderIt({ opportunity: OPP, people: PEOPLE, candidates: [{ id: 'o2', name: 'Panel talk' }] });
     fireEvent.click(screen.getByTestId('script-beat14-change'));
-    expect(screen.getByTestId('script-beat14-mode-pick').getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByTestId('script-beat14-mode-pick').getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByTestId('script-beat14-pick').value).toBe('o1');
     expect(screen.getByTestId('script-beat14-pick').textContent).toContain('Studio by Sable campaign (attached)');
     expect(screen.getByTestId('script-beat14-pick').textContent).toContain('Panel talk');

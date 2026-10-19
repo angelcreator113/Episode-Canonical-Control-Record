@@ -218,6 +218,9 @@ function cueLabel(text) {
   return `${kind === 'EVENT' ? 'Event' : 'Episode intent'}${rest ? `: ${rest}` : ''}`;
 }
 
+// Beats 11–13 are the cutscene: no phone (lib/scriptShowRules; Script page re-audit, 2026-10-19).
+const CUTSCENE_NO_PHONE = 'Beats 11–13 are the cutscene: no phone.';
+
 const COVERAGE_KINDS = { deliverable: 'Deliverable', goal: 'Goal', hook: 'Forward hook', opportunity: 'Opportunity', wear: 'Wear cue', phone: 'Phone moment', beat: 'Beat missing', rule: 'Show rule' };
 
 function parseLine(line) {
@@ -371,6 +374,8 @@ function MomentCard({ moment, shown, alongside = [], phoneDown = false, beatNumb
           {shown.kind === 'post' && (draft
             ? <span className="esp-moment-drafted" data-testid="script-post-drafted">{draft.status === 'live' ? '✓ Live in Lala\u2019s posts' : '✓ Draft in Lala\u2019s posts, waiting for approval'}</span>
             : <span className="esp-moment-opens" data-testid="script-post-pending">Drafted in Lala&apos;s posts when the script is saved</span>)}
+          {/* A message in the cutscene is flagged too (Script page re-audit, 2026-10-19). */}
+          {phoneDown && <span className="esp-moment-missing" data-testid="script-moment-phone-down">{isCutsceneBeat(beatNumber) ? CUTSCENE_NO_PHONE : <>Lala&apos;s phone isn&apos;t on screen here. Bring it up first: Phone / overlay, The phone itself.</>}</span>}
           {alongside.length > 0 && <span className="esp-moment-with" data-testid="script-moment-with">With: {alongside.join(', ')}</span>}
         </span>
       </div>
@@ -392,7 +397,7 @@ function MomentCard({ moment, shown, alongside = [], phoneDown = false, beatNumb
           </span>
         )}
         {!shown && <span className="esp-moment-missing">No icon, screen or overlay by this name yet</span>}
-        {phoneDown && <span className="esp-moment-missing" data-testid="script-moment-phone-down">{isCutsceneBeat(beatNumber) ? 'Beats 11–13 are the cutscene: no phone.' : <>Lala&apos;s phone isn&apos;t on screen here. Bring it up first: Phone / overlay, The phone itself.</>}</span>}
+        {phoneDown && <span className="esp-moment-missing" data-testid="script-moment-phone-down">{isCutsceneBeat(beatNumber) ? CUTSCENE_NO_PHONE : <>Lala&apos;s phone isn&apos;t on screen here. Bring it up first: Phone / overlay, The phone itself.</>}</span>}
         {alongside.length > 0 && <span className="esp-moment-with" data-testid="script-moment-with">With: {alongside.join(', ')}</span>}
       </span>
     </div>
@@ -714,6 +719,7 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
   // and Ask wait (Script tab re-audit, 2026-10-15: Ask cleared the words and
   // sent nothing).
   const cantWrite = regenerating || writing || locking;
+  const cutsceneBeat = isCutsceneBeat(beat.number);
   // The words are cleared only once a new version came back, and only if they
   // weren't changed meanwhile (Script page audit, 2026-10-19: a failed
   // request lost them).
@@ -727,11 +733,11 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
     handledRequest.current = request.n;
     setMessaging(null);
     setAdding(request.kind === 'line' ? 'Lala' : false);
-    setPicking(request.kind === 'phone' ? {} : false);
+    setPicking(request.kind === 'phone' && !isCutsceneBeat(beat.number) ? {} : false);
     // Answered, so a remount (Raw editor and back) doesn't open it again.
     onRequestDone?.();
     setReveal({ kind: request.kind, n: request.n });
-  }, [request, expanded, beat.approved, onRequestDone]);
+  }, [request, expanded, beat.approved, beat.number, onRequestDone]);
   // The adder opens at the end of the beat, often below the screen: it is
   // scrolled to the middle and its first control takes focus, so the bar's
   // tap shows where it went (Script page audit, 2026-10-19).
@@ -879,10 +885,13 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
                 <span className="esp-add-label">Add:</span>
                 <button type="button" className="esp-moment-btn" data-testid={`script-add-action-${beat.number}`} onClick={e => { e.stopPropagation(); setPicking(false); setMessaging(null); setAdding('action'); }}>Action</button>
                 <button type="button" className="esp-moment-btn" data-testid={`script-add-line-${beat.number}`} onClick={e => { e.stopPropagation(); setPicking(false); setMessaging(null); setAdding('Lala'); }}>Dialogue</button>
-                <button type="button" className="esp-moment-btn" data-testid={`script-add-moment-${beat.number}`} onClick={e => { e.stopPropagation(); setAdding(false); setMessaging(null); setPicking({}); }}>Open a screen</button>
-                <button type="button" className="esp-moment-btn" data-testid={`script-add-scroll-${beat.number}`} onClick={e => { e.stopPropagation(); setAdding(false); setMessaging(null); setPicking({ verb: 'SCROLL', title: 'Scroll the feed', feed: true }); }}>Scroll the feed</button>
+                {/* No phone in the cutscene, beats 11–13 (Script page re-audit,
+                    2026-10-19): its chips are not offered there, and it says why. */}
+                {cutsceneBeat && <span className="esp-beat-nophone" data-testid={`script-cutscene-note-${beat.number}`}>{CUTSCENE_NO_PHONE}</span>}
+                {!cutsceneBeat && <button type="button" className="esp-moment-btn" data-testid={`script-add-moment-${beat.number}`} onClick={e => { e.stopPropagation(); setAdding(false); setMessaging(null); setPicking({}); }}>Open a screen</button>}
+                {!cutsceneBeat && <button type="button" className="esp-moment-btn" data-testid={`script-add-scroll-${beat.number}`} onClick={e => { e.stopPropagation(); setAdding(false); setMessaging(null); setPicking({ verb: 'SCROLL', title: 'Scroll the feed', feed: true }); }}>Scroll the feed</button>}
                 {/* Task #2885: a notification, a DM or a post. */}
-                {Object.keys(MESSAGE_KINDS).map((k) => (
+                {!cutsceneBeat && Object.keys(MESSAGE_KINDS).map((k) => (
                   <button key={k} type="button" className="esp-moment-btn" data-testid={`script-add-${k}-${beat.number}`}
                     onClick={e => { e.stopPropagation(); setAdding(false); setPicking(false); setMessaging(k); }}>
                     {k === 'notify' ? 'Notification' : k === 'dm' ? 'DM' : 'Post'}
@@ -1676,7 +1685,9 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     return () => { cancelled = true; };
   }, [episodeId]);
   const dealItems = (deal?.items || []).map((i) => ({ ...i, id: i.deliverable_id }));
-  const phoneBeats = new Set(beats.filter((b) => hasPhoneMoment(b.lines, onScreen)).map((b) => b.id));
+  // A cutscene beat is never marked as having a phone moment (Script page re-audit, 2026-10-19).
+  const phoneBeats = new Set(beats.filter((b) => !isCutsceneBeat(b.number) && hasPhoneMoment(b.lines, onScreen)).map((b) => b.id));
+  const openInCutscene = !!openBeat && isCutsceneBeat(openBeat.number);
   const openScene = openBeat ? scenePlan.find((p) => p.beat_number === openBeat.number) : null;
   const inRoom = openBeat ? beatSpeakers(openBeat.lines) : [];
   // What is true at the open beat (Task #2882; Evoni's choices of 2026-10-11).
@@ -1938,7 +1949,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
         <div className="esp-mobilebar" data-testid="script-mobilebar" role="region" aria-label="Add to the open beat">
           <button type="button" className="esp-mobilebar-btn" disabled={!openBeat || openBeat.approved} data-testid="script-bar-line"
             onClick={() => setBarRequest({ kind: 'line', n: Date.now(), beatId: openId })}><Plus size={16} aria-hidden="true" /> Line</button>
-          <button type="button" className="esp-mobilebar-btn" disabled={!openBeat || openBeat.approved} data-testid="script-bar-phone"
+          <button type="button" className="esp-mobilebar-btn" disabled={!openBeat || openBeat.approved || openInCutscene} data-testid="script-bar-phone"
+            title={openInCutscene ? CUTSCENE_NO_PHONE : undefined} aria-label={openInCutscene ? `Phone: ${CUTSCENE_NO_PHONE}` : undefined}
             onClick={() => setBarRequest({ kind: 'phone', n: Date.now(), beatId: openId })}><Smartphone size={16} aria-hidden="true" /> Phone</button>
           <button type="button" className={`esp-mobilebar-btn${contextOpen ? ' is-on' : ''}`} aria-expanded={contextOpen} data-testid="script-bar-context"
             onClick={() => setContextOpen((o) => !o)}><ListChecks size={16} aria-hidden="true" /> Context</button>

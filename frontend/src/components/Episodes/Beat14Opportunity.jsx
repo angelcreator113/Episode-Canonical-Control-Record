@@ -115,9 +115,10 @@ export default function Beat14Opportunity({ showId, episodeId, data, onChange, d
       ) : (
         <div className="esp-beat14-form" data-testid="script-beat14-form">
           {!opportunity && <p className="esp-uses-note">The invitation someone at the event offers at the end of the episode. It is offered if the episode lands, and replaces the random follow-up offer.</p>}
-          <div className="esp-beat14-modes" role="tablist" aria-label="Opportunity">
-            <button type="button" role="tab" aria-selected={mode === 'new'} className={`esp-btn is-small${mode === 'new' ? ' is-active' : ''}`} onClick={() => setMode('new')} data-testid="script-beat14-mode-new">New</button>
-            <button type="button" role="tab" aria-selected={mode === 'pick'} className={`esp-btn is-small${mode === 'pick' ? ' is-active' : ''}`} onClick={() => setMode('pick')} disabled={!choices.length} data-testid="script-beat14-mode-pick">{opportunity ? 'Attached or open' : 'Open ones'} ({choices.length})</button>
+          {/* Two buttons, one pressed: a segmented choice, not tabs (Script page re-audit, 2026-10-19). */}
+          <div className="esp-beat14-modes" role="group" aria-label="Opportunity">
+            <button type="button" aria-pressed={mode === 'new'} className="esp-btn is-small" onClick={() => setMode('new')} data-testid="script-beat14-mode-new">New</button>
+            <button type="button" aria-pressed={mode === 'pick'} className="esp-btn is-small" onClick={() => setMode('pick')} disabled={!choices.length} data-testid="script-beat14-mode-pick">{opportunity ? 'Attached or open' : 'Open ones'} ({choices.length})</button>
           </div>
           {mode === 'pick' ? (
             <label className="esp-beat14-field">Opportunity
