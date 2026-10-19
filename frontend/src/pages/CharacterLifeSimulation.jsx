@@ -50,7 +50,7 @@ const FAMILY_ROLES = [
   { role: 'Parents', feed: 'Parental approval or disapproval becomes context for the creator\'s choices — present or conspicuously absent', story: 'The parent who doesn\'t know what their child does for a living. The parent who is proud of the wrong things.' },
   { role: 'Siblings', feed: 'Collaboration potential, rivalry potential, the shared history that complicates the public persona', story: 'The sibling who is also a creator. The sibling who refuses to be. Both are stories.' },
   { role: 'Partners', feed: 'The relationship that shapes the character\'s content permission structure — what she will and won\'t show', story: 'David. JustAWoman tells him everything about the men. He doesn\'t have the feeling.' },
-  { role: 'Children', feed: 'Parent creators shift content — the child changes what she will and won\'t say publicly', story: 'What she protects from the Feed. What the Feed takes anyway. The line she draws and what it costs to hold it.' },
+  { role: 'Children', feed: 'Parent creators shift content — the child changes what she will and won\'t say publicly', story: 'What she protects from The Pulse. What The Pulse takes anyway. The line she draws and what it costs to hold it.' },
 ];
 
 const FRIEND_GROUPS = [
@@ -66,12 +66,12 @@ const MILESTONES = [
   { cat: 'Career', milestone: 'First product launch', feed: 'The creator becomes the entrepreneur — the content becomes commercial', signal: 'Expansion stage. And a test: does the audience follow her into commerce?' },
   { cat: 'Career', milestone: 'Winning a major award', feed: 'Status shift — the industry agreed publicly. The Starlight Awards on the record.', signal: 'The external validation that does not resolve the internal question. The trophy doesn\'t answer the wound.' },
   { cat: 'Career', milestone: 'First Atelier Circuit invitation', feed: 'Fashion legitimacy — the invitation is the content, the appearance is the credential', signal: 'She made it into the room. Now she has to decide what she does with the room.' },
-  { cat: 'Relationship', milestone: 'First relationship reveal', feed: 'The audience meets the relationship — they immediately have opinions', signal: 'Vulnerability. Or the performance of vulnerability. The Feed cannot tell the difference.' },
+  { cat: 'Relationship', milestone: 'First relationship reveal', feed: 'The audience meets the relationship — they immediately have opinions', signal: 'Vulnerability. Or the performance of vulnerability. The Pulse cannot tell the difference.' },
   { cat: 'Relationship', milestone: 'Engagement / wedding', feed: 'Major content event — the audience is invested in the relationship milestone', signal: 'The private decision becomes public property. The commitment is witnessed by everyone.' },
   { cat: 'Relationship', milestone: 'Breakup', feed: 'The post that announces or implies it. The silence before the announcement.', signal: 'Whatever the relationship was providing — safety, identity, content — is now gone.' },
   { cat: 'Life', milestone: 'Moving cities', feed: 'The relocation post — new city, new energy, new chapter narrative', signal: 'She left something. The new city is always partly about what she\'s leaving.' },
-  { cat: 'Life', milestone: 'Starting a business', feed: 'The launch announcement — the creator becomes the founder', signal: 'Her identity expands beyond the Feed. Or tries to.' },
-  { cat: 'Life', milestone: 'Becoming a parent', feed: 'If she discloses: the Feed changes. If she doesn\'t: the speculation is its own event.', signal: 'Everything about what she will and won\'t show publicly gets re-negotiated.' },
+  { cat: 'Life', milestone: 'Starting a business', feed: 'The launch announcement — the creator becomes the founder', signal: 'Her identity expands beyond The Pulse. Or tries to.' },
+  { cat: 'Life', milestone: 'Becoming a parent', feed: 'If she discloses: The Pulse changes. If she doesn\'t: the speculation is its own event.', signal: 'Everything about what she will and won\'t show publicly gets re-negotiated.' },
 ];
 
 const RIVALRIES = [
@@ -87,23 +87,23 @@ const MENTORSHIP_CHAINS = [
 ];
 
 const MIGRATIONS = [
-  { pattern: 'Maverick Harbor → Dazzle District', signals: 'Ambition in fashion — she wants legitimacy beyond the Feed', career: 'Fashion industry access, Dazzle Academy adjacency, the Atelier Circuit as goal', story: 'She left the collaborative, entrepreneurial world for the hierarchical, status-obsessed one. She thinks she\'s ready.' },
-  { pattern: 'Radiance Row → Maverick Harbor', signals: 'Beauty expertise becoming personal brand — the specialist becomes the influencer', career: 'Audience-building, platform expansion, the credibility of expertise applied to content', story: 'She was the expert in the room. Now she has to be the character on the Feed. Different skill.' },
+  { pattern: 'Maverick Harbor → Dazzle District', signals: 'Ambition in fashion — she wants legitimacy beyond The Pulse', career: 'Fashion industry access, Dazzle Academy adjacency, the Atelier Circuit as goal', story: 'She left the collaborative, entrepreneurial world for the hierarchical, status-obsessed one. She thinks she\'s ready.' },
+  { pattern: 'Radiance Row → Maverick Harbor', signals: 'Beauty expertise becoming personal brand — the specialist becomes the influencer', career: 'Audience-building, platform expansion, the credibility of expertise applied to content', story: 'She was the expert in the room. Now she has to be the character on The Pulse. Different skill.' },
   { pattern: 'Echo Park → Ascent Tower', signals: 'Entertainment creator becoming founder — the performer becomes the builder', career: 'Startup culture, product development, Dream Market positioning', story: 'She got tired of being the talent. She wanted to own the thing. That transition is harder than it looks.' },
   { pattern: 'Anywhere → Dazzle District', signals: 'The aspiration move — Dazzle District is the destination that means you made it in fashion', career: 'Depends entirely on whether she has industry relationships or just the aspiration', story: 'The move she made before she was ready. The city didn\'t open for her the way she thought it would.' },
   { pattern: 'Dazzle District → Anywhere', signals: 'The departure — from the place that was supposed to be the destination', career: 'Career diversification, independence from a single industry power center', story: 'She made it and found out what it cost. The move away is the real story.' },
 ];
 
 const PERSONA_GAPS = [
-  { gap: 'Narrow', public: 'Mostly real — what you see is close to what\'s true', private: 'Consistent with the Feed — not much is hidden', story: 'The creator who seems to hold nothing back. The audience assumes she has no secrets. She does. They\'re just different from what they\'d expect.' },
+  { gap: 'Narrow', public: 'Mostly real — what you see is close to what\'s true', private: 'Consistent with The Pulse — not much is hidden', story: 'The creator who seems to hold nothing back. The audience assumes she has no secrets. She does. They\'re just different from what they\'d expect.' },
   { gap: 'Medium', public: 'Curated truth — real things, but selected. The architecture of disclosure.', private: 'More complicated than the content suggests — the parts left out are the load-bearing parts', story: 'The comment section that knows something is wrong before she says anything. They\'re reading the medium gap.' },
-  { gap: 'Wide', public: 'Constructed persona — the Feed is a performance, the person is elsewhere', private: 'Completely separate from the public identity — different values, different relationships, different life', story: 'JustAWoman at the dinner table vs. JustAWoman online. She knows both. The audience only knows one.' },
+  { gap: 'Wide', public: 'Constructed persona — The Pulse is a performance, the person is elsewhere', private: 'Completely separate from the public identity — different values, different relationships, different life', story: 'JustAWoman at the dinner table vs. JustAWoman online. She knows both. The audience only knows one.' },
   { gap: 'In Motion', public: 'The persona is changing — what she\'s willing to show is expanding or contracting', private: 'The private life is pressing against the public one — something is forcing the gap to move', story: 'The content shift. The caption that\'s different from last week\'s. The comment she didn\'t make. The audience tracks the gap even when they don\'t have language for it.' },
 ];
 
 const GENERATIONAL_MOMENTS = [
   { moment: 'Career pivot (mid-arc)', changes: 'Content lane, aesthetic, platform behavior', stays: 'The wound. The wound does not pivot.', story: 'The creator who changed everything about how she shows up. The audience can see what didn\'t change.' },
-  { moment: 'Priority shift (becoming a parent)', changes: 'What she will and won\'t share publicly, the content permission structure', stays: 'The ambition. The wound. The audience.', story: 'She hid the pregnancy until she couldn\'t. She\'s been calculating what the Feed costs since before the baby was born.' },
+  { moment: 'Priority shift (becoming a parent)', changes: 'What she will and won\'t share publicly, the content permission structure', stays: 'The ambition. The wound. The audience.', story: 'She hid the pregnancy until she couldn\'t. She\'s been calculating what The Pulse costs since before the baby was born.' },
   { moment: 'Entering the Legacy stage', changes: 'She stops being a participant and becomes a reference point', stays: 'The body of work. The relationships she built. The creators who learned from her.', story: 'The younger creator who does something she invented and doesn\'t know the origin. The Archivist notices.' },
   { moment: 'Child entering the industry', changes: 'A second generation carrying the family aesthetic, wound, and audience expectations', stays: 'The family name. The comparison the child can\'t escape.', story: 'The child who needs to fail publicly before the audience will let them succeed on their own terms.' },
   { moment: 'Founding a brand or institution', changes: 'She moves from creator to architect — building the structure others will inhabit', stays: 'The voice. The original vision.', story: 'Who built it and who benefits from it are not always the same person.' },
@@ -242,7 +242,7 @@ function renderMilestones() {
   return (
     <div className="cls-section">
       <p className="cls-intro">
-        Milestones generate content, shift reputation, and mark the before-and-after of who a character is on the Feed.
+        Milestones generate content, shift reputation, and mark the before-and-after of who a character is on The Pulse.
       </p>
       {categories.map((cat) => (
         <div key={cat}>

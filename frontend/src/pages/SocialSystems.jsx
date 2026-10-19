@@ -65,7 +65,7 @@ const TABS = [
 // page's saved edits are read by Amber's read_world_page tool, and the
 // archetypes by the Feed (fix-list item 26, 2026-10-08).
 const READS = {
-  archetypes: 'Each new LalaVerse Feed profile gets one of these archetypes, your edits included, beside the Feed\'s own ten; each card counts the profiles that have it. Brain Update writes each archetype into the Show Bible as a Social Archetype card. A card reaches the generators only when you mark it “In every prompt” in the Show Bible; Brain Update keeps that mark when it updates the card.',
+  archetypes: 'Each new LalaVerse Pulse profile gets one of these archetypes, your edits included, beside The Pulse\'s own ten; each card counts the profiles that have it. Brain Update writes each archetype into the Show Bible as a Social Archetype card. A card reaches the generators only when you mark it “In every prompt” in the Show Bible; Brain Update keeps that mark when it updates the card.',
   legends: 'The fifty legendary roles are fixed placeholders in code; nothing in the app links a role to a character yet. The celebrity tiers, famous characters and gossip outlets below are Culture\'s calendar data, and the Calendar Brain Update here writes them into the Show Bible.',
   rules: 'Brain Update writes the relationship types, economy streams, influence forces and legacy signals into the Show Bible as cards. A card reaches the generators only when you mark it “In every prompt” in the Show Bible; Brain Update keeps that mark when it updates the card.',
   trends: 'The fashion and beauty stages and the momentum waves sync through the Social Systems button; the algorithm forces and drama mechanics are Culture\'s calendar data and sync through the Calendar button. No generator reads the page itself. A card reaches the generators only when you mark it “In every prompt” in the Show Bible; Brain Update keeps that mark when it updates the card.',
@@ -78,10 +78,10 @@ const plural = (n, one, many = `${one}s`) => `${n.toLocaleString()} ${n === 1 ? 
 
 /** What the archetype cards' counts are, or why there are none. */
 function feedNote(feed, counted) {
-  if (feed === null) return 'Counting the LalaVerse Feed…';
-  if (!counted) return 'The LalaVerse Feed could not be counted just now.';
-  const parts = ['Each card counts the LalaVerse Feed profiles that have it.'];
-  if (counted.unset) parts.push(`${plural(counted.unset, 'profile')} ${counted.unset === 1 ? 'has' : 'have'} none yet: made before the Feed used these. Suggest theirs below, or set one on a character's page (Known for on The Pulse).`);
+  if (feed === null) return 'Counting The Pulse…';
+  if (!counted) return 'The Pulse could not be counted just now.';
+  const parts = ['Each card counts the LalaVerse Pulse profiles that have it.'];
+  if (counted.unset) parts.push(`${plural(counted.unset, 'profile')} ${counted.unset === 1 ? 'has' : 'have'} none yet: made before The Pulse used these. Suggest theirs below, or set one on a character's page (Known for on The Pulse).`);
   if (counted.other) parts.push(`${plural(counted.other, 'profile')} ${counted.other === 1 ? 'carries' : 'carry'} an archetype no longer in this list.`);
   return parts.join(' ');
 }
@@ -98,10 +98,10 @@ function balanceNote(counted) {
     parts.push(`Crowded: ${b.crowded.map((c) => `${c.name} (${c.count} of ${b.total}, ${c.share}%)`).join('; ')}.`);
   }
   if (b.empty.length) {
-    parts.push(`Nobody on the Feed is known as ${b.empty.length === 1 ? b.empty[0] : `${b.empty.slice(0, -1).join(', ')} or ${b.empty[b.empty.length - 1]}`} yet.`);
+    parts.push(`Nobody on The Pulse is known as ${b.empty.length === 1 ? b.empty[0] : `${b.empty.slice(0, -1).join(', ')} or ${b.empty[b.empty.length - 1]}`} yet.`);
   }
-  if (!parts.length) return 'The Feed is balanced: every type has someone and none crowds it.';
-  parts.push('New creators from the Feed get the least-used types first, and suggestions lean toward them when two fit.');
+  if (!parts.length) return 'The Pulse is balanced: every type has someone and none crowds it.';
+  parts.push('New creators from The Pulse get the least-used types first, and suggestions lean toward them when two fit.');
   return parts.join(' ');
 }
 
@@ -237,7 +237,7 @@ export default function SocialSystems({ embedded = false }) {
                         <span
                           className={`ss-chip-mini ss-arch-count${crowdedNames.has(a.name) ? ' is-crowded' : ''}${counted.balance.total && !counted.count(a.name) ? ' is-empty' : ''}`}
                           data-testid="ss-arch-count"
-                        >{counted.count(a.name).toLocaleString()} in the Feed</span>
+                        >{counted.count(a.name).toLocaleString()} in The Pulse</span>
                       )}
                     </button>
                     {open && (

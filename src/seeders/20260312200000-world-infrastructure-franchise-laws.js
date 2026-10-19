@@ -184,7 +184,7 @@ module.exports = {
               group: 'Fashion Icons',
               count: 5,
               roles: [
-                { role: 'The Style Queen', function: 'Defines what is fashionable this season and what is over', signature: 'Her opinion reshapes the Feed overnight' },
+                { role: 'The Style Queen', function: 'Defines what is fashionable this season and what is over', signature: 'Her opinion reshapes The Pulse overnight' },
                 { role: 'Velvet Muse', function: 'The living embodiment of Dazzle District\'s aesthetic', signature: 'Every Velvet Season moment is built around her presence or absence' },
                 { role: 'The Runway Architect', function: 'Designs the shows that define the Atelier Circuit', signature: 'Their runway is the reference point for the year' },
                 { role: 'Street Style Sovereign', function: 'Bridges street style and high fashion', signature: 'Discovered at Style Market, now front row at every show' },
@@ -196,7 +196,7 @@ module.exports = {
               count: 5,
               roles: [
                 { role: 'The Glow Guru', function: 'Defines beauty standards — her recommendations sell out in hours', signature: 'The beauty world waits for her review before celebrating a launch' },
-                { role: 'Skin Scientist', function: 'Makes skincare evidence-based and aspirational simultaneously', signature: 'Translates beauty lab science into the Feed\'s language' },
+                { role: 'Skin Scientist', function: 'Makes skincare evidence-based and aspirational simultaneously', signature: 'Translates beauty lab science into The Pulse\'s language' },
                 { role: 'The Makeup Oracle', function: 'Predicts beauty trends before they surface publicly', signature: 'The look she posts in January becomes the look everyone does in March' },
                 { role: 'Lash Empress', function: 'Rules the lash and eye beauty space absolutely', signature: 'Started in Radiance Row salons — the Dazzle Academy equivalent in beauty' },
                 { role: 'The Aesthetic Alchemist', function: 'Combines beauty, fashion, and art into a singular visual language', signature: 'Impossible to copy because the source is a specific interior life' }
@@ -218,7 +218,7 @@ module.exports = {
               count: 5,
               roles: [
                 { role: 'The Viral Comedian', function: 'Makes the platform laugh — laughter is its own kind of power', signature: 'The meme that defined the year was hers' },
-                { role: 'The Music Architect', function: 'Builds sonic worlds, not just songs', signature: 'Her sound lives in the background of half the Feed\'s content' },
+                { role: 'The Music Architect', function: 'Builds sonic worlds, not just songs', signature: 'Her sound lives in the background of half The Pulse\'s content' },
                 { role: 'The Nightlife Queen', function: 'Controls what happens after midnight in LalaVerse', signature: 'Her guest list is the event' },
                 { role: 'The Performance Icon', function: 'Elevates creator content to performance art', signature: 'The only creator whose live videos feel like theater' },
                 { role: 'The Stage Rebel', function: 'Breaks every entertainment convention and gets celebrated for it', signature: 'The performance everyone talks about that nobody can explain' }
@@ -241,7 +241,7 @@ module.exports = {
               roles: [
                 { role: 'The Culture Analyst', function: 'Makes sense of what\'s happening in real time', signature: 'Her analysis drops within hours of any major event — always definitive' },
                 { role: 'The Trend Oracle', function: 'Predicts cultural shifts before they happen — always right, always cryptic', signature: 'The post from six months ago that predicted exactly this' },
-                { role: 'The Social Philosopher', function: 'Asks the questions the platform usually avoids', signature: 'The thread that stopped the Feed for a day' },
+                { role: 'The Social Philosopher', function: 'Asks the questions the platform usually avoids', signature: 'The thread that stopped The Pulse for a day' },
                 { role: 'The Media Critic', function: 'Holds the media networks accountable — including Whisper Wire', signature: 'The only creator the gossip outlets are afraid of' },
                 { role: 'The Gossip Empress', function: 'Knows everything — shares it strategically, never wrong', signature: 'She knew before the announcement. She always knows.' }
               ]
@@ -265,7 +265,7 @@ module.exports = {
                 { role: 'The New Wave Designer', function: 'Bringing the next aesthetic before the industry catches up', signature: 'Style Market discovery. Atelier Circuit in two years.' },
                 { role: 'The Beauty Prodigy', function: 'Doing things in beauty that shouldn\'t be possible at her age', signature: 'Found during Glow Week. The Glow Gazette couldn\'t stop writing about her.' },
                 { role: 'The Street Innovator', function: 'Rewriting what street style means right now', signature: 'The look everyone copied. She was already wearing something else.' },
-                { role: 'The Viral Wildcard', function: 'Nobody predicted her. Nobody can predict what she\'ll do next.', signature: 'The post that broke the Feed. Twice.' }
+                { role: 'The Viral Wildcard', function: 'Nobody predicted her. Nobody can predict what she\'ll do next.', signature: 'The post that broke The Pulse. Twice.' }
               ]
             },
             {

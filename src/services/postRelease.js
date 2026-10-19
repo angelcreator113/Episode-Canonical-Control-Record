@@ -538,7 +538,7 @@ async function planOne(db, post, { tzOffset = 0, now = new Date(), taken = null,
   const onFeed = spreadOnFeed(at, others, feed, tz(tzOffset), r);
   if (onFeed.getTime() !== at.getTime()) {
     at = onFeed;
-    why += '; moved so the Feed is not crowded';
+    why += '; moved so The Pulse is not crowded';
   }
   // Their posting schedule (services/postingSchedule; Evoni, 2026-10-18):
   // the first time on their days, in their windows, at or after the time

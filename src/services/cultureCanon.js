@@ -87,7 +87,7 @@ const DEFAULTS = Object.freeze({
     { name: 'Trend Telescope', focus: 'Trend forecasting', covers: 'Trend Summit coverage, upcoming aesthetics, emerging creators', power: 'Being predicted by Trend Telescope before you peak is the signal.' },
   ],
   CELEBRITY_HIERARCHY: [
-    { tier: 1, name: 'Cultural Icons', followers: '10M+', desc: 'Platform-defining figures. Define trends. Headline global events. Their opinion reshapes the Feed.' },
+    { tier: 1, name: 'Cultural Icons', followers: '10M+', desc: 'Platform-defining figures. Define trends. Headline global events. Their opinion reshapes The Pulse.' },
     { tier: 2, name: 'Industry Titans', followers: '5M-10M', desc: 'Major designers, beauty founders, entertainment stars. Shape industry direction. Sponsor major events.' },
     { tier: 3, name: 'Major Influencers', followers: '1M-5M', desc: 'Fashion creators, lifestyle influencers. Move culture at scale. Front row at everything.' },
     { tier: 4, name: 'Rising Creators', followers: '100K-1M', desc: 'Viral creators, niche experts. The dangerous tier — where careers accelerate or collapse.' },

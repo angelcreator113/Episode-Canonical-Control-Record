@@ -91,7 +91,7 @@ const RULES = Object.freeze([
   { match: /community|peer|watcher|friend|relatable/i,
     label: 'evenings', windows: [{ start: '18:30', end: '21:00' }], why: 'a community voice posts when their people are home' },
 ]);
-const DEFAULT_RULE = Object.freeze({ label: 'midday and evenings', windows: [{ start: '12:00', end: '13:30' }, { start: '18:00', end: '20:00' }], why: 'midday and evening are when the Feed is busiest' });
+const DEFAULT_RULE = Object.freeze({ label: 'midday and evenings', windows: [{ start: '12:00', end: '13:30' }, { start: '18:00', end: '20:00' }], why: 'midday and evening are when The Pulse is busiest' });
 
 // Temperament (pulseVoices): how often, and on how many days.
 const TEMPERAMENT = Object.freeze({
