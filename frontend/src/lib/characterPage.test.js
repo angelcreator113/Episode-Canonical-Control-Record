@@ -1,6 +1,6 @@
 /** The character page's rows and sentences (lib/characterPage). */
 import { describe, test, expect } from 'vitest';
-import { depthOf, depthLevelOf, cityLabel, archetypeOf, showUpRows, withLala, voiceOf, eventPurpose } from './characterPage';
+import { depthOf, depthLevelOf, depthStageOf, cityLabel, archetypeOf, showUpRows, withLala, voiceOf, eventPurpose } from './characterPage';
 
 const APPEARANCES = {
   linked: true,
@@ -21,9 +21,27 @@ describe('the character page', () => {
     expect(depthOf(undefined).index).toBe(0);
   });
 
+  // The profile audit, 2026-10-19: the saved stage is shown, never the computed one as if saved.
+  test('stage: the saved level, and what their fields already reach when that is further', () => {
+    expect(depthStageOf({ depth_level: 'breathing', feed_profile_id: 7 })).toEqual({ level: 'breathing', ready: 'active' });
+    expect(depthStageOf({ depth_level: 'active', feed_profile_id: 7 })).toEqual({ level: 'active', ready: null });
+    expect(depthStageOf({ feed_profile_id: 7 })).toEqual({ level: 'sparked', ready: 'active' });
+    expect(depthStageOf({ depth_level: 'alive' })).toEqual({ level: 'alive', ready: null });
+    expect(depthStageOf(null)).toEqual({ level: 'sparked', ready: null });
+  });
+
   test('labels', () => {
     expect(cityLabel('echo_park')).toBe('Echo Park');
     expect(cityLabel(null)).toBeNull();
+    // Every stored city reads as a name; "unknown" is no city (the profile audit, 2026-10-19).
+    expect(cityLabel('velour_city')).toBe('Velour City');
+    expect(cityLabel('nova_prime')).toBe('Nova Prime');
+    expect(cityLabel('the_drift')).toBe('The Drift');
+    expect(cityLabel('solenne')).toBe('Solenne');
+    expect(cityLabel('cascade_row')).toBe('Cascade Row');
+    expect(cityLabel('unknown')).toBeNull();
+    expect(cityLabel('outside_lalaverse')).toBeNull();
+    expect(cityLabel('some_new_place')).toBe('Some New Place');
     expect(archetypeOf({ society_archetype: 'the_peer', archetype: 'soft_life' })).toBe('The peer');
   });
 

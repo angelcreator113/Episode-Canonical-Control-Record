@@ -48,10 +48,31 @@ export function depthLevelOf(character) {
   return at(c.depth_level) > at(reached) ? c.depth_level : reached;
 }
 
+/**
+ * Their stage as saved (registry_characters.depth_level, the one The Pulse
+ * reads in pulseVoices.eligible), and the step their fields already reach
+ * when that is further: { level, ready }. The page shows the saved stage
+ * with "Ready to be …" beside it, never the computed one as if saved (the
+ * profile audit, 2026-10-19: it said Active for a character The Pulse kept
+ * as not posting yet).
+ */
+export function depthStageOf(character) {
+  const at = (k) => DEPTH_STEPS.findIndex((s) => s.key === k);
+  const level = at(character?.depth_level) >= 0 ? character.depth_level : 'sparked';
+  const reached = depthLevelOf(character);
+  return { level, ready: at(reached) > at(level) ? reached : null };
+}
+
+// Every city value the profiles store: the five DREAM cities and the
+// legacy enum (SocialProfile.city). The profile audit, 2026-10-19: legacy
+// ones showed raw ("velour city"), and 'unknown' read as a city.
 const CITY_LABELS = {
   dazzle_district: 'Dazzle District', radiance_row: 'Radiance Row', echo_park: 'Echo Park',
   ascent_tower: 'Ascent Tower', maverick_harbor: 'Maverick Harbor',
+  nova_prime: 'Nova Prime', velour_city: 'Velour City', the_drift: 'The Drift', solenne: 'Solenne', cascade_row: 'Cascade Row',
 };
+// Values that say "no city", never shown as one.
+const NO_CITY = new Set(['unknown', 'none', 'outside_lalaverse']);
 /**
  * The five DREAM cities and what each is the capital of (the franchise laws'
  * world infrastructure), placed where the LalaVerse map draws them.
@@ -69,7 +90,12 @@ export const dreamCityOf = (label) => {
   return DREAM_CITIES.find((c) => c.key === k) || null;
 };
 
-export const cityLabel = (city) => CITY_LABELS[city] || (city ? String(city).replace(/_/g, ' ') : null);
+export const cityLabel = (city) => {
+  if (!city || NO_CITY.has(String(city).toLowerCase())) return null;
+  if (CITY_LABELS[city]) return CITY_LABELS[city];
+  // Anything else in title case, not raw.
+  return String(city).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+};
 
 /**
  * Their city, one answer (Evoni, 2026-10-16: one meaning per field). The
