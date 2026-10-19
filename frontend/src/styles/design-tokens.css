@@ -288,7 +288,7 @@
   --studio-magenta-soft:  #FCE7F3;  /* selected row / chip bg */
   --studio-purple:      #6B2FA0;  /* section icons, links (8.6:1 on white) */
   --studio-purple-soft: #F1E8FA;
-  --studio-gradient:    linear-gradient(90deg, #E0218A 0%, #C2177A 100%);  /* primary buttons, white text */
+  --studio-gradient:    linear-gradient(90deg, #D01C80 0%, #C2177A 100%);  /* primary buttons, white text (5.0:1 at its lightest) */
   --studio-ok:          #2F6B2A;  /* APPROVED text (6.6:1 on its soft) */
   --studio-ok-soft:     #DDF2D6;
   --studio-warn:        #9A4A0E;  /* NEEDS REVISION text (5.9:1 on its soft) */
