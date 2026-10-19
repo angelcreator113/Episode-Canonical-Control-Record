@@ -297,7 +297,13 @@ async function bringExisting(db, { by = null } = {}) {
     UNION ALL
     SELECT s.id::text, wl.approved_base_image_url, s.name, 'scene_set', 'world_locations:' || wl.id || ':approved_base_image_url'
       FROM world_locations wl JOIN scene_sets s ON s.id = wl.approved_base_scene_set_id AND s.deleted_at IS NULL
-     WHERE wl.deleted_at IS NULL`;
+     WHERE wl.deleted_at IS NULL
+    UNION ALL
+    -- The venue's own photo (world_locations.venue_photo_url; Evoni, 2026-10-19:
+    -- bring venue photos in too), for each set at that venue.
+    SELECT s.id::text, wl.venue_photo_url, s.name || ' (the venue)', 'venue', 'world_locations:' || wl.id || ':venue_photo_url'
+      FROM scene_sets s JOIN world_locations wl ON wl.id = s.world_location_id AND wl.deleted_at IS NULL
+     WHERE s.deleted_at IS NULL`;
   const events = `
     SELECT we.id::text AS entity_id, COALESCE(a.s3_url_processed, a.s3_url_raw) AS url, we.name || ': the invitation' AS caption,
            'invitation' AS source, 'assets:' || a.id AS source_ref
