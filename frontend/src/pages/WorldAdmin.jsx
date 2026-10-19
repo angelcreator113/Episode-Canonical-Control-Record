@@ -8086,7 +8086,22 @@ export function OpportunitiesTab({ showId, api, S, setToast, loadData, episodes 
   // The card whose "Attach to beat 14…" form is open (Evoni, 2026-10-19).
   const [attachingId, setAttachingId] = useState(null);
   const OPP_TYPES = ['modeling', 'runway', 'editorial', 'campaign', 'ambassador', 'brand_deal', 'podcast', 'interview', 'award_show'];
-  const OPP_STATUS_COLORS = { offered: '#f59e0b', considering: '#6366f1', negotiating: '#8b5cf6', booked: '#22c55e', preparing: '#3b82f6', active: '#16a34a', completed: '#059669', paid: '#0d9488', declined: '#94a3b8', cancelled: '#dc2626', archived: '#666' };
+  // Text tokens, each at least 4.5:1 on the card and on its own 12% tint
+  // (Script page audit 3, 2026-10-19: amber "offered" was 2.15:1).
+  const OPP_STATUS_COLORS = { offered: 'var(--warning-text)', considering: 'var(--lala-lavender-text)', negotiating: 'var(--accent-dark)', booked: 'var(--success-text)', preparing: 'var(--info-text)', active: 'var(--success-text)', completed: 'var(--primary-text)', paid: 'var(--primary-text)', declined: 'var(--text-muted)', cancelled: 'var(--danger-text)', archived: 'var(--text-muted)' };
+  const tint = (c) => `color-mix(in srgb, ${c} 12%, transparent)`;
+  // Payments are coins: careerPipelineService adds payment_amount to a coins
+  // goal (Script page audit 3, 2026-10-19: the tab showed dollars).
+  const coinsText = (n) => `${Math.round(n).toLocaleString()} coins`;
+  // Focus goes back to the card when its attach form closes (Script page audit 3, 2026-10-19).
+  const focusCardRef = useRef(null);
+  useEffect(() => {
+    const id = focusCardRef.current;
+    if (id == null || attachingId != null) return;
+    focusCardRef.current = null;
+    const card = document.querySelector(`[data-opp-card="${id}"]`);
+    (card?.querySelector(`[data-testid="opp-beat14-open-${id}"]`) || card?.querySelector('a, button'))?.focus();
+  });
 
   const loadOpps = useCallback(() => api.get(`/api/v1/opportunities/${showId}`)
     .then(r => { setOpps(r.data.opportunities || []); setOppLoading(false); })
@@ -8154,7 +8169,7 @@ export function OpportunitiesTab({ showId, api, S, setToast, loadData, episodes 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
         <div>
           <h2 style={{ ...S.cardTitle, margin: '0 0 4px' }}>Opportunities</h2>
-          <div style={{ fontSize: 12, color: '#94a3b8' }}>{opps.length} total · ${bookedValue.toLocaleString()} booked · ${totalValue.toLocaleString()} pipeline</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{opps.length} total · {coinsText(bookedValue)} booked · {coinsText(totalValue)} pipeline</div>
         </div>
         <button onClick={() => setOppForm({ name: '', opportunity_type: 'modeling', category: 'fashion', prestige: 5, payment_amount: 0 })} style={S.primaryBtn}>+ New Opportunity</button>
       </div>
@@ -8163,7 +8178,7 @@ export function OpportunitiesTab({ showId, api, S, setToast, loadData, episodes 
           const count = pipeline[s]?.length || 0;
           if (!count) return null;
           if (s === 'held') return <span key={s} className="ob14-chip-held">held for beat 14: {count}</span>;
-          return <span key={s} style={{ padding: '3px 10px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: OPP_STATUS_COLORS[s] + '20', color: OPP_STATUS_COLORS[s] }}>{s}: {count}</span>;
+          return <span key={s} style={{ padding: '3px 10px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: tint(OPP_STATUS_COLORS[s] || 'var(--text-muted)'), color: OPP_STATUS_COLORS[s] || 'var(--text-muted)' }}>{s}: {count}</span>;
         })}
       </div>
       {oppForm && (
@@ -8181,7 +8196,7 @@ export function OpportunitiesTab({ showId, api, S, setToast, loadData, episodes 
               <datalist id="opp-companies">{companies.map(c => <option key={c.id} value={c.name}>{c.kind_label}</option>)}</datalist>
               <Link to="/universe?tab=brands" style={{ fontSize: 10 }}>New company</Link>
             </div>
-            <div><label style={S.fLabel}>Payment</label><input type="number" value={oppForm.payment_amount || 0} onChange={e => setOppForm({ ...oppForm, payment_amount: parseInt(e.target.value) || 0 })} style={S.sel} /></div>
+            <div><label style={S.fLabel}>Payment (coins)</label><input type="number" value={oppForm.payment_amount || 0} onChange={e => setOppForm({ ...oppForm, payment_amount: parseInt(e.target.value) || 0 })} style={S.sel} /></div>
             <div><label style={S.fLabel}>Prestige</label><input type="number" min={1} max={10} value={oppForm.prestige || 5} onChange={e => setOppForm({ ...oppForm, prestige: parseInt(e.target.value) || 5 })} style={S.sel} /></div>
             <div><label style={S.fLabel}>Season</label><input value={oppForm.season || ''} onChange={e => setOppForm({ ...oppForm, season: e.target.value })} placeholder="FW26" style={S.sel} /></div>
           </div>
@@ -8193,24 +8208,24 @@ export function OpportunitiesTab({ showId, api, S, setToast, loadData, episodes 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {opps.map(opp => {
             const held = opp.status === 'held';
-            const sc = held ? 'var(--lala-gold)' : (OPP_STATUS_COLORS[opp.status] || '#999');
+            const sc = held ? 'var(--lala-gold)' : (OPP_STATUS_COLORS[opp.status] || 'var(--text-muted)');
             const NEXT = { offered: 'considering', considering: 'negotiating', negotiating: 'booked', booked: 'preparing', preparing: 'active', active: 'completed', completed: 'paid' };
             return (
-              <div key={opp.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderLeft: `4px solid ${sc}`, borderRadius: 10, padding: '12px 16px' }}>
+              <div key={opp.id} data-opp-card={opp.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderLeft: `4px solid ${sc}`, borderRadius: 10, padding: '12px 16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{opp.name}</div>
                     <div style={{ fontSize: 11, color: '#666', display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
                       {held
                         ? <HeldForBeat14 opp={opp} />
-                        : <span style={{ padding: '1px 6px', borderRadius: 4, background: sc + '20', color: sc, fontWeight: 600, fontSize: 10 }}>{opp.status}</span>}
+                        : <span style={{ padding: '1px 6px', borderRadius: 4, background: tint(sc), color: sc, fontWeight: 600, fontSize: 10 }}>{opp.status}</span>}
                       <span>{opp.opportunity_type?.replace(/_/g, ' ')}</span>
                       {opp.company_id && companyById.get(opp.company_id)
                         ? <Link to={`/brands/${companyById.get(opp.company_id).slug}`}>{opp.brand_or_company || companyById.get(opp.company_id).name}</Link>
                         : opp.brand_or_company && <span>{opp.brand_or_company}</span>}
                     </div>
                   </div>
-                  {parseFloat(opp.payment_amount) > 0 && <div style={{ fontSize: 16, fontWeight: 800, color: '#16a34a' }}>${parseFloat(opp.payment_amount).toLocaleString()}</div>}
+                  {parseFloat(opp.payment_amount) > 0 && <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--success-text)' }} data-testid={`opp-payment-${opp.id}`}>{coinsText(parseFloat(opp.payment_amount))}</div>}
                 </div>
                 {opp.narrative_stakes && <div style={{ fontSize: 11, color: '#666', marginBottom: 6 }}>{opp.narrative_stakes}</div>}
                 <div className="ob14-card-actions" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
@@ -8229,8 +8244,8 @@ export function OpportunitiesTab({ showId, api, S, setToast, loadData, episodes 
                 </div>
                 {attachingId === opp.id && (
                   <Beat14AttachForm showId={showId} opp={opp} episodes={episodes} api={api}
-                    onCancel={() => setAttachingId(null)}
-                    onDone={async (ep) => { setAttachingId(null); setToast(`${opp.name} is beat 14's opportunity in ${ep?.title || (ep?.episode_number != null ? `Episode ${ep.episode_number}` : 'the episode')}`); await loadOpps(); }} />
+                    onCancel={() => { focusCardRef.current = opp.id; setAttachingId(null); }}
+                    onDone={async (ep) => { focusCardRef.current = opp.id; setAttachingId(null); setToast(`${opp.name} is beat 14's opportunity in ${ep?.title || (ep?.episode_number != null ? `Episode ${ep.episode_number}` : 'the episode')}`); await loadOpps(); }} />
                 )}
                 {/* Deliverables that check themselves (Evoni, 2026-10-19): "Pulse stories: 2 of 3". */}
                 {opp.event_id && <DeliverableProgress opportunityId={opp.id} compact />}
