@@ -10,13 +10,16 @@
  * POST   /api/v1/opportunities/:showId/:id/advance — Advance pipeline status
  * POST   /api/v1/opportunities/:showId/:id/to-event — Convert to world event
  * GET    /api/v1/opportunities/:showId/stats       — Pipeline stats
+ *
+ * Every write here is ADMIN only; the reads stay requireAuth (Evoni,
+ * 2026-10-19: "this whole part of the site is admin only").
  */
 
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 
 async function getModels(req) {
   return req?.app?.get('models') || req?.app?.locals?.db || require('../models');
@@ -95,7 +98,7 @@ router.get('/opportunities/:showId', requireAuth, async (req, res) => {
 // POST /opportunities/:showId — Create
 // ═══════════════════════════════════════════
 
-router.post('/opportunities/:showId', requireAuth, async (req, res) => {
+router.post('/opportunities/:showId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { showId } = req.params;
     const models = await getModels(req);
@@ -147,7 +150,7 @@ router.post('/opportunities/:showId', requireAuth, async (req, res) => {
 // PUT /opportunities/:showId/:id — Update
 // ═══════════════════════════════════════════
 
-router.put('/opportunities/:showId/:id', requireAuth, async (req, res) => {
+router.put('/opportunities/:showId/:id', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { showId, id } = req.params;
     const models = await getModels(req);
@@ -179,7 +182,7 @@ router.put('/opportunities/:showId/:id', requireAuth, async (req, res) => {
 // POST /opportunities/:showId/:id/advance — Advance pipeline
 // ═══════════════════════════════════════════
 
-router.post('/opportunities/:showId/:id/advance', requireAuth, async (req, res) => {
+router.post('/opportunities/:showId/:id/advance', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { showId, id } = req.params;
     const { to_status, note } = req.body;
@@ -234,7 +237,7 @@ router.post('/opportunities/:showId/:id/advance', requireAuth, async (req, res) 
 // POST /opportunities/:showId/:id/to-event — Convert to world event
 // ═══════════════════════════════════════════
 
-router.post('/opportunities/:showId/:id/to-event', requireAuth, async (req, res) => {
+router.post('/opportunities/:showId/:id/to-event', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { showId, id } = req.params;
     const models = await getModels(req);
@@ -272,7 +275,9 @@ router.get('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, asyn
   }
 });
 
-router.put('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, async (req, res) => {
+// Attach and detach are ADMIN only (Evoni, 2026-10-19: "make Beat 14 this
+// whole part of the site is admin only"); the read stays requireAuth.
+router.put('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { attachBeat14 } = require('../services/beat14Opportunity');
     const body = req.body || {};
@@ -288,7 +293,7 @@ router.put('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, asyn
   }
 });
 
-router.delete('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, async (req, res) => {
+router.delete('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { detachBeat14 } = require('../services/beat14Opportunity');
     return res.json({ success: true, data: await detachBeat14(await getModels(req), req.params) });
@@ -301,7 +306,7 @@ router.delete('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, a
 // DELETE /opportunities/:showId/:id
 // ═══════════════════════════════════════════
 
-router.delete('/opportunities/:showId/:id', requireAuth, async (req, res) => {
+router.delete('/opportunities/:showId/:id', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { showId, id } = req.params;
     const models = await getModels(req);
@@ -353,7 +358,7 @@ router.get('/opportunities/:showId/stats', requireAuth, async (req, res) => {
 // POST /opportunities/:showId/episode-complete/:episodeId — Trigger career pipeline on episode completion
 // ═══════════════════════════════════════════
 
-router.post('/opportunities/:showId/episode-complete/:episodeId', requireAuth, async (req, res) => {
+router.post('/opportunities/:showId/episode-complete/:episodeId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { showId, episodeId } = req.params;
     const models = await getModels(req);

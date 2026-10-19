@@ -15,7 +15,8 @@ jest.mock('../../../src/services/careerPipelineService', () => ({
 }));
 jest.mock('../../../src/middleware/auth', () => {
   const actual = jest.requireActual('../../../src/middleware/auth');
-  return { ...actual, requireAuth: (req, _res, next) => { req.user = { id: 'u1' }; next(); } };
+  // An ADMIN: every deal write is ADMIN only (Evoni, 2026-10-19).
+  return { ...actual, requireAuth: (req, _res, next) => { req.user = { id: 'u1', groups: ['ADMIN'] }; next(); } };
 });
 
 const router = require('../../../src/routes/opportunityRoutes');

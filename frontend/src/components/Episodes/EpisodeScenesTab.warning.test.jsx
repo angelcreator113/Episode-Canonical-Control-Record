@@ -72,10 +72,10 @@ describe('EpisodeScenesTab feed moment warning', () => {
     renderTab();
 
     expect((await screen.findByRole('alert')).textContent)
-      .toContain("Could not check whether this episode's feed moments were saved: Network Error");
+      .toContain("Could not check whether this episode's Pulse moments were saved: Network Error");
   });
 
-  describe('Retry feed moments (Task #2220)', () => {
+  describe('Retry Pulse moments (Task #2220)', () => {
     // The plan reports `before` until the retry has run, then `after`.
     const planSequence = (before, after) => {
       let retried = false;
@@ -100,9 +100,9 @@ describe('EpisodeScenesTab feed moment warning', () => {
       });
 
       renderTab();
-      fireEvent.click(await screen.findByRole('button', { name: 'Retry feed moments' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Retry Pulse moments' }));
 
-      expect((await screen.findByRole('status')).textContent).toBe('Saved the feed moment for beats 3 and 7.');
+      expect((await screen.findByRole('status')).textContent).toBe('Saved the Pulse moment for beats 3 and 7.');
       expect(apiClient.post).toHaveBeenCalledWith('/api/v1/episode-brief/ep-1/feed-moments/retry');
       expect(screen.queryByRole('alert')).toBeNull();
     });
@@ -115,7 +115,7 @@ describe('EpisodeScenesTab feed moment warning', () => {
       });
 
       renderTab();
-      fireEvent.click(await screen.findByRole('button', { name: 'Retry feed moments' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Retry Pulse moments' }));
 
       expect((await screen.findByRole('status')).textContent).toBe('Saved 1 of 2. Still not saved for beat 7: db unavailable');
       await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('not saved for beat 7, so that beat has no feed moment.'));
@@ -127,12 +127,12 @@ describe('EpisodeScenesTab feed moment warning', () => {
       vi.mocked(apiClient.post).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
 
       renderTab();
-      fireEvent.click(await screen.findByRole('button', { name: 'Retry feed moments' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Retry Pulse moments' }));
 
       const running = await screen.findByRole('button', { name: /Retrying/ });
       expect(running.disabled).toBe(true);
       finish({ data: { success: true, data: { attempted: 1, saved: 0, failed: [{ beat_number: 5, error: 'x' }] } } });
-      expect(await screen.findByRole('button', { name: 'Retry feed moments' })).toBeTruthy();
+      expect(await screen.findByRole('button', { name: 'Retry Pulse moments' })).toBeTruthy();
     });
 
     test('a failed request says so in plain words', async () => {
@@ -142,10 +142,10 @@ describe('EpisodeScenesTab feed moment warning', () => {
       }));
 
       renderTab();
-      fireEvent.click(await screen.findByRole('button', { name: 'Retry feed moments' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Retry Pulse moments' }));
 
       expect((await screen.findByRole('status')).textContent)
-        .toBe("Could not retry the feed moments: This episode's source event is gone, so its feed moments cannot be generated again.");
+        .toBe("Could not retry the Pulse moments: This episode's source event is gone, so its feed moments cannot be generated again.");
     });
   });
 });

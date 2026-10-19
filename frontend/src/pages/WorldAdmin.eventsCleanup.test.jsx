@@ -151,9 +151,9 @@ describe('WorldAdmin events queue — cleanup and pagination (Task #2360)', () =
     await waitFor(() => expect(cardIds()).toHaveLength(9));
 
     fireEvent.click(screen.getByTestId('events-ideas-button'));
-    const drawer = await screen.findByRole('dialog', { name: /Ideas — Feed opportunities & event templates/ });
+    const drawer = await screen.findByRole('dialog', { name: /Ideas — Pulse opportunities & event templates/ });
     expect(drawer.getAttribute('data-testid')).toBe('events-ideas');
-    expect(within(drawer).getByText(/Pipeline — Feed → Opportunities → Events/)).toBeTruthy();
+    expect(within(drawer).getByText(/Pipeline — The Pulse → Opportunities → Events/)).toBeTruthy();
 
     fireEvent.click(screen.getByTestId('events-ideas-close'));
     await waitFor(() => expect(screen.queryByTestId('events-ideas')).toBeNull());

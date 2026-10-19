@@ -15,7 +15,7 @@ const NO_ZONES = [];
 const NO_OTHERS = [];
 
 export const CONTENT_AREA_KINDS = [
-  { key: 'latest_post', label: 'Latest post', desc: "From Lala's Feed", tone: 'ink', content_type: 'feed_posts', content_config: { max_items: 1 } },
+  { key: 'latest_post', label: 'Latest post', desc: "From Lala's posts", tone: 'ink', content_type: 'feed_posts', content_config: { max_items: 1 } },
   { key: 'dm_thread', label: 'DM thread', desc: 'A conversation in Messages', tone: 'pink', content_type: 'dm_thread', content_config: {} },
   { key: 'profile_card', label: 'Profile card', desc: 'Any character, from the registry', tone: 'lavender', content_type: 'profile_header', content_config: {} },
   { key: 'lala_stats', label: "Lala's stats", desc: 'Coins and her next goal', tone: 'gold', content_type: 'money_balance', content_config: {} },

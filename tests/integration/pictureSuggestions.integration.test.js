@@ -328,4 +328,14 @@ const CANDLE = {
     expect(res.body.reading.person_in_frame).toBe('yes'); // "same me"
     expect(await row(ids.garbled)).toBeUndefined();
   });
+
+  it('the AI down or without a key gives the plainer reading, not a raw error, and keeps nothing', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    mockCreate.mockRejectedValueOnce(new Error('Could not resolve authentication method. Expected either apiKey or authToken to be set.'));
+    const res = await suggest(ids.garbled);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ fallback: true, ai_unavailable: true, cached: false });
+    expect(JSON.stringify(res.body)).not.toMatch(/authentication method/);
+    expect(await row(ids.garbled)).toBeUndefined();
+  });
 });

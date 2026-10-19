@@ -186,7 +186,7 @@ export function showUpRows(appearances, feedProfile) {
   const feed = appearances.feed;
   if (feed) {
     rows.push({
-      kind: 'feed', label: 'Feed', title: lalaTie(feed.lala_relationship) || 'On the feed',
+      kind: 'feed', label: 'Pulse', title: lalaTie(feed.lala_relationship) || 'On The Pulse',
       sub: plural(feed.posts || 0, 'post'),
       // Its profile where Feed profiles are made, World Studio's Feed tab (Task #2761).
       to: feedProfile?.id ? `/world-studio?tab=feed&layer=${feedProfile.feed_layer === 'real_world' ? 'real_world' : 'lalaverse'}&profile=${feedProfile.id}` : '/pulse',
