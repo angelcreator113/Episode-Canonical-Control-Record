@@ -86,7 +86,7 @@ describe('EpisodeScenesTab, the compact layout (S9 b)', () => {
     fireEvent.click(within(strip).getByTestId('est-location-chip-set-home'));
     const home = screen.getByTestId('est-location-detail-set-home');
     expect(home.textContent).toContain('3 more views');
-    expect(within(home).getByRole('link', { name: 'Open in Scene Sets' }).getAttribute('href')).toBe('/shows/show-1/world?tab=scene-sets&set=set-home');
+    expect(within(home).getByRole('link', { name: 'Open in Scene Sets' }).getAttribute('href')).toMatch(/^\/shows\/show-1\/world\?tab=scene-sets&set=set-home&from=%2Fepisodes%2F/);
     expect(within(home).queryByRole('link', { name: 'Open Event Package' })).toBeNull();
 
     fireEvent.click(within(strip).getByTestId('est-location-chip-set-venue'));

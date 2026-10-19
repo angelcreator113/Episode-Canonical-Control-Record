@@ -17,6 +17,7 @@ const { v4: uuidv4 } = require('uuid');
 const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
 const { findLiveLinkedEpisode, eventEpisodeConflictError } = require('../utils/eventEpisodeLink');
 const { findMissingPrices, dealPriceRequiredError } = require('./dealPricingService');
+const { takePriceSnapshot } = require('./dealPriceSnapshot');
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 const { listEventDeliverables, stampDeliverablesEpisode, buildTermsSnapshot } = require('./eventTermsService');
 const { saveBeatFeedMoment, recordFeedMomentSave } = require('./feedMomentSaveService');
@@ -743,6 +744,10 @@ Return ONLY JSON.` }],
     await draftEpisodeSpending(models.sequelize, { event, episodeId: episode.id, replacingEpisodeId, transaction });
 
     await stampEventUsed(models.sequelize, eventId, episode.id, { transaction });
+    // The deal is agreed: its prices are frozen now, in the same commit, so
+    // a later rate card edit never reaches them (Evoni, 2026-10-19;
+    // services/dealPriceSnapshot).
+    await takePriceSnapshot(models.sequelize, eventId, { transaction, reason: 'start_episode' });
     return { episode, brief };
   });
 

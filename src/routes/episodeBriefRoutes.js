@@ -130,6 +130,8 @@ router.post('/:episodeId/generate-plan', requireAuth, aiRateLimiter, async (req,
     });
   } catch (err) {
     console.error('[ScenePlanner] generate error:', err);
+    // A refused budget is a 429 with its code, not a 500 (eighth audit).
+    if (err?.code === 'AI_BUDGET_EXCEEDED' || err?.status === 429) return res.status(429).json({ error: err.message, code: 'AI_BUDGET_EXCEEDED' });
     return res.status(500).json({ error: err.message });
   }
 });

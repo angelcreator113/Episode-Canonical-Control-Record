@@ -108,9 +108,12 @@ describe('EpisodeSceneWorkspace', () => {
     renderWs({ onToast });
     await screen.findByTestId('esw-scene-1');
     expect(screen.getByLabelText("Director's note").disabled).toBe(true);
-    fireEvent.click(await screen.findByRole('button', { name: /Close Up/ }));
+    // Its angles are not offered while it is locked, saying why (eighth audit).
+    const closeUp = await screen.findByRole('button', { name: /Close Up/ });
+    expect(closeUp.disabled).toBe(true);
+    expect(closeUp.getAttribute('title')).toBe('This scene is locked. Unlock it to change it.');
+    fireEvent.click(closeUp);
     expect(api.put).not.toHaveBeenCalled();
-    expect(onToast).toHaveBeenCalledWith('This scene is locked. Unlock it to change it.', 'error');
     fireEvent.click(screen.getByTestId('esw-lock'));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/episode-brief/ep-1/plan/1/lock'));
   });
@@ -139,5 +142,31 @@ describe('EpisodeSceneWorkspace', () => {
     renderWs({ onOpenTab });
     fireEvent.click(await screen.findByRole('button', { name: 'Open the Beat Plan' }));
     expect(onOpenTab).toHaveBeenCalledWith('beatplan');
+  });
+
+  // Eighth audit (2026-10-19).
+  test("the stage shows the server's picture (the dressed look or variant) before the angle's plain still", async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/episode-brief/ep-1/plan') return { data: { data: [{ ...PLAN[1], location: { image: { url: 'https://x/gala-dressed.jpg' } } }] } };
+      if (url === '/api/v1/scene-sets/set-1') return { data: { success: true, data: SET } };
+      return { data: {} };
+    });
+    const { container } = renderWs();
+    fireEvent.click(await screen.findByTestId('esw-scene-2'));
+    await screen.findByRole('button', { name: /Close Up/ });
+    const srcs = [...container.querySelectorAll('img')].map((i) => i.getAttribute('src'));
+    expect(srcs).toContain('https://x/gala-dressed.jpg');
+  });
+
+  test('a removed location says so and points to Move my beats, with no Add angle', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/episode-brief/ep-1/plan') return { data: { data: PLAN } };
+      if (url === '/api/v1/scene-sets/set-1') throw Object.assign(new Error('gone'), { response: { status: 404 } });
+      return { data: {} };
+    });
+    renderWs();
+    fireEvent.click(await screen.findByTestId('esw-scene-2'));
+    expect((await screen.findByTestId('esw-set-failed')).textContent).toMatch(/was removed.*Move my beats/);
+    expect(screen.queryByText('Add angle')).toBeNull();
   });
 });

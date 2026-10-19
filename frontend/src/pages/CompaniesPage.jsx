@@ -3,7 +3,9 @@
  * profile pages"): every company in Lala's world, fashion brands first, then
  * magazines and press outlets, agencies and venues; each opens its profile
  * (/brands/:slug, pages/BrandProfilePage). Evoni adds a company here
- * (POST /api/v1/companies). Reached from the Sidebar's WORLD zone.
+ * (POST /api/v1/companies). It is the LalaVerse hub's Brands tab (Evoni,
+ * 2026-10-19: "Brand & companies page being as a tab inside lalaverse");
+ * /brands redirects there, and the hub's banner stands in for the heading.
  */
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -47,7 +49,7 @@ function NewCompany({ onMade }) {
   );
 }
 
-export default function CompaniesPage() {
+export default function CompaniesPage({ embedded = false }) {
   const navigate = useNavigate();
   const { user } = useAuth() || {};
   const admin = isAdmin(user);
@@ -70,11 +72,13 @@ export default function CompaniesPage() {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <div className="co" data-testid="companies">
-      <header className="co-head">
-        <h1 className="co-title"><Store size={22} aria-hidden /> Brands &amp; companies</h1>
-        <p className="co-muted">Every company in Lala&rsquo;s world: the fashion houses, the press, agencies and venues. Open one to see its profile.</p>
-      </header>
+    <div className={`co${embedded ? ' is-embedded' : ''}`} data-testid="companies">
+      {!embedded && (
+        <header className="co-head">
+          <h1 className="co-title"><Store size={22} aria-hidden /> Brands &amp; companies</h1>
+          <p className="co-muted">Every company in Lala&rsquo;s world: the fashion houses, the press, agencies and venues. Open one to see its profile.</p>
+        </header>
+      )}
       <div className="co-filters" role="group" aria-label="Kind">
         {KINDS.map(([key, label]) => (
           <button key={key || 'all'} type="button" className={`co-chip${kind === key ? ' is-on' : ''}`} aria-pressed={kind === key} onClick={() => setKind(key)}>{label}</button>
