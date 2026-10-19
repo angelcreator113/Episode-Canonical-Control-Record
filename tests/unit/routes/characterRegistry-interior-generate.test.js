@@ -33,7 +33,13 @@ jest.mock('../../../src/models', () => ({
 }));
 jest.mock('../../../src/middleware/auth', () => {
   const actual = jest.requireActual('../../../src/middleware/auth');
-  return { ...actual, requireAuth: (req, _res, next) => { req.user = { id: 'u1' }; next(); } };
+  // An ADMIN unless the request says otherwise: generating and applying are
+  // ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only).
+  return { ...actual, requireAuth: (req, _res, next) => {
+    const h = req.headers['x-test-groups'];
+    req.user = { id: 'u1', groups: h === undefined ? ['ADMIN'] : (h ? h.split(',') : []) };
+    next();
+  } };
 });
 jest.mock('../../../src/middleware/aiRateLimiter', () => ({ aiRateLimiter: (_req, _res, next) => next() }));
 
@@ -96,6 +102,24 @@ test('a finalized character is refused', async () => {
   const res = await request(app).post(url).send({});
   expect(res.status).toBe(409);
   expect(mockGenerateMissingInterior).not.toHaveBeenCalled();
+});
+
+// The profile audit, 2026-10-19: the AI down or without a key is a plain 502.
+test('the AI unreachable is a plain 502 that says nothing was spent, not the SDK\'s text', async () => {
+  jest.spyOn(console, 'error').mockImplementation(() => {});
+  mockGenerateMissingInterior.mockRejectedValue(new Error('Could not resolve authentication method. Expected either apiKey or authToken to be set.'));
+  const res = await request(app).post(url).send({});
+  expect(res.status).toBe(502);
+  expect(res.body.error).toBe('The AI could not be reached; nothing was spent.');
+  expect(JSON.stringify(res.body)).not.toMatch(/authentication method/);
+  expect(mockLocked.update).not.toHaveBeenCalled();
+});
+
+test('a budget refusal stays a 429', async () => {
+  jest.spyOn(console, 'error').mockImplementation(() => {});
+  mockGenerateMissingInterior.mockRejectedValue(Object.assign(new Error('AI daily budget exceeded'), { code: 'AI_BUDGET_EXCEEDED' }));
+  const res = await request(app).post(url).send({});
+  expect(res.status).toBe(429);
 });
 
 test('an empty answer is an error, not a silent success', async () => {
@@ -177,11 +201,19 @@ describe('preview, then apply', () => {
     expect(mockLocked.update).not.toHaveBeenCalled();
   });
 
-  test('a preview hides the blind spot from anyone but the author', async () => {
+  test('a preview is refused to anyone but the author, so the blind spot never reaches them', async () => {
+    mockGenerateMissingInterior.mockResolvedValue({ blind_spot: 'She keeps score.', self_narrative: 'Me' });
+    const res = await request(app).post(url).set('x-test-groups', 'editor').send({ preview: true, fields: ['blind_spot', 'self_narrative'] });
+    expect(res.status).toBe(403);
+    expect(JSON.stringify(res.body)).not.toMatch(/keeps score/);
+    expect(mockGenerateMissingInterior).not.toHaveBeenCalled();
+  });
+
+  test('the author\'s preview carries the blind spot', async () => {
     mockGenerateMissingInterior.mockResolvedValue({ blind_spot: 'She keeps score.', self_narrative: 'Me' });
     const res = await request(app).post(url).send({ preview: true, fields: ['blind_spot', 'self_narrative'] });
     expect(res.status).toBe(200);
-    expect(res.body.proposed).toEqual({ self_narrative: 'Me' });
+    expect(res.body.proposed).toEqual({ blind_spot: 'She keeps score.', self_narrative: 'Me' });
   });
 
   test('apply writes the chosen values into empty fields only, and says what it skipped', async () => {
@@ -203,10 +235,10 @@ describe('preview, then apply', () => {
     expect(res.body.skipped).toEqual(['want_architecture']);
   });
 
-  test('apply never writes the blind spot for anyone but the author', async () => {
-    const res = await request(app).post(applyUrl).send({ values: { blind_spot: 'Written by an editor' } });
-    expect(res.status).toBe(200);
-    expect(res.body.filled).toEqual([]);
+  test('apply never writes the blind spot for anyone but the author: they are refused', async () => {
+    const res = await request(app).post(applyUrl).set('x-test-groups', 'editor').send({ values: { blind_spot: 'Written by an editor' } });
+    expect(res.status).toBe(403);
+    expect(mockLocked.update).not.toHaveBeenCalled();
     expect(mockLocked.blind_spot).toBeUndefined();
   });
 

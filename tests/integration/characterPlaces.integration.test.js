@@ -65,8 +65,9 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
 
   beforeAll(async () => {
     await migration.up(sequelize.getQueryInterface(), Sequelize);
+    // An ADMIN: these writes are ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only).
     token = TokenService.generateTokenPair({
-      id: 'test-user-homes', email: 'user@homes.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-homes', email: 'user@homes.dev', name: 'Editor', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
   beforeEach(() => {

@@ -633,7 +633,8 @@ router.get('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => {
 
 // ─── PUT /:id  — update a scene set ──────────────────────────────────────────
 
-router.put('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.put('/:id', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -776,7 +777,8 @@ router.get('/:id/version-options', validateUUIDParam('id'), requireAuth, async (
   }
 });
 
-router.put('/:id/version', validateUUIDParam('id'), requireAuth, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.put('/:id/version', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { makeEventVersion, makeEveryday } = require('../services/sceneSetVersionService');
     const b = req.body || {};

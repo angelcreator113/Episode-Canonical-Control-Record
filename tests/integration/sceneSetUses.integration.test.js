@@ -83,7 +83,8 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
   beforeAll(async () => {
     const qi = sequelize.getQueryInterface();
     for (const m of [junctionMigration, sortOrderMigration, rolesMigration, scenePlanIdMigration]) await m.up(qi, Sequelize);
-    token = TokenService.generateTokenPair({ id: 'test-user-set-uses', email: 'u@uses.dev', name: 'Editor', groups: ['USER'], role: 'USER' }).accessToken;
+    // An ADMIN: these writes are ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only).
+    token = TokenService.generateTokenPair({ id: 'test-user-set-uses', email: 'u@uses.dev', name: 'Editor', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
     await run(`INSERT INTO universes (id, name, slug, created_at, updated_at) VALUES (:universe, :name, :name, NOW(), NOW())`,
       { universe, name: `uses-${universe.slice(0, 8)}` }).catch(() => {});
     await run(`INSERT INTO shows (id, name, slug, metadata, universe_id, created_at, updated_at) VALUES (:show, :n, :n, '{}', :universe, NOW(), NOW())`,

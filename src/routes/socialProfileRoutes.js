@@ -1760,7 +1760,8 @@ router.post('/:id/cross', requireAuth, guardJustAWomanRecord, async (req, res) =
 
 // ── PUT /:id ─────────────────────────────────────────────────────────────────
 // Update editable fields on a profile
-router.put('/:id', requireAuth, guardJustAWomanRecord, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.put('/:id', requireAuth, authorize(['ADMIN']), guardJustAWomanRecord, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
     const profile = await db.SocialProfile.findByPk(req.params.id);
@@ -1806,7 +1807,8 @@ router.put('/:id', requireAuth, guardJustAWomanRecord, async (req, res) => {
 });
 
 // PATCH /:id — partial update (same logic as PUT, supports frontend PATCH calls)
-router.patch('/:id', requireAuth, guardJustAWomanRecord, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.patch('/:id', requireAuth, authorize(['ADMIN']), guardJustAWomanRecord, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
     const profile = await db.SocialProfile.findByPk(req.params.id);

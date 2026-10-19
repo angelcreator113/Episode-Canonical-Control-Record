@@ -172,6 +172,11 @@ Answer with JSON only, one entry per post, numbered 1 to ${count}:
 async function loadCharacter(db, characterId) {
   const character = await db.RegistryCharacter.findByPk(characterId);
   if (!character) throw new PostsError(404, 'Character not found.');
+  // A confidential professional (Dr. Sinclair) has no public posts, drafted
+  // or otherwise (the profile audit, 2026-10-19; utils/confidentialCharacters).
+  if (require('../utils/confidentialCharacters').isConfidential(character)) {
+    throw new PostsError(403, `${character.display_name} is a confidential professional and does not post on The Pulse.`);
+  }
   const feedProfile = character.feed_profile_id && db.SocialProfile ? await db.SocialProfile.findByPk(character.feed_profile_id) : null;
   if (!feedProfile) throw new PostsError(409, `${character.display_name} is not on the feed yet: match them to a feed person first.`);
   if (feedProfile.current_state === 'posthumous') throw new PostsError(409, `${character.display_name} has died: their account does not post.`);

@@ -209,22 +209,7 @@ async function setFacts(db, { character, feedProfile = null, showId = null, body
     const count = Number(body.followers?.count);
     if (!Number.isInteger(count) || count < 0) throw new FactsError(400, 'Followers must be a whole number of 0 or more.');
     followerTarget = count;
-    // The count's stored copies agree with it: the label, the tier, the
-    // generated profile's copy and the primary platform's (the drift the
-    // consistency check found on Maren: facts 2M, copies still 1.2M).
-    const label = formatCount(count);
-    const tier = require('./pulseAudience').tierFor(count).key;
-    feedChanges.follower_count_approx = label;
-    feedChanges.follower_tier = tier;
-    if (feedProfile.full_profile && typeof feedProfile.full_profile === 'object') {
-      feedChanges.full_profile = { ...feedProfile.full_profile, follower_count_approx: label, follower_tier: tier };
-    }
-    const primary = primaryPresenceKey(feedProfile.platform_presences, feedProfile.platform);
-    if (primary) {
-      const presences = JSON.parse(JSON.stringify(feedProfile.platform_presences));
-      presences[primary].followers = label;
-      feedChanges.platform_presences = presences;
-    }
+    Object.assign(feedChanges, followerCopies(feedProfile, count));
   }
   const canon = nextCanonFacts(character.canon_facts, body);
 
@@ -258,6 +243,49 @@ async function setFacts(db, { character, feedProfile = null, showId = null, body
   const after = await factsOf(db, { character, feedProfile, showId: show });
   await require('./factHistory').recordFactChanges(db, { character, showId: show, before, after, reason: text(body.reason, 500) || null, by });
   return after;
+}
+
+/**
+ * The follower count's stored copies on a social profile, agreeing with
+ * `count`: the label, the tier, the generated profile's copy and the
+ * primary platform's (the drift the consistency check found on Maren: facts
+ * 2M, copies still 1.2M). The changes for feedProfile.update.
+ */
+function followerCopies(feedProfile, count) {
+  const label = formatCount(count);
+  const tier = require('./pulseAudience').tierFor(count).key;
+  const changes = { follower_count_approx: label, follower_tier: tier };
+  if (feedProfile.full_profile && typeof feedProfile.full_profile === 'object') {
+    changes.full_profile = { ...feedProfile.full_profile, follower_count_approx: label, follower_tier: tier };
+  }
+  const primary = primaryPresenceKey(feedProfile.platform_presences, feedProfile.platform);
+  if (primary) {
+    const presences = JSON.parse(JSON.stringify(feedProfile.platform_presences));
+    presences[primary].followers = label;
+    changes.platform_presences = presences;
+  }
+  return changes;
+}
+
+/**
+ * Brings a profile's stored copies to its present ledger count, after a
+ * ledger change is decided (pulseFollowers.decide / override; the profile
+ * audit, 2026-10-19: three follower numbers for one person). Nothing when
+ * the profile has no accepted count; a fault is logged, never thrown.
+ */
+async function syncFollowerCopies(db, showId, profileId) {
+  try {
+    const { countAt } = require('./pulseFollowers');
+    const count = await countAt(db, showId, profileId);
+    if (count === null) return null;
+    const profile = await db.SocialProfile.findByPk(profileId);
+    if (!profile) return null;
+    await profile.update(followerCopies(profile, count));
+    return count;
+  } catch (err) {
+    console.error('[characterFacts] the follower copies could not be brought up to date:', err.message);
+    return null;
+  }
 }
 
 const STATUS_WORDS = {
@@ -403,4 +431,5 @@ module.exports = {
   FACT_KEYS, ACCOUNT_STATUSES, INCOME_CADENCES, AFFORDABILITY, HOME_PRICE_RANGES, homePriceRangeOf, FactsError,
   formatCount, affordabilityOf, yearlyIncome, factsOf, setFacts, nextCanonFacts, showIdFor,
   isDecided, factsPromptBlock, factsForCharacter, factsForProfile, holdToFacts, agreeingFollowers, primaryPresenceKey, FACT_FIELDS, STATUS_WORDS,
+  followerCopies, syncFollowerCopies,
 };

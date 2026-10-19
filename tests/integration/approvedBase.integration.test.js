@@ -105,8 +105,9 @@ function mockProviders() {
       ADD COLUMN IF NOT EXISTS enhanced_video_url text`);
     await migration.up(sequelize.getQueryInterface(), Sequelize);
     await approvedMigration.up(sequelize.getQueryInterface(), Sequelize);
+    // An ADMIN: these writes are ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only).
     token = TokenService.generateTokenPair({
-      id: 'test-user-approved-base-s6', email: 'user@approved-base-s6.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-approved-base-s6', email: 'user@approved-base-s6.dev', name: 'Editor', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     for (const [id, name] of [[ids.show, `S6 show ${ids.show.slice(0, 8)}`], [ids.otherShow, `S6 other ${ids.otherShow.slice(0, 8)}`]]) {
       await run(`INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:id, :name, :slug, NOW(), NOW())`,
