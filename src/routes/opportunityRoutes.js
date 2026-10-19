@@ -260,10 +260,31 @@ router.post('/opportunities/:showId/:id/to-event', requireAuth, async (req, res)
 
 const beat14Error = (res, err, what) => {
   console.error(`[Beat14] ${what} failed:`, err.message);
+  // Two attaches at once both pass the service's checks; the unique index on
+  // offered_in_episode_id lets one through (Script page audit, 2026-10-19).
+  if (err.name === 'SequelizeUniqueConstraintError') {
+    return res.status(409).json({ success: false, error: 'Beat 14 changed while this was saved: read it again and choose once more.' });
+  }
   return res.status(err.status || 500).json({ success: false, error: err.message });
 };
 
+// Ids that are not UUIDs are a 400, not a database error and a 500 (Script
+// page audit, 2026-10-19).
+const BEAT14_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const beat14BadIds = (req, res) => {
+  const { showId, episodeId } = req.params;
+  const oppId = req.body?.opportunity_id;
+  const bad = !BEAT14_UUID.test(String(showId)) ? 'showId'
+    : !BEAT14_UUID.test(String(episodeId)) ? 'episodeId'
+      : req.method === 'PUT' && oppId != null && oppId !== '' && !BEAT14_UUID.test(String(oppId)) ? 'opportunity_id'
+        : null;
+  if (!bad) return false;
+  res.status(400).json({ success: false, error: `${bad} must be an id (UUID).` });
+  return true;
+};
+
 router.get('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, async (req, res) => {
+  if (beat14BadIds(req, res)) return undefined;
   try {
     const { getBeat14 } = require('../services/beat14Opportunity');
     return res.json({ success: true, data: await getBeat14(await getModels(req), req.params) });
@@ -273,6 +294,7 @@ router.get('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, asyn
 });
 
 router.put('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, async (req, res) => {
+  if (beat14BadIds(req, res)) return undefined;
   try {
     const { attachBeat14 } = require('../services/beat14Opportunity');
     const body = req.body || {};
@@ -289,6 +311,7 @@ router.put('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, asyn
 });
 
 router.delete('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, async (req, res) => {
+  if (beat14BadIds(req, res)) return undefined;
   try {
     const { detachBeat14 } = require('../services/beat14Opportunity');
     return res.json({ success: true, data: await detachBeat14(await getModels(req), req.params) });

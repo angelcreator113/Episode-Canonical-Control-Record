@@ -180,3 +180,51 @@ describe("Lala's voice and the invitation", () => {
     expect(screen.queryByTestId('script-health-fix-reveal')).toBeNull();
   });
 });
+
+// Beat 14's opportunity, checked for real (Script page audit, 2026-10-19).
+describe("scriptHealth: beat 14's opportunity", () => {
+  const opp = { name: 'Sable Campaign Shoot', contact_name: 'Sable Reyes', status: 'held' };
+  const DM = '[UI:DM Sable Reyes: The Sable campaign shoot is yours if you want it.]';
+  const row = (lines, { o = opp, intent = 'pass', other = [] } = {}) => scriptHealth({
+    beats: [...other, { id: 'beat-14', number: 14, lines }], beat14: { opportunity: o }, designedIntent: intent,
+  }).find((r) => r.key === 'beat14');
+
+  test('ok only when beat 14 has a DM or notification naming it', () => {
+    expect(row([DM])).toMatchObject({ ok: true, beatId: 'beat-14', text: 'Beat 14 offers Sable Campaign Shoot, from Sable Reyes.' });
+    const missing = row(['Me: and then?'], { other: [{ id: 'beat-11', number: 11, lines: [DM] }] });
+    expect(missing.ok).toBe(false);
+    expect(missing.text).toContain("Beat 14 doesn't deliver Sable Campaign Shoot yet");
+  });
+
+  test('designed to fail: ok only when beat 14 does not deliver it', () => {
+    expect(row(['Me: nothing came'], { intent: 'fail' })).toMatchObject({ ok: true, text: "Beat 14's opportunity, Sable Campaign Shoot, does not come: the episode is designed to fail." });
+    expect(row([DM], { intent: 'fail' })).toMatchObject({ ok: false, text: 'Beat 14 delivers Sable Campaign Shoot, but the episode is designed to fail: the invitation does not come.' });
+  });
+
+  test('after completion: expired never comes, offered came, whatever the intent', () => {
+    expect(row([DM], { o: { ...opp, status: 'expired' } }).ok).toBe(false);
+    expect(row(['Me: quiet'], { o: { ...opp, status: 'expired' } }).text).toContain('the episode did not land');
+    expect(row([DM], { o: { ...opp, status: 'offered' }, intent: 'fail' }).ok).toBe(true);
+  });
+
+  test('nothing attached stays a row to fix', () => {
+    expect(row([DM], { o: null })).toMatchObject({ ok: false });
+  });
+});
+
+// A beat 14 read that fails says so in the side panel (Script page audit, 2026-10-19).
+describe("beat 14's opportunity, unread", () => {
+  test('beat 14 open: a one-line note, and the console says why', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (String(url).endsWith('/beat14')) throw new Error('down');
+      return { data: { data: [] } };
+    });
+    renderTab('## BEAT: 13 · Wrap\nMe: bye\n\n## BEAT: 14 · Cliffhanger\nMe: and then?');
+    const beat = screen.getByTestId('script-beat-14');
+    if (!beat.className.includes('is-open')) fireEvent.click(beat.querySelector('.esp-beat-head'));
+    expect((await screen.findByTestId('script-beat14-unread')).textContent).toBe("Couldn't read beat 14's opportunity.");
+    expect(spy).toHaveBeenCalledWith('[EpisodeScript] beat 14 opportunity load failed:', expect.any(Error));
+    spy.mockRestore();
+  });
+});

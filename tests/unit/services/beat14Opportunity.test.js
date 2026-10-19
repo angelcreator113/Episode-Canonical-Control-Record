@@ -39,3 +39,39 @@ describe('coverage', () => {
     expect(scriptCoverage(named, { opportunity: { name: 'Sable Campaign Shoot' } }).missing.some((g) => g.kind === 'opportunity')).toBe(false);
   });
 });
+
+// After completion its status says what happened (Script page audit,
+// 2026-10-19): expired never comes; offered (or after) came.
+describe('beat14Context after completion', () => {
+  test('expired: the invitation does not come, whatever the intent', () => {
+    const text = beat14Context({ ...OPP, status: 'expired' }, 'pass');
+    expect(text).toContain('This episode did not land, so the invitation does not come');
+    expect(text).toContain('no other offer comes in its place');
+    expect(text).not.toContain('[UI:DM');
+  });
+  test('offered: it came, even when the episode was designed to fail', () => {
+    expect(beat14Context({ ...OPP, status: 'offered' }, 'fail')).toContain('[UI:DM Sable Reyes: …]');
+  });
+  test('held follows the designed intent', () => {
+    expect(beat14Context({ ...OPP, status: 'held' }, 'fail')).toContain('designed not to land');
+    expect(beat14Context({ ...OPP, status: 'held' }, 'pass')).toContain('Beat 14 ends on it');
+  });
+});
+
+describe('loadForScript', () => {
+  test('returns the attached opportunity with its status, whatever the status', async () => {
+    const { loadForScript } = require('../../../src/services/beat14Opportunity');
+    const row = { id: 'o1', name: 'Sable Campaign Shoot', opportunity_type: 'campaign', status: 'expired' };
+    const models = { Opportunity: { findOne: jest.fn(async () => row) } };
+    expect(await loadForScript(models, { episodeId: 'ep1' })).toMatchObject({ id: 'o1', status: 'expired' });
+    expect(models.Opportunity.findOne).toHaveBeenCalledWith({ where: { offered_in_episode_id: 'ep1' } });
+  });
+});
+
+describe('coverage: a mention outside beat 14', () => {
+  test('named in beat 11 only, it is still a gap for beat 14', () => {
+    const script = '## BEAT: 11 · Event Outcome\n[UI:DM Sable Reyes: The Sable campaign shoot is yours.]\n\n## BEAT: 14 · Cliffhanger\nMe: bye';
+    const gap = scriptCoverage(script, { opportunity: { name: 'Sable Campaign Shoot' } }).missing.find((g) => g.kind === 'opportunity');
+    expect(gap).toMatchObject({ beat: null, target: 14 });
+  });
+});

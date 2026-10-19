@@ -8,6 +8,7 @@
  */
 import { phoneCheck, uncuedPieces, wearFlags, dealCueFlags, lastGettingReadyIndex } from './scriptMoments';
 import { REVEAL_BEAT, voiceOffLines, revealCheck } from './scriptShowRules';
+import { invitationLine, beat14Outcome, BEAT } from './beat14Invitation';
 
 const list = (items) => (items.length <= 2 ? items.join(' and ') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`);
 const plural = (n, one, many) => (n === 1 ? one : many);
@@ -115,11 +116,28 @@ export function scriptHealth({
 
   // Beat 14's opportunity (Evoni, 2026-10-19): the invitation someone at the
   // event offers. Only when it was read (beat14 null: not known, no row).
-  const last = beats.find((b) => b.number === 14);
+  // Checked for real (Script page audit, 2026-10-19): it is there only when
+  // beat 14 has a [UI:DM …] or [UI:NOTIFY …] line naming it; when it does not
+  // come (designed to fail, or expired at completion) beat 14 must not have one.
+  const last = beats.find((b) => b.number === BEAT);
   if (beat14 && last) {
     const opp = beat14.opportunity;
-    if (!opp) rows.push({ key: 'beat14', ok: false, beatId: last.id || null, text: 'Beat 14 has no opportunity attached: open beat 14 to attach the invitation someone at the event offers.' });
-    else rows.push({ key: 'beat14', ok: true, beatId: last.id || null, text: designedIntent === 'fail' ? `Beat 14's opportunity, ${opp.name}, does not come: the episode is designed to fail.` : `Beat 14 offers ${opp.name}${opp.contact_name ? `, from ${opp.contact_name}` : ''}.` });
+    const id = last.id || null;
+    if (!opp) rows.push({ key: 'beat14', ok: false, beatId: id, text: 'Beat 14 has no opportunity attached: open beat 14 to attach the invitation someone at the event offers.' });
+    else {
+      const there = invitationLine(last.lines || [], opp.name) !== null;
+      const from = opp.contact_name || (opp.connector_handle ? `@${opp.connector_handle}` : null);
+      if (beat14Outcome(opp, designedIntent) === 'withheld') {
+        const why = opp.status === 'expired' ? 'the episode did not land' : 'the episode is designed to fail';
+        rows.push(there
+          ? { key: 'beat14', ok: false, beatId: id, text: `Beat 14 delivers ${opp.name}, but ${why}: the invitation does not come.` }
+          : { key: 'beat14', ok: true, beatId: id, text: `Beat 14's opportunity, ${opp.name}, does not come: ${why}.` });
+      } else {
+        rows.push(there
+          ? { key: 'beat14', ok: true, beatId: id, text: `Beat 14 offers ${opp.name}${from ? `, from ${from}` : ''}.` }
+          : { key: 'beat14', ok: false, beatId: id, text: `Beat 14 doesn't deliver ${opp.name} yet: end it on one [UI:DM …] or [UI:NOTIFY …] line${from ? ` from ${from}` : ''} that names it.` });
+      }
+    }
   }
 
   const approved = beats.filter((b) => b.approved).length;
