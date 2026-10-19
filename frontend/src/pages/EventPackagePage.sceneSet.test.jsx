@@ -146,7 +146,8 @@ describe('Place: the scene set for the event (S7)', () => {
     expect(link.textContent).toBe('Glasshouse Hall');
     expect(within(screen.getByTestId('place-scene-set')).getByRole('button').textContent).toBe('Change scene set');
     fireEvent.click(link);
-    expect(screen.getByTestId('landed').textContent).toBe('/shows/show-1/world?tab=scene-sets&set=set-venue-hall');
+    // With the way back to the Event Package (eighth audit).
+    expect(screen.getByTestId('landed').textContent).toMatch(/^\/shows\/show-1\/world\?tab=scene-sets&set=set-venue-hall&from=.*&fromLabel=Event%20Package$/);
   });
 
   test('the episode accepted: the chosen set, read-only', async () => {

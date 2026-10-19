@@ -6,6 +6,8 @@ import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 
 vi.mock('../services/api', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), patch: vi.fn() },
@@ -71,5 +73,19 @@ describe('CompaniesPage', () => {
     renderPage();
     await screen.findByTestId('co-velour_atelier');
     expect(screen.queryByRole('button', { name: /New company/ })).toBeNull();
+  });
+
+  test('embedded in the LalaVerse hub it has no heading of its own (the hub banner is it)', async () => {
+    render(<MemoryRouter><CompaniesPage embedded /></MemoryRouter>);
+    await screen.findByTestId('co-velour_atelier');
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+    expect(screen.getByTestId('companies').className).toContain('is-embedded');
+  });
+
+  test('/brands opens the LalaVerse hub\'s Brands tab; profiles keep their own page (Evoni, 2026-10-19)', () => {
+    const app = readFileSync(resolve(process.cwd(), 'src/App.jsx'), 'utf8');
+    expect(app).toMatch(/<Route path="\/brands" element=\{<Navigate to="\/universe\?tab=brands" replace \/>\} \/>/);
+    expect(app).toMatch(/<Route path="\/brands\/:slug" element=\{<BrandProfilePage \/>\} \/>/);
+    expect(app).not.toMatch(/CompaniesPage/);
   });
 });

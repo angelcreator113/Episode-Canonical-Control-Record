@@ -163,6 +163,7 @@ async function linksOf(db, assetIds) {
 async function createAsset(db, {
   url, thumbnailUrl = null, storageKey = null, width = null, height = null, caption = null, source = 'upload',
   status = 'approved', visibility = 'internal', usageRights = null, details = null, generation = null, links = [], by = null,
+  parentAssetId = null,
 }) {
   const u = checkUrl(url);
   if (!SOURCES.includes(source)) throw new MediaError(400, `source must be one of ${SOURCES.join(', ')}.`);
@@ -171,13 +172,14 @@ async function createAsset(db, {
   const normalized = (Array.isArray(links) ? links : []).map(normalizeLink);
   for (const l of normalized) if (!(await entityExists(db, l))) throw new MediaError(404, `That ${l.entity_type} was not found.`);
   const [inserted] = await db.sequelize.query(
-    `INSERT INTO media_assets (url, thumbnail_url, storage_key, width, height, caption, source, status, visibility, usage_rights, details, generation, created_by)
-     VALUES (:url, :thumb, :key, :width, :height, :caption, :source, :status, :visibility, :rights, CAST(:details AS JSONB), CAST(:generation AS JSONB), :by)
+    `INSERT INTO media_assets (url, thumbnail_url, storage_key, width, height, caption, source, status, visibility, usage_rights, details, generation, parent_asset_id, created_by)
+     VALUES (:url, :thumb, :key, :width, :height, :caption, :source, :status, :visibility, :rights, CAST(:details AS JSONB), CAST(:generation AS JSONB), :parent, :by)
      ON CONFLICT ((md5(url))) WHERE deleted_at IS NULL DO NOTHING RETURNING id`,
     {
       replacements: {
         url: u, thumb: thumbnailUrl, key: storageKey, width, height, caption: clean(caption, 500), source, status, visibility,
-        rights: clean(usageRights, 500), details: JSON.stringify(normalizeDetails(details)), generation: generation ? JSON.stringify(generation) : null, by,
+        rights: clean(usageRights, 500), details: JSON.stringify(normalizeDetails(details)), generation: generation ? JSON.stringify(generation) : null,
+        parent: parentAssetId && UUID_RE.test(String(parentAssetId)) ? parentAssetId : null, by,
       },
     });
   let id = inserted[0]?.id;
@@ -356,8 +358,68 @@ async function bringExisting(db, { by = null } = {}) {
   };
 }
 
+const SOURCE_ROLES = Object.freeze(['place', 'portrait', 'parent']);
+
+/**
+ * Visual Memory phase 4 (Evoni, 2026-10-19): what a made picture was made
+ * from, one media_asset_sources row per reference used. A place reference is
+ * not a variation (parent_asset_id stays empty) but is kept, so the same
+ * place stays the same place. sources: [{ role, source_asset_id?,
+ * character_id?, source_url? }].
+ */
+async function addSources(db, assetId, sources, { by = null } = {}) {
+  let written = 0;
+  for (const s of Array.isArray(sources) ? sources : []) {
+    if (!SOURCE_ROLES.includes(s?.role)) throw new MediaError(400, `A source is one of ${SOURCE_ROLES.join(', ')}.`);
+    const sourceId = s.source_asset_id && UUID_RE.test(String(s.source_asset_id)) ? s.source_asset_id : null;
+    const characterId = s.character_id && UUID_RE.test(String(s.character_id)) ? s.character_id : null;
+    const url = sourceId ? null : (clean(s.source_url, 2000) || null);
+    if (!sourceId && !url) continue;
+    await db.sequelize.query(
+      `INSERT INTO media_asset_sources (asset_id, source_asset_id, role, character_id, source_url, created_by)
+       VALUES (:asset, :source, :role, :character, :url, :by)`,
+      { replacements: { asset: assetId, source: sourceId, role: s.role, character: characterId, url, by } });
+    written += 1;
+  }
+  return written;
+}
+
+/** "Made from": this picture's sources, each library one only when the reader may see it. */
+async function sourcesOf(db, assetId, { audience = 'admin' } = {}) {
+  if (!UUID_RE.test(String(assetId))) throw new MediaError(404, 'Picture not found.');
+  const [rows] = await db.sequelize.query(
+    `SELECT s.id, s.role, s.source_asset_id, s.character_id, s.source_url, s.created_at,
+            ma.url AS source_url_live, ma.caption AS source_caption, ma.status AS source_status,
+            COALESCE(rc.selected_name, rc.display_name) AS character_name
+       FROM media_asset_sources s
+       LEFT JOIN media_assets ma ON ma.id = s.source_asset_id AND ${visibilityWhere(audience)}
+       LEFT JOIN registry_characters rc ON rc.id = s.character_id
+      WHERE s.asset_id = :id AND s.deleted_at IS NULL
+      ORDER BY s.created_at ASC`, { replacements: { id: assetId } });
+  return rows
+    .filter((r) => !r.source_asset_id || r.source_url_live)
+    .map((r) => ({
+      id: r.id, role: r.role, source_asset_id: r.source_asset_id, character_id: r.character_id, character_name: r.character_name || null,
+      url: r.source_asset_id ? r.source_url_live : (audience === 'admin' ? r.source_url : null),
+      caption: r.source_caption || null, status: r.source_status || null,
+    }));
+}
+
+/** How often each picture has been a source in this role: the place pictures a made picture already kept. */
+async function sourceUseCounts(db, assetIds, role = 'place') {
+  const out = new Map();
+  if (!assetIds.length) return out;
+  const [rows] = await db.sequelize.query(
+    `SELECT source_asset_id, COUNT(*)::int AS n FROM media_asset_sources
+      WHERE source_asset_id IN (:ids) AND role = :role AND deleted_at IS NULL GROUP BY source_asset_id`,
+    { replacements: { ids: assetIds, role } });
+  for (const r of rows) out.set(r.source_asset_id, r.n);
+  return out;
+}
+
 module.exports = {
   STATUSES, VISIBILITIES, ROLES, SOURCES, ENTITIES, DETAIL_KEYS, MediaError,
   visibilityWhere, audienceOf, normalizeLink, normalizeDetails, checkUrl,
   createAsset, updateAsset, removeAsset, linkAsset, unlinkLink, getAsset, listFor, assetsByUrl, taggables, bringExisting,
+  SOURCE_ROLES, addSources, sourcesOf, sourceUseCounts,
 };
