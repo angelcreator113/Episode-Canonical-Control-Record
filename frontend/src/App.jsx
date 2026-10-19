@@ -126,6 +126,9 @@ const StoryThreadTracker = lazy(() => import('./pages/StoryThreadTracker'));
 const StoryCalendar = lazy(() => import('./pages/StoryCalendar'));
 const StoryHealthDashboard = lazy(() => import('./pages/StoryHealthDashboard'));
 const CharacterProfile = lazy(() => import('./pages/CharacterProfilePage'));
+// Brands and companies (Evoni, 2026-10-18): the list and each profile.
+const CompaniesPage = lazy(() => import('./pages/CompaniesPage'));
+const BrandProfilePage = lazy(() => import('./pages/BrandProfilePage'));
 const SetupWizard = lazy(() => import('./pages/SetupWizard'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const RecycleBin = lazy(() => import('./pages/RecycleBin'));
@@ -441,6 +444,8 @@ function AppContent() {
           {/* PNOS Character Registry */}
           <Route path="/character-registry" element={<CharacterRegistryPage />} />
           <Route path="/character/:id" element={<CharacterProfile />} />
+          <Route path="/brands" element={<CompaniesPage />} />
+          <Route path="/brands/:slug" element={<BrandProfilePage />} />
           <Route path="/setup" element={<SetupWizard />} />
           
           
@@ -607,6 +612,7 @@ function AppContent() {
             '/world-studio': 'World Studio',
             '/scene-studio': 'Book Scene Studio',
             '/pulse': 'The Pulse',
+            '/brands': 'Brands & companies',
             '/social-timeline': 'Social Timeline Engine',
             '/social-personality': 'Social Personality Engine',
             '/feed-relationships': 'Feed Relationship Map',

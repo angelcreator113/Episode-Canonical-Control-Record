@@ -63,7 +63,7 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }], 
     await run(`INSERT INTO feed_posts (id, show_id, social_profile_id, poster_handle, content_text, status, posted_at, created_at, updated_at)
                VALUES (:fanPost, :show, :fan, :handle, 'Wore Velour Atelier to the opening and felt like a decision.', 'live', NOW(), NOW(), NOW())`,
     { ...ids, fan, handle: `fan${tag}` });
-    brands = Object.fromEntries((await q('SELECT id, slug, name FROM lalaverse_brands')).map((b) => [b.slug, b]));
+    brands = Object.fromEntries((await q("SELECT id, slug, name FROM lalaverse_brands WHERE kind = 'brand'")).map((b) => [b.slug, b]));
     for (const [id, slug, status] of [[ids.dealOri, 'ori_beauty', 'negotiating'], [ids.dealVelour, 'velour_atelier', 'booked']]) {
       await run(`INSERT INTO opportunities (id, show_id, name, opportunity_type, status, brand_or_company, created_at, updated_at)
                  VALUES (:id, :show, :name, 'campaign', :status, :brand, NOW(), NOW())`,

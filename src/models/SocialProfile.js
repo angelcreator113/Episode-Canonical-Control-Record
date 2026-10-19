@@ -74,6 +74,8 @@ module.exports = (sequelize, DataTypes) => {
     society_archetype:     { type: DataTypes.STRING(100), allowNull: true },
     // When they post (services/postingSchedule, migration 20261018160000): null keeps the old behaviour.
     posting_schedule:      { type: DataTypes.JSONB, allowNull: true },
+    // Trust per character (services/pulseTrust): 'review_all' | 'trusted' | 'full'; null is 'trusted'.
+    pulse_trust:           { type: DataTypes.STRING(20), allowNull: true },
     content_persona:       { type: DataTypes.TEXT, allowNull: true },
     real_signal:           { type: DataTypes.TEXT, allowNull: true },
     posting_voice:         { type: DataTypes.TEXT, allowNull: true },
