@@ -49,7 +49,7 @@ describe('TabOrientation', () => {
   });
 
   test('every hub tab has its three lines', () => {
-    for (const key of ['overview', 'bible', 'world', 'society', 'culture', 'state']) {
+    for (const key of ['overview', 'bible', 'world', 'society', 'brands', 'culture', 'state']) {
       for (const field of ['title', 'what', 'reads', 'doHere']) expect(ORIENTATION[key][field].length, `${key}.${field}`).toBeGreaterThan(20);
     }
   });

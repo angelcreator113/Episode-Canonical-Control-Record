@@ -8151,7 +8151,7 @@ function OpportunitiesTab({ showId, api, S, setToast, loadData }) {
               <label style={S.fLabel} htmlFor="opp-company">Brand or company</label>
               <input id="opp-company" list="opp-companies" value={oppForm.brand_or_company || ''} onChange={e => setOppForm({ ...oppForm, brand_or_company: e.target.value })} style={S.sel} />
               <datalist id="opp-companies">{companies.map(c => <option key={c.id} value={c.name}>{c.kind_label}</option>)}</datalist>
-              <Link to="/brands" style={{ fontSize: 10 }}>New company</Link>
+              <Link to="/universe?tab=brands" style={{ fontSize: 10 }}>New company</Link>
             </div>
             <div><label style={S.fLabel}>Payment</label><input type="number" value={oppForm.payment_amount || 0} onChange={e => setOppForm({ ...oppForm, payment_amount: parseInt(e.target.value) || 0 })} style={S.sel} /></div>
             <div><label style={S.fLabel}>Prestige</label><input type="number" min={1} max={10} value={oppForm.prestige || 5} onChange={e => setOppForm({ ...oppForm, prestige: parseInt(e.target.value) || 5 })} style={S.sel} /></div>

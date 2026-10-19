@@ -9,7 +9,7 @@
 export const ORIENTATION = {
   overview: {
     title: 'The LalaVerse, at a glance',
-    what: 'The world your show and novel live in: one hub, six tabs. This tab is the summary: the active show, its counts, and how far the world is set up.',
+    what: 'The world your show and novel live in: one hub, seven tabs. This tab is the summary: the active show, its counts, and how far the world is set up.',
     reads: 'Nothing reads this tab; it reads everything else. The seven setup steps below check the other tabs and the Feed.',
     doHere: 'Follow the steps in order. Each one opens the tab that does the work; a green check means that part of the world exists.',
   },
@@ -30,6 +30,12 @@ export const ORIENTATION = {
     what: 'The fifteen influencer archetypes, the legends and society, the social rules and the trends. A reference document for who exists in the social world and how reputation moves.',
     reads: 'The AI only through the Brain Update button: the eight seeded society laws in the Show Bible are what it sees today. Editing here changes the page, not the canon, until you update the Brain.',
     doHere: 'You rarely edit this. When you do, change the text and press Brain Update so the Show Bible carries the new rule.',
+  },
+  brands: {
+    title: 'The companies in Lala\u2019s world',
+    what: 'Every fashion house, magazine and press outlet, agency and venue, each with its own profile: who works there, how it posts on The Pulse, its deals with Lala and who it is linked to.',
+    reads: 'The Pulse reads the brands directly: their voice and representatives write their posts, replies and deal announcements, and a deal names the company it is with.',
+    doHere: 'Open a company to see or edit its profile. Add a new one with New company (admins).',
   },
   culture: {
     title: 'The year, who covers it, and what is remembered',
