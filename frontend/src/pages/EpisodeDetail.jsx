@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
 import useScrolledPast from '../hooks/useScrolledPast';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Compass, Sparkles, PenLine, CalendarDays, Crown, ChevronLeft, ChevronRight, ChevronDown, Clapperboard, MapPin, Calendar, Coins, MoreVertical, ArrowRight } from 'lucide-react';
+import { Compass, Sparkles, PenLine, CalendarDays, Crown, ChevronLeft, ChevronRight, ChevronDown, Clapperboard, MapPin, Calendar, Coins, MoreVertical, ArrowRight, Pencil, Trash2 } from 'lucide-react';
 import { STATUS_LABEL } from '../lib/episodePipeline';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/ToastContainer';
@@ -245,6 +245,22 @@ const EpisodeDetail = () => {
   }, [checksEpisodeId]);
 
   const [showMoreActions, setShowMoreActions] = useState(false);
+  // The header's ⋮ menu closes on Escape (focus back on the ⋮) and on a
+  // click or tap anywhere else (Script page audit 4, 2026-10-19: it stayed
+  // open over the page).
+  const moreMenuRef = useRef(null);
+  useEffect(() => {
+    if (!showMoreActions) return undefined;
+    const away = (e) => { if (moreMenuRef.current && !moreMenuRef.current.contains(e.target)) setShowMoreActions(false); };
+    const esc = (e) => {
+      if (e.key !== 'Escape') return;
+      setShowMoreActions(false);
+      moreMenuRef.current?.querySelector('.ed-btn-more')?.focus();
+    };
+    document.addEventListener('pointerdown', away);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', esc); };
+  }, [showMoreActions]);
   // A cover whose image would not load falls back to the placeholder.
   const [failedCover, setFailedCover] = useState(null);
   // { episodeId, events, failed? } — the Wardrobe's events and the episode
@@ -277,6 +293,16 @@ const EpisodeDetail = () => {
     // padding and title size animate for 0.3s (`transition: all 0.3s`) after
     // each switch, so heights inside that window are not the full one.
     const SETTLE_MS = 400;
+    // The page's scroller keeps what it brings into view, and what Tab
+    // reaches, below the compact header: its scroll-padding-top is the
+    // header's height (Script page audit 4, 2026-10-19: a chosen beat's name
+    // and arrows sat under it).
+    let scroller = null;
+    for (let n = el.parentElement; n && !scroller; n = n.parentElement) {
+      const oy = getComputedStyle(n).overflowY;
+      if (oy === 'auto' || oy === 'scroll') scroller = n;
+    }
+    if (!scroller) scroller = document.scrollingElement || document.documentElement;
     let full = 0;
     let wasCompact = headerCompactRef.current;
     let switchedAt = 0;
@@ -286,6 +312,7 @@ const EpisodeDetail = () => {
       const h = el.offsetHeight;
       if (!compact && performance.now() - switchedAt > SETTLE_MS) full = h;
       spacer.style.height = `${Math.max(0, full - h)}px`;
+      scroller.style.scrollPaddingTop = compact ? `${h + 12}px` : '';
     };
     const onEnd = (e) => { if (e.target === el) sync(); };
     el.addEventListener('transitionend', onEnd);
@@ -295,6 +322,7 @@ const EpisodeDetail = () => {
     return () => {
       ro.disconnect();
       el.removeEventListener('transitionend', onEnd);
+      scroller.style.scrollPaddingTop = '';
     };
   }, [headerEpisodeId]);
   const [selectedEvent, setSelectedEvent] = useState(null);
@@ -869,7 +897,7 @@ const EpisodeDetail = () => {
                   {balanceFailed && headerBalance === null ? 'Coins unavailable' : coinsLabel(headerBalance)}
                 </button>
               )}
-              <div className="ed-more-menu">
+              <div className="ed-more-menu" ref={moreMenuRef}>
                 <button
                   type="button"
                   onClick={() => setShowMoreActions(!showMoreActions)}
@@ -888,7 +916,7 @@ const EpisodeDetail = () => {
                       }}
                       className="ed-dropdown-item"
                     >
-                      <span>✏️</span>
+                      <Pencil size={16} aria-hidden="true" />
                       <span>Edit Episode</span>
                     </button>
                     {/* Create Thumbnail relocated to the Assets area, Scene
@@ -911,7 +939,7 @@ const EpisodeDetail = () => {
                       }}
                       className="ed-dropdown-item ed-dropdown-danger"
                     >
-                      <span>🗑️</span>
+                      <Trash2 size={16} aria-hidden="true" />
                       <span>Delete Episode</span>
                     </button>
                   </div>

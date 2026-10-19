@@ -5,7 +5,7 @@
  * its beat.
  */
 import { vi, beforeEach, test, expect } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../../services/api', () => ({
@@ -38,6 +38,8 @@ beforeEach(() => {
 
 test("beat 8's coin line, beat 9's shopping list and Lala's beat 13 line are rows on their beats", async () => {
   render(<MemoryRouter><EpisodeScriptTab episode={{ id: 'ep-1', show_id: 'show-1', script_content: SCRIPT, script_locked_beats: [] }} show={{ id: 'show-1' }} /></MemoryRouter>);
+  // Ready to film? starts folded (Script page audit 4, 2026-10-19).
+  fireEvent.click(screen.getByTestId('script-health-toggle'));
   await waitFor(() => expect(screen.getByTestId('script-health-rule-beat8-p1').textContent)
     .toContain('Beat 8: the Velvet Blazer goes on without its coin line [STAT: coins -120].'));
   await waitFor(() => expect(screen.getByTestId('script-health-rule-beat9').textContent).toContain('the approved shopping list never comes up'));

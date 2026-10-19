@@ -7,13 +7,21 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { GripVertical, Smartphone, EllipsisVertical, ListOrdered, Clapperboard, Link2, ListChecks, Check, MapPin, Image as ImageIcon, Shirt, Bell, MessageCircle, Send, Layers, CircleHelp } from 'lucide-react';
+import { GripVertical, Smartphone, EllipsisVertical, ListOrdered, Clapperboard, Link2, ListChecks, Check, MapPin, Image as ImageIcon, Shirt, Bell, MessageCircle, Send, Layers, CircleHelp, LogIn, Hand, Mail, Sparkles, Target, AlarmClock, Plane, Trophy, Palette, ChartColumn, Flame, FileText } from 'lucide-react';
 import { STATUS_LABELS } from '../../lib/scriptBeatView';
 import { dropIndex } from '../../lib/scriptBeatOrder';
 import { SHOT_LABELS, fmtType } from '../BeatPlan/BeatPlanParts';
 
 export function BeatStatusBadge({ status = 'draft', testId = undefined }) {
   return <span className={`esp-status is-${status}`} data-testid={testId}>{STATUS_LABELS[status] || STATUS_LABELS.draft}</span>;
+}
+
+// A beat with no scene picture shows its kind as a lucide icon, not the
+// beat's emoji (Script page audit 4, 2026-10-19), by its canonical number.
+const BEAT_ICONS = { 1: Clapperboard, 2: LogIn, 3: Hand, 4: Mail, 5: Sparkles, 6: Target, 7: MessageCircle, 8: Shirt, 9: AlarmClock, 10: Plane, 11: Trophy, 12: Palette, 13: ChartColumn, 14: Flame };
+function BeatIcon({ number }) {
+  const Icon = BEAT_ICONS[number] || FileText;
+  return <Icon size={22} aria-hidden="true" />;
 }
 
 // A beat row's ⋮: the beat's own actions (move, approve), as the open
@@ -92,7 +100,7 @@ export function ScriptBeatList({ beats, openId, onChoose, statuses = {}, scenePl
                 onClick={() => onChoose(b.id)}>
                 <span className="esp-beatlist-num" aria-hidden="true">{b.number}</span>
                 <span className="esp-beatlist-thumb" aria-hidden="true">
-                  {scene?.image ? <img src={scene.image} alt="" loading="lazy" /> : <span className="esp-beatlist-icon">{b.icon}</span>}
+                  {scene?.image ? <img src={scene.image} alt="" loading="lazy" /> : <span className="esp-beatlist-icon"><BeatIcon number={b.number} /></span>}
                 </span>
                 <span className="esp-beatlist-text">
                   <span className="esp-beatlist-badges">
@@ -148,13 +156,19 @@ export function SceneContextCard({ beatNumber, rows }) {
 
 const ASSET_ICONS = { location: MapPin, device: Smartphone, phone: Smartphone, icon: Smartphone, overlay: Layers, notify: Bell, dm: MessageCircle, post: Send, wardrobe: Shirt, unknown: CircleHelp };
 
+// The first few assets, then all on "Show all n", so a beat with twenty
+// pieces doesn't stretch the cards beside it (Script page audit 4, 2026-10-19).
+const ASSETS_SHOWN = 8;
+
 export function AssetsCard({ beatNumber, assets }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? assets : assets.slice(0, ASSETS_SHOWN);
   return (
     <section className="esp-card esp-assets" data-testid={`script-assets-${beatNumber}`} aria-label="Assets and links">
       <h4 className="esp-card-title"><Link2 size={16} aria-hidden="true" /> Assets &amp; Links</h4>
       {assets.length ? (
         <ul className="esp-assets-list">
-          {assets.map((a) => {
+          {shown.map((a) => {
             const Icon = ASSET_ICONS[a.kind] || ImageIcon;
             return (
               <li key={a.key} data-testid="script-asset" data-kind={a.kind}>
@@ -166,6 +180,11 @@ export function AssetsCard({ beatNumber, assets }) {
         </ul>
       ) : (
         <p className="esp-card-empty">Nothing on screen or worn in this beat yet.</p>
+      )}
+      {assets.length > ASSETS_SHOWN && (
+        <button type="button" className="esp-link esp-assets-more" aria-expanded={all} data-testid={`script-assets-more-${beatNumber}`} onClick={() => setAll((v) => !v)}>
+          {all ? 'Show fewer' : `Show all ${assets.length}`}
+        </button>
       )}
     </section>
   );

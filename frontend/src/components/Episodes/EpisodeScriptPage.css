@@ -3,7 +3,12 @@
    Scene Visuals, Script Lines and three cards), what generation reads below
    the beats. Soft pink page, white cards, magenta marks; colours through
    tokens only (--studio-* in styles/design-tokens.css). */
+/* position: relative holds the screen-reader-only text (.esp-sr) inside the
+   tab: with no positioned box above it, it sat below the page and made the
+   document itself scroll, so bringing a beat into view slid the whole app
+   up (Script page audit 4, 2026-10-19). */
 .esp {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
   grid-template-areas: "top top" "main side";
@@ -135,7 +140,7 @@
 .esp-beatrow.is-open .esp-beatlist-num { background: var(--studio-magenta); color: var(--text-inverse); }
 .esp-beatlist-thumb { flex: none; display: flex; align-items: center; justify-content: center; width: 56px; height: 50px; border-radius: 8px; overflow: hidden; background: var(--studio-purple-soft); }
 .esp-beatlist-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.esp-beatlist-icon { font-size: 22px; }
+.esp-beatlist-icon { display: inline-flex; color: var(--studio-purple); }
 .esp-beatlist-text { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
 .esp-beatlist-badges { display: inline-flex; align-items: center; gap: 6px; }
 .esp-beatlist-name { max-width: 100%; font-size: 14px; font-weight: 700; line-height: 1.3; color: var(--studio-ink); overflow-wrap: break-word; hyphens: auto; }
@@ -180,7 +185,10 @@
 .esp-drop-after { box-shadow: 0 3px 0 0 var(--studio-magenta) !important; }
 
 /* ── The open beat (centre) ── */
-.esp-beat { margin-bottom: 12px; overflow: visible; }
+/* The episode page pads its scroller by the compact header's height
+   (EpisodeDetail), so a beat brought into view stops below the header, with
+   this gap (Script page audit 4, 2026-10-19). */
+.esp-beat { margin-bottom: 12px; overflow: visible; scroll-margin-top: 12px; }
 /* One open beat in the centre; with none open, every beat as a short card. */
 .esp-beats.has-open .esp-beat:not(.is-open) { display: none; }
 .esp-beat:not(.is-open) { border-left: 4px solid var(--beat-color, var(--studio-magenta)); }
@@ -197,7 +205,11 @@
 .esp-beat-count { font-family: 'DM Mono', var(--font-mono); font-size: 12px; color: var(--studio-ink-muted); white-space: nowrap; }
 .esp-beat-runtime { color: var(--studio-ink); font-weight: 600; }
 .esp-beat-runtime::before { content: ' · '; color: var(--studio-ink-muted); font-weight: 400; }
-.esp-beat-chev { font-size: 10px; color: var(--studio-ink-muted); transition: transform 0.2s; }
+.esp-beat-chev { flex: none; color: var(--studio-ink-muted); transition: transform 0.2s; }
+/* Beside the beat list the open beat's head doesn't fold it: no chevron, no
+   hand (Script page audit 4, 2026-10-19). */
+.esp.has-beatlist .esp-beat.is-open .esp-beat-chev { display: none; }
+.esp.has-beatlist .esp-beat.is-open .esp-beat-head { cursor: default; }
 .esp-beat.is-open .esp-beat-chev { transform: rotate(180deg); }
 .esp-beat-thumb { flex-shrink: 0; width: 52px; height: 36px; border-radius: 6px; overflow: hidden; background: var(--studio-page-2); }
 .esp-beat-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -375,6 +387,8 @@
 .esp-assets-list li { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--studio-ink); overflow-wrap: anywhere; }
 .esp-assets-list svg { flex: none; margin-top: 1px; color: var(--studio-magenta); }
 .esp-assets-kind { color: var(--studio-ink-muted); }
+/* "Show all n" under the first eight (Script page audit 4, 2026-10-19). */
+.esp-assets-more { align-self: flex-start; margin-top: 10px; padding: 0; border: none; background: none; font-family: inherit; cursor: pointer; }
 .esp-checklist-count { margin-left: auto; font-family: 'DM Mono', var(--font-mono); font-size: 13px; color: var(--studio-ink); }
 .esp-progress { display: block; width: 100%; height: 8px; margin: 0 0 12px; border: none; border-radius: 999px; background: var(--studio-page-2); overflow: hidden; appearance: none; }
 .esp-progress::-webkit-progress-bar { background: var(--studio-page-2); border-radius: 999px; }
@@ -535,6 +549,9 @@
 }
 @media (max-width: 760px) {
   .esp.has-beatlist { padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
+  /* What Tab reaches stops above the bottom bar, not under it: the page's
+     scroller is padded by the bar (Script page audit 4, 2026-10-19). */
+  .app-content:has(.esp.has-beatlist), html:has(.esp.has-beatlist) { scroll-padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
   .esp-chips { display: flex; }
   .esp.has-beatlist .esp-beat:not(.is-open) { display: none; }
   .esp.has-beatlist .esp-order-hint { display: none; }
@@ -583,4 +600,13 @@
   .esp-beat14-field input,
   .esp-beat14-field select,
   .esp-beat14-field textarea { min-height: 44px; font-size: 16px; /* iOS zooms into smaller inputs */ }
+}
+
+/* A touch screen of any width, a tablet's 768px too, gets the phone's 44px
+   targets (Script page audit 4, 2026-10-19: 23px row buttons at 768). */
+@media (pointer: coarse) {
+  .esp button, .esp summary, .esp-rowmenu-btn, .esp-health-open, .esp-btn, .esp-btn-primary, .esp-btn-primary.is-small, .esp-btn.is-small { min-height: 44px; }
+  .esp-step { width: 44px; height: 44px; }
+  .esp-beat-head { min-height: 44px; }
+  .esp-link { display: inline-flex; align-items: center; min-height: 44px; }
 }

@@ -1,40 +1,22 @@
 // "Ready to film?" (Script tab audit, 2026-10-15): the script-wide checks in
 // one card at the top of the Script tab (lib/scriptHealth). A row a beat can
-// fix opens that beat. Open or closed is remembered per viewer. A phone-path
-// row also fixes itself (lib/phonePaths: "Go home first"), and Fix all fixes
-// every one (script phone paths, 2026-10-16).
+// fix opens that beat. A phone-path row also fixes itself (lib/phonePaths:
+// "Go home first"), and Fix all fixes every one (script phone paths,
+// 2026-10-16). It starts folded at every width, with its count on the
+// button, as Evoni's mockup has the beats at the top (Script page audit 4,
+// 2026-10-19); open or closed is not remembered.
 import { useState } from 'react';
 import { Check, AlertTriangle, ChevronDown } from 'lucide-react';
-
-const STORE_KEY = 'esp-health-collapsed';
 
 // A stat's key reads as words ("brand trust"); a [STAT: …] tag keeps it as
 // the script writes it (Script page audit 3, 2026-10-19).
 export const shownText = (text) => String(text ?? '').replace(/(\[STAT:[^\]]*\])|\bbrand_trust\b/g, (m, tag) => tag || 'brand trust');
 
-// At phone width it starts folded: open, its list pushed the beat about
-// 1700px down (Script page audit, 2026-10-19).
-function isPhoneWidth() {
-  try { return window.matchMedia?.('(max-width: 760px)').matches || false; }
-  catch (err) { console.error('[ScriptHealth] width check failed:', err); return false; }
-}
-
-function readCollapsed() {
-  if (isPhoneWidth()) return true;
-  try { return window.localStorage.getItem(STORE_KEY) === '1'; }
-  catch (err) { console.error('[ScriptHealth] could not read the remembered state:', err); return false; }
-}
-
 export default function ScriptHealthPanel({ rows = [], beatNumbers = {}, onOpenBeat, onFix, busy = false }) {
-  const [collapsed, setCollapsed] = useState(readCollapsed);
+  const [collapsed, setCollapsed] = useState(true);
   const toCheck = rows.filter((r) => !r.ok).length;
   const fixable = rows.filter((r) => !r.ok && r.fix);
-  const toggle = () => {
-    const next = !collapsed;
-    setCollapsed(next);
-    try { window.localStorage.setItem(STORE_KEY, next ? '1' : '0'); }
-    catch (err) { console.error('[ScriptHealth] could not remember the state:', err); }
-  };
+  const toggle = () => setCollapsed((c) => !c);
   return (
     <section className={`esp-health${toCheck ? ' has-gaps' : ' is-clear'}`} data-testid="script-health">
       <button type="button" className="esp-health-head" aria-expanded={!collapsed} aria-controls="esp-health-list" onClick={toggle} data-testid="script-health-toggle">

@@ -87,6 +87,14 @@ describe('Episode shell theme', () => {
     expect(redesign).toMatch(/\.ed-page\.ed-studio \.ed-tab:focus-visible,[^{]*\{\s*outline: 2px solid var\(--studio-magenta\);/);
   });
 
+  test("the header's ⋮ and its menu, and the chosen tab, draw only tokens (Script page audit 4, 2026-10-19)", () => {
+    for (const sel of ['.ed-btn-more', '.ed-btn-more:hover', '.ed-dropdown', '.ed-tab.ed-tab-active']) {
+      expect(rule(sel)).not.toMatch(/rgba?\(/);
+    }
+    expect(rule('.ed-page.ed-studio .ed-dropdown')).toMatch(/border: 1px solid var\(--studio-line\);[^}]*background: var\(--studio-card\); box-shadow: var\(--studio-shadow\);/);
+    expect(rule('.ed-page.ed-studio .ed-dropdown-item')).toMatch(/min-height: 44px;/);
+  });
+
   test('the evaluation verdicts read text tokens on their surfaces', () => {
     // Results → Evaluation moved to EpisodeResultsPages (the Results redesign, 2026-10-08).
     const results = readFileSync(resolve(__dirname, '../components/Episodes/EpisodeResultsPages.jsx'), 'utf8');

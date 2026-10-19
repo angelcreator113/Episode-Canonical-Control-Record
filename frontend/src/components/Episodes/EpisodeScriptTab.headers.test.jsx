@@ -74,8 +74,9 @@ describe('lines', () => {
     renderTab('## BEAT: 1 · Opening Ritual\n[TRANSITION: cut to the closet]\n[WEAR: 3f2a9c1e-0000-4000-8000-000000000001]\nLala (V.O.): "Bestie."\nLocation: The penthouse\nLala: “Hi.”');
     const beat = screen.getByTestId('script-beat-1');
     expect(within(beat).getByText('Transition: cut to the closet').className).toBe('esp-line-cue');
-    expect(within(beat).getByText('Puts on a piece of the look')).toBeTruthy();
-    expect(within(beat).queryByText(/3f2a9c1e/)).toBeNull();
+    // A [WEAR] cue names its piece; with no look to name it from, its id
+    // (Script page audit 4, 2026-10-19).
+    expect(within(beat).getByText('Puts on 3f2a9c1e-0000-4000-8000-000000000001').className).toBe('esp-line-cue');
     const speakers = within(beat).getAllByText(/^(Lala|Location)$/).map((el) => el.textContent);
     expect(speakers).toEqual(['Lala', 'Lala']);
     expect(within(beat).getByText('Location: The penthouse')).toBeTruthy();
