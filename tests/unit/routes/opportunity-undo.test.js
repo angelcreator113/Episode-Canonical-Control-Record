@@ -46,6 +46,14 @@ describe('POST /opportunities/:showId/:id/undo', () => {
     expect(opp.status_history[opp.status_history.length - 1]).toMatchObject({ status: 'active', note: 'Undone', undone_from: 'completed' });
   });
 
+  // Steps made before advance saved its history: the last status written is the one before.
+  test('a step the history never recorded goes back to the last status written', async () => {
+    const opp = row({ id: ID, status: 'completed', status_history: [h('offered'), h('active')] });
+    const res = await undo(app(models(opp)));
+    expect(res.status).toBe(200);
+    expect(res.body.undone).toEqual({ from: 'completed', to: 'active' });
+  });
+
   test('twice goes back two steps, then there is nothing earlier', async () => {
     const opp = row({ id: ID, status: 'considering', status_history: [h('offered'), h('considering')] });
     const a = app(models(opp));

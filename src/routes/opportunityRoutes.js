@@ -221,8 +221,10 @@ router.post('/opportunities/:showId/:id/advance', requireAuth, authorize(['ADMIN
       return res.status(400).json({ success: false, error: `Cannot advance from "${opp.status}" to "${to_status}". Allowed: ${allowed.join(', ')}` });
     }
 
-    const history = opp.status_history || [];
-    history.push({ status: to_status, date: new Date().toISOString(), note: note || null, from: opp.status });
+    // A new array: a JSONB array changed in place is never saved by
+    // Sequelize, so no step was ever written to the history (Script page
+    // audit, 2026-10-19: Undo found nothing to go back to).
+    const history = [...(Array.isArray(opp.status_history) ? opp.status_history : []), { status: to_status, date: new Date().toISOString(), note: note || null, from: opp.status }];
 
     const updates = { status: to_status, status_history: history };
     if (to_status === 'booked') updates.booking_date = new Date().toISOString().split('T')[0];
@@ -280,7 +282,9 @@ function statusBeforeLastStep(history, current) {
     if (h.note === 'Undone' && h.undone_from) { stack.pop(); if (stack[stack.length - 1] !== h.status) stack.push(h.status); continue; }
     stack.push(h.status);
   }
-  if (stack[stack.length - 1] !== current) return null;
+  // Steps made before the history was saved: the last status written is
+  // the one before.
+  if (stack.length && stack[stack.length - 1] !== current) return stack[stack.length - 1];
   for (let i = stack.length - 2; i >= 0; i -= 1) if (stack[i] !== current) return stack[i];
   return null;
 }
