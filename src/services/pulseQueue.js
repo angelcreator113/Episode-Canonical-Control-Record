@@ -30,7 +30,7 @@
  * budget.
  */
 
-const KINDS = ['event', 'ambient', 'comment', 'dm', 'storyline', 'voice'];   // dm: Task #2984; storyline: Task #2989; voice: Task #3070
+const KINDS = ['event', 'ambient', 'comment', 'dm', 'storyline', 'voice', 'moment'];   // dm: Task #2984; storyline: Task #2989; voice: Task #3070; moment: services/worldMoments
 const DEFAULTS = {
   automated_requests: 5, manual_requests: 15, ambient_enabled: false,
   // Evoni's Engine mock (2026-10-17): each automated kind can be switched off; all start on.
