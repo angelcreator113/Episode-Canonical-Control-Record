@@ -41,8 +41,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
   beforeAll(async () => {
     for (const k of ['S3_PRIMARY_BUCKET', 'AWS_S3_BUCKET']) { savedBuckets[k] = process.env[k]; delete process.env[k]; }
+    // An ADMIN: these writes are ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only).
     token = TokenService.generateTokenPair({
-      id: 'test-user-char-photo', email: 'evoni@photo.dev', name: 'Photo Test', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-char-photo', email: 'evoni@photo.dev', name: 'Photo Test', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     png = await sharp({ create: { width: 3000, height: 2000, channels: 3, background: { r: 168, g: 137, b: 200 } } }).png().toBuffer();
     await run(`INSERT INTO character_registries (id, title, created_at, updated_at) VALUES (:reg, 'Photo registry', NOW(), NOW())`, ids);

@@ -30,13 +30,19 @@ describe('Step 3 CP6 — characterGenerationRoutes.js router.use migration', () 
   });
 
   describe('Non-AI handlers (5) inherit auth from router.use, no inline aiRateLimiter', () => {
-    [['post', '/confirm'], ['post', '/confirm-feed'], ['post', '/promote-ghost/:characterId'], ['get', '/depth/:id'], ['patch', '/depth/:id']].forEach(([verb, route]) => {
+    [['post', '/confirm'], ['post', '/confirm-feed'], ['get', '/depth/:id'], ['patch', '/depth/:id']].forEach(([verb, route]) => {
       test(`${verb.toUpperCase()} ${route} has no inline aiRateLimiter`, () => {
         const escaped = route.replace(/\//g, '\\/');
         const re = new RegExp(`router\\.${verb}\\('${escaped}',\\s*async`);
         expect(SRC).toMatch(re);
       });
     });
+  });
+
+  // Evoni, 2026-10-19 ("this whole part of the site is admin only"; the
+  // profile audit): promoting a ghost is ADMIN only, still without aiRateLimiter.
+  test('POST /promote-ghost/:characterId is ADMIN only, no inline aiRateLimiter', () => {
+    expect(SRC).toMatch(/router\.post\('\/promote-ghost\/:characterId',\s*require\('\.\.\/middleware\/auth'\)\.authorize\(\['ADMIN'\]\),\s*async/);
   });
 
   test('no optionalAuth references remain', () => {

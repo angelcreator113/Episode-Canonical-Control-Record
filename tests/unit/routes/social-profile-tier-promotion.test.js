@@ -59,10 +59,17 @@ describe('Step 3 CP8 — socialProfileRoutes.js anchor mixed Tier 1+4', () => {
     ].forEach(([verb, route]) => {
       test(`${verb.toUpperCase()} ${route} preserves guardJustAWomanRecord after requireAuth`, () => {
         const escaped = route.replace(/\//g, '\\/');
-        const re = new RegExp(`router\\.${verb}\\('${escaped}',\\s*requireAuth,(\\s*aiRateLimiter,)?\\s*guardJustAWomanRecord,\\s*async`);
+        const re = new RegExp(`router\\.${verb}\\('${escaped}',\\s*requireAuth,(\\s*authorize\\(\\['ADMIN'\\]\\),)?(\\s*aiRateLimiter,)?\\s*guardJustAWomanRecord,\\s*async`);
         expect(SRC).toMatch(re);
       });
     });
+  });
+
+  // Evoni, 2026-10-19 ("this whole part of the site is admin only"; the
+  // profile audit): editing a profile is ADMIN only.
+  test('PUT and PATCH /:id are ADMIN only, guard kept', () => {
+    expect(SRC).toMatch(/router\.put\('\/:id',\s*requireAuth,\s*authorize\(\['ADMIN'\]\),\s*guardJustAWomanRecord,\s*async/);
+    expect(SRC).toMatch(/router\.patch\('\/:id',\s*requireAuth,\s*authorize\(\['ADMIN'\]\),\s*guardJustAWomanRecord,\s*async/);
   });
 
   test('guardJustAWomanRecord function definition preserved verbatim', () => {

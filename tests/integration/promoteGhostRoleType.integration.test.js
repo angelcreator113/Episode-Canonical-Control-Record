@@ -26,12 +26,13 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   const ids = { reg: uuid(), rc: uuid() };
 
   beforeAll(async () => {
+    // An ADMIN: these writes are ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only).
     token = TokenService.generateTokenPair({
       id: 'test-user-promote-ghost',
       email: 'test@promote-ghost.dev',
       name: 'Promote Ghost Test',
-      groups: ['USER', 'EDITOR'],
-      role: 'USER',
+      groups: ['ADMIN'],
+      role: 'ADMIN',
     }).accessToken;
     await run(`INSERT INTO character_registries (id, title, created_at, updated_at) VALUES (:reg, 'Promote ghost registry', NOW(), NOW())`, ids);
     await run(`INSERT INTO registry_characters (id, registry_id, character_key, display_name, ghost_characters, created_at, updated_at)

@@ -19,7 +19,8 @@ jest.mock('../../../src/models', () => ({
 }));
 jest.mock('../../../src/middleware/auth', () => {
   const actual = jest.requireActual('../../../src/middleware/auth');
-  return { ...actual, requireAuth: (req, _res, next) => { req.user = { id: 'u1' }; next(); } };
+  // An ADMIN: generating is ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only).
+  return { ...actual, requireAuth: (req, _res, next) => { req.user = { id: 'u1', groups: ['ADMIN'] }; next(); } };
 });
 
 const models = require('../../../src/models');

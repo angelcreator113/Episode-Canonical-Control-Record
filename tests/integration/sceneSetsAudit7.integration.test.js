@@ -74,7 +74,8 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
 
   beforeAll(() => {
     token = TokenService.generateTokenPair({
-      id: 'test-user-audit7', email: 'user@audit7.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      // Scene-set writes are ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only).
+      id: 'test-admin-audit7', email: 'admin@audit7.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
   beforeEach(() => {

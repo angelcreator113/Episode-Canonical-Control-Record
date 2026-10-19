@@ -70,7 +70,8 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
   const beats = async (episodeId) => rows('SELECT beat_number, scene_set_id, angle_label FROM scene_plans WHERE episode_id = :episodeId ORDER BY beat_number', { episodeId });
 
   beforeAll(() => {
-    token = TokenService.generateTokenPair({ id: 'test-user-audit8', email: 'u@audit8.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    // An ADMIN: these writes are ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only).
+    token = TokenService.generateTokenPair({ id: 'test-user-audit8', email: 'u@audit8.dev', name: 'Editor', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
   });
   beforeEach(() => {
     jest.spyOn(console, 'log').mockImplementation(() => {});

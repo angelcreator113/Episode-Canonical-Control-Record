@@ -222,8 +222,12 @@ function EventPhotosAndAngles({ event, onNote, onChanged }) {
 }
 
 /** Hosted events, each with its photos; add or stop hosting one. */
-function HostedEvents({ character, showId, onNote }) {
-  const [events, setEvents] = useState(null);
+function HostedEvents({ character, showId, onNote, appearances = null }) {
+  const hostsIn = (data) => (data?.events || []).filter((e) => e.role === 'host');
+  // The page's own appearances, when it has them, instead of a second
+  // request for the same thing (the profile audit, 2026-10-19); a change
+  // here reads them again.
+  const [events, setEvents] = useState(appearances ? hostsIn(appearances) : null);
   const [all, setAll] = useState(null);
   const [adding, setAdding] = useState(false);
   const [choice, setChoice] = useState('');
@@ -232,14 +236,15 @@ function HostedEvents({ character, showId, onNote }) {
   const load = useCallback(async () => {
     try {
       const res = await api.get(`/api/v1/cast/characters/${character.id}/appearances`);
-      setEvents((res.data?.events || []).filter((e) => e.role === 'host'));
+      setEvents(hostsIn(res.data));
     } catch (err) {
       console.error('[CharacterPlacesTab] hosted events failed:', err);
       setEvents([]);
       onNote({ error: true, text: errorText(err, 'Could not load their events') });
     }
   }, [character.id, onNote]);
-  useEffect(() => { load(); }, [load]);
+  const given = Boolean(appearances);
+  useEffect(() => { if (!given) load(); }, [load, given]);
 
   const startAdd = async () => {
     setAdding(true);
@@ -349,7 +354,7 @@ function HostedEvents({ character, showId, onNote }) {
   );
 }
 
-export default function CharacterPlacesTab({ character }) {
+export default function CharacterPlacesTab({ character, appearances = null }) {
   const [data, setData] = useState(null);
   const [sets, setSets] = useState(null);
   const [note, setNote] = useState(null);
@@ -396,7 +401,7 @@ export default function CharacterPlacesTab({ character }) {
           showId={data.show_id} sets={sets} loadSets={loadSets} onSetsStale={() => setSets(null)} onChanged={load} onNote={setNote}
           anglesKey={anglesKey} onAnglesAdded={onAnglesAdded} />
       ))}
-      <HostedEvents character={character} showId={data.show_id} onNote={setNote} />
+      <HostedEvents character={character} showId={data.show_id} onNote={setNote} appearances={appearances} />
       {/* Kept in view at the foot of the screen: on a phone the tab is
           several screens long, and a result below the hosted events was
           never seen (sixth audit). */}

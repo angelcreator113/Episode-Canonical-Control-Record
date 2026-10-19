@@ -46,8 +46,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   };
 
   beforeAll(async () => {
+    // An ADMIN: these writes are ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only).
     token = TokenService.generateTokenPair({
-      id: 'test-user-cast-review', email: 'test@cast-review.dev', name: 'Cast Review Test', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-cast-review', email: 'test@cast-review.dev', name: 'Cast Review Test', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     await run(`INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:show, :name, :slug, NOW(), NOW())`,
       { show: ids.show, name: `Cast ${TAG}`, slug: `cast-${TAG}` });

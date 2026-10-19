@@ -29,7 +29,8 @@ jest.mock('../../../src/middleware/auth', () => {
   return {
     ...actual,
     requireAuth: (req, res, next) => {
-      if (req.headers['x-test-user']) { req.user = { id: 'u1' }; return next(); }
+      // An ADMIN: editing a profile is ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only).
+      if (req.headers['x-test-user']) { req.user = { id: 'u1', groups: ['ADMIN'] }; return next(); }
       return actual.requireAuth(req, res, next);
     },
   };
