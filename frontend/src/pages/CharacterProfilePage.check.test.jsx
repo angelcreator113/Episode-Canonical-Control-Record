@@ -28,7 +28,7 @@ describe('ProfileCheck', () => {
     api.get.mockResolvedValue(result([FLAG]));
     render(<ProfileCheck characterId="c1" />);
     expect(api.get).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByText('Check their profile against these facts'));
+    fireEvent.click(screen.getByText('Only check'));
     const box = await screen.findByTestId('ch-check');
     expect(await within(box).findByText(/1 place disagrees with their facts/)).toBeTruthy();
     expect(within(box).getByText(/what they post \(4\) and author-only notes \(2\) are not checked/)).toBeTruthy();
@@ -40,7 +40,7 @@ describe('ProfileCheck', () => {
     api.get.mockResolvedValueOnce(result([FLAG])).mockResolvedValueOnce(result([], [{ ...FLAG, note: null }]));
     api.post.mockResolvedValue({ data: { success: true } });
     render(<ProfileCheck characterId="c1" />);
-    fireEvent.click(screen.getByText('Check their profile against these facts'));
+    fireEvent.click(screen.getByText('Only check'));
     fireEvent.click(await screen.findByText('It’s intentional'));
     expect(await screen.findByText('1 marked intentional')).toBeTruthy();
     expect(screen.getByText(/Everything agrees with their facts./)).toBeTruthy();
@@ -52,7 +52,7 @@ describe('ProfileCheck', () => {
     api.get.mockResolvedValue(result([flag]));
     api.post.mockResolvedValue(result([]));
     render(<ProfileCheck characterId="c1" />);
-    fireEvent.click(screen.getByText('Check their profile against these facts'));
+    fireEvent.click(screen.getByText('Only check'));
     fireEvent.click(await screen.findByText('Fix: “2M followers”'));
     expect(await screen.findByText(/Everything agrees with their facts./)).toBeTruthy();
     expect(api.post).toHaveBeenCalledWith('/api/v1/cast/characters/c1/check/fix', { flag_id: FLAG.id });
@@ -63,7 +63,7 @@ describe('ProfileCheck', () => {
     api.get.mockResolvedValue(result([flag]));
     api.post.mockResolvedValue(result([]));
     render(<ProfileCheck characterId="c1" />);
-    fireEvent.click(screen.getByText('Check their profile against these facts'));
+    fireEvent.click(screen.getByText('Only check'));
     expect(screen.queryByText(/^Fix:/)).toBeNull();
     fireEvent.click(await screen.findByText('Edit the text'));
     const box = screen.getByLabelText('Description');
@@ -77,7 +77,7 @@ describe('ProfileCheck', () => {
   test('a stored copy has a fix but no text to edit', async () => {
     api.get.mockResolvedValue(result([{ ...FLAG, fix: '2M', editable: false }]));
     render(<ProfileCheck characterId="c1" />);
-    fireEvent.click(screen.getByText('Check their profile against these facts'));
+    fireEvent.click(screen.getByText('Only check'));
     expect(await screen.findByText('Fix: “2M”')).toBeTruthy();
     expect(screen.queryByText('Edit the text')).toBeNull();
   });
@@ -86,7 +86,7 @@ describe('ProfileCheck', () => {
     api.get.mockRejectedValue(Object.assign(new Error('x'), { response: { data: { error: 'Character not found' } } }));
     vi.spyOn(console, 'error').mockImplementation(() => {});
     render(<ProfileCheck characterId="c1" />);
-    fireEvent.click(screen.getByText('Check their profile against these facts'));
+    fireEvent.click(screen.getByText('Only check'));
     expect((await screen.findByRole('alert')).textContent).toBe('Character not found');
   });
 
@@ -104,7 +104,7 @@ describe('ProfileCheck', () => {
       { flag_id: MOOD.id, verdict: 'fine', before: 'she goes quiet for days.', after: null, why: 'A mood, not her account.' },
     ] } } : result([MOOD])));
     render(<ProfileCheck characterId="c1" />);
-    fireEvent.click(screen.getByText('Check their profile against these facts'));
+    fireEvent.click(screen.getByText('Only check'));
     fireEvent.click(await screen.findByText('Suggest fixes'));
     expect(await screen.findByText(/Suggested: “She kept posting through the retakes.”/)).toBeTruthy();
     expect(screen.getByText('Looks fine as it is.')).toBeTruthy();
@@ -122,7 +122,7 @@ describe('ProfileCheck', () => {
       { flag_id: MOOD.id, verdict: 'fine', before: 'x', after: null, why: 'A mood.' },
     ] } } : { data: { success: true } }));
     render(<ProfileCheck characterId="c1" />);
-    fireEvent.click(screen.getByText('Check their profile against these facts'));
+    fireEvent.click(screen.getByText('Only check'));
     expect(await screen.findByText('Fix all 1')).toBeTruthy();
     fireEvent.click(screen.getByText('Suggest fixes'));
     fireEvent.click(await screen.findByText('Fix all 3'));
@@ -135,5 +135,31 @@ describe('ProfileCheck', () => {
       ['/intentional', { flag_id: MOOD.id, note: 'A mood.' }],
     ]);
     expect(screen.getByText(/Everything agrees with their facts./)).toBeTruthy();
+  });
+
+  test('Check and fix fixes everything it can in one click, lists each change with Undo, and what is left', async () => {
+    const change = { id: 'ch-1', character_id: 'c1', kind: 'text', label: 'Description: "1.2M followers" → "2M followers"', field: 'character.description', before: 'a', after: 'b' };
+    api.post.mockResolvedValueOnce({ data: { success: true, changes: [change], left: ['1 finding with no suggestion: open their page to fix it.'], check: result([]).data } });
+    render(<ProfileCheck characterId="c1" />);
+    fireEvent.click(screen.getByTestId('ch-check-and-fix'));
+    const fixed = await screen.findByTestId('ch-check-fixed');
+    expect(api.post).toHaveBeenCalledWith('/api/v1/cast/consistency/fix-character/c1');
+    expect(fixed.textContent).toContain('Fixed 1.');
+    expect(fixed.textContent).toContain('"1.2M followers" → "2M followers"');
+    expect(fixed.textContent).toContain('1 finding with no suggestion');
+    expect(screen.getByText(/Everything agrees with their facts./)).toBeTruthy();
+
+    api.post.mockResolvedValueOnce({ data: { success: true } });
+    api.get.mockResolvedValueOnce(result([FLAG]));
+    fireEvent.click(within(fixed).getByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(api.post).toHaveBeenLastCalledWith('/api/v1/cast/consistency/undo', { change }));
+    expect(await within(fixed).findByText('Undone')).toBeTruthy();
+  });
+
+  test('Check and fix says so when it fails', async () => {
+    api.post.mockRejectedValueOnce({ response: { data: { error: 'The AI budget for today is used up.' } } });
+    render(<ProfileCheck characterId="c1" />);
+    fireEvent.click(screen.getByTestId('ch-check-and-fix'));
+    expect((await screen.findByRole('alert')).textContent).toBe('The AI budget for today is used up.');
   });
 });
