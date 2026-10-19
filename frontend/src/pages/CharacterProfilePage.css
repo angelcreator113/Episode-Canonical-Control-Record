@@ -1697,3 +1697,8 @@ a.ch-tl-body:hover { background: var(--lala-gold-soft); }
 .ch-pulse-vis-counts { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--text-secondary); }
 .ch-pulse-vis-counts strong { color: var(--text-primary); }
 .ch-pulse-vis-counts a { color: var(--lala-lavender-text); font-weight: 700; }
+
+/* Check and fix (Evoni, 2026-10-19): what was fixed, each with Undo, and what is left. */
+.ch-check-fixed { display: grid; gap: 8px; margin-top: 8px; }
+.ch-check-fixed .ch-check-list li { background: var(--surface-subtle, var(--lala-parchment-2)); }
+.ch-check-left { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
