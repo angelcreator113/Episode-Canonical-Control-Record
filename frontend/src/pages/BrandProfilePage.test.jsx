@@ -66,6 +66,12 @@ describe('BrandProfilePage', () => {
     expect(screen.getByText('@velouratelier on The Pulse')).toBeTruthy();
   });
 
+  test('its way back is the LalaVerse hub\'s Brands tab (Evoni, 2026-10-19)', async () => {
+    renderAt();
+    await screen.findByRole('heading', { name: 'Velour Atelier' });
+    expect(screen.getByRole('link', { name: '← LalaVerse › Brands' }).getAttribute('href')).toBe('/universe?tab=brands');
+  });
+
   test('people: their title and their authority in words, linked to their character', async () => {
     renderAt('/brands/velour_atelier?tab=people');
     const people = await screen.findByTestId('bp-people');
@@ -160,5 +166,6 @@ describe('BrandProfilePage', () => {
     vi.mocked(api.get).mockRejectedValueOnce({ response: { status: 404, data: { error: 'Company not found.' } } });
     renderAt('/brands/nobody');
     expect((await screen.findByRole('alert')).textContent).toBe('There is no company here.');
+    expect(screen.getByRole('link', { name: '← LalaVerse › Brands' }).getAttribute('href')).toBe('/universe?tab=brands');
   });
 });
