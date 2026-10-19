@@ -111,6 +111,8 @@ let PulsePoll; // Audience polls (Task #3005)
 let PulsePollOption; // Poll options (Task #3005)
 let PulsePollVote; // Poll votes, hashed (Task #3005)
 let PulseRecap; // The weekly Pulse recap (Task #3008)
+let PostPictureSuggestion; // Visual Memory phase 4: a caption's picture reading and what was chosen
+let MediaAssetSource; // Visual Memory phase 4: what a made picture was made from
 let WardrobeOrderLine; // Imported Amazon order lines (Task #3102)
 let EpisodeScriptVersion; // Scripts the Script tab replaced (Script tab audit, 2026-10-15)
 let WritingRhythm; // Writing rhythm tracking
@@ -390,6 +392,8 @@ try {
   PulsePollOption = require('./PulsePollOption')(sequelize, DataTypes);
   PulsePollVote = require('./PulsePollVote')(sequelize, DataTypes);
   PulseRecap = require('./PulseRecap')(sequelize, DataTypes);
+  PostPictureSuggestion = require('./PostPictureSuggestion')(sequelize, DataTypes);
+  MediaAssetSource = require('./MediaAssetSource')(sequelize, DataTypes);
   WardrobeOrderLine = require('./WardrobeOrderLine')(sequelize, DataTypes);
   EpisodeScriptVersion = require('./EpisodeScriptVersion')(sequelize, DataTypes);
   WritingRhythm = require('./WritingRhythm')(sequelize, DataTypes);
@@ -588,6 +592,8 @@ const requiredModels = {
   PulsePollOption,
   PulsePollVote,
   PulseRecap,
+  PostPictureSuggestion,
+  MediaAssetSource,
   WardrobeOrderLine,
   EpisodeScriptVersion,
   WritingRhythm,
@@ -2126,6 +2132,8 @@ module.exports.PulsePoll = PulsePoll;
 module.exports.PulsePollOption = PulsePollOption;
 module.exports.PulsePollVote = PulsePollVote;
 module.exports.PulseRecap = PulseRecap;
+module.exports.PostPictureSuggestion = PostPictureSuggestion;
+module.exports.MediaAssetSource = MediaAssetSource;
 module.exports.WardrobeOrderLine = WardrobeOrderLine;
 module.exports.EpisodeScriptVersion = EpisodeScriptVersion;
 module.exports.WritingRhythm = WritingRhythm;

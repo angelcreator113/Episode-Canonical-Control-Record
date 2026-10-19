@@ -76,14 +76,17 @@ async function liveSet(sequelize, id) {
  * Venues are shared across a universe's shows; another show's set was
  * linked to this show's event and its look made on it (audit, 2026-10-15).
  */
-async function venueSets(sequelize, locationId, showId) {
+async function venueSets(sequelize, locationId, showId, eventSetId = null) {
   if (!locationId) return [];
+  // Another event's version is that event's photos, not a set for this
+  // one (eighth audit); the event's own version stays offered.
   const [rows] = await sequelize.query(
     `SELECT id, name, base_still_url FROM scene_sets
       WHERE world_location_id = :locationId AND deleted_at IS NULL
         AND (show_id = :showId OR show_id IS NULL)
+        AND (version_of_set_id IS NULL OR id = CAST(:eventSetId AS uuid))
       ORDER BY name ASC, created_at ASC`,
-    { replacements: { locationId, showId: showId || null } });
+    { replacements: { locationId, showId: showId || null, eventSetId: eventSetId || null } });
   return rows;
 }
 
@@ -103,7 +106,7 @@ async function resolveLookSet(sequelize, event, chosenSetId = null) {
   // (fourth audit, 2026-10-15). A set with no location stays the event's.
   const atOtherVenue = Boolean(own?.world_location_id && venueId && String(own.world_location_id) !== String(venueId));
   if (own && !otherShows(own, event) && !atOtherVenue) return { kind: 'set', set: own, link: false };
-  const sets = await venueSets(sequelize, venueId, event.show_id);
+  const sets = await venueSets(sequelize, venueId, event.show_id, event.scene_set_id);
   if (chosenSetId) {
     const chosen = sets.find((s) => String(s.id) === String(chosenSetId));
     if (!chosen) throw new VenueLookImageError('That scene set is not at this event\'s venue', 400, 'SET_NOT_AT_VENUE');
@@ -184,8 +187,11 @@ async function createVenueSet(models, event, locationId) {
 }
 
 async function linkEvent(sequelize, eventId, setId) {
+  const [[before]] = await sequelize.query('SELECT scene_set_id FROM world_events WHERE id = :eventId', { replacements: { eventId } });
   await sequelize.query('UPDATE world_events SET scene_set_id = :setId, updated_at = NOW() WHERE id = :eventId',
     { replacements: { setId, eventId } });
+  // Its draft episode follows (eighth audit).
+  await require('./eventPlaceSync').syncEpisodeEventLocation(sequelize, { eventId, fromSetId: before?.scene_set_id || null, toSetId: setId });
 }
 
 /**
@@ -205,12 +211,15 @@ async function startLook(models, { showId, eventId, chosenSetId = null, override
     throw new VenueLookImageError('This venue has several scene sets: choose one', 409, 'CHOOSE_SET', { options: target.options });
   }
   const set = target.kind === 'create' ? await createVenueSet(models, event, target.locationId) : target.set;
-  if (target.kind === 'create' || target.link) await linkEvent(sequelize, event.id, set.id);
+  // The event moves to the set only once nothing below refuses (eighth
+  // audit: a refused run still re-pointed the event, and its episode).
+  const link = async () => { if (target.kind === 'create' || target.link) await linkEvent(sequelize, event.id, set.id); };
 
   const plan = await planLook(sequelize, { event, set, overrides: overrides.value || {} });
   const sceneGen = require('./sceneGenerationService');
 
   if (plan.step === STEPS.AWAITING_APPROVAL) {
+    await link();
     return { result: { step: plan.step, scene_set_id: set.id }, run: null };
   }
 
@@ -226,6 +235,7 @@ async function startLook(models, { showId, eventId, chosenSetId = null, override
         RETURNING id`,
       { replacements: { id: set.id, stuck: STUCK_AFTER_MS / 1000 } });
     if (!claimed.length) throw new VenueLookImageError(`The base of "${set.name}" is already being generated. Wait for it to finish.`, 409, 'BASE_GENERATING');
+    await link();
     const run = async () => {
       try {
         const instance = await models.SceneSet.findByPk(set.id);
@@ -254,6 +264,7 @@ async function startLook(models, { showId, eventId, chosenSetId = null, override
     { replacements: { setId: set.id, eventId: event.id, brief: JSON.stringify(plan.brief), estimate: plan.estimate?.usd ?? null, stuck: STUCK_AFTER_MS / 1000 } });
   // A look already generating is not started (and paid for) again.
   if (!look) throw new VenueLookImageError('This look is already being generated. Wait for it to finish.', 409, 'LOOK_GENERATING');
+  await link();
   const run = async () => {
     try {
       const out = await sceneGen.generateDressedStill(set, briefToPrompt(plan.brief), plan.brief.approved_base.image_url, { suffix: `look-${event.id}` });
@@ -295,7 +306,6 @@ async function uploadLook(models, { showId, eventId, chosenSetId = null, storeIm
     throw new VenueLookImageError('This venue has several scene sets: choose one', 409, 'CHOOSE_SET', { options: target.options });
   }
   const set = target.kind === 'create' ? await createVenueSet(models, event, target.locationId) : target.set;
-  if (target.kind === 'create' || target.link) await linkEvent(sequelize, event.id, set.id);
   const imageUrl = await storeImage(set);
   const [[look]] = await sequelize.query(
     `INSERT INTO scene_set_looks (id, scene_set_id, event_id, status, source, image_url, brief, estimate_usd, cost_usd, error, generated_at, created_at, updated_at)
@@ -305,6 +315,8 @@ async function uploadLook(models, { showId, eventId, chosenSetId = null, storeIm
                    estimate_usd = NULL, cost_usd = 0, error = NULL, generated_at = NOW(), updated_at = NOW()
      RETURNING id, status, source, image_url`,
     { replacements: { setId: set.id, eventId: event.id, url: imageUrl } });
+  // Linked once the image is stored and its look saved (eighth audit).
+  if (target.kind === 'create' || target.link) await linkEvent(sequelize, event.id, set.id);
   await dropDressedAngles(sequelize, look.id);
   return { scene_set_id: set.id, look };
 }

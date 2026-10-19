@@ -91,8 +91,10 @@ export default function EpisodeSceneWorkspace({ episode, onOpenTab, onToast }) {
     if (!id || sets[id]) return undefined;
     let live = true;
     getSceneSetApi(id)
-      .then((res) => { if (live) setSets((s) => ({ ...s, [id]: res?.data?.data || {} })); })
-      .catch((err) => { console.error('[Scenes] scene set load failed:', err); if (live) setSets((s) => ({ ...s, [id]: {} })); });
+      .then((res) => { if (live) setSets((s) => ({ ...s, [id]: res?.data?.data || { failed: true } })); })
+      // A set that cannot be read (removed, or a failed request) is marked,
+      // not shown as one with no angles (eighth audit).
+      .catch((err) => { console.error('[Scenes] scene set load failed:', err); if (live) setSets((s) => ({ ...s, [id]: { failed: true, removed: err?.response?.status === 404 } })); });
     return () => { live = false; };
   }, [beat?.scene_set_id, sets]);
 
@@ -103,7 +105,11 @@ export default function EpisodeSceneWorkspace({ episode, onOpenTab, onToast }) {
   const clip = sceneClips[clipIndex] || sceneClips[0] || null;
   const angles = Array.isArray(set?.angles) ? set.angles : [];
   const chosenAngle = angles.find((a) => a.angle_label && a.angle_label === beat?.angle_label) || null;
-  const picture = beat ? (angleImage(chosenAngle) || beatImage(beat)) : null;
+  // The server's picture first: it is the dressed event look or the time and
+  // weather variant when there is one, the angle's plain still otherwise
+  // (eighth audit: the stage showed the undressed still).
+  const picture = beat ? (beat.location?.image?.url || angleImage(chosenAngle) || beatImage(beat)) : null;
+  const backTo = { from: `/episodes/${episodeId}?tab=scenes`, fromLabel: 'Production' };
 
   const linkedCount = new Set(clips.map((c) => Number(c.beat_number)).filter(Boolean)).size;
   const totalSeconds = plan.reduce((n, b) => n + (sceneSeconds(clips, b.beat_number) || 0), 0);
@@ -215,19 +221,26 @@ export default function EpisodeSceneWorkspace({ episode, onOpenTab, onToast }) {
 
         <div className="esw-angles-head">
           <h3 className="esw-card-title">Angles</h3>
-          {set?.id && showId && <Link className="esw-link" to={sceneSetPath(showId, set.id)}><Pencil size={13} aria-hidden /> Open in Scene Sets</Link>}
+          {set?.id && showId && <Link className="esw-link" to={sceneSetPath(showId, set.id, backTo)}><Pencil size={13} aria-hidden /> Open in Scene Sets</Link>}
         </div>
         {!beat?.scene_set_id ? (
           <p className="esw-note">This scene has no location yet. Choose one on the Beat Plan.</p>
         ) : !set ? (
           <p className="esw-note">Loading angles…</p>
+        ) : set.failed ? (
+          <p className="esw-note" role="alert" data-testid="esw-set-failed">
+            {set.removed
+              ? 'This scene\'s location was removed. Choose its replacement with "Move my beats" on the Beat Plan.'
+              : 'Could not read this location\'s angles.'}
+          </p>
         ) : (
           <ul className="esw-angles">
             {angles.map((a) => {
               const on = a.angle_label && a.angle_label === beat.angle_label;
               return (
                 <li key={a.id}>
-                  <button type="button" className={`esw-angle${on ? ' is-on' : ''}`} aria-pressed={on} disabled={saving || on}
+                  <button type="button" className={`esw-angle${on ? ' is-on' : ''}`} aria-pressed={on} disabled={saving || on || beat.locked}
+                    title={beat.locked ? 'This scene is locked. Unlock it to change it.' : undefined}
                     onClick={() => saveBeat({ angle_label: a.angle_label, chosen: true }, `Scene ${beat.beat_number}: ${angleName(a)}`)}>
                     <span className="esw-angle-img">{angleImage(a) ? <img src={angleImage(a)} alt="" loading="lazy" /> : <ImageOff size={18} aria-hidden />}</span>
                     <span className="esw-angle-name">{angleName(a)}</span>
@@ -237,7 +250,7 @@ export default function EpisodeSceneWorkspace({ episode, onOpenTab, onToast }) {
             })}
             {showId && (
               <li>
-                <Link className="esw-angle is-add" to={sceneSetPath(showId, set.id, { from: `/episodes/${episodeId}?tab=scenes`, fromLabel: 'Production' })}>
+                <Link className="esw-angle is-add" to={sceneSetPath(showId, set.id, backTo)}>
                   <span className="esw-angle-img"><Plus size={22} aria-hidden /></span>
                   <span className="esw-angle-name">Add angle</span>
                 </Link>

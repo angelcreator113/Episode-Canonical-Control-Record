@@ -26,7 +26,7 @@
  * missing-image actions are the Beat Plan's (components/BeatPlan). The
  * feed moment warning (§8(w) P5, Task #2216) and Edit locations (L6) stay.
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { MapPin, Film, Loader, AlertTriangle, Clapperboard, Trash2 } from 'lucide-react';
 import apiClient from '../../services/api';
@@ -154,10 +154,17 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
     if (onToast) onToast(msg, type);
   }, [onToast]);
 
+  // Only the newest read is applied (eighth audit: the 6-second poll's read,
+  // sent before a save, could land after the save's own read and put the old
+  // beat back on screen).
+  const planSeq = useRef(0);
+  const locationsSeq = useRef(0);
   const loadPlan = useCallback(async () => {
     if (!episodeId) return;
+    const seq = ++planSeq.current;
     try {
       const res = await getEpisodePlanApi(episodeId);
+      if (seq !== planSeq.current) return;
       const data = res.data || {};
       setPlan(Array.isArray(data.data) ? data.data : []);
       setReadiness(data.readiness || null);
@@ -175,8 +182,10 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
 
   const loadLocations = useCallback(async () => {
     if (!episodeId) return null;
+    const seq = ++locationsSeq.current;
     try {
       const res = await getEpisodeLocationsApi(episodeId);
+      if (seq !== locationsSeq.current) return null;
       const data = res.data?.data && !Array.isArray(res.data.data) ? res.data.data : {};
       const next = { locations: data.locations || [], show_id: data.show_id || episode?.show_id || null, editable: data.editable };
       setLocations(next);
@@ -430,7 +439,7 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
                 <span className="est-location-name">{l.scene_set?.name || 'Scene set'}</span>
                 <span className="est-location-meta">{views ? `Base image and ${views} more ${views === 1 ? 'view' : 'views'}` : 'Base image only'}</span>
                 <span className="est-location-links">
-                  {showId && <Link to={sceneSetPath(showId, l.scene_set_id)}>Open in Scene Sets</Link>}
+                  {showId && <Link to={sceneSetPath(showId, l.scene_set_id, { from: `/episodes/${episodeId}?tab=production.beatplan`, fromLabel: scenesFromLabel })}>Open in Scene Sets</Link>}
                   {l.role === 'event' && sourceEvent?.id && (sourceEvent.show_id || showId) && (
                     <Link to={`/shows/${sourceEvent.show_id || showId}/events/${sourceEvent.id}`}>Open Event Package</Link>
                   )}
@@ -439,9 +448,13 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
             </div>
           );
         })()}
-        <button className="est-btn est-btn-outline est-btn-sm est-sets-edit" onClick={openLocations} data-testid="est-edit-locations">
+        {/* An accepted episode's locations are fixed: said here, not after a
+            click whose message was lost (eighth audit). */}
+        <button className="est-btn est-btn-outline est-btn-sm est-sets-edit" onClick={openLocations} data-testid="est-edit-locations"
+          disabled={locations.editable === false}>
           {locations.locations.length ? 'Add or change a set' : 'Choose the locations'}
         </button>
+        {locations.editable === false && <span className="est-sets-locked" data-testid="est-locations-locked">This episode is accepted: its locations are fixed.</span>}
         {locationsEdit && (
           <EpisodeLocationsStep
             showId={showId}

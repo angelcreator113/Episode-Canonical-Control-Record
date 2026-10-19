@@ -20,10 +20,21 @@
  *   DELETE /:id/links/:linkId            untag (soft)
  *   POST   /bring-existing               carry portraits, scene stills,
  *                                        invitations and post pictures in
+ *   POST   /:id/variations               phase 3: a variation of this picture,
+ *                                        { change: { kind, text, character_id },
+ *                                        locks }; one image call, budget-gated;
+ *                                        saved as a new private draft linked to
+ *                                        it (services/mediaVariations) (ADMIN)
+ *   GET    /:id/family                   the original and its variations
+ *   GET    /:id/sources                  phase 4: what it was made from (the
+ *                                        place it keeps, the portraits, the
+ *                                        picture it varies), each one the
+ *                                        reader may see
  */
 const express = require('express');
 const multer = require('multer');
 const { requireAuth, authorize } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 const router = express.Router();
 const admin = [requireAuth, authorize(['ADMIN'])];
@@ -37,6 +48,9 @@ function sendError(res, err, label) {
   const { PulseImageError } = require('../services/pulseImageService');
   if (err instanceof PulseImageError) return res.status(err.status).json({ success: false, error: err.message, code: err.code });
   console.error(`[Media] ${label} error:`, err);
+  // The image budget refused the call (imageCostService): nothing was made.
+  if (err.code === 'AI_BUDGET_EXCEEDED') return res.status(429).json({ success: false, error: err.message, code: err.code });
+  if (err.response?.status) return res.status(502).json({ success: false, error: 'The image tool could not make it. Try again later.' });
   return res.status(500).json({ success: false, error: err.message });
 }
 
@@ -81,6 +95,36 @@ router.post('/bring-existing', ...admin, async (req, res) => {
     return res.json({ success: true, ...(await media().bringExisting(models(), { by: byOf(req) })) });
   } catch (err) {
     return sendError(res, err, 'POST /bring-existing');
+  }
+});
+
+router.post('/:id/variations', ...admin, aiRateLimiter, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const out = await require('../services/mediaVariations').createVariation(models(), {
+      assetId: req.params.id, change: body.change, locks: body.locks, by: byOf(req),
+    });
+    return res.status(201).json({ success: true, ...out });
+  } catch (err) {
+    return sendError(res, err, 'POST /:id/variations');
+  }
+});
+
+router.get('/:id/family', requireAuth, async (req, res) => {
+  try {
+    return res.json({ success: true, ...(await require('../services/mediaVariations').familyOf(models(), req.params.id, { audience: media().audienceOf(req.user) })) });
+  } catch (err) {
+    return sendError(res, err, 'GET /:id/family');
+  }
+});
+
+router.get('/:id/sources', requireAuth, async (req, res) => {
+  try {
+    const audience = media().audienceOf(req.user);
+    await media().getAsset(models(), req.params.id, { audience });
+    return res.json({ success: true, items: await media().sourcesOf(models(), req.params.id, { audience }) });
+  } catch (err) {
+    return sendError(res, err, 'GET /:id/sources');
   }
 });
 
