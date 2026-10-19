@@ -7,6 +7,7 @@ import { PenLine, GripVertical, ArrowUp, ArrowDown, Smartphone, Image as ImageIc
 import api from '../../services/api';
 import { episodePlanning } from '../../utils/episodePlanning';
 import { scriptInputs, mustCover, scriptPeople } from '../../lib/episodeScript';
+import Beat14Opportunity from './Beat14Opportunity';
 import { beatState } from '../../lib/beatState';
 import { moveBeat, moveLine, dropIndex, replaceBeat, appendLine, insertLine } from '../../lib/scriptBeatOrder';
 import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, phoneUpAtBeat, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers, phoneCheck, messageLine, closetBeat, wearFlags, uncuedPieces, lastGettingReadyIndex, todoModeAt, deliveredAt, dealCueFlags, TODO_MODE_LABELS } from '../../lib/scriptMoments';
@@ -195,7 +196,7 @@ function cueLabel(text) {
   return `${kind === 'EVENT' ? 'Event' : 'Episode intent'}${rest ? `: ${rest}` : ''}`;
 }
 
-const COVERAGE_KINDS = { deliverable: 'Deliverable', goal: 'Goal', hook: 'Forward hook', wear: 'Wear cue', phone: 'Phone moment', beat: 'Beat missing' };
+const COVERAGE_KINDS = { deliverable: 'Deliverable', goal: 'Goal', hook: 'Forward hook', opportunity: 'Opportunity', wear: 'Wear cue', phone: 'Phone moment', beat: 'Beat missing' };
 
 function parseLine(line) {
   const t = (typeof line === 'string' ? line : '').trim();
@@ -892,6 +893,22 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   const [brief, setBrief] = useState(null);
   const [source, setSource] = useState(null);
   const [deliverables, setDeliverables] = useState([]);
+  // Beat 14's opportunity (Evoni, 2026-10-19; Beat14Opportunity): null until
+  // read; a read that fails or answers in another shape leaves it null, so
+  // nothing is claimed about it.
+  const [beat14, setBeat14] = useState(null);
+  const loadBeat14 = useCallback(async () => {
+    if (!showId || !episodeId) return;
+    try {
+      const res = await api.get(`/api/v1/opportunities/${showId}/episode/${episodeId}/beat14`);
+      const d = res?.data?.data;
+      setBeat14(d && typeof d === 'object' && !Array.isArray(d) && 'opportunity' in d ? d : null);
+    } catch (err) {
+      console.error('[EpisodeScript] beat 14 opportunity load failed:', err);
+      setBeat14(null);
+    }
+  }, [showId, episodeId]);
+  useEffect(() => { loadBeat14(); }, [loadBeat14]);
   // The outfit locked on the Wardrobe tab, which the script writer reads (null: could not be read).
   const [outfit, setOutfit] = useState([]);
   // What can be on screen in a beat (Task #2789): the episode's Lala's Phone
@@ -1553,7 +1570,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   const inputs = scriptInputs({ brief, plan, outfit, event: source?.event || null, deliverables });
   // What the episode must cover, ticked from the script, and the open beat's
   // phone check (Task #2884).
-  const cover = mustCover({ beats, event: source?.event || null, brief });
+  const cover = mustCover({ beats, event: source?.event || null, brief, opportunity: brief?.designed_intent === 'fail' ? null : beat14?.opportunity || null });
   // The phone starts each beat where the beat before left it, not on the
   // home screen (Script tab audit, 2026-10-15).
   const phoneScreenAt = [];
@@ -1587,6 +1604,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   const healthRows = showBeatList ? scriptHealth({
     beats, canonical: BEAT_NAMES, cover, onScreen, outfit, dealItems,
     closetNumber: closetBeat(scriptText), dirty: scriptText !== savedScript, unsaved,
+    beat14, designedIntent: brief?.designed_intent || null,
   }) : [];
   return (
     <div className={`esp${showBeatList ? ' has-beatlist' : ''}${contextOpen ? ' is-context-open' : ''}`}>
@@ -1855,6 +1873,9 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
             <div data-testid="script-truth-time"><dt><Clock size={14} aria-hidden="true" /> Story time</dt><dd>{truth.storyTime}{truth.eventTimed && <span className="esp-truth-note">The event&apos;s date and time; a beat has no clock of its own</span>}</dd></div>
           </dl>
         </section>
+      )}
+      {hasScript && openBeatNumber === 14 && beat14 && (
+        <Beat14Opportunity showId={showId} episodeId={episodeId} data={beat14} onChange={loadBeat14} designedIntent={brief?.designed_intent || null} />
       )}
       {hasScript && openBeat && check && (
         <section className="esp-phonecheck" data-testid="script-phone-check">
