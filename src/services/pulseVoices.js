@@ -304,7 +304,11 @@ async function eligible(db, showId, { at, stage = 'active', includeUnmet = false
   const voices = await db.PulseVoice.findAll({ where: { registry_character_id: characters.map((c) => c.id) } });
   const voiceOf = new Map(voices.map((v) => [v.registry_character_id, v]));
   const byName = new Map(rows.map((r, i) => [r.id, i]));
+  // A confidential professional (Dr. Sinclair) never posts, even matched to a
+  // profile (the profile audit, 2026-10-19; utils/confidentialCharacters).
+  const { isConfidential } = require('../utils/confidentialCharacters');
   return characters
+    .filter((c) => !isConfidential(c))
     .filter((c) => profileOf.has(Number(c.feed_profile_id)) && (includeUnmet || !leftOut.has(Number(c.feed_profile_id))))
     .sort((a, b) => byName.get(a.id) - byName.get(b.id))
     .map((c) => {

@@ -1267,7 +1267,12 @@ a.ch-trail-text:hover { text-decoration: underline; }
   font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
 }
 .ch-btn-export:hover { background: var(--lala-lavender-soft); }
-.ch-tabs { display: flex; flex-wrap: nowrap; gap: 4px; }
+/* The bar scrolls on its own at every width, so a tab that does not fit
+   never pushes the page sideways (the profile audit, 2026-10-19). */
+.ch-tabs {
+  display: flex; flex-wrap: nowrap; gap: 4px; max-width: 100%; min-width: 0;
+  overflow-x: auto; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; overscroll-behavior-x: contain;
+}
 .ch-tab {
   flex: 1 0 auto; justify-content: center; min-height: 46px; color: var(--text-primary); text-decoration: none; white-space: nowrap;
 }
@@ -1352,7 +1357,6 @@ a.ch-trail-text:hover { text-decoration: underline; }
 @media (max-width: 900px) {
   .ch-overview { grid-template-columns: 1fr; }
   .ch-overview > .ch-col:nth-child(3) { grid-column: auto; display: flex; align-items: stretch; }
-  .ch-tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; }
   .ch-tab { flex: 0 0 auto; scroll-snap-align: center; }
 }
 @media (max-width: 560px) {
@@ -1702,3 +1706,9 @@ a.ch-tl-body:hover { background: var(--lala-gold-soft); }
 .ch-check-fixed { display: grid; gap: 8px; margin-top: 8px; }
 .ch-check-fixed .ch-check-list li { background: var(--surface-subtle, var(--lala-parchment-2)); }
 .ch-check-left { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+
+/* An archived character, opened by an ADMIN (the profile audit, 2026-10-19). */
+.ch-archived {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; padding: 12px 16px;
+  border-radius: 14px; border: 1.5px solid var(--lala-gold-line); background: var(--lala-gold-soft); color: var(--text-primary);
+}

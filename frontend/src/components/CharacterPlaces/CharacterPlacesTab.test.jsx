@@ -35,6 +35,14 @@ describe('CharacterPlacesTab', () => {
     });
   });
 
+  // The profile audit, 2026-10-19: the page's own appearances, not a second request.
+  test('with the page\'s appearances given, the hosted events read from them', async () => {
+    render(<MemoryRouter><CharacterPlacesTab character={sable} appearances={{ events: hosted }} /></MemoryRouter>);
+    await screen.findByTestId('places-role-work');
+    await waitFor(() => expect(screen.getByText('Wearable Experiments')).toBeTruthy());
+    expect(api.get).not.toHaveBeenCalledWith('/api/v1/cast/characters/c-1/appearances');
+  });
+
   test('home, closet and place of work, the venue set linked as the place of work', async () => {
     renderIt();
     const work = await screen.findByTestId('places-role-work');

@@ -68,8 +68,9 @@ const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
       ADD COLUMN IF NOT EXISTS enhanced_still_url text,
       ADD COLUMN IF NOT EXISTS enhanced_video_url text`);
     await approvedMigration.up(sequelize.getQueryInterface(), Sequelize);
+    // An ADMIN: these writes are ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only).
     token = TokenService.generateTokenPair({
-      id: 'test-user-routes-audit', email: 'user@routes-audit.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-routes-audit', email: 'user@routes-audit.dev', name: 'Editor', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
   beforeEach(() => {

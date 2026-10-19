@@ -293,7 +293,8 @@ router.get('/review', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/characters/:id/keep', requireAuth, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.post('/characters/:id/keep', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
     const kept = req.body?.kept;
@@ -312,7 +313,8 @@ router.post('/characters/:id/keep', requireAuth, async (req, res) => {
   }
 });
 
-router.put('/characters/:id/feed-profile', requireAuth, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.put('/characters/:id/feed-profile', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
     const profileId = Number(req.body?.feed_profile_id);
@@ -320,6 +322,11 @@ router.put('/characters/:id/feed-profile', requireAuth, async (req, res) => {
     const { RegistryCharacter, SocialProfile } = getModels();
     const character = await RegistryCharacter.findByPk(req.params.id);
     if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+    // A confidential professional (Dr. Sinclair) never gets a public profile:
+    // matched to one she could post on her own (the profile audit, 2026-10-19).
+    if (require('../utils/confidentialCharacters').isConfidential(character)) {
+      return res.status(403).json({ success: false, code: 'CONFIDENTIAL', error: 'A confidential professional stays off The Pulse, so they cannot be matched to a profile.' });
+    }
     const profile = await SocialProfile.findByPk(profileId, { attributes: ['id', 'handle', 'display_name', 'feed_layer'] });
     if (!profile) return res.status(404).json({ success: false, error: 'Feed profile not found' });
     if (profile.feed_layer !== 'lalaverse') return res.status(400).json({ success: false, error: 'Only a LalaVerse feed profile can be matched' });
@@ -337,7 +344,8 @@ router.put('/characters/:id/feed-profile', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/characters/:id/restore', requireAuth, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.post('/characters/:id/restore', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
     const { RegistryCharacter } = getModels();
@@ -357,7 +365,8 @@ router.post('/characters/:id/restore', requireAuth, async (req, res) => {
   }
 });
 
-router.delete('/characters/:id/permanent', requireAuth, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.delete('/characters/:id/permanent', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
     const { RegistryCharacter, sequelize } = getModels();
@@ -1059,7 +1068,8 @@ router.get('/characters/:id/places', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/characters/:id/places/share', requireAuth, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.post('/characters/:id/places/share', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
     const sceneSetId = req.body?.scene_set_id;
@@ -1074,16 +1084,18 @@ router.post('/characters/:id/places/share', requireAuth, async (req, res) => {
 
 // A place's description written from their profile (Evoni, 2026-10-17):
 // nothing is saved; placeDescriptionService holds what it reads.
-router.post('/characters/:id/places/describe', requireAuth, aiRateLimiter, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.post('/characters/:id/places/describe', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   const { describePlace, PlaceDescriptionError } = require('../services/placeDescriptionService');
   try {
     const data = await describePlace(getModels(), { characterId: req.params.id, sceneSetId: req.body?.scene_set_id, role: req.body?.role || null });
     return res.json({ success: true, data });
   } catch (err) {
     const { PlaceShareError } = require('../services/characterPlaceShare');
-    if (err instanceof PlaceDescriptionError || err instanceof PlaceShareError) return res.status(err.status).json({ success: false, code: err.code, error: err.message });
+    // No key (AI_UNAVAILABLE) or the AI down: the plain 502, not the raw text (the profile audit, 2026-10-19).
+    if (err?.code !== 'AI_UNAVAILABLE' && (err instanceof PlaceDescriptionError || err instanceof PlaceShareError)) return res.status(err.status).json({ success: false, code: err.code, error: err.message });
     console.error('[cast] POST characters/:id/places/describe error:', err);
-    if (err?.code === 'AI_BUDGET_EXCEEDED') return res.status(429).json({ success: false, code: err.code, error: err.message });
+    if (require('../utils/aiFailure').aiFailure(res, err)) return undefined;
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -1097,7 +1109,8 @@ const hostedError = (res, err, label) => {
   return res.status(500).json({ success: false, error: err.message });
 };
 
-router.post('/characters/:id/hosted-events', requireAuth, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.post('/characters/:id/hosted-events', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { hostEvent } = require('../services/characterHostedEvents');
     return res.json({ success: true, data: await hostEvent(getModels().sequelize, { characterId: req.params.id, eventId: req.body?.event_id }) });
@@ -1106,7 +1119,8 @@ router.post('/characters/:id/hosted-events', requireAuth, async (req, res) => {
   }
 });
 
-router.delete('/characters/:id/hosted-events/:eventId', requireAuth, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.delete('/characters/:id/hosted-events/:eventId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { unhostEvent } = require('../services/characterHostedEvents');
     return res.json({ success: true, data: await unhostEvent(getModels().sequelize, { characterId: req.params.id, eventId: req.params.eventId }) });

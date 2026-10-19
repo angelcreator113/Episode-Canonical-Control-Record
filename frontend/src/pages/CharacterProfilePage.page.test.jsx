@@ -56,8 +56,10 @@ describe('the character page', () => {
     expect(document.querySelector('.ch-roles').textContent).toBe('The peer · Supporting · Event host');
     expect(screen.getByText('Pulse profile')).toBeTruthy();
     expect(screen.getByText('Has voice')).toBeTruthy();
-    // Saved as Breathing, but a feed profile already makes them Active.
-    expect(screen.getByText('Active', { selector: '.ch-status' })).toBeTruthy();
+    // Saved as Breathing: the page says so, and that a feed profile already
+    // makes them ready to be Active (the profile audit, 2026-10-19).
+    expect(screen.getByText('Breathing', { selector: '.ch-status' })).toBeTruthy();
+    expect(screen.getByTestId('ch-ready').textContent).toBe('Ready to be Active');
     expect(screen.getByRole('button', { name: '↑ Deepen to Alive' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Export Profile' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'The cast' }).getAttribute('href')).toBe('/character-registry');
@@ -335,3 +337,66 @@ describe('the character page', () => {
   });
 });
 
+
+// The character profile audit's fixes (Evoni, 2026-10-19).
+describe('the profile audit fixes', () => {
+  test('Key stats shows the facts\' follower count, not a stale stored label', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/character-registry/characters/c1') return { data: { character: CHARACTER } };
+      if (url === '/api/v1/social-profiles/7') return { data: { profile: { ...PROFILE, follower_count_approx: '1.2M' } } };
+      if (url === '/api/v1/cast/characters/c1/appearances') return { data: APPEARANCES };
+      if (url === '/api/v1/cast/characters/c1/facts') return { data: { facts: { followers: { count: 1500000, label: '1.5M', source: 'ledger' }, undecided: [] } } };
+      return { data: {} };
+    });
+    renderIt();
+    const stats = await screen.findByTestId('ch-stats');
+    await waitFor(() => expect(stats.textContent).toContain('1.5M'));
+    expect(stats.textContent).not.toContain('1.2M');
+  });
+
+  test('the Pulse profile is asked for without waiting on relationships', async () => {
+    vi.mocked(api.get).mockImplementation((url) => {
+      if (url === '/api/v1/character-registry/characters/c1') return Promise.resolve({ data: { character: CHARACTER } });
+      if (url.startsWith('/api/v1/relationships/')) return new Promise(() => {}); // never answers
+      return Promise.resolve({ data: {} });
+    });
+    renderIt();
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/v1/social-profiles/7'));
+    expect(api.get).toHaveBeenCalledWith('/api/v1/cast/characters/c1/appearances');
+  });
+
+  test('opening a tab scrolls the tab bar, never the page', async () => {
+    const spy = vi.fn();
+    const before = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = spy;
+    try {
+      render(
+        <MemoryRouter initialEntries={['/character/c1?tab=settings']}>
+          <Routes><Route path="/character/:id" element={<CharacterProfilePage />} /></Routes>
+        </MemoryRouter>,
+      );
+      await screen.findByRole('navigation', { name: 'Character sections' });
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      Element.prototype.scrollIntoView = before;
+    }
+  });
+
+  test('an archived character opened by an admin says so, and Bring back restores them', async () => {
+    let archived = true;
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/character-registry/characters/c1') return { data: { character: CHARACTER, ...(archived ? { archived: true } : {}) } };
+      return { data: {} };
+    });
+    vi.mocked(api.post).mockImplementation(async (url) => {
+      if (url === '/api/v1/cast/characters/c1/restore') { archived = false; return { data: { success: true } }; }
+      return { data: {} };
+    });
+    renderIt();
+    const banner = await screen.findByTestId('ch-archived');
+    expect(banner.textContent).toContain('Archived.');
+    fireEvent.click(within(banner).getByRole('button', { name: 'Bring back' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/cast/characters/c1/restore'));
+    await waitFor(() => expect(screen.queryByTestId('ch-archived')).toBeNull());
+  });
+});

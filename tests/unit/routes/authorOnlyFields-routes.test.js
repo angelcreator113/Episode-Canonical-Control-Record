@@ -3,6 +3,9 @@
 // ============================================================================
 // Admin reads and writes all four; editor and viewer can do neither; an
 // unauthenticated caller is refused by requireAuth. Mocked, no database.
+// Evoni, 2026-10-19 ("this whole part of the site is admin only"; the
+// profile audit): the depth generators, the depth writes and the registry
+// PUT are ADMIN only, so an editor or viewer is refused there outright.
 
 const express = require('express');
 const request = require('supertest');
@@ -102,12 +105,12 @@ beforeEach(() => {
 describe('reads — the four fields reach the admin group only', () => {
   const READS = [
     ['get', '/api/v1/character-depth/c1', (b) => b.depth],
-    ['post', '/api/v1/character-depth/c1/generate', (b) => b.proposed],
+    ['post', '/api/v1/character-depth/c1/generate', (b) => b.proposed, undefined, true],
     // A single dimension proposes only its own fields: blindspot carries three
     // of the four, narrative carries de_actual_narrative_gap.
     ['post', '/api/v1/character-depth/c1/generate/blindspot', (b) => b.proposed,
-      ['de_blind_spot', 'de_blind_spot_evidence', 'de_blind_spot_crack_condition']],
-    ['post', '/api/v1/character-depth/c1/generate/narrative', (b) => b.proposed, ['de_actual_narrative_gap']],
+      ['de_blind_spot', 'de_blind_spot_evidence', 'de_blind_spot_crack_condition'], true],
+    ['post', '/api/v1/character-depth/c1/generate/narrative', (b) => b.proposed, ['de_actual_narrative_gap'], true],
     ['get', '/api/v1/character-registry/characters/c1', (b) => b.character, ROW],
     ['get', '/api/v1/character-registry/registries/r1', (b) => b.registry.characters[0], ROW],
     ['get', '/api/v1/character-registry/registries/default', (b) => b.registry.characters[0], ROW],
@@ -115,7 +118,7 @@ describe('reads — the four fields reach the admin group only', () => {
 
   beforeEach(() => resetRow(true));
 
-  for (const [method, url, pick, keys = ALL] of READS) {
+  for (const [method, url, pick, keys = ALL, adminOnly = false] of READS) {
     test(`${method.toUpperCase()} ${url}: admin sees ${keys.length === 4 ? 'all four' : keys.join(', ')}`, async () => {
       const res = await call(method, url, USERS.admin);
       expect(res.status).toBe(200);
@@ -123,10 +126,10 @@ describe('reads — the four fields reach the admin group only', () => {
     });
 
     for (const who of ['editor', 'viewer']) {
-      test(`${method.toUpperCase()} ${url}: ${who} sees none, other fields intact`, async () => {
+      test(`${method.toUpperCase()} ${url}: ${who} ${adminOnly ? 'is refused and sees none' : 'sees none, other fields intact'}`, async () => {
         const res = await call(method, url, USERS[who]);
-        expect(res.status).toBe(200);
-        expect(hasNone(pick(res.body))).toBe(true);
+        expect(res.status).toBe(adminOnly ? 403 : 200);
+        if (!adminOnly) expect(hasNone(pick(res.body))).toBe(true);
         expect(JSON.stringify(res.body)).not.toMatch(/blind_spot"|de_blind_spot_evidence|de_blind_spot_crack_condition|de_actual_narrative_gap/);
       });
     }
@@ -138,8 +141,8 @@ describe('reads — the four fields reach the admin group only', () => {
     });
   }
 
-  test('generate: other proposed fields still reach an editor', async () => {
-    const res = await call('post', '/api/v1/character-depth/c1/generate', USERS.editor);
+  test('generate: the other proposed fields reach the admin', async () => {
+    const res = await call('post', '/api/v1/character-depth/c1/generate', USERS.admin);
     expect(res.body.proposed.de_money_wound).toBe('proposed');
     expect(res.body.proposed.de_blind_spot_category).toBe('self');
   });
@@ -147,10 +150,11 @@ describe('reads — the four fields reach the admin group only', () => {
 
 describe('writes — only the admin group writes the four fields', () => {
   // [method, url, wrap, the response's fields, the keys the response carries them under]
+  // [..., adminOnly]: an ADMIN-only write refuses an editor or viewer outright.
   const WRITES = [
-    ['put', '/api/v1/character-depth/c1', (fields) => fields, (b) => b.depth, ALL],
-    ['post', '/api/v1/character-depth/c1/confirm', (fields) => ({ proposed: fields }), (b) => b.depth, ALL],
-    ['put', '/api/v1/character-registry/characters/c1', (fields) => fields, (b) => b.character, ROW],
+    ['put', '/api/v1/character-depth/c1', (fields) => fields, (b) => b.depth, ALL, true],
+    ['post', '/api/v1/character-depth/c1/confirm', (fields) => ({ proposed: fields }), (b) => b.depth, ALL, true],
+    ['put', '/api/v1/character-registry/characters/c1', (fields) => fields, (b) => b.character, ROW, true],
     // characterGenerationRoutes /confirm spreads `proposed` into update()
     ['post', '/api/v1/character-generation/confirm', (fields) => ({ character_id: 'c1', proposed: fields }),
       (b) => b.character, ROW],
@@ -158,7 +162,7 @@ describe('writes — only the admin group writes the four fields', () => {
 
   beforeEach(() => resetRow(false));
 
-  for (const [method, url, wrap, pick, keys] of WRITES) {
+  for (const [method, url, wrap, pick, keys, adminOnly = false] of WRITES) {
     test(`${method.toUpperCase()} ${url}: admin writes all four and reads them back`, async () => {
       const res = await call(method, url, USERS.admin, wrap({ ...AUTHOR, de_money_wound: 'new' }));
       expect(res.status).toBe(200);
@@ -168,12 +172,17 @@ describe('writes — only the admin group writes the four fields', () => {
     });
 
     for (const who of ['editor', 'viewer']) {
-      test(`${method.toUpperCase()} ${url}: ${who} cannot write them; other fields still save`, async () => {
+      test(`${method.toUpperCase()} ${url}: ${who} cannot write them${adminOnly ? ' (refused, nothing written)' : '; other fields still save'}`, async () => {
         const res = await call(method, url, USERS[who], wrap({ ...AUTHOR, de_money_wound: 'new' }));
-        expect(res.status).toBe(200);
         expect(hasNone(mockRow)).toBe(true);
-        expect(mockRow.de_money_wound).toBe('new');
-        expect(hasNone(pick(res.body))).toBe(true);
+        if (adminOnly) {
+          expect(res.status).toBe(403);
+          expect(mockRow.de_money_wound).toBe('old');
+        } else {
+          expect(res.status).toBe(200);
+          expect(mockRow.de_money_wound).toBe('new');
+          expect(hasNone(pick(res.body))).toBe(true);
+        }
       });
     }
 
@@ -185,18 +194,17 @@ describe('writes — only the admin group writes the four fields', () => {
     });
   }
 
-  test('registry PUT: an editor editing another field does not get the stored author-only fields back', async () => {
+  test('registry PUT: an editor is refused, gets no author-only fields back, and the stored ones stay', async () => {
     resetRow(true); // the row already holds all four (the note's measured case)
     const res = await call('put', '/api/v1/character-registry/characters/c1', USERS.editor, { subtitle: 'kept' });
-    expect(res.status).toBe(200);
-    expect(res.body.character.subtitle).toBe('kept');
-    expect(hasNone(res.body.character)).toBe(true);
+    expect(res.status).toBe(403);
+    expect(JSON.stringify(res.body)).not.toMatch(/de_blind_spot|de_actual_narrative_gap/);
     expect(hasAll(mockRow, ROW)).toBe(true); // stored values untouched
   });
 
-  test('depth PUT: an editor sending only author-only fields gets 400 and nothing is written', async () => {
+  test('depth PUT: an editor sending only author-only fields is refused and nothing is written', async () => {
     const res = await call('put', '/api/v1/character-depth/c1', USERS.editor, { ...AUTHOR });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(403);
     expect(mockMethods.update).not.toHaveBeenCalled();
     expect(hasNone(mockRow)).toBe(true);
   });

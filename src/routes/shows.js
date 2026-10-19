@@ -3,7 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const sharp = require('sharp');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const { countedLedgerRows } = require('../utils/ledgerBalanceFilter');
 
 // Lazy load Show model to avoid circular dependencies
@@ -723,7 +723,8 @@ router.put('/:id/lead-character', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/:id/character-places', requireAuth, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.post('/:id/character-places', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { linkPlace } = require('../services/characterPlacesService');
     const b = req.body || {};
@@ -738,7 +739,8 @@ router.post('/:id/character-places', requireAuth, async (req, res) => {
 // Lala's home filled in from what the show knows: Lala as the lead when
 // none was ever chosen, and a World Location for her home and closet sets
 // (characterPlacesService.fillLalaHome). Only empty fields are filled.
-router.post('/:id/character-places/fill', requireAuth, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.post('/:id/character-places/fill', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { fillLalaHome } = require('../services/characterPlacesService');
     return res.json({ success: true, data: await fillLalaHome(getShow().sequelize, req.params.id) });
@@ -747,7 +749,8 @@ router.post('/:id/character-places/fill', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/:id/character-places/unlink', requireAuth, async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.post('/:id/character-places/unlink', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { unlinkPlace } = require('../services/characterPlacesService');
     const b = req.body || {};

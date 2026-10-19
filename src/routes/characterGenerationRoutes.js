@@ -317,7 +317,8 @@ router.post('/confirm-feed', async (req, res) => {
 // POST /promote-ghost/:characterId
 // Promote a ghost character to a full registry entry
 // ────────────────────────────────────────────────────────────────────────────
-router.post('/promote-ghost/:characterId', async (req, res) => {
+// ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
+router.post('/promote-ghost/:characterId', require('../middleware/auth').authorize(['ADMIN']), async (req, res) => {
   const { ghost_name, registry_id } = req.body;
   const models = getModels(req);
   const { RegistryCharacter } = models;
