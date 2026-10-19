@@ -131,12 +131,14 @@ const ORIGINAL = script(beat(1, 'Opening Ritual', 'Prime: "Hey besties"'), beat(
     generateGroundedScript.mockResolvedValueOnce({
       script: script(beat(1, 'Opening Ritual', 'Prime: "Hi"'), beat(2, 'Login Sequence', 'Lala: "x"'), beat(3, 'Welcome', 'Lala: "y"')),
       coverage: { missing: [], fixed_beats: [1] },
-      facts: { deliverables: [{ description: 'TikTok outfit reveal' }], goals: [], forwardHook: '', lockedPieces: [] },
+      facts: { deliverables: [{ description: 'TikTok outfit reveal' }], goals: [{ label: 'Meet Marcus Reed' }], forwardHook: '', lockedPieces: [] },
     });
     const res = await auth(request(app).post(`/api/v1/episode-brief/${ep}/generate-script`)).send({ showId: show, confirmOverwrite: true });
     expect(res.status).toBe(200);
     expect(res.body.coverage.fixed_beats).toEqual([1]);
-    expect(res.body.coverage.missing).toEqual(expect.arrayContaining([{ kind: 'deliverable', label: 'TikTok outfit reveal', target: 12 }]));
+    expect(res.body.coverage.missing).toEqual(expect.arrayContaining([{ kind: 'goal', label: 'Meet Marcus Reed', target: 11 }]));
+    // What she owes is not required on screen (Evoni, 2026-10-18).
+    expect(res.body.coverage.missing.some((g) => g.kind === 'deliverable')).toBe(false);
     expect(res.body.script).toContain('## BEAT: 1');
   });
 
