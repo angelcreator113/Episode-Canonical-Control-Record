@@ -28,7 +28,7 @@
 
 const HELD = 'held';
 const CREATED_HERE = 'beat14';
-const OPEN_STATUSES = ['offered', 'considering'];
+const OPEN_STATUSES = ['offered', 'considering', 'negotiating'];
 const TYPES = ['modeling', 'runway', 'editorial', 'campaign', 'ambassador', 'brand_deal', 'podcast', 'interview', 'panel', 'award_show', 'pr_gifting', 'casting_call'];
 
 class Beat14Error extends Error {
@@ -164,7 +164,7 @@ async function attachBeat14(models, { showId, episodeId, opportunity_id = null, 
       opp = await models.Opportunity.findOne({ where: { id: opportunity_id, show_id: showId }, transaction });
       if (!opp) throw new Beat14Error(404, 'Opportunity not found.');
       if (opp.offered_in_episode_id && String(opp.offered_in_episode_id) !== String(episodeId)) throw new Beat14Error(409, 'That opportunity is already beat 14 of another episode.');
-      if (!OPEN_STATUSES.includes(opp.status)) throw new Beat14Error(409, `Only an open opportunity can be offered in beat 14; this one is ${opp.status}.`);
+      if (!OPEN_STATUSES.includes(opp.status)) throw new Beat14Error(409, `Only an opportunity that is offered, considering or negotiating can be offered in beat 14; this one is ${opp.status}.`);
       await opp.update({
         status: HELD,
         offered_in_episode_id: episodeId,
@@ -243,13 +243,18 @@ async function loadForScript(models, { episodeId }) {
 
 module.exports = { getBeat14, attachBeat14, detachBeat14, resolveAtCompletion, loadForScript, eventPeople, Beat14Error, HELD, TYPES };
 
+const { beat14Outcome } = require('../utils/beat14Invitation');
+
 /**
  * The writer's BEAT 14 OPPORTUNITY block for the attached opportunity, ''
  * without one. Whether it comes depends on how the episode goes (Evoni,
- * 2026-10-19): an episode designed to fail does not deliver it.
+ * 2026-10-19): an episode designed to fail does not deliver it. Once the
+ * episode is completed its status says what happened, expired or offered
+ * (utils/beat14Invitation beat14Outcome; Script page audit, 2026-10-19).
  */
 function beat14Context(opp, designedIntent = null) {
   if (!opp) return '';
+  const outcome = beat14Outcome(opp, designedIntent);
   const from = opp.contact_name || (opp.connector_handle ? `@${opp.connector_handle}` : 'someone at the event');
   const handle = opp.connector_handle && opp.contact_name ? ` (@${opp.connector_handle})` : '';
   const lines = [
@@ -257,8 +262,9 @@ function beat14Context(opp, designedIntent = null) {
     `${opp.name}${opp.brand_or_company ? `, with ${opp.brand_or_company}` : ''} (${String(opp.opportunity_type || 'opportunity').replace(/_/g, ' ')}): offered by ${from}${handle}, who was at the event.`,
   ];
   if (opp.narrative_stakes) lines.push(`What it is about: ${opp.narrative_stakes}`);
-  if (designedIntent === 'fail') {
-    lines.push('This episode is designed not to land, so the invitation does not come: Beat 14 never delivers it, and its question is what she does now.');
+  if (outcome === 'withheld') {
+    const why = opp.status === 'expired' ? 'This episode did not land' : 'This episode is designed not to land';
+    lines.push(`${why}, so the invitation does not come: Beat 14 never delivers it, no other offer comes in its place, and its question is what she does now.`);
   } else {
     lines.push(`Beat 14 ends on it: the invitation arrives from ${from} as one private message or notification ([UI:DM ${from}: …] or [UI:NOTIFY ${from}: …]), naming "${opp.name}" in their own voice. How warm it is follows how the episode went. Whether Lala says yes stays open. When a forward hook is set, this invitation is how it is told. What it pays is never a coin line.`);
   }
@@ -266,3 +272,4 @@ function beat14Context(opp, designedIntent = null) {
 }
 
 module.exports.beat14Context = beat14Context;
+module.exports.beat14Outcome = beat14Outcome;

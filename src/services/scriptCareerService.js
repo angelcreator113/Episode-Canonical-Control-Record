@@ -100,8 +100,13 @@ function deliverableLine(d) {
 /**
  * The prompt block: the deal, what she owes, what she wants, and where in
  * the 14 beats each one plays. Empty when the event offers nothing to say.
+ * `beat14` is how beat 14 plays its attached opportunity
+ * (utils/beat14Invitation beat14Outcome): 'invitation' leaves beat 14 to the
+ * BEAT 14 OPPORTUNITY block, 'withheld' asks for no offer, null (nothing
+ * attached) keeps the follow-up offer (Script page audit, 2026-10-19: the
+ * writer was told to end beat 14 two ways).
  */
-function careerBlock(career) {
+function careerBlock(career, { beat14 = null } = {}) {
   if (!career) return '';
   const { deal, deliverables = [], goals = [] } = career;
   if (!deal && !deliverables.length && !goals.length) return '';
@@ -133,7 +138,8 @@ function careerBlock(career) {
   // whether she is paid is known the next episode (Evoni, 2026-10-18).
   if (deliverables.length) out.push('- What she owes may be mentioned (Beat 9 may remind her it is due), but it need not be made on camera, and she is not paid for it in this episode.');
   if (deal?.bonus) out.push('- Beat 13: whether she earned the bonus is not known yet; never give it in coins.');
-  out.push('- Beat 14: the hook comes from her career: a follow-up offer, a goal still open, or what this deal could lead to.');
+  if (beat14 === 'withheld') out.push('- Beat 14: the hook comes from her career, and no offer comes: a goal still open, or what she does now.');
+  else if (beat14 !== 'invitation') out.push('- Beat 14: the hook comes from her career: a follow-up offer, a goal still open, or what this deal could lead to.');
   return out.join('\n');
 }
 

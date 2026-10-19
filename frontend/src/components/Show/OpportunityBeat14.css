@@ -1,0 +1,17 @@
+/* The show tab's opportunities and beat 14 (Evoni, 2026-10-19). Tokens only. */
+.ob14-held { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border-radius: 4px; background: var(--lala-gold-soft); color: var(--lala-gold-text); font-size: 10px; font-weight: 600; }
+.ob14-held a { color: inherit; }
+.ob14-chip-held { padding: 1px 6px; border-radius: 4px; background: var(--lala-gold-soft); color: var(--lala-gold-text); font-weight: 600; font-size: 10px; }
+.ob14-form { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; padding: 10px 12px; border: 1px solid var(--lala-gold-line); border-radius: 8px; background: var(--lala-parchment); }
+.ob14-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--lala-ink); }
+.ob14-field select { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid var(--lala-lavender-line); border-radius: 8px; background: var(--surface-card); color: var(--lala-ink); font: inherit; }
+.ob14-note { margin: 0; font-size: 12px; color: var(--lala-ink-muted); }
+.ob14-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.ob14-btn { padding: 4px 10px; border: 1px solid var(--lala-lavender-line); border-radius: 6px; background: var(--surface-card); color: var(--lala-ink); font-size: 11px; font-weight: 600; cursor: pointer; }
+.ob14-btn.is-primary { border-color: var(--lala-gold-line); background: var(--lala-gold); color: var(--text-inverse); }
+.ob14-btn:disabled { opacity: 0.6; cursor: default; }
+.ob14-error { margin: 0; font-size: 12px; color: var(--lala-danger); }
+@media (max-width: 760px) {
+  .ob14-field select { min-height: 44px; font-size: 16px; /* iOS zooms into smaller inputs */ }
+  .ob14-btn { min-height: 44px; }
+}

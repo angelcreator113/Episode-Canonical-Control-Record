@@ -8,6 +8,7 @@ import api from '../../services/api';
 import { episodePlanning } from '../../utils/episodePlanning';
 import { scriptInputs, mustCover, scriptPeople } from '../../lib/episodeScript';
 import Beat14Opportunity from './Beat14Opportunity';
+import { beat14Outcome } from '../../lib/beat14Invitation';
 import { beatState } from '../../lib/beatState';
 import { moveBeat, moveLine, dropIndex, replaceBeat, appendLine, insertLine } from '../../lib/scriptBeatOrder';
 import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, phoneUpAtBeat, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers, phoneCheck, messageLine, closetBeat, wearFlags, uncuedPieces, lastGettingReadyIndex, todoModeAt, deliveredAt, dealCueFlags, TODO_MODE_LABELS } from '../../lib/scriptMoments';
@@ -922,15 +923,22 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // read; a read that fails or answers in another shape leaves it null, so
   // nothing is claimed about it.
   const [beat14, setBeat14] = useState(null);
+  // A failed read says so in the side panel, not nothing (Script page audit,
+  // 2026-10-19).
+  const [beat14Failed, setBeat14Failed] = useState(false);
   const loadBeat14 = useCallback(async () => {
     if (!showId || !episodeId) return;
     try {
       const res = await api.get(`/api/v1/opportunities/${showId}/episode/${episodeId}/beat14`);
       const d = res?.data?.data;
-      setBeat14(d && typeof d === 'object' && !Array.isArray(d) && 'opportunity' in d ? d : null);
+      const ok = d && typeof d === 'object' && !Array.isArray(d) && 'opportunity' in d;
+      if (!ok) console.error('[EpisodeScript] beat 14 opportunity answered in another shape:', d);
+      setBeat14(ok ? d : null);
+      setBeat14Failed(!ok);
     } catch (err) {
       console.error('[EpisodeScript] beat 14 opportunity load failed:', err);
       setBeat14(null);
+      setBeat14Failed(true);
     }
   }, [showId, episodeId]);
   useEffect(() => { loadBeat14(); }, [loadBeat14]);
@@ -1617,7 +1625,10 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   const inputs = scriptInputs({ brief, plan, outfit, event: source?.event || null, deliverables });
   // What the episode must cover, ticked from the script, and the open beat's
   // phone check (Task #2884).
-  const cover = mustCover({ beats, event: source?.event || null, brief, opportunity: brief?.designed_intent === 'fail' ? null : beat14?.opportunity || null });
+  // Beat 14's opportunity is on the list only when it comes: not when the
+  // episode is designed to fail, nor once it expired (Script page audit,
+  // 2026-10-19; lib/beat14Invitation beat14Outcome).
+  const cover = mustCover({ beats, event: source?.event || null, brief, opportunity: beat14Outcome(beat14?.opportunity, brief?.designed_intent || null) === 'invitation' ? beat14.opportunity : null });
   // The phone starts each beat where the beat before left it, not on the
   // home screen (Script tab audit, 2026-10-15).
   const phoneScreenAt = [];
@@ -1891,9 +1902,9 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
               ))}
             </ul>
           ) : (
-            <p className="esp-cover-empty" data-testid="script-cover-empty">Nothing to cover: the event has no goals, and the brief has no forward hook.</p>
+            <p className="esp-cover-empty" data-testid="script-cover-empty">Nothing to cover: the event has no goals, the brief has no forward hook, and beat 14 has no opportunity coming.</p>
           )}
-          <p className="esp-uses-note">From the event package and the brief. Ticked when the script mentions it.</p>
+          <p className="esp-uses-note">From the event package, the brief and beat 14&apos;s opportunity. Ticked when the script mentions it; the opportunity, when beat 14 delivers it as a DM or notification.</p>
         </section>
       )}
       {hasScript && truth && (
@@ -1927,6 +1938,9 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       )}
       {hasScript && openBeatNumber === 14 && beat14 && (
         <Beat14Opportunity showId={showId} episodeId={episodeId} data={beat14} onChange={loadBeat14} designedIntent={brief?.designed_intent || null} />
+      )}
+      {hasScript && openBeatNumber === 14 && !beat14 && beat14Failed && (
+        <p className="esp-cover-empty" role="status" data-testid="script-beat14-unread">Couldn&apos;t read beat 14&apos;s opportunity.</p>
       )}
       {hasScript && openBeat && check && (
         <section className="esp-phonecheck" data-testid="script-phone-check">

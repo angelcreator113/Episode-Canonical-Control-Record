@@ -115,3 +115,89 @@ describe('attach and detach after completion', () => {
     expect(again.update).toHaveBeenCalledWith(expect.objectContaining({ status: 'considering', offered_in_episode_id: null }), expect.anything());
   });
 });
+
+// After completion its status says what happened (Script page audit,
+// 2026-10-19): expired never comes; offered (or after) came.
+describe('beat14Context after completion', () => {
+  test('expired: the invitation does not come, whatever the intent', () => {
+    const text = beat14Context({ ...OPP, status: 'expired' }, 'pass');
+    expect(text).toContain('This episode did not land, so the invitation does not come');
+    expect(text).toContain('no other offer comes in its place');
+    expect(text).not.toContain('[UI:DM');
+  });
+  test('offered: it came, even when the episode was designed to fail', () => {
+    expect(beat14Context({ ...OPP, status: 'offered' }, 'fail')).toContain('[UI:DM Sable Reyes: …]');
+  });
+  test('held follows the designed intent', () => {
+    expect(beat14Context({ ...OPP, status: 'held' }, 'fail')).toContain('designed not to land');
+    expect(beat14Context({ ...OPP, status: 'held' }, 'pass')).toContain('Beat 14 ends on it');
+  });
+});
+
+describe('loadForScript', () => {
+  test('returns the attached opportunity with its status, whatever the status', async () => {
+    const { loadForScript } = require('../../../src/services/beat14Opportunity');
+    const row = { id: 'o1', name: 'Sable Campaign Shoot', opportunity_type: 'campaign', status: 'expired' };
+    const models = { Opportunity: { findOne: jest.fn(async () => row) } };
+    expect(await loadForScript(models, { episodeId: 'ep1' })).toMatchObject({ id: 'o1', status: 'expired' });
+    expect(models.Opportunity.findOne).toHaveBeenCalledWith({ where: { offered_in_episode_id: 'ep1' } });
+  });
+});
+
+describe('coverage: a mention outside beat 14', () => {
+  test('named in beat 11 only, it is still a gap for beat 14', () => {
+    const script = '## BEAT: 11 · Event Outcome\n[UI:DM Sable Reyes: The Sable campaign shoot is yours.]\n\n## BEAT: 14 · Cliffhanger\nMe: bye';
+    const gap = scriptCoverage(script, { opportunity: { name: 'Sable Campaign Shoot' } }).missing.find((g) => g.kind === 'opportunity');
+    expect(gap).toMatchObject({ beat: null, target: 14 });
+  });
+});
+
+// Negotiating is open too (Evoni, 2026-10-19: the show tab's opportunities
+// are attached from there); held stays out.
+describe('open statuses: offered, considering, negotiating', () => {
+  const SHOW = 'show-1';
+  const EVENT = { id: 'ev1', name: 'The Gala' };
+  const load = () => {
+    jest.resetModules();
+    jest.doMock('../../../src/services/episodeMoneyService', () => ({ findSourceEvent: async () => EVENT }));
+    jest.doMock('../../../src/utils/eventAttendees', () => ({ eventAttendees: () => [7] }));
+    jest.doMock('../../../src/utils/eventOrganizer', () => ({ eventCreatorOrganizer: () => ({ profileId: 7 }) }));
+    return require('../../../src/services/beat14Opportunity');
+  };
+  const sequelize = {
+    QueryTypes: { SELECT: 'SELECT' },
+    query: async (sql) => (/FROM episodes/.test(sql) ? [{ id: 'ep1', show_id: SHOW, title: 'Ep' }] : [{ id: 7, handle: 'sable', display_name: 'Sable Reyes' }]),
+    transaction: async (fn) => fn({}),
+  };
+  const opp = (status) => {
+    const o = { id: 'o1', name: 'Velour Cover', status, status_history: [], offered_in_episode_id: null };
+    o.update = jest.fn(async (u) => Object.assign(o, u));
+    return o;
+  };
+  const models = (o) => ({ sequelize, Opportunity: { findOne: jest.fn(async ({ where }) => (where.id ? o : null)), findAll: jest.fn(async () => []) } });
+  afterEach(() => jest.resetModules());
+
+  test('a negotiating one is held for beat 14, its previous status kept', async () => {
+    const { attachBeat14 } = load();
+    const o = opp('negotiating');
+    const out = await attachBeat14(models(o), { showId: SHOW, episodeId: 'ep1', opportunity_id: 'o1', connector_profile_id: 7 });
+    expect(out.status).toBe('held');
+    expect(o.status_history[o.status_history.length - 1]).toMatchObject({ status: 'held', previous_status: 'negotiating' });
+  });
+
+  test('booked or held is refused, naming the open statuses', async () => {
+    const { attachBeat14 } = load();
+    await expect(attachBeat14(models(opp('booked')), { showId: SHOW, episodeId: 'ep1', opportunity_id: 'o1', connector_profile_id: 7 }))
+      .rejects.toMatchObject({ status: 409, message: 'Only an opportunity that is offered, considering or negotiating can be offered in beat 14; this one is booked.' });
+    await expect(attachBeat14(models(opp('held')), { showId: SHOW, episodeId: 'ep1', opportunity_id: 'o1', connector_profile_id: 7 }))
+      .rejects.toMatchObject({ status: 409 });
+  });
+
+  test('the candidates are the open ones, negotiating among them', async () => {
+    const { getBeat14 } = load();
+    const m = models(null);
+    await getBeat14(m, { showId: SHOW, episodeId: 'ep1' });
+    const { Op } = require('sequelize');
+    expect(m.Opportunity.findAll.mock.calls[0][0].where.status[Op.in]).toEqual(['offered', 'considering', 'negotiating']);
+  });
+});

@@ -10,6 +10,7 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { latestWorldSnapshotForShow } = require('./worldSnapshotForShow');
 const { careerBlock } = require('./scriptCareerService');
+const { beat14Outcome } = require('../utils/beat14Invitation');
 
 let client = null;
 function getClient() {
@@ -406,6 +407,16 @@ async function generateGroundedScript(episodeId, showId, models, { lockedBeats =
   return { script, coverage: { missing, fixed_beats: fixedBeats.sort((a, b) => a - b), phone_steps: phoneSteps, voice_clicks: voiceClicks, reveal_fixed: revealFixed, coin_lines: coinLines, story_gaps: storyGaps }, facts };
 }
 
+// Rule 6, how beat 14 ends: one instruction (Script page audit, 2026-10-19).
+// With the invitation coming it ends on it and the forward hook is told
+// through it; withheld, the hook comes and no offer does; with nothing
+// attached, the forward hook as before.
+function beat14Ending(ending, hook) {
+  if (ending === 'invitation') return `the invitation in the BEAT 14 OPPORTUNITY block${hook ? `; the forward hook, "${hook}", is told through it` : ''}`;
+  const told = hook ? `the forward hook: "${hook}"` : 'a forward hook seeding the next episode';
+  return ending === 'withheld' ? `${told}; the BEAT 14 OPPORTUNITY does not come, and no other offer comes in its place` : told;
+}
+
 // What the coverage check needs from the writer's inputs.
 function coverageFacts(inputs) {
   const career = inputs?.story?.career || null;
@@ -414,9 +425,10 @@ function coverageFacts(inputs) {
     goals: career?.goals || [],
     forwardHook: inputs?.brief?.forward_hook || '',
     lockedPieces: (inputs?.outfitScore?.items || []).filter((p) => p?.id).map((p) => ({ id: p.id, name: p.name })),
-    // Beat 14's opportunity, when the episode is not designed to fail (Evoni,
-    // 2026-10-19): it must arrive in the script.
-    opportunity: inputs?.beat14 && inputs?.brief?.designed_intent !== 'fail'
+    // Beat 14's opportunity, when it comes (Evoni, 2026-10-19): it must
+    // arrive in the script. Not when the episode is designed to fail, nor once
+    // it expired at completion (Script page audit, 2026-10-19).
+    opportunity: beat14Outcome(inputs?.beat14, inputs?.brief?.designed_intent || null) === 'invitation'
       ? { name: inputs.beat14.name, from: inputs.beat14.contact_name || inputs.beat14.connector_handle || null }
       : null,
   };
@@ -476,7 +488,7 @@ async function generateGroundedBeat(episodeId, showId, models, { beatNumber, cur
 // never the rest (re-audit 2, 2026-10-15: one guest's bad JSON dropped her
 // career, money and stats together). Returns { text, career, stats }: what
 // rendered, so the rules and the fallback stats read only what is there.
-function storyContext(story, { hasSeason = false, hook = '', balanceBefore = null } = {}) {
+function storyContext(story, { hasSeason = false, hook = '', balanceBefore = null, beat14 = null } = {}) {
   const none = { text: '', career: false, stats: false };
   if (!story) return none;
   const { storyContextBlocks, financialContextText } = require('./episodeScriptWriterService');
@@ -494,10 +506,14 @@ function storyContext(story, { hasSeason = false, hook = '', balanceBefore = nul
     arcPhase: hasSeason ? null : story.arcPhase,
   };
   const financial = story.financial ? block('financial', () => `═══ FINANCIAL CONTEXT ═══\n${financialContextText(before ? { ...story.financial, balance, total_income: 0, total_expenses: 0 } : story.financial)}`) : '';
-  // A function, so a `$` in the hook is written as it is.
+  // A function, so a `$` in the hook is written as it is. With beat 14's
+  // invitation coming, the career block leaves beat 14 to it; with it
+  // withheld, no offer comes (careerBlock; Script page audit, 2026-10-19).
   const career = block('career', () => {
-    const text = careerBlock(story.career);
-    return text && hook ? text.replace(/^- Beat 14: .*$/m, () => `- Beat 14: end on the forward hook, "${hook}", told through her career: a follow-up offer, a goal still open, or what this deal could lead to.`) : text;
+    const text = careerBlock(story.career, { beat14 });
+    if (!text || !hook) return text;
+    const instead = beat14 === 'withheld' ? 'no offer comes: a goal still open, or what she does now' : 'a follow-up offer, a goal still open, or what this deal could lead to';
+    return text.replace(/^- Beat 14: .*$/m, () => `- Beat 14: end on the forward hook, "${hook}", told through her career: ${instead}.`);
   });
   // The guests are the block most likely to hold bad data; without them the
   // rest (her stats, the last episode, the arc) still goes in.
@@ -640,7 +656,10 @@ function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrob
   const rulesOn = rulesPhone(phone, onScreen);
   const hook = typeof brief?.forward_hook === 'string' ? brief.forward_hook.trim() : '';
   const balanceBefore = money?.balanceBefore ?? null;
-  const told = storyContext(story, { hasSeason: !!seasonContext?.label, hook, balanceBefore });
+  // How beat 14 ends (Script page audit, 2026-10-19): on the invitation,
+  // with the hook told through it; or, withheld, with no offer at all.
+  const ending = beat14Outcome(beat14, brief?.designed_intent || null);
+  const told = storyContext(story, { hasSeason: !!seasonContext?.label, hook, balanceBefore, beat14: ending });
   const statsContext = told.stats ? ''
     : lalaStats?.character_states ? JSON.stringify(snapshotStates(lalaStats.character_states, balanceBefore ?? story?.financial?.balance)).slice(0, 1500)
     : 'Stats not loaded';
@@ -722,7 +741,7 @@ RULES:
 3. Lala's lines are ALWAYS short and punchy — max 2-3 sentences
 4. Community engagement: ask audience to react in comments at least twice
 5. A change to her stats appears only as a [STAT:] tag; she may say her coin balance in her own words when she checks it
-${!only || only.beat.number === 14 ? `6. ${only ? 'This beat ends' : 'Beat 14 ends'} on ${hook ? `the forward hook: "${hook}"` : 'a forward hook seeding the next episode'}\n` : ''}${told.career ? "7. Lala's career is on the page: name the deal, what she owes and what she wants from the event in the beats the CAREER block gives them, in her words, never as a list\n" : ''}
+${!only || only.beat.number === 14 ? `6. ${only ? 'This beat ends' : 'Beat 14 ends'} on ${beat14Ending(ending, hook)}\n` : ''}${told.career ? "7. Lala's career is on the page: name the deal, what she owes and what she wants from the event in the beats the CAREER block gives them, in her words, never as a list\n" : ''}
 
 ═══ JUSTAWOMAN ON CAMERA ═══
 JustAWoman (Me:) is playing the game on camera from her corner: she sees the game interface and reacts to it; Lala lives the experience. Two perspectives on the same moment. Lala cannot hear her commentary or see the audience's game interface.

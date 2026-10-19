@@ -68,6 +68,29 @@ async function linkDealOr400(res, models, body) {
 // GET /opportunities/:showId — List
 // ═══════════════════════════════════════════
 
+// Each opportunity attached to an episode's beat 14 carries that episode
+// ({ id, title }) as beat14_episode, so the show tab can say "Beat 14 of
+// ‹title›" (Evoni, 2026-10-19). One query for all of them; a failed read
+// leaves the titles out.
+async function withBeat14Episodes(models, opps) {
+  const ids = [...new Set(opps.map((o) => o.offered_in_episode_id).filter(Boolean))];
+  if (!ids.length || !models.sequelize) return opps;
+  try {
+    const rows = await models.sequelize.query(
+      'SELECT id, title FROM episodes WHERE id IN (:ids) AND deleted_at IS NULL',
+      { replacements: { ids }, type: models.sequelize.QueryTypes.SELECT }
+    );
+    const byId = new Map(rows.map((r) => [String(r.id), r]));
+    return opps.map((o) => {
+      const ep = o.offered_in_episode_id ? byId.get(String(o.offered_in_episode_id)) : null;
+      return ep ? { ...o, beat14_episode: { id: ep.id, title: ep.title || null } } : o;
+    });
+  } catch (err) {
+    console.error('[Opportunities] beat 14 episode titles read failed (non-blocking):', err.message);
+    return opps;
+  }
+}
+
 router.get('/opportunities/:showId', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
@@ -78,8 +101,8 @@ router.get('/opportunities/:showId', requireAuth, async (req, res) => {
       const where = { show_id: showId };
       if (status) where.status = status;
       if (type) where.opportunity_type = type;
-      const opps = await models.Opportunity.findAll({ where, order: [['created_at', 'DESC']] });
-      return res.json({ success: true, opportunities: opps.map(o => o.toJSON()) });
+      const opps = (await models.Opportunity.findAll({ where, order: [['created_at', 'DESC']] })).map(o => o.toJSON());
+      return res.json({ success: true, opportunities: await withBeat14Episodes(models, opps) });
     }
 
     // Fallback raw SQL
@@ -198,8 +221,10 @@ router.post('/opportunities/:showId/:id/advance', requireAuth, authorize(['ADMIN
       return res.status(400).json({ success: false, error: `Cannot advance from "${opp.status}" to "${to_status}". Allowed: ${allowed.join(', ')}` });
     }
 
-    const history = opp.status_history || [];
-    history.push({ status: to_status, date: new Date().toISOString(), note: note || null, from: opp.status });
+    // A new array: a JSONB array changed in place is never saved by
+    // Sequelize, so no step was ever written to the history (Script page
+    // audit, 2026-10-19: Undo found nothing to go back to).
+    const history = [...(Array.isArray(opp.status_history) ? opp.status_history : []), { status: to_status, date: new Date().toISOString(), note: note || null, from: opp.status }];
 
     const updates = { status: to_status, status_history: history };
     if (to_status === 'booked') updates.booking_date = new Date().toISOString().split('T')[0];
@@ -234,6 +259,67 @@ router.post('/opportunities/:showId/:id/advance', requireAuth, authorize(['ADMIN
 });
 
 // ═══════════════════════════════════════════
+// POST /opportunities/:showId/:id/undo — Undo the last step (Evoni,
+// 2026-10-19: an Advance click marked one complete when she meant to set it
+// up). Back to the status it had before its last step, with an 'Undone'
+// entry in its history. Only the status moves: what the career pipeline did
+// on completed or paid (goals checked, opportunities unlocked) is NOT
+// reversed, nor the booking date or payment status set on the way. One held
+// for beat 14 belongs to that episode: detach it there instead.
+// ═══════════════════════════════════════════
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The status before the last step, reading the history as a stack: each
+ * entry is a step, an 'Undone' entry takes one back. Null when the history
+ * does not end on the current status or holds nothing earlier.
+ */
+function statusBeforeLastStep(history, current) {
+  const stack = [];
+  for (const h of Array.isArray(history) ? history : []) {
+    if (!h || typeof h.status !== 'string') continue;
+    if (h.note === 'Undone' && h.undone_from) { stack.pop(); if (stack[stack.length - 1] !== h.status) stack.push(h.status); continue; }
+    stack.push(h.status);
+  }
+  // Steps made before the history was saved: the last status written is
+  // the one before.
+  if (stack.length && stack[stack.length - 1] !== current) return stack[stack.length - 1];
+  for (let i = stack.length - 2; i >= 0; i -= 1) if (stack[i] !== current) return stack[i];
+  return null;
+}
+
+router.post('/opportunities/:showId/:id/undo', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  const { showId, id } = req.params;
+  if (!UUID_RE.test(String(showId)) || !UUID_RE.test(String(id))) {
+    return res.status(400).json({ success: false, error: `${UUID_RE.test(String(showId)) ? 'id' : 'showId'} must be an id (UUID).` });
+  }
+  try {
+    const models = await getModels(req);
+    if (!models.Opportunity) return res.status(500).json({ success: false, error: 'Model not loaded' });
+    const opp = await models.Opportunity.findOne({ where: { id, show_id: showId } });
+    if (!opp) return res.status(404).json({ success: false, error: 'Opportunity not found' });
+    if (opp.status === 'held') {
+      return res.status(409).json({ success: false, error: 'This one is held for an episode\'s beat 14: remove it from beat 14 on that episode\'s Script tab instead.' });
+    }
+    const history = Array.isArray(opp.status_history) ? opp.status_history : [];
+    const back = statusBeforeLastStep(history, opp.status);
+    if (!back) return res.status(409).json({ success: false, error: `There is no earlier status to go back to from "${opp.status}".` });
+    // Held is beat 14's to set, at attach (services/beat14Opportunity).
+    if (back === 'held') return res.status(409).json({ success: false, error: 'Its last step came from beat 14 (attached, let go or decided at completion); that is not undone here.' });
+    const from = opp.status;
+    await opp.update({
+      status: back,
+      status_history: [...history, { status: back, date: new Date().toISOString(), note: 'Undone', undone_from: from }],
+    });
+    return res.json({ success: true, opportunity: opp.toJSON(), undone: { from, to: back } });
+  } catch (err) {
+    console.error('[Opportunities] undo failed:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════
 // POST /opportunities/:showId/:id/to-event — Convert to world event
 // ═══════════════════════════════════════════
 
@@ -263,10 +349,31 @@ router.post('/opportunities/:showId/:id/to-event', requireAuth, authorize(['ADMI
 
 const beat14Error = (res, err, what) => {
   console.error(`[Beat14] ${what} failed:`, err.message);
+  // Two attaches at once both pass the service's checks; the unique index on
+  // offered_in_episode_id lets one through (Script page audit, 2026-10-19).
+  if (err.name === 'SequelizeUniqueConstraintError') {
+    return res.status(409).json({ success: false, error: 'Beat 14 changed while this was saved: read it again and choose once more.' });
+  }
   return res.status(err.status || 500).json({ success: false, error: err.message });
 };
 
+// Ids that are not UUIDs are a 400, not a database error and a 500 (Script
+// page audit, 2026-10-19).
+const BEAT14_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const beat14BadIds = (req, res) => {
+  const { showId, episodeId } = req.params;
+  const oppId = req.body?.opportunity_id;
+  const bad = !BEAT14_UUID.test(String(showId)) ? 'showId'
+    : !BEAT14_UUID.test(String(episodeId)) ? 'episodeId'
+      : req.method === 'PUT' && oppId != null && oppId !== '' && !BEAT14_UUID.test(String(oppId)) ? 'opportunity_id'
+        : null;
+  if (!bad) return false;
+  res.status(400).json({ success: false, error: `${bad} must be an id (UUID).` });
+  return true;
+};
+
 router.get('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, async (req, res) => {
+  if (beat14BadIds(req, res)) return undefined;
   try {
     const { getBeat14 } = require('../services/beat14Opportunity');
     return res.json({ success: true, data: await getBeat14(await getModels(req), req.params) });
@@ -278,6 +385,7 @@ router.get('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, asyn
 // Attach and detach are ADMIN only (Evoni, 2026-10-19: "make Beat 14 this
 // whole part of the site is admin only"); the read stays requireAuth.
 router.put('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  if (beat14BadIds(req, res)) return undefined;
   try {
     const { attachBeat14 } = require('../services/beat14Opportunity');
     const body = req.body || {};
@@ -294,6 +402,7 @@ router.put('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, auth
 });
 
 router.delete('/opportunities/:showId/episode/:episodeId/beat14', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  if (beat14BadIds(req, res)) return undefined;
   try {
     const { detachBeat14 } = require('../services/beat14Opportunity');
     return res.json({ success: true, data: await detachBeat14(await getModels(req), req.params) });
@@ -396,3 +505,4 @@ router.get('/opportunities/:showId/career-tier', requireAuth, async (req, res) =
 });
 
 module.exports = router;
+module.exports.statusBeforeLastStep = statusBeforeLastStep;
