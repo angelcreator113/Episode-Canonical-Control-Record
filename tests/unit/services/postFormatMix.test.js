@@ -63,3 +63,26 @@ describe('postFormatMix', () => {
     expect(mix.promptLine('story')).toBe('');
   });
 });
+
+// Evoni, 2026-10-20: hand-written posts (the script's [UI:POST …]) read their format from their words.
+describe('formatFromWords', () => {
+  const { formatFromWords } = require('../../../src/services/postFormatMix');
+  test.each([
+    ['Photo dump from the fitting', 'carousel'],
+    ['swipe for the shoes', 'carousel'],
+    ['Mirror selfie before the doors open', 'post'],
+    ['fit check', 'post'],
+    ['"Dress like the room already said yes."', 'quote'],
+    ['“Soft, then sharp.”', 'quote'],
+    ['Thoughts on tonight: I was terrified.', 'text'],
+    ['Hot take: velvet is a year-round fabric', 'text'],
+    ['Studio night, statement look.', 'post'],
+    ['', 'post'],
+  ])('%s → %s', (words, format) => {
+    expect(formatFromWords(words)).toBe(format);
+  });
+
+  test('the fallback is used when the words say nothing', () => {
+    expect(formatFromWords('Studio night.', 'text')).toBe('text');
+  });
+});

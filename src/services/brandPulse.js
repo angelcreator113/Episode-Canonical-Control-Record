@@ -357,9 +357,15 @@ async function draftWeek(db, { showId, perBrand = WEEK_PER_BRAND }) {
   const n = Math.max(1, Math.min(5, Number(perBrand) || WEEK_PER_BRAND));
   const clock = require('./storyClock');
   const at = await clock.presentOrder(db, showId);
+  // Each brand's posts get their formats up front, from its mix (photo and
+  // carousel product posts, a little text, never a quote: services/postFormatMix),
+  // and the prompt says which post is which so each is written for its shape.
+  const mixApi = require('./postFormatMix');
+  const slots = new Map(brands.map((b) => [b.slug, Array.from({ length: n }, () => mixApi.formatFor(accounts.get(b.id), { brand: true }))]));
   const blocks = brands.map((b) => {
     const reps = repsOf(b.slug).map((r) => `${r.key} (${r.name}, ${r.title})`).join(', ') || 'none';
-    return `=== ${b.slug} (@${accounts.get(b.id).handle}) ===\n${brandVoiceBlock(b)}\nRepresentatives who may post from it: ${reps}`;
+    const shapes = slots.get(b.slug).map((f, i) => `  ${i + 1}. "${f}": ${mixApi.promptLine(f)}`).join('\n');
+    return `=== ${b.slug} (@${accounts.get(b.id).handle}) ===\n${brandVoiceBlock(b)}\nRepresentatives who may post from it: ${reps}\nIts ${n} posts, in this order and these shapes:\n${shapes}`;
   }).join('\n\n');
   await require('./pulseRequests').take(db, { showId, lane: 'manual', kind: 'brand_week' });
   const parsed = await ask(`You plan one week of posts on The Pulse, LalaVerse's social network, for these brand accounts. Each brand gets ${n} posts: ${EVERYDAY_KINDS}. A representative may write one of them as herself (give her key), keeping her own views apart from the brand's.
@@ -368,7 +374,7 @@ ${blocks}
 
 When: ${clock.label(at)}.
 Do not add signatures: a representative's name is added after her post.
-Answer with JSON only: {"posts": [{"brand": "the brand's key", "rep": "a representative's key or null", "text": "the post", "hashtag": "#OneTag or null"}]}`, 4000);
+Answer with JSON only: {"posts": [{"brand": "the brand's key", "format": "the shape it was written for", "rep": "a representative's key or null", "text": "the post", "hashtag": "#OneTag or null"}]}`, 4000);
   const items = Array.isArray(parsed.posts) ? parsed.posts : [];
   const bySlug = new Map(brands.map((b) => [b.slug, b]));
   const routed = [];
@@ -382,7 +388,12 @@ Answer with JSON only: {"posts": [{"brand": "the brand's key", "rep": "a represe
     counts.set(brand.slug, (counts.get(brand.slug) || 0) + 1);
     const rep = item.rep && repByKey(item.rep)?.brand === brand.slug ? repByKey(item.rep) : null;
     try {
-      const post = await saveDraft(db, { showId, account: accounts.get(brand.id), brand, rep, text, tag: cleanTag(item.hashtag), at, kind: 'everyday' });
+      // The shape it says it was written for, if that one is still open for
+      // this brand; else the brand's next open shape.
+      const open = slots.get(brand.slug);
+      const i = open.indexOf(item.format);
+      const format = open.splice(i >= 0 ? i : 0, 1)[0] || mixApi.formatFor(accounts.get(brand.id), { brand: true });
+      const post = await saveDraft(db, { showId, account: accounts.get(brand.id), brand, rep, text, tag: cleanTag(item.hashtag), at, kind: 'everyday', format });
       const r = await routeEveryday(db, post, { brand, rep, release: 'schedule' });
       routed.push({ brand: brand.name, rep: rep?.name || null, post_id: post.id, review: r.review, scheduled_at: r.scheduled_at });
     } catch (err) {
@@ -479,11 +490,13 @@ ${brandVoiceBlock(brand, rep)}
 
 The partnership: ${deal.name} (${deal.opportunity_type}).${deal.publish_date ? ` It goes public on ${deal.publish_date}.` : ''}
 Say what the partnership is and why it fits what ${brand.name} believes. No money, no terms, nothing about how it was negotiated.
+${require('./postFormatMix').promptLine('post')}
 ${rep ? `Do not add a signature: ${firstName(rep)}'s name is added after the post.\n` : ''}Answer with JSON only: {"text": "the post", "hashtag": "#OneTag or null"}`, 600);
   const text = cleanText(parsed.text, 2000);
   if (!text) throw new BrandPulseError(502, 'The draft came back empty.');
   const post = await saveDraft(db, {
-    showId: deal.show_id, account, brand, rep, text, tag: cleanTag(parsed.hashtag), at, kind: 'deal',
+    // An announcement is a photo post: the campaign shot (Evoni, 2026-10-20).
+    showId: deal.show_id, account, brand, rep, text, tag: cleanTag(parsed.hashtag), at, kind: 'deal', format: 'post',
     extra: { event_id: deal.event_id, episode_id: deal.episode_id },
   });
   await post.update({ gate_json: { ...post.gate_json, brand: { ...post.gate_json.brand, deal_id: deal.id }, review: ['brand_deal'] } });

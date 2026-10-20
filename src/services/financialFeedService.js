@@ -24,22 +24,24 @@ const { v4: uuidv4 } = require('uuid');
 
 // ── Copy templates ─────────────────────────────────────────────────────────
 
+// Each template carries the post's format (services/postFormatMix): a
+// milestone is a thought in words; showing the fit is a photo post.
 const MILESTONE_POSTS = [
-  "{label} unlocked. I've been saving + slaying for this.",
-  "Hit {label} today — closet's officially paying its own rent.",
-  "{label}. This one's going in the diary.",
+  ["{label} unlocked. I've been saving + slaying for this.", 'text'],
+  ["Hit {label} today — closet's officially paying its own rent.", 'text'],
+  ["{label}. This one's going in the diary.", 'text'],
 ];
 
 const BIG_SPEND_POSTS = [
-  "New era, new receipts. Dropped {amount} coins on the fit — worth it.",
-  "That outfit was {amount} coins of pure confidence. No notes.",
-  "{amount} coins later and I'm not even sorry. {item_name} called me first.",
+  ["New era, new receipts. Dropped {amount} coins on the fit — worth it.", 'post'],
+  ["That outfit was {amount} coins of pure confidence. No notes.", 'post'],
+  ["{amount} coins later and I'm not even sorry. {item_name} called me first.", 'post'],
 ];
 
 const OVERSPEND_POSTS = [
-  "{amount} coins deep and the fridge is empty. Priorities are priorities.",
-  "Balance check is scary. But the pictures? Immaculate.",
-  "The outfit cost more than the rent. The rent'll wait.",
+  ["{amount} coins deep and the fridge is empty. Priorities are priorities.", 'text'],
+  ["Balance check is scary. But the pictures? Immaculate.", 'post'],
+  ["The outfit cost more than the rent. The rent'll wait.", 'text'],
 ];
 
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
@@ -76,12 +78,12 @@ async function writeFeedPost(sequelize, showId, post) {
     await sequelize.query(
       `INSERT INTO feed_posts (
         id, show_id, episode_id, event_id, social_profile_id, poster_handle,
-        poster_display_name, poster_creator_name, poster_platform, post_type, content_text,
+        poster_display_name, poster_creator_name, poster_platform, post_type, post_format, content_text,
         narrative_function, emotional_impact, ai_generated, posted_at,
         timeline_position, status, created_at, updated_at
       ) VALUES (
         :id, :showId, :episodeId, :eventId, :profileId, :handle,
-        :displayName, :creatorName, 'lalaverse', :postType, :contentText,
+        :displayName, :creatorName, 'lalaverse', :postType, :postFormat, :contentText,
         :narrativeFunction, :emotionalImpact, true, NOW(),
         :timelinePosition, :status, NOW(), NOW()
       )`,
@@ -97,6 +99,7 @@ async function writeFeedPost(sequelize, showId, post) {
         displayName: post.display_name || null,
         creatorName: post.creator_name || null,
         postType: post.post_type || 'post',
+        postFormat: post.post_format || 'post',
         contentText: post.content_text,
         narrativeFunction: post.narrative_function || null,
         emotionalImpact: post.emotional_impact || null,
@@ -120,7 +123,8 @@ async function postMilestoneReached(sequelize, showId, triggered, { episodeId } 
   const profile = await resolveLalaProfile(sequelize, showId);
   let posted = 0;
   for (const { goal } of triggered) {
-    const text = fillTemplate(pick(MILESTONE_POSTS), { label: goal.label, reward: goal.reward_coins });
+    const [tpl, format] = pick(MILESTONE_POSTS);
+    const text = fillTemplate(tpl, { label: goal.label, reward: goal.reward_coins });
     const res = await writeFeedPost(sequelize, showId, {
       episode_id: episodeId,
       profile_id: profile.id,
@@ -128,6 +132,7 @@ async function postMilestoneReached(sequelize, showId, triggered, { episodeId } 
       display_name: profile.display_name,
       creator_name: profile.creator_name,
       post_type: 'post',
+      post_format: format,
       content_text: text,
       narrative_function: 'flex',
       emotional_impact: 'confidence_boost',
@@ -150,7 +155,7 @@ async function postBigSpend(sequelize, showId, summary, balanceAfter, opts = {})
   const totalSpend = (summary?.wardrobe_cost || 0) + (summary?.event_cost || 0);
   if (totalSpend < thresholdCoins) return { posted: 0 };
   const overspent = nextGoalThreshold && balanceAfter < nextGoalThreshold * 0.25;
-  const template = overspent ? pick(OVERSPEND_POSTS) : pick(BIG_SPEND_POSTS);
+  const [template, format] = overspent ? pick(OVERSPEND_POSTS) : pick(BIG_SPEND_POSTS);
   const text = fillTemplate(template, { amount: totalSpend.toLocaleString(), item_name: itemName || 'The fit' });
   const profile = await resolveLalaProfile(sequelize, showId);
   const res = await writeFeedPost(sequelize, showId, {
@@ -161,6 +166,7 @@ async function postBigSpend(sequelize, showId, summary, balanceAfter, opts = {})
     display_name: profile.display_name,
     creator_name: profile.creator_name,
     post_type: 'post',
+    post_format: format,
     content_text: text,
     narrative_function: overspent ? 'bts' : 'flex',
     emotional_impact: overspent ? 'anxiety' : 'confidence_boost',

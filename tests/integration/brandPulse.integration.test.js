@@ -38,6 +38,7 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }], 
   const savedKey = process.env.ANTHROPIC_API_KEY;
   const drafts = [];
   const scores = [];
+  const weekShapes = new Map();
   let admin;
   let user;
   let fan;
@@ -51,6 +52,18 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }], 
     mockCreate.mockImplementation(async ({ messages }) => {
       const prompt = messages[0].content;
       if (prompt.startsWith('Score how well')) return say(scores.shift() || { score: 0.9, why: 'fits' });
+      if (prompt.startsWith('You plan one week') && !drafts.length) {
+        // Unless a test queued its own answer: each brand's block lists its
+        // shapes in order; answer them last-first, naming each.
+        const posts = [];
+        for (const block of prompt.split('=== ').slice(1)) {
+          const slug = block.split(' ')[0];
+          const shapes = [...block.matchAll(/^ {2}\d+\. "(\w+)":/gm)].map((m) => m[1]);
+          weekShapes.set(slug, shapes);
+          shapes.slice().reverse().forEach((f, i) => posts.push({ brand: slug, format: f, rep: null, text: `${slug} ${f} ${i}`, hashtag: null }));
+        }
+        return say({ posts });
+      }
       return say(drafts.shift());
     });
     admin = TokenService.generateTokenPair({ id: 'test-admin-bp', email: 'evoni@bp.dev', name: 'Evoni', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
@@ -147,6 +160,23 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }], 
     expect(wrongHouse.status).toBe(400);
   });
 
+  // Evoni, 2026-10-20: the week's posts are written for their shapes.
+  it("a week's drafts: each brand's posts get their shapes from its mix, the prompt names them, and each is saved with the shape it was written for", async () => {
+    const res = await as(request(app).post('/api/v1/brand-pulse/draft-week')).send({ show_id: ids.show, per_brand: 2 });
+    expect(res.status).toBe(200);
+    const prompt = mockCreate.mock.calls.find((c) => c[0].messages[0].content.startsWith('You plan one week'))[0].messages[0].content;
+    expect(prompt).toContain('posts, in this order and these shapes');
+    expect(weekShapes.size).toBeGreaterThan(0);
+    for (const [slug, shapes] of weekShapes) {
+      expect(shapes).toHaveLength(2);
+      shapes.forEach((f) => expect(['text', 'post', 'carousel']).toContain(f));   // a brand never posts a quote
+      const rows = await q('SELECT post_format, content_text FROM feed_posts WHERE show_id = :show AND content_text LIKE :like',
+        { show: ids.show, like: `${slug} %` });
+      expect(rows.map((r) => r.post_format).sort()).toEqual(shapes.slice().sort());
+      rows.forEach((r) => expect(r.content_text.split(' ')[1]).toBe(r.post_format));
+    }
+  });
+
   it('a fully trusted brand account: a post held only for its voice is scheduled anyway, marked released_on_trust', async () => {
     const [account] = await q("SELECT id FROM social_profiles WHERE deleted_at IS NULL AND full_profile->>'lalaverse_brand_id' = :b", { b: brands.velour_atelier.id });
     await run("UPDATE social_profiles SET pulse_trust = 'full' WHERE id = :id", { id: account.id });
@@ -215,5 +245,8 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }], 
     const [post] = await q("SELECT status, gate_json->'review' AS review, gate_json->'brand'->>'deal_id' AS deal FROM feed_posts WHERE id = :id", { id: ok.body.post.id });
     expect(post).toEqual({ status: 'draft', review: ['brand_deal'], deal: ids.dealVelour });
     expect(mockCreate.mock.calls[0][0].messages[0].content).toContain('No money, no terms');
+    // An announcement is a photo post, the campaign shot (Evoni, 2026-10-20).
+    expect((await q('SELECT post_format FROM feed_posts WHERE id = :id', { id: ok.body.post.id }))[0].post_format).toBe('post');
+    expect(mockCreate.mock.calls[0][0].messages[0].content).toContain('write it as the caption for that photo');
   });
 });
