@@ -1,16 +1,15 @@
 /**
- * /episodes/:episodeId/composer (audit LINK-02, 2026-10-03). The route used
- * to open the Template Library, which never read the episode: an
- * episode-specific link landed on a generic page. The episode's thumbnails
- * live in its Thumbnail Gallery, so the old link goes there, keeping the
- * episode. The per-video thumbnail builder (choose a template, pick this
- * episode's assets, keep the output linked to the episode and video) is the
- * release workflow, audit batch 5; the Template Library stays at
- * /template-studio for templates themselves.
+ * Old episode thumbnail links (audit LINK-02, 2026-10-03; Evoni, 2026-10-20).
+ * /episodes/:episodeId/composer and /thumbnails/:episodeId (the retired
+ * Thumbnail Gallery) both open the one thumbnail editor, Templates ›
+ * YouTube thumbnails, on that episode, replacing themselves in history so
+ * Back skips them. The editor lists the episode's saved thumbnails, so the
+ * gallery's list and Delete live there now.
  */
 import { Navigate, useParams } from 'react-router-dom';
+import { thumbnailStudioHref } from '../lib/thumbnailStudioHref';
 
-export const episodeThumbnailsPath = (episodeId) => `/thumbnails/${episodeId}`;
+export const episodeThumbnailsPath = (episodeId) => thumbnailStudioHref({ episodeId });
 
 export default function EpisodeComposerRedirect() {
   const { episodeId } = useParams();

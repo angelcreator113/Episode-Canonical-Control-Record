@@ -13,8 +13,11 @@
  * title in up to three lines, the episode badge). Images come from S3 only
  * (allowedImageUrl) or from the request's own upload.
  *
- * Saving makes it the episode's primary thumbnail (thumbnails table); the
- * one before it stays, as a cover.
+ * Saving makes it the episode's primary thumbnail (thumbnails table) and
+ * episodes.thumbnail_url; the one before it stays, as a cover. This page is
+ * the one place an episode's thumbnail is edited (Evoni, 2026-10-20), so the
+ * saved ones are listed here too: make one the episode's thumbnail again, or
+ * delete one that is not.
  */
 
 const sharp = require('sharp');
@@ -321,16 +324,82 @@ async function saveAsPrimary(sequelize, episodeId, png) {
       { replacements: { episodeId }, transaction });
     const [[created]] = await sequelize.query(
       `INSERT INTO thumbnails ("episodeId", "s3Bucket", "s3Key", "fileSizeBytes", "mimeType", "widthPixels", "heightPixels", format, "thumbnailType", "generatedAt")
-       VALUES (:episodeId, :bucket, :key, :size, 'image/png', ${WIDTH}, ${HEIGHT}, 'png', 'primary', NOW())
+       VALUES (:episodeId, :bucket, :key, :size, 'image/png', ${WIDTH}, ${HEIGHT}, 'thumbnail', 'primary', NOW())
        RETURNING id`,
       { replacements: { episodeId, bucket: BUCKET, key, size: png.length }, transaction });
+    await sequelize.query('UPDATE episodes SET thumbnail_url = :url WHERE id = :episodeId',
+      { replacements: { episodeId, url }, transaction });
     return created;
   });
   return { id: row?.id, url, key };
 }
 
+const rowUrl = (r) => r.url || `https://${r.s3Bucket}.s3.${REGION}.amazonaws.com/${r.s3Key}`;
+
+/** The episode's saved thumbnails, its current one first, then newest first. */
+async function listSaved(sequelize, episodeId) {
+  const [rows] = await sequelize.query(
+    `SELECT id, "s3Bucket", "s3Key", url, "thumbnailType", "widthPixels", "heightPixels", "generatedAt"
+       FROM thumbnails
+      WHERE "episodeId" = :episodeId
+      ORDER BY ("thumbnailType" = 'primary') DESC, "generatedAt" DESC NULLS LAST, id DESC
+      LIMIT 100`,
+    { replacements: { episodeId } });
+  return (rows || []).map((r) => ({
+    id: r.id,
+    url: rowUrl(r),
+    isPrimary: r.thumbnailType === 'primary',
+    width: r.widthPixels,
+    height: r.heightPixels,
+    savedAt: r.generatedAt,
+  }));
+}
+
+async function findSaved(sequelize, episodeId, thumbnailId, transaction) {
+  const [[row]] = await sequelize.query(
+    `SELECT id, "s3Bucket", "s3Key", url, "thumbnailType" FROM thumbnails
+      WHERE id = :thumbnailId AND "episodeId" = :episodeId LIMIT 1`,
+    { replacements: { episodeId, thumbnailId }, transaction });
+  if (!row) throw new ThumbnailError(404, 'That thumbnail is not one of this episode\'s');
+  return row;
+}
+
+/** Makes a saved thumbnail the episode's thumbnail again; the current one becomes a cover. */
+async function makePrimary(sequelize, episodeId, thumbnailId) {
+  if (!/^\d+$/.test(String(thumbnailId))) throw new ThumbnailError(400, 'Unknown thumbnail');
+  return sequelize.transaction(async (transaction) => {
+    const row = await findSaved(sequelize, episodeId, thumbnailId, transaction);
+    const url = rowUrl(row);
+    await sequelize.query(
+      `UPDATE thumbnails SET "thumbnailType" = 'cover'
+        WHERE "episodeId" = :episodeId AND "thumbnailType" = 'primary' AND id <> :thumbnailId`,
+      { replacements: { episodeId, thumbnailId }, transaction });
+    await sequelize.query(
+      `UPDATE thumbnails SET "thumbnailType" = 'primary' WHERE id = :thumbnailId`,
+      { replacements: { thumbnailId }, transaction });
+    await sequelize.query('UPDATE episodes SET thumbnail_url = :url WHERE id = :episodeId',
+      { replacements: { episodeId, url }, transaction });
+    return { id: row.id, url };
+  });
+}
+
+/**
+ * Deletes a saved thumbnail that is not the episode's current one (its row;
+ * the S3 file stays). The current one is refused: make another current first.
+ */
+async function removeSaved(sequelize, episodeId, thumbnailId) {
+  if (!/^\d+$/.test(String(thumbnailId))) throw new ThumbnailError(400, 'Unknown thumbnail');
+  const row = await findSaved(sequelize, episodeId, thumbnailId);
+  if (row.thumbnailType === 'primary') {
+    throw new ThumbnailError(409, 'This is the episode\'s thumbnail. Make another one the thumbnail first.');
+  }
+  await sequelize.query('DELETE FROM thumbnails WHERE id = :thumbnailId AND "episodeId" = :episodeId',
+    { replacements: { episodeId, thumbnailId } });
+  return { id: row.id };
+}
+
 module.exports = {
   WIDTH, HEIGHT, LAYOUTS, DEFAULT_STYLE, ThumbnailError,
   readStyle, readSpec, allowedImageUrl, fetchImage, layoutBoxes, titleSize, wrapTitle, fitTitle, kickerSize, textSvg, shadeSvg,
-  render, sources, saveStyle, saveAsPrimary,
+  render, sources, saveStyle, saveAsPrimary, listSaved, makePrimary, removeSaved,
 };
