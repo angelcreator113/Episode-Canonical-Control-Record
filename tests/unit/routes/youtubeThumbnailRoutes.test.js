@@ -101,3 +101,15 @@ test('the saved list, making one current, and a refused delete pass through', as
   expect(del.status).toBe(409);
   expect(del.body.error).toMatch(/Make another one the thumbnail first/);
 });
+
+test('a JustAWoman upload goes into the render beside Lala', async () => {
+  const solid = (r, g, b) => sharp({ create: { width: 300, height: 600, channels: 4, background: { r, g, b, alpha: 1 } } }).png().toBuffer();
+  const res = await request(app).post('/api/v1/youtube-thumbnails/render')
+    .field('spec', JSON.stringify({ title: 'Duo', layout: 'lala-left', dim: 0 }))
+    .attach('lala', await solid(0, 255, 0), { filename: 'l.png', contentType: 'image/png' })
+    .attach('jaw', await solid(0, 0, 255), { filename: 'j.png', contentType: 'image/png' })
+    .buffer(true).parse(binary);
+  expect(res.status).toBe(200);
+  const { data, info } = await sharp(res.body).raw().toBuffer({ resolveWithObject: true });
+  expect(data[(650 * info.width + 60) * info.channels + 2]).toBeGreaterThan(200);
+});

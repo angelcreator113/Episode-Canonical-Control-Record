@@ -21,7 +21,7 @@ vi.mock('../lib/youtubeThumbnailsApi', async () => {
   };
 });
 
-import { youtubeThumbnailsApi, episodeWords, renderForm, thumbnailStudioHref } from '../lib/youtubeThumbnailsApi';
+import { youtubeThumbnailsApi, episodeWords, renderForm, thumbnailStudioHref, poseSections, defaultPose } from '../lib/youtubeThumbnailsApi';
 import YouTubeThumbnailStudio from './YouTubeThumbnailStudio';
 
 const SOURCES = {
@@ -46,6 +46,22 @@ describe('helpers', () => {
     expect(JSON.parse(form.get('spec'))).toEqual({ title: 'T' });
     expect(form.get('background')).toBe(f);
     expect(form.get('lala')).toBeNull();
+  });
+
+  test('pose sections and the pose a thumbnail starts from', () => {
+    const poses = [
+      { url: 'u-f1', pose: 'front', isDefault: true },
+      { url: 'u-f2', pose: 'front', isDefault: false },
+      { url: 'u-g1', pose: 'glamour', isDefault: false },
+    ];
+    expect(poseSections(poses).map((sec) => [sec.title, sec.items.map((i) => i.url)])).toEqual([['Front', ['u-f1', 'u-f2']], ['Glamour', ['u-g1']]]);
+    expect(poseSections(undefined)).toEqual([]);
+    expect(defaultPose(poses).url).toBe('u-f1'); // a starred Front beats an unstarred Glamour
+    expect(defaultPose([{ url: 'g', pose: 'glamour', isDefault: true }, { url: 'f', pose: 'front', isDefault: true }]).url).toBe('g');
+    expect(defaultPose([{ url: 'b', pose: 'back', isDefault: false }]).url).toBe('b');
+    expect(defaultPose([])).toBeNull();
+    const form = renderForm({ title: 'T' }, { jaw: new File(['j'], 'j.png', { type: 'image/png' }) });
+    expect(form.get('jaw').name).toBe('j.png');
   });
 
   test('the editor link opens on the episode when there is one', () => {
@@ -104,7 +120,7 @@ describe('YouTubeThumbnailStudio', () => {
     await waitFor(() => expect(youtubeThumbnailsApi.saved).toHaveBeenCalledTimes(1));
     youtubeThumbnailsApi.saved.mockResolvedValue([{ id: 7, url: 'https://b.s3.amazonaws.com/t.png', isPrimary: true }]);
     fireEvent.click(await screen.findByTestId('yts-save'));
-    await waitFor(() => expect(youtubeThumbnailsApi.save).toHaveBeenCalledWith('ep-1', expect.objectContaining({ title: 'Studio by Sable' }), { background: null, lala: null }));
+    await waitFor(() => expect(youtubeThumbnailsApi.save).toHaveBeenCalledWith('ep-1', expect.objectContaining({ title: 'Studio by Sable' }), { background: null, lala: null, jaw: null }));
     expect(await screen.findByText("Saved as the episode's thumbnail.")).toBeTruthy();
     expect(screen.queryByRole('link', { name: /thumbnail gallery/ })).toBeNull();
     expect(within(await screen.findByTestId('yts-saved-7')).getByText('Episode thumbnail')).toBeTruthy();
@@ -164,5 +180,47 @@ describe('YouTubeThumbnailStudio', () => {
     renderPage('/template-studio/youtube');
     expect(await screen.findByText('Choose a show and an episode to make its thumbnail.')).toBeTruthy();
     expect(youtubeThumbnailsApi.sources).not.toHaveBeenCalled();
+  });
+
+  test('the episode\'s poses: Lala starts on her starred pose, grouped by pose; JustAWoman joins when picked', async () => {
+    youtubeThumbnailsApi.sources.mockResolvedValue({
+      ...SOURCES,
+      poses: {
+        lala: [
+          { id: 'p1', url: 'https://b.s3.amazonaws.com/lala-front.png', pose: 'front', label: 'Front ★', isDefault: true },
+          { id: 'p2', url: 'https://b.s3.amazonaws.com/lala-side.png', pose: 'side', label: 'Side', isDefault: false },
+        ],
+        justawoman: [{ id: 'p3', url: 'https://b.s3.amazonaws.com/jaw-glam.png', pose: 'glamour', label: 'Glamour ★', isDefault: true }],
+      },
+    });
+    renderPage();
+    await waitFor(() => expect(youtubeThumbnailsApi.render).toHaveBeenCalled(), { timeout: 2000 });
+    expect(lastSpec()).toMatchObject({ lalaUrl: 'https://b.s3.amazonaws.com/lala-front.png', jawUrl: null });
+    expect(within(screen.getByTestId('yts-lala-front')).getByTitle('Front ★')).toBeTruthy();
+    expect(within(screen.getByTestId('yts-lala-side')).getByTitle('Side')).toBeTruthy();
+    expect(within(screen.getByTestId('yts-lala-asset-library')).getByTitle('Lala 1')).toBeTruthy();
+    expect(screen.queryByTestId('yts-poses-note')).toBeNull();
+    fireEvent.click(within(screen.getByTestId('yts-jaw-glamour')).getByTitle('Glamour ★'));
+    await waitFor(() => expect(lastSpec()).toMatchObject({ jawUrl: 'https://b.s3.amazonaws.com/jaw-glam.png' }), { timeout: 2000 });
+    fireEvent.click(within(screen.getByTestId('yts-jaw')).getByRole('button', { name: /No JustAWoman/ }));
+    await waitFor(() => expect(lastSpec()).toMatchObject({ jawUrl: null }), { timeout: 2000 });
+  });
+
+  test('Save style keeps the show\'s own Lala when the picked one is this episode\'s pose', async () => {
+    youtubeThumbnailsApi.sources.mockResolvedValue({
+      ...SOURCES,
+      poses: { lala: [{ id: 'p1', url: 'https://b.s3.amazonaws.com/lala-front.png', pose: 'front', label: 'Front ★', isDefault: true }], justawoman: [] },
+    });
+    youtubeThumbnailsApi.saveStyle.mockResolvedValue({});
+    renderPage();
+    fireEvent.click(await screen.findByTestId('yts-save-style'));
+    await waitFor(() => expect(youtubeThumbnailsApi.saveStyle).toHaveBeenCalledWith('show-1', expect.objectContaining({ lalaUrl: 'https://b.s3.amazonaws.com/lala2.png' })));
+  });
+
+  test('with no poses yet it points to the Files tab', async () => {
+    renderPage();
+    const note = await screen.findByTestId('yts-poses-note');
+    expect(within(note).getByRole('link', { name: 'Files tab' }).getAttribute('href')).toBe('/episodes/ep-1?tab=files');
+    expect(screen.getByTestId('yts-jaw')).toBeTruthy();
   });
 });

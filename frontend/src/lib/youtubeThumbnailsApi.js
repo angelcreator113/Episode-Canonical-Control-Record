@@ -32,7 +32,39 @@ export function renderForm(spec, files = {}) {
   form.append('spec', JSON.stringify(spec));
   if (files.background) form.append('background', files.background);
   if (files.lala) form.append('lala', files.lala);
+  if (files.jaw) form.append('jaw', files.jaw);
   return form;
+}
+
+const POSE_TITLES = { front: 'Front', back: 'Back', side: 'Side', glamour: 'Glamour' };
+
+/**
+ * A character's poses (sources.poses.lala / .justawoman) as picker
+ * sections, Front, Back, Side, Glamour, each with its photos (the default
+ * first, as the server sends them). Poses with no ready photo are left out.
+ */
+export function poseSections(poses) {
+  return Object.keys(POSE_TITLES)
+    .map((key) => ({ title: POSE_TITLES[key], items: (poses || []).filter((p) => p.pose === key) }))
+    .filter((s) => s.items.length);
+}
+
+/**
+ * The pose a thumbnail starts from: the starred one of the first pose
+ * that has one, in the order Glamour, Front, Side, Back; else the newest
+ * of those. null when the character has no ready pose.
+ */
+export function defaultPose(poses) {
+  const list = poses || [];
+  for (const key of ['glamour', 'front', 'side', 'back']) {
+    const starred = list.find((p) => p.pose === key && p.isDefault);
+    if (starred) return starred;
+  }
+  for (const key of ['glamour', 'front', 'side', 'back']) {
+    const any = list.find((p) => p.pose === key);
+    if (any) return any;
+  }
+  return null;
 }
 
 /** The thumbnail's words for an episode: its title, the show's name, "EP n". */
