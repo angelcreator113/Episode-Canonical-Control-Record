@@ -125,7 +125,7 @@
 
   .ed-tab.ed-tab-active {
     transform: none;
-    box-shadow: 0 2px 6px rgba(192, 110, 135, 0.15);
+    box-shadow: var(--studio-shadow);
   }
 
   .ed-tab-icon {
@@ -578,7 +578,7 @@
   width: 40px;
   height: 40px;
   border-radius: 12px;
-  border: 1.5px solid rgba(229,231,235,0.8);
+  border: 1.5px solid var(--studio-line);
   background: var(--surface-bg);
   color: var(--text-secondary);
   font-size: var(--text-3xl);
@@ -588,15 +588,15 @@
   align-items: center;
   justify-content: center;
   transition: all 0.25s ease;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+  box-shadow: none;
 }
 
 .ed-btn-more:hover{
   background: var(--lala-parchment-2);
-  border-color: rgba(47, 127, 118,0.3);
+  border-color: var(--studio-line-strong);
   color: var(--ed-primary);
   transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+  box-shadow: var(--studio-shadow);
 }
 
 .ed-btn-whats-next{
@@ -626,9 +626,9 @@
   top: calc(100% + 0.5rem);
   right: 0;
   background: var(--surface-card);
-  border: 1px solid rgba(229,231,235,0.8);
+  border: 1px solid var(--studio-line);
   border-radius: 14px;
-  box-shadow: 0 12px 32px rgba(0,0,0,0.15), 0 4px 8px rgba(0,0,0,0.08);
+  box-shadow: var(--studio-shadow);
   min-width: 220px;
   z-index: 9999;
   overflow: hidden;
@@ -823,7 +823,7 @@
   background: var(--primary-subtle);
   font-weight: 700;
   border-color: var(--primary);
-  box-shadow: 0 2px 6px rgba(192, 110, 135, 0.15);
+  box-shadow: var(--studio-shadow);
   transform: none;
 }
 
@@ -920,7 +920,7 @@
     background: var(--primary-subtle);
     color: var(--primary-text);
     font-weight: 700;
-    box-shadow: 0 2px 6px rgba(192, 110, 135, 0.2);
+    box-shadow: var(--studio-shadow);
     transform: none;
   }
 }
@@ -3389,8 +3389,20 @@
   display: inline-grid; place-items: center; width: 44px; height: 44px; padding: 0; border-radius: 10px;
   border: 1px solid var(--studio-line); background: var(--studio-card); color: var(--studio-ink);
 }
-.ed-page.ed-studio .ed-btn-more:hover { background: var(--studio-page-2); }
-.ed-page.ed-studio .ed-dropdown { right: 0; left: auto; }
+.ed-page.ed-studio .ed-btn-more:hover { background: var(--studio-page-2); border-color: var(--studio-line-strong); color: var(--studio-ink); transform: none; box-shadow: none; }
+.ed-page.ed-studio .ed-btn-more:focus-visible { outline: 2px solid var(--studio-magenta); outline-offset: 2px; }
+/* The ⋮ menu in the studio look, its items lucide icons and 44px tall
+   (Script page audit 4, 2026-10-19). */
+.ed-page.ed-studio .ed-dropdown {
+  right: 0; left: auto; border: 1px solid var(--studio-line); border-radius: var(--studio-radius);
+  background: var(--studio-card); box-shadow: var(--studio-shadow);
+}
+.ed-page.ed-studio .ed-dropdown-item { min-height: 44px; font-size: 14px; color: var(--studio-ink); }
+.ed-page.ed-studio .ed-dropdown-item svg { flex: none; color: var(--studio-purple); }
+.ed-page.ed-studio .ed-dropdown-item::before { background: var(--studio-magenta); }
+.ed-page.ed-studio .ed-dropdown-item:hover { background: var(--studio-page-2); }
+.ed-page.ed-studio .ed-dropdown-item:focus-visible { outline: 2px solid var(--studio-magenta); outline-offset: -2px; }
+.ed-page.ed-studio .ed-dropdown-danger, .ed-page.ed-studio .ed-dropdown-danger svg { color: var(--danger-text); }
 
 /* The header's one primary action: the mockup's gradient button. */
 .ed-page.ed-studio .eds-primary {
@@ -3413,7 +3425,10 @@
 
 /* S9 (b): while scrolling, the header is the title and navigation only. */
 .ed-page.ed-studio .ed-header-new.is-compact { padding-top: 6px; padding-bottom: 6px; }
-.ed-page.ed-studio .ed-header-new.is-compact .eds-crumbs,
+/* The Episodes crumb, the way back to the show, stays at every width;
+   Home, the separators and the title crumb fold away (Script page audit 4,
+   2026-10-19). */
+.ed-page.ed-studio .ed-header-new.is-compact .eds-crumbs li:not(.eds-crumb-episodes) { display: none; }
 .ed-page.ed-studio .ed-header-new.is-compact .eds-cover,
 .ed-page.ed-studio .ed-header-new.is-compact .eds-show-pill,
 .ed-page.ed-studio .ed-header-new.is-compact .eds-meta,

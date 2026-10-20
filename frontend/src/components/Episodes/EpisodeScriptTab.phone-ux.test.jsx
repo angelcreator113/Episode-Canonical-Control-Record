@@ -86,10 +86,11 @@ describe('Ready to film?', () => {
     expect(list.querySelectorAll('li').length).toBeGreaterThan(0);
   });
 
-  test('starts open on a desktop, and aria-controls names the list', () => {
+  // Folded at every width now, as Evoni's mockup has it (Script page audit 4, 2026-10-19).
+  test('starts folded on a desktop too, and aria-controls names the list', () => {
     renderTab();
     const toggle = screen.getByTestId('script-health-toggle');
-    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(document.getElementById(toggle.getAttribute('aria-controls'))).not.toBeNull();
   });
 });

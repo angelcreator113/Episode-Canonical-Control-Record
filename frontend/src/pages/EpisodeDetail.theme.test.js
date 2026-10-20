@@ -87,6 +87,14 @@ describe('Episode shell theme', () => {
     expect(redesign).toMatch(/\.ed-page\.ed-studio \.ed-tab:focus-visible,[^{]*\{\s*outline: 2px solid var\(--studio-magenta\);/);
   });
 
+  test("the header's ⋮ and its menu, and the chosen tab, draw only tokens (Script page audit 4, 2026-10-19)", () => {
+    for (const sel of ['.ed-btn-more', '.ed-btn-more:hover', '.ed-dropdown', '.ed-tab.ed-tab-active']) {
+      expect(rule(sel)).not.toMatch(/rgba?\(/);
+    }
+    expect(rule('.ed-page.ed-studio .ed-dropdown')).toMatch(/border: 1px solid var\(--studio-line\);[^}]*background: var\(--studio-card\); box-shadow: var\(--studio-shadow\);/);
+    expect(rule('.ed-page.ed-studio .ed-dropdown-item')).toMatch(/min-height: 44px;/);
+  });
+
   test('the evaluation verdicts read text tokens on their surfaces', () => {
     // Results → Evaluation moved to EpisodeResultsPages (the Results redesign, 2026-10-08).
     const results = readFileSync(resolve(__dirname, '../components/Episodes/EpisodeResultsPages.jsx'), 'utf8');
@@ -140,5 +148,15 @@ describe('Episode shell theme', () => {
     // reused as text: the old pink tab text and the old blue primary.
     expect(contrast('#ec4899', '#ffffff')).toBeLessThan(4.5);
     expect(contrast('#ffffff', '#3b82f6')).toBeLessThan(4.5);
+  });
+});
+
+// Script page audit 4 (2026-10-19): the compact header keeps the Episodes
+// crumb, the way back to the show, at every width.
+describe('the compact header keeps Episodes', () => {
+  test('the crumbs stay; only Home and the title crumb fold away', () => {
+    expect(css).not.toMatch(/\.is-compact \.eds-crumbs\s*[,{]/);
+    expect(css).toMatch(/\.is-compact \.eds-crumbs li:not\(\.eds-crumb-episodes\)\s*\{[^}]*display:\s*none/);
+    expect(jsx).toMatch(/className="eds-crumb-episodes"/);
   });
 });

@@ -3,7 +3,7 @@
 
 import { Fragment, useState, useEffect, useLayoutEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { Link } from 'react-router-dom';
-import { PenLine, ArrowUp, ArrowDown, Smartphone, Image as ImageIcon, X, Plus, Coins, Shirt, MapPin, Users, ListChecks, Check, Circle, AlertTriangle, Bell, MessageCircle, Send, Clock, Trash2, ChevronLeft, ChevronRight, AudioLines, ScrollText, Images, Sparkles, Camera, Home } from 'lucide-react';
+import { PenLine, GripVertical, ChevronDown, ArrowUp, ArrowDown, Smartphone, Image as ImageIcon, X, Plus, Coins, Shirt, MapPin, Users, ListChecks, Check, Circle, AlertTriangle, Bell, MessageCircle, Send, Clock, Trash2, ChevronLeft, ChevronRight, AudioLines, ScrollText, Images, Sparkles, Camera, Home } from 'lucide-react';
 import api from '../../services/api';
 import { episodePlanning } from '../../utils/episodePlanning';
 import { scriptInputs, mustCover, scriptPeople } from '../../lib/episodeScript';
@@ -11,7 +11,7 @@ import Beat14Opportunity from './Beat14Opportunity';
 import { beat14Outcome } from '../../lib/beat14Invitation';
 import { beatState } from '../../lib/beatState';
 import { moveBeat, moveLine, dropIndex, replaceBeat, appendLine, insertLine } from '../../lib/scriptBeatOrder';
-import { parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, phoneUpAtBeat, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers, phoneCheck, phoneStartScreens, messageLine, closetBeat, wearFlags, uncuedPieces, lastGettingReadyIndex, todoModeAt, deliveredAt, dealCueFlags, TODO_MODE_LABELS } from '../../lib/scriptMoments';
+import { wearOf, parseMoment, resolveMoment, momentLine, verbLabel, beatOnScreen, phoneUpAtBeat, deviceLabel, phoneIcons, PHONE_KEY, PHONE_NAME, PHONE_VERBS, OVERLAY_VERBS, DEVICE_VERBS, EXPECTED_ON_SCREEN, hasPhoneMoment, beatSpeakers, phoneCheck, phoneStartScreens, messageLine, closetBeat, wearFlags, uncuedPieces, lastGettingReadyIndex, todoModeAt, deliveredAt, dealCueFlags, TODO_MODE_LABELS } from '../../lib/scriptMoments';
 import { isScreen, isIcon, isProduction } from '../../lib/overlayUtils';
 import { draftLine, lalaLine, lalaLineSlots } from '../../lib/lalaLineDraft';
 import { headerNumber, BEAT_SPLIT, HAS_BEAT_HEADER, normalizeBeatHeaders } from '../../lib/beatLabelNumber';
@@ -194,6 +194,13 @@ function scriptWithBeatLines(scriptText, lockedBeats, beatId, edit) {
   return preamble ? `${preamble}\n\n${body}` : body;
 }
 
+// How far down the episode's compact sticky header reaches, 0 without one
+// (Script page audit 4, 2026-10-19).
+const stickyHeaderBottom = () => {
+  const h = document.querySelector('.ed-header-new.is-compact');
+  return h ? Math.max(0, h.getBoundingClientRect().bottom) : 0;
+};
+
 // A script with no `## BEAT:` header is shown as up to 14 beats by place;
 // moving, adding, regenerating and locking work on headed beats, so they
 // first give it headers, one per shown beat (Script tab audit, 2026-10-15:
@@ -297,7 +304,7 @@ export function rewrittenLine(original, words) {
   return next.trim() === String(original || '').trim() ? null : next;
 }
 
-function ScriptLine({ line, number = null, beatId, lineId = null, onOpenEdit = null, onFocusLater = null, beatNumber = null, lineIndex, onEdit, onDelete, onRewrite, rewriting, locked, prevLine = null, nextLine = null, onMoveLine, drag, onScreen, withOnScreen, phoneDown = false }) {
+function ScriptLine({ look = [], line, number = null, beatId, lineId = null, onOpenEdit = null, onFocusLater = null, beatNumber = null, lineIndex, onEdit, onDelete, onRewrite, rewriting, locked, prevLine = null, nextLine = null, onMoveLine, drag, onScreen, withOnScreen, phoneDown = false }) {
   const [editing, setEditing] = useState(false);
   const [dropAt, setDropAt] = useState(null);
   const [editText, setEditText] = useState('');
@@ -312,6 +319,11 @@ function ScriptLine({ line, number = null, beatId, lineId = null, onOpenEdit = n
   }, [changed, onOpenEdit, beatId, lineId, lineIndex]);
   const parsed = parseLine(lineStr);
   if (!parsed || parsed.hidden) return null;
+  // A [WEAR] cue names the piece Lala puts on, from the locked look, or its
+  // id when the look has no such piece (Script page audit 4, 2026-10-19:
+  // twenty cards all read "Puts on a piece of the look").
+  const wearId = parsed.type === 'cue' ? wearOf(lineStr) : null;
+  if (wearId) parsed.text = `Puts on ${(look || []).find((p) => String(p?.id) === String(wearId))?.name || wearId}`;
   const sc = { Prime: 'var(--primary-text)', Lala: 'var(--accent-dark)', Kelli: 'var(--info-text)', Guest: 'var(--success-text)' };
   // Focus goes back to the line's row once its editor closes, found by its
   // place, since a changed line is drawn anew (Script page audit, 2026-10-19).
@@ -788,6 +800,13 @@ function ProposalCard({ proposal, onAccept, onDiscard }) {
 // lines before to the lines now: by the change the page just made (`op`, a
 // splice or a move) when it describes the change exactly, else by the
 // longest run of lines kept in order. A line with no match gets a new id.
+// Whether a line's row can take focus by its place yet (Script page audit 4,
+// 2026-10-19): only once the edit asked on `asked` is committed and the beats
+// drawn are that script's. Before then the row at that place is the old line,
+// about to be replaced, and focus on it fell to the page with it.
+export function lineFocusReady({ asked, committed, drawn }) {
+  return committed !== asked && committed === drawn;
+}
 const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 export function nextLineIds(prev, prevIds, next, op, newId) {
   if (op?.kind === 'move') {
@@ -838,7 +857,7 @@ function useLineIds(beatId, lines, opRef) {
   return held.current.ids;
 }
 
-function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, proposal = null, onAcceptProposal, onDiscardProposal, onEdit, onDeleteLine, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, writing = false, onScreen, onAddMoment, phoneUpAtStart = false, request = null, onRequestDone, people = [], lalaSlots = [], dressCode = '', lineOpRef = null, lineIdsRef = null, onOpenEdit = null, onFocusLater = null, status = 'draft', healthRows = [], hasPhone = false, worn = [], storyTime = null, linesTools = null, onStep = null, prevBeatId = null, nextBeatId = null }) {
+function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, proposal = null, onAcceptProposal, onDiscardProposal, onEdit, onDeleteLine, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, writing = false, onScreen, onAddMoment, phoneUpAtStart = false, request = null, onRequestDone, people = [], lalaSlots = [], dressCode = '', lineOpRef = null, lineIdsRef = null, onOpenEdit = null, onFocusLater = null, status = 'draft', healthRows = [], hasPhone = false, worn = [], look = [], storyTime = null, linesTools = null, onStep = null, prevBeatId = null, nextBeatId = null }) {
   const scene = scenePlan?.find(p => p.beat_number === beat.number);
   const cardRef = useRef(null);
   const [picking, setPicking] = useState(false);
@@ -926,7 +945,9 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
   const used = phoneUpAtStart
     ? [{ name: PHONE_NAME, kind: 'device', url: onScreen.phoneFrame || null }, ...usedHere.filter((u) => u.kind !== 'device')] : usedHere;
   const [dropAt, setDropAt] = useState(null);
-  const visibleLines = beat.lines.filter(l => { const p = parseLine(l); return p && !p.hidden && p.type !== 'cue'; }).length;
+  // Every card the beat numbers, cues included, so "n lines" matches the
+  // numbers on them (Script page audit 4, 2026-10-19: 2 lines over 22 cards).
+  const visibleLines = shownLines.length;
   // A line is keyed by its own id, not its place (Script page audit,
   // 2026-10-19) nor its words (re-audit: identical lines swapped keys).
   const lineKeys = useLineIds(beat.id, beat.lines, lineOpRef);
@@ -959,6 +980,15 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
       onDrop={(e) => { const d = drag.current(); setDropAt(null); if (d?.kind !== 'beat') return; e.preventDefault(); onMoveBeat(d.from, dropIndex(d.from, index, drag.half(e) === 'after')); drag.end(); }}
     >
       <div className="esp-beat-top">
+        {/* Where the beat list is hidden (1100px and below) the beat is
+            dragged by its own head, onto a pill or another beat (Script page
+            audit 4, 2026-10-19); the CSS shows this handle only there. */}
+        {!beat.approved && (
+          <span className="esp-grip esp-head-grip" data-testid={`script-drag-head-${beat.number}`} draggable
+            title="Drag to move this beat onto a beat pill. It keeps its number and name."
+            onDragStart={(e) => { if (cardRef.current) e.dataTransfer?.setDragImage?.(cardRef.current, 24, 24); drag.start(e, { kind: 'beat', from: index }); }}
+            onDragEnd={() => drag.end()}><GripVertical size={16} aria-hidden="true" /></span>
+        )}
         <div
           className="esp-beat-head"
           role="button"
@@ -979,13 +1009,16 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
           </div>
           {picture && !expanded && <span className="esp-beat-thumb" aria-hidden="true"><img src={picture} alt="" loading="lazy" /></span>}
           <span className="esp-beat-count">{visibleLines} line{visibleLines === 1 ? '' : 's'}<span className="esp-beat-runtime" data-testid={`script-beat-runtime-${beat.number}`} title="Rough length: words at 150 a minute, a few seconds per action or moment">{formatRuntime(beatSeconds(beat.lines))}</span></span>
-          <span className="esp-beat-chev" aria-hidden="true">▼</span>
+          {/* Beside the beat list the open beat's head doesn't fold it, so the
+              chevron hides there (EpisodeScriptPage.css; Script page audit 4,
+              2026-10-19: folding it left every beat stacked beside the list). */}
+          <ChevronDown size={14} className="esp-beat-chev" aria-hidden="true" />
         </div>
         {/* The beat before and after, beside the head, not inside its role="button". */}
         {expanded && onStep && (
           <span className="esp-beat-steps">
-            <button type="button" className="esp-step" aria-label="Previous beat" data-testid="script-beat-prev" disabled={!prevBeatId} onClick={() => onStep(prevBeatId)}><ChevronLeft size={18} aria-hidden="true" /></button>
-            <button type="button" className="esp-step" aria-label="Next beat" data-testid="script-beat-next" disabled={!nextBeatId} onClick={() => onStep(nextBeatId)}><ChevronRight size={18} aria-hidden="true" /></button>
+            <button type="button" className="esp-step" aria-label="Previous beat" data-testid="script-beat-prev" disabled={!prevBeatId} onClick={() => onStep(prevBeatId, 'prev')}><ChevronLeft size={18} aria-hidden="true" /></button>
+            <button type="button" className="esp-step" aria-label="Next beat" data-testid="script-beat-next" disabled={!nextBeatId} onClick={() => onStep(nextBeatId, 'next')}><ChevronRight size={18} aria-hidden="true" /></button>
           </span>
         )}
       </div>
@@ -1064,7 +1097,7 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
               const at = shownLines.indexOf(i);
               return (
                 <Fragment key={lineKeys[i]}>
-                  <ScriptLine line={line} number={at >= 0 ? at + 1 : null} beatId={beat.id} lineId={lineKeys[i]} onOpenEdit={onOpenEdit} onFocusLater={onFocusLater} lineIndex={i} prevLine={at > 0 ? shownLines[at - 1] : null} nextLine={at >= 0 && at < shownLines.length - 1 ? shownLines[at + 1] : null} onEdit={onEdit} onDelete={onDeleteLine} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${lineKeys[i]}`} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} onScreen={onScreen} withOnScreen={withByLine[i]} phoneDown={phoneDownAt.includes(i)} beatNumber={beat.number} />
+                  <ScriptLine look={look} line={line} number={at >= 0 ? at + 1 : null} beatId={beat.id} lineId={lineKeys[i]} onOpenEdit={onOpenEdit} onFocusLater={onFocusLater} lineIndex={i} prevLine={at > 0 ? shownLines[at - 1] : null} nextLine={at >= 0 && at < shownLines.length - 1 ? shownLines[at + 1] : null} onEdit={onEdit} onDelete={onDeleteLine} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${lineKeys[i]}`} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} onScreen={onScreen} withOnScreen={withByLine[i]} phoneDown={phoneDownAt.includes(i)} beatNumber={beat.number} />
                   {slot && <LalaLineSlot piece={slot.piece} dressCode={dressCode} onInsert={(text) => onAddMoment(beat.id, text, i)} />}
                 </Fragment>
               );
@@ -1155,6 +1188,10 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // Unsaved edits kept in this browser, offered back when the tab opens.
   const draft = useScriptDraft({ episodeId, scriptText, savedScript });
   const [beats, setBeats] = useState([]);
+  // Which script is committed, parsed and drawn (focusLineLater; Script page audit 4, 2026-10-19).
+  const committedTextRef = useRef(null);
+  const parsedTextRef = useRef(null);
+  const drawnTextRef = useRef(null);
   // undefined: nothing chosen yet, so the first beat is open.
   const [expandedBeat, setExpandedBeat] = useState(undefined);
   const [scenePlan, setScenePlan] = useState([]);
@@ -1179,6 +1216,16 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // written against the script it replaced (re-audit 2, 2026-10-15).
   const genSeqRef = useRef(0);
   const [developerMode, setDeveloperMode] = useState(false);
+  // The Raw editor / Beat view toggle sits in the open beat or on the
+  // script's card, so each switch draws it anew: focus follows it (Script
+  // page audit 4, 2026-10-19: it fell to the page).
+  const rawToggleRef = useRef(null);
+  const rawRefocusRef = useRef(false);
+  useLayoutEffect(() => {
+    if (!rawRefocusRef.current) return;
+    rawRefocusRef.current = false;
+    rawToggleRef.current?.focus({ preventScroll: true });
+  }, [developerMode]);
   const [toast, setToast] = useState(null);
   const [generating, setGenerating] = useState(false);
   // While a new script is being written (or awaited), the page's script is
@@ -1364,14 +1411,31 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // scrolls to it only when its card is off screen, never otherwise.
   const chosenRef = useRef(null);
   const chooseBeat = (id) => { chosenRef.current = id; setExpandedBeat(id); };
+  // The previous / next arrows keep focus: on the new beat's same arrow, or
+  // its head where that arrow is off at the end (Script page audit 4,
+  // 2026-10-19: the arrow pressed went away with the beat it was on).
+  const stepRef = useRef(null);
+  const stepBeat = (id, which) => { stepRef.current = { id, which }; chooseBeat(id); };
+  useLayoutEffect(() => {
+    const step = stepRef.current;
+    if (!step) return;
+    stepRef.current = null;
+    const card = document.querySelector(`[data-beat-id="${step.id}"]`);
+    const arrow = card?.querySelector(`[data-testid="script-beat-${step.which}"]`);
+    (arrow && !arrow.disabled ? arrow : card?.querySelector('.esp-beat-head'))?.focus({ preventScroll: true });
+  });
   useLayoutEffect(() => {
     const id = chosenRef.current;
     if (!id) return;
     chosenRef.current = null;
     const card = document.querySelector(`[data-beat-id="${id}"]`);
     if (!card) return;
+    // The episode's compact header stays over the page's top while
+    // scrolling: a head under it is as hidden as one above the screen, and
+    // the card's scroll-margin-top puts it clear below (Script page audit 4,
+    // 2026-10-19: beat 12 opened with its name under the header).
     const top = card.getBoundingClientRect().top;
-    if (top < 0 || top > window.innerHeight - 80) card.scrollIntoView?.({ block: 'start' });
+    if (top < stickyHeaderBottom() || top > window.innerHeight - 80) card.scrollIntoView?.({ block: 'start' });
   });
   useLayoutEffect(() => {
     const pin = pinRef.current;
@@ -1392,7 +1456,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     const script = episode?.script_content || '';
     const locks = Array.isArray(episode?.script_locked_beats) ? episode.script_locked_beats : [];
     setScriptText(script); setSavedScript(script); setLockedBeats(locks);
-    if (script) setBeats(parseScriptIntoBeats(script, locks));
+    if (script) { parsedTextRef.current = script; setBeats(parseScriptIntoBeats(script, locks)); }
     // The episode the page holds can be older than the saved script: a new
     // script still being written when the tab closed is saved after (Script
     // tab re-audit, 2026-10-15). The tab reads the saved one, and takes it
@@ -1443,7 +1507,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     setScriptText(propScript); setSavedScript(propScript); setLockedBeats(nowLocks);
   }, [propScript, propLocks]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { setBeats(scriptText ? parseScriptIntoBeats(scriptText, lockedBeats) : []); }, [scriptText, lockedBeats]);
+  useEffect(() => { parsedTextRef.current = scriptText; setBeats(scriptText ? parseScriptIntoBeats(scriptText, lockedBeats) : []); }, [scriptText, lockedBeats]);
 
   // One drag at a time: a beat (by position) or a line inside one beat.
   const dragRef = useRef(null);
@@ -1469,6 +1533,11 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     if (expandedBeat === undefined) setExpandedBeat(beats[0]?.id ?? null);
     setScriptText(next);
   };
+  // The pills are drop targets for a beat dragged by its head where the beat
+  // list is hidden (Script page audit 4, 2026-10-19): a pill's left half is
+  // before it, its right half after.
+  const [pillDrop, setPillDrop] = useState(null);
+  const pillHalf = (e) => { const r = e.currentTarget.getBoundingClientRect(); return Number.isFinite(e.clientX) && r.width > 0 && e.clientX > r.left + r.width / 2 ? 'after' : 'before'; };
   const handleMoveLine = (beatId, from, to) => {
     const at = beats.findIndex(b => b.id === beatId);
     if (busy) { flash('Wait for the new script before editing it.', 'error'); return false; }
@@ -1553,18 +1622,33 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // A line's row to focus once the script it changed is parsed into beats
   // and drawn (ScriptLine closeEditor; Script page audit 3, 2026-10-19).
   const focusLineRef = useRef(null);
+  // The script committed, the script the beats were parsed from, and the one
+  // the drawn beats show: the beats are parsed in an effect, so the edit is
+  // drawn a commit after the editor closes, and a long render of the whole
+  // tab yields to frames in between (Script page audit 4, 2026-10-19: a
+  // frame-timed fallback focused the old row there, which then went away).
+  useLayoutEffect(() => { committedTextRef.current = scriptText; }, [scriptText]);
   // A request no new beats answered (nothing changed after all) is answered
-  // two frames on, never by a later, unrelated change.
+  // once the frames show nothing is still to be drawn (lineFocusReady), or
+  // about a second on; never by a later, unrelated change.
   const focusLineLater = useCallback((beatId, at) => {
-    const f = { beatId, at };
+    const f = { beatId, at, asked: committedTextRef.current, frames: 0 };
     focusLineRef.current = f;
-    requestAnimationFrame(() => requestAnimationFrame(() => {
+    const tick = () => {
       if (focusLineRef.current !== f) return;
+      f.frames += 1;
+      if (!lineFocusReady({ asked: f.asked, committed: committedTextRef.current, drawn: drawnTextRef.current }) && f.frames < 60) {
+        requestAnimationFrame(tick);
+        return;
+      }
       focusLineRef.current = null;
       document.querySelector(`[data-beat-id="${beatId}"] [data-line-index="${at}"]`)?.focus();
-    }));
+    };
+    requestAnimationFrame(tick);
   }, []);
+  // The beats drawn: their rows carry the edited line's settled id now.
   useLayoutEffect(() => {
+    drawnTextRef.current = parsedTextRef.current;
     const f = focusLineRef.current;
     if (!f) return;
     focusLineRef.current = null;
@@ -2074,7 +2158,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // Table read, Export and the raw editor sit on the open beat's Script
   // Lines card; with no beat open, or in the raw editor, on the script's card.
   const readActions = <ScriptReadActions scriptText={scriptText} title={episode?.title || (episode?.episode_number ? `Episode ${episode.episode_number}` : 'Script')} dirty={scriptText !== savedScript} onScreen={onScreenWithDrafts} scenePlan={scenePlan} startBeat={Math.max(0, beats.indexOf(openBeat))} />;
-  const rawToggle = <button type="button" className={`esp-btn${developerMode ? ' is-on' : ''}`} onClick={() => setDeveloperMode(d => !d)}>{developerMode ? 'Beat view' : 'Raw editor'}</button>;
+  const rawToggle = <button type="button" ref={rawToggleRef} className={`esp-btn${developerMode ? ' is-on' : ''}`} onClick={() => { rawRefocusRef.current = true; setDeveloperMode(d => !d); }}>{developerMode ? 'Beat view' : 'Raw editor'}</button>;
   const toolsInBeat = showBeatList && !!openBeat;
   return (
     <div className={`esp${showBeatList ? ' has-beatlist' : ''}${contextOpen ? ' is-context-open' : ''}`}>
@@ -2190,8 +2274,11 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
           <ul className="esp-pills" aria-label="Beats" data-testid="script-pills">
             {beats.map((b) => (
               <li key={b.id}>
-                <button type="button" className={`esp-pill${b.id === openId ? ' is-open' : ''}`} aria-current={b.id === openId ? 'true' : undefined}
-                  data-testid={`script-pill-${b.number}`} onClick={() => chooseBeat(b.id)}>
+                <button type="button" className={`esp-pill${b.id === openId ? ' is-open' : ''}${pillDrop?.id === b.id ? ` esp-pill-drop-${pillDrop.half}` : ''}`} aria-current={b.id === openId ? 'true' : undefined}
+                  data-testid={`script-pill-${b.number}`} onClick={() => chooseBeat(b.id)}
+                  onDragOver={(e) => { if (drag.current()?.kind !== 'beat') return; e.preventDefault(); setPillDrop({ id: b.id, half: pillHalf(e) }); }}
+                  onDragLeave={() => setPillDrop(null)}
+                  onDrop={(e) => { const d = drag.current(); setPillDrop(null); if (d?.kind !== 'beat') return; e.preventDefault(); handleMoveBeat(d.from, dropIndex(d.from, beats.indexOf(b), pillHalf(e) === 'after')); drag.end(); }}>
                   {b.number} · {b.name}
                   {phoneBeats.has(b.id) && <Smartphone size={13} aria-label="Has a phone moment" />}
                 </button>
@@ -2214,14 +2301,23 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
 
       {!developerMode && (hasScript ? (
         <div className={`esp-beats${busy ? ' is-busy' : ''}${openBeat ? ' has-open' : ''}`} aria-busy={busy || undefined} data-testid="script-beats">
-          {beats.length > 1 && <p className="esp-order-hint">Drag a beat by its handle in the beat list, or a line within its beat, to change the order. A beat keeps its number and name wherever it goes. Approved beats stay where they are.</p>}
+          {/* Says how at each width (Script page audit 4, 2026-10-19): the
+              beat list's handles, or the beat's own handle onto a pill where
+              the list is hidden, and Up and Down where nothing drags. */}
+          {beats.length > 1 && (
+            <p className="esp-order-hint" data-testid="script-order-hint">
+              <span className="esp-order-hint-list" data-testid="script-order-hint-list">Drag a beat by its handle in the beat list, or a line within its beat, to change the order. </span>
+              <span className="esp-order-hint-pills" data-testid="script-order-hint-pills">Drag the beat by the handle on its head onto a beat pill, or a line within its beat, to change the order. </span>
+              On a touch screen, use Up and Down at the foot of the open beat. A beat keeps its number and name wherever it goes. Approved beats stay where they are.
+            </p>
+          )}
           {beats.map((beat, index) => {
             const open = openId === beat.id;
             const phoneUp = phoneUpAtStart[index] || false;
-            return <BeatSection key={beat.id} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open && !isPhoneWidth() ? null : beat.id)} onApprove={handleApprove} proposal={proposal?.beatId === beat.id ? proposal : null} onAcceptProposal={acceptProposal} onDiscardProposal={() => setProposal(null)} onEdit={handleEditLine} onDeleteLine={handleDeleteLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking || busy} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} writing={!!regeneratingBeat || busy} onRequestDone={clearBarRequest} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} lineOpRef={lineOpRef} lineIdsRef={lineIdsRef} onOpenEdit={trackOpenEdit} onFocusLater={focusLineLater} phoneUpAtStart={phoneUp} people={people} lalaSlots={lineSlots.filter((s) => s.beatIndex === index)} dressCode={source?.event?.dress_code || ''}
-              status={statuses[beat.id]} healthRows={open ? healthRows : []} hasPhone={phoneBeats.has(beat.id)} worn={open ? wornInOpen : []}
+            return <BeatSection key={beat.id} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open && !isPhoneWidth() && !showBeatList ? null : beat.id)} onApprove={handleApprove} proposal={proposal?.beatId === beat.id ? proposal : null} onAcceptProposal={acceptProposal} onDiscardProposal={() => setProposal(null)} onEdit={handleEditLine} onDeleteLine={handleDeleteLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking || busy} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} writing={!!regeneratingBeat || busy} onRequestDone={clearBarRequest} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} lineOpRef={lineOpRef} lineIdsRef={lineIdsRef} onOpenEdit={trackOpenEdit} onFocusLater={focusLineLater} phoneUpAtStart={phoneUp} people={people} lalaSlots={lineSlots.filter((s) => s.beatIndex === index)} dressCode={source?.event?.dress_code || ''}
+              status={statuses[beat.id]} healthRows={open ? healthRows : []} hasPhone={phoneBeats.has(beat.id)} worn={open ? wornInOpen : []} look={outfit || []}
               storyTime={open && truth?.eventTimed ? truth.storyTime : null} linesTools={open && toolsInBeat ? <>{readActions}{rawToggle}</> : null}
-              onStep={chooseBeat} prevBeatId={index > 0 ? beats[index - 1].id : null} nextBeatId={index < beats.length - 1 ? beats[index + 1].id : null} />;
+              onStep={stepBeat} prevBeatId={index > 0 ? beats[index - 1].id : null} nextBeatId={index < beats.length - 1 ? beats[index + 1].id : null} />;
           })}
           {/* Franchise Guard Results */}
           {guardResult && (

@@ -63,11 +63,13 @@ describe('Script tab keeps the tapped beat in place', () => {
     expect(scroller.scrollTop).toBe(100); // the 300px collapse above, scrolled back
   });
 
-  test('closing the open beat itself does not scroll', () => {
+  // Beside the beat list the open beat's head no longer folds it (Script
+  // page audit 4, 2026-10-19); it stays open and nothing scrolls.
+  test("the open beat's own head neither folds it nor scrolls", () => {
     renderTab();
     scroller.scrollTop = 100;
     fireEvent.click(head(1));
-    expect(screen.getByTestId('script-beat-1').className).not.toContain('is-open');
+    expect(screen.getByTestId('script-beat-1').className).toContain('is-open');
     expect(scroller.scrollTop).toBe(100);
   });
 });

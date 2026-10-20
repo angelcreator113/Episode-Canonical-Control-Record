@@ -67,7 +67,13 @@
 }
 @media (max-width: 760px) {
   .eph-steps { display: flex; overflow-x: auto; padding: 8px; }
-  .eph-step { flex: 0 0 96px; }
+  /* Three and a bit across, so the strip shows it scrolls (Script page audit 4, 2026-10-19). */
+  .eph-step { flex: 0 0 84px; }
   .eph-episode { grid-template-columns: minmax(0, 96px) minmax(0, 1fr); }
   .eph-sections { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* 44px on a touch screen of any width (Script page audit 4, 2026-10-19). */
+@media (pointer: coarse) {
+  .eph-btn, .eph-ready, .eph-link { min-height: 44px; }
 }
