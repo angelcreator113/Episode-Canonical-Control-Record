@@ -70,6 +70,8 @@
 .yts-layout.is-center .yts-layout-art b { left: 18%; width: 64%; }
 
 .yts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px; }
+.yts-section { display: flex; flex-direction: column; gap: 4px; }
+.yts-section-title { font-size: 12px; font-weight: 700; color: var(--text-secondary); }
 .yts-pick { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; aspect-ratio: 16 / 10; padding: 0; overflow: hidden; border-radius: 10px; border: 2px solid var(--lala-parchment-3); background: var(--lala-parchment-2); color: var(--text-secondary); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
 .yts-pick img { width: 100%; height: 100%; object-fit: cover; }
 /* Cut-outs show whole (a crop would cut Lala off). */

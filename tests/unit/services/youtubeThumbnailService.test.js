@@ -95,6 +95,43 @@ describe('render', () => {
     expect(px(1130, 650)[1]).toBeLessThan(200);
   });
 
+  test('with JustAWoman too, both stand on the figure side: her toward the edge, Lala in front; the text side stays clear', async () => {
+    const solid = (r, g, b, w, h) => sharp({ create: { width: w, height: h, channels: 4, background: { r, g, b, alpha: 1 } } }).png().toBuffer();
+    const lala = await solid(0, 255, 0, 300, 600);
+    const jaw = await solid(0, 0, 255, 300, 600);
+    for (const [layout, mirror] of [['lala-left', (x) => x], ['lala-right', (x) => 1279 - x]]) {
+      const png = await yt.render(yt.readSpec({ layout, title: 'x', dim: 0, jawUrl: null }), { lala, jaw });
+      const { data, info } = await sharp(png).raw().toBuffer({ resolveWithObject: true });
+      const px = (x, y) => { const i = (y * info.width + mirror(x)) * info.channels; return [data[i], data[i + 1], data[i + 2]]; };
+      expect(px(60, 650)[2]).toBeGreaterThan(200); // JustAWoman at the edge
+      expect(px(390, 650)[1]).toBeGreaterThan(200); // Lala in front, in her column
+      expect(px(800, 650)[1]).toBeLessThan(200); // nobody on the text side
+      expect(px(800, 650)[2]).toBeLessThan(200);
+    }
+  });
+
+  test('JustAWoman alone stands where Lala would; in Title only nobody stands', async () => {
+    const jaw = await sharp({ create: { width: 300, height: 600, channels: 4, background: { r: 0, g: 0, b: 255, alpha: 1 } } }).png().toBuffer();
+    const left = await sharp(await yt.render(yt.readSpec({ layout: 'lala-left', title: 'x', dim: 0 }), { jaw })).raw().toBuffer({ resolveWithObject: true });
+    const at = ({ data, info }, x, y) => data[(y * info.width + x) * info.channels + 2];
+    expect(at(left, 150, 650)).toBeGreaterThan(200);
+    const center = await sharp(await yt.render(yt.readSpec({ layout: 'center', title: 'x', dim: 0 }), { jaw })).raw().toBuffer({ resolveWithObject: true });
+    expect(at(center, 150, 650)).toBeLessThan(200);
+  });
+
+  test('duoPositions keeps both inside the frame, mirrored on the right', () => {
+    const left = yt.duoPositions('left', { width: 360, height: 690 }, { width: 340, height: 640 });
+    expect(left).toEqual({ lala: { left: 210, top: 30 }, jaw: { left: 20, top: 80 } });
+    const right = yt.duoPositions('right', { width: 360, height: 690 }, { width: 340, height: 640 });
+    expect(right).toEqual({ lala: { left: 1280 - 210 - 360, top: 30 }, jaw: { left: 1280 - 20 - 340, top: 80 } });
+  });
+
+  test('readSpec keeps jawUrl, and the show style never does', () => {
+    expect(yt.readSpec({ title: 'x', jawUrl: 'https://b.s3.amazonaws.com/j.png' }).jawUrl).toBe('https://b.s3.amazonaws.com/j.png');
+    expect(yt.readSpec({ title: 'x' }).jawUrl).toBeNull();
+    expect(yt.readStyle({ jawUrl: 'https://b.s3.amazonaws.com/j.png' })).not.toHaveProperty('jawUrl');
+  });
+
   test('an unreadable picture is a 400', async () => {
     await expect(yt.render(yt.readSpec({ title: 'x' }), { background: Buffer.from('nope') })).rejects.toMatchObject({ status: 400 });
   });
@@ -113,8 +150,19 @@ describe('database work', () => {
       [[{ id: 'show-1', name: 'Styling Adventures', cover_image_url: 'https://b.s3.amazonaws.com/cover.jpg', metadata: { youtube_thumbnail: { layout: 'center' } } }]],
       [[{ url: 'https://b.s3.amazonaws.com/wide.jpg', angle: 'Wide', set_name: 'Bedroom' }, { url: 'https://elsewhere.com/x.jpg', angle: 'X' }]],
       [[{ id: 'a1', name: 'Lala cut-out', url: 'https://b.s3.amazonaws.com/lala.png' }]],
+      [[{ reg: 'episode_character_poses' }]],
+      [[
+        { id: 'p1', character_key: 'lala', pose: 'front', is_default: true, url: 'https://b.s3.amazonaws.com/p1.png' },
+        { id: 'p2', character_key: 'justawoman', pose: 'glamour', is_default: false, url: 'https://b.s3.amazonaws.com/p2.png' },
+        { id: 'p3', character_key: 'lala', pose: 'side', is_default: false, url: 'https://elsewhere.com/p3.png' },
+      ]],
     );
     const out = await yt.sources(s, 'ep-1');
+    expect(out.poses).toEqual({
+      lala: [{ id: 'p1', url: 'https://b.s3.amazonaws.com/p1.png', pose: 'front', label: 'Front ★', isDefault: true }],
+      justawoman: [{ id: 'p2', url: 'https://b.s3.amazonaws.com/p2.png', pose: 'glamour', label: 'Glamour', isDefault: false }],
+    });
+    expect(s.query.mock.calls[5][0]).toMatch(/status = 'ready' AND final_url IS NOT NULL/);
     expect(out.episode).toEqual({ id: 'ep-1', title: 'Studio by Sable', episode_number: 1 });
     expect(out.show).toEqual({ id: 'show-1', name: 'Styling Adventures' });
     expect(out.style.layout).toBe('center');
@@ -124,6 +172,12 @@ describe('database work', () => {
     ]);
     expect(out.cutouts).toEqual([{ id: 'a1', url: 'https://b.s3.amazonaws.com/lala.png', label: 'Lala cut-out' }]);
     expect(s.query.mock.calls[3][0]).not.toMatch(/s3_url_no_bg/);
+  });
+
+  test('readyPoses: empty lists until the poses table exists, with no query of it', async () => {
+    const s = seq([[{ reg: null }]]);
+    await expect(yt.readyPoses(s, 'ep-1')).resolves.toEqual({ lala: [], justawoman: [] });
+    expect(s.query).toHaveBeenCalledTimes(1);
   });
 
   test('sources: an unknown episode is a 404', async () => {

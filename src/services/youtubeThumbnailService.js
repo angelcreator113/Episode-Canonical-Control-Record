@@ -73,6 +73,8 @@ function readSpec(body = {}) {
     kicker: clean(b.kicker, 48),
     badge: clean(b.badge, 12),
     backgroundUrl: typeof b.backgroundUrl === 'string' && b.backgroundUrl ? b.backgroundUrl : null,
+    // JustAWoman, beside Lala (an episode's pose; not part of the show's style).
+    jawUrl: typeof b.jawUrl === 'string' && b.jawUrl ? b.jawUrl : null,
   };
 }
 
@@ -108,6 +110,23 @@ async function fetchImage(url) {
 }
 
 // ── Layout and text ─────────────────────────────────────────────────────────
+
+/**
+ * Where the figures stand when JustAWoman is beside Lala: both in Lala's
+ * column, JustAWoman toward the edge and a little smaller, Lala in front.
+ * Returns { lala, jaw } as { left, top } for figures of these sizes.
+ */
+function duoPositions(side, lalaSize, jawSize) {
+  const edge = 20;
+  const lalaCenter = 390; // from the figure side's edge
+  const jaw = { left: edge, top: HEIGHT - jawSize.height };
+  const lala = { left: Math.max(edge, lalaCenter - Math.round(lalaSize.width / 2)), top: HEIGHT - lalaSize.height };
+  if (side === 'right') {
+    jaw.left = WIDTH - edge - jawSize.width;
+    lala.left = Math.min(WIDTH - edge - lalaSize.width, WIDTH - lalaCenter - Math.round(lalaSize.width / 2));
+  }
+  return { lala, jaw };
+}
 
 /** Where the text goes and where Lala stands, per layout. */
 function layoutBoxes(layout) {
@@ -207,8 +226,9 @@ const plainBackground = (accent) => Buffer.from(
 );
 
 /**
- * Renders the thumbnail: PNG, 1280×720. images: { background, lala }
- * as Buffers (either may be null).
+ * Renders the thumbnail: PNG, 1280×720. images: { background, lala, jaw }
+ * as Buffers (any may be null). With Lala and JustAWoman both, they stand
+ * together on the figure side (duoPositions); with one, she stands alone.
  */
 async function render(spec, images = {}) {
   let base;
@@ -222,16 +242,27 @@ async function render(spec, images = {}) {
   }
   const layers = [{ input: Buffer.from(shadeSvg(spec)), top: 0, left: 0 }];
   const box = layoutBoxes(spec.layout).lala;
-  if (box && images.lala) {
+  const figure = async (buffer, who, size) => {
     try {
-      const lala = await sharp(images.lala).rotate().resize({ width: box.maxWidth, height: HEIGHT - 30, fit: 'inside' }).png().toBuffer();
-      const meta = await sharp(lala).metadata();
-      const left = box.side === 'left' ? 30 : WIDTH - meta.width - 30;
-      layers.push({ input: lala, top: HEIGHT - meta.height, left: Math.max(0, left) });
+      const png = await sharp(buffer).rotate().resize({ ...size, fit: 'inside' }).png().toBuffer();
+      const meta = await sharp(png).metadata();
+      return { png, width: meta.width, height: meta.height };
     } catch (err) {
-      console.error('[YouTubeThumbnail] Lala image unreadable:', err.message);
-      throw new ThumbnailError(400, 'The Lala image is not an image we can read');
+      console.error(`[YouTubeThumbnail] ${who} image unreadable:`, err.message);
+      throw new ThumbnailError(400, `The ${who} image is not an image we can read`);
     }
+  };
+  if (box && images.lala && images.jaw) {
+    const jaw = await figure(images.jaw, 'JustAWoman', { width: 340, height: HEIGHT - 80 });
+    const lala = await figure(images.lala, 'Lala', { width: 360, height: HEIGHT - 30 });
+    const at = duoPositions(box.side, lala, jaw);
+    layers.push({ input: jaw.png, top: at.jaw.top, left: at.jaw.left });
+    layers.push({ input: lala.png, top: at.lala.top, left: at.lala.left });
+  } else if (box && (images.lala || images.jaw)) {
+    const who = images.lala ? 'Lala' : 'JustAWoman';
+    const one = await figure(images.lala || images.jaw, who, { width: box.maxWidth, height: HEIGHT - 30 });
+    const left = box.side === 'left' ? 30 : WIDTH - one.width - 30;
+    layers.push({ input: one.png, top: HEIGHT - one.height, left: Math.max(0, left) });
   }
   layers.push({ input: Buffer.from(textSvg(spec)), top: 0, left: 0 });
   return sharp(base).composite(layers).png({ compressionLevel: 9 }).toBuffer();
@@ -270,6 +301,7 @@ async function sources(sequelize, episodeId) {
         LIMIT 40`,
       { replacements: { showId: episode.show_id } })
     : [[]];
+  const poses = await readyPoses(sequelize, episode.id);
   const backgrounds = [
     ...(angles || []).map((a) => ({ url: a.url, label: [a.set_name, a.angle].filter(Boolean).join(' · ') })),
     ...(show?.cover_image_url ? [{ url: show.cover_image_url, label: 'Show cover' }] : []),
@@ -280,7 +312,36 @@ async function sources(sequelize, episodeId) {
     style: readStyle(show?.metadata?.youtube_thumbnail),
     backgrounds,
     cutouts: (cutouts || []).filter((c) => allowedImageUrl(c.url)).map((c) => ({ id: c.id, url: c.url, label: c.name })),
+    poses,
   };
+}
+
+const POSE_ORDER = ['front', 'back', 'side', 'glamour'];
+const POSE_LABEL = { front: 'Front', back: 'Back', side: 'Side', glamour: 'Glamour' };
+
+/**
+ * The episode's ready cut-outs from Files › Character poses
+ * (episode_character_poses), as { lala: [...], justawoman: [...] }: each
+ * { id, url, pose, label, isDefault }, by pose (Front, Back, Side, Glamour),
+ * the default first. Empty lists when the table is not there yet (its
+ * migration, 20261020150000, runs only through the Deploy workflow).
+ */
+async function readyPoses(sequelize, episodeId) {
+  const out = { lala: [], justawoman: [] };
+  const [[reg]] = await sequelize.query("SELECT to_regclass('public.episode_character_poses') AS reg");
+  if (!reg || !reg.reg) return out;
+  const [rows] = await sequelize.query(
+    `SELECT id, character_key, pose, is_default, final_url AS url
+       FROM episode_character_poses
+      WHERE episode_id = :episodeId AND deleted_at IS NULL AND status = 'ready' AND final_url IS NOT NULL
+      ORDER BY array_position(ARRAY['front', 'back', 'side', 'glamour']::varchar[], pose::varchar), is_default DESC, created_at DESC
+      LIMIT 80`,
+    { replacements: { episodeId } });
+  for (const r of rows || []) {
+    if (!out[r.character_key] || !POSE_ORDER.includes(r.pose) || !allowedImageUrl(r.url)) continue;
+    out[r.character_key].push({ id: r.id, url: r.url, pose: r.pose, label: `${POSE_LABEL[r.pose]}${r.is_default ? ' ★' : ''}`, isDefault: Boolean(r.is_default) });
+  }
+  return out;
 }
 
 /** Saves the show's style (merged into shows.metadata.youtube_thumbnail). */
@@ -400,6 +461,6 @@ async function removeSaved(sequelize, episodeId, thumbnailId) {
 
 module.exports = {
   WIDTH, HEIGHT, LAYOUTS, DEFAULT_STYLE, ThumbnailError,
-  readStyle, readSpec, allowedImageUrl, fetchImage, layoutBoxes, titleSize, wrapTitle, fitTitle, kickerSize, textSvg, shadeSvg,
+  readStyle, readSpec, allowedImageUrl, fetchImage, layoutBoxes, duoPositions, readyPoses, titleSize, wrapTitle, fitTitle, kickerSize, textSvg, shadeSvg,
   render, sources, saveStyle, saveAsPrimary, listSaved, makePrimary, removeSaved,
 };

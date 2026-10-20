@@ -3,7 +3,9 @@
  * 1280x720 YouTube thumbnail from its show's style. Pick the show and the
  * episode; the title, the show's name and "EP n" fill in. Choose the layout,
  * the background (the episode's scene angles, the show cover, or an upload),
- * the Lala cut-out (the show's background-removed images, or an upload),
+ * Lala and JustAWoman (this episode's poses from Files › Character poses,
+ * grouped Front, Back, Side, Glamour, with Lala's starred pose picked
+ * first; Lala also from the Asset Library; either from an upload),
  * the colours and how dark the background is. The preview is rendered by
  * the server, so it is the file that is saved. Save makes it the episode's
  * primary thumbnail (Production's Thumbnail step); Save style keeps the
@@ -20,32 +22,60 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Youtube, Upload, Download, Save, Palette, ImageOff, Check, LayoutTemplate, Sparkles, Star, Trash2, History } from 'lucide-react';
-import { youtubeThumbnailsApi, LAYOUTS, ACCENTS, TEXT_COLORS, episodeWords } from '../lib/youtubeThumbnailsApi';
+import { youtubeThumbnailsApi, LAYOUTS, ACCENTS, TEXT_COLORS, episodeWords, poseSections, defaultPose } from '../lib/youtubeThumbnailsApi';
 import './YouTubeThumbnailStudio.css';
 
 const PREVIEW_DELAY_MS = 500;
 
-function Picker({ title, items, value, onPick, upload, onUpload, onNone, noneLabel, testid, whole = false }) {
+function PickButton({ it, value, upload, onPick }) {
+  return (
+    <button type="button" className={`yts-pick${value === it.url && !upload ? ' is-on' : ''}`} aria-pressed={value === it.url && !upload}
+      onClick={() => onPick(it.url)} title={it.label}>
+      <img src={it.url} alt={it.label || ''} loading="lazy" />
+    </button>
+  );
+}
+
+/**
+ * A picture picker: None, the pictures, Upload. With sections (the
+ * character poses: Front, Back, Side, Glamour), each group of pictures
+ * gets its own heading under the None and Upload row.
+ */
+function Picker({ title, items, sections, value, onPick, upload, onUpload, onNone, noneLabel, testid, whole = false }) {
   const inputRef = useRef(null);
+  const grid = `yts-grid${whole ? ' is-whole' : ''}`;
+  const none = (
+    <button type="button" className={`yts-pick is-none${!value && !upload ? ' is-on' : ''}`} aria-pressed={!value && !upload} onClick={onNone}>
+      <ImageOff size={18} aria-hidden /><span>{noneLabel}</span>
+    </button>
+  );
+  const add = (
+    <button type="button" className={`yts-pick is-upload${upload ? ' is-on' : ''}`} aria-pressed={Boolean(upload)} onClick={() => inputRef.current?.click()}>
+      <Upload size={18} aria-hidden /><span>{upload ? upload.name : 'Upload'}</span>
+    </button>
+  );
   return (
     <fieldset className="yts-field" data-testid={testid}>
       <legend className="yts-label">{title}</legend>
-      <div className={`yts-grid${whole ? ' is-whole' : ''}`}>
-        <button type="button" className={`yts-pick is-none${!value && !upload ? ' is-on' : ''}`} aria-pressed={!value && !upload} onClick={onNone}>
-          <ImageOff size={18} aria-hidden /><span>{noneLabel}</span>
-        </button>
-        {items.map((it) => (
-          <button key={it.url} type="button" className={`yts-pick${value === it.url && !upload ? ' is-on' : ''}`} aria-pressed={value === it.url && !upload}
-            onClick={() => onPick(it.url)} title={it.label}>
-            <img src={it.url} alt={it.label || ''} loading="lazy" />
-          </button>
-        ))}
-        <button type="button" className={`yts-pick is-upload${upload ? ' is-on' : ''}`} aria-pressed={Boolean(upload)} onClick={() => inputRef.current?.click()}>
-          <Upload size={18} aria-hidden /><span>{upload ? upload.name : 'Upload'}</span>
-        </button>
-        <input ref={inputRef} type="file" accept="image/*" hidden data-testid={`${testid}-input`}
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value = ''; }} />
-      </div>
+      {sections ? (
+        <>
+          <div className={grid}>{none}{add}</div>
+          {sections.map((sec) => (
+            <div key={sec.title} className="yts-section" data-testid={`${testid}-${sec.title.toLowerCase().replace(/\s+/g, '-')}`}>
+              <span className="yts-section-title">{sec.title}</span>
+              <div className={grid}>{sec.items.map((it) => <PickButton key={it.url} it={it} value={value} upload={upload} onPick={onPick} />)}</div>
+            </div>
+          ))}
+        </>
+      ) : (
+        <div className={grid}>
+          {none}
+          {items.map((it) => <PickButton key={it.url} it={it} value={value} upload={upload} onPick={onPick} />)}
+          {add}
+        </div>
+      )}
+      <input ref={inputRef} type="file" accept="image/*" hidden data-testid={`${testid}-input`}
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value = ''; }} />
     </fieldset>
   );
 }
@@ -58,7 +88,7 @@ export default function YouTubeThumbnailStudio() {
   const [episodeId, setEpisodeId] = useState(params.get('episode') || '');
   const [sources, setSources] = useState(null);
   const [spec, setSpec] = useState(null);
-  const [files, setFiles] = useState({ background: null, lala: null });
+  const [files, setFiles] = useState({ background: null, lala: null, jaw: null });
   const [preview, setPreview] = useState(null);
   const [rendering, setRendering] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -91,12 +121,16 @@ export default function YouTubeThumbnailStudio() {
       if (!live || !src) return;
       setSources(src);
       if (src.show?.id && src.show.id !== showId) setShowId(src.show.id);
-      setFiles({ background: null, lala: null });
+      setFiles({ background: null, lala: null, jaw: null });
       setSpec({
         ...src.style,
         ...episodeWords(src.episode, src.show),
         backgroundUrl: src.backgrounds?.[0]?.url || null,
-        lalaUrl: src.style?.lalaUrl || src.cutouts?.[0]?.url || null,
+        // This episode's starred Lala pose first (her look changes each
+        // episode), then the show's saved Lala, then the Asset Library's.
+        lalaUrl: defaultPose(src.poses?.lala)?.url || src.style?.lalaUrl || src.cutouts?.[0]?.url || null,
+        // JustAWoman joins only when picked.
+        jawUrl: null,
       });
     }).catch((err) => {
       console.error('[YouTubeThumbnails] sources load failed:', err);
@@ -193,7 +227,10 @@ export default function YouTubeThumbnailStudio() {
     if (!sources?.show?.id) return;
     setBusy(true);
     try {
-      const style = { layout: spec.layout, accent: spec.accent, textColor: spec.textColor, dim: spec.dim, lalaUrl: files.lala ? null : spec.lalaUrl };
+      // An episode's pose is that episode's look: the show keeps its own Lala.
+      const isPose = (sources?.poses?.lala || []).some((p) => p.url === spec.lalaUrl);
+      const lalaUrl = files.lala ? null : isPose ? (sources?.style?.lalaUrl || null) : spec.lalaUrl;
+      const style = { layout: spec.layout, accent: spec.accent, textColor: spec.textColor, dim: spec.dim, lalaUrl };
       await youtubeThumbnailsApi.saveStyle(sources.show.id, style);
       setMessage({ type: 'ok', text: `Style saved for ${sources.show.name}: every episode starts from it.` });
     } catch (err) {
@@ -293,13 +330,24 @@ export default function YouTubeThumbnailStudio() {
               onNone={() => { setFiles((f) => ({ ...f, background: null })); set({ backgroundUrl: null }); }} />
 
             {spec.layout !== 'center' && (
-              <Picker title="Lala" testid="yts-lala" whole items={sources?.cutouts || []} value={spec.lalaUrl} upload={files.lala}
+              <Picker title="Lala" testid="yts-lala" whole value={spec.lalaUrl} upload={files.lala}
+                sections={[
+                  ...poseSections(sources?.poses?.lala),
+                  ...((sources?.cutouts || []).length ? [{ title: 'Asset Library', items: sources.cutouts }] : []),
+                ]}
                 noneLabel="No Lala" onPick={(url) => { setFiles((f) => ({ ...f, lala: null })); set({ lalaUrl: url }); }}
                 onUpload={(f) => { setFiles((x) => ({ ...x, lala: f })); setSaved(null); }}
                 onNone={() => { setFiles((f) => ({ ...f, lala: null })); set({ lalaUrl: null }); }} />
             )}
-            {spec.layout !== 'center' && !(sources?.cutouts || []).length && (
-              <p className="yts-note"><Sparkles size={14} aria-hidden /> Lala images with their background removed (Asset Library) show here; or upload a PNG cut-out.</p>
+            {spec.layout !== 'center' && (
+              <Picker title="JustAWoman" testid="yts-jaw" whole value={spec.jawUrl} upload={files.jaw}
+                sections={poseSections(sources?.poses?.justawoman)}
+                noneLabel="No JustAWoman" onPick={(url) => { setFiles((f) => ({ ...f, jaw: null })); set({ jawUrl: url }); }}
+                onUpload={(f) => { setFiles((x) => ({ ...x, jaw: f })); setSaved(null); }}
+                onNone={() => { setFiles((f) => ({ ...f, jaw: null })); set({ jawUrl: null }); }} />
+            )}
+            {spec.layout !== 'center' && !(sources?.poses?.lala || []).length && !(sources?.poses?.justawoman || []).length && (
+              <p className="yts-note" data-testid="yts-poses-note"><Sparkles size={14} aria-hidden /> Add Lala and JustAWoman photos on the episode's <Link to={`/episodes/${episodeId}?tab=files`}>Files tab</Link>, labelled by pose; they show here once their background is removed. Or upload a PNG cut-out.</p>
             )}
 
             <fieldset className="yts-field">
