@@ -53,6 +53,15 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect((await request(app).get('/api/v1/ai-usage/cost-overview')).status).toBe(401);
   });
 
+  // Evoni, 2026-10-20: the older AI Costs data is ADMIN only too.
+  test('the older AI Costs endpoints refuse a non-admin', async () => {
+    for (const path of ['summary', 'by-model', 'by-route', 'daily', 'recent', 'optimizations', 'cache-stats']) {
+      const res = await request(app).get(`/api/v1/ai-usage/${path}`).set('Authorization', `Bearer ${user}`);
+      expect([path, res.status]).toEqual([path, 403]);
+    }
+    expect((await request(app).get('/api/v1/ai-usage/summary').set('Authorization', `Bearer ${admin}`)).status).toBe(200);
+  });
+
   test('today against both budgets, as the gates read them', async () => {
     const res = await get(admin);
     expect(res.status).toBe(200);
