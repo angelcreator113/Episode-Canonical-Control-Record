@@ -1,6 +1,8 @@
 /**
  * aiUsageRoutes.js — AI Cost Dashboard API
  *
+ * Every route here is ADMIN only (Evoni, 2026-10-20: the spend is hers to see).
+ *
  * GET /api/v1/ai-usage/summary        — overall spend + token totals
  * GET /api/v1/ai-usage/by-model       — breakdown by model
  * GET /api/v1/ai-usage/by-route       — breakdown by route/feature
@@ -51,7 +53,7 @@ router.get('/cost-overview', requireAuth, authorize(['ADMIN']), async (req, res)
 });
 
 // ─── GET /summary ──────────────────────────────────────────────
-router.get('/summary', requireAuth, async (req, res) => {
+router.get('/summary', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const db = getDb();
     const _where = getDaysFilter(req);
@@ -95,7 +97,7 @@ router.get('/summary', requireAuth, async (req, res) => {
 });
 
 // ─── GET /by-model ─────────────────────────────────────────────
-router.get('/by-model', requireAuth, async (req, res) => {
+router.get('/by-model', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const db = getDb();
     const rows = await db.sequelize.query(`
@@ -132,7 +134,7 @@ router.get('/by-model', requireAuth, async (req, res) => {
 });
 
 // ─── GET /by-route ─────────────────────────────────────────────
-router.get('/by-route', requireAuth, async (req, res) => {
+router.get('/by-route', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const db = getDb();
     const rows = await db.sequelize.query(`
@@ -161,7 +163,7 @@ router.get('/by-route', requireAuth, async (req, res) => {
 });
 
 // ─── GET /daily ────────────────────────────────────────────────
-router.get('/daily', requireAuth, async (req, res) => {
+router.get('/daily', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const db = getDb();
     const rows = await db.sequelize.query(`
@@ -188,7 +190,7 @@ router.get('/daily', requireAuth, async (req, res) => {
 });
 
 // ─── GET /recent ───────────────────────────────────────────────
-router.get('/recent', requireAuth, async (req, res) => {
+router.get('/recent', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const db = getDb();
     const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 200);
@@ -204,7 +206,7 @@ router.get('/recent', requireAuth, async (req, res) => {
 });
 
 // ─── GET /optimizations ────────────────────────────────────────
-router.get('/optimizations', requireAuth, async (req, res) => {
+router.get('/optimizations', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const db = getDb();
     const tips = [];
@@ -308,7 +310,7 @@ router.get('/optimizations', requireAuth, async (req, res) => {
 });
 
 // ── GET /cache-stats — AI response cache hit/miss stats ──────────────────────
-router.get('/cache-stats', requireAuth, async (_req, res) => {
+router.get('/cache-stats', requireAuth, authorize(['ADMIN']), async (_req, res) => {
   try {
     const { getCacheStats, CACHE_ENABLED } = require('../services/aiResponseCache');
     const stats = getCacheStats();

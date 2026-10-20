@@ -61,8 +61,12 @@ function calculateCost(model, usage) {
 
 // Try to figure out which route triggered this call from the call stack
 function inferRouteName() {
-  const stack = new Error().stack || '';
-  const lines = stack.split('\n');
+  return routeNameFromStack(new Error().stack || '');
+}
+
+/** The route (or service, or worker) a call stack came from; pure, for tests. */
+function routeNameFromStack(stack) {
+  const lines = String(stack || '').split('\n');
   
   // Skip these service files — they're wrappers, not the actual callers
   const skipServices = ['aiCostTracker', 'imageCostService', 'anthropic', 'index'];
@@ -71,10 +75,12 @@ function inferRouteName() {
   let foundService = null;
   
   for (const line of lines) {
-    // Look for route files (highest priority)
-    const routeMatch = line.match(/\broutes[\\/]([a-zA-Z0-9_-]+)\.js/);
+    // Look for route files (highest priority). A route in a sub-folder keeps
+    // its folder (routes/memories/engine.js -> 'memories/engine'), so the AI
+    // writing hub's calls are named instead of logged as 'unknown'.
+    const routeMatch = line.match(/\broutes[\\/](?:([a-zA-Z0-9_-]+)[\\/])?([a-zA-Z0-9_-]+)\.js/);
     if (routeMatch && !foundRoute) {
-      foundRoute = routeMatch[1];
+      foundRoute = routeMatch[1] ? `${routeMatch[1]}/${routeMatch[2]}` : routeMatch[2];
     }
     
     // Look for service files (lower priority, skip wrapper services)
@@ -401,5 +407,5 @@ applyPatch();
 
 module.exports = {
   calculateCost, MODEL_PRICING, getDailySpend, getFreshDailySpend, DAILY_BUDGET, SPEND_CACHE_MS,
-  refreshSpend, recordSpend, inferRouteName,
+  refreshSpend, recordSpend, inferRouteName, routeNameFromStack,
 };

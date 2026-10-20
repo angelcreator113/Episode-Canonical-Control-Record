@@ -47,6 +47,13 @@ describe('Step 3 CP10 — aiUsageRoutes.js', () => {
     expect(SRC).toMatch(/router\.get\('\/cache-stats',\s*requireAuth,/);
   });
 
+  // Evoni, 2026-10-20: every AI Costs route is ADMIN only.
+  test('every route is ADMIN only', () => {
+    const routes = SRC.match(/^router\.get\([^\n]+/gm) || [];
+    expect(routes.length).toBe(8);
+    routes.forEach((line) => expect(line).toMatch(/requireAuth,\s*authorize\(\['ADMIN'\]\),/));
+  });
+
   test('no aiRateLimiter (D3-verified non-AI)', () => {
     expect(SRC).not.toMatch(/aiRateLimiter/);
   });

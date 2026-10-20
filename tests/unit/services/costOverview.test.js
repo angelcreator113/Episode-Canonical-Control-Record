@@ -31,6 +31,9 @@ describe('featureFor: logged route names → features', () => {
     ['worldEvents', false, 'episodes'],
     ['storyteller', false, 'writing'],
     ['svc:storyGenerationService', false, 'writing'],
+    // The writing hub's routes, named with their folder (aiCostTracker.routeNameFromStack).
+    ['memories/engine', false, 'writing'],
+    ['memories/assistant', false, 'writing'],
     ['unknown', false, 'other'],
     ['', false, 'other'],
     [null, false, 'other'],
