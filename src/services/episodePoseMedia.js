@@ -33,7 +33,7 @@ const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/clien
 const { runImageCall, isBudgetError } = require('./imageCostService');
 const poses = require('./episodePosesService');
 
-const BUCKET = process.env.AWS_S3_BUCKET || process.env.S3_ASSET_BUCKET || 'primepisodes-assets';
+const { ASSET_BUCKET: BUCKET, requireAssetBucket } = require('./assetBucket');
 const REGION = process.env.AWS_REGION || 'us-east-1';
 const MAX_SIDE = 4000;
 const UPSCALE_BELOW = 1600;
@@ -63,12 +63,12 @@ const publicUrl = (key) => `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`
 const posePrefix = (episodeId, poseId) => `episodes/${episodeId}/poses/${poseId}`;
 
 async function putBuffer(key, body, contentType) {
-  await getS3().send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: body, ContentType: contentType }));
+  await getS3().send(new PutObjectCommand({ Bucket: requireAssetBucket(), Key: key, Body: body, ContentType: contentType }));
   return publicUrl(key);
 }
 
 async function getBuffer(key) {
-  const res = await getS3().send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
+  const res = await getS3().send(new GetObjectCommand({ Bucket: requireAssetBucket(), Key: key }));
   return Buffer.from(await res.Body.transformToByteArray());
 }
 

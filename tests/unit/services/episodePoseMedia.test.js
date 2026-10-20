@@ -24,6 +24,9 @@ jest.mock('../../../src/services/episodePosesService', () => {
   return { ...actual, setState: jest.fn(async () => ({})) };
 });
 
+// The upload bucket comes from the server's settings (src/services/assetBucket.js).
+process.env.S3_PRIMARY_BUCKET = process.env.S3_PRIMARY_BUCKET || 'test-bucket';
+
 const sharp = require('sharp');
 const axios = require('axios');
 const { runImageCall } = require('../../../src/services/imageCostService');
