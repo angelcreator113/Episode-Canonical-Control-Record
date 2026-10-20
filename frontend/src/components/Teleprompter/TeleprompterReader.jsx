@@ -17,6 +17,10 @@
 // spoken line, on the reading line, shows "Stay quiet · react" counting down
 // its estimated time, an action "Action · Ns". "Pace by line times" holds
 // each line on the reading line for its time, scaled by the pace slider.
+// Batch 1 (Evoni, 2026-10-20): "Follow my voice" scrolls with what she
+// says (lib/voiceFollow); time per beat while rehearsing a script, against
+// the estimate; `//` pause, `*word*` emphasis and (breath) marks; a mic
+// meter with a no-sound warning, and a framing grid on the camera preview.
 // Keys: Space play/pause, Up/Down speed (or pace), PageUp/PageDown jump a
 // half screen (a line, pacing by line times; clickers and foot pedals send
 // these), Left/Right beat, Escape exits.
@@ -26,7 +30,16 @@ import { createPortal } from 'react-dom';
 import {
   X, ChevronLeft, ChevronRight, Play, Pause, FlipHorizontal2, Timer, Video, VideoOff, Circle, Square,
   RotateCcw, Upload, Download, AlertTriangle, CheckCircle2, ALargeSmall, Gauge, Hourglass, SlidersHorizontal,
+  AudioLines, Grid3x3, Clock,
 } from 'lucide-react';
+import useVoiceFollow from '../../hooks/useVoiceFollow';
+import useMicLevel from '../../hooks/useMicLevel';
+import { advance, speechRecognition } from '../../lib/voiceFollow';
+import { spokenWords, pauseCount } from '../../lib/teleprompterMarks';
+import { beatSeconds } from '../../lib/scriptRuntime';
+import { SESSION_KEY, SAVED_KEY, readTimes, writeTimes, durationText } from '../../lib/rehearsal';
+import { cameraErrorMessage } from '../../lib/teleprompterLines';
+import { MarkedText, MicMeter, FramingGrid, RehearsalPanel } from './TeleprompterParts';
 import useDialogLayer from '../../hooks/useDialogLayer';
 import useTakeRecorder from '../../hooks/useTakeRecorder';
 import { teleprompterScript, pastedParagraphs, pastedScript, speakersOf, HER, takeName, takeExtension, downloadName, clock } from '../../lib/teleprompterLines';
@@ -40,7 +53,10 @@ export const SPEED_MAX = 20;
 const PX_PER_STEP = 8; // speed 5 scrolls 40px a second
 export const PACE_MIN = 0.5;
 export const PACE_MAX = 2;
-export const DEFAULTS = { size: 40, speed: 5, mirror: false, countdown: true, lineMode: 'mine', readAs: HER, pacing: 'steady', pace: 1 };
+export const DEFAULTS = { size: 40, speed: 5, mirror: false, countdown: true, lineMode: 'mine', readAs: HER, pacing: 'steady', pace: 1, grid: false };
+// Below this level for this long while recording: "No sound from your mic".
+const QUIET_LEVEL = 0.04;
+const QUIET_MS = 3000;
 const roundPace = (n) => Math.round(n * 10) / 10;
 
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
@@ -56,7 +72,8 @@ export function readSettings() {
       countdown: typeof raw.countdown === 'boolean' ? raw.countdown : DEFAULTS.countdown,
       lineMode: raw.lineMode === 'same' ? 'same' : 'mine',
       readAs: typeof raw.readAs === 'string' && raw.readAs.trim() ? raw.readAs : HER,
-      pacing: raw.pacing === 'lines' ? 'lines' : 'steady',
+      pacing: ['lines', 'voice'].includes(raw.pacing) ? raw.pacing : 'steady',
+      grid: typeof raw.grid === 'boolean' ? raw.grid : DEFAULTS.grid,
       pace: Number.isFinite(raw.pace) ? clamp(roundPace(raw.pace), PACE_MIN, PACE_MAX) : DEFAULTS.pace,
     };
   } catch (err) {
@@ -84,15 +101,19 @@ const reducedMotion = () => {
 // Where an element sits in the scroll box's content (works mirrored too).
 const topIn = (el, box) => el.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
 
-function Line({ l, mine, at, lineRef, index }) {
-  if (l.kind === 'direction') {
-    return <p ref={lineRef} className="stp-direction" data-testid="stp-direction" data-line={index} data-at={at || undefined}>{l.text}</p>;
+// A line; `wordStart`/`cursor` number its words for Follow my voice.
+function Line({ l, mine, at, lineRef, index, wordStart = null, cursor = -1, from = 0 }) {
+  const common = { ref: lineRef, 'data-line': index, 'data-at': at || undefined };
+  if (l.kind === 'para') return <p {...common} className="stp-para" data-testid="stp-para"><MarkedText text={l.text} wordStart={wordStart} cursor={cursor} from={from} /></p>;
+  if (l.kind === 'breath') {
+    return <p {...common} className="stp-direction is-breath" data-testid="stp-breath"><MarkedText text="(breath)" /> <span className="stp-sr">breath</span></p>;
   }
+  if (l.kind === 'direction') return <p {...common} className="stp-direction" data-testid="stp-direction"><MarkedText text={l.text} /></p>;
   return (
-    <div ref={lineRef} className={`stp-line is-${mine ? 'mine' : 'cue'}`} data-testid={mine ? 'stp-mine' : 'stp-cue'} data-line={index} data-at={at || undefined}>
+    <div {...common} className={`stp-line is-${mine ? 'mine' : 'cue'}`} data-testid={mine ? 'stp-mine' : 'stp-cue'}>
       <span className="stp-speaker">{l.speaker}</span>
-      {l.paren && <span className="stp-paren">{l.paren}</span>}
-      <p className="stp-words">{l.text}</p>
+      {l.paren && <span className="stp-paren"><MarkedText text={l.paren} /></span>}
+      <p className="stp-words"><MarkedText text={l.text} wordStart={wordStart} cursor={cursor} from={from} /></p>
     </div>
   );
 }
@@ -102,6 +123,7 @@ function Line({ l, mine, at, lineRef, index }) {
 function SilenceCue({ line, left, total, reduced }) {
   const n = Math.max(0, Math.ceil(left - 0.05));
   if (line.kind === 'direction') return <div className="stp-quiet is-action" role="status" data-testid="stp-quiet">Action · {n}s</div>;
+  if (line.kind === 'breath') return <div className="stp-quiet is-action" role="status" data-testid="stp-quiet">Breath · {n}s</div>;
   const frac = total > 0 ? Math.max(0, Math.min(1, left / total)) : 0;
   return (
     <div className="stp-quiet" role="status" data-testid="stp-quiet">
@@ -146,7 +168,9 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const busyTake = recording || count > 0 || !!take;
   const oneBeat = isScript && recordOn && beats.length > 0;
   const beat = beats[current] || null;
-  const pacing = settings.pacing;
+  // Follow my voice falls back to the steady scroll where the browser can't listen.
+  const voiceSupported = !!speechRecognition();
+  const pacing = settings.pacing === 'voice' && !voiceSupported ? 'steady' : settings.pacing;
   const pace = settings.pace;
 
   // Every line in reading order, and where each beat's lines start.
@@ -161,19 +185,41 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
         flat.push(...b.lines);
       });
     } else if (pasted) pasted.forEach((g) => flat.push(...g));
+    else paragraphs.forEach((p) => flat.push({ kind: 'para', who: null, text: p, seconds: 0 }));
     return { flat, beatFirst };
-  }, [isScript, oneBeat, script, beats, current, pasted]);
+  }, [isScript, oneBeat, script, beats, current, pasted, paragraphs]);
   const { flat } = layout;
-  const hasLines = flat.length > 0;
+  // Lines with speakers and times (not plain pasted prose).
+  const hasLines = flat.some((l) => l.kind !== 'para');
 
   // "Read as": whose lines are hers; JustAWoman unless she picks another.
   const speakers = useMemo(() => speakersOf(isScript ? [...script.intro, ...beats.flatMap((b) => b.lines)] : (pasted || []).flat()), [isScript, script, beats, pasted]);
   const readAsChoices = speakers.length ? [...new Set([HER, 'Lala', ...speakers])] : [];
   // A name saved from another script that is not in this one reads as JustAWoman.
   const readAs = readAsChoices.includes(settings.readAs) ? settings.readAs : HER;
-  const isMine = (l) => l.kind !== 'direction' && l.who === readAs;
+  const isMine = (l) => l.kind === 'para' || (!!l.who && l.who === readAs);
+
+  // Follow my voice: her words in order, and where each of her lines starts.
+  const voiceWords = useMemo(() => {
+    const words = [];
+    const start = [];
+    const end = [];
+    flat.forEach((l, i) => {
+      if (!(l.kind === 'para' || (l.who && l.who === readAs))) return;
+      start[i] = words.length;
+      spokenWords(l.text).forEach((w) => words.push({ w: w.w, line: i }));
+      end[i] = words.length;
+    });
+    return { words, start, end };
+  }, [flat, readAs]);
 
   const [active, setActive] = useState(() => layout.beatFirst[current] ?? 0);
+  // Follow my voice: the next word she has to say (an index in voiceWords).
+  const [cursor, setCursor] = useState(0);
+  const cursorRef = useRef(0);
+  // Where she started reading this time: words from here to the cursor read as said.
+  const [voiceFrom, setVoiceFrom] = useState(0);
+  const voiceOn = pacing === 'voice';
 
   const dialogRef = useRef(null);
   const scrollRef = useRef(null);
@@ -239,6 +285,97 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     const box = scrollRef.current;
     if (el && box) scrollToBox(topIn(el, box) - box.clientHeight / 3);
   };
+  const scrollToWord = (i) => {
+    const box = scrollRef.current;
+    const el = box?.querySelector(`[data-vw="${i}"]`);
+    if (el) scrollToBox(topIn(el, box) - box.clientHeight / 3);
+  };
+  const moveCursor = (c) => { cursorRef.current = c; setCursor(c); };
+  // Her place: the first of her words at or after line `at`.
+  const syncCursor = (at) => {
+    const { words, start, end } = voiceWords;
+    if (words[cursorRef.current]?.line === at) return cursorRef.current;
+    for (let i = Math.max(0, at); i < flat.length; i += 1) {
+      if (start[i] != null && end[i] > start[i]) { moveCursor(start[i]); return start[i]; }
+    }
+    moveCursor(words.length);
+    return words.length;
+  };
+
+  // Follow my voice: a line finished, the next comes up; someone else's
+  // line counts down its time, then the prompter goes on by itself.
+  const nextAfter = (line) => {
+    const next = line + 1;
+    if (next >= flat.length) { setPlaying(false); return; }
+    setActive(next);
+    if (voiceWords.start[next] != null) {
+      const c = Math.max(cursorRef.current, voiceWords.start[next]);
+      moveCursor(c);
+      scrollToWord(c);
+    } else scrollToLine(next);
+  };
+  const onHeard = (heard) => {
+    const { words, end } = voiceWords;
+    const next = advance(words, cursorRef.current, heard);
+    if (next <= cursorRef.current) return;
+    moveCursor(next);
+    const line = words[next - 1].line;
+    if (next >= end[line]) nextAfter(line);
+    else { setActive(line); scrollToWord(next); }
+  };
+  const voice = useVoiceFollow(voiceOn && playing, { onHeard, recording });
+  useEffect(() => {
+    if (!voiceOn || !playing || !flat.length) return undefined;
+    const l = flat[active];
+    if (!l) return undefined;
+    const wordless = voiceWords.start[active] != null && voiceWords.end[active] <= voiceWords.start[active];
+    if (isMine(l) && !wordless) return undefined;
+    scrollToLine(active);
+    const t = window.setTimeout(() => nextAfter(active), Math.max(200, ((l.seconds || 0) + pauseCount(l.text)) * 1000));
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceOn, playing, active, flat, readAs]);
+
+  // Follow my voice while reading: the mic for the meter (recording has its own).
+  const [voiceMic, setVoiceMic] = useState(null);
+  const [voiceMicError, setVoiceMicError] = useState(null);
+  useEffect(() => {
+    if (!voiceOn || recordOn || !navigator.mediaDevices?.getUserMedia) return undefined;
+    let live = true;
+    let got = null;
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then((st) => {
+        if (!live) { (st.getTracks?.() || []).forEach((t) => t.stop()); return; }
+        got = st;
+        setVoiceMic(st);
+        setVoiceMicError(null);
+      })
+      .catch((err) => {
+        console.error('[Teleprompter] microphone did not start for Follow my voice:', err);
+        if (live) setVoiceMicError(err?.name === 'NotAllowedError' ? 'The microphone is blocked for Follow my voice. Allow it for this site in the browser, then try again.' : cameraErrorMessage(err));
+      });
+    return () => {
+      live = false;
+      (got?.getTracks?.() || []).forEach((t) => { try { t.stop(); } catch (err) { console.error('[Teleprompter] mic track did not stop:', err); } });
+      setVoiceMic(null);
+    };
+  }, [voiceOn, recordOn]);
+  const meterStream = recordOn ? rec.stream : voiceMic;
+  const level = useMicLevel(meterStream);
+  const levelRef = useRef(0);
+  levelRef.current = level;
+  // Recording and nothing heard for 3 seconds: say so.
+  const [silent, setSilent] = useState(false);
+  useEffect(() => {
+    if (!recording) { setSilent(false); return undefined; }
+    let loud = Date.now();
+    const t = window.setInterval(() => {
+      const now = Date.now();
+      if (levelRef.current > QUIET_LEVEL) loud = now;
+      setSilent(now - loud > QUIET_MS);
+    }, 250);
+    return () => window.clearInterval(t);
+  }, [recording]);
 
   // Steady speed: speed steps of 8px a second, from wherever the text is.
   useEffect(() => {
@@ -267,7 +404,8 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     if (!playing || pacing !== 'lines' || !flat.length) return undefined;
     const i = clamp(active, 0, flat.length - 1);
     scrollToLine(i);
-    const ms = Math.max(200, ((flat[i].seconds || 0) / pace) * 1000);
+    // A `//` pause holds a second more.
+    const ms = Math.max(200, (((flat[i].seconds || 0) + pauseCount(flat[i].text)) / pace) * 1000);
     const t = window.setTimeout(() => {
       if (i >= flat.length - 1) setPlaying(false);
       else setActive(i + 1);
@@ -279,12 +417,41 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   // The silence cue counts down the line on the reading line while the
   // prompter runs; paused, it waits.
   const atLine = flat[active] || null;
-  const cueTotal = atLine ? (pacing === 'lines' ? (atLine.seconds || 0) / pace : (atLine.seconds || 0)) : 0;
+  const cueTotal = atLine ? (pacing === 'lines' ? ((atLine.seconds || 0) + pauseCount(atLine.text)) / pace : (atLine.seconds || 0)) : 0;
   const showCue = !!atLine && !isMine(atLine) && cueTotal > 0;
   const [cueLeft, setCueLeft] = useState(cueTotal);
   const cueSpentRef = useRef(0);
   useEffect(() => { cueSpentRef.current = 0; setCueLeft(cueTotal); }, [active, cueTotal]);
   const running = playing || recording;
+
+  // Rehearsal: time on each beat while the prompter runs (picked scripts).
+  const store = (name) => { try { return window[name]; } catch (err) { console.error('[Teleprompter] storage not reachable:', err); return null; } };
+  const rehearsalKey = isScript && numbered ? (source.episodeId || 'script') : null;
+  const [times, setTimes] = useState(() => (rehearsalKey ? readTimes(store('sessionStorage'), SESSION_KEY(rehearsalKey)) || {} : {}));
+  const [savedTimes, setSavedTimes] = useState(() => (rehearsalKey ? readTimes(store('localStorage'), SAVED_KEY(rehearsalKey)) : null));
+  const [showTimes, setShowTimes] = useState(false);
+  const [savedNote, setSavedNote] = useState(null);
+  const beatKey = beat?.number ?? null;
+  useEffect(() => {
+    if (!rehearsalKey || !running || beatKey == null) return undefined;
+    let last = Date.now();
+    const t = window.setInterval(() => {
+      const now = Date.now();
+      const d = (now - last) / 1000;
+      last = now;
+      setTimes((m) => ({ ...m, [beatKey]: (m[beatKey] || 0) + d }));
+    }, 500);
+    return () => window.clearInterval(t);
+  }, [rehearsalKey, running, beatKey]);
+  useEffect(() => { if (rehearsalKey) writeTimes(store('sessionStorage'), SESSION_KEY(rehearsalKey), times); }, [rehearsalKey, times]);
+  const rehearsalRows = beats.filter((b) => b.number != null && (times[b.number] || 0) >= 1).map((b) => ({
+    key: b.number, number: b.number, actual: times[b.number], estimate: beatSeconds(b.raw || []),
+    saved: savedTimes?.beats?.[b.number] ?? null, current: b === beat,
+  }));
+  const saveTimes = () => {
+    const value = { savedAt: new Date().toISOString(), beats: Object.fromEntries(Object.entries(times).map(([k, v]) => [k, Math.round(v)])) };
+    if (writeTimes(store('localStorage'), SAVED_KEY(rehearsalKey), value)) { setSavedTimes(value); setSavedNote(new Date().toLocaleString()); }
+  };
   useEffect(() => {
     if (!running || !showCue) return undefined;
     let last = Date.now();
@@ -325,7 +492,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     if (!box) return;
     if (Math.abs(box.scrollTop - posRef.current) > 2) posRef.current = box.scrollTop;
     const line = box.scrollTop + box.clientHeight / 3 + 4;
-    if (!(pacing === 'lines' && playing) && hasLines) {
+    if (!(pacing !== 'steady' && playing) && flat.length) {
       let at = 0;
       for (let i = 0; i < flat.length; i += 1) {
         const el = lineRefs.current[i];
@@ -352,6 +519,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const togglePlay = () => {
     if (count > 0) { cancelCountdown(); return; }
     if (playing) { setPlaying(false); return; }
+    if (voiceOn) setVoiceFrom(syncCursor(active));
     if (settings.countdown && !recording) countdown(() => setPlaying(true));
     else setPlaying(true);
   };
@@ -366,6 +534,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     countdown(() => {
       scrollToBox(0);
       setActive(0);
+      if (voiceOn) setVoiceFrom(syncCursor(0));
       if (rec.begin()) setPlaying(true);
     });
   };
@@ -457,10 +626,11 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     if (e.key === 'PageDown' || e.key === 'PageUp') {
       e.preventDefault();
       const dir = e.key === 'PageDown' ? 1 : -1;
-      if (pacing === 'lines' && hasLines) {
+      if ((pacing === 'lines' || voiceOn) && flat.length) {
         const next = clamp(active + dir, 0, flat.length - 1);
         setActive(next);
         scrollToLine(next);
+        if (voiceOn) setVoiceFrom(syncCursor(next));
         return;
       }
       const box = scrollRef.current;
@@ -481,21 +651,23 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   };
 
+  const problem = rec.camera.message || rec.error || (voiceOn ? voice.error || voiceMicError : null);
   const shown = oneBeat ? [{ ...beat, at: current }] : beats.map((b, i) => ({ ...b, at: i }));
-  const empty = isScript ? !beats.length && !script.intro.length : !paragraphs.length && !pasted;
+  const empty = isScript ? !beats.length && !script.intro.length : !flat.length;
   // Lines render in layout order; each takes the next index.
   let n = 0;
   const renderLine = (l, key) => {
     const i = n;
     n += 1;
-    return <Line key={key} l={l} index={i} mine={isMine(l)} at={i === active} lineRef={(el) => { lineRefs.current[i] = el; }} />;
+    return <Line key={key} l={l} index={i} mine={isMine(l)} at={i === active} lineRef={(el) => { lineRefs.current[i] = el; }}
+      wordStart={voiceOn ? voiceWords.start[i] ?? null : null} cursor={cursor} from={voiceFrom} />;
   };
   lineRefs.current.length = flat.length;
 
   return createPortal(
     <div
       ref={dialogRef}
-      className={`stp-root is-${settings.lineMode}${settings.mirror ? ' is-mirrored' : ''}${pacing === 'lines' ? ' is-paced' : ''}`}
+      className={`stp-root is-${settings.lineMode}${settings.mirror ? ' is-mirrored' : ''}${pacing !== 'steady' ? ' is-paced' : ''}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="stp-title"
@@ -523,7 +695,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
               <label className="stp-jump">
                 <span className="stp-sr">Jump to beat</span>
                 <select value={String(current)} disabled={busyTake} onChange={(e) => goTo(Number(e.target.value))} data-testid="stp-jump">
-                  {beats.map((b, i) => <option key={`${b.number}-${i}`} value={String(i)}>{b.number} · {b.name}</option>)}
+                  {beats.map((b, i) => <option key={`${b.number}-${i}`} value={String(i)}>{b.number} · {b.name}{times[b.number] >= 1 ? ` · ${durationText(times[b.number])}` : ''}</option>)}
                 </select>
               </label>
               <button type="button" className="stp-btn is-icon" aria-label="Next beat" data-testid="stp-next" disabled={current >= beats.length - 1 || busyTake} onClick={() => goTo(current + 1)}><ChevronRight size={20} aria-hidden="true" /></button>
@@ -546,7 +718,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
               </section>
             ))}
             {pasted && pasted.map((g, gi) => <div key={gi} className="stp-group">{g.map((l, j) => renderLine(l, j))}</div>)}
-            {!isScript && !pasted && paragraphs.map((p, i) => <p key={i} className="stp-para" data-testid="stp-para">{p}</p>)}
+            {!isScript && !pasted && flat.map((l, i) => renderLine(l, i))}
             {empty && <p className="stp-direction">Nothing to read yet.</p>}
           </article>
           <div className="stp-spacer is-bottom" aria-hidden="true" />
@@ -554,13 +726,24 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
         <div className="stp-marker" aria-hidden="true" data-testid="stp-marker" />
         {showCue && !take && count === 0 && <SilenceCue line={atLine} left={cueLeft} total={cueTotal} reduced={reduced} />}
 
-        {recording && (
-          <div className="stp-recdot" role="status" data-testid="stp-recording">
-            <span className="stp-dot" aria-hidden="true" /> REC {clock(rec.elapsed)}
+        {(recording || meterStream) && (
+          <div className="stp-hud">
+            {recording && (
+              <div className="stp-recdot" role="status" data-testid="stp-recording">
+                <span className="stp-dot" aria-hidden="true" /> REC {clock(rec.elapsed)}
+              </div>
+            )}
+            {meterStream && <MicMeter level={level} silent={silent} />}
           </div>
         )}
         {recordOn && rec.camera.status === 'ready' && (
-          <video ref={previewRef} className="stp-preview" muted autoPlay playsInline aria-label="Camera preview" data-testid="stp-preview" />
+          <div className="stp-cam">
+            <video ref={previewRef} className="stp-preview" muted autoPlay playsInline aria-label="Camera preview" data-testid="stp-preview" />
+            {settings.grid && <FramingGrid />}
+          </div>
+        )}
+        {showTimes && rehearsalKey && !take && (
+          <RehearsalPanel rows={rehearsalRows} savedAt={savedNote} onReset={() => { setTimes({}); setSavedNote(null); }} onSave={saveTimes} />
         )}
         {count > 0 && <div className="stp-countdown" aria-live="assertive" data-testid="stp-countdown">{count}</div>}
 
@@ -585,10 +768,10 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
         )}
       </div>
 
-      {(rec.camera.message || rec.error || notice) && (
-        <p className={`stp-status${notice && !rec.camera.message && !rec.error ? ' is-ok' : ''}`} role={rec.camera.message || rec.error ? 'alert' : 'status'} data-testid="stp-status">
-          {rec.camera.message || rec.error ? <AlertTriangle size={16} aria-hidden="true" /> : <CheckCircle2 size={16} aria-hidden="true" />}
-          <span>{rec.camera.message || rec.error || notice}</span>
+      {(problem || notice) && (
+        <p className={`stp-status${!problem ? ' is-ok' : ''}`} role={problem ? 'alert' : 'status'} data-testid="stp-status">
+          {problem ? <AlertTriangle size={16} aria-hidden="true" /> : <CheckCircle2 size={16} aria-hidden="true" />}
+          <span>{problem || notice}</span>
           {rec.camera.status === 'error' && <button type="button" className="stp-btn is-small" onClick={rec.retry}>Try again</button>}
         </p>
       )}
@@ -598,7 +781,11 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
           {playing || count > 0 ? <Pause size={20} aria-hidden="true" /> : <Play size={20} aria-hidden="true" />}
           <span className="stp-btn-text">{playing || count > 0 ? 'Pause' : 'Play'}</span>
         </button>
-        {pacing === 'lines' ? (
+        {voiceOn ? (
+          <span className={`stp-listening${voice.listening ? ' is-on' : ''}`} data-testid="stp-listening" role="status">
+            <AudioLines size={18} aria-hidden="true" /> {voice.listening ? 'Listening' : playing ? 'Starting…' : 'Press Play and read'}
+          </span>
+        ) : pacing === 'lines' ? (
           <label className="stp-slider">
             <Gauge size={18} aria-hidden="true" />
             <span className="stp-sr">Pace</span>
@@ -629,10 +816,29 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
         <button type="button" className="stp-btn" data-testid="stp-countdown-toggle" aria-pressed={settings.countdown} title="Count 3-2-1 before scrolling" onClick={() => set('countdown', !settings.countdown)}>
           <Timer size={18} aria-hidden="true" /> 3-2-1
         </button>
-        {hasLines && (
-          <button type="button" className="stp-btn" data-testid="stp-pace-lines" aria-pressed={pacing === 'lines'} title="Hold each line on the reading line for its estimated time"
-            onClick={() => { setPlaying(false); set('pacing', pacing === 'lines' ? 'steady' : 'lines'); }}>
-            <Hourglass size={18} aria-hidden="true" /> Pace by line times
+        <div className="stp-pacing" role="group" aria-label="Pacing">
+          <button type="button" className="stp-btn" data-testid="stp-pace-steady" aria-pressed={pacing === 'steady'} onClick={() => { setPlaying(false); set('pacing', 'steady'); }}>Steady</button>
+          {hasLines && (
+            <button type="button" className="stp-btn" data-testid="stp-pace-lines" aria-pressed={pacing === 'lines'} title="Hold each line on the reading line for its estimated time"
+              onClick={() => { setPlaying(false); set('pacing', pacing === 'lines' ? 'steady' : 'lines'); }}>
+              <Hourglass size={18} aria-hidden="true" /> Pace by line times
+            </button>
+          )}
+          <button type="button" className="stp-btn" data-testid="stp-pace-voice" aria-pressed={pacing === 'voice'} disabled={!voiceSupported}
+            title={voiceSupported ? 'Scroll as you read your lines aloud' : 'Needs Chrome or Edge'}
+            onClick={() => { setPlaying(false); set('pacing', pacing === 'voice' ? 'steady' : 'voice'); }}>
+            <AudioLines size={18} aria-hidden="true" /> Follow my voice
+            {!voiceSupported && <span className="stp-needs" data-testid="stp-voice-needs">Needs Chrome or Edge</span>}
+          </button>
+        </div>
+        {rehearsalKey && (
+          <button type="button" className="stp-btn" data-testid="stp-rehearsal-toggle" aria-pressed={showTimes} onClick={() => setShowTimes((v) => !v)}>
+            <Clock size={18} aria-hidden="true" /> Times
+          </button>
+        )}
+        {recordOn && (
+          <button type="button" className="stp-btn" data-testid="stp-grid-toggle" aria-pressed={settings.grid} onClick={() => set('grid', !settings.grid)}>
+            <Grid3x3 size={18} aria-hidden="true" /> Grid
           </button>
         )}
         {hasLines && (

@@ -6,7 +6,8 @@
 
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { X, ChevronLeft, ChevronRight, Smartphone } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { X, ChevronLeft, ChevronRight, Smartphone, ScrollText } from 'lucide-react';
 import { scriptSections, readLine } from '../../lib/scriptExport';
 import useDialogLayer from '../../hooks/useDialogLayer';
 import './ScriptTableRead.css';
@@ -55,7 +56,7 @@ function Element({ r }) {
   }
 }
 
-export default function ScriptTableRead({ scriptText, title = '', onScreen = null, startBeat = 0, printMode = false, onClose }) {
+export default function ScriptTableRead({ scriptText, title = '', onScreen = null, startBeat = 0, printMode = false, onClose, episodeId = null }) {
   const { preamble, beats } = useMemo(() => scriptSections(scriptText), [scriptText]);
   const read = (lines) => lines.map((l) => readLine(l, onScreen)).filter((r) => r && ['dialogue', 'action', 'narration', 'moment'].includes(r.type));
   const [current, setCurrent] = useState(() => Math.min(Math.max(0, startBeat), Math.max(0, beats.length - 1)));
@@ -162,6 +163,14 @@ export default function ScriptTableRead({ scriptText, title = '', onScreen = nul
               <button type="button" className="str-icon-btn" aria-label="Previous beat" data-testid="table-read-prev" disabled={current === 0} onClick={() => goTo(current - 1)}><ChevronLeft size={18} aria-hidden="true" /></button>
               <button type="button" className="str-icon-btn" aria-label="Next beat" data-testid="table-read-next" disabled={current >= beats.length - 1} onClick={() => goTo(current + 1)}><ChevronRight size={18} aria-hidden="true" /></button>
             </>
+          )}
+          {/* Table read → Teleprompter on the beat being read (Evoni, 2026-10-20). */}
+          {episodeId && !printMode && (
+            <Link className="str-icon-btn str-prompter" data-testid="table-read-teleprompter"
+              to={`/teleprompter?episode=${encodeURIComponent(episodeId)}${beats[current]?.number != null ? `&beat=${encodeURIComponent(beats[current].number)}` : ''}`}
+              title="Read this beat on the teleprompter (the saved script)">
+              <ScrollText size={16} aria-hidden="true" /> Teleprompter
+            </Link>
           )}
           <button type="button" className="str-icon-btn str-size" aria-label="Smaller text" disabled={sizeAt <= 0} onClick={() => setSize(SIZES[sizeAt - 1])}>A-</button>
           <button type="button" className="str-icon-btn str-size" aria-label="Larger text" disabled={sizeAt >= SIZES.length - 1} onClick={() => setSize(SIZES[sizeAt + 1])}>A+</button>

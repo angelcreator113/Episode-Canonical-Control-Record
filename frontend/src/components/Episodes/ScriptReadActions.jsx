@@ -79,7 +79,7 @@ export default function ScriptReadActions({ scriptText, title = '', dirty = fals
       {error && <span className="str-export-note" role="alert">{error}</span>}
       {mode && (
         <ScriptTableRead scriptText={scriptText} title={title} onScreen={onScreen} startBeat={mode === 'read' ? startBeat : 0}
-          printMode={mode === 'print'} onClose={() => setMode(null)} />
+          printMode={mode === 'print'} onClose={() => setMode(null)} episodeId={episodeId} />
       )}
     </>
   );
