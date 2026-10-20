@@ -74,7 +74,7 @@ body.str-open { overflow: hidden; }
 }
 
 /* The Script tab's Table read button and Export menu. */
-.str-launch { display: inline-flex; align-items: center; gap: 6px; }
+.str-launch { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
 .str-export { position: relative; }
 .str-export > summary { list-style: none; }
 .str-export > summary::-webkit-details-marker { display: none; }

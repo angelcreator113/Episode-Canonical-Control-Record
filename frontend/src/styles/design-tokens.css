@@ -298,6 +298,20 @@
   --studio-shadow:      0 2px 10px rgba(194, 23, 122, 0.08);
   --studio-radius:      12px;
 
+  /* Teleprompter on the Script page (Evoni, 2026-10-20): read a beat and
+     record yourself. Dark, so the words carry across the room; her lines
+     brightest, everyone else's dimmer cues (each pair >= 4.5:1 on the bg). */
+  --studio-prompter-bg:       #14101A;  /* the reading surface */
+  --studio-prompter-bar:      #201A28;  /* top and bottom bars */
+  --studio-prompter-line:     #3A3046;  /* bar borders, button outlines */
+  --studio-prompter-ink:      #FFFFFF;  /* her lines (18.9:1 on bg) */
+  --studio-prompter-cue:      #B9AEC4;  /* others' lines, labels (9.1:1) */
+  --studio-prompter-dim:      #988CA6;  /* stage directions (6.2:1) */
+  --studio-prompter-mark:     #F45DB0;  /* reading-line marker, her speaker label (6.0:1) */
+  --studio-prompter-rec:      #FF4D5E;  /* recording dot (5.6:1) */
+  --studio-prompter-ok:       #7FD88A;  /* saved note (10.9:1) */
+  --studio-prompter-scrim:    rgba(20, 16, 26, 0.88);  /* behind the countdown and review */
+
   /* ════════════════════════════════════════════════════════════
      THE PULSE — LalaVerse's social network (pages/SocialMediaPage;
      docs/design/2026-10-the-pulse.md; Evoni's mockup, Task 2926).

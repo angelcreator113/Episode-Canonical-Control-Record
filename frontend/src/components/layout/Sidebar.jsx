@@ -10,6 +10,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { ScrollText } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import showService from '../../services/showService';
 import { activeShowId } from '../../utils/activeShow';
@@ -54,6 +55,8 @@ function buildNav() {
       items: [
         { icon: '🎬', label: 'Shows', route: '/shows', expandable: true },
         { icon: '⏱️', label: 'Timeline Editor', route: '/studio/timeline' },
+        // Teleprompter: read a script or pasted text and record yourself (Evoni, 2026-10-20).
+        { icon: <ScrollText size={16} aria-hidden="true" />, label: 'Teleprompter', route: '/teleprompter', hint: 'Read your script and record yourself' },
       ],
     },
     {

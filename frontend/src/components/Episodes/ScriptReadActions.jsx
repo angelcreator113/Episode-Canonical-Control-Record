@@ -4,7 +4,8 @@
 // element. Both read the script as the page has it, saved or not.
 
 import { useState, useRef } from 'react';
-import { BookOpen, Download, Printer, FileText } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { BookOpen, Download, Printer, FileText, ScrollText } from 'lucide-react';
 import ScriptTableRead from './ScriptTableRead';
 import { toFountain, toPlainText, scriptFileSlug } from '../../lib/scriptExport';
 import './ScriptTableRead.css';
@@ -23,7 +24,7 @@ export function downloadText(text, fileName, type = 'text/plain;charset=utf-8') 
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-export default function ScriptReadActions({ scriptText, title = '', dirty = false, onScreen = null, scenePlan = [], startBeat = 0 }) {
+export default function ScriptReadActions({ scriptText, title = '', dirty = false, onScreen = null, scenePlan = [], startBeat = 0, episodeId = null, beatNumber = null }) {
   // null | 'read' | 'print'
   const [mode, setMode] = useState(null);
   const [error, setError] = useState(null);
@@ -50,6 +51,16 @@ export default function ScriptReadActions({ scriptText, title = '', dirty = fals
       <button type="button" className="esp-btn str-launch" data-testid="script-table-read" title={`Read the script through, full screen${unsavedNote}`} onClick={() => setMode('read')}>
         <BookOpen size={14} aria-hidden="true" /> Table read
       </button>
+      {/* The Teleprompter page on this episode and the open beat (Evoni,
+          2026-10-20). It reads the saved script; an in-app link, so the
+          tab's unsaved-changes guard asks first. */}
+      {episodeId && (
+        <Link className="esp-btn str-launch" data-testid="script-teleprompter"
+          to={`/teleprompter?episode=${encodeURIComponent(episodeId)}${beatNumber != null ? `&beat=${encodeURIComponent(beatNumber)}` : ''}`}
+          title={`Read the saved script on the teleprompter and record yourself${dirty ? ' (save first: unsaved changes are not in it)' : ''}`}>
+          <ScrollText size={14} aria-hidden="true" /> Teleprompter
+        </Link>
+      )}
       <details className="str-export" ref={menuRef} data-testid="script-export">
         <summary className="esp-btn str-launch" title={`Download or print the script${unsavedNote}`}>Export</summary>
         <div className="str-export-menu" role="group" aria-label="Export">

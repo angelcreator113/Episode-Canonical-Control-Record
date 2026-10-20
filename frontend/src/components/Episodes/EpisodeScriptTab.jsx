@@ -2157,7 +2157,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   const wornInOpen = openBeat ? piecesWornIn(beats, openIndex, outfit) : [];
   // Table read, Export and the raw editor sit on the open beat's Script
   // Lines card; with no beat open, or in the raw editor, on the script's card.
-  const readActions = <ScriptReadActions scriptText={scriptText} title={episode?.title || (episode?.episode_number ? `Episode ${episode.episode_number}` : 'Script')} dirty={scriptText !== savedScript} onScreen={onScreenWithDrafts} scenePlan={scenePlan} startBeat={Math.max(0, beats.indexOf(openBeat))} />;
+  const readActions = <ScriptReadActions scriptText={scriptText} title={episode?.title || (episode?.episode_number ? `Episode ${episode.episode_number}` : 'Script')} dirty={scriptText !== savedScript} onScreen={onScreenWithDrafts} scenePlan={scenePlan} startBeat={Math.max(0, beats.indexOf(openBeat))} episodeId={episodeId} beatNumber={openBeat?.number ?? null} />;
   const rawToggle = <button type="button" ref={rawToggleRef} className={`esp-btn${developerMode ? ' is-on' : ''}`} onClick={() => { rawRefocusRef.current = true; setDeveloperMode(d => !d); }}>{developerMode ? 'Beat view' : 'Raw editor'}</button>;
   const toolsInBeat = showBeatList && !!openBeat;
   return (
