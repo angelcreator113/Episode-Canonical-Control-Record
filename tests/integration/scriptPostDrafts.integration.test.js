@@ -108,6 +108,21 @@ const SCRIPT = [
     expect(await drafts(ids.show)).toHaveLength(2);
   });
 
+  // Evoni, 2026-10-20: a script post's format is read from its own words.
+  it("each Post line's format comes from its words; Lala's usual is a photo", async () => {
+    const ids = await seed([
+      '## BEAT: 12 · Deliverable Creation',
+      '[UI:POST Studio night, statement look.]',
+      '[UI:POST Photo dump from the fitting, swipe for the shoes]',
+      '[UI:POST "Dress like the room already said yes."]',
+      '[UI:POST Thoughts on tonight: I was terrified.]',
+      '[UI:POST Mirror selfie before the doors open]',
+    ].join('\n'));
+    await auth(request(app).post(url(ids.ep)));
+    const [rows] = await run('SELECT content_text, post_format FROM feed_posts WHERE show_id = :show ORDER BY created_at', { show: ids.show });
+    expect(rows.map((r) => r.post_format)).toEqual(['post', 'carousel', 'quote', 'text', 'post']);
+  });
+
   it('no Post lines, nothing drafted; an unknown episode is 404', async () => {
     const ids = await seed('## BEAT: 1 · Opening Ritual\nPrime: "Hi."');
     expect((await auth(request(app).post(url(ids.ep)))).body.data).toEqual([]);

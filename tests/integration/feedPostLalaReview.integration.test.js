@@ -94,8 +94,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const finance = require('../../src/services/financialFeedService');
     const res = await finance.postMilestoneReached(sequelize, showId, [{ goal: { label: '10K coins', reward_coins: 50 } }]);
     expect(res.posted).toBe(1);
-    const [rows] = await run("SELECT status, poster_handle FROM feed_posts WHERE show_id = :showId AND narrative_function = 'flex'", { showId });
-    expect(rows).toEqual([{ status: 'draft', poster_handle: 'lala' }]);
+    const [rows] = await run("SELECT status, poster_handle, post_format FROM feed_posts WHERE show_id = :showId AND narrative_function = 'flex'", { showId });
+    // A milestone is a thought in words, not a photo post (Evoni, 2026-10-20).
+    expect(rows).toEqual([{ status: 'draft', poster_handle: 'lala', post_format: 'text' }]);
   });
 
   test('a ripple reply about Lala is a draft for Review; one about anyone else follows its live parent (Task #3103)', async () => {
