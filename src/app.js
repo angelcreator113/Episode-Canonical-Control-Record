@@ -1034,6 +1034,10 @@ app.use('/api/footage', footageRoutes);
 const rawClipRoutes = trackRouteLoad('rawClips', () => require('./routes/rawClipRoutes'));
 app.use('/api/v1/episode-clips', rawClipRoutes);
 
+// Character poses: Lala and JustAWoman photos per episode, on Files (episodePoseRoutes)
+const episodePoseRoutes = trackRouteLoad('episodePoses', () => require('./routes/episodePoseRoutes'));
+app.use('/api/v1/episode-poses', episodePoseRoutes);
+
 // Voice clips: script lines spoken by Evoni, for the teleprompter (scriptVoiceClipRoutes)
 const scriptVoiceClipRoutes = trackRouteLoad('scriptVoiceClips', () => require('./routes/scriptVoiceClipRoutes'));
 app.use('/api/v1/script-voice-clips', scriptVoiceClipRoutes);
