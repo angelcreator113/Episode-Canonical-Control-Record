@@ -37,6 +37,8 @@ const PRE_AUTH_PATHS = ['/login', '/', ...(import.meta.env.DEV ? ['/__dev-token-
 const EpisodeDetail = lazy(() => import('./pages/EpisodeDetail'));
 const NewEpisodeRedirect = lazy(() => import('./pages/NewEpisodeRedirect'));
 const IconCueTimeline = lazy(() => import('./pages/IconCueTimeline'));
+// Teleprompter: read a script or pasted text, and record yourself (Evoni, 2026-10-20).
+const Teleprompter = lazy(() => import('./pages/Teleprompter'));
 const SearchResults = lazy(() => import('./pages/SearchResults'));
 const ThumbnailGallery = lazy(() => import('./pages/ThumbnailGallery'));
 const CompositionDetail = lazy(() => import('./pages/CompositionDetail'));
@@ -377,6 +379,7 @@ function AppContent() {
           <Route path="/shows/:id/settings" element={<ShowSettingsRedirect />} />
           {/* Studio — universe-level entry points */}
           <Route path="/studio/timeline" element={<StudioTimelinePage />} />
+          <Route path="/teleprompter" element={<Teleprompter />} />
 
           {/* Scene Studio (Canva-like visual editor) */}
           <Route path="/studio/scene/:sceneId" element={<SceneStudioPage />} />

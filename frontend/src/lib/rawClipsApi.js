@@ -23,13 +23,15 @@ export const STRENGTHS = [
 
 export const rawClipsApi = {
   list: (episodeId) => api.get(base(episodeId)).then((r) => (Array.isArray(r.data?.data) ? r.data.data : [])),
-  upload: (episodeId, file, { performer, greenScreen = false, guestName, strength } = {}, onProgress) => {
+  // label: the clip's name in Files (the teleprompter names each take; Evoni, 2026-10-20).
+  upload: (episodeId, file, { performer, greenScreen = false, guestName, strength, label } = {}, onProgress) => {
     const form = new FormData();
     form.append('video', file);
     form.append('performer', performer);
     form.append('green_screen', greenScreen ? 'true' : 'false');
     if (guestName) form.append('guest_name', guestName);
     if (strength) form.append('strength', strength);
+    if (label) form.append('label', label);
     return api.post(base(episodeId), form, {
       timeout: 0, // a big clip can take longer than the client's usual 3 minutes
       onUploadProgress: (e) => { if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100)); },
