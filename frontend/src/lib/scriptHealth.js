@@ -142,7 +142,9 @@ export function scriptHealth({
   if (beat14 && last) {
     const opp = beat14.opportunity;
     const id = last.id || null;
-    if (!opp) rows.push({ key: 'beat14', ok: false, beatId: id, text: 'Beat 14 has no opportunity attached: open beat 14 to attach the invitation someone at the event offers.' });
+    // The invitation is an optional ending (Evoni, 2026-10-19): none attached
+    // is a note, not a thing to check (Script page audit 4).
+    if (!opp) rows.push({ key: 'beat14', ok: true, beatId: id, text: 'Beat 14 has no opportunity attached (optional): open beat 14 to attach the invitation someone at the event offers.' });
     else {
       const there = invitationLine(last.lines || [], opp.name) !== null;
       const from = opp.contact_name || (atHandle(opp.connector_handle) || null);

@@ -16,9 +16,16 @@ import { scriptHealth } from '../../lib/scriptHealth';
 
 // JustAWoman speaks here: Lala's voice has its own rows (see "Lala's voice" below).
 const SCRIPT = '## BEAT: 1 · Opening Ritual\nMe: Hi besties.\n\n## BEAT: 2 · Login Sequence\nMe: Logging in.\n[UI:OPEN Nowhere]';
-const renderTab = (script = SCRIPT, locked = []) => render(
-  <MemoryRouter><EpisodeScriptTab episode={{ id: 'ep-1', show_id: 'show-1', script_content: script, script_locked_beats: locked }} show={{ id: 'show-1' }} /></MemoryRouter>,
-);
+// "Ready to film?" starts folded (Script page audit 4, 2026-10-19): these
+// tests open it, as Evoni would.
+const renderTab = (script = SCRIPT, locked = []) => {
+  const r = render(
+    <MemoryRouter><EpisodeScriptTab episode={{ id: 'ep-1', show_id: 'show-1', script_content: script, script_locked_beats: locked }} show={{ id: 'show-1' }} /></MemoryRouter>,
+  );
+  const toggle = screen.queryByTestId('script-health-toggle');
+  if (toggle?.getAttribute('aria-expanded') === 'false') fireEvent.click(toggle);
+  return r;
+};
 
 beforeEach(() => {
   Object.values(api).forEach((fn) => fn?.mockReset?.());
@@ -53,28 +60,19 @@ describe('Ready to film?', () => {
     expect(screen.getByTestId('script-health-saved').textContent).toBe('Unsaved changes.');
   });
 
-  test('closed stays closed for this viewer', () => {
+  // Folded at every width, open or closed not remembered (Script page audit 4, 2026-10-19).
+  test('folds and opens; a new visit starts folded again, and nothing is stored', () => {
+    const set = vi.spyOn(Storage.prototype, 'setItem');
     const { unmount } = renderTab();
+    expect(screen.getByTestId('script-health-beats')).toBeTruthy();
     fireEvent.click(screen.getByTestId('script-health-toggle'));
     expect(screen.queryByTestId('script-health-beats')).toBeNull();
     expect(screen.getByTestId('script-health-toggle').getAttribute('aria-expanded')).toBe('false');
     unmount();
-    renderTab();
-    expect(screen.queryByTestId('script-health-beats')).toBeNull();
-    fireEvent.click(screen.getByTestId('script-health-toggle'));
-    expect(screen.getByTestId('script-health-beats')).toBeTruthy();
-  });
-
-  test('storage that throws still shows the card, open, and says why in the console', () => {
-    const get = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
-    const set = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked'); });
-    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
-    renderTab();
-    expect(screen.getByTestId('script-health-beats')).toBeTruthy();
-    fireEvent.click(screen.getByTestId('script-health-toggle'));
-    expect(screen.queryByTestId('script-health-beats')).toBeNull();
-    expect(err).toHaveBeenCalled();
-    get.mockRestore(); set.mockRestore(); err.mockRestore();
+    render(<MemoryRouter><EpisodeScriptTab episode={{ id: 'ep-1', show_id: 'show-1', script_content: SCRIPT, script_locked_beats: [] }} show={{ id: 'show-1' }} /></MemoryRouter>);
+    expect(screen.getByTestId('script-health-toggle').getAttribute('aria-expanded')).toBe('false');
+    expect(set.mock.calls.some(([k]) => k === 'esp-health-collapsed')).toBe(false);
+    set.mockRestore();
   });
 
   test('a look piece never put on is flagged at the getting-ready beat', async () => {
@@ -207,8 +205,10 @@ describe("scriptHealth: beat 14's opportunity", () => {
     expect(row([DM], { o: { ...opp, status: 'offered' }, intent: 'fail' }).ok).toBe(true);
   });
 
-  test('nothing attached stays a row to fix', () => {
-    expect(row([DM], { o: null })).toMatchObject({ ok: false });
+  // The invitation is an optional ending (Evoni, 2026-10-19; Script page audit 4).
+  test('nothing attached is an optional note, not a row to fix', () => {
+    expect(row([DM], { o: null })).toMatchObject({ ok: true });
+    expect(row([DM], { o: null }).text).toMatch(/\(optional\)/);
   });
 });
 

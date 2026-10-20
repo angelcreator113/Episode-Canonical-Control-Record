@@ -53,6 +53,24 @@ describe('productionSteps', () => {
   });
 });
 
+// Evoni, 2026-10-19: "script is being marked completed before it's finished".
+describe('the Script step', () => {
+  const ALL = Array.from({ length: 14 }, (_, i) => i + 1);
+  const step = (episode) => productionSteps({ episode: { id: 'e', status: 'draft', ...episode } }).find((s) => s.key === 'script');
+  test('a written script is not done until every beat is approved', () => {
+    expect(step({ script_content: '## BEAT: 1 · Opening Ritual\nMe: hi' })).toMatchObject({ done: false, detail: '0 of 14 beats approved', current: false });
+    expect(step({ script_content: 'x', script_locked_beats: [1, 2, 3] })).toMatchObject({ done: false, detail: '3 of 14 beats approved' });
+  });
+  test('done when all 14 beats are approved, saved as numbers or as JSON text', () => {
+    expect(step({ script_content: 'x', script_locked_beats: ALL })).toMatchObject({ done: true, detail: null });
+    expect(step({ script_content: 'x', script_locked_beats: JSON.stringify(ALL) }).done).toBe(true);
+  });
+  test('no script: not done and no count; status past Draft still counts as done', () => {
+    expect(step({})).toMatchObject({ done: false, detail: null });
+    expect(step({ status: 'scripted' }).done).toBe(true);
+  });
+});
+
 describe('sectionSummary and canMarkReady', () => {
   test('each section with its count', () => {
     expect(sectionSummary(SECTIONS, { a: true, d: true })).toEqual([

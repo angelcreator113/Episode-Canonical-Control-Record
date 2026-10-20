@@ -126,7 +126,7 @@ export function eventPanel(event, locations = []) {
  * ruling: no new statuses), from the episode's own Production steps
  * (lib/productionSteps) so the board and the episode page agree:
  *   Planning   the checklist's brief and event sections
- *   Script     a script written, or the status past Draft
+ *   Script     all 14 beats approved, or the status past Draft
  *   Production the scene plan done and footage uploaded
  *   Edit       every scene has a clip
  *   Thumbnail  a primary thumbnail, or a thumbnail on the episode

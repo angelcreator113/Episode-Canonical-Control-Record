@@ -159,3 +159,40 @@ describe('Episode header: previous/next and status (Episode Style mock, 2026-10-
     expect(mockToast.showError).toHaveBeenCalledWith('The status could not be saved.');
   });
 });
+
+describe("the header's ⋮ menu (Script page audit 4, 2026-10-19)", () => {
+  beforeEach(() => {
+    vi.mocked(api.get).mockImplementation(async (url) => (url.startsWith('/api/v1/episodes?show_id=') ? { data: { data: EPISODES } } : { data: {} }));
+  });
+
+  test('Escape closes it and gives focus back to the ⋮', async () => {
+    renderAt('/episodes/ep-2?tab=checklist');
+    const more = await screen.findByRole('button', { name: 'More actions' });
+    fireEvent.click(more);
+    expect(more.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(more);
+  });
+
+  test('a click anywhere else closes it; a click inside does not', async () => {
+    renderAt('/episodes/ep-2?tab=checklist');
+    const more = await screen.findByRole('button', { name: 'More actions' });
+    fireEvent.click(more);
+    fireEvent.pointerDown(screen.getByRole('button', { name: /Edit Episode/ }));
+    expect(more.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.pointerDown(document.body);
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  test('its items carry lucide icons, not emoji', async () => {
+    renderAt('/episodes/ep-2?tab=checklist');
+    fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+    const edit = screen.getByRole('button', { name: /Edit Episode/ });
+    const del = screen.getByRole('button', { name: /Delete Episode/ });
+    for (const item of [edit, del]) {
+      expect(item.querySelector('svg')).not.toBeNull();
+      expect(item.textContent).not.toMatch(/✏️|🗑️/);
+    }
+  });
+});

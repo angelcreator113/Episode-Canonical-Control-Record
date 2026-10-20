@@ -71,6 +71,8 @@ describe('while a lock saves, nothing changes the script', () => {
   test("Ready to film's fixes wait", () => {
     vi.mocked(api.put).mockReturnValue(deferred().promise);
     renderTab('## BEAT: 4 · Interruption Pulse 1\nMe: ooh\nLala: hi\n\n## BEAT: 5 · Reveal\n[UI:DISPLAY Start button]\nMe: read it');
+    // Ready to film? starts folded (Script page audit 4, 2026-10-19).
+    fireEvent.click(screen.getByTestId('script-health-toggle'));
     fireEvent.click(screen.getByTestId('script-lock-4'));
     expect(screen.getByTestId('script-health-fix-voice-beat-4').disabled).toBe(true);
   });

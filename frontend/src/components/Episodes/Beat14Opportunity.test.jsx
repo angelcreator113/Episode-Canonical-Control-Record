@@ -154,7 +154,8 @@ describe('beat 14 in must cover and health', () => {
 
   test('health: none attached, attached, designed to fail, not read', () => {
     const row = (args) => scriptHealth({ beats, ...args }).find((r) => r.key === 'beat14');
-    expect(row({ beat14: { opportunity: null } })).toMatchObject({ ok: false, beatId: 'b14' });
+    // Optional (Evoni, 2026-10-19; Script page audit 4): a note, not a thing to check.
+    expect(row({ beat14: { opportunity: null } })).toMatchObject({ ok: true, beatId: 'b14' });
     expect(row({ beat14: { opportunity: OPP } }).text).toBe('Beat 14 offers Studio by Sable campaign, from Sable Reyes.');
     // Designed to fail, a beat 14 that delivers it is flagged (Script page audit, 2026-10-19).
     expect(row({ beat14: { opportunity: OPP }, designedIntent: 'fail' })).toMatchObject({ ok: false, text: 'Beat 14 delivers Studio by Sable campaign, but the episode is designed to fail: the invitation does not come.' });
