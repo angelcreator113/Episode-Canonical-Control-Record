@@ -402,6 +402,7 @@ export function PostCard({ post, onChange, showId }) {
       {hasSide && (
         <aside className="prv-item-side" aria-label="Release">
           {isDraft && <GateResult gate={post.gate_json} />}
+          {isDraft && <PicturePlan plan={post.picture_plan} />}
           <div className="prv-side-actions" data-testid="sm-post-actions">
             {isDraft && <>
               <button type="button" className="prv-btn prv-release-btn" disabled={busy} onClick={release}><Send size={16} aria-hidden="true" />{post.release_state ? 'Release now' : 'Release'}</button>
@@ -431,6 +432,21 @@ const FLAG_LABELS = {
  * services/pulseGate.js): the voice score, why it waits for Evoni, and
  * each flag with its detail. Nothing for posts the engine did not draft.
  */
+/**
+ * Approving this draft makes its picture from the poster's camera roll
+ * (services/postPictures; Evoni, 2026-10-19): how many, and about what it
+ * costs. A photo of theirs that fits is used first, at no cost.
+ */
+export function PicturePlan({ plan }) {
+  if (!plan || !plan.count) return null;
+  const cost = typeof plan.estimate_usd === 'number' ? ` (about $${plan.estimate_usd.toFixed(2)})` : '';
+  return (
+    <p className="prv-muted" data-testid="prv-picture-plan">
+      Approving makes {plan.count === 1 ? 'its picture' : `its ${plan.count} pictures`} from their camera roll{cost}, unless a photo of theirs already fits.
+    </p>
+  );
+}
+
 export function GateResult({ gate }) {
   if (!gate || typeof gate !== 'object') return null;
   const review = Array.isArray(gate.review) ? gate.review : [];
@@ -475,6 +491,7 @@ export function RequestPost({ post, onChange }) {
       <p className="prv-request-text"><b>{who.name}</b> {editing ? null : post.content_text}</p>
       {editing && <textarea aria-label="Edit the post" rows={3} value={text} onChange={(e) => setText(e.target.value)} />}
       <GateResult gate={post.gate_json} />
+      <PicturePlan plan={post.picture_plan} />
       <p className="prv-muted">{post.episode_id ? <Link to={`/episodes/${post.episode_id}`}>{episodeNumber != null ? `Episode ${episodeNumber}` : 'Its episode'}</Link> : null}</p>
       <p className="prv-actions">
         {editing ? (

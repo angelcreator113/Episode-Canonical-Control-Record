@@ -49,7 +49,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       const [[row]] = await run(`INSERT INTO social_profiles (handle, platform, vibe_sentence, display_name, feed_layer, status, lala_relationship, public_persona, city, created_at, updated_at)
         VALUES (:handle, 'instagram', 'dry wit', :display, 'lalaverse', CAST(:status AS enum_social_profiles_status),
           CAST(:rel AS enum_social_profiles_lala_relationship), :persona, CAST(:city AS enum_social_profiles_city), NOW(), NOW()) RETURNING id`,
-      { handle: `${key}-${tag}`, display: key, status: extra.status || 'finalized', rel: extra.rel || null, persona: extra.persona || null, city: extra.city || null });
+      { handle: `${extra.at ? '@' : ''}${key}-${tag}`, display: key, status: extra.status || 'finalized', rel: extra.rel || null, persona: extra.persona || null, city: extra.city || null });
       p[key] = row.id;
     };
     await profile('lala');
@@ -57,6 +57,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await profile('crossed', { status: 'crossed' });  // came from the feed before follows existed
     await profile('maren', { status: 'finalized', persona: 'baker and early riser', city: 'velour_city' });
     await profile('stranger');
+    await profile('sable', { at: true });          // stored as "@sable-…", the way real handles are
     await profile('made', { status: 'generated' });   // "Make one for me": their character was made on The Cast
     // Lala's registry character links her profile: lalaFeedProfile finds her through it.
     await run(`INSERT INTO registry_characters (id, registry_id, character_key, display_name, feed_profile_id, created_at, updated_at)
@@ -147,6 +148,18 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const listed = res.body.data.friends.list.map((f) => f.id);
     expect(listed).toContain(p.friend);
     expect(listed).not.toContain(p.crossed);
+  });
+
+  // Real handles are stored with their "@" (Evoni's live 404s, 2026-10-19:
+  // /pulse-follows/profile/studiobysable). The URL may carry it or not.
+  test('a profile stored as "@handle" is found with or without the @, and its media too', async () => {
+    for (const h of [`sable-${tag}`, `@sable-${tag}`, `SABLE-${tag}`]) {
+      const res = await as(editor, request(app).get(`/api/v1/pulse-follows/profile/${encodeURIComponent(h)}?show_id=${ids.show}`));
+      expect(res.status).toBe(200);
+      expect(res.body.data.profile.handle).toBe(`sable-${tag}`);
+    }
+    expect((await as(editor, request(app).get(`/api/v1/pulse-follows/profile/sable-${tag}/media`))).status).toBe(200);
+    expect((await as(editor, request(app).get(`/api/v1/pulse-follows/profile/nobody-${tag}`))).status).toBe(404);
   });
 
   test('a profile read: who they are, their audience number, the relation; the character id for an admin only', async () => {

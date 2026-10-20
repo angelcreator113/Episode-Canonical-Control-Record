@@ -128,8 +128,22 @@ async function forReader(req, posts) {
   // optionalAuth reads only cognito:groups; a local token carries its own groups claim.
   const raw = req.user?.raw || {};
   const groups = [...(req.user?.groups || []), ...(Array.isArray(raw.groups) ? raw.groups : [])];
-  if (require('../services/mediaLibrary').audienceOf({ groups }) === 'admin') return posts;
-  return require('../services/postMedia').publicPosts(require('../models'), posts);
+  if (require('../services/mediaLibrary').audienceOf({ groups }) === 'admin') {
+    // A draft that will get a picture on approval says so, with what it costs
+    // (services/postPictures): the estimate before, the job's cost after.
+    const pp = require('../services/postPictures');
+    return posts.map((p) => {
+      const n = p && p.status === 'draft' && !p.picture_job ? pp.wanted(p) : 0;
+      return n ? { ...p, picture_plan: { count: n, estimate_usd: pp.estimate(n) } } : p;
+    });
+  }
+  // A post's picture job is the studio's (services/postPictures), not the reader's.
+  const shown = await require('../services/postMedia').publicPosts(require('../models'), posts);
+  return shown.map((p) => {
+    if (!p || typeof p !== 'object' || !('picture_job' in p)) return p;
+    const { picture_job: _job, ...rest } = p;
+    return rest;
+  });
 }
 
 // ── GET FEED TIMELINE (QUERY COMPAT) ────────────────────────────────────────
@@ -719,6 +733,11 @@ router.put('/:postId', requireAuth, async (req, res) => {
     // A draft going live has its numbers proposed after the response, never failing the release (Task #2953).
     if (released) require('../services/pulseNumbers').proposeLater(post);
     if (released) require('../services/pulseCloseness').proposeLater(post.id);
+    // Approved by her (an ADMIN): its picture is made now, from the poster's camera roll
+    // (services/postPictures; Evoni, 2026-10-19). The release never waits for it or fails on it.
+    if (released && require('../middleware/auth').userInGroup(req.user, 'admin')) {
+      await require('../services/postPictures').afterApproval(require('../models'), post, { by: req.user?.email || null });
+    }
     return undefined;
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -889,7 +908,14 @@ router.post('/release-plan', requireAuth, authorize(['ADMIN']), async (req, res)
   try {
     const { scheduleAll, ReleaseError } = require('../services/postRelease');
     try {
-      return res.json(await scheduleAll(require('../models'), req.body?.items, { tzOffset: Number(req.body?.tz_offset) || 0, anyway: req.body?.anyway === true }));
+      const models = require('../models');
+      const result = await scheduleAll(models, req.body?.items, { tzOffset: Number(req.body?.tz_offset) || 0, anyway: req.body?.anyway === true });
+      // Scheduled by her: approved, so their pictures are made now (services/postPictures).
+      for (const id of result.scheduled || []) {
+        const post = await models.FeedPost.findByPk(id);
+        if (post) await require('../services/postPictures').afterApproval(models, post, { by: req.user?.email || null });
+      }
+      return res.json(result);
     } catch (err) {
       if (err instanceof ReleaseError) return res.status(err.status).json({ error: err.message });
       throw err;
@@ -926,6 +952,8 @@ router.put('/:postId/release-time', requireAuth, authorize(['ADMIN']), async (re
       await setReleaseTime(post, { mode: req.body?.mode, at: req.body?.at ?? null });
       // The hour she chose teaches the suggestions her own posting hours.
       if (req.body?.mode === 'schedule') await require('../services/postRelease').learnReleaseTime(models, post, req.body.at, { tzOffset: Number(req.body?.tz_offset) || 0 });
+      // Scheduled by her: approved, so its picture is made now (services/postPictures).
+      if (req.body?.mode === 'schedule') await require('../services/postPictures').afterApproval(models, post, { by: req.user?.email || null });
     } catch (err) {
       if (err instanceof ReleaseError) return res.status(err.status).json({ error: err.message });
       throw err;

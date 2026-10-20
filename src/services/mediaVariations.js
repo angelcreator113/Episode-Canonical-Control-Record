@@ -185,15 +185,18 @@ async function addedCharacter(db, characterId) {
  * reference images (the first is the one edited), images/generations when
  * there are none (phase 4: a new picture with no person and no place to
  * keep). routeName is what ai_usage_logs records it under; size defaults to
- * the library's landscape SIZE (the camera roll asks for a phone's portrait).
+ * the library's landscape SIZE (the camera roll asks for a phone's portrait);
+ * onLogged, when given, receives the logged cost ({ costUsd, estimateUsd, usageLogId }).
  */
-async function editImage(prompt, images, { routeName = 'media-variation', size = SIZE } = {}) {
+async function editImage(prompt, images, { routeName = 'media-variation', size = SIZE, onLogged = null } = {}) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new MediaError(503, 'The image tool is not set up (OPENAI_API_KEY).');
   const text = prompt.length > 4000 ? `${prompt.slice(0, 3997)}...` : prompt;
   const axios = require('axios');
   const imageCost = require('./imageCostService');
   const plan = { model: MODEL, ...size, quality: 'high', count: 1, inputImages: images.length > 0, routeName };
+  // The caller learns what the call really cost (imageCostService.runImageCall onLogged).
+  if (typeof onLogged === 'function') plan.onLogged = onLogged;
   let call;
   if (images.length) {
     const FormData = require('form-data');

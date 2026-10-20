@@ -330,9 +330,11 @@ async function peopleFor(db, character, names) {
   return out;
 }
 
-async function liveMoments(db, characterId) {
+async function liveMoments(db, characterId, { planned = false } = {}) {
   return db.CameraRollMoment.findAll({
-    where: { character_id: characterId, status: ['proposed', 'kept', 'made', 'failed'] },
+    // planned: only the roll's own moments; a photo made for a Pulse post
+    // (post_id, services/postPictures) is in the roll but not in its number.
+    where: { character_id: characterId, status: ['proposed', 'kept', 'made', 'failed'], ...(planned ? { post_id: null } : {}) },
     order: [['created_at', 'ASC']],
   });
 }
@@ -341,7 +343,7 @@ async function plan(db, characterId, { count = null, idea = '', by = null } = {}
   const { character, registry } = await eligible(db, characterId);
   const target = await targetFor(db, character, registry);
   const existing = await liveMoments(db, character.id);
-  const room = target - existing.length;
+  const room = target - existing.filter((m) => !m.post_id).length;
   if (room <= 0) throw new CameraRollError(409, `Their camera roll already has ${existing.length} of ${target} photos planned. Drop some to plan more.`);
   const n = Math.max(1, Math.min(room, Number(count) > 0 ? Math.floor(Number(count)) : room));
   const ctx = await contextFor(db, character);
@@ -426,7 +428,7 @@ async function setStatus(db, momentId, status) {
   if (moment.status === 'made') throw new CameraRollError(409, 'That photo is already made; remove the picture from the library instead.');
   if (status === 'kept' && moment.status === 'dropped') {
     const { character, registry } = await load(db, moment.character_id);
-    const live = await liveMoments(db, moment.character_id);
+    const live = await liveMoments(db, moment.character_id, { planned: true });
     const target = await targetFor(db, character, registry);
     if (live.length >= target) throw new CameraRollError(409, `Their camera roll already has ${target} photos planned.`);
   }
@@ -452,9 +454,10 @@ function rollRecord(m) {
 }
 
 /** The image prompt: a candid phone photo of this moment, never a studio portrait. */
-function photoPrompt(character, m, { look = '', referenced = false } = {}) {
+function photoPrompt(character, m, { look = '', referenced = false, wearing: outfitText = null } = {}) {
   const a = character.appearance && typeof character.appearance === 'object' ? character.appearance : {};
-  const wearing = { at_home: a.at_home, going_out: a.going_out || a.signature_style, work: a.signature_style, event: a.going_out || a.signature_style }[m.outfit];
+  // outfitText: what they wore that day when the story knows it (Lala's episode wardrobe, services/postPictures).
+  const wearing = outfitText || { at_home: a.at_home, going_out: a.going_out || a.signature_style, work: a.signature_style, event: a.going_out || a.signature_style }[m.outfit];
   const others = (Array.isArray(m.people) ? m.people : []).map((p) => p?.name).filter(Boolean);
   const inFrame = m.shows_face
     ? `${nameOf(character)} is in the photo${referenced ? ', the same person as in the first reference image (keep their face exactly)' : ''}.`
@@ -473,7 +476,7 @@ function photoPrompt(character, m, { look = '', referenced = false } = {}) {
   ].filter(Boolean).join(' ');
 }
 
-async function make(db, momentId, { by = null } = {}) {
+async function make(db, momentId, { by = null, routeName = ROUTE, wearing = null } = {}) {
   const moment = await momentWithCharacter(db, momentId);
   if (moment.status === 'made') throw new CameraRollError(409, 'That photo is already made.');
   if (moment.status === 'dropped') throw new CameraRollError(409, 'That photo was dropped; keep it first.');
@@ -505,11 +508,12 @@ async function make(db, momentId, { by = null } = {}) {
     }
   }
   const { appearanceLines, isBlank } = require('./characterAppearance');
-  const prompt = photoPrompt(character, moment, { look: appearanceLines(character.appearance), referenced: refs.length > 0 });
+  const prompt = photoPrompt(character, moment, { look: appearanceLines(character.appearance), referenced: refs.length > 0, wearing });
 
   let buffer;
+  let actual = null;
   try {
-    buffer = await variations.editImage(prompt, refs, { routeName: ROUTE, size: PHONE_SIZE });
+    buffer = await variations.editImage(prompt, refs, { routeName, size: PHONE_SIZE, onLogged: (l) => { actual = l.costUsd; } });
   } catch (err) {
     if (err.code === 'AI_BUDGET_EXCEEDED') throw err;
     const status = err.status && err.status < 500 ? err.status : 502;
@@ -570,7 +574,8 @@ async function make(db, momentId, { by = null } = {}) {
   if (refs.length) {
     await media.addSources(db, created.asset.id, [{ role: 'portrait', source_asset_id: headshot.asset_id, character_id: character.id }], { by });
   }
-  await moment.update({ status: 'made', asset_id: created.asset.id, prompt, error: null, cost: estimate.usd });
+  // What the call really cost when it was logged, else the estimate.
+  await moment.update({ status: 'made', asset_id: created.asset.id, prompt, error: null, cost: typeof actual === 'number' ? actual : estimate.usd });
   return { moment: momentOut(moment, created.asset.url), photo: photoOut(created.asset) };
 }
 
@@ -603,7 +608,7 @@ function momentOut(m, url = null) {
     id: r.id, status: r.status, moment: r.moment, purpose: r.purpose, taken_by: r.taken_by, shows_face: Boolean(r.shows_face),
     outfit: r.outfit, album: r.album, place_text: r.place_text || null, story_date: r.story_date || null,
     event_id: r.event_id || null, episode_id: r.episode_id || null, people: Array.isArray(r.people) ? r.people : [],
-    asset_id: r.asset_id || null, url, error: r.error || null, created_at: r.created_at,
+    asset_id: r.asset_id || null, url, error: r.error || null, post_id: r.post_id || null, created_at: r.created_at,
   };
 }
 
@@ -653,4 +658,5 @@ module.exports = {
   CameraRollError, STATUSES, PURPOSES, TAKERS, OUTFITS, ALBUMS, ALBUM_LABELS, TARGETS, EDITABLE,
   normalizeMoment, normalizePlan, photoPrompt, promptFor, parseMoments, refusalFor, targetFor,
   rollFor, setHeadshot, headshotOf, plan, updateMoment, keep, drop, make, makeKept,
+  load, nameOf, momentOut, photoOut, IMAGE_MODEL, PHONE_SIZE,
 };

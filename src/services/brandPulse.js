@@ -252,8 +252,12 @@ function repFor(brand, repKey) {
 const cleanText = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 const cleanTag = (v) => (typeof v === 'string' && v.trim() && v !== 'null' ? v.trim().slice(0, 100) : null);
 
-/** Saves one drafted brand post (a draft until routed). */
-async function saveDraft(db, { showId, account, brand, rep, text, tag, at, kind, extra = {} }) {
+/**
+ * Saves one drafted brand post (a draft until routed). Its format is the one
+ * the prompt was written for, else a brand's mix: photo and carousel product
+ * posts, a little text, never a quote (services/postFormatMix).
+ */
+async function saveDraft(db, { showId, account, brand, rep, text, tag, at, kind, extra = {}, format = null }) {
   const body = rep ? `${text}\n${signature(rep)}` : text;
   return db.FeedPost.create({
     show_id: showId,
@@ -264,6 +268,7 @@ async function saveDraft(db, { showId, account, brand, rep, text, tag, at, kind,
     poster_display_name: account.display_name || brand.name,
     poster_platform: 'lalaverse',
     post_type: 'post',
+    post_format: format || require('./postFormatMix').formatFor(account, { brand: true }),
     content_text: body,
     trending_topic: tag,
     likes: 0, comments_count: 0, shares: 0, sample_comments: [],
@@ -303,7 +308,7 @@ async function routeEveryday(db, post, { brand, rep, release = 'now', alwaysRevi
       return { post, review: ['schedule'], published: false, scheduled_at: null };
     }
   }
-  await require('./pulseDrafter').release(post);
+  await require('./pulseDrafter').release(post, db);
   return { post, review, published: true, scheduled_at: null };
 }
 
@@ -322,17 +327,20 @@ async function draftBrandPost(db, { showId, brandId, repKey = null, about = null
   const clock = require('./storyClock');
   const at = await clock.presentOrder(db, showId);
   await require('./pulseRequests').take(db, { showId, lane: 'manual', kind: 'brand_post' });
+  const mixApi = require('./postFormatMix');
+  const format = mixApi.formatFor(account, { brand: true });
   const parsed = await ask(`You write one post on The Pulse, LalaVerse's social network, from the ${brand.name} account (@${account.handle}).
 
 ${brandVoiceBlock(brand, rep)}
 
 When: ${clock.label(at)}.
 What to post: ${cleanText(about, 500) || EVERYDAY_KINDS}.
+${mixApi.promptLine(format)}
 ${rep ? `Do not add a signature: ${firstName(rep)}'s name is added after the post.\n` : ''}
 Answer with JSON only: {"text": "the post", "hashtag": "#OneTag or null"}`, 600);
   const text = cleanText(parsed.text, 2000);
   if (!text) throw new BrandPulseError(502, 'The draft came back empty.');
-  const post = await saveDraft(db, { showId, account, brand, rep, text, tag: cleanTag(parsed.hashtag), at, kind: 'everyday' });
+  const post = await saveDraft(db, { showId, account, brand, rep, text, tag: cleanTag(parsed.hashtag), at, kind: 'everyday', format });
   return routeEveryday(db, post, { brand, rep, release: 'schedule' });
 }
 

@@ -28,6 +28,8 @@ module.exports = (sequelize, DataTypes) => {
     asset_id:     { type: DataTypes.UUID, allowNull: true, references: { model: 'media_assets', key: 'id' } },
     error:        { type: DataTypes.TEXT, allowNull: true },
     cost:         { type: DataTypes.DECIMAL(10, 4), allowNull: true },
+    // The Pulse post this photo was made for (migration 20261019230001, services/postPictures).
+    post_id:      { type: DataTypes.UUID, allowNull: true },
     created_by:   { type: DataTypes.STRING(255), allowNull: true },
   }, {
     sequelize, modelName: 'CameraRollMoment',

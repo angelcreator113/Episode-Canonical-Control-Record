@@ -22,6 +22,8 @@ const migration = require('../../src/migrations/20261019120000-media-library');
 const later = require('../../src/migrations/20261019160000-picture-suggestions');
 // The camera roll's moments point at media_assets too: undone first, redone last.
 const cameraRoll = require('../../src/migrations/20261019220000-camera-roll');
+// A post's camera-roll moment (post_id) sits on that table: undone before it, redone after it.
+const postPictures = require('../../src/migrations/20261019230001-post-pictures');
 
 const shouldSkip =
   !process.env.DATABASE_URL ||
@@ -187,6 +189,7 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
     await run(`DELETE FROM media_asset_links WHERE asset_id IN (SELECT id FROM media_assets WHERE url LIKE :pre)`, { pre: `https://cdn.test/${tag}/%` });
     await run('DELETE FROM media_assets WHERE url LIKE :pre', { pre: `https://cdn.test/${tag}/%` });
     const qi = sequelize.getQueryInterface();
+    await postPictures.down(qi, sequelize.constructor);
     await cameraRoll.down(qi, sequelize.constructor);
     await later.down(qi, sequelize.constructor);
     await migration.down(qi, sequelize.constructor);
@@ -196,6 +199,7 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
     await migration.up(qi, sequelize.constructor);
     await later.up(qi, sequelize.constructor);
     await cameraRoll.up(qi, sequelize.constructor);
+    await postPictures.up(qi, sequelize.constructor);
     const back = await q("SELECT to_regclass('public.media_assets') AS a, to_regclass('public.media_asset_links') AS l, to_regclass('public.media_asset_sources') AS s, to_regclass('public.camera_roll_moments') AS c");
     expect(back[0].a).toBeTruthy();
     expect(back[0].l).toBeTruthy();

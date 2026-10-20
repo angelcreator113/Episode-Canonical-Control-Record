@@ -102,6 +102,9 @@ async function releaseDue(db, now = new Date()) {
       await post.update({ status: 'live', posted_at: post.posted_at || post.release_at, release_state: null, release_at: null });
       require('./pulseNumbers').proposeLater(post);
       require('./pulseCloseness').proposeLater(post.id);
+      // Its picture: made when it was scheduled by her; one scheduled by the
+      // engine (world moments, a brand's week) gets it now (services/postPictures).
+      await require('./postPictures').afterRelease(db, post, { by: 'scheduled release' });
       if (learn && post.social_profile_id) {
         await require('./pulseVoices').learnFromEdit(db, { socialProfileId: post.social_profile_id, text: post.content_text, postId: post.id, by: 'scheduled release' });
       }
@@ -118,6 +121,8 @@ function startScheduler(db) {
   if (timer) return timer;
   timer = setInterval(() => {
     releaseDue(db).catch((err) => console.error('[postRelease] the release timer failed:', err.message));
+    // Approved posts whose picture waited for today's limit (services/postPictures).
+    require('./postPictures').runWaiting(db).catch((err) => console.error('[postRelease] the waiting post pictures failed:', err.message));
   }, TICK_MS);
   if (typeof timer.unref === 'function') timer.unref();
   return timer;

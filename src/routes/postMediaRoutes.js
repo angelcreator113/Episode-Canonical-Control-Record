@@ -5,7 +5,10 @@
  * public sees is filtered in the feed routes.
  *
  *   GET  /formats                       the formats and how many pictures each
- *                                       takes; the deliverable → format map
+ *                                       takes; the deliverable → format map;
+ *                                       post_picture: what a post's picture
+ *                                       costs, the day's limit, how many each
+ *                                       format gets
  *   GET  /posts/:postId                 the post, its pictures and its poster's
  *                                       library
  *   PUT  /posts/:postId                 { asset_ids: [...], format? } — its
@@ -32,6 +35,15 @@
  *   GET  /suggestions/acceptance        per recommendation, how often it was
  *                                       taken and what was chosen instead
  *   GET  /needs-picture?show_id=&character_id=   posts with no picture
+ *   GET  /posts/:postId/picture         its picture from the camera roll
+ *                                       (services/postPictures): where it
+ *                                       stands, the estimate, today's count
+ *                                       against the day's limit, and photos of
+ *                                       theirs that could be used instead
+ *   POST /posts/:postId/picture         { make_now? } make (or retry) an
+ *                                       approved post's picture now; make_now
+ *                                       passes the image budget but not the
+ *                                       day's post-picture limit
  */
 const express = require('express');
 const { requireAuth, authorize } = require('../middleware/auth');
@@ -45,6 +57,9 @@ const byOf = (req) => req.user?.email || req.user?.id || null;
 
 function sendError(res, err, label) {
   const { MediaError } = require('../services/mediaLibrary');
+  const { PostPictureError } = require('../services/postPictures');
+  const { CameraRollError } = require('../services/cameraRoll');
+  if (err instanceof PostPictureError || err instanceof CameraRollError) return res.status(err.status).json({ success: false, error: err.message });
   if (err instanceof MediaError) {
     return res.status(err.status).json({ success: false, error: err.message, ...(err.pictures ? { code: 'pictures_not_public', pictures: err.pictures } : {}) });
   }
@@ -66,6 +81,11 @@ router.get('/formats', ...admin, (req, res) => {
     formats: s.FORMATS.map((f) => ({ key: f, label: s.FORMAT_LABELS[f], min: s.PICTURES[f][0], max: s.PICTURES[f][1] })),
     deliverables: s.FORMAT_FOR_DELIVERABLE,
     story_hours: s.STORY_HOURS,
+    // A post's picture from the camera roll after approval (services/postPictures).
+    post_picture: (() => {
+      const pp = require('../services/postPictures');
+      return { per_picture_usd: pp.estimate(1), per_day: pp.dailyCap(), counts: pp.COUNT };
+    })(),
   });
 });
 
@@ -143,6 +163,23 @@ router.post('/posts/:postId/suggestions/run', ...admin, aiRateLimiter, async (re
     return res.status(201).json({ success: true, ...out });
   } catch (err) {
     return sendError(res, err, 'POST /posts/:postId/suggestions/run');
+  }
+});
+
+router.get('/posts/:postId/picture', ...admin, async (req, res) => {
+  try {
+    return res.json({ success: true, ...(await require('../services/postPictures').statusOf(models(), req.params.postId)) });
+  } catch (err) {
+    return sendError(res, err, 'GET /posts/:postId/picture');
+  }
+});
+
+router.post('/posts/:postId/picture', ...admin, aiRateLimiter, async (req, res) => {
+  try {
+    const job = await require('../services/postPictures').run(models(), req.params.postId, { by: byOf(req), makeNow: req.body?.make_now === true });
+    return res.json({ success: true, job });
+  } catch (err) {
+    return sendError(res, err, 'POST /posts/:postId/picture');
   }
 });
 

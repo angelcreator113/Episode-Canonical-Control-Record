@@ -8,10 +8,19 @@
  * For an ADMIN: the two follow switches (routes/pulseFollowsRoutes) and a link
  * to their full character page. Lala's own profile is ProfileView in
  * pages/SocialMediaPage. Opened at /pulse?tab=profile&who=<handle>.
+ *
+ * A real account's page (Evoni, 2026-10-19: "lets give each pulse profile a
+ * gallery just like a real social media account"): Posts (pinned first, at
+ * most three; a carousel marked; a words-only post as a typographic tile),
+ * Tagged (photos others posted with them in it) and Highlights (their posted
+ * camera-roll photos by album), all public pictures only
+ * (GET /pulse-follows/profile/:handle/media). An ADMIN pins and unpins, and
+ * sees where each post's picture stands (services/postPictures): being made,
+ * waiting for tomorrow (Make now), failed (Retry), or what it cost.
  */
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, UserCheck, UserPlus, Users } from 'lucide-react';
+import { ArrowLeft, Layers, Pin, PinOff, UserCheck, UserPlus, Users } from 'lucide-react';
 import api from '../../services/api';
 import { Avatar, cityName, photoItemsOf } from './PulsePost';
 import { followersText } from '../../lib/pulseAudience';
@@ -19,6 +28,33 @@ import './PulsePerson.css';
 
 const POSTS = 24;
 const clean = (h) => String(h || '').replace(/^@/, '');
+const money = (n) => (typeof n === 'number' ? `$${n.toFixed(2)}` : null);
+
+/** Pinned posts first, in pin order (newest pin first); the rest as read, newest first. */
+export function orderPosts(posts, pinned = []) {
+  const at = new Map(pinned.map((id, i) => [String(id), i]));
+  const first = posts.filter((p) => at.has(String(p.id))).sort((a, b) => at.get(String(a.id)) - at.get(String(b.id)));
+  return [...first, ...posts.filter((p) => !at.has(String(p.id)))];
+}
+
+/**
+ * Where a post's picture stands, for an ADMIN: a short word for the tile, the
+ * whole sentence (shown on hover and read aloud), and the button that moves it on.
+ */
+export function pictureLine(job) {
+  if (!job || !job.state) return null;
+  switch (job.state) {
+    case 'pending':
+    case 'making': return { short: 'Making…', text: 'Its picture is being made.' };
+    case 'waiting_cap': return { short: 'Waiting', text: job.reason || "Today's post-picture limit is reached; it will be made tomorrow.", action: 'make_now' };
+    case 'failed': return { short: 'Failed', text: job.error || 'The picture could not be made.', action: 'retry' };
+    case 'made': return job.reused
+      ? { short: 'From roll', text: 'A photo already in their camera roll (no cost).' }
+      : { short: money(job.cost_usd) || 'Made', text: `Picture made${money(job.cost_usd) ? `, ${money(job.cost_usd)}` : ''}.` };
+    case 'skipped': return { short: 'No picture', text: job.reason || 'No picture for this post.' };
+    default: return null;
+  }
+}
 
 /** The badges for how they and Lala follow each other. */
 export function followBadges(relation) {
@@ -43,6 +79,10 @@ function FollowSwitch({ label, on, busy, onChange, testId }) {
 export default function PulsePerson({ show, handle, viewAt = null, admin = false, onBack = null }) {
   const [data, setData] = useState(null);       // null loading, false failed
   const [posts, setPosts] = useState(null);
+  const [media, setMedia] = useState(null);      // { pinned, tagged, highlights }; false when it could not be read
+  const [tab, setTab] = useState('posts');
+  const [album, setAlbum] = useState(null);
+  const [reload, setReload] = useState(0);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -74,7 +114,47 @@ export default function PulsePerson({ show, handle, viewAt = null, admin = false
         if (alive) setPosts(false);
       });
     return () => { alive = false; };
-  }, [profileId, show?.id, viewAt]);
+  }, [profileId, show?.id, viewAt, reload]);
+
+  useEffect(() => {
+    if (!profileId) return undefined;
+    let alive = true;
+    api.get(`/api/v1/pulse-follows/profile/${encodeURIComponent(clean(handle))}/media`)
+      .then((r) => {
+        const d = r.data?.data || {};
+        const list = (v) => (Array.isArray(v) ? v : []);
+        if (alive) setMedia({ pinned: list(d.pinned), tagged: list(d.tagged), highlights: list(d.highlights) });
+      })
+      .catch((err) => {
+        console.error('[ThePulse] their tagged photos and highlights could not be read:', err.response?.status || err.message);
+        if (alive) setMedia(false);
+      });
+    return () => { alive = false; };
+  }, [profileId, handle, reload]);
+
+  const setPin = async (post, on) => {
+    setBusy(true); setError(null);
+    try {
+      if (on) await api.put(`/api/v1/pulse-follows/posts/${post.id}/pin`);
+      else await api.delete(`/api/v1/pulse-follows/posts/${post.id}/pin`);
+      setReload((n) => n + 1);
+    } catch (err) {
+      console.error('[ThePulse] the pin could not be saved:', err.response?.status || err.message);
+      setError(err.response?.data?.error || 'The pin could not be saved.');
+    } finally { setBusy(false); }
+  };
+
+  const makePicture = async (post, makeNow) => {
+    setBusy(true); setError(null);
+    try {
+      await api.post(`/api/v1/post-media/posts/${post.id}/picture`, { make_now: makeNow });
+      setReload((n) => n + 1);
+    } catch (err) {
+      console.error('[ThePulse] the post picture could not be made:', err.response?.status || err.message);
+      setError(err.response?.data?.error || 'The picture could not be made.');
+      setReload((n) => n + 1);
+    } finally { setBusy(false); }
+  };
 
   const setFollow = async (path, on) => {
     setBusy(true); setError(null);
@@ -133,23 +213,112 @@ export default function PulsePerson({ show, handle, viewAt = null, admin = false
         </div>
       )}
 
-      <h3 className="pp-section">Posts</h3>
-      {posts === null && <p className="pl-quiet">Loading…</p>}
-      {posts === false && <p className="pl-error" role="alert">Their posts could not be read.</p>}
-      {Array.isArray(posts) && posts.length === 0 && <p className="pl-quiet" data-testid="pp-no-posts">Nothing posted yet.</p>}
-      {Array.isArray(posts) && posts.length > 0 && (
-        <ul className="pp-grid">
-          {posts.map((p) => {
-            const photo = p.teaser ? null : photoItemsOf(p)[0];
-            return (
-              <li key={p.id} className="pp-tile" data-testid="pp-post">
-                {photo
-                  ? <img src={photo.src} alt={photo.alt} className={p.photo_teaser ? 'pp-tile-blur' : undefined} />
-                  : <p>{p.teaser ? 'First look' : String(p.content_text || '').slice(0, 140)}</p>}
-              </li>
-            );
-          })}
-        </ul>
+      <div className="pp-tabs" role="tablist" aria-label="Their photos">
+        {[['posts', 'Posts'], ['tagged', 'Tagged'], ['highlights', 'Highlights']].map(([key, label]) => (
+          <button key={key} type="button" role="tab" aria-selected={tab === key} className={tab === key ? 'pp-tab on' : 'pp-tab'}
+            onClick={() => { setTab(key); setAlbum(null); }} data-testid={`pp-tab-${key}`}>
+            {label}{key === 'tagged' && media && media.tagged.length > 0 ? ` (${media.tagged.length})` : ''}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'posts' && (
+        <>
+          {posts === null && <p className="pl-quiet">Loading…</p>}
+          {posts === false && <p className="pl-error" role="alert">Their posts could not be read.</p>}
+          {Array.isArray(posts) && posts.length === 0 && <p className="pl-quiet" data-testid="pp-no-posts">Nothing posted yet.</p>}
+          {Array.isArray(posts) && posts.length > 0 && (
+            <ul className="pp-grid">
+              {orderPosts(posts, media ? media.pinned : []).map((p) => {
+                const photos = p.teaser ? [] : photoItemsOf(p);
+                const photo = photos[0];
+                const pinned = Boolean(media && media.pinned.map(String).includes(String(p.id)));
+                const carousel = photos.length > 1 || p.post_format === 'carousel';
+                const line = admin ? pictureLine(p.picture_job) : null;
+                return (
+                  <li key={p.id} className={photo ? 'pp-tile' : 'pp-tile pp-tile-text'} data-testid="pp-post">
+                    {photo
+                      ? <img src={photo.src} alt={photo.alt} className={p.photo_teaser ? 'pp-tile-blur' : undefined} />
+                      : <p>{p.teaser ? 'First look' : String(p.content_text || '').slice(0, 140)}</p>}
+                    {(pinned || carousel) && (
+                      <span className="pp-tile-marks">
+                        {pinned && <span className="pp-mark" role="img" aria-label="Pinned" data-testid="pp-pinned"><Pin size={13} aria-hidden="true" /></span>}
+                        {carousel && <span className="pp-mark" role="img" aria-label="Carousel" data-testid="pp-carousel"><Layers size={13} aria-hidden="true" /></span>}
+                      </span>
+                    )}
+                    {admin && (
+                      <span className="pp-tile-admin">
+                        <button type="button" className="pp-pin" disabled={busy} onClick={() => setPin(p, !pinned)}
+                          aria-label={pinned ? 'Unpin post' : 'Pin post'} title={pinned ? 'Unpin' : 'Pin first on their profile (three at most)'} data-testid="pp-pin">
+                          {pinned ? <PinOff size={14} aria-hidden="true" /> : <Pin size={14} aria-hidden="true" />}
+                        </button>
+                        {line && (
+                          <span className="pp-picture" data-testid="pp-picture" title={line.text}>
+                            <span aria-hidden="true">{line.short}</span>
+                            <span className="pp-sr">{line.text}</span>
+                            {line.action === 'make_now' && (
+                              <button type="button" className="pp-picture-btn" disabled={busy} onClick={() => makePicture(p, true)}
+                                title="Makes it now: today's post-picture limit does not apply, the image budget still does" data-testid="pp-make-now">Make now</button>
+                            )}
+                            {line.action === 'retry' && (
+                              <button type="button" className="pp-picture-btn" disabled={busy} onClick={() => makePicture(p, false)} data-testid="pp-retry">Retry</button>
+                            )}
+                          </span>
+                        )}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </>
+      )}
+
+      {tab === 'tagged' && (
+        <>
+          {media === null && <p className="pl-quiet">Loading…</p>}
+          {media === false && <p className="pl-error" role="alert">Their tagged photos could not be read.</p>}
+          {media && media.tagged.length === 0 && <p className="pl-quiet" data-testid="pp-no-tagged">Nobody has posted a photo with them in it yet.</p>}
+          {media && media.tagged.length > 0 && (
+            <ul className="pp-grid">
+              {media.tagged.map((t) => (
+                <li key={t.asset_id} className="pp-tile" data-testid="pp-tagged">
+                  <img src={t.url} alt={t.caption || ''} />
+                  {t.poster_handle && <span className="pp-tile-by">@{clean(t.poster_handle)}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+
+      {tab === 'highlights' && (
+        <>
+          {media === null && <p className="pl-quiet">Loading…</p>}
+          {media === false && <p className="pl-error" role="alert">Their highlights could not be read.</p>}
+          {media && media.highlights.length === 0 && <p className="pl-quiet" data-testid="pp-no-highlights">No highlights yet.</p>}
+          {media && media.highlights.length > 0 && (
+            <ul className="pp-highlights">
+              {media.highlights.map((h) => (
+                <li key={h.key}>
+                  <button type="button" className={album === h.key ? 'pp-highlight on' : 'pp-highlight'} onClick={() => setAlbum(album === h.key ? null : h.key)}
+                    aria-pressed={album === h.key} data-testid="pp-highlight">
+                    <span className="pp-highlight-ring">{h.cover ? <img src={h.cover} alt="" /> : null}</span>
+                    <span className="pp-highlight-label">{h.label}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {media && album && (
+            <ul className="pp-grid" data-testid="pp-highlight-photos">
+              {(media.highlights.find((h) => h.key === album)?.photos || []).map((ph) => (
+                <li key={ph.asset_id} className="pp-tile"><img src={ph.url} alt={ph.caption || ''} /></li>
+              ))}
+            </ul>
+          )}
+        </>
       )}
     </section>
   );
