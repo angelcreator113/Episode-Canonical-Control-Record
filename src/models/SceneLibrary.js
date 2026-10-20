@@ -256,7 +256,7 @@ module.exports = (sequelize) => {
           // Generate signed URLs for S3 assets
           const S3Service = require('../services/S3Service');
           const BUCKET_NAME =
-            process.env.AWS_S3_BUCKET || process.env.S3_ASSET_BUCKET || 'primepisodes-assets';
+            require('../services/assetBucket').ASSET_BUCKET;
 
           const generateSignedUrls = async (scene) => {
             if (!scene) return;

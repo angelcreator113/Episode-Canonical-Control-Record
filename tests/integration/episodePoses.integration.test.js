@@ -19,6 +19,9 @@ const mockSend = jest.fn(async (cmd) => {
   if (Body) mockStore.set(Key, Buffer.from(Body));
   return {};
 });
+// The upload bucket comes from the server's settings (src/services/assetBucket.js).
+process.env.S3_PRIMARY_BUCKET = process.env.S3_PRIMARY_BUCKET || 'test-bucket';
+
 jest.mock('@aws-sdk/client-s3', () => {
   const actual = jest.requireActual('@aws-sdk/client-s3');
   return { ...actual, S3Client: jest.fn(() => ({ send: (...a) => mockSend(...a) })) };

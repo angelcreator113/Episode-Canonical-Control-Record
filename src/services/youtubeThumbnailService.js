@@ -28,7 +28,7 @@ const HEIGHT = 720;
 const LAYOUTS = Object.freeze(['lala-left', 'lala-right', 'center']);
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 15000;
-const BUCKET = process.env.AWS_S3_BUCKET || process.env.S3_ASSET_BUCKET || 'primepisodes-assets';
+const { ASSET_BUCKET: BUCKET, requireAssetBucket } = require('./assetBucket');
 const REGION = process.env.AWS_REGION || 'us-east-1';
 
 const DEFAULT_STYLE = Object.freeze({
@@ -374,7 +374,7 @@ const getS3 = () => {
  */
 async function saveAsPrimary(sequelize, episodeId, png) {
   const key = `episodes/${episodeId}/thumbnails/youtube-${Date.now()}.png`;
-  await getS3().send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: png, ContentType: 'image/png' }));
+  await getS3().send(new PutObjectCommand({ Bucket: requireAssetBucket(), Key: key, Body: png, ContentType: 'image/png' }));
   const url = `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`;
   // Only the columns the thumbnails migration creates (isPrimary and the
   // publish columns are model-only; scripts/schema-agreement-step2.baseline).
