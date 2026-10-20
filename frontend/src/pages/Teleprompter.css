@@ -119,17 +119,21 @@ body.stp-open { overflow: hidden; }
 /* "Everything the same": one size, one brightness. */
 .stp-root.is-same .stp-words, .stp-root.is-same .stp-direction { font-size: 1em; color: var(--studio-prompter-ink); }
 
+.stp-hud { position: absolute; left: 12px; top: 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; pointer-events: none; }
 .stp-recdot {
-  position: absolute; left: 12px; top: 12px; display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px;
+  display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px;
   background: var(--studio-prompter-scrim); color: var(--studio-prompter-ink); font-family: 'DM Mono', var(--font-mono); font-size: 14px; font-weight: 700;
 }
 .stp-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--studio-prompter-rec); animation: stp-blink 1s steps(2, start) infinite; }
 @keyframes stp-blink { to { visibility: hidden; } }
 @media (prefers-reduced-motion: reduce) { .stp-dot { animation: none; } }
 
-.stp-preview {
-  position: absolute; right: 12px; top: 12px; width: 180px; aspect-ratio: 4 / 3; object-fit: cover;
+.stp-cam {
+  position: absolute; right: 12px; top: 12px; width: 180px; aspect-ratio: 4 / 3; overflow: hidden;
   border: 2px solid var(--studio-prompter-line); border-radius: 12px; background: var(--studio-prompter-bar);
+}
+.stp-preview {
+  display: block; width: 100%; height: 100%; object-fit: cover;
   transform: scaleX(-1); /* a mirror, as she sees herself */
 }
 .stp-countdown {
@@ -193,6 +197,46 @@ body.stp-open { overflow: hidden; }
   .stp-root.is-paced .stp-scroll { scroll-behavior: auto; }
 }
 
+/* Batch 1 (Evoni, 2026-10-20): reading marks, Follow my voice, the mic
+   meter, the framing grid and the rehearsal times. */
+.stp-em { font-style: normal; font-weight: 700; color: var(--studio-prompter-mark); }
+.stp-mark-pause, .stp-mark-breath {
+  display: inline-flex; align-items: center; justify-content: center; margin: 0 0.15em; padding: 0.05em 0.2em;
+  border: 1px solid var(--studio-prompter-line); border-radius: 0.3em; color: var(--studio-prompter-mark); vertical-align: middle; line-height: 1;
+}
+.stp-mark-breath { color: var(--studio-prompter-ok); }
+.stp-direction.is-breath { font-style: normal; }
+.stp-w.is-said { color: var(--studio-prompter-dim); }
+.stp-pacing { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.stp-needs { font-size: 11px; color: var(--studio-prompter-dim); }
+.stp-listening { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 8px; font-size: 14px; color: var(--studio-prompter-cue); }
+.stp-listening.is-on { color: var(--studio-prompter-ok); }
+
+.stp-meter { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--studio-prompter-scrim); color: var(--studio-prompter-cue); font-size: 12px; }
+.stp-meter-track { display: block; width: 80px; height: 6px; border-radius: 3px; background: var(--studio-prompter-line); overflow: hidden; }
+.stp-meter-track span { display: block; height: 100%; background: var(--studio-prompter-ok); transform-origin: left center; transition: transform 0.1s linear; }
+.stp-meter-warn { color: var(--studio-prompter-rec); font-weight: 700; }
+.stp-meter.is-silent { border: 1px solid var(--studio-prompter-rec); }
+
+.stp-grid { position: absolute; inset: 0; pointer-events: none; }
+.stp-grid::before, .stp-grid::after { content: ''; position: absolute; border: 0 solid var(--studio-prompter-grid); }
+.stp-grid::before { top: 0; bottom: 0; left: 33.333%; right: 33.333%; border-left-width: 1px; border-right-width: 1px; }
+.stp-grid::after { left: 0; right: 0; top: 33.333%; bottom: 33.333%; border-top-width: 1px; border-bottom-width: 1px; }
+
+.stp-rehearsal {
+  position: absolute; left: 12px; bottom: 12px; box-sizing: border-box; width: min(420px, calc(100% - 24px)); max-height: 60%; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 8px; padding: 12px 14px;
+  border: 1px solid var(--studio-prompter-line); border-radius: 12px; background: var(--studio-prompter-bar); color: var(--studio-prompter-cue); font-size: 14px;
+}
+.stp-rehearsal-title { margin: 0; font-family: 'DM Mono', var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--studio-prompter-mark); }
+.stp-rehearsal-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.stp-rehearsal-list li.is-current { color: var(--studio-prompter-ink); }
+.stp-rehearsal-list .is-over { color: var(--studio-prompter-rec); }
+.stp-rehearsal-list .is-under { color: var(--studio-prompter-ok); }
+.stp-rehearsal-saved, .stp-rehearsal-empty, .stp-rehearsal-note { margin: 0; color: var(--studio-prompter-dim); }
+.stp-rehearsal-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+@media (prefers-reduced-motion: reduce) { .stp-meter-track span { transition: none; } }
+
 @media (max-width: 600px) {
   .stp-bar { padding: 6px 12px; gap: 6px 8px; }
   .stp-kicker { display: none; }
@@ -214,7 +258,10 @@ body.stp-open { overflow: hidden; }
   .stp-extras.is-open { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
   .stp-modes { width: 100%; }
   .stp-modes .stp-btn { flex: 1; }
-  .stp-preview { width: 104px; right: 8px; top: 8px; }
+  .stp-cam { width: 104px; right: 8px; top: 8px; }
+  .stp-rehearsal { left: 8px; bottom: 8px; width: calc(100% - 16px); }
+  .stp-pacing { width: 100%; }
+  .stp-pacing .stp-btn { flex: 1; }
   .stp-countdown { font-size: 120px; }
   .stp-review { bottom: 8px; width: calc(100% - 16px); }
   /* Under the text, clear of the reading line, on a narrow screen. */

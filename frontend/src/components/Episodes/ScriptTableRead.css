@@ -31,6 +31,7 @@ body.str-open { overflow: hidden; }
   font-family: 'DM Mono', var(--font-mono); font-size: 12px; font-weight: 700;
 }
 .str-icon-btn:hover:not(:disabled) { background: var(--lala-gold-soft); }
+.str-prompter { gap: 6px; text-decoration: none; }
 .str-icon-btn:disabled { opacity: 0.4; cursor: default; }
 .str-icon-btn:focus-visible, .str-jump select:focus-visible { outline: 2px solid var(--lala-gold); outline-offset: 2px; }
 .str-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

@@ -15,6 +15,7 @@
  */
 import { readLine, scriptSections } from './scriptExport';
 import { lineSeconds } from './scriptRuntime';
+import { isBreath } from './teleprompterMarks';
 
 // Her names as the script writes them (lib/scriptRuleChecks JAW_SAYS; `Me:`
 // reads as Prime in lib/scriptSpeaker).
@@ -37,7 +38,8 @@ export function teleprompterLines(lines = []) {
       const hers = isHerSpeaker(r.speaker);
       out.push({ kind: hers ? 'mine' : 'cue', who: hers ? HER : r.speaker, speaker: r.speaker, paren: r.paren || null, text: r.text, seconds });
     } else if (r.type === 'action' || r.type === 'narration') {
-      out.push({ kind: 'direction', who: null, text: r.text, seconds });
+      // `(breath)` / `[breath]` on its own line is a breath mark (Evoni, 2026-10-20).
+      out.push({ kind: isBreath(r.text) ? 'breath' : 'direction', who: null, text: r.text, seconds });
     }
     // moment, transition, tag: hidden.
   }
@@ -52,7 +54,7 @@ export function teleprompterScript(scriptText) {
   const { preamble, beats } = scriptSections(scriptText || '');
   return {
     intro: teleprompterLines(preamble),
-    beats: beats.map((b) => ({ number: b.number, name: b.name, lines: teleprompterLines(b.lines) })),
+    beats: beats.map((b) => ({ number: b.number, name: b.name, raw: b.lines, lines: teleprompterLines(b.lines) })),
   };
 }
 
