@@ -58,9 +58,10 @@ async function fetchBook(db, bookId) {
   if (!book) return null;
 
   // Sort chapters and filter lines
-  const chapters = (book.chapters || [])
+  const sorted = (book.chapters || [])
     .slice()
-    .sort((a, b) => (a.order_index || a.sort_order || 0) - (b.order_index || b.sort_order || 0))
+    .sort((a, b) => (a.order_index || a.sort_order || 0) - (b.order_index || b.sort_order || 0));
+  const all = sorted
     .map(ch => ({
       id:           ch.id,
       title:        ch.title || 'Untitled Chapter',
@@ -77,8 +78,19 @@ async function fetchBook(db, bookId) {
           source_tags: l.source_tags || {},
         }))
         .filter(l => l.content.trim().length > 0),
-    }))
-    .filter(ch => ch.lines.length > 0);
+    }));
+  const chapters = all.filter(ch => ch.lines.length > 0);
+
+  // Only approved/edited lines are exported. A chapter with none is left
+  // out, and said so (the book side check, 2026-10-20): it has words not yet
+  // approved in Review (draft prose or unapproved lines), or nothing yet.
+  const skippedChapters = sorted
+    .filter((ch, i) => all[i].lines.length === 0)
+    .map((ch) => {
+      const hasWords = String(ch.draft_prose || '').trim().length > 0
+        || (ch.lines || ch.storyteller_lines || []).some(l => String(l.content || l.text || '').trim().length > 0);
+      return { title: ch.title || 'Untitled Chapter', reason: hasWords ? 'not_approved' : 'empty' };
+    });
 
   const wordCount = chapters
     .flatMap(ch => ch.lines)
@@ -88,11 +100,14 @@ async function fetchBook(db, bookId) {
     id:           book.id,
     title:        book.title || 'Untitled',
     description:  book.description || '',
-    character:    book.character || '',
+    // The book's column is character_name; `character` was never one, so
+    // the title page never showed whose memoir it is.
+    character:    book.character_name || '',
     author_name:  book.author_name || '',
     front_matter: book.front_matter || {},
     back_matter:  book.back_matter || {},
     chapters,
+    skippedChapters,
     wordCount,
     chapterCount: chapters.length,
     lineCount:    chapters.flatMap(ch => ch.lines).length,
@@ -141,6 +156,10 @@ router.get('/book/:bookId/meta', requireAuth, async (req, res) => {
       word_count:    book.wordCount,
       chapter_count: book.chapterCount,
       line_count:    book.lineCount,
+      // Chapters not in the export, and why: 'not_approved' (words waiting
+      // in Review) or 'empty'.
+      skipped_chapters: book.skippedChapters,
+      not_approved_count: book.skippedChapters.filter(c => c.reason === 'not_approved').length,
       reading_minutes: Math.max(1, Math.round(book.wordCount / WORDS_PER_MINUTE)),
       chapters: book.chapters.map(ch => ({
         title:      ch.title,
@@ -548,6 +567,8 @@ router.get('/book/:bookId/docx', requireAuth, async (req, res) => {
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', buffer.length);
+    // How many chapters this file leaves out because their words are not approved yet.
+    res.setHeader('X-Export-Not-Approved', String(book.skippedChapters.filter(c => c.reason === 'not_approved').length));
     res.send(buffer);
 
   } catch (err) {
@@ -874,6 +895,8 @@ router.get('/book/:bookId/pdf', requireAuth, async (req, res) => {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', buffer.length);
+    // How many chapters this file leaves out because their words are not approved yet.
+    res.setHeader('X-Export-Not-Approved', String(book.skippedChapters.filter(c => c.reason === 'not_approved').length));
     res.send(buffer);
 
   } catch (err) {

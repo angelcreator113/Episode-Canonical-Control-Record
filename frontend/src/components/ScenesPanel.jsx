@@ -21,7 +21,7 @@ export const planScenesForChapter = (payload) =>
   apiClient.post(`${API}/memories/scene-planner`, payload);
 
 export const fetchBookSceneSuggestions = (bookId) =>
-  apiClient.get(`${API}/memories/books/${bookId}/scenes`);
+  apiClient.post(`${API}/memories/books/${bookId}/scenes`);
 
 export default function ScenesPanel({ bookId, chapters = [], onChaptersChange, book, characterId }) {
   const [expanded, setExpanded] = useState({});
