@@ -103,6 +103,8 @@ async function draftScriptPosts(models, episodeId) {
       poster_display_name: lala.display_name || null,
       poster_platform: 'lalaverse',
       post_type: 'post',
+      // Read from the script's own words; Lala's usual is a photo (services/postFormatMix).
+      post_format: require('./postFormatMix').formatFromWords(p.text, 'post'),
       content_text: p.text,
       likes: 0, comments_count: 0, shares: 0, sample_comments: [],
       posted_at: null,

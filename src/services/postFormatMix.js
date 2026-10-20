@@ -93,4 +93,20 @@ const LINES = Object.freeze({
 
 const promptLine = (format) => LINES[format] || '';
 
-module.exports = { FORMATS, MIXES, kindOf, weightsFor, pick, formatFor, promptLine, setRandom };
+/**
+ * A post's format read from its own words, for posts written by hand (the
+ * script's [UI:POST …] lines): "photos"/"dump" is a carousel, "photo"/"selfie"
+ * a photo, a line wholly in quotes a quote card, "thoughts"/"rant" words only.
+ * Anything else is `fallback` (Lala's usual: a photo post).
+ */
+function formatFromWords(words, fallback = 'post') {
+  const t = String(words || '').trim();
+  if (!t) return fallback;
+  if (/\b(photo dump|photos|pics|carousel|slides|swipe)\b/i.test(t)) return 'carousel';
+  if (/\b(photo|pic|selfie|mirror|picture|snap|fit ?check|ootd)\b/i.test(t)) return 'post';
+  if (/^["“].+["”]$/.test(t)) return 'quote';
+  if (/\b(thoughts?|thread|rant|note to self|psa|hot take|confession)\b/i.test(t)) return 'text';
+  return fallback;
+}
+
+module.exports = { FORMATS, MIXES, kindOf, weightsFor, pick, formatFor, promptLine, formatFromWords, setRandom };
