@@ -9,7 +9,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/ToastContainer';
 import { API_URL } from '../config/api';
 import episodeService from '../services/episodeService';
-import thumbnailService from '../services/thumbnailService';
 import apiClient from '../services/api';
 import ErrorMessage from '../components/ErrorMessage';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -17,8 +16,6 @@ import TagInput from '../components/TagInput';
 import { STATUS_OPTIONS } from '../utils/constants';
 import './CreateEpisode.css';
 
-const MAX_THUMB_MB = 5;
-const MAX_THUMB_BYTES = MAX_THUMB_MB * 1024 * 1024;
 
 const CreateEpisode = () => {
   const { episodeId } = useParams();
@@ -124,7 +121,8 @@ const CreateEpisode = () => {
 
   const [shows, setShows] = useState([]);
   const [loadingShows, setLoadingShows] = useState(false);
-  const [thumbnailFile, setThumbnailFile] = useState(null);
+  // The thumbnail is edited only in Templates › YouTube thumbnails (Evoni,
+  // 2026-10-20); here it is read, for the progress count and to keep thumbnail_id.
   const [thumbnailPreview, setThumbnailPreview] = useState(null);
   const [thumbnailId, setThumbnailId] = useState(null);
 
@@ -268,7 +266,7 @@ const CreateEpisode = () => {
         tone: Object.values(tones).some(Boolean),
       },
       creative: {
-        thumbnail: Boolean(thumbnailPreview || thumbnailId || thumbnailFile),
+        thumbnail: Boolean(thumbnailPreview || thumbnailId),
       },
     };
 
@@ -296,7 +294,7 @@ const CreateEpisode = () => {
       totalComplete,
       totalFields,
     };
-  }, [formData, thumbnailPreview, thumbnailId, thumbnailFile, platforms, contentStrategy, contentTypes, tones]);
+  }, [formData, thumbnailPreview, thumbnailId, platforms, contentStrategy, contentTypes, tones]);
 
   const clearFieldError = (name) => {
     if (!errors[name]) return;
@@ -311,30 +309,6 @@ const CreateEpisode = () => {
 
   const handleCategoriesChange = (newCategories) => {
     setFormData((prev) => ({ ...prev, categories: newCategories }));
-  };
-
-  const handleThumbnailChange = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > MAX_THUMB_BYTES) {
-      setErrors((prev) => ({ ...prev, thumbnail: `File too large (max ${MAX_THUMB_MB}MB)` }));
-      return;
-    }
-
-    setThumbnailFile(file);
-    const reader = new FileReader();
-    reader.onload = () => setThumbnailPreview(reader.result);
-    reader.readAsDataURL(file);
-    clearFieldError('thumbnail');
-  };
-
-  const handleRemoveThumbnail = () => {
-    setThumbnailFile(null);
-    setThumbnailPreview(null);
-    setThumbnailId(null);
-    const fileInput = document.getElementById('thumbnailFile');
-    if (fileInput) fileInput.value = '';
   };
 
   // Platform checkbox handlers
@@ -381,16 +355,6 @@ const CreateEpisode = () => {
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };
-
-  const uploadThumbnailIfNeeded = async (episodeId) => {
-    if (!thumbnailFile) return;
-    try {
-      await thumbnailService.uploadThumbnail(episodeId, thumbnailFile);
-    } catch (err) {
-      console.error('Failed to upload thumbnail:', err);
-      toast.showError('Episode created, but thumbnail upload failed.');
-    }
   };
 
   const handleSubmit = async (e) => {
@@ -451,12 +415,10 @@ const CreateEpisode = () => {
       if (isEditMode) {
         const response = await episodeService.updateEpisode(episodeId, episodeData);
         resultEpisode = response?.data || response;
-        await uploadThumbnailIfNeeded(episodeId);
         toast.showSuccess('Episode updated successfully!');
       } else {
         const response = await episodeService.createEpisode(episodeData);
         resultEpisode = response?.data || response;
-        await uploadThumbnailIfNeeded(resultEpisode.id);
         toast.showSuccess('Episode created successfully!');
       }
 

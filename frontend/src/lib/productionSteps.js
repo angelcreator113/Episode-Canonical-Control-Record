@@ -14,6 +14,7 @@
  *   6 Thumbnail       the episode has a primary thumbnail            → Templates › YouTube thumbnails
  *   7 Review & Publish status In review, Scheduled or Published      → Results › Distribution
  */
+import { thumbnailStudioHref } from './thumbnailStudioHref';
 
 export const SCENE_COUNT = 14;
 
@@ -67,7 +68,7 @@ export function productionSteps({ episode = {}, checks = null, sections = null, 
     { key: 'scenes', label: 'Scenes', done: sectionDone(sections, checks, 'scene'), open: { tab: 'scenes' } },
     { key: 'files', label: 'Files', done: (clips || []).length > 0, detail: (clips || []).length ? `${clips.length} ${clips.length === 1 ? 'clip' : 'clips'}` : null, stat: takesStat(clips), open: { tab: 'files' } },
     { key: 'edit', label: 'Edit & Assemble', done: linked >= SCENE_COUNT, detail: linked ? `${linked} of ${SCENE_COUNT} scenes have a clip` : null, open: { href: `/episodes/${id}/timeline` } },
-    { key: 'thumbnail', label: 'Thumbnail', done: Boolean(hasThumbnail), open: { href: `/template-studio/youtube?episode=${id}` } },
+    { key: 'thumbnail', label: 'Thumbnail', done: Boolean(hasThumbnail), open: { href: thumbnailStudioHref({ episodeId: id }) } },
     { key: 'publish', label: 'Review & Publish', done: READY.includes(status), open: { tab: 'distribution' } },
   ];
   const current = steps.findIndex((s) => !s.done);

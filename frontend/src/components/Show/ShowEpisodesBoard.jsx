@@ -24,6 +24,7 @@ import EpisodeCard from '../EpisodeCard';
 import { episodesInProduction, checklistSummary } from './ShowOverview';
 import { loadProductionChecks, CHECKLIST_SECTIONS } from '../Episodes/EpisodeProductionChecklist';
 import { rawClipsApi } from '../../lib/rawClipsApi';
+import { thumbnailStudioHref } from '../../lib/thumbnailStudioHref';
 import {
   STAGES, STATUS_LABEL, stageOf, episodeCode, episodeTags, cardLine,
   pipelineColumns, pipelineSummary, eventPanel, pipelineSteps, matchesSearch,
@@ -210,7 +211,7 @@ function NowProducing({ showId, episode, checks, panel, onTagsSaved }) {
           <Thumb episode={episode} />
           <span className="seb-badge">{episodeCode(episode)}</span>
           <span className="seb-badge is-status">{STATUS_LABEL[episode.status] || episode.status}</span>
-          <Link className="seb-thumb-edit" to={`/template-studio/youtube?episode=${episode.id}`}><Pencil size={14} aria-hidden="true" /> Edit Thumbnail</Link>
+          <Link className="seb-thumb-edit" to={thumbnailStudioHref({ episodeId: episode.id })}><Pencil size={14} aria-hidden="true" /> Edit Thumbnail</Link>
         </div>
         <div className="seb-hero-main">
           <h2 id="seb-hero-title" className="seb-hero-title">{episode.title || 'Untitled'}</h2>

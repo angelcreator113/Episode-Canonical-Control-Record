@@ -4,8 +4,9 @@
  * colors only through tokens, except the four platforms' own brand marks
  * (YouTube, TikTok, Instagram, Facebook), which are not ours to retune;
  * Save, the primary and the tag chips are the primary (they were green
- * and purple gradients); the statuses read text tokens; the remove
- * button is the danger family; the focus ring is the primary.
+ * and purple gradients); the statuses read text tokens; the focus ring
+ * is the primary. (The thumbnail's remove button went with the one
+ * thumbnail editor, 2026-10-20.)
  */
 import { describe, test, expect } from 'vitest';
 import { readFileSync } from 'fs';
@@ -29,11 +30,9 @@ describe('Episode Distribution theme', () => {
     expect(css).not.toMatch(/rgba\((?:139, 92, 246|102, 126, 234|16, 185, 129),/);
   });
 
-  test('Save, the primary and the tag chips are the primary; the remove button is the danger family', () => {
+  test('Save, the primary and the tag chips are the primary', () => {
     expect(css).toMatch(/\.episode-distribution-tab \.btn-save\s*\{[^}]*background: var\(--primary\);/);
     expect(css).toMatch(/\.episode-distribution-tab \.btn-primary\s*\{\s*background: var\(--primary\);/);
-    expect(css).toMatch(/\.episode-distribution-tab \.btn-remove-thumb\s*\{[^}]*background: var\(--danger\);/);
-    expect(css).toMatch(/\.episode-distribution-tab \.btn-remove-thumb:hover\s*\{\s*background: var\(--danger-text\);/);
     expect(css).toMatch(/\.episode-distribution-tab \.form-select:focus\s*\{\s*outline: none;\s*border-color: var\(--primary\);/);
     // The Results redesign (2026-10-08): the tab's primary is the lavender
     // and Generate is a lavender outline, as on the Summary.
@@ -52,8 +51,6 @@ describe('Episode Distribution theme', () => {
     const sources = [tokens];
     for (const [fg, bg] of [
       ['--text-inverse', '--primary'],
-      ['--text-inverse', '--danger'],
-      ['--text-inverse', '--danger-text'],
       ['--lala-gold-text', '--surface-bg'],
       ['--success-text', '--surface-card'],
       ['--warning-text', '--surface-card'],

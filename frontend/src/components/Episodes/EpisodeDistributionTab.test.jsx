@@ -77,3 +77,38 @@ describe('EpisodeDistributionTab — Track 6 CP11 module-scope helpers', () => {
     });
   });
 });
+
+// The one thumbnail editor (Evoni, 2026-10-20): the tab shows the episode's
+// thumbnail and links to Templates › YouTube thumbnails; it uploads nothing.
+vi.mock('./StyleSheetDistributionCard', () => ({ default: () => null }));
+
+describe('EpisodeDistributionTab — thumbnail', () => {
+  const renderTab = async (episode) => {
+    const { render, screen } = await import('@testing-library/react');
+    const { MemoryRouter } = await import('react-router-dom');
+    const { default: Tab } = await import('./EpisodeDistributionTab');
+    render(<MemoryRouter><Tab episode={episode} onUpdate={() => {}} /></MemoryRouter>);
+    return screen;
+  };
+
+  test('an enabled platform shows the episode\'s thumbnail and an Edit link to the editor', async () => {
+    const screen = await renderTab({
+      id: 'ep-1', show_id: 'show-1', title: 'Studio by Sable', thumbnail_url: 'https://b.s3.amazonaws.com/t.png',
+      distribution_metadata: { youtube: { enabled: true, title: 'Studio by Sable', hashtags: [] } },
+    });
+    const box = await screen.findByTestId('distribution-thumbnail');
+    expect(box.querySelector('img').getAttribute('src')).toBe('https://b.s3.amazonaws.com/t.png');
+    const link = screen.getByRole('link', { name: 'Edit in Thumbnail Studio' });
+    expect(link.getAttribute('href')).toBe('/template-studio/youtube?show=show-1&episode=ep-1');
+    expect(screen.queryByRole('button', { name: /Upload Thumbnail|Remove/ })).toBeNull();
+  });
+
+  test('with no thumbnail yet it offers to make one there', async () => {
+    const screen = await renderTab({
+      id: 'ep-2', show_id: 'show-1', title: 'x',
+      distribution_metadata: { youtube: { enabled: true, title: 'x', hashtags: [] } },
+    });
+    expect((await screen.findByRole('link', { name: 'Make it in Thumbnail Studio' })).getAttribute('href'))
+      .toBe('/template-studio/youtube?show=show-1&episode=ep-2');
+  });
+});

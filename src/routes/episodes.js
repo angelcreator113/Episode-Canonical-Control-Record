@@ -775,7 +775,9 @@ router.put(
   asyncHandler(episodeController.updateScriptLocks)
 );
 
-// ✅ UPLOAD THUMBNAIL for episode
+// DEPRECATED (Evoni, 2026-10-20): an episode's thumbnail is edited only in
+// Templates › YouTube thumbnails (/api/v1/youtube-thumbnails). No page calls
+// this any more; it stays until its removal is its own change.
 const thumbnailUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
