@@ -12,6 +12,9 @@ jest.mock('@aws-sdk/client-s3', () => ({
   PutObjectCommand: jest.fn((input) => ({ input })),
 }));
 
+// The upload bucket comes from the server's settings (src/services/assetBucket.js).
+process.env.S3_PRIMARY_BUCKET = process.env.S3_PRIMARY_BUCKET || 'test-bucket';
+
 const sharp = require('sharp');
 const yt = require('../../../src/services/youtubeThumbnailService');
 
