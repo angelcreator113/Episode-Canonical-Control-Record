@@ -20,7 +20,8 @@ export const EP_TABS = [
     { key: 'scenes', label: 'Scenes' },
     { key: 'beatplan', label: 'Beat Plan' },
     // Evoni, 2026-10-17: Files is the episode's raw video clips
-    // (EpisodeRawFootageTab), by who is on camera.
+    // (EpisodeRawFootageTab), by who is on camera; since 2026-10-20 it
+    // opens with Lala and JustAWoman pose photos (EpisodePosesPanel).
     { key: 'files', label: 'Files' },
     { key: 'wardrobe', label: 'Wardrobe' },
     // The Style Page (was Lookbook; Task #2876): the style sheet as its
