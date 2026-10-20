@@ -299,3 +299,46 @@ body.stp-open { overflow: hidden; }
   .stp-quiet { top: auto; bottom: 8px; right: 8px; min-width: 140px; padding: 8px 10px; }
   .stp-quiet-n { font-size: 24px; }
 }
+
+/* ── Batch 3: phone remote and voice clips ─────────────────── */
+.stp-remote, .stp-voicebox {
+  position: absolute; right: 12px; bottom: 12px; box-sizing: border-box; width: min(380px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow-y: auto;
+  border: 1px solid var(--studio-prompter-line); border-radius: 12px; background: var(--studio-prompter-bar); color: var(--studio-prompter-cue); font-size: 14px;
+}
+.stp-remote { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; }
+.stp-remote-head, .vr-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.stp-remote-head .stp-takes-title { display: inline-flex; align-items: center; gap: 6px; }
+.stp-remote-text { margin: 0; overflow-wrap: anywhere; }
+.stp-remote-path { font-family: 'DM Mono', var(--font-mono); color: var(--studio-prompter-ink); }
+.stp-remote-qr { align-self: center; width: 200px; height: 200px; border-radius: 8px; image-rendering: pixelated; }
+.stp-remote-code { margin: 0; font-family: 'DM Mono', var(--font-mono); font-size: 15px; line-height: 1.5; letter-spacing: 0.04em; color: var(--studio-prompter-ink); overflow-wrap: anywhere; user-select: all; }
+.stp-remote-meta { margin: 0; font-size: 12px; color: var(--studio-prompter-dim); }
+.stp-live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--studio-prompter-ok); }
+.stp-quiet-voice { grid-column: 1 / -1; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--studio-prompter-ok); }
+.stp-status.is-note { color: var(--studio-prompter-cue); }
+
+/* The voice recorder (components/Teleprompter/VoiceRecord), on the dark reader. */
+.stp-voicebox .vr-panel { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; }
+.stp-root .vr-title { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-family: 'DM Mono', var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--studio-prompter-mark); }
+.stp-root .vr-line { margin: 0; color: var(--studio-prompter-ink); font-family: var(--font-prose); font-size: 16px; overflow-wrap: anywhere; }
+.stp-root .vr-audio { width: 100%; min-height: 44px; }
+.stp-root .vr-meta, .stp-root .vr-note { margin: 0; font-size: 13px; color: var(--studio-prompter-dim); }
+.stp-root .vr-stale { display: inline-flex; align-items: flex-start; gap: 6px; color: var(--studio-prompter-mark); }
+.stp-root .vr-error { margin: 0; font-size: 14px; color: var(--studio-prompter-rec); }
+.stp-root .vr-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.stp-root .vr-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 44px; min-height: 44px; padding: 0 12px;
+  border: 1px solid var(--studio-prompter-line); border-radius: 10px; background: transparent; color: var(--studio-prompter-ink); font: inherit; font-size: 14px; cursor: pointer;
+}
+.stp-root .vr-btn:disabled { opacity: 0.4; cursor: default; }
+.stp-root .vr-btn:focus-visible { outline: 2px solid var(--studio-prompter-mark); outline-offset: 2px; }
+.stp-root .vr-btn.is-primary { border-color: var(--studio-prompter-ink); background: var(--studio-prompter-ink); color: var(--studio-prompter-bg); font-weight: 600; }
+.stp-root .vr-btn.is-rec { border-color: var(--studio-prompter-rec); color: var(--studio-prompter-rec); }
+.stp-root .vr-btn.is-icon { padding: 0; }
+.stp-root .vr-rec { display: inline-flex; align-items: center; gap: 6px; color: var(--studio-prompter-rec); font-family: 'DM Mono', var(--font-mono); }
+.stp-root .vr-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--studio-prompter-rec); }
+
+@media (max-width: 600px) {
+  .stp-remote, .stp-voicebox { right: 8px; bottom: 8px; width: calc(100% - 16px); }
+  .stp-remote-qr { width: 168px; height: 168px; }
+}

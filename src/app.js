@@ -195,7 +195,7 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Remote-Token'],
   exposedHeaders: ['Content-Type', 'Authorization'],
   optionsSuccessStatus: 200,
 };
@@ -247,6 +247,17 @@ app.use(attachRBAC);
 
 // Capture response data for audit logging
 app.use(captureResponseData);
+
+// Teleprompter phone remote (Teleprompter batch 3): mounted ahead of the
+// global /api limiters, because the desktop asks for the phone's commands
+// about every 700ms; teleprompterRemoteRoutes carries its own per-user and
+// per-address limits. Its phone routes are token-authenticated (no account).
+try {
+  app.use('/api/v1/teleprompter-remote', require('./routes/teleprompterRemoteRoutes'));
+  console.log('✓ Teleprompter remote routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load teleprompter remote routes:', e.message);
+}
 
 // ============================================================================
 // RATE LIMITING
@@ -1022,6 +1033,10 @@ app.use('/api/footage', footageRoutes);
 // Raw clips: the episode's raw video clips, on Assets → Files (rawClipRoutes)
 const rawClipRoutes = trackRouteLoad('rawClips', () => require('./routes/rawClipRoutes'));
 app.use('/api/v1/episode-clips', rawClipRoutes);
+
+// Voice clips: script lines spoken by Evoni, for the teleprompter (scriptVoiceClipRoutes)
+const scriptVoiceClipRoutes = trackRouteLoad('scriptVoiceClips', () => require('./routes/scriptVoiceClipRoutes'));
+app.use('/api/v1/script-voice-clips', scriptVoiceClipRoutes);
 
 // YouTube thumbnails: an episode's thumbnail from its show's style (Templates)
 const youtubeThumbnailRoutes = trackRouteLoad('youtubeThumbnails', () => require('./routes/youtubeThumbnailRoutes'));
