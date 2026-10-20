@@ -10,15 +10,13 @@ import { Link } from 'react-router-dom';
 import {
   Check, ClipboardList, FileText, Images, FolderOpen, Scissors, Image as ImageIcon, Upload, CalendarDays, MapPin, Clapperboard, CircleCheck, Circle,
 } from 'lucide-react';
-import api from '../../services/api';
 import { rawClipsApi } from '../../lib/rawClipsApi';
+import { currentThumbnail } from '../../lib/youtubeThumbnailsApi';
 import { productionSteps, sectionSummary, canMarkReady } from '../../lib/productionSteps';
 import { STATUS_LABEL } from '../../lib/episodePipeline';
 import './EpisodeProductionHeader.css';
 
 const STEP_ICONS = { brief: ClipboardList, script: FileText, scenes: Images, files: FolderOpen, edit: Scissors, thumbnail: ImageIcon, publish: Upload };
-
-export const getPrimaryThumbnailApi = (episodeId) => api.get(`/api/v1/thumbnails/episode/${episodeId}/primary`);
 
 const fmtDate = (d) => {
   if (!d) return null;
@@ -29,7 +27,9 @@ const fmtDate = (d) => {
 export default function EpisodeProductionHeader({ episode, sourceEvent = null, checks = null, sections = null, onOpenTab, onMarkReady, statusSaving = false }) {
   const episodeId = episode?.id;
   const [clips, setClips] = useState([]);
-  const [hasThumbnail, setHasThumbnail] = useState(false);
+  const [savedThumbnail, setSavedThumbnail] = useState(false);
+  // The episode's own thumbnail_url counts at once; the editor's saved list confirms one saved before it was set.
+  const hasThumbnail = Boolean(episode?.thumbnail_url) || savedThumbnail;
 
   useEffect(() => {
     if (!episodeId) return undefined;
@@ -38,12 +38,11 @@ export default function EpisodeProductionHeader({ episode, sourceEvent = null, c
     Promise.resolve().then(() => rawClipsApi.list(episodeId))
       .then((rows) => { if (live) setClips(Array.isArray(rows) ? rows : []); })
       .catch((err) => console.error('[Production] clips load failed:', err));
-    Promise.resolve().then(() => getPrimaryThumbnailApi(episodeId))
-      .then((res) => { if (live) setHasThumbnail(Boolean(res?.data?.data || res?.data?.thumbnail || res?.data?.id)); })
+    Promise.resolve().then(() => currentThumbnail(episodeId))
+      .then((thumb) => { if (live) setSavedThumbnail(Boolean(thumb)); })
       .catch((err) => {
-        // No primary thumbnail yet is a 404; anything else is worth a log.
-        if (err?.response?.status !== 404) console.error('[Production] thumbnail check failed:', err);
-        if (live) setHasThumbnail(false);
+        console.error('[Production] thumbnail check failed:', err);
+        if (live) setSavedThumbnail(false);
       });
     return () => { live = false; };
   }, [episodeId]);

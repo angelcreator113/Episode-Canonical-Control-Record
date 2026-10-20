@@ -77,6 +77,20 @@ export function episodeWords(episode, show) {
   };
 }
 
+/**
+ * The episode's current thumbnail, { id, url }, from the editor's saved
+ * list (queries only migrated columns), or null when it has none. Pages
+ * that show or count the thumbnail read this, with episodes.thumbnail_url
+ * first; the older /api/v1/thumbnails reads select model-only columns and
+ * fail on a database built from the migrations.
+ */
+export async function currentThumbnail(episodeId) {
+  if (!episodeId) return null;
+  const saved = await youtubeThumbnailsApi.saved(episodeId);
+  const primary = saved.find((t) => t.isPrimary);
+  return primary ? { id: primary.id, url: primary.url } : null;
+}
+
 export const youtubeThumbnailsApi = {
   sources: (episodeId) => api.get(`${base}/episodes/${episodeId}/sources`).then((r) => r.data?.data),
   render: (spec, files) => api.post(`${base}/render`, renderForm(spec, files), { responseType: 'blob', timeout: 60000 }).then((r) => r.data),

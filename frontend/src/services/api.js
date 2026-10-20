@@ -135,21 +135,6 @@ export const episodeAPI = {
   },
 };
 
-// Thumbnail API calls
-export const thumbnailAPI = {
-  getAll: (options = {}) => {
-    const params = new URLSearchParams({
-      page: options.page || 1,
-      limit: options.limit || 20,
-    });
-    return apiClient.get(`/api/v1/thumbnails?${params}`);
-  },
-
-  getById: (id) => {
-    return apiClient.get(`/api/v1/thumbnails/${id}`);
-  },
-};
-
 // Metadata API calls
 export const metadataAPI = {
   getAll: () => {
