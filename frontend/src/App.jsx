@@ -45,8 +45,6 @@ const Teleprompter = lazy(() => import('./pages/Teleprompter'));
 // The teleprompter's phone remote (Teleprompter batch 3): public, no layout.
 const TeleprompterRemote = lazy(() => import('./pages/TeleprompterRemote'));
 const SearchResults = lazy(() => import('./pages/SearchResults'));
-const ThumbnailGallery = lazy(() => import('./pages/ThumbnailGallery'));
-const CompositionDetail = lazy(() => import('./pages/CompositionDetail'));
 const UIOverlaysTab = lazy(() => import('./pages/UIOverlaysTab'));
 const AdminPanel = lazy(() => import('./pages/AdminPanel'));
 const TemplateManagement = lazy(() => import('./pages/TemplateManagement'));
@@ -63,6 +61,7 @@ const EditShow = lazy(() => import('./pages/EditShow'));
 const OutfitCalendar = lazy(() => import('./pages/OutfitCalendar'));
 const TemplateStudio = lazy(() => import('./pages/TemplateStudio'));
 import EpisodeComposerRedirect from './components/EpisodeComposerRedirect';
+import { thumbnailStudioHref } from './lib/thumbnailStudioHref';
 import { WORLD_REDIRECTS, HUB_TABS, hubTarget } from './utils/worldRedirects';
 
 /** A former world page's route opens its LalaVerse hub tab, carrying its old ?tab= as &sub=. */
@@ -419,23 +418,25 @@ function AppContent() {
           <Route path="/wardrobe/calendar" element={<OutfitCalendar />} />
           
           {/* Template Library. The old episode composer link keeps its episode
-              (audit LINK-02): it opens that episode's Thumbnail Gallery. */}
+              (audit LINK-02): it opens the thumbnail editor on that episode. */}
           <Route path="/episodes/:episodeId/composer" element={<EpisodeComposerRedirect />} />
           <Route path="/template-studio" element={<TemplateStudio />} />
           <Route path="/template-studio/youtube" element={<YouTubeThumbnailStudio />} />
           <Route path="/template-studio/designer" element={<TemplateDesigner />} />
           <Route path="/template-studio/designer/:templateId" element={<TemplateDesigner />} />
           
-          {/* Compositions */}
-          <Route path="/compositions/:id" element={<CompositionDetail />} />
+          {/* Compositions: retired (Evoni, 2026-10-20); an episode's thumbnail
+              is edited only in Templates › YouTube thumbnails. */}
+          <Route path="/compositions/:id" element={<Navigate to={thumbnailStudioHref()} replace />} />
           
           {/* Templates */}
           <Route path="/admin/templates" element={<TemplateManagement />} />
           
           {/* ===== POST-PRODUCTION ROUTES ===== */}
           
-          {/* Thumbnail Gallery */}
-          <Route path="/thumbnails/:episodeId" element={<ThumbnailGallery />} />
+          {/* Thumbnail Gallery: retired (Evoni, 2026-10-20); its list and
+              Delete are in the thumbnail editor, which this opens on the episode. */}
+          <Route path="/thumbnails/:episodeId" element={<EpisodeComposerRedirect />} />
           
           {/* Export */}
           <Route path="/episodes/:episodeId/export" element={<ExportPage />} />

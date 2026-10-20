@@ -140,13 +140,52 @@ describe('database work', () => {
 
   test('saveAsPrimary uploads the PNG, turns the old primary into a cover, and adds the new one with migrated columns only', async () => {
     mockSend.mockResolvedValue({});
-    const s = seq([[]], [[{ id: 42 }]]);
+    const s = seq([[]], [[{ id: 42 }]], [[]]);
     const out = await yt.saveAsPrimary(s, 'ep-1', Buffer.from('png'));
     expect(mockSend.mock.calls[0][0].input).toMatchObject({ Key: expect.stringMatching(/^episodes\/ep-1\/thumbnails\/youtube-\d+\.png$/), ContentType: 'image/png' });
     expect(s.query.mock.calls[0][0]).toMatch(/SET "thumbnailType" = 'cover'/);
     const insert = s.query.mock.calls[1][0];
     expect(insert).toMatch(/INSERT INTO thumbnails/);
     expect(insert).not.toMatch(/isPrimary|publishStatus/);
+    // format is the migration's enum (thumbnail, poster, cover): 'png' is refused there.
+    expect(insert).toMatch(/'thumbnail', 'primary'/);
     expect(out).toMatchObject({ id: 42, url: expect.stringContaining(out.key) });
+    expect(s.query.mock.calls[2][0]).toMatch(/UPDATE episodes SET thumbnail_url = :url/);
+    expect(s.query.mock.calls[2][1].replacements).toEqual({ episodeId: 'ep-1', url: out.url });
+  });
+
+  test('listSaved: the current one first, with a URL from the S3 key when the row has none', async () => {
+    const s = seq([[
+      { id: 9, s3Bucket: 'b', s3Key: 'episodes/ep-1/thumbnails/a.png', url: null, thumbnailType: 'primary', widthPixels: 1280, heightPixels: 720, generatedAt: '2026-10-20' },
+      { id: 8, s3Bucket: 'b', s3Key: 'k', url: 'https://b.s3.amazonaws.com/old.png', thumbnailType: 'cover' },
+    ]]);
+    const out = await yt.listSaved(s, 'ep-1');
+    expect(out[0]).toMatchObject({ id: 9, isPrimary: true, url: 'https://b.s3.us-east-1.amazonaws.com/episodes/ep-1/thumbnails/a.png', width: 1280 });
+    expect(out[1]).toMatchObject({ id: 8, isPrimary: false, url: 'https://b.s3.amazonaws.com/old.png' });
+    expect(s.query.mock.calls[0][0]).toMatch(/ORDER BY \("thumbnailType" = 'primary'\) DESC/);
+    expect(s.query.mock.calls[0][0]).not.toMatch(/isPrimary|publishStatus/);
+  });
+
+  test('makePrimary: the old one becomes a cover, this one primary, and the episode points at it', async () => {
+    const s = seq([[{ id: 8, s3Bucket: 'b', s3Key: 'k', url: 'https://b.s3.amazonaws.com/old.png', thumbnailType: 'cover' }]], [[]], [[]], [[]]);
+    await expect(yt.makePrimary(s, 'ep-1', '8')).resolves.toEqual({ id: 8, url: 'https://b.s3.amazonaws.com/old.png' });
+    expect(s.transaction).toHaveBeenCalled();
+    expect(s.query.mock.calls[1][0]).toMatch(/SET "thumbnailType" = 'cover'[\s\S]*id <> :thumbnailId/);
+    expect(s.query.mock.calls[2][0]).toMatch(/SET "thumbnailType" = 'primary' WHERE id = :thumbnailId/);
+    expect(s.query.mock.calls[3][0]).toMatch(/UPDATE episodes SET thumbnail_url/);
+  });
+
+  test('makePrimary: another episode\'s thumbnail is a 404, and a non-number id a 400', async () => {
+    await expect(yt.makePrimary(seq([[]]), 'ep-1', '8')).rejects.toMatchObject({ status: 404 });
+    await expect(yt.makePrimary(seq(), 'ep-1', '8; DROP')).rejects.toMatchObject({ status: 400 });
+  });
+
+  test('removeSaved deletes an older one and refuses the current one', async () => {
+    const older = seq([[{ id: 8, thumbnailType: 'cover' }]], [[]]);
+    await expect(yt.removeSaved(older, 'ep-1', '8')).resolves.toEqual({ id: 8 });
+    expect(older.query.mock.calls[1][0]).toMatch(/DELETE FROM thumbnails WHERE id = :thumbnailId AND "episodeId" = :episodeId/);
+    const current = seq([[{ id: 9, thumbnailType: 'primary' }]]);
+    await expect(yt.removeSaved(current, 'ep-1', '9')).rejects.toMatchObject({ status: 409 });
+    expect(current.query).toHaveBeenCalledTimes(1);
   });
 });

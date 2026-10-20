@@ -2,10 +2,14 @@
  * YouTube thumbnails (Templates › YouTube thumbnails; Evoni, 2026-10-17):
  * /api/v1/youtube-thumbnails. An episode's 1280x720 thumbnail from its
  * show's style; the server renders it, so the preview is the saved file.
+ * The one place an episode's thumbnail is edited (Evoni, 2026-10-20): every
+ * other page links here with thumbnailStudioHref.
  */
 import api from '../services/api';
 
 const base = '/api/v1/youtube-thumbnails';
+
+export { thumbnailStudioHref } from './thumbnailStudioHref';
 
 export const LAYOUTS = [
   { key: 'lala-left', label: 'Lala left' },
@@ -45,6 +49,9 @@ export const youtubeThumbnailsApi = {
   sources: (episodeId) => api.get(`${base}/episodes/${episodeId}/sources`).then((r) => r.data?.data),
   render: (spec, files) => api.post(`${base}/render`, renderForm(spec, files), { responseType: 'blob', timeout: 60000 }).then((r) => r.data),
   save: (episodeId, spec, files) => api.post(`${base}/episodes/${episodeId}`, renderForm(spec, files), { timeout: 60000 }).then((r) => r.data?.data),
+  saved: (episodeId) => api.get(`${base}/episodes/${episodeId}/saved`).then((r) => (Array.isArray(r.data?.data) ? r.data.data : [])),
+  makePrimary: (episodeId, thumbnailId) => api.post(`${base}/episodes/${episodeId}/saved/${thumbnailId}/primary`).then((r) => r.data?.data),
+  removeSaved: (episodeId, thumbnailId) => api.delete(`${base}/episodes/${episodeId}/saved/${thumbnailId}`).then((r) => r.data?.data),
   saveStyle: (showId, style) => api.put(`${base}/shows/${showId}/style`, style).then((r) => r.data?.data),
   shows: () => api.get('/api/v1/shows').then((r) => (Array.isArray(r.data?.data) ? r.data.data : [])),
   episodes: (showId) => api.get(`/api/v1/episodes?show_id=${showId}&limit=500&sort=episode_number:ASC`)

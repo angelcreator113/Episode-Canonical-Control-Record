@@ -10,10 +10,16 @@
  * layout, colours and Lala for every episode of the show.
  *
  * ?show= and ?episode= open it on an episode (Production's Thumbnail step).
+ *
+ * The one place an episode's thumbnail is edited (Evoni, 2026-10-20): the
+ * episode's saved thumbnails are listed under the preview, its current one
+ * first; any of them can be made the episode's thumbnail again, and one that
+ * is not current can be deleted. Every other page links here
+ * (thumbnailStudioHref); /thumbnails/:episodeId redirects here.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Youtube, Upload, Download, Save, Palette, ImageOff, Check, LayoutTemplate, Sparkles } from 'lucide-react';
+import { Youtube, Upload, Download, Save, Palette, ImageOff, Check, LayoutTemplate, Sparkles, Star, Trash2, History } from 'lucide-react';
 import { youtubeThumbnailsApi, LAYOUTS, ACCENTS, TEXT_COLORS, episodeWords } from '../lib/youtubeThumbnailsApi';
 import './YouTubeThumbnailStudio.css';
 
@@ -58,6 +64,7 @@ export default function YouTubeThumbnailStudio() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(null);
   const [saved, setSaved] = useState(null);
+  const [history, setHistory] = useState([]);
   const renderId = useRef(0);
 
   // Shows, then the chosen show's episodes.
@@ -99,6 +106,19 @@ export default function YouTubeThumbnailStudio() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [episodeId]);
 
+  // The episode's saved thumbnails, its current one first.
+  const loadHistory = useCallback(async (id) => {
+    if (!id) { setHistory([]); return; }
+    try {
+      setHistory(await youtubeThumbnailsApi.saved(id));
+    } catch (err) {
+      console.error('[YouTubeThumbnails] saved thumbnails load failed:', err);
+      setHistory([]);
+      setMessage({ type: 'error', text: 'Could not load the saved thumbnails.' });
+    }
+  }, []);
+  useEffect(() => { loadHistory(episodeId); }, [episodeId, loadHistory]);
+
   // The preview, a moment after the last change; an older render never replaces a newer one.
   useEffect(() => {
     if (!spec || !spec.title?.trim()) return undefined;
@@ -132,9 +152,38 @@ export default function YouTubeThumbnailStudio() {
       const out = await youtubeThumbnailsApi.save(episodeId, spec, files);
       setSaved(out);
       setMessage({ type: 'ok', text: "Saved as the episode's thumbnail." });
+      loadHistory(episodeId);
     } catch (err) {
       console.error('[YouTubeThumbnails] save failed:', err);
       setMessage({ type: 'error', text: err?.response?.data?.error || 'The thumbnail could not be saved.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const makeCurrent = async (thumb) => {
+    setBusy(true);
+    try {
+      await youtubeThumbnailsApi.makePrimary(episodeId, thumb.id);
+      setMessage({ type: 'ok', text: "That one is the episode's thumbnail again." });
+      await loadHistory(episodeId);
+    } catch (err) {
+      console.error('[YouTubeThumbnails] make current failed:', err);
+      setMessage({ type: 'error', text: err?.response?.data?.error || 'Could not change the thumbnail.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeSaved = async (thumb) => {
+    if (!window.confirm('Delete this saved thumbnail? This cannot be undone.')) return;
+    setBusy(true);
+    try {
+      await youtubeThumbnailsApi.removeSaved(episodeId, thumb.id);
+      setHistory((h) => h.filter((t) => t.id !== thumb.id));
+    } catch (err) {
+      console.error('[YouTubeThumbnails] delete failed:', err);
+      setMessage({ type: 'error', text: err?.response?.data?.error || 'Could not delete the thumbnail.' });
     } finally {
       setBusy(false);
     }
@@ -191,6 +240,7 @@ export default function YouTubeThumbnailStudio() {
       {!spec ? (
         <div className="yts-empty"><LayoutTemplate size={36} aria-hidden /><p>Choose a show and an episode to make its thumbnail.</p></div>
       ) : (
+        <>
         <div className="yts-work">
           <section className="yts-stage" aria-label="Preview">
             <div className={`yts-preview${rendering ? ' is-rendering' : ''}`}>
@@ -206,7 +256,7 @@ export default function YouTubeThumbnailStudio() {
               {preview && <a className="yts-btn" href={preview} download={fileName}><Download size={16} aria-hidden /> Download</a>}
             </div>
             {saved && (
-              <p className="yts-saved"><Check size={16} aria-hidden /> Saved. <Link to={`/thumbnails/${episodeId}`}>Open the thumbnail gallery</Link> · <Link to={`/episodes/${episodeId}?tab=production`}>Back to Production</Link></p>
+              <p className="yts-saved"><Check size={16} aria-hidden /> Saved. <Link to={`/episodes/${episodeId}?tab=production`}>Back to Production</Link></p>
             )}
           </section>
 
@@ -275,6 +325,34 @@ export default function YouTubeThumbnailStudio() {
             </div>
           </section>
         </div>
+        {history.length > 0 && (
+          <section className="yts-history" aria-label="Saved thumbnails" data-testid="yts-history">
+            <h2 className="yts-label"><History size={14} aria-hidden /> Saved thumbnails</h2>
+            <ul className="yts-history-grid">
+              {history.map((t) => (
+                <li key={t.id} className={`yts-history-item${t.isPrimary ? ' is-current' : ''}`} data-testid={`yts-saved-${t.id}`}>
+                  <img src={t.url} alt={t.isPrimary ? "The episode's thumbnail" : 'An earlier thumbnail'} loading="lazy" />
+                  <div className="yts-history-row">
+                    {t.isPrimary ? (
+                      <span className="yts-history-badge"><Star size={13} aria-hidden /> Episode thumbnail</span>
+                    ) : (
+                      <>
+                        <button type="button" className="yts-history-btn" onClick={() => makeCurrent(t)} disabled={busy}>
+                          <Star size={13} aria-hidden /> Use this one
+                        </button>
+                        <button type="button" className="yts-history-btn is-danger" onClick={() => removeSaved(t)} disabled={busy} aria-label="Delete this saved thumbnail">
+                          <Trash2 size={13} aria-hidden />
+                        </button>
+                      </>
+                    )}
+                    {t.savedAt && <span className="yts-history-date">{new Date(t.savedAt).toLocaleDateString()}</span>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        </>
       )}
     </div>
   );
