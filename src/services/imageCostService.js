@@ -118,6 +118,13 @@ const RATE_TABLE = {
     provider: 'replicate', model: 'nightmareai/real-esrgan', unit: 'image', usd: null,
     source: `${PRICE_NEEDED}. wardrobeImageService.aiUpscaleImage: scale 4 (default; wardrobeController passes a scale)`,
   },
+  // ── remove.bg ─────────────────────────────────────────────────────────────
+  // One cut-out is one credit at size=auto; Runway's remove-background (the
+  // fallback) stays unpriced (not in this table).
+  'remove.bg': {
+    provider: 'removebg', model: 'remove.bg', unit: 'image', usd: 0.2,
+    source: "Evoni, 2026-10-20: $0.20 per image on her remove.bg plan. Used by episodePoseMedia, the wardrobe's background removal (wardrobeController, wardrobeLibraryController), uiOverlayService (the Phone Hub), imageProcessing's /remove-background and the other runImageCall({ model: 'remove.bg' }) callers",
+  },
   'stability-ai/sdxl': {
     provider: 'replicate', model: 'stability-ai/sdxl', unit: 'image', usd: null,
     source: `${PRICE_NEEDED}. imageRestyleService.runImgToImg: 1024x1024, 1 output, 30 steps, expert_ensemble_refiner`,
