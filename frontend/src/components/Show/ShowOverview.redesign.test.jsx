@@ -26,8 +26,9 @@ const routes = (url) => {
   if (url === '/api/v1/world/show-1/events/ev-9/financial-forecast') {
     return { data: { success: true, income: { total: 600 }, expenses: { total: 450, outfit_retail: 300, outfit_rentals: 50 }, projected_balance: { baseline: 2050 } } };
   }
-  if (url === '/api/v1/thumbnails/episode/ep-1/primary') return { data: { data: { id: 7 } } };
-  if (url === '/api/v1/thumbnails/7/url') return { data: { data: { url: 'https://b.s3.amazonaws.com/thumb.png' } } };
+  // The thumbnail editor's saved list; the old /api/v1/thumbnails reads are not called.
+  if (url === '/api/v1/youtube-thumbnails/episodes/ep-1/saved') return { data: { success: true, data: [{ id: 7, url: 'https://b.s3.amazonaws.com/thumb.png', isPrimary: true }] } };
+  if (url.startsWith('/api/v1/thumbnails/')) throw new Error(`old thumbnail read: ${url}`);
   if (url === '/api/v1/episode-clips/ep-1') return { data: { success: true, data: [{ id: 'c1', label: 'Lala_CamA.mp4', performer: 'lala', thumbnail_url: 'c.jpg', duration_seconds: 45 }, { id: 'c2', label: 'Guest.mov', performer: 'guest', guest_name: 'Tasha' }] } };
   if (url === '/api/v1/episodes/ep-1/scene-sets') return { data: { success: true, data: [{ id: 's1', name: 'Studio Interior' }] } };
   if (url.startsWith('/api/v1/registries')) return { data: { registries: [{ characters: [{ id: 'r1', character_key: 'lala', display_name: 'Lala' }, { id: 'r3', character_key: 'sable', display_name: 'Sable', role_type: 'support', role_label: 'Creative Partner' }] }] } };

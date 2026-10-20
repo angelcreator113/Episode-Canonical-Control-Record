@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import api from '../../services/api';
 import { thumbnailStudioHref } from '../../lib/thumbnailStudioHref';
+import { currentThumbnail } from '../../lib/youtubeThumbnailsApi';
 import { computeEventPackageReadiness, computeEventState, describeMissing } from '../../utils/eventReadinessSections';
 import { CHECKLIST_SECTIONS, computeSectionState, checklistFixTarget, loadProductionChecks } from '../Episodes/EpisodeProductionChecklist';
 import './ShowOverview.css';
@@ -247,13 +248,10 @@ function useThumbnail(episode) {
     if (!episode?.id) { setUrl(null); return undefined; }
     let live = true;
     setUrl(episode.thumbnail_url || null);
-    Promise.resolve().then(() => api.get(`/api/v1/thumbnails/episode/${episode.id}/primary`))
-      .then((r) => {
-        const id = r?.data?.data?.id;
-        return id ? api.get(`/api/v1/thumbnails/${id}/url`) : null;
-      })
-      .then((r) => { const u = r?.data?.data?.url || r?.data?.url; if (live && u) setUrl(u); })
-      .catch((err) => { if (err?.response?.status !== 404) console.error('[ShowOverview] thumbnail load failed:', err); });
+    // The editor's saved list: its current thumbnail, if one was saved before thumbnail_url was set.
+    Promise.resolve().then(() => currentThumbnail(episode.id))
+      .then((thumb) => { if (live && thumb?.url) setUrl(thumb.url); })
+      .catch((err) => console.error('[ShowOverview] thumbnail load failed:', err));
     return () => { live = false; };
   }, [episode?.id, episode?.thumbnail_url]);
   return url;
