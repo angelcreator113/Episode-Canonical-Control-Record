@@ -31,7 +31,10 @@ const DevTokenCarrier = import.meta.env.DEV
 // build-time constant, so in a production build the spread resolves to an
 // empty array and the string literal itself is dropped by Rollup's
 // dead-code elimination — same mechanism as DevTokenCarrier above.
-const PRE_AUTH_PATHS = ['/login', '/', ...(import.meta.env.DEV ? ['/__dev-token-carrier'] : [])];
+// /teleprompter/remote: the teleprompter's phone remote, public (token in the
+// URL's fragment), reached only from the desktop's QR code.
+const REMOTE_PATH = '/teleprompter/remote';
+const PRE_AUTH_PATHS = ['/login', '/', REMOTE_PATH, ...(import.meta.env.DEV ? ['/__dev-token-carrier'] : [])];
 
 // Lazy-loaded: all other pages (code-split into separate chunks)
 const EpisodeDetail = lazy(() => import('./pages/EpisodeDetail'));
@@ -39,6 +42,8 @@ const NewEpisodeRedirect = lazy(() => import('./pages/NewEpisodeRedirect'));
 const IconCueTimeline = lazy(() => import('./pages/IconCueTimeline'));
 // Teleprompter: read a script or pasted text, and record yourself (Evoni, 2026-10-20).
 const Teleprompter = lazy(() => import('./pages/Teleprompter'));
+// The teleprompter's phone remote (Teleprompter batch 3): public, no layout.
+const TeleprompterRemote = lazy(() => import('./pages/TeleprompterRemote'));
 const SearchResults = lazy(() => import('./pages/SearchResults'));
 const ThumbnailGallery = lazy(() => import('./pages/ThumbnailGallery'));
 const CompositionDetail = lazy(() => import('./pages/CompositionDetail'));
@@ -253,6 +258,13 @@ function AppContent() {
   }, [isAuthenticated, loading, location.pathname, navigate]);
 
 
+
+  // The phone remote (Teleprompter batch 3): public and outside the app's
+  // layout, signed in or not. No Sidebar entry: the desktop teleprompter's
+  // QR code is the way in.
+  if (location.pathname === REMOTE_PATH) {
+    return <Suspense fallback={null}><TeleprompterRemote /></Suspense>;
+  }
 
   if (loading) {
     return (

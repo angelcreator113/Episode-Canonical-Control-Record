@@ -1,7 +1,7 @@
 // frontend/src/components/Episodes/EpisodeScriptTab.jsx
 // Beat-by-beat script reviewer with Show Brain AI rewrite
 
-import { Fragment, useState, useEffect, useLayoutEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import { Fragment, useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { Link } from 'react-router-dom';
 import { PenLine, GripVertical, ChevronDown, ArrowUp, ArrowDown, Smartphone, Image as ImageIcon, X, Plus, Coins, Shirt, MapPin, Users, ListChecks, Check, Circle, AlertTriangle, Bell, MessageCircle, Send, Clock, Trash2, ChevronLeft, ChevronRight, AudioLines, ScrollText, Images, Sparkles, Camera, Home } from 'lucide-react';
 import api from '../../services/api';
@@ -29,6 +29,9 @@ import ScriptReadActions from './ScriptReadActions';
 import ScriptHistory from './ScriptHistory';
 import useScriptDraft from '../../hooks/useScriptDraft';
 import useDialogLayer from '../../hooks/useDialogLayer';
+import VoiceRecordPanel, { VoiceBadge, VoiceMicButton } from '../Teleprompter/VoiceRecord';
+import { voiceClipsApi, isNotReady as voiceNotReady, VOICE_NOT_READY, clipsByLine, lineKey, withClip } from '../../lib/voiceClipsApi';
+import { teleprompterLines, teleprompterIndexMap, HER } from '../../lib/teleprompterLines';
 import './EpisodeScriptPage.css';
 
 // Track 6 CP15 partial-migration extension (5th instance) — file already
@@ -304,10 +307,12 @@ export function rewrittenLine(original, words) {
   return next.trim() === String(original || '').trim() ? null : next;
 }
 
-function ScriptLine({ look = [], line, number = null, beatId, lineId = null, onOpenEdit = null, onFocusLater = null, beatNumber = null, lineIndex, onEdit, onDelete, onRewrite, rewriting, locked, prevLine = null, nextLine = null, onMoveLine, drag, onScreen, withOnScreen, phoneDown = false }) {
+function ScriptLine({ voice = null, look = [], line, number = null, beatId, lineId = null, onOpenEdit = null, onFocusLater = null, beatNumber = null, lineIndex, onEdit, onDelete, onRewrite, rewriting, locked, prevLine = null, nextLine = null, onMoveLine, drag, onScreen, withOnScreen, phoneDown = false }) {
   const [editing, setEditing] = useState(false);
   const [dropAt, setDropAt] = useState(null);
   const [editText, setEditText] = useState('');
+  // The line's voice recorder (Teleprompter batch 3); it never changes the script.
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const lineStr = typeof line === 'string' ? line : '';
   // An open editor with changed words is known to the tab, so nothing that
   // replaces the beat or the script throws them away (Script page audit 3,
@@ -380,7 +385,9 @@ function ScriptLine({ look = [], line, number = null, beatId, lineId = null, onO
   const kind = lineKind(parsed, onScreen);
   const duration = lineDuration(lineStr);
   const TypeIcon = parsed.type === 'dialogue' ? AudioLines : parsed.type === 'moment' ? Smartphone : parsed.type === 'cue' ? null : ImageIcon;
+  const canVoice = !!voice && voice.ready === true;
   return (
+    <>
     <div className={`esp-line-row is-${parsed.type}`}>
     {number !== null && <span className="esp-line-n" aria-hidden="true">{number}</span>}
     <div
@@ -407,6 +414,7 @@ function ScriptLine({ look = [], line, number = null, beatId, lineId = null, onO
           <span className="esp-line-speaker" style={{ '--speaker': sc[parsed.speaker] || 'var(--text-primary)' }}>{parsed.speaker}</span>
           {parsed.note && <span className="esp-line-note">{parsed.note}</span>}
           <span className="esp-line-text">"{parsed.text}"</span>
+          {canVoice && <VoiceBadge clip={voice.clip} text={voice.line.text} />}
         </div>
       )}
       {parsed.type !== 'dialogue' && <span className="esp-line-kind">{kind}</span>}
@@ -422,7 +430,13 @@ function ScriptLine({ look = [], line, number = null, beatId, lineId = null, onO
       </span>
     )}
     {parsed.type === 'dialogue' && !locked && <button type="button" className="esp-rewrite" onClick={() => onRewrite(beatId, lineIndex, lineStr, lineId)} disabled={rewriting} aria-label={rewriting ? 'Rewriting…' : undefined}>{rewriting ? '⏳' : '✦ Rewrite'}</button>}
+    {canVoice && <VoiceMicButton clip={voice.clip} open={voiceOpen} speaker={voice.line.speaker} testId="script-voice-mic" onClick={() => setVoiceOpen((o) => !o)} />}
     </div>
+    {canVoice && voiceOpen && (
+      <VoiceRecordPanel episodeId={voice.episodeId} line={voice.line} clip={voice.clip} testId="script-voice-panel"
+        onSaved={voice.onSaved} onRemoved={voice.onRemoved} onNotReady={voice.onNotReady} onClose={() => setVoiceOpen(false)} />
+    )}
+    </>
   );
 }
 
@@ -857,7 +871,7 @@ function useLineIds(beatId, lines, opRef) {
   return held.current.ids;
 }
 
-function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, proposal = null, onAcceptProposal, onDiscardProposal, onEdit, onDeleteLine, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, writing = false, onScreen, onAddMoment, phoneUpAtStart = false, request = null, onRequestDone, people = [], lalaSlots = [], dressCode = '', lineOpRef = null, lineIdsRef = null, onOpenEdit = null, onFocusLater = null, status = 'draft', healthRows = [], hasPhone = false, worn = [], look = [], storyTime = null, linesTools = null, onStep = null, prevBeatId = null, nextBeatId = null }) {
+function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, proposal = null, onAcceptProposal, onDiscardProposal, onEdit, onDeleteLine, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, writing = false, onScreen, onAddMoment, phoneUpAtStart = false, request = null, onRequestDone, people = [], lalaSlots = [], dressCode = '', lineOpRef = null, lineIdsRef = null, onOpenEdit = null, onFocusLater = null, status = 'draft', healthRows = [], hasPhone = false, worn = [], look = [], storyTime = null, linesTools = null, onStep = null, prevBeatId = null, nextBeatId = null }) {
   const scene = scenePlan?.find(p => p.beat_number === beat.number);
   const cardRef = useRef(null);
   const [picking, setPicking] = useState(false);
@@ -951,6 +965,20 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
   // A line is keyed by its own id, not its place (Script page audit,
   // 2026-10-19) nor its words (re-audit: identical lines swapped keys).
   const lineKeys = useLineIds(beat.id, beat.lines, lineOpRef);
+  // Voice clips (Teleprompter batch 3): a spoken line of anyone but
+  // JustAWoman can carry one, named as the teleprompter counts the beat's lines.
+  const tpAt = teleprompterIndexMap(beat.lines);
+  const tpLines = teleprompterLines(beat.lines);
+  const voiceFor = (i) => {
+    if (!voice || voice.ready === false || !Number.isInteger(Number(beat.number))) return null;
+    const at = tpAt[i];
+    const l = at == null ? null : tpLines[at];
+    if (!l || !l.who || l.who === HER || (l.kind !== 'cue' && l.kind !== 'mine')) return null;
+    return {
+      ...voice, clip: voice.byLine.get(lineKey(beat.number, at)) || null,
+      line: { beatNumber: Number(beat.number), lineIndex: at, speaker: l.who, text: l.text },
+    };
+  };
   // The tab finds a rewritten line again by its id, not its words (Script
   // page audit 3, 2026-10-19: of two same lines, the first was rewritten).
   useLayoutEffect(() => {
@@ -1092,12 +1120,13 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
               <h4 className="esp-section-title"><ScrollText size={18} aria-hidden="true" /> Script Lines</h4>
               {linesTools && <div className="esp-section-tools">{linesTools}</div>}
             </div>
+            {voice?.ready === false && <p className="esp-voice-off" role="status" data-testid="script-voice-off">{VOICE_NOT_READY}</p>}
             <div className="esp-lines">{beat.lines.map((line, i) => {
               const slot = beat.approved ? null : lalaSlots.find((s) => s.lineIndex === i);
               const at = shownLines.indexOf(i);
               return (
                 <Fragment key={lineKeys[i]}>
-                  <ScriptLine look={look} line={line} number={at >= 0 ? at + 1 : null} beatId={beat.id} lineId={lineKeys[i]} onOpenEdit={onOpenEdit} onFocusLater={onFocusLater} lineIndex={i} prevLine={at > 0 ? shownLines[at - 1] : null} nextLine={at >= 0 && at < shownLines.length - 1 ? shownLines[at + 1] : null} onEdit={onEdit} onDelete={onDeleteLine} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${lineKeys[i]}`} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} onScreen={onScreen} withOnScreen={withByLine[i]} phoneDown={phoneDownAt.includes(i)} beatNumber={beat.number} />
+                  <ScriptLine voice={voiceFor(i)} look={look} line={line} number={at >= 0 ? at + 1 : null} beatId={beat.id} lineId={lineKeys[i]} onOpenEdit={onOpenEdit} onFocusLater={onFocusLater} lineIndex={i} prevLine={at > 0 ? shownLines[at - 1] : null} nextLine={at >= 0 && at < shownLines.length - 1 ? shownLines[at + 1] : null} onEdit={onEdit} onDelete={onDeleteLine} onRewrite={onRewrite} rewriting={rewritingLine === `${beat.id}-${lineKeys[i]}`} locked={beat.approved} onMoveLine={onMoveLine} drag={drag} onScreen={onScreen} withOnScreen={withByLine[i]} phoneDown={phoneDownAt.includes(i)} beatNumber={beat.number} />
                   {slot && <LalaLineSlot piece={slot.piece} dressCode={dressCode} onInsert={(text) => onAddMoment(beat.id, text, i)} />}
                 </Fragment>
               );
@@ -1178,6 +1207,30 @@ function BeatSection({ beat, index, beatCount, scenePlan, expanded, onToggle, on
 
 export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange }) {
   const episodeId = episode?.id;
+  // Voice clips (Teleprompter batch 3): lines Evoni recorded in another
+  // speaker's voice. Kept apart from the script, so recording one never
+  // makes the script unsaved. ready: null loading, true, false (the database
+  // update has not run: the mic buttons hide and a note says why).
+  const [voiceClips, setVoiceClips] = useState([]);
+  const [voiceReady, setVoiceReady] = useState(null);
+  useEffect(() => {
+    if (!episodeId) return undefined;
+    let live = true;
+    voiceClipsApi.list(episodeId)
+      .then((rows) => { if (live) { setVoiceClips(rows); setVoiceReady(true); } })
+      .catch((err) => {
+        console.error('[EpisodeScriptTab] voice clips not loaded:', err);
+        if (live) setVoiceReady(voiceNotReady(err) ? false : null);
+      });
+    return () => { live = false; };
+  }, [episodeId]);
+  const voiceByLine = useMemo(() => clipsByLine(voiceClips), [voiceClips]);
+  const voice = useMemo(() => (episodeId ? {
+    episodeId, ready: voiceReady, byLine: voiceByLine,
+    onSaved: (clip) => setVoiceClips((cs) => withClip(cs, clip)),
+    onRemoved: (id) => setVoiceClips((cs) => cs.filter((c) => c.id !== id)),
+    onNotReady: () => setVoiceReady(false),
+  } : null), [episodeId, voiceReady, voiceByLine]);
   const showId = show?.id || episode?.show_id;
   const [scriptText, setScriptText] = useState(episode?.script_content || '');
   // The script as last saved, so locking knows whether the page has edits
@@ -2314,7 +2367,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
           {beats.map((beat, index) => {
             const open = openId === beat.id;
             const phoneUp = phoneUpAtStart[index] || false;
-            return <BeatSection key={beat.id} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open && !isPhoneWidth() && !showBeatList ? null : beat.id)} onApprove={handleApprove} proposal={proposal?.beatId === beat.id ? proposal : null} onAcceptProposal={acceptProposal} onDiscardProposal={() => setProposal(null)} onEdit={handleEditLine} onDeleteLine={handleDeleteLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking || busy} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} writing={!!regeneratingBeat || busy} onRequestDone={clearBarRequest} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} lineOpRef={lineOpRef} lineIdsRef={lineIdsRef} onOpenEdit={trackOpenEdit} onFocusLater={focusLineLater} phoneUpAtStart={phoneUp} people={people} lalaSlots={lineSlots.filter((s) => s.beatIndex === index)} dressCode={source?.event?.dress_code || ''}
+            return <BeatSection key={beat.id} voice={voice} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open && !isPhoneWidth() && !showBeatList ? null : beat.id)} onApprove={handleApprove} proposal={proposal?.beatId === beat.id ? proposal : null} onAcceptProposal={acceptProposal} onDiscardProposal={() => setProposal(null)} onEdit={handleEditLine} onDeleteLine={handleDeleteLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking || busy} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} writing={!!regeneratingBeat || busy} onRequestDone={clearBarRequest} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} lineOpRef={lineOpRef} lineIdsRef={lineIdsRef} onOpenEdit={trackOpenEdit} onFocusLater={focusLineLater} phoneUpAtStart={phoneUp} people={people} lalaSlots={lineSlots.filter((s) => s.beatIndex === index)} dressCode={source?.event?.dress_code || ''}
               status={statuses[beat.id]} healthRows={open ? healthRows : []} hasPhone={phoneBeats.has(beat.id)} worn={open ? wornInOpen : []} look={outfit || []}
               storyTime={open && truth?.eventTimed ? truth.storyTime : null} linesTools={open && toolsInBeat ? <>{readActions}{rawToggle}</> : null}
               onStep={stepBeat} prevBeatId={index > 0 ? beats[index - 1].id : null} nextBeatId={index < beats.length - 1 ? beats[index + 1].id : null} />;

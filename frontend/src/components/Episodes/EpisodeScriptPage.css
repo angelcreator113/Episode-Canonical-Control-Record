@@ -287,6 +287,40 @@
 .esp-line-row:hover .esp-rewrite, .esp-rewrite:focus-visible { opacity: 1; }
 .esp-rewrite:hover { border-color: var(--studio-line-strong); }
 @media (hover: none) { .esp-rewrite { opacity: 1; } }
+/* Voice clips (Teleprompter batch 3): a mic beside a spoken line, a badge
+   on it, and the recorder under it (components/Teleprompter/VoiceRecord).
+   A 44px target, quiet until the line is hovered or it has a clip. */
+.vr-mic {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin: -8px -6px -8px 0;
+  border: 1px solid transparent; border-radius: 50%; background: none; color: var(--studio-ink-muted); cursor: pointer;
+}
+.vr-mic:hover:not(:disabled), .vr-mic[aria-expanded='true'] { border-color: var(--studio-line-strong); color: var(--studio-magenta); }
+.vr-mic.has-clip { color: var(--studio-magenta); }
+.vr-mic:focus-visible { outline: 2px solid var(--studio-magenta); outline-offset: 2px; }
+.esp-line .vr-badge { display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; padding: 1px 8px; border-radius: 999px; background: var(--studio-ok-soft); color: var(--studio-ok); font-family: 'DM Mono', var(--font-mono); font-size: 11px; font-weight: 700; }
+.esp-line .vr-badge.is-stale { background: var(--studio-warn-soft); color: var(--studio-warn); }
+.esp-voice-off { margin: 0 0 8px; font-size: 13px; color: var(--studio-ink-muted); }
+.esp-lines .vr-panel { display: flex; flex-direction: column; gap: 8px; margin: -2px 0 2px 34px; padding: 10px 12px; border: 1px solid var(--studio-line-strong); border-radius: 10px; background: var(--studio-page); }
+.esp-lines .vr-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.esp-lines .vr-title { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-family: 'DM Mono', var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--studio-magenta); }
+.esp-lines .vr-line { margin: 0; font-family: var(--font-prose); font-size: 14px; color: var(--studio-ink); overflow-wrap: anywhere; }
+.esp-lines .vr-audio { width: 100%; min-height: 44px; }
+.esp-lines .vr-meta, .esp-lines .vr-note { margin: 0; font-size: 12px; color: var(--studio-ink-muted); }
+.esp-lines .vr-stale { display: inline-flex; align-items: flex-start; gap: 6px; color: var(--studio-warn); }
+.esp-lines .vr-error { margin: 0; padding: 6px 10px; border-radius: 8px; background: var(--studio-warn-soft); color: var(--studio-warn); font-size: 13px; }
+.esp-lines .vr-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.esp-lines .vr-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 44px; min-height: 44px; padding: 0 12px;
+  border: 1px solid var(--studio-line-strong); border-radius: 10px; background: var(--studio-card); color: var(--studio-ink); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.esp-lines .vr-btn:disabled { opacity: 0.5; cursor: default; }
+.esp-lines .vr-btn:focus-visible { outline: 2px solid var(--studio-magenta); outline-offset: 2px; }
+.esp-lines .vr-btn.is-primary { border-color: var(--studio-magenta); background: var(--studio-magenta); color: var(--studio-card); }
+.esp-lines .vr-btn.is-rec { border-color: var(--studio-magenta); color: var(--studio-magenta); }
+.esp-lines .vr-btn.is-icon { padding: 0; border-color: transparent; background: none; }
+.esp-lines .vr-rec { display: inline-flex; align-items: center; gap: 6px; color: var(--studio-magenta); font-family: 'DM Mono', var(--font-mono); font-size: 13px; }
+.esp-lines .vr-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--studio-magenta); }
+@media (max-width: 760px) { .esp-lines .vr-panel { margin-left: 0; } }
 .esp-line-edit { padding: 8px; border: 1.5px solid var(--studio-magenta); border-radius: 10px; background: var(--studio-card); }
 .esp-line-input { display: block; box-sizing: border-box; width: 100%; padding: 8px 12px; border: 1px solid var(--studio-line-strong); border-radius: 8px; background: var(--studio-card); color: var(--studio-ink); font-family: var(--font-prose); font-size: 15px; line-height: 1.6; resize: vertical; outline: none; }
 .esp-line-input:focus { border-color: var(--studio-magenta); }

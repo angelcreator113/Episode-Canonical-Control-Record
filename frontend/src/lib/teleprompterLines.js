@@ -152,3 +152,22 @@ export function clock(seconds) {
   const s = Math.max(0, Math.floor(Number(seconds) || 0));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
+
+/**
+ * Where each of a beat's script lines lands among its teleprompter lines
+ * (Teleprompter batch 3: a voice clip names its line by beat and this
+ * index). rawLines: the beat's non-blank script lines, as the Script tab
+ * and scriptSections keep them. Returns an array as long as rawLines: the
+ * teleprompter index, or null for a line the teleprompter does not show
+ * (a [UI:] moment, a tag).
+ */
+export function teleprompterIndexMap(rawLines = []) {
+  let at = 0;
+  return rawLines.map((line) => {
+    if (!String(line ?? '').trim()) return null;
+    if (!teleprompterLines([line]).length) return null;
+    const i = at;
+    at += 1;
+    return i;
+  });
+}
