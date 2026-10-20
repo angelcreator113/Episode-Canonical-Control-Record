@@ -49,6 +49,13 @@ describe('EpisodeProductionHeader', () => {
     expect(screen.getByTestId('eph-step-thumbnail').className).not.toContain('is-done');
   });
 
+  test('Files carries "Takes: n of 14 beats" from the clips it already loads (Teleprompter batch 2)', async () => {
+    rawClipsApi.list.mockResolvedValue([{ id: 'c1', beat_number: 1 }, { id: 'c2', beat_number: 1 }, { id: 'c3', beat_number: 8 }, { id: 'c4', beat_number: null }]);
+    renderHeader();
+    await waitFor(() => expect(screen.getByTestId('eph-step-stat-files').textContent).toBe('Takes: 2 of 14 beats'));
+    expect(rawClipsApi.list).toHaveBeenCalledTimes(1);
+  });
+
   test('a step opens its tab, or its page', async () => {
     const onOpenTab = vi.fn();
     renderHeader({ onOpenTab });

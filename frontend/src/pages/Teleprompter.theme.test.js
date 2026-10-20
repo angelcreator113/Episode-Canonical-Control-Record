@@ -6,7 +6,7 @@ import { resolve } from 'path';
 import { contrast, readToken, stripTaskRefs } from '../styles/contrast';
 
 const css = readFileSync(resolve(__dirname, 'Teleprompter.css'), 'utf8');
-const files = ['Teleprompter.jsx', '../components/Teleprompter/TeleprompterReader.jsx', '../components/Teleprompter/TeleprompterParts.jsx'].map((f) => readFileSync(resolve(__dirname, f), 'utf8'));
+const files = ['Teleprompter.jsx', '../components/Teleprompter/TeleprompterReader.jsx', '../components/Teleprompter/TeleprompterParts.jsx', '../components/Teleprompter/TeleprompterTakes.jsx'].map((f) => readFileSync(resolve(__dirname, f), 'utf8'));
 const tokens = readFileSync(resolve(__dirname, '../styles/design-tokens.css'), 'utf8');
 const COLOUR = /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?)\(/i;
 

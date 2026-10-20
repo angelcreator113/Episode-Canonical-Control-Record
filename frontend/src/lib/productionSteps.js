@@ -8,6 +8,8 @@
  *   2 Script          all 14 beats approved, or the status past Draft → Script
  *   3 Scenes          the checklist's scene section                  → Production › Scenes
  *   4 Files           at least one raw clip uploaded                 → Production › Files
+ *                     its stat: "Takes: n of 14 beats", the beats with at least
+ *                     one take (a raw clip linked to beat 1-14; Teleprompter batch 2)
  *   5 Edit & Assemble every scene has a clip linked to it            → the timeline editor
  *   6 Thumbnail       the episode has a primary thumbnail            → Templates › YouTube thumbnails
  *   7 Review & Publish status In review, Scheduled or Published      → Results › Distribution
@@ -46,8 +48,11 @@ export function linkedScenes(clips) {
   return new Set((clips || []).map((c) => Number(c.beat_number)).filter((n) => n >= 1 && n <= SCENE_COUNT));
 }
 
+/** "Takes: 5 of 14 beats": the beats with at least one take (any raw clip linked to beat 1-14). */
+export const takesStat = (clips) => `Takes: ${linkedScenes(clips).size} of ${SCENE_COUNT} beats`;
+
 /**
- * The seven steps: { key, label, done, detail, open } where open is
+ * The seven steps: { key, label, done, detail, stat?, open } where open is
  * { tab } or { href }. The current step is the first one not done.
  */
 export function productionSteps({ episode = {}, checks = null, sections = null, clips = [], hasThumbnail = false } = {}) {
@@ -60,7 +65,7 @@ export function productionSteps({ episode = {}, checks = null, sections = null, 
     { key: 'brief', label: 'Event & Brief', done: sectionDone(sections, checks, 'brief') && sectionDone(sections, checks, 'world'), open: { tab: 'overview' } },
     { key: 'script', label: 'Script', done: (written && approved >= SCENE_COUNT) || PAST_DRAFT.includes(status), detail: written && approved < SCENE_COUNT ? `${approved} of ${SCENE_COUNT} beats approved` : null, open: { tab: 'scripts' } },
     { key: 'scenes', label: 'Scenes', done: sectionDone(sections, checks, 'scene'), open: { tab: 'scenes' } },
-    { key: 'files', label: 'Files', done: (clips || []).length > 0, detail: (clips || []).length ? `${clips.length} ${clips.length === 1 ? 'clip' : 'clips'}` : null, open: { tab: 'files' } },
+    { key: 'files', label: 'Files', done: (clips || []).length > 0, detail: (clips || []).length ? `${clips.length} ${clips.length === 1 ? 'clip' : 'clips'}` : null, stat: takesStat(clips), open: { tab: 'files' } },
     { key: 'edit', label: 'Edit & Assemble', done: linked >= SCENE_COUNT, detail: linked ? `${linked} of ${SCENE_COUNT} scenes have a clip` : null, open: { href: `/episodes/${id}/timeline` } },
     { key: 'thumbnail', label: 'Thumbnail', done: Boolean(hasThumbnail), open: { href: `/template-studio/youtube?episode=${id}` } },
     { key: 'publish', label: 'Review & Publish', done: READY.includes(status), open: { tab: 'distribution' } },

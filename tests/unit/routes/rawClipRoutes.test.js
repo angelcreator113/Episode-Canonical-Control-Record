@@ -9,7 +9,7 @@ const express = require('express');
 const request = require('supertest');
 
 const mockQuery = jest.fn();
-jest.mock('../../../src/models', () => ({ sequelize: { query: (...a) => mockQuery(...a) } }));
+jest.mock('../../../src/models', () => ({ sequelize: { query: (...a) => mockQuery(...a), transaction: async (fn) => fn('tx') } }));
 jest.mock('../../../src/middleware/auth', () => {
   const actual = jest.requireActual('../../../src/middleware/auth');
   return { ...actual, requireAuth: (req, _res, next) => { req.user = { id: 'u1' }; next(); } };
@@ -119,6 +119,20 @@ describe('GET, PATCH and DELETE', () => {
 
   test('patch with nothing to change is a 400', async () => {
     const res = await request(app).patch('/api/v1/episode-clips/ep-1/c1').send({});
+    expect(res.status).toBe(400);
+  });
+
+  test('patch of is_favorite / start_line before their migration is a 409 JSON message, not a 500', async () => {
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    mockQuery.mockRejectedValueOnce(Object.assign(new Error('column "is_favorite" of relation "episode_raw_clips" does not exist'), { original: { code: '42703' } }));
+    const res = await request(app).patch('/api/v1/episode-clips/ep-1/c1').send({ is_favorite: true });
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ success: false, error: expect.stringMatching(/not switched on yet/) });
+    spy.mockRestore();
+  });
+
+  test('patch of a bad start_line is a 400', async () => {
+    const res = await request(app).patch('/api/v1/episode-clips/ep-1/c1').send({ start_line: -2 });
     expect(res.status).toBe(400);
   });
 });

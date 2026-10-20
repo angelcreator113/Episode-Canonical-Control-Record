@@ -28,6 +28,8 @@
 .eph-step-label svg { color: var(--studio-purple); }
 .eph-step.is-current .eph-step-label { color: var(--studio-magenta); font-weight: 700; }
 .eph-step-detail { font-size: 11px; color: var(--studio-ink-muted); }
+/* "Takes: n of 14 beats" on Files (Teleprompter batch 2). */
+.eph-step-stat { padding: 1px 8px; border-radius: 8px; background: var(--studio-purple-soft); color: var(--studio-purple); font-size: 11px; font-weight: 600; line-height: 1.5; }
 
 /* Cards */
 .eph-cards { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 14px; }

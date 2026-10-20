@@ -79,6 +79,7 @@ export default function EpisodeProductionHeader({ episode, sourceEvent = null, c
               <span className="eph-step-mark" aria-hidden>{s.done ? <Check size={16} /> : s.number}</span>
               <span className="eph-step-label"><Icon size={15} aria-hidden /> {s.label}</span>
               {s.detail && <span className="eph-step-detail">{s.detail}</span>}
+              {s.stat && <span className="eph-step-stat" data-testid={`eph-step-stat-${s.key}`}>{s.stat}</span>}
             </>
           );
           const cls = `eph-step${s.done ? ' is-done' : ''}${s.current ? ' is-current' : ''}`;

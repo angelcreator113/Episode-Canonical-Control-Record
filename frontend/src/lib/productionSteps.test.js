@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { productionSteps, sectionDone, linkedScenes, sectionSummary, canMarkReady, SCENE_COUNT } from './productionSteps';
+import { productionSteps, sectionDone, linkedScenes, sectionSummary, canMarkReady, takesStat, SCENE_COUNT } from './productionSteps';
 
 const SECTIONS = [
   { id: 'brief', label: 'Episode Brief', items: [{ id: 'a', required: true }, { id: 'b', required: false }] },
@@ -84,5 +84,15 @@ describe('sectionSummary and canMarkReady', () => {
     expect(canMarkReady({ status: 'in_build' })).toBe(true);
     expect(canMarkReady({ status: 'in_review' })).toBe(false);
     expect(canMarkReady({})).toBe(true);
+  });
+});
+
+describe('takesStat (Teleprompter batch 2)', () => {
+  test('counts the beats 1-14 with at least one take; it rides on the Files step', () => {
+    expect(takesStat([])).toBe('Takes: 0 of 14 beats');
+    expect(takesStat([{ beat_number: 8 }, { beat_number: 8 }, { beat_number: 15 }, { beat_number: null }, { beat_number: '3' }])).toBe('Takes: 2 of 14 beats');
+    const steps = productionSteps({ episode: { id: 'ep-1' }, clips: [{ beat_number: 4 }] });
+    expect(steps.find((s) => s.key === 'files').stat).toBe('Takes: 1 of 14 beats');
+    expect(steps.filter((s) => s.stat).map((s) => s.key)).toEqual(['files']);
   });
 });

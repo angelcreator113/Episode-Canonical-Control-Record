@@ -15,7 +15,7 @@
  */
 import { readLine, scriptSections } from './scriptExport';
 import { lineSeconds } from './scriptRuntime';
-import { isBreath } from './teleprompterMarks';
+import { isBreath, markTokens } from './teleprompterMarks';
 
 // Her names as the script writes them (lib/scriptRuleChecks JAW_SAYS; `Me:`
 // reads as Prime in lib/scriptSpeaker).
@@ -90,10 +90,24 @@ export function downloadName(type, at = new Date()) {
   return `Teleprompter take ${at.getFullYear()}-${p(at.getMonth() + 1)}-${p(at.getDate())} ${p(at.getHours())}-${p(at.getMinutes())}.${takeExtension(type)}`;
 }
 
-/** "Beat 8 · Transformation Loop · take 2", the take's name in Files. */
-export function takeName(beat, take) {
+/**
+ * "Beat 8 · Transformation Loop · take 2", the take's name in Files;
+ * fromLine (1-based) adds " · from line 4" for a take picked up mid-beat.
+ */
+export function takeName(beat, take, fromLine = null) {
   const head = beat?.number != null ? `Beat ${beat.number}${beat.name ? ` · ${beat.name}` : ''}` : 'Script';
-  return `${head} · take ${take}`;
+  return `${head} · take ${take}${fromLine > 1 ? ` · from line ${fromLine}` : ''}`;
+}
+
+/**
+ * "4 · Lala: Okay besties…", a beat line as a "Start from" choice (1-based),
+ * the reading marks (`//`, `*word*`, (breath)) left out.
+ */
+export function lineChoice(line, i, max = 48) {
+  const words = markTokens(String(line?.text || '')).map((k) => k.v || ' ').join('');
+  const raw = line?.kind === 'breath' ? '(breath)' : line?.speaker ? `${line.speaker}: ${words}` : words;
+  const text = raw.replace(/\s+/g, ' ').trim();
+  return `${i + 1} · ${text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text}`;
 }
 
 /** The first type this browser records (MP4 first: Safari and iPhone play it back). */

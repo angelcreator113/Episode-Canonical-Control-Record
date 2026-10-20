@@ -38,6 +38,8 @@ export const rawClipsApi = {
     }).then((r) => r.data?.data);
   },
   update: (episodeId, clipId, changes) => api.patch(`${base(episodeId)}/${clipId}`, changes).then((r) => r.data?.data),
+  // Stars a take for its beat; the server un-stars the beat's other takes.
+  favorite: (episodeId, clipId, on) => api.patch(`${base(episodeId)}/${clipId}`, { is_favorite: !!on }).then((r) => r.data?.data),
   removeGreen: (episodeId, clipId, strength) => api.post(`${base(episodeId)}/${clipId}/remove-green`, { strength }).then((r) => r.data?.data),
   remove: (episodeId, clipId) => api.delete(`${base(episodeId)}/${clipId}`).then(() => true),
   // The episode's scenes (canonical beats) a clip can be linked to.
@@ -76,3 +78,27 @@ export function clipSize(bytes) {
 
 /** Whether any clip is still waiting on green removal (the tab polls while so). */
 export const anyKeying = (clips) => clips.some((c) => c.key_status === 'queued' || c.key_status === 'processing');
+
+/**
+ * Whether the server sends a clip's favourite and start line (Teleprompter
+ * batch 2): only once migration 20261020090000 has run, so the ★ hides
+ * until then.
+ */
+export const hasTakeFields = (clip) => !!clip && typeof clip === 'object' && 'is_favorite' in clip;
+
+/** The episode's takes for one beat (any raw clip linked to it), oldest first. */
+export const beatTakes = (clips, beatNumber) => (beatNumber == null ? [] : (clips || []).filter((c) => Number(c.beat_number) === Number(beatNumber)));
+
+/**
+ * The clips after starring (on) or un-starring one: one favourite per beat,
+ * as the server keeps it. Clips without the field are left alone.
+ */
+export function withFavorite(clips, clipId, on, row = null) {
+  const target = (clips || []).find((c) => c.id === clipId);
+  const beat = target ? Number(target.beat_number) : null;
+  return (clips || []).map((c) => {
+    if (c.id === clipId) return { ...c, ...(row || {}), is_favorite: !!on };
+    if (on && hasTakeFields(c) && beat != null && Number(c.beat_number) === beat) return { ...c, is_favorite: false };
+    return c;
+  });
+}
