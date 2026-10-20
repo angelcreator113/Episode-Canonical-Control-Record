@@ -101,6 +101,18 @@ describe('rate table and estimate', () => {
     expect(T['dall-e-3'].bySizeQuality).toEqual({ 'hd:1024x1024': 0.08, 'hd:1792x1024': 0.12, 'hd:1024x1792': 0.12 });
     expect(T['gpt-image-1']).toMatchObject({ bySizeQuality: { 'high:1536x1024': 0.25 }, inputImageTokenUsdPerMillion: 10 });
     for (const key of Object.keys(T).filter((k) => T[k].provider === 'replicate')) expect(T[key].usd).toBeNull();
+    // remove.bg: $0.20 per image (Evoni, 2026-10-20).
+    expect(T['remove.bg']).toMatchObject({ provider: 'removebg', unit: 'image', usd: 0.2 });
+  });
+
+  test('a remove.bg cut-out is priced per image, whatever the picture\'s size; Runway\'s fallback stays unpriced', () => {
+    const { imageCost } = loadFresh();
+    expect(imageCost.estimateImageCost({ model: 'remove.bg', provider: 'removebg' }))
+      .toMatchObject({ model: 'remove.bg', provider: 'removebg', unit: 'image', units: 1, usd: 0.2, priced: true });
+    expect(imageCost.estimateImageCost({ model: 'remove.bg', provider: 'removebg', width: 4000, height: 3000 }))
+      .toMatchObject({ units: 1, usd: 0.2 });
+    expect(imageCost.estimateImageCost({ model: 'remove-background', provider: 'runway' }))
+      .toMatchObject({ usd: null, priced: false, provider: 'runway' });
   });
 
   test('OpenAI: priced by quality and size; a combination without a price is unpriced', () => {
