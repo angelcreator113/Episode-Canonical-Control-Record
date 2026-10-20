@@ -13,7 +13,9 @@ export const getCompositionApi = (id) => apiClient.get(`/api/v1/compositions/${i
 export const listCompositionOutputsApi = (id) =>
   apiClient.get(`/api/v1/compositions/${id}/outputs`);
 export const deleteOutputApi = (outputId) =>
-  apiClient.delete(`/api/v1/outputs/${outputId}`);
+  // The route lives under compositions (routes/compositions.js DELETE /outputs/:id;
+  // show side check, 2026-10-20, F6).
+  apiClient.delete(`/api/v1/compositions/outputs/${outputId}`);
 export const generateOutputsApi = (id, payload) =>
   apiClient.post(`/api/v1/compositions/${id}/outputs/generate`, payload);
 export const setPrimaryCompositionApi = (id) =>

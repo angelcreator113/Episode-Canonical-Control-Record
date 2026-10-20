@@ -48,7 +48,7 @@ const AI_RATE_LIMITER_COUNTS = {
   'wardrobe.js': 10,            // 2 import-line + 8 handlers
   'wardrobeLibrary.js': 3,      // 2 import-line + 1 handler
   'wardrobeBrands.js': 3,       // 2 import-line + 1 handler
-  'wardrobeEventRoutes.js': 0,
+  'wardrobeEventRoutes.js': 3,  // 2 import-line matches + POST /:showId/suggest (show side check, 2026-10-20)
   'outfitSets.js': 0,
   'hairLibraryRoutes.js': 3,    // 2 import-line + 1 handler
   'makeupLibraryRoutes.js': 3,  // 2 import-line + 1 handler
@@ -162,7 +162,7 @@ describe('Step 3 CP5 — Wardrobe cluster Tier 1 sweep + AI POST + Item 16 + aud
     });
   });
 
-  describe('AI POST reference model application (D1 — 12 sites uniformly requireAuth + aiRateLimiter)', () => {
+  describe('AI POST reference model application (D1 — 12 sites uniformly requireAuth + aiRateLimiter; 13 with wardrobe-events suggest)', () => {
     test('wardrobe.js — 8 router.post lines wrap requireAuth + aiRateLimiter', () => {
       const src = readSrc('wardrobe.js');
       const matches = src.match(/router\.post\([^)]*requireAuth,\s*aiRateLimiter,/g) || [];
@@ -194,14 +194,14 @@ describe('Step 3 CP5 — Wardrobe cluster Tier 1 sweep + AI POST + Item 16 + aud
       );
     });
 
-    test('CP5 zone aggregate: 12 router.post lines wrap requireAuth + aiRateLimiter', () => {
+    test('CP5 zone aggregate: 13 router.post lines wrap requireAuth + aiRateLimiter (+1 wardrobe-events suggest, show side check 2026-10-20)', () => {
       let total = 0;
       for (const f of CP5_FILES) {
         const src = readSrc(f);
         const matches = src.match(/router\.post\([^)]*requireAuth,\s*aiRateLimiter,/g) || [];
         total += matches.length;
       }
-      expect(total).toBe(12);
+      expect(total).toBe(13);
     });
   });
 
@@ -223,12 +223,12 @@ describe('Step 3 CP5 — Wardrobe cluster Tier 1 sweep + AI POST + Item 16 + aud
       expect(total).toBe(99);
     });
 
-    test('CP5 zone contains 22 total aiRateLimiter references (5 files × 2 import-line matches + 12 handler invocations)', () => {
+    test('CP5 zone contains 25 total aiRateLimiter references (6 files × 2 import-line matches + 13 handler invocations)', () => {
       const total = CP5_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         return sum + ((src.match(/\baiRateLimiter\b/g) || []).length);
       }, 0);
-      expect(total).toBe(22);
+      expect(total).toBe(25);
     });
 
     test('CP5 zone has zero optionalAuth references', () => {

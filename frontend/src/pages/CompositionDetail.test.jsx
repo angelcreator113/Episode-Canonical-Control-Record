@@ -48,10 +48,10 @@ describe('CompositionDetail — Track 6 CP10 module-scope helpers', () => {
     expect(apiClient.get).toHaveBeenCalledWith('/api/v1/compositions/c-1/outputs');
   });
 
-  test('deleteOutputApi DELETE on /outputs/:outputId', async () => {
+  test('deleteOutputApi DELETE on /compositions/outputs/:outputId', async () => {
     vi.mocked(apiClient.delete).mockResolvedValue({ data: {} });
     await deleteOutputApi('o-1');
-    expect(apiClient.delete).toHaveBeenCalledWith('/api/v1/outputs/o-1');
+    expect(apiClient.delete).toHaveBeenCalledWith('/api/v1/compositions/outputs/o-1');
   });
 
   test('generateOutputsApi POST single-format (handleRegenerateOutput shape)', async () => {

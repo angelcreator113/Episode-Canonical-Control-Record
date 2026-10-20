@@ -283,7 +283,7 @@ export default function EventFeedDashboard() {
           <ArrowLeft size={16} /> Back
         </button>
         <div className="efd-title">
-          <h1>Event Feed Dashboard</h1>
+          <h1>Event Pulse dashboard</h1>
           <p className="efd-subtitle">Engagement analytics, trending topics, viral detection, event chains</p>
         </div>
         <button className="efd-refresh" onClick={loadAll} disabled={loading}>
@@ -361,7 +361,7 @@ export default function EventFeedDashboard() {
               <div className="efd-empty">
                 <TrendingUp size={40} />
                 <p>No trending topics yet.</p>
-                <p>Feed posts with hashtags will appear here.</p>
+                <p>Pulse posts with hashtags will appear here.</p>
               </div>
             ) : (
               <div className="efd-trending-grid">

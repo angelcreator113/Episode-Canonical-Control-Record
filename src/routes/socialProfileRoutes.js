@@ -3173,7 +3173,73 @@ router.put('/:id/posting-schedule', requireAuth, authorize(['ADMIN']), async (re
   }
 });
 
-router.get('/:id', optionalAuth, async (req, res) => {
+// Lala's reactions to one Pulse person (the Reactions button on a profile;
+// FeedEnhancements LalaReactions). It used to send a free-form prompt to
+// /memories/ai, which does not exist (show side check, 2026-10-20, F1); the
+// prompt is now built here from the profile, never taken from the browser.
+const REACTION_MODELS = ['claude-sonnet-4-6'];
+
+function lalaReactionsPrompt(p) {
+  return `You are writing internal monologue for Lala, a luxury fashion content creator in the LalaVerse.
+
+She just saw content from ${p.display_name || p.handle} (${platformLabel(p.platform)}).
+Follow motivation: ${p.follow_motivation || 'general interest'}
+Follow emotion: ${p.follow_emotion || 'neutral'}
+Follow trigger: ${p.follow_trigger || 'their content'}
+Beauty factor: ${p.beauty_factor ?? 5}/10
+Lifestyle claim: ${p.lifestyle_claim || 'unknown'}
+Lifestyle reality: ${p.lifestyle_reality || 'unknown'}
+
+Generate 4 reaction scenarios as JSON:
+[
+  { "trigger": "specific content moment", "internal_monologue": "what Lala thinks (2-3 sentences, raw and honest)", "what_she_posts": "her public response (caption or comment)", "emotional_cost": "what this interaction takes from her" },
+  ...4 total
+]
+
+Make reactions feel real — jealousy, aspiration, self-comparison, motivation. Not generic.`;
+}
+
+router.post('/:id/lala-reactions', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  try {
+    if (!/^\d+$/.test(String(req.params.id))) return res.status(400).json({ error: 'id must be a profile id' });
+    const profile = await db.SocialProfile.findByPk(req.params.id);
+    if (!profile) return res.status(404).json({ error: 'Not found' });
+    if (isLockedProfile(profile)) return res.status(403).json({ error: "JustAWoman's record is not a Pulse person." });
+    let message;
+    for (const model of REACTION_MODELS) {
+      for (let attempt = 1; attempt <= 2 && !message; attempt += 1) {
+        try {
+          message = await client.messages.create({ model, max_tokens: 1500, messages: [{ role: 'user', content: lalaReactionsPrompt(profile) }] });
+        } catch (callErr) {
+          console.warn(`[socialProfiles] lala-reactions with ${model}, try ${attempt}, failed:`, callErr.message);
+          if (callErr?.code === 'AI_BUDGET_EXCEEDED' || (attempt === 2 && model === REACTION_MODELS[REACTION_MODELS.length - 1])) throw callErr;
+        }
+      }
+      if (message) break;
+    }
+    const text = message?.content?.[0]?.text || '';
+    let reactions = null;
+    try {
+      const match = text.match(/\[[\s\S]*\]/);
+      reactions = match ? JSON.parse(match[0]) : null;
+    } catch (parseErr) {
+      console.error('[socialProfiles] lala-reactions came back unreadable:', parseErr.message);
+    }
+    if (!Array.isArray(reactions)) return res.status(502).json({ error: 'The reactions came back in a form that could not be read. Try again.' });
+    return res.json({ reactions: reactions.slice(0, 4) });
+  } catch (err) {
+    if (require('../utils/aiFailure').aiFailure(res, err)) return undefined;
+    console.error('[socialProfiles] lala-reactions error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// A profile id is a number. Anything else (/underground, /feed: routers mounted
+// after this one on the same path) passes on instead of 500ing here (show side
+// check, 2026-10-20, F7).
+router.get('/:id', optionalAuth, async (req, res, next) => {
+  if (!/^\d+$/.test(String(req.params.id))) return next();
   const db = req.app.locals.db || require('../models');
   try {
     const profile = await db.SocialProfile.findByPk(req.params.id, {
@@ -3187,6 +3253,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
     const [linked] = await withRegistryLinks(db, [profile]);
     return res.json({ profile: linked });
   } catch (err) {
+    console.error('[socialProfiles] GET /:id error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
