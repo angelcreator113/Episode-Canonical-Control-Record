@@ -17,7 +17,13 @@ jest.mock('../../../src/middleware/auth', () => {
 });
 jest.mock('../../../src/services/youtubeThumbnailService', () => {
   const actual = jest.requireActual('../../../src/services/youtubeThumbnailService');
-  return { ...actual, saveAsPrimary: jest.fn(async () => ({ id: 7, url: 'https://b.s3.amazonaws.com/t.png', key: 't.png' })) };
+  return {
+    ...actual,
+    saveAsPrimary: jest.fn(async () => ({ id: 7, url: 'https://b.s3.amazonaws.com/t.png', key: 't.png' })),
+    listSaved: jest.fn(async () => [{ id: 7, url: 'https://b.s3.amazonaws.com/t.png', isPrimary: true }]),
+    makePrimary: jest.fn(async () => ({ id: 6, url: 'https://b.s3.amazonaws.com/s.png' })),
+    removeSaved: jest.fn(async () => { throw new actual.ThumbnailError(409, 'This is the episode\'s thumbnail. Make another one the thumbnail first.'); }),
+  };
 });
 
 const yt = require('../../../src/services/youtubeThumbnailService');
@@ -82,4 +88,16 @@ test('a non-image upload is refused', async () => {
     .attach('background', Buffer.from('hi'), { filename: 'a.txt', contentType: 'text/plain' });
   expect(res.status).toBe(400);
   expect(res.body.error).toMatch(/Only images/);
+});
+
+test('the saved list, making one current, and a refused delete pass through', async () => {
+  const list = await request(app).get('/api/v1/youtube-thumbnails/episodes/ep-1/saved');
+  expect(list.status).toBe(200);
+  expect(list.body.data).toEqual([{ id: 7, url: 'https://b.s3.amazonaws.com/t.png', isPrimary: true }]);
+  const made = await request(app).post('/api/v1/youtube-thumbnails/episodes/ep-1/saved/6/primary');
+  expect(made.status).toBe(200);
+  expect(yt.makePrimary).toHaveBeenCalledWith(expect.anything(), 'ep-1', '6');
+  const del = await request(app).delete('/api/v1/youtube-thumbnails/episodes/ep-1/saved/7');
+  expect(del.status).toBe(409);
+  expect(del.body.error).toMatch(/Make another one the thumbnail first/);
 });

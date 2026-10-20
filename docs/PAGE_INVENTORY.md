@@ -115,7 +115,7 @@ not via any page's UI.
 | `/template-studio/designer` | `pages/TemplateDesigner.jsx` (App.jsx:395) | live | in-app link (`pages/TemplateStudio.jsx:64`) |
 | `/template-studio/designer/:templateId` | `pages/TemplateDesigner.jsx` (App.jsx:396) | live | in-app link (`pages/TemplateStudio.jsx:72`) |
 | `/library` | `pages/CompositionLibrary.jsx` (App.jsx:399) | live | Sidebar (STUDIO zone, `Sidebar.jsx:57`) |
-| `/compositions/:id` | `pages/CompositionDetail.jsx` (App.jsx:400) | live | URL only |
+| `/compositions/:id` | `Navigate` to `/template-studio/youtube` (`thumbnailStudioHref`) | redirect | URL only. `pages/CompositionDetail.jsx` retired 2026-10-20: an episode's thumbnail is edited only in `YouTubeThumbnailStudio` |
 | `/admin/templates` | `pages/TemplateManagement.jsx` (App.jsx:403) | live | URL only |
 
 > **Flag — likely broken link:** `pages/TemplateStudio.jsx:357` calls
@@ -129,15 +129,13 @@ not via any page's UI.
 
 | Path | Component | Live/Redirect | Reachable via |
 |---|---|---|---|
-| `/thumbnails/:episodeId` | `pages/ThumbnailGallery.jsx` (App.jsx:408) | live | URL only — see note below |
+| `/thumbnails/:episodeId` | `EpisodeComposerRedirect` → `/template-studio/youtube?episode=…` | redirect | URL only. `pages/ThumbnailGallery.jsx` retired 2026-10-20: its list and Delete are `YouTubeThumbnailStudio`'s Saved thumbnails |
 | `/episodes/:episodeId/export` | `pages/ExportPage.jsx` (App.jsx:411) | live | in-app link (`components/ExportDropdown/ExportDropdown.jsx:13,17`, `pages/EpisodeReview.jsx:74`) |
 | `/episodes/:episodeId/review` | `pages/EpisodeReview.jsx` (App.jsx:414) | live | in-app link (`components/Episodes/EpisodeKanbanBoard.jsx:178` via `utils/workflowRouter.js:64,77`) |
 
-> **Flag — second likely broken link:** `pages/ThumbnailGallery.jsx` itself
-> navigates to `/episodes/${id}/thumbnail/${id}` (per this inventory's route
-> research), which also matches no declared `App.jsx` route. Recorded here
-> rather than re-verified line-by-line since it wasn't this document's
-> primary target.
+> **Resolved 2026-10-20:** `pages/ThumbnailGallery.jsx` no longer exists;
+> `/thumbnails/:episodeId` redirects to the one thumbnail editor,
+> `YouTubeThumbnailStudio`, on that episode.
 
 ### Management — writing (App.jsx:419-433)
 
@@ -600,9 +598,9 @@ on by this document.
 | `/episodes/:episodeId/beats` | `pages/BeatGeneration.jsx` | Page for viewing an episode's scenes and generating/reviewing AI script beats per scene. |
 | `/episodes/:episodeId/icon-cues` | `pages/IconCueTimeline.jsx` | Timeline editor/viewer for AI-generated icon cues, cursor paths, and music cues for an episode. |
 | `/episodes/:episodeId/composer`, `/template-studio` | `pages/TemplateStudio.jsx` | Template Management Dashboard: list, filter, clone, publish, lock, and archive thumbnail templates. |
-| `/compositions/:id` | `pages/CompositionDetail.jsx` | Detail page for a single composition, with tabs for outputs, layout adjustment, and history; supports generating/deleting outputs. |
+| `/compositions/:id` | redirect | Retired 2026-10-20; opens Templates › YouTube thumbnails (`YouTubeThumbnailStudio`). |
 | `/admin/templates` | `pages/TemplateManagement.jsx` | Admin page to create, edit, and manage episode templates. |
-| `/thumbnails/:episodeId` | `pages/ThumbnailGallery.jsx` | Gallery page listing episode thumbnails across platforms with search/status/platform filters. |
+| `/thumbnails/:episodeId` | redirect (`EpisodeComposerRedirect`) | Retired 2026-10-20; opens `YouTubeThumbnailStudio` on the episode, which lists its saved thumbnails (make current, delete). |
 | `/write/:bookId/:chapterId` | `pages/WriteMode.jsx` | Unified writing hub combining a TOC sidebar, prose editor, and context panel for voice-first chapter writing. |
 | `/chapter-structure/:bookId/:chapterId` | `pages/ChapterStructureEditor.jsx` | Structured chapter writing editor with visual hierarchy (headings, quotes, reflections), collapsible sections, auto-TOC, and templates. |
 | `/setup` | `pages/SetupWizard.jsx` | Conversational onboarding wizard that walks the user through 7 world-building "beats" to build the universe. |

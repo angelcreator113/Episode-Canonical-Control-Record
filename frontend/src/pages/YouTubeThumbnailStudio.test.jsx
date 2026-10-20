@@ -2,7 +2,9 @@
  * Templates › YouTube thumbnails (Evoni, 2026-10-17): an episode opens with
  * its show's style and its own words; changes re-render the preview; Save
  * stores the episode's thumbnail; Save style keeps the show's look; an
- * upload goes with the render.
+ * upload goes with the render. The one editor (2026-10-20): the episode's
+ * saved thumbnails are listed, one can be made current again, an older one
+ * deleted.
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
@@ -12,11 +14,14 @@ vi.mock('../lib/youtubeThumbnailsApi', async () => {
   const actual = await vi.importActual('../lib/youtubeThumbnailsApi');
   return {
     ...actual,
-    youtubeThumbnailsApi: { sources: vi.fn(), render: vi.fn(), save: vi.fn(), saveStyle: vi.fn(), shows: vi.fn(), episodes: vi.fn() },
+    youtubeThumbnailsApi: {
+      sources: vi.fn(), render: vi.fn(), save: vi.fn(), saveStyle: vi.fn(), shows: vi.fn(), episodes: vi.fn(),
+      saved: vi.fn(), makePrimary: vi.fn(), removeSaved: vi.fn(),
+    },
   };
 });
 
-import { youtubeThumbnailsApi, episodeWords, renderForm } from '../lib/youtubeThumbnailsApi';
+import { youtubeThumbnailsApi, episodeWords, renderForm, thumbnailStudioHref } from '../lib/youtubeThumbnailsApi';
 import YouTubeThumbnailStudio from './YouTubeThumbnailStudio';
 
 const SOURCES = {
@@ -42,6 +47,12 @@ describe('helpers', () => {
     expect(form.get('background')).toBe(f);
     expect(form.get('lala')).toBeNull();
   });
+
+  test('the editor link opens on the episode when there is one', () => {
+    expect(thumbnailStudioHref({ showId: 's1', episodeId: 'e1' })).toBe('/template-studio/youtube?show=s1&episode=e1');
+    expect(thumbnailStudioHref({ episodeId: 'e1' })).toBe('/template-studio/youtube?episode=e1');
+    expect(thumbnailStudioHref()).toBe('/template-studio/youtube');
+  });
 });
 
 describe('YouTubeThumbnailStudio', () => {
@@ -51,6 +62,7 @@ describe('YouTubeThumbnailStudio', () => {
     youtubeThumbnailsApi.episodes.mockResolvedValue([{ id: 'ep-1', episode_number: 1, title: 'Studio by Sable' }]);
     youtubeThumbnailsApi.sources.mockResolvedValue(SOURCES);
     youtubeThumbnailsApi.render.mockResolvedValue(new Blob(['png'], { type: 'image/png' }));
+    youtubeThumbnailsApi.saved.mockResolvedValue([]);
     globalThis.URL.createObjectURL = vi.fn(() => 'blob:preview');
     globalThis.URL.revokeObjectURL = vi.fn();
   });
@@ -86,13 +98,48 @@ describe('YouTubeThumbnailStudio', () => {
     expect(within(screen.getByTestId('yts-backgrounds')).getByText('mine.jpg')).toBeTruthy();
   });
 
-  test('Save stores it as the episode\'s thumbnail and links to the gallery', async () => {
+  test('Save stores it as the episode\'s thumbnail and lists it with the saved ones', async () => {
     youtubeThumbnailsApi.save.mockResolvedValue({ id: 7, url: 'https://b.s3.amazonaws.com/t.png' });
     renderPage();
+    await waitFor(() => expect(youtubeThumbnailsApi.saved).toHaveBeenCalledTimes(1));
+    youtubeThumbnailsApi.saved.mockResolvedValue([{ id: 7, url: 'https://b.s3.amazonaws.com/t.png', isPrimary: true }]);
     fireEvent.click(await screen.findByTestId('yts-save'));
     await waitFor(() => expect(youtubeThumbnailsApi.save).toHaveBeenCalledWith('ep-1', expect.objectContaining({ title: 'Studio by Sable' }), { background: null, lala: null }));
     expect(await screen.findByText("Saved as the episode's thumbnail.")).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Open the thumbnail gallery' }).getAttribute('href')).toBe('/thumbnails/ep-1');
+    expect(screen.queryByRole('link', { name: /thumbnail gallery/ })).toBeNull();
+    expect(within(await screen.findByTestId('yts-saved-7')).getByText('Episode thumbnail')).toBeTruthy();
+  });
+
+  test('a saved one can be made the episode\'s thumbnail again', async () => {
+    youtubeThumbnailsApi.saved.mockResolvedValueOnce([
+      { id: 9, url: 'https://b.s3.amazonaws.com/new.png', isPrimary: true },
+      { id: 8, url: 'https://b.s3.amazonaws.com/old.png', isPrimary: false },
+    ]).mockResolvedValueOnce([
+      { id: 8, url: 'https://b.s3.amazonaws.com/old.png', isPrimary: true },
+      { id: 9, url: 'https://b.s3.amazonaws.com/new.png', isPrimary: false },
+    ]);
+    youtubeThumbnailsApi.makePrimary.mockResolvedValue({ id: 8 });
+    renderPage();
+    const older = await screen.findByTestId('yts-saved-8');
+    expect(within(screen.getByTestId('yts-saved-9')).queryByRole('button', { name: /Delete/ })).toBeNull();
+    fireEvent.click(within(older).getByRole('button', { name: /Use this one/ }));
+    await waitFor(() => expect(youtubeThumbnailsApi.makePrimary).toHaveBeenCalledWith('ep-1', 8));
+    await waitFor(() => expect(within(screen.getByTestId('yts-saved-8')).getByText('Episode thumbnail')).toBeTruthy());
+  });
+
+  test('an older saved one can be deleted after confirming', async () => {
+    youtubeThumbnailsApi.saved.mockResolvedValue([
+      { id: 9, url: 'https://b.s3.amazonaws.com/new.png', isPrimary: true },
+      { id: 8, url: 'https://b.s3.amazonaws.com/old.png', isPrimary: false },
+    ]);
+    youtubeThumbnailsApi.removeSaved.mockResolvedValue({ id: 8 });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderPage();
+    fireEvent.click(within(await screen.findByTestId('yts-saved-8')).getByRole('button', { name: /Delete/ }));
+    await waitFor(() => expect(youtubeThumbnailsApi.removeSaved).toHaveBeenCalledWith('ep-1', 8));
+    await waitFor(() => expect(screen.queryByTestId('yts-saved-8')).toBeNull());
+    expect(screen.getByTestId('yts-saved-9')).toBeTruthy();
+    confirm.mockRestore();
   });
 
   test('Save style keeps the layout, colours and Lala for the show', async () => {
