@@ -83,7 +83,8 @@ const REQUIRE_AUTH_COUNTS = {
   // +2 for POST and DELETE /:id/style-sheet/distribution/site (Shop the Look
   // on the website, Task #3021, requireAuth + ADMIN).
   // +2 for GET /:id/script-versions and GET /:id/script-versions/:versionId (Script tab audit, 2026-10-15, requireAuth).
-  'episodes.js': 113,
+  // -1 for POST /:id/thumbnail, retired (one thumbnail editor, 2026-10-20).
+  'episodes.js': 112,
   // 12 at CP2 close; +1 for POST /:episodeId/feed-moments/retry (Task #2220, requireAuth);
   // +3 for POST /:episodeId/dressed-angles/:angleId/{brief,generate,upload} (L10, §8(hh), requireAuth).
   // +1 for GET /:episodeId/dressed-angles (S8, §8(dd), requireAuth).
@@ -313,7 +314,8 @@ describe('Step 3 CP2 — Episodes cluster tier promotion', () => {
     // +1 for todoListRoutes.js GET /todo/at (Task #3191).
     // +2 for episodes.js GET /:id/script-versions and /:id/script-versions/:versionId (Script tab audit, 2026-10-15).
     // +4 for shows.js character homes: GET/POST /:id/character-places, POST .../unlink, PUT /:id/lead-character (2026-10-15).
-    test('CP2 zone contains 323 total requireAuth references across 22 files', () => {
+    // -1 for episodes.js POST /:id/thumbnail, retired (one thumbnail editor, 2026-10-20).
+    test('CP2 zone contains 322 total requireAuth references across 22 files', () => {
       const total = CP2_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
@@ -327,7 +329,7 @@ describe('Step 3 CP2 — Episodes cluster tier promotion', () => {
     // +5 for episodes.js Lookbook GET, PUT, POST images, PATCH and DELETE image (Task #2812).
     // +1 for episodes.js PUT /:id/lookbook/venue (Task #2813).
     // +3 for episodes.js style sheet GET, approve and reopen (Task #2814).
-      expect(total).toBe(323);
+      expect(total).toBe(322);
     });
 
     test('F-AUTH-3 Tier 3 consumer count (2 in src/routes/, press.js only)', () => {
