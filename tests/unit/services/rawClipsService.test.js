@@ -40,6 +40,73 @@ describe('readFields', () => {
   });
 });
 
+describe('take fields: is_favorite and start_line (Teleprompter batch 2)', () => {
+  test('readFields: is_favorite is a boolean; start_line a whole number from 0, or null', () => {
+    expect(clips.readFields({ is_favorite: true })).toEqual({ is_favorite: true });
+    expect(clips.readFields({ is_favorite: 'false' })).toEqual({ is_favorite: false });
+    expect(() => clips.readFields({ is_favorite: 'yes' })).toThrow(/is_favorite must be true or false/);
+    expect(clips.readFields({ start_line: 0 })).toEqual({ start_line: 0 });
+    expect(clips.readFields({ start_line: '4' })).toEqual({ start_line: 4 });
+    expect(clips.readFields({ start_line: null })).toEqual({ start_line: null });
+    expect(() => clips.readFields({ start_line: -1 })).toThrow(/start_line must be a whole number from 0/);
+    expect(() => clips.readFields({ start_line: 1.5 })).toThrow(clips.RawClipError);
+  });
+
+  test('shapeRow sends the fields only when the columns exist, never has_take_fields', () => {
+    expect(clips.shapeRow({ id: 'c1', is_favorite: null, start_line: null, has_take_fields: false })).toEqual({ id: 'c1' });
+    expect(clips.shapeRow({ id: 'c1', is_favorite: true, start_line: '3', has_take_fields: true })).toEqual({ id: 'c1', is_favorite: true, start_line: 3 });
+    expect(clips.shapeRow({ id: 'c1', is_favorite: false, start_line: null, has_take_fields: true })).toEqual({ id: 'c1', is_favorite: false, start_line: null });
+    expect(clips.shapeRow(undefined)).toBeUndefined();
+  });
+
+  test('listing reads the fields through to_jsonb, so it works before the migration', async () => {
+    const s = seq([[]], [[{ id: 'c1', has_take_fields: false, is_favorite: null, start_line: null }, { id: 'c2', has_take_fields: true, is_favorite: true, start_line: 2 }]]);
+    await expect(clips.listClips(s, 'ep')).resolves.toEqual([{ id: 'c1' }, { id: 'c2', is_favorite: true, start_line: 2 }]);
+    expect(s.query.mock.calls[1][0]).toMatch(/to_jsonb\(episode_raw_clips\) -> 'is_favorite' AS is_favorite/);
+  });
+
+  test('starring a take un-stars the other takes of its beat, in one transaction', async () => {
+    const query = jest.fn()
+      .mockResolvedValueOnce([[{ id: 'c2', beat_number: 8, is_favorite: true, start_line: null, has_take_fields: true }]])
+      .mockResolvedValueOnce([[], 1]);
+    const transaction = jest.fn(async (fn) => fn('tx'));
+    const row = await clips.updateClip({ query, transaction }, 'ep', 'c2', { is_favorite: true });
+    expect(row).toEqual({ id: 'c2', beat_number: 8, is_favorite: true, start_line: null });
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[0][0]).toMatch(/SET is_favorite = :is_favorite, updated_at = NOW\(\)/);
+    expect(query.mock.calls[0][1].transaction).toBe('tx');
+    const [unstar, opts] = query.mock.calls[1];
+    expect(unstar).toMatch(/SET is_favorite = false/);
+    expect(unstar).toMatch(/beat_number = :beat AND id <> :clipId/);
+    expect(opts).toMatchObject({ replacements: { episodeId: 'ep', clipId: 'c2', beat: 8 }, transaction: 'tx' });
+  });
+
+  test('un-starring, or starring a take with no beat, touches only that take', async () => {
+    const query = jest.fn().mockResolvedValue([[{ id: 'c2', beat_number: null, has_take_fields: true, is_favorite: true, start_line: null }]]);
+    const transaction = jest.fn(async (fn) => fn('tx'));
+    await clips.updateClip({ query, transaction }, 'ep', 'c2', { is_favorite: true });
+    expect(query).toHaveBeenCalledTimes(1);
+    await clips.updateClip({ query, transaction }, 'ep', 'c2', { is_favorite: false, start_line: 3 });
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[1][0]).toMatch(/SET is_favorite = :is_favorite, start_line = :start_line/);
+  });
+
+  test('before the migration, a PATCH of the fields is a 409 with a plain message (and is logged)', async () => {
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const pgErr = Object.assign(new Error('column "start_line" of relation "episode_raw_clips" does not exist'), { original: { code: '42703', message: 'column "start_line" of relation "episode_raw_clips" does not exist' } });
+    const query = jest.fn().mockRejectedValue(pgErr);
+    await expect(clips.updateClip({ query, transaction: async (fn) => fn('tx') }, 'ep', 'c1', { start_line: 2 }))
+      .rejects.toMatchObject({ status: 409, message: clips.TAKE_FIELDS_MISSING });
+    await expect(clips.updateClip({ query, transaction: async (fn) => fn('tx') }, 'ep', 'c1', { is_favorite: true }))
+      .rejects.toBeInstanceOf(clips.RawClipError);
+    const other = new Error('connection reset');
+    await expect(clips.updateClip({ query: jest.fn().mockRejectedValue(other) }, 'ep', 'c1', { label: 'x' })).rejects.toBe(other);
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+});
+
 describe('readStrength and truthy', () => {
   test('strength defaults to medium and must be low, medium or high', () => {
     expect(clips.readStrength(undefined)).toBe('medium');

@@ -15,9 +15,21 @@ const PERFORMERS = Object.freeze(['lala', 'justawoman', 'guest']);
 const KEY_STATUSES = Object.freeze(['none', 'queued', 'processing', 'done', 'failed']);
 const KEY_STRENGTHS = Object.freeze(['low', 'medium', 'high']);
 
+// is_favorite and start_line (Teleprompter batch 2; Evoni, 2026-10-20)
+// arrive with 20261020090000-add-episode-raw-clips-favorite-start-line.js,
+// which runs only through the Deploy workflow. Read through to_jsonb so the
+// same SELECT works before and after it: has_take_fields says whether the
+// columns are there, and shapeRow leaves both fields out when they are not.
+const TAKE_COLUMNS = `to_jsonb(episode_raw_clips) -> 'is_favorite' AS is_favorite,
+  to_jsonb(episode_raw_clips) -> 'start_line' AS start_line,
+  (to_jsonb(episode_raw_clips) -> 'is_favorite') IS NOT NULL AS has_take_fields`;
+const TAKE_FIELDS = Object.freeze(['is_favorite', 'start_line']);
+const TAKE_FIELDS_MISSING = 'Favourites and start lines are not switched on yet: the database update that adds them (20261020090000) has not run. The take is saved; star it once the update is in.';
+
 const COLUMNS = `id, episode_id, show_id, performer, guest_name, label, beat_number, original_filename, content_type,
   file_size_bytes, duration_seconds, width, height, url_raw, thumbnail_url,
-  key_status, key_strength, url_cutout, key_error, key_started_at, key_finished_at, created_at, updated_at`;
+  key_status, key_strength, url_cutout, key_error, key_started_at, key_finished_at, created_at, updated_at,
+  ${TAKE_COLUMNS}`;
 
 // A job still queued or processing this long after its last update was cut
 // off (the server restarted mid-job); list marks it failed so Retry shows.
@@ -31,12 +43,34 @@ class RawClipError extends Error {
   }
 }
 
+/**
+ * A row as the API sends it: is_favorite (boolean) and start_line (a whole
+ * number or null) only when the columns exist; has_take_fields never.
+ */
+function shapeRow(row) {
+  if (!row || typeof row !== 'object' || !('has_take_fields' in row)) return row;
+  const { has_take_fields: has, is_favorite: fav, start_line: line, ...rest } = row;
+  if (!has) return rest;
+  return { ...rest, is_favorite: fav === true || fav === 'true', start_line: line == null ? null : Number(line) };
+}
+
+// Postgres 42703: undefined_column. A PATCH of is_favorite / start_line
+// before the migration has run is a 409 with a plain message, not a 500.
+const missingTakeColumn = (err) => {
+  const code = err?.original?.code || err?.parent?.code || err?.code;
+  const text = String(err?.original?.message || err?.message || '');
+  return (code === '42703' || /column .* does not exist/i.test(text)) && TAKE_FIELDS.some((f) => text.includes(f));
+};
+
 const cleanText = (v, max) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
 
 /**
  * Validates the editable fields. Returns { performer, guest_name, label,
- * beat_number } (only the keys given). beat_number links the clip to a
- * scene (canonical beat 1-14); null unlinks it.
+ * beat_number, is_favorite, start_line } (only the keys given).
+ * beat_number links the clip to a scene (canonical beat 1-14); null unlinks
+ * it. is_favorite stars the take for its beat (a boolean); start_line is the
+ * line within the beat a teleprompter take was read from (0 = the top), a
+ * whole number from 0, or null.
  */
 function readFields(body = {}, { requirePerformer = false } = {}) {
   const out = {};
@@ -52,6 +86,20 @@ function readFields(body = {}, { requirePerformer = false } = {}) {
       const beat = Number(body.beat_number);
       if (!Number.isInteger(beat) || beat < 1 || beat > 14) throw new RawClipError(400, 'beat_number must be a whole number from 1 to 14, or null');
       out.beat_number = beat;
+    }
+  }
+  if (body.is_favorite !== undefined) {
+    const v = body.is_favorite;
+    if (v === true || v === 'true') out.is_favorite = true;
+    else if (v === false || v === 'false') out.is_favorite = false;
+    else throw new RawClipError(400, 'is_favorite must be true or false');
+  }
+  if (body.start_line !== undefined) {
+    if (body.start_line === null || body.start_line === '') out.start_line = null;
+    else {
+      const line = Number(body.start_line);
+      if (!Number.isInteger(line) || line < 0 || line > 100000) throw new RawClipError(400, 'start_line must be a whole number from 0, or null');
+      out.start_line = line;
     }
   }
   if (out.performer && out.performer !== 'guest') out.guest_name = null;
@@ -92,7 +140,7 @@ async function listClips(sequelize, episodeId, { activeIds = [] } = {}) {
       WHERE episode_id = :episodeId AND deleted_at IS NULL
       ORDER BY created_at ASC`,
     { replacements: { episodeId } });
-  return rows || [];
+  return (rows || []).map(shapeRow);
 }
 
 /** One live clip of the episode, with its S3 keys (for the media work), or null. */
@@ -101,7 +149,7 @@ async function getClip(sequelize, episodeId, clipId) {
     `SELECT ${COLUMNS}, s3_key_raw, thumbnail_key, s3_key_cutout FROM episode_raw_clips
       WHERE id = :clipId AND episode_id = :episodeId AND deleted_at IS NULL LIMIT 1`,
     { replacements: { episodeId, clipId } });
-  return row || null;
+  return shapeRow(row) || null;
 }
 
 /** Inserts a clip row. clip: the columns, already validated. Returns the row. */
@@ -126,21 +174,47 @@ async function createClip(sequelize, clip) {
         :keyStatus, :keyStrength, NOW(), NOW())
      RETURNING ${COLUMNS}`,
     { replacements });
-  return row;
+  return shapeRow(row);
 }
 
-/** Updates performer, guest_name, label and beat_number. Returns the row, or null when there is no such clip. */
+/**
+ * Updates performer, guest_name, label, beat_number, is_favorite and
+ * start_line. Returns the row, or null when there is no such clip.
+ * Starring a take un-stars the episode's other takes for the same beat, in
+ * one transaction: one favourite per beat (Evoni, 2026-10-20).
+ */
 async function updateClip(sequelize, episodeId, clipId, body = {}) {
   const fields = readFields(body);
   const keys = Object.keys(fields);
-  if (!keys.length) throw new RawClipError(400, 'Nothing to change: send performer, guest_name, label or beat_number');
+  if (!keys.length) throw new RawClipError(400, 'Nothing to change: send performer, guest_name, label, beat_number, is_favorite or start_line');
   const sets = keys.map((k) => `${k} = :${k}`).join(', ');
-  const [rows] = await sequelize.query(
-    `UPDATE episode_raw_clips SET ${sets}, updated_at = NOW()
-      WHERE id = :clipId AND episode_id = :episodeId AND deleted_at IS NULL
-      RETURNING ${COLUMNS}`,
-    { replacements: { ...fields, episodeId, clipId } });
-  return (rows || [])[0] || null;
+  const run = async (transaction) => {
+    const [rows] = await sequelize.query(
+      `UPDATE episode_raw_clips SET ${sets}, updated_at = NOW()
+        WHERE id = :clipId AND episode_id = :episodeId AND deleted_at IS NULL
+        RETURNING ${COLUMNS}`,
+      { replacements: { ...fields, episodeId, clipId }, transaction });
+    const row = shapeRow((rows || [])[0]) || null;
+    if (row && fields.is_favorite === true && row.beat_number != null) {
+      await sequelize.query(
+        `UPDATE episode_raw_clips SET is_favorite = false, updated_at = NOW()
+          WHERE episode_id = :episodeId AND beat_number = :beat AND id <> :clipId
+            AND is_favorite = true AND deleted_at IS NULL`,
+        { replacements: { episodeId, clipId, beat: row.beat_number }, transaction });
+    }
+    return row;
+  };
+  try {
+    if (fields.is_favorite === true) return await sequelize.transaction((t) => run(t));
+    return await run(undefined);
+  } catch (err) {
+    if (missingTakeColumn(err)) {
+      console.error('[rawClips] is_favorite / start_line columns are missing (migration 20261020090000 not run):', err.message);
+      throw new RawClipError(409, TAKE_FIELDS_MISSING);
+    }
+    console.error('[rawClips] update failed:', err.message);
+    throw err;
+  }
 }
 
 /** Sets the green-removal state. extra: { strength, cutoutKey, cutoutUrl, error }. */
@@ -163,7 +237,7 @@ async function setKeyState(sequelize, clipId, status, extra = {}) {
   const [rows] = await sequelize.query(
     `UPDATE episode_raw_clips SET ${sets.join(', ')} WHERE id = :clipId AND deleted_at IS NULL RETURNING ${COLUMNS}`,
     { replacements });
-  return (rows || [])[0] || null;
+  return shapeRow((rows || [])[0]) || null;
 }
 
 /** Soft-deletes one of the episode's clips (its files stay in S3). True when one was removed. */
@@ -261,7 +335,8 @@ function readProbe(json) {
 
 module.exports = {
   PERFORMERS, KEY_STATUSES, KEY_STRENGTHS, STALE_HOURS, STALE_MESSAGE, DEFAULT_KEY_COLOR, STRENGTH_SIMILARITY,
-  RawClipError, readFields, readStrength, truthy, findEpisode,
+  TAKE_FIELDS, TAKE_FIELDS_MISSING,
+  RawClipError, readFields, readStrength, truthy, findEpisode, shapeRow,
   listClips, getClip, createClip, updateClip, setKeyState, removeClip,
   pickKeyColor, chromakeyArgs, sampleFrameArgs, thumbnailArgs, probeArgs, readProbe,
 };

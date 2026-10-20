@@ -237,6 +237,33 @@ body.stp-open { overflow: hidden; }
 .stp-rehearsal-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 @media (prefers-reduced-motion: reduce) { .stp-meter-track span { transition: none; } }
 
+/* Batch 2 (Evoni, 2026-10-20): the beat's takes in Files with a ★, and
+   "Start from" a line within the beat. */
+.stp-takes {
+  position: absolute; right: 12px; bottom: 12px; box-sizing: border-box; width: min(420px, calc(100% - 24px)); max-height: 60%; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 8px; padding: 12px 14px;
+  border: 1px solid var(--studio-prompter-line); border-radius: 12px; background: var(--studio-prompter-bar); color: var(--studio-prompter-cue); font-size: 14px;
+}
+.stp-takes-title { margin: 0; font-family: 'DM Mono', var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--studio-prompter-mark); }
+.stp-takes-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.stp-take { display: flex; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid var(--studio-prompter-line); }
+.stp-take:last-child { border-bottom: 0; }
+.stp-take-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.stp-take-name { color: var(--studio-prompter-ink); overflow-wrap: anywhere; }
+.stp-take-meta { font-family: 'DM Mono', var(--font-mono); font-size: 12px; color: var(--studio-prompter-dim); }
+.stp-take.is-favorite .stp-take-name { font-weight: 600; }
+.stp-star.is-on { border-color: var(--studio-prompter-mark); color: var(--studio-prompter-mark); }
+.stp-takes-empty { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--studio-prompter-dim); }
+.stp-take-video { width: 100%; max-height: 30vh; border-radius: 10px; background: var(--studio-prompter-bg); }
+.stp-count { font-family: 'DM Mono', var(--font-mono); font-size: 13px; }
+.stp-startfrom { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.stp-startfrom-label { font-family: 'DM Mono', var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--studio-prompter-cue); white-space: nowrap; }
+.stp-startfrom select {
+  max-width: 240px; min-width: 0; min-height: 44px; padding: 4px 10px; border: 1px solid var(--studio-prompter-line); border-radius: 10px;
+  background: var(--studio-prompter-bg); color: var(--studio-prompter-ink); font: inherit; font-size: 16px; text-overflow: ellipsis;
+}
+.stp-startfrom select:focus-visible { outline: 2px solid var(--studio-prompter-mark); outline-offset: 2px; }
+
 @media (max-width: 600px) {
   .stp-bar { padding: 6px 12px; gap: 6px 8px; }
   .stp-kicker { display: none; }
@@ -264,6 +291,10 @@ body.stp-open { overflow: hidden; }
   .stp-pacing .stp-btn { flex: 1; }
   .stp-countdown { font-size: 120px; }
   .stp-review { bottom: 8px; width: calc(100% - 16px); }
+  .stp-takes { right: 8px; bottom: 8px; width: calc(100% - 16px); }
+  .stp-startfrom { flex: 1 1 100%; order: 10; }
+  .stp-startfrom-label { display: none; }
+  .stp-startfrom select { flex: 1; width: 100%; max-width: none; }
   /* Under the text, clear of the reading line, on a narrow screen. */
   .stp-quiet { top: auto; bottom: 8px; right: 8px; min-width: 140px; padding: 8px 10px; }
   .stp-quiet-n { font-size: 24px; }

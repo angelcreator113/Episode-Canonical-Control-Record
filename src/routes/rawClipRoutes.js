@@ -7,12 +7,16 @@
  *   GET    /:episodeId                         the episode's clips
  *   POST   /:episodeId                         upload one (multipart: video, performer,
  *                                              guest_name?, label?, green_screen?, strength?)
- *   PATCH  /:episodeId/:clipId                 performer, guest_name, label, beat_number (the scene)
+ *   PATCH  /:episodeId/:clipId                 performer, guest_name, label, beat_number (the scene),
+ *                                              is_favorite (one per beat), start_line (teleprompter)
  *   POST   /:episodeId/:clipId/remove-green    (re)run green removal { strength }
  *   DELETE /:episodeId/:clipId                 soft delete (files stay in S3)
  *
  * green_screen on upload queues green removal at once. The original is
  * never changed; the cut-out is a second file (rawClipMedia).
+ *
+ * is_favorite and start_line come with migration 20261020090000; until it
+ * has run, clips list without them and a PATCH of them is a 409 that says so.
  */
 
 const express = require('express');

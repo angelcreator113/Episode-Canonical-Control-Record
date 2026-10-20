@@ -21,6 +21,10 @@
 // says (lib/voiceFollow); time per beat while rehearsing a script, against
 // the estimate; `//` pause, `*word*` emphasis and (breath) marks; a mic
 // meter with a no-sound warning, and a framing grid on the camera preview.
+// Batch 2 (Evoni, 2026-10-20): "Takes" lists the beat's takes already in
+// Files, with a preview and a ★ (one favourite per beat); "Start from" picks
+// the line within the beat a take begins on, and the take's name and its
+// start_line say so.
 // Keys: Space play/pause, Up/Down speed (or pace), PageUp/PageDown jump a
 // half screen (a line, pacing by line times; clickers and foot pedals send
 // these), Left/Right beat, Escape exits.
@@ -30,7 +34,7 @@ import { createPortal } from 'react-dom';
 import {
   X, ChevronLeft, ChevronRight, Play, Pause, FlipHorizontal2, Timer, Video, VideoOff, Circle, Square,
   RotateCcw, Upload, Download, AlertTriangle, CheckCircle2, ALargeSmall, Gauge, Hourglass, SlidersHorizontal,
-  AudioLines, Grid3x3, Clock,
+  AudioLines, Grid3x3, Clock, Film,
 } from 'lucide-react';
 import useVoiceFollow from '../../hooks/useVoiceFollow';
 import useMicLevel from '../../hooks/useMicLevel';
@@ -40,10 +44,11 @@ import { beatSeconds } from '../../lib/scriptRuntime';
 import { SESSION_KEY, SAVED_KEY, readTimes, writeTimes, durationText } from '../../lib/rehearsal';
 import { cameraErrorMessage } from '../../lib/teleprompterLines';
 import { MarkedText, MicMeter, FramingGrid, RehearsalPanel } from './TeleprompterParts';
+import TakesPanel from './TeleprompterTakes';
 import useDialogLayer from '../../hooks/useDialogLayer';
 import useTakeRecorder from '../../hooks/useTakeRecorder';
-import { teleprompterScript, pastedParagraphs, pastedScript, speakersOf, HER, takeName, takeExtension, downloadName, clock } from '../../lib/teleprompterLines';
-import { rawClipsApi } from '../../lib/rawClipsApi';
+import { teleprompterScript, pastedParagraphs, pastedScript, speakersOf, HER, takeName, takeExtension, downloadName, clock, lineChoice } from '../../lib/teleprompterLines';
+import { rawClipsApi, hasTakeFields, beatTakes, withFavorite } from '../../lib/rawClipsApi';
 
 export const SETTINGS_KEY = 'teleprompter.settings';
 export const SIZE_MIN = 20;
@@ -159,6 +164,12 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const [save, setSave] = useState({ status: 'idle', progress: 0, error: null, clip: null });
   const [notice, setNotice] = useState(null);
   const [clips, setClips] = useState([]); // the episode's clips already in Files
+  const [clipsLoaded, setClipsLoaded] = useState(false);
+  const [showTakes, setShowTakes] = useState(false);
+  const [starring, setStarring] = useState(null);
+  const [takesError, setTakesError] = useState(null);
+  // The line within the beat the next take starts on (0 = the top).
+  const [startLine, setStartLine] = useState(0);
   const [sessionTakes, setSessionTakes] = useState(0); // pasted-text takes this visit
   const [reduced] = useState(reducedMotion);
   const [more, setMore] = useState(false);
@@ -250,14 +261,15 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
   const clearTimers = () => { timersRef.current.forEach((t) => window.clearTimeout(t)); timersRef.current = []; };
   useEffect(() => clearTimers, []);
 
-  // The clips already in Files, so the next take is "take 3".
+  // The clips already in Files: the beat's takes, and the next take is "take 3".
   const episodeId = isScript ? source.episodeId : null;
   useEffect(() => {
-    if (!episodeId || !recordOn) return undefined;
+    if (!episodeId) return undefined;
     let live = true;
     rawClipsApi.list(episodeId)
       .then((rows) => { if (live) setClips(rows); })
-      .catch((err) => console.error('[Teleprompter] could not count the takes in Files:', err));
+      .catch((err) => console.error('[Teleprompter] could not count the takes in Files:', err))
+      .finally(() => { if (live) setClipsLoaded(true); });
     return () => { live = false; };
   }, [episodeId, recordOn]);
 
@@ -483,6 +495,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     if (i < 0 || i >= beats.length || busyTake) return;
     setCurrent(i);
     setNotice(null);
+    setStartLine(0);
     if (oneBeat) { setPlaying(false); scrollToBox(0); setActive(0); } else { toBeat(i); setActive(layout.beatFirst[i] ?? 0); }
   };
 
@@ -524,29 +537,51 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
     else setPlaying(true);
   };
 
+  // A take starts with its "Start from" line on the reading line (the top: line 0).
+  const fromLine = oneBeat ? clamp(startLine, 0, Math.max(0, flat.length - 1)) : 0;
+  const toStart = () => {
+    if (fromLine > 0) scrollToLine(fromLine); else scrollToBox(0);
+    setActive(fromLine);
+  };
   const record = () => {
     if (rec.camera.status !== 'ready' || busyTake) return;
     setNotice(null);
     setSave({ status: 'idle', progress: 0, error: null, clip: null });
     setPlaying(false);
-    scrollToBox(0);
-    setActive(0);
+    toStart();
     countdown(() => {
-      scrollToBox(0);
-      setActive(0);
-      if (voiceOn) setVoiceFrom(syncCursor(0));
+      toStart();
+      if (voiceOn) setVoiceFrom(syncCursor(fromLine));
       if (rec.begin()) setPlaying(true);
     });
   };
   const stopTake = () => { setPlaying(false); rec.stop(); };
-  const retake = () => { rec.discard(); setSave({ status: 'idle', progress: 0, error: null, clip: null }); scrollToBox(0); setActive(0); };
+  const retake = () => { rec.discard(); setSave({ status: 'idle', progress: 0, error: null, clip: null }); toStart(); };
 
   // Who is on camera in Files: JustAWoman, Lala, or a guest by name.
   const performer = readAs === HER ? 'justawoman' : readAs === 'Lala' ? 'lala' : 'guest';
   const beatNumber = beat?.number != null ? Number(beat.number) : null;
   const inFiles = clips.filter((c) => c.performer === performer && Number(c.beat_number) === beatNumber && (performer !== 'guest' || c.guest_name === readAs)).length;
   const takeNo = isScript ? inFiles + 1 : sessionTakes + 1;
-  const label = isScript ? `${takeName(beat, takeNo)}${readAs !== HER ? ` · as ${readAs}` : ''}` : null;
+  const label = isScript ? `${takeName(beat, takeNo, fromLine > 0 ? fromLine + 1 : null)}${readAs !== HER ? ` · as ${readAs}` : ''}` : null;
+  // The beat's takes in Files (every performer), for the Takes panel.
+  const takes = beatTakes(clips, beatNumber);
+  const canTakes = isScript && !!episodeId && beatNumber != null;
+
+  const toggleFavorite = async (clip) => {
+    const on = !clip.is_favorite;
+    setTakesError(null);
+    setStarring(clip.id);
+    try {
+      const row = await rawClipsApi.favorite(episodeId, clip.id, on);
+      setClips((cs) => withFavorite(cs, clip.id, on, row));
+    } catch (err) {
+      console.error('[Teleprompter] favourite not saved:', err);
+      setTakesError(err?.response?.data?.error || 'The star was not saved. Try again.');
+    } finally {
+      setStarring(null);
+    }
+  };
 
   const saveTake = async () => {
     if (!take) return;
@@ -579,12 +614,18 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
         clip = await rawClipsApi.upload(source.episodeId, file, { performer, label, guestName: performer === 'guest' ? readAs : undefined }, (p) => setSave((s) => ({ ...s, progress: p })));
         setSave((s) => ({ ...s, clip }));
       }
-      // The scene the take is for (Production plays clips by beat_number).
+      // The scene the take is for (Production plays clips by beat_number),
+      // and the line it started on, once the server keeps start lines.
       if (clip?.id && beatNumber >= 1 && beatNumber <= 14 && Number(clip.beat_number) !== beatNumber) {
-        const linked = await rawClipsApi.update(source.episodeId, clip.id, { beat_number: beatNumber });
-        clip = { ...clip, ...(linked || { beat_number: beatNumber }) };
+        const changes = hasTakeFields(clip) ? { beat_number: beatNumber, start_line: fromLine } : { beat_number: beatNumber };
+        const linked = await rawClipsApi.update(source.episodeId, clip.id, changes);
+        clip = { ...clip, ...(linked || changes) };
       }
-      setClips((c) => [...c, { ...clip, performer, guest_name: performer === 'guest' ? readAs : null, beat_number: beatNumber }]);
+      const seconds = take.seconds;
+      setClips((c) => [...c, {
+        ...clip, performer, guest_name: performer === 'guest' ? readAs : null, beat_number: beatNumber,
+        duration_seconds: clip?.duration_seconds ?? seconds, created_at: clip?.created_at || new Date().toISOString(),
+      }]);
       setNotice(`Saved to the episode's Files: ${label}`);
       setSave({ status: 'idle', progress: 0, error: null, clip: null });
       rec.discard();
@@ -742,6 +783,9 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
             {settings.grid && <FramingGrid />}
           </div>
         )}
+        {showTakes && canTakes && !take && (
+          <TakesPanel takes={takes} beatNumber={beatNumber} onFavorite={toggleFavorite} starring={starring} error={takesError} loading={!clipsLoaded} />
+        )}
         {showTimes && rehearsalKey && !take && (
           <RehearsalPanel rows={rehearsalRows} savedAt={savedNote} onReset={() => { setTimes({}); setSavedNote(null); }} onSave={saveTimes} />
         )}
@@ -832,7 +876,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
           </button>
         </div>
         {rehearsalKey && (
-          <button type="button" className="stp-btn" data-testid="stp-rehearsal-toggle" aria-pressed={showTimes} onClick={() => setShowTimes((v) => !v)}>
+          <button type="button" className="stp-btn" data-testid="stp-rehearsal-toggle" aria-pressed={showTimes} onClick={() => { setShowTimes((v) => !v); setShowTakes(false); }}>
             <Clock size={18} aria-hidden="true" /> Times
           </button>
         )}
@@ -848,9 +892,24 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
           </div>
         )}
         </div>
+        {canTakes && (
+          <button type="button" className="stp-btn" data-testid="stp-takes-toggle" aria-pressed={showTakes} aria-label={`Takes for beat ${beatNumber}: ${takes.length}`}
+            onClick={() => { setShowTakes((v) => !v); setShowTimes(false); }}>
+            <Film size={18} aria-hidden="true" /> <span className="stp-btn-text">Takes</span> <span className="stp-count">{takes.length}</span>
+          </button>
+        )}
         <button type="button" className={`stp-btn${recordOn ? ' is-on' : ''}`} data-testid="stp-record-mode" aria-pressed={recordOn} onClick={toggleRecord}>
           {recordOn ? <Video size={18} aria-hidden="true" /> : <VideoOff size={18} aria-hidden="true" />} Read &amp; record
         </button>
+        {oneBeat && beat && beat.lines.length > 1 && (
+          <label className="stp-startfrom">
+            <span className="stp-startfrom-label" aria-hidden="true">Start from</span>
+            <select value={String(fromLine)} aria-label="Start the take from line" disabled={busyTake} data-testid="stp-start-line"
+              onChange={(e) => { const i = Number(e.target.value); setStartLine(i); if (i > 0) scrollToLine(i); else scrollToBox(0); setActive(i); }}>
+              {beat.lines.map((l, i) => <option key={i} value={String(i)}>{i === 0 ? `${lineChoice(l, i)} (the top)` : lineChoice(l, i)}</option>)}
+            </select>
+          </label>
+        )}
         {recordOn && (
           recording ? (
             <button type="button" className="stp-btn is-rec" data-testid="stp-stop" onClick={stopTake}><Square size={18} aria-hidden="true" /> Stop</button>
