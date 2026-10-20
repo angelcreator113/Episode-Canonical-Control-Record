@@ -25,6 +25,7 @@ import { episodesInProduction, checklistSummary } from './ShowOverview';
 import { loadProductionChecks, CHECKLIST_SECTIONS } from '../Episodes/EpisodeProductionChecklist';
 import { rawClipsApi } from '../../lib/rawClipsApi';
 import { thumbnailStudioHref } from '../../lib/thumbnailStudioHref';
+import { currentThumbnail } from '../../lib/youtubeThumbnailsApi';
 import {
   STAGES, STATUS_LABEL, stageOf, episodeCode, episodeTags, cardLine,
   pipelineColumns, pipelineSummary, eventPanel, pipelineSteps, matchesSearch,
@@ -106,12 +107,10 @@ function useHeroMedia(episodeId) {
     Promise.resolve().then(() => rawClipsApi.list(episodeId))
       .then((rows) => { if (live) setMedia((m) => ({ ...m, clips: Array.isArray(rows) ? rows : [] })); })
       .catch((err) => console.error('[ShowEpisodesBoard] clips load failed:', err));
-    Promise.resolve().then(() => api.get(`/api/v1/thumbnails/episode/${episodeId}/primary`))
-      .then((res) => { if (live) setMedia((m) => ({ ...m, hasThumbnail: Boolean(res?.data?.data) })); })
-      .catch((err) => {
-        // No primary thumbnail yet is a 404; anything else is worth a log.
-        if (err?.response?.status !== 404) console.error('[ShowEpisodesBoard] thumbnail check failed:', err);
-      });
+    // The editor's saved list (episodePipeline also counts episodes.thumbnail_url).
+    Promise.resolve().then(() => currentThumbnail(episodeId))
+      .then((thumb) => { if (live) setMedia((m) => ({ ...m, hasThumbnail: Boolean(thumb) })); })
+      .catch((err) => console.error('[ShowEpisodesBoard] thumbnail check failed:', err));
     return () => { live = false; };
   }, [episodeId]);
   return media;

@@ -66,11 +66,25 @@ describe('EpisodeProductionHeader', () => {
     await waitFor(() => expect(rawClipsApi.list).toHaveBeenCalledWith('ep-1'));
   });
 
-  test('a primary thumbnail finishes the Thumbnail step', async () => {
-    vi.mocked(api.get).mockResolvedValue({ data: { success: true, data: { id: 't1' } } });
+  test('a current thumbnail in the editor\'s saved list finishes the Thumbnail step', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { success: true, data: [{ id: 2, url: 'https://b.s3.amazonaws.com/t.png', isPrimary: true }] } });
     renderHeader();
     await waitFor(() => expect(screen.getByTestId('eph-step-thumbnail').className).toContain('is-done'));
-    expect(api.get).toHaveBeenCalledWith('/api/v1/thumbnails/episode/ep-1/primary');
+    // The editor's saved list (migrated columns only), not the old /api/v1/thumbnails read.
+    expect(api.get).toHaveBeenCalledWith('/api/v1/youtube-thumbnails/episodes/ep-1/saved');
+    expect(api.get).not.toHaveBeenCalledWith('/api/v1/thumbnails/episode/ep-1/primary');
+  });
+
+  test('only older saved ones, or none, leave the step open; the episode\'s thumbnail_url alone finishes it', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { success: true, data: [{ id: 1, url: 'https://b.s3.amazonaws.com/old.png', isPrimary: false }] } });
+    const { unmount } = renderHeader();
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/v1/youtube-thumbnails/episodes/ep-1/saved'));
+    expect(screen.getByTestId('eph-step-thumbnail').className).not.toContain('is-done');
+    unmount();
+    vi.mocked(api.get).mockRejectedValue(new Error('down'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    renderHeader({ episode: { ...EPISODE, thumbnail_url: 'https://b.s3.amazonaws.com/t.png' } });
+    expect(screen.getByTestId('eph-step-thumbnail').className).toContain('is-done');
   });
 
   test('the episode at a glance and the progress by section', () => {
