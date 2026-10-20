@@ -1,6 +1,8 @@
 // frontend/src/components/Episodes/EpisodeDistributionTab.jsx
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import apiClient from '../../services/api';
+import { thumbnailStudioHref } from '../../lib/thumbnailStudioHref';
 import StyleSheetDistributionCard from './StyleSheetDistributionCard';
 import './EpisodeDistributionTab.css';
 
@@ -459,34 +461,26 @@ function EpisodeDistributionTab({ episode, onUpdate }) {
               />
             </div>
             
-            {/* Thumbnail */}
+            {/* Thumbnail: shown here, edited only in Templates › YouTube
+                thumbnails (Evoni, 2026-10-20). */}
             {platform.features.includes('thumbnail') && (
-              <div className="form-group">
-                <label>Platform Thumbnail</label>
+              <div className="form-group" data-testid="distribution-thumbnail">
+                <label>Thumbnail</label>
                 <div className="thumbnail-upload">
-                  {platformData.thumbnail_url ? (
+                  {platformData.thumbnail_url || episode.thumbnail_url ? (
                     <div className="thumbnail-preview">
-                      <img src={platformData.thumbnail_url} alt="Thumbnail" />
-                      <button
-                        className="btn-remove-thumb"
-                        onClick={() => updatePlatform(selectedPlatform, 'thumbnail_url', null)}
-                      >
-                        Remove
-                      </button>
+                      <img src={platformData.thumbnail_url || episode.thumbnail_url} alt={`Thumbnail for ${episode.title || 'the episode'}`} />
                     </div>
                   ) : (
                     <div className="thumbnail-placeholder">
                       <span>📸</span>
-                      <p>Upload {platform.aspectRatio} thumbnail</p>
-                      <button className="btn-secondary">
-                        Upload Thumbnail
-                      </button>
+                      <p>No thumbnail yet</p>
                     </div>
                   )}
                 </div>
-                <small className="form-hint">
-                  Recommended: {platform.aspectRatio} aspect ratio
-                </small>
+                <Link className="btn-secondary thumbnail-edit-link" to={thumbnailStudioHref({ showId: episode.show_id || episode.showId, episodeId: episode.id })}>
+                  {platformData.thumbnail_url || episode.thumbnail_url ? 'Edit in Thumbnail Studio' : 'Make it in Thumbnail Studio'}
+                </Link>
               </div>
             )}
           </div>

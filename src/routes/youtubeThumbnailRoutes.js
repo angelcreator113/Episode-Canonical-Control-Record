@@ -9,6 +9,11 @@
  *   POST /render                         a preview PNG (no saving)
  *   POST /episodes/:episodeId            render and save as the episode's primary thumbnail
  *   PUT  /shows/:showId/style            save the show's style for every episode
+ *   GET  /episodes/:episodeId/saved      the episode's saved thumbnails, its current one first
+ *   POST /episodes/:episodeId/saved/:thumbnailId/primary   make a saved one the episode's thumbnail
+ *   DELETE /episodes/:episodeId/saved/:thumbnailId          delete a saved one (not the current one)
+ *
+ * This is the one place an episode's thumbnail is edited (Evoni, 2026-10-20).
  *
  * Render and save take multipart: `spec` (JSON: layout, title, kicker, badge,
  * accent, textColor, dim, backgroundUrl, lalaUrl) and optional files
@@ -106,6 +111,30 @@ router.put('/shows/:showId/style', requireAuth, async (req, res) => {
     return res.json({ success: true, data: await yt.saveStyle(models.sequelize, req.params.showId, req.body || {}) });
   } catch (err) {
     return sendError(res, err, 'style');
+  }
+});
+
+router.get('/episodes/:episodeId/saved', requireAuth, async (req, res) => {
+  try {
+    return res.json({ success: true, data: await yt.listSaved(models.sequelize, req.params.episodeId) });
+  } catch (err) {
+    return sendError(res, err, 'saved list');
+  }
+});
+
+router.post('/episodes/:episodeId/saved/:thumbnailId/primary', requireAuth, async (req, res) => {
+  try {
+    return res.json({ success: true, data: await yt.makePrimary(models.sequelize, req.params.episodeId, req.params.thumbnailId) });
+  } catch (err) {
+    return sendError(res, err, 'make primary');
+  }
+});
+
+router.delete('/episodes/:episodeId/saved/:thumbnailId', requireAuth, async (req, res) => {
+  try {
+    return res.json({ success: true, data: await yt.removeSaved(models.sequelize, req.params.episodeId, req.params.thumbnailId) });
+  } catch (err) {
+    return sendError(res, err, 'delete');
   }
 });
 

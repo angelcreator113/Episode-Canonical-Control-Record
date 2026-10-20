@@ -390,22 +390,11 @@
   display: block;
 }
 
-.episode-distribution-tab .btn-remove-thumb {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  padding: 0.5rem 1rem;
-  background: var(--danger);
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.episode-distribution-tab .btn-remove-thumb:hover {
-  background: var(--danger-text);
+.episode-distribution-tab .thumbnail-edit-link {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 0.625rem;
+  text-decoration: none;
 }
 
 .episode-distribution-tab .thumbnail-placeholder {

@@ -28,6 +28,7 @@ import {
   CircleCheck, Image as ImageIcon, Music, Film, ChevronRight, AlertTriangle, Coins, Star, Heart, BarChart3, Zap, UserRound, ImageOff, Pencil,
 } from 'lucide-react';
 import api from '../../services/api';
+import { thumbnailStudioHref } from '../../lib/thumbnailStudioHref';
 import { computeEventPackageReadiness, computeEventState, describeMissing } from '../../utils/eventReadinessSections';
 import { CHECKLIST_SECTIONS, computeSectionState, checklistFixTarget, loadProductionChecks } from '../Episodes/EpisodeProductionChecklist';
 import './ShowOverview.css';
@@ -325,7 +326,7 @@ function NowProducing({ showId, episodes, episode, onPick, checksState }) {
           <h2 className="pov-now-title">{episode.title || 'Untitled'}</h2>
           {(episode.logline || episode.description) && <p className="pov-now-logline">{episode.logline || episode.description}</p>}
         </div>
-        <Link className="pov-thumb" to={`/template-studio/youtube?show=${showId}&episode=${episode.id}`} data-testid="sov-thumbnail">
+        <Link className="pov-thumb" to={thumbnailStudioHref({ showId, episodeId: episode.id })} data-testid="sov-thumbnail">
           {thumb ? <img src={thumb} alt={`Thumbnail for ${episode.title || 'the episode'}`} /> : <span className="pov-thumb-empty"><ImageOff size={24} aria-hidden /> No thumbnail yet</span>}
           <span className="pov-thumb-edit"><Pencil size={14} aria-hidden /> {thumb ? 'Edit Thumbnail' : 'Make Thumbnail'}</span>
         </Link>
