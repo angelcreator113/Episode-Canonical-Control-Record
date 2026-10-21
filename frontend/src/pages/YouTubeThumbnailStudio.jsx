@@ -33,7 +33,7 @@ import {
   Youtube, Upload, Download, Save, Palette, ImageOff, Check, LayoutTemplate, Sparkles, Star, Trash2, History, Folder, ChevronRight,
   Eye, EyeOff, ArrowUp, ArrowDown, Type, RotateCcw, ScanEye, X, Lock, LockOpen, Copy, Undo2, Redo2, Plus, Pencil, AlignLeft, AlignCenter, AlignRight,
   AlignStartVertical, AlignCenterVertical, AlignEndVertical, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
-  AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, Keyboard, RefreshCw, FlipHorizontal2, ZoomIn, ZoomOut,
+  AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, Keyboard, RefreshCw, FlipHorizontal2, ZoomIn, ZoomOut, ArrowRight, Circle, Tag,
 } from 'lucide-react';
 import {
   youtubeThumbnailsApi, LAYOUTS, ACCENTS, TEXT_COLORS, readRecentColours, rememberColour, episodeWords, defaultPose, folderPath, folderCount, folderCover, firstFolder,
@@ -41,7 +41,7 @@ import {
 import {
   FONTS, presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer,
   addText, addPicture, layerName, loadThumbnailFonts, OUTLINE, BOX_COLOR, BOX_OPACITY, STICKER_EDGE, CARD_COLOR, duplicateLayer, WIDTH, HEIGHT,
-  alignLayers, distributeLayers, measurer, youtubeWarnings, fileSize, YOUTUBE_SIZES, GLOW_COLOR, FADE_COLOR, EFFECT_SIZE,
+  alignLayers, distributeLayers, measurer, youtubeWarnings, fileSize, YOUTUBE_SIZES, GLOW_COLOR, FADE_COLOR, EFFECT_SIZE, SHAPES, addShape,
 } from '../lib/thumbnailLayers';
 import ThumbnailCanvas from '../components/Thumbnails/ThumbnailCanvas';
 import { usePreview } from '../lib/picturePreview';
@@ -331,6 +331,90 @@ function TextEffects({ layer, onChange }) {
   );
 }
 
+const SHAPE_ICONS = { arrow: ArrowRight, ring: Circle, burst: Star, sparkle: Sparkles, tag: Tag };
+
+/** Add a sticker (Evoni, 2026-10-21: stickers and shapes): an arrow, a circle, a burst, sparkles, a price tag. */
+function StickerRow({ onAdd }) {
+  return (
+    <div className="yts-stickers" role="group" aria-label="Add a sticker" data-testid="yts-stickers">
+      <span className="yts-label">Add a sticker</span>
+      <div className="yts-actions">
+        {SHAPES.map((sh) => {
+          const Icon = SHAPE_ICONS[sh.key];
+          return (
+            <button key={sh.key} type="button" className="yts-btn" onClick={() => onAdd(sh.key)} aria-label={`Add ${sh.label.toLowerCase()}`}>
+              <Icon size={16} aria-hidden /> {sh.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** A sticker's colours, outline, and a burst's or a tag's words. */
+function ShapeSettings({ layer, onChange }) {
+  const worded = layer.shape === 'burst' || layer.shape === 'tag';
+  const width = layer.strokeWidth ?? 6;
+  return (
+    <div className="yts-text-tools" data-testid="yts-shape-settings">
+      {worded && (
+        <input className="yts-input" value={layer.text || ''} maxLength={16} aria-label="Sticker words"
+          onChange={(e) => onChange({ text: e.target.value })} />
+      )}
+      <div className="yts-row">
+        <label className="yts-field is-small">
+          <span className="yts-label">{layer.shape === 'ring' ? 'Colour' : 'Fill'}</span>
+          <input type="color" className="yts-color" value={layer.fill} aria-label="Sticker colour"
+            onChange={(e) => onChange({ fill: e.target.value.toUpperCase() })} />
+        </label>
+        {layer.shape === 'ring' && (
+          <label className="yts-field">
+            <span className="yts-label">Thickness ({layer.thickness || 16})</span>
+            <input type="range" min="4" max="60" step="2" value={layer.thickness || 16} aria-label="Circle thickness"
+              onChange={(e) => onChange({ thickness: Number(e.target.value) })} />
+          </label>
+        )}
+        {worded && (
+          <>
+            <label className="yts-field">
+              <span className="yts-label">Font</span>
+              <select className="yts-input" value={layer.font || 'sans'} onChange={(e) => onChange({ font: e.target.value })} aria-label="Sticker font">
+                {Object.entries(FONTS).map(([k, f]) => <option key={k} value={k}>{f.label}</option>)}
+              </select>
+            </label>
+            <label className="yts-field is-small">
+              <span className="yts-label">Words colour</span>
+              <input type="color" className="yts-color" value={layer.color || OUTLINE} aria-label="Sticker words colour"
+                onChange={(e) => onChange({ color: e.target.value.toUpperCase() })} />
+            </label>
+          </>
+        )}
+      </div>
+      <label className="yts-check">
+        <input type="checkbox" checked={Boolean(layer.stroke)} aria-label="Sticker outline"
+          onChange={(e) => onChange({ stroke: e.target.checked ? OUTLINE : null, strokeWidth: width || 6 })} />
+        Outline
+      </label>
+      {layer.stroke && (
+        <div className="yts-row">
+          <label className="yts-field is-small">
+            <span className="yts-label">Outline colour</span>
+            <input type="color" className="yts-color" value={layer.stroke} aria-label="Sticker outline colour"
+              onChange={(e) => onChange({ stroke: e.target.value.toUpperCase() })} />
+          </label>
+          <label className="yts-field">
+            <span className="yts-label">Outline width ({width})</span>
+            <input type="range" min="1" max="24" step="1" value={width} aria-label="Sticker outline width"
+              onChange={(e) => onChange({ strokeWidth: Number(e.target.value) })} />
+          </label>
+        </div>
+      )}
+      {layer.shape === 'arrow' && <p className="yts-note">Turn the arrow with the handle above it to aim it.</p>}
+    </div>
+  );
+}
+
 function LayerSettings({ layer, onChange, colours, onRemember }) {
   if (!layer || layer.kind === 'shade') return null;
   return (
@@ -359,6 +443,7 @@ function LayerSettings({ layer, onChange, colours, onRemember }) {
         </div>
       )}
       {layer.kind === 'text' && <TextTools layer={layer} onChange={onChange} />}
+      {layer.kind === 'shape' && <ShapeSettings layer={layer} onChange={onChange} />}
       {layer.kind === 'image' && layer.role !== 'background' && (
         <div className="yts-row">
           <label className="yts-field">
@@ -1393,6 +1478,7 @@ export default function YouTubeThumbnailStudio() {
                 <Type size={16} aria-hidden /> Add words
               </button>
             </div>
+            <StickerRow onAdd={(key) => addAndPick((s) => addShape(s, key))} />
 
             <FolderPicker title="Background" testid="yts-backgrounds" tree={tree} start={['scene-sets']} value={roleSrc(spec, 'background')}
               noneLabel="Plain" onPick={(url) => setRole('background', url)} uploading={Boolean(uploading)}

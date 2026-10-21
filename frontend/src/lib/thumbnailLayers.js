@@ -198,7 +198,8 @@ function comeStyleMe(content, style) {
 }
 
 /** A layer's name in the layers list. */
-export const layerName = (l) => ROLE_LABELS[l.role] || l.name || (l.kind === 'text' ? (l.text || 'Text').slice(0, 24) : 'Picture');
+export const layerName = (l) => ROLE_LABELS[l.role] || l.name
+  || (l.kind === 'text' ? (l.text || 'Text').slice(0, 24) : l.kind === 'shape' ? shapeLabel(l) : 'Picture');
 
 /** The starting boxes per layout (the earlier fixed layout, as layers). */
 function presetBoxes(layout) {
@@ -355,6 +356,31 @@ export const addPicture = (spec, url, name) => ({
   }],
 });
 
+// Stickers and shapes (Evoni, 2026-10-21): what each starts as. Each fills its box.
+export const SHAPES = [
+  { key: 'arrow', label: 'Arrow', w: 320, h: 140, look: { fill: '#FFD86B', stroke: OUTLINE, strokeWidth: 6 } },
+  { key: 'ring', label: 'Circle', w: 300, h: 220, look: { fill: '#FF3B3B', stroke: null, strokeWidth: 6, thickness: 16 } },
+  { key: 'burst', label: 'Burst', w: 260, h: 260, look: { fill: '#E0689F', stroke: '#FFFFFF', strokeWidth: 6, text: 'NEW', font: 'sans', color: '#FFFFFF' } },
+  { key: 'sparkle', label: 'Sparkles', w: 220, h: 220, look: { fill: '#FFD86B', stroke: null, strokeWidth: 6 } },
+  { key: 'tag', label: 'Price tag', w: 340, h: 140, look: { fill: '#FFFFFF', stroke: OUTLINE, strokeWidth: 4, text: '$29', font: 'sans', color: OUTLINE } },
+];
+const shapeLabel = (l) => {
+  const label = (SHAPES.find((x) => x.key === l.shape) || SHAPES[0]).label;
+  return (l.shape === 'burst' || l.shape === 'tag') && l.text ? `${label}: ${l.text}` : label;
+};
+
+/** Adds a sticker in the middle, on top. */
+export const addShape = (spec, key) => {
+  const sh = SHAPES.find((x) => x.key === key) || SHAPES[0];
+  return {
+    ...spec,
+    layers: [...spec.layers, {
+      id: newId(spec, sh.key), role: null, kind: 'shape', shape: sh.key, visible: true,
+      x: Math.round((WIDTH - sh.w) / 2), y: Math.round((HEIGHT - sh.h) / 2), w: sh.w, h: sh.h, rotation: 0, opacity: 1, ...sh.look,
+    }],
+  };
+};
+
 /**
  * A moved or transformed layer's new box. Konva turns a node about its
  * offset (the box's centre here), so its position is the centre; scale is
@@ -508,6 +534,11 @@ export function drawnSize(l, measureFor) {
     return fitText(String(l.text).toUpperCase(), { w: l.w * 0.8, h: l.h * 0.7, size: Math.round(l.h * 0.55) }, measure).size;
   }
   if (l.kind === 'checklist') return (l.items || []).length ? checklistRows(l, measure).size : null;
+  if (l.kind === 'shape') {
+    if (!(l.shape === 'burst' || l.shape === 'tag') || !String(l.text || '').trim()) return null;
+    const box = shapeWordsBox(l);
+    return fitText(String(l.text), { w: box.w, h: box.h, size: Math.round(box.h * 0.8) }, measure).size;
+  }
   return null;
 }
 
@@ -722,6 +753,21 @@ export function wordsMargin(l) {
   return Math.ceil(l.size / 7) + 2 + (effect ? Math.ceil(effect.blur * 1.5) + effect.offsetY : 0);
 }
 
+/**
+ * Sets the baseline so words stand where the server's "middle" puts them:
+ * the browser's "middle" sits a few points off, so as Konva does, the words
+ * stand on their baseline half the font's ascent less descent below the
+ * middle. Returns that lift (0 where the font cannot be measured).
+ */
+function baselineLift(ctx) {
+  const em = ctx.measureText('M');
+  const ascent = em.fontBoundingBoxAscent ?? em.actualBoundingBoxAscent;
+  const descent = em.fontBoundingBoxDescent ?? em.actualBoundingBoxDescent;
+  const known = ascent != null && descent != null;
+  ctx.textBaseline = known ? 'alphabetic' : 'middle';
+  return known ? (ascent - descent) / 2 : 0;
+}
+
 /** The server's paintWords: the words (not the box behind them), centred on the origin. */
 export function paintWords(ctx, l) {
   const text = l.upper ? String(l.text || '').toUpperCase() : String(l.text || '');
@@ -734,11 +780,7 @@ export function paintWords(ctx, l) {
   ctx.font = fontCss(l.font, size);
   // The browser's "middle" sits a few points off the server's; as Konva does,
   // stand the words on their baseline half the font's ascent less descent below the middle.
-  const em = ctx.measureText('M');
-  const ascent = em.fontBoundingBoxAscent ?? em.actualBoundingBoxAscent;
-  const descent = em.fontBoundingBoxDescent ?? em.actualBoundingBoxDescent;
-  const lift = ascent != null && descent != null ? (ascent - descent) / 2 : null;
-  ctx.textBaseline = lift === null ? 'middle' : 'alphabetic';
+  const lift = baselineLift(ctx);
   ctx.lineJoin = 'round';
   ctx.lineWidth = Math.max(2, Math.round(size / 7));
   const lineH = size * LINE_HEIGHT;
@@ -804,4 +846,127 @@ export function wordsCanvas(l, make = makeCanvas) {
   ox.shadowOffsetY = effect.offsetY;
   ox.drawImage(words, 0, 0);
   return out;
+}
+
+// ── Stickers and shapes (Evoni, 2026-10-21), step for step as the server draws them. ──
+
+const polygon = (ctx, pts) => {
+  ctx.beginPath();
+  pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+  ctx.closePath();
+};
+
+const sparklePoints = (l, cx, cy, r) => [...Array(8)].map((_, i) => {
+  const a = (i * Math.PI) / 4 - Math.PI / 2;
+  const k = i % 2 ? r * 0.28 : r;
+  return [(cx + Math.cos(a) * k) * (l.w / 2), (cy + Math.sin(a) * k) * (l.h / 2)];
+});
+
+const tagParts = (l) => ({
+  hole: { x: -l.w / 2 + l.h * 0.32, r: l.h * 0.09 },
+  words: { x0: -l.w / 2 + l.h * 0.5, x1: l.w / 2 - l.h * 0.15 },
+});
+
+/** The server's shapePath: the shape's outline, centred on the origin. */
+export function shapePath(ctx, l) {
+  const { w, h } = l;
+  if (l.shape === 'ring') {
+    const t = l.thickness || 16;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, Math.max(1, w / 2 - t / 2), Math.max(1, h / 2 - t / 2), 0, 0, Math.PI * 2);
+  } else if (l.shape === 'burst') {
+    polygon(ctx, [...Array(32)].map((_, i) => {
+      const a = (i * Math.PI) / 16 - Math.PI / 2;
+      const k = i % 2 ? 0.78 : 1;
+      return [Math.cos(a) * k * (w / 2), Math.sin(a) * k * (h / 2)];
+    }));
+  } else if (l.shape === 'sparkle') {
+    ctx.beginPath();
+    for (const [cx, cy, r] of [[-0.2, 0.1, 0.8], [0.55, -0.55, 0.4], [0.6, 0.55, 0.28]]) {
+      sparklePoints(l, cx, cy, r).forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+      ctx.closePath();
+    }
+  } else if (l.shape === 'tag') {
+    const notch = -w / 2 + h * 0.45;
+    polygon(ctx, [[-w / 2, 0], [notch, -h / 2], [w / 2, -h / 2], [w / 2, h / 2], [notch, h / 2]]);
+  } else {
+    const head = Math.min(w * 0.4, h * 0.9);
+    const shaft = h * 0.36;
+    polygon(ctx, [[-w / 2, -shaft / 2], [w / 2 - head, -shaft / 2], [w / 2 - head, -h / 2], [w / 2, 0],
+      [w / 2 - head, h / 2], [w / 2 - head, shaft / 2], [-w / 2, shaft / 2]]);
+  }
+}
+
+const outlined = (l) => Boolean(l.stroke && (l.strokeWidth ?? 6));
+
+/** The room round the box a shape needs for its outline. */
+export const shapeMargin = (l) => Math.ceil(outlined(l) ? (l.strokeWidth ?? 6) : 0) + 2;
+
+/** The box a burst's or a tag's words fit in: { x (its middle), w, h }. */
+export function shapeWordsBox(l) {
+  if (l.shape === 'tag') {
+    const { words } = tagParts(l);
+    return { x: (words.x0 + words.x1) / 2, w: words.x1 - words.x0, h: l.h * 0.7 };
+  }
+  return { x: 0, w: l.w * 0.62, h: l.h * 0.5 };
+}
+
+function shapeWords(ctx, l) {
+  const box = shapeWordsBox(l);
+  const measure = (s, size) => { ctx.font = fontCss(l.font || 'sans', size); return ctx.measureText(s).width; };
+  const { size, lines } = fitText(String(l.text), { w: box.w, h: box.h, size: Math.round(box.h * 0.8) }, measure);
+  ctx.font = fontCss(l.font || 'sans', size);
+  const lift = baselineLift(ctx);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = l.color || '#FFFFFF';
+  const lineH = size * LINE_HEIGHT;
+  lines.forEach((line, i) => ctx.fillText(line, box.x, (i - (lines.length - 1) / 2) * lineH + lift));
+}
+
+/** The server's shapeCanvas: outline under fill, the tag's hole punched through, the words; drawn at (-m, -m) in the box. */
+export function shapeCanvas(l, make = makeCanvas) {
+  const m = shapeMargin(l);
+  const width = l.strokeWidth ?? 6;
+  const c = make(l.w + m * 2, l.h + m * 2);
+  const ctx = c.getContext('2d');
+  ctx.translate(m + l.w / 2, m + l.h / 2);
+  ctx.lineJoin = 'round';
+  shapePath(ctx, l);
+  if (l.shape === 'ring') {
+    const t = l.thickness || 16;
+    if (outlined(l)) {
+      ctx.strokeStyle = l.stroke;
+      ctx.lineWidth = t + width * 2;
+      ctx.stroke();
+    }
+    ctx.strokeStyle = l.fill;
+    ctx.lineWidth = t;
+    ctx.stroke();
+    return c;
+  }
+  if (outlined(l)) {
+    ctx.strokeStyle = l.stroke;
+    ctx.lineWidth = width * 2;
+    ctx.stroke();
+  }
+  ctx.fillStyle = l.fill;
+  ctx.fill();
+  if (l.shape === 'tag') {
+    const { hole } = tagParts(l);
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath();
+    ctx.arc(hole.x, 0, hole.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    if (outlined(l)) {
+      ctx.beginPath();
+      ctx.arc(hole.x, 0, hole.r, 0, Math.PI * 2);
+      ctx.strokeStyle = l.stroke;
+      ctx.lineWidth = Math.max(1, width / 2);
+      ctx.stroke();
+    }
+  }
+  if ((l.shape === 'burst' || l.shape === 'tag') && l.text) shapeWords(ctx, l);
+  return c;
 }

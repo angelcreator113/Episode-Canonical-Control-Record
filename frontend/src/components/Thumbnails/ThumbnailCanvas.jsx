@@ -12,7 +12,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Stage, Layer, Group, Rect, Text, Line, Image as KImage, Transformer } from 'react-konva';
 import {
   WIDTH, HEIGHT, LINE_HEIGHT, FONTS, fitText, measurer, spaced, fitPicture, boxFromNode, layerName, checklistRows, snapBox, layersInBox, adjustedPicture, CARD_COLOR, stickerCanvas, stickerMargin, drawFitted,
-  fancyWords, wordsCanvas, wordsMargin,
+  fancyWords, wordsCanvas, wordsMargin, shapeCanvas, shapeMargin,
 } from '../../lib/thumbnailLayers';
 import { previewUrl, previewWidth } from '../../lib/picturePreview';
 
@@ -187,7 +187,27 @@ function Checklist({ l }) {
   );
 }
 
-const BODY = { image: Picture, text: Words, badge: Badge, checklist: Checklist };
+/** A sticker (Evoni, 2026-10-21: stickers and shapes), drawn on a canvas as the server draws it. */
+function Shape({ l }) {
+  const drawn = useMemo(() => {
+    try {
+      return shapeCanvas(l);
+    } catch (err) {
+      // No 2D canvas here: the box stays pickable; the saved file still has the sticker.
+      console.error('[ThumbnailCanvas] could not draw the sticker:', err?.message || err);
+      return null;
+    }
+  }, [l.shape, l.w, l.h, l.fill, l.stroke, l.strokeWidth, l.thickness, l.text, l.font, l.color]);
+  const m = shapeMargin(l);
+  return (
+    <>
+      <Rect width={l.w} height={l.h} fill="rgba(0,0,0,0.001)" />
+      {drawn && <KImage image={drawn} x={-m} y={-m} width={l.w + m * 2} height={l.h + m * 2} listening={false} />}
+    </>
+  );
+}
+
+const BODY = { image: Picture, text: Words, badge: Badge, checklist: Checklist, shape: Shape };
 
 // Bigger handles where fingers do the dragging (Evoni, 2026-10-21: phone width).
 const coarsePointer = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function'

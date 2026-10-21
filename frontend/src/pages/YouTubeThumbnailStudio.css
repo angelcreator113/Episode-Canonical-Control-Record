@@ -41,6 +41,7 @@
 .yts-icon-btn.is-danger { color: var(--danger-text); border-color: var(--danger-border); }
 .yts-icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .yts-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.yts-stickers { display: flex; flex-direction: column; gap: 6px; }
 .yts-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 8px 16px; border-radius: 999px; border: 1.5px solid var(--accent-light); background: var(--surface-card); color: var(--accent-dark); font: inherit; font-size: 14px; font-weight: 700; text-decoration: none; cursor: pointer; }
 .yts-btn.is-primary { border-color: var(--accent-dark); background: var(--accent-dark); color: var(--text-inverse); }
 .yts-btn:disabled { opacity: 0.55; cursor: not-allowed; }

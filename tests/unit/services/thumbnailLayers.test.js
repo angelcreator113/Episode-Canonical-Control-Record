@@ -385,6 +385,67 @@ describe('renderLayers', () => {
     expect(await pixel(png, 640, 360)).toEqual([255, 255, 255]);
   });
 
+  // Stickers and shapes (Evoni, 2026-10-21).
+  const shaped = (extra) => L.readLayers({ version: 2, layers: [
+    { id: 'bg', kind: 'image', role: 'background', src: 'https://b.s3.amazonaws.com/black.png', fit: 'cover', x: 0, y: 0, w: 1280, h: 720 },
+    { id: 's', kind: 'shape', x: 440, y: 160, w: 400, h: 400, fill: '#FF0000', ...extra },
+  ] }, s3);
+  const drawShape = async (extra) => L.renderLayers(shaped(extra), { bg: await solid(1280, 720, '#000000') });
+
+  test('shapes are kept in range; an unknown one is an arrow', () => {
+    const [, a] = shaped({ shape: 'heart', fill: 'pink', stroke: '#abcdef', strokeWidth: 99, thickness: 1, text: 'x'.repeat(30) }).layers;
+    expect(a).toMatchObject({ kind: 'shape', shape: 'arrow', fill: '#FFD86B', stroke: '#ABCDEF', strokeWidth: 24, thickness: 4, font: 'sans', color: '#FFFFFF' });
+    expect(a.text).toHaveLength(16);
+    const [, b] = shaped({ shape: 'tag', stroke: 'none', strokeWidth: -3 }).layers;
+    expect(b).toMatchObject({ shape: 'tag', fill: '#FF0000', stroke: null, strokeWidth: 0, thickness: 16, text: '' });
+    expect(L.SHAPES).toEqual(['arrow', 'ring', 'burst', 'sparkle', 'tag']);
+  });
+
+  test('an arrow points right: its head\'s tip at the right edge, the shaft thin at the left', async () => {
+    const png = await drawShape({ shape: 'arrow', w: 400, h: 200, y: 260 });
+    expect(await pixel(png, 835, 360)).toEqual([255, 0, 0]); // near the tip
+    expect(await pixel(png, 830, 280)).toEqual([0, 0, 0]); // beside the tip
+    expect(await pixel(png, 450, 360)).toEqual([255, 0, 0]); // the shaft
+    expect(await pixel(png, 450, 290)).toEqual([0, 0, 0]); // above the shaft
+    expect(await pixel(png, 690, 275)).toEqual([255, 0, 0]); // the head (from x 680) is nearly the full height
+  });
+
+  test('a ring: a line round the edge, the middle left clear; its outline outside and inside it', async () => {
+    const png = await drawShape({ shape: 'ring', thickness: 20, stroke: '#FFFFFF', strokeWidth: 6 });
+    expect(await pixel(png, 640, 360)).toEqual([0, 0, 0]);
+    expect(await pixel(png, 450, 360)).toEqual([255, 0, 0]); // in the line, 10 in from the box
+    expect(await pixel(png, 437, 360)).toEqual([255, 255, 255]); // the outline just outside it
+    expect(await pixel(png, 463, 360)).toEqual([255, 255, 255]); // and just inside it
+  });
+
+  test('a burst: filled, its points reaching the box, its words in the middle', async () => {
+    const png = await drawShape({ shape: 'burst', text: 'NEW', color: '#FFFFFF' });
+    expect(await pixel(png, 640, 170)).toEqual([255, 0, 0]); // the top point
+    expect(await pixel(png, 445, 165)).toEqual([0, 0, 0]); // the box's corner stays clear
+    const lit = await over(png, { x0: 520, y0: 330, x1: 760, y1: 390 }, (n, r, g, b) => n + (g > 200 && b > 200 ? 1 : 0), 0);
+    expect(lit).toBeGreaterThan(500); // white words
+  });
+
+  test('a price tag: its hole shows what is behind it; its words sit right of the hole', async () => {
+    const png = await drawShape({ shape: 'tag', y: 280, h: 160, text: '$29', color: '#FFFFFF', stroke: '#FFFFFF', strokeWidth: 4 });
+    const holeX = Math.round(440 + 160 * 0.32);
+    expect(await pixel(png, holeX, 360)).toEqual([0, 0, 0]);
+    expect(await pixel(png, holeX + 25, 360)).toEqual([255, 0, 0]);
+    expect(await pixel(png, 830, 300)).toEqual([255, 0, 0]); // the square end
+    expect(await pixel(png, 445, 290)).toEqual([0, 0, 0]); // the pointed end leaves its corner
+    const box = L.shapeWordsBox({ shape: 'tag', w: 400, h: 160 });
+    expect(box.x - box.w / 2).toBeGreaterThan(-200 + 160 * 0.32);
+  });
+
+  test('sparkles: three four-point stars; between their points stays clear', async () => {
+    const png = await drawShape({ shape: 'sparkle' });
+    // The big star's centre is at (-0.2, 0.1) of the halves: (600, 380).
+    expect(await pixel(png, 600, 380)).toEqual([255, 0, 0]);
+    expect(await pixel(png, 600, 225)).toEqual([255, 0, 0]); // its top point
+    expect(await pixel(png, 690, 290)).toEqual([0, 0, 0]); // between points
+    expect(await pixel(png, 750, 250)).toEqual([255, 0, 0]); // the small star's centre (0.55, -0.55)
+  });
+
   test('fontFile: only the thumbnail fonts', () => {
     expect(L.fontFile('script')).toMatch(/GreatVibes-Regular\.ttf$/);
     expect(L.fontFile('../../etc/passwd')).toBeNull();
