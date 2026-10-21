@@ -17,6 +17,8 @@ export const LAYOUTS = [
   { key: 'lala-left', label: 'Lala left' },
   { key: 'lala-right', label: 'Lala right' },
   { key: 'center', label: 'Title only' },
+  // Evoni's collage (2026-10-21): checklist, Lala, the script headline, the pieces.
+  { key: 'come-style-me', label: 'Come Style Me' },
 ];
 
 // The LalaVerse palette for the accent (the show's name, the badge, the

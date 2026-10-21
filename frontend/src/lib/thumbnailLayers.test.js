@@ -7,7 +7,7 @@
 import { describe, test, expect } from 'vitest';
 import {
   presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer, addText, addPicture,
-  boxFromNode, fitText, fitPicture, layerName, LINE_HEIGHT,
+  boxFromNode, fitText, fitPicture, layerName, LINE_HEIGHT, checklistRows,
 } from './thumbnailLayers';
 
 const CONTENT = {
@@ -120,5 +120,52 @@ describe('fitText and fitPicture (as the server draws)', () => {
     expect(fitPicture(1000, 1000, { w: 1280, h: 720, fit: 'cover' }).crop).toEqual({ x: 0, y: 218.75, width: 1000, height: 562.5 });
     expect(fitPicture(300, 600, { w: 600, h: 600, fit: 'contain' })).toEqual({ crop: null, x: 150, y: 0, w: 300, h: 600 });
     expect(fitPicture(600, 300, { w: 600, h: 600, fit: 'contain' })).toEqual({ crop: null, x: 0, y: 300, w: 600, h: 300 });
+  });
+});
+
+describe('Come Style Me (Evoni, 2026-10-21)', () => {
+  const ALL = {
+    ...CONTENT,
+    outfitUrl: 'https://b.s3.amazonaws.com/back.png',
+    checklist: ['Sweater dress', 'Accessories', 'Hair', 'Vibe'].map((text) => ({ text, checked: true })),
+    edition: 'Sweater Dress Edition',
+    pieces: [1, 2, 3, 4, 5].map((n) => ({ url: `https://b.s3.amazonaws.com/p${n}.png`, label: `Piece ${n}` })),
+    logoUrl: 'https://b.s3.amazonaws.com/logo.png',
+  };
+
+  test('every layer: the scene set, the outfit behind Lala, four photo cards, the checklist, the headline, the show\'s name, the edition, the ribbon, the logo', () => {
+    const spec = presetLayers('come-style-me', ALL, STYLE);
+    expect(roles(spec)).toEqual(['background', 'shade', 'outfit', 'lala', 'piece-1', 'piece-2', 'piece-3', 'piece-4', 'checklist', 'headline', 'kicker', 'edition', 'badge', 'logo']);
+    expect(layerOf(spec, 'piece-1')).toMatchObject({ frame: 'polaroid', name: 'Piece 1', rotation: -4 });
+    expect(layerOf(spec, 'piece-2').rotation).toBe(4);
+    expect(layerOf(spec, 'checklist')).toMatchObject({ kind: 'checklist', font: 'hand', items: ALL.checklist });
+    expect(layerOf(spec, 'headline')).toMatchObject({ text: 'Come Style Me', font: 'script', rotation: -6 });
+    expect(layerOf(spec, 'badge').text).toBe('EPISODE 1');
+    expect(layerOf(spec, 'edition')).toMatchObject({ text: 'Sweater Dress Edition', bg: '#F4ECDD', upper: true });
+  });
+
+  test('only the core when the episode has nothing else: scene set, Lala, checklist, headline (and the show\'s name)', () => {
+    const spec = presetLayers('come-style-me', { kicker: 'Styling Adventures', backgroundUrl: CONTENT.backgroundUrl, lalaUrl: CONTENT.lalaUrl, checklist: ALL.checklist }, STYLE);
+    expect(roles(spec)).toEqual(['background', 'shade', 'lala', 'checklist', 'headline', 'kicker']);
+  });
+
+  test('its template fills each episode: the episode\'s pieces, edition, checklist and ribbon; a piece or edition it has none for goes; the headline stays', () => {
+    const template = updateLayer(presetLayers('come-style-me', ALL, STYLE), 'headline', { text: 'Style Me Again', x: 600 });
+    const next = fillTemplate(template, {
+      ...CONTENT, badge: 'EP 2', checklist: [{ text: 'Gown', checked: false }], edition: null,
+      pieces: [{ url: 'https://b.s3.amazonaws.com/q1.png', label: 'Clutch' }], outfitUrl: null, logoUrl: null,
+    });
+    expect(roles(next)).toEqual(['background', 'shade', 'lala', 'piece-1', 'checklist', 'headline', 'kicker', 'badge']);
+    expect(layerOf(next, 'piece-1')).toMatchObject({ src: 'https://b.s3.amazonaws.com/q1.png', name: 'Clutch', frame: 'polaroid' });
+    expect(layerOf(next, 'checklist').items).toEqual([{ text: 'Gown', checked: false }]);
+    expect(layerOf(next, 'headline')).toMatchObject({ text: 'Style Me Again', x: 600 });
+    expect(layerOf(next, 'badge').text).toBe('EPISODE 2');
+  });
+
+  test('the checklist\'s rows: one words size for all, the box beside them', () => {
+    const measure = (s, size) => s.length * size * 0.5;
+    const rows = checklistRows({ w: 300, h: 200, items: [{ text: 'Sweater dress' }, { text: 'Hair' }] }, measure);
+    expect(rows).toMatchObject({ rowH: 100, box: 60, textX: 90 });
+    expect('Sweater dress'.length * rows.size * 0.5).toBeLessThanOrEqual(210);
   });
 });

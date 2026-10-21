@@ -162,6 +162,7 @@ describe('database work', () => {
       [[{ name: 'Lala red', asset_group: 'LALA', asset_type: 'PROMO_LALA', url: 'https://b.s3.amazonaws.com/lala.png' }]],
       [[{ reg: 'episode_wardrobe' }]],
       [[{ name: 'Sweater dress', category: 'dress', url: 'https://b.s3.amazonaws.com/d.png' }]],
+      [[{ theme: 'gala', canon_consequences: { documents: { shopping_list: { items: [{ slot: 'dress' }, { slot: 'shoes' }, { slot: 'item_3' }, { slot: 'accessories' }] } } } }]],
       [[{ reg: null }]], // no drafts table yet: no draft
     );
     const out = await yt.sources(s, 'ep-1');
@@ -181,6 +182,30 @@ describe('database work', () => {
     expect(s.query.mock.calls[3][0]).not.toMatch(/s3_url_no_bg/);
     expect(s.query.mock.calls[3][0]).toMatch(/asset_type IS DISTINCT FROM 'DOCUMENT_OVERLAY'/);
     expect(out.folders.map((f) => f.key)).toEqual(['scene-sets', 'poses', 'outfit', 'library']);
+    // The "Come Style Me" suggestions: the shopping list's slots, the dress's edition, the pieces.
+    expect(out.suggest).toEqual({
+      checklist: [{ text: 'Dress', checked: true }, { text: 'Shoes', checked: true }, { text: 'Accessories', checked: true }],
+      edition: 'Sweater Dress Edition',
+      pieces: [{ url: 'https://b.s3.amazonaws.com/d.png', label: 'Sweater dress' }],
+      logoUrl: null,
+    });
+    expect(out.draft).toBeNull();
+  });
+
+  test('layoutSuggestions: from the outfit, then the defaults; the event\'s theme names the edition; the show\'s logo', async () => {
+    const outfit = [{ url: 'https://b.s3.amazonaws.com/b.png', label: 'chain bag', category: 'handbag' }];
+    const noEvent = await yt.layoutSuggestions(seq([[]]), 'ep-1', outfit, { metadata: { logo: { url: 'https://b.s3.amazonaws.com/logo.png' } } });
+    expect(noEvent.checklist.map((r) => r.text)).toEqual(['Handbag', 'Hair', 'Vibe']);
+    expect(noEvent.edition).toBe('Chain Bag Edition');
+    expect(noEvent.logoUrl).toBe('https://b.s3.amazonaws.com/logo.png');
+    const bare = await yt.layoutSuggestions(seq([[{ theme: 'garden_party', canon_consequences: null }]]), 'ep-1', [], null);
+    expect(bare).toEqual({
+      checklist: ['Outfit', 'Accessories', 'Hair', 'Vibe'].map((text) => ({ text, checked: true })),
+      edition: 'Garden Party Edition', pieces: [], logoUrl: null,
+    });
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    const broken = { query: jest.fn().mockRejectedValue(new Error('no table')) };
+    expect((await yt.layoutSuggestions(broken, 'ep-1', [], null)).checklist).toHaveLength(4);
   });
 
   test('pictureFolders: by where each picture comes from; empty folders left out; only S3 pictures', () => {

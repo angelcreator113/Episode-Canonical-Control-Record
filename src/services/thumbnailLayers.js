@@ -15,6 +15,8 @@
  *   text    words in one of FONTS, made smaller until they fit the box;
  *           optional outline (stroke) and backing colour (bg).
  *   badge   a pill with a few words ("EP 1").
+ *   checklist  rows of a tick box and a few words (Evoni's "Come Style Me":
+ *           sweater dress, accessories, hair, vibe); each tick on or off.
  *
  * role names what a layer is for (background, lala, jaw, title, kicker,
  * badge, shade): the Studio's controls and the show's template find layers
@@ -35,7 +37,8 @@ try {
 const WIDTH = 1280;
 const HEIGHT = 720;
 const MAX_LAYERS = 24;
-const KINDS = Object.freeze(['image', 'shade', 'text', 'badge']);
+const KINDS = Object.freeze(['image', 'shade', 'text', 'badge', 'checklist']);
+const MAX_ROWS = 6;
 const HEX = /^#[0-9a-f]{6}$/i;
 
 const FONT_DIR = path.join(__dirname, '..', 'assets', 'fonts');
@@ -109,6 +112,12 @@ function readLayers(body, allowedUrl) {
     }
     if (l.kind === 'shade') {
       return { ...base, dim: num(l.dim, 0, 0.8, 0.35), accent: hex(l.accent, '#E0689F'), side: pick(l.side, ['left', 'right', 'center', 'none'], 'left') };
+    }
+    if (l.kind === 'checklist') {
+      const items = (Array.isArray(l.items) ? l.items : []).slice(0, MAX_ROWS)
+        .map((it) => ({ text: str(it?.text, 40), checked: it?.checked !== false }))
+        .filter((it) => it.text);
+      return { ...base, items, font: pick(l.font, Object.keys(FONTS), 'hand'), color: hex(l.color, '#FFFFFF') };
     }
     if (l.kind === 'badge') {
       return { ...base, text: str(l.text, 16), font: pick(l.font, Object.keys(FONTS), 'sans'), fill: hex(l.fill, '#E0689F'), color: hex(l.color, '#FFFFFF') };
@@ -287,6 +296,53 @@ function drawBadge(ctx, l) {
 }
 
 /**
+ * The checklist's rows: each row's box (a square, its side) and the words'
+ * size, the same for every row (the smallest that fits each). Mirrored in
+ * the editor.
+ */
+function checklistRows(l, measure) {
+  const n = Math.max(1, l.items.length);
+  const rowH = l.h / n;
+  const box = Math.round(rowH * 0.6);
+  const textX = box * 1.5;
+  // Each row is one line: the largest size at which every row fits beside its box.
+  const start = Math.max(MIN_SIZE, Math.round(rowH * 0.8));
+  let size = start;
+  for (const it of l.items) {
+    while (size > MIN_SIZE && measure(it.text, size) > l.w - textX) size -= 2;
+  }
+  return { rowH, box, textX, size };
+}
+
+function drawChecklist(ctx, l) {
+  if (!l.items.length) return;
+  const measure = (s, size) => { ctx.font = fontCss(l.font, size); return ctx.measureText(s).width; };
+  const { rowH, box, textX, size } = checklistRows(l, measure);
+  ctx.strokeStyle = l.color;
+  ctx.fillStyle = l.color;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left';
+  l.items.forEach((it, i) => {
+    const cy = -l.h / 2 + rowH * (i + 0.5);
+    const x0 = -l.w / 2;
+    ctx.lineWidth = Math.max(2, Math.round(box * 0.09));
+    ctx.strokeRect(x0, cy - box / 2, box, box);
+    if (it.checked) {
+      ctx.lineWidth = Math.max(3, Math.round(box * 0.14));
+      ctx.beginPath();
+      ctx.moveTo(x0 + box * 0.18, cy);
+      ctx.lineTo(x0 + box * 0.42, cy + box * 0.28);
+      ctx.lineTo(x0 + box * 0.95, cy - box * 0.45);
+      ctx.stroke();
+    }
+    ctx.font = fontCss(l.font, size);
+    ctx.fillText(it.text, x0 + textX, cy);
+  });
+}
+
+/**
  * Draws the layers to a 1280×720 PNG. pictures maps each image layer's id
  * to its bytes (a missing one is skipped). A plain plum-to-accent gradient
  * sits under everything, so an empty canvas is never transparent.
@@ -319,6 +375,7 @@ async function renderLayers(spec, pictures = {}) {
       if (l.kind === 'image') drawImage(ctx, images[l.id], l);
       else if (l.kind === 'text') drawText(ctx, l);
       else if (l.kind === 'badge') drawBadge(ctx, l);
+      else if (l.kind === 'checklist') drawChecklist(ctx, l);
     }
     ctx.restore();
   }
@@ -332,6 +389,6 @@ function fontFile(key) {
 }
 
 module.exports = {
-  WIDTH, HEIGHT, MAX_LAYERS, KINDS, FONTS, LINE_HEIGHT, LayerError,
-  readLayers, wrapWords, fitText, renderLayers, fontFile,
+  WIDTH, HEIGHT, MAX_LAYERS, MAX_ROWS, KINDS, FONTS, LINE_HEIGHT, LayerError,
+  readLayers, wrapWords, fitText, checklistRows, renderLayers, fontFile,
 };

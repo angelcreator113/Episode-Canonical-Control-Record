@@ -103,6 +103,28 @@ describe('renderLayers', () => {
     await expect(L.renderLayers(bad, { x: Buffer.from('not a picture') })).rejects.toMatchObject({ status: 400 });
   });
 
+  test('a checklist: at most six rows with words, ticked unless turned off; a ticked box is drawn ticked', async () => {
+    const spec = L.readLayers({
+      version: 2,
+      layers: [{ kind: 'checklist', x: 100, y: 100, w: 400, h: 200, color: '#ffffff',
+        items: [{ text: 'Sweater dress' }, { text: 'Hair', checked: false }, { text: '' }, ...Array.from({ length: 6 }, (_, i) => ({ text: `Row ${i}` }))] }],
+    }, s3);
+    const list = spec.layers[0];
+    expect(list.items.slice(0, 2)).toEqual([{ text: 'Sweater dress', checked: true }, { text: 'Hair', checked: false }]);
+    expect(list.items).toHaveLength(5); // six rows read, the empty one dropped
+    expect(list).toMatchObject({ font: 'hand', color: '#FFFFFF' });
+    const one = L.readLayers({ version: 2, layers: [
+      { kind: 'shade', dim: 0, side: 'none', accent: '#000000' },
+      { kind: 'checklist', x: 100, y: 100, w: 400, h: 100, items: [{ text: 'Vibe' }] },
+    ] }, s3);
+    const png = await L.renderLayers(one, {});
+    // The row's box is 60 wide at the left of the layer; its tick runs up to the right corner.
+    const rows = L.checklistRows(one.layers[1], (t, size) => t.length * size * 0.5);
+    expect(rows).toMatchObject({ rowH: 100, box: 60 });
+    expect(await pixel(png, 100, 150)).toEqual([255, 255, 255]); // the box's left side
+    expect(await pixel(png, 130, 150)).not.toEqual([255, 255, 255]); // inside the box, left of the tick: empty
+  });
+
   test('fontFile: only the thumbnail fonts', () => {
     expect(L.fontFile('script')).toMatch(/GreatVibes-Regular\.ttf$/);
     expect(L.fontFile('../../etc/passwd')).toBeNull();

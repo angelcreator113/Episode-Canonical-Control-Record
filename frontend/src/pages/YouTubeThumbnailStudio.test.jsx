@@ -221,6 +221,50 @@ describe('YouTubeThumbnailStudio', () => {
     expect(screen.getByRole('button', { name: /Lala left/ }).getAttribute('aria-pressed')).toBe('true');
   });
 
+  test('Come Style Me: the episode\'s checklist, edition and pieces; the checklist\'s rows ticked and worded here; the headline', async () => {
+    youtubeThumbnailsApi.sources.mockResolvedValue({
+      ...SOURCES,
+      poses: {
+        lala: [
+          { id: 'p1', url: 'https://b.s3.amazonaws.com/glam.png', pose: 'glamour', label: 'Glamour ★', isDefault: true },
+          { id: 'p2', url: 'https://b.s3.amazonaws.com/back.png', pose: 'back', label: 'Back ★', isDefault: true },
+        ],
+        justawoman: [],
+      },
+      suggest: {
+        checklist: [{ text: 'Sweater dress', checked: true }, { text: 'Hair', checked: true }, { text: 'Vibe', checked: true }],
+        edition: 'Sweater Dress Edition',
+        pieces: [{ url: 'https://b.s3.amazonaws.com/dress.png', label: 'Sweater dress' }],
+        logoUrl: null,
+      },
+    });
+    renderPage();
+    await opened();
+    expect(screen.queryByTestId('yts-checklist')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Come Style Me/ }));
+    // The core and what the episode has: the back pose as the full outfit, its one piece, its edition.
+    expect(within(screen.getByTestId('yts-canvas')).getAllByRole('button').map((b) => b.textContent).slice(0, -1))
+      .toEqual(['background', 'shade', 'outfit', 'lala', 'piece-1', 'checklist', 'headline', 'kicker', 'edition', 'badge']);
+    expect(screen.queryByLabelText('Title')).toBeNull();
+    expect(screen.getByLabelText('Headline').value).toBe('Come Style Me');
+    expect(screen.getByLabelText('Edition label').value).toBe('Sweater Dress Edition');
+    const list = screen.getByTestId('yts-checklist');
+    fireEvent.change(within(list).getByLabelText('Checklist row 1'), { target: { value: 'Red sweater dress' } });
+    fireEvent.click(within(list).getByLabelText('Tick Hair'));
+    fireEvent.click(within(list).getByRole('button', { name: 'Remove checklist row 3' }));
+    fireEvent.click(within(list).getByRole('button', { name: 'Add a row' }));
+    fireEvent.change(screen.getByLabelText('Headline'), { target: { value: 'Style Me' } });
+    await waitFor(() => expect(youtubeThumbnailsApi.saveDraft).toHaveBeenCalled(), { timeout: 3000 });
+    const spec = lastDraft();
+    expect(layerOf(spec, 'checklist').items).toEqual([
+      { text: 'Red sweater dress', checked: true }, { text: 'Hair', checked: false }, { text: 'New', checked: true },
+    ]);
+    expect(layerOf(spec, 'headline').text).toBe('Style Me');
+    expect(layerOf(spec, 'outfit').src).toBe('https://b.s3.amazonaws.com/back.png');
+    expect(layerOf(spec, 'lala').src).toBe('https://b.s3.amazonaws.com/glam.png');
+    expect(layerOf(spec, 'badge').text).toBe('EPISODE 1');
+  });
+
   test('the layers list hides, orders and removes; words and pictures can be added', async () => {
     renderPage();
     await opened();

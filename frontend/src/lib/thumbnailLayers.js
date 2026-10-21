@@ -7,8 +7,10 @@
  * mirror the server's, so the editor shows what will be saved.
  *
  * Layers with a role are the ones the Studio's controls fill: background,
- * shade, jaw, lala, kicker, title, badge. The three layouts (Lala left,
- * Lala right, Title only) are presets: where those roles start.
+ * shade, jaw, lala, kicker, title, badge; and for "Come Style Me" (Evoni,
+ * 2026-10-21) headline, checklist, outfit, piece-1..4, edition, logo.
+ * The layouts (Lala left, Lala right, Title only, Come Style Me)
+ * are presets: where those roles start.
  */
 import api from '../services/api';
 
@@ -109,7 +111,75 @@ export function fitPicture(iw, ih, { w, h, fit }) {
 
 export const ROLE_LABELS = {
   background: 'Background', shade: 'Shade', jaw: 'JustAWoman', lala: 'Lala', kicker: 'Show name', title: 'Title', badge: 'Badge',
+  headline: 'Headline', checklist: 'Checklist', outfit: 'Full outfit', edition: 'Edition label', logo: 'Logo',
+  'piece-1': 'Piece 1', 'piece-2': 'Piece 2', 'piece-3': 'Piece 3', 'piece-4': 'Piece 4',
 };
+
+/**
+ * The checklist's rows (the server's checklistRows): each row's height, the
+ * tick box's side, where the words start, and one words size for all rows
+ * (each row one line).
+ */
+export function checklistRows(l, measure) {
+  const items = l.items || [];
+  const n = Math.max(1, items.length);
+  const rowH = l.h / n;
+  const box = Math.round(rowH * 0.6);
+  const textX = box * 1.5;
+  // Each row is one line: the largest size at which every row fits beside its box.
+  const start = Math.max(MIN_SIZE, Math.round(rowH * 0.8));
+  let size = start;
+  for (const it of items) {
+    while (size > MIN_SIZE && measure(it.text, size) > l.w - textX) size -= 2;
+  }
+  return { rowH, box, textX, size };
+}
+
+/** "EP 3" as "EPISODE 3" when the layout spells it out. */
+const longBadge = (badge) => String(badge || '').replace(/^EP\b/i, 'EPISODE');
+
+const PIECES = ['piece-1', 'piece-2', 'piece-3', 'piece-4'];
+
+/**
+ * "Come Style Me" (Evoni's reference thumbnail, 2026-10-21): the scene set,
+ * Lala large on the left, the checklist top left, the script headline top
+ * right, the show's name and the edition label under it, the full outfit
+ * in the middle, the pieces as photo cards down the right, the episode
+ * ribbon bottom left. The scene set, Lala, the checklist and the headline
+ * are the core; a layer with nothing for it is left out.
+ */
+function comeStyleMe(content, style) {
+  const accent = style.accent || '#B8962E';
+  const r = (role, kind, box, extra) => ({ id: role, role, kind, visible: true, rotation: 0, opacity: 1, ...box, ...extra });
+  const layers = [
+    r('background', 'image', { x: 0, y: 0, w: WIDTH, h: HEIGHT }, { src: content.backgroundUrl || null, fit: 'cover', frame: 'none' }),
+    r('shade', 'shade', { x: 0, y: 0, w: WIDTH, h: HEIGHT }, { dim: style.dim ?? 0.2, accent, side: 'left' }),
+  ];
+  if (content.outfitUrl) layers.push(r('outfit', 'image', { x: 470, y: 90, w: 300, h: 630 }, { src: content.outfitUrl, fit: 'contain', frame: 'none' }));
+  if (content.lalaUrl) layers.push(r('lala', 'image', { x: 0, y: 40, w: 520, h: 680 }, { src: content.lalaUrl, fit: 'contain', frame: 'none' }));
+  (content.pieces || []).slice(0, 4).forEach((p, i) => {
+    layers.push(r(PIECES[i], 'image', { x: 1090, y: 18 + i * 172, w: 172, h: 172, rotation: i % 2 ? 4 : -4 }, { src: p.url, name: p.label || null, fit: 'contain', frame: 'polaroid' }));
+  });
+  layers.push(
+    r('checklist', 'checklist', { x: 36, y: 28, w: 300, h: 190, rotation: -4 }, {
+      items: (content.checklist || []).slice(0, 6), font: 'hand', color: '#FFFFFF',
+    }),
+    r('headline', 'text', { x: 560, y: 10, w: 540, h: 330, rotation: -6 }, {
+      text: content.headline || 'Come Style Me', font: 'script', size: 150, color: '#F3D27A', stroke: null, bg: null, align: 'center', upper: false,
+    }),
+    r('kicker', 'text', { x: 640, y: 350, w: 440, h: 170 }, {
+      text: content.kicker || '', font: 'serif', size: 52, color: '#FFFFFF', stroke: OUTLINE, bg: null, align: 'center', upper: true,
+    }),
+  );
+  if (content.edition) {
+    layers.push(r('edition', 'text', { x: 660, y: 540, w: 400, h: 58, rotation: -2 }, {
+      text: content.edition, font: 'serif', size: 28, color: '#5A1430', stroke: null, bg: '#F4ECDD', align: 'center', upper: true,
+    }));
+  }
+  if (content.badge) layers.push(r('badge', 'badge', { x: 40, y: 610, w: 300, h: 74 }, { text: longBadge(content.badge), font: 'serif', fill: accent, color: '#FFFFFF' }));
+  if (content.logoUrl) layers.push(r('logo', 'image', { x: 40, y: 520, w: 120, h: 80 }, { src: content.logoUrl, fit: 'contain', frame: 'none' }));
+  return { version: 2, layers };
+}
 
 /** A layer's name in the layers list. */
 export const layerName = (l) => ROLE_LABELS[l.role] || l.name || (l.kind === 'text' ? (l.text || 'Text').slice(0, 24) : 'Picture');
@@ -139,6 +209,7 @@ const roleLayer = (role, kind, box, extra) => ({ id: role, role, kind, visible: 
  * lalaUrl, jawUrl } and style { accent, textColor, dim }.
  */
 export function presetLayers(layout, content = {}, style = {}) {
+  if (layout === 'come-style-me') return comeStyleMe(content, style);
   const b = presetBoxes(layout);
   const accent = style.accent || '#E0689F';
   const duo = Boolean(content.lalaUrl && content.jawUrl);
@@ -209,15 +280,24 @@ export function applyStyle(spec, { accent, textColor, dim } = {}) {
  * are. A figure the episode has no picture for is left out.
  */
 export function fillTemplate(template, content = {}) {
-  const pictures = { background: content.backgroundUrl, lala: content.lalaUrl, jaw: content.jawUrl };
-  const words = { title: content.title, kicker: content.kicker, badge: content.badge };
+  const pictures = {
+    background: content.backgroundUrl, lala: content.lalaUrl, jaw: content.jawUrl, outfit: content.outfitUrl, logo: content.logoUrl,
+    ...Object.fromEntries(PIECES.map((k, i) => [k, content.pieces?.[i]?.url])),
+  };
+  const optional = new Set(['lala', 'jaw', 'outfit', 'logo', ...PIECES]);
+  const words = { title: content.title, kicker: content.kicker, edition: content.edition };
   const layers = (template?.layers || []).flatMap((l) => {
     if (l.role in pictures) {
       const src = pictures[l.role] || null;
-      if (!src && (l.role === 'lala' || l.role === 'jaw')) return [];
-      return [{ ...l, src }];
+      if (!src && optional.has(l.role)) return [];
+      const piece = PIECES.indexOf(l.role);
+      return [{ ...l, src, ...(piece >= 0 ? { name: content.pieces[piece].label || null } : {}) }];
     }
+    if (l.role === 'edition' && !content.edition) return [];
     if (l.role in words) return [{ ...l, text: words[l.role] || '' }];
+    // The badge keeps the template's wording: "EP 3" or "EPISODE 3".
+    if (l.role === 'badge') return [{ ...l, text: /^EPISODE\b/i.test(l.text || '') ? longBadge(content.badge) : (content.badge || '') }];
+    if (l.role === 'checklist' && content.checklist?.length) return [{ ...l, items: content.checklist.slice(0, 6) }];
     return [l];
   });
   return { version: 2, layers };
