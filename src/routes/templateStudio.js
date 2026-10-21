@@ -9,6 +9,11 @@
  * POST /api/v1/template-studio/:id/publish - Publish template
  * POST /api/v1/template-studio/:id/lock - Lock template (prevent edits)
  * POST /api/v1/template-studio/:id/archive - Archive template
+ * POST /api/v1/template-studio/:id/unlock - Unlock template
+ * PATCH /api/v1/template-studio/:id/name - Rename template (every version)
+ *
+ * Deleted templates are kept with deleted_at set (migration
+ * 20261021120000-create-template-studio.js) and are never listed or found.
  */
 
 const express = require('express');
@@ -34,7 +39,7 @@ router.get('/', requireAuth, async (req, res) => {
 
     let whereClause = '';
     const params = [];
-    const conditions = [];
+    const conditions = ['deleted_at IS NULL'];
 
     if (status) {
       conditions.push(`status = $${params.length + 1}`);
@@ -56,9 +61,7 @@ router.get('/', requireAuth, async (req, res) => {
       params.push(`%${name}%`);
     }
 
-    if (conditions.length > 0) {
-      whereClause = 'WHERE ' + conditions.join(' AND ');
-    }
+    whereClause = 'WHERE ' + conditions.join(' AND ');
 
     params.push(parseInt(limit, 10));
     params.push(parseInt(offset, 10));
@@ -118,7 +121,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 
     const [templates] = await models.sequelize.query(
       `
-      SELECT * FROM template_studio WHERE id = $1
+      SELECT * FROM template_studio WHERE id = $1 AND deleted_at IS NULL
     `,
       { bind: [id] }
     );
@@ -249,7 +252,7 @@ router.put('/:id', requireAuth, async (req, res) => {
     // Check if template exists and is editable
     const [existing] = await models.sequelize.query(
       `
-      SELECT id, status, locked FROM template_studio WHERE id = $1
+      SELECT id, status, locked FROM template_studio WHERE id = $1 AND deleted_at IS NULL
     `,
       { bind: [id] }
     );
@@ -361,7 +364,7 @@ router.delete('/:id', requireAuth, async (req, res) => {
 
     const [existing] = await models.sequelize.query(
       `
-      SELECT id, status, locked FROM template_studio WHERE id = $1
+      SELECT id, status, locked FROM template_studio WHERE id = $1 AND deleted_at IS NULL
     `,
       { bind: [id] }
     );
@@ -380,7 +383,7 @@ router.delete('/:id', requireAuth, async (req, res) => {
 
     await models.sequelize.query(
       `
-      DELETE FROM template_studio WHERE id = $1
+      UPDATE template_studio SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL
     `,
       { bind: [id] }
     );
@@ -411,7 +414,7 @@ router.post('/:id/clone', requireAuth, async (req, res) => {
 
     const [existing] = await models.sequelize.query(
       `
-      SELECT * FROM template_studio WHERE id = $1
+      SELECT * FROM template_studio WHERE id = $1 AND deleted_at IS NULL
     `,
       { bind: [id] }
     );
@@ -494,7 +497,7 @@ router.post('/:id/publish', requireAuth, async (req, res) => {
 
     const [existing] = await models.sequelize.query(
       `
-      SELECT id, status FROM template_studio WHERE id = $1
+      SELECT id, status FROM template_studio WHERE id = $1 AND deleted_at IS NULL
     `,
       { bind: [id] }
     );
@@ -548,7 +551,7 @@ router.post('/:id/lock', requireAuth, async (req, res) => {
 
     const [existing] = await models.sequelize.query(
       `
-      SELECT id, locked FROM template_studio WHERE id = $1
+      SELECT id, locked FROM template_studio WHERE id = $1 AND deleted_at IS NULL
     `,
       { bind: [id] }
     );
@@ -602,7 +605,7 @@ router.post('/:id/archive', requireAuth, async (req, res) => {
 
     const [existing] = await models.sequelize.query(
       `
-      SELECT id, status FROM template_studio WHERE id = $1
+      SELECT id, status FROM template_studio WHERE id = $1 AND deleted_at IS NULL
     `,
       { bind: [id] }
     );
@@ -638,6 +641,113 @@ router.post('/:id/archive', requireAuth, async (req, res) => {
     console.error('Failed to archive template:', error);
     res.status(500).json({
       error: 'Failed to archive template',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/v1/template-studio/:id/unlock
+ * Unlock template (edits allowed again, as its status permits)
+ */
+router.post('/:id/unlock', requireAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    const [result] = await models.sequelize.query(
+      `
+      UPDATE template_studio
+      SET locked = false, locked_at = NULL
+      WHERE id = $1 AND deleted_at IS NULL
+      RETURNING *
+    `,
+      { bind: [req.params.id] }
+    );
+
+    if (result.length === 0) {
+      return res.status(404).json({
+        error: 'Template not found',
+      });
+    }
+
+    res.json({
+      status: 'SUCCESS',
+      message: 'Template unlocked',
+      data: result[0],
+    });
+  } catch (error) {
+    console.error('Failed to unlock template:', error);
+    res.status(500).json({
+      error: 'Failed to unlock template',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * PATCH /api/v1/template-studio/:id/name
+ * Rename a template: every version sharing its name follows, so the
+ * versions stay together. Any status; not while locked.
+ * Body: { name }
+ */
+router.patch('/:id/name', requireAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+    if (!name || name.length > 255) {
+      return res.status(400).json({
+        error: 'Validation failed',
+        message: 'A name of 1 to 255 characters is required',
+      });
+    }
+
+    const { sequelize } = models;
+    const outcome = await sequelize.transaction(async (transaction) => {
+      const [existing] = await sequelize.query(
+        'SELECT id, name, locked FROM template_studio WHERE id = $1 AND deleted_at IS NULL',
+        { bind: [req.params.id], transaction }
+      );
+      if (existing.length === 0) return { status: 404, body: { error: 'Template not found' } };
+      if (existing[0].locked) {
+        return { status: 403, body: { error: 'Template is locked', message: 'Unlock it to rename it' } };
+      }
+      const from = existing[0].name;
+      if (from === name) return { status: 200, rows: [] };
+
+      // Versions are unique by (name, version), deleted ones included.
+      const [taken] = await sequelize.query(
+        'SELECT deleted_at FROM template_studio WHERE name = $1 ORDER BY deleted_at NULLS FIRST LIMIT 1',
+        { bind: [name], transaction }
+      );
+      if (taken.length > 0) {
+        return {
+          status: 409,
+          body: {
+            error: 'Name taken',
+            message: taken[0].deleted_at ? 'That name belongs to a deleted template' : 'That name is taken',
+          },
+        };
+      }
+      const [rows] = await sequelize.query(
+        'UPDATE template_studio SET name = $1 WHERE name = $2 RETURNING id',
+        { bind: [name, from], transaction }
+      );
+      return { status: 200, rows };
+    });
+
+    if (outcome.status !== 200) return res.status(outcome.status).json(outcome.body);
+    res.json({
+      status: 'SUCCESS',
+      message: 'Template renamed',
+      data: { id: req.params.id, name, versions: outcome.rows.length },
+    });
+  } catch (error) {
+    console.error('Failed to rename template:', error);
+    res.status(500).json({
+      error: 'Failed to rename template',
       message: error.message,
     });
   }
