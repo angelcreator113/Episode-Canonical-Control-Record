@@ -12,6 +12,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Stage, Layer, Group, Rect, Text, Line, Image as KImage, Transformer } from 'react-konva';
 import {
   WIDTH, HEIGHT, LINE_HEIGHT, FONTS, fitText, measurer, spaced, fitPicture, boxFromNode, layerName, checklistRows, snapBox, layersInBox, adjustedPicture, stickerCanvas, stickerMargin, drawFitted,
+  fancyWords, wordsCanvas, wordsMargin,
 } from '../../lib/thumbnailLayers';
 import { previewUrl, previewWidth } from '../../lib/picturePreview';
 
@@ -94,6 +95,30 @@ function Picture({ l, scale }) {
 }
 
 function Words({ l }) {
+  // A shadow or glow, a fade or a curve (Evoni, 2026-10-21: text effects):
+  // drawn on a canvas as the server draws them, one shadow under it all.
+  const fancy = fancyWords(l);
+  const drawn = useMemo(() => {
+    if (!fancy) return null;
+    try {
+      return wordsCanvas(l);
+    } catch (err) {
+      // No 2D canvas here: the plain words stand in; the saved file still has the effect.
+      console.error('[ThumbnailCanvas] could not draw the words\' effect:', err?.message || err);
+      return null;
+    }
+  }, [fancy, l.text, l.upper, l.font, l.size, l.w, l.h, l.bg, l.align,
+    l.spacing, l.color, l.stroke, l.effect, l.effectColor, l.effectSize, l.gradient, l.curve]);
+  if (drawn) {
+    const m = wordsMargin(l);
+    return (
+      <>
+        <Rect width={l.w} height={l.h} fill="rgba(0,0,0,0.001)" />
+        {l.bg && <Rect width={l.w} height={l.h} fill={l.bg} opacity={l.bgOpacity ?? 1} cornerRadius={Math.min(l.bgRadius || 0, l.w / 2, l.h / 2)} />}
+        <KImage image={drawn} x={-m} y={-m} width={l.w + m * 2} height={l.h + m * 2} listening={false} />
+      </>
+    );
+  }
   const text = l.upper ? String(l.text || '').toUpperCase() : String(l.text || '');
   const pad = l.bg ? Math.round(l.size * 0.25) : 0;
   const spacing = l.spacing || 0;

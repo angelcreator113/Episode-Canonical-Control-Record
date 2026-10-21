@@ -41,7 +41,7 @@ import {
 import {
   FONTS, presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer,
   addText, addPicture, layerName, loadThumbnailFonts, OUTLINE, BOX_COLOR, BOX_OPACITY, STICKER_EDGE, duplicateLayer, WIDTH, HEIGHT,
-  alignLayers, distributeLayers, measurer, youtubeWarnings, fileSize, YOUTUBE_SIZES,
+  alignLayers, distributeLayers, measurer, youtubeWarnings, fileSize, YOUTUBE_SIZES, GLOW_COLOR, FADE_COLOR, EFFECT_SIZE,
 } from '../lib/thumbnailLayers';
 import ThumbnailCanvas from '../components/Thumbnails/ThumbnailCanvas';
 import { usePreview } from '../lib/picturePreview';
@@ -241,6 +241,69 @@ function TextTools({ layer, onChange }) {
           </label>
         </div>
       )}
+      <TextEffects layer={layer} onChange={onChange} />
+    </div>
+  );
+}
+
+/** A shadow or a glow, a fade to a second colour, words on a curve (Evoni, 2026-10-21: text effects). */
+function TextEffects({ layer, onChange }) {
+  const effect = layer.effect || 'none';
+  const curve = layer.curve || 0;
+  return (
+    <div className="yts-text-effects" data-testid="yts-text-effects">
+      <div className="yts-row">
+        <label className="yts-field">
+          <span className="yts-label">Effect</span>
+          <select className="yts-input" value={effect} aria-label="Words effect"
+            onChange={(e) => onChange(e.target.value === 'glow'
+              ? { effect: 'glow', effectColor: layer.effectColor || GLOW_COLOR, effectSize: layer.effectSize || EFFECT_SIZE }
+              : { effect: e.target.value, effectSize: layer.effectSize || EFFECT_SIZE })}>
+            <option value="none">None</option>
+            <option value="shadow">Shadow</option>
+            <option value="glow">Glow</option>
+          </select>
+        </label>
+        {effect === 'glow' && (
+          <label className="yts-field is-small">
+            <span className="yts-label">Glow colour</span>
+            <input type="color" className="yts-color" value={layer.effectColor || GLOW_COLOR} aria-label="Glow colour"
+              onChange={(e) => onChange({ effectColor: e.target.value.toUpperCase() })} />
+          </label>
+        )}
+        {effect !== 'none' && (
+          <label className="yts-field">
+            <span className="yts-label">{effect === 'glow' ? 'Glow' : 'Shadow'} size ({layer.effectSize || EFFECT_SIZE})</span>
+            <input type="range" min="4" max="40" step="2" value={layer.effectSize || EFFECT_SIZE} aria-label="Effect size"
+              onChange={(e) => onChange({ effectSize: Number(e.target.value) })} />
+          </label>
+        )}
+      </div>
+      <div className="yts-row">
+        <label className="yts-check">
+          <input type="checkbox" checked={Boolean(layer.gradient)} aria-label="Fade to a second colour"
+            onChange={(e) => onChange({ gradient: e.target.checked ? FADE_COLOR : null })} />
+          Fade to a second colour
+        </label>
+        {layer.gradient && (
+          <label className="yts-field is-small">
+            <span className="yts-label">Fade to</span>
+            <input type="color" className="yts-color" value={layer.gradient} aria-label="Fade to colour"
+              onChange={(e) => onChange({ gradient: e.target.value.toUpperCase() })} />
+          </label>
+        )}
+      </div>
+      <div className="yts-row">
+        <label className="yts-field">
+          <span className="yts-label">Curve ({curve === 0 ? 'straight' : curve > 0 ? `arch up ${curve}°` : `bend down ${-curve}°`})</span>
+          <input type="range" min="-180" max="180" step="5" value={curve} aria-label="Curve"
+            onChange={(e) => onChange({ curve: Number(e.target.value) })} />
+        </label>
+        {curve !== 0 && (
+          <button type="button" className="yts-btn" onClick={() => onChange({ curve: 0 })}>Straighten</button>
+        )}
+      </div>
+      {curve !== 0 && <p className="yts-note">Curved words sit on one line.</p>}
     </div>
   );
 }

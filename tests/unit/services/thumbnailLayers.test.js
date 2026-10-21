@@ -258,6 +258,98 @@ describe('renderLayers', () => {
     expect(await pixel(card, 445, 360)).toEqual([255, 255, 255]); // the card's own edge, no red sticker edge
   });
 
+  // Text effects (Evoni, 2026-10-21).
+  const raw = async (png) => sharp(png).raw().toBuffer({ resolveWithObject: true });
+  /** Over a box of the PNG: f(r, g, b) for each pixel, gathered by reduce. */
+  const over = async (png, { x0, y0, x1, y1 }, f, start) => {
+    const { data, info } = await raw(png);
+    let acc = start;
+    for (let y = y0; y <= y1; y += 1) {
+      for (let x = x0; x <= x1; x += 1) {
+        const i = (y * info.width + x) * info.channels;
+        acc = f(acc, data[i], data[i + 1], data[i + 2], x, y);
+      }
+    }
+    return acc;
+  };
+
+  test('text effects are kept in range', () => {
+    const [, t] = L.readLayers(words({ effect: 'glow', effectColor: '#abcdef', effectSize: 99, gradient: '#00ff00', curve: 999 }), s3).layers;
+    expect(t).toMatchObject({ effect: 'glow', effectColor: '#ABCDEF', effectSize: 40, gradient: '#00FF00', curve: 180 });
+    const [, d] = L.readLayers(words({ effect: 'sparkle', effectColor: 'gold', effectSize: 1, gradient: 'pink', curve: -999 }), s3).layers;
+    expect(d).toMatchObject({ effect: 'none', effectColor: '#FFD86B', effectSize: 4, gradient: null, curve: -180 });
+    expect(L.textEffect(d)).toBeNull();
+    expect(L.textEffect({ effect: 'shadow', effectSize: 18 })).toEqual({ color: 'rgba(0,0,0,0.6)', blur: 18, offsetY: 6 });
+    expect(L.fancyWords(d)).toBe(true); // curved
+    expect(L.fancyWords({ effect: 'none', gradient: null, curve: 0 })).toBe(false);
+  });
+
+  test('curveLayout: letters spread evenly about the middle, rising to it (up) or falling (down); the line fits the box', () => {
+    const plain = (s, size) => String(s).length * size * 0.5;
+    const l = { curve: 90, size: 100, w: 600, h: 300, spacing: 0, bg: null };
+    const up = L.curveLayout('ABCDE', l, plain);
+    const xs = up.glyphs.map((g) => g.x);
+    expect(xs[2]).toBeCloseTo(0, 6);
+    expect(xs[0]).toBeCloseTo(-xs[4], 6);
+    expect(up.glyphs[2].y).toBeLessThan(up.glyphs[0].y); // the middle letter is highest
+    expect(up.glyphs[0].rotation).toBeLessThan(0);
+    expect(up.glyphs[4].rotation).toBeGreaterThan(0);
+    const down = L.curveLayout('ABCDE', { ...l, curve: -90 }, plain);
+    expect(down.glyphs[2].y).toBeGreaterThan(down.glyphs[0].y);
+    expect(down.glyphs[0].rotation).toBeGreaterThan(0);
+    // Too long for the box at 100: it comes down until it fits.
+    const long = L.curveLayout('ABCDEFGHIJKLMNOP', l, plain);
+    expect(long.size).toBeLessThan(100);
+    const R = (16 * long.size * 0.5) / (Math.PI / 2);
+    expect(2 * R * Math.sin(Math.PI / 4) + long.size).toBeLessThanOrEqual(600);
+  });
+
+  test('a glow lights the background round the words in its colour; none leaves it dark', async () => {
+    const above = { x0: 140, y0: 316, x1: 1139, y1: 326 }; // over the words, inside their box
+    const maxRed = (png) => over(png, above, (m, r) => Math.max(m, r), 0);
+    expect(await maxRed(await draw({ align: 'center' }))).toBe(0);
+    const lit = await draw({ align: 'center', effect: 'glow', effectColor: '#FF0000', effectSize: 30 });
+    expect(await maxRed(lit)).toBeGreaterThan(40);
+    expect(await over(lit, above, (m, r, g, b) => Math.max(m, g, b), 0)).toBeLessThan(10); // red, not white
+  });
+
+  test('a shadow darkens under the words; the words stay their colour', async () => {
+    const grey = await solid(1280, 720, '#808080');
+    const spec = (extra) => L.readLayers(words({ align: 'center', ...extra }), s3);
+    const below = { x0: 140, y0: 392, x1: 1139, y1: 402 };
+    const darkest = (png) => over(png, below, (m, r) => Math.min(m, r), 255);
+    expect(await darkest(await L.renderLayers(spec({}), { bg: grey }))).toBe(128);
+    const shadowed = await L.renderLayers(spec({ effect: 'shadow', effectSize: 24 }), { bg: grey });
+    expect(await darkest(shadowed)).toBeLessThan(110);
+    expect((await ink(shadowed, 330, 390)).right).toBeGreaterThan(0);
+  });
+
+  test('a fade: the words\' colour at the top, the second colour at the bottom', async () => {
+    const png = await draw({ text: 'HHHH', align: 'center', size: 110, color: '#FFFFFF', gradient: '#0000FF' });
+    // Average red of the drawn letters (blue above 100) in a top band and a bottom band of the line.
+    const band = (y0, y1) => over(png, { x0: 140, y0, x1: 1139, y1 }, (a, r, g, b) => (b > 100 ? { n: a.n + 1, r: a.r + r } : a), { n: 0, r: 0 });
+    const top = await band(322, 332);
+    const bottom = await band(388, 398);
+    expect(top.n).toBeGreaterThan(50);
+    expect(bottom.n).toBeGreaterThan(50);
+    expect(top.r / top.n).toBeGreaterThan(170);
+    expect(bottom.r / bottom.n).toBeLessThan(90);
+  });
+
+  test('curved words: up, the middle stands higher than the ends; down, lower', async () => {
+    const curved = (curve) => draw({ text: 'GLAMOROUS', align: 'center', size: 90, y: 200, h: 320, curve });
+    /** The topmost white pixel in a few columns about x. */
+    const topAt = async (png, x) => over(png, { x0: x - 30, y0: 200, x1: x + 30, y1: 519 }, (m, r, g, b, _x, y) => (r > 200 && g > 200 && b > 200 ? Math.min(m, y) : m), 720);
+    const { left, right } = await ink(await curved(150), 200, 519);
+    const upPng = await curved(150);
+    const mid = await topAt(upPng, 640);
+    expect(mid).toBeLessThan(await topAt(upPng, left + 40) - 40);
+    expect(mid).toBeLessThan(await topAt(upPng, right - 40) - 40);
+    const downPng = await curved(-150);
+    const d = await ink(downPng, 200, 519);
+    expect(await topAt(downPng, 640)).toBeGreaterThan(await topAt(downPng, d.left + 40) + 40);
+  });
+
   test('fontFile: only the thumbnail fonts', () => {
     expect(L.fontFile('script')).toMatch(/GreatVibes-Regular\.ttf$/);
     expect(L.fontFile('../../etc/passwd')).toBeNull();
