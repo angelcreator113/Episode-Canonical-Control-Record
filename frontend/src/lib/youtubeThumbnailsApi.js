@@ -118,6 +118,40 @@ export function episodeWords(episode, show) {
   };
 }
 
+/** A head-to-toe pose for Come Style Me's full outfit: her back pose, else her front; not the main one. */
+export function outfitPose(poses, mainUrl) {
+  for (const pose of ['back', 'front', 'side']) {
+    const list = (poses || []).filter((p) => p.pose === pose && p.url !== mainUrl);
+    const pick = list.find((p) => p.isDefault) || list[0];
+    if (pick) return pick.url;
+  }
+  return null;
+}
+
+/**
+ * An episode's words and pictures (its sources), as a template or a layout
+ * fills them: the Studio when an episode opens, and a whole season at once.
+ */
+export function episodeContent(src) {
+  // This episode's starred Lala pose first (her look changes each
+  // episode), then the show's saved Lala, then the Asset Library's.
+  const lalaUrl = defaultPose(src.poses?.lala)?.url || src.style?.lalaUrl || src.cutouts?.[0]?.url || null;
+  return {
+    ...episodeWords(src.episode, src.show),
+    backgroundUrl: src.backgrounds?.[0]?.url || null,
+    lalaUrl,
+    // JustAWoman joins only when picked.
+    jawUrl: null,
+    // Come Style Me: the full outfit is another of Lala's poses (her back
+    // or front), the checklist, edition and pieces come from the episode.
+    outfitUrl: outfitPose(src.poses?.lala, lalaUrl),
+    checklist: src.suggest?.checklist || [],
+    edition: src.suggest?.edition || null,
+    pieces: src.suggest?.pieces || [],
+    logoUrl: src.suggest?.logoUrl || null,
+  };
+}
+
 /**
  * The episode's current thumbnail, { id, url }, from the editor's saved
  * list (queries only migrated columns), or null when it has none. Pages
@@ -135,6 +169,9 @@ export async function currentThumbnail(episodeId) {
 export const youtubeThumbnailsApi = {
   sources: (episodeId) => api.get(`${base}/episodes/${episodeId}/sources`).then((r) => r.data?.data),
   render: (spec) => api.post(`${base}/render`, spec, { responseType: 'blob', timeout: 60000 }).then((r) => r.data),
+  // A whole season at once (Evoni, 2026-10-21): a small JPEG of the layers, and the show's episodes with their thumbnails.
+  renderSmall: (spec) => api.post(`${base}/render/small`, spec, { responseType: 'blob', timeout: 60000 }).then((r) => r.data),
+  season: (showId) => api.get(`${base}/shows/${showId}/season`).then((r) => (Array.isArray(r.data?.data) ? r.data.data : [])),
   save: (episodeId, spec) => api.post(`${base}/episodes/${episodeId}`, spec, { timeout: 60000 }).then((r) => r.data?.data),
   draft: (episodeId) => api.get(`${base}/episodes/${episodeId}/draft`).then((r) => r.data?.data || null),
   saveDraft: (episodeId, spec) => api.put(`${base}/episodes/${episodeId}/draft`, spec).then((r) => r.data?.data),

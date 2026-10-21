@@ -1027,10 +1027,50 @@ async function removeSaved(sequelize, episodeId, thumbnailId) {
   return { id: row.id };
 }
 
+// ── A whole season at once (Evoni, 2026-10-21) ──────────────────────────────
+
+const SEASON_MAX = 200;
+const SMALL_WIDTH = 640;
+
+/**
+ * The show's episodes in order, each with its current thumbnail (the
+ * primary one, else episodes.thumbnail_url; null when it has none) and
+ * whether it has its own arrangement (a draft).
+ */
+async function seasonEpisodes(sequelize, showId) {
+  const show = await findShow(sequelize, showId);
+  const drafts = await draftsReady(sequelize);
+  const [rows] = await sequelize.query(
+    `SELECT e.id, e.title, e.episode_number, e.thumbnail_url, t.url, t."s3Bucket", t."s3Key",
+            ${drafts ? 'EXISTS (SELECT 1 FROM episode_thumbnail_drafts d WHERE d.episode_id = e.id AND d.deleted_at IS NULL)' : 'false'} AS has_draft
+       FROM episodes e
+       LEFT JOIN LATERAL (
+         SELECT url, "s3Bucket", "s3Key" FROM thumbnails
+          WHERE "episodeId" = e.id AND "thumbnailType" = 'primary'
+          ORDER BY "generatedAt" DESC NULLS LAST, id DESC LIMIT 1
+       ) t ON true
+      WHERE e.show_id = :showId AND e.deleted_at IS NULL
+      ORDER BY e.episode_number ASC NULLS LAST, e.created_at ASC
+      LIMIT ${SEASON_MAX}`,
+    { replacements: { showId: show.id } });
+  return (rows || []).map((r) => ({
+    id: r.id,
+    title: r.title,
+    episode_number: r.episode_number,
+    thumbnailUrl: (r.s3Key || r.url ? rowUrl(r) : null) || r.thumbnail_url || null,
+    hasDraft: Boolean(r.has_draft),
+  }));
+}
+
+/** A small JPEG of a drawn thumbnail (640 × 360), for a grid of them. */
+async function smallPreview(png) {
+  return sharp(png).resize(SMALL_WIDTH).flatten({ background: '#000000' }).jpeg({ quality: 82, mozjpeg: true }).toBuffer();
+}
+
 module.exports = {
   WIDTH, HEIGHT, LAYOUTS, DEFAULT_STYLE, ThumbnailError, YOUTUBE_MAX_BYTES, forYouTube,
   readStyle, allowedImageUrl, fetchImage, previewImage, PREVIEW_WIDTHS, readyPoses, pictureFolders, libraryImages, outfitImages, layoutSuggestions,
-  sources, saveStyle, saveAsPrimary, listSaved, makePrimary, removeSaved,
+  sources, saveStyle, saveAsPrimary, listSaved, makePrimary, removeSaved, seasonEpisodes, smallPreview, SMALL_WIDTH,
   readTemplate, renderSpec, getDraft, saveDraft, uploadPicture, listUploads, labelOfUpload,
   LEGACY_ID, templateName, listTemplates, listAllTemplates, createTemplate, updateTemplate, deleteTemplate,
   VERSION_MAX, nextVersionName, listVersions, createVersion, updateVersion, deleteVersion,
