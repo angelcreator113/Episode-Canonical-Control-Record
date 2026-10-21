@@ -21,6 +21,7 @@ vi.mock('../lib/youtubeThumbnailsApi', async () => {
       sources: vi.fn(), render: vi.fn(), save: vi.fn(), saveStyle: vi.fn(), shows: vi.fn(), episodes: vi.fn(),
       saved: vi.fn(), makePrimary: vi.fn(), removeSaved: vi.fn(), saveDraft: vi.fn(), draft: vi.fn(), uploadPicture: vi.fn(),
       templates: vi.fn(), createTemplate: vi.fn(), updateTemplate: vi.fn(), deleteTemplate: vi.fn(),
+      versions: vi.fn(), createVersion: vi.fn(), updateVersion: vi.fn(), deleteVersion: vi.fn(),
     },
   };
 });
@@ -618,6 +619,80 @@ describe('YouTubeThumbnailStudio', () => {
     fireEvent.keyDown(window, { key: 'v', ctrlKey: true });
     await waitFor(() => expect(layerOf(lastDraft(), 'logo')).toMatchObject({ id: 'logo', x: 20, y: 20 }), { timeout: 3000 });
     expect((await screen.findByRole('status')).textContent).toContain('Pasted 1 layer from "Gala Night". Undo takes them away.');
+  });
+
+  test('versions to compare: keep the arrangement as one; compare Now with each at YouTube\'s sizes; use, rename, update, delete', async () => {
+    const red = { id: 'v-1', name: 'Version A', previewUrl: 'https://b.s3.amazonaws.com/va.jpg', spec: presetLayers('lala-left', { title: 'Red dress' }, {}) };
+    const gold = { id: 'v-2', name: 'Version B', previewUrl: 'https://b.s3.amazonaws.com/vb.jpg', spec: presetLayers('lala-left', { title: 'word '.repeat(30) }, {}) };
+    youtubeThumbnailsApi.sources.mockResolvedValue({ ...SOURCES, versions: [red] });
+    youtubeThumbnailsApi.createVersion.mockResolvedValue({ ...gold });
+    youtubeThumbnailsApi.versions.mockResolvedValue([red, gold]);
+    renderPage();
+    await opened();
+    const bar = () => within(screen.getByTestId('yts-versions'));
+    expect(bar().getByText('Version A')).toBeTruthy();
+    fireEvent.click(bar().getByTestId('yts-keep-version'));
+    await waitFor(() => expect(youtubeThumbnailsApi.createVersion).toHaveBeenCalledWith('ep-1', { spec: expect.objectContaining({ version: 2 }) }));
+    expect((await screen.findByRole('status')).textContent).toContain('Kept as "Version B".');
+    await waitFor(() => expect(bar().getByTestId('yts-version-v-2')).toBeTruthy());
+    // Compare: Now (the canvas's picture) and each version, at 360 and 168 wide, with how each reads.
+    fireEvent.click(screen.getByTestId('canvas-snapshot'));
+    fireEvent.click(bar().getByRole('button', { name: /Compare/ }));
+    const cmp = within(screen.getByTestId('yts-compare'));
+    expect(cmp.getAllByRole('img').map((i) => i.getAttribute('alt'))).toEqual([
+      'Now, 360 pixels wide', 'Now, 168 pixels wide', 'Version A, 360 pixels wide', 'Version A, 168 pixels wide', 'Version B, 360 pixels wide', 'Version B, 168 pixels wide',
+    ]);
+    expect(within(screen.getByTestId('yts-compare-v-1')).getByText('Reads at every size')).toBeTruthy();
+    expect(within(screen.getByTestId('yts-compare-v-2')).getByText(/^\d+ warnings?$/)).toBeTruthy();
+    fireEvent.click(within(screen.getByTestId('yts-compare-v-1')).getByRole('button', { name: 'Use this one' }));
+    await waitFor(() => expect(layerOf(lastDraft(), 'title').text).toBe('Red dress'), { timeout: 3000 });
+    expect(screen.queryByTestId('yts-compare')).toBeNull();
+    // Rename, update with this (asked first), delete (asked first).
+    const card = () => within(screen.getByTestId('yts-version-v-2'));
+    youtubeThumbnailsApi.updateVersion.mockResolvedValue({});
+    fireEvent.click(card().getByRole('button', { name: /Rename/ }));
+    fireEvent.change(card().getByRole('textbox', { name: 'New name for Version B' }), { target: { value: 'Gold dress' } });
+    fireEvent.click(card().getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(youtubeThumbnailsApi.updateVersion).toHaveBeenCalledWith('ep-1', 'v-2', { name: 'Gold dress' }));
+    fireEvent.click(card().getByRole('button', { name: 'Update with this' }));
+    expect(card().getByText('Replace "Version B" with this arrangement?')).toBeTruthy();
+    fireEvent.click(card().getByRole('button', { name: 'Yes' }));
+    await waitFor(() => expect(youtubeThumbnailsApi.updateVersion).toHaveBeenCalledWith('ep-1', 'v-2', { spec: expect.objectContaining({ version: 2 }) }));
+    youtubeThumbnailsApi.deleteVersion.mockResolvedValue({});
+    fireEvent.click(card().getByRole('button', { name: 'Delete Version B' }));
+    fireEvent.click(card().getByRole('button', { name: 'Yes' }));
+    await waitFor(() => expect(youtubeThumbnailsApi.deleteVersion).toHaveBeenCalledWith('ep-1', 'v-2'));
+  });
+
+  test('versions: one that cannot be kept says why', async () => {
+    youtubeThumbnailsApi.createVersion.mockRejectedValue({ response: { status: 409, data: { error: 'An episode keeps up to 12 versions; delete one first' } } });
+    renderPage();
+    await opened();
+    expect(within(screen.getByTestId('yts-versions')).getByText(/Try a few looks/)).toBeTruthy();
+    fireEvent.click(screen.getByTestId('yts-keep-version'));
+    expect((await screen.findByRole('alert')).textContent).toContain('An episode keeps up to 12 versions; delete one first');
+  });
+
+  test('Remove, by the picked layers: removes them (not locked ones); Undo brings them back', async () => {
+    renderPage();
+    await opened();
+    fireEvent.click(screen.getByTestId('canvas-title'));
+    const bar = () => within(screen.getByTestId('yts-arrange'));
+    fireEvent.click(bar().getByRole('button', { name: /^Remove$/ }));
+    expect(screen.queryByTestId('canvas-title')).toBeNull();
+    expect(screen.queryByTestId('yts-arrange')).toBeNull(); // nothing picked now
+    fireEvent.click(screen.getByRole('button', { name: /Undo/ }));
+    expect(screen.getByTestId('canvas-title')).toBeTruthy();
+    // Two picked, one locked: only the other goes.
+    fireEvent.click(screen.getByTestId('canvas-title'));
+    fireEvent.click(within(screen.getByTestId('yts-layers')).getByRole('button', { name: 'Lock Title' }));
+    fireEvent.click(within(screen.getByTestId('yts-layers')).getByRole('button', { name: 'Badge' }), { shiftKey: true });
+    expect(bar().getByRole('button', { name: /^Remove$/ }).disabled).toBe(false);
+    fireEvent.click(bar().getByRole('button', { name: /^Remove$/ }));
+    expect(screen.queryByTestId('canvas-badge')).toBeNull();
+    expect(screen.getByTestId('canvas-title')).toBeTruthy();
+    // Only a locked one picked: Remove is off.
+    expect(bar().getByRole('button', { name: /^Remove$/ }).disabled).toBe(true);
   });
 
   test('zoom: in and out by a quarter, 100% to 300%, Fit; +, - and 0 on the keyboard', async () => {
