@@ -24,6 +24,7 @@ const sharp = require('sharp');
 const layers = require('./thumbnailLayers');
 const { readDocuments } = require('./eventDocumentsService');
 const { readLogo } = require('./showLogoService');
+const { EPISODE_EVENT_ID_SQL } = require('../utils/episodeEventSql');
 const { PutObjectCommand, S3Client } = require('@aws-sdk/client-s3');
 
 const WIDTH = 1280;
@@ -396,8 +397,9 @@ const FALLBACK_CHECKLIST = ['Outfit', 'Accessories', 'Hair', 'Vibe'];
 /**
  * What the "Come Style Me" layout fills in for an episode (Evoni,
  * 2026-10-21; all of it editable before saving):
- *   checklist: 3-4 rows, ticked. The slots of the episode's event shopping
- *     list (world_events.used_in_episode_id; "dress", "shoes", ...); else
+ *   checklist: 3-4 rows, ticked. The slots of the episode's event's shopping
+ *     list (the episode's event by the one rule, utils/episodeEventSql;
+ *     "dress", "shoes", ...); else
  *     the outfit's categories with Hair and Vibe; else Outfit,
  *     Accessories, Hair, Vibe.
  *   edition: "<main piece> Edition" (the outfit's dress, else its first
@@ -409,9 +411,7 @@ async function layoutSuggestions(sequelize, episodeId, outfit = [], show = null)
   let event = null;
   try {
     const [[row]] = await sequelize.query(
-      `SELECT theme, canon_consequences FROM world_events
-        WHERE used_in_episode_id = :episodeId AND deleted_at IS NULL
-        ORDER BY updated_at DESC NULLS LAST LIMIT 1`,
+      `SELECT theme, canon_consequences FROM world_events WHERE id = ${EPISODE_EVENT_ID_SQL} LIMIT 1`,
       { replacements: { episodeId } });
     event = row || null;
   } catch (err) {
