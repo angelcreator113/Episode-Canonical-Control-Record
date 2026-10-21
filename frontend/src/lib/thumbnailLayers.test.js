@@ -6,7 +6,7 @@
  */
 import { describe, test, expect } from 'vitest';
 import {
-  toneValue, stickerMargin, STICKER_SHADOW,
+  toneValue, stickerMargin, STICKER_SHADOW, clearWhiteEdges,
   textEffect, fancyWords, curveLayout, wordsMargin, paintWords, wordsCanvas, GLOW_COLOR, EFFECT_SIZE,
   SHAPES, addShape, shapeCanvas, shapeMargin, shapeWordsBox,
   spaced, alignLayers, distributeLayers, layersInBox, youtubeWarnings, drawnSize, fileSize, TIMESTAMP_ZONE,
@@ -478,6 +478,41 @@ describe('addPieceCard (Evoni, 2026-10-21: an added outfit piece comes in on its
     ] };
     const added = addPieceCard(spec, 'https://b.s3.amazonaws.com/skirt.png', 'Skirt').layers.at(-1);
     expect(added).toMatchObject({ id: 'piece-2', role: null, w: 200, h: 180, fit: 'cover', cardColor: '#E6C98F', clearWhite: true, src: 'https://b.s3.amazonaws.com/skirt.png' });
+  });
+});
+
+describe('clearWhiteEdges (the server\'s, Evoni 2026-10-21: colour behind the wardrobe pieces)', () => {
+  /** w×h RGBA pixels from rows of 'W' (white), 'R' (red), 'n' (near white, 220). */
+  const pixels = (rows) => {
+    const d = new Uint8ClampedArray(rows.length * rows[0].length * 4);
+    rows.join('').split('').forEach((c, p) => {
+      const [r, g, b] = c === 'W' ? [255, 255, 255] : c === 'n' ? [220, 220, 220] : [255, 0, 0];
+      d.set([r, g, b, 255], p * 4);
+    });
+    return d;
+  };
+  const alphas = (d, w) => [...Array(d.length / 4)].map((_, p) => d[p * 4 + 3]).reduce((rows, a, p) => {
+    if (p % w === 0) rows.push([]);
+    rows.at(-1).push(a);
+    return rows;
+  }, []);
+
+  test('the white joined to the edges is cleared; white inside the piece stays; a near-white fringe is part see-through', () => {
+    const d = pixels([
+      'WWWWWW',
+      'WnRRRW',
+      'WRWWRW',
+      'WRRRRW',
+      'WWWWWW',
+    ]);
+    clearWhiteEdges(d, 6, 5);
+    expect(alphas(d, 6)).toEqual([
+      [0, 0, 0, 0, 0, 0],
+      [0, 109, 255, 255, 255, 0], // 220 is near white: 255 × (235 − 220) / (235 − 200)
+      [0, 255, 255, 255, 255, 0],
+      [0, 255, 255, 255, 255, 0],
+      [0, 0, 0, 0, 0, 0],
+    ]);
   });
 });
 

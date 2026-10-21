@@ -40,7 +40,7 @@ import {
 } from '../lib/youtubeThumbnailsApi';
 import {
   FONTS, presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer,
-  addText, addPicture, addPieceCard, layerName, loadThumbnailFonts, OUTLINE, BOX_COLOR, BOX_OPACITY, STICKER_EDGE, duplicateLayer, WIDTH, HEIGHT,
+  addText, addPicture, addPieceCard, layerName, loadThumbnailFonts, OUTLINE, BOX_COLOR, BOX_OPACITY, STICKER_EDGE, duplicateLayer, WIDTH, HEIGHT, CARD_COLOR,
   alignLayers, distributeLayers, measurer, youtubeWarnings, fixWarning, fixAllWarnings, fileSize, YOUTUBE_SIZES, GLOW_COLOR, FADE_COLOR, EFFECT_SIZE, SHAPES, addShape,
 } from '../lib/thumbnailLayers';
 import ThumbnailCanvas from '../components/Thumbnails/ThumbnailCanvas';
@@ -141,10 +141,33 @@ function FolderPicker({ title, tree, start, value, onPick, onUpload, uploading =
  * or darker, more or less contrast; on a picture without a photo card, a
  * sticker edge round a cut-out and a drop shadow under it.
  */
-function PictureEffects({ layer, onChange }) {
+function PictureEffects({ layer, onChange, colours = [], onRemember }) {
   const card = layer.frame === 'polaroid';
+  const cardColour = layer.cardColor || CARD_COLOR;
   return (
     <div className="yts-text-tools" data-testid="yts-picture-effects">
+      {card && (
+        // A coloured card (Evoni, 2026-10-21: colour behind the wardrobe pieces, not only white).
+        <fieldset className="yts-field">
+          <legend className="yts-label">Card colour</legend>
+          <div className="yts-swatches">
+            {[CARD_COLOR, ...colours.filter((c) => c !== CARD_COLOR)].map((c) => (
+              <button key={c} type="button" className={`yts-swatch${cardColour === c ? ' is-on' : ''}`} style={{ background: c }}
+                aria-label={`Card ${c}`} aria-pressed={cardColour === c} onClick={() => onChange({ cardColor: c })} />
+            ))}
+            <label className="yts-swatch-any" title="Any colour">
+              <Palette size={15} aria-hidden />
+              <input type="color" className="yts-color" value={cardColour} aria-label="Any card colour"
+                onChange={(e) => onChange({ cardColor: e.target.value.toUpperCase() })} onBlur={(e) => onRemember?.(e.target.value)} />
+            </label>
+          </div>
+        </fieldset>
+      )}
+      <label className="yts-check">
+        <input type="checkbox" checked={Boolean(layer.clearWhite)} aria-label="Clear the photo's white background"
+          onChange={(e) => onChange({ clearWhite: e.target.checked })} />
+        Clear the photo's white background{card ? ' (the card colour shows up to the piece)' : ''}
+      </label>
       <div className="yts-row">
         <button type="button" className={`yts-btn${layer.flipX ? ' is-primary' : ''}`} aria-pressed={Boolean(layer.flipX)}
           onClick={() => onChange({ flipX: !layer.flipX })}><FlipHorizontal2 size={16} aria-hidden /> Flip</button>
@@ -392,7 +415,7 @@ function ShapeSettings({ layer, onChange }) {
   );
 }
 
-function LayerSettings({ layer, onChange }) {
+function LayerSettings({ layer, onChange, colours, onRemember }) {
   if (!layer || layer.kind === 'shade') return null;
   return (
     <fieldset className="yts-field yts-layer-settings" data-testid="yts-layer-settings">
@@ -439,7 +462,7 @@ function LayerSettings({ layer, onChange }) {
           </label>
         </div>
       )}
-      {layer.kind === 'image' && <PictureEffects layer={layer} onChange={onChange} />}
+      {layer.kind === 'image' && <PictureEffects layer={layer} onChange={onChange} colours={colours} onRemember={onRemember} />}
       <div className="yts-row yts-box-fields">
         {[['x', 'Left', -WIDTH, WIDTH * 2], ['y', 'Top', -HEIGHT, HEIGHT * 2], ['w', 'Width', 10, WIDTH * 3], ['h', 'Height', 10, HEIGHT * 3]].map(([key, label, min, max]) => (
           <label key={key} className="yts-field is-small">
@@ -1452,7 +1475,8 @@ export default function YouTubeThumbnailStudio() {
             {saved && (
               <p className="yts-saved"><Check size={16} aria-hidden /> Saved. <Link to={`/episodes/${episodeId}?tab=production`}>Back to Production</Link></p>
             )}
-            <LayerSettings layer={picked} onChange={(patch) => edit((s) => updateLayer(s, picked.id, patch))} />
+            <LayerSettings layer={picked} onChange={(patch) => edit((s) => updateLayer(s, picked.id, patch))}
+              colours={[...ACCENTS, ...recentColours.filter((c) => !ACCENTS.includes(c))]} onRemember={remember} />
             <LayersList spec={spec} selectedId={selectedId} pickedIds={pickedIds} onSelect={select} onChange={edit} onDuplicate={duplicate} />
           </section>
 

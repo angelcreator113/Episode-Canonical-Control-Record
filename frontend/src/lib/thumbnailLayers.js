@@ -35,6 +35,8 @@ export const BOX_COLOR = '#2C2C2C';
 export const BOX_OPACITY = 0.6;
 // A sticker edge starts white, as cut-out stickers are (Evoni, 2026-10-21: picture effects).
 export const STICKER_EDGE = '#FFFFFF';
+// A photo card is white unless a colour is chosen (Evoni, 2026-10-21: coloured cards for the wardrobe pieces).
+export const CARD_COLOR = '#FFFFFF';
 
 export const fontCss = (key, size) => {
   const f = FONTS[key] || FONTS.serif;
@@ -707,9 +709,41 @@ export function drawRes(scale, ratio = (typeof window !== 'undefined' && window.
   return Math.min(3, Math.max(1, Math.ceil(scale * ratio * 2) / 2));
 }
 
-/** The picture as it is drawn: turned left to right and toned when asked; else the picture itself. */
+const WHITE = 235;
+const NEAR = 200;
+
+/** The server's clearWhiteEdges: clears the white joined to the picture's edges, its near-white fringe part see-through. */
+export function clearWhiteEdges(d, w, h) {
+  const n = w * h;
+  const low = (p) => Math.min(d[p * 4], d[p * 4 + 1], d[p * 4 + 2]);
+  const cleared = new Uint8Array(n);
+  const queue = new Int32Array(n);
+  let tail = 0;
+  const visit = (p) => {
+    if (!cleared[p] && d[p * 4 + 3] > 0 && low(p) >= WHITE) { cleared[p] = 1; queue[tail++] = p; }
+  };
+  for (let x = 0; x < w; x += 1) { visit(x); visit((h - 1) * w + x); }
+  for (let y = 0; y < h; y += 1) { visit(y * w); visit(y * w + w - 1); }
+  for (let head = 0; head < tail; head += 1) {
+    const p = queue[head];
+    const x = p % w;
+    if (x > 0) visit(p - 1);
+    if (x < w - 1) visit(p + 1);
+    if (p >= w) visit(p - w);
+    if (p < n - w) visit(p + w);
+  }
+  for (let p = 0; p < n; p += 1) {
+    if (cleared[p]) { d[p * 4 + 3] = 0; continue; }
+    const x = p % w;
+    const touches = (x > 0 && cleared[p - 1]) || (x < w - 1 && cleared[p + 1]) || (p >= w && cleared[p - w]) || (p < n - w && cleared[p + w]);
+    const v = low(p);
+    if (touches && v >= NEAR) d[p * 4 + 3] = Math.round((d[p * 4 + 3] * (WHITE - v)) / (WHITE - NEAR));
+  }
+}
+
+/** The picture as it is drawn: turned left to right, its white background cleared and toned when asked; else the picture itself. */
 export function adjustedPicture(img, l, make = makeCanvas) {
-  if (!img || (!l.flipX && !l.brightness && !l.contrast)) return img;
+  if (!img || (!l.flipX && !l.brightness && !l.contrast && !l.clearWhite)) return img;
   const c = make(img.width, img.height);
   const cx = c.getContext('2d');
   if (l.flipX) {
@@ -717,11 +751,12 @@ export function adjustedPicture(img, l, make = makeCanvas) {
     cx.scale(-1, 1);
   }
   cx.drawImage(img, 0, 0);
-  if (l.brightness || l.contrast) {
+  if (l.brightness || l.contrast || l.clearWhite) {
     try {
       const data = cx.getImageData(0, 0, img.width, img.height);
       const d = data.data;
-      for (let i = 0; i < d.length; i += 4) {
+      if (l.clearWhite) clearWhiteEdges(d, img.width, img.height);
+      for (let i = 0; i < d.length && (l.brightness || l.contrast); i += 4) {
         d[i] = toneValue(d[i], l.brightness || 0, l.contrast || 0);
         d[i + 1] = toneValue(d[i + 1], l.brightness || 0, l.contrast || 0);
         d[i + 2] = toneValue(d[i + 2], l.brightness || 0, l.contrast || 0);
