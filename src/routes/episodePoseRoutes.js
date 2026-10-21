@@ -84,7 +84,9 @@ router.post('/:episodeId', requireAuth, aiRateLimiter, (req, res) => {
         width: info.width, height: info.height,
         original_key: originalKey, original_url: originalUrl, created_by: req.user?.id ? String(req.user.id) : null,
       });
-      media.enqueue(models.sequelize, { poseId: id, episodeId: episode.id, originalKey, buffer: file.buffer });
+      media.enqueue(models.sequelize, {
+        poseId: id, episodeId: episode.id, originalKey, characterKey: fields.character_key, buffer: file.buffer,
+      });
       return res.status(202).json({ success: true, data: row });
     } catch (err) {
       return sendError(res, err, 'upload');
@@ -110,7 +112,9 @@ router.post('/:episodeId/:poseId/reprocess', requireAuth, aiRateLimiter, async (
       return res.status(409).json({ success: false, error: 'This photo is already being processed' });
     }
     const row = await poses.setState(models.sequelize, pose.id, 'queued', { steps: {} });
-    media.enqueue(models.sequelize, { poseId: pose.id, episodeId: pose.episode_id, originalKey: pose.original_key });
+    media.enqueue(models.sequelize, {
+      poseId: pose.id, episodeId: pose.episode_id, originalKey: pose.original_key, characterKey: pose.character_key,
+    });
     return res.status(202).json({ success: true, data: row });
   } catch (err) {
     return sendError(res, err, 'reprocess');

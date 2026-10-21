@@ -20,6 +20,10 @@
  *   4. Edges: the faint halo remove.bg leaves is cut, the edge softened by
  *      half a pixel, and the empty margin trimmed (8px kept). sharp again.
  *
+ * JustAWoman's photos keep their background (Evoni, 2026-10-21;
+ * episodePosesService.KEEP_BACKGROUND): steps 1-2 only, and the enhanced
+ * photo is the final one.
+ *
  * Files, under episodes/{episodeId}/poses/{poseId}/: original.<ext> (never
  * changed), {run}-enhanced.jpg (steps 1-2, with its background) and
  * {run}-final.png (the cut-out). {run} is the run's time, so a reprocess
@@ -213,7 +217,7 @@ const skipReason = (err) => (isBudgetError(err) ? "skipped: today's image budget
  * failure records what was done.
  */
 async function processPose(job) {
-  const { sequelize, poseId, episodeId, originalKey, steps } = job;
+  const { sequelize, poseId, episodeId, originalKey, characterKey, steps } = job;
   const prefix = posePrefix(episodeId, poseId);
   const run = Date.now();
   await poses.setState(sequelize, poseId, 'processing', { steps });
@@ -241,6 +245,16 @@ async function processPose(job) {
   }
   await poses.setState(sequelize, poseId, 'processing', { steps, enhancedKey, enhancedUrl });
 
+  // JustAWoman keeps her background: the enhanced photo is the final one,
+  // with no remove.bg call and no edge cleanup.
+  if (poses.keepsBackground(characterKey)) {
+    steps.background = 'kept';
+    await poses.setState(sequelize, poseId, 'ready', {
+      steps, finalKey: enhancedKey, finalUrl: enhancedUrl, finalWidth: enhanced.width, finalHeight: enhanced.height,
+    });
+    return;
+  }
+
   const cut = await removeBackground(enhanced.buffer);
   steps.background = cut.provider;
   const final = await cleanEdges(cut.buffer);
@@ -263,12 +277,13 @@ const activeIds = () => [...active];
 
 /**
  * Queues a pose. buffer: the original, when the upload still has it;
- * otherwise the job downloads originalKey. False when it is already queued.
+ * otherwise the job downloads originalKey. characterKey decides whether the
+ * background comes off. False when it is already queued.
  */
-function enqueue(sequelize, { poseId, episodeId, originalKey, buffer = null }) {
+function enqueue(sequelize, { poseId, episodeId, originalKey, characterKey = null, buffer = null }) {
   if (active.has(poseId)) return false;
   active.add(poseId);
-  queue.push({ sequelize, poseId, episodeId, originalKey, buffer, steps: {} });
+  queue.push({ sequelize, poseId, episodeId, originalKey, characterKey, buffer, steps: {} });
   setImmediate(drain);
   return true;
 }
