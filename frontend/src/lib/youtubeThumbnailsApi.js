@@ -190,6 +190,11 @@ export const youtubeThumbnailsApi = {
   createTemplate: (showId, body) => api.post(`${base}/shows/${showId}/templates`, body, { timeout: 60000 }).then((r) => r.data?.data),
   updateTemplate: (showId, templateId, body) => api.patch(`${base}/shows/${showId}/templates/${templateId}`, body, { timeout: 60000 }).then((r) => r.data?.data),
   deleteTemplate: (showId, templateId) => api.delete(`${base}/shows/${showId}/templates/${templateId}`).then((r) => r.data?.data),
+  // An episode's versions to compare (Evoni, 2026-10-21).
+  versions: (episodeId) => api.get(`${base}/episodes/${episodeId}/versions`).then((r) => (Array.isArray(r.data?.data) ? r.data.data : [])),
+  createVersion: (episodeId, body) => api.post(`${base}/episodes/${episodeId}/versions`, body, { timeout: 60000 }).then((r) => r.data?.data),
+  updateVersion: (episodeId, versionId, body) => api.patch(`${base}/episodes/${episodeId}/versions/${versionId}`, body, { timeout: 60000 }).then((r) => r.data?.data),
+  deleteVersion: (episodeId, versionId) => api.delete(`${base}/episodes/${episodeId}/versions/${versionId}`).then((r) => r.data?.data),
   shows: () => api.get('/api/v1/shows').then((r) => (Array.isArray(r.data?.data) ? r.data.data : [])),
   // Every episode, in order. A single limit=500 request was refused (the
   // server allows 100), which left the Episode list empty.

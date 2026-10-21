@@ -174,6 +174,8 @@ async function sources(sequelize, episodeId) {
     // this episode's draft.
     ...await templatesAndDefault(sequelize, show),
     draft: await getDraft(sequelize, episode.id),
+    // Versions kept to compare (Evoni, 2026-10-21).
+    versions: await listVersions(sequelize, episode.id),
   };
 }
 
@@ -494,19 +496,22 @@ async function listAllTemplates(sequelize) {
   }).filter((g) => g.templates.length);
 }
 
-/** A small picture of a template (640×360 JPEG in S3), or null when it cannot be drawn. */
-async function drawTemplatePreview(showId, templateId, spec) {
+/** A small picture of some layers (640×360 JPEG in S3, under prefix), or null when it cannot be drawn. */
+async function drawLayersPreview(prefix, id, spec) {
   try {
     const png = await renderSpec(spec);
     const jpg = await sharp(png).resize(PREVIEW_SIZE.width, PREVIEW_SIZE.height).jpeg({ quality: 82 }).toBuffer();
-    const key = `shows/${showId}/thumbnail-templates/${templateId}-${Date.now()}.jpg`;
+    const key = `${prefix}/${id}-${Date.now()}.jpg`;
     await getS3().send(new PutObjectCommand({ Bucket: requireAssetBucket(), Key: key, Body: jpg, ContentType: 'image/jpeg' }));
     return `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`;
   } catch (err) {
-    console.error(`[YouTubeThumbnail] template ${templateId}'s picture could not be drawn:`, err.message);
+    console.error(`[YouTubeThumbnail] the picture of ${prefix}/${id} could not be drawn:`, err.message);
     return null;
   }
 }
+
+/** A small picture of a template (640×360 JPEG in S3), or null when it cannot be drawn. */
+const drawTemplatePreview = (showId, templateId, spec) => drawLayersPreview(`shows/${showId}/thumbnail-templates`, templateId, spec);
 
 async function setPreview(sequelize, templateId, url) {
   if (!url) return;
@@ -651,6 +656,142 @@ async function deleteTemplate(sequelize, showId, rawTemplateId) {
     }
     return { id: found.id };
   });
+}
+
+// ── An episode's versions to compare (Evoni, 2026-10-21: "versions to
+// compare"; episode_thumbnail_versions) ────────────────────────────────────
+
+const VERSION_MAX = 12;
+
+const versionsReady = async (sequelize) => {
+  const [[reg]] = await sequelize.query("SELECT to_regclass('public.episode_thumbnail_versions') AS reg");
+  return Boolean(reg && reg.reg);
+};
+
+const requireVersions = async (sequelize) => {
+  if (!await versionsReady(sequelize)) {
+    throw new ThumbnailError(503, 'Versions need the latest database update (episode_thumbnail_versions)');
+  }
+};
+
+/** A version's name: trimmed, 1 to 80 characters. */
+function versionName(raw) {
+  const name = typeof raw === 'string' ? raw.trim().replace(/\s+/g, ' ') : '';
+  if (!name || name.length > TEMPLATE_NAME_MAX) throw new ThumbnailError(400, `A version needs a name of 1 to ${TEMPLATE_NAME_MAX} characters`);
+  return name;
+}
+
+/** The first of "Version A", "Version B", ... the episode does not have yet. */
+function nextVersionName(names) {
+  const taken = new Set(names.map((n) => String(n).toLowerCase()));
+  for (let i = 0; i < 26; i += 1) {
+    const name = `Version ${String.fromCharCode(65 + i)}`;
+    if (!taken.has(name.toLowerCase())) return name;
+  }
+  return `Version ${names.length + 1}`;
+}
+
+const versionOut = (r) => ({ id: r.id, name: r.name, previewUrl: r.preview_url || null, spec: readTemplate(r.spec), updatedAt: r.updated_at });
+
+async function findEpisode(sequelize, episodeId, transaction) {
+  if (!UUID.test(String(episodeId))) throw new ThumbnailError(404, 'Episode not found');
+  const [[episode]] = await sequelize.query(
+    'SELECT id FROM episodes WHERE id = :episodeId AND deleted_at IS NULL LIMIT 1',
+    { replacements: { episodeId }, transaction });
+  if (!episode) throw new ThumbnailError(404, 'Episode not found');
+  return episode;
+}
+
+const versionIdOf = (id) => {
+  if (UUID.test(String(id))) return id;
+  throw new ThumbnailError(404, 'Version not found');
+};
+
+/** The episode's versions, oldest first ([] until their table exists). */
+async function listVersions(sequelize, episodeId) {
+  if (!UUID.test(String(episodeId)) || !await versionsReady(sequelize)) return [];
+  const [rows] = await sequelize.query(
+    `SELECT id, name, spec, preview_url, updated_at FROM episode_thumbnail_versions
+      WHERE episode_id = :episodeId AND deleted_at IS NULL ORDER BY created_at, id`,
+    { replacements: { episodeId } });
+  return rows.map(versionOut);
+}
+
+const drawVersionPreview = (episodeId, versionId, spec) => drawLayersPreview(`episodes/${episodeId}/thumbnail-versions`, versionId, spec);
+
+/** Keeps the arrangement as a version. body: { spec, name? } (the next "Version A, B, ..." when no name). At most 12. */
+async function createVersion(sequelize, episodeId, body = {}, userId = null) {
+  await requireVersions(sequelize);
+  const spec = layers.readLayers(body.spec, allowedImageUrl);
+  const given = body.name !== undefined && body.name !== null && String(body.name).trim() ? versionName(body.name) : null;
+  let row;
+  try {
+    row = await sequelize.transaction(async (transaction) => {
+      const episode = await findEpisode(sequelize, episodeId, transaction);
+      const [names] = await sequelize.query(
+        'SELECT name FROM episode_thumbnail_versions WHERE episode_id = :episodeId AND deleted_at IS NULL',
+        { replacements: { episodeId: episode.id }, transaction });
+      if (names.length >= VERSION_MAX) throw new ThumbnailError(409, `An episode keeps up to ${VERSION_MAX} versions; delete one first`);
+      const name = given || nextVersionName(names.map((n) => n.name));
+      const [[created]] = await sequelize.query(
+        `INSERT INTO episode_thumbnail_versions (episode_id, name, spec, created_by)
+         VALUES (:episodeId, :name, CAST(:spec AS jsonb), :userId)
+         RETURNING id, name, spec, preview_url, updated_at`,
+        { replacements: { episodeId: episode.id, name, spec: JSON.stringify(spec), userId }, transaction });
+      return created;
+    });
+  } catch (err) {
+    if (nameTaken(err)) throw new ThumbnailError(409, 'That name is taken');
+    throw err;
+  }
+  row.preview_url = await drawVersionPreview(episodeId, row.id, spec);
+  if (row.preview_url) {
+    await sequelize.query('UPDATE episode_thumbnail_versions SET preview_url = :url WHERE id = :id', { replacements: { url: row.preview_url, id: row.id } });
+  }
+  return versionOut(row);
+}
+
+/** Renames a version (body.name) and/or replaces its layers and picture (body.spec). */
+async function updateVersion(sequelize, episodeId, rawVersionId, body = {}) {
+  await requireVersions(sequelize);
+  const versionId = versionIdOf(rawVersionId);
+  const name = body.name !== undefined ? versionName(body.name) : undefined;
+  const spec = body.spec !== undefined ? layers.readLayers(body.spec, allowedImageUrl) : undefined;
+  let row;
+  try {
+    row = await sequelize.transaction(async (transaction) => {
+      const episode = await findEpisode(sequelize, episodeId, transaction);
+      const [[updated]] = await sequelize.query(
+        `UPDATE episode_thumbnail_versions
+            SET name = COALESCE(:name, name), spec = COALESCE(CAST(:spec AS jsonb), spec), updated_at = NOW()
+          WHERE id = :versionId AND episode_id = :episodeId AND deleted_at IS NULL
+          RETURNING id, name, spec, preview_url, updated_at`,
+        { replacements: { versionId, episodeId: episode.id, name: name ?? null, spec: spec ? JSON.stringify(spec) : null }, transaction });
+      if (!updated) throw new ThumbnailError(404, 'Version not found');
+      return updated;
+    });
+  } catch (err) {
+    if (nameTaken(err)) throw new ThumbnailError(409, 'That name is taken');
+    throw err;
+  }
+  if (spec) {
+    row.preview_url = await drawVersionPreview(episodeId, row.id, spec) || row.preview_url;
+    await sequelize.query('UPDATE episode_thumbnail_versions SET preview_url = :url WHERE id = :id', { replacements: { url: row.preview_url, id: row.id } });
+  }
+  return versionOut(row);
+}
+
+/** Deletes a version (kept with deleted_at). */
+async function deleteVersion(sequelize, episodeId, rawVersionId) {
+  await requireVersions(sequelize);
+  const versionId = versionIdOf(rawVersionId);
+  const episode = await findEpisode(sequelize, episodeId);
+  const [rows] = await sequelize.query(
+    `UPDATE episode_thumbnail_versions SET deleted_at = NOW()
+      WHERE id = :versionId AND episode_id = :episodeId AND deleted_at IS NULL RETURNING id`,
+    { replacements: { versionId, episodeId: episode.id } });
+  if (!rows.length) throw new ThumbnailError(404, 'Version not found');
+  return { id: versionId };
 }
 
 let s3 = null;
@@ -932,4 +1073,5 @@ module.exports = {
   sources, saveStyle, saveAsPrimary, listSaved, makePrimary, removeSaved, seasonEpisodes, smallPreview, SMALL_WIDTH,
   readTemplate, renderSpec, getDraft, saveDraft, uploadPicture, listUploads, labelOfUpload,
   LEGACY_ID, templateName, listTemplates, listAllTemplates, createTemplate, updateTemplate, deleteTemplate,
+  VERSION_MAX, nextVersionName, listVersions, createVersion, updateVersion, deleteVersion,
 };

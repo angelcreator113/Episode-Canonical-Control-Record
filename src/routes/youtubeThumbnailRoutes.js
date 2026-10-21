@@ -16,6 +16,10 @@
  *   POST /shows/:showId/templates        save a new named template { name, spec, makeDefault? }
  *   PATCH /shows/:showId/templates/:templateId   rename, replace its layers, or make it the default
  *   DELETE /shows/:showId/templates/:templateId  delete one (the next becomes the default)
+ *   GET  /episodes/:episodeId/versions   the episode's versions to compare, with their pictures
+ *   POST /episodes/:episodeId/versions   keep the arrangement as a version { spec, name? }
+ *   PATCH /episodes/:episodeId/versions/:versionId   rename it, or replace its layers
+ *   DELETE /episodes/:episodeId/versions/:versionId  delete one
  *   GET  /episodes/:episodeId/saved      the episode's saved thumbnails, its current one first
  *   POST /episodes/:episodeId/saved/:thumbnailId/primary   make a saved one the episode's thumbnail
  *   DELETE /episodes/:episodeId/saved/:thumbnailId          delete a saved one (not the current one)
@@ -170,6 +174,39 @@ router.delete('/shows/:showId/templates/:templateId', requireAuth, async (req, r
     return res.json({ success: true, data: await yt.deleteTemplate(models.sequelize, req.params.showId, req.params.templateId) });
   } catch (err) {
     return sendError(res, err, 'template delete');
+  }
+});
+
+// An episode's versions to compare (Evoni, 2026-10-21).
+router.get('/episodes/:episodeId/versions', requireAuth, async (req, res) => {
+  try {
+    return res.json({ success: true, data: await yt.listVersions(models.sequelize, req.params.episodeId) });
+  } catch (err) {
+    return sendError(res, err, 'versions');
+  }
+});
+
+router.post('/episodes/:episodeId/versions', requireAuth, async (req, res) => {
+  try {
+    return res.status(201).json({ success: true, data: await yt.createVersion(models.sequelize, req.params.episodeId, readBody(req), userOf(req)) });
+  } catch (err) {
+    return sendError(res, err, 'version save');
+  }
+});
+
+router.patch('/episodes/:episodeId/versions/:versionId', requireAuth, async (req, res) => {
+  try {
+    return res.json({ success: true, data: await yt.updateVersion(models.sequelize, req.params.episodeId, req.params.versionId, readBody(req)) });
+  } catch (err) {
+    return sendError(res, err, 'version change');
+  }
+});
+
+router.delete('/episodes/:episodeId/versions/:versionId', requireAuth, async (req, res) => {
+  try {
+    return res.json({ success: true, data: await yt.deleteVersion(models.sequelize, req.params.episodeId, req.params.versionId) });
+  } catch (err) {
+    return sendError(res, err, 'version delete');
   }
 });
 
