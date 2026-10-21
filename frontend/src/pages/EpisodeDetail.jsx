@@ -38,6 +38,7 @@ const EpisodeResultsStory = lazy(() => import('../components/Episodes/EpisodeRes
 const PhonePreviewMode = lazy(() => import('../components/PhonePreviewMode'));
 import usePhonePlayback from '../hooks/usePhonePlayback';
 import api from '../services/api';
+import { fetchAllEpisodes } from '../lib/fetchAllPages';
 import { getEpisodeEvents } from '../services/episodeEventsApi';
 import { EP_TABS, resolveEpisodeTab, withEpisodeTab } from '../utils/episodeTabs';
 import { closetBeat } from '../lib/scriptMoments';
@@ -65,8 +66,9 @@ const TAB_ICONS = { overview: Sparkles, scripts: PenLine, production: CalendarDa
 export const listEpisodeLibraryScenesApi = (epId) =>
   api.get(`/api/v1/episodes/${epId}/library-scenes`).then((r) => r.data);
 // The show's episodes in order, for the header's previous/next switcher.
+// Paged, 100 at a time: the server refuses a limit over 100.
 export const listShowEpisodesApi = (showId) =>
-  api.get(`/api/v1/episodes?show_id=${showId}&limit=500&sort=episode_number:ASC`).then((r) => r.data?.data || []);
+  fetchAllEpisodes(api, showId, { sort: 'episode_number:ASC' }).then((r) => r.items);
 export const listWorldEventsApi = (showId) =>
   api.get(`/api/v1/world/${showId}/events`).then((r) => r.data);
 // Lala's ledger balance for the header chip: the same /balance the Dashboard

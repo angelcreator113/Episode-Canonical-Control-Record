@@ -6,6 +6,7 @@
  * other page links here with thumbnailStudioHref.
  */
 import api from '../services/api';
+import { fetchAllEpisodes } from './fetchAllPages';
 
 const base = '/api/v1/youtube-thumbnails';
 
@@ -100,6 +101,7 @@ export const youtubeThumbnailsApi = {
   removeSaved: (episodeId, thumbnailId) => api.delete(`${base}/episodes/${episodeId}/saved/${thumbnailId}`).then((r) => r.data?.data),
   saveStyle: (showId, style) => api.put(`${base}/shows/${showId}/style`, style).then((r) => r.data?.data),
   shows: () => api.get('/api/v1/shows').then((r) => (Array.isArray(r.data?.data) ? r.data.data : [])),
-  episodes: (showId) => api.get(`/api/v1/episodes?show_id=${showId}&limit=500&sort=episode_number:ASC`)
-    .then((r) => (Array.isArray(r.data?.data) ? r.data.data : [])),
+  // Every episode, in order. A single limit=500 request was refused (the
+  // server allows 100), which left the Episode list empty.
+  episodes: (showId) => fetchAllEpisodes(api, showId, { sort: 'episode_number:ASC' }).then((r) => r.items),
 };

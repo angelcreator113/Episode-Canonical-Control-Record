@@ -163,10 +163,11 @@ export default function YouTubeThumbnailStudio() {
         const blob = await youtubeThumbnailsApi.render(spec, files);
         if (id !== renderId.current) return;
         setPreview((old) => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(blob); });
-        setMessage((m) => (m?.type === 'error' ? null : m));
+        // A good preview clears only a failed preview, not e.g. the episode list's error.
+        setMessage((m) => (m?.from === 'preview' ? null : m));
       } catch (err) {
         console.error('[YouTubeThumbnails] preview failed:', err);
-        if (id === renderId.current) setMessage({ type: 'error', text: 'The preview could not be made. Check the pictures.' });
+        if (id === renderId.current) setMessage({ type: 'error', from: 'preview', text: 'The preview could not be made. Check the pictures.' });
       } finally {
         if (id === renderId.current) setRendering(false);
       }
