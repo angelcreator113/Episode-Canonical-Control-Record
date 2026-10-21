@@ -10,7 +10,7 @@ import {
   textEffect, fancyWords, curveLayout, wordsMargin, paintWords, wordsCanvas, GLOW_COLOR, EFFECT_SIZE,
   spaced, alignLayers, distributeLayers, layersInBox, youtubeWarnings, drawnSize, fileSize, TIMESTAMP_ZONE,
   READABLE_SIZE, readablePatch, clearOfTimestamp, fixWarning, fixAllWarnings, finerCanvas, drawRes, WIDTH, HEIGHT,
-  presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer, addText, addPicture,
+  presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer, addText, addPicture, addPieceCard,
   boxFromNode, fitText, fitPicture, layerName, LINE_HEIGHT, checklistRows, duplicateLayer, snapBox, SNAP,
 } from './thumbnailLayers';
 
@@ -465,5 +465,17 @@ describe('finer canvases (Evoni, 2026-10-21: adjusted pictures must not lose qua
     const out = wordsCanvas(l, make);
     const m = wordsMargin(l);
     expect(out.getContext().calls).toEqual([['image', [0, 0, 400 + m * 2, 100 + m * 2], 36, 12]]);
+  });
+});
+
+describe('addPieceCard (Evoni, 2026-10-21: an added outfit piece comes in on its card)', () => {
+  test('like the pieces already there: their size, fit and card look; else 172 square; in the middle, on top', () => {
+    const bare = addPieceCard({ version: 2, layers: [] }, 'https://b.s3.amazonaws.com/top.png', 'Silk top');
+    expect(bare.layers[0]).toMatchObject({ id: 'piece-1', kind: 'image', frame: 'polaroid', fit: 'contain', w: 172, h: 172, x: 554, y: 274, name: 'Silk top' });
+    const spec = { version: 2, layers: [
+      { id: 'piece-1', role: 'piece-1', kind: 'image', frame: 'polaroid', fit: 'cover', w: 200, h: 180, cardColor: '#E6C98F', clearWhite: true },
+    ] };
+    const added = addPieceCard(spec, 'https://b.s3.amazonaws.com/skirt.png', 'Skirt').layers.at(-1);
+    expect(added).toMatchObject({ id: 'piece-2', role: null, w: 200, h: 180, fit: 'cover', cardColor: '#E6C98F', clearWhite: true, src: 'https://b.s3.amazonaws.com/skirt.png' });
   });
 });

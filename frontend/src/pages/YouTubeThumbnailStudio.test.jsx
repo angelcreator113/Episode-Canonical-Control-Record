@@ -344,9 +344,18 @@ describe('YouTubeThumbnailStudio', () => {
     await waitFor(() => expect(youtubeThumbnailsApi.saveDraft).toHaveBeenCalled(), { timeout: 3000 });
     const spec = lastDraft();
     // The title went back one, behind Lala.
-    expect(spec.layers.map((l) => l.id)).toEqual(['background', 'shade', 'title', 'lala', 'badge', 'text-1', 'picture-1']);
+    expect(spec.layers.map((l) => l.id)).toEqual(['background', 'shade', 'title', 'lala', 'badge', 'text-1', 'piece-1']);
     expect(layerOf(spec, 'badge').visible).toBe(false);
-    expect(spec.layers.at(-1)).toMatchObject({ src: 'https://b.s3.amazonaws.com/dress.png', name: 'Sweater dress' });
+    // An outfit piece comes in on a photo card, as the layout's pieces do (Evoni, 2026-10-21).
+    expect(spec.layers.at(-1)).toMatchObject({ src: 'https://b.s3.amazonaws.com/dress.png', name: 'Sweater dress', frame: 'polaroid', w: 172, h: 172 });
+  });
+
+  test('saved thumbnails that do not load: the message says the server\'s answer', async () => {
+    youtubeThumbnailsApi.saved.mockRejectedValue({ response: { status: 500, data: { error: 'column "url" does not exist' } } });
+    renderPage();
+    await opened();
+    expect((await screen.findByText(/^Could not load the saved thumbnails/)).textContent)
+      .toBe('Could not load the saved thumbnails (500: column "url" does not exist).');
   });
 
   test('an upload is kept on the server, used, and listed in Uploads', async () => {

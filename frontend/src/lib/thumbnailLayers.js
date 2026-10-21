@@ -354,6 +354,26 @@ export const addPicture = (spec, url, name) => ({
 });
 
 /**
+ * Adds an outfit piece on a photo card (Evoni, 2026-10-21: an added piece
+ * came in without its card), like the pieces already there: their size,
+ * fit and card look, in the middle, on top. Without one, 172 square.
+ */
+export const addPieceCard = (spec, url, name) => {
+  const like = spec.layers.find((l) => l.kind === 'image' && l.frame === 'polaroid');
+  const w = like?.w || 172;
+  const h = like?.h || 172;
+  const look = like ? Object.fromEntries(['fit', 'cardColor', 'clearWhite'].filter((k) => like[k] !== undefined).map((k) => [k, like[k]])) : {};
+  return {
+    ...spec,
+    layers: [...spec.layers, {
+      id: newId(spec, 'piece'), role: null, name: name || null, kind: 'image', visible: true,
+      x: Math.round((WIDTH - w) / 2), y: Math.round((HEIGHT - h) / 2), w, h, rotation: 0, opacity: 1,
+      src: url, fit: 'contain', frame: 'polaroid', ...look,
+    }],
+  };
+};
+
+/**
  * A moved or transformed layer's new box. Konva turns a node about its
  * offset (the box's centre here), so its position is the centre; scale is
  * folded back into the size.

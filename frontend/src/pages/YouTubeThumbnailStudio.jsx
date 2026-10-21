@@ -40,7 +40,7 @@ import {
 } from '../lib/youtubeThumbnailsApi';
 import {
   FONTS, presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer,
-  addText, addPicture, layerName, loadThumbnailFonts, OUTLINE, BOX_COLOR, BOX_OPACITY, STICKER_EDGE, duplicateLayer, WIDTH, HEIGHT,
+  addText, addPicture, addPieceCard, layerName, loadThumbnailFonts, OUTLINE, BOX_COLOR, BOX_OPACITY, STICKER_EDGE, duplicateLayer, WIDTH, HEIGHT,
   alignLayers, distributeLayers, measurer, youtubeWarnings, fixWarning, fixAllWarnings, fileSize, YOUTUBE_SIZES, GLOW_COLOR, FADE_COLOR, EFFECT_SIZE,
 } from '../lib/thumbnailLayers';
 import ThumbnailCanvas from '../components/Thumbnails/ThumbnailCanvas';
@@ -855,7 +855,10 @@ export default function YouTubeThumbnailStudio() {
     } catch (err) {
       console.error('[YouTubeThumbnails] saved thumbnails load failed:', err);
       setHistory([]);
-      setMessage({ type: 'error', text: 'Could not load the saved thumbnails.' });
+      // The server's reason, so a failure can be told apart (Evoni, 2026-10-21).
+      const why = err?.response?.data?.error || err?.response?.data?.message;
+      const status = err?.response?.status;
+      setMessage({ type: 'error', text: `Could not load the saved thumbnails${status ? ` (${status}${why ? `: ${why}` : ''})` : ''}.` });
     }
   }, []);
   useEffect(() => { loadHistory(episodeId); }, [episodeId, loadHistory]);
@@ -1060,6 +1063,15 @@ export default function YouTubeThumbnailStudio() {
     const items = [...uploads, ...earlier.filter((e) => !uploads.some((u) => u.url === e.url))];
     return [...(items.length ? [{ key: 'uploads', label: 'Uploads', items }] : []), ...server.filter((f) => f.key !== 'uploads')];
   }, [uploads, sources]);
+
+  // The episode's outfit pieces: picked from "Add a picture", they come in on a photo card like the others.
+  const outfitUrls = useMemo(() => {
+    const urls = new Set();
+    const walk = (f) => { (f.items || []).forEach((it) => urls.add(it.url)); (f.folders || []).forEach(walk); };
+    tree.filter((f) => f.key === 'outfit').forEach(walk);
+    return urls;
+  }, [tree]);
+  const addChosenPicture = (url, label) => addAndPick((s) => (outfitUrls.has(url) ? addPieceCard(s, url, label) : addPicture(s, url, label)));
 
   // This arrangement on another episode, with its words and pictures (as the show's template would be).
   const [tryOn, setTryOn] = useState({ id: '', url: null, busy: false });
@@ -1436,7 +1448,7 @@ export default function YouTubeThumbnailStudio() {
             )}
 
             <FolderPicker title="Add a picture" testid="yts-add-picture" whole tree={tree} start={['outfit', 'documents']}
-              onPick={(url, label) => addAndPick((s) => addPicture(s, url, label))} uploading={Boolean(uploading)}
+              onPick={addChosenPicture} uploading={Boolean(uploading)}
               onUpload={(f) => upload(f, (url, label) => addAndPick((s) => addPicture(s, url, label)))} />
 
             <fieldset className="yts-field">
