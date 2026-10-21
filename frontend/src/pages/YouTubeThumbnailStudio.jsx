@@ -33,7 +33,7 @@ import {
   Youtube, Upload, Download, Save, Palette, ImageOff, Check, LayoutTemplate, Sparkles, Star, Trash2, History, Folder, ChevronRight,
   Eye, EyeOff, ArrowUp, ArrowDown, Type, RotateCcw, ScanEye, X, Lock, LockOpen, Copy, Undo2, Redo2, Plus, Pencil, AlignLeft, AlignCenter, AlignRight,
   AlignStartVertical, AlignCenterVertical, AlignEndVertical, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
-  AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, Keyboard, RefreshCw, FlipHorizontal2, ZoomIn, ZoomOut, ArrowRight, Circle, Tag,
+  AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, Keyboard, RefreshCw, FlipHorizontal2, ZoomIn, ZoomOut, Columns2, CopyPlus, ArrowRight, Circle, Tag,
 } from 'lucide-react';
 import {
   youtubeThumbnailsApi, LAYOUTS, ACCENTS, TEXT_COLORS, readRecentColours, rememberColour, episodeWords, defaultPose, folderPath, folderCount, folderCover, firstFolder,
@@ -795,6 +795,126 @@ function TemplatesBar({ showName, templates, busy, onUse, onCreate, onRename, on
   );
 }
 
+/** How a version reads where YouTube shows it: "Reads at every size" or how many warnings. */
+const warningsLine = (n) => (n ? `${n} warning${n === 1 ? '' : 's'}` : 'Reads at every size');
+
+/**
+ * Compare (Evoni, 2026-10-21: versions to compare): the thumbnail as it is
+ * now and each kept version side by side, at YouTube's search size and
+ * beside a video, with the timestamp, and how each reads there.
+ */
+function CompareVersions({ now, nowWarnings, versions, warningsOf, busy, onUse }) {
+  const columns = [
+    ...(now ? [{ id: 'now', name: 'Now', src: now, warnings: nowWarnings, now: true }] : []),
+    ...versions.map((v) => ({ id: v.id, name: v.name, url: v.previewUrl, warnings: warningsOf(v), version: v })),
+  ];
+  return (
+    <ul className="yts-compare" data-testid="yts-compare">
+      {columns.map((c) => (
+        <li key={c.id} className={`yts-compare-col${c.now ? ' is-now' : ''}`} data-testid={`yts-compare-${c.id}`}>
+          <p className="yts-template-name">{c.name}</p>
+          {[360, 168].map((width) => (
+            <div key={width} className="yts-yt-thumb" style={{ width }}>
+              {c.src ? <img src={c.src} alt={`${c.name}, ${width} pixels wide`} /> : c.url ? <PreviewImg url={c.url} alt={`${c.name}, ${width} pixels wide`} /> : null}
+              <span className="yts-yt-time" aria-hidden>12:34</span>
+            </div>
+          ))}
+          <p className={`yts-note${c.warnings ? ' is-warn' : ''}`}>{warningsLine(c.warnings)}</p>
+          {c.version && (
+            <button type="button" className="yts-history-btn" onClick={() => onUse(c.version)} disabled={busy || !c.version.spec}>Use this one</button>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * The episode's versions (Evoni, 2026-10-21: "versions to compare"): keep
+ * the arrangement as Version A, B, ...; each with its picture; use one,
+ * rename it, update it with the arrangement, delete it; compare them all.
+ */
+function VersionsBar({ versions, busy, now, nowWarnings, warningsOf, onKeep, onUse, onRename, onUpdate, onDelete }) {
+  const [renaming, setRenaming] = useState(null); // { id, name }
+  const [asking, setAsking] = useState(null); // { id, kind: 'update' | 'delete' }
+  const [comparing, setComparing] = useState(false);
+  const rename = async (e, v) => {
+    e.preventDefault();
+    if (renaming.name.trim() === v.name || await onRename(v, renaming.name)) setRenaming(null);
+  };
+  const answer = async (v) => {
+    const { kind } = asking;
+    setAsking(null);
+    await (kind === 'delete' ? onDelete(v) : onUpdate(v));
+  };
+  return (
+    <section className="yts-templates" aria-label="Versions to compare" data-testid="yts-versions">
+      <div className="yts-templates-head">
+        <p className="yts-label"><Columns2 size={16} aria-hidden /> Versions to compare</p>
+        <div className="yts-actions">
+          {versions.length > 0 && (
+            <button type="button" className={`yts-btn${comparing ? ' is-primary' : ''}`} aria-pressed={comparing} onClick={() => setComparing((c) => !c)}>
+              <Columns2 size={16} aria-hidden /> {comparing ? 'Close compare' : 'Compare'}
+            </button>
+          )}
+          <button type="button" className="yts-btn" onClick={onKeep} disabled={busy} data-testid="yts-keep-version">
+            <CopyPlus size={16} aria-hidden /> Keep as a version
+          </button>
+        </div>
+      </div>
+      {comparing && versions.length > 0 && (
+        <CompareVersions now={now} nowWarnings={nowWarnings} versions={versions} warningsOf={warningsOf} busy={busy}
+          onUse={(v) => { setComparing(false); onUse(v); }} />
+      )}
+      {versions.length ? (
+        <ul className="yts-template-grid">
+          {versions.map((v) => (
+            <li key={v.id} className="yts-template" data-testid={`yts-version-${v.id}`}>
+              <button type="button" className="yts-template-pic" onClick={() => onUse(v)} disabled={busy || !v.spec} title={`Use ${v.name}`}>
+                {v.previewUrl ? <PreviewImg url={v.previewUrl} alt="" /> : <Columns2 size={28} aria-hidden />}
+              </button>
+              {renaming?.id === v.id ? (
+                <form className="yts-template-form" onSubmit={(e) => rename(e, v)}>
+                  <input className="yts-input" value={renaming.name} maxLength={80} autoFocus aria-label={`New name for ${v.name}`}
+                    onChange={(e) => setRenaming({ ...renaming, name: e.target.value })}
+                    onKeyDown={(e) => { if (e.key === 'Escape') setRenaming(null); }} />
+                  <button type="submit" className="yts-history-btn" disabled={busy || !renaming.name.trim()}>Save</button>
+                  <button type="button" className="yts-history-btn" onClick={() => setRenaming(null)}>Cancel</button>
+                </form>
+              ) : (
+                <p className="yts-template-name" onDoubleClick={() => setRenaming({ id: v.id, name: v.name })} title="Double-click to rename">
+                  {v.name} <span className="yts-version-reads">· {warningsLine(warningsOf(v))}</span>
+                </p>
+              )}
+              {asking?.id === v.id ? (
+                <div className="yts-history-row" role="group" aria-label="Confirm">
+                  <span className="yts-template-ask">{asking.kind === 'delete' ? `Delete "${v.name}"?` : `Replace "${v.name}" with this arrangement?`}</span>
+                  <button type="button" className="yts-history-btn" onClick={() => answer(v)}>Yes</button>
+                  <button type="button" className="yts-history-btn" onClick={() => setAsking(null)}>No</button>
+                </div>
+              ) : (
+                <div className="yts-history-row">
+                  <button type="button" className="yts-history-btn" onClick={() => onUse(v)} disabled={busy || !v.spec}>Use</button>
+                  <button type="button" className="yts-history-btn" onClick={() => setRenaming({ id: v.id, name: v.name })} disabled={busy}>
+                    <Pencil size={13} aria-hidden /> Rename
+                  </button>
+                  <button type="button" className="yts-history-btn" onClick={() => setAsking({ id: v.id, kind: 'update' })} disabled={busy}>
+                    Update with this
+                  </button>
+                  <button type="button" className="yts-history-btn is-danger" onClick={() => setAsking({ id: v.id, kind: 'delete' })} disabled={busy}
+                    aria-label={`Delete ${v.name}`}><Trash2 size={13} aria-hidden /></button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="yts-note">Try a few looks: keep this arrangement as a version, change it, keep another, then compare them side by side at YouTube's sizes.</p>
+      )}
+    </section>
+  );
+}
+
 export default function YouTubeThumbnailStudio() {
   const [params, setParams] = useSearchParams();
   const [shows, setShows] = useState([]);
@@ -1329,6 +1449,43 @@ export default function YouTubeThumbnailStudio() {
     () => youtubeThumbnailsApi.deleteTemplate(sources.show.id, t.id),
     `"${t.name}" is deleted.`, 'The template could not be deleted.');
 
+  // The episode's versions to compare (Evoni, 2026-10-21).
+  const versionChange = async (run, done, failed) => {
+    if (!episodeId) return false;
+    setBusy(true);
+    try {
+      const text = await run();
+      const versions = await youtubeThumbnailsApi.versions(episodeId);
+      setSources((s) => ({ ...s, versions }));
+      // run may say what happened (keeping a version names it); else the usual words.
+      setMessage({ type: 'ok', text: typeof text === 'string' ? text : done });
+      return true;
+    } catch (err) {
+      console.error('[YouTubeThumbnails] version change failed:', err);
+      setMessage({ type: 'error', text: err?.response?.data?.error || failed });
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+  const keepVersion = () => versionChange(async () => {
+    const v = await youtubeThumbnailsApi.createVersion(episodeId, { spec });
+    return `Kept as "${v?.name || 'a version'}". Change the thumbnail and keep another to compare.`;
+  }, null, 'The version could not be kept.');
+  const renameVersion = (v, name) => versionChange(
+    () => youtubeThumbnailsApi.updateVersion(episodeId, v.id, { name: name.trim() }), `Renamed to "${name.trim()}".`, 'The version could not be renamed.');
+  const updateVersion = (v) => versionChange(
+    () => youtubeThumbnailsApi.updateVersion(episodeId, v.id, { spec }), `"${v.name}" now has this arrangement.`, 'The version could not be updated.');
+  const deleteVersion = (v) => versionChange(
+    () => youtubeThumbnailsApi.deleteVersion(episodeId, v.id), `"${v.name}" is deleted.`, 'The version could not be deleted.');
+  const useVersion = (v) => {
+    if (!v.spec) return;
+    setSelectedId(null);
+    edit(v.spec);
+    setMessage({ type: 'ok', text: `Now editing "${v.name}". Undo goes back.` });
+  };
+  const versionWarnings = useCallback((v) => (v.spec ? youtubeWarnings(v.spec, measurer).length : 0), [fontsTick]);
+
   const useTemplate = (t) => {
     if (!t.spec || !sources) return;
     setSelectedId(null);
@@ -1608,6 +1765,10 @@ export default function YouTubeThumbnailStudio() {
           <TemplatesBar showName={sources.show.name} templates={sources.templates || []} busy={busy}
             onUse={useTemplate} onCreate={createTemplate} onRename={renameTemplate} onDefault={defaultTemplate}
             onUpdate={updateTemplate} onDelete={deleteTemplate} />
+        )}
+        {episodeId && sources && (
+          <VersionsBar versions={sources.versions || []} busy={busy} now={snapshot} nowWarnings={ytWarnings.length} warningsOf={versionWarnings}
+            onKeep={keepVersion} onUse={useVersion} onRename={renameVersion} onUpdate={updateVersion} onDelete={deleteVersion} />
         )}
         {history.length > 0 && (
           <section className="yts-history" aria-label="Saved thumbnails" data-testid="yts-history">
