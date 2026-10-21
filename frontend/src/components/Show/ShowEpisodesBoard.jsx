@@ -24,6 +24,8 @@ import EpisodeCard from '../EpisodeCard';
 import { episodesInProduction, checklistSummary } from './ShowOverview';
 import { loadProductionChecks, CHECKLIST_SECTIONS } from '../Episodes/EpisodeProductionChecklist';
 import { rawClipsApi } from '../../lib/rawClipsApi';
+import { thumbnailStudioHref } from '../../lib/thumbnailStudioHref';
+import { currentThumbnail } from '../../lib/youtubeThumbnailsApi';
 import {
   STAGES, STATUS_LABEL, stageOf, episodeCode, episodeTags, cardLine,
   pipelineColumns, pipelineSummary, eventPanel, pipelineSteps, matchesSearch,
@@ -105,12 +107,10 @@ function useHeroMedia(episodeId) {
     Promise.resolve().then(() => rawClipsApi.list(episodeId))
       .then((rows) => { if (live) setMedia((m) => ({ ...m, clips: Array.isArray(rows) ? rows : [] })); })
       .catch((err) => console.error('[ShowEpisodesBoard] clips load failed:', err));
-    Promise.resolve().then(() => api.get(`/api/v1/thumbnails/episode/${episodeId}/primary`))
-      .then((res) => { if (live) setMedia((m) => ({ ...m, hasThumbnail: Boolean(res?.data?.data) })); })
-      .catch((err) => {
-        // No primary thumbnail yet is a 404; anything else is worth a log.
-        if (err?.response?.status !== 404) console.error('[ShowEpisodesBoard] thumbnail check failed:', err);
-      });
+    // The editor's saved list (episodePipeline also counts episodes.thumbnail_url).
+    Promise.resolve().then(() => currentThumbnail(episodeId))
+      .then((thumb) => { if (live) setMedia((m) => ({ ...m, hasThumbnail: Boolean(thumb) })); })
+      .catch((err) => console.error('[ShowEpisodesBoard] thumbnail check failed:', err));
     return () => { live = false; };
   }, [episodeId]);
   return media;
@@ -210,7 +210,7 @@ function NowProducing({ showId, episode, checks, panel, onTagsSaved }) {
           <Thumb episode={episode} />
           <span className="seb-badge">{episodeCode(episode)}</span>
           <span className="seb-badge is-status">{STATUS_LABEL[episode.status] || episode.status}</span>
-          <Link className="seb-thumb-edit" to={`/template-studio/youtube?episode=${episode.id}`}><Pencil size={14} aria-hidden="true" /> Edit Thumbnail</Link>
+          <Link className="seb-thumb-edit" to={thumbnailStudioHref({ episodeId: episode.id })}><Pencil size={14} aria-hidden="true" /> Edit Thumbnail</Link>
         </div>
         <div className="seb-hero-main">
           <h2 id="seb-hero-title" className="seb-hero-title">{episode.title || 'Untitled'}</h2>

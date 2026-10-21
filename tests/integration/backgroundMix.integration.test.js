@@ -9,6 +9,11 @@
  *   framed as whichever pillar fits, and records the one the AI names;
  * - in a batch, only a poster with a mix gets it, and each draft records
  *   its own pillar; a poster with no content type is drafted as before.
+ *
+ * Each draft's format (text, quote, photo, carousel) is picked at random
+ * (postFormatMix); it is pinned here to a photo post so every run drafts the
+ * same prompt. Unpinned, a quote card ("This post is a quote card: …") came
+ * up about one run in twenty and failed the second test (CI, 2026-10-20).
  */
 jest.unmock('uuid');
 
@@ -42,6 +47,8 @@ const answer = (draftReply) => mockCreate.mockImplementation(async ({ messages }
   const p = {};
 
   beforeAll(async () => {
+    // 0.5 picks a photo post in every mix these posters use (postFormatMix.MIXES).
+    require('../../src/services/postFormatMix').setRandom(() => 0.5);
     jest.spyOn(console, 'log').mockImplementation(() => {});
     await run('INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:show, :name, :slug, NOW(), NOW())', { show: ids.show, name: `BgMix ${tag}`, slug: `bgmix-${tag}` });
     await require('../../src/services/pulseQueue').saveSettings(models, ids.show, { automated_requests: 100, manual_requests: 100 });
@@ -66,6 +73,7 @@ const answer = (draftReply) => mockCreate.mockImplementation(async ({ messages }
   beforeEach(() => mockCreate.mockReset());
 
   afterAll(async () => {
+    require('../../src/services/postFormatMix').setRandom(null);
     await run('DELETE FROM pulse_requests WHERE show_id = :show', ids);
     await run('DELETE FROM feed_posts WHERE show_id = :show', ids);
     await run('DELETE FROM pulse_voices WHERE registry_character_id IN (:ids)', { ids: Object.values(c) });
@@ -93,7 +101,8 @@ const answer = (draftReply) => mockCreate.mockImplementation(async ({ messages }
     const r = await drafter.draftAndRoute(models, { showId: ids.show, characterId: c.bea, moment: 6, context: { about: 'the night before the gala' } });
     const prompt = drafts()[0];
     expect(prompt).toContain('Frame the post as whichever of these pillars fits what happened.');
-    expect(prompt).not.toContain('This post is a');
+    // No planned pillar (that line is pulseDrafter's "This post is a <pillar> post …: their mix needs one.").
+    expect(prompt).not.toContain('their mix needs one');
     await r.post.reload();
     expect(r.post.gate_json.pillar).toBe('Routine');
   });

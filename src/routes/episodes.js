@@ -775,59 +775,6 @@ router.put(
   asyncHandler(episodeController.updateScriptLocks)
 );
 
-// ✅ UPLOAD THUMBNAIL for episode
-const thumbnailUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
-  fileFilter: (_req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) cb(null, true);
-    else cb(new Error('Only image files are allowed'));
-  },
-});
-
-router.post(
-  '/:id/thumbnail',
-  requireAuth,
-  thumbnailUpload.single('thumbnail'),
-  asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    const { models } = require('../models');
-    const { Episode } = models;
-    const S3Service = require('../services/S3Service');
-    const { v4: uuidv4 } = require('uuid');
-
-    const episode = await Episode.findByPk(id);
-    if (!episode) {
-      return res.status(404).json({ success: false, error: 'Episode not found' });
-    }
-
-    if (!req.file) {
-      return res.status(400).json({ success: false, error: 'No thumbnail file provided' });
-    }
-
-    const bucket = process.env.S3_BUCKET || 'episode-metadata-storage-dev';
-    const ext = req.file.mimetype === 'image/jpeg' ? 'jpg' : 'png';
-    const key = `thumbnails/${id}/${uuidv4()}.${ext}`;
-
-    const uploadResult = await S3Service.uploadFile(bucket, key, req.file.buffer, {
-      ContentType: req.file.mimetype,
-    });
-
-    const thumbnailUrl = uploadResult.location || `https://${bucket}.s3.amazonaws.com/${key}`;
-
-    await episode.update({ thumbnail_url: thumbnailUrl });
-
-    res.json({
-      success: true,
-      data: {
-        thumbnail_url: thumbnailUrl,
-        s3Key: key,
-        s3Bucket: bucket,
-      },
-    });
-  })
-);
-
 // DELETE EPISODE
 router.delete(
   '/:id',

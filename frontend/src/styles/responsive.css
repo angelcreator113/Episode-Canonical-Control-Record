@@ -843,33 +843,6 @@
   }
 }
 
-/* --- CompositionDetail: tablet --- */
-@media (min-width: 769px) and (max-width: 1024px) {
-  .composition-detail {
-    padding: 1.5rem !important;
-  }
-
-  .composition-detail__outputs-grid {
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  }
-}
-
-@media (max-width: 480px) {
-  .composition-detail {
-    padding: 0.75rem !important;
-  }
-
-  .composition-detail__tabs {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-
-  .composition-detail__tabs::-webkit-scrollbar {
-    display: none;
-  }
-}
-
 /* --- WardrobeLibraryUpload: small mobile --- */
 @media (max-width: 480px) {
   .wardrobe-library-upload {
@@ -1409,12 +1382,6 @@
 
   /* ── ShowDetail episodes grid ── */
   .episodes-grid {
-    grid-template-columns: 1fr !important;
-  }
-
-  /* ── ThumbnailGallery ── */
-  .thumbnails-grid,
-  .thumbnail-gallery-grid {
     grid-template-columns: 1fr !important;
   }
 

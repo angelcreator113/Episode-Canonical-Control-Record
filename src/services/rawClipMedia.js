@@ -25,7 +25,7 @@ const clips = require('./rawClipsService');
 
 const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
 const FFPROBE = process.env.FFPROBE_PATH || 'ffprobe';
-const BUCKET = process.env.AWS_S3_BUCKET || process.env.S3_ASSET_BUCKET || 'primepisodes-assets';
+const { ASSET_BUCKET: BUCKET, requireAssetBucket } = require('./assetBucket');
 const REGION = process.env.AWS_REGION || 'us-east-1';
 const JOB_TIMEOUT_MS = 2 * 60 * 60 * 1000;
 const TMP_DIR = path.join(os.tmpdir(), 'raw-clips');
@@ -101,13 +101,13 @@ function run(cmd, args, { low = false, timeoutMs = 10 * 60 * 1000 } = {}) {
 async function uploadFile(localPath, key, contentType) {
   const { size } = await fsp.stat(localPath);
   await getS3().send(new PutObjectCommand({
-    Bucket: BUCKET, Key: key, Body: fs.createReadStream(localPath), ContentLength: size, ContentType: contentType,
+    Bucket: requireAssetBucket(), Key: key, Body: fs.createReadStream(localPath), ContentLength: size, ContentType: contentType,
   }));
   return publicUrl(key);
 }
 
 async function downloadFile(key, localPath) {
-  const res = await getS3().send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
+  const res = await getS3().send(new GetObjectCommand({ Bucket: requireAssetBucket(), Key: key }));
   await pipeline(res.Body, fs.createWriteStream(localPath));
 }
 

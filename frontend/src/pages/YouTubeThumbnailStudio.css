@@ -34,6 +34,19 @@
 .yts-saved { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; font-size: 14px; color: var(--success-text); }
 .yts-saved a { color: var(--accent-dark); font-weight: 700; }
 
+.yts-history { display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 18px; border: 1.5px solid var(--lala-gold-line); background: var(--surface-card); color: var(--text-primary); box-shadow: var(--shadow-sm); }
+.yts-history .yts-label { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
+.yts-history-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
+.yts-history-item { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 6px; border-radius: 12px; border: 2px solid var(--lala-parchment-3); background: var(--lala-parchment-2); }
+.yts-history-item.is-current { border-color: var(--accent-dark); }
+.yts-history-item img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; background-color: var(--lala-ink); }
+.yts-history-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.yts-history-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: var(--accent-dark); }
+.yts-history-btn { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 4px 10px; border-radius: 999px; border: 1.5px solid var(--accent-light); background: var(--surface-card); color: var(--accent-dark); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.yts-history-btn.is-danger { color: var(--danger-text); border-color: var(--danger-text); }
+.yts-history-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.yts-history-date { margin-left: auto; font-size: 12px; color: var(--text-secondary); }
+
 .yts-panel { display: flex; flex-direction: column; gap: 14px; min-width: 0; padding: 16px; border-radius: 18px; border: 1.5px solid var(--lala-gold-line); background: var(--surface-card); color: var(--text-primary); box-shadow: var(--shadow-sm); }
 .yts-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin: 0; padding: 0; border: none; }
 .yts-field.is-small { flex: 0 0 110px; }
@@ -57,6 +70,8 @@
 .yts-layout.is-center .yts-layout-art b { left: 18%; width: 64%; }
 
 .yts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px; }
+.yts-section { display: flex; flex-direction: column; gap: 4px; }
+.yts-section-title { font-size: 12px; font-weight: 700; color: var(--text-secondary); }
 .yts-pick { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; aspect-ratio: 16 / 10; padding: 0; overflow: hidden; border-radius: 10px; border: 2px solid var(--lala-parchment-3); background: var(--lala-parchment-2); color: var(--text-secondary); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
 .yts-pick img { width: 100%; height: 100%; object-fit: cover; }
 /* Cut-outs show whole (a crop would cut Lala off). */
@@ -78,4 +93,5 @@
   .yts-choose, .yts-select { width: 100%; }
   .yts-row { flex-direction: column; }
   .yts-field.is-small { flex: none; }
+  .yts-history-grid { grid-template-columns: minmax(0, 1fr); }
 }

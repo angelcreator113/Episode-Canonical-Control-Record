@@ -9,10 +9,15 @@
  *   POST /render                         a preview PNG (no saving)
  *   POST /episodes/:episodeId            render and save as the episode's primary thumbnail
  *   PUT  /shows/:showId/style            save the show's style for every episode
+ *   GET  /episodes/:episodeId/saved      the episode's saved thumbnails, its current one first
+ *   POST /episodes/:episodeId/saved/:thumbnailId/primary   make a saved one the episode's thumbnail
+ *   DELETE /episodes/:episodeId/saved/:thumbnailId          delete a saved one (not the current one)
+ *
+ * This is the one place an episode's thumbnail is edited (Evoni, 2026-10-20).
  *
  * Render and save take multipart: `spec` (JSON: layout, title, kicker, badge,
- * accent, textColor, dim, backgroundUrl, lalaUrl) and optional files
- * `background` and `lala` (an upload wins over its URL).
+ * accent, textColor, dim, backgroundUrl, lalaUrl, jawUrl) and optional files
+ * `background`, `lala` and `jaw` (JustAWoman; an upload wins over its URL).
  */
 
 const express = require('express');
@@ -25,12 +30,12 @@ const router = express.Router();
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 15 * 1024 * 1024, files: 2 },
+  limits: { fileSize: 15 * 1024 * 1024, files: 3 },
   fileFilter: (req, file, cb) => {
     if ((file.mimetype || '').startsWith('image/')) cb(null, true);
     else cb(new yt.ThumbnailError(400, 'Only images can be used'));
   },
-}).fields([{ name: 'background', maxCount: 1 }, { name: 'lala', maxCount: 1 }]);
+}).fields([{ name: 'background', maxCount: 1 }, { name: 'lala', maxCount: 1 }, { name: 'jaw', maxCount: 1 }]);
 
 const sendError = (res, err, what) => {
   if (err instanceof multer.MulterError) {
@@ -41,7 +46,7 @@ const sendError = (res, err, what) => {
   return res.status(500).json({ success: false, error: err.message });
 };
 
-/** Reads the multipart request: the spec and its two images, as Buffers. */
+/** Reads the multipart request: the spec and its images, as Buffers. */
 async function readRender(req) {
   let body = {};
   try {
@@ -53,11 +58,13 @@ async function readRender(req) {
   const spec = yt.readSpec(body);
   const file = (name) => req.files?.[name]?.[0]?.buffer || null;
   const lalaUrl = typeof body.lalaUrl === 'string' && body.lalaUrl ? body.lalaUrl : null;
-  const [background, lala] = await Promise.all([
+  const figures = spec.layout !== 'center';
+  const [background, lala, jaw] = await Promise.all([
     file('background') || (spec.backgroundUrl ? yt.fetchImage(spec.backgroundUrl) : null),
-    spec.layout === 'center' ? null : (file('lala') || (lalaUrl ? yt.fetchImage(lalaUrl) : null)),
+    figures ? (file('lala') || (lalaUrl ? yt.fetchImage(lalaUrl) : null)) : null,
+    figures ? (file('jaw') || (spec.jawUrl ? yt.fetchImage(spec.jawUrl) : null)) : null,
   ]);
-  return { spec, images: { background, lala } };
+  return { spec, images: { background, lala, jaw } };
 }
 
 router.get('/episodes/:episodeId/sources', requireAuth, async (req, res) => {
@@ -106,6 +113,30 @@ router.put('/shows/:showId/style', requireAuth, async (req, res) => {
     return res.json({ success: true, data: await yt.saveStyle(models.sequelize, req.params.showId, req.body || {}) });
   } catch (err) {
     return sendError(res, err, 'style');
+  }
+});
+
+router.get('/episodes/:episodeId/saved', requireAuth, async (req, res) => {
+  try {
+    return res.json({ success: true, data: await yt.listSaved(models.sequelize, req.params.episodeId) });
+  } catch (err) {
+    return sendError(res, err, 'saved list');
+  }
+});
+
+router.post('/episodes/:episodeId/saved/:thumbnailId/primary', requireAuth, async (req, res) => {
+  try {
+    return res.json({ success: true, data: await yt.makePrimary(models.sequelize, req.params.episodeId, req.params.thumbnailId) });
+  } catch (err) {
+    return sendError(res, err, 'make primary');
+  }
+});
+
+router.delete('/episodes/:episodeId/saved/:thumbnailId', requireAuth, async (req, res) => {
+  try {
+    return res.json({ success: true, data: await yt.removeSaved(models.sequelize, req.params.episodeId, req.params.thumbnailId) });
+  } catch (err) {
+    return sendError(res, err, 'delete');
   }
 });
 

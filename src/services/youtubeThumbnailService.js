@@ -13,8 +13,11 @@
  * title in up to three lines, the episode badge). Images come from S3 only
  * (allowedImageUrl) or from the request's own upload.
  *
- * Saving makes it the episode's primary thumbnail (thumbnails table); the
- * one before it stays, as a cover.
+ * Saving makes it the episode's primary thumbnail (thumbnails table) and
+ * episodes.thumbnail_url; the one before it stays, as a cover. This page is
+ * the one place an episode's thumbnail is edited (Evoni, 2026-10-20), so the
+ * saved ones are listed here too: make one the episode's thumbnail again, or
+ * delete one that is not.
  */
 
 const sharp = require('sharp');
@@ -25,7 +28,7 @@ const HEIGHT = 720;
 const LAYOUTS = Object.freeze(['lala-left', 'lala-right', 'center']);
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 15000;
-const BUCKET = process.env.AWS_S3_BUCKET || process.env.S3_ASSET_BUCKET || 'primepisodes-assets';
+const { ASSET_BUCKET: BUCKET, requireAssetBucket } = require('./assetBucket');
 const REGION = process.env.AWS_REGION || 'us-east-1';
 
 const DEFAULT_STYLE = Object.freeze({
@@ -70,6 +73,8 @@ function readSpec(body = {}) {
     kicker: clean(b.kicker, 48),
     badge: clean(b.badge, 12),
     backgroundUrl: typeof b.backgroundUrl === 'string' && b.backgroundUrl ? b.backgroundUrl : null,
+    // JustAWoman, beside Lala (an episode's pose; not part of the show's style).
+    jawUrl: typeof b.jawUrl === 'string' && b.jawUrl ? b.jawUrl : null,
   };
 }
 
@@ -105,6 +110,23 @@ async function fetchImage(url) {
 }
 
 // ── Layout and text ─────────────────────────────────────────────────────────
+
+/**
+ * Where the figures stand when JustAWoman is beside Lala: both in Lala's
+ * column, JustAWoman toward the edge and a little smaller, Lala in front.
+ * Returns { lala, jaw } as { left, top } for figures of these sizes.
+ */
+function duoPositions(side, lalaSize, jawSize) {
+  const edge = 20;
+  const lalaCenter = 390; // from the figure side's edge
+  const jaw = { left: edge, top: HEIGHT - jawSize.height };
+  const lala = { left: Math.max(edge, lalaCenter - Math.round(lalaSize.width / 2)), top: HEIGHT - lalaSize.height };
+  if (side === 'right') {
+    jaw.left = WIDTH - edge - jawSize.width;
+    lala.left = Math.min(WIDTH - edge - lalaSize.width, WIDTH - lalaCenter - Math.round(lalaSize.width / 2));
+  }
+  return { lala, jaw };
+}
 
 /** Where the text goes and where Lala stands, per layout. */
 function layoutBoxes(layout) {
@@ -204,8 +226,9 @@ const plainBackground = (accent) => Buffer.from(
 );
 
 /**
- * Renders the thumbnail: PNG, 1280×720. images: { background, lala }
- * as Buffers (either may be null).
+ * Renders the thumbnail: PNG, 1280×720. images: { background, lala, jaw }
+ * as Buffers (any may be null). With Lala and JustAWoman both, they stand
+ * together on the figure side (duoPositions); with one, she stands alone.
  */
 async function render(spec, images = {}) {
   let base;
@@ -219,16 +242,27 @@ async function render(spec, images = {}) {
   }
   const layers = [{ input: Buffer.from(shadeSvg(spec)), top: 0, left: 0 }];
   const box = layoutBoxes(spec.layout).lala;
-  if (box && images.lala) {
+  const figure = async (buffer, who, size) => {
     try {
-      const lala = await sharp(images.lala).rotate().resize({ width: box.maxWidth, height: HEIGHT - 30, fit: 'inside' }).png().toBuffer();
-      const meta = await sharp(lala).metadata();
-      const left = box.side === 'left' ? 30 : WIDTH - meta.width - 30;
-      layers.push({ input: lala, top: HEIGHT - meta.height, left: Math.max(0, left) });
+      const png = await sharp(buffer).rotate().resize({ ...size, fit: 'inside' }).png().toBuffer();
+      const meta = await sharp(png).metadata();
+      return { png, width: meta.width, height: meta.height };
     } catch (err) {
-      console.error('[YouTubeThumbnail] Lala image unreadable:', err.message);
-      throw new ThumbnailError(400, 'The Lala image is not an image we can read');
+      console.error(`[YouTubeThumbnail] ${who} image unreadable:`, err.message);
+      throw new ThumbnailError(400, `The ${who} image is not an image we can read`);
     }
+  };
+  if (box && images.lala && images.jaw) {
+    const jaw = await figure(images.jaw, 'JustAWoman', { width: 340, height: HEIGHT - 80 });
+    const lala = await figure(images.lala, 'Lala', { width: 360, height: HEIGHT - 30 });
+    const at = duoPositions(box.side, lala, jaw);
+    layers.push({ input: jaw.png, top: at.jaw.top, left: at.jaw.left });
+    layers.push({ input: lala.png, top: at.lala.top, left: at.lala.left });
+  } else if (box && (images.lala || images.jaw)) {
+    const who = images.lala ? 'Lala' : 'JustAWoman';
+    const one = await figure(images.lala || images.jaw, who, { width: box.maxWidth, height: HEIGHT - 30 });
+    const left = box.side === 'left' ? 30 : WIDTH - one.width - 30;
+    layers.push({ input: one.png, top: HEIGHT - one.height, left: Math.max(0, left) });
   }
   layers.push({ input: Buffer.from(textSvg(spec)), top: 0, left: 0 });
   return sharp(base).composite(layers).png({ compressionLevel: 9 }).toBuffer();
@@ -267,6 +301,7 @@ async function sources(sequelize, episodeId) {
         LIMIT 40`,
       { replacements: { showId: episode.show_id } })
     : [[]];
+  const poses = await readyPoses(sequelize, episode.id);
   const backgrounds = [
     ...(angles || []).map((a) => ({ url: a.url, label: [a.set_name, a.angle].filter(Boolean).join(' · ') })),
     ...(show?.cover_image_url ? [{ url: show.cover_image_url, label: 'Show cover' }] : []),
@@ -277,7 +312,36 @@ async function sources(sequelize, episodeId) {
     style: readStyle(show?.metadata?.youtube_thumbnail),
     backgrounds,
     cutouts: (cutouts || []).filter((c) => allowedImageUrl(c.url)).map((c) => ({ id: c.id, url: c.url, label: c.name })),
+    poses,
   };
+}
+
+const POSE_ORDER = ['front', 'back', 'side', 'glamour'];
+const POSE_LABEL = { front: 'Front', back: 'Back', side: 'Side', glamour: 'Glamour' };
+
+/**
+ * The episode's ready cut-outs from Files › Character poses
+ * (episode_character_poses), as { lala: [...], justawoman: [...] }: each
+ * { id, url, pose, label, isDefault }, by pose (Front, Back, Side, Glamour),
+ * the default first. Empty lists when the table is not there yet (its
+ * migration, 20261020150000, runs only through the Deploy workflow).
+ */
+async function readyPoses(sequelize, episodeId) {
+  const out = { lala: [], justawoman: [] };
+  const [[reg]] = await sequelize.query("SELECT to_regclass('public.episode_character_poses') AS reg");
+  if (!reg || !reg.reg) return out;
+  const [rows] = await sequelize.query(
+    `SELECT id, character_key, pose, is_default, final_url AS url
+       FROM episode_character_poses
+      WHERE episode_id = :episodeId AND deleted_at IS NULL AND status = 'ready' AND final_url IS NOT NULL
+      ORDER BY array_position(ARRAY['front', 'back', 'side', 'glamour']::varchar[], pose::varchar), is_default DESC, created_at DESC
+      LIMIT 80`,
+    { replacements: { episodeId } });
+  for (const r of rows || []) {
+    if (!out[r.character_key] || !POSE_ORDER.includes(r.pose) || !allowedImageUrl(r.url)) continue;
+    out[r.character_key].push({ id: r.id, url: r.url, pose: r.pose, label: `${POSE_LABEL[r.pose]}${r.is_default ? ' ★' : ''}`, isDefault: Boolean(r.is_default) });
+  }
+  return out;
 }
 
 /** Saves the show's style (merged into shows.metadata.youtube_thumbnail). */
@@ -310,7 +374,7 @@ const getS3 = () => {
  */
 async function saveAsPrimary(sequelize, episodeId, png) {
   const key = `episodes/${episodeId}/thumbnails/youtube-${Date.now()}.png`;
-  await getS3().send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: png, ContentType: 'image/png' }));
+  await getS3().send(new PutObjectCommand({ Bucket: requireAssetBucket(), Key: key, Body: png, ContentType: 'image/png' }));
   const url = `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`;
   // Only the columns the thumbnails migration creates (isPrimary and the
   // publish columns are model-only; scripts/schema-agreement-step2.baseline).
@@ -321,16 +385,82 @@ async function saveAsPrimary(sequelize, episodeId, png) {
       { replacements: { episodeId }, transaction });
     const [[created]] = await sequelize.query(
       `INSERT INTO thumbnails ("episodeId", "s3Bucket", "s3Key", "fileSizeBytes", "mimeType", "widthPixels", "heightPixels", format, "thumbnailType", "generatedAt")
-       VALUES (:episodeId, :bucket, :key, :size, 'image/png', ${WIDTH}, ${HEIGHT}, 'png', 'primary', NOW())
+       VALUES (:episodeId, :bucket, :key, :size, 'image/png', ${WIDTH}, ${HEIGHT}, 'thumbnail', 'primary', NOW())
        RETURNING id`,
       { replacements: { episodeId, bucket: BUCKET, key, size: png.length }, transaction });
+    await sequelize.query('UPDATE episodes SET thumbnail_url = :url WHERE id = :episodeId',
+      { replacements: { episodeId, url }, transaction });
     return created;
   });
   return { id: row?.id, url, key };
 }
 
+const rowUrl = (r) => r.url || `https://${r.s3Bucket}.s3.${REGION}.amazonaws.com/${r.s3Key}`;
+
+/** The episode's saved thumbnails, its current one first, then newest first. */
+async function listSaved(sequelize, episodeId) {
+  const [rows] = await sequelize.query(
+    `SELECT id, "s3Bucket", "s3Key", url, "thumbnailType", "widthPixels", "heightPixels", "generatedAt"
+       FROM thumbnails
+      WHERE "episodeId" = :episodeId
+      ORDER BY ("thumbnailType" = 'primary') DESC, "generatedAt" DESC NULLS LAST, id DESC
+      LIMIT 100`,
+    { replacements: { episodeId } });
+  return (rows || []).map((r) => ({
+    id: r.id,
+    url: rowUrl(r),
+    isPrimary: r.thumbnailType === 'primary',
+    width: r.widthPixels,
+    height: r.heightPixels,
+    savedAt: r.generatedAt,
+  }));
+}
+
+async function findSaved(sequelize, episodeId, thumbnailId, transaction) {
+  const [[row]] = await sequelize.query(
+    `SELECT id, "s3Bucket", "s3Key", url, "thumbnailType" FROM thumbnails
+      WHERE id = :thumbnailId AND "episodeId" = :episodeId LIMIT 1`,
+    { replacements: { episodeId, thumbnailId }, transaction });
+  if (!row) throw new ThumbnailError(404, 'That thumbnail is not one of this episode\'s');
+  return row;
+}
+
+/** Makes a saved thumbnail the episode's thumbnail again; the current one becomes a cover. */
+async function makePrimary(sequelize, episodeId, thumbnailId) {
+  if (!/^\d+$/.test(String(thumbnailId))) throw new ThumbnailError(400, 'Unknown thumbnail');
+  return sequelize.transaction(async (transaction) => {
+    const row = await findSaved(sequelize, episodeId, thumbnailId, transaction);
+    const url = rowUrl(row);
+    await sequelize.query(
+      `UPDATE thumbnails SET "thumbnailType" = 'cover'
+        WHERE "episodeId" = :episodeId AND "thumbnailType" = 'primary' AND id <> :thumbnailId`,
+      { replacements: { episodeId, thumbnailId }, transaction });
+    await sequelize.query(
+      `UPDATE thumbnails SET "thumbnailType" = 'primary' WHERE id = :thumbnailId`,
+      { replacements: { thumbnailId }, transaction });
+    await sequelize.query('UPDATE episodes SET thumbnail_url = :url WHERE id = :episodeId',
+      { replacements: { episodeId, url }, transaction });
+    return { id: row.id, url };
+  });
+}
+
+/**
+ * Deletes a saved thumbnail that is not the episode's current one (its row;
+ * the S3 file stays). The current one is refused: make another current first.
+ */
+async function removeSaved(sequelize, episodeId, thumbnailId) {
+  if (!/^\d+$/.test(String(thumbnailId))) throw new ThumbnailError(400, 'Unknown thumbnail');
+  const row = await findSaved(sequelize, episodeId, thumbnailId);
+  if (row.thumbnailType === 'primary') {
+    throw new ThumbnailError(409, 'This is the episode\'s thumbnail. Make another one the thumbnail first.');
+  }
+  await sequelize.query('DELETE FROM thumbnails WHERE id = :thumbnailId AND "episodeId" = :episodeId',
+    { replacements: { episodeId, thumbnailId } });
+  return { id: row.id };
+}
+
 module.exports = {
   WIDTH, HEIGHT, LAYOUTS, DEFAULT_STYLE, ThumbnailError,
-  readStyle, readSpec, allowedImageUrl, fetchImage, layoutBoxes, titleSize, wrapTitle, fitTitle, kickerSize, textSvg, shadeSvg,
-  render, sources, saveStyle, saveAsPrimary,
+  readStyle, readSpec, allowedImageUrl, fetchImage, layoutBoxes, duoPositions, readyPoses, titleSize, wrapTitle, fitTitle, kickerSize, textSvg, shadeSvg,
+  render, sources, saveStyle, saveAsPrimary, listSaved, makePrimary, removeSaved,
 };

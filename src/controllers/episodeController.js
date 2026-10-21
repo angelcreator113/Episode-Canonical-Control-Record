@@ -1236,7 +1236,7 @@ module.exports = {
       // Fetch updated data with stats
       const S3Service = require('../services/S3Service');
       const BUCKET_NAME =
-        process.env.AWS_S3_BUCKET || process.env.S3_ASSET_BUCKET || 'primepisodes-assets';
+        require('../services/assetBucket').ASSET_BUCKET;
 
       const updatedScenes = await EpisodeScene.findAll({
         where: { episode_id: id },
