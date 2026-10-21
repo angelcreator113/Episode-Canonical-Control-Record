@@ -38,10 +38,10 @@ vi.mock('../lib/thumbnailLayers', async () => {
 // The canvas: each visible layer as a button that picks it, and a button
 // that "drags" the picked layer (what Konva's drag and transform report).
 vi.mock('../components/Thumbnails/ThumbnailCanvas', () => ({
-  default: ({ spec, selectedId, onSelect, onChange, onSnapshot }) => (
+  default: ({ spec, selectedId, onSelect, onChange, onSnapshot, grid, safeZones }) => (
     <>
     <button type="button" data-testid="canvas-snapshot" onClick={() => onSnapshot?.('data:image/jpeg;base64,c25hcA==')}>snapshot</button>
-    <div data-testid="yts-canvas">
+    <div data-testid="yts-canvas" data-grid={String(Boolean(grid))} data-safe={String(Boolean(safeZones))}>
       {spec.layers.filter((l) => l.visible).map((l) => (
         <button key={l.id} type="button" data-testid={`canvas-${l.id}`} onClick={() => onSelect(l.id)}>{l.id}</button>
       ))}
@@ -1010,6 +1010,59 @@ describe('YouTubeThumbnailStudio', () => {
     fireEvent.click(more);
     fireEvent.click(screen.getByRole('menuitem', { name: 'Start again' }));
     expect(within(screen.getByTestId('yts-ask')).getByText(/Start this episode again/)).toBeTruthy();
+  });
+
+  test('the grid and the safe zones: toggled on the toolbar, drawn over the canvas only', async () => {
+    renderPage();
+    await opened();
+    const canvas = screen.getByTestId('yts-canvas');
+    expect(canvas.dataset.grid).toBe('false');
+    fireEvent.click(screen.getByTestId('yts-grid-btn'));
+    expect(screen.getByTestId('yts-canvas').dataset.grid).toBe('true');
+    expect(screen.getByTestId('yts-grid-btn').getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByTestId('yts-safe-btn'));
+    expect(screen.getByTestId('yts-canvas').dataset.safe).toBe('true');
+    fireEvent.click(screen.getByTestId('yts-grid-btn'));
+    expect(screen.getByTestId('yts-canvas').dataset.grid).toBe('false');
+    // Not part of the thumbnail: no layer, nothing in the draft.
+    expect(youtubeThumbnailsApi.saveDraft).not.toHaveBeenCalled();
+  });
+
+  test('layers: each row has a small picture of its layer; dragging a row onto another puts it there', async () => {
+    renderPage();
+    await opened();
+    const row = (id) => screen.getByTestId(`yts-layer-${id}`);
+    expect(row('background').querySelector('.yts-layer-thumb img')).toBeTruthy();
+    expect(row('badge').querySelector('.yts-layer-thumb').textContent).toBe('EP 1');
+    const before = within(screen.getByTestId('yts-layers')).getAllByRole('listitem').map((li) => li.dataset.testid);
+    // The badge (at the front) dragged onto the background (at the back) takes its place: the very back.
+    fireEvent.dragStart(row('badge'));
+    fireEvent.dragOver(row('background'));
+    expect(row('background').className).toContain('is-over');
+    fireEvent.drop(row('background'));
+    await waitFor(() => expect(youtubeThumbnailsApi.saveDraft).toHaveBeenCalled(), { timeout: 3000 });
+    expect(lastDraft().layers[0].id).toBe('badge');
+    const after = within(screen.getByTestId('yts-layers')).getAllByRole('listitem').map((li) => li.dataset.testid);
+    expect(after.at(-1)).toBe('yts-layer-badge');
+    expect(after).toHaveLength(before.length);
+    // Undo puts it back.
+    fireEvent.click(screen.getByRole('button', { name: /Undo/ }));
+    expect(within(screen.getByTestId('yts-layers')).getAllByRole('listitem').map((li) => li.dataset.testid)).toEqual(before);
+  });
+
+  test('assets: a tab for each folder this episode has, opening on the outfit; picking adds the picture', async () => {
+    renderPage();
+    await opened();
+    const tabs = within(screen.getByRole('tablist', { name: 'Pictures' }));
+    expect(tabs.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Outfit', 'Library', 'Scene sets']);
+    expect(tabs.getByRole('tab', { name: 'Outfit' }).getAttribute('aria-selected')).toBe('true');
+    const add = () => within(screen.getByTestId('yts-add-picture'));
+    expect(add().getByTestId('yts-add-picture-folder-outfit/dress')).toBeTruthy();
+    fireEvent.click(tabs.getByRole('tab', { name: 'Library' }));
+    fireEvent.click(add().getByTestId('yts-add-picture-folder-library/lala'));
+    fireEvent.click(add().getByTitle('Lala 2'));
+    await waitFor(() => expect(youtubeThumbnailsApi.saveDraft).toHaveBeenCalled(), { timeout: 3000 });
+    expect(lastDraft().layers.at(-1)).toMatchObject({ kind: 'image', src: 'https://b.s3.amazonaws.com/lala2.png' });
   });
 
   test('whole season: the grid in place of the editor; Open in the editor goes back to that episode', async () => {

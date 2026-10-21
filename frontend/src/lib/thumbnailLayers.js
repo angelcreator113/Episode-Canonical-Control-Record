@@ -330,6 +330,20 @@ export function moveLayer(spec, id, dir) {
   return { ...spec, layers };
 }
 
+/**
+ * Puts a layer where another one is (Layers, dragged; Evoni, 2026-10-21
+ * redesign): moved toward the front it lands just in front of that layer,
+ * moved toward the back just behind it.
+ */
+export function placeLayer(spec, id, targetId) {
+  const from = spec.layers.findIndex((l) => l.id === id);
+  const to = spec.layers.findIndex((l) => l.id === targetId);
+  if (from < 0 || to < 0 || from === to) return spec;
+  const layers = spec.layers.filter((l) => l.id !== id);
+  layers.splice(to, 0, spec.layers[from]);
+  return { ...spec, layers };
+}
+
 export const removeLayer = (spec, id) => ({ ...spec, layers: spec.layers.filter((l) => l.id !== id) });
 
 const newId = (spec, prefix) => {

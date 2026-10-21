@@ -33,13 +33,13 @@ import {
   Youtube, Upload, Download, Save, Palette, ImageOff, Check, LayoutTemplate, Sparkles, Star, Trash2, History, Folder, ChevronRight,
   Eye, EyeOff, ArrowUp, ArrowDown, Type, RotateCcw, ScanEye, X, Lock, LockOpen, Copy, Undo2, Redo2, Plus, Pencil, AlignLeft, AlignCenter, AlignRight,
   AlignStartVertical, AlignCenterVertical, AlignEndVertical, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
-  AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, Keyboard, RefreshCw, FlipHorizontal2, ZoomIn, ZoomOut, ClipboardCopy, ClipboardPaste, Columns2, CopyPlus, ArrowRight, Circle, Tag, LayoutGrid, EllipsisVertical,
+  AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, Keyboard, RefreshCw, FlipHorizontal2, ZoomIn, ZoomOut, ClipboardCopy, ClipboardPaste, Columns2, CopyPlus, ArrowRight, Circle, Tag, LayoutGrid, EllipsisVertical, Grid3x3, SquareDashed, GripVertical, ListChecks, Shapes,
 } from 'lucide-react';
 import {
   youtubeThumbnailsApi, LAYOUTS, ACCENTS, TEXT_COLORS, readRecentColours, rememberColour, episodeContent, folderPath, folderCount, folderCover, firstFolder,
 } from '../lib/youtubeThumbnailsApi';
 import {
-  FONTS, presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer,
+  FONTS, presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, placeLayer, removeLayer,
   addText, addPicture, addPieceCard, layerName, loadThumbnailFonts, OUTLINE, BOX_COLOR, BOX_OPACITY, STICKER_EDGE, duplicateLayer, WIDTH, HEIGHT, CARD_COLOR,
   alignLayers, distributeLayers, copyLayers, pasteLayers, CLIPBOARD_KEY, measurer, youtubeWarnings, fixWarning, fixAllWarnings, fileSize, YOUTUBE_SIZES, GLOW_COLOR, FADE_COLOR, EFFECT_SIZE, SHAPES, addShape,
 } from '../lib/thumbnailLayers';
@@ -66,6 +66,33 @@ function PickButton({ it, value, onPick }) {
       onClick={() => onPick(it.url, it.label)} title={it.label}>
       <PreviewImg url={it.url} alt={it.label || ''} />
     </button>
+  );
+}
+
+// The tabs over the episode's pictures (Evoni, 2026-10-21 redesign), in the
+// order she reaches for them; only the folders this episode has.
+const ASSET_TABS = [
+  ['outfit', 'Outfit'], ['library', 'Library'], ['scene-sets', 'Scene sets'], ['poses', 'Poses'], ['documents', 'Documents'], ['uploads', 'Uploads'],
+];
+
+/** Assets for this episode: a tab per picture folder; picking one adds it as a layer. */
+function AssetTabs({ tree, onPick, onUpload, uploading }) {
+  const tabs = ASSET_TABS.filter(([key]) => (tree || []).some((f) => f.key === key && folderCount(f) > 0));
+  const [tab, setTab] = useState(null);
+  const on = tabs.some(([key]) => key === tab) ? tab : (tabs.find(([key]) => key === 'outfit') || tabs.find(([key]) => key === 'documents') || tabs[0] || [null])[0];
+  return (
+    <>
+      {tabs.length > 1 && (
+        <div className="yts-tabs" role="tablist" aria-label="Pictures">
+          {tabs.map(([key, label]) => (
+            <button key={key} type="button" role="tab" aria-selected={on === key} className={`yts-tab${on === key ? ' is-on' : ''}`}
+              onClick={() => setTab(key)} data-testid={`yts-asset-tab-${key}`}>{label}</button>
+          ))}
+        </div>
+      )}
+      <FolderPicker key={on || 'all'} title="Add a picture" testid="yts-add-picture" whole tree={tree} start={on ? [on] : []}
+        onPick={onPick} uploading={uploading} onUpload={(f) => { setTab('uploads'); onUpload(f); }} />
+    </>
   );
 }
 
@@ -482,16 +509,40 @@ function LayerSettings({ layer, onChange, colours, onRemember }) {
   );
 }
 
+/** A small picture of a layer for its row in Layers (Evoni, 2026-10-21 redesign). */
+function LayerThumb({ l }) {
+  let inner;
+  if (l.kind === 'image') inner = l.src ? <PreviewImg url={l.src} alt="" /> : <ImageOff size={14} aria-hidden />;
+  else if (l.kind === 'badge') inner = <span className="yts-layer-thumb-words">{String(l.text || '').slice(0, 5)}</span>;
+  else if (l.kind === 'checklist') inner = <ListChecks size={15} aria-hidden />;
+  else if (l.kind === 'shape') { const Icon = SHAPE_ICONS[l.shape] || Shapes; inner = <Icon size={15} aria-hidden />; }
+  else if (l.kind === 'shade') inner = <span className="yts-layer-thumb-shade" style={{ background: l.accent }} />;
+  else inner = <Type size={15} aria-hidden />;
+  return <span className={`yts-layer-thumb is-${l.kind}`} aria-hidden>{inner}</span>;
+}
+
 /** The layers, front first: pick, hide or show, lock, copy, move forward or back, remove. */
 function LayersList({ spec, selectedId, pickedIds, onSelect, onChange, onDuplicate }) {
   const picked = new Set(pickedIds || (selectedId ? [selectedId] : []));
   const front = [...(spec?.layers || [])].reverse();
+  // Dragged by its row (Evoni, 2026-10-21 redesign); the arrows still move one step.
+  const [drag, setDrag] = useState(null);
+  const [over, setOver] = useState(null);
+  const done = () => { setDrag(null); setOver(null); };
   return (
     <fieldset className="yts-field" data-testid="yts-layers">
       <legend className="yts-label">Layers</legend>
       <ul className="yts-layers">
         {front.map((l, i) => (
-          <li key={l.id} className={`yts-layer${picked.has(l.id) ? ' is-on' : ''}${l.visible ? '' : ' is-hidden'}`}>
+          <li key={l.id} className={`yts-layer${picked.has(l.id) ? ' is-on' : ''}${l.visible ? '' : ' is-hidden'}${over === l.id ? ' is-over' : ''}${drag === l.id ? ' is-dragged' : ''}`}
+            draggable data-testid={`yts-layer-${l.id}`}
+            onDragStart={(e) => { setDrag(l.id); e.dataTransfer?.setData?.('text/plain', l.id); if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'; }}
+            onDragOver={(e) => { if (drag && drag !== l.id) { e.preventDefault(); setOver(l.id); } }}
+            onDragLeave={() => setOver((o) => (o === l.id ? null : o))}
+            onDrop={(e) => { e.preventDefault(); if (drag && drag !== l.id) onChange(placeLayer(spec, drag, l.id)); done(); }}
+            onDragEnd={done}>
+            <GripVertical size={14} className="yts-layer-grip" aria-hidden />
+            <LayerThumb l={l} />
             <button type="button" className="yts-layer-name" aria-pressed={picked.has(l.id)}
               onClick={(e) => onSelect(l.kind === 'shade' ? null : l.id, { toggle: l.kind !== 'shade' && (e.shiftKey || e.ctrlKey || e.metaKey) })}>
               {layerName(l)}
@@ -989,6 +1040,8 @@ export default function YouTubeThumbnailStudio() {
   const [fontsTick, setFontsTick] = useState(0);
   // A whole season at once (Evoni, 2026-10-21): the grid in place of the editor.
   const [season, setSeason] = useState(false);
+  // The grid and safe zones over the canvas (Evoni, 2026-10-21 redesign); never saved.
+  const [marks, setMarks] = useState({ grid: false, safe: false });
   const edited = useRef(false);
   // The layers as they are now (an upload adds to them after its await).
   const specRef = useRef(null);
@@ -1652,6 +1705,16 @@ export default function YouTubeThumbnailStudio() {
                     <Redo2 size={15} aria-hidden />
                   </button>
                 </div>
+                <div className="yts-toolbar-group" role="group" aria-label="Marks">
+                  <button type="button" className={`yts-tool-btn${marks.grid ? ' is-on' : ''}`} aria-pressed={marks.grid} data-testid="yts-grid-btn"
+                    onClick={() => setMarks((m) => ({ ...m, grid: !m.grid }))} title="Squares and thirds over the canvas (not saved)">
+                    <Grid3x3 size={15} aria-hidden /> Show grid
+                  </button>
+                  <button type="button" className={`yts-tool-btn${marks.safe ? ' is-on' : ''}`} aria-pressed={marks.safe} data-testid="yts-safe-btn"
+                    onClick={() => setMarks((m) => ({ ...m, safe: !m.safe }))} title="Where YouTube's timestamp sits, and a margin round the edge (not saved)">
+                    <SquareDashed size={15} aria-hidden /> Safe zones
+                  </button>
+                </div>
                 <div className="yts-toolbar-end">
                   <button type="button" className="yts-tool-btn" onClick={seeExactly} disabled={rendering} data-testid="yts-exact">
                     <ScanEye size={15} aria-hidden /> {rendering ? 'Drawing…' : 'See it exactly'}
@@ -1670,7 +1733,8 @@ export default function YouTubeThumbnailStudio() {
                 removable={(spec?.layers || []).filter((l) => pickedIds.includes(l.id) && !l.locked && l.kind !== 'shade').length} onRemove={removePicked}
                 onCopy={copyPicked} />
               <ThumbnailCanvas spec={spec} selectedId={selectedId} selectedIds={pickedIds} onSelect={select} onSelectMany={selectMany}
-                fontsTick={fontsTick} onChange={(id, patch) => edit((s) => updateLayer(s, id, patch))} onChangeMany={editMany} onSnapshot={setSnapshot} zoom={zoom} />
+                fontsTick={fontsTick} onChange={(id, patch) => edit((s) => updateLayer(s, id, patch))} onChangeMany={editMany} onSnapshot={setSnapshot} zoom={zoom}
+                grid={marks.grid} safeZones={marks.safe} />
               <p className="yts-note" data-testid="yts-draft-note">
                 {draftNote || 'Click a layer to move it, pull a corner to resize, use the top handle to turn it.'}
               </p>
@@ -1707,8 +1771,7 @@ export default function YouTubeThumbnailStudio() {
               </section>
               <section className="yts-card" aria-label="Assets for this episode">
                 <h2 className="yts-label">Assets for this episode</h2>
-                <FolderPicker title="Add a picture" testid="yts-add-picture" whole tree={tree} start={['outfit', 'documents']}
-                  onPick={addChosenPicture} uploading={Boolean(uploading)}
+                <AssetTabs tree={tree} onPick={addChosenPicture} uploading={Boolean(uploading)}
                   onUpload={(f) => upload(f, (url, label) => addAndPick((s) => addPicture(s, url, label)))} />
               </section>
             </div>

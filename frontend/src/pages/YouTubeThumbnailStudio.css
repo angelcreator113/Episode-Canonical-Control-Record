@@ -261,3 +261,21 @@
   .yts-season-head .yts-btn { margin-left: 0; }
   .yts-season-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Redesign part 2 (Evoni, 2026-10-21): the grid and safe-zone toggles, layer thumbnails and dragging, the asset tabs. */
+.yts-tool-btn.is-on { border-color: var(--accent-dark); background: var(--accent-subtle); color: var(--accent-dark); }
+.yts-layer { cursor: grab; }
+.yts-layer.is-dragged { opacity: 0.5; }
+.yts-layer.is-over { border-color: var(--accent-dark); box-shadow: inset 0 3px 0 var(--accent-dark); }
+.yts-layer-grip { flex-shrink: 0; color: var(--text-secondary); }
+.yts-layer-thumb { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 30px; overflow: hidden; border-radius: 6px; border: 1px solid var(--lala-parchment-3); background: var(--lala-parchment); color: var(--accent-dark); }
+.yts-layer-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.yts-layer-thumb.is-badge { border-color: var(--accent-dark); background: var(--accent-dark); color: var(--text-inverse); }
+.yts-layer-thumb-words { font-size: 11px; font-weight: 700; }
+.yts-layer-thumb-shade { display: block; width: 100%; height: 100%; opacity: 0.6; }
+.yts-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.yts-tab { min-height: 34px; padding: 6px 14px; border-radius: 10px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--accent-dark); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.yts-tab.is-on { border-color: var(--accent-dark); background: var(--accent-dark); color: var(--text-inverse); }
+@media (max-width: 520px) {
+  .yts-layer-grip { display: none; }
+}
