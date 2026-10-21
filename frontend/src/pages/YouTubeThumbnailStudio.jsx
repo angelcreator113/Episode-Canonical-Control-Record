@@ -32,6 +32,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import {
   Youtube, Upload, Download, Save, Palette, ImageOff, Check, LayoutTemplate, Sparkles, Star, Trash2, History, Folder, ChevronRight,
   Eye, EyeOff, ArrowUp, ArrowDown, Type, RotateCcw, ScanEye, X, Lock, LockOpen, Copy, Undo2, Redo2, Plus, Pencil, AlignLeft, AlignCenter, AlignRight,
+  AlignStartVertical, AlignCenterVertical, AlignEndVertical, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
+  AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, Keyboard, RefreshCw,
 } from 'lucide-react';
 import {
   youtubeThumbnailsApi, LAYOUTS, ACCENTS, TEXT_COLORS, readRecentColours, rememberColour, episodeWords, defaultPose, folderPath, folderCount, folderCover, firstFolder,
@@ -39,6 +41,7 @@ import {
 import {
   FONTS, presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer,
   addText, addPicture, layerName, loadThumbnailFonts, OUTLINE, BOX_COLOR, BOX_OPACITY, duplicateLayer, WIDTH, HEIGHT,
+  alignLayers, distributeLayers,
 } from '../lib/thumbnailLayers';
 import ThumbnailCanvas from '../components/Thumbnails/ThumbnailCanvas';
 import { usePreview } from '../lib/picturePreview';
@@ -252,15 +255,17 @@ function LayerSettings({ layer, onChange }) {
 }
 
 /** The layers, front first: pick, hide or show, lock, copy, move forward or back, remove. */
-function LayersList({ spec, selectedId, onSelect, onChange, onDuplicate }) {
+function LayersList({ spec, selectedId, pickedIds, onSelect, onChange, onDuplicate }) {
+  const picked = new Set(pickedIds || (selectedId ? [selectedId] : []));
   const front = [...(spec?.layers || [])].reverse();
   return (
     <fieldset className="yts-field" data-testid="yts-layers">
       <legend className="yts-label">Layers</legend>
       <ul className="yts-layers">
         {front.map((l, i) => (
-          <li key={l.id} className={`yts-layer${l.id === selectedId ? ' is-on' : ''}${l.visible ? '' : ' is-hidden'}`}>
-            <button type="button" className="yts-layer-name" onClick={() => onSelect(l.kind === 'shade' ? null : l.id)} aria-pressed={l.id === selectedId}>
+          <li key={l.id} className={`yts-layer${picked.has(l.id) ? ' is-on' : ''}${l.visible ? '' : ' is-hidden'}`}>
+            <button type="button" className="yts-layer-name" aria-pressed={picked.has(l.id)}
+              onClick={(e) => onSelect(l.kind === 'shade' ? null : l.id, { toggle: l.kind !== 'shade' && (e.shiftKey || e.ctrlKey || e.metaKey) })}>
               {layerName(l)}
             </button>
             <button type="button" className="yts-icon-btn" onClick={() => onChange(updateLayer(spec, l.id, { visible: !l.visible }))}
@@ -325,6 +330,65 @@ function ChecklistEditor({ layer, onChange }) {
         <button type="button" className="yts-btn" onClick={() => onChange({ items: [...items, { text: 'New', checked: true }] })}>Add a row</button>
       )}
     </fieldset>
+  );
+}
+
+const ALIGN_TOOLS = [
+  ['left', 'Line up left edges', AlignStartVertical], ['center', 'Line up centres across', AlignCenterVertical], ['right', 'Line up right edges', AlignEndVertical],
+  ['top', 'Line up tops', AlignStartHorizontal], ['middle', 'Line up middles', AlignCenterHorizontal], ['bottom', 'Line up bottoms', AlignEndHorizontal],
+];
+
+/**
+ * Arranging the picked layers (Evoni, 2026-10-21): one lines up with the
+ * canvas, several with each other; three or more spread evenly.
+ */
+function ArrangeBar({ count, onAlign, onSpread, onClear }) {
+  if (!count) return null;
+  return (
+    <div className="yts-arrange" role="toolbar" aria-label="Arrange" data-testid="yts-arrange">
+      <span className="yts-arrange-count">{count === 1 ? '1 picked: line up with the canvas' : `${count} picked`}</span>
+      {ALIGN_TOOLS.map(([how, label, Icon]) => (
+        <button key={how} type="button" className="yts-icon-btn" onClick={() => onAlign(how)} aria-label={label} title={label}>
+          <Icon size={15} aria-hidden />
+        </button>
+      ))}
+      <button type="button" className="yts-icon-btn" onClick={() => onSpread('x')} disabled={count < 3}
+        aria-label="Spread evenly across" title="Spread evenly across (3 or more)"><AlignHorizontalDistributeCenter size={15} aria-hidden /></button>
+      <button type="button" className="yts-icon-btn" onClick={() => onSpread('y')} disabled={count < 3}
+        aria-label="Spread evenly down" title="Spread evenly down (3 or more)"><AlignVerticalDistributeCenter size={15} aria-hidden /></button>
+      <button type="button" className="yts-icon-btn" onClick={onClear} aria-label="Pick nothing" title="Pick nothing (Esc)"><X size={15} aria-hidden /></button>
+    </div>
+  );
+}
+
+const SHORTCUTS = [
+  ['Click', 'Pick a layer'],
+  ['Shift-click or Ctrl-click', 'Pick more than one (or take one away)'],
+  ['Drag across the canvas', 'Pick everything the box touches'],
+  ['Arrow keys', 'Nudge the picked layers 1 point (with Shift, 10)'],
+  ['Alt while dragging', 'Move freely, without snapping'],
+  ['Delete or Backspace', 'Remove the picked layers (not locked ones)'],
+  ['Esc', 'Pick nothing'],
+  ['Ctrl+Z', 'Undo'],
+  ['Ctrl+Shift+Z or Ctrl+Y', 'Redo'],
+  ['Ctrl+D', 'Copy the picked layer'],
+  ['?', 'Show or hide this list'],
+];
+
+function ShortcutsPanel({ onClose }) {
+  return (
+    <section className="yts-shortcuts" aria-label="Keyboard shortcuts" data-testid="yts-shortcuts">
+      <div className="yts-templates-head">
+        <p className="yts-label"><Keyboard size={16} aria-hidden /> Keyboard shortcuts</p>
+        <button type="button" className="yts-icon-btn" onClick={onClose} aria-label="Close the shortcuts"><X size={15} aria-hidden /></button>
+      </div>
+      <dl className="yts-shortcut-list">
+        {SHORTCUTS.map(([keys, what]) => (
+          <React.Fragment key={keys}><dt>{keys}</dt><dd>{what}</dd></React.Fragment>
+        ))}
+      </dl>
+      <p className="yts-note">On a Mac, Cmd works wherever Ctrl is named.</p>
+    </section>
   );
 }
 
@@ -437,9 +501,25 @@ export default function YouTubeThumbnailStudio() {
   const [sources, setSources] = useState(null);
   const [spec, setSpecState] = useState(null);
   const [look, setLook] = useState(null);
-  const [selectedId, setSelectedId] = useState(null);
+  // The picked layers (Evoni, 2026-10-21: arranging tools): the main one,
+  // whose settings show, and any others picked with it.
+  const [selectedId, setPrimary] = useState(null);
+  const [extraIds, setExtraIds] = useState([]);
+  const setSelectedId = useCallback((v) => { setPrimary(v); setExtraIds([]); }, []);
   const selectedIdRef = useRef(null);
   selectedIdRef.current = selectedId;
+  const pickedIds = useMemo(() => (selectedId ? [selectedId, ...extraIds.filter((id) => id !== selectedId)] : []), [selectedId, extraIds]);
+  const pickedRef = useRef([]);
+  pickedRef.current = pickedIds;
+  // A question asked on the page before something is replaced or deleted ({ text, yes }).
+  const [asking, setAsking] = useState(null);
+  const [showKeys, setShowKeys] = useState(false);
+  // Loading the episode, and what failed to load (with Retry).
+  const [loading, setLoading] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(null); // 'shows' | 'episodes' | 'episode'
+  const [listsTick, setListsTick] = useState(0);
+  const [episodeTick, setEpisodeTick] = useState(0);
+  const retryLoad = () => (loadFailed === 'episode' ? setEpisodeTick((n) => n + 1) : setListsTick((n) => n + 1));
   const [uploads, setUploads] = useState([]);
   const [uploading, setUploading] = useState(null);
   const [exact, setExact] = useState(null);
@@ -465,18 +545,20 @@ export default function YouTubeThumbnailStudio() {
 
   // Shows, then the chosen show's episodes.
   useEffect(() => {
-    youtubeThumbnailsApi.shows().then(setShows).catch((err) => {
+    youtubeThumbnailsApi.shows().then((list) => { setShows(list); setLoadFailed((f) => (f === 'shows' ? null : f)); }).catch((err) => {
       console.error('[YouTubeThumbnails] shows load failed:', err);
       setMessage({ type: 'error', text: 'Could not load the shows.' });
+      setLoadFailed('shows');
     });
-  }, []);
+  }, [listsTick]);
   useEffect(() => {
     if (!showId) { setEpisodes([]); return; }
-    youtubeThumbnailsApi.episodes(showId).then(setEpisodes).catch((err) => {
+    youtubeThumbnailsApi.episodes(showId).then((list) => { setEpisodes(list); setLoadFailed((f) => (f === 'episodes' ? null : f)); }).catch((err) => {
       console.error('[YouTubeThumbnails] episodes load failed:', err);
+      setLoadFailed('episodes');
       setMessage({ type: 'error', text: 'Could not load the episodes.' });
     });
-  }, [showId]);
+  }, [showId, listsTick]);
 
   /** This episode's words and pictures, as a template or a layout fills them. */
   const episodeContent = useCallback((src) => {
@@ -512,8 +594,11 @@ export default function YouTubeThumbnailStudio() {
     setExact(null);
     setSelectedId(null);
     setDraftNote(null);
+    setLoading(true);
     youtubeThumbnailsApi.sources(episodeId).then((src) => {
       if (!live || !src) return;
+      setLoading(false);
+      setLoadFailed((f) => (f === 'episode' ? null : f));
       setSources(src);
       if (src.show?.id && src.show.id !== showId) setShowId(src.show.id);
       const lk = { layout: src.style?.layout || 'lala-left', accent: src.style?.accent, textColor: src.style?.textColor, dim: src.style?.dim };
@@ -539,11 +624,14 @@ export default function YouTubeThumbnailStudio() {
       }
     }).catch((err) => {
       console.error('[YouTubeThumbnails] sources load failed:', err);
-      if (live) setMessage({ type: 'error', text: err?.response?.data?.error || 'Could not load the episode.' });
+      if (!live) return;
+      setLoading(false);
+      setLoadFailed('episode');
+      setMessage({ type: 'error', text: err?.response?.data?.error || 'Could not load the episode.' });
     });
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [episodeId]);
+  }, [episodeId, episodeTick]);
 
   // Every change is kept for this episode, a moment after the last one.
   useEffect(() => {
@@ -616,13 +704,59 @@ export default function YouTubeThumbnailStudio() {
     if (next.layers[i + 1]) setSelectedId(next.layers[i + 1].id);
   }, [edit]);
 
-  // Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z or Ctrl+Y redo, Ctrl/Cmd+D copy the
-  // picked layer; not while typing in a field (it has its own undo).
+  /** Picks a layer; with toggle, adds it to the picked ones or takes it away. */
+  const select = useCallback((id, { toggle } = {}) => {
+    if (!toggle || !id) { setSelectedId(id); return; }
+    const now = pickedRef.current;
+    if (now.includes(id)) {
+      const rest = now.filter((x) => x !== id);
+      setPrimary(rest[0] || null);
+      setExtraIds(rest.slice(1));
+    } else if (!now.length) {
+      setSelectedId(id);
+    } else {
+      setExtraIds([...now.slice(1), id]);
+    }
+  }, [setSelectedId]);
+  const selectMany = useCallback((ids) => { setPrimary(ids[0] || null); setExtraIds(ids.slice(1)); }, []);
+
+  /** Several layers changed at once (moved together, lined up): one step to undo. */
+  const editMany = useCallback((patches) => edit((s) => Object.entries(patches).reduce((acc, [id, patch]) => updateLayer(acc, id, patch), s)), [edit]);
+  const align = (how) => edit((s) => alignLayers(s, pickedRef.current, how));
+  const spread = (axis) => edit((s) => distributeLayers(s, pickedRef.current, axis));
+
+  /** Removes the picked layers that are not locked. */
+  const removePicked = useCallback(() => {
+    const ids = pickedRef.current;
+    const gone = (specRef.current?.layers || []).filter((l) => ids.includes(l.id) && !l.locked && l.kind !== 'shade').map((l) => l.id);
+    if (!gone.length) return;
+    edit((s) => gone.reduce((acc, id) => removeLayer(acc, id), s));
+    const left = ids.filter((id) => !gone.includes(id));
+    setPrimary(left[0] || null);
+    setExtraIds(left.slice(1));
+  }, [edit]);
+
+  // Keys outside a field: Delete or Backspace removes the picked layers,
+  // Esc picks nothing, ? shows the shortcuts. Ctrl/Cmd+Z undo,
+  // Ctrl/Cmd+Shift+Z or Ctrl+Y redo, Ctrl/Cmd+D copy the picked layer; not
+  // while typing in a field (it has its own undo).
   useEffect(() => {
     const onKey = (e) => {
-      if (!(e.ctrlKey || e.metaKey) || !specRef.current) return;
+      if (!specRef.current) return;
       const tag = e.target?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target?.isContentEditable) return;
+      if (!(e.ctrlKey || e.metaKey)) {
+        if ((e.key === 'Delete' || e.key === 'Backspace') && pickedRef.current.length) {
+          e.preventDefault();
+          removePicked();
+        } else if (e.key === 'Escape') {
+          setSelectedId(null);
+          setShowKeys(false);
+        } else if (e.key === '?') {
+          setShowKeys((v) => !v);
+        }
+        return;
+      }
       const key = e.key.toLowerCase();
       if (key === 'z' && !e.shiftKey) {
         e.preventDefault();
@@ -637,7 +771,7 @@ export default function YouTubeThumbnailStudio() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [undo, redo, duplicate]);
+  }, [undo, redo, duplicate, removePicked, setSelectedId]);
 
   const setRole = (role, value) => edit((s) => {
     if (!value && (role === 'lala' || role === 'jaw')) {
@@ -663,8 +797,17 @@ export default function YouTubeThumbnailStudio() {
     edit((s) => applyStyle(s, patch));
   };
 
+  const ask = (text, yes) => setAsking({ text, yes });
+
   const pickLayout = (layout) => {
-    if (edited.current && !window.confirm('Start again from this layout? Moved, resized and turned layers go back to where the layout puts them.')) return;
+    if (edited.current) {
+      ask('Start again from this layout? Moved, resized and turned layers go back to where the layout puts them.', () => applyLayout(layout));
+      return;
+    }
+    applyLayout(layout);
+  };
+
+  const applyLayout = (layout) => {
     // What is on the thumbnail now, and the episode's own for what is not.
     const own = sources ? episodeContent(sources) : {};
     const pieces = ['piece-1', 'piece-2', 'piece-3', 'piece-4'].map((r) => layerOf(spec, r)).filter(Boolean).map((l) => ({ url: l.src, label: l.name }));
@@ -687,9 +830,10 @@ export default function YouTubeThumbnailStudio() {
 
   const resetToTemplate = () => {
     if (!sources) return;
-    if (!window.confirm(`Start this episode again from ${sources.template ? "the show's template" : "the show's layout"}?`)) return;
-    setSelectedId(null);
-    edit(startingSpec(sources, look));
+    ask(`Start this episode again from ${sources.template ? "the show's default template" : "the show's layout"}? Undo goes back.`, () => {
+      setSelectedId(null);
+      edit(startingSpec(sources, look));
+    });
   };
 
   const upload = async (file, then) => {
@@ -782,8 +926,9 @@ export default function YouTubeThumbnailStudio() {
     }
   };
 
-  const removeSaved = async (thumb) => {
-    if (!window.confirm('Delete this saved thumbnail? This cannot be undone.')) return;
+  const removeSaved = (thumb) => ask('Delete this saved thumbnail? This cannot be undone.', () => deleteSaved(thumb));
+
+  const deleteSaved = async (thumb) => {
     setBusy(true);
     try {
       await youtubeThumbnailsApi.removeSaved(episodeId, thumb.id);
@@ -891,16 +1036,38 @@ export default function YouTubeThumbnailStudio() {
         </div>
       </header>
 
-      {message && <p className={`yts-message is-${message.type}`} role={message.type === 'error' ? 'alert' : 'status'}>{message.text}</p>}
+      {message && (
+        <div className={`yts-message is-${message.type}`} role={message.type === 'error' ? 'alert' : 'status'}>
+          <span>{message.text}</span>
+          {loadFailed && message.type === 'error' && (
+            <button type="button" className="yts-btn" onClick={() => { setMessage(null); retryLoad(); }} data-testid="yts-retry">
+              <RefreshCw size={15} aria-hidden /> Try again
+            </button>
+          )}
+        </div>
+      )}
+
+      {asking && (
+        <div className="yts-ask" role="group" aria-label="Confirm" data-testid="yts-ask">
+          <p>{asking.text}</p>
+          <button type="button" className="yts-btn is-primary" onClick={() => { const { yes } = asking; setAsking(null); yes(); }}>Yes</button>
+          <button type="button" className="yts-btn" onClick={() => setAsking(null)}>No</button>
+        </div>
+      )}
 
       {!spec ? (
-        <div className="yts-empty"><LayoutTemplate size={36} aria-hidden /><p>Choose a show and an episode to make its thumbnail.</p></div>
+        loading ? (
+          <div className="yts-empty" role="status" data-testid="yts-loading"><span className="yts-spinner" aria-hidden /><p>Loading the episode…</p></div>
+        ) : (
+          <div className="yts-empty"><LayoutTemplate size={36} aria-hidden /><p>Choose a show and an episode to make its thumbnail.</p></div>
+        )
       ) : (
         <>
         <div className="yts-work">
           <section className="yts-stage" aria-label="Editor">
-            <ThumbnailCanvas spec={spec} selectedId={selectedId} onSelect={setSelectedId} fontsTick={fontsTick}
-              onChange={(id, patch) => edit((s) => updateLayer(s, id, patch))} />
+            <ThumbnailCanvas spec={spec} selectedId={selectedId} selectedIds={pickedIds} onSelect={select} onSelectMany={selectMany}
+              fontsTick={fontsTick} onChange={(id, patch) => edit((s) => updateLayer(s, id, patch))} onChangeMany={editMany} />
+            <ArrangeBar count={pickedIds.length} onAlign={align} onSpread={spread} onClear={() => setSelectedId(null)} />
             <p className="yts-note" data-testid="yts-draft-note">
               {draftNote || 'Click a layer to move it, pull a corner to resize, use the top handle to turn it.'}
             </p>
@@ -920,7 +1087,11 @@ export default function YouTubeThumbnailStudio() {
               <button type="button" className="yts-btn" onClick={resetToTemplate} data-testid="yts-reset">
                 <RotateCcw size={16} aria-hidden /> Start again
               </button>
+              <button type="button" className="yts-btn" onClick={() => setShowKeys((v) => !v)} aria-expanded={showKeys} data-testid="yts-keys-btn" title="Keyboard shortcuts (?)">
+                <Keyboard size={16} aria-hidden /> Shortcuts
+              </button>
             </div>
+            {showKeys && <ShortcutsPanel onClose={() => setShowKeys(false)} />}
             {exact && (
               <figure className="yts-exact" data-testid="yts-exact-figure">
                 <img src={exact} alt="The thumbnail exactly as it will be saved" data-testid="yts-preview" />
@@ -954,7 +1125,7 @@ export default function YouTubeThumbnailStudio() {
               <p className="yts-saved"><Check size={16} aria-hidden /> Saved. <Link to={`/episodes/${episodeId}?tab=production`}>Back to Production</Link></p>
             )}
             <LayerSettings layer={picked} onChange={(patch) => edit((s) => updateLayer(s, picked.id, patch))} />
-            <LayersList spec={spec} selectedId={selectedId} onSelect={setSelectedId} onChange={edit} onDuplicate={duplicate} />
+            <LayersList spec={spec} selectedId={selectedId} pickedIds={pickedIds} onSelect={select} onChange={edit} onDuplicate={duplicate} />
           </section>
 
           <section className="yts-panel" aria-label="Thumbnail settings">

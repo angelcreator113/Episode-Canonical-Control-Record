@@ -15,7 +15,7 @@
 .yts-select { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: var(--accent-dark); }
 .yts-select select { min-width: 220px; max-width: 100%; min-height: 40px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--accent-light); background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 14px; font-weight: 500; }
 
-.yts-message { margin: 0; padding: 10px 14px; border-radius: 12px; font-size: 14px; }
+.yts-message { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 0; padding: 10px 14px; border-radius: 12px; font-size: 14px; }
 .yts-message.is-error { background: var(--danger-bg); color: var(--danger-text); }
 .yts-message.is-ok { background: var(--success-bg); color: var(--success-text); }
 .yts-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 48px 16px; border-radius: 18px; border: 1.5px dashed var(--lala-gold-line); background: var(--surface-card); color: var(--text-secondary); text-align: center; }
@@ -159,3 +159,19 @@
 .yts-title-colour { display: flex; gap: 6px; align-items: center; }
 .yts-title-colour .yts-input { flex: 1 1 auto; min-width: 0; }
 .yts-title-colour .yts-color { flex: 0 0 48px; width: 48px; }
+
+/* Arranging, shortcuts, questions on the page, loading (Evoni, 2026-10-21) */
+.yts-arrange { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.yts-arrange-count { margin-right: 4px; font-size: 13px; font-weight: 700; color: var(--accent-dark); }
+.yts-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 12px; border: 1.5px solid var(--accent-dark); background: var(--surface-card); color: var(--text-primary); }
+.yts-ask p { flex: 1 1 220px; margin: 0; font-weight: 700; }
+.yts-shortcuts { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 14px; border: 1.5px solid var(--lala-gold-line); background: var(--surface-card); color: var(--text-primary); }
+.yts-shortcut-list { display: grid; grid-template-columns: minmax(0, max-content) 1fr; gap: 6px 14px; margin: 0; font-size: 14px; }
+.yts-shortcut-list dt { font-weight: 700; color: var(--accent-dark); }
+.yts-shortcut-list dd { margin: 0; }
+.yts-spinner { width: 32px; height: 32px; border-radius: 50%; border: 3px solid var(--lala-parchment-3); border-top-color: var(--accent-dark); animation: yts-spin 0.9s linear infinite; }
+@keyframes yts-spin { to { transform: rotate(360deg); } }
+@media (max-width: 520px) {
+  .yts-shortcut-list { grid-template-columns: 1fr; gap: 2px; }
+  .yts-shortcut-list dd { margin-bottom: 6px; }
+}

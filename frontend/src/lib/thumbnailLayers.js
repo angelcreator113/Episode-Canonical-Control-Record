@@ -409,3 +409,68 @@ export function snapBox(box, others = []) {
     guides: [...(sx ? [{ x: sx.at }] : []), ...(sy ? [{ y: sy.at }] : [])],
   };
 }
+
+/**
+ * Lines layers up (Evoni, 2026-10-21: arranging tools). how: left, center,
+ * right (across), top, middle, bottom (down). One layer lines up with the
+ * canvas; several with the box round them all. Locked layers, the shade
+ * and missing ids are left where they are. Boxes are the layers' own
+ * (x, y, w, h), before any turn.
+ */
+export function alignLayers(spec, ids, how) {
+  const moving = spec.layers.filter((l) => ids.includes(l.id) && !l.locked && l.kind !== 'shade');
+  if (!moving.length) return spec;
+  const area = moving.length === 1
+    ? { left: 0, top: 0, right: WIDTH, bottom: HEIGHT }
+    : {
+      left: Math.min(...moving.map((l) => l.x)), top: Math.min(...moving.map((l) => l.y)),
+      right: Math.max(...moving.map((l) => l.x + l.w)), bottom: Math.max(...moving.map((l) => l.y + l.h)),
+    };
+  const place = {
+    left: () => ({ x: area.left }),
+    center: (l) => ({ x: Math.round((area.left + area.right - l.w) / 2) }),
+    right: (l) => ({ x: area.right - l.w }),
+    top: () => ({ y: area.top }),
+    middle: (l) => ({ y: Math.round((area.top + area.bottom - l.h) / 2) }),
+    bottom: (l) => ({ y: area.bottom - l.h }),
+  }[how];
+  if (!place) return spec;
+  const ids2 = new Set(moving.map((l) => l.id));
+  return { ...spec, layers: spec.layers.map((l) => (ids2.has(l.id) ? { ...l, ...place(l) } : l)) };
+}
+
+/**
+ * Spreads three or more layers evenly (axis 'x' across, 'y' down): the
+ * first and last stay, the ones between get equal gaps. Locked layers and
+ * the shade are left out.
+ */
+export function distributeLayers(spec, ids, axis) {
+  const [pos, size] = axis === 'y' ? ['y', 'h'] : ['x', 'w'];
+  const moving = spec.layers.filter((l) => ids.includes(l.id) && !l.locked && l.kind !== 'shade')
+    .sort((a, b) => (a[pos] + a[size] / 2) - (b[pos] + b[size] / 2));
+  if (moving.length < 3) return spec;
+  const first = moving[0];
+  const last = moving[moving.length - 1];
+  const used = moving.reduce((n, l) => n + l[size], 0);
+  const gap = (last[pos] + last[size] - first[pos] - used) / (moving.length - 1);
+  const at = new Map();
+  let cursor = first[pos];
+  for (const l of moving) {
+    at.set(l.id, Math.round(cursor));
+    cursor += l[size] + gap;
+  }
+  at.set(last.id, last[pos]);
+  return { ...spec, layers: spec.layers.map((l) => (at.has(l.id) ? { ...l, [pos]: at.get(l.id) } : l)) };
+}
+
+/** The layers a drag box from (x0, y0) to (x1, y1) touches, front first; not the shade, the background, or hidden ones. */
+export function layersInBox(spec, { x0, y0, x1, y1 }) {
+  const left = Math.min(x0, x1);
+  const right = Math.max(x0, x1);
+  const top = Math.min(y0, y1);
+  const bottom = Math.max(y0, y1);
+  return [...spec.layers].reverse()
+    .filter((l) => l.visible && l.kind !== 'shade' && l.role !== 'background')
+    .filter((l) => l.x < right && l.x + l.w > left && l.y < bottom && l.y + l.h > top)
+    .map((l) => l.id);
+}
