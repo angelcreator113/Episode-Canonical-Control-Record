@@ -6,7 +6,7 @@
  *
  *   GET  /episodes/:episodeId/sources   the episode, its show, its show's saved style,
  *                                        and the pictures to choose from
- *   POST /render                         a preview PNG (no saving)
+ *   POST /render                         the file as it would be saved (no saving): PNG, or JPEG over 2 MB
  *   POST /episodes/:episodeId            render and save as the episode's primary thumbnail
  *   PUT  /shows/:showId/style            save the show's style for every episode
  *   GET  /templates                      every show's named templates, with their pictures (the Templates page)
@@ -75,10 +75,13 @@ router.get('/episodes/:episodeId/sources', requireAuth, async (req, res) => {
 
 router.post('/render', requireAuth, async (req, res) => {
   try {
-    const png = await renderRequest(req);
-    res.set('Content-Type', 'image/png');
+    // The file exactly as it would be saved: a JPEG when the PNG is over YouTube's 2 MB.
+    const file = await yt.forYouTube(await renderRequest(req));
+    res.set('Content-Type', file.mime);
     res.set('Cache-Control', 'no-store');
-    return res.send(png);
+    res.set('X-Thumbnail-Bytes', String(file.bytes));
+    res.set('X-Thumbnail-Png-Bytes', String(file.pngBytes));
+    return res.send(file.buffer);
   } catch (err) {
     return sendError(res, err, 'render');
   }

@@ -474,3 +474,66 @@ export function layersInBox(spec, { x0, y0, x1, y1 }) {
     .filter((l) => l.x < right && l.x + l.w > left && l.y < bottom && l.y + l.h > top)
     .map((l) => l.id);
 }
+
+// How a thumbnail looks where YouTube shows it (Evoni, 2026-10-21): the
+// smallest place is the sidebar's "Up next", 168 wide; the video's length
+// sits over the bottom right corner.
+export const YOUTUBE_SIZES = [
+  { key: 'search', label: 'Search, on a computer', width: 360 },
+  { key: 'phone', label: 'Home, on a phone', width: 343 },
+  { key: 'sidebar', label: 'Up next, beside a video', width: 168 },
+];
+export const SMALLEST_WIDTH = 168;
+// Words smaller than this many pixels in the sidebar are hard to read.
+export const READABLE_PX = 8;
+// Where YouTube's timestamp ("12:34") covers the thumbnail, in canvas points.
+export const TIMESTAMP_ZONE = { x: 1090, y: 630, w: 190, h: 90 };
+
+/** The size words are drawn at, after fitting their box (as both renderers draw them); null for layers without words. */
+export function drawnSize(l, measureFor) {
+  const measure = measureFor(l.font);
+  if (l.kind === 'text') {
+    const text = l.upper ? String(l.text || '').toUpperCase() : String(l.text || '');
+    if (!text.trim()) return null;
+    const pad = l.bg ? Math.round(l.size * 0.25) : 0;
+    return fitText(text, { w: l.w - pad * 2, h: l.h - pad * 2, size: l.size }, spaced(measure, l.spacing || 0)).size;
+  }
+  if (l.kind === 'badge') {
+    if (!String(l.text || '').trim()) return null;
+    return fitText(String(l.text).toUpperCase(), { w: l.w * 0.8, h: l.h * 0.7, size: Math.round(l.h * 0.55) }, measure).size;
+  }
+  if (l.kind === 'checklist') return (l.items || []).length ? checklistRows(l, measure).size : null;
+  return null;
+}
+
+const QUIET_SMALL = new Set(['kicker', 'badge']);
+
+const overlaps = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+
+/**
+ * What would go wrong where YouTube shows the thumbnail: words too small to
+ * read in the sidebar (not the show's name or the "EP" badge, small by
+ * design), and any words under the timestamp. [{ id, kind:
+ * 'small' | 'timestamp', text }], front layers first.
+ */
+export function youtubeWarnings(spec, measureFor) {
+  const out = [];
+  for (const l of [...(spec?.layers || [])].reverse()) {
+    if (!l.visible) continue;
+    const size = drawnSize(l, measureFor);
+    if (size === null) continue;
+    const name = layerName(l);
+    const px = Math.round((size * SMALLEST_WIDTH) / WIDTH * 10) / 10;
+    // The show's name and the "EP" badge are small by design; the words that carry the thumbnail must read.
+    if (px < READABLE_PX && !QUIET_SMALL.has(l.role)) {
+      out.push({ id: l.id, kind: 'small', text: `${name} is about ${px} pixels tall beside a video: too small to read. Make it bigger or use fewer words.` });
+    }
+    if (overlaps(l, TIMESTAMP_ZONE)) {
+      out.push({ id: l.id, kind: 'timestamp', text: `${name} sits under YouTube's timestamp in the bottom right corner.` });
+    }
+  }
+  return out;
+}
+
+/** "1.4 MB" or "860 KB". */
+export const fileSize = (bytes) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);

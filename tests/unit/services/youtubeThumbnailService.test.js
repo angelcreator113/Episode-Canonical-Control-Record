@@ -199,9 +199,34 @@ describe('database work', () => {
     expect(insert).not.toMatch(/isPrimary|publishStatus/);
     // format is the migration's enum (thumbnail, poster, cover): 'png' is refused there.
     expect(insert).toMatch(/'thumbnail', 'primary'/);
-    expect(out).toMatchObject({ id: 42, url: expect.stringContaining(out.key) });
+    expect(out).toMatchObject({ id: 42, url: expect.stringContaining(out.key), type: 'png', bytes: 3 });
     expect(s.query.mock.calls[2][0]).toMatch(/UPDATE episodes SET thumbnail_url = :url/);
     expect(s.query.mock.calls[2][1].replacements).toEqual({ episodeId: 'ep-1', url: out.url });
+  });
+
+  // YouTube refuses a custom thumbnail over 2 MB (Evoni, 2026-10-21).
+  const noise = (w, h) => sharp(require('crypto').randomBytes(w * h * 3), { raw: { width: w, height: h, channels: 3 } }).png().toBuffer();
+
+  test('forYouTube: a PNG within 2 MB stays a PNG; a bigger one becomes the best JPEG under 2 MB', async () => {
+    const small = await sharp({ create: { width: 1280, height: 720, channels: 3, background: '#336699' } }).png().toBuffer();
+    expect(await yt.forYouTube(small)).toMatchObject({ type: 'png', mime: 'image/png', ext: 'png', bytes: small.length });
+    const big = await noise(1280, 720);
+    expect(big.length).toBeGreaterThan(yt.YOUTUBE_MAX_BYTES);
+    const out = await yt.forYouTube(big);
+    expect(out).toMatchObject({ type: 'jpeg', mime: 'image/jpeg', ext: 'jpg', pngBytes: big.length });
+    expect(out.bytes).toBeLessThanOrEqual(yt.YOUTUBE_MAX_BYTES);
+    expect(await sharp(out.buffer).metadata()).toMatchObject({ format: 'jpeg', width: 1280, height: 720 });
+  });
+
+  test('saveAsPrimary saves a PNG over 2 MB as a JPEG, with its own type and size', async () => {
+    mockSend.mockReset();
+    mockSend.mockResolvedValue({});
+    const s = seq([[]], [[{ id: 43 }]], [[]]);
+    const out = await yt.saveAsPrimary(s, 'ep-1', await noise(1280, 720));
+    expect(mockSend.mock.calls[0][0].input).toMatchObject({ Key: expect.stringMatching(/\.jpg$/), ContentType: 'image/jpeg' });
+    expect(out).toMatchObject({ type: 'jpeg', bytes: expect.any(Number) });
+    expect(out.bytes).toBeLessThanOrEqual(yt.YOUTUBE_MAX_BYTES);
+    expect(s.query.mock.calls[1][1].replacements).toMatchObject({ mime: 'image/jpeg', size: out.bytes });
   });
 
   test('listSaved: the current one first, with a URL from the S3 key when the row has none', async () => {

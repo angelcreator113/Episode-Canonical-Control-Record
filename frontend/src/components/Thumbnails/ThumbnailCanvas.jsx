@@ -162,7 +162,7 @@ const coarsePointer = () => typeof window !== 'undefined' && typeof window.match
  * (onChangeMany: { [id]: patch }).
  */
 export default function ThumbnailCanvas({
-  spec, selectedId, selectedIds, onSelect, onSelectMany, onChange, onChangeMany, fontsTick = 0,
+  spec, selectedId, selectedIds, onSelect, onSelectMany, onChange, onChangeMany, onSnapshot, fontsTick = 0,
 }) {
   const wrapRef = useRef(null);
   const stageRef = useRef(null);
@@ -198,6 +198,30 @@ export default function ThumbnailCanvas({
     tr.getLayer()?.batchDraw();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [picksKey, spec, width]);
+
+  // A small picture of the thumbnail for the YouTube previews (Evoni,
+  // 2026-10-21), without the handles: a moment after each change, and once
+  // more a little later, when pictures that were loading have drawn.
+  useEffect(() => {
+    if (!onSnapshot) return undefined;
+    const shoot = () => {
+      const stage = stageRef.current;
+      const tr = trRef.current;
+      if (!stage) return;
+      const shown = tr?.visible();
+      tr?.visible(false);
+      try {
+        onSnapshot(stage.toDataURL({ pixelRatio: 720 / width, mimeType: 'image/jpeg', quality: 0.85 }));
+      } catch (err) {
+        console.error('[ThumbnailCanvas] snapshot failed:', err?.message || err);
+      } finally {
+        tr?.visible(shown !== false);
+      }
+    };
+    const soon = setTimeout(shoot, 500);
+    const later = setTimeout(shoot, 1800);
+    return () => { clearTimeout(soon); clearTimeout(later); };
+  }, [spec, width, fontsTick, onSnapshot]);
 
   const scale = width / WIDTH;
   const layers = (spec?.layers || []).filter((l) => l.visible);
