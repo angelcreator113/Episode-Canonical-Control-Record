@@ -36,13 +36,16 @@ vi.mock('../lib/thumbnailLayers', async () => {
 // The canvas: each visible layer as a button that picks it, and a button
 // that "drags" the picked layer (what Konva's drag and transform report).
 vi.mock('../components/Thumbnails/ThumbnailCanvas', () => ({
-  default: ({ spec, selectedId, onSelect, onChange }) => (
+  default: ({ spec, selectedId, onSelect, onChange, onSnapshot }) => (
+    <>
+    <button type="button" data-testid="canvas-snapshot" onClick={() => onSnapshot?.('data:image/jpeg;base64,c25hcA==')}>snapshot</button>
     <div data-testid="yts-canvas">
       {spec.layers.filter((l) => l.visible).map((l) => (
         <button key={l.id} type="button" data-testid={`canvas-${l.id}`} onClick={() => onSelect(l.id)}>{l.id}</button>
       ))}
       <button type="button" data-testid="canvas-drag" onClick={() => onChange(selectedId, { x: 99, y: 11, w: 300, h: 200, rotation: -12 })}>drag</button>
     </div>
+    </>
   ),
 }));
 
@@ -479,6 +482,37 @@ describe('YouTubeThumbnailStudio', () => {
     fireEvent.click(screen.getByTestId('yts-retry'));
     await opened();
     expect(youtubeThumbnailsApi.sources).toHaveBeenCalledTimes(2);
+  });
+
+  test('where YouTube shows it: three sizes with the timestamp; words too small or under the timestamp are named, and pick their layer', async () => {
+    renderPage();
+    await opened();
+    expect(screen.queryByTestId('yts-youtube')).toBeNull(); // no picture of the canvas yet
+    fireEvent.click(screen.getByTestId('canvas-snapshot'));
+    const yt = within(screen.getByTestId('yts-youtube'));
+    expect(yt.getAllByRole('img').map((i) => i.getAttribute('alt'))).toEqual([
+      'The thumbnail 360 pixels wide', 'The thumbnail 343 pixels wide', 'The thumbnail 168 pixels wide',
+    ]);
+    expect(yt.getByText('Up next, beside a video')).toBeTruthy();
+    expect(yt.getByText('Readable at every size, and clear of the timestamp.')).toBeTruthy();
+    // A title far too long for its box is drawn tiny.
+    fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), { target: { value: 'word '.repeat(30) } });
+    const warn = within(screen.getByTestId('yts-yt-warnings')).getByRole('button', { name: /^Title is about [\d.]+ pixels tall beside a video/ });
+    fireEvent.click(warn);
+    expect(screen.getByTestId('yts-layer-settings').querySelector('legend').textContent).toBe('Title');
+  });
+
+  test('See it exactly and Save say the file type and size; a JPEG says why', async () => {
+    renderPage();
+    await opened();
+    youtubeThumbnailsApi.render.mockResolvedValueOnce(new Blob([new Uint8Array(1536 * 1024)], { type: 'image/jpeg' }));
+    fireEvent.click(screen.getByTestId('yts-exact'));
+    const fig = await screen.findByTestId('yts-exact-figure');
+    expect(fig.textContent).toContain('Exactly as it will be saved (JPEG, 1.5 MB; over 2 MB as a PNG, so saved as a JPEG for YouTube).');
+    expect(within(fig).getByRole('link', { name: /Download/ }).getAttribute('download')).toMatch(/\.jpg$/);
+    youtubeThumbnailsApi.save.mockResolvedValue({ id: 7, url: 'https://b.s3.amazonaws.com/t.jpg', type: 'jpeg', bytes: 1536 * 1024 });
+    fireEvent.click(screen.getByTestId('yts-save'));
+    expect(await screen.findByText("Saved as the episode's thumbnail (JPEG, 1.5 MB; YouTube allows 2 MB).")).toBeTruthy();
   });
 
   test('text tools: line up, largest size, letter spacing, a box behind the words', async () => {

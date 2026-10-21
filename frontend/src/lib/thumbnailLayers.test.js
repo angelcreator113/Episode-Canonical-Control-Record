@@ -6,7 +6,7 @@
  */
 import { describe, test, expect } from 'vitest';
 import {
-  spaced, alignLayers, distributeLayers, layersInBox,
+  spaced, alignLayers, distributeLayers, layersInBox, youtubeWarnings, drawnSize, fileSize, TIMESTAMP_ZONE,
   presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer, addText, addPicture,
   boxFromNode, fitText, fitPicture, layerName, LINE_HEIGHT, checklistRows, duplicateLayer, snapBox, SNAP,
 } from './thumbnailLayers';
@@ -246,5 +246,40 @@ describe('arranging (Evoni, 2026-10-21)', () => {
     const withBg = { ...spec, layers: [{ id: 'bg', kind: 'image', role: 'background', visible: true, x: 0, y: 0, w: 1280, h: 720 }, ...spec.layers, box('hid', 120, 60, 10, 10, { visible: false })] };
     expect(layersInBox(withBg, { x0: 0, y0: 0, x1: 600, y1: 400 })).toEqual(['lock', 'b', 'a']);
     expect(layersInBox(withBg, { x0: 700, y0: 0, x1: 650, y1: 10 })).toEqual([]);
+  });
+});
+
+describe('where YouTube shows it (Evoni, 2026-10-21)', () => {
+  // 0.5 points per letter per point of size: easy sums.
+  const measureFor = () => (s, size) => String(s).length * size * 0.5;
+  const words = (id, text, more = {}) => ({ id, kind: 'text', role: null, name: id, visible: true, text, size: 120, font: 'sans', x: 100, y: 100, w: 600, h: 200, ...more });
+
+  test('drawnSize: the size words are drawn at after fitting their box', () => {
+    expect(drawnSize(words('t', 'Glam'), measureFor)).toBe(120);
+    // 40 letters at 120 would be 2400 wide: made smaller until they fit 600 x 200.
+    expect(drawnSize(words('t', 'x'.repeat(40)), measureFor)).toBeLessThan(40);
+    expect(drawnSize({ id: 'p', kind: 'image', visible: true }, measureFor)).toBeNull();
+    expect(drawnSize(words('t', '   '), measureFor)).toBeNull();
+  });
+
+  test('words too small to read beside a video, and words under the timestamp', () => {
+    const spec = { version: 2, layers: [
+      words('big', 'Glam'),
+      words('tiny', 'x'.repeat(200), { name: 'Fine print' }),
+      words('corner', 'EP 1', { x: TIMESTAMP_ZONE.x - 20, y: TIMESTAMP_ZONE.y + 10, w: 150, h: 90, name: 'Corner' }),
+      words('hidden', 'x'.repeat(200), { visible: false }),
+    ] };
+    const out = youtubeWarnings(spec, measureFor);
+    expect(out.map((w) => [w.id, w.kind])).toEqual([['corner', 'timestamp'], ['tiny', 'small']]);
+    expect(out[1].text).toMatch(/^Fine print is about [\d.]+ pixels tall beside a video/);
+    // The show's name and the badge are small by design: only the timestamp counts for them.
+    const quiet = { version: 2, layers: [words('k', 'x'.repeat(200), { role: 'kicker' }), words('b', 'EP 1', { role: 'badge', ...TIMESTAMP_ZONE })] };
+    expect(youtubeWarnings(quiet, measureFor).map((w) => [w.id, w.kind])).toEqual([['b', 'timestamp']]);
+  });
+
+  test('fileSize', () => {
+    expect(fileSize(1.4 * 1024 * 1024)).toBe('1.4 MB');
+    expect(fileSize(860 * 1024)).toBe('860 KB');
+    expect(fileSize(10)).toBe('1 KB');
   });
 });

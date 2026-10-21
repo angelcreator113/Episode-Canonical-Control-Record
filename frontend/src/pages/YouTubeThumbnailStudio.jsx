@@ -41,7 +41,7 @@ import {
 import {
   FONTS, presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer,
   addText, addPicture, layerName, loadThumbnailFonts, OUTLINE, BOX_COLOR, BOX_OPACITY, duplicateLayer, WIDTH, HEIGHT,
-  alignLayers, distributeLayers,
+  alignLayers, distributeLayers, measurer, youtubeWarnings, fileSize, YOUTUBE_SIZES,
 } from '../lib/thumbnailLayers';
 import ThumbnailCanvas from '../components/Thumbnails/ThumbnailCanvas';
 import { usePreview } from '../lib/picturePreview';
@@ -361,6 +361,47 @@ function ArrangeBar({ count, onAlign, onSpread, onClear }) {
   );
 }
 
+/**
+ * The thumbnail where YouTube shows it (Evoni, 2026-10-21): in search, on
+ * a phone and beside a video, with the timestamp over its corner; and what
+ * would go wrong there (words too small, words under the timestamp).
+ * Picking a warning picks its layer.
+ */
+function YouTubePreviews({ src, title, channel, warnings, onPick }) {
+  if (!src) return null;
+  return (
+    <section className="yts-yt" aria-label="Where YouTube shows it" data-testid="yts-youtube">
+      <p className="yts-label"><Youtube size={16} aria-hidden /> Where YouTube shows it</p>
+      <div className="yts-yt-grid">
+        {YOUTUBE_SIZES.map((size) => (
+          <figure key={size.key} className={`yts-yt-card is-${size.key}`}>
+            <div className="yts-yt-thumb" style={{ width: size.width }}>
+              <img src={src} alt={`The thumbnail ${size.width} pixels wide`} />
+              <span className="yts-yt-time" aria-hidden>12:34</span>
+            </div>
+            <figcaption>
+              <strong>{title || 'Episode title'}</strong>
+              <span>{channel}</span>
+              <em>{size.label}</em>
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+      {warnings.length ? (
+        <ul className="yts-yt-warn" data-testid="yts-yt-warnings">
+          {warnings.map((w) => (
+            <li key={`${w.id}-${w.kind}`}>
+              <button type="button" className="yts-yt-warn-btn" onClick={() => onPick(w.id)}>{w.text}</button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="yts-note">Readable at every size, and clear of the timestamp.</p>
+      )}
+    </section>
+  );
+}
+
 const SHORTCUTS = [
   ['Click', 'Pick a layer'],
   ['Shift-click or Ctrl-click', 'Pick more than one (or take one away)'],
@@ -514,6 +555,10 @@ export default function YouTubeThumbnailStudio() {
   // A question asked on the page before something is replaced or deleted ({ text, yes }).
   const [asking, setAsking] = useState(null);
   const [showKeys, setShowKeys] = useState(false);
+  // A small picture of the editor's thumbnail, for the YouTube previews.
+  const [snapshot, setSnapshot] = useState(null);
+  // The exact file "See it exactly" drew: { type: 'png' | 'jpeg', bytes }.
+  const [exactFile, setExactFile] = useState(null);
   // Loading the episode, and what failed to load (with Retry).
   const [loading, setLoading] = useState(false);
   const [loadFailed, setLoadFailed] = useState(null); // 'shows' | 'episodes' | 'episode'
@@ -888,6 +933,7 @@ export default function YouTubeThumbnailStudio() {
     setRendering(true);
     try {
       const blob = await youtubeThumbnailsApi.render(spec);
+      setExactFile({ type: /jpe?g/.test(blob.type || '') ? 'jpeg' : 'png', bytes: blob.size });
       setExact((old) => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(blob); });
     } catch (err) {
       console.error('[YouTubeThumbnails] render failed:', err);
@@ -902,7 +948,12 @@ export default function YouTubeThumbnailStudio() {
     try {
       const out = await youtubeThumbnailsApi.save(episodeId, spec);
       setSaved(out);
-      setMessage({ type: 'ok', text: "Saved as the episode's thumbnail." });
+      setMessage({
+        type: 'ok',
+        text: out?.bytes
+          ? `Saved as the episode's thumbnail (${out.type === 'jpeg' ? 'JPEG' : 'PNG'}, ${fileSize(out.bytes)}; YouTube allows 2 MB).`
+          : "Saved as the episode's thumbnail.",
+      });
       loadHistory(episodeId);
     } catch (err) {
       console.error('[YouTubeThumbnails] save failed:', err);
@@ -1004,8 +1055,11 @@ export default function YouTubeThumbnailStudio() {
 
   const fileName = useMemo(() => {
     const n = sources?.episode?.episode_number;
-    return `${(sources?.show?.name || 'thumbnail').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}${n ? `-ep${n}` : ''}.png`;
-  }, [sources]);
+    return `${(sources?.show?.name || 'thumbnail').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}${n ? `-ep${n}` : ''}.${exactFile?.type === 'jpeg' ? 'jpg' : 'png'}`;
+  }, [sources, exactFile]);
+
+  // What would go wrong where YouTube shows it (measured with the editor's fonts).
+  const ytWarnings = useMemo(() => (spec ? youtubeWarnings(spec, measurer) : []), [spec, fontsTick]);
 
   const picked = spec?.layers.find((l) => l.id === selectedId) || null;
   const shade = layerOf(spec, 'shade');
@@ -1066,7 +1120,7 @@ export default function YouTubeThumbnailStudio() {
         <div className="yts-work">
           <section className="yts-stage" aria-label="Editor">
             <ThumbnailCanvas spec={spec} selectedId={selectedId} selectedIds={pickedIds} onSelect={select} onSelectMany={selectMany}
-              fontsTick={fontsTick} onChange={(id, patch) => edit((s) => updateLayer(s, id, patch))} onChangeMany={editMany} />
+              fontsTick={fontsTick} onChange={(id, patch) => edit((s) => updateLayer(s, id, patch))} onChangeMany={editMany} onSnapshot={setSnapshot} />
             <ArrangeBar count={pickedIds.length} onAlign={align} onSpread={spread} onClear={() => setSelectedId(null)} />
             <p className="yts-note" data-testid="yts-draft-note">
               {draftNote || 'Click a layer to move it, pull a corner to resize, use the top handle to turn it.'}
@@ -1092,11 +1146,13 @@ export default function YouTubeThumbnailStudio() {
               </button>
             </div>
             {showKeys && <ShortcutsPanel onClose={() => setShowKeys(false)} />}
+            <YouTubePreviews src={snapshot} title={layerOf(spec, 'title')?.text || sources?.episode?.title} channel={sources?.show?.name}
+              warnings={ytWarnings} onPick={(id) => setSelectedId(id)} />
             {exact && (
               <figure className="yts-exact" data-testid="yts-exact-figure">
                 <img src={exact} alt="The thumbnail exactly as it will be saved" data-testid="yts-preview" />
                 <figcaption>
-                  Exactly as it will be saved.
+                  Exactly as it will be saved{exactFile ? ` (${exactFile.type === 'jpeg' ? 'JPEG' : 'PNG'}, ${fileSize(exactFile.bytes)}` : ''}{exactFile?.type === 'jpeg' ? '; over 2 MB as a PNG, so saved as a JPEG for YouTube)' : exactFile ? '; YouTube allows 2 MB)' : ''}.
                   <a className="yts-btn" href={exact} download={fileName}><Download size={16} aria-hidden /> Download</a>
                   <button type="button" className="yts-icon-btn" onClick={() => setExact(null)} aria-label="Close the exact view"><X size={15} aria-hidden /></button>
                 </figcaption>

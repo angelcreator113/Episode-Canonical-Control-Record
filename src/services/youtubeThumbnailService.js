@@ -662,13 +662,38 @@ const getS3 = () => {
   return s3;
 };
 
+// YouTube refuses a custom thumbnail over 2 MB (Evoni, 2026-10-21: keep
+// every saved one under it). A PNG that is too big is saved as a JPEG,
+// at the best quality that fits.
+const YOUTUBE_MAX_BYTES = 2 * 1024 * 1024;
+const JPEG_QUALITIES = [92, 88, 84, 80, 75, 70, 64, 58, 50];
+
 /**
- * Uploads the PNG and makes it the episode's primary thumbnail; the one
- * before it becomes a cover. Returns { id, url, key }.
+ * The file a thumbnail is saved as: the PNG when it is within YouTube's
+ * 2 MB, else the best-quality JPEG that is. { buffer, type: 'png' | 'jpeg',
+ * mime, ext, bytes, pngBytes }.
+ */
+async function forYouTube(png) {
+  if (png.length <= YOUTUBE_MAX_BYTES) {
+    return { buffer: png, type: 'png', mime: 'image/png', ext: 'png', bytes: png.length, pngBytes: png.length };
+  }
+  let jpeg = null;
+  for (const quality of JPEG_QUALITIES) {
+    jpeg = await sharp(png).flatten({ background: '#000000' }).jpeg({ quality, mozjpeg: true }).toBuffer();
+    if (jpeg.length <= YOUTUBE_MAX_BYTES) break;
+  }
+  return { buffer: jpeg, type: 'jpeg', mime: 'image/jpeg', ext: 'jpg', bytes: jpeg.length, pngBytes: png.length };
+}
+
+/**
+ * Uploads the thumbnail (as forYouTube gives it: under 2 MB) and makes it
+ * the episode's primary thumbnail; the one before it becomes a cover.
+ * Returns { id, url, key, type, bytes }.
  */
 async function saveAsPrimary(sequelize, episodeId, png) {
-  const key = `episodes/${episodeId}/thumbnails/youtube-${Date.now()}.png`;
-  await getS3().send(new PutObjectCommand({ Bucket: requireAssetBucket(), Key: key, Body: png, ContentType: 'image/png' }));
+  const file = await forYouTube(png);
+  const key = `episodes/${episodeId}/thumbnails/youtube-${Date.now()}.${file.ext}`;
+  await getS3().send(new PutObjectCommand({ Bucket: requireAssetBucket(), Key: key, Body: file.buffer, ContentType: file.mime }));
   const url = `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`;
   // Only the columns the thumbnails migration creates (isPrimary and the
   // publish columns are model-only; scripts/schema-agreement-step2.baseline).
@@ -679,14 +704,14 @@ async function saveAsPrimary(sequelize, episodeId, png) {
       { replacements: { episodeId }, transaction });
     const [[created]] = await sequelize.query(
       `INSERT INTO thumbnails ("episodeId", "s3Bucket", "s3Key", "fileSizeBytes", "mimeType", "widthPixels", "heightPixels", format, "thumbnailType", "generatedAt")
-       VALUES (:episodeId, :bucket, :key, :size, 'image/png', ${WIDTH}, ${HEIGHT}, 'thumbnail', 'primary', NOW())
+       VALUES (:episodeId, :bucket, :key, :size, :mime, ${WIDTH}, ${HEIGHT}, 'thumbnail', 'primary', NOW())
        RETURNING id`,
-      { replacements: { episodeId, bucket: BUCKET, key, size: png.length }, transaction });
+      { replacements: { episodeId, bucket: BUCKET, key, size: file.bytes, mime: file.mime }, transaction });
     await sequelize.query('UPDATE episodes SET thumbnail_url = :url WHERE id = :episodeId',
       { replacements: { episodeId, url }, transaction });
     return created;
   });
-  return { id: row?.id, url, key };
+  return { id: row?.id, url, key, type: file.type, bytes: file.bytes };
 }
 
 /** The pictures a thumbnail's visible image layers use, fetched: { [layerId]: Buffer }. */
@@ -859,7 +884,7 @@ async function removeSaved(sequelize, episodeId, thumbnailId) {
 }
 
 module.exports = {
-  WIDTH, HEIGHT, LAYOUTS, DEFAULT_STYLE, ThumbnailError,
+  WIDTH, HEIGHT, LAYOUTS, DEFAULT_STYLE, ThumbnailError, YOUTUBE_MAX_BYTES, forYouTube,
   readStyle, allowedImageUrl, fetchImage, previewImage, PREVIEW_WIDTHS, readyPoses, pictureFolders, libraryImages, outfitImages, layoutSuggestions,
   sources, saveStyle, saveAsPrimary, listSaved, makePrimary, removeSaved,
   readTemplate, renderSpec, getDraft, saveDraft, uploadPicture, listUploads, labelOfUpload,

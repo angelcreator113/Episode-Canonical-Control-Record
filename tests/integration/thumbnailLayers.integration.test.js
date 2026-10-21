@@ -139,6 +139,26 @@ const solid = (w, h, background) => sharp({ create: { width: w, height: h, chann
     expect(await sharp(mockStore.get(saved.body.data.key)).metadata()).toMatchObject({ width: 1280, height: 720 });
   });
 
+  test('over YouTube\'s 2 MB: render and save give a JPEG under 2 MB (Evoni, 2026-10-21)', async () => {
+    const noisy = await sharp(crypto.randomBytes(1280 * 720 * 3), { raw: { width: 1280, height: 720, channels: 3 } }).png().toBuffer();
+    mockStore.set('pics/noisy.png', noisy);
+    const binary = (r) => r.buffer(true).parse((res, cb) => { const c = []; res.on('data', (d) => c.push(d)); res.on('end', () => cb(null, Buffer.concat(c))); });
+    const res = await binary(auth(request(app).post(`${base}/render`)).send(spec(`${BUCKET_URL}pics/noisy.png`)));
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/image\/jpeg/);
+    expect(Number(res.headers['x-thumbnail-bytes'])).toBe(res.body.length);
+    expect(Number(res.headers['x-thumbnail-png-bytes'])).toBeGreaterThan(2 * 1024 * 1024);
+    expect(res.body.length).toBeLessThanOrEqual(2 * 1024 * 1024);
+    const ep = await episode();
+    const saved = await auth(request(app).post(`${base}/episodes/${ep}`)).send(spec(`${BUCKET_URL}pics/noisy.png`));
+    expect(saved.status).toBe(201);
+    expect(saved.body.data).toMatchObject({ type: 'jpeg', key: expect.stringMatching(/\.jpg$/) });
+    expect(saved.body.data.bytes).toBeLessThanOrEqual(2 * 1024 * 1024);
+    const [row] = await rows('SELECT "mimeType", "fileSizeBytes" FROM thumbnails WHERE "episodeId" = :ep', { ep });
+    expect(row).toMatchObject({ mimeType: 'image/jpeg' });
+    expect(Number(row.fileSizeBytes)).toBe(saved.body.data.bytes);
+  });
+
   test('the show\'s template: saved with the style, kept when the style is saved without it, cleared with null', async () => {
     const t = spec(`${BUCKET_URL}pics/bg.png`);
     const put = await auth(request(app).put(`${base}/shows/${show}/style`)).send({ layout: 'lala-left', accent: '#B8962E', template: t });
