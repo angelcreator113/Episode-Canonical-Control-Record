@@ -33,6 +33,8 @@ export const OUTLINE = '#2A0A22';
 // The box behind words starts as the ink colour, half see-through (Evoni, 2026-10-21: text tools).
 export const BOX_COLOR = '#2C2C2C';
 export const BOX_OPACITY = 0.6;
+// A sticker edge starts white, as cut-out stickers are (Evoni, 2026-10-21: picture effects).
+export const STICKER_EDGE = '#FFFFFF';
 
 export const fontCss = (key, size) => {
   const f = FONTS[key] || FONTS.serif;
@@ -537,3 +539,86 @@ export function youtubeWarnings(spec, measureFor) {
 
 /** "1.4 MB" or "860 KB". */
 export const fileSize = (bytes) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
+
+// ── Picture effects (Evoni, 2026-10-21), step for step as the server draws
+// them (src/services/thumbnailLayers.js), so the editor shows the saved file. ──
+
+/** brightness and contrast on one 0–255 value: contrast about the middle, then brightness. */
+export const toneValue = (v, brightness, contrast) => Math.max(0, Math.min(255, Math.round((v - 128) * (1 + contrast) + 128 + brightness * 255)));
+
+export const makeCanvas = (w, h) => {
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(w));
+  c.height = Math.max(1, Math.round(h));
+  return c;
+};
+
+/** The picture as it is drawn: turned left to right and toned when asked; else the picture itself. */
+export function adjustedPicture(img, l, make = makeCanvas) {
+  if (!img || (!l.flipX && !l.brightness && !l.contrast)) return img;
+  const c = make(img.width, img.height);
+  const cx = c.getContext('2d');
+  if (l.flipX) {
+    cx.translate(img.width, 0);
+    cx.scale(-1, 1);
+  }
+  cx.drawImage(img, 0, 0);
+  if (l.brightness || l.contrast) {
+    try {
+      const data = cx.getImageData(0, 0, img.width, img.height);
+      const d = data.data;
+      for (let i = 0; i < d.length; i += 4) {
+        d[i] = toneValue(d[i], l.brightness || 0, l.contrast || 0);
+        d[i + 1] = toneValue(d[i + 1], l.brightness || 0, l.contrast || 0);
+        d[i + 2] = toneValue(d[i + 2], l.brightness || 0, l.contrast || 0);
+      }
+      cx.putImageData(data, 0, 0);
+    } catch (err) {
+      // A picture from another address cannot be read back; the saved file still has its tone.
+      console.error('[thumbnailLayers] could not tone the picture here:', err?.message || err);
+    }
+  }
+  return c;
+}
+
+/** The server's drawFitted: a picture into a box, cover (cropped) or contain (standing on the bottom, or centred). */
+export function drawFitted(ctx, img, { x, y, w, h, fit, center = false }) {
+  const at = fitPicture(img.width, img.height, { w, h, fit, center });
+  if (at.crop) ctx.drawImage(img, at.crop.x, at.crop.y, at.crop.width, at.crop.height, x + at.x, y + at.y, at.w, at.h);
+  else ctx.drawImage(img, x + at.x, y + at.y, at.w, at.h);
+}
+
+export const STICKER_SHADOW = { color: 'rgba(0,0,0,0.45)', blur: 24, offsetY: 10 };
+/** The room round the box a sticker needs for its outline and shadow. */
+export const stickerMargin = (l) => Math.ceil((l.outline ? (l.outlineWidth || 12) : 0) + (l.shadow ? STICKER_SHADOW.blur + STICKER_SHADOW.offsetY : 0));
+const stickerRing = (r) => [...Array(24)].map((_, i) => [Math.cos((i * Math.PI) / 12) * r, Math.sin((i * Math.PI) / 12) * r]);
+
+/** The server's stickerCanvas: what the box shows, a sticker edge round it, a drop shadow under both. */
+export function stickerCanvas(l, drawBox, make = makeCanvas) {
+  const m = stickerMargin(l);
+  const width = l.outlineWidth || 12;
+  const box = make(l.w, l.h);
+  drawBox(box.getContext('2d'));
+  const sticker = make(l.w + m * 2, l.h + m * 2);
+  const sx = sticker.getContext('2d');
+  if (l.outline) {
+    const sil = make(l.w, l.h);
+    const lx = sil.getContext('2d');
+    lx.drawImage(box, 0, 0);
+    lx.globalCompositeOperation = 'source-in';
+    lx.fillStyle = l.outline;
+    lx.fillRect(0, 0, l.w, l.h);
+    for (const r of [width, width / 2]) {
+      for (const [dx, dy] of stickerRing(r)) sx.drawImage(sil, m + dx, m + dy);
+    }
+  }
+  sx.drawImage(box, m, m);
+  if (!l.shadow) return sticker;
+  const out = make(l.w + m * 2, l.h + m * 2);
+  const ox = out.getContext('2d');
+  ox.shadowColor = STICKER_SHADOW.color;
+  ox.shadowBlur = STICKER_SHADOW.blur;
+  ox.shadowOffsetY = STICKER_SHADOW.offsetY;
+  ox.drawImage(sticker, 0, 0);
+  return out;
+}

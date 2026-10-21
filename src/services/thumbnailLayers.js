@@ -9,7 +9,10 @@
  *
  *   image   a picture (src: an S3/CloudFront URL), cover-fitted (the
  *           background) or contained and standing on the box's bottom
- *           (a figure); frame 'polaroid' gives it a white card.
+ *           (a figure); frame 'polaroid' gives it a white card. Effects
+ *           (Evoni, 2026-10-21): flipX, brightness and contrast change the
+ *           picture's own pixels; outline (a sticker edge round a cut-out)
+ *           and shadow are drawn round what the box shows (not on a card).
  *   shade   the darkening that keeps text readable: dim, a gradient from
  *           one side, and the accent stripe along the bottom. Whole canvas.
  *   text    words in one of FONTS, made smaller until they fit the box
@@ -112,7 +115,18 @@ function readLayers(body, allowedUrl) {
     if (l.kind === 'image') {
       const src = typeof l.src === 'string' && l.src ? l.src : null;
       if (src && !allowedUrl(src)) throw new LayerError(400, `Layer ${i + 1}: that picture is not one of ours (only S3 pictures can be used)`);
-      return { ...base, src, fit: pick(l.fit, ['cover', 'contain'], 'contain'), frame: pick(l.frame, ['none', 'polaroid'], 'none') };
+      return {
+        ...base,
+        src,
+        fit: pick(l.fit, ['cover', 'contain'], 'contain'),
+        frame: pick(l.frame, ['none', 'polaroid'], 'none'),
+        flipX: Boolean(l.flipX),
+        brightness: Math.round(num(l.brightness, -0.5, 0.5, 0) * 100) / 100,
+        contrast: Math.round(num(l.contrast, -0.5, 0.5, 0) * 100) / 100,
+        outline: HEX.test(String(l.outline || '')) ? String(l.outline).toUpperCase() : null,
+        outlineWidth: Math.round(num(l.outlineWidth, 2, 40, 12)),
+        shadow: Boolean(l.shadow),
+      };
     }
     if (l.kind === 'shade') {
       return { ...base, dim: num(l.dim, 0, 0.8, 0.35), accent: hex(l.accent, '#E0689F'), side: pick(l.side, ['left', 'right', 'center', 'none'], 'left') };
@@ -252,6 +266,74 @@ function drawFitted(ctx, img, { x, y, w, h, fit, center = false }) {
   const dw = iw * scale;
   const dh = ih * scale;
   ctx.drawImage(img, x + (w - dw) / 2, center ? y + (h - dh) / 2 : y + h - dh, dw, dh);
+}
+
+// ── Picture effects (Evoni, 2026-10-21). Mirrored step for step in the
+// editor (frontend/src/lib/thumbnailLayers.js), so both draw the same. ─────
+
+/** brightness and contrast on one 0–255 value: contrast about the middle, then brightness. */
+const toneValue = (v, brightness, contrast) => Math.max(0, Math.min(255, Math.round((v - 128) * (1 + contrast) + 128 + brightness * 255)));
+
+/** The picture as it is drawn: turned left to right and toned when asked; else the picture itself. */
+function adjustedPicture(img, l, makeCanvas) {
+  if (!l.flipX && !l.brightness && !l.contrast) return img;
+  const c = makeCanvas(img.width, img.height);
+  const cx = c.getContext('2d');
+  if (l.flipX) {
+    cx.translate(img.width, 0);
+    cx.scale(-1, 1);
+  }
+  cx.drawImage(img, 0, 0);
+  if (l.brightness || l.contrast) {
+    const data = cx.getImageData(0, 0, img.width, img.height);
+    const d = data.data;
+    for (let i = 0; i < d.length; i += 4) {
+      d[i] = toneValue(d[i], l.brightness, l.contrast);
+      d[i + 1] = toneValue(d[i + 1], l.brightness, l.contrast);
+      d[i + 2] = toneValue(d[i + 2], l.brightness, l.contrast);
+    }
+    cx.putImageData(data, 0, 0);
+  }
+  return c;
+}
+
+const STICKER_SHADOW = { color: 'rgba(0,0,0,0.45)', blur: 24, offsetY: 10 };
+/** The room round the box a sticker needs for its outline and shadow. */
+const stickerMargin = (l) => Math.ceil((l.outline ? l.outlineWidth : 0) + (l.shadow ? STICKER_SHADOW.blur + STICKER_SHADOW.offsetY : 0));
+const stickerRing = (r) => [...Array(24)].map((_, i) => [Math.cos((i * Math.PI) / 12) * r, Math.sin((i * Math.PI) / 12) * r]);
+
+/**
+ * A picture with a sticker edge and/or a drop shadow: what the box shows
+ * (drawBox draws it into a w×h canvas), its silhouette in the outline
+ * colour pushed out all round, and the shadow under both. A canvas of
+ * (w + 2m) × (h + 2m), m = stickerMargin(l), to draw at (-m, -m) in the box.
+ */
+function stickerCanvas(l, drawBox, makeCanvas) {
+  const m = stickerMargin(l);
+  const box = makeCanvas(l.w, l.h);
+  drawBox(box.getContext('2d'));
+  const sticker = makeCanvas(l.w + m * 2, l.h + m * 2);
+  const sx = sticker.getContext('2d');
+  if (l.outline) {
+    const sil = makeCanvas(l.w, l.h);
+    const lx = sil.getContext('2d');
+    lx.drawImage(box, 0, 0);
+    lx.globalCompositeOperation = 'source-in';
+    lx.fillStyle = l.outline;
+    lx.fillRect(0, 0, l.w, l.h);
+    for (const r of [l.outlineWidth, l.outlineWidth / 2]) {
+      for (const [dx, dy] of stickerRing(r)) sx.drawImage(sil, m + dx, m + dy);
+    }
+  }
+  sx.drawImage(box, m, m);
+  if (!l.shadow) return sticker;
+  const out = makeCanvas(l.w + m * 2, l.h + m * 2);
+  const ox = out.getContext('2d');
+  ox.shadowColor = STICKER_SHADOW.color;
+  ox.shadowBlur = STICKER_SHADOW.blur;
+  ox.shadowOffsetY = STICKER_SHADOW.offsetY;
+  ox.drawImage(sticker, 0, 0);
+  return out;
 }
 
 function drawShade(ctx, l) {
@@ -425,7 +507,16 @@ async function renderLayers(spec, pictures = {}) {
     } else {
       ctx.translate(l.x + l.w / 2, l.y + l.h / 2);
       ctx.rotate((l.rotation * Math.PI) / 180);
-      if (l.kind === 'image') drawImage(ctx, images[l.id], l);
+      if (l.kind === 'image') {
+        const pic = adjustedPicture(images[l.id], l, canvasLib.createCanvas);
+        if (l.frame !== 'polaroid' && (l.outline || l.shadow)) {
+          const m = stickerMargin(l);
+          const sticker = stickerCanvas(l, (bx) => drawFitted(bx, pic, { x: 0, y: 0, w: l.w, h: l.h, fit: l.fit }), canvasLib.createCanvas);
+          ctx.drawImage(sticker, -l.w / 2 - m, -l.h / 2 - m);
+        } else {
+          drawImage(ctx, pic, l);
+        }
+      }
       else if (l.kind === 'text') drawText(ctx, l);
       else if (l.kind === 'badge') drawBadge(ctx, l);
       else if (l.kind === 'checklist') drawChecklist(ctx, l);
@@ -443,5 +534,5 @@ function fontFile(key) {
 
 module.exports = {
   WIDTH, HEIGHT, MAX_LAYERS, MAX_ROWS, KINDS, FONTS, LINE_HEIGHT, LayerError,
-  readLayers, wrapWords, fitText, spaced, checklistRows, renderLayers, fontFile,
+  readLayers, wrapWords, fitText, spaced, checklistRows, renderLayers, fontFile, toneValue, stickerMargin,
 };

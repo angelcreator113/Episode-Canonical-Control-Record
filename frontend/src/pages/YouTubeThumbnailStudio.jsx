@@ -33,14 +33,14 @@ import {
   Youtube, Upload, Download, Save, Palette, ImageOff, Check, LayoutTemplate, Sparkles, Star, Trash2, History, Folder, ChevronRight,
   Eye, EyeOff, ArrowUp, ArrowDown, Type, RotateCcw, ScanEye, X, Lock, LockOpen, Copy, Undo2, Redo2, Plus, Pencil, AlignLeft, AlignCenter, AlignRight,
   AlignStartVertical, AlignCenterVertical, AlignEndVertical, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
-  AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, Keyboard, RefreshCw,
+  AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, Keyboard, RefreshCw, FlipHorizontal2, ZoomIn, ZoomOut,
 } from 'lucide-react';
 import {
   youtubeThumbnailsApi, LAYOUTS, ACCENTS, TEXT_COLORS, readRecentColours, rememberColour, episodeWords, defaultPose, folderPath, folderCount, folderCover, firstFolder,
 } from '../lib/youtubeThumbnailsApi';
 import {
   FONTS, presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer,
-  addText, addPicture, layerName, loadThumbnailFonts, OUTLINE, BOX_COLOR, BOX_OPACITY, duplicateLayer, WIDTH, HEIGHT,
+  addText, addPicture, layerName, loadThumbnailFonts, OUTLINE, BOX_COLOR, BOX_OPACITY, STICKER_EDGE, duplicateLayer, WIDTH, HEIGHT,
   alignLayers, distributeLayers, measurer, youtubeWarnings, fileSize, YOUTUBE_SIZES,
 } from '../lib/thumbnailLayers';
 import ThumbnailCanvas from '../components/Thumbnails/ThumbnailCanvas';
@@ -48,6 +48,7 @@ import { usePreview } from '../lib/picturePreview';
 import './YouTubeThumbnailStudio.css';
 
 const DRAFT_DELAY_MS = 1200;
+const ZOOM_MAX = 3;
 // Changes this close together are one step to undo (typing a word, a slider).
 const UNDO_GROUP_MS = 600;
 const UNDO_STEPS = 50;
@@ -135,6 +136,60 @@ function FolderPicker({ title, tree, start, value, onPick, onUpload, uploading =
 }
 
 /** The picked layer's own settings: words, font and colour; or a picture's fit and frame; and its turn. */
+/**
+ * A picture's effects (Evoni, 2026-10-21): turn it left to right, lighter
+ * or darker, more or less contrast; on a picture without a photo card, a
+ * sticker edge round a cut-out and a drop shadow under it.
+ */
+function PictureEffects({ layer, onChange }) {
+  const card = layer.frame === 'polaroid';
+  return (
+    <div className="yts-text-tools" data-testid="yts-picture-effects">
+      <div className="yts-row">
+        <button type="button" className={`yts-btn${layer.flipX ? ' is-primary' : ''}`} aria-pressed={Boolean(layer.flipX)}
+          onClick={() => onChange({ flipX: !layer.flipX })}><FlipHorizontal2 size={16} aria-hidden /> Flip</button>
+      </div>
+      <div className="yts-row">
+        <label className="yts-field">
+          <span className="yts-label">Brightness ({Math.round((layer.brightness || 0) * 100)})</span>
+          <input type="range" min="-0.5" max="0.5" step="0.05" value={layer.brightness || 0} onChange={(e) => onChange({ brightness: Number(e.target.value) })} aria-label="Brightness" />
+        </label>
+        <label className="yts-field">
+          <span className="yts-label">Contrast ({Math.round((layer.contrast || 0) * 100)})</span>
+          <input type="range" min="-0.5" max="0.5" step="0.05" value={layer.contrast || 0} onChange={(e) => onChange({ contrast: Number(e.target.value) })} aria-label="Contrast" />
+        </label>
+      </div>
+      {card ? (
+        <p className="yts-note">A photo card has its own edge and shadow.</p>
+      ) : (
+        <>
+          <label className="yts-check">
+            <input type="checkbox" checked={Boolean(layer.outline)} aria-label="Sticker edge"
+              onChange={(e) => onChange({ outline: e.target.checked ? STICKER_EDGE : null, outlineWidth: layer.outlineWidth || 12 })} />
+            Sticker edge (best on a cut-out)
+          </label>
+          {layer.outline && (
+            <div className="yts-row">
+              <label className="yts-field is-small">
+                <span className="yts-label">Edge colour</span>
+                <input type="color" className="yts-color" value={layer.outline} onChange={(e) => onChange({ outline: e.target.value.toUpperCase() })} aria-label="Edge colour" />
+              </label>
+              <label className="yts-field">
+                <span className="yts-label">Edge width ({layer.outlineWidth || 12})</span>
+                <input type="range" min="2" max="40" step="1" value={layer.outlineWidth || 12} onChange={(e) => onChange({ outlineWidth: Number(e.target.value) })} aria-label="Edge width" />
+              </label>
+            </div>
+          )}
+          <label className="yts-check">
+            <input type="checkbox" checked={Boolean(layer.shadow)} aria-label="Drop shadow" onChange={(e) => onChange({ shadow: e.target.checked })} />
+            Drop shadow
+          </label>
+        </>
+      )}
+    </div>
+  );
+}
+
 const ALIGNS = [['left', 'Left', AlignLeft], ['center', 'Centre', AlignCenter], ['right', 'Right', AlignRight]];
 
 /**
@@ -236,6 +291,7 @@ function LayerSettings({ layer, onChange }) {
           </label>
         </div>
       )}
+      {layer.kind === 'image' && <PictureEffects layer={layer} onChange={onChange} />}
       <div className="yts-row yts-box-fields">
         {[['x', 'Left', -WIDTH, WIDTH * 2], ['y', 'Top', -HEIGHT, HEIGHT * 2], ['w', 'Width', 10, WIDTH * 3], ['h', 'Height', 10, HEIGHT * 3]].map(([key, label, min, max]) => (
           <label key={key} className="yts-field is-small">
@@ -410,6 +466,7 @@ const SHORTCUTS = [
   ['Alt while dragging', 'Move freely, without snapping'],
   ['Delete or Backspace', 'Remove the picked layers (not locked ones)'],
   ['Esc', 'Pick nothing'],
+  ['+ / - / 0', 'Zoom in, out, back to fit'],
   ['Ctrl+Z', 'Undo'],
   ['Ctrl+Shift+Z or Ctrl+Y', 'Redo'],
   ['Ctrl+D', 'Copy the picked layer'],
@@ -555,6 +612,9 @@ export default function YouTubeThumbnailStudio() {
   // A question asked on the page before something is replaced or deleted ({ text, yes }).
   const [asking, setAsking] = useState(null);
   const [showKeys, setShowKeys] = useState(false);
+  // How far the canvas is zoomed in (Evoni, 2026-10-21): 100% fits the page.
+  const [zoom, setZoom] = useState(1);
+  const zoomBy = (d) => setZoom((z) => Math.min(ZOOM_MAX, Math.max(1, Math.round((z + d) * 4) / 4)));
   // A small picture of the editor's thumbnail, for the YouTube previews.
   const [snapshot, setSnapshot] = useState(null);
   // The exact file "See it exactly" drew: { type: 'png' | 'jpeg', bytes }.
@@ -799,6 +859,12 @@ export default function YouTubeThumbnailStudio() {
           setShowKeys(false);
         } else if (e.key === '?') {
           setShowKeys((v) => !v);
+        } else if (e.key === '+' || e.key === '=') {
+          zoomBy(0.25);
+        } else if (e.key === '-') {
+          zoomBy(-0.25);
+        } else if (e.key === '0') {
+          setZoom(1);
         }
         return;
       }
@@ -1120,7 +1186,13 @@ export default function YouTubeThumbnailStudio() {
         <div className="yts-work">
           <section className="yts-stage" aria-label="Editor">
             <ThumbnailCanvas spec={spec} selectedId={selectedId} selectedIds={pickedIds} onSelect={select} onSelectMany={selectMany}
-              fontsTick={fontsTick} onChange={(id, patch) => edit((s) => updateLayer(s, id, patch))} onChangeMany={editMany} onSnapshot={setSnapshot} />
+              fontsTick={fontsTick} onChange={(id, patch) => edit((s) => updateLayer(s, id, patch))} onChangeMany={editMany} onSnapshot={setSnapshot} zoom={zoom} />
+            <div className="yts-zoom" role="group" aria-label="Zoom" data-testid="yts-zoom">
+              <button type="button" className="yts-icon-btn" onClick={() => zoomBy(-0.25)} disabled={zoom <= 1} aria-label="Zoom out" title="Zoom out (-)"><ZoomOut size={15} aria-hidden /></button>
+              <span className="yts-zoom-level" aria-live="polite">{Math.round(zoom * 100)}%</span>
+              <button type="button" className="yts-icon-btn" onClick={() => zoomBy(0.25)} disabled={zoom >= ZOOM_MAX} aria-label="Zoom in" title="Zoom in (+)"><ZoomIn size={15} aria-hidden /></button>
+              {zoom > 1 && <button type="button" className="yts-history-btn" onClick={() => setZoom(1)}>Fit</button>}
+            </div>
             <ArrangeBar count={pickedIds.length} onAlign={align} onSpread={spread} onClear={() => setSelectedId(null)} />
             <p className="yts-note" data-testid="yts-draft-note">
               {draftNote || 'Click a layer to move it, pull a corner to resize, use the top handle to turn it.'}

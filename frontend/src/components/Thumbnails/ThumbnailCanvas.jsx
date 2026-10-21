@@ -8,10 +8,10 @@
  * layer can be picked but not moved, resized or turned. Drawn as the server draws the saved file
  * (lib/thumbnailLayers: the same fonts, fitting and picture fit).
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Stage, Layer, Group, Rect, Text, Line, Image as KImage, Transformer } from 'react-konva';
 import {
-  WIDTH, HEIGHT, LINE_HEIGHT, FONTS, fitText, measurer, spaced, fitPicture, boxFromNode, layerName, checklistRows, snapBox, layersInBox,
+  WIDTH, HEIGHT, LINE_HEIGHT, FONTS, fitText, measurer, spaced, fitPicture, boxFromNode, layerName, checklistRows, snapBox, layersInBox, adjustedPicture, stickerCanvas, stickerMargin, drawFitted,
 } from '../../lib/thumbnailLayers';
 import { previewUrl, previewWidth } from '../../lib/picturePreview';
 
@@ -57,7 +57,12 @@ function Shade({ l }) {
 }
 
 function Picture({ l, scale }) {
-  const img = usePicture(l.src, l.w * scale);
+  const loaded = usePicture(l.src, l.w * scale);
+  // Flipped and toned as the server does it (Evoni, 2026-10-21: picture effects).
+  const img = useMemo(() => (loaded ? adjustedPicture(loaded, l) : null), [loaded, l.flipX, l.brightness, l.contrast]);
+  const sticker = useMemo(() => (img && l.frame !== 'polaroid' && (l.outline || l.shadow)
+    ? stickerCanvas(l, (bx) => drawFitted(bx, img, { x: 0, y: 0, w: l.w, h: l.h, fit: l.fit }))
+    : null), [img, l.w, l.h, l.fit, l.frame, l.outline, l.outlineWidth, l.shadow]);
   if (l.frame === 'polaroid') {
     const pad = Math.round(Math.min(l.w, l.h) * 0.05);
     const inner = { w: l.w - pad * 2, h: l.h - pad * 2 };
@@ -66,6 +71,15 @@ function Picture({ l, scale }) {
       <>
         <Rect width={l.w} height={l.h} fill="#FFFFFF" shadowColor="black" shadowBlur={18} shadowOffsetY={6} shadowOpacity={0.35} />
         {img && <KImage image={img} x={pad + at.x} y={pad + at.y} width={at.w} height={at.h} crop={at.crop || undefined} />}
+      </>
+    );
+  }
+  if (sticker) {
+    const m = stickerMargin(l);
+    return (
+      <>
+        <Rect width={l.w} height={l.h} fill="rgba(0,0,0,0.001)" />
+        <KImage image={sticker} x={-m} y={-m} width={l.w + m * 2} height={l.h + m * 2} />
       </>
     );
   }
@@ -162,13 +176,15 @@ const coarsePointer = () => typeof window !== 'undefined' && typeof window.match
  * (onChangeMany: { [id]: patch }).
  */
 export default function ThumbnailCanvas({
-  spec, selectedId, selectedIds, onSelect, onSelectMany, onChange, onChangeMany, onSnapshot, fontsTick = 0,
+  spec, selectedId, selectedIds, onSelect, onSelectMany, onChange, onChangeMany, onSnapshot, fontsTick = 0, zoom = 1,
 }) {
   const wrapRef = useRef(null);
   const stageRef = useRef(null);
   const trRef = useRef(null);
   const dragFrom = useRef(null); // { id, x, y, others: { [id]: { x, y } } } while picked layers move together
-  const [width, setWidth] = useState(640);
+  const [fitWidth, setWidth] = useState(640);
+  // Zoomed in (Evoni, 2026-10-21), the canvas is drawn bigger and scrolls inside its frame.
+  const width = Math.round(fitWidth * zoom);
   const [guides, setGuides] = useState([]);
   const [marquee, setMarquee] = useState(null); // { x0, y0, x1, y1 } in canvas points
   const picks = selectedIds || (selectedId ? [selectedId] : []);
@@ -331,7 +347,7 @@ export default function ThumbnailCanvas({
   const main = (spec?.layers || []).find((x) => x.id === picks[0]);
   const anchorSize = coarsePointer() ? 18 : 10;
   return (
-    <div ref={wrapRef} className="yts-canvas" tabIndex={0} onKeyDown={onKeyDown} data-testid="yts-canvas"
+    <div ref={wrapRef} className={`yts-canvas${zoom > 1 ? ' is-zoomed' : ''}`} tabIndex={0} onKeyDown={onKeyDown} data-testid="yts-canvas"
       aria-label={picks.length > 1
         ? `Thumbnail editor. ${picks.length} layers are picked: drag one to move them together; arrow keys nudge them.`
         : main
