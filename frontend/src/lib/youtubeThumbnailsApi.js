@@ -119,6 +119,12 @@ export const youtubeThumbnailsApi = {
   makePrimary: (episodeId, thumbnailId) => api.post(`${base}/episodes/${episodeId}/saved/${thumbnailId}/primary`).then((r) => r.data?.data),
   removeSaved: (episodeId, thumbnailId) => api.delete(`${base}/episodes/${episodeId}/saved/${thumbnailId}`).then((r) => r.data?.data),
   saveStyle: (showId, style) => api.put(`${base}/shows/${showId}/style`, style).then((r) => r.data?.data),
+  // A show's named templates (Evoni, 2026-10-21); "legacy" is the one kept before them.
+  templates: (showId) => api.get(`${base}/shows/${showId}/templates`).then((r) => (Array.isArray(r.data?.data) ? r.data.data : [])),
+  allTemplates: () => api.get(`${base}/templates`).then((r) => (Array.isArray(r.data?.data) ? r.data.data : [])),
+  createTemplate: (showId, body) => api.post(`${base}/shows/${showId}/templates`, body, { timeout: 60000 }).then((r) => r.data?.data),
+  updateTemplate: (showId, templateId, body) => api.patch(`${base}/shows/${showId}/templates/${templateId}`, body, { timeout: 60000 }).then((r) => r.data?.data),
+  deleteTemplate: (showId, templateId) => api.delete(`${base}/shows/${showId}/templates/${templateId}`).then((r) => r.data?.data),
   shows: () => api.get('/api/v1/shows').then((r) => (Array.isArray(r.data?.data) ? r.data.data : [])),
   // Every episode, in order. A single limit=500 request was refused (the
   // server allows 100), which left the Episode list empty.

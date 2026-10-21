@@ -2,9 +2,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   LayoutGrid, CheckCircle2, PenLine, Archive, Lock, Search, Plus, Copy, Send,
-  Trash2, ImageIcon, Layers, Maximize2, ChevronLeft, ChevronRight, Youtube, Unlock, Type,
+  Trash2, ImageIcon, Layers, Maximize2, ChevronLeft, ChevronRight, Youtube, Unlock, Type, Star, LayoutTemplate,
 } from 'lucide-react';
 import apiClient from '../services/api';
+import { youtubeThumbnailsApi, thumbnailStudioHref } from '../lib/youtubeThumbnailsApi';
+import { usePreview } from '../lib/picturePreview';
 import './TemplateStudio.css';
 
 // ─── Track 6 CP10 module-scope helpers (Pattern F prophylactic — Api suffix) ───
@@ -155,6 +157,105 @@ function TemplatePreview({ template, labels = false, safeZones = false, fit = 4 
   );
 }
 
+function ShowTemplatePicture({ url, name }) {
+  const src = usePreview(url, 300);
+  if (!url) return <LayoutTemplate size={32} aria-hidden />;
+  return src ? <img src={src} alt={`${name}`} loading="lazy" /> : <span className="ts-spinner is-small" aria-hidden />;
+}
+
+/**
+ * Every show's YouTube thumbnail templates (Evoni, 2026-10-21: several per
+ * show, each with its picture, renamed at will). Open one in the Studio on
+ * that show; rename it here (Enter saves, Escape cancels).
+ */
+function ShowTemplates({ say }) {
+  const [groups, setGroups] = useState(null);
+  const [failed, setFailed] = useState(null);
+  const [renaming, setRenaming] = useState(null); // { showId, id, name }
+
+  const load = async () => {
+    setFailed(null);
+    try {
+      setGroups(await youtubeThumbnailsApi.allTemplates());
+    } catch (err) {
+      console.error('[TemplateStudio] show templates load failed:', err);
+      setFailed(errorText(err, 'Could not load the show templates.'));
+    }
+  };
+  useEffect(() => { load(); }, []);
+
+  const rename = async (e, t) => {
+    e.preventDefault();
+    const name = renaming.name.trim();
+    if (!name) { say('error', 'A template needs a name.'); return; }
+    if (name === t.name) { setRenaming(null); return; }
+    try {
+      await youtubeThumbnailsApi.updateTemplate(renaming.showId, t.id, { name });
+      setRenaming(null);
+      say('ok', `Renamed to "${name}".`);
+      await load();
+    } catch (err) {
+      console.error('[TemplateStudio] show template rename failed:', err);
+      say('error', err?.response?.data?.error || errorText(err, 'The template could not be renamed.'));
+    }
+  };
+
+  if (failed) {
+    return (
+      <div className="ts-state" role="alert">
+        <p>{failed}</p>
+        <button type="button" onClick={load} className="ts-clear">Retry</button>
+      </div>
+    );
+  }
+  if (!groups) {
+    return <div className="ts-state"><div className="ts-spinner"></div><p>Loading show templates...</p></div>;
+  }
+  if (!groups.length) {
+    return (
+      <div className="ts-state">
+        <Youtube size={40} aria-hidden className="ts-state-icon" />
+        <h3>No show templates yet</h3>
+        <p>Arrange an episode's thumbnail in YouTube thumbnails, then save it as a template.</p>
+        <Link className="ts-new" to="/template-studio/youtube">Open YouTube thumbnails</Link>
+      </div>
+    );
+  }
+  return (
+    <div className="ts-show-templates" data-testid="ts-show-templates">
+      {groups.map(({ show, templates }) => (
+        <section key={show.id} className="ts-show-group" aria-label={`${show.name} templates`}>
+          <h2 className="ts-show-name">{show.name}</h2>
+          <ul className="ts-show-grid">
+            {templates.map((t) => (
+              <li key={t.id} className={`ts-show-card${t.isDefault ? ' is-default' : ''}`} data-testid={`ts-show-template-${t.id}`}>
+                <div className="ts-show-pic"><ShowTemplatePicture url={t.previewUrl} name={t.name} /></div>
+                {renaming?.id === t.id ? (
+                  <form className="ts-rename" onSubmit={(e) => rename(e, t)}>
+                    <input className="ts-rename-input" value={renaming.name} maxLength={80} autoFocus aria-label={`New name for ${t.name}`}
+                      onChange={(e) => setRenaming({ ...renaming, name: e.target.value })}
+                      onKeyDown={(e) => { if (e.key === 'Escape') setRenaming(null); }} />
+                    <button type="submit" className="ts-clear">Save</button>
+                    <button type="button" className="ts-clear" onClick={() => setRenaming(null)}>Cancel</button>
+                  </form>
+                ) : (
+                  <p className="ts-show-card-name" onDoubleClick={() => setRenaming({ showId: show.id, id: t.id, name: t.name })} title="Double-click to rename">
+                    {t.isDefault && <Star size={14} aria-label="Default" />} {t.name}
+                  </p>
+                )}
+                <div className="ts-show-actions">
+                  <Link className="ts-clear" to={thumbnailStudioHref({ showId: show.id, templateId: t.id })}>Open</Link>
+                  <button type="button" className="ts-clear" onClick={() => setRenaming({ showId: show.id, id: t.id, name: t.name })}>Rename</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  );
+}
+
 function TemplateStudio() {
   const navigate = useNavigate();
 
@@ -169,6 +270,8 @@ function TemplateStudio() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('recently_used');
   const [selectedId, setSelectedId] = useState(null);
+  // The layout templates (template_studio), or every show's YouTube thumbnail templates.
+  const [view, setView] = useState('layouts');
 
   useEffect(() => {
     loadTemplates();
@@ -338,15 +441,23 @@ function TemplateStudio() {
               const Icon = s.icon;
               const n = key === 'ALL' ? templates.length : (statusCounts[key] || 0);
               return (
-                <button key={key} type="button" aria-pressed={statusFilter === key}
-                  className={`ts-rail-btn ${statusFilter === key ? 'is-active' : ''}`}
-                  onClick={() => setStatusFilter(key)}>
+                <button key={key} type="button" aria-pressed={view === 'layouts' && statusFilter === key}
+                  className={`ts-rail-btn ${view === 'layouts' && statusFilter === key ? 'is-active' : ''}`}
+                  onClick={() => { setView('layouts'); setStatusFilter(key); }}>
                   <Icon size={20} aria-hidden />
                   <span className="ts-rail-label">{s.label}</span>
                   <span className="ts-rail-count">{n}</span>
                 </button>
               );
             })}
+          </nav>
+          <div className="ts-rail-divider" />
+          <nav className="ts-rail-nav">
+            <button type="button" aria-pressed={view === 'shows'} data-testid="ts-show-templates-btn"
+              className={`ts-rail-btn ${view === 'shows' ? 'is-active' : ''}`} onClick={() => setView('shows')}>
+              <LayoutTemplate size={20} aria-hidden />
+              <span className="ts-rail-label">Show templates</span>
+            </button>
           </nav>
           <div className="ts-rail-divider" />
           <div className="ts-rail-heading">Elsewhere in the studio</div>
@@ -358,6 +469,18 @@ function TemplateStudio() {
 
         {/* ── Main ───────────────────────────────────────────────── */}
         <div className="ts-main">
+          {view === 'shows' ? (
+            <>
+              {message && (
+                <div className={`ts-message is-${message.kind}`} role={message.kind === 'error' ? 'alert' : 'status'}>
+                  <span>{message.text}</span>
+                  <button type="button" className="ts-message-close" onClick={() => setMessage(null)} aria-label="Dismiss">×</button>
+                </div>
+              )}
+              <ShowTemplates say={say} />
+            </>
+          ) : (
+          <>
           {/* format tabs */}
           <div className="ts-tabs" role="tablist" aria-label="Formats">
             <button type="button" role="tab" aria-selected={formatFilter === 'ALL'}
@@ -564,6 +687,8 @@ function TemplateStudio() {
                 </div>
               </section>
             </div>
+          )}
+          </>
           )}
         </div>
       </div>
