@@ -523,7 +523,7 @@ export default function FeedViewContent({
                 {/* Scheduler Status */}
                 <div style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,padding:20,marginBottom:16}}>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
-                    <div style={{fontSize:16,fontWeight:700,color:C.ink}}>Feed Automation</div>
+                    <div style={{fontSize:16,fontWeight:700,color:C.ink}}>Pulse automation</div>
                     <div style={{display:'flex',gap:8}}>
                       <button onClick={()=>toggleScheduler(autoStatus?.running?'stop':'start')} style={{padding:'6px 16px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,cursor:'pointer',border:'none',background:autoStatus?.running?'#ef4444':'#22c55e',color:'#fff'}}>
                         {autoStatus?.running?'Stop Scheduler':'Start Scheduler'}

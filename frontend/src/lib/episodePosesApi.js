@@ -10,6 +10,10 @@ import api from '../services/api';
 
 const base = (episodeId) => `/api/v1/episode-poses/${episodeId}`;
 
+// JustAWoman's photos keep their background (Evoni, 2026-10-21): enhanced
+// only. The server's list is episodePosesService.KEEP_BACKGROUND.
+export const keepsBackground = (characterKey) => characterKey === 'justawoman';
+
 export const CHARACTERS = [
   { key: 'lala', label: 'Lala' },
   { key: 'justawoman', label: 'JustAWoman' },
@@ -55,12 +59,13 @@ export function photosFor(rows, characterKey, pose) {
 
 /**
  * What processing did, in a few words: "Upscaled x2", or why it did not
- * upscale ("upscaling is not set up on the server"). null when there is
- * nothing to say.
+ * upscale ("upscaling is not set up on the server"), and "Background kept"
+ * for a photo that keeps it. null when there is nothing to say.
  */
 export function stepsNote(steps) {
+  const notes = [];
   const up = steps?.upscale;
-  if (!up || up === 'not needed') return null;
-  if (/^x\d$/.test(up)) return `Upscaled ${up}`;
-  return `Not upscaled: ${String(up).replace(/^skipped:\s*/, '')}`;
+  if (up && up !== 'not needed') notes.push(/^x\d$/.test(up) ? `Upscaled ${up}` : `Not upscaled: ${String(up).replace(/^skipped:\s*/, '')}`);
+  if (steps?.background === 'kept') notes.push('Background kept');
+  return notes.length ? notes.join(' · ') : null;
 }

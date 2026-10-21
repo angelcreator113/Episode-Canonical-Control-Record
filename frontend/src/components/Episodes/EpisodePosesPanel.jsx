@@ -2,8 +2,9 @@
  * Files › Character poses (Evoni, 2026-10-20): photos of Lala and
  * JustAWoman for this episode, labelled Front, Back, Side or Glamour. Drop
  * photos on a pose to upload them. Each one is enhanced (colour and light,
- * upscaled when small) and has its background removed on the server, in the
- * background; the original is always kept. A pose can hold several photos:
+ * upscaled when small) on the server, in the background; Lala's also have
+ * their background removed, JustAWoman's keep theirs (2026-10-21). The
+ * original is always kept. A pose can hold several photos:
  * the starred one is its default, the one the thumbnail editor picks first.
  * Each photo shows before and after, can be starred, moved to another pose,
  * processed again, or deleted.
@@ -13,7 +14,7 @@ import {
   Upload, Star, Trash2, RefreshCw, X, Loader, CircleCheck, CircleAlert, Clock, ImageOff,
 } from 'lucide-react';
 import {
-  episodePosesApi, CHARACTERS, POSES, PHOTO_ACCEPT, isPhoto, anyProcessing, photosFor, stepsNote,
+  episodePosesApi, CHARACTERS, POSES, PHOTO_ACCEPT, isPhoto, anyProcessing, photosFor, stepsNote, keepsBackground,
 } from '../../lib/episodePosesApi';
 import './EpisodePosesPanel.css';
 
@@ -28,17 +29,19 @@ const STATUS = {
 
 function PhotoCard({ photo, onStar, onMove, onReprocess, onDelete, busy }) {
   const ready = photo.status === 'ready' && photo.final_url;
+  const keeps = keepsBackground(photo.character_key);
   const [view, setView] = useState('after');
   const showAfter = ready && view === 'after';
-  const src = showAfter ? photo.final_url : (photo.enhanced_url || photo.original_url);
-  const st = STATUS[photo.status] || STATUS.queued;
+  // Before: the enhanced photo next to a cut-out; the original next to an enhanced photo.
+  const src = showAfter ? photo.final_url : ((!keeps && photo.enhanced_url) || photo.original_url);
+  const st = photo.status === 'processing' && keeps ? { ...STATUS.processing, label: 'Enhancing…' } : (STATUS[photo.status] || STATUS.queued);
   const working = photo.status === 'queued' || photo.status === 'processing';
   const note = stepsNote(photo.steps);
   const name = photo.original_filename || 'photo';
   return (
     <li className={`epp-card${photo.is_default ? ' is-default' : ''}`} data-testid={`epp-photo-${photo.id}`}>
-      <div className={`epp-frame${showAfter ? ' is-checker' : ''}`}>
-        {src ? <img src={src} alt={showAfter ? `${name}, background removed` : name} loading="lazy" /> : <ImageOff size={24} aria-hidden />}
+      <div className={`epp-frame${showAfter && !keeps ? ' is-checker' : ''}`}>
+        {src ? <img src={src} alt={showAfter ? `${name}, ${keeps ? 'enhanced' : 'background removed'}` : name} loading="lazy" /> : <ImageOff size={24} aria-hidden />}
         <button type="button" className={`epp-star${photo.is_default ? ' is-on' : ''}`} onClick={() => !photo.is_default && onStar(photo)}
           aria-pressed={photo.is_default} disabled={busy}
           aria-label={photo.is_default ? 'The default for this pose' : 'Make this the default for this pose'}
@@ -208,7 +211,7 @@ export default function EpisodePosesPanel({ episode }) {
       <header className="epp-head">
         <div>
           <h2 className="epp-title">Character poses</h2>
-          <p className="epp-sub">Photos of Lala and JustAWoman for this episode. Each one is enhanced and has its background removed; the original is always kept. The starred photo of a pose is the one the thumbnail editor picks first.</p>
+          <p className="epp-sub">Photos of Lala and JustAWoman for this episode. Each one is enhanced; Lala's also have their background removed, JustAWoman's keep theirs. The original is always kept. The starred photo of a pose is the one the thumbnail editor picks first.</p>
         </div>
         <span className="epp-total">{photos.length} {photos.length === 1 ? 'photo' : 'photos'}</span>
       </header>

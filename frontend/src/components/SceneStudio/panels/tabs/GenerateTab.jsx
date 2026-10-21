@@ -2,6 +2,10 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { Sparkles, Loader, Image, History, Wand2, Trash2, AlertCircle, CheckCircle, Scissors, RotateCcw, Info, Upload, RefreshCw, Frame, Palette, Crop, Layers } from 'lucide-react';
 import api from '../../../../services/api';
 
+// A source image uploaded for Transform is a scene frame: one of the types
+// POST /api/v1/assets accepts (routes/assets.js VALID_ASSET_TYPES).
+const TRANSFORM_SOURCE_ASSET_TYPE = 'EPISODE_FRAME';
+
 /**
  * GenerateTab — AI object generation (DALL-E 3) + Image Transform (img2img).
  * Features:
@@ -291,10 +295,12 @@ export default function GenerateTab({ sceneId, contextType, canvasWidth, canvasH
       setSourceImageThumb(reader.result);
     };
     reader.readAsDataURL(file);
-    // Upload the file to get a URL
+    // Upload the file to get a URL: POST /assets with its assetType (there is
+    // no /assets/upload; show side check, 2026-10-20, F3).
     const formData = new FormData();
     formData.append('file', file);
-    api.post(`/api/v1/assets/upload`, formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+    formData.append('assetType', TRANSFORM_SOURCE_ASSET_TYPE);
+    api.post('/api/v1/assets', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
       .then(({ data }) => {
         const url = data?.data?.url || data?.data?.s3_url_raw || data?.url;
         if (url) setSourceImageUrl(url);
