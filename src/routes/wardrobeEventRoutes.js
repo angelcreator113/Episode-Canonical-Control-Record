@@ -11,6 +11,8 @@
 const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
+const { aiFailure } = require('../utils/aiFailure');
 // Game responses never carry a piece's real-world source (Task #3020).
 const { withoutRealFields } = require('../utils/wardrobeInWorld');
 
@@ -188,7 +190,10 @@ router.get('/:showId/filter', requireAuth, async (req, res) => {
 // ── SUGGEST OUTFIT FOR EVENT ─────────────────────────────────────────────────
 // POST /api/v1/wardrobe-events/:showId/suggest
 // Body: { event_id, episodeId }
-router.post('/:showId/suggest', requireAuth, async (req, res) => {
+// AI route: rate-limited, MODELS with two tries each, budget/unreachable
+// answered by utils/aiFailure (show side check, 2026-10-20, P4).
+const SUGGEST_MODELS = ['claude-sonnet-4-6'];
+router.post('/:showId/suggest', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { showId } = req.params;
     const { event_id, episodeId } = req.body;
@@ -255,18 +260,31 @@ Return JSON: { "outfit_name": "...", "vibe": "...", "items": [{ "name": "exact i
 
 Return ONLY the JSON.`;
 
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1000,
-      messages: [{ role: 'user', content: prompt }],
-    });
+    let response;
+    for (const model of SUGGEST_MODELS) {
+      for (let attempt = 1; attempt <= 2 && !response; attempt += 1) {
+        try {
+          response = await client.messages.create({
+            model,
+            max_tokens: 1000,
+            messages: [{ role: 'user', content: prompt }],
+          });
+        } catch (callErr) {
+          console.warn(`[WardrobeEvent] suggest with ${model}, try ${attempt}, failed:`, callErr.message);
+          if (callErr?.code === 'AI_BUDGET_EXCEEDED' || (attempt === 2 && model === SUGGEST_MODELS[SUGGEST_MODELS.length - 1])) throw callErr;
+        }
+      }
+      if (response) break;
+    }
 
     let suggestion = null;
     try {
       const text = response.content[0]?.text || '';
       const match = text.match(/\{[\s\S]*\}/);
       if (match) suggestion = JSON.parse(match[0]);
-    } catch { /* return raw */ }
+    } catch (parseErr) {
+      console.error('[WardrobeEvent] suggest came back unreadable:', parseErr.message);
+    }
 
     return res.json({
       success: true,
@@ -274,6 +292,7 @@ Return ONLY the JSON.`;
       event: { id: event.id, name: event.name, dress_code: event.dress_code },
     });
   } catch (err) {
+    if (aiFailure(res, err)) return undefined;
     console.error('[WardrobeEvent] Suggest error:', err);
     return res.status(500).json({ error: err.message });
   }
