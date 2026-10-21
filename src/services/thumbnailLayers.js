@@ -109,6 +109,8 @@ function readLayers(body, allowedUrl) {
       visible: l.visible !== false,
       // Locked: not moved, resized or turned on the canvas (Evoni, 2026-10-21).
       locked: Boolean(l.locked),
+      // Small on purpose: the Studio does not warn that its words are too small to read (Evoni, 2026-10-21).
+      smallOk: Boolean(l.smallOk),
       x: Math.round(num(l.x, -WIDTH, WIDTH * 2, 0)),
       y: Math.round(num(l.y, -HEIGHT, HEIGHT * 2, 0)),
       w: Math.round(num(l.w, 1, WIDTH * 3, WIDTH)),
@@ -366,6 +368,9 @@ const stickerRing = (r) => [...Array(24)].map((_, i) => [Math.cos((i * Math.PI) 
  * (drawBox draws it into a w×h canvas), its silhouette in the outline
  * colour pushed out all round, and the shadow under both. A canvas of
  * (w + 2m) × (h + 2m), m = stickerMargin(l), to draw at (-m, -m) in the box.
+ * makeCanvas(w, h) gives a canvas w × h points; the editor's are drawn
+ * finer (more pixels a point, canvas.res), so every canvas is drawn at its
+ * size in points and a shadow is measured in pixels. Here res is 1.
  */
 function stickerCanvas(l, drawBox, makeCanvas) {
   const m = stickerMargin(l);
@@ -376,22 +381,24 @@ function stickerCanvas(l, drawBox, makeCanvas) {
   if (l.outline) {
     const sil = makeCanvas(l.w, l.h);
     const lx = sil.getContext('2d');
-    lx.drawImage(box, 0, 0);
+    lx.drawImage(box, 0, 0, l.w, l.h);
     lx.globalCompositeOperation = 'source-in';
     lx.fillStyle = l.outline;
     lx.fillRect(0, 0, l.w, l.h);
     for (const r of [l.outlineWidth, l.outlineWidth / 2]) {
-      for (const [dx, dy] of stickerRing(r)) sx.drawImage(sil, m + dx, m + dy);
+      for (const [dx, dy] of stickerRing(r)) sx.drawImage(sil, m + dx, m + dy, l.w, l.h);
     }
   }
-  sx.drawImage(box, m, m);
+  sx.drawImage(box, m, m, l.w, l.h);
   if (!l.shadow) return sticker;
   const out = makeCanvas(l.w + m * 2, l.h + m * 2);
   const ox = out.getContext('2d');
+  // A shadow is measured in the canvas's own pixels, not its points.
+  const res = out.res || 1;
   ox.shadowColor = STICKER_SHADOW.color;
-  ox.shadowBlur = STICKER_SHADOW.blur;
-  ox.shadowOffsetY = STICKER_SHADOW.offsetY;
-  ox.drawImage(sticker, 0, 0);
+  ox.shadowBlur = STICKER_SHADOW.blur * res;
+  ox.shadowOffsetY = STICKER_SHADOW.offsetY * res;
+  ox.drawImage(sticker, 0, 0, l.w + m * 2, l.h + m * 2);
   return out;
 }
 
@@ -504,10 +511,11 @@ function wordsCanvas(l, makeCanvas) {
   if (!effect) return words;
   const out = makeCanvas(l.w + m * 2, l.h + m * 2);
   const ox = out.getContext('2d');
+  const res = out.res || 1;
   ox.shadowColor = effect.color;
-  ox.shadowBlur = effect.blur;
-  ox.shadowOffsetY = effect.offsetY;
-  ox.drawImage(words, 0, 0);
+  ox.shadowBlur = effect.blur * res;
+  ox.shadowOffsetY = effect.offsetY * res;
+  ox.drawImage(words, 0, 0, l.w + m * 2, l.h + m * 2);
   return out;
 }
 

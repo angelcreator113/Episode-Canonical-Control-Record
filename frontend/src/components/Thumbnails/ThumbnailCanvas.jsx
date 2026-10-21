@@ -12,7 +12,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Stage, Layer, Group, Rect, Text, Line, Image as KImage, Transformer } from 'react-konva';
 import {
   WIDTH, HEIGHT, LINE_HEIGHT, FONTS, fitText, measurer, spaced, fitPicture, boxFromNode, layerName, checklistRows, snapBox, layersInBox, adjustedPicture, stickerCanvas, stickerMargin, drawFitted,
-  fancyWords, wordsCanvas, wordsMargin,
+  fancyWords, wordsCanvas, wordsMargin, finerCanvas, drawRes,
 } from '../../lib/thumbnailLayers';
 import { previewUrl, previewWidth } from '../../lib/picturePreview';
 
@@ -61,9 +61,11 @@ function Picture({ l, scale }) {
   const loaded = usePicture(l.src, l.w * scale);
   // Flipped and toned as the server does it (Evoni, 2026-10-21: picture effects).
   const img = useMemo(() => (loaded ? adjustedPicture(loaded, l) : null), [loaded, l.flipX, l.brightness, l.contrast]);
+  // Drawn as fine as the screen shows it, so the edge and shadow stay sharp (Evoni, 2026-10-21).
+  const res = drawRes(scale);
   const sticker = useMemo(() => (img && l.frame !== 'polaroid' && (l.outline || l.shadow)
-    ? stickerCanvas(l, (bx) => drawFitted(bx, img, { x: 0, y: 0, w: l.w, h: l.h, fit: l.fit }))
-    : null), [img, l.w, l.h, l.fit, l.frame, l.outline, l.outlineWidth, l.shadow]);
+    ? stickerCanvas(l, (bx) => drawFitted(bx, img, { x: 0, y: 0, w: l.w, h: l.h, fit: l.fit }), finerCanvas(res))
+    : null), [img, res, l.w, l.h, l.fit, l.frame, l.outline, l.outlineWidth, l.shadow]);
   if (l.frame === 'polaroid') {
     const pad = Math.round(Math.min(l.w, l.h) * 0.05);
     const inner = { w: l.w - pad * 2, h: l.h - pad * 2 };
@@ -94,20 +96,21 @@ function Picture({ l, scale }) {
   );
 }
 
-function Words({ l }) {
+function Words({ l, scale = 1 }) {
   // A shadow or glow, a fade or a curve (Evoni, 2026-10-21: text effects):
   // drawn on a canvas as the server draws them, one shadow under it all.
   const fancy = fancyWords(l);
+  const res = drawRes(scale);
   const drawn = useMemo(() => {
     if (!fancy) return null;
     try {
-      return wordsCanvas(l);
+      return wordsCanvas(l, finerCanvas(res));
     } catch (err) {
       // No 2D canvas here: the plain words stand in; the saved file still has the effect.
       console.error('[ThumbnailCanvas] could not draw the words\' effect:', err?.message || err);
       return null;
     }
-  }, [fancy, l.text, l.upper, l.font, l.size, l.w, l.h, l.bg, l.align,
+  }, [fancy, res, l.text, l.upper, l.font, l.size, l.w, l.h, l.bg, l.align,
     l.spacing, l.color, l.stroke, l.effect, l.effectColor, l.effectSize, l.gradient, l.curve]);
   if (drawn) {
     const m = wordsMargin(l);

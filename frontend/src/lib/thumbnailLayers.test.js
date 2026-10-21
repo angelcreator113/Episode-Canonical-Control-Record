@@ -9,6 +9,7 @@ import {
   toneValue, stickerMargin, STICKER_SHADOW,
   textEffect, fancyWords, curveLayout, wordsMargin, paintWords, wordsCanvas, GLOW_COLOR, EFFECT_SIZE,
   spaced, alignLayers, distributeLayers, layersInBox, youtubeWarnings, drawnSize, fileSize, TIMESTAMP_ZONE,
+  READABLE_SIZE, readablePatch, clearOfTimestamp, fixWarning, fixAllWarnings, finerCanvas, drawRes, WIDTH, HEIGHT,
   presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer, addText, addPicture,
   boxFromNode, fitText, fitPicture, layerName, LINE_HEIGHT, checklistRows, duplicateLayer, snapBox, SNAP,
 } from './thumbnailLayers';
@@ -279,6 +280,55 @@ describe('where YouTube shows it (Evoni, 2026-10-21)', () => {
     expect(youtubeWarnings(quiet, measureFor).map((w) => [w.id, w.kind])).toEqual([['b', 'timestamp']]);
   });
 
+  // Fixing the warnings (Evoni, 2026-10-21).
+  test('READABLE_SIZE: 8 pixels in the 168-wide sidebar is 61 points on the 1280 canvas', () => {
+    expect(READABLE_SIZE).toBe(61);
+  });
+
+  test('readablePatch: grows the box and the words about its centre just enough; {} when they read; null when they cannot', () => {
+    const edition = words('edition', 'I DESIGNED MY OUTFIT', { size: 28, x: 660, y: 540, w: 400, h: 58 });
+    expect(drawnSize(edition, measureFor)).toBe(28);
+    const patch = readablePatch(edition, measureFor);
+    const after = { ...edition, ...patch };
+    expect(drawnSize(after, measureFor)).toBeGreaterThanOrEqual(READABLE_SIZE);
+    expect(drawnSize(after, measureFor)).toBeLessThan(READABLE_SIZE + 6); // just enough
+    // Centred where it was, but kept on the canvas: here the right edge holds it in.
+    expect(after.x + after.w).toBe(WIDTH);
+    expect(Math.abs(after.y + after.h / 2 - 569)).toBeLessThanOrEqual(1);
+    expect(after.x).toBeGreaterThanOrEqual(0);
+    expect(readablePatch(words('big', 'Glam'), measureFor)).toEqual({});
+    expect(readablePatch(words('long', 'x'.repeat(200)), measureFor)).toBeNull();
+  });
+
+  test('clearOfTimestamp: up or left, the shorter move; null when neither fits', () => {
+    const corner = { x: 1070, y: 640, w: 150, h: 90 };
+    expect(clearOfTimestamp(corner)).toEqual({ y: TIMESTAMP_ZONE.y - 8 - 90 });
+    // Too tall to sit above the timestamp: it moves left.
+    expect(clearOfTimestamp({ x: 1000, y: 10, w: 200, h: 700 })).toEqual({ x: TIMESTAMP_ZONE.x - 8 - 200 });
+    expect(clearOfTimestamp({ x: 0, y: 0, w: WIDTH, h: HEIGHT })).toBeNull();
+  });
+
+  test('fix one, fix all; small on purpose is not warned about; a locked layer is left as it is', () => {
+    const spec = { version: 2, layers: [
+      words('edition', 'I DESIGNED MY OUTFIT', { name: 'Edition label', size: 28, x: 660, y: 540, w: 400, h: 58 }),
+      words('long', 'x'.repeat(200), { name: 'Fine print' }),
+      words('corner', 'EP 1', { x: 1070, y: 640, w: 150, h: 90, name: 'Corner' }),
+    ] };
+    const small = youtubeWarnings(spec, measureFor).find((w) => w.id === 'edition');
+    const one = fixWarning(spec, small, measureFor);
+    expect(youtubeWarnings(one, measureFor).some((w) => w.id === 'edition' && w.kind === 'small')).toBe(false);
+    expect(fixWarning(spec, { ...small, id: 'long' }, measureFor)).toBeNull();
+    expect(fixWarning(updateLayer(spec, 'edition', { locked: true }), small, measureFor)).toBeNull();
+    const { spec: all, left } = fixAllWarnings(spec, measureFor);
+    // Grown into the corner, the label is then moved clear of the timestamp too.
+    expect(left.map((w) => [w.id, w.kind])).toEqual([['long', 'small']]);
+    const label = all.layers.find((l) => l.id === 'edition');
+    expect(label.y + label.h).toBeLessThanOrEqual(TIMESTAMP_ZONE.y - 8);
+    expect(layerOf({ layers: all.layers.map((l) => ({ ...l, role: l.id })) }, 'corner').y).toBe(TIMESTAMP_ZONE.y - 8 - 90);
+    const quiet = updateLayer(spec, 'long', { smallOk: true });
+    expect(youtubeWarnings(quiet, measureFor).map((w) => w.id)).not.toContain('long');
+  });
+
   test('fileSize', () => {
     expect(fileSize(1.4 * 1024 * 1024)).toBe('1.4 MB');
     expect(fileSize(860 * 1024)).toBe('860 KB');
@@ -383,5 +433,37 @@ describe('text effects (the server\'s, Evoni 2026-10-21)', () => {
     expect(out.ctx.calls).toEqual([['image', made[0], '#FF0000', 20, 0]]);
     const plain = wordsCanvas({ ...l, effect: 'none', curve: 30 }, make);
     expect(plain).toBe(made[2]);
+  });
+});
+
+describe('finer canvases (Evoni, 2026-10-21: adjusted pictures must not lose quality)', () => {
+  test('drawRes: the screen\'s pixels a point, 1 to 3, in halves', () => {
+    expect(drawRes(0.64, 2)).toBe(1.5);
+    expect(drawRes(0.64 * 3, 2)).toBe(3);
+    expect(drawRes(0.3, 1)).toBe(1);
+  });
+
+  test('finerCanvas: res pixels a point, its res kept', () => {
+    const c = finerCanvas(2.5)(100, 40);
+    expect([c.width, c.height, c.res]).toEqual([250, 100, 2.5]);
+  });
+
+  test('a shadow or glow on a finer canvas is measured in its pixels; canvases are drawn at their size in points', () => {
+    const made = [];
+    const make = (w, h) => {
+      const calls = [];
+      const ctx = {
+        calls, measureText: (s) => ({ width: String(s).length * 10 }), translate: () => {}, rotate: () => {}, save: () => {}, restore: () => {},
+        fillText: () => {}, strokeText: () => {}, createLinearGradient: () => ({ addColorStop: () => {} }),
+        drawImage: (...a) => calls.push(['image', a.slice(1), ctx.shadowBlur, ctx.shadowOffsetY]),
+      };
+      const c = { w, h, res: 2, getContext: () => ctx };
+      made.push(c);
+      return c;
+    };
+    const l = { kind: 'text', text: 'Hi', font: 'sans', size: 70, w: 400, h: 100, color: '#FFFFFF', effect: 'shadow', effectSize: 18 };
+    const out = wordsCanvas(l, make);
+    const m = wordsMargin(l);
+    expect(out.getContext().calls).toEqual([['image', [0, 0, 400 + m * 2, 100 + m * 2], 36, 12]]);
   });
 });

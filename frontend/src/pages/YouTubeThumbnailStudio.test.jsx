@@ -502,6 +502,42 @@ describe('YouTubeThumbnailStudio', () => {
     expect(screen.getByTestId('yts-layer-settings').querySelector('legend').textContent).toBe('Title');
   });
 
+  test('fixing the warnings: Make it readable grows the words; Small on purpose stops the warning; one that cannot be fixed says so', async () => {
+    renderPage();
+    await opened();
+    fireEvent.click(screen.getByTestId('canvas-snapshot'));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), { target: { value: 'word '.repeat(16) } });
+    await waitFor(() => expect(layerOf(lastDraft(), 'title').text).toBe('word '.repeat(16)), { timeout: 3000 });
+    const before = layerOf(lastDraft(), 'title');
+    const list = () => within(screen.getByTestId('yts-yt-warnings'));
+    expect(list().getByRole('button', { name: /^Title is about/ })).toBeTruthy();
+    fireEvent.click(list().getByRole('button', { name: 'Make it readable' }));
+    await waitFor(() => expect(screen.queryByTestId('yts-yt-warnings')).toBeNull(), { timeout: 3000 });
+    expect(screen.getByText('Readable at every size, and clear of the timestamp.')).toBeTruthy();
+    await waitFor(() => expect(layerOf(lastDraft(), 'title').w).toBeGreaterThan(before.w), { timeout: 3000 });
+    // One word far too long to wrap: it cannot be made readable; small on purpose instead.
+    fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), { target: { value: 'x'.repeat(150) } });
+    fireEvent.click(list().getByRole('button', { name: 'Make it readable' }));
+    expect(screen.getByRole('status').textContent).toMatch(/^Title cannot be made readable beside a video/);
+    fireEvent.click(list().getByRole('button', { name: 'Small on purpose' }));
+    await waitFor(() => expect(layerOf(lastDraft(), 'title').smallOk).toBe(true), { timeout: 3000 });
+    expect(screen.queryByTestId('yts-yt-warnings')).toBeNull();
+  });
+
+  test('the edition label is the episode\'s title; an arrangement kept from before can take it with one click', async () => {
+    youtubeThumbnailsApi.sources.mockResolvedValue({
+      ...SOURCES,
+      suggest: { checklist: [{ text: 'Dress', checked: true }], edition: 'Sweater Dress Edition', pieces: [], logoUrl: null },
+    });
+    renderPage();
+    await opened();
+    fireEvent.click(screen.getByRole('button', { name: /Come Style Me/ }));
+    expect(screen.getByLabelText('Edition label').value).toBe('Sweater Dress Edition');
+    fireEvent.click(screen.getByRole('button', { name: 'Use the episode title' }));
+    expect(screen.getByLabelText('Edition label').value).toBe('Studio by Sable');
+    expect(screen.queryByRole('button', { name: 'Use the episode title' })).toBeNull();
+  });
+
   test('See it exactly and Save say the file type and size; a JPEG says why', async () => {
     renderPage();
     await opened();

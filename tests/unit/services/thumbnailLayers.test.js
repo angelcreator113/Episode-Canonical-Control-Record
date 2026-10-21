@@ -350,6 +350,11 @@ describe('renderLayers', () => {
     expect(await topAt(downPng, 640)).toBeGreaterThan(await topAt(downPng, d.left + 40) + 40);
   });
 
+  test('small on purpose is kept with the layer (the Studio stops warning about it)', () => {
+    const [t, u] = L.readLayers({ version: 2, layers: [{ kind: 'text', text: 'fine print', smallOk: true }, { kind: 'badge', text: 'EP 1' }] }, s3).layers;
+    expect([t.smallOk, u.smallOk]).toEqual([true, false]);
+  });
+
   test('fontFile: only the thumbnail fonts', () => {
     expect(L.fontFile('script')).toMatch(/GreatVibes-Regular\.ttf$/);
     expect(L.fontFile('../../etc/passwd')).toBeNull();

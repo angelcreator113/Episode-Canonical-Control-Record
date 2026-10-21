@@ -109,7 +109,7 @@ describe('ThumbnailCanvas', () => {
 
   test('words with an effect, a fade or a curve are one picture drawn as the server draws them, round the box', () => {
     const ctx = {
-      font: '', measureText: (s) => ({ width: String(s).length * 40 }), translate: vi.fn(), rotate: vi.fn(), save: vi.fn(), restore: vi.fn(),
+      font: '', measureText: (s) => ({ width: String(s).length * 40 }), translate: vi.fn(), rotate: vi.fn(), scale: vi.fn(), save: vi.fn(), restore: vi.fn(),
       fillText: vi.fn(), strokeText: vi.fn(), drawImage: vi.fn(), createLinearGradient: () => ({ addColorStop: vi.fn() }),
     };
     const before = HTMLCanvasElement.prototype.getContext;

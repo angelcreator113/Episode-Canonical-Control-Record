@@ -89,7 +89,7 @@ async function previewImage(url, width = 800) {
   const full = await fetchImage(url);
   return pictures.get(`preview:${w}:${url}`, async () => {
     try {
-      return await sharp(full).rotate().resize({ width: w, height: w * 2, fit: 'inside', withoutEnlargement: true }).webp({ quality: 82 }).toBuffer();
+      return await sharp(full).rotate().resize({ width: w, height: w * 2, fit: 'inside', withoutEnlargement: true }).webp({ quality: 90 }).toBuffer();
     } catch (err) {
       console.error('[YouTubeThumbnail] preview could not be made:', err.message);
       throw new ThumbnailError(400, 'That is not a picture we can read');
@@ -168,7 +168,7 @@ async function sources(sequelize, episodeId) {
     poses,
     folders: pictureFolders({ angles, cover: show?.cover_image_url, poses, outfit, library, uploads: await listUploads(episode.id) }),
     // What the "Come Style Me" layout fills in (Evoni, 2026-10-21).
-    suggest: await layoutSuggestions(sequelize, episode.id, outfit, show),
+    suggest: await layoutSuggestions(sequelize, episode.id, outfit, show, episode.title),
     // The layers: the show's templates (named; Evoni, 2026-10-21), the
     // default one (where an episode starts; null until one is saved), and
     // this episode's draft.
@@ -252,12 +252,14 @@ const FALLBACK_CHECKLIST = ['Outfit', 'Accessories', 'Hair', 'Vibe'];
  *     "dress", "shoes", ...); else
  *     the outfit's categories with Hair and Vibe; else Outfit,
  *     Accessories, Hair, Vibe.
- *   edition: "<main piece> Edition" (the outfit's dress, else its first
- *     piece; else the event's theme), or null.
+ *   edition: the episode's title (Evoni, 2026-10-21: "edition label
+ *     should be the episode title"); without one, "<main piece> Edition"
+ *     (the outfit's dress, else its first piece; else the event's theme),
+ *     or null.
  *   pieces: up to four of the outfit's pictures, for the photo cards.
  *   logoUrl: the show's logo (showLogoService), or null.
  */
-async function layoutSuggestions(sequelize, episodeId, outfit = [], show = null) {
+async function layoutSuggestions(sequelize, episodeId, outfit = [], show = null, title = null) {
   let event = null;
   try {
     const [[row]] = await sequelize.query(
@@ -285,11 +287,12 @@ async function layoutSuggestions(sequelize, episodeId, outfit = [], show = null)
   if (rows.length < 3) rows = pickRows([...fromOutfit, 'Hair', 'Vibe']);
   if (rows.length < 3) rows = FALLBACK_CHECKLIST;
   const main = outfit.find((w) => /dress/i.test(w.category || '')) || outfit[0] || null;
-  const edition = main?.label ? `${titleCase(main.label)} Edition` : (event?.theme ? `${titleCase(event.theme)} Edition` : null);
+  const named = String(title || '').trim();
+  const edition = named || (main?.label ? `${titleCase(main.label)} Edition` : (event?.theme ? `${titleCase(event.theme)} Edition` : null));
   const logo = readLogo(show?.metadata);
   return {
     checklist: rows.map((text) => ({ text, checked: true })),
-    edition: edition ? edition.slice(0, 60) : null,
+    edition: edition ? edition.slice(0, 160) : null,
     pieces: outfit.filter((w) => allowedImageUrl(w.url)).slice(0, 4).map(({ url, label }) => ({ url, label })),
     logoUrl: logo && allowedImageUrl(logo.url) ? logo.url : null,
   };
