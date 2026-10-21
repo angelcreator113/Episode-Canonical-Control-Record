@@ -69,9 +69,14 @@ export function partialNote({ items, total, complete }) {
   return total != null ? `Showing ${n.toLocaleString()} of ${total.toLocaleString()}` : `Showing the first ${n.toLocaleString()}`;
 }
 
-/** Every episode of the show (GET /api/v1/episodes pages with page/limit). */
-export function fetchAllEpisodes(api, showId, options = {}) {
-  return fetchAllPages(api, ({ page, limit }) => `/api/v1/episodes?show_id=${encodeURIComponent(showId)}&limit=${limit}&page=${page}`,
+/**
+ * Every episode of the show (GET /api/v1/episodes pages with page/limit; the
+ * server refuses a limit over 100). `sort` ("episode_number:ASC") orders
+ * every page the same way.
+ */
+export function fetchAllEpisodes(api, showId, { sort, ...options } = {}) {
+  const order = sort ? `&sort=${encodeURIComponent(sort)}` : '';
+  return fetchAllPages(api, ({ page, limit }) => `/api/v1/episodes?show_id=${encodeURIComponent(showId)}&limit=${limit}&page=${page}${order}`,
     { pageSize: 100, label: 'episodes', ...options });
 }
 

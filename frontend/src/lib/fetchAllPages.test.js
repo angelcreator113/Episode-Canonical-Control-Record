@@ -52,6 +52,14 @@ describe('fetchAllPages', () => {
       '/api/v1/episodes?show_id=show%201&limit=100&page=1',
       '/api/v1/episodes?show_id=show%201&limit=100&page=2',
     ]);
+    // In order across pages (the Thumbnail Studio, the episode header and the
+    // teleprompter list episodes by number; one limit=500 request was refused).
+    const sorted = pagedApi(120);
+    expect((await fetchAllEpisodes(sorted, 's1', { sort: 'episode_number:ASC' })).items).toHaveLength(120);
+    expect(sorted.get.mock.calls.map((c) => c[0])).toEqual([
+      '/api/v1/episodes?show_id=s1&limit=100&page=1&sort=episode_number%3AASC',
+      '/api/v1/episodes?show_id=s1&limit=100&page=2&sort=episode_number%3AASC',
+    ]);
     const sets = { get: vi.fn(async (url) => pagedApi(230).get(url).then((r) => ({ data: { data: r.data.data, total: 230 } }))) };
     const list = await fetchAllSceneSets(sets, 's1');
     expect(list).toMatchObject({ total: 230, complete: true });

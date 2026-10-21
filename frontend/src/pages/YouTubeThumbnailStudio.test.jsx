@@ -94,6 +94,15 @@ describe('YouTubeThumbnailStudio', () => {
     expect(screen.getByLabelText('Title').value).toBe('Studio by Sable');
   });
 
+  test('the episode list\'s error stays on screen after a good preview', async () => {
+    youtubeThumbnailsApi.episodes.mockRejectedValue(new Error('400'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('yts-preview')).toBeTruthy(), { timeout: 2000 });
+    expect(screen.getByText('Could not load the episodes.')).toBeTruthy();
+    console.error.mockRestore();
+  });
+
   test('a change re-renders with it: title, layout, picture, accent', async () => {
     renderPage();
     await waitFor(() => expect(youtubeThumbnailsApi.render).toHaveBeenCalledTimes(1), { timeout: 2000 });
