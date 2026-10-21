@@ -191,16 +191,18 @@ function Checklist({ l }) {
 }
 
 /** A sticker (Evoni, 2026-10-21: stickers and shapes), drawn on a canvas as the server draws it. */
-function Shape({ l }) {
+function Shape({ l, scale = 1 }) {
+  // As fine as the screen shows it, so the sticker stays sharp (Evoni, 2026-10-21).
+  const res = drawRes(scale);
   const drawn = useMemo(() => {
     try {
-      return shapeCanvas(l);
+      return shapeCanvas(l, finerCanvas(res));
     } catch (err) {
       // No 2D canvas here: the box stays pickable; the saved file still has the sticker.
       console.error('[ThumbnailCanvas] could not draw the sticker:', err?.message || err);
       return null;
     }
-  }, [l.shape, l.w, l.h, l.fill, l.stroke, l.strokeWidth, l.thickness, l.text, l.font, l.color]);
+  }, [res, l.shape, l.w, l.h, l.fill, l.stroke, l.strokeWidth, l.thickness, l.text, l.font, l.color]);
   const m = shapeMargin(l);
   return (
     <>
