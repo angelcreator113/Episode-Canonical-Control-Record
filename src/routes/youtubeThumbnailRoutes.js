@@ -7,9 +7,11 @@
  *   GET  /episodes/:episodeId/sources   the episode, its show, its show's saved style,
  *                                        and the pictures to choose from
  *   POST /render                         the file as it would be saved (no saving): PNG, or JPEG over 2 MB
+ *   POST /render/small                   the same layers drawn small (JPEG, 640 wide), for the season grid
  *   POST /episodes/:episodeId            render and save as the episode's primary thumbnail
  *   PUT  /shows/:showId/style            save the show's style for every episode
  *   GET  /templates                      every show's named templates, with their pictures (the Templates page)
+ *   GET  /shows/:showId/season           the show's episodes, each with its thumbnail (or none) and whether it has its own arrangement
  *   GET  /shows/:showId/templates        the show's named templates, the default first
  *   POST /shows/:showId/templates        save a new named template { name, spec, makeDefault? }
  *   PATCH /shows/:showId/templates/:templateId   rename, replace its layers, or make it the default
@@ -84,6 +86,25 @@ router.post('/render', requireAuth, async (req, res) => {
     return res.send(file.buffer);
   } catch (err) {
     return sendError(res, err, 'render');
+  }
+});
+
+// A whole season at once (Evoni, 2026-10-21): a small picture of each, quick to draw and to show in a grid.
+router.post('/render/small', requireAuth, async (req, res) => {
+  try {
+    const jpeg = await yt.smallPreview(await renderRequest(req));
+    res.set('Cache-Control', 'no-store');
+    return res.type('image/jpeg').send(jpeg);
+  } catch (err) {
+    return sendError(res, err, 'small render');
+  }
+});
+
+router.get('/shows/:showId/season', requireAuth, async (req, res) => {
+  try {
+    return res.json({ success: true, data: await yt.seasonEpisodes(models.sequelize, req.params.showId) });
+  } catch (err) {
+    return sendError(res, err, 'season');
   }
 });
 

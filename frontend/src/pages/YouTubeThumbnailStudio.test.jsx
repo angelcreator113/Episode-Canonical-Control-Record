@@ -21,6 +21,7 @@ vi.mock('../lib/youtubeThumbnailsApi', async () => {
       sources: vi.fn(), render: vi.fn(), save: vi.fn(), saveStyle: vi.fn(), shows: vi.fn(), episodes: vi.fn(),
       saved: vi.fn(), makePrimary: vi.fn(), removeSaved: vi.fn(), saveDraft: vi.fn(), draft: vi.fn(), uploadPicture: vi.fn(),
       templates: vi.fn(), createTemplate: vi.fn(), updateTemplate: vi.fn(), deleteTemplate: vi.fn(),
+      season: vi.fn(), renderSmall: vi.fn(),
     },
   };
 });
@@ -911,5 +912,21 @@ describe('YouTubeThumbnailStudio', () => {
     const note = await screen.findByTestId('yts-poses-note');
     expect(within(note).getByRole('link', { name: 'Files tab' }).getAttribute('href')).toBe('/episodes/ep-1?tab=files');
     expect(screen.getByTestId('yts-jaw')).toBeTruthy();
+  });
+
+  test('whole season: the grid in place of the editor; Open in the editor goes back to that episode', async () => {
+    youtubeThumbnailsApi.season.mockResolvedValue([{ id: 'ep-1', episode_number: 1, title: 'Studio by Sable', thumbnailUrl: null, hasDraft: false }]);
+    youtubeThumbnailsApi.templates.mockResolvedValue([]);
+    renderPage();
+    await opened();
+    fireEvent.click(screen.getByTestId('yts-season-open'));
+    const grid = within(await screen.findByTestId('yts-season'));
+    expect(screen.queryByTestId('yts-canvas')).toBeNull();
+    expect(youtubeThumbnailsApi.season).toHaveBeenCalledWith('show-1');
+    // No template with layers yet: the show's layout.
+    expect(grid.getByRole('combobox', { name: 'Template for the season' }).value).toBe('layout');
+    fireEvent.click((await grid.findByTestId('yts-season-ep-1')).querySelector('button'));
+    expect(await opened()).toBeTruthy();
+    expect(screen.queryByTestId('yts-season')).toBeNull();
   });
 });

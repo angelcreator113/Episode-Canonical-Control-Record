@@ -33,10 +33,10 @@ import {
   Youtube, Upload, Download, Save, Palette, ImageOff, Check, LayoutTemplate, Sparkles, Star, Trash2, History, Folder, ChevronRight,
   Eye, EyeOff, ArrowUp, ArrowDown, Type, RotateCcw, ScanEye, X, Lock, LockOpen, Copy, Undo2, Redo2, Plus, Pencil, AlignLeft, AlignCenter, AlignRight,
   AlignStartVertical, AlignCenterVertical, AlignEndVertical, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
-  AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, Keyboard, RefreshCw, FlipHorizontal2, ZoomIn, ZoomOut, ArrowRight, Circle, Tag,
+  AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, Keyboard, RefreshCw, FlipHorizontal2, ZoomIn, ZoomOut, ArrowRight, Circle, Tag, LayoutGrid,
 } from 'lucide-react';
 import {
-  youtubeThumbnailsApi, LAYOUTS, ACCENTS, TEXT_COLORS, readRecentColours, rememberColour, episodeWords, defaultPose, folderPath, folderCount, folderCover, firstFolder,
+  youtubeThumbnailsApi, LAYOUTS, ACCENTS, TEXT_COLORS, readRecentColours, rememberColour, episodeContent, folderPath, folderCount, folderCover, firstFolder,
 } from '../lib/youtubeThumbnailsApi';
 import {
   FONTS, presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer,
@@ -44,6 +44,7 @@ import {
   alignLayers, distributeLayers, measurer, youtubeWarnings, fixWarning, fixAllWarnings, fileSize, YOUTUBE_SIZES, GLOW_COLOR, FADE_COLOR, EFFECT_SIZE, SHAPES, addShape,
 } from '../lib/thumbnailLayers';
 import ThumbnailCanvas from '../components/Thumbnails/ThumbnailCanvas';
+import ThumbnailSeason from '../components/Thumbnails/ThumbnailSeason';
 import { usePreview } from '../lib/picturePreview';
 import './YouTubeThumbnailStudio.css';
 
@@ -526,16 +527,6 @@ function LayersList({ spec, selectedId, pickedIds, onSelect, onChange, onDuplica
 const roleText = (spec, role) => layerOf(spec, role)?.text || '';
 const roleSrc = (spec, role) => layerOf(spec, role)?.src || null;
 
-/** A head-to-toe pose for Come Style Me's full outfit: her back pose, else her front; not the main one. */
-function outfitPose(poses, mainUrl) {
-  for (const pose of ['back', 'front', 'side']) {
-    const list = (poses || []).filter((p) => p.pose === pose && p.url !== mainUrl);
-    const pick = list.find((p) => p.isDefault) || list[0];
-    if (pick) return pick.url;
-  }
-  return null;
-}
-
 /** The checklist's rows: a tick and a few words each; add one (six at most), remove one. */
 function ChecklistEditor({ layer, onChange }) {
   const items = layer.items || [];
@@ -840,6 +831,8 @@ export default function YouTubeThumbnailStudio() {
   const [saved, setSaved] = useState(null);
   const [history, setHistory] = useState([]);
   const [fontsTick, setFontsTick] = useState(0);
+  // A whole season at once (Evoni, 2026-10-21): the grid in place of the editor.
+  const [season, setSeason] = useState(false);
   const edited = useRef(false);
   // The layers as they are now (an upload adds to them after its await).
   const specRef = useRef(null);
@@ -870,31 +863,11 @@ export default function YouTubeThumbnailStudio() {
     });
   }, [showId, listsTick]);
 
-  /** This episode's words and pictures, as a template or a layout fills them. */
-  const episodeContent = useCallback((src) => {
-    // This episode's starred Lala pose first (her look changes each
-    // episode), then the show's saved Lala, then the Asset Library's.
-    const lalaUrl = defaultPose(src.poses?.lala)?.url || src.style?.lalaUrl || src.cutouts?.[0]?.url || null;
-    return {
-      ...episodeWords(src.episode, src.show),
-      backgroundUrl: src.backgrounds?.[0]?.url || null,
-      lalaUrl,
-      // JustAWoman joins only when picked.
-      jawUrl: null,
-      // Come Style Me: the full outfit is another of Lala's poses (her back
-      // or front), the checklist, edition and pieces come from the episode.
-      outfitUrl: outfitPose(src.poses?.lala, lalaUrl),
-      checklist: src.suggest?.checklist || [],
-      edition: src.suggest?.edition || null,
-      pieces: src.suggest?.pieces || [],
-      logoUrl: src.suggest?.logoUrl || null,
-    };
-  }, []);
 
   /** Where an episode starts: the show's template, else the show's layout. */
   const startingSpec = useCallback((src, lk) => (src.template
     ? fillTemplate(src.template, episodeContent(src))
-    : presetLayers(lk.layout, episodeContent(src), lk)), [episodeContent]);
+    : presetLayers(lk.layout, episodeContent(src), lk)), []);
 
   // The episode's pictures, its show's style and template, and its own arrangement.
   useEffect(() => {
@@ -1370,6 +1343,10 @@ export default function YouTubeThumbnailStudio() {
               {episodes.map((e) => <option key={e.id} value={e.id}>{e.episode_number ? `${e.episode_number}. ` : ''}{e.title || 'Untitled'}</option>)}
             </select>
           </label>
+          <button type="button" className={`yts-btn${season ? ' is-primary' : ''}`} onClick={() => setSeason((v) => !v)} disabled={!showId}
+            aria-pressed={season} data-testid="yts-season-open" title="One template on every episode: check them in a grid, save the ones you like">
+            <LayoutGrid size={15} aria-hidden /> Whole season
+          </button>
         </div>
       </header>
 
@@ -1392,7 +1369,10 @@ export default function YouTubeThumbnailStudio() {
         </div>
       )}
 
-      {!spec ? (
+      {season && showId ? (
+        <ThumbnailSeason showId={showId} onClose={() => setSeason(false)}
+          onOpenEpisode={(id) => { setSeason(false); pickEpisode(id); }} />
+      ) : !spec ? (
         loading ? (
           <div className="yts-empty" role="status" data-testid="yts-loading"><span className="yts-spinner" aria-hidden /><p>Loading the episode…</p></div>
         ) : (
