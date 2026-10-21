@@ -120,6 +120,8 @@ describe('fitText and fitPicture (as the server draws)', () => {
     expect(fitPicture(1000, 1000, { w: 1280, h: 720, fit: 'cover' }).crop).toEqual({ x: 0, y: 218.75, width: 1000, height: 562.5 });
     expect(fitPicture(300, 600, { w: 600, h: 600, fit: 'contain' })).toEqual({ crop: null, x: 150, y: 0, w: 300, h: 600 });
     expect(fitPicture(600, 300, { w: 600, h: 600, fit: 'contain' })).toEqual({ crop: null, x: 0, y: 300, w: 600, h: 300 });
+    // On a photo card the product sits in the middle.
+    expect(fitPicture(600, 300, { w: 600, h: 600, fit: 'contain', center: true })).toEqual({ crop: null, x: 0, y: 150, w: 600, h: 300 });
   });
 });
 

@@ -352,6 +352,45 @@ describe('YouTubeThumbnailStudio', () => {
     expect(within(screen.getByTestId('yts-lala')).getByRole('button', { name: 'Uploads, 1 picture' })).toBeTruthy();
   });
 
+  test('the episode\'s earlier uploads are listed with this visit\'s, newest first, in one Uploads folder', async () => {
+    youtubeThumbnailsApi.sources.mockResolvedValue({
+      ...SOURCES,
+      folders: [{ key: 'uploads', label: 'Uploads', items: [{ url: 'https://b.s3.amazonaws.com/up/old.png', label: 'Old one' }] }, ...SOURCES.folders],
+    });
+    youtubeThumbnailsApi.uploadPicture.mockResolvedValue({ url: 'https://b.s3.amazonaws.com/up/new.png', label: 'New one' });
+    renderPage();
+    await opened();
+    fireEvent.change(screen.getByTestId('yts-add-picture-input'), { target: { files: [new File(['x'], 'new.png', { type: 'image/png' })] } });
+    await waitFor(() => expect(youtubeThumbnailsApi.uploadPicture).toHaveBeenCalled());
+    const add = screen.getByTestId('yts-add-picture');
+    fireEvent.click(within(add).getByRole('button', { name: 'All folders' }));
+    expect(within(add).getAllByRole('button', { name: /^Uploads, / })).toHaveLength(1);
+    fireEvent.click(within(add).getByRole('button', { name: 'Uploads, 2 pictures' }));
+    expect(within(add).getAllByRole('button', { pressed: false }).map((b) => b.title).filter(Boolean)).toEqual(['New one', 'Old one']);
+  });
+
+  test('try it on another episode: that episode\'s words and pictures in this arrangement, drawn on the server', async () => {
+    youtubeThumbnailsApi.episodes.mockResolvedValue([
+      { id: 'ep-1', episode_number: 1, title: 'Studio by Sable' },
+      { id: 'ep-2', episode_number: 2, title: 'Gala Night' },
+    ]);
+    renderPage();
+    await opened();
+    fireEvent.click(screen.getByTestId('canvas-title'));
+    fireEvent.click(screen.getByTestId('canvas-drag'));
+    youtubeThumbnailsApi.sources.mockResolvedValueOnce({ ...SOURCES, episode: { id: 'ep-2', title: 'Gala Night', episode_number: 2 } });
+    const select = screen.getByLabelText('Try it on another episode');
+    expect([...select.options].map((o) => o.textContent)).toEqual(['Choose an episode', '2. Gala Night']);
+    fireEvent.change(select, { target: { value: 'ep-2' } });
+    await waitFor(() => expect(youtubeThumbnailsApi.render).toHaveBeenCalled());
+    const drawn = youtubeThumbnailsApi.render.mock.calls.at(-1)[0];
+    expect(layerOf(drawn, 'title')).toMatchObject({ text: 'Gala Night', x: 99, rotation: -12 });
+    expect(layerOf(drawn, 'badge').text).toBe('EP 2');
+    expect(await screen.findByTestId('yts-try-figure')).toBeTruthy();
+    // This episode is unchanged.
+    expect(screen.getByLabelText('Title').value).toBe('Studio by Sable');
+  });
+
   test('See it exactly draws it on the server; Save stores the layers as the episode\'s thumbnail and lists it', async () => {
     youtubeThumbnailsApi.save.mockResolvedValue({ id: 7, url: 'https://b.s3.amazonaws.com/t.png' });
     renderPage();

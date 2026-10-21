@@ -26,7 +26,7 @@ const { createCache } = require('./pictureCache');
 const { readDocuments } = require('./eventDocumentsService');
 const { readLogo } = require('./showLogoService');
 const { EPISODE_EVENT_ID_SQL } = require('../utils/episodeEventSql');
-const { PutObjectCommand, S3Client } = require('@aws-sdk/client-s3');
+const { PutObjectCommand, ListObjectsV2Command, S3Client } = require('@aws-sdk/client-s3');
 
 const WIDTH = 1280;
 const HEIGHT = 720;
@@ -350,7 +350,7 @@ async function sources(sequelize, episodeId) {
     backgrounds,
     cutouts: (cutouts || []).filter((c) => allowedImageUrl(c.url)).map((c) => ({ id: c.id, url: c.url, label: c.name })),
     poses,
-    folders: pictureFolders({ angles, cover: show?.cover_image_url, poses, outfit, library }),
+    folders: pictureFolders({ angles, cover: show?.cover_image_url, poses, outfit, library, uploads: await listUploads(episode.id) }),
     // What the "Come Style Me" layout fills in (Evoni, 2026-10-21).
     suggest: await layoutSuggestions(sequelize, episode.id, outfit, show),
     // The layers: the show's template (null until one is saved) and this episode's draft.
@@ -394,10 +394,11 @@ function prune(folder) {
  *   This episode's outfit: by clothing category.
  *   Asset library: by asset group (Lala, Show, Guests, Episodes, Wardrobe).
  *   Documents: the event documents drawn as pictures (the shopping list).
+ *   Uploads (first): the pictures uploaded in the Studio for the episode.
  * Each folder is { key, label, folders?, items? }; each item { url, label }.
  * Empty folders are left out; only S3/CloudFront pictures are kept.
  */
-function pictureFolders({ angles = [], cover = null, poses = { lala: [], justawoman: [] }, outfit = [], library = [] }) {
+function pictureFolders({ angles = [], cover = null, poses = { lala: [], justawoman: [] }, outfit = [], library = [], uploads = [] }) {
   const ok = (it) => it && allowedImageUrl(it.url);
   const sets = groupInto('scene-sets', (angles || []).map((a) => ({ url: a.url, label: a.angle || a.set_name || 'Angle', set: a.set_name || 'Scene set' })).filter(ok), (a) => a.set)
     .map((f) => ({ ...f, items: f.items.map(({ url, label }) => ({ url, label })) }));
@@ -412,6 +413,7 @@ function pictureFolders({ angles = [], cover = null, poses = { lala: [], justawo
   const docs = library.filter((a) => a.asset_type === 'DOCUMENT_OVERLAY');
   const assets = library.filter((a) => a.asset_type !== 'DOCUMENT_OVERLAY');
   const tree = [
+    { key: 'uploads', label: 'Uploads', items: uploads.filter(ok).map(({ url, label }) => ({ url, label })) },
     { key: 'scene-sets', label: 'Scene sets', folders: [...sets, { key: 'scene-sets/show', label: 'Show', items: [{ url: cover, label: 'Show cover' }].filter(ok) }] },
     { key: 'poses', label: 'Character poses', folders: [character('lala', 'Lala'), character('justawoman', 'JustAWoman')] },
     { key: 'outfit', label: "This episode's outfit", folders: groupInto('outfit', outfit.filter(ok), (w) => titleCase(w.category) || 'Other').map((f) => ({ ...f, items: f.items.map(({ url, label }) => ({ url, label })) })) },
@@ -426,7 +428,8 @@ const FALLBACK_CHECKLIST = ['Outfit', 'Accessories', 'Hair', 'Vibe'];
 /**
  * What the "Come Style Me" layout fills in for an episode (Evoni,
  * 2026-10-21; all of it editable before saving):
- *   checklist: 3-4 rows, ticked. The slots of the episode's event's shopping
+ *   checklist: 3-4 rows, ticked; the main piece by its name ("Sweater
+ *     dress"), the others by their kind. The slots of the episode's event's shopping
  *     list (the episode's event by the one rule, utils/episodeEventSql;
  *     "dress", "shoes", ...); else
  *     the outfit's categories with Hair and Vibe; else Outfit,
@@ -446,10 +449,19 @@ async function layoutSuggestions(sequelize, episodeId, outfit = [], show = null)
   } catch (err) {
     console.error('[YouTubeThumbnail] the episode\'s event did not read; no shopping list for the checklist:', err.message);
   }
+  // The main piece by its name ("Sweater dress"), the rest by their kind ("Accessories").
+  const mainKind = /dress|gown|top|jumpsuit|outfit|suit/i;
+  const rowFor = (kind) => {
+    const piece = mainKind.test(kind) && outfit.find((w) => String(w.category || '').toLowerCase() === String(kind).toLowerCase() && w.label);
+    if (!piece) return titleCase(kind);
+    const name = String(piece.label).trim().toLowerCase();
+    return name[0].toUpperCase() + name.slice(1);
+  };
   const slots = (readDocuments(event).shopping_list?.items || [])
-    .map((it) => titleCase(it?.slot))
-    .filter((s) => s && !/^Item \d+$/.test(s));
-  const fromOutfit = outfit.map((w) => titleCase(w.category)).filter(Boolean);
+    .map((it) => String(it?.slot || '').trim())
+    .filter((s) => s && !/^item_\d+$/i.test(s))
+    .map(rowFor);
+  const fromOutfit = outfit.map((w) => w.category).filter(Boolean).map(rowFor);
   const pickRows = (list) => [...new Set(list)].slice(0, 4);
   let rows = pickRows(slots);
   if (rows.length < 3) rows = pickRows([...fromOutfit, 'Hair', 'Vibe']);
@@ -668,9 +680,44 @@ async function uploadPicture(episodeId, buffer, name = 'Upload') {
   }
   const [ext, contentType] = PICTURE_FORMATS[format] || [];
   if (!ext) throw new ThumbnailError(400, 'Use a JPG, PNG or WebP picture.');
-  const key = `episodes/${episodeId}/thumbnail-pictures/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  // The name rides in the key, so the episode's uploads can be listed with their names.
+  const named = uploadName(name);
+  const key = `${uploadsPrefix(episodeId)}${Date.now()}-${Math.random().toString(36).slice(2, 8)}${named ? `--${named}` : ''}.${ext}`;
   await getS3().send(new PutObjectCommand({ Bucket: requireAssetBucket(), Key: key, Body: buffer, ContentType: contentType }));
-  return { url: `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`, label: String(name || 'Upload').slice(0, 80) };
+  return { url: `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`, label: labelOfUpload(key) };
+}
+
+const uploadsPrefix = (episodeId) => `episodes/${episodeId}/thumbnail-pictures/`;
+
+/** A file's name as it can sit in a key: its stem, letters, digits and dashes, 60 at most. */
+const uploadName = (name) => String(name || '').replace(/\.[a-z0-9]+$/i, '').toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+
+/** An upload's label from its key: the name it was uploaded with, else "Upload". */
+function labelOfUpload(key) {
+  const m = /--([a-z0-9-]+)\.[a-z0-9]+$/.exec(key);
+  if (!m) return 'Upload';
+  const words = m[1].replace(/-/g, ' ').trim();
+  return words ? words[0].toUpperCase() + words.slice(1) : 'Upload';
+}
+
+/**
+ * The pictures uploaded in the Studio for this episode, newest first (at
+ * most 60), as { url, label }; kept in S3, so they are listed on every
+ * visit (Evoni, 2026-10-21). Empty when the bucket cannot be listed.
+ */
+async function listUploads(episodeId) {
+  try {
+    const out = await getS3().send(new ListObjectsV2Command({ Bucket: requireAssetBucket(), Prefix: uploadsPrefix(episodeId), MaxKeys: 200 }));
+    return (out.Contents || [])
+      .filter((o) => /\.(png|jpe?g|webp|avif)$/i.test(o.Key || ''))
+      .sort((a, b) => new Date(b.LastModified || 0) - new Date(a.LastModified || 0))
+      .slice(0, 60)
+      .map((o) => ({ url: `https://${BUCKET}.s3.${REGION}.amazonaws.com/${o.Key}`, label: labelOfUpload(o.Key) }));
+  } catch (err) {
+    console.error(`[YouTubeThumbnail] the uploads of episode ${episodeId} could not be listed:`, err.message);
+    return [];
+  }
 }
 
 const rowUrl = (r) => r.url || `https://${r.s3Bucket}.s3.${REGION}.amazonaws.com/${r.s3Key}`;
@@ -741,5 +788,5 @@ module.exports = {
   WIDTH, HEIGHT, LAYOUTS, DEFAULT_STYLE, ThumbnailError,
   readStyle, readSpec, allowedImageUrl, fetchImage, previewImage, PREVIEW_WIDTHS, layoutBoxes, duoPositions, readyPoses, pictureFolders, libraryImages, outfitImages, layoutSuggestions, titleSize, wrapTitle, fitTitle, kickerSize, textSvg, shadeSvg,
   render, sources, saveStyle, saveAsPrimary, listSaved, makePrimary, removeSaved,
-  readTemplate, renderSpec, getDraft, saveDraft, uploadPicture,
+  readTemplate, renderSpec, getDraft, saveDraft, uploadPicture, listUploads, labelOfUpload,
 };

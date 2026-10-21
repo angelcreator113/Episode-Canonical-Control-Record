@@ -61,11 +61,11 @@ function Picture({ l, scale }) {
   if (l.frame === 'polaroid') {
     const pad = Math.round(Math.min(l.w, l.h) * 0.05);
     const inner = { w: l.w - pad * 2, h: l.h - pad * 2 };
-    const at = img ? fitPicture(img.width, img.height, { ...inner, fit: 'cover' }) : null;
+    const at = img ? fitPicture(img.width, img.height, { ...inner, fit: l.fit, center: true }) : null;
     return (
       <>
         <Rect width={l.w} height={l.h} fill="#FFFFFF" shadowColor="black" shadowBlur={18} shadowOffsetY={6} shadowOpacity={0.35} />
-        {img && <KImage image={img} x={pad} y={pad} width={inner.w} height={inner.h} crop={at.crop} />}
+        {img && <KImage image={img} x={pad + at.x} y={pad + at.y} width={at.w} height={at.h} crop={at.crop || undefined} />}
       </>
     );
   }

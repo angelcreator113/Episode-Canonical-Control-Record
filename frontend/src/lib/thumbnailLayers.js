@@ -94,8 +94,8 @@ export function measurer(font) {
   };
 }
 
-/** Where a picture is drawn in its box: cover fills (cropped), contain stands on the bottom. */
-export function fitPicture(iw, ih, { w, h, fit }) {
+/** Where a picture is drawn in its box: cover fills (cropped), contain stands on the bottom (or, center, sits in the middle: on a photo card). */
+export function fitPicture(iw, ih, { w, h, fit, center = false }) {
   if (!iw || !ih) return { crop: null, x: 0, y: 0, w, h };
   if (fit === 'cover') {
     const scale = Math.max(w / iw, h / ih);
@@ -106,7 +106,7 @@ export function fitPicture(iw, ih, { w, h, fit }) {
   const scale = Math.min(w / iw, h / ih);
   const dw = iw * scale;
   const dh = ih * scale;
-  return { crop: null, x: (w - dw) / 2, y: h - dh, w: dw, h: dh };
+  return { crop: null, x: (w - dw) / 2, y: center ? (h - dh) / 2 : h - dh, w: dw, h: dh };
 }
 
 export const ROLE_LABELS = {

@@ -10,6 +10,7 @@ const mockSend = jest.fn();
 jest.mock('@aws-sdk/client-s3', () => ({
   S3Client: jest.fn(() => ({ send: (...a) => mockSend(...a) })),
   PutObjectCommand: jest.fn((input) => ({ input })),
+  ListObjectsV2Command: jest.fn((input) => ({ input, list: true })),
 }));
 
 // The upload bucket comes from the server's settings (src/services/assetBucket.js).
@@ -184,12 +185,34 @@ describe('database work', () => {
     expect(out.folders.map((f) => f.key)).toEqual(['scene-sets', 'poses', 'outfit', 'library']);
     // The "Come Style Me" suggestions: the shopping list's slots, the dress's edition, the pieces.
     expect(out.suggest).toEqual({
-      checklist: [{ text: 'Dress', checked: true }, { text: 'Shoes', checked: true }, { text: 'Accessories', checked: true }],
+      // The main piece by its name, the rest by their kind.
+      checklist: [{ text: 'Sweater dress', checked: true }, { text: 'Shoes', checked: true }, { text: 'Accessories', checked: true }],
       edition: 'Sweater Dress Edition',
       pieces: [{ url: 'https://b.s3.amazonaws.com/d.png', label: 'Sweater dress' }],
       logoUrl: null,
     });
     expect(out.draft).toBeNull();
+  });
+
+  test('uploads: the name rides in the key and comes back as the label; listed newest first; a listing that fails is empty', async () => {
+    mockSend.mockReset();
+    mockSend.mockResolvedValue({});
+    const up = await yt.uploadPicture('ep-1', await sharp({ create: { width: 8, height: 8, channels: 3, background: '#123456' } }).png().toBuffer(), 'Red Sweater (final).PNG');
+    expect(up.url).toMatch(/\/episodes\/ep-1\/thumbnail-pictures\/\d+-\w+--red-sweater-final\.png$/);
+    expect(up.label).toBe('Red sweater final');
+    expect(yt.labelOfUpload('episodes/e/thumbnail-pictures/1-abc.png')).toBe('Upload');
+    mockSend.mockResolvedValueOnce({ Contents: [
+      { Key: 'episodes/ep-1/thumbnail-pictures/1-a--old-one.png', LastModified: '2026-10-01T00:00:00Z' },
+      { Key: 'episodes/ep-1/thumbnail-pictures/2-b--new-one.jpg', LastModified: '2026-10-21T00:00:00Z' },
+      { Key: 'episodes/ep-1/thumbnail-pictures/notes.txt', LastModified: '2026-10-22T00:00:00Z' },
+    ] });
+    const list = await yt.listUploads('ep-1');
+    expect(list.map((u) => u.label)).toEqual(['New one', 'Old one']);
+    expect(mockSend.mock.calls.at(-1)[0].input).toMatchObject({ Prefix: 'episodes/ep-1/thumbnail-pictures/' });
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    mockSend.mockRejectedValueOnce(new Error('AccessDenied'));
+    await expect(yt.listUploads('ep-1')).resolves.toEqual([]);
+    mockSend.mockReset();
   });
 
   test('layoutSuggestions: from the outfit, then the defaults; the event\'s theme names the edition; the show\'s logo', async () => {

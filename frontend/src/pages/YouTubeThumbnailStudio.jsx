@@ -535,11 +535,31 @@ export default function YouTubeThumbnailStudio() {
     }
   };
 
-  // The folders, with this session's uploads first.
-  const tree = useMemo(() => [
-    ...(uploads.length ? [{ key: 'uploads', label: 'Uploads', items: uploads }] : []),
-    ...(sources?.folders || []),
-  ], [uploads, sources]);
+  // The folders, Uploads first: this visit's, then the episode's earlier ones (kept on the server).
+  const tree = useMemo(() => {
+    const server = sources?.folders || [];
+    const earlier = server.find((f) => f.key === 'uploads')?.items || [];
+    const items = [...uploads, ...earlier.filter((e) => !uploads.some((u) => u.url === e.url))];
+    return [...(items.length ? [{ key: 'uploads', label: 'Uploads', items }] : []), ...server.filter((f) => f.key !== 'uploads')];
+  }, [uploads, sources]);
+
+  // This arrangement on another episode, with its words and pictures (as the show's template would be).
+  const [tryOn, setTryOn] = useState({ id: '', url: null, busy: false });
+  useEffect(() => () => { if (tryOn.url) URL.revokeObjectURL(tryOn.url); }, [tryOn.url]);
+  const tryOnEpisode = async (id) => {
+    setTryOn((t) => ({ ...t, id, url: null }));
+    if (!id) return;
+    setTryOn({ id, url: null, busy: true });
+    try {
+      const other = await youtubeThumbnailsApi.sources(id);
+      const blob = await youtubeThumbnailsApi.render(fillTemplate(specRef.current, episodeContent(other)));
+      setTryOn({ id, url: URL.createObjectURL(blob), busy: false });
+    } catch (err) {
+      console.error('[YouTubeThumbnails] try on another episode failed:', err);
+      setTryOn({ id, url: null, busy: false });
+      setMessage({ type: 'error', text: err?.response?.data?.error || 'That episode could not be drawn with this arrangement.' });
+    }
+  };
 
   const pickShow = (id) => { setShowId(id); setEpisodeId(''); setParams(id ? { show: id } : {}); };
   const pickEpisode = (id) => { setEpisodeId(id); setParams(id ? { show: showId, episode: id } : { show: showId }); };
@@ -694,6 +714,25 @@ export default function YouTubeThumbnailStudio() {
                   Exactly as it will be saved.
                   <a className="yts-btn" href={exact} download={fileName}><Download size={16} aria-hidden /> Download</a>
                   <button type="button" className="yts-icon-btn" onClick={() => setExact(null)} aria-label="Close the exact view"><X size={15} aria-hidden /></button>
+                </figcaption>
+              </figure>
+            )}
+            <div className="yts-try" data-testid="yts-try">
+              <label className="yts-select">
+                <span>Try it on another episode</span>
+                <select value={tryOn.id} onChange={(e) => tryOnEpisode(e.target.value)} aria-label="Try it on another episode" disabled={tryOn.busy}>
+                  <option value="">Choose an episode</option>
+                  {episodes.filter((e) => e.id !== episodeId).map((e) => <option key={e.id} value={e.id}>{e.episode_number ? `${e.episode_number}. ` : ''}{e.title || 'Untitled'}</option>)}
+                </select>
+              </label>
+              {tryOn.busy && <span className="yts-note">Drawing…</span>}
+            </div>
+            {tryOn.url && (
+              <figure className="yts-exact" data-testid="yts-try-figure">
+                <img src={tryOn.url} alt="This arrangement on the other episode" />
+                <figcaption>
+                  This arrangement with that episode's words and pictures, as the show's template would give it.
+                  <button type="button" className="yts-icon-btn" onClick={() => setTryOn({ id: '', url: null, busy: false })} aria-label="Close the other episode"><X size={15} aria-hidden /></button>
                 </figcaption>
               </figure>
             )}

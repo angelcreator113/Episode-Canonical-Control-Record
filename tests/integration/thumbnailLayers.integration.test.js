@@ -95,7 +95,8 @@ const solid = (w, h, background) => sharp({ create: { width: w, height: h, chann
     const res = await auth(request(app).post(`${base}/episodes/${ep}/pictures`))
       .attach('image', await solid(64, 64, '#123456'), { filename: 'mine.png', contentType: 'image/png' });
     expect(res.status).toBe(201);
-    expect(res.body.data).toMatchObject({ label: 'mine.png', url: expect.stringMatching(new RegExp(`^${BUCKET_URL}episodes/${ep}/thumbnail-pictures/\\d+-\\w+\\.png$`)) });
+    // The name rides in the key, so the episode's uploads list with their names.
+    expect(res.body.data).toMatchObject({ label: 'Mine', url: expect.stringMatching(new RegExp(`^${BUCKET_URL}episodes/${ep}/thumbnail-pictures/\\d+-\\w+--mine\\.png$`)) });
     const bad = await auth(request(app).post(`${base}/episodes/${ep}/pictures`))
       .attach('image', Buffer.from('nope'), { filename: 'x.png', contentType: 'image/png' });
     expect(bad.status).toBe(400);

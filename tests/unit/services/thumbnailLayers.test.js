@@ -128,6 +128,19 @@ describe('renderLayers', () => {
     expect(await pixel(png, 130, 150)).not.toEqual([255, 255, 255]); // inside the box, left of the tick: empty
   });
 
+  test('a photo card: a white card, the product whole and in the middle (contain), or filling it (cover)', async () => {
+    const card = (fit) => L.readLayers({ version: 2, layers: [
+      { kind: 'shade', dim: 0, side: 'none', accent: '#000000' },
+      { id: 'p', kind: 'image', src: 'https://b.s3.amazonaws.com/p.png', frame: 'polaroid', fit, x: 100, y: 100, w: 200, h: 200 },
+    ] }, s3);
+    const wide = await solid(400, 100, '#00FF00'); // a wide product: 4 to 1
+    const whole = await L.renderLayers(card('contain'), { p: wide });
+    expect(await pixel(whole, 200, 200)).toEqual([0, 255, 0]); // the middle of the card: the product
+    expect(await pixel(whole, 200, 125)).toEqual([255, 255, 255]); // above it: the white card
+    const filled = await L.renderLayers(card('cover'), { p: wide });
+    expect(await pixel(filled, 200, 125)).toEqual([0, 255, 0]); // filled: the product reaches the top
+  });
+
   test('fontFile: only the thumbnail fonts', () => {
     expect(L.fontFile('script')).toMatch(/GreatVibes-Regular\.ttf$/);
     expect(L.fontFile('../../etc/passwd')).toBeNull();
