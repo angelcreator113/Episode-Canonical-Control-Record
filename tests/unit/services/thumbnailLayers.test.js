@@ -350,6 +350,41 @@ describe('renderLayers', () => {
     expect(await topAt(downPng, 640)).toBeGreaterThan(await topAt(downPng, d.left + 40) + 40);
   });
 
+  // Coloured cards and a cleared white background (Evoni, 2026-10-21: colour behind the wardrobe pieces).
+  /** A product photo: a white background round a red square, with a white square (a white garment) inside it. */
+  const productPhoto = () => sharp({ create: { width: 200, height: 200, channels: 3, background: '#FFFFFF' } })
+    .composite([
+      { input: { create: { width: 120, height: 120, channels: 3, background: '#FF0000' } }, left: 40, top: 40 },
+      { input: { create: { width: 40, height: 40, channels: 3, background: '#FFFFFF' } }, left: 80, top: 80 },
+    ]).png().toBuffer();
+
+  test('a card is kept white unless a colour is chosen; clearWhite is kept', () => {
+    const [, p] = pictured({ frame: 'polaroid', cardColor: '#e0689f', clearWhite: 1 }).layers;
+    expect(p).toMatchObject({ cardColor: '#E0689F', clearWhite: true });
+    const [, q] = pictured({ cardColor: 'pink' }).layers;
+    expect(q).toMatchObject({ cardColor: '#FFFFFF', clearWhite: false });
+  });
+
+  test('a coloured card shows its colour; with the white cleared, the colour reaches the piece and a white garment stays white', async () => {
+    const grey = await solid(1280, 720, '#808080');
+    const photo = await productPhoto();
+    // The card fills 440..840 × 160..560; the photo (cover) fills the card inside a 20-point edge.
+    const plain = await L.renderLayers(pictured({ frame: 'polaroid', fit: 'cover', cardColor: '#00AA00' }), { bg: grey, p: photo });
+    expect(await pixel(plain, 450, 360)).toEqual([0, 170, 0]); // the card's edge
+    expect(await pixel(plain, 500, 360)).toEqual([255, 255, 255]); // the photo's own white
+    const cleared = await L.renderLayers(pictured({ frame: 'polaroid', fit: 'cover', cardColor: '#00AA00', clearWhite: true }), { bg: grey, p: photo });
+    expect(await pixel(cleared, 500, 360)).toEqual([0, 170, 0]); // the card shows through
+    expect(await pixel(cleared, 580, 360)).toEqual([255, 0, 0]); // the piece
+    expect(await pixel(cleared, 640, 360)).toEqual([255, 255, 255]); // the white inside it stays
+  });
+
+  test('without a card, clearing the white leaves what is behind the picture', async () => {
+    const grey = await solid(1280, 720, '#808080');
+    const png = await L.renderLayers(pictured({ fit: 'cover', clearWhite: true }), { bg: grey, p: await productPhoto() });
+    expect(await pixel(png, 460, 360)).toEqual([128, 128, 128]);
+    expect(await pixel(png, 640, 360)).toEqual([255, 255, 255]);
+  });
+
   // Stickers and shapes (Evoni, 2026-10-21).
   const shaped = (extra) => L.readLayers({ version: 2, layers: [
     { id: 'bg', kind: 'image', role: 'background', src: 'https://b.s3.amazonaws.com/black.png', fit: 'cover', x: 0, y: 0, w: 1280, h: 720 },

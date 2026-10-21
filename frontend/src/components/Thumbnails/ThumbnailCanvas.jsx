@@ -11,7 +11,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Stage, Layer, Group, Rect, Text, Line, Image as KImage, Transformer } from 'react-konva';
 import {
-  WIDTH, HEIGHT, LINE_HEIGHT, FONTS, fitText, measurer, spaced, fitPicture, boxFromNode, layerName, checklistRows, snapBox, layersInBox, adjustedPicture, stickerCanvas, stickerMargin, drawFitted,
+  WIDTH, HEIGHT, LINE_HEIGHT, FONTS, fitText, measurer, spaced, fitPicture, boxFromNode, layerName, checklistRows, snapBox, layersInBox, adjustedPicture, CARD_COLOR, stickerCanvas, stickerMargin, drawFitted,
   fancyWords, wordsCanvas, wordsMargin, shapeCanvas, shapeMargin,
 } from '../../lib/thumbnailLayers';
 import { previewUrl, previewWidth } from '../../lib/picturePreview';
@@ -60,7 +60,7 @@ function Shade({ l }) {
 function Picture({ l, scale }) {
   const loaded = usePicture(l.src, l.w * scale);
   // Flipped and toned as the server does it (Evoni, 2026-10-21: picture effects).
-  const img = useMemo(() => (loaded ? adjustedPicture(loaded, l) : null), [loaded, l.flipX, l.brightness, l.contrast]);
+  const img = useMemo(() => (loaded ? adjustedPicture(loaded, l) : null), [loaded, l.flipX, l.brightness, l.contrast, l.clearWhite]);
   const sticker = useMemo(() => (img && l.frame !== 'polaroid' && (l.outline || l.shadow)
     ? stickerCanvas(l, (bx) => drawFitted(bx, img, { x: 0, y: 0, w: l.w, h: l.h, fit: l.fit }))
     : null), [img, l.w, l.h, l.fit, l.frame, l.outline, l.outlineWidth, l.shadow]);
@@ -70,7 +70,7 @@ function Picture({ l, scale }) {
     const at = img ? fitPicture(img.width, img.height, { ...inner, fit: l.fit, center: true }) : null;
     return (
       <>
-        <Rect width={l.w} height={l.h} fill="#FFFFFF" shadowColor="black" shadowBlur={18} shadowOffsetY={6} shadowOpacity={0.35} />
+        <Rect width={l.w} height={l.h} fill={l.cardColor || CARD_COLOR} shadowColor="black" shadowBlur={18} shadowOffsetY={6} shadowOpacity={0.35} />
         {img && <KImage image={img} x={pad + at.x} y={pad + at.y} width={at.w} height={at.h} crop={at.crop || undefined} />}
       </>
     );

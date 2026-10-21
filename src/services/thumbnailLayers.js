@@ -9,7 +9,10 @@
  *
  *   image   a picture (src: an S3/CloudFront URL), cover-fitted (the
  *           background) or contained and standing on the box's bottom
- *           (a figure); frame 'polaroid' gives it a white card. Effects
+ *           (a figure); frame 'polaroid' gives it a card (cardColor,
+ *           white unless chosen; Evoni, 2026-10-21: coloured cards for the
+ *           wardrobe pieces). clearWhite clears a photo's own white
+ *           background (the white joined to its edges). Effects
  *           (Evoni, 2026-10-21): flipX, brightness and contrast change the
  *           picture's own pixels; outline (a sticker edge round a cut-out)
  *           and shadow are drawn round what the box shows (not on a card).
@@ -136,6 +139,8 @@ function readLayers(body, allowedUrl) {
         outline: HEX.test(String(l.outline || '')) ? String(l.outline).toUpperCase() : null,
         outlineWidth: Math.round(num(l.outlineWidth, 2, 40, 12)),
         shadow: Boolean(l.shadow),
+        cardColor: hex(l.cardColor, '#FFFFFF'),
+        clearWhite: Boolean(l.clearWhite),
       };
     }
     if (l.kind === 'shade') {
@@ -316,7 +321,7 @@ function drawImage(ctx, img, l) {
     ctx.shadowColor = 'rgba(0,0,0,0.35)';
     ctx.shadowBlur = 18;
     ctx.shadowOffsetY = 6;
-    ctx.fillStyle = '#FFFFFF';
+    ctx.fillStyle = l.cardColor || '#FFFFFF';
     ctx.fillRect(-w / 2, -h / 2, w, h);
     ctx.shadowColor = 'transparent';
     // On the card: a product whole and centred (contain), or filling it (cover).
@@ -353,8 +358,47 @@ function drawFitted(ctx, img, { x, y, w, h, fit, center = false }) {
 const toneValue = (v, brightness, contrast) => Math.max(0, Math.min(255, Math.round((v - 128) * (1 + contrast) + 128 + brightness * 255)));
 
 /** The picture as it is drawn: turned left to right and toned when asked; else the picture itself. */
+// The photo's own white background (Evoni, 2026-10-21): white is every
+// colour at least WHITE; near it (at least NEAR) a fringe fades out.
+const WHITE = 235;
+const NEAR = 200;
+
+/**
+ * Clears the white joined to the picture's edges (RGBA pixels d, w×h), so
+ * a white garment inside the picture stays; the near-white fringe round
+ * what is cleared is made part see-through, so the edge is soft. Mirrored
+ * in the editor.
+ */
+function clearWhiteEdges(d, w, h) {
+  const n = w * h;
+  const low = (p) => Math.min(d[p * 4], d[p * 4 + 1], d[p * 4 + 2]);
+  const cleared = new Uint8Array(n);
+  const queue = new Int32Array(n);
+  let tail = 0;
+  const visit = (p) => {
+    if (!cleared[p] && d[p * 4 + 3] > 0 && low(p) >= WHITE) { cleared[p] = 1; queue[tail++] = p; }
+  };
+  for (let x = 0; x < w; x += 1) { visit(x); visit((h - 1) * w + x); }
+  for (let y = 0; y < h; y += 1) { visit(y * w); visit(y * w + w - 1); }
+  for (let head = 0; head < tail; head += 1) {
+    const p = queue[head];
+    const x = p % w;
+    if (x > 0) visit(p - 1);
+    if (x < w - 1) visit(p + 1);
+    if (p >= w) visit(p - w);
+    if (p < n - w) visit(p + w);
+  }
+  for (let p = 0; p < n; p += 1) {
+    if (cleared[p]) { d[p * 4 + 3] = 0; continue; }
+    const x = p % w;
+    const touches = (x > 0 && cleared[p - 1]) || (x < w - 1 && cleared[p + 1]) || (p >= w && cleared[p - w]) || (p < n - w && cleared[p + w]);
+    const v = low(p);
+    if (touches && v >= NEAR) d[p * 4 + 3] = Math.round((d[p * 4 + 3] * (WHITE - v)) / (WHITE - NEAR));
+  }
+}
+
 function adjustedPicture(img, l, makeCanvas) {
-  if (!l.flipX && !l.brightness && !l.contrast) return img;
+  if (!l.flipX && !l.brightness && !l.contrast && !l.clearWhite) return img;
   const c = makeCanvas(img.width, img.height);
   const cx = c.getContext('2d');
   if (l.flipX) {
@@ -362,10 +406,12 @@ function adjustedPicture(img, l, makeCanvas) {
     cx.scale(-1, 1);
   }
   cx.drawImage(img, 0, 0);
-  if (l.brightness || l.contrast) {
+  if (l.brightness || l.contrast || l.clearWhite) {
     const data = cx.getImageData(0, 0, img.width, img.height);
     const d = data.data;
-    for (let i = 0; i < d.length; i += 4) {
+    // The white is found before the tone changes it.
+    if (l.clearWhite) clearWhiteEdges(d, img.width, img.height);
+    for (let i = 0; i < d.length && (l.brightness || l.contrast); i += 4) {
       d[i] = toneValue(d[i], l.brightness, l.contrast);
       d[i + 1] = toneValue(d[i + 1], l.brightness, l.contrast);
       d[i + 2] = toneValue(d[i + 2], l.brightness, l.contrast);
