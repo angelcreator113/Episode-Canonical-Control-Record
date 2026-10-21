@@ -3,13 +3,15 @@
  * 2026-10-21): the layers drawn at the page's width, 16:9. Click a layer to
  * pick it; drag it to move it; pull a corner to make it bigger or smaller;
  * turn it with the handle above it. Arrow keys nudge the picked layer (with
- * Shift, ten at a time). Drawn as the server draws the saved file
+ * Shift, ten at a time). A drag snaps to the canvas's edges and centre and
+ * to the other layers (gold guide lines; hold Alt not to snap). A locked
+ * layer can be picked but not moved, resized or turned. Drawn as the server draws the saved file
  * (lib/thumbnailLayers: the same fonts, fitting and picture fit).
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { Stage, Layer, Group, Rect, Text, Line, Image as KImage, Transformer } from 'react-konva';
 import {
-  WIDTH, HEIGHT, LINE_HEIGHT, FONTS, fitText, measurer, fitPicture, boxFromNode, layerName, checklistRows,
+  WIDTH, HEIGHT, LINE_HEIGHT, FONTS, fitText, measurer, fitPicture, boxFromNode, layerName, checklistRows, snapBox,
 } from '../../lib/thumbnailLayers';
 
 function usePicture(src) {
@@ -135,6 +137,7 @@ export default function ThumbnailCanvas({ spec, selectedId, onSelect, onChange, 
   const stageRef = useRef(null);
   const trRef = useRef(null);
   const [width, setWidth] = useState(640);
+  const [guides, setGuides] = useState([]);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -152,7 +155,8 @@ export default function ThumbnailCanvas({ spec, selectedId, onSelect, onChange, 
     const tr = trRef.current;
     const stage = stageRef.current;
     if (!tr || !stage) return;
-    const node = selectedId ? stage.findOne(`#${CSS.escape(selectedId)}`) : null;
+    const picked = (spec?.layers || []).find((l) => l.id === selectedId);
+    const node = picked && !picked.locked ? stage.findOne(`#${CSS.escape(selectedId)}`) : null;
     tr.nodes(node ? [node] : []);
     tr.getLayer()?.batchDraw();
   }, [selectedId, spec, width]);
@@ -163,9 +167,19 @@ export default function ThumbnailCanvas({ spec, selectedId, onSelect, onChange, 
     x: node.x(), y: node.y(), scaleX: node.scaleX(), scaleY: node.scaleY(), rotation: node.rotation(),
   }, l));
 
+  /** Snaps a dragged layer to the canvas and the other visible layers. */
+  const snapDrag = (l, e) => {
+    const node = e.target;
+    if (e.evt?.altKey) { setGuides([]); return; }
+    const others = layers.filter((o) => o.id !== l.id && o.kind !== 'shade' && o.role !== 'background');
+    const s = snapBox({ cx: node.x(), cy: node.y(), w: l.w, h: l.h }, others);
+    node.position({ x: s.cx, y: s.cy });
+    setGuides(s.guides);
+  };
+
   const onKeyDown = (e) => {
     const l = (spec?.layers || []).find((x) => x.id === selectedId);
-    if (!l || l.kind === 'shade') return;
+    if (!l || l.kind === 'shade' || l.locked) return;
     const step = e.shiftKey ? 10 : 1;
     const move = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
     if (!move) return;
@@ -176,7 +190,9 @@ export default function ThumbnailCanvas({ spec, selectedId, onSelect, onChange, 
   const picked = (spec?.layers || []).find((x) => x.id === selectedId);
   return (
     <div ref={wrapRef} className="yts-canvas" tabIndex={0} onKeyDown={onKeyDown} data-testid="yts-canvas"
-      aria-label={picked ? `Thumbnail editor. ${layerName(picked)} is picked: drag to move, pull a corner to resize, use the top handle to turn; arrow keys nudge.` : 'Thumbnail editor. Click a layer to move, resize or turn it.'}>
+      aria-label={picked
+        ? (picked.locked ? `Thumbnail editor. ${layerName(picked)} is picked and locked.` : `Thumbnail editor. ${layerName(picked)} is picked: drag to move, pull a corner to resize, use the top handle to turn; arrow keys nudge.`)
+        : 'Thumbnail editor. Click a layer to move, resize or turn it.'}>
       <Stage ref={stageRef} width={width} height={Math.round((width * HEIGHT) / WIDTH)} scaleX={scale} scaleY={scale}
         onMouseDown={(e) => { if (e.target === e.target.getStage()) onSelect(null); }}
         onTouchStart={(e) => { if (e.target === e.target.getStage()) onSelect(null); }}>
@@ -187,14 +203,19 @@ export default function ThumbnailCanvas({ spec, selectedId, onSelect, onChange, 
             if (!Body) return null;
             return (
               <Group key={l.id} id={l.id} x={l.x + l.w / 2} y={l.y + l.h / 2} offsetX={l.w / 2} offsetY={l.h / 2}
-                rotation={l.rotation} opacity={l.opacity} draggable
+                rotation={l.rotation} opacity={l.opacity} draggable={!l.locked}
                 onMouseDown={() => onSelect(l.id)} onTap={() => onSelect(l.id)}
-                onDragEnd={(e) => change(l, e.target)}
+                onDragMove={(e) => snapDrag(l, e)}
+                onDragEnd={(e) => { setGuides([]); change(l, e.target); }}
                 onTransformEnd={(e) => { const node = e.target; change(l, node); node.scaleX(1); node.scaleY(1); }}>
                 <Body l={l} />
               </Group>
             );
           })}
+          {guides.map((g, i) => (
+            <Line key={i} points={g.x !== undefined ? [g.x, 0, g.x, HEIGHT] : [0, g.y, WIDTH, g.y]}
+              stroke="#E8C468" strokeWidth={2 / scale} dash={[8 / scale, 6 / scale]} listening={false} />
+          ))}
           <Transformer ref={trRef} rotateEnabled keepRatio={false} rotationSnaps={[0, 90, 180, 270]} rotationSnapTolerance={4}
             borderStroke="#B8962E" anchorStroke="#B8962E" anchorFill="#FFFFFF" anchorSize={10}
             boundBoxFunc={(oldBox, box) => (Math.abs(box.width) < 12 || Math.abs(box.height) < 12 ? oldBox : box)} />

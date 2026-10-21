@@ -98,6 +98,8 @@ function readLayers(body, allowedUrl) {
       role: str(l.role, 20) || null,
       name: str(l.name, 80) || null,
       visible: l.visible !== false,
+      // Locked: not moved, resized or turned on the canvas (Evoni, 2026-10-21).
+      locked: Boolean(l.locked),
       x: Math.round(num(l.x, -WIDTH, WIDTH * 2, 0)),
       y: Math.round(num(l.y, -HEIGHT, HEIGHT * 2, 0)),
       w: Math.round(num(l.w, 1, WIDTH * 3, WIDTH)),

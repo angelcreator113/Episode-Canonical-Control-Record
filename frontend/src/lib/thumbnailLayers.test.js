@@ -7,7 +7,7 @@
 import { describe, test, expect } from 'vitest';
 import {
   presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer, addText, addPicture,
-  boxFromNode, fitText, fitPicture, layerName, LINE_HEIGHT, checklistRows,
+  boxFromNode, fitText, fitPicture, layerName, LINE_HEIGHT, checklistRows, duplicateLayer, snapBox, SNAP,
 } from './thumbnailLayers';
 
 const CONTENT = {
@@ -167,5 +167,27 @@ describe('Come Style Me (Evoni, 2026-10-21)', () => {
     const rows = checklistRows({ w: 300, h: 200, items: [{ text: 'Sweater dress' }, { text: 'Hair' }] }, measure);
     expect(rows).toMatchObject({ rowH: 100, box: 60, textX: 90 });
     expect('Sweater dress'.length * rows.size * 0.5).toBeLessThanOrEqual(210);
+  });
+});
+
+describe('editor tools (Evoni, 2026-10-21)', () => {
+  test('duplicateLayer: a copy just above, moved a little, with no role and unlocked; the original keeps its role', () => {
+    const spec = updateLayer(presetLayers('lala-left', CONTENT, STYLE), 'lala', { locked: true });
+    const next = duplicateLayer(duplicateLayer(spec, 'lala'), 'lala');
+    const i = next.layers.findIndex((l) => l.id === 'lala');
+    expect(next.layers[i + 1]).toMatchObject({ id: 'lala-copy-2', role: null, name: 'Lala copy', locked: false, x: 54, y: 54, src: CONTENT.lalaUrl });
+    expect(next.layers[i + 2].id).toBe('lala-copy-1');
+    expect(layerOf(next, 'lala').locked).toBe(true);
+    expect(duplicateLayer(spec, 'nope')).toBe(spec);
+  });
+
+  test('snapBox: an edge or centre within reach snaps to the canvas or another layer, and says where the guide goes', () => {
+    // The centre 5 from the canvas's middle: snaps there.
+    expect(snapBox({ cx: 645, cy: 200, w: 100, h: 100 })).toEqual({ cx: 640, cy: 200, guides: [{ x: 640 }] });
+    // Its left edge 3 from another layer's right edge (x 400 + w 200 = 600); its top on the canvas's top.
+    expect(snapBox({ cx: 653, cy: 52, w: 100, h: 100 }, [{ x: 400, y: 300, w: 200, h: 100 }])).toEqual({ cx: 650, cy: 50, guides: [{ x: 600 }, { y: 0 }] });
+    // Nothing within reach: stays.
+    expect(snapBox({ cx: 300, cy: 200, w: 100, h: 100 })).toEqual({ cx: 300, cy: 200, guides: [] });
+    expect(SNAP).toBe(8);
   });
 });

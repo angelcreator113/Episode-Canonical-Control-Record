@@ -265,6 +265,54 @@ describe('YouTubeThumbnailStudio', () => {
     expect(layerOf(spec, 'badge').text).toBe('EPISODE 1');
   });
 
+  test('undo and redo: buttons and Ctrl+Z / Ctrl+Shift+Z; quick changes are one step; not while typing in a field', async () => {
+    renderPage();
+    await opened();
+    expect(screen.getByTestId('yts-undo').disabled).toBe(true);
+    fireEvent.click(screen.getByTestId('canvas-title'));
+    fireEvent.click(screen.getByTestId('canvas-drag'));
+    expect(screen.getByTestId('yts-undo').disabled).toBe(false);
+    const title = () => screen.getAllByRole('spinbutton', { name: 'Left (points)' })[0].value;
+    expect(title()).toBe('99');
+    fireEvent.click(screen.getByTestId('yts-undo'));
+    expect(title()).toBe('70'); // Lala right: the title starts at 70
+    expect(screen.getByTestId('yts-redo').disabled).toBe(false);
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true, shiftKey: true });
+    expect(title()).toBe('99');
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+    expect(title()).toBe('70');
+    // Typing quickly is one step; Ctrl+Z inside a field is the field's own.
+    const field = screen.getByLabelText('Title');
+    fireEvent.change(field, { target: { value: 'A' } });
+    fireEvent.change(field, { target: { value: 'AB' } });
+    fireEvent.keyDown(field, { key: 'z', ctrlKey: true });
+    expect(field.value).toBe('AB');
+    fireEvent.click(screen.getByTestId('yts-undo'));
+    expect(screen.getByLabelText('Title').value).toBe('Studio by Sable');
+  });
+
+  test('lock: a locked layer\'s place and size cannot be typed; copy: a copy with no role, picked; Ctrl+D copies the picked one', async () => {
+    renderPage();
+    await opened();
+    const list = screen.getByTestId('yts-layers');
+    fireEvent.click(within(list).getByRole('button', { name: 'Lock Lala' }));
+    expect(within(list).getByRole('button', { name: 'Unlock Lala' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByTestId('canvas-lala'));
+    expect(screen.getByRole('spinbutton', { name: 'Width (points)' }).disabled).toBe(true);
+    fireEvent.click(within(list).getByRole('button', { name: 'Copy Lala' }));
+    // The copy is picked and can be moved; its size can be typed.
+    const width = screen.getByRole('spinbutton', { name: 'Width (points)' });
+    expect(width.disabled).toBe(false);
+    fireEvent.change(width, { target: { value: '300' } });
+    fireEvent.keyDown(window, { key: 'd', ctrlKey: true });
+    await waitFor(() => expect(youtubeThumbnailsApi.saveDraft).toHaveBeenCalled(), { timeout: 3000 });
+    const spec = lastDraft();
+    expect(spec.layers.map((l) => l.id).slice(0, 5)).toEqual(['background', 'shade', 'lala', 'lala-copy-1', 'image-copy-1']);
+    expect(layerOf(spec, 'lala').locked).toBe(true);
+    expect(spec.layers[3]).toMatchObject({ role: null, locked: false, w: 300 });
+    expect(spec.layers[4]).toMatchObject({ role: null, w: 300 });
+  });
+
   test('the layers list hides, orders and removes; words and pictures can be added', async () => {
     renderPage();
     await opened();

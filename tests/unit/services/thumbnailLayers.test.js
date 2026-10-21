@@ -28,6 +28,9 @@ describe('readLayers', () => {
     expect(shade).toMatchObject({ id: 'layer-3', dim: 0.8, side: 'left', accent: '#E0689F' });
     expect(badge).toMatchObject({ text: 'EP 1234567890123', fill: '#B8962E' });
     expect(L.readLayers({ version: 2, layers: [{ kind: 'text', text: 'x', stroke: null }] }, s3).layers[0].stroke).toBeNull();
+    // A locked layer stays locked; anything else is unlocked.
+    const lk = L.readLayers({ version: 2, layers: [{ kind: 'text', text: 'x', locked: true }, { kind: 'text', text: 'y', locked: 'yes please' }, { kind: 'text', text: 'z' }] }, s3).layers;
+    expect(lk.map((l) => l.locked)).toEqual([true, true, false]);
   });
 
   test('refuses what is not layers, unknown kinds, too many layers, and pictures that are not ours', () => {
