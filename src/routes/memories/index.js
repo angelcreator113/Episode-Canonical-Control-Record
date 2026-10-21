@@ -12,6 +12,11 @@
 const express = require('express');
 const router = express.Router();
 
+// An AI failure any writing route answers with a raw 5xx ("Connection
+// error.") reaches the author as a 429 (budget) or a plain 502 (the book side
+// check, 2026-10-20; utils/aiFailure).
+router.use(require('../../utils/aiFailure').plainAiErrors);
+
 // ── Mount domain sub-routers ────────────────────────────────────────────────
 // Each sub-router defines its own routes relative to /api/v1/memories/
 

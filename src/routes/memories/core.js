@@ -6,6 +6,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 // Auth middleware
 const { requireAuth } = require('../../middleware/auth');
 const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
+const { aiFailure } = require('../../utils/aiFailure');
 
 const db = require('../../models');
 const { StorytellerMemory, StorytellerLine, StorytellerBook, StorytellerChapter, RegistryCharacter } = db;
@@ -655,10 +656,18 @@ router.get('/books/:bookId/memories/pending', requireAuth, async (req, res) => {
 // GET /books/:bookId/scenes
 // Generates 3-5 scene suggestions via Claude API.
 // Uses confirmed memories + approved/edited lines as context.
-// Results are NOT stored — generated fresh on each request.
+// Results are NOT stored — generated fresh on each request, so both panels
+// (WriteMode's and BookEditor's ScenesPanel) call it only when their
+// Generate button is pressed. It is a POST (the book side check, 2026-10-20:
+// a GET can be refetched, and each one is a paid AI call); GET stays as an
+// alias for old clients. Rate-limited, MODELS with two attempts, budget-gated by
+// aiCostTracker; an unreachable AI or a budget refusal answers plainly
+// (utils/aiFailure).
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.get('/books/:bookId/scenes', requireAuth, async (req, res) => {
+const MODELS = ['claude-sonnet-4-6'];
+
+async function bookSceneSuggestions(req, res) {
   try {
     const { bookId } = req.params;
 
@@ -737,12 +746,27 @@ router.get('/books/:bookId/scenes', requireAuth, async (req, res) => {
       confirmedMemories,
     });
 
-    // ── 6. Call Claude ────────────────────────────────────────────────────
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1500,
-      messages: [{ role: 'user', content: prompt }],
-    });
+    // ── 6. Call Claude: MODELS, two attempts each ─────────────────────────
+    let response;
+    let lastErr;
+    for (const model of MODELS) {
+      for (let attempt = 0; attempt < 2 && !response; attempt++) {
+        try {
+          response = await anthropic.messages.create({
+            model,
+            max_tokens: 1500,
+            messages: [{ role: 'user', content: prompt }],
+          });
+        } catch (apiErr) {
+          // A budget refusal is final: no second attempt.
+          if (apiErr?.code === 'AI_BUDGET_EXCEEDED') throw apiErr;
+          lastErr = apiErr;
+          console.warn(`[scenes] ${model} attempt ${attempt + 1} failed:`, apiErr.message);
+        }
+      }
+      if (response) break;
+    }
+    if (!response) throw lastErr;
 
     const rawText = response.content
       .filter(b => b.type === 'text')
@@ -789,9 +813,13 @@ router.get('/books/:bookId/scenes', requireAuth, async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('GET /books/:bookId/scenes error:', err);
-    res.status(500).json({ error: 'Scene generation failed', details: err.message });
+    console.error('/books/:bookId/scenes error:', err);
+    if (aiFailure(res, err)) return undefined;
+    return res.status(500).json({ error: 'Scene generation failed', details: err.message });
   }
-});
+}
+
+router.post('/books/:bookId/scenes', requireAuth, aiRateLimiter, bookSceneSuggestions);
+router.get('/books/:bookId/scenes', requireAuth, aiRateLimiter, bookSceneSuggestions);
 
 module.exports = router;

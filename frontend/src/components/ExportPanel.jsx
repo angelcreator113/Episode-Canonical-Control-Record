@@ -108,6 +108,18 @@ export default function ExportPanel({ bookId, bookTitle }) {
             <StatBox icon='✦'  value={meta.line_count}  label='lines' />
           </div>
 
+          {/* Chapters left out: only approved lines are exported (the book side check, 2026-10-20). */}
+          {meta.not_approved_count > 0 && (
+            <div style={s.skippedNote} role='status' data-testid='export-not-approved'>
+              {meta.not_approved_count === 1
+                ? '1 chapter is not in the export yet: approve its lines in Review.'
+                : `${meta.not_approved_count} chapters are not in the export yet: approve their lines in Review.`}
+              <div style={s.skippedList}>
+                {meta.skipped_chapters.filter(c => c.reason === 'not_approved').map(c => c.title).join(' · ')}
+              </div>
+            </div>
+          )}
+
           {/* Chapter breakdown */}
           {meta.chapters?.length > 0 && (
             <div style={s.chapterList}>
@@ -254,6 +266,23 @@ const s = {
     height:       5,
     borderRadius: '50%',
     background:   'var(--lala-gold)',
+  },
+  skippedNote: {
+    margin:       '8px 16px 0',
+    padding:      '10px 12px',
+    border:       '1px solid var(--lala-gold-line)',
+    borderRadius: 4,
+    fontFamily:   'Lora, Georgia, serif',
+    fontSize:     13,
+    lineHeight:   1.45,
+    color:        'var(--text-primary)',
+  },
+  skippedList: {
+    marginTop:  4,
+    fontFamily: 'DM Mono, monospace',
+    fontSize:   11,
+    color:      'var(--text-secondary)',
+    overflowWrap: 'anywhere',
   },
   errorBox: {
     margin:     '12px 16px',

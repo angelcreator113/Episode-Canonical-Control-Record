@@ -1053,7 +1053,7 @@ async function loadSocialFeedContext(characterKeys, registryId) {
         'moment_log', 'sample_captions', 'sample_comments', 'controversy_history',
         'lala_relevance_score', 'lala_relevance_reason',
         'justawoman_mirror', 'mirror_proposed_by_amber',
-        'visibility_tier', 'pinned_post',
+        'visibility_tier', 'pinned_post', 'feed_layer',
       ],
     });
     if (!profiles.length) return '';
@@ -1118,8 +1118,13 @@ async function loadSocialFeedContext(characterKeys, registryId) {
       sections.push('ACTIVE ENTANGLEMENTS (unresolved social events creating pressure):\n' + eventLines.join('\n'));
     }
 
+    // LalaVerse's social web is The Pulse (the lore rename, 2026-10-19);
+    // JustAWoman's world has ordinary social media, which keeps its own name.
+    const heading = profiles.every(p => p.feed_layer === 'lalaverse')
+      ? 'THE PULSE CONTEXT (LalaVerse\'s social web, the parasocial/digital pressure layer — characters exist in public)'
+      : 'SOCIAL MEDIA CONTEXT (the parasocial/digital pressure layer — characters exist in public)';
     return sections.length
-      ? `\n\nSOCIAL FEED CONTEXT (the parasocial/digital pressure layer — characters exist in public):\n${sections.join('\n\n')}`
+      ? `\n\n${heading}:\n${sections.join('\n\n')}`
       : '';
   } catch (err) {
     console.error('[loadSocialFeedContext] error:', err?.message);
