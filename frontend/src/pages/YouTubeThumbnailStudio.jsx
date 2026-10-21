@@ -33,7 +33,7 @@ import {
   Youtube, Upload, Download, Save, Palette, ImageOff, Check, LayoutTemplate, Sparkles, Star, Trash2, History, Folder, ChevronRight,
   Eye, EyeOff, ArrowUp, ArrowDown, Type, RotateCcw, ScanEye, X, Lock, LockOpen, Copy, Undo2, Redo2, Plus, Pencil, AlignLeft, AlignCenter, AlignRight,
   AlignStartVertical, AlignCenterVertical, AlignEndVertical, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
-  AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, Keyboard, RefreshCw, FlipHorizontal2, ZoomIn, ZoomOut, ClipboardCopy, ClipboardPaste, Columns2, CopyPlus, ArrowRight, Circle, Tag, LayoutGrid, EllipsisVertical, Grid3x3, SquareDashed, GripVertical, ListChecks, Shapes, Bandage, StickyNote, Eclipse,
+  AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, Keyboard, RefreshCw, FlipHorizontal2, ZoomIn, ZoomOut, ClipboardCopy, ClipboardPaste, Columns2, CopyPlus, ArrowRight, Circle, Tag, LayoutGrid, EllipsisVertical, Grid3x3, SquareDashed, GripVertical, ListChecks, Shapes, Bandage, StickyNote, Eclipse, Wand2,
 } from 'lucide-react';
 import {
   youtubeThumbnailsApi, LAYOUTS, ACCENTS, TEXT_COLORS, readRecentColours, rememberColour, episodeContent, folderPath, folderCount, folderCover, firstFolder,
@@ -169,11 +169,20 @@ function FolderPicker({ title, tree, start, value, onPick, onUpload, uploading =
  * or darker, more or less contrast; on a picture without a photo card, a
  * sticker edge round a cut-out and a drop shadow under it.
  */
-function PictureEffects({ layer, onChange, colours = [], onRemember }) {
+function PictureEffects({ layer, onChange, colours = [], onRemember, onCutOut, cutting = false }) {
   const card = layer.frame === 'polaroid';
   const cardColour = layer.cardColor || CARD_COLOR;
   return (
     <div className="yts-text-tools" data-testid="yts-picture-effects">
+      {onCutOut && layer.src && (
+        // AI help (Evoni, 2026-10-21): the background off a picture, e.g. one uploaded straight here; within the image budget.
+        <div className="yts-actions">
+          <button type="button" className="yts-btn" onClick={() => onCutOut(layer)} disabled={cutting} data-testid="yts-cut-out"
+            title="Removes the background with AI (counts toward the daily image budget); the cut-out is kept in Uploads">
+            <Wand2 size={16} aria-hidden /> {cutting ? 'Removing the background…' : 'Remove the background (AI)'}
+          </button>
+        </div>
+      )}
       {card && (
         // A coloured card (Evoni, 2026-10-21: colour behind the wardrobe pieces, not only white).
         <fieldset className="yts-field">
@@ -447,7 +456,7 @@ function ShapeSettings({ layer, onChange }) {
   );
 }
 
-function LayerSettings({ layer, onChange, colours, onRemember }) {
+function LayerSettings({ layer, onChange, colours, onRemember, onCutOut, cutting }) {
   if (!layer || layer.kind === 'shade') return null;
   return (
     <fieldset className="yts-field yts-layer-settings" data-testid="yts-layer-settings">
@@ -494,7 +503,7 @@ function LayerSettings({ layer, onChange, colours, onRemember }) {
           </label>
         </div>
       )}
-      {layer.kind === 'image' && <PictureEffects layer={layer} onChange={onChange} colours={colours} onRemember={onRemember} />}
+      {layer.kind === 'image' && <PictureEffects layer={layer} onChange={onChange} colours={colours} onRemember={onRemember} onCutOut={onCutOut} cutting={cutting} />}
       <div className="yts-row yts-box-fields">
         {[['x', 'Left', -WIDTH, WIDTH * 2], ['y', 'Top', -HEIGHT, HEIGHT * 2], ['w', 'Width', 10, WIDTH * 3], ['h', 'Height', 10, HEIGHT * 3]].map(([key, label, min, max]) => (
           <label key={key} className="yts-field is-small">
@@ -512,6 +521,12 @@ function LayerSettings({ layer, onChange, colours, onRemember }) {
     </fieldset>
   );
 }
+
+/** A title idea's hook as a burst sticker with those words (AI help). */
+const addHook = (spec, hook) => {
+  const next = addShape(spec, 'burst');
+  return updateLayer(next, next.layers.at(-1).id, { text: hook });
+};
 
 /** A small picture of a layer for its row in Layers (Evoni, 2026-10-21 redesign). */
 function LayerThumb({ l }) {
@@ -1351,6 +1366,36 @@ export default function YouTubeThumbnailStudio() {
     setSelectedId(next.layers.at(-1).id);
   };
 
+  // AI help (Evoni, 2026-10-21), within the daily budgets: title ideas; a picture's background removed.
+  const [ideas, setIdeas] = useState({ busy: false, list: [] });
+  useEffect(() => { setIdeas({ busy: false, list: [] }); }, [episodeId]);
+  const askIdeas = async () => {
+    setIdeas((x) => ({ ...x, busy: true }));
+    try {
+      const list = await youtubeThumbnailsApi.titleIdeas(episodeId);
+      setIdeas({ busy: false, list });
+    } catch (err) {
+      console.error('[YouTubeThumbnails] title ideas failed:', err);
+      setIdeas((x) => ({ ...x, busy: false }));
+      setMessage({ type: 'error', text: err?.response?.data?.error || 'No title ideas this time. Try again.' });
+    }
+  };
+  const [cutting, setCutting] = useState(false);
+  const cutOut = async (layer) => {
+    setCutting(true);
+    try {
+      const pic = await youtubeThumbnailsApi.cutOut(episodeId, layer.src, layerName(layer));
+      setUploads((u) => [pic, ...u.filter((x) => x.url !== pic.url)]);
+      edit((s) => updateLayer(s, layer.id, { src: pic.url, clearWhite: false }));
+      setMessage({ type: 'ok', text: 'Background removed. The cut-out is kept in Uploads; Undo puts the photo back.' });
+    } catch (err) {
+      console.error('[YouTubeThumbnails] cut out failed:', err);
+      setMessage({ type: 'error', text: err?.response?.data?.error || 'The background could not be removed. Try again.' });
+    } finally {
+      setCutting(false);
+    }
+  };
+
   // Colours picked with the free picker, newest first (this browser).
   const [recentColours, setRecentColours] = useState(readRecentColours);
   const remember = (c) => setRecentColours(rememberColour(c));
@@ -1784,7 +1829,7 @@ export default function YouTubeThumbnailStudio() {
           <aside className="yts-side" aria-label="Thumbnail settings">
             {picked && picked.kind !== 'shade' && (
               <section className="yts-card">
-                <LayerSettings layer={picked} onChange={(patch) => edit((s) => updateLayer(s, picked.id, patch))}
+                <LayerSettings layer={picked} onChange={(patch) => edit((s) => updateLayer(s, picked.id, patch))} onCutOut={cutOut} cutting={cutting}
                   colours={[...ACCENTS, ...recentColours.filter((c) => !ACCENTS.includes(c))]} onRemember={remember} />
               </section>
             )}
@@ -1835,6 +1880,32 @@ export default function YouTubeThumbnailStudio() {
                     </button>
                   )}
                 </div>
+              )}
+            </section>
+
+            <section className="yts-card" aria-label="AI help" data-testid="yts-ai">
+              <h2 className="yts-label"><Sparkles size={14} aria-hidden /> AI help</h2>
+              <div className="yts-actions">
+                <button type="button" className="yts-btn" onClick={askIdeas} disabled={ideas.busy} data-testid="yts-ideas-btn">
+                  <Sparkles size={16} aria-hidden /> {ideas.busy ? 'Thinking…' : ideas.list.length ? 'More title ideas' : 'Title ideas'}
+                </button>
+              </div>
+              <p className="yts-note">From this episode's title, checklist and outfit; counts toward the daily AI budget.</p>
+              {ideas.list.length > 0 && (
+                <ul className="yts-ideas" data-testid="yts-ideas">
+                  {ideas.list.map((idea, i) => (
+                    <li key={`${i}-${idea.title}`} className="yts-idea">
+                      <span className="yts-idea-title">{idea.title}</span>
+                      {idea.hook && <span className="yts-idea-hook">{idea.hook}</span>}
+                      <span className="yts-idea-actions">
+                        <button type="button" className="yts-history-btn" onClick={() => setRole('title', idea.title)} aria-label={`Use "${idea.title}" as the title`}>Use title</button>
+                        {idea.hook && (
+                          <button type="button" className="yts-history-btn" onClick={() => addAndPick((s) => addHook(s, idea.hook))} aria-label={`Add "${idea.hook}" as a burst`}>Add the hook</button>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
               )}
             </section>
 

@@ -158,8 +158,12 @@ async function upscale(url, factor) {
   return out.buffer;
 }
 
-/** Step 3: the background off. Returns { buffer (PNG with alpha), provider }. */
-async function removeBackground(buffer) {
+/**
+ * Step 3: the background off. Returns { buffer (PNG with alpha), provider }.
+ * `type` is remove.bg's subject: a person for the poses; 'auto' for any
+ * picture (the Thumbnail Studio's cut-out, Evoni 2026-10-21).
+ */
+async function removeBackground(buffer, { type = 'person' } = {}) {
   const removeBgKey = process.env.REMOVEBG_API_KEY || process.env.REMOVE_BG_API_KEY;
   const runway = require('./RunwayMLService');
   if (!removeBgKey && !runway.isConfigured()) {
@@ -170,7 +174,7 @@ async function removeBackground(buffer) {
       const form = new FormData();
       form.append('image_file', buffer, { filename: 'pose.jpg', contentType: 'image/jpeg' });
       form.append('size', 'auto');
-      form.append('type', 'person');
+      form.append('type', type);
       form.append('format', 'png');
       const res = await runImageCall({ model: 'remove.bg', provider: 'removebg' }, () => axios.post(
         'https://api.remove.bg/v1.0/removebg', form,

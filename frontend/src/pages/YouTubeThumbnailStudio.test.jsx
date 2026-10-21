@@ -23,6 +23,7 @@ vi.mock('../lib/youtubeThumbnailsApi', async () => {
       templates: vi.fn(), createTemplate: vi.fn(), updateTemplate: vi.fn(), deleteTemplate: vi.fn(),
       versions: vi.fn(), createVersion: vi.fn(), updateVersion: vi.fn(), deleteVersion: vi.fn(),
       season: vi.fn(), renderSmall: vi.fn(),
+      titleIdeas: vi.fn(), cutOut: vi.fn(),
     },
   };
 });
@@ -823,6 +824,45 @@ describe('YouTubeThumbnailStudio', () => {
     fireEvent.click(within(screen.getByTestId('yts-ask')).getByRole('button', { name: 'Yes' }));
     await waitFor(() => expect(lastDraft().layers.map((l) => l.id)).toEqual(expect.arrayContaining(['change', 'after-label'])), { timeout: 3000 });
     expect(screen.getByRole('button', { name: /Before\/After/ }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  test('AI help: title ideas from the episode; use one as the title, add its hook as a burst; a refusal says why', async () => {
+    youtubeThumbnailsApi.titleIdeas.mockResolvedValue([
+      { title: 'The $40 Gala Gown', hook: '$40 FIND' },
+      { title: 'Gala Ready in Ten', hook: '' },
+    ]);
+    renderPage();
+    await opened();
+    const card = () => within(screen.getByTestId('yts-ai'));
+    fireEvent.click(card().getByTestId('yts-ideas-btn'));
+    await waitFor(() => expect(card().getByText('The $40 Gala Gown')).toBeTruthy());
+    expect(youtubeThumbnailsApi.titleIdeas).toHaveBeenCalledWith('ep-1');
+    expect(card().queryByRole('button', { name: 'Add "" as a burst' })).toBeNull();
+    fireEvent.click(card().getByRole('button', { name: 'Use "The $40 Gala Gown" as the title' }));
+    fireEvent.click(card().getByRole('button', { name: 'Add "$40 FIND" as a burst' }));
+    await waitFor(() => expect(lastDraft().layers.at(-1)).toMatchObject({ kind: 'shape', shape: 'burst', text: '$40 FIND' }), { timeout: 3000 });
+    expect(layerOf(lastDraft(), 'title').text).toBe('The $40 Gala Gown');
+    expect(card().getByTestId('yts-ideas-btn').textContent).toContain('More title ideas');
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    youtubeThumbnailsApi.titleIdeas.mockRejectedValueOnce({ response: { data: { error: 'Today\'s AI budget is used up' } } });
+    fireEvent.click(card().getByTestId('yts-ideas-btn'));
+    expect((await screen.findByRole('alert')).textContent).toContain('Today\'s AI budget is used up');
+  });
+
+  test('AI help: Remove the background on a picked picture swaps in the cut-out (kept in Uploads); Undo puts the photo back', async () => {
+    youtubeThumbnailsApi.cutOut.mockResolvedValue({ url: 'https://b.s3.amazonaws.com/up/lala-cut.png', label: 'Lala cut out' });
+    renderPage();
+    await opened();
+    fireEvent.click(screen.getByTestId('canvas-lala'));
+    fireEvent.click(screen.getByTestId('yts-cut-out'));
+    await waitFor(() => expect(layerOf(lastDraft(), 'lala').src).toBe('https://b.s3.amazonaws.com/up/lala-cut.png'), { timeout: 3000 });
+    const [episodeId, url, name] = youtubeThumbnailsApi.cutOut.mock.calls[0];
+    expect([episodeId, name]).toEqual(['ep-1', 'Lala']);
+    expect(url).toMatch(/^https:\/\/b\.s3\.amazonaws\.com\//);
+    expect((await screen.findByRole('status')).textContent).toContain('Background removed');
+    fireEvent.click(screen.getByRole('button', { name: /Undo/ }));
+    // The photo it was cut from comes back.
+    await waitFor(() => expect(layerOf(lastDraft(), 'lala').src).toBe(url), { timeout: 3000 });
   });
 
   test('any colour: the accent and the title from the free picker; picked ones are remembered as swatches', async () => {
