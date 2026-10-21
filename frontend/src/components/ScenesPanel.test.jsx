@@ -44,10 +44,12 @@ describe('ScenesPanel — Track 3 helpers', () => {
     expect(apiClient.post).toHaveBeenCalledWith('/api/v1/memories/scene-planner', payload);
   });
 
-  test('fetchBookSceneSuggestions calls apiClient.get on book scenes URL', async () => {
-    vi.mocked(apiClient.get).mockResolvedValue({ data: { scenes: [] } });
+  // A POST: each call is a paid AI call, never a refetchable GET (the book side check, 2026-10-20).
+  test('fetchBookSceneSuggestions calls apiClient.post on book scenes URL', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({ data: { scenes: [] } });
     await fetchBookSceneSuggestions('b1');
-    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/memories/books/b1/scenes');
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/memories/books/b1/scenes');
+    expect(apiClient.get).not.toHaveBeenCalled();
   });
 
   test('error path — updateChapterSections propagates rejection', async () => {
