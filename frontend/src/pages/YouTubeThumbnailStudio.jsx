@@ -33,7 +33,7 @@ import {
   Youtube, Upload, Download, Save, Palette, ImageOff, Check, LayoutTemplate, Sparkles, Star, Trash2, History, Folder, ChevronRight,
   Eye, EyeOff, ArrowUp, ArrowDown, Type, RotateCcw, ScanEye, X, Lock, LockOpen, Copy, Undo2, Redo2, Plus, Pencil, AlignLeft, AlignCenter, AlignRight,
   AlignStartVertical, AlignCenterVertical, AlignEndVertical, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
-  AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, Keyboard, RefreshCw, FlipHorizontal2, ZoomIn, ZoomOut, Columns2, CopyPlus, ArrowRight, Circle, Tag, LayoutGrid,
+  AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, Keyboard, RefreshCw, FlipHorizontal2, ZoomIn, ZoomOut, ClipboardCopy, ClipboardPaste, Columns2, CopyPlus, ArrowRight, Circle, Tag, LayoutGrid,
 } from 'lucide-react';
 import {
   youtubeThumbnailsApi, LAYOUTS, ACCENTS, TEXT_COLORS, readRecentColours, rememberColour, episodeContent, folderPath, folderCount, folderCover, firstFolder,
@@ -41,7 +41,7 @@ import {
 import {
   FONTS, presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer,
   addText, addPicture, addPieceCard, layerName, loadThumbnailFonts, OUTLINE, BOX_COLOR, BOX_OPACITY, STICKER_EDGE, duplicateLayer, WIDTH, HEIGHT, CARD_COLOR,
-  alignLayers, distributeLayers, measurer, youtubeWarnings, fixWarning, fixAllWarnings, fileSize, YOUTUBE_SIZES, GLOW_COLOR, FADE_COLOR, EFFECT_SIZE, SHAPES, addShape,
+  alignLayers, distributeLayers, copyLayers, pasteLayers, CLIPBOARD_KEY, measurer, youtubeWarnings, fixWarning, fixAllWarnings, fileSize, YOUTUBE_SIZES, GLOW_COLOR, FADE_COLOR, EFFECT_SIZE, SHAPES, addShape,
 } from '../lib/thumbnailLayers';
 import ThumbnailCanvas from '../components/Thumbnails/ThumbnailCanvas';
 import ThumbnailSeason from '../components/Thumbnails/ThumbnailSeason';
@@ -560,7 +560,7 @@ const ALIGN_TOOLS = [
  * Arranging the picked layers (Evoni, 2026-10-21): one lines up with the
  * canvas, several with each other; three or more spread evenly.
  */
-function ArrangeBar({ count, removable = 0, onAlign, onSpread, onClear, onRemove }) {
+function ArrangeBar({ count, removable = 0, onAlign, onSpread, onClear, onCopy, onRemove }) {
   if (!count) return null;
   return (
     <div className="yts-arrange" role="toolbar" aria-label="Arrange" data-testid="yts-arrange">
@@ -575,6 +575,10 @@ function ArrangeBar({ count, removable = 0, onAlign, onSpread, onClear, onRemove
       <button type="button" className="yts-icon-btn" onClick={() => onSpread('y')} disabled={count < 3}
         aria-label="Spread evenly down" title="Spread evenly down (3 or more)"><AlignVerticalDistributeCenter size={15} aria-hidden /></button>
       <button type="button" className="yts-icon-btn" onClick={onClear} aria-label="Pick nothing" title="Pick nothing (Esc)"><X size={15} aria-hidden /></button>
+      {/* Copy to paste on another episode (Evoni, 2026-10-21). */}
+      <button type="button" className="yts-btn" onClick={onCopy} title="Copy, to paste on this or another episode (Ctrl+C)">
+        <ClipboardCopy size={15} aria-hidden /> Copy
+      </button>
       {/* Remove what is picked, right where it is picked (Evoni, 2026-10-21: "no way of deleting anything"). */}
       <button type="button" className="yts-btn yts-remove-btn" onClick={onRemove} disabled={!removable}
         title={removable ? 'Remove (Delete key); Undo brings it back' : 'Locked: unlock it to remove it'}>
@@ -666,6 +670,7 @@ const SHORTCUTS = [
   ['Ctrl+Z', 'Undo'],
   ['Ctrl+Shift+Z or Ctrl+Y', 'Redo'],
   ['Ctrl+D', 'Copy the picked layer'],
+  ['Ctrl+C / Ctrl+V', 'Copy the picked layers; paste them here or on another episode'],
   ['?', 'Show or hide this list'],
 ];
 
@@ -1110,6 +1115,57 @@ export default function YouTubeThumbnailStudio() {
     if (next.layers[i + 1]) setSelectedId(next.layers[i + 1].id);
   }, [edit]);
 
+  // What was copied, kept on this browser so it can be pasted on another episode (Evoni, 2026-10-21).
+  const readClip = () => {
+    try {
+      const raw = window.localStorage.getItem(CLIPBOARD_KEY);
+      const c = raw ? JSON.parse(raw) : null;
+      return Array.isArray(c?.layers) && c.layers.length ? c : null;
+    } catch (err) {
+      console.error('[YouTubeThumbnails] the copied layers could not be read:', err);
+      return null;
+    }
+  };
+  const [clip, setClip] = useState(readClip);
+  useEffect(() => {
+    // Copied in another tab: the Paste button follows.
+    const onStorage = (e) => { if (e.key === CLIPBOARD_KEY) setClip(readClip()); };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+  const clipRef = useRef(null);
+  clipRef.current = clip;
+  const sourcesRef = useRef(null);
+  sourcesRef.current = sources;
+
+  const copyPicked = useCallback(() => {
+    const ep = sourcesRef.current?.episode;
+    const c = copyLayers(specRef.current, pickedRef.current, ep ? { episodeId: ep.id, title: ep.title || null } : null);
+    if (!c) return;
+    try {
+      window.localStorage.setItem(CLIPBOARD_KEY, JSON.stringify(c));
+    } catch (err) {
+      // Kept for this page only; another tab or a reload will not have it.
+      console.error('[YouTubeThumbnails] the copied layers could not be kept on this browser:', err);
+    }
+    setClip(c);
+    const n = c.layers.length;
+    setMessage({ type: 'ok', text: `Copied ${n === 1 ? '1 layer' : `${n} layers`}. Open any episode and press Paste (Ctrl+V).` });
+  }, []);
+
+  const pasteClip = useCallback(() => {
+    const c = clipRef.current;
+    if (!c || !specRef.current) return;
+    const here = sourcesRef.current?.episode?.id;
+    const { spec: next, ids } = pasteLayers(specRef.current, c, { nudge: Boolean(here) && c.from?.episodeId === here });
+    if (!ids.length) return;
+    edit(next);
+    setPrimary(ids[0]);
+    setExtraIds(ids.slice(1));
+    const from = c.from?.title && c.from.episodeId !== here ? ` from "${c.from.title}"` : '';
+    setMessage({ type: 'ok', text: `Pasted ${ids.length === 1 ? '1 layer' : `${ids.length} layers`}${from}. Undo takes them away.` });
+  }, [edit]);
+
   /** Picks a layer; with toggle, adds it to the picked ones or takes it away. */
   const select = useCallback((id, { toggle } = {}) => {
     if (!toggle || !id) { setSelectedId(id); return; }
@@ -1144,7 +1200,8 @@ export default function YouTubeThumbnailStudio() {
 
   // Keys outside a field: Delete or Backspace removes the picked layers,
   // Esc picks nothing, ? shows the shortcuts. Ctrl/Cmd+Z undo,
-  // Ctrl/Cmd+Shift+Z or Ctrl+Y redo, Ctrl/Cmd+D copy the picked layer; not
+  // Ctrl/Cmd+Shift+Z or Ctrl+Y redo, Ctrl/Cmd+D copy the picked layer,
+  // Ctrl/Cmd+C and V copy and paste (another episode too); not
   // while typing in a field (it has its own undo).
   useEffect(() => {
     const onKey = (e) => {
@@ -1179,11 +1236,17 @@ export default function YouTubeThumbnailStudio() {
       } else if (key === 'd' && selectedIdRef.current) {
         e.preventDefault();
         duplicate(selectedIdRef.current);
+      } else if (key === 'c' && pickedRef.current.length) {
+        e.preventDefault();
+        copyPicked();
+      } else if (key === 'v' && clipRef.current) {
+        e.preventDefault();
+        pasteClip();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [undo, redo, duplicate, removePicked, setSelectedId]);
+  }, [undo, redo, duplicate, removePicked, setSelectedId, copyPicked, pasteClip]);
 
   const setRole = (role, value) => edit((s) => {
     if (!value && (role === 'lala' || role === 'jaw')) {
@@ -1548,7 +1611,8 @@ export default function YouTubeThumbnailStudio() {
               {zoom > 1 && <button type="button" className="yts-history-btn" onClick={() => setZoom(1)}>Fit</button>}
             </div>
             <ArrangeBar count={pickedIds.length} onAlign={align} onSpread={spread} onClear={() => setSelectedId(null)}
-              removable={(spec?.layers || []).filter((l) => pickedIds.includes(l.id) && !l.locked && l.kind !== 'shade').length} onRemove={removePicked} />
+              removable={(spec?.layers || []).filter((l) => pickedIds.includes(l.id) && !l.locked && l.kind !== 'shade').length} onRemove={removePicked}
+              onCopy={copyPicked} />
             <p className="yts-note" data-testid="yts-draft-note">
               {draftNote || 'Click a layer to move it, pull a corner to resize, use the top handle to turn it.'}
             </p>
@@ -1680,6 +1744,12 @@ export default function YouTubeThumbnailStudio() {
               <button type="button" className="yts-btn" onClick={() => addAndPick((s) => addText(s))} data-testid="yts-add-text">
                 <Type size={16} aria-hidden /> Add words
               </button>
+              {clip?.layers?.length > 0 && (
+                <button type="button" className="yts-btn" onClick={pasteClip} data-testid="yts-paste"
+                  title={clip.from?.title ? `Copied from ${clip.from.title} (Ctrl+V)` : 'Ctrl+V'}>
+                  <ClipboardPaste size={16} aria-hidden /> Paste {clip.layers.length === 1 ? '1 layer' : `${clip.layers.length} layers`}
+                </button>
+              )}
             </div>
             <StickerRow onAdd={(key) => addAndPick((s) => addShape(s, key))} />
 

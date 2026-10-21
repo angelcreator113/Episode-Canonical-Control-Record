@@ -12,7 +12,7 @@ import {
   spaced, alignLayers, distributeLayers, layersInBox, youtubeWarnings, drawnSize, fileSize, TIMESTAMP_ZONE,
   READABLE_SIZE, readablePatch, clearOfTimestamp, fixWarning, fixAllWarnings, finerCanvas, drawRes, WIDTH, HEIGHT,
   presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer, addText, addPicture, addPieceCard,
-  boxFromNode, fitText, fitPicture, layerName, LINE_HEIGHT, checklistRows, duplicateLayer, snapBox, SNAP,
+  boxFromNode, fitText, fitPicture, layerName, LINE_HEIGHT, checklistRows, duplicateLayer, snapBox, SNAP, copyLayers, pasteLayers,
 } from './thumbnailLayers';
 
 const CONTENT = {
@@ -571,5 +571,37 @@ describe('stickers and shapes (the server\'s, Evoni 2026-10-21)', () => {
     };
     shapeCanvas({ shape: 'ring', w: 300, h: 200, fill: '#FF3B3B', thickness: 16, stroke: '#FFFFFF', strokeWidth: 4 }, () => ({ getContext: () => ctx }));
     expect(strokes).toEqual([['#FFFFFF', 24], ['#FF3B3B', 16]]);
+  });
+});
+
+describe('copy and paste between episodes (Evoni, 2026-10-21)', () => {
+  const one = presetLayers('lala-left', { title: 'Red Dress Day', kicker: 'Styling Adventures', badge: 'EP 1', backgroundUrl: 'https://b.s3.amazonaws.com/bg.jpg', lalaUrl: 'https://b.s3.amazonaws.com/l.png' }, {});
+
+  test('copyLayers: the picked ones, unlocked; not the shade; null when nothing is picked', () => {
+    const locked = updateLayer(one, 'title', { locked: true });
+    const c = copyLayers(locked, ['title', 'shade', 'badge'], { episodeId: 'ep-1', title: 'Red Dress Day' });
+    expect(c.from).toEqual({ episodeId: 'ep-1', title: 'Red Dress Day' });
+    expect(c.layers.map((l) => [l.id, l.locked])).toEqual([['title', false], ['badge', false]]);
+    expect(copyLayers(one, ['shade'])).toBeNull();
+    expect(copyLayers(one, [])).toBeNull();
+  });
+
+  test('pasteLayers: on top, where they were; a role already here comes in as a plain layer; nudged on the same episode', () => {
+    const c = copyLayers(one, ['title', 'badge']);
+    const { spec, ids } = pasteLayers(one, c, { nudge: true });
+    expect(ids).toEqual(['title-1', 'badge-1']);
+    const pasted = spec.layers.slice(-2);
+    expect(pasted.map((l) => [l.role, l.name])).toEqual([[null, 'Title'], [null, 'Badge']]);
+    expect(pasted[0]).toMatchObject({ text: 'Red Dress Day', x: layerOf(one, 'title').x + 24, y: layerOf(one, 'title').y + 24 });
+    expect(layerOf(spec, 'title').text).toBe('Red Dress Day'); // this episode's own title is still the title
+  });
+
+  test('pasteLayers: on a thumbnail without that role, the layer keeps its role and id; a background goes to the back', () => {
+    const bare = { version: 2, layers: [{ id: 'shade', role: 'shade', kind: 'shade', visible: true }] };
+    const { spec, ids } = pasteLayers(bare, copyLayers(one, ['background', 'title']));
+    expect(ids).toEqual(['background', 'title']);
+    expect(spec.layers.map((l) => l.id)).toEqual(['background', 'shade', 'title']);
+    expect(layerOf(spec, 'title').text).toBe('Red Dress Day');
+    expect(pasteLayers(bare, null)).toEqual({ spec: bare, ids: [] });
   });
 });
