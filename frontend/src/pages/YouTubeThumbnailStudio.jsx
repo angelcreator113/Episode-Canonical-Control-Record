@@ -28,25 +28,35 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   Youtube, Upload, Download, Save, Palette, ImageOff, Check, LayoutTemplate, Sparkles, Star, Trash2, History, Folder, ChevronRight,
-  Eye, EyeOff, ArrowUp, ArrowDown, Type, RotateCcw, ScanEye, X,
+  Eye, EyeOff, ArrowUp, ArrowDown, Type, RotateCcw, ScanEye, X, Lock, LockOpen, Copy, Undo2, Redo2,
 } from 'lucide-react';
 import {
   youtubeThumbnailsApi, LAYOUTS, ACCENTS, TEXT_COLORS, episodeWords, defaultPose, folderPath, folderCount, folderCover, firstFolder,
 } from '../lib/youtubeThumbnailsApi';
 import {
   FONTS, presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer,
-  addText, addPicture, layerName, loadThumbnailFonts, OUTLINE,
+  addText, addPicture, layerName, loadThumbnailFonts, OUTLINE, duplicateLayer, WIDTH, HEIGHT,
 } from '../lib/thumbnailLayers';
 import ThumbnailCanvas from '../components/Thumbnails/ThumbnailCanvas';
+import { usePreview } from '../lib/picturePreview';
 import './YouTubeThumbnailStudio.css';
 
 const DRAFT_DELAY_MS = 1200;
+// Changes this close together are one step to undo (typing a word, a slider).
+const UNDO_GROUP_MS = 600;
+const UNDO_STEPS = 50;
+
+/** A folder's picture, from its small copy (the full one can be 4000px). */
+function PreviewImg({ url, alt }) {
+  const src = usePreview(url, 120);
+  return src ? <img src={src} alt={alt} loading="lazy" /> : <span className="yts-img-wait" aria-hidden />;
+}
 
 function PickButton({ it, value, onPick }) {
   return (
     <button type="button" className={`yts-pick${value === it.url ? ' is-on' : ''}`} aria-pressed={value === it.url}
       onClick={() => onPick(it.url, it.label)} title={it.label}>
-      <img src={it.url} alt={it.label || ''} loading="lazy" />
+      <PreviewImg url={it.url} alt={it.label || ''} />
     </button>
   );
 }
@@ -98,7 +108,7 @@ function FolderPicker({ title, tree, start, value, onPick, onUpload, uploading =
             return (
               <button key={f.key} type="button" className="yts-folder" onClick={() => setAt(f.key)} data-testid={`${testid}-folder-${f.key}`}
                 aria-label={`${f.label}, ${n} ${n === 1 ? 'picture' : 'pictures'}`}>
-                <span className="yts-folder-art">{cover ? <img src={cover} alt="" loading="lazy" /> : <Folder size={20} aria-hidden />}</span>
+                <span className="yts-folder-art">{cover ? <PreviewImg url={cover} alt="" /> : <Folder size={20} aria-hidden />}</span>
                 <span className="yts-folder-name"><Folder size={12} aria-hidden /> {f.label}</span>
                 <span className="yts-folder-count" aria-hidden>{n} {n === 1 ? 'picture' : 'pictures'}</span>
               </button>
@@ -164,16 +174,26 @@ function LayerSettings({ layer, onChange }) {
           </label>
         </div>
       )}
+      <div className="yts-row yts-box-fields">
+        {[['x', 'Left', -WIDTH, WIDTH * 2], ['y', 'Top', -HEIGHT, HEIGHT * 2], ['w', 'Width', 10, WIDTH * 3], ['h', 'Height', 10, HEIGHT * 3]].map(([key, label, min, max]) => (
+          <label key={key} className="yts-field is-small">
+            <span className="yts-label">{label}</span>
+            <input type="number" className="yts-input" value={Math.round(layer[key])} min={min} max={max} disabled={layer.locked}
+              onChange={(e) => { const n = Number(e.target.value); if (Number.isFinite(n)) onChange({ [key]: Math.min(max, Math.max(min, Math.round(n))) }); }}
+              aria-label={`${label} (points)`} />
+          </label>
+        ))}
+      </div>
       <label className="yts-field">
         <span className="yts-label">Turn ({Math.round(layer.rotation)}°)</span>
-        <input type="range" min="-180" max="180" step="1" value={layer.rotation} onChange={(e) => onChange({ rotation: Number(e.target.value) })} aria-label="Turn" />
+        <input type="range" min="-180" max="180" step="1" value={layer.rotation} onChange={(e) => onChange({ rotation: Number(e.target.value) })} aria-label="Turn" disabled={layer.locked} />
       </label>
     </fieldset>
   );
 }
 
-/** The layers, front first: pick, hide or show, move forward or back, remove. */
-function LayersList({ spec, selectedId, onSelect, onChange }) {
+/** The layers, front first: pick, hide or show, lock, copy, move forward or back, remove. */
+function LayersList({ spec, selectedId, onSelect, onChange, onDuplicate }) {
   const front = [...(spec?.layers || [])].reverse();
   return (
     <fieldset className="yts-field" data-testid="yts-layers">
@@ -188,6 +208,16 @@ function LayersList({ spec, selectedId, onSelect, onChange }) {
               aria-label={`${l.visible ? 'Hide' : 'Show'} ${layerName(l)}`} title={l.visible ? 'Hide' : 'Show'}>
               {l.visible ? <Eye size={15} aria-hidden /> : <EyeOff size={15} aria-hidden />}
             </button>
+            {l.kind !== 'shade' && (
+              <button type="button" className={`yts-icon-btn${l.locked ? ' is-on' : ''}`} onClick={() => onChange(updateLayer(spec, l.id, { locked: !l.locked }))}
+                aria-pressed={Boolean(l.locked)} aria-label={`${l.locked ? 'Unlock' : 'Lock'} ${layerName(l)}`} title={l.locked ? 'Unlock' : 'Lock'}>
+                {l.locked ? <Lock size={15} aria-hidden /> : <LockOpen size={15} aria-hidden />}
+              </button>
+            )}
+            {l.kind !== 'shade' && (
+              <button type="button" className="yts-icon-btn" onClick={() => onDuplicate(l.id)}
+                aria-label={`Copy ${layerName(l)}`} title="Copy"><Copy size={15} aria-hidden /></button>
+            )}
             <button type="button" className="yts-icon-btn" onClick={() => onChange(moveLayer(spec, l.id, 'up'))} disabled={i === 0}
               aria-label={`Bring ${layerName(l)} forward`} title="Forward"><ArrowUp size={15} aria-hidden /></button>
             <button type="button" className="yts-icon-btn" onClick={() => onChange(moveLayer(spec, l.id, 'down'))} disabled={i === front.length - 1}
@@ -249,6 +279,8 @@ export default function YouTubeThumbnailStudio() {
   const [spec, setSpecState] = useState(null);
   const [look, setLook] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
+  const selectedIdRef = useRef(null);
+  selectedIdRef.current = selectedId;
   const [uploads, setUploads] = useState([]);
   const [uploading, setUploading] = useState(null);
   const [exact, setExact] = useState(null);
@@ -263,6 +295,12 @@ export default function YouTubeThumbnailStudio() {
   // The layers as they are now (an upload adds to them after its await).
   const specRef = useRef(null);
   specRef.current = spec;
+  // Undo and redo (Evoni, 2026-10-21): the arrangements before and after
+  // this one; changes close together are one step.
+  const past = useRef([]);
+  const future = useRef([]);
+  const lastEditAt = useRef(0);
+  const [, setHistoryTick] = useState(0);
 
   useEffect(() => { loadThumbnailFonts().then(() => setFontsTick((n) => n + 1)); }, []);
 
@@ -322,6 +360,9 @@ export default function YouTubeThumbnailStudio() {
       const lk = { layout: src.style?.layout || 'lala-left', accent: src.style?.accent, textColor: src.style?.textColor, dim: src.style?.dim };
       setLook(lk);
       edited.current = false;
+      past.current = [];
+      future.current = [];
+      lastEditAt.current = 0;
       if (src.draft) {
         const { savedAt, ...draft } = src.draft;
         setSpecState(draft);
@@ -371,11 +412,65 @@ export default function YouTubeThumbnailStudio() {
 
   /** A change made here: kept as this episode's arrangement. */
   const edit = useCallback((next) => {
+    const now = Date.now();
+    if (specRef.current && now - lastEditAt.current > UNDO_GROUP_MS) {
+      past.current = [...past.current, specRef.current].slice(-UNDO_STEPS);
+    }
+    future.current = [];
+    lastEditAt.current = now;
     edited.current = true;
     setSaved(null);
     setExact(null);
+    setHistoryTick((n) => n + 1);
     setSpecState((s) => (typeof next === 'function' ? next(s) : next));
   }, []);
+
+  /** Back one step (undo) or forward one (redo); kept as the episode's arrangement like any change. */
+  const step = useCallback((from, to) => {
+    if (!from.current.length || !specRef.current) return;
+    to.current = [...to.current, specRef.current];
+    const prev = from.current[from.current.length - 1];
+    from.current = from.current.slice(0, -1);
+    lastEditAt.current = 0;
+    edited.current = true;
+    setSaved(null);
+    setExact(null);
+    setHistoryTick((n) => n + 1);
+    setSpecState(prev);
+    setSelectedId((id) => (prev.layers.some((l) => l.id === id) ? id : null));
+  }, []);
+  const undo = useCallback(() => step(past, future), [step]);
+  const redo = useCallback(() => step(future, past), [step]);
+
+  const duplicate = useCallback((id) => {
+    const next = duplicateLayer(specRef.current, id);
+    const i = next.layers.findIndex((l) => l.id === id);
+    edit(next);
+    if (next.layers[i + 1]) setSelectedId(next.layers[i + 1].id);
+  }, [edit]);
+
+  // Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z or Ctrl+Y redo, Ctrl/Cmd+D copy the
+  // picked layer; not while typing in a field (it has its own undo).
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || !specRef.current) return;
+      const tag = e.target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target?.isContentEditable) return;
+      const key = e.key.toLowerCase();
+      if (key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if ((key === 'z' && e.shiftKey) || key === 'y') {
+        e.preventDefault();
+        redo();
+      } else if (key === 'd' && selectedIdRef.current) {
+        e.preventDefault();
+        duplicate(selectedIdRef.current);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [undo, redo, duplicate]);
 
   const setRole = (role, value) => edit((s) => {
     if (!value && (role === 'lala' || role === 'jaw')) {
@@ -440,11 +535,31 @@ export default function YouTubeThumbnailStudio() {
     }
   };
 
-  // The folders, with this session's uploads first.
-  const tree = useMemo(() => [
-    ...(uploads.length ? [{ key: 'uploads', label: 'Uploads', items: uploads }] : []),
-    ...(sources?.folders || []),
-  ], [uploads, sources]);
+  // The folders, Uploads first: this visit's, then the episode's earlier ones (kept on the server).
+  const tree = useMemo(() => {
+    const server = sources?.folders || [];
+    const earlier = server.find((f) => f.key === 'uploads')?.items || [];
+    const items = [...uploads, ...earlier.filter((e) => !uploads.some((u) => u.url === e.url))];
+    return [...(items.length ? [{ key: 'uploads', label: 'Uploads', items }] : []), ...server.filter((f) => f.key !== 'uploads')];
+  }, [uploads, sources]);
+
+  // This arrangement on another episode, with its words and pictures (as the show's template would be).
+  const [tryOn, setTryOn] = useState({ id: '', url: null, busy: false });
+  useEffect(() => () => { if (tryOn.url) URL.revokeObjectURL(tryOn.url); }, [tryOn.url]);
+  const tryOnEpisode = async (id) => {
+    setTryOn((t) => ({ ...t, id, url: null }));
+    if (!id) return;
+    setTryOn({ id, url: null, busy: true });
+    try {
+      const other = await youtubeThumbnailsApi.sources(id);
+      const blob = await youtubeThumbnailsApi.render(fillTemplate(specRef.current, episodeContent(other)));
+      setTryOn({ id, url: URL.createObjectURL(blob), busy: false });
+    } catch (err) {
+      console.error('[YouTubeThumbnails] try on another episode failed:', err);
+      setTryOn({ id, url: null, busy: false });
+      setMessage({ type: 'error', text: err?.response?.data?.error || 'That episode could not be drawn with this arrangement.' });
+    }
+  };
 
   const pickShow = (id) => { setShowId(id); setEpisodeId(''); setParams(id ? { show: id } : {}); };
   const pickEpisode = (id) => { setEpisodeId(id); setParams(id ? { show: showId, episode: id } : { show: showId }); };
@@ -582,6 +697,12 @@ export default function YouTubeThumbnailStudio() {
               <button type="button" className="yts-btn" onClick={saveTemplate} disabled={busy || !sources?.show?.id} data-testid="yts-save-template">
                 <Palette size={16} aria-hidden /> Save as {sources?.show?.name || 'show'} template
               </button>
+              <button type="button" className="yts-btn" onClick={undo} disabled={!past.current.length} data-testid="yts-undo" title="Undo (Ctrl+Z)">
+                <Undo2 size={16} aria-hidden /> Undo
+              </button>
+              <button type="button" className="yts-btn" onClick={redo} disabled={!future.current.length} data-testid="yts-redo" title="Redo (Ctrl+Shift+Z)">
+                <Redo2 size={16} aria-hidden /> Redo
+              </button>
               <button type="button" className="yts-btn" onClick={resetToTemplate} data-testid="yts-reset">
                 <RotateCcw size={16} aria-hidden /> Start again
               </button>
@@ -596,11 +717,30 @@ export default function YouTubeThumbnailStudio() {
                 </figcaption>
               </figure>
             )}
+            <div className="yts-try" data-testid="yts-try">
+              <label className="yts-select">
+                <span>Try it on another episode</span>
+                <select value={tryOn.id} onChange={(e) => tryOnEpisode(e.target.value)} aria-label="Try it on another episode" disabled={tryOn.busy}>
+                  <option value="">Choose an episode</option>
+                  {episodes.filter((e) => e.id !== episodeId).map((e) => <option key={e.id} value={e.id}>{e.episode_number ? `${e.episode_number}. ` : ''}{e.title || 'Untitled'}</option>)}
+                </select>
+              </label>
+              {tryOn.busy && <span className="yts-note">Drawing…</span>}
+            </div>
+            {tryOn.url && (
+              <figure className="yts-exact" data-testid="yts-try-figure">
+                <img src={tryOn.url} alt="This arrangement on the other episode" />
+                <figcaption>
+                  This arrangement with that episode's words and pictures, as the show's template would give it.
+                  <button type="button" className="yts-icon-btn" onClick={() => setTryOn({ id: '', url: null, busy: false })} aria-label="Close the other episode"><X size={15} aria-hidden /></button>
+                </figcaption>
+              </figure>
+            )}
             {saved && (
               <p className="yts-saved"><Check size={16} aria-hidden /> Saved. <Link to={`/episodes/${episodeId}?tab=production`}>Back to Production</Link></p>
             )}
             <LayerSettings layer={picked} onChange={(patch) => edit((s) => updateLayer(s, picked.id, patch))} />
-            <LayersList spec={spec} selectedId={selectedId} onSelect={setSelectedId} onChange={edit} />
+            <LayersList spec={spec} selectedId={selectedId} onSelect={setSelectedId} onChange={edit} onDuplicate={duplicate} />
           </section>
 
           <section className="yts-panel" aria-label="Thumbnail settings">

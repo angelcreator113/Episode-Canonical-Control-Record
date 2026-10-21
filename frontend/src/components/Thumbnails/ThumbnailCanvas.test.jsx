@@ -7,7 +7,7 @@
  */
 import React from 'react';
 import { vi, describe, test, expect, beforeAll } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 
 const groups = {};
 vi.mock('react-konva', () => {
@@ -22,6 +22,11 @@ vi.mock('react-konva', () => {
   return { Stage: Plain('Stage'), Layer: Plain('Layer'), Group, Rect: Plain('Rect'), Text: Plain('Text'), Line: Plain('Line'), Image: Plain('Image'), Transformer };
 });
 
+vi.mock('../../lib/picturePreview', () => ({
+  previewUrl: (url) => Promise.resolve(url),
+  previewWidth: () => 800,
+  usePreview: (url) => url,
+}));
 import ThumbnailCanvas from './ThumbnailCanvas';
 import { presetLayers, updateLayer } from '../../lib/thumbnailLayers';
 
@@ -72,6 +77,24 @@ describe('ThumbnailCanvas', () => {
     fireEvent.keyDown(canvas, { key: 'ArrowUp', shiftKey: true });
     expect(onChange).toHaveBeenLastCalledWith('title', { x: title.x, y: title.y - 10 });
     expect(canvas.getAttribute('aria-label')).toMatch(/Title is picked/);
+  });
+
+  test('a drag snaps to the canvas\'s middle and draws a guide; Alt drags freely; a locked layer does not move', () => {
+    const { rerender } = render(<ThumbnailCanvas spec={SPEC} selectedId="lala" onSelect={() => {}} onChange={() => {}} />);
+    const moved = { x: () => 645, y: () => 300, position: vi.fn() };
+    act(() => groups.title.onDragMove({ target: moved, evt: {} }));
+    expect(moved.position).toHaveBeenCalledWith({ x: 640, y: expect.any(Number) });
+    expect(document.querySelectorAll('[data-konva="Line"]').length).toBeGreaterThan(0);
+    const free = { x: () => 645, y: () => 300, position: vi.fn() };
+    act(() => groups.title.onDragMove({ target: free, evt: { altKey: true } }));
+    expect(free.position).not.toHaveBeenCalled();
+    const onChange = vi.fn();
+    const locked = updateLayer(SPEC, 'title', { locked: true });
+    rerender(<ThumbnailCanvas spec={locked} selectedId="title" onSelect={() => {}} onChange={onChange} />);
+    expect(groups.title.draggable).toBe(false);
+    fireEvent.keyDown(screen.getByTestId('yts-canvas'), { key: 'ArrowRight' });
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByTestId('yts-canvas').getAttribute('aria-label')).toMatch(/Title is picked and locked/);
   });
 
   test('words are fitted to their box, line by line, in the layer\'s font', () => {

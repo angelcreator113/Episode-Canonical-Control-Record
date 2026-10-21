@@ -98,6 +98,8 @@ function readLayers(body, allowedUrl) {
       role: str(l.role, 20) || null,
       name: str(l.name, 80) || null,
       visible: l.visible !== false,
+      // Locked: not moved, resized or turned on the canvas (Evoni, 2026-10-21).
+      locked: Boolean(l.locked),
       x: Math.round(num(l.x, -WIDTH, WIDTH * 2, 0)),
       y: Math.round(num(l.y, -HEIGHT, HEIGHT * 2, 0)),
       w: Math.round(num(l.w, 1, WIDTH * 3, WIDTH)),
@@ -198,14 +200,18 @@ function drawImage(ctx, img, l) {
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(-w / 2, -h / 2, w, h);
     ctx.shadowColor = 'transparent';
-    drawFitted(ctx, img, { x: -w / 2 + pad, y: -h / 2 + pad, w: w - pad * 2, h: h - pad * 2, fit: 'cover' });
+    // On the card: a product whole and centred (contain), or filling it (cover).
+    drawFitted(ctx, img, { x: -w / 2 + pad, y: -h / 2 + pad, w: w - pad * 2, h: h - pad * 2, fit: l.fit, center: true });
     return;
   }
   drawFitted(ctx, img, { x: -w / 2, y: -h / 2, w, h, fit: l.fit });
 }
 
-/** cover: fills the box, cropped from the centre. contain: whole, centred across, standing on the bottom. */
-function drawFitted(ctx, img, { x, y, w, h, fit }) {
+/**
+ * cover: fills the box, cropped from the centre. contain: whole, centred
+ * across, standing on the bottom (a figure), or centred both ways (center).
+ */
+function drawFitted(ctx, img, { x, y, w, h, fit, center = false }) {
   const iw = img.width;
   const ih = img.height;
   if (fit === 'cover') {
@@ -218,7 +224,7 @@ function drawFitted(ctx, img, { x, y, w, h, fit }) {
   const scale = Math.min(w / iw, h / ih);
   const dw = iw * scale;
   const dh = ih * scale;
-  ctx.drawImage(img, x + (w - dw) / 2, y + h - dh, dw, dh);
+  ctx.drawImage(img, x + (w - dw) / 2, center ? y + (h - dh) / 2 : y + h - dh, dw, dh);
 }
 
 function drawShade(ctx, l) {

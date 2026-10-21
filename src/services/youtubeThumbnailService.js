@@ -2,16 +2,13 @@
 
 /**
  * YouTube thumbnails (Templates › YouTube thumbnails; Evoni, 2026-10-17):
- * an episode's 1280×720 thumbnail made from its show's style. The style
- * (layout, colours, the Lala cut-out, how dark the background is) is saved
- * once on the show (shows.metadata.youtube_thumbnail) and each episode
- * fills in its own picture, title and episode number.
- *
- * Rendered here with sharp, so the preview is the saved file: the
- * background (cover-fit), a gradient for the text side, the Lala cut-out
- * (bottom-aligned on one side), then the text as SVG (the show's name, the
- * title in up to three lines, the episode badge). Images come from S3 only
- * (allowedImageUrl) or from the request's own upload.
+ * an episode's 1280×720 thumbnail. Since 2026-10-21 it is layers
+ * (thumbnailLayers: moved, resized and turned freely), drawn here with
+ * node-canvas, so "See it exactly" is the saved file. The show's style and
+ * template (shows.metadata.youtube_thumbnail) are where every episode
+ * starts; an episode's own arrangement is its draft
+ * (episode_thumbnail_drafts). Pictures come from S3 only (allowedImageUrl);
+ * a Studio upload is kept in S3 first.
  *
  * Saving makes it the episode's primary thumbnail (thumbnails table) and
  * episodes.thumbnail_url; the one before it stays, as a cover. This page is
@@ -22,10 +19,11 @@
 
 const sharp = require('sharp');
 const layers = require('./thumbnailLayers');
+const { createCache } = require('./pictureCache');
 const { readDocuments } = require('./eventDocumentsService');
 const { readLogo } = require('./showLogoService');
 const { EPISODE_EVENT_ID_SQL } = require('../utils/episodeEventSql');
-const { PutObjectCommand, S3Client } = require('@aws-sdk/client-s3');
+const { PutObjectCommand, ListObjectsV2Command, S3Client } = require('@aws-sdk/client-s3');
 
 const WIDTH = 1280;
 const HEIGHT = 720;
@@ -47,7 +45,6 @@ class ThumbnailError extends Error {
 }
 
 const HEX = /^#[0-9a-f]{6}$/i;
-const clean = (v, max) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
 
 /** The show's saved style, filled out with the defaults. */
 function readStyle(raw = {}) {
@@ -61,27 +58,6 @@ function readStyle(raw = {}) {
   };
 }
 
-/** A render request: the style plus this episode's words and pictures. Throws ThumbnailError(400). */
-function readSpec(body = {}) {
-  const b = body && typeof body === 'object' ? body : {};
-  if (b.layout !== undefined && !LAYOUTS.includes(b.layout)) throw new ThumbnailError(400, `layout must be one of ${LAYOUTS.join(', ')}`);
-  for (const k of ['accent', 'textColor']) {
-    if (b[k] !== undefined && !HEX.test(String(b[k]))) throw new ThumbnailError(400, `${k} must be a colour like #E0689F`);
-  }
-  const style = readStyle(b);
-  const title = clean(b.title, 90);
-  if (!title) throw new ThumbnailError(400, 'The thumbnail needs a title');
-  return {
-    ...style,
-    title,
-    kicker: clean(b.kicker, 48),
-    badge: clean(b.badge, 12),
-    backgroundUrl: typeof b.backgroundUrl === 'string' && b.backgroundUrl ? b.backgroundUrl : null,
-    // JustAWoman, beside Lala (an episode's pose; not part of the show's style).
-    jawUrl: typeof b.jawUrl === 'string' && b.jawUrl ? b.jawUrl : null,
-  };
-}
-
 /** Only https images in S3 (or the CloudFront domain) are fetched. */
 function allowedImageUrl(url) {
   let u;
@@ -92,8 +68,36 @@ function allowedImageUrl(url) {
   return /^[a-z0-9.-]+\.s3([.-][a-z0-9-]+)?\.amazonaws\.com$/.test(host);
 }
 
+// Recent pictures, and the editor's smaller copies, for a few minutes (pictureCache).
+const pictures = createCache();
+
+/** A picture's bytes: from the cache when it was read lately, else fetched (and kept). */
 async function fetchImage(url) {
   if (!allowedImageUrl(url)) throw new ThumbnailError(400, 'That image is not one of ours (only S3 images can be used)');
+  return pictures.get(`full:${url}`, () => downloadImage(url));
+}
+
+const PREVIEW_WIDTHS = [400, 800, 1600];
+
+/**
+ * A smaller copy of a picture for the editor (Evoni, 2026-10-21: make it
+ * faster): at most `width` wide (rounded up to 400, 800 or 1600), WebP,
+ * transparency kept. The saved thumbnail is still drawn from the full one.
+ */
+async function previewImage(url, width = 800) {
+  const w = PREVIEW_WIDTHS.find((x) => x >= Number(width)) || PREVIEW_WIDTHS[PREVIEW_WIDTHS.length - 1];
+  const full = await fetchImage(url);
+  return pictures.get(`preview:${w}:${url}`, async () => {
+    try {
+      return await sharp(full).rotate().resize({ width: w, height: w * 2, fit: 'inside', withoutEnlargement: true }).webp({ quality: 82 }).toBuffer();
+    } catch (err) {
+      console.error('[YouTubeThumbnail] preview could not be made:', err.message);
+      throw new ThumbnailError(400, 'That is not a picture we can read');
+    }
+  });
+}
+
+async function downloadImage(url) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -111,165 +115,6 @@ async function fetchImage(url) {
   } finally {
     clearTimeout(timer);
   }
-}
-
-// ── Layout and text ─────────────────────────────────────────────────────────
-
-/**
- * Where the figures stand when JustAWoman is beside Lala: both in Lala's
- * column, JustAWoman toward the edge and a little smaller, Lala in front.
- * Returns { lala, jaw } as { left, top } for figures of these sizes.
- */
-function duoPositions(side, lalaSize, jawSize) {
-  const edge = 20;
-  const lalaCenter = 390; // from the figure side's edge
-  const jaw = { left: edge, top: HEIGHT - jawSize.height };
-  const lala = { left: Math.max(edge, lalaCenter - Math.round(lalaSize.width / 2)), top: HEIGHT - lalaSize.height };
-  if (side === 'right') {
-    jaw.left = WIDTH - edge - jawSize.width;
-    lala.left = Math.min(WIDTH - edge - lalaSize.width, WIDTH - lalaCenter - Math.round(lalaSize.width / 2));
-  }
-  return { lala, jaw };
-}
-
-/** Where the text goes and where Lala stands, per layout. */
-function layoutBoxes(layout) {
-  if (layout === 'lala-right') return { text: { x: 70, width: 620, align: 'start' }, lala: { side: 'right', maxWidth: 560 } };
-  if (layout === 'center') return { text: { x: 110, width: 1060, align: 'middle' }, lala: null };
-  return { text: { x: 590, width: 610, align: 'start' }, lala: { side: 'left', maxWidth: 560 } };
-}
-
-/** The title's starting size: big for a few words, smaller for many. */
-function titleSize(title, width) {
-  const n = String(title || '').length;
-  const base = n <= 14 ? 112 : n <= 26 ? 92 : n <= 44 ? 80 : 68;
-  return width < 700 ? base : Math.round(base * 1.1);
-}
-
-const CHAR_EM = 0.56; // bold serif: a little over half an em a character
-
-/** The title in lines that fit the width; more than three only when cut (with …). */
-function wrapTitle(title, width, size, maxLines = 3) {
-  const perLine = Math.max(6, Math.floor(width / (size * CHAR_EM)));
-  const words = String(title || '').split(' ').filter(Boolean);
-  const lines = [];
-  let line = '';
-  for (const w of words) {
-    const next = line ? `${line} ${w}` : w;
-    if (next.length <= perLine || !line) line = next;
-    else { lines.push(line); line = w; }
-  }
-  if (line) lines.push(line);
-  if (lines.length > maxLines) {
-    const kept = lines.slice(0, maxLines);
-    kept[maxLines - 1] = `${kept[maxLines - 1].replace(/[.,;:!?-]*$/, '')}…`;
-    return kept;
-  }
-  return lines;
-}
-
-/** The title's size and lines: the starting size, made smaller until it fits in three lines (54 at least). */
-function fitTitle(title, width) {
-  for (let size = titleSize(title, width); size > 54; size -= 6) {
-    const lines = wrapTitle(title, width, size, Infinity);
-    if (lines.length <= 3) return { size, lines };
-  }
-  return { size: 54, lines: wrapTitle(title, width, 54) };
-}
-
-/** The show's name sized to fit its column on one line (34 at most, 20 at least). */
-function kickerSize(kicker, width) {
-  const n = String(kicker || '').length || 1;
-  return Math.max(20, Math.min(34, Math.floor(width / (n * 0.8 + 1))));
-}
-
-const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-/** The text layer as SVG: the show's name, the title, the episode badge. */
-function textSvg(spec) {
-  const box = layoutBoxes(spec.layout).text;
-  const { size, lines } = fitTitle(spec.title, box.width);
-  const kSize = kickerSize(spec.kicker, box.width);
-  const lineH = Math.round(size * 1.05);
-  const blockH = lines.length * lineH + (spec.kicker ? 64 : 0);
-  let y = Math.round((HEIGHT - blockH) / 2) + (spec.kicker ? 64 : 0) + Math.round(size * 0.8);
-  const x = box.align === 'middle' ? WIDTH / 2 : box.x;
-  const anchor = box.align === 'middle' ? 'middle' : 'start';
-  const kickerY = y - Math.round(size * 0.8) - 22;
-  const parts = [];
-  if (spec.kicker) {
-    parts.push(`<text x="${x}" y="${kickerY}" text-anchor="${anchor}" font-family="DejaVu Sans, Arial, sans-serif" font-size="${kSize}" font-weight="700" letter-spacing="${Math.round(kSize / 8)}" fill="${spec.accent}" stroke="#2A0A22" stroke-width="6" paint-order="stroke">${esc(spec.kicker.toUpperCase())}</text>`);
-  }
-  for (const l of lines) {
-    parts.push(`<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="Georgia, DejaVu Serif, serif" font-size="${size}" font-weight="700" fill="${spec.textColor}" stroke="#2A0A22" stroke-width="${Math.round(size / 9)}" stroke-linejoin="round" paint-order="stroke">${esc(l)}</text>`);
-    y += lineH;
-  }
-  if (spec.badge) {
-    const w = Math.max(120, 40 + spec.badge.length * 30);
-    const bx = spec.layout === 'lala-right' ? 56 : WIDTH - w - 56;
-    parts.push(`<rect x="${bx}" y="44" rx="34" ry="34" width="${w}" height="68" fill="${spec.accent}" stroke="#FFFFFF" stroke-width="4"/>`);
-    parts.push(`<text x="${bx + w / 2}" y="91" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif" font-size="36" font-weight="700" fill="#FFFFFF">${esc(spec.badge.toUpperCase())}</text>`);
-  }
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}">${parts.join('')}</svg>`;
-}
-
-/** The gradient that keeps the text side readable, plus an overall dim. */
-function shadeSvg(spec) {
-  const toward = spec.layout === 'lala-right' ? { x1: 0, x2: 1 } : spec.layout === 'center' ? null : { x1: 1, x2: 0 };
-  const grad = toward
-    ? `<linearGradient id="g" x1="${toward.x1}" y1="0" x2="${toward.x2}" y2="0"><stop offset="0" stop-color="#2A0A22" stop-opacity="0.85"/><stop offset="0.55" stop-color="#2A0A22" stop-opacity="0.35"/><stop offset="1" stop-color="#2A0A22" stop-opacity="0"/></linearGradient>`
-    : '<radialGradient id="g" cx="0.5" cy="0.5" r="0.7"><stop offset="0" stop-color="#2A0A22" stop-opacity="0.65"/><stop offset="1" stop-color="#2A0A22" stop-opacity="0.2"/></radialGradient>';
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}"><defs>${grad}</defs>`
-    + `<rect width="${WIDTH}" height="${HEIGHT}" fill="#000" fill-opacity="${spec.dim}"/>`
-    + `<rect width="${WIDTH}" height="${HEIGHT}" fill="url(#g)"/>`
-    + `<rect x="0" y="${HEIGHT - 14}" width="${WIDTH}" height="14" fill="${spec.accent}"/></svg>`;
-}
-
-const plainBackground = (accent) => Buffer.from(
-  `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}"><defs><linearGradient id="b" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4A1640"/><stop offset="1" stop-color="${accent}"/></linearGradient></defs><rect width="${WIDTH}" height="${HEIGHT}" fill="url(#b)"/></svg>`,
-);
-
-/**
- * Renders the thumbnail: PNG, 1280×720. images: { background, lala, jaw }
- * as Buffers (any may be null). With Lala and JustAWoman both, they stand
- * together on the figure side (duoPositions); with one, she stands alone.
- */
-async function render(spec, images = {}) {
-  let base;
-  try {
-    base = images.background
-      ? await sharp(images.background).rotate().resize(WIDTH, HEIGHT, { fit: 'cover', position: 'attention' }).png().toBuffer()
-      : await sharp(plainBackground(spec.accent)).png().toBuffer();
-  } catch (err) {
-    console.error('[YouTubeThumbnail] background unreadable:', err.message);
-    throw new ThumbnailError(400, 'The background is not an image we can read');
-  }
-  const layers = [{ input: Buffer.from(shadeSvg(spec)), top: 0, left: 0 }];
-  const box = layoutBoxes(spec.layout).lala;
-  const figure = async (buffer, who, size) => {
-    try {
-      const png = await sharp(buffer).rotate().resize({ ...size, fit: 'inside' }).png().toBuffer();
-      const meta = await sharp(png).metadata();
-      return { png, width: meta.width, height: meta.height };
-    } catch (err) {
-      console.error(`[YouTubeThumbnail] ${who} image unreadable:`, err.message);
-      throw new ThumbnailError(400, `The ${who} image is not an image we can read`);
-    }
-  };
-  if (box && images.lala && images.jaw) {
-    const jaw = await figure(images.jaw, 'JustAWoman', { width: 340, height: HEIGHT - 80 });
-    const lala = await figure(images.lala, 'Lala', { width: 360, height: HEIGHT - 30 });
-    const at = duoPositions(box.side, lala, jaw);
-    layers.push({ input: jaw.png, top: at.jaw.top, left: at.jaw.left });
-    layers.push({ input: lala.png, top: at.lala.top, left: at.lala.left });
-  } else if (box && (images.lala || images.jaw)) {
-    const who = images.lala ? 'Lala' : 'JustAWoman';
-    const one = await figure(images.lala || images.jaw, who, { width: box.maxWidth, height: HEIGHT - 30 });
-    const left = box.side === 'left' ? 30 : WIDTH - one.width - 30;
-    layers.push({ input: one.png, top: HEIGHT - one.height, left: Math.max(0, left) });
-  }
-  layers.push({ input: Buffer.from(textSvg(spec)), top: 0, left: 0 });
-  return sharp(base).composite(layers).png({ compressionLevel: 9 }).toBuffer();
 }
 
 // ── Sources and saving ──────────────────────────────────────────────────────
@@ -321,7 +166,7 @@ async function sources(sequelize, episodeId) {
     backgrounds,
     cutouts: (cutouts || []).filter((c) => allowedImageUrl(c.url)).map((c) => ({ id: c.id, url: c.url, label: c.name })),
     poses,
-    folders: pictureFolders({ angles, cover: show?.cover_image_url, poses, outfit, library }),
+    folders: pictureFolders({ angles, cover: show?.cover_image_url, poses, outfit, library, uploads: await listUploads(episode.id) }),
     // What the "Come Style Me" layout fills in (Evoni, 2026-10-21).
     suggest: await layoutSuggestions(sequelize, episode.id, outfit, show),
     // The layers: the show's template (null until one is saved) and this episode's draft.
@@ -365,10 +210,11 @@ function prune(folder) {
  *   This episode's outfit: by clothing category.
  *   Asset library: by asset group (Lala, Show, Guests, Episodes, Wardrobe).
  *   Documents: the event documents drawn as pictures (the shopping list).
+ *   Uploads (first): the pictures uploaded in the Studio for the episode.
  * Each folder is { key, label, folders?, items? }; each item { url, label }.
  * Empty folders are left out; only S3/CloudFront pictures are kept.
  */
-function pictureFolders({ angles = [], cover = null, poses = { lala: [], justawoman: [] }, outfit = [], library = [] }) {
+function pictureFolders({ angles = [], cover = null, poses = { lala: [], justawoman: [] }, outfit = [], library = [], uploads = [] }) {
   const ok = (it) => it && allowedImageUrl(it.url);
   const sets = groupInto('scene-sets', (angles || []).map((a) => ({ url: a.url, label: a.angle || a.set_name || 'Angle', set: a.set_name || 'Scene set' })).filter(ok), (a) => a.set)
     .map((f) => ({ ...f, items: f.items.map(({ url, label }) => ({ url, label })) }));
@@ -383,6 +229,7 @@ function pictureFolders({ angles = [], cover = null, poses = { lala: [], justawo
   const docs = library.filter((a) => a.asset_type === 'DOCUMENT_OVERLAY');
   const assets = library.filter((a) => a.asset_type !== 'DOCUMENT_OVERLAY');
   const tree = [
+    { key: 'uploads', label: 'Uploads', items: uploads.filter(ok).map(({ url, label }) => ({ url, label })) },
     { key: 'scene-sets', label: 'Scene sets', folders: [...sets, { key: 'scene-sets/show', label: 'Show', items: [{ url: cover, label: 'Show cover' }].filter(ok) }] },
     { key: 'poses', label: 'Character poses', folders: [character('lala', 'Lala'), character('justawoman', 'JustAWoman')] },
     { key: 'outfit', label: "This episode's outfit", folders: groupInto('outfit', outfit.filter(ok), (w) => titleCase(w.category) || 'Other').map((f) => ({ ...f, items: f.items.map(({ url, label }) => ({ url, label })) })) },
@@ -397,7 +244,8 @@ const FALLBACK_CHECKLIST = ['Outfit', 'Accessories', 'Hair', 'Vibe'];
 /**
  * What the "Come Style Me" layout fills in for an episode (Evoni,
  * 2026-10-21; all of it editable before saving):
- *   checklist: 3-4 rows, ticked. The slots of the episode's event's shopping
+ *   checklist: 3-4 rows, ticked; the main piece by its name ("Sweater
+ *     dress"), the others by their kind. The slots of the episode's event's shopping
  *     list (the episode's event by the one rule, utils/episodeEventSql;
  *     "dress", "shoes", ...); else
  *     the outfit's categories with Hair and Vibe; else Outfit,
@@ -417,10 +265,19 @@ async function layoutSuggestions(sequelize, episodeId, outfit = [], show = null)
   } catch (err) {
     console.error('[YouTubeThumbnail] the episode\'s event did not read; no shopping list for the checklist:', err.message);
   }
+  // The main piece by its name ("Sweater dress"), the rest by their kind ("Accessories").
+  const mainKind = /dress|gown|top|jumpsuit|outfit|suit/i;
+  const rowFor = (kind) => {
+    const piece = mainKind.test(kind) && outfit.find((w) => String(w.category || '').toLowerCase() === String(kind).toLowerCase() && w.label);
+    if (!piece) return titleCase(kind);
+    const name = String(piece.label).trim().toLowerCase();
+    return name[0].toUpperCase() + name.slice(1);
+  };
   const slots = (readDocuments(event).shopping_list?.items || [])
-    .map((it) => titleCase(it?.slot))
-    .filter((s) => s && !/^Item \d+$/.test(s));
-  const fromOutfit = outfit.map((w) => titleCase(w.category)).filter(Boolean);
+    .map((it) => String(it?.slot || '').trim())
+    .filter((s) => s && !/^item_\d+$/i.test(s))
+    .map(rowFor);
+  const fromOutfit = outfit.map((w) => w.category).filter(Boolean).map(rowFor);
   const pickRows = (list) => [...new Set(list)].slice(0, 4);
   let rows = pickRows(slots);
   if (rows.length < 3) rows = pickRows([...fromOutfit, 'Hair', 'Vibe']);
@@ -639,9 +496,44 @@ async function uploadPicture(episodeId, buffer, name = 'Upload') {
   }
   const [ext, contentType] = PICTURE_FORMATS[format] || [];
   if (!ext) throw new ThumbnailError(400, 'Use a JPG, PNG or WebP picture.');
-  const key = `episodes/${episodeId}/thumbnail-pictures/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  // The name rides in the key, so the episode's uploads can be listed with their names.
+  const named = uploadName(name);
+  const key = `${uploadsPrefix(episodeId)}${Date.now()}-${Math.random().toString(36).slice(2, 8)}${named ? `--${named}` : ''}.${ext}`;
   await getS3().send(new PutObjectCommand({ Bucket: requireAssetBucket(), Key: key, Body: buffer, ContentType: contentType }));
-  return { url: `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`, label: String(name || 'Upload').slice(0, 80) };
+  return { url: `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`, label: labelOfUpload(key) };
+}
+
+const uploadsPrefix = (episodeId) => `episodes/${episodeId}/thumbnail-pictures/`;
+
+/** A file's name as it can sit in a key: its stem, letters, digits and dashes, 60 at most. */
+const uploadName = (name) => String(name || '').replace(/\.[a-z0-9]+$/i, '').toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+
+/** An upload's label from its key: the name it was uploaded with, else "Upload". */
+function labelOfUpload(key) {
+  const m = /--([a-z0-9-]+)\.[a-z0-9]+$/.exec(key);
+  if (!m) return 'Upload';
+  const words = m[1].replace(/-/g, ' ').trim();
+  return words ? words[0].toUpperCase() + words.slice(1) : 'Upload';
+}
+
+/**
+ * The pictures uploaded in the Studio for this episode, newest first (at
+ * most 60), as { url, label }; kept in S3, so they are listed on every
+ * visit (Evoni, 2026-10-21). Empty when the bucket cannot be listed.
+ */
+async function listUploads(episodeId) {
+  try {
+    const out = await getS3().send(new ListObjectsV2Command({ Bucket: requireAssetBucket(), Prefix: uploadsPrefix(episodeId), MaxKeys: 200 }));
+    return (out.Contents || [])
+      .filter((o) => /\.(png|jpe?g|webp|avif)$/i.test(o.Key || ''))
+      .sort((a, b) => new Date(b.LastModified || 0) - new Date(a.LastModified || 0))
+      .slice(0, 60)
+      .map((o) => ({ url: `https://${BUCKET}.s3.${REGION}.amazonaws.com/${o.Key}`, label: labelOfUpload(o.Key) }));
+  } catch (err) {
+    console.error(`[YouTubeThumbnail] the uploads of episode ${episodeId} could not be listed:`, err.message);
+    return [];
+  }
 }
 
 const rowUrl = (r) => r.url || `https://${r.s3Bucket}.s3.${REGION}.amazonaws.com/${r.s3Key}`;
@@ -710,7 +602,7 @@ async function removeSaved(sequelize, episodeId, thumbnailId) {
 
 module.exports = {
   WIDTH, HEIGHT, LAYOUTS, DEFAULT_STYLE, ThumbnailError,
-  readStyle, readSpec, allowedImageUrl, fetchImage, layoutBoxes, duoPositions, readyPoses, pictureFolders, libraryImages, outfitImages, layoutSuggestions, titleSize, wrapTitle, fitTitle, kickerSize, textSvg, shadeSvg,
-  render, sources, saveStyle, saveAsPrimary, listSaved, makePrimary, removeSaved,
-  readTemplate, renderSpec, getDraft, saveDraft, uploadPicture,
+  readStyle, allowedImageUrl, fetchImage, previewImage, PREVIEW_WIDTHS, readyPoses, pictureFolders, libraryImages, outfitImages, layoutSuggestions,
+  sources, saveStyle, saveAsPrimary, listSaved, makePrimary, removeSaved,
+  readTemplate, renderSpec, getDraft, saveDraft, uploadPicture, listUploads, labelOfUpload,
 };

@@ -128,3 +128,8 @@
 .yts-folder-name { display: flex; align-items: flex-start; gap: 4px; min-width: 0; font-size: 12px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
 .yts-folder-name svg { flex-shrink: 0; margin-top: 2px; }
 .yts-folder-count { font-size: 11px; color: var(--text-secondary); }
+.yts-icon-btn.is-on { border-color: var(--accent-dark); background: var(--accent-subtle); color: var(--accent-dark); }
+.yts-box-fields { flex-wrap: wrap; }
+.yts-box-fields .yts-field.is-small { flex: 1 1 70px; }
+.yts-img-wait { display: block; width: 100%; height: 100%; background-color: var(--lala-parchment-3); }
+.yts-try { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }

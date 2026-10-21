@@ -1,8 +1,8 @@
 /**
- * YouTube thumbnails (Evoni, 2026-10-17): the style and request checks,
- * where images may come from, the title fitting, a real render (sharp,
- * 1280x720), the picture lists, the show's style, and saving as the
- * episode's primary thumbnail. No database (sequelize.query is mocked) and
+ * YouTube thumbnails (Evoni, 2026-10-17): the show's style, where images
+ * may come from, the picture lists and folders, the Come Style Me
+ * suggestions, uploads, the show's style, and saving as the episode's
+ * primary thumbnail. (Drawing is thumbnailLayers.test.) No database (sequelize.query is mocked) and
  * no S3 (the client is mocked).
  */
 
@@ -10,6 +10,7 @@ const mockSend = jest.fn();
 jest.mock('@aws-sdk/client-s3', () => ({
   S3Client: jest.fn(() => ({ send: (...a) => mockSend(...a) })),
   PutObjectCommand: jest.fn((input) => ({ input })),
+  ListObjectsV2Command: jest.fn((input) => ({ input, list: true })),
 }));
 
 // The upload bucket comes from the server's settings (src/services/assetBucket.js).
@@ -18,20 +19,12 @@ process.env.S3_PRIMARY_BUCKET = process.env.S3_PRIMARY_BUCKET || 'test-bucket';
 const sharp = require('sharp');
 const yt = require('../../../src/services/youtubeThumbnailService');
 
-describe('readStyle and readSpec', () => {
+describe('readStyle', () => {
   test('a missing or odd style falls back to the defaults', () => {
     expect(yt.readStyle(undefined)).toEqual(yt.DEFAULT_STYLE);
     expect(yt.readStyle({ layout: 'sideways', accent: 'pink', dim: 5 })).toMatchObject({ layout: 'lala-left', accent: '#E0689F', dim: 0.8 });
     expect(yt.readStyle({ layout: 'center', accent: '#b8962e', lalaUrl: 'https://b.s3.amazonaws.com/l.png' }))
       .toMatchObject({ layout: 'center', accent: '#B8962E', lalaUrl: 'https://b.s3.amazonaws.com/l.png' });
-  });
-
-  test('a request needs a title, a known layout and real colours', () => {
-    expect(yt.readSpec({ title: '  Studio   by Sable ', badge: 'EP 1', kicker: 'Styling Adventures' }))
-      .toMatchObject({ title: 'Studio by Sable', badge: 'EP 1', kicker: 'Styling Adventures', layout: 'lala-left' });
-    expect(() => yt.readSpec({})).toThrow(/needs a title/);
-    expect(() => yt.readSpec({ title: 'x', layout: 'diagonal' })).toThrow(/layout must be one of/);
-    expect(() => yt.readSpec({ title: 'x', accent: 'red' })).toThrow(/accent must be a colour/);
   });
 });
 
@@ -47,96 +40,6 @@ describe('allowedImageUrl', () => {
 
   test('fetchImage refuses anything else before any request', async () => {
     await expect(yt.fetchImage('https://example.com/a.png')).rejects.toMatchObject({ status: 400 });
-  });
-});
-
-describe('title fitting', () => {
-  test('short titles stay big; long ones shrink to three lines, and only the longest are cut', () => {
-    expect(yt.fitTitle('Day One', 610)).toEqual({ size: 112, lines: ['Day One'] });
-    const mid = yt.fitTitle('Studio by Sable: The Creative Atelier', 610);
-    expect(mid.lines.length).toBeLessThanOrEqual(3);
-    expect(mid.lines.join(' ')).toBe('Studio by Sable: The Creative Atelier');
-    const long = yt.fitTitle('Lala Meets the Host Who Changes Everything About Her Style Forever and Ever', 610);
-    expect(long.size).toBe(54);
-    expect(long.lines).toHaveLength(3);
-    expect(long.lines[2].endsWith('…')).toBe(true);
-  });
-
-  test('the show name shrinks to fit its column', () => {
-    expect(yt.kickerSize('Lala', 610)).toBe(34);
-    expect(yt.kickerSize('Styling Adventures with Lala', 610)).toBeLessThan(34);
-  });
-
-  test('text is escaped in the SVG', () => {
-    const svg = yt.textSvg(yt.readSpec({ title: 'Tea & <Toast>', kicker: 'A "show"' }));
-    expect(svg).toContain('Tea &amp;');
-    expect(svg).toContain('&lt;Toast&gt;');
-    expect(svg).toContain('A &quot;SHOW&quot;');
-    expect(svg).not.toContain('<Toast>');
-  });
-});
-
-describe('render', () => {
-  test('a 1280x720 PNG, with and without pictures', async () => {
-    const bg = await sharp({ create: { width: 1600, height: 900, channels: 3, background: '#7A2A6A' } }).jpeg().toBuffer();
-    const lala = await sharp({ create: { width: 400, height: 800, channels: 4, background: { r: 224, g: 104, b: 159, alpha: 1 } } }).png().toBuffer();
-    for (const layout of yt.LAYOUTS) {
-      const png = await yt.render(yt.readSpec({ layout, title: 'Studio by Sable', badge: 'EP 1', kicker: 'Styling Adventures' }), { background: bg, lala });
-      const meta = await sharp(png).metadata();
-      expect([meta.format, meta.width, meta.height]).toEqual(['png', 1280, 720]);
-    }
-    const plain = await sharp(await yt.render(yt.readSpec({ title: 'No pictures' }), {})).metadata();
-    expect([plain.width, plain.height]).toEqual([1280, 720]);
-  });
-
-  test('Lala stands on her side: left layout fills the bottom-left, not the bottom-right', async () => {
-    const lala = await sharp({ create: { width: 300, height: 600, channels: 4, background: { r: 0, g: 255, b: 0, alpha: 1 } } }).png().toBuffer();
-    const png = await yt.render(yt.readSpec({ layout: 'lala-left', title: 'x', dim: 0 }), { lala });
-    const { data, info } = await sharp(png).raw().toBuffer({ resolveWithObject: true });
-    const px = (x, y) => { const i = (y * info.width + x) * info.channels; return [data[i], data[i + 1], data[i + 2]]; };
-    expect(px(150, 650)[1]).toBeGreaterThan(200);
-    expect(px(1130, 650)[1]).toBeLessThan(200);
-  });
-
-  test('with JustAWoman too, both stand on the figure side: her toward the edge, Lala in front; the text side stays clear', async () => {
-    const solid = (r, g, b, w, h) => sharp({ create: { width: w, height: h, channels: 4, background: { r, g, b, alpha: 1 } } }).png().toBuffer();
-    const lala = await solid(0, 255, 0, 300, 600);
-    const jaw = await solid(0, 0, 255, 300, 600);
-    for (const [layout, mirror] of [['lala-left', (x) => x], ['lala-right', (x) => 1279 - x]]) {
-      const png = await yt.render(yt.readSpec({ layout, title: 'x', dim: 0, jawUrl: null }), { lala, jaw });
-      const { data, info } = await sharp(png).raw().toBuffer({ resolveWithObject: true });
-      const px = (x, y) => { const i = (y * info.width + mirror(x)) * info.channels; return [data[i], data[i + 1], data[i + 2]]; };
-      expect(px(60, 650)[2]).toBeGreaterThan(200); // JustAWoman at the edge
-      expect(px(390, 650)[1]).toBeGreaterThan(200); // Lala in front, in her column
-      expect(px(800, 650)[1]).toBeLessThan(200); // nobody on the text side
-      expect(px(800, 650)[2]).toBeLessThan(200);
-    }
-  });
-
-  test('JustAWoman alone stands where Lala would; in Title only nobody stands', async () => {
-    const jaw = await sharp({ create: { width: 300, height: 600, channels: 4, background: { r: 0, g: 0, b: 255, alpha: 1 } } }).png().toBuffer();
-    const left = await sharp(await yt.render(yt.readSpec({ layout: 'lala-left', title: 'x', dim: 0 }), { jaw })).raw().toBuffer({ resolveWithObject: true });
-    const at = ({ data, info }, x, y) => data[(y * info.width + x) * info.channels + 2];
-    expect(at(left, 150, 650)).toBeGreaterThan(200);
-    const center = await sharp(await yt.render(yt.readSpec({ layout: 'center', title: 'x', dim: 0 }), { jaw })).raw().toBuffer({ resolveWithObject: true });
-    expect(at(center, 150, 650)).toBeLessThan(200);
-  });
-
-  test('duoPositions keeps both inside the frame, mirrored on the right', () => {
-    const left = yt.duoPositions('left', { width: 360, height: 690 }, { width: 340, height: 640 });
-    expect(left).toEqual({ lala: { left: 210, top: 30 }, jaw: { left: 20, top: 80 } });
-    const right = yt.duoPositions('right', { width: 360, height: 690 }, { width: 340, height: 640 });
-    expect(right).toEqual({ lala: { left: 1280 - 210 - 360, top: 30 }, jaw: { left: 1280 - 20 - 340, top: 80 } });
-  });
-
-  test('readSpec keeps jawUrl, and the show style never does', () => {
-    expect(yt.readSpec({ title: 'x', jawUrl: 'https://b.s3.amazonaws.com/j.png' }).jawUrl).toBe('https://b.s3.amazonaws.com/j.png');
-    expect(yt.readSpec({ title: 'x' }).jawUrl).toBeNull();
-    expect(yt.readStyle({ jawUrl: 'https://b.s3.amazonaws.com/j.png' })).not.toHaveProperty('jawUrl');
-  });
-
-  test('an unreadable picture is a 400', async () => {
-    await expect(yt.render(yt.readSpec({ title: 'x' }), { background: Buffer.from('nope') })).rejects.toMatchObject({ status: 400 });
   });
 });
 
@@ -184,12 +87,34 @@ describe('database work', () => {
     expect(out.folders.map((f) => f.key)).toEqual(['scene-sets', 'poses', 'outfit', 'library']);
     // The "Come Style Me" suggestions: the shopping list's slots, the dress's edition, the pieces.
     expect(out.suggest).toEqual({
-      checklist: [{ text: 'Dress', checked: true }, { text: 'Shoes', checked: true }, { text: 'Accessories', checked: true }],
+      // The main piece by its name, the rest by their kind.
+      checklist: [{ text: 'Sweater dress', checked: true }, { text: 'Shoes', checked: true }, { text: 'Accessories', checked: true }],
       edition: 'Sweater Dress Edition',
       pieces: [{ url: 'https://b.s3.amazonaws.com/d.png', label: 'Sweater dress' }],
       logoUrl: null,
     });
     expect(out.draft).toBeNull();
+  });
+
+  test('uploads: the name rides in the key and comes back as the label; listed newest first; a listing that fails is empty', async () => {
+    mockSend.mockReset();
+    mockSend.mockResolvedValue({});
+    const up = await yt.uploadPicture('ep-1', await sharp({ create: { width: 8, height: 8, channels: 3, background: '#123456' } }).png().toBuffer(), 'Red Sweater (final).PNG');
+    expect(up.url).toMatch(/\/episodes\/ep-1\/thumbnail-pictures\/\d+-\w+--red-sweater-final\.png$/);
+    expect(up.label).toBe('Red sweater final');
+    expect(yt.labelOfUpload('episodes/e/thumbnail-pictures/1-abc.png')).toBe('Upload');
+    mockSend.mockResolvedValueOnce({ Contents: [
+      { Key: 'episodes/ep-1/thumbnail-pictures/1-a--old-one.png', LastModified: '2026-10-01T00:00:00Z' },
+      { Key: 'episodes/ep-1/thumbnail-pictures/2-b--new-one.jpg', LastModified: '2026-10-21T00:00:00Z' },
+      { Key: 'episodes/ep-1/thumbnail-pictures/notes.txt', LastModified: '2026-10-22T00:00:00Z' },
+    ] });
+    const list = await yt.listUploads('ep-1');
+    expect(list.map((u) => u.label)).toEqual(['New one', 'Old one']);
+    expect(mockSend.mock.calls.at(-1)[0].input).toMatchObject({ Prefix: 'episodes/ep-1/thumbnail-pictures/' });
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    mockSend.mockRejectedValueOnce(new Error('AccessDenied'));
+    await expect(yt.listUploads('ep-1')).resolves.toEqual([]);
+    mockSend.mockReset();
   });
 
   test('layoutSuggestions: from the outfit, then the defaults; the event\'s theme names the edition; the show\'s logo', async () => {

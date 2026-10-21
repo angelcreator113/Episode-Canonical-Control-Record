@@ -94,8 +94,8 @@ export function measurer(font) {
   };
 }
 
-/** Where a picture is drawn in its box: cover fills (cropped), contain stands on the bottom. */
-export function fitPicture(iw, ih, { w, h, fit }) {
+/** Where a picture is drawn in its box: cover fills (cropped), contain stands on the bottom (or, center, sits in the middle: on a photo card). */
+export function fitPicture(iw, ih, { w, h, fit, center = false }) {
   if (!iw || !ih) return { crop: null, x: 0, y: 0, w, h };
   if (fit === 'cover') {
     const scale = Math.max(w / iw, h / ih);
@@ -106,7 +106,7 @@ export function fitPicture(iw, ih, { w, h, fit }) {
   const scale = Math.min(w / iw, h / ih);
   const dw = iw * scale;
   const dh = ih * scale;
-  return { crop: null, x: (w - dw) / 2, y: h - dh, w: dw, h: dh };
+  return { crop: null, x: (w - dw) / 2, y: center ? (h - dh) / 2 : h - dh, w: dw, h: dh };
 }
 
 export const ROLE_LABELS = {
@@ -349,4 +349,51 @@ export function boxFromNode({ x, y, scaleX = 1, scaleY = 1, rotation = 0 }, laye
   const h = Math.max(10, Math.round(layer.h * Math.abs(scaleY)));
   const r = ((Math.round(rotation * 10) / 10 + 540) % 360) - 180;
   return { x: Math.round(x - w / 2), y: Math.round(y - h / 2), w, h, rotation: r };
+}
+
+/**
+ * A copy of a layer, just above it and a little down and right; the copy
+ * has no role, so the Studio's controls keep filling the original.
+ */
+export function duplicateLayer(spec, id) {
+  const i = spec.layers.findIndex((l) => l.id === id);
+  if (i < 0) return spec;
+  const src = spec.layers[i];
+  const copy = { ...src, id: newId(spec, `${src.role || src.kind}-copy`), role: null, name: `${layerName(src)} copy`, locked: false, x: src.x + 24, y: src.y + 24 };
+  return { ...spec, layers: [...spec.layers.slice(0, i + 1), copy, ...spec.layers.slice(i + 1)] };
+}
+
+export const SNAP = 8;
+
+/**
+ * Where a dragged box snaps: its left edge, centre or right edge to the
+ * canvas's edges and centre and to the other layers' edges and centres
+ * (likewise top, middle, bottom), when within SNAP. box: { cx, cy, w, h }
+ * (the centre, as Konva reports it). Returns the snapped centre and the
+ * guide lines to draw: { cx, cy, guides: [{ x } | { y }] }.
+ */
+export function snapBox(box, others = []) {
+  const xs = [0, WIDTH / 2, WIDTH];
+  const ys = [0, HEIGHT / 2, HEIGHT];
+  for (const o of others) {
+    xs.push(o.x, o.x + o.w / 2, o.x + o.w);
+    ys.push(o.y, o.y + o.h / 2, o.y + o.h);
+  }
+  const axis = (c, half, targets) => {
+    let best = null;
+    for (const t of targets) {
+      for (const off of [-half, 0, half]) {
+        const d = t - (c + off);
+        if (Math.abs(d) <= SNAP && (!best || Math.abs(d) < Math.abs(best.d))) best = { d, at: t };
+      }
+    }
+    return best;
+  };
+  const sx = axis(box.cx, box.w / 2, xs);
+  const sy = axis(box.cy, box.h / 2, ys);
+  return {
+    cx: box.cx + (sx ? sx.d : 0),
+    cy: box.cy + (sy ? sy.d : 0),
+    guides: [...(sx ? [{ x: sx.at }] : []), ...(sy ? [{ y: sy.at }] : [])],
+  };
 }
