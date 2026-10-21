@@ -36,19 +36,6 @@ export function renderForm(spec, files = {}) {
   return form;
 }
 
-const POSE_TITLES = { front: 'Front', back: 'Back', side: 'Side', glamour: 'Glamour' };
-
-/**
- * A character's poses (sources.poses.lala / .justawoman) as picker
- * sections, Front, Back, Side, Glamour, each with its photos (the default
- * first, as the server sends them). Poses with no ready photo are left out.
- */
-export function poseSections(poses) {
-  return Object.keys(POSE_TITLES)
-    .map((key) => ({ title: POSE_TITLES[key], items: (poses || []).filter((p) => p.pose === key) }))
-    .filter((s) => s.items.length);
-}
-
 /**
  * The pose a thumbnail starts from: the starred one of the first pose
  * that has one, in the order Glamour, Front, Side, Back; else the newest
@@ -66,6 +53,38 @@ export function defaultPose(poses) {
   }
   return null;
 }
+
+/**
+ * The Studio's picture folders (sources.folders; Evoni, 2026-10-21): each
+ * { key, label, folders?, items? }. folderPath gives the folders from the
+ * top down to the one with this key ([] when there is none), so a picker
+ * can show where it is and step back.
+ */
+export function folderPath(tree, key) {
+  if (!key) return [];
+  for (const f of tree || []) {
+    if (f.key === key) return [f];
+    const below = folderPath(f.folders, key);
+    if (below.length) return [f, ...below];
+  }
+  return [];
+}
+
+/** How many pictures a folder holds, its subfolders' included. */
+export const folderCount = (f) => (f?.items || []).length + (f?.folders || []).reduce((n, sub) => n + folderCount(sub), 0);
+
+/** The first picture in a folder or under it: the folder's cover. */
+export function folderCover(f) {
+  if (f?.items?.length) return f.items[0].url;
+  for (const sub of f?.folders || []) {
+    const url = folderCover(sub);
+    if (url) return url;
+  }
+  return null;
+}
+
+/** The first of these folder keys that the tree has, else null (the top). */
+export const firstFolder = (tree, keys) => (keys || []).find((k) => folderPath(tree, k).length) || null;
 
 /** The thumbnail's words for an episode: its title, the show's name, "EP n". */
 export function episodeWords(episode, show) {

@@ -159,6 +159,9 @@ describe('database work', () => {
         { id: 'p2', character_key: 'justawoman', pose: 'glamour', is_default: false, url: 'https://b.s3.amazonaws.com/p2.png' },
         { id: 'p3', character_key: 'lala', pose: 'side', is_default: false, url: 'https://elsewhere.com/p3.png' },
       ]],
+      [[{ name: 'Lala red', asset_group: 'LALA', asset_type: 'PROMO_LALA', url: 'https://b.s3.amazonaws.com/lala.png' }]],
+      [[{ reg: 'episode_wardrobe' }]],
+      [[{ name: 'Sweater dress', category: 'dress', url: 'https://b.s3.amazonaws.com/d.png' }]],
     );
     const out = await yt.sources(s, 'ep-1');
     expect(out.poses).toEqual({
@@ -175,6 +178,42 @@ describe('database work', () => {
     ]);
     expect(out.cutouts).toEqual([{ id: 'a1', url: 'https://b.s3.amazonaws.com/lala.png', label: 'Lala cut-out' }]);
     expect(s.query.mock.calls[3][0]).not.toMatch(/s3_url_no_bg/);
+    expect(s.query.mock.calls[3][0]).toMatch(/asset_type IS DISTINCT FROM 'DOCUMENT_OVERLAY'/);
+    expect(out.folders.map((f) => f.key)).toEqual(['scene-sets', 'poses', 'outfit', 'library']);
+  });
+
+  test('pictureFolders: by where each picture comes from; empty folders left out; only S3 pictures', () => {
+    const tree = yt.pictureFolders({
+      angles: [
+        { url: 'https://b.s3.amazonaws.com/w.jpg', angle: 'Wide', set_name: 'Library' },
+        { url: 'https://b.s3.amazonaws.com/c.jpg', angle: 'Close', set_name: 'Library' },
+        { url: 'https://b.s3.amazonaws.com/b.jpg', angle: 'Wide', set_name: 'Bedroom' },
+        { url: 'https://elsewhere.com/x.jpg', angle: 'X', set_name: 'Elsewhere' },
+      ],
+      cover: 'https://b.s3.amazonaws.com/cover.jpg',
+      poses: { lala: [{ url: 'https://b.s3.amazonaws.com/p1.png', pose: 'glamour', label: 'Glamour ★', isDefault: true }], justawoman: [] },
+      outfit: [
+        { url: 'https://b.s3.amazonaws.com/d.png', label: 'Sweater dress', category: 'dress' },
+        { url: 'https://b.s3.amazonaws.com/bag.png', label: 'Chain bag', category: 'handbag' },
+        { url: 'https://b.s3.amazonaws.com/o.png', label: 'Thing', category: null },
+      ],
+      library: [
+        { url: 'https://b.s3.amazonaws.com/l.png', label: 'Lala red', asset_group: 'LALA', asset_type: 'PROMO_LALA' },
+        { url: 'https://b.s3.amazonaws.com/g.png', label: 'Guest', asset_group: 'GUEST', asset_type: 'PROMO_GUEST' },
+        { url: 'https://b.s3.amazonaws.com/list.png', label: 'Shopping list', asset_group: 'EPISODE', asset_type: 'DOCUMENT_OVERLAY' },
+      ],
+    });
+    const shape = (f) => [f.label, ...(f.folders ? [f.folders.map(shape)] : []), ...(f.items ? [f.items.map((i) => i.label)] : [])];
+    expect(tree.map(shape)).toEqual([
+      ['Scene sets', [['Library', ['Wide', 'Close']], ['Bedroom', ['Wide']], ['Show', ['Show cover']]]],
+      ['Character poses', [['Lala', [['Glamour', ['Glamour ★']]]]]],
+      ["This episode's outfit", [['Dress', ['Sweater dress']], ['Handbag', ['Chain bag']], ['Other', ['Thing']]]],
+      ['Asset library', [['Lala', ['Lala red']], ['Guests', ['Guest']]]],
+      ['Documents', ['Shopping list']],
+    ]);
+    expect(tree[1].folders[0].folders[0]).toEqual({ key: 'poses/lala/glamour', label: 'Glamour', items: [{ url: 'https://b.s3.amazonaws.com/p1.png', label: 'Glamour ★', isDefault: true }] });
+    expect(tree[0].folders[0].key).toBe('scene-sets/library');
+    expect(yt.pictureFolders({})).toEqual([]);
   });
 
   test('readyPoses: empty lists until the poses table exists, with no query of it', async () => {
