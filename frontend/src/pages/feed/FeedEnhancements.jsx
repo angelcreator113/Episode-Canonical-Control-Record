@@ -8,9 +8,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import apiClient from '../../services/api';
 import { platformLabel } from './feedConstants';
 
-// File-local helper. Memories AI is a generic prompt-completion endpoint.
-export const generateMemoriesAiApi = (payload) =>
-  apiClient.post('/api/v1/memories/ai', payload).then((r) => r.data);
+// Lala's reactions to one Pulse person: the server builds the prompt from the
+// profile (show side check, 2026-10-20: /memories/ai never existed).
+export const generateLalaReactionsApi = (profileId) =>
+  apiClient.post(`/api/v1/social-profiles/${profileId}/lala-reactions`).then((r) => r.data);
 
 const C = { ink: '#2C2C2C', inkMid: '#666', inkLight: '#94a3b8', border: '#e2e8f0', surface: '#fff', surfaceAlt: '#FAF7F0', pink: '#ec4899', lavender: '#6366f1', blue: '#3b82f6', gold: '#B8962E', radius: 10, radiusSm: 6, shadow: '0 1px 3px rgba(0,0,0,0.06)' };
 
@@ -113,36 +114,18 @@ export function LalaReactions({ profile, showId, onClose }) {
   const [loading, setLoading] = useState(false);
   const p = profile;
 
+  const [error, setError] = useState(null);
+
   const generate = async () => {
     setLoading(true);
+    setError(null);
     try {
-      const d = await generateMemoriesAiApi({
-        prompt: `You are writing internal monologue for Lala, a luxury fashion content creator in the LalaVerse.
-
-She just saw content from ${p.display_name || p.handle} (${platformLabel(p.platform)}).
-Follow motivation: ${p.follow_motivation || 'general interest'}
-Follow emotion: ${p.follow_emotion || 'neutral'}
-Follow trigger: ${p.follow_trigger || 'their content'}
-Beauty factor: ${p.beauty_factor || 5}/10
-Lifestyle claim: ${p.lifestyle_claim || 'unknown'}
-Lifestyle reality: ${p.lifestyle_reality || 'unknown'}
-
-Generate 4 reaction scenarios as JSON:
-[
-  { "trigger": "specific content moment", "internal_monologue": "what Lala thinks (2-3 sentences, raw and honest)", "what_she_posts": "her public response (caption or comment)", "emotional_cost": "what this interaction takes from her" },
-  ...4 total
-]
-
-Make reactions feel real — jealousy, aspiration, self-comparison, motivation. Not generic.`,
-        maxTokens: 1500,
-      });
-      const text = d.response || d.content || d.data;
-      if (text) {
-        const match = text.match(/\[[\s\S]*\]/);
-        if (match) setReactions(JSON.parse(match[0]));
-      }
+      const d = await generateLalaReactionsApi(p.id);
+      if (Array.isArray(d?.reactions) && d.reactions.length) setReactions(d.reactions);
+      else setError('No reactions came back. Try again.');
     } catch (err) {
       console.error('Reaction generation failed:', err);
+      setError(err?.response?.data?.error || 'The reactions could not be made. Try again.');
     }
     setLoading(false);
   };
@@ -164,6 +147,8 @@ Make reactions feel real — jealousy, aspiration, self-comparison, motivation. 
           <button onClick={onClose} style={{ background: '#f1f5f9', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12 }}>Close</button>
         </div>
       </div>
+
+      {error && <div role="alert" style={{ fontSize: 12, color: '#b91c1c', marginBottom: 10 }}>{error}</div>}
 
       {!reactions && !loading && (
         <div style={{ textAlign: 'center', padding: 30, color: C.inkLight }}>

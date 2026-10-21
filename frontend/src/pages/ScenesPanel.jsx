@@ -33,7 +33,7 @@ const STORYTELLER_API = '/api/v1/storyteller';
 // File-local helpers. addChapterLineApi is a CP12 SceneInterview cross-CP
 // duplicate per v2.12 §9.11 (2-fold cross-CP existence).
 export const generateBookScenesApi = (bookId) =>
-  apiClient.get(`${MEMORIES_API}/books/${bookId}/scenes`).then((r) => r.data);
+  apiClient.post(`${MEMORIES_API}/books/${bookId}/scenes`).then((r) => r.data);
 export const addChapterLineApi = (chapterId, payload) =>
   apiClient.post(`${STORYTELLER_API}/chapters/${chapterId}/lines`, payload).then((r) => r.data);
 

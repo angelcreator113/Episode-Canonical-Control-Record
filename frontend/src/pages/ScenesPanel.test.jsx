@@ -15,10 +15,12 @@ describe('ScenesPanel — Track 6 CP15', () => {
     Object.values(apiClient).forEach((fn) => fn?.mockReset?.());
   });
 
-  test('generateBookScenesApi GET on /memories/books/:id/scenes', async () => {
-    vi.mocked(apiClient.get).mockResolvedValue({ data: { scenes: [] } });
+  // A POST: each call is a paid AI call, never a refetchable GET (the book side check, 2026-10-20).
+  test('generateBookScenesApi POST on /memories/books/:id/scenes', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({ data: { scenes: [] } });
     await generateBookScenesApi('b-1');
-    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/memories/books/b-1/scenes');
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/memories/books/b-1/scenes');
+    expect(apiClient.get).not.toHaveBeenCalled();
   });
 
   test('addChapterLineApi POST on /storyteller/chapters/:id/lines (CP12 dup, 2-fold)', async () => {

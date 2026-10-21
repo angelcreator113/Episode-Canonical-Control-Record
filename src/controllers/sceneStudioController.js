@@ -1212,6 +1212,21 @@ exports.transformObject = async (req, res) => {
   }
 };
 
+// ── AI Image Transform (Scene Sets) ──
+// Scene Studio's Transform on a scene set called a route only scenes had
+// (show side check, 2026-10-20, F2). The transform itself does not depend on
+// which it is; a set that does not exist is a 404 before the paid image.
+exports.transformSceneSetObject = async (req, res) => {
+  try {
+    const sceneSet = await SceneSet.findByPk(req.params.id, { attributes: ['id'] });
+    if (!sceneSet) return res.status(404).json({ success: false, error: 'Scene set not found' });
+  } catch (error) {
+    console.error('Scene Studio transformSceneSetObject lookup error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+  return exports.transformObject(req, res);
+};
+
 // ── AI Object Generation (Scene Sets) ──
 
 exports.generateSceneSetObject = async (req, res) => {

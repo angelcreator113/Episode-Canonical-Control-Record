@@ -12,6 +12,7 @@
  *   anything else                not this helper's: the route answers it
  *
  *   aiFailure(res, err)  → the response sent, or null when err is neither
+ *   plainAiErrors        router middleware: a route's raw 5xx AI failure → 429 / 502
  *   isAiUnreachable(err), UNREACHABLE
  */
 
@@ -44,4 +45,35 @@ function aiFailure(res, err) {
   return null;
 }
 
-module.exports = { aiFailure, isAiUnreachable, isBudgetRefusal, UNREACHABLE };
+// The two budget refusals' own wording (aiCostTracker, imageCostService),
+// for routes that pass only err.message along.
+const BUDGET_TEXT = /AI daily budget exceeded|Image generation is paused until tomorrow/i;
+
+/**
+ * Router middleware for routes that answer an AI failure with a raw 5xx
+ * (the AI writing hub, routes/memories: the book side check, 2026-10-20).
+ * When such a route sends a 5xx JSON whose error text is a budget refusal
+ * it becomes a 429 with that reason; when it is the AI being unreachable it
+ * becomes a 502 with the plain message, never the SDK's raw text. Every
+ * other answer passes untouched.
+ */
+function plainAiErrors(req, res, next) {
+  const json = res.json.bind(res);
+  res.json = (body) => {
+    if (res.statusCode >= 500 && body && typeof body === 'object') {
+      const text = [body.error, body.details, body.message].filter((v) => typeof v === 'string').join(' ');
+      if (BUDGET_TEXT.test(text)) {
+        res.status(429);
+        return json({ success: false, code: 'AI_BUDGET_EXCEEDED', error: [body.details, body.error, body.message].find((v) => typeof v === 'string' && BUDGET_TEXT.test(v)) });
+      }
+      if (UNREACHABLE_TEXT.test(text)) {
+        res.status(502);
+        return json({ success: false, code: 'AI_UNREACHABLE', error: UNREACHABLE });
+      }
+    }
+    return json(body);
+  };
+  next();
+}
+
+module.exports = { aiFailure, plainAiErrors, isAiUnreachable, isBudgetRefusal, UNREACHABLE };
