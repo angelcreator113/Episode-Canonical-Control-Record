@@ -20,6 +20,7 @@ vi.mock('../lib/youtubeThumbnailsApi', async () => {
     youtubeThumbnailsApi: {
       sources: vi.fn(), render: vi.fn(), save: vi.fn(), saveStyle: vi.fn(), shows: vi.fn(), episodes: vi.fn(),
       saved: vi.fn(), makePrimary: vi.fn(), removeSaved: vi.fn(), saveDraft: vi.fn(), draft: vi.fn(), uploadPicture: vi.fn(),
+      templates: vi.fn(), createTemplate: vi.fn(), updateTemplate: vi.fn(), deleteTemplate: vi.fn(),
     },
   };
 });
@@ -113,6 +114,7 @@ describe('helpers', () => {
     expect(thumbnailStudioHref({ showId: 's1', episodeId: 'e1' })).toBe('/template-studio/youtube?show=s1&episode=e1');
     expect(thumbnailStudioHref({ episodeId: 'e1' })).toBe('/template-studio/youtube?episode=e1');
     expect(thumbnailStudioHref()).toBe('/template-studio/youtube');
+    expect(thumbnailStudioHref({ showId: 's1', templateId: 't1' })).toBe('/template-studio/youtube?show=s1&template=t1');
   });
 });
 
@@ -406,17 +408,103 @@ describe('YouTubeThumbnailStudio', () => {
     expect(within(await screen.findByTestId('yts-saved-7')).getByText('Episode thumbnail')).toBeTruthy();
   });
 
-  test('Save as template keeps the arrangement, the colours and the show\'s own Lala for every episode', async () => {
+  test('Save as a new template: named, with the colours and the show\'s own Lala; the list comes back', async () => {
+    youtubeThumbnailsApi.saveStyle.mockResolvedValue({});
+    youtubeThumbnailsApi.createTemplate.mockResolvedValue({ id: 't-1' });
+    const tpl = presetLayers('lala-right', { title: 'X' }, {});
+    youtubeThumbnailsApi.templates.mockResolvedValue([{ id: 't-1', name: 'Come Style Me', isDefault: true, previewUrl: null, spec: tpl }]);
+    renderPage();
+    await opened();
+    expect(screen.getByText(/No templates yet/)).toBeTruthy();
+    fireEvent.click(screen.getByTestId('yts-save-template'));
+    fireEvent.change(screen.getByRole('textbox', { name: 'New template name' }), { target: { value: ' Come Style Me ' } });
+    expect(screen.getByRole('checkbox', { name: 'Every episode starts from it' }).checked).toBe(true); // the first is the default
+    fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
+    await waitFor(() => expect(youtubeThumbnailsApi.createTemplate).toHaveBeenCalled());
+    const [showId, style] = youtubeThumbnailsApi.saveStyle.mock.calls[0];
+    expect(showId).toBe('show-1');
+    expect(style).toEqual({ layout: 'lala-right', accent: '#B8962E', textColor: '#FFFFFF', dim: 0.3, lalaUrl: 'https://b.s3.amazonaws.com/lala2.png' });
+    const [tShow, body] = youtubeThumbnailsApi.createTemplate.mock.calls[0];
+    expect(tShow).toBe('show-1');
+    expect(body.name).toBe('Come Style Me');
+    expect(body.makeDefault).toBe(true);
+    expect(body.spec.layers.map((l) => l.role)).toEqual(['background', 'shade', 'lala', 'kicker', 'title', 'badge']);
+    expect(await screen.findByText(/Template "Come Style Me" saved for Styling Adventures. Every episode starts from it./)).toBeTruthy();
+    expect(within(screen.getByTestId('yts-template-t-1')).getByText('Come Style Me')).toBeTruthy();
+  });
+
+  test('templates: use one (undo goes back), rename, make default, update with this, delete after asking', async () => {
+    const haul = presetLayers('center', { title: 'Old' }, {});
+    const list = [
+      { id: 't-1', name: 'Come Style Me', isDefault: true, previewUrl: 'https://b.s3.amazonaws.com/t1.jpg', spec: presetLayers('lala-left', {}, {}) },
+      { id: 't-2', name: 'Haul', isDefault: false, previewUrl: null, spec: haul },
+    ];
+    youtubeThumbnailsApi.sources.mockResolvedValueOnce({ ...SOURCES, templates: list, template: list[0].spec });
+    youtubeThumbnailsApi.templates.mockResolvedValue(list);
+    youtubeThumbnailsApi.updateTemplate.mockResolvedValue({});
+    youtubeThumbnailsApi.deleteTemplate.mockResolvedValue({});
     youtubeThumbnailsApi.saveStyle.mockResolvedValue({});
     renderPage();
     await opened();
+    const card = () => screen.getByTestId('yts-template-t-2');
+    fireEvent.click(within(card()).getByRole('button', { name: 'Use' }));
+    // Haul's layers, this episode's words.
+    expect(screen.getByText(/Started from "Haul"/)).toBeTruthy();
+    await waitFor(() => expect(youtubeThumbnailsApi.saveDraft).toHaveBeenCalled(), { timeout: 3000 });
+    expect(layerOf(lastDraft(), 'title').text).toBe('Studio by Sable');
+    expect(layerOf(lastDraft(), 'title').x).toBe(layerOf(haul, 'title').x);
+    expect(layerOf(haul, 'title').x).not.toBe(layerOf(list[0].spec, 'title').x);
+    const kept = youtubeThumbnailsApi.saveDraft.mock.calls.length;
+    fireEvent.click(screen.getByTestId('yts-undo'));
+    await waitFor(() => expect(youtubeThumbnailsApi.saveDraft.mock.calls.length).toBeGreaterThan(kept), { timeout: 3000 });
+    expect(layerOf(lastDraft(), 'title').x).toBe(layerOf(list[0].spec, 'title').x);
+
+    fireEvent.click(within(card()).getByRole('button', { name: /rename/i }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'New name for Haul' }), { target: { value: 'Big Haul' } });
+    fireEvent.click(within(card()).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(youtubeThumbnailsApi.updateTemplate).toHaveBeenCalledWith('show-1', 't-2', { name: 'Big Haul' }));
+    expect(await screen.findByText('Renamed to "Big Haul".')).toBeTruthy();
+
+    fireEvent.click(within(card()).getByRole('button', { name: /make default/i }));
+    await waitFor(() => expect(youtubeThumbnailsApi.updateTemplate).toHaveBeenCalledWith('show-1', 't-2', { isDefault: true }));
+
+    fireEvent.click(within(card()).getByRole('button', { name: 'Update with this' }));
+    fireEvent.click(within(card()).getByRole('button', { name: 'Yes' }));
+    await waitFor(() => expect(youtubeThumbnailsApi.updateTemplate).toHaveBeenCalledWith('show-1', 't-2', { spec: expect.objectContaining({ version: 2 }) }));
+
+    fireEvent.click(within(card()).getByRole('button', { name: 'Delete Haul' }));
+    fireEvent.click(within(card()).getByRole('button', { name: 'No' }));
+    expect(youtubeThumbnailsApi.deleteTemplate).not.toHaveBeenCalled();
+    fireEvent.click(within(card()).getByRole('button', { name: 'Delete Haul' }));
+    fireEvent.click(within(card()).getByRole('button', { name: 'Yes' }));
+    await waitFor(() => expect(youtubeThumbnailsApi.deleteTemplate).toHaveBeenCalledWith('show-1', 't-2'));
+  });
+
+  test('a taken name: the server\'s reason shows and the name stays to change', async () => {
+    const list = [{ id: 't-1', name: 'Haul', isDefault: true, previewUrl: null, spec: presetLayers('center', {}, {}) }];
+    youtubeThumbnailsApi.sources.mockResolvedValueOnce({ ...SOURCES, templates: list, template: list[0].spec });
+    youtubeThumbnailsApi.saveStyle.mockResolvedValue({});
+    youtubeThumbnailsApi.createTemplate.mockRejectedValue({ response: { status: 409, data: { error: 'That name is taken' } } });
+    renderPage();
+    await opened();
     fireEvent.click(screen.getByTestId('yts-save-template'));
-    await waitFor(() => expect(youtubeThumbnailsApi.saveStyle).toHaveBeenCalled());
-    const [showId, style] = youtubeThumbnailsApi.saveStyle.mock.calls[0];
-    expect(showId).toBe('show-1');
-    expect(style).toMatchObject({ layout: 'lala-right', accent: '#B8962E', textColor: '#FFFFFF', dim: 0.3, lalaUrl: 'https://b.s3.amazonaws.com/lala2.png' });
-    expect(style.template.layers.map((l) => l.role)).toEqual(['background', 'shade', 'lala', 'kicker', 'title', 'badge']);
-    expect(await screen.findByText(/Template saved for Styling Adventures/)).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: 'Every episode starts from it' }).checked).toBe(false);
+    fireEvent.change(screen.getByRole('textbox', { name: 'New template name' }), { target: { value: 'haul' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
+    expect(await screen.findByText('That name is taken')).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: 'New template name' }).value).toBe('haul');
+  });
+
+  test('?template= starts the episode from that template, over its own arrangement, and keeps it', async () => {
+    const haul = presetLayers('center', { title: 'Old' }, {});
+    const draft = presetLayers('lala-left', { title: 'Mine' }, {});
+    youtubeThumbnailsApi.sources.mockResolvedValueOnce({ ...SOURCES, draft, templates: [{ id: 't-2', name: 'Haul', isDefault: false, spec: haul }] });
+    renderPage('/template-studio/youtube?show=show-1&episode=ep-1&template=t-2');
+    await opened();
+    expect(screen.getByTestId('yts-draft-note').textContent).toBe('Started from "Haul".');
+    expect(screen.queryByTestId('canvas-lala')).toBeNull();
+    await waitFor(() => expect(youtubeThumbnailsApi.saveDraft).toHaveBeenCalled(), { timeout: 3000 });
+    expect(layerOf(lastDraft(), 'title').text).toBe('Studio by Sable');
   });
 
   test('a saved one can be made the episode\'s thumbnail again', async () => {

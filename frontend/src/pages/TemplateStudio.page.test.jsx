@@ -4,12 +4,14 @@
  * and message line that replace confirm() and alert().
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), patch: vi.fn(), request: vi.fn() },
 }));
+
+vi.mock('../lib/picturePreview', () => ({ usePreview: (url) => url, previewUrl: (url) => Promise.resolve(url), previewWidth: () => 800 }));
 
 import apiClient from '../services/api';
 import TemplateStudio from './TemplateStudio';
@@ -97,5 +99,30 @@ describe('TemplateStudio page', () => {
     vi.mocked(apiClient.post).mockRejectedValue({ response: { data: { message: 'Template is already archived' } } });
     fireEvent.click(screen.getByRole('button', { name: 'Yes' }));
     expect((await screen.findByRole('alert')).textContent).toContain('Template is already archived');
+  });
+
+  test('Show templates: every show\'s, with pictures; Open goes to the Studio on that template; rename here', async () => {
+    const groups = [{ show: { id: 's-1', name: 'Styling Adventures' }, templates: [
+      { id: 't-1', name: 'Come Style Me', isDefault: true, previewUrl: 'https://b.s3.amazonaws.com/t1.jpg' },
+      { id: 't-2', name: 'Haul', isDefault: false, previewUrl: null },
+    ] }];
+    vi.mocked(apiClient.get).mockImplementation(async (url) => ({
+      data: { data: String(url).includes('youtube-thumbnails/templates') ? groups : [template()] },
+    }));
+    render(<MemoryRouter><TemplateStudio /></MemoryRouter>);
+    await screen.findByRole('heading', { level: 2, name: 'Glam Look' });
+    fireEvent.click(screen.getByTestId('ts-show-templates-btn'));
+    expect(await screen.findByRole('heading', { level: 2, name: 'Styling Adventures' })).toBeTruthy();
+    const first = screen.getByTestId('ts-show-template-t-1');
+    expect(first.querySelector('img').getAttribute('src')).toBe('https://b.s3.amazonaws.com/t1.jpg');
+    expect(within(first).getByRole('link', { name: 'Open' }).getAttribute('href'))
+      .toBe('/template-studio/youtube?show=s-1&template=t-1');
+    const haul = screen.getByTestId('ts-show-template-t-2');
+    fireEvent.click(within(haul).getByRole('button', { name: 'Rename' }));
+    fireEvent.change(within(haul).getByRole('textbox', { name: 'New name for Haul' }), { target: { value: 'Big Haul' } });
+    vi.mocked(apiClient.patch).mockResolvedValue({ data: { data: {} } });
+    fireEvent.click(within(haul).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalledWith('/api/v1/youtube-thumbnails/shows/s-1/templates/t-2', { name: 'Big Haul' }, expect.anything()));
+    expect((await screen.findByRole('status')).textContent).toContain('Renamed to "Big Haul".');
   });
 });

@@ -13,10 +13,13 @@
  * Asset library, Documents, and this session's Uploads.
  *
  * What is arranged on an episode stays with it (kept as it changes, a
- * draft); Save as show template makes it where every episode starts.
+ * draft). A show has named templates (Evoni, 2026-10-21: Come Style Me,
+ * Haul, GRWM…): use one, save this arrangement as a new one, rename one,
+ * make one the default (where every episode starts), update or delete one.
  * The server draws the saved file from the same layers ("See it exactly").
  *
- * ?show= and ?episode= open it on an episode (Production's Thumbnail step).
+ * ?show= and ?episode= open it on an episode (Production's Thumbnail step);
+ * ?template= starts that episode from one of the show's templates.
  *
  * The one place an episode's thumbnail is edited (Evoni, 2026-10-20): the
  * episode's saved thumbnails are listed under the editor, its current one
@@ -27,8 +30,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
-  Youtube, Upload, Download, Save, Palette, ImageOff, Check, LayoutTemplate, Sparkles, Star, Trash2, History, Folder, ChevronRight,
-  Eye, EyeOff, ArrowUp, ArrowDown, Type, RotateCcw, ScanEye, X, Lock, LockOpen, Copy, Undo2, Redo2,
+  Youtube, Upload, Download, Save, ImageOff, Check, LayoutTemplate, Sparkles, Star, Trash2, History, Folder, ChevronRight,
+  Eye, EyeOff, ArrowUp, ArrowDown, Type, RotateCcw, ScanEye, X, Lock, LockOpen, Copy, Undo2, Redo2, Plus, Pencil,
 } from 'lucide-react';
 import {
   youtubeThumbnailsApi, LAYOUTS, ACCENTS, TEXT_COLORS, episodeWords, defaultPose, folderPath, folderCount, folderCover, firstFolder,
@@ -269,6 +272,106 @@ function ChecklistEditor({ layer, onChange }) {
   );
 }
 
+/**
+ * The show's named templates (Evoni, 2026-10-21): each with its picture;
+ * Use starts this episode from it; save this arrangement as a new one;
+ * rename (or double-click the name), make the default, update with this
+ * arrangement, delete. Each handler resolves true when it worked.
+ */
+function TemplatesBar({ showName, templates, busy, onUse, onCreate, onRename, onDefault, onUpdate, onDelete }) {
+  const [adding, setAdding] = useState(null); // { name, makeDefault }
+  const [renaming, setRenaming] = useState(null); // { id, name }
+  const [asking, setAsking] = useState(null); // { id, kind: 'update' | 'delete' }
+  const create = async (e) => {
+    e.preventDefault();
+    if (await onCreate(adding.name, adding.makeDefault)) setAdding(null);
+  };
+  const rename = async (e, t) => {
+    e.preventDefault();
+    if (renaming.name.trim() === t.name || await onRename(t, renaming.name)) setRenaming(null);
+  };
+  const answer = async (t) => {
+    const { kind } = asking;
+    setAsking(null);
+    await (kind === 'delete' ? onDelete(t) : onUpdate(t));
+  };
+  return (
+    <section className="yts-templates" aria-label={`${showName} templates`} data-testid="yts-templates">
+      <div className="yts-templates-head">
+        <p className="yts-label"><LayoutTemplate size={16} aria-hidden /> {showName} templates</p>
+        {!adding && (
+          <button type="button" className="yts-btn" onClick={() => setAdding({ name: '', makeDefault: !templates.length })} disabled={busy} data-testid="yts-save-template">
+            <Plus size={16} aria-hidden /> Save as a new template
+          </button>
+        )}
+      </div>
+      {adding && (
+        <form className="yts-template-form" onSubmit={create} data-testid="yts-template-new">
+          <input className="yts-input" value={adding.name} maxLength={80} autoFocus placeholder="Name, e.g. Come Style Me"
+            aria-label="New template name" onChange={(e) => setAdding({ ...adding, name: e.target.value })}
+            onKeyDown={(e) => { if (e.key === 'Escape') setAdding(null); }} />
+          <label className="yts-check">
+            <input type="checkbox" checked={adding.makeDefault} onChange={(e) => setAdding({ ...adding, makeDefault: e.target.checked })} />
+            Every episode starts from it
+          </label>
+          <button type="submit" className="yts-btn is-primary" disabled={busy || !adding.name.trim()}>Save template</button>
+          <button type="button" className="yts-btn" onClick={() => setAdding(null)}>Cancel</button>
+        </form>
+      )}
+      {templates.length ? (
+        <ul className="yts-template-grid">
+          {templates.map((t) => (
+            <li key={t.id} className={`yts-template${t.isDefault ? ' is-default' : ''}`} data-testid={`yts-template-${t.id}`}>
+              <button type="button" className="yts-template-pic" onClick={() => onUse(t)} disabled={busy || !t.spec} title={`Use ${t.name}`}>
+                {t.previewUrl ? <PreviewImg url={t.previewUrl} alt="" /> : <LayoutTemplate size={28} aria-hidden />}
+              </button>
+              {renaming?.id === t.id ? (
+                <form className="yts-template-form" onSubmit={(e) => rename(e, t)}>
+                  <input className="yts-input" value={renaming.name} maxLength={80} autoFocus aria-label={`New name for ${t.name}`}
+                    onChange={(e) => setRenaming({ ...renaming, name: e.target.value })}
+                    onKeyDown={(e) => { if (e.key === 'Escape') setRenaming(null); }} />
+                  <button type="submit" className="yts-history-btn" disabled={busy || !renaming.name.trim()}>Save</button>
+                  <button type="button" className="yts-history-btn" onClick={() => setRenaming(null)}>Cancel</button>
+                </form>
+              ) : (
+                <p className="yts-template-name" onDoubleClick={() => setRenaming({ id: t.id, name: t.name })} title="Double-click to rename">
+                  {t.isDefault && <Star size={13} aria-label="Default" />} {t.name}
+                </p>
+              )}
+              {asking?.id === t.id ? (
+                <div className="yts-history-row" role="group" aria-label="Confirm">
+                  <span className="yts-template-ask">{asking.kind === 'delete' ? `Delete "${t.name}"?` : `Replace "${t.name}" with this arrangement?`}</span>
+                  <button type="button" className="yts-history-btn" onClick={() => answer(t)}>Yes</button>
+                  <button type="button" className="yts-history-btn" onClick={() => setAsking(null)}>No</button>
+                </div>
+              ) : (
+                <div className="yts-history-row">
+                  <button type="button" className="yts-history-btn" onClick={() => onUse(t)} disabled={busy || !t.spec}>Use</button>
+                  <button type="button" className="yts-history-btn" onClick={() => setRenaming({ id: t.id, name: t.name })} disabled={busy}>
+                    <Pencil size={13} aria-hidden /> Rename
+                  </button>
+                  {!t.isDefault && (
+                    <button type="button" className="yts-history-btn" onClick={() => onDefault(t)} disabled={busy}>
+                      <Star size={13} aria-hidden /> Make default
+                    </button>
+                  )}
+                  <button type="button" className="yts-history-btn" onClick={() => setAsking({ id: t.id, kind: 'update' })} disabled={busy}>
+                    Update with this
+                  </button>
+                  <button type="button" className="yts-history-btn is-danger" onClick={() => setAsking({ id: t.id, kind: 'delete' })} disabled={busy}
+                    aria-label={`Delete ${t.name}`}><Trash2 size={13} aria-hidden /></button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="yts-note">No templates yet. Arrange this thumbnail, then save it as one: every episode of {showName} can start from it.</p>
+      )}
+    </section>
+  );
+}
+
 export default function YouTubeThumbnailStudio() {
   const [params, setParams] = useSearchParams();
   const [shows, setShows] = useState([]);
@@ -363,7 +466,15 @@ export default function YouTubeThumbnailStudio() {
       past.current = [];
       future.current = [];
       lastEditAt.current = 0;
-      if (src.draft) {
+      const asked = params.get('template');
+      const chosen = asked ? (src.templates || []).find((t) => t.id === asked && t.spec) : null;
+      if (chosen) {
+        // Opened on one of the show's templates (the Templates page): the episode starts from it, and keeps it.
+        edited.current = true;
+        setSpecState(fillTemplate(chosen.spec, episodeContent(src)));
+        setDraftNote(`Started from "${chosen.name}".`);
+        setParams((p) => { const next = new URLSearchParams(p); next.delete('template'); return next; }, { replace: true });
+      } else if (src.draft) {
         const { savedAt, ...draft } = src.draft;
         setSpecState(draft);
         setDraftNote(savedAt ? 'Your arrangement for this episode.' : null);
@@ -562,7 +673,12 @@ export default function YouTubeThumbnailStudio() {
   };
 
   const pickShow = (id) => { setShowId(id); setEpisodeId(''); setParams(id ? { show: id } : {}); };
-  const pickEpisode = (id) => { setEpisodeId(id); setParams(id ? { show: showId, episode: id } : { show: showId }); };
+  // A template asked for in the address waits for the episode it is used on.
+  const pickEpisode = (id) => {
+    const template = params.get('template');
+    setEpisodeId(id);
+    setParams(id ? { show: showId, episode: id, ...(template ? { template } : {}) } : { show: showId, ...(template ? { template } : {}) });
+  };
 
   const seeExactly = async () => {
     setRendering(true);
@@ -620,24 +736,65 @@ export default function YouTubeThumbnailStudio() {
     }
   };
 
-  const saveTemplate = async () => {
-    if (!sources?.show?.id) return;
+  // The show's style (layout, colours, its own Lala), saved with a template.
+  const saveShowStyle = async () => {
+    // An episode's pose is that episode's look: the show keeps its own Lala.
+    const lalaNow = roleSrc(spec, 'lala');
+    const isPose = (sources?.poses?.lala || []).some((p) => p.url === lalaNow);
+    const lalaUrl = isPose || !lalaNow ? (sources?.style?.lalaUrl || null) : lalaNow;
+    await youtubeThumbnailsApi.saveStyle(sources.show.id, { layout: look.layout, accent: look.accent, textColor: look.textColor, dim: look.dim, lalaUrl });
+  };
+
+  const reloadTemplates = async () => {
+    const templates = await youtubeThumbnailsApi.templates(sources.show.id);
+    setSources((s) => ({ ...s, templates, template: templates.find((t) => t.isDefault)?.spec || null }));
+  };
+
+  /** One change to the show's templates: busy while it runs, the list again after, a message either way. */
+  const templateChange = async (run, done, failed) => {
+    if (!sources?.show?.id) return false;
     setBusy(true);
     try {
-      // An episode's pose is that episode's look: the show keeps its own Lala.
-      const lalaNow = roleSrc(spec, 'lala');
-      const isPose = (sources?.poses?.lala || []).some((p) => p.url === lalaNow);
-      const lalaUrl = isPose || !lalaNow ? (sources?.style?.lalaUrl || null) : lalaNow;
-      const style = { layout: look.layout, accent: look.accent, textColor: look.textColor, dim: look.dim, lalaUrl, template: spec };
-      await youtubeThumbnailsApi.saveStyle(sources.show.id, style);
-      setSources((s) => ({ ...s, template: spec }));
-      setMessage({ type: 'ok', text: `Template saved for ${sources.show.name}: every episode starts from this arrangement, with its own words and pictures.` });
+      await run();
+      await reloadTemplates();
+      setMessage({ type: 'ok', text: done });
+      return true;
     } catch (err) {
-      console.error('[YouTubeThumbnails] template save failed:', err);
-      setMessage({ type: 'error', text: err?.response?.data?.error || 'The template could not be saved.' });
+      console.error('[YouTubeThumbnails] template change failed:', err);
+      setMessage({ type: 'error', text: err?.response?.data?.error || failed });
+      return false;
     } finally {
       setBusy(false);
     }
+  };
+
+  const createTemplate = (name, makeDefault) => templateChange(async () => {
+    await saveShowStyle();
+    await youtubeThumbnailsApi.createTemplate(sources.show.id, { name: name.trim(), spec, makeDefault });
+  }, `Template "${name.trim()}" saved for ${sources?.show?.name}.${makeDefault ? ' Every episode starts from it.' : ''}`, 'The template could not be saved.');
+
+  const renameTemplate = (t, name) => templateChange(
+    () => youtubeThumbnailsApi.updateTemplate(sources.show.id, t.id, { name: name.trim() }),
+    `Renamed to "${name.trim()}".`, 'The template could not be renamed.');
+
+  const defaultTemplate = (t) => templateChange(
+    () => youtubeThumbnailsApi.updateTemplate(sources.show.id, t.id, { isDefault: true }),
+    `Every episode of ${sources?.show?.name} now starts from "${t.name}".`, 'Could not make that the default.');
+
+  const updateTemplate = (t) => templateChange(async () => {
+    await saveShowStyle();
+    await youtubeThumbnailsApi.updateTemplate(sources.show.id, t.id, { spec });
+  }, `"${t.name}" now has this arrangement.`, 'The template could not be updated.');
+
+  const deleteTemplate = (t) => templateChange(
+    () => youtubeThumbnailsApi.deleteTemplate(sources.show.id, t.id),
+    `"${t.name}" is deleted.`, 'The template could not be deleted.');
+
+  const useTemplate = (t) => {
+    if (!t.spec || !sources) return;
+    setSelectedId(null);
+    edit(fillTemplate(t.spec, episodeContent(sources)));
+    setMessage({ type: 'ok', text: `Started from "${t.name}". Undo goes back.` });
   };
 
   const fileName = useMemo(() => {
@@ -693,9 +850,6 @@ export default function YouTubeThumbnailStudio() {
               </button>
               <button type="button" className="yts-btn" onClick={seeExactly} disabled={rendering} data-testid="yts-exact">
                 <ScanEye size={16} aria-hidden /> {rendering ? 'Drawing…' : 'See it exactly'}
-              </button>
-              <button type="button" className="yts-btn" onClick={saveTemplate} disabled={busy || !sources?.show?.id} data-testid="yts-save-template">
-                <Palette size={16} aria-hidden /> Save as {sources?.show?.name || 'show'} template
               </button>
               <button type="button" className="yts-btn" onClick={undo} disabled={!past.current.length} data-testid="yts-undo" title="Undo (Ctrl+Z)">
                 <Undo2 size={16} aria-hidden /> Undo
@@ -838,6 +992,11 @@ export default function YouTubeThumbnailStudio() {
             </div>
           </section>
         </div>
+        {sources?.show?.id && (
+          <TemplatesBar showName={sources.show.name} templates={sources.templates || []} busy={busy}
+            onUse={useTemplate} onCreate={createTemplate} onRename={renameTemplate} onDefault={defaultTemplate}
+            onUpdate={updateTemplate} onDelete={deleteTemplate} />
+        )}
         {history.length > 0 && (
           <section className="yts-history" aria-label="Saved thumbnails" data-testid="yts-history">
             <h2 className="yts-label"><History size={14} aria-hidden /> Saved thumbnails</h2>

@@ -596,3 +596,27 @@
   .template-studio .ts-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .template-studio .ts-panel-stage { height: 240px; padding: 10px; }
 }
+
+/* every show's YouTube thumbnail templates (Evoni, 2026-10-21) */
+.template-studio .ts-show-templates { display: flex; flex-direction: column; gap: 18px; }
+.template-studio .ts-show-group { display: flex; flex-direction: column; gap: 10px; }
+.template-studio .ts-show-name { margin: 0; font-family: var(--ts-serif); font-size: 20px; color: var(--ts-plum); }
+.template-studio .ts-show-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin: 0; padding: 0; list-style: none; }
+.template-studio .ts-show-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+  border-radius: 14px;
+  border: 1.5px solid var(--ts-gold-soft);
+  background: var(--ts-glass);
+}
+.template-studio .ts-show-card.is-default { border-color: var(--ts-magenta); }
+.template-studio .ts-show-pic { display: grid; place-items: center; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 10px; background: var(--ts-blush); color: var(--ts-magenta); }
+.template-studio .ts-show-pic img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.template-studio .ts-show-card-name { display: flex; align-items: center; gap: 4px; margin: 0; font-weight: 700; color: var(--ts-plum); overflow-wrap: anywhere; cursor: text; }
+.template-studio .ts-show-card-name svg { color: var(--ts-magenta); flex: none; }
+.template-studio .ts-show-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.template-studio .ts-show-actions a { text-decoration: none; }
+.template-studio .ts-spinner.is-small { width: 22px; height: 22px; }

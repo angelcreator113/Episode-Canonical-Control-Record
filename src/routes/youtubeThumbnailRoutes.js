@@ -9,6 +9,11 @@
  *   POST /render                         a preview PNG (no saving)
  *   POST /episodes/:episodeId            render and save as the episode's primary thumbnail
  *   PUT  /shows/:showId/style            save the show's style for every episode
+ *   GET  /templates                      every show's named templates, with their pictures (the Templates page)
+ *   GET  /shows/:showId/templates        the show's named templates, the default first
+ *   POST /shows/:showId/templates        save a new named template { name, spec, makeDefault? }
+ *   PATCH /shows/:showId/templates/:templateId   rename, replace its layers, or make it the default
+ *   DELETE /shows/:showId/templates/:templateId  delete one (the next becomes the default)
  *   GET  /episodes/:episodeId/saved      the episode's saved thumbnails, its current one first
  *   POST /episodes/:episodeId/saved/:thumbnailId/primary   make a saved one the episode's thumbnail
  *   DELETE /episodes/:episodeId/saved/:thumbnailId          delete a saved one (not the current one)
@@ -98,6 +103,49 @@ router.put('/shows/:showId/style', requireAuth, async (req, res) => {
     return res.json({ success: true, data: await yt.saveStyle(models.sequelize, req.params.showId, req.body || {}) });
   } catch (err) {
     return sendError(res, err, 'style');
+  }
+});
+
+// A show's named templates (Evoni, 2026-10-21: several per show, renamed at will).
+const userOf = (req) => (req.user?.id ? String(req.user.id) : null);
+
+router.get('/templates', requireAuth, async (req, res) => {
+  try {
+    return res.json({ success: true, data: await yt.listAllTemplates(models.sequelize) });
+  } catch (err) {
+    return sendError(res, err, 'all templates');
+  }
+});
+
+router.get('/shows/:showId/templates', requireAuth, async (req, res) => {
+  try {
+    return res.json({ success: true, data: await yt.listTemplates(models.sequelize, req.params.showId) });
+  } catch (err) {
+    return sendError(res, err, 'templates');
+  }
+});
+
+router.post('/shows/:showId/templates', requireAuth, async (req, res) => {
+  try {
+    return res.status(201).json({ success: true, data: await yt.createTemplate(models.sequelize, req.params.showId, readBody(req), userOf(req)) });
+  } catch (err) {
+    return sendError(res, err, 'template save');
+  }
+});
+
+router.patch('/shows/:showId/templates/:templateId', requireAuth, async (req, res) => {
+  try {
+    return res.json({ success: true, data: await yt.updateTemplate(models.sequelize, req.params.showId, req.params.templateId, readBody(req), userOf(req)) });
+  } catch (err) {
+    return sendError(res, err, 'template change');
+  }
+});
+
+router.delete('/shows/:showId/templates/:templateId', requireAuth, async (req, res) => {
+  try {
+    return res.json({ success: true, data: await yt.deleteTemplate(models.sequelize, req.params.showId, req.params.templateId) });
+  } catch (err) {
+    return sendError(res, err, 'template delete');
   }
 });
 

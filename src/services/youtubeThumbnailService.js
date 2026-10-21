@@ -169,8 +169,10 @@ async function sources(sequelize, episodeId) {
     folders: pictureFolders({ angles, cover: show?.cover_image_url, poses, outfit, library, uploads: await listUploads(episode.id) }),
     // What the "Come Style Me" layout fills in (Evoni, 2026-10-21).
     suggest: await layoutSuggestions(sequelize, episode.id, outfit, show),
-    // The layers: the show's template (null until one is saved) and this episode's draft.
-    template: readTemplate(show?.metadata?.youtube_thumbnail?.template),
+    // The layers: the show's templates (named; Evoni, 2026-10-21), the
+    // default one (where an episode starts; null until one is saved), and
+    // this episode's draft.
+    ...await templatesAndDefault(sequelize, show),
     draft: await getDraft(sequelize, episode.id),
   };
 }
@@ -392,6 +394,262 @@ async function saveStyle(sequelize, showId, body = {}) {
   return style;
 }
 
+// ── A show's named templates (Evoni, 2026-10-21: several per show, each
+// with a picture, renamed at will; show_thumbnail_templates) ─────────────────
+
+const TEMPLATE_NAME_MAX = 80;
+const LEGACY_ID = 'legacy';
+const PREVIEW_SIZE = { width: 640, height: 360 };
+
+const templatesReady = async (sequelize) => {
+  const [[reg]] = await sequelize.query("SELECT to_regclass('public.show_thumbnail_templates') AS reg");
+  return Boolean(reg && reg.reg);
+};
+
+const requireTemplates = async (sequelize) => {
+  if (!await templatesReady(sequelize)) {
+    throw new ThumbnailError(503, 'Named templates need the latest database update (show_thumbnail_templates)');
+  }
+};
+
+/** A template's name: trimmed, 1 to 80 characters. */
+function templateName(raw) {
+  const name = typeof raw === 'string' ? raw.trim().replace(/\s+/g, ' ') : '';
+  if (!name || name.length > TEMPLATE_NAME_MAX) throw new ThumbnailError(400, `A template needs a name of 1 to ${TEMPLATE_NAME_MAX} characters`);
+  return name;
+}
+
+/** The template kept in the show's metadata before named ones, standing in as "Default" until one is saved. */
+function legacyTemplate(show) {
+  const spec = readTemplate(show?.metadata?.youtube_thumbnail?.template);
+  return spec ? { id: LEGACY_ID, name: 'Default', isDefault: true, previewUrl: null, spec, updatedAt: null, legacy: true } : null;
+}
+
+const templateOut = (r) => ({
+  id: r.id, name: r.name, isDefault: Boolean(r.is_default), previewUrl: r.preview_url || null,
+  spec: readTemplate(r.spec), updatedAt: r.updated_at,
+});
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A template id from a request: "legacy" or a uuid; anything else is not one. */
+const templateIdOf = (id) => {
+  if (id === LEGACY_ID || UUID.test(String(id))) return id;
+  throw new ThumbnailError(404, 'Template not found');
+};
+
+async function findShow(sequelize, showId, transaction) {
+  if (!UUID.test(String(showId))) throw new ThumbnailError(404, 'Show not found');
+  const [[show]] = await sequelize.query(
+    'SELECT id, name, metadata FROM shows WHERE id = :showId AND deleted_at IS NULL LIMIT 1',
+    { replacements: { showId }, transaction });
+  if (!show) throw new ThumbnailError(404, 'Show not found');
+  return show;
+}
+
+async function templateRows(sequelize, showId, transaction) {
+  const [rows] = await sequelize.query(
+    `SELECT id, name, spec, preview_url, is_default, updated_at FROM show_thumbnail_templates
+      WHERE show_id = :showId AND deleted_at IS NULL
+      ORDER BY is_default DESC, lower(name)`,
+    { replacements: { showId }, transaction });
+  return rows;
+}
+
+/** The show's templates, the default first; the metadata one stands in until one is saved. */
+async function listTemplates(sequelize, showOrId) {
+  const show = typeof showOrId === 'object' ? showOrId : await findShow(sequelize, showOrId);
+  if (!show) return [];
+  const rows = await templatesReady(sequelize) ? await templateRows(sequelize, show.id) : [];
+  if (rows.length) return rows.map(templateOut);
+  const legacy = legacyTemplate(show);
+  return legacy ? [legacy] : [];
+}
+
+/** For sources: the show's templates and the default's layers (where an episode starts). */
+async function templatesAndDefault(sequelize, show) {
+  const templates = await listTemplates(sequelize, show);
+  const def = templates.find((t) => t.isDefault) || null;
+  return { templates, template: def?.spec || null };
+}
+
+/** Every show's templates, for the Templates page (no layers; their pictures). */
+async function listAllTemplates(sequelize) {
+  const [shows] = await sequelize.query('SELECT id, name, metadata FROM shows WHERE deleted_at IS NULL ORDER BY name');
+  const ready = await templatesReady(sequelize);
+  const [rows] = ready
+    ? await sequelize.query(
+      `SELECT id, show_id, name, preview_url, is_default, updated_at FROM show_thumbnail_templates
+        WHERE deleted_at IS NULL ORDER BY is_default DESC, lower(name)`)
+    : [[]];
+  return shows.map((show) => {
+    const own = rows.filter((r) => r.show_id === show.id)
+      .map((r) => ({ id: r.id, name: r.name, isDefault: Boolean(r.is_default), previewUrl: r.preview_url || null, updatedAt: r.updated_at }));
+    const legacy = own.length ? null : legacyTemplate(show);
+    const templates = legacy ? [{ ...legacy, spec: undefined }] : own;
+    return { show: { id: show.id, name: show.name }, templates };
+  }).filter((g) => g.templates.length);
+}
+
+/** A small picture of a template (640×360 JPEG in S3), or null when it cannot be drawn. */
+async function drawTemplatePreview(showId, templateId, spec) {
+  try {
+    const png = await renderSpec(spec);
+    const jpg = await sharp(png).resize(PREVIEW_SIZE.width, PREVIEW_SIZE.height).jpeg({ quality: 82 }).toBuffer();
+    const key = `shows/${showId}/thumbnail-templates/${templateId}-${Date.now()}.jpg`;
+    await getS3().send(new PutObjectCommand({ Bucket: requireAssetBucket(), Key: key, Body: jpg, ContentType: 'image/jpeg' }));
+    return `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`;
+  } catch (err) {
+    console.error(`[YouTubeThumbnail] template ${templateId}'s picture could not be drawn:`, err.message);
+    return null;
+  }
+}
+
+async function setPreview(sequelize, templateId, url) {
+  if (!url) return;
+  await sequelize.query('UPDATE show_thumbnail_templates SET preview_url = :url WHERE id = :templateId',
+    { replacements: { url, templateId } });
+}
+
+const nameTaken = (err) => err?.original?.code === '23505' || err?.parent?.code === '23505';
+
+/**
+ * The metadata template becomes a real row ("Default") the first time a
+ * show's templates change, so it is kept. Returns its id, or null.
+ */
+async function adoptLegacy(sequelize, show, userId, transaction) {
+  const [[{ n }]] = await sequelize.query(
+    'SELECT COUNT(*)::int AS n FROM show_thumbnail_templates WHERE show_id = :showId AND deleted_at IS NULL',
+    { replacements: { showId: show.id }, transaction });
+  const legacy = n ? null : legacyTemplate(show);
+  if (!legacy) return null;
+  const [[row]] = await sequelize.query(
+    `INSERT INTO show_thumbnail_templates (show_id, name, spec, is_default, created_by)
+     VALUES (:showId, 'Default', CAST(:spec AS jsonb), true, :userId) RETURNING id`,
+    { replacements: { showId: show.id, spec: JSON.stringify(legacy.spec), userId }, transaction });
+  return row.id;
+}
+
+/** Saves a new named template. body: { name, spec, makeDefault? }. The show's first is its default. */
+async function createTemplate(sequelize, showId, body = {}, userId = null) {
+  await requireTemplates(sequelize);
+  const name = templateName(body.name);
+  const spec = layers.readLayers(body.spec, allowedImageUrl);
+  let adopted = null;
+  let created;
+  try {
+    created = await sequelize.transaction(async (transaction) => {
+      const show = await findShow(sequelize, showId, transaction);
+      adopted = await adoptLegacy(sequelize, show, userId, transaction);
+      const [[{ n }]] = await sequelize.query(
+        'SELECT COUNT(*)::int AS n FROM show_thumbnail_templates WHERE show_id = :showId AND deleted_at IS NULL',
+        { replacements: { showId: show.id }, transaction });
+      const isDefault = Boolean(body.makeDefault) || n === 0;
+      if (isDefault) {
+        await sequelize.query(
+          'UPDATE show_thumbnail_templates SET is_default = false WHERE show_id = :showId AND is_default AND deleted_at IS NULL',
+          { replacements: { showId: show.id }, transaction });
+      }
+      const [[row]] = await sequelize.query(
+        `INSERT INTO show_thumbnail_templates (show_id, name, spec, is_default, created_by)
+         VALUES (:showId, :name, CAST(:spec AS jsonb), :isDefault, :userId)
+         RETURNING id, name, spec, preview_url, is_default, updated_at`,
+        { replacements: { showId: show.id, name, spec: JSON.stringify(spec), isDefault, userId }, transaction });
+      return row;
+    });
+  } catch (err) {
+    if (nameTaken(err)) throw new ThumbnailError(409, 'That name is taken');
+    throw err;
+  }
+  if (adopted) {
+    const [[old]] = await sequelize.query('SELECT spec FROM show_thumbnail_templates WHERE id = :id', { replacements: { id: adopted } });
+    await setPreview(sequelize, adopted, await drawTemplatePreview(showId, adopted, layers.readLayers(old.spec, allowedImageUrl)));
+  }
+  created.preview_url = await drawTemplatePreview(showId, created.id, spec);
+  await setPreview(sequelize, created.id, created.preview_url);
+  return templateOut(created);
+}
+
+/**
+ * Changes a template: body.name renames it (409 when the show has that name
+ * already), body.spec replaces its layers (and its picture), body.isDefault
+ * true makes it the one episodes start from. "legacy" is the metadata one,
+ * which becomes a row first.
+ */
+async function updateTemplate(sequelize, showId, rawTemplateId, body = {}, userId = null) {
+  await requireTemplates(sequelize);
+  const templateId = templateIdOf(rawTemplateId);
+  const name = body.name !== undefined ? templateName(body.name) : undefined;
+  const spec = body.spec !== undefined ? layers.readLayers(body.spec, allowedImageUrl) : undefined;
+  let row;
+  try {
+    row = await sequelize.transaction(async (transaction) => {
+      const show = await findShow(sequelize, showId, transaction);
+      const id = templateId === LEGACY_ID ? await adoptLegacy(sequelize, show, userId, transaction) : templateId;
+      const [[found]] = id ? await sequelize.query(
+        'SELECT id FROM show_thumbnail_templates WHERE id = :id AND show_id = :showId AND deleted_at IS NULL',
+        { replacements: { id, showId: show.id }, transaction }) : [[null]];
+      if (!found) throw new ThumbnailError(404, 'Template not found');
+      if (body.isDefault === true) {
+        await sequelize.query(
+          'UPDATE show_thumbnail_templates SET is_default = false WHERE show_id = :showId AND is_default AND id <> :id AND deleted_at IS NULL',
+          { replacements: { showId: show.id, id }, transaction });
+      }
+      const [[updated]] = await sequelize.query(
+        `UPDATE show_thumbnail_templates
+            SET name = COALESCE(:name, name),
+                spec = COALESCE(CAST(:spec AS jsonb), spec),
+                is_default = is_default OR :makeDefault,
+                updated_at = NOW()
+          WHERE id = :id
+          RETURNING id, name, spec, preview_url, is_default, updated_at`,
+        { replacements: { id, name: name ?? null, spec: spec ? JSON.stringify(spec) : null, makeDefault: body.isDefault === true }, transaction });
+      return updated;
+    });
+  } catch (err) {
+    if (nameTaken(err)) throw new ThumbnailError(409, 'That name is taken');
+    throw err;
+  }
+  if (spec || (templateId === LEGACY_ID && !row.preview_url)) {
+    row.preview_url = await drawTemplatePreview(showId, row.id, layers.readLayers(row.spec, allowedImageUrl)) || row.preview_url;
+    await setPreview(sequelize, row.id, row.preview_url);
+  }
+  return templateOut(row);
+}
+
+/** Deletes a template (kept with deleted_at). The default's place passes to the most recently changed one left. */
+async function deleteTemplate(sequelize, showId, rawTemplateId) {
+  await requireTemplates(sequelize);
+  const templateId = templateIdOf(rawTemplateId);
+  return sequelize.transaction(async (transaction) => {
+    const show = await findShow(sequelize, showId, transaction);
+    if (templateId === LEGACY_ID) {
+      if (!legacyTemplate(show)) throw new ThumbnailError(404, 'Template not found');
+      await sequelize.query(
+        `UPDATE shows SET metadata = jsonb_set(COALESCE(metadata::jsonb, '{}'::jsonb), '{youtube_thumbnail}',
+            (COALESCE(metadata::jsonb -> 'youtube_thumbnail', '{}'::jsonb)) - 'template', true), updated_at = NOW()
+          WHERE id = :showId`,
+        { replacements: { showId: show.id }, transaction });
+      return { id: LEGACY_ID };
+    }
+    const [[found]] = await sequelize.query(
+      'SELECT id, is_default FROM show_thumbnail_templates WHERE id = :id AND show_id = :showId AND deleted_at IS NULL',
+      { replacements: { id: templateId, showId: show.id }, transaction });
+    if (!found) throw new ThumbnailError(404, 'Template not found');
+    await sequelize.query(
+      'UPDATE show_thumbnail_templates SET deleted_at = NOW(), is_default = false WHERE id = :id',
+      { replacements: { id: found.id }, transaction });
+    if (found.is_default) {
+      await sequelize.query(
+        `UPDATE show_thumbnail_templates SET is_default = true
+          WHERE id = (SELECT id FROM show_thumbnail_templates
+                       WHERE show_id = :showId AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 1)`,
+        { replacements: { showId: show.id }, transaction });
+    }
+    return { id: found.id };
+  });
+}
+
 let s3 = null;
 const getS3 = () => {
   if (!s3) {
@@ -605,4 +863,5 @@ module.exports = {
   readStyle, allowedImageUrl, fetchImage, previewImage, PREVIEW_WIDTHS, readyPoses, pictureFolders, libraryImages, outfitImages, layoutSuggestions,
   sources, saveStyle, saveAsPrimary, listSaved, makePrimary, removeSaved,
   readTemplate, renderSpec, getDraft, saveDraft, uploadPicture, listUploads, labelOfUpload,
+  LEGACY_ID, templateName, listTemplates, listAllTemplates, createTemplate, updateTemplate, deleteTemplate,
 };

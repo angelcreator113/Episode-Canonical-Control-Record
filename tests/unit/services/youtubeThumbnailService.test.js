@@ -66,6 +66,7 @@ describe('database work', () => {
       [[{ reg: 'episode_wardrobe' }]],
       [[{ name: 'Sweater dress', category: 'dress', url: 'https://b.s3.amazonaws.com/d.png' }]],
       [[{ theme: 'gala', canon_consequences: { documents: { shopping_list: { items: [{ slot: 'dress' }, { slot: 'shoes' }, { slot: 'item_3' }, { slot: 'accessories' }] } } } }]],
+      [[{ reg: null }]], // no named templates table yet, and no template in the show's metadata
       [[{ reg: null }]], // no drafts table yet: no draft
     );
     const out = await yt.sources(s, 'ep-1');
@@ -94,6 +95,8 @@ describe('database work', () => {
       logoUrl: null,
     });
     expect(out.draft).toBeNull();
+    expect(out.templates).toEqual([]);
+    expect(out.template).toBeNull();
   });
 
   test('uploads: the name rides in the key and comes back as the label; listed newest first; a listing that fails is empty', async () => {
