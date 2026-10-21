@@ -30,7 +30,7 @@ const getS3Client = () => {
 };
 
 const BUCKET_NAME =
-  process.env.AWS_S3_BUCKET || process.env.S3_ASSET_BUCKET || 'primepisodes-assets';
+  require('../services/assetBucket').ASSET_BUCKET;
 
 /**
  * @route   GET /api/scene-library

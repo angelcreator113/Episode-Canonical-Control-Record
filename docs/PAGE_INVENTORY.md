@@ -110,14 +110,17 @@ not via any page's UI.
 | Path | Component | Live/Redirect | Reachable via |
 |---|---|---|---|
 | `/wardrobe/calendar` | `pages/OutfitCalendar.jsx` (App.jsx:390) | live | in-app link (`pages/WorldAdmin.jsx:5526`, `window.open`) |
-| `/episodes/:episodeId/composer` | `pages/TemplateStudio.jsx` (App.jsx:393) | live | URL only — see note below |
+| `/episodes/:episodeId/composer` | `EpisodeComposerRedirect` → `/template-studio/youtube?episode=…` | redirect | URL only. Since 2026-10-20 (PR #3442) it opens the one thumbnail editor on the episode; before, the Thumbnail Gallery (audit LINK-02) |
 | `/template-studio` | `pages/TemplateStudio.jsx` (App.jsx:394) | live | URL only (bare path has no caller; only its designer sub-route is linked) |
+| `/template-studio/youtube` | `pages/YouTubeThumbnailStudio.jsx` | live | in-app links: the Templates rail (`TemplateStudio`, `ts-youtube-link`); "Edit/Make Thumbnail" on `ShowOverview` and `ShowEpisodesBoard`; Production's Thumbnail step (`productionSteps`, `episodePipeline`); the Distribution tab's thumbnail (`EpisodeDistributionTab`). All build the link with `thumbnailStudioHref`. The only place an episode's thumbnail is edited (2026-10-20, PR #3442); it also lists the episode's saved thumbnails and, since PR #3445, picks Lala and JustAWoman from the episode's poses (Files › Character poses, `EpisodePosesPanel`) |
 | `/template-studio/designer` | `pages/TemplateDesigner.jsx` (App.jsx:395) | live | in-app link (`pages/TemplateStudio.jsx:64`) |
 | `/template-studio/designer/:templateId` | `pages/TemplateDesigner.jsx` (App.jsx:396) | live | in-app link (`pages/TemplateStudio.jsx:72`) |
-| `/library` | `pages/CompositionLibrary.jsx` (App.jsx:399) | live | Sidebar (STUDIO zone, `Sidebar.jsx:57`) |
+| `/library` | — | gone | MEASURED at `d0daa7c` (2026-10-20): `App.jsx` declares no `/library` route, `Sidebar.jsx` has no such row, and `pages/CompositionLibrary.jsx` does not exist; the authenticated catch-all handles the path. When it was removed is not re-derived here |
 | `/compositions/:id` | `Navigate` to `/template-studio/youtube` (`thumbnailStudioHref`) | redirect | URL only. `pages/CompositionDetail.jsx` retired 2026-10-20: an episode's thumbnail is edited only in `YouTubeThumbnailStudio` |
 | `/admin/templates` | `pages/TemplateManagement.jsx` (App.jsx:403) | live | URL only |
 
+> **Resolved (MEASURED at `d0daa7c`, 2026-10-20):** `TemplateStudio` no longer navigates to `/composer`; the "Use Template" button was removed (its own comment: no composer route takes a template without an episode). The original flag, kept for history:
+>
 > **Flag — likely broken link:** `pages/TemplateStudio.jsx:357` calls
 > `navigate(\`/composer?template=${template.id}\`)`. No route named `/composer`
 > exists anywhere in `App.jsx` — only `/episodes/:episodeId/composer` and
@@ -597,7 +600,9 @@ on by this document.
 | `/shows/:showId/feed-timeline` | `pages/FeedTimelinePage.jsx` | Displays a social feed timeline of posts (with emotional impact, narrative function, engagement) tied to an episode. |
 | `/episodes/:episodeId/beats` | `pages/BeatGeneration.jsx` | Page for viewing an episode's scenes and generating/reviewing AI script beats per scene. |
 | `/episodes/:episodeId/icon-cues` | `pages/IconCueTimeline.jsx` | Timeline editor/viewer for AI-generated icon cues, cursor paths, and music cues for an episode. |
-| `/episodes/:episodeId/composer`, `/template-studio` | `pages/TemplateStudio.jsx` | Template Management Dashboard: list, filter, clone, publish, lock, and archive thumbnail templates. |
+| `/template-studio` | `pages/TemplateStudio.jsx` | Template Management Dashboard: list, filter, clone, publish, lock, and archive thumbnail templates; its rail opens YouTube thumbnails. |
+| `/template-studio/youtube` | `pages/YouTubeThumbnailStudio.jsx` | The one place an episode's YouTube thumbnail is made and edited (2026-10-20): the show's style, the episode's words, background, Lala and JustAWoman from the episode's poses; saved thumbnails listed with make-current and delete. |
+| `/episodes/:episodeId/composer` | redirect (`EpisodeComposerRedirect`) | Opens `YouTubeThumbnailStudio` on the episode (2026-10-20). |
 | `/compositions/:id` | redirect | Retired 2026-10-20; opens Templates › YouTube thumbnails (`YouTubeThumbnailStudio`). |
 | `/admin/templates` | `pages/TemplateManagement.jsx` | Admin page to create, edit, and manage episode templates. |
 | `/thumbnails/:episodeId` | redirect (`EpisodeComposerRedirect`) | Retired 2026-10-20; opens `YouTubeThumbnailStudio` on the episode, which lists its saved thumbnails (make current, delete). |

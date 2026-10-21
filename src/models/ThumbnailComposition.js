@@ -147,13 +147,12 @@ module.exports = (sequelize) => {
         defaultValue: {},
         comment: 'Stores visibility toggles, text field values, and per-composition overrides',
       },
-      // Task #1909: the Layout Editor's draft columns, written by
-      // save-draft / apply-draft in src/routes/compositions.js. Canon lacks
-      // all five until 20260925000000-add-draft-columns-to-thumbnail-
-      // compositions.js runs; run it BEFORE deploying this declaration, or
-      // every ThumbnailComposition query names columns the table lacks.
-      // Until then the two routes answer 501
-      // (src/services/compositionDraftColumns.js).
+      // Task #1909: the Layout Editor's draft columns. Canon lacks all five
+      // until 20260925000000-add-draft-columns-to-thumbnail-compositions.js
+      // runs; run it BEFORE deploying this declaration, or every
+      // ThumbnailComposition query names columns the table lacks. Nothing
+      // writes them since 2026-10-20: the Layout Editor and its save-draft /
+      // apply-draft routes were retired with the one thumbnail editor.
       draft_overrides: {
         type: DataTypes.JSONB,
         allowNull: true,
