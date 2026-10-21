@@ -3121,6 +3121,10 @@ router.put('/:id/canvas', validateUUIDParam('id'), requireAuth, asyncHandler(sce
 // POST /api/v1/scene-sets/:id/generate-object - AI object generation (DALL-E 3) for scene sets
 router.post('/:id/generate-object', validateUUIDParam('id'), requireAuth, aiRateLimiter, asyncHandler(sceneStudioController.generateSceneSetObject));
 
+// POST /api/v1/scene-sets/:id/transform-object - AI image transform (img2img) for scene sets
+// (Scene Studio's Transform on a set; show side check, 2026-10-20, F2)
+router.post('/:id/transform-object', validateUUIDParam('id'), requireAuth, aiRateLimiter, asyncHandler(sceneStudioController.transformSceneSetObject));
+
 // POST /api/v1/scene-sets/:id/regenerate-background - AI background variation for scene sets
 router.post('/:id/regenerate-background', validateUUIDParam('id'), requireAuth, aiRateLimiter, asyncHandler(sceneStudioController.regenerateSceneSetBackground));
 

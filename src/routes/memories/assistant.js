@@ -1388,7 +1388,8 @@ Respond ONLY in valid JSON:
         return { replyAppend: `\nProposed relationship: "${charA.display_name}" ↔ "${charB.display_name}" (${relationship_type}). Unconfirmed — head to the Relationship Engine to review and confirm.` };
       }
 
-      // ── Feed Awareness — Read ─────────────────────────────────────────
+      // ── The Pulse — Read (LalaVerse's social web; the lore rename, 2026-10-19) ──
+      // LalaVerse profiles only: never JustAWoman's record or real-world profiles.
 
       case 'read_feed': {
         const profiles = await sequelize.query(
@@ -1396,13 +1397,15 @@ Respond ONLY in valid JSON:
                   follower_tier, vibe_sentence, lala_relevance_score,
                   SUBSTRING(watch_reason, 1, 120) as watch_reason_short
            FROM social_profiles
+          WHERE deleted_at IS NULL AND feed_layer = 'lalaverse'
+            AND COALESCE(is_justawoman_record, false) = false
            ORDER BY lala_relevance_score DESC NULLS LAST, updated_at DESC
            LIMIT 25`,
           { type: sequelize.QueryTypes.SELECT }
         );
 
         if (profiles.length === 0) {
-          return { replyAppend: '\nThe feed is quiet — no social profiles exist yet.' };
+          return { replyAppend: '\nThe Pulse is quiet — no one is on it yet.' };
         }
 
         const summary = profiles.map(p => {
@@ -1414,7 +1417,7 @@ Respond ONLY in valid JSON:
           return line;
         }).join('\n');
 
-        return { replyAppend: `\nThe Feed (${profiles.length} profiles):\n${summary}` };
+        return { replyAppend: `\nThe Pulse (${profiles.length} people):\n${summary}` };
       }
 
       // ── Character Follow Influence — what characters watch and why ────

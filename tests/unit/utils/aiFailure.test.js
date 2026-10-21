@@ -40,3 +40,45 @@ describe('aiFailure', () => {
     expect(isAiUnreachable(null)).toBe(false);
   });
 });
+
+// plainAiErrors (the book side check, P1, 2026-10-20): every writing-hub route
+// that answers its raw AI failure as a 500 reaches the author plainly.
+describe('plainAiErrors', () => {
+  const { plainAiErrors } = require('../../../src/utils/aiFailure');
+  const run = (status, body) => {
+    const sent = {};
+    const r = { statusCode: status };
+    r.status = jest.fn((s) => { r.statusCode = s; return r; });
+    r.json = jest.fn((b) => { sent.status = r.statusCode; sent.body = b; return r; });
+    const next = jest.fn();
+    plainAiErrors({}, r, next);
+    expect(next).toHaveBeenCalled();
+    r.status(status).json(body);
+    return sent;
+  };
+
+  test('a raw connection error in a 500 becomes a plain 502', () => {
+    expect(run(500, { error: 'Connection error.' })).toEqual({ status: 502, body: { success: false, code: 'AI_UNREACHABLE', error: UNREACHABLE } });
+  });
+
+  test('the missing-key text in details becomes a plain 502', () => {
+    expect(run(500, { error: 'Failed', details: 'Could not resolve authentication method. Expected either apiKey or authToken to be set.' }).status).toBe(502);
+  });
+
+  test.each([
+    ['error', { error: 'AI daily budget exceeded ($50.00 / $50). Call blocked.' }],
+    ['details', { error: 'Failed', details: 'AI daily budget exceeded ($50.00 / $50). Call blocked.' }],
+    ['message', { message: 'Image generation is paused until tomorrow.' }],
+  ])('a budget refusal in %s becomes a 429 with its own reason', (_where, body) => {
+    const sent = run(500, body);
+    expect(sent.status).toBe(429);
+    expect(sent.body.code).toBe('AI_BUDGET_EXCEEDED');
+    expect(sent.body.error).toMatch(/budget exceeded|paused until tomorrow/);
+  });
+
+  test('a 500 that is not the AI, and any non-error answer, pass untouched', () => {
+    expect(run(500, { error: 'column "x" does not exist' })).toEqual({ status: 500, body: { error: 'column "x" does not exist' } });
+    expect(run(200, { error: 'Connection error.' })).toEqual({ status: 200, body: { error: 'Connection error.' } });
+    expect(run(404, { error: 'Not found' })).toEqual({ status: 404, body: { error: 'Not found' } });
+  });
+});

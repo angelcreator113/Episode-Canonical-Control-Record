@@ -114,7 +114,7 @@ describe('Episode header: previous/next and status (Episode Style mock, 2026-10-
     Object.values(api).forEach((fn) => fn?.mockClear?.());
     vi.mocked(episodeService.updateEpisode).mockReset();
     vi.mocked(api.get).mockImplementation(async (url) => {
-      if (url === '/api/v1/episodes?show_id=show-1&limit=500&sort=episode_number:ASC') return { data: { data: EPISODES } };
+      if (url === '/api/v1/episodes?show_id=show-1&limit=100&page=1&sort=episode_number%3AASC') return { data: { data: EPISODES } };
       return { data: {} };
     });
   });

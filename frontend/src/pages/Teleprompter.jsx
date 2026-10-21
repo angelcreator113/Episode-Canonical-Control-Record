@@ -13,6 +13,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { ScrollText, ClipboardPaste, BookOpen, Play } from 'lucide-react';
 import api from '../services/api';
+import { fetchAllEpisodes } from '../lib/fetchAllPages';
 import TeleprompterReader from '../components/Teleprompter/TeleprompterReader';
 import { teleprompterScript, pastedParagraphs } from '../lib/teleprompterLines';
 import './Teleprompter.css';
@@ -68,8 +69,9 @@ export default function Teleprompter() {
   useEffect(() => {
     if (!showId) { setEpisodes([]); return undefined; }
     let live = true;
-    api.get(`/api/v1/episodes?show_id=${encodeURIComponent(showId)}&limit=500&sort=episode_number:ASC`)
-      .then((r) => { if (live) setEpisodes(Array.isArray(r.data?.data) ? r.data.data : []); })
+    // Paged, 100 at a time: the server refuses a limit over 100.
+    fetchAllEpisodes(api, showId, { sort: 'episode_number:ASC' })
+      .then((r) => { if (live) setEpisodes(r.items); })
       .catch((err) => { console.error('[Teleprompter] episodes not loaded:', err); if (live) setError('Could not load the episodes.'); });
     return () => { live = false; };
   }, [showId]);

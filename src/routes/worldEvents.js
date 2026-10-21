@@ -1636,8 +1636,11 @@ router.post('/world/:showId/events/bulk-seed', requireAuth, async (req, res) => 
   }
 });
 
-// AI event diversification suggestions
-router.post('/world/:showId/events/ai-fix', express.json({ limit: '2mb' }), requireAuth, async (req, res) => {
+// AI event diversification suggestions. AI route: rate-limited, MODELS with
+// two tries each, budget/unreachable answered by utils/aiFailure (show side
+// check, 2026-10-20, P4).
+const AI_FIX_MODELS = ['claude-sonnet-4-6'];
+router.post('/world/:showId/events/ai-fix', express.json({ limit: '2mb' }), requireAuth, aiRateLimiter, async (req, res) => {
   try {
     if (!req.body || typeof req.body !== 'object') {
       return res.status(400).json({
@@ -1684,8 +1687,8 @@ router.post('/world/:showId/events/ai-fix', express.json({ limit: '2mb' }), requ
 
     const warningList = (warnings || []).slice(0, 10).map(w => `- ${w.msg || w}`).join('\n');
 
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+    const aiFixRequest = (model) => client.messages.create({
+      model,
       max_tokens: 2000,
       system: `You are a TV show producer for "Styling Adventures with Lala", a narrative-driven luxury fashion life simulator set in the LalaVerse.
 
@@ -1737,17 +1740,32 @@ Guidelines:
       }],
     });
 
+    let response;
+    for (const model of AI_FIX_MODELS) {
+      for (let attempt = 1; attempt <= 2 && !response; attempt += 1) {
+        try {
+          response = await aiFixRequest(model);
+        } catch (callErr) {
+          console.warn(`[WorldEvents] ai-fix with ${model}, try ${attempt}, failed:`, callErr.message);
+          if (callErr?.code === 'AI_BUDGET_EXCEEDED' || (attempt === 2 && model === AI_FIX_MODELS[AI_FIX_MODELS.length - 1])) throw callErr;
+        }
+      }
+      if (response) break;
+    }
+
     const text = response.content?.[0]?.text || '';
     let suggestions;
     try {
       const match = text.match(/\[[\s\S]*\]/);
       suggestions = match ? JSON.parse(match[0]) : [];
-    } catch {
+    } catch (parseErr) {
+      console.error('[WorldEvents] ai-fix came back unreadable:', parseErr.message);
       suggestions = [{ warning: 'Parse error', suggestion: text.slice(0, 500), action: 'manual', event_name: '', new_value: '' }];
     }
 
     return res.json({ success: true, data: suggestions });
   } catch (err) {
+    if (require('../utils/aiFailure').aiFailure(res, err)) return undefined;
     console.error('[WorldEvents] AI fix error:', err);
     const message = err?.error?.message || err?.message || 'Unknown AI service error';
     let status = 500;
