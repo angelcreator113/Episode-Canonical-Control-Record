@@ -30,6 +30,9 @@ export const FONTS = {
 
 /** The outline round thumbnail words (dark plum; the server's default stroke). */
 export const OUTLINE = '#2A0A22';
+// The box behind words starts as the ink colour, half see-through (Evoni, 2026-10-21: text tools).
+export const BOX_COLOR = '#2C2C2C';
+export const BOX_OPACITY = 0.6;
 
 export const fontCss = (key, size) => {
   const f = FONTS[key] || FONTS.serif;
@@ -81,6 +84,15 @@ export function fitText(text, { w, h, size }, measure) {
     if (lines.length * s * LINE_HEIGHT <= h && widest <= w) return { size: s, lines };
   }
   return { size: MIN_SIZE, lines: wrapWords(words, MIN_SIZE, w, measure) };
+}
+
+/**
+ * measure with letter spacing: each letter's width plus the spacing after
+ * it, as Konva draws spaced text (the server's spaced).
+ */
+export function spaced(measure, spacing) {
+  if (!spacing) return measure;
+  return (s, size) => [...String(s)].reduce((w, ch) => w + measure(ch, size) + spacing, 0);
 }
 
 let measureCtx = null;

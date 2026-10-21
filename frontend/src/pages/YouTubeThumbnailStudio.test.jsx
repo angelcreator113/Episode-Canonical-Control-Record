@@ -408,6 +408,41 @@ describe('YouTubeThumbnailStudio', () => {
     expect(within(await screen.findByTestId('yts-saved-7')).getByText('Episode thumbnail')).toBeTruthy();
   });
 
+  test('text tools: line up, largest size, letter spacing, a box behind the words', async () => {
+    renderPage();
+    await opened();
+    fireEvent.click(screen.getByTestId('canvas-title'));
+    const tools = within(screen.getByTestId('yts-text-tools'));
+    fireEvent.click(tools.getByRole('button', { name: 'Line up centre' }));
+    expect(tools.getByRole('button', { name: 'Line up centre' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.change(tools.getByRole('slider', { name: 'Largest size' }), { target: { value: '150' } });
+    fireEvent.change(tools.getByRole('slider', { name: 'Letter spacing' }), { target: { value: '6' } });
+    fireEvent.click(tools.getByRole('checkbox', { name: 'Box behind the words' }));
+    fireEvent.change(tools.getByRole('slider', { name: 'Box see-through' }), { target: { value: '0.25' } });
+    fireEvent.change(tools.getByRole('slider', { name: 'Box rounded corners' }), { target: { value: '24' } });
+    await waitFor(() => expect(layerOf(lastDraft(), 'title').bgRadius).toBe(24), { timeout: 3000 });
+    expect(layerOf(lastDraft(), 'title')).toMatchObject({ align: 'center', size: 150, spacing: 6, bg: '#2C2C2C', bgOpacity: 0.75 });
+    fireEvent.click(tools.getByRole('checkbox', { name: 'Box behind the words' }));
+    await waitFor(() => expect(layerOf(lastDraft(), 'title').bg).toBeNull(), { timeout: 3000 });
+  });
+
+  test('any colour: the accent and the title from the free picker; picked ones are remembered as swatches', async () => {
+    window.localStorage.removeItem('yts-recent-colours');
+    renderPage();
+    await opened();
+    const accent = screen.getByLabelText('Any accent colour');
+    fireEvent.change(accent, { target: { value: '#123abc' } });
+    fireEvent.blur(accent);
+    expect(screen.getByRole('button', { name: 'Accent #123ABC' }).getAttribute('aria-pressed')).toBe('true');
+    const title = screen.getByLabelText('Any title colour');
+    fireEvent.change(title, { target: { value: '#ff8800' } });
+    fireEvent.blur(title);
+    await waitFor(() => expect(layerOf(lastDraft(), 'title').color).toBe('#FF8800'), { timeout: 3000 });
+    expect(layerOf(lastDraft(), 'kicker').color).toBe('#123ABC');
+    expect(JSON.parse(window.localStorage.getItem('yts-recent-colours'))).toEqual(['#FF8800', '#123ABC']);
+    expect(screen.getByRole('option', { name: 'Recent #123ABC' })).toBeTruthy();
+  });
+
   test('Save as a new template: named, with the colours and the show\'s own Lala; the list comes back', async () => {
     youtubeThumbnailsApi.saveStyle.mockResolvedValue({});
     youtubeThumbnailsApi.createTemplate.mockResolvedValue({ id: 't-1' });

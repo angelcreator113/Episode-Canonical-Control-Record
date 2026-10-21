@@ -141,6 +141,68 @@ describe('renderLayers', () => {
     expect(await pixel(filled, 200, 125)).toEqual([0, 255, 0]); // filled: the product reaches the top
   });
 
+  // Evoni, 2026-10-21: text tools. Where the white words reach, on a black background, in rows y0..y1.
+  const ink = async (png, y0, y1) => {
+    const { data, info } = await sharp(png).raw().toBuffer({ resolveWithObject: true });
+    let left = info.width;
+    let right = -1;
+    for (let y = y0; y <= y1; y += 1) {
+      for (let x = 0; x < info.width; x += 1) {
+        const i = (y * info.width + x) * info.channels;
+        if (data[i] > 200 && data[i + 1] > 200 && data[i + 2] > 200) { left = Math.min(left, x); right = Math.max(right, x); }
+      }
+    }
+    return { left, right };
+  };
+  const words = (extra) => ({
+    version: 2,
+    layers: [
+      { id: 'bg', kind: 'image', role: 'background', src: 'https://b.s3.amazonaws.com/black.png', fit: 'cover', x: 0, y: 0, w: 1280, h: 720 },
+      { id: 't', kind: 'text', text: 'Glam', font: 'sans', size: 80, stroke: null, x: 140, y: 300, w: 1000, h: 120, ...extra },
+    ],
+  });
+  const draw = async (extra) => L.renderLayers(L.readLayers(words(extra), s3), { bg: await solid(1280, 720, '#000000') });
+
+  test('text tools are kept in range: spacing -2..20, the box see-through 0..1 and rounded 0..60', () => {
+    const [t] = L.readLayers({ version: 2, layers: [{ kind: 'text', text: 'x', spacing: 99, bg: '#123456', bgOpacity: 3, bgRadius: -5, align: 'right' }] }, s3).layers;
+    expect(t).toMatchObject({ spacing: 20, bg: '#123456', bgOpacity: 1, bgRadius: 0, align: 'right' });
+    const [d] = L.readLayers({ version: 2, layers: [{ kind: 'text', text: 'x', spacing: -9, bgRadius: 999 }] }, s3).layers;
+    expect(d).toMatchObject({ spacing: -2, bg: null, bgOpacity: 1, bgRadius: 60 });
+  });
+
+  test('spaced: each letter, then the spacing after it; no spacing is the plain measure', () => {
+    const measure = (s, size) => String(s).length * size; // 1 point per letter per size
+    expect(L.spaced(measure, 0)).toBe(measure);
+    expect(L.spaced(measure, 5)('abc', 10)).toBe(3 * 10 + 3 * 5);
+  });
+
+  test('left, centre and right line the words up inside their box', async () => {
+    const left = await ink(await draw({ align: 'left' }), 330, 390);
+    const centre = await ink(await draw({ align: 'center' }), 330, 390);
+    const right = await ink(await draw({ align: 'right' }), 330, 390);
+    expect(left.left).toBeLessThan(150);
+    expect(right.right).toBeGreaterThan(1130);
+    expect(Math.abs((centre.left + centre.right) / 2 - 640)).toBeLessThan(6);
+  });
+
+  test('letter spacing spreads the words; centred, they stay centred', async () => {
+    const plain = await ink(await draw({ align: 'center' }), 330, 390);
+    const wide = await ink(await draw({ align: 'center', spacing: 20 }), 330, 390);
+    expect(wide.right - wide.left).toBeGreaterThan(plain.right - plain.left + 50);
+    expect(Math.abs((wide.left + wide.right) / 2 - 640)).toBeLessThan(6);
+  });
+
+  test('a box behind the words: its colour, see-through over the background, its corners rounded', async () => {
+    const png = await draw({ text: '', bg: '#FF0000', bgOpacity: 0.5, bgRadius: 40 });
+    const [r, g, b] = await pixel(png, 640, 360);
+    expect(r).toBeGreaterThan(120);
+    expect(r).toBeLessThan(135); // half red over black
+    expect([g, b]).toEqual([0, 0]);
+    expect(await pixel(png, 141, 301)).toEqual([0, 0, 0]); // the rounded corner leaves the background
+    const square = await draw({ text: '', bg: '#FF0000', bgOpacity: 1, bgRadius: 0 });
+    expect(await pixel(square, 141, 301)).toEqual([255, 0, 0]);
+  });
+
   test('fontFile: only the thumbnail fonts', () => {
     expect(L.fontFile('script')).toMatch(/GreatVibes-Regular\.ttf$/);
     expect(L.fontFile('../../etc/passwd')).toBeNull();

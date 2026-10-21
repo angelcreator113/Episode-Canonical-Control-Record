@@ -150,3 +150,12 @@
 .yts-template-name { display: flex; align-items: center; gap: 4px; margin: 0; font-weight: 700; overflow-wrap: anywhere; cursor: text; }
 .yts-template-name svg { color: var(--accent-dark); flex: none; }
 .yts-template-ask { font-size: 13px; font-weight: 700; }
+
+/* Text and colour tools (Evoni, 2026-10-21) */
+.yts-text-tools { display: flex; flex-direction: column; gap: 10px; }
+.yts-align { display: flex; gap: 6px; }
+.yts-swatch-any { display: inline-flex; align-items: center; gap: 4px; height: 34px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--accent-dark); cursor: pointer; }
+.yts-swatch-any .yts-color { width: 34px; min-height: 26px; padding: 0; border: 0; }
+.yts-title-colour { display: flex; gap: 6px; align-items: center; }
+.yts-title-colour .yts-input { flex: 1 1 auto; min-width: 0; }
+.yts-title-colour .yts-color { flex: 0 0 48px; width: 48px; }
