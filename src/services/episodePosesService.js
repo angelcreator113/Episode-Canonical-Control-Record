@@ -16,6 +16,10 @@
  */
 
 const CHARACTERS = Object.freeze(['lala', 'justawoman']);
+// Characters whose photos keep their background (Evoni, 2026-10-21):
+// JustAWoman's are colour-fixed and upscaled, never cut out.
+const KEEP_BACKGROUND = Object.freeze(['justawoman']);
+const keepsBackground = (characterKey) => KEEP_BACKGROUND.includes(characterKey);
 const POSES = Object.freeze(['front', 'back', 'side', 'glamour']);
 const STATUSES = Object.freeze(['queued', 'processing', 'ready', 'failed']);
 
@@ -216,6 +220,6 @@ async function removePose(sequelize, episodeId, poseId) {
 }
 
 module.exports = {
-  CHARACTERS, POSES, STATUSES, STALE_MINUTES, STALE_MESSAGE, PoseError,
+  CHARACTERS, KEEP_BACKGROUND, keepsBackground, POSES, STATUSES, STALE_MINUTES, STALE_MESSAGE, PoseError,
   readFields, findEpisode, listPoses, getPose, createPose, updatePose, setState, removePose,
 };

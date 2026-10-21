@@ -148,6 +148,26 @@ async function madeUpCutout() {
     expect(done).toMatchObject({ status: 'ready', steps: { upscale: 'skipped: upscaling is not set up on the server' } });
   });
 
+  test('JustAWoman keeps her background: the enhanced photo is final, and remove.bg is never called', async () => {
+    const ep = await episode();
+    postSpy.mockClear();
+    await upload(ep, 'justawoman', 'front', 1700, 1700);
+    await upload(ep, 'justawoman', 'side', 1700, 1700);
+    await settled(ep);
+    // Reprocess goes the same way.
+    const [first] = (await auth(request(app).get(url(ep)))).body.data;
+    expect((await auth(request(app).post(url(ep, `/${first.id}/reprocess`)))).status).toBe(202);
+    const done = await settled(ep);
+    expect(done).toHaveLength(2);
+    for (const p of done) {
+      expect(p).toMatchObject({ status: 'ready', error: null, steps: { color: true, upscale: 'not needed', background: 'kept' } });
+      expect(p.final_url).toBe(p.enhanced_url);
+      expect(p.final_url).toMatch(/-enhanced\.jpg$/);
+      expect([p.final_width, p.final_height]).toEqual([1700, 1700]);
+    }
+    expect(postSpy).not.toHaveBeenCalled();
+  });
+
   test('several per pose, one default: starring moves it; moving a default to another pose drops its star; list order', async () => {
     const ep = await episode();
     const a = (await upload(ep, 'lala', 'glamour', 1700, 1700)).body.data;
