@@ -468,6 +468,51 @@
 .template-studio .ts-action.is-primary svg { color: #fff; }
 .template-studio .ts-action.is-danger { color: #b3261e; }
 .template-studio .ts-action.is-danger svg { color: #b3261e; }
+.template-studio .ts-action:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+
+/* one line of feedback, and the Yes / No row that replaces confirm() */
+.template-studio .ts-message {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1.5px solid var(--ts-gold-soft);
+  background: var(--ts-glass);
+  color: var(--ts-plum);
+  font-size: 14px;
+}
+.template-studio .ts-message.is-error { border-color: #b3261e; color: #b3261e; }
+.template-studio .ts-message-close {
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.template-studio .ts-ask {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.template-studio .ts-ask p { grid-column: 1 / -1; margin: 0; color: var(--ts-plum); font-weight: 600; }
+
+/* rename in place */
+.template-studio .ts-rename { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.template-studio .ts-rename-input {
+  flex: 1 1 180px;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1.5px solid var(--ts-gold-soft);
+  font-family: var(--ts-serif);
+  font-size: 18px;
+  color: var(--ts-plum);
+}
+.template-studio .ts-rename-note { flex-basis: 100%; margin: 0; font-size: 12px; color: var(--ts-muted); }
 
 /* versions strip */
 .template-studio .ts-versions {

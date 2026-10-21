@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   LayoutGrid, CheckCircle2, PenLine, Archive, Lock, Search, Plus, Copy, Send,
-  Trash2, ImageIcon, Layers, Maximize2, ChevronLeft, ChevronRight, Youtube,
+  Trash2, ImageIcon, Layers, Maximize2, ChevronLeft, ChevronRight, Youtube, Unlock, Type,
 } from 'lucide-react';
 import apiClient from '../services/api';
 import './TemplateStudio.css';
@@ -22,6 +22,13 @@ export const archiveTemplateApi = (id) =>
   apiClient.post(`/api/v1/template-studio/${id}/archive`);
 export const deleteTemplateApi = (id) =>
   apiClient.delete(`/api/v1/template-studio/${id}`);
+export const unlockTemplateApi = (id) =>
+  apiClient.post(`/api/v1/template-studio/${id}/unlock`);
+// Renames every version sharing the template's name (Evoni, 2026-10-21).
+export const renameTemplateApi = (id, name) =>
+  apiClient.patch(`/api/v1/template-studio/${id}/name`, { name });
+
+const errorText = (err, fallback) => err?.response?.data?.message || err?.response?.data?.error || err?.message || fallback;
 
 /**
  * TemplateStudio - Template Management Dashboard
@@ -186,87 +193,74 @@ function TemplateStudio() {
     navigate('/template-studio/designer');
   };
 
+  // One line of feedback on the page, and a Yes / No row in place of confirm().
+  const [message, setMessage] = useState(null); // { kind: 'ok' | 'error', text }
+  const [asking, setAsking] = useState(null); // { text, run }
+  const [renaming, setRenaming] = useState(null); // the name being typed, or null
+
+  const say = (kind, text) => setMessage({ kind, text });
+
+  const act = async (fn, done, fallback) => {
+    try {
+      const res = await fn();
+      say('ok', typeof done === 'function' ? done(res) : done);
+      await loadTemplates();
+    } catch (err) {
+      console.error('[TemplateStudio]', fallback, err);
+      say('error', errorText(err, fallback));
+    }
+  };
+
+  const ask = (text, run) => setAsking({ text, run });
+
   const handleEdit = (template) => {
-    if (template.status !== 'DRAFT') {
-      alert('Only DRAFT templates can be edited. Clone this template to create a new version.');
+    if (template.status !== 'DRAFT' || template.locked) {
+      say('error', template.locked ? 'Unlock this template to edit it.' : 'Only drafts can be edited. Clone this template to make a new version.');
       return;
     }
     navigate(`/template-studio/designer/${template.id}`);
   };
 
-  const handleClone = async (template) => {
-    if (!confirm(`Clone "${template.name}" to create version ${template.version + 1}?`)) {
-      return;
-    }
+  const handleClone = (template) => ask(`Clone "${template.name}" as a new version?`, () => act(
+    () => cloneTemplateApi(template.id),
+    (res) => `Cloned: version ${res?.data?.data?.version ?? template.version + 1} is a draft.`,
+    'Failed to clone template'));
 
-    try {
-      const response = await cloneTemplateApi(template.id);
-      alert(`✅ Template cloned successfully! New version: ${response.data?.data?.version}`);
-      loadTemplates();
-    } catch (err) {
-      alert(`❌ ${err.response?.data?.message || err.message || 'Failed to clone template'}`);
-    }
-  };
+  const handlePublish = (template) => ask(`Publish "${template.name}"? It becomes available for use.`, () => act(
+    () => publishTemplateApi(template.id), `"${template.name}" is published.`, 'Failed to publish template'));
 
-  const handlePublish = async (template) => {
-    if (!confirm(`Publish "${template.name}"? This will make it available for use.`)) {
-      return;
-    }
+  const handleLock = (template) => (template.locked
+    ? act(() => unlockTemplateApi(template.id), `"${template.name}" is unlocked.`, 'Failed to unlock template')
+    : ask(`Lock "${template.name}"? It cannot be edited, renamed or deleted until it is unlocked.`, () => act(
+      () => lockTemplateApi(template.id), `"${template.name}" is locked.`, 'Failed to lock template')));
 
-    try {
-      await publishTemplateApi(template.id);
-      alert('✅ Template published successfully!');
-      loadTemplates();
-    } catch (err) {
-      alert(`❌ ${err.response?.data?.message || err.message || 'Failed to publish template'}`);
-    }
-  };
+  const handleArchive = (template) => ask(`Archive "${template.name}"? It will no longer be offered for new thumbnails.`, () => act(
+    () => archiveTemplateApi(template.id), `"${template.name}" is archived.`, 'Failed to archive template'));
 
-  const handleLock = async (template) => {
-    if (!confirm(`Lock "${template.name}"? This will prevent any future edits.`)) {
-      return;
-    }
-
-    try {
-      await lockTemplateApi(template.id);
-      alert('✅ Template locked successfully!');
-      loadTemplates();
-    } catch (err) {
-      alert(`❌ ${err.response?.data?.message || err.message || 'Failed to lock template'}`);
-    }
-  };
-
-  const handleArchive = async (template) => {
-    if (!confirm(`Archive "${template.name}"? It will no longer be available for new compositions.`)) {
-      return;
-    }
-
-    try {
-      await archiveTemplateApi(template.id);
-      alert('✅ Template archived successfully!');
-      loadTemplates();
-    } catch (err) {
-      alert(`❌ ${err.response?.data?.message || err.message || 'Failed to archive template'}`);
-    }
-  };
-
-  const handleDelete = async (template) => {
-    if (template.status !== 'DRAFT') {
-      alert('Only DRAFT templates can be deleted. Use Archive instead.');
-      return;
-    }
-
-    if (!confirm(`Delete "${template.name}"? This cannot be undone.`)) {
-      return;
-    }
-
-    try {
+  const handleDelete = (template) => ask(`Delete "${template.name}" v${template.version}?`, () => act(
+    async () => {
       await deleteTemplateApi(template.id);
-      alert('✅ Template deleted successfully!');
       if (selectedId === template.id) setSelectedId(null);
-      loadTemplates();
+    }, `"${template.name}" v${template.version} is deleted.`, 'Failed to delete template'));
+
+  const startRename = (template) => {
+    if (template.locked) { say('error', 'Unlock this template to rename it.'); return; }
+    setAsking(null);
+    setRenaming(template.name);
+  };
+
+  const saveRename = async (template) => {
+    const name = (renaming || '').trim();
+    if (!name) { say('error', 'A template needs a name.'); return; }
+    if (name === template.name) { setRenaming(null); return; }
+    try {
+      await renameTemplateApi(template.id, name);
+      setRenaming(null);
+      say('ok', `Renamed to "${name}".`);
+      await loadTemplates();
     } catch (err) {
-      alert(`❌ ${err.response?.data?.message || err.message || 'Failed to delete template'}`);
+      console.error('[TemplateStudio] Failed to rename template', err);
+      say('error', errorText(err, 'Failed to rename template'));
     }
   };
 
@@ -301,6 +295,10 @@ function TemplateStudio() {
   const versions = useMemo(() => (selected
     ? templates.filter(t => t.name === selected.name).sort((a, b) => (a.version || 0) - (b.version || 0))
     : []), [templates, selected]);
+
+  // A rename or a question belongs to the template it was started on.
+  const selectedKey = selected?.id;
+  useEffect(() => { setRenaming(null); setAsking(null); }, [selectedKey]);
 
   const selIndex = selected ? sortedTemplates.indexOf(selected) : -1;
   const step = (d) => {
@@ -391,6 +389,13 @@ function TemplateStudio() {
             {filtersActive && <button type="button" className="ts-clear" onClick={clearFilters}>Clear</button>}
           </div>
 
+          {message && (
+            <div className={`ts-message is-${message.kind}`} role={message.kind === 'error' ? 'alert' : 'status'}>
+              <span>{message.text}</span>
+              <button type="button" className="ts-message-close" onClick={() => setMessage(null)} aria-label="Dismiss">×</button>
+            </div>
+          )}
+
           {/* Loading State */}
           {loading && (
             <div className="ts-state">
@@ -465,7 +470,20 @@ function TemplateStudio() {
                 </div>
 
                 <div className="ts-panel-info">
-                  <h2 className="ts-panel-name">{selected.name}</h2>
+                  {renaming !== null ? (
+                    <form className="ts-rename" onSubmit={(e) => { e.preventDefault(); saveRename(selected); }}>
+                      <input className="ts-rename-input" value={renaming} maxLength={255} autoFocus
+                        aria-label="Template name"
+                        onChange={(e) => setRenaming(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Escape') setRenaming(null); }} />
+                      <button type="submit" className="ts-clear">Save</button>
+                      <button type="button" className="ts-clear" onClick={() => setRenaming(null)}>Cancel</button>
+                      {versions.length > 1 && <p className="ts-rename-note">All {versions.length} versions take the new name.</p>}
+                    </form>
+                  ) : (
+                    <h2 className="ts-panel-name" onDoubleClick={() => startRename(selected)}
+                      title={selected.locked ? undefined : 'Double-click to rename'}>{selected.name}</h2>
+                  )}
                   {selected.description && <p className="ts-panel-desc">{selected.description}</p>}
                   <div className="ts-chips">
                     <span className={`ts-status is-${String(selected.status).toLowerCase()}`}>v{selected.version} · {statusWord(selected.status)}</span>
@@ -485,25 +503,40 @@ function TemplateStudio() {
                   )}
                 </div>
 
-                <div className="ts-actions">
-                  {selected.status === 'DRAFT' && !selected.locked && (
-                    <>
-                      <button type="button" className="ts-action is-primary" onClick={() => handleEdit(selected)}><PenLine size={18} aria-hidden /> Edit</button>
-                      <button type="button" className="ts-action" onClick={() => handlePublish(selected)}><Send size={18} aria-hidden /> Publish</button>
-                      <button type="button" className="ts-action is-danger" onClick={() => handleDelete(selected)}><Trash2 size={18} aria-hidden /> Delete</button>
-                    </>
-                  )}
-                  {selected.status === 'PUBLISHED' && (
-                    <>
-                      {/* Removed: "Use Template" button — opened a composer with this template; no composer route takes a template without an episode. */}
+                {asking ? (
+                  <div className="ts-ask" role="group" aria-label="Confirm">
+                    <p>{asking.text}</p>
+                    <button type="button" className="ts-action is-primary" onClick={() => { const { run } = asking; setAsking(null); run(); }}>Yes</button>
+                    <button type="button" className="ts-action" onClick={() => setAsking(null)}>No</button>
+                  </div>
+                ) : (
+                  <div className="ts-actions">
+                    {selected.status === 'DRAFT' && (
+                      <>
+                        <button type="button" className="ts-action is-primary" onClick={() => handleEdit(selected)} disabled={selected.locked}
+                          title={selected.locked ? 'Unlock to edit' : undefined}><PenLine size={18} aria-hidden /> Edit</button>
+                        <button type="button" className="ts-action" onClick={() => handlePublish(selected)}><Send size={18} aria-hidden /> Publish</button>
+                        <button type="button" className="ts-action is-danger" onClick={() => handleDelete(selected)} disabled={selected.locked}
+                          title={selected.locked ? 'Unlock to delete' : undefined}><Trash2 size={18} aria-hidden /> Delete</button>
+                      </>
+                    )}
+                    {selected.status === 'PUBLISHED' && (
+                      <>
+                        {/* Removed: "Use Template" button — opened a composer with this template; no composer route takes a template without an episode. */}
+                        <button type="button" className="ts-action is-primary" onClick={() => handleClone(selected)}><Copy size={18} aria-hidden /> Clone</button>
+                        <button type="button" className="ts-action" onClick={() => handleArchive(selected)}><Archive size={18} aria-hidden /> Archive</button>
+                      </>
+                    )}
+                    {selected.status === 'ARCHIVED' && (
                       <button type="button" className="ts-action is-primary" onClick={() => handleClone(selected)}><Copy size={18} aria-hidden /> Clone</button>
-                      <button type="button" className="ts-action" onClick={() => handleArchive(selected)}><Archive size={18} aria-hidden /> Archive</button>
-                    </>
-                  )}
-                  {selected.status === 'ARCHIVED' && (
-                    <button type="button" className="ts-action is-primary" onClick={() => handleClone(selected)}><Copy size={18} aria-hidden /> Clone</button>
-                  )}
-                </div>
+                    )}
+                    <button type="button" className="ts-action" onClick={() => startRename(selected)} disabled={selected.locked}
+                      title={selected.locked ? 'Unlock to rename' : undefined}><Type size={18} aria-hidden /> Rename</button>
+                    <button type="button" className="ts-action" onClick={() => handleLock(selected)} aria-pressed={!!selected.locked}>
+                      {selected.locked ? <><Unlock size={18} aria-hidden /> Unlock</> : <><Lock size={18} aria-hidden /> Lock</>}
+                    </button>
+                  </div>
+                )}
               </section>
 
               {/* versions strip */}
