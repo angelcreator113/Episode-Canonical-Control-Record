@@ -382,6 +382,26 @@ export const addShape = (spec, key) => {
 };
 
 /**
+ * Adds an outfit piece on a photo card (Evoni, 2026-10-21: an added piece
+ * came in without its card), like the pieces already there: their size,
+ * fit and card look, in the middle, on top. Without one, 172 square.
+ */
+export const addPieceCard = (spec, url, name) => {
+  const like = spec.layers.find((l) => l.kind === 'image' && l.frame === 'polaroid');
+  const w = like?.w || 172;
+  const h = like?.h || 172;
+  const look = like ? Object.fromEntries(['fit', 'cardColor', 'clearWhite'].filter((k) => like[k] !== undefined).map((k) => [k, like[k]])) : {};
+  return {
+    ...spec,
+    layers: [...spec.layers, {
+      id: newId(spec, 'piece'), role: null, name: name || null, kind: 'image', visible: true,
+      x: Math.round((WIDTH - w) / 2), y: Math.round((HEIGHT - h) / 2), w, h, rotation: 0, opacity: 1,
+      src: url, fit: 'contain', frame: 'polaroid', ...look,
+    }],
+  };
+};
+
+/**
  * A moved or transformed layer's new box. Konva turns a node about its
  * offset (the box's centre here), so its position is the centre; scale is
  * folded back into the size.
@@ -560,8 +580,9 @@ export function youtubeWarnings(spec, measureFor) {
     if (size === null) continue;
     const name = layerName(l);
     const px = Math.round((size * SMALLEST_WIDTH) / WIDTH * 10) / 10;
-    // The show's name and the "EP" badge are small by design; the words that carry the thumbnail must read.
-    if (px < READABLE_PX && !QUIET_SMALL.has(l.role)) {
+    // The show's name and the "EP" badge are small by design, and so is a layer marked small on purpose
+    // (smallOk); the words that carry the thumbnail must read.
+    if (px < READABLE_PX && !QUIET_SMALL.has(l.role) && !l.smallOk) {
       out.push({ id: l.id, kind: 'small', text: `${name} is about ${px} pixels tall beside a video: too small to read. Make it bigger or use fewer words.` });
     }
     if (overlaps(l, TIMESTAMP_ZONE)) {
@@ -569,6 +590,88 @@ export function youtubeWarnings(spec, measureFor) {
     }
   }
   return out;
+}
+
+// ── Fixing the warnings (Evoni, 2026-10-21: "how do we auto fix any issues?") ──
+
+/** The smallest size, in canvas points, at which words read in the sidebar. */
+export const READABLE_SIZE = Math.ceil((READABLE_PX * WIDTH) / SMALLEST_WIDTH);
+const GAP = 8;
+
+/** The layer's box grown k times about its centre (words: their largest size too), kept on the canvas; null when it would not fit. */
+function grown(l, k) {
+  const w = Math.round(l.w * k);
+  const h = Math.round(l.h * k);
+  if (w > WIDTH || h > HEIGHT) return null;
+  const size = l.kind === 'text' ? Math.ceil(l.size * k) : null;
+  if (size !== null && size > 220) return null;
+  const cx = l.x + l.w / 2;
+  const cy = l.y + l.h / 2;
+  return {
+    x: Math.round(Math.min(Math.max(cx - w / 2, 0), WIDTH - w)),
+    y: Math.round(Math.min(Math.max(cy - h / 2, 0), HEIGHT - h)),
+    w,
+    h,
+    ...(size !== null ? { size } : {}),
+  };
+}
+
+/**
+ * What makes a layer's words readable in the sidebar: its box (and the
+ * words' largest size) grown about its centre just enough, kept on the
+ * canvas. {} when they already read; null when they cannot without
+ * outgrowing the canvas.
+ */
+export function readablePatch(l, measureFor) {
+  const now = drawnSize(l, measureFor);
+  if (now === null || now >= READABLE_SIZE) return {};
+  let k = READABLE_SIZE / now;
+  for (let i = 0; i < 8; i += 1) {
+    const patch = grown(l, k);
+    if (!patch) return null;
+    if (drawnSize({ ...l, ...patch }, measureFor) >= READABLE_SIZE) return patch;
+    k *= 1.06;
+  }
+  return null;
+}
+
+/** Where a layer moves to be clear of YouTube's timestamp: up or left, whichever is the shorter move; null when neither fits. */
+export function clearOfTimestamp(l) {
+  const z = TIMESTAMP_ZONE;
+  const moves = [];
+  if (z.y - GAP - l.h >= 0) moves.push({ by: l.y + l.h - (z.y - GAP), patch: { y: Math.round(z.y - GAP - l.h) } });
+  if (z.x - GAP - l.w >= 0) moves.push({ by: l.x + l.w - (z.x - GAP), patch: { x: Math.round(z.x - GAP - l.w) } });
+  moves.sort((a, b) => a.by - b.by);
+  return moves[0]?.patch || null;
+}
+
+/** The thumbnail with one warning fixed (words made readable, or moved clear of the timestamp); null when it cannot be. */
+export function fixWarning(spec, warning, measureFor) {
+  const l = spec.layers.find((x) => x.id === warning.id);
+  if (!l || l.locked) return null;
+  const patch = warning.kind === 'small' ? readablePatch(l, measureFor) : clearOfTimestamp(l);
+  return patch ? updateLayer(spec, l.id, patch) : null;
+}
+
+/**
+ * Every warning fixed that can be (made readable first, then moved clear
+ * of the timestamp, as growing can reach it): { spec, left } where left is
+ * the warnings that could not be fixed.
+ */
+export function fixAllWarnings(spec, measureFor) {
+  let next = spec;
+  const failed = new Set();
+  for (let pass = 0; pass < 3; pass += 1) {
+    const todo = youtubeWarnings(next, measureFor).filter((w) => !failed.has(`${w.id}-${w.kind}`))
+      .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'small' ? -1 : 1));
+    if (!todo.length) break;
+    for (const w of todo) {
+      const fixed = fixWarning(next, w, measureFor);
+      if (fixed) next = fixed;
+      else failed.add(`${w.id}-${w.kind}`);
+    }
+  }
+  return { spec: next, left: youtubeWarnings(next, measureFor) };
 }
 
 /** "1.4 MB" or "860 KB". */
@@ -586,6 +689,25 @@ export const makeCanvas = (w, h) => {
   c.height = Math.max(1, Math.round(h));
   return c;
 };
+
+/**
+ * A maker of canvases drawn finer than one pixel a point (Evoni,
+ * 2026-10-21: adjusted pictures must not lose quality): res pixels a point,
+ * so a sticker edge, a shadow or effect words stay sharp on a sharp screen
+ * and zoomed in. Each canvas is w × h points, keeps its res, and is drawn
+ * at its size in points.
+ */
+export const finerCanvas = (res = 1) => (w, h) => {
+  const c = makeCanvas(w * res, h * res);
+  c.res = res;
+  c.getContext('2d')?.scale(res, res);
+  return c;
+};
+
+/** How fine to draw for a canvas shown `scale` screen points a point: the screen's pixels a point, 1 to 3, in halves. */
+export function drawRes(scale, ratio = (typeof window !== 'undefined' && window.devicePixelRatio) || 1) {
+  return Math.min(3, Math.max(1, Math.ceil(scale * ratio * 2) / 2));
+}
 
 const WHITE = 235;
 const NEAR = 200;
@@ -671,22 +793,24 @@ export function stickerCanvas(l, drawBox, make = makeCanvas) {
   if (l.outline) {
     const sil = make(l.w, l.h);
     const lx = sil.getContext('2d');
-    lx.drawImage(box, 0, 0);
+    lx.drawImage(box, 0, 0, l.w, l.h);
     lx.globalCompositeOperation = 'source-in';
     lx.fillStyle = l.outline;
     lx.fillRect(0, 0, l.w, l.h);
     for (const r of [width, width / 2]) {
-      for (const [dx, dy] of stickerRing(r)) sx.drawImage(sil, m + dx, m + dy);
+      for (const [dx, dy] of stickerRing(r)) sx.drawImage(sil, m + dx, m + dy, l.w, l.h);
     }
   }
-  sx.drawImage(box, m, m);
+  sx.drawImage(box, m, m, l.w, l.h);
   if (!l.shadow) return sticker;
   const out = make(l.w + m * 2, l.h + m * 2);
   const ox = out.getContext('2d');
+  // A shadow is measured in the canvas's own pixels, not its points.
+  const res = out.res || 1;
   ox.shadowColor = STICKER_SHADOW.color;
-  ox.shadowBlur = STICKER_SHADOW.blur;
-  ox.shadowOffsetY = STICKER_SHADOW.offsetY;
-  ox.drawImage(sticker, 0, 0);
+  ox.shadowBlur = STICKER_SHADOW.blur * res;
+  ox.shadowOffsetY = STICKER_SHADOW.offsetY * res;
+  ox.drawImage(sticker, 0, 0, l.w + m * 2, l.h + m * 2);
   return out;
 }
 
@@ -841,10 +965,11 @@ export function wordsCanvas(l, make = makeCanvas) {
   if (!effect) return words;
   const out = make(l.w + m * 2, l.h + m * 2);
   const ox = out.getContext('2d');
+  const res = out.res || 1;
   ox.shadowColor = effect.color;
-  ox.shadowBlur = effect.blur;
-  ox.shadowOffsetY = effect.offsetY;
-  ox.drawImage(words, 0, 0);
+  ox.shadowBlur = effect.blur * res;
+  ox.shadowOffsetY = effect.offsetY * res;
+  ox.drawImage(words, 0, 0, l.w + m * 2, l.h + m * 2);
   return out;
 }
 

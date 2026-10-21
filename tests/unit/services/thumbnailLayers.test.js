@@ -350,6 +350,11 @@ describe('renderLayers', () => {
     expect(await topAt(downPng, 640)).toBeGreaterThan(await topAt(downPng, d.left + 40) + 40);
   });
 
+  test('small on purpose is kept with the layer (the Studio stops warning about it)', () => {
+    const [t, u] = L.readLayers({ version: 2, layers: [{ kind: 'text', text: 'fine print', smallOk: true }, { kind: 'badge', text: 'EP 1' }] }, s3).layers;
+    expect([t.smallOk, u.smallOk]).toEqual([true, false]);
+  });
+
   // Coloured cards and a cleared white background (Evoni, 2026-10-21: colour behind the wardrobe pieces).
   /** A product photo: a white background round a red square, with a white square (a white garment) inside it. */
   const productPhoto = () => sharp({ create: { width: 200, height: 200, channels: 3, background: '#FFFFFF' } })

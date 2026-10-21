@@ -109,7 +109,7 @@ describe('ThumbnailCanvas', () => {
 
   test('words with an effect, a fade or a curve are one picture drawn as the server draws them, round the box', () => {
     const ctx = {
-      font: '', measureText: (s) => ({ width: String(s).length * 40 }), translate: vi.fn(), rotate: vi.fn(), save: vi.fn(), restore: vi.fn(),
+      font: '', measureText: (s) => ({ width: String(s).length * 40 }), translate: vi.fn(), rotate: vi.fn(), scale: vi.fn(), save: vi.fn(), restore: vi.fn(),
       fillText: vi.fn(), strokeText: vi.fn(), drawImage: vi.fn(), createLinearGradient: () => ({ addColorStop: vi.fn() }),
     };
     const before = HTMLCanvasElement.prototype.getContext;
@@ -135,8 +135,12 @@ describe('ThumbnailCanvas', () => {
     const ctx = {
       font: '', measureText: (s) => ({ width: String(s).length * 40 }), translate: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(),
       closePath: vi.fn(), arc: vi.fn(), ellipse: vi.fn(), save: vi.fn(), restore: vi.fn(), stroke: vi.fn(), fill: vi.fn(), fillText: vi.fn(),
+      scale: vi.fn(),
     };
     const before = HTMLCanvasElement.prototype.getContext;
+    const ratio = window.devicePixelRatio;
+    // A sharp screen: the canvas (640 wide, half the thumbnail) shows 2 pixels a point.
+    window.devicePixelRatio = 4;
     HTMLCanvasElement.prototype.getContext = () => ctx;
     try {
       const spec = addShape(SPEC, 'burst');
@@ -148,7 +152,10 @@ describe('ThumbnailCanvas', () => {
       expect(img).toMatchObject({ x: -m, y: -m, width: burst.w + m * 2, height: burst.h + m * 2 });
       expect(JSON.parse(node.querySelector('[data-konva="Rect"]').getAttribute('data-props'))).toMatchObject({ width: burst.w, height: burst.h });
       expect(ctx.fillText).toHaveBeenCalledWith('NEW', 0, expect.any(Number));
+      // Drawn twice as fine, so it stays sharp (Evoni, 2026-10-21).
+      expect(ctx.scale).toHaveBeenCalledWith(2, 2);
     } finally {
+      window.devicePixelRatio = ratio;
       HTMLCanvasElement.prototype.getContext = before;
     }
   });

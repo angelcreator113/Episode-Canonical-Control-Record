@@ -40,8 +40,8 @@ import {
 } from '../lib/youtubeThumbnailsApi';
 import {
   FONTS, presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer,
-  addText, addPicture, layerName, loadThumbnailFonts, OUTLINE, BOX_COLOR, BOX_OPACITY, STICKER_EDGE, CARD_COLOR, duplicateLayer, WIDTH, HEIGHT,
-  alignLayers, distributeLayers, measurer, youtubeWarnings, fileSize, YOUTUBE_SIZES, GLOW_COLOR, FADE_COLOR, EFFECT_SIZE, SHAPES, addShape,
+  addText, addPicture, addPieceCard, layerName, loadThumbnailFonts, OUTLINE, BOX_COLOR, BOX_OPACITY, STICKER_EDGE, duplicateLayer, WIDTH, HEIGHT, CARD_COLOR,
+  alignLayers, distributeLayers, measurer, youtubeWarnings, fixWarning, fixAllWarnings, fileSize, YOUTUBE_SIZES, GLOW_COLOR, FADE_COLOR, EFFECT_SIZE, SHAPES, addShape,
 } from '../lib/thumbnailLayers';
 import ThumbnailCanvas from '../components/Thumbnails/ThumbnailCanvas';
 import { usePreview } from '../lib/picturePreview';
@@ -594,8 +594,20 @@ function ArrangeBar({ count, onAlign, onSpread, onClear }) {
  * would go wrong there (words too small, words under the timestamp).
  * Picking a warning picks its layer.
  */
-function YouTubePreviews({ src, title, channel, warnings, onPick }) {
+function YouTubePreviews({ src, title, channel, warnings, onPick, onFix, onFixAll, onSmallOk }) {
+  // What a fix could not do, said under the warnings (Evoni, 2026-10-21: fix them from here).
+  const [cant, setCant] = useState(null);
   if (!src) return null;
+  const nameOf = (w) => w.text.split(' is about ')[0].split(' sits under ')[0];
+  const fix = (w) => {
+    setCant(onFix(w) ? null : w.kind === 'small'
+      ? `${nameOf(w)} cannot be made readable beside a video without outgrowing the thumbnail. Use fewer words, or keep it small on purpose.`
+      : `${nameOf(w)} is too big to move clear of the timestamp. Make it smaller first.`);
+  };
+  const fixAll = () => {
+    const left = onFixAll();
+    setCant(left.length ? `Fixed what could be. Still to do: ${left.map(nameOf).join(', ')}.` : null);
+  };
   return (
     <section className="yts-yt" aria-label="Where YouTube shows it" data-testid="yts-youtube">
       <p className="yts-label"><Youtube size={16} aria-hidden /> Where YouTube shows it</p>
@@ -615,16 +627,33 @@ function YouTubePreviews({ src, title, channel, warnings, onPick }) {
         ))}
       </div>
       {warnings.length ? (
-        <ul className="yts-yt-warn" data-testid="yts-yt-warnings">
-          {warnings.map((w) => (
-            <li key={`${w.id}-${w.kind}`}>
-              <button type="button" className="yts-yt-warn-btn" onClick={() => onPick(w.id)}>{w.text}</button>
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="yts-yt-warn" data-testid="yts-yt-warnings">
+            {warnings.map((w) => (
+              <li key={`${w.id}-${w.kind}`} className="yts-yt-warn-row">
+                <button type="button" className="yts-yt-warn-btn" onClick={() => onPick(w.id)}>{w.text}</button>
+                <div className="yts-actions">
+                  <button type="button" className="yts-btn" onClick={() => fix(w)}>
+                    {w.kind === 'small' ? 'Make it readable' : 'Move it'}
+                  </button>
+                  {w.kind === 'small' && (
+                    <button type="button" className="yts-btn" onClick={() => { setCant(null); onSmallOk(w.id); }}
+                      title="Stop warning about this one: it is small on purpose">Small on purpose</button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+          {warnings.length > 1 && (
+            <div className="yts-actions">
+              <button type="button" className="yts-btn is-primary" onClick={fixAll}>Fix all</button>
+            </div>
+          )}
+        </>
       ) : (
         <p className="yts-note">Readable at every size, and clear of the timestamp.</p>
       )}
+      {cant && <p className="yts-note" role="status">{cant}</p>}
     </section>
   );
 }
@@ -934,7 +963,10 @@ export default function YouTubeThumbnailStudio() {
     } catch (err) {
       console.error('[YouTubeThumbnails] saved thumbnails load failed:', err);
       setHistory([]);
-      setMessage({ type: 'error', text: 'Could not load the saved thumbnails.' });
+      // The server's reason, so a failure can be told apart (Evoni, 2026-10-21).
+      const why = err?.response?.data?.error || err?.response?.data?.message;
+      const status = err?.response?.status;
+      setMessage({ type: 'error', text: `Could not load the saved thumbnails${status ? ` (${status}${why ? `: ${why}` : ''})` : ''}.` });
     }
   }, []);
   useEffect(() => { loadHistory(episodeId); }, [episodeId, loadHistory]);
@@ -1139,6 +1171,15 @@ export default function YouTubeThumbnailStudio() {
     const items = [...uploads, ...earlier.filter((e) => !uploads.some((u) => u.url === e.url))];
     return [...(items.length ? [{ key: 'uploads', label: 'Uploads', items }] : []), ...server.filter((f) => f.key !== 'uploads')];
   }, [uploads, sources]);
+
+  // The episode's outfit pieces: picked from "Add a picture", they come in on a photo card like the others.
+  const outfitUrls = useMemo(() => {
+    const urls = new Set();
+    const walk = (f) => { (f.items || []).forEach((it) => urls.add(it.url)); (f.folders || []).forEach(walk); };
+    tree.filter((f) => f.key === 'outfit').forEach(walk);
+    return urls;
+  }, [tree]);
+  const addChosenPicture = (url, label) => addAndPick((s) => (outfitUrls.has(url) ? addPieceCard(s, url, label) : addPicture(s, url, label)));
 
   // This arrangement on another episode, with its words and pictures (as the show's template would be).
   const [tryOn, setTryOn] = useState({ id: '', url: null, busy: false });
@@ -1390,7 +1431,18 @@ export default function YouTubeThumbnailStudio() {
             </div>
             {showKeys && <ShortcutsPanel onClose={() => setShowKeys(false)} />}
             <YouTubePreviews src={snapshot} title={layerOf(spec, 'title')?.text || sources?.episode?.title} channel={sources?.show?.name}
-              warnings={ytWarnings} onPick={(id) => setSelectedId(id)} />
+              warnings={ytWarnings} onPick={(id) => setSelectedId(id)}
+              onFix={(w) => {
+                const next = fixWarning(specRef.current, w, measurer);
+                if (next) edit(next);
+                return Boolean(next);
+              }}
+              onFixAll={() => {
+                const { spec: next, left } = fixAllWarnings(specRef.current, measurer);
+                if (next !== specRef.current) edit(next);
+                return left;
+              }}
+              onSmallOk={(id) => edit((s) => updateLayer(s, id, { smallOk: true }))} />
             {exact && (
               <figure className="yts-exact" data-testid="yts-exact-figure">
                 <img src={exact} alt="The thumbnail exactly as it will be saved" data-testid="yts-preview" />
@@ -1464,10 +1516,18 @@ export default function YouTubeThumbnailStudio() {
             </div>
 
             {layerOf(spec, 'edition') && (
-              <label className="yts-field">
-                <span className="yts-label">Edition label</span>
-                <input className="yts-input" value={roleText(spec, 'edition')} maxLength={160} onChange={(e) => edit((s) => updateLayer(s, 'edition', { text: e.target.value }))} aria-label="Edition label" />
-              </label>
+              <div className="yts-field">
+                <label className="yts-field">
+                  <span className="yts-label">Edition label</span>
+                  <input className="yts-input" value={roleText(spec, 'edition')} maxLength={160} onChange={(e) => edit((s) => updateLayer(s, 'edition', { text: e.target.value }))} aria-label="Edition label" />
+                </label>
+                {/* The edition label is the episode's title (Evoni, 2026-10-21); an arrangement kept from before has the old words. */}
+                {sources?.episode?.title && roleText(spec, 'edition') !== sources.episode.title && (
+                  <button type="button" className="yts-btn" onClick={() => edit((s) => updateLayer(s, 'edition', { text: sources.episode.title }))}>
+                    Use the episode title
+                  </button>
+                )}
+              </div>
             )}
             {layerOf(spec, 'checklist') && (
               <ChecklistEditor layer={layerOf(spec, 'checklist')} onChange={(patch) => edit((s) => updateLayer(s, layerOf(s, 'checklist').id, patch))} />
@@ -1498,7 +1558,7 @@ export default function YouTubeThumbnailStudio() {
             )}
 
             <FolderPicker title="Add a picture" testid="yts-add-picture" whole tree={tree} start={['outfit', 'documents']}
-              onPick={(url, label) => addAndPick((s) => addPicture(s, url, label))} uploading={Boolean(uploading)}
+              onPick={addChosenPicture} uploading={Boolean(uploading)}
               onUpload={(f) => upload(f, (url, label) => addAndPick((s) => addPicture(s, url, label)))} />
 
             <fieldset className="yts-field">

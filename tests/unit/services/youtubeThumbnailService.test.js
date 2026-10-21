@@ -86,11 +86,11 @@ describe('database work', () => {
     expect(s.query.mock.calls[3][0]).not.toMatch(/s3_url_no_bg/);
     expect(s.query.mock.calls[3][0]).toMatch(/asset_type IS DISTINCT FROM 'DOCUMENT_OVERLAY'/);
     expect(out.folders.map((f) => f.key)).toEqual(['scene-sets', 'poses', 'outfit', 'library']);
-    // The "Come Style Me" suggestions: the shopping list's slots, the dress's edition, the pieces.
+    // The "Come Style Me" suggestions: the shopping list's slots, the episode's title for the edition, the pieces.
     expect(out.suggest).toEqual({
       // The main piece by its name, the rest by their kind.
       checklist: [{ text: 'Sweater dress', checked: true }, { text: 'Shoes', checked: true }, { text: 'Accessories', checked: true }],
-      edition: 'Sweater Dress Edition',
+      edition: 'Studio by Sable',
       pieces: [{ url: 'https://b.s3.amazonaws.com/d.png', label: 'Sweater dress' }],
       logoUrl: null,
     });
@@ -120,8 +120,10 @@ describe('database work', () => {
     mockSend.mockReset();
   });
 
-  test('layoutSuggestions: from the outfit, then the defaults; the event\'s theme names the edition; the show\'s logo', async () => {
+  test('layoutSuggestions: from the outfit, then the defaults; the episode\'s title is the edition, else the main piece or the event\'s theme; the show\'s logo', async () => {
     const outfit = [{ url: 'https://b.s3.amazonaws.com/b.png', label: 'chain bag', category: 'handbag' }];
+    const titled = await yt.layoutSuggestions(seq([[]]), 'ep-1', outfit, null, '  I Designed My Outfit for a Fashion Studio Experiment ');
+    expect(titled.edition).toBe('I Designed My Outfit for a Fashion Studio Experiment');
     const noEvent = await yt.layoutSuggestions(seq([[]]), 'ep-1', outfit, { metadata: { logo: { url: 'https://b.s3.amazonaws.com/logo.png' } } });
     expect(noEvent.checklist.map((r) => r.text)).toEqual(['Handbag', 'Hair', 'Vibe']);
     expect(noEvent.edition).toBe('Chain Bag Edition');
