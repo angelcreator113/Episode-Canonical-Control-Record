@@ -6,7 +6,7 @@
  */
 import { describe, test, expect } from 'vitest';
 import {
-  spaced,
+  spaced, alignLayers, distributeLayers, layersInBox,
   presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer, addText, addPicture,
   boxFromNode, fitText, fitPicture, layerName, LINE_HEIGHT, checklistRows, duplicateLayer, snapBox, SNAP,
 } from './thumbnailLayers';
@@ -201,5 +201,50 @@ describe('spaced (the server\'s spaced)', () => {
     expect(spaced(measure, 0)).toBe(measure);
     expect(spaced(measure, 5)('abc', 10)).toBe(3 * 10 + 3 * 5);
     expect(spaced(measure, -2)('ab', 10)).toBe(2 * 10 - 2 * 2);
+  });
+});
+
+describe('arranging (Evoni, 2026-10-21)', () => {
+  const box = (id, x, y, w, h, more = {}) => ({ id, kind: 'text', visible: true, x, y, w, h, ...more });
+  const spec = { version: 2, layers: [
+    { id: 'shade', kind: 'shade', role: 'shade', visible: true, x: 0, y: 0, w: 1280, h: 720 },
+    box('a', 100, 50, 200, 100), box('b', 500, 300, 100, 50), box('c', 900, 600, 300, 80), box('lock', 10, 10, 50, 50, { locked: true }),
+  ] };
+  const at = (s, id) => s.layers.find((l) => l.id === id);
+
+  test('one layer lines up with the canvas', () => {
+    expect(at(alignLayers(spec, ['a'], 'center'), 'a').x).toBe(540);
+    expect(at(alignLayers(spec, ['a'], 'right'), 'a').x).toBe(1080);
+    expect(at(alignLayers(spec, ['a'], 'bottom'), 'a').y).toBe(620);
+    expect(at(alignLayers(spec, ['a'], 'middle'), 'a').y).toBe(310);
+  });
+
+  test('several line up with the box round them; locked ones and the shade stay', () => {
+    const left = alignLayers(spec, ['a', 'b', 'c', 'lock', 'shade'], 'left');
+    expect(['a', 'b', 'c'].map((id) => at(left, id).x)).toEqual([100, 100, 100]);
+    expect(at(left, 'lock').x).toBe(10);
+    const top = alignLayers(spec, ['a', 'b'], 'top');
+    expect([at(top, 'a').y, at(top, 'b').y]).toEqual([50, 50]);
+    const centre = alignLayers(spec, ['a', 'b'], 'center');
+    expect([at(centre, 'a').x + 100, at(centre, 'b').x + 50]).toEqual([350, 350]);
+    expect(alignLayers(spec, ['lock'], 'left')).toBe(spec);
+  });
+
+  test('spread: the first and last stay, equal gaps between', () => {
+    const across = distributeLayers(spec, ['c', 'a', 'b'], 'x');
+    expect(at(across, 'a').x).toBe(100);
+    expect(at(across, 'c').x).toBe(900);
+    // gaps: (1200 - 100 - 600) / 2 = 250 → b at 100 + 200 + 250
+    expect(at(across, 'b').x).toBe(550);
+    expect(distributeLayers(spec, ['a', 'b'], 'x')).toBe(spec);
+    // down: (680 - 50 - 230) / 2 = 200 → b at 50 + 100 + 200
+    const down = distributeLayers(spec, ['a', 'b', 'c'], 'y');
+    expect([at(down, 'a').y, at(down, 'b').y, at(down, 'c').y]).toEqual([50, 350, 600]);
+  });
+
+  test('a drag box picks what it touches, front first; not the shade, the background or hidden layers', () => {
+    const withBg = { ...spec, layers: [{ id: 'bg', kind: 'image', role: 'background', visible: true, x: 0, y: 0, w: 1280, h: 720 }, ...spec.layers, box('hid', 120, 60, 10, 10, { visible: false })] };
+    expect(layersInBox(withBg, { x0: 0, y0: 0, x1: 600, y1: 400 })).toEqual(['lock', 'b', 'a']);
+    expect(layersInBox(withBg, { x0: 700, y0: 0, x1: 650, y1: 10 })).toEqual([]);
   });
 });

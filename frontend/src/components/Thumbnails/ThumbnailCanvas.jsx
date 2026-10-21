@@ -11,7 +11,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Stage, Layer, Group, Rect, Text, Line, Image as KImage, Transformer } from 'react-konva';
 import {
-  WIDTH, HEIGHT, LINE_HEIGHT, FONTS, fitText, measurer, spaced, fitPicture, boxFromNode, layerName, checklistRows, snapBox,
+  WIDTH, HEIGHT, LINE_HEIGHT, FONTS, fitText, measurer, spaced, fitPicture, boxFromNode, layerName, checklistRows, snapBox, layersInBox,
 } from '../../lib/thumbnailLayers';
 import { previewUrl, previewWidth } from '../../lib/picturePreview';
 
@@ -150,12 +150,30 @@ function Checklist({ l }) {
 
 const BODY = { image: Picture, text: Words, badge: Badge, checklist: Checklist };
 
-export default function ThumbnailCanvas({ spec, selectedId, onSelect, onChange, fontsTick = 0 }) {
+// Bigger handles where fingers do the dragging (Evoni, 2026-10-21: phone width).
+const coarsePointer = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+  && window.matchMedia('(pointer: coarse)').matches;
+
+/**
+ * The editor. selectedIds are the picked layers, the first the main one
+ * (its settings show). Click picks one; Shift or Ctrl/Cmd-click adds or
+ * takes away; a drag on an empty part of the canvas picks what the box
+ * touches (onSelectMany). Picked layers move together: one change for all
+ * (onChangeMany: { [id]: patch }).
+ */
+export default function ThumbnailCanvas({
+  spec, selectedId, selectedIds, onSelect, onSelectMany, onChange, onChangeMany, fontsTick = 0,
+}) {
   const wrapRef = useRef(null);
   const stageRef = useRef(null);
   const trRef = useRef(null);
+  const dragFrom = useRef(null); // { id, x, y, others: { [id]: { x, y } } } while picked layers move together
   const [width, setWidth] = useState(640);
   const [guides, setGuides] = useState([]);
+  const [marquee, setMarquee] = useState(null); // { x0, y0, x1, y1 } in canvas points
+  const picks = selectedIds || (selectedId ? [selectedId] : []);
+  const pickSet = new Set(picks);
+  const many = (patches) => (onChangeMany ? onChangeMany(patches) : Object.entries(patches).forEach(([id, p]) => onChange(id, p)));
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -168,26 +186,42 @@ export default function ThumbnailCanvas({ spec, selectedId, onSelect, onChange, 
     return () => ro.disconnect();
   }, []);
 
-  // The handles go round the picked layer.
+  // The handles go round the picked layers (not locked ones).
+  const picksKey = picks.join('|');
   useEffect(() => {
     const tr = trRef.current;
     const stage = stageRef.current;
     if (!tr || !stage) return;
-    const picked = (spec?.layers || []).find((l) => l.id === selectedId);
-    const node = picked && !picked.locked ? stage.findOne(`#${CSS.escape(selectedId)}`) : null;
-    tr.nodes(node ? [node] : []);
+    const nodes = (spec?.layers || []).filter((l) => pickSet.has(l.id) && !l.locked && l.visible)
+      .map((l) => stage.findOne(`#${CSS.escape(l.id)}`)).filter(Boolean);
+    tr.nodes(nodes);
     tr.getLayer()?.batchDraw();
-  }, [selectedId, spec, width]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picksKey, spec, width]);
 
   const scale = width / WIDTH;
   const layers = (spec?.layers || []).filter((l) => l.visible);
   const change = (l, node) => onChange(l.id, boxFromNode({
     x: node.x(), y: node.y(), scaleX: node.scaleX(), scaleY: node.scaleY(), rotation: node.rotation(),
   }, l));
+  const together = (l) => pickSet.has(l.id) && picks.length > 1;
 
-  /** Snaps a dragged layer to the canvas and the other visible layers. */
-  const snapDrag = (l, e) => {
+  /** Snaps a dragged layer to the canvas and the other visible layers; picked ones move with it. */
+  // The layers that follow a led drag get Konva's drag events too: they
+  // neither snap nor report on their own; the led layer reports for all.
+  const following = (l) => Boolean(dragFrom.current && dragFrom.current.others[l.id]);
+
+  const onDragMove = (l, e) => {
     const node = e.target;
+    const from = dragFrom.current;
+    if (following(l)) return;
+    if (from && from.id === l.id) {
+      const dx = node.x() - from.x;
+      const dy = node.y() - from.y;
+      const stage = stageRef.current;
+      Object.entries(from.others).forEach(([id, p]) => stage?.findOne(`#${CSS.escape(id)}`)?.position({ x: p.x + dx, y: p.y + dy }));
+      return;
+    }
     if (e.evt?.altKey) { setGuides([]); return; }
     const others = layers.filter((o) => o.id !== l.id && o.kind !== 'shade' && o.role !== 'background');
     const s = snapBox({ cx: node.x(), cy: node.y(), w: l.w, h: l.h }, others);
@@ -195,36 +229,108 @@ export default function ThumbnailCanvas({ spec, selectedId, onSelect, onChange, 
     setGuides(s.guides);
   };
 
+  const onDragStart = (l, e) => {
+    if (following(l)) return;
+    if (!together(l)) { dragFrom.current = null; return; }
+    const stage = stageRef.current;
+    const others = {};
+    for (const o of layers) {
+      if (o.id === l.id || !pickSet.has(o.id) || o.locked) continue;
+      const n = stage?.findOne(`#${CSS.escape(o.id)}`);
+      if (n) others[o.id] = { x: n.x(), y: n.y() };
+    }
+    dragFrom.current = { id: l.id, x: e.target.x(), y: e.target.y(), others };
+  };
+
+  const onDragEnd = (l, e) => {
+    setGuides([]);
+    const from = dragFrom.current;
+    if (following(l)) return;
+    if (!from || from.id !== l.id) { dragFrom.current = null; change(l, e.target); return; }
+    // Kept a moment, so the followers' own drag ends (which may come after) are ignored too.
+    setTimeout(() => { if (dragFrom.current === from) dragFrom.current = null; }, 0);
+    const dx = Math.round(e.target.x() - from.x);
+    const dy = Math.round(e.target.y() - from.y);
+    const patches = { [l.id]: { x: l.x + dx, y: l.y + dy } };
+    for (const id of Object.keys(from.others)) {
+      const o = layers.find((x) => x.id === id);
+      if (o) patches[id] = { x: o.x + dx, y: o.y + dy };
+    }
+    many(patches);
+  };
+
   const onKeyDown = (e) => {
-    const l = (spec?.layers || []).find((x) => x.id === selectedId);
-    if (!l || l.kind === 'shade' || l.locked) return;
     const step = e.shiftKey ? 10 : 1;
     const move = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
     if (!move) return;
+    const moving = (spec?.layers || []).filter((x) => pickSet.has(x.id) && x.kind !== 'shade' && !x.locked);
+    if (!moving.length) return;
     e.preventDefault();
-    onChange(l.id, { x: l.x + move[0], y: l.y + move[1] });
+    if (moving.length === 1) onChange(moving[0].id, { x: moving[0].x + move[0], y: moving[0].y + move[1] });
+    else many(Object.fromEntries(moving.map((x) => [x.id, { x: x.x + move[0], y: x.y + move[1] }])));
   };
 
-  const picked = (spec?.layers || []).find((x) => x.id === selectedId);
+  // The drag box, in canvas points.
+  const pointer = () => {
+    const p = stageRef.current?.getPointerPosition();
+    return p ? { x: p.x / scale, y: p.y / scale } : null;
+  };
+  // A drag box starts on an empty part of the canvas, or on the background
+  // picture while it is not picked (a click there still picks it).
+  const boxStart = (e, onLayer = null) => {
+    if (!onLayer && e.target !== e.target.getStage()) return;
+    const p = pointer();
+    if (p) setMarquee({ x0: p.x, y0: p.y, x1: p.x, y1: p.y, click: onLayer });
+  };
+  const boxMove = () => {
+    if (!marquee) return;
+    const p = pointer();
+    if (p) setMarquee((m) => (m ? { ...m, x1: p.x, y1: p.y } : m));
+  };
+  const boxEnd = () => {
+    if (!marquee) return;
+    const m = marquee;
+    setMarquee(null);
+    if (Math.abs(m.x1 - m.x0) < 6 && Math.abs(m.y1 - m.y0) < 6) { onSelect(m.click || null); return; }
+    const ids = layersInBox(spec, m);
+    if (onSelectMany) onSelectMany(ids);
+    else onSelect(ids[0] || null);
+  };
+
+  const pick = (l, e) => {
+    const evt = e?.evt || {};
+    if (evt.shiftKey || evt.ctrlKey || evt.metaKey) { onSelect(l.id, { toggle: true }); return; }
+    // A picked layer among several stays with them, so they can be dragged together.
+    if (!together(l)) onSelect(l.id);
+  };
+
+  const main = (spec?.layers || []).find((x) => x.id === picks[0]);
+  const anchorSize = coarsePointer() ? 18 : 10;
   return (
     <div ref={wrapRef} className="yts-canvas" tabIndex={0} onKeyDown={onKeyDown} data-testid="yts-canvas"
-      aria-label={picked
-        ? (picked.locked ? `Thumbnail editor. ${layerName(picked)} is picked and locked.` : `Thumbnail editor. ${layerName(picked)} is picked: drag to move, pull a corner to resize, use the top handle to turn; arrow keys nudge.`)
-        : 'Thumbnail editor. Click a layer to move, resize or turn it.'}>
+      aria-label={picks.length > 1
+        ? `Thumbnail editor. ${picks.length} layers are picked: drag one to move them together; arrow keys nudge them.`
+        : main
+          ? (main.locked ? `Thumbnail editor. ${layerName(main)} is picked and locked.` : `Thumbnail editor. ${layerName(main)} is picked: drag to move, pull a corner to resize, use the top handle to turn; arrow keys nudge.`)
+          : 'Thumbnail editor. Click a layer to move, resize or turn it; drag across the canvas to pick several.'}>
       <Stage ref={stageRef} width={width} height={Math.round((width * HEIGHT) / WIDTH)} scaleX={scale} scaleY={scale}
-        onMouseDown={(e) => { if (e.target === e.target.getStage()) onSelect(null); }}
-        onTouchStart={(e) => { if (e.target === e.target.getStage()) onSelect(null); }}>
+        onMouseDown={boxStart} onTouchStart={boxStart} onMouseMove={boxMove} onTouchMove={boxMove}
+        onMouseUp={boxEnd} onTouchEnd={boxEnd} onMouseLeave={boxEnd}>
         <Layer key={fontsTick}>
           {layers.map((l) => {
             if (l.kind === 'shade') return <Shade key={l.id} l={l} />;
             const Body = BODY[l.kind];
             if (!Body) return null;
+            const boxFromHere = l.role === 'background' && !pickSet.has(l.id);
             return (
               <Group key={l.id} id={l.id} x={l.x + l.w / 2} y={l.y + l.h / 2} offsetX={l.w / 2} offsetY={l.h / 2}
-                rotation={l.rotation} opacity={l.opacity} draggable={!l.locked}
-                onMouseDown={() => onSelect(l.id)} onTap={() => onSelect(l.id)}
-                onDragMove={(e) => snapDrag(l, e)}
-                onDragEnd={(e) => { setGuides([]); change(l, e.target); }}
+                rotation={l.rotation} opacity={l.opacity} draggable={!l.locked && !boxFromHere}
+                onMouseDown={(e) => (boxFromHere ? boxStart(e, l.id) : pick(l, e))}
+                onTouchStart={(e) => { if (boxFromHere) boxStart(e, l.id); }}
+                onTap={(e) => { if (!boxFromHere) pick(l, e); }}
+                onDragStart={(e) => onDragStart(l, e)}
+                onDragMove={(e) => onDragMove(l, e)}
+                onDragEnd={(e) => onDragEnd(l, e)}
                 onTransformEnd={(e) => { const node = e.target; change(l, node); node.scaleX(1); node.scaleY(1); }}>
                 <Body l={l} scale={scale} />
               </Group>
@@ -234,8 +340,13 @@ export default function ThumbnailCanvas({ spec, selectedId, onSelect, onChange, 
             <Line key={i} points={g.x !== undefined ? [g.x, 0, g.x, HEIGHT] : [0, g.y, WIDTH, g.y]}
               stroke="#E8C468" strokeWidth={2 / scale} dash={[8 / scale, 6 / scale]} listening={false} />
           ))}
+          {marquee && (
+            <Rect x={Math.min(marquee.x0, marquee.x1)} y={Math.min(marquee.y0, marquee.y1)}
+              width={Math.abs(marquee.x1 - marquee.x0)} height={Math.abs(marquee.y1 - marquee.y0)}
+              fill="rgba(184,150,46,0.12)" stroke="#B8962E" strokeWidth={1.5 / scale} dash={[6 / scale, 4 / scale]} listening={false} />
+          )}
           <Transformer ref={trRef} rotateEnabled keepRatio={false} rotationSnaps={[0, 90, 180, 270]} rotationSnapTolerance={4}
-            borderStroke="#B8962E" anchorStroke="#B8962E" anchorFill="#FFFFFF" anchorSize={10}
+            borderStroke="#B8962E" anchorStroke="#B8962E" anchorFill="#FFFFFF" anchorSize={anchorSize}
             boundBoxFunc={(oldBox, box) => (Math.abs(box.width) < 12 || Math.abs(box.height) < 12 ? oldBox : box)} />
         </Layer>
       </Stage>

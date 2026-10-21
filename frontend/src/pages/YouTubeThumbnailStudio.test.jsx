@@ -216,15 +216,20 @@ describe('YouTubeThumbnailStudio', () => {
     expect(screen.getByTestId('canvas-lala')).toBeTruthy();
   });
 
-  test('a layout starts again from its arrangement, after asking once something was changed', async () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+  test('a layout starts again from its arrangement, after asking on the page once something was changed', async () => {
     renderPage();
     await opened();
     fireEvent.click(screen.getByRole('button', { name: /Title only/ }));
-    expect(confirm).not.toHaveBeenCalled(); // nothing changed yet
+    expect(screen.queryByTestId('yts-ask')).toBeNull(); // nothing changed yet
     expect(screen.queryByTestId('canvas-lala')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Lala left/ }));
-    expect(confirm).toHaveBeenCalledTimes(1);
+    const ask = within(screen.getByTestId('yts-ask'));
+    expect(ask.getByText(/Start again from this layout\?/)).toBeTruthy();
+    fireEvent.click(ask.getByRole('button', { name: 'No' }));
+    expect(screen.getByRole('button', { name: /Lala left/ }).getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: /Lala left/ }));
+    fireEvent.click(within(screen.getByTestId('yts-ask')).getByRole('button', { name: 'Yes' }));
+    expect(screen.queryByTestId('yts-ask')).toBeNull();
     expect(screen.getByRole('button', { name: /Lala left/ }).getAttribute('aria-pressed')).toBe('true');
   });
 
@@ -408,6 +413,74 @@ describe('YouTubeThumbnailStudio', () => {
     expect(within(await screen.findByTestId('yts-saved-7')).getByText('Episode thumbnail')).toBeTruthy();
   });
 
+  test('arranging: Shift-click picks several in the layers list; line them up; spread three; one lines up with the canvas', async () => {
+    renderPage();
+    await opened();
+    const list = within(screen.getByTestId('yts-layers'));
+    fireEvent.click(list.getByRole('button', { name: 'Title' }));
+    fireEvent.click(list.getByRole('button', { name: 'Show name' }), { shiftKey: true });
+    const bar = within(screen.getByTestId('yts-arrange'));
+    expect(bar.getByText('2 picked')).toBeTruthy();
+    expect(bar.getByRole('button', { name: 'Spread evenly across' }).disabled).toBe(true);
+    fireEvent.click(bar.getByRole('button', { name: 'Line up left edges' }));
+    await waitFor(() => expect(youtubeThumbnailsApi.saveDraft).toHaveBeenCalled(), { timeout: 3000 });
+    const left = Math.min(layerOf(lastDraft(), 'title').x, layerOf(lastDraft(), 'kicker').x);
+    expect(layerOf(lastDraft(), 'title').x).toBe(left);
+    expect(layerOf(lastDraft(), 'kicker').x).toBe(left);
+    // A third: spread across.
+    fireEvent.click(list.getByRole('button', { name: 'Badge' }), { ctrlKey: true });
+    expect(within(screen.getByTestId('yts-arrange')).getByText('3 picked')).toBeTruthy();
+    expect(within(screen.getByTestId('yts-arrange')).getByRole('button', { name: 'Spread evenly across' }).disabled).toBe(false);
+    // Shift-click again takes one away.
+    fireEvent.click(list.getByRole('button', { name: 'Badge' }), { shiftKey: true });
+    expect(within(screen.getByTestId('yts-arrange')).getByText('2 picked')).toBeTruthy();
+    // One picked lines up with the canvas: centred across 1280.
+    fireEvent.click(list.getByRole('button', { name: 'Title' }));
+    const n = youtubeThumbnailsApi.saveDraft.mock.calls.length;
+    fireEvent.click(within(screen.getByTestId('yts-arrange')).getByRole('button', { name: 'Line up centres across' }));
+    await waitFor(() => expect(youtubeThumbnailsApi.saveDraft.mock.calls.length).toBeGreaterThan(n), { timeout: 3000 });
+    const t = layerOf(lastDraft(), 'title');
+    expect(Math.abs(t.x + t.w / 2 - 640)).toBeLessThanOrEqual(1);
+  });
+
+  test('keys: Delete removes the picked layers (not locked ones), Esc picks nothing, ? shows the shortcuts', async () => {
+    renderPage();
+    await opened();
+    const list = within(screen.getByTestId('yts-layers'));
+    fireEvent.click(list.getByRole('button', { name: 'Lock Badge' }));
+    fireEvent.click(list.getByRole('button', { name: 'Show name' }));
+    fireEvent.click(list.getByRole('button', { name: 'Badge' }), { shiftKey: true });
+    fireEvent.keyDown(window, { key: 'Delete' });
+    expect(screen.queryByTestId('canvas-kicker')).toBeNull();
+    expect(screen.getByTestId('canvas-badge')).toBeTruthy(); // locked: kept
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByTestId('yts-arrange')).toBeNull();
+    // Typing in a field is left alone.
+    fireEvent.click(list.getByRole('button', { name: 'Title' }));
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Title words' }), { key: 'Backspace' });
+    expect(screen.getByTestId('canvas-title')).toBeTruthy();
+    fireEvent.keyDown(window, { key: '?' });
+    expect(within(screen.getByTestId('yts-shortcuts')).getByText('Pick everything the box touches')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Close the shortcuts' }));
+    expect(screen.queryByTestId('yts-shortcuts')).toBeNull();
+    fireEvent.click(screen.getByTestId('yts-keys-btn'));
+    expect(screen.getByTestId('yts-shortcuts')).toBeTruthy();
+  });
+
+  test('loading: a sign while the episode loads; when it fails, Try again loads it again', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    let fail;
+    youtubeThumbnailsApi.sources.mockReturnValueOnce(new Promise((_, reject) => { fail = reject; }));
+    renderPage();
+    expect(await screen.findByTestId('yts-loading')).toBeTruthy();
+    fail({ response: { data: { error: 'The server is busy' } } });
+    expect((await screen.findByRole('alert')).textContent).toContain('The server is busy');
+    expect(screen.queryByTestId('yts-loading')).toBeNull();
+    fireEvent.click(screen.getByTestId('yts-retry'));
+    await opened();
+    expect(youtubeThumbnailsApi.sources).toHaveBeenCalledTimes(2);
+  });
+
   test('text tools: line up, largest size, letter spacing, a box behind the words', async () => {
     renderPage();
     await opened();
@@ -565,9 +638,10 @@ describe('YouTubeThumbnailStudio', () => {
       { id: 8, url: 'https://b.s3.amazonaws.com/old.png', isPrimary: false },
     ]);
     youtubeThumbnailsApi.removeSaved.mockResolvedValue({ id: 8 });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderPage();
     fireEvent.click(within(await screen.findByTestId('yts-saved-8')).getByRole('button', { name: /Delete/ }));
+    expect(youtubeThumbnailsApi.removeSaved).not.toHaveBeenCalled();
+    fireEvent.click(within(screen.getByTestId('yts-ask')).getByRole('button', { name: 'Yes' }));
     await waitFor(() => expect(youtubeThumbnailsApi.removeSaved).toHaveBeenCalledWith('ep-1', 8));
     await waitFor(() => expect(screen.queryByTestId('yts-saved-8')).toBeNull());
     expect(screen.getByTestId('yts-saved-9')).toBeTruthy();
