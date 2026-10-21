@@ -425,6 +425,41 @@ export function duplicateLayer(spec, id) {
   return { ...spec, layers: [...spec.layers.slice(0, i + 1), copy, ...spec.layers.slice(i + 1)] };
 }
 
+// ── Copy and paste between episodes (Evoni, 2026-10-21) ──
+
+/** Where the Studio keeps what was copied, on this browser (any episode, any tab). */
+export const CLIPBOARD_KEY = 'yts-clipboard';
+
+/** The picked layers to paste elsewhere (not the shade; unlocked): { from, layers }, or null when there is nothing to copy. */
+export function copyLayers(spec, ids, from = null) {
+  const layers = (spec?.layers || []).filter((l) => ids.includes(l.id) && l.kind !== 'shade').map((l) => ({ ...l, locked: false }));
+  return layers.length ? { from, layers } : null;
+}
+
+/**
+ * Pastes copied layers on top, where they were (nudge: 24 points down and
+ * right, for pasting on the episode they came from). A layer keeps its role
+ * (and the role's id) only when this thumbnail has no layer in that role,
+ * so it never replaces this episode's own title or Lala; a background so
+ * kept goes to the back. { spec, ids }: the pasted layers' ids.
+ */
+export function pasteLayers(spec, clip, { nudge = false } = {}) {
+  if (!spec || !clip?.layers?.length) return { spec, ids: [] };
+  let next = spec;
+  const ids = [];
+  for (const l of clip.layers) {
+    const keepRole = Boolean(l.role) && !layerOf(next, l.role);
+    const id = keepRole && !next.layers.some((x) => x.id === l.role) ? l.role : newId(next, l.role || l.kind);
+    const layer = {
+      ...l, id, role: keepRole ? l.role : null, name: keepRole ? (l.name || null) : (l.name || layerName(l)), locked: false,
+      x: l.x + (nudge ? 24 : 0), y: l.y + (nudge ? 24 : 0),
+    };
+    next = { ...next, layers: keepRole && l.role === 'background' ? [layer, ...next.layers] : [...next.layers, layer] };
+    ids.push(id);
+  }
+  return { spec: next, ids };
+}
+
 export const SNAP = 8;
 
 /**
