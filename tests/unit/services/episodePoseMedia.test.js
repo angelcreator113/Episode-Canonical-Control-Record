@@ -218,6 +218,28 @@ describe('processPose, start to finish', () => {
     ]);
   });
 
+  test('JustAWoman keeps her background: colour and upscale, then the enhanced photo is final; no remove.bg', async () => {
+    process.env.REMOVEBG_API_KEY = 'k';
+    process.env.REPLICATE_API_TOKEN = 't';
+    aiUpscaleImage.mockImplementation(async (url, { scale }) => ({ buffer: await photo(200 * scale, 300 * scale) }));
+    const job = { sequelize: {}, poseId: 'p6', episodeId: 'ep1', characterKey: 'justawoman', buffer: await photo(200, 300), steps: {} };
+
+    await media.processPose(job);
+
+    expect(axios.post).not.toHaveBeenCalled();
+    expect(runImageCall).not.toHaveBeenCalledWith(expect.objectContaining({ model: 'remove.bg' }), expect.anything());
+    expect(job.steps).toEqual({ color: true, upscale: 'x4', background: 'kept' });
+    expect(putKeys()).toEqual([
+      expect.stringMatching(/^episodes\/ep1\/poses\/p6\/\d+-enhanced\.jpg$/),
+      expect.stringMatching(/^episodes\/ep1\/poses\/p6\/\d+-enhanced-x4\.jpg$/),
+    ]);
+    expect(poses.setState.mock.calls.map((c) => c[2])).toEqual(['processing', 'processing', 'ready']);
+    expect(poses.setState.mock.calls[2][3]).toMatchObject({
+      finalUrl: expect.stringMatching(/-enhanced-x4\.jpg$/), finalKey: expect.stringMatching(/-enhanced-x4\.jpg$/), finalWidth: 800, finalHeight: 1200,
+    });
+    expect(poses.keepsBackground('lala')).toBe(false);
+  });
+
   test('without its buffer the job reads the original from S3', async () => {
     process.env.REMOVEBG_API_KEY = 'k';
     axios.post.mockResolvedValue({ data: await cutout() });

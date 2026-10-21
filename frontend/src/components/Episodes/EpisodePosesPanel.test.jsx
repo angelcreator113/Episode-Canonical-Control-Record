@@ -16,7 +16,7 @@ vi.mock('../../lib/episodePosesApi', async () => {
   };
 });
 
-import { episodePosesApi, anyProcessing, photosFor, stepsNote, isPhoto } from '../../lib/episodePosesApi';
+import { episodePosesApi, anyProcessing, photosFor, stepsNote, isPhoto, keepsBackground } from '../../lib/episodePosesApi';
 import EpisodePosesPanel from './EpisodePosesPanel';
 
 const PHOTOS = [
@@ -37,6 +37,10 @@ describe('pose helpers', () => {
     expect(stepsNote({ upscale: 'skipped: upscaling is not set up on the server' })).toBe('Not upscaled: upscaling is not set up on the server');
     expect(stepsNote({ upscale: 'not needed' })).toBeNull();
     expect(stepsNote(null)).toBeNull();
+    expect(stepsNote({ upscale: 'not needed', background: 'kept' })).toBe('Background kept');
+    expect(stepsNote({ upscale: 'x2', background: 'kept' })).toBe('Upscaled x2 · Background kept');
+    expect(keepsBackground('justawoman')).toBe(true);
+    expect(keepsBackground('lala')).toBe(false);
     expect(isPhoto(new File(['x'], 'a.JPG', { type: '' }))).toBe(true);
     expect(isPhoto(new File(['x'], 'a.webp', { type: 'image/webp' }))).toBe(true);
     expect(isPhoto(new File(['x'], 'a.heic', { type: 'image/heic' }))).toBe(false);
@@ -70,6 +74,21 @@ describe('EpisodePosesPanel', () => {
     expect(within(card).getByRole('img').getAttribute('src')).toBe('https://x/p1.png');
     fireEvent.click(within(card).getByRole('button', { name: 'Before' }));
     expect(within(card).getByRole('img').getAttribute('src')).toBe('https://x/p1-e.jpg');
+  });
+
+  test('JustAWoman keeps her background: no checkerboard, Before is the original, and processing says Enhancing', async () => {
+    const jaw = { id: 'j1', character_key: 'justawoman', pose: 'front', is_default: true, status: 'ready', original_filename: 'jaw.jpg', original_url: 'https://x/j1.jpg', enhanced_url: 'https://x/j1-e.jpg', final_url: 'https://x/j1-e.jpg', steps: { upscale: 'not needed', background: 'kept' } };
+    episodePosesApi.list.mockResolvedValue([jaw, { ...jaw, id: 'j2', status: 'processing', final_url: null, steps: {} }]);
+    render(<EpisodePosesPanel episode={{ id: 'ep-1' }} />);
+    const card = await screen.findByTestId('epp-photo-j1');
+    const img = within(card).getByRole('img');
+    expect(img.getAttribute('src')).toBe('https://x/j1-e.jpg');
+    expect(img.getAttribute('alt')).toBe('jaw.jpg, enhanced');
+    expect(img.parentElement.className).not.toMatch(/is-checker/);
+    expect(within(card).getByText('Background kept')).toBeTruthy();
+    fireEvent.click(within(card).getByRole('button', { name: 'Before' }));
+    expect(within(card).getByRole('img').getAttribute('src')).toBe('https://x/j1.jpg');
+    expect(within(screen.getByTestId('epp-photo-j2')).getByText('Enhancing…')).toBeTruthy();
   });
 
   test('a failed photo says why and offers Retry', async () => {
