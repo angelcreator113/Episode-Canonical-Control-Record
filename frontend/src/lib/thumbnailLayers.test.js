@@ -6,6 +6,7 @@
  */
 import { describe, test, expect } from 'vitest';
 import {
+  toneValue, stickerMargin, STICKER_SHADOW,
   spaced, alignLayers, distributeLayers, layersInBox, youtubeWarnings, drawnSize, fileSize, TIMESTAMP_ZONE,
   presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer, addText, addPicture,
   boxFromNode, fitText, fitPicture, layerName, LINE_HEIGHT, checklistRows, duplicateLayer, snapBox, SNAP,
@@ -281,5 +282,22 @@ describe('where YouTube shows it (Evoni, 2026-10-21)', () => {
     expect(fileSize(1.4 * 1024 * 1024)).toBe('1.4 MB');
     expect(fileSize(860 * 1024)).toBe('860 KB');
     expect(fileSize(10)).toBe('1 KB');
+  });
+});
+
+describe('picture effects (the server\'s, Evoni 2026-10-21)', () => {
+  test('toneValue: the same numbers as the server', () => {
+    expect(toneValue(128, 0, 0.5)).toBe(128);
+    expect(toneValue(200, 0, 0.5)).toBe(236);
+    expect(toneValue(100, 0.1, 0)).toBe(126);
+    expect(toneValue(250, 0.5, 0)).toBe(255);
+    expect(toneValue(5, -0.5, 0)).toBe(0);
+  });
+
+  test('stickerMargin: room for the edge and the shadow', () => {
+    expect(stickerMargin({})).toBe(0);
+    expect(stickerMargin({ outline: '#FFFFFF', outlineWidth: 12 })).toBe(12);
+    expect(stickerMargin({ shadow: true })).toBe(STICKER_SHADOW.blur + STICKER_SHADOW.offsetY);
+    expect(stickerMargin({ outline: '#FFFFFF', outlineWidth: 20, shadow: true })).toBe(54);
   });
 });

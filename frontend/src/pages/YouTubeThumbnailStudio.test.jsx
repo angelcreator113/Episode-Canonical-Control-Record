@@ -515,6 +515,46 @@ describe('YouTubeThumbnailStudio', () => {
     expect(await screen.findByText("Saved as the episode's thumbnail (JPEG, 1.5 MB; YouTube allows 2 MB).")).toBeTruthy();
   });
 
+  test('picture effects: flip, brightness, contrast, a sticker edge and a shadow; a photo card keeps its own', async () => {
+    renderPage();
+    await opened();
+    fireEvent.click(within(screen.getByTestId('yts-layers')).getByRole('button', { name: 'Lala' }));
+    const fx = within(screen.getByTestId('yts-picture-effects'));
+    fireEvent.click(fx.getByRole('button', { name: /Flip/ }));
+    fireEvent.change(fx.getByRole('slider', { name: 'Brightness' }), { target: { value: '0.2' } });
+    fireEvent.change(fx.getByRole('slider', { name: 'Contrast' }), { target: { value: '-0.1' } });
+    fireEvent.click(fx.getByRole('checkbox', { name: 'Sticker edge' }));
+    fireEvent.change(fx.getByRole('slider', { name: 'Edge width' }), { target: { value: '20' } });
+    fireEvent.click(fx.getByRole('checkbox', { name: 'Drop shadow' }));
+    await waitFor(() => expect(layerOf(lastDraft(), 'lala').shadow).toBe(true), { timeout: 3000 });
+    expect(layerOf(lastDraft(), 'lala')).toMatchObject({ flipX: true, brightness: 0.2, contrast: -0.1, outline: '#FFFFFF', outlineWidth: 20 });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Frame' }), { target: { value: 'polaroid' } });
+    expect(within(screen.getByTestId('yts-picture-effects')).getByText('A photo card has its own edge and shadow.')).toBeTruthy();
+    expect(within(screen.getByTestId('yts-picture-effects')).queryByRole('checkbox', { name: 'Sticker edge' })).toBeNull();
+  });
+
+  test('zoom: in and out by a quarter, 100% to 300%, Fit; +, - and 0 on the keyboard', async () => {
+    renderPage();
+    await opened();
+    const zoom = within(screen.getByTestId('yts-zoom'));
+    expect(zoom.getByText('100%')).toBeTruthy();
+    expect(zoom.getByRole('button', { name: 'Zoom out' }).disabled).toBe(true);
+    fireEvent.click(zoom.getByRole('button', { name: 'Zoom in' }));
+    expect(zoom.getByText('125%')).toBeTruthy();
+    fireEvent.keyDown(window, { key: '+' });
+    fireEvent.keyDown(window, { key: '+' });
+    expect(zoom.getByText('175%')).toBeTruthy();
+    fireEvent.keyDown(window, { key: '-' });
+    expect(zoom.getByText('150%')).toBeTruthy();
+    for (let i = 0; i < 10; i += 1) fireEvent.click(zoom.getByRole('button', { name: 'Zoom in' }));
+    expect(zoom.getByText('300%')).toBeTruthy();
+    fireEvent.click(zoom.getByRole('button', { name: 'Fit' }));
+    expect(zoom.getByText('100%')).toBeTruthy();
+    fireEvent.keyDown(window, { key: '+' });
+    fireEvent.keyDown(window, { key: '0' });
+    expect(zoom.getByText('100%')).toBeTruthy();
+  });
+
   test('text tools: line up, largest size, letter spacing, a box behind the words', async () => {
     renderPage();
     await opened();

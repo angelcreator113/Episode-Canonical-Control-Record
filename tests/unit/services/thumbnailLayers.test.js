@@ -203,6 +203,61 @@ describe('renderLayers', () => {
     expect(await pixel(square, 141, 301)).toEqual([255, 0, 0]);
   });
 
+  // Picture effects (Evoni, 2026-10-21).
+  const halves = () => sharp({ create: { width: 200, height: 100, channels: 3, background: '#FF0000' } })
+    .composite([{ input: { create: { width: 100, height: 100, channels: 3, background: '#0000FF' } }, left: 100, top: 0 }]).png().toBuffer();
+  const pictured = (extra, more = []) => L.readLayers({ version: 2, layers: [
+    { id: 'bg', kind: 'image', role: 'background', src: 'https://b.s3.amazonaws.com/w.png', fit: 'cover', x: 0, y: 0, w: 1280, h: 720 },
+    { id: 'p', kind: 'image', src: 'https://b.s3.amazonaws.com/p.png', fit: 'contain', x: 440, y: 160, w: 400, h: 400, ...extra },
+    ...more,
+  ] }, s3);
+
+  test('picture effects are kept in range', () => {
+    const [, p] = pictured({ brightness: 3, contrast: -3, outline: '#abcdef', outlineWidth: 99, shadow: 1, flipX: 'yes' }).layers;
+    expect(p).toMatchObject({ brightness: 0.5, contrast: -0.5, outline: '#ABCDEF', outlineWidth: 40, shadow: true, flipX: true });
+    const [, q] = pictured({ outline: 'pink' }).layers;
+    expect(q).toMatchObject({ brightness: 0, contrast: 0, outline: null, outlineWidth: 12, shadow: false, flipX: false });
+  });
+
+  test('toneValue: contrast about the middle, then brightness; kept in 0..255', () => {
+    expect(L.toneValue(128, 0, 0.5)).toBe(128);
+    expect(L.toneValue(200, 0, 0.5)).toBe(236);
+    expect(L.toneValue(100, 0.1, 0)).toBe(126);
+    expect(L.toneValue(250, 0.5, 0)).toBe(255);
+    expect(L.toneValue(5, -0.5, 0)).toBe(0);
+  });
+
+  test('flip turns the picture left to right; brightness lightens it', async () => {
+    const white = await solid(1280, 720, '#FFFFFF');
+    const pic = await halves();
+    const plain = await L.renderLayers(pictured({ fit: 'cover' }), { bg: white, p: pic });
+    expect(await pixel(plain, 500, 360)).toEqual([255, 0, 0]);
+    const flipped = await L.renderLayers(pictured({ fit: 'cover', flipX: true }), { bg: white, p: pic });
+    expect(await pixel(flipped, 500, 360)).toEqual([0, 0, 255]);
+    expect(await pixel(flipped, 780, 360)).toEqual([255, 0, 0]);
+    const lighter = await L.renderLayers(pictured({ fit: 'cover', brightness: 0.2 }), { bg: white, p: pic });
+    expect(await pixel(lighter, 780, 360)).toEqual([51, 51, 255]);
+  });
+
+  test('a sticker edge round a cut-out, in its colour; a shadow under it; not on a photo card', async () => {
+    const grey = await solid(1280, 720, '#808080');
+    // A cut-out: a green square in the middle of a see-through picture.
+    const cutout = await sharp({ create: { width: 400, height: 400, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+      .composite([{ input: { create: { width: 200, height: 200, channels: 4, background: '#00FF00' } }, left: 100, top: 100 }]).png().toBuffer();
+    const plain = await L.renderLayers(pictured({}), { bg: grey, p: cutout });
+    expect(await pixel(plain, 640, 360)).toEqual([0, 255, 0]);
+    expect(await pixel(plain, 535, 360)).toEqual([128, 128, 128]); // just left of the square: the background
+    const edged = await L.renderLayers(pictured({ outline: '#FFFFFF', outlineWidth: 12 }), { bg: grey, p: cutout });
+    expect(await pixel(edged, 640, 360)).toEqual([0, 255, 0]);
+    expect(await pixel(edged, 535, 360)).toEqual([255, 255, 255]); // the white edge
+    expect(await pixel(edged, 520, 360)).toEqual([128, 128, 128]); // beyond it
+    const shadowed = await L.renderLayers(pictured({ shadow: true }), { bg: grey, p: cutout });
+    const [r] = await pixel(shadowed, 640, 470); // just below the square
+    expect(r).toBeLessThan(110);
+    const card = await L.renderLayers(pictured({ frame: 'polaroid', outline: '#FF0000' }), { bg: grey, p: cutout });
+    expect(await pixel(card, 445, 360)).toEqual([255, 255, 255]); // the card's own edge, no red sticker edge
+  });
+
   test('fontFile: only the thumbnail fonts', () => {
     expect(L.fontFile('script')).toMatch(/GreatVibes-Regular\.ttf$/);
     expect(L.fontFile('../../etc/passwd')).toBeNull();
