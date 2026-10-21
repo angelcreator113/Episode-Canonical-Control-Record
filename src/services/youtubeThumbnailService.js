@@ -21,6 +21,7 @@
  */
 
 const sharp = require('sharp');
+const layers = require('./thumbnailLayers');
 const { PutObjectCommand, S3Client } = require('@aws-sdk/client-s3');
 
 const WIDTH = 1280;
@@ -318,6 +319,9 @@ async function sources(sequelize, episodeId) {
     cutouts: (cutouts || []).filter((c) => allowedImageUrl(c.url)).map((c) => ({ id: c.id, url: c.url, label: c.name })),
     poses,
     folders: pictureFolders({ angles, cover: show?.cover_image_url, poses, outfit, library }),
+    // The layers: the show's template (null until one is saved) and this episode's draft.
+    template: readTemplate(show?.metadata?.youtube_thumbnail?.template),
+    draft: await getDraft(sequelize, episode.id),
   };
 }
 
@@ -446,12 +450,36 @@ async function readyPoses(sequelize, episodeId) {
   return out;
 }
 
-/** Saves the show's style (merged into shows.metadata.youtube_thumbnail). */
-async function saveStyle(sequelize, showId, body) {
+/**
+ * The show's thumbnail template (shows.metadata.youtube_thumbnail.template):
+ * the layers every episode starts from (Evoni, 2026-10-21), or null when
+ * none is saved or it no longer reads.
+ */
+function readTemplate(raw) {
+  if (!raw) return null;
+  try {
+    return layers.readLayers(raw, allowedImageUrl);
+  } catch (err) {
+    console.error('[YouTubeThumbnail] the show\'s template does not read; ignoring it:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Saves the show's style (merged into shows.metadata.youtube_thumbnail).
+ * body.template, when given, is the layers every episode starts from
+ * (checked like any thumbnail); null clears it; left out, the saved one is
+ * kept (the merge leaves keys the style does not name).
+ */
+async function saveStyle(sequelize, showId, body = {}) {
   const style = readStyle(body);
   if (style.lalaUrl && !allowedImageUrl(style.lalaUrl)) throw new ThumbnailError(400, 'The Lala image must be one of ours');
+  if (body && body.template !== undefined) {
+    style.template = body.template === null ? null : layers.readLayers(body.template, allowedImageUrl);
+  }
   const [rows] = await sequelize.query(
-    `UPDATE shows SET metadata = jsonb_set(COALESCE(metadata::jsonb, '{}'::jsonb), '{youtube_thumbnail}', CAST(:style AS jsonb), true), updated_at = NOW()
+    `UPDATE shows SET metadata = jsonb_set(COALESCE(metadata::jsonb, '{}'::jsonb), '{youtube_thumbnail}',
+        COALESCE(metadata::jsonb -> 'youtube_thumbnail', '{}'::jsonb) || CAST(:style AS jsonb), true), updated_at = NOW()
       WHERE id = :showId AND deleted_at IS NULL RETURNING id`,
     { replacements: { showId, style: JSON.stringify(style) } });
   if (!(rows || []).length) throw new ThumbnailError(404, 'Show not found');
@@ -495,6 +523,76 @@ async function saveAsPrimary(sequelize, episodeId, png) {
     return created;
   });
   return { id: row?.id, url, key };
+}
+
+/** The pictures a thumbnail's visible image layers use, fetched: { [layerId]: Buffer }. */
+async function layerPictures(spec) {
+  const out = {};
+  await Promise.all(spec.layers.filter((l) => l.kind === 'image' && l.visible && l.src).map(async (l) => {
+    out[l.id] = await fetchImage(l.src);
+  }));
+  return out;
+}
+
+/** Renders a layered thumbnail ({ version: 2, layers }, already read): PNG, 1280×720. */
+async function renderSpec(spec) {
+  return layers.renderLayers(spec, await layerPictures(spec));
+}
+
+const draftsReady = async (sequelize) => {
+  const [[reg]] = await sequelize.query("SELECT to_regclass('public.episode_thumbnail_drafts') AS reg");
+  return Boolean(reg && reg.reg);
+};
+
+/** The episode's thumbnail as last arranged ({ version: 2, layers }), or null. */
+async function getDraft(sequelize, episodeId) {
+  if (!await draftsReady(sequelize)) return null;
+  const [[row]] = await sequelize.query(
+    'SELECT spec, updated_at FROM episode_thumbnail_drafts WHERE episode_id = :episodeId AND deleted_at IS NULL LIMIT 1',
+    { replacements: { episodeId } });
+  if (!row) return null;
+  try {
+    return { ...layers.readLayers(row.spec, allowedImageUrl), savedAt: row.updated_at };
+  } catch (err) {
+    console.error(`[YouTubeThumbnail] the draft of episode ${episodeId} does not read; ignoring it:`, err.message);
+    return null;
+  }
+}
+
+/** Keeps the episode's arrangement (one live draft per episode). 503 until its table exists. */
+async function saveDraft(sequelize, episodeId, body, userId = null) {
+  const spec = layers.readLayers(body, allowedImageUrl);
+  if (!await draftsReady(sequelize)) throw new ThumbnailError(503, 'Saving arrangements needs the latest database update (episode_thumbnail_drafts)');
+  const [[episode]] = await sequelize.query('SELECT id FROM episodes WHERE id = :episodeId AND deleted_at IS NULL LIMIT 1', { replacements: { episodeId } });
+  if (!episode) throw new ThumbnailError(404, 'Episode not found');
+  await sequelize.query(
+    `INSERT INTO episode_thumbnail_drafts (episode_id, spec, updated_by)
+     VALUES (:episodeId, CAST(:spec AS jsonb), :userId)
+     ON CONFLICT (episode_id) WHERE deleted_at IS NULL
+     DO UPDATE SET spec = EXCLUDED.spec, updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
+    { replacements: { episodeId, spec: JSON.stringify(spec), userId } });
+  return spec;
+}
+
+const PICTURE_FORMATS = { jpeg: ['jpg', 'image/jpeg'], png: ['png', 'image/png'], webp: ['webp', 'image/webp'], avif: ['avif', 'image/avif'] };
+
+/**
+ * Keeps a picture uploaded in the Studio (S3, under the episode), so a
+ * layer can point at it and an arrangement can be saved. { url, label }.
+ */
+async function uploadPicture(episodeId, buffer, name = 'Upload') {
+  let format;
+  try {
+    ({ format } = await sharp(buffer).metadata());
+  } catch (err) {
+    console.error('[YouTubeThumbnail] uploaded picture unreadable:', err.message);
+    throw new ThumbnailError(400, 'That file is not a picture we can read. Use JPG, PNG or WebP.');
+  }
+  const [ext, contentType] = PICTURE_FORMATS[format] || [];
+  if (!ext) throw new ThumbnailError(400, 'Use a JPG, PNG or WebP picture.');
+  const key = `episodes/${episodeId}/thumbnail-pictures/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  await getS3().send(new PutObjectCommand({ Bucket: requireAssetBucket(), Key: key, Body: buffer, ContentType: contentType }));
+  return { url: `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`, label: String(name || 'Upload').slice(0, 80) };
 }
 
 const rowUrl = (r) => r.url || `https://${r.s3Bucket}.s3.${REGION}.amazonaws.com/${r.s3Key}`;
@@ -565,4 +663,5 @@ module.exports = {
   WIDTH, HEIGHT, LAYOUTS, DEFAULT_STYLE, ThumbnailError,
   readStyle, readSpec, allowedImageUrl, fetchImage, layoutBoxes, duoPositions, readyPoses, pictureFolders, libraryImages, outfitImages, titleSize, wrapTitle, fitTitle, kickerSize, textSvg, shadeSvg,
   render, sources, saveStyle, saveAsPrimary, listSaved, makePrimary, removeSaved,
+  readTemplate, renderSpec, getDraft, saveDraft, uploadPicture,
 };

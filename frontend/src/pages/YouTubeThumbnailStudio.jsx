@@ -1,38 +1,51 @@
 /**
  * Templates › YouTube thumbnails (Evoni, 2026-10-17): make an episode's
- * 1280x720 YouTube thumbnail from its show's style. Pick the show and the
- * episode; the title, the show's name and "EP n" fill in. Choose the layout,
- * the background, Lala and JustAWoman. The pictures are in folders
- * (2026-10-21): Scene sets, Character poses (Lala, JustAWoman › Front, Back,
+ * 1280x720 YouTube thumbnail. Pick the show and the episode; the title, the
+ * show's name and "EP n" fill in.
+ *
+ * The thumbnail is layers (2026-10-21: "make my images bigger or smaller
+ * and move things so I can have them at different angles"): drag any of
+ * them, pull a corner to resize, turn it with the handle above it. The
+ * layout buttons are starting arrangements; the layers list hides, orders
+ * and removes; words and pictures can be added. The pictures are in
+ * folders: Scene sets, Character poses (Lala, JustAWoman › Front, Back,
  * Side, Glamour; Lala's starred pose picked first), This episode's outfit,
- * Asset library and Documents; or upload one.
- * the colours and how dark the background is. The preview is rendered by
- * the server, so it is the file that is saved. Save makes it the episode's
- * primary thumbnail (Production's Thumbnail step); Save style keeps the
- * layout, colours and Lala for every episode of the show.
+ * Asset library, Documents, and this session's Uploads.
+ *
+ * What is arranged on an episode stays with it (kept as it changes, a
+ * draft); Save as show template makes it where every episode starts.
+ * The server draws the saved file from the same layers ("See it exactly").
  *
  * ?show= and ?episode= open it on an episode (Production's Thumbnail step).
  *
  * The one place an episode's thumbnail is edited (Evoni, 2026-10-20): the
- * episode's saved thumbnails are listed under the preview, its current one
- * first; any of them can be made the episode's thumbnail again, and one that
- * is not current can be deleted. Every other page links here
+ * episode's saved thumbnails are listed under the editor, its current one
+ * first; any of them can be made the episode's thumbnail again, and one
+ * that is not current can be deleted. Every other page links here
  * (thumbnailStudioHref); /thumbnails/:episodeId redirects here.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Youtube, Upload, Download, Save, Palette, ImageOff, Check, LayoutTemplate, Sparkles, Star, Trash2, History, Folder, ChevronRight } from 'lucide-react';
+import {
+  Youtube, Upload, Download, Save, Palette, ImageOff, Check, LayoutTemplate, Sparkles, Star, Trash2, History, Folder, ChevronRight,
+  Eye, EyeOff, ArrowUp, ArrowDown, Type, RotateCcw, ScanEye, X,
+} from 'lucide-react';
 import {
   youtubeThumbnailsApi, LAYOUTS, ACCENTS, TEXT_COLORS, episodeWords, defaultPose, folderPath, folderCount, folderCover, firstFolder,
 } from '../lib/youtubeThumbnailsApi';
+import {
+  FONTS, presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer,
+  addText, addPicture, layerName, loadThumbnailFonts, OUTLINE,
+} from '../lib/thumbnailLayers';
+import ThumbnailCanvas from '../components/Thumbnails/ThumbnailCanvas';
 import './YouTubeThumbnailStudio.css';
 
-const PREVIEW_DELAY_MS = 500;
+const DRAFT_DELAY_MS = 1200;
 
-function PickButton({ it, value, upload, onPick }) {
+function PickButton({ it, value, onPick }) {
   return (
-    <button type="button" className={`yts-pick${value === it.url && !upload ? ' is-on' : ''}`} aria-pressed={value === it.url && !upload}
-      onClick={() => onPick(it.url)} title={it.label}>
+    <button type="button" className={`yts-pick${value === it.url ? ' is-on' : ''}`} aria-pressed={value === it.url}
+      onClick={() => onPick(it.url, it.label)} title={it.label}>
       <img src={it.url} alt={it.label || ''} loading="lazy" />
     </button>
   );
@@ -43,8 +56,9 @@ function PickButton({ it, value, upload, onPick }) {
  * it is ("All folders › Character poses › Lala"), the folders here, and the
  * pictures here. It opens in the first of `start` that has pictures (the
  * background in Scene sets, Lala in her poses); any folder is a click away.
+ * Without onNone there is no None button (adding a picture).
  */
-function FolderPicker({ title, tree, start, value, onPick, upload, onUpload, onNone, noneLabel, testid, whole = false }) {
+function FolderPicker({ title, tree, start, value, onPick, onUpload, uploading = false, onNone, noneLabel, testid, whole = false }) {
   const inputRef = useRef(null);
   const startKey = firstFolder(tree, start);
   const [at, setAt] = useState(startKey);
@@ -54,20 +68,19 @@ function FolderPicker({ title, tree, start, value, onPick, upload, onUpload, onN
   const folders = here ? (here.folders || []) : (tree || []);
   const items = here?.items || [];
   const grid = `yts-grid${whole ? ' is-whole' : ''}`;
-  const none = (
-    <button type="button" className={`yts-pick is-none${!value && !upload ? ' is-on' : ''}`} aria-pressed={!value && !upload} onClick={onNone}>
-      <ImageOff size={18} aria-hidden /><span>{noneLabel}</span>
-    </button>
-  );
-  const add = (
-    <button type="button" className={`yts-pick is-upload${upload ? ' is-on' : ''}`} aria-pressed={Boolean(upload)} onClick={() => inputRef.current?.click()}>
-      <Upload size={18} aria-hidden /><span>{upload ? upload.name : 'Upload'}</span>
-    </button>
-  );
   return (
     <fieldset className="yts-field" data-testid={testid}>
       <legend className="yts-label">{title}</legend>
-      <div className={grid}>{none}{add}</div>
+      <div className={grid}>
+        {onNone && (
+          <button type="button" className={`yts-pick is-none${!value ? ' is-on' : ''}`} aria-pressed={!value} onClick={onNone}>
+            <ImageOff size={18} aria-hidden /><span>{noneLabel}</span>
+          </button>
+        )}
+        <button type="button" className="yts-pick is-upload" onClick={() => inputRef.current?.click()} disabled={uploading}>
+          <Upload size={18} aria-hidden /><span>{uploading ? 'Uploading…' : 'Upload'}</span>
+        </button>
+      </div>
       <nav className="yts-crumbs" aria-label={`${title}: where you are`} data-testid={`${testid}-crumbs`}>
         <button type="button" onClick={() => setAt(null)} aria-current={here ? undefined : 'location'}>All folders</button>
         {path.map((f) => (
@@ -95,7 +108,7 @@ function FolderPicker({ title, tree, start, value, onPick, upload, onUpload, onN
       )}
       {items.length > 0 && (
         <div className={grid} data-testid={`${testid}-pictures`}>
-          {items.map((it) => <PickButton key={it.url} it={it} value={value} upload={upload} onPick={onPick} />)}
+          {items.map((it) => <PickButton key={it.url} it={it} value={value} onPick={onPick} />)}
         </div>
       )}
       {!folders.length && !items.length && <p className="yts-note">No pictures yet. Upload one.</p>}
@@ -105,6 +118,93 @@ function FolderPicker({ title, tree, start, value, onPick, upload, onUpload, onN
   );
 }
 
+/** The picked layer's own settings: words, font and colour; or a picture's fit and frame; and its turn. */
+function LayerSettings({ layer, onChange }) {
+  if (!layer || layer.kind === 'shade') return null;
+  return (
+    <fieldset className="yts-field yts-layer-settings" data-testid="yts-layer-settings">
+      <legend className="yts-label">{layerName(layer)}</legend>
+      {(layer.kind === 'text' || layer.kind === 'badge') && (
+        <input className="yts-input" value={layer.text} maxLength={layer.kind === 'badge' ? 16 : 160}
+          onChange={(e) => onChange({ text: e.target.value })} aria-label={`${layerName(layer)} words`} />
+      )}
+      {layer.kind === 'text' && (
+        <div className="yts-row">
+          <label className="yts-field">
+            <span className="yts-label">Font</span>
+            <select className="yts-input" value={layer.font} onChange={(e) => onChange({ font: e.target.value })} aria-label="Font">
+              {Object.entries(FONTS).map(([k, f]) => <option key={k} value={k}>{f.label}</option>)}
+            </select>
+          </label>
+          <label className="yts-field is-small">
+            <span className="yts-label">Colour</span>
+            <input type="color" className="yts-color" value={layer.color} onChange={(e) => onChange({ color: e.target.value.toUpperCase() })} aria-label="Words colour" />
+          </label>
+          <label className="yts-field is-small">
+            <span className="yts-label">Outline</span>
+            <input type="checkbox" checked={Boolean(layer.stroke)} onChange={(e) => onChange({ stroke: e.target.checked ? OUTLINE : null })} aria-label="Outline the words" />
+          </label>
+        </div>
+      )}
+      {layer.kind === 'image' && layer.role !== 'background' && (
+        <div className="yts-row">
+          <label className="yts-field">
+            <span className="yts-label">Frame</span>
+            <select className="yts-input" value={layer.frame} onChange={(e) => onChange({ frame: e.target.value })} aria-label="Frame">
+              <option value="none">None</option>
+              <option value="polaroid">Photo card</option>
+            </select>
+          </label>
+          <label className="yts-field">
+            <span className="yts-label">Fit</span>
+            <select className="yts-input" value={layer.fit} onChange={(e) => onChange({ fit: e.target.value })} aria-label="Fit">
+              <option value="contain">Whole picture</option>
+              <option value="cover">Fill the box</option>
+            </select>
+          </label>
+        </div>
+      )}
+      <label className="yts-field">
+        <span className="yts-label">Turn ({Math.round(layer.rotation)}°)</span>
+        <input type="range" min="-180" max="180" step="1" value={layer.rotation} onChange={(e) => onChange({ rotation: Number(e.target.value) })} aria-label="Turn" />
+      </label>
+    </fieldset>
+  );
+}
+
+/** The layers, front first: pick, hide or show, move forward or back, remove. */
+function LayersList({ spec, selectedId, onSelect, onChange }) {
+  const front = [...(spec?.layers || [])].reverse();
+  return (
+    <fieldset className="yts-field" data-testid="yts-layers">
+      <legend className="yts-label">Layers</legend>
+      <ul className="yts-layers">
+        {front.map((l, i) => (
+          <li key={l.id} className={`yts-layer${l.id === selectedId ? ' is-on' : ''}${l.visible ? '' : ' is-hidden'}`}>
+            <button type="button" className="yts-layer-name" onClick={() => onSelect(l.kind === 'shade' ? null : l.id)} aria-pressed={l.id === selectedId}>
+              {layerName(l)}
+            </button>
+            <button type="button" className="yts-icon-btn" onClick={() => onChange(updateLayer(spec, l.id, { visible: !l.visible }))}
+              aria-label={`${l.visible ? 'Hide' : 'Show'} ${layerName(l)}`} title={l.visible ? 'Hide' : 'Show'}>
+              {l.visible ? <Eye size={15} aria-hidden /> : <EyeOff size={15} aria-hidden />}
+            </button>
+            <button type="button" className="yts-icon-btn" onClick={() => onChange(moveLayer(spec, l.id, 'up'))} disabled={i === 0}
+              aria-label={`Bring ${layerName(l)} forward`} title="Forward"><ArrowUp size={15} aria-hidden /></button>
+            <button type="button" className="yts-icon-btn" onClick={() => onChange(moveLayer(spec, l.id, 'down'))} disabled={i === front.length - 1}
+              aria-label={`Send ${layerName(l)} back`} title="Back"><ArrowDown size={15} aria-hidden /></button>
+            <button type="button" className="yts-icon-btn is-danger" onClick={() => { if (l.id === selectedId) onSelect(null); onChange(removeLayer(spec, l.id)); }}
+              aria-label={`Remove ${layerName(l)}`} title="Remove"><Trash2 size={15} aria-hidden /></button>
+          </li>
+        ))}
+      </ul>
+    </fieldset>
+  );
+}
+
+/** What a role shows now (for the controls). */
+const roleText = (spec, role) => layerOf(spec, role)?.text || '';
+const roleSrc = (spec, role) => layerOf(spec, role)?.src || null;
+
 export default function YouTubeThumbnailStudio() {
   const [params, setParams] = useSearchParams();
   const [shows, setShows] = useState([]);
@@ -112,15 +212,25 @@ export default function YouTubeThumbnailStudio() {
   const [showId, setShowId] = useState(params.get('show') || '');
   const [episodeId, setEpisodeId] = useState(params.get('episode') || '');
   const [sources, setSources] = useState(null);
-  const [spec, setSpec] = useState(null);
-  const [files, setFiles] = useState({ background: null, lala: null, jaw: null });
-  const [preview, setPreview] = useState(null);
+  const [spec, setSpecState] = useState(null);
+  const [look, setLook] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
+  const [uploads, setUploads] = useState([]);
+  const [uploading, setUploading] = useState(null);
+  const [exact, setExact] = useState(null);
   const [rendering, setRendering] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(null);
+  const [draftNote, setDraftNote] = useState(null);
   const [saved, setSaved] = useState(null);
   const [history, setHistory] = useState([]);
-  const renderId = useRef(0);
+  const [fontsTick, setFontsTick] = useState(0);
+  const edited = useRef(false);
+  // The layers as they are now (an upload adds to them after its await).
+  const specRef = useRef(null);
+  specRef.current = spec;
+
+  useEffect(() => { loadThumbnailFonts().then(() => setFontsTick((n) => n + 1)); }, []);
 
   // Shows, then the chosen show's episodes.
   useEffect(() => {
@@ -137,26 +247,44 @@ export default function YouTubeThumbnailStudio() {
     });
   }, [showId]);
 
-  // The episode's pictures and its show's style.
+  /** This episode's words and pictures, as a template or a layout fills them. */
+  const episodeContent = useCallback((src) => ({
+    ...episodeWords(src.episode, src.show),
+    backgroundUrl: src.backgrounds?.[0]?.url || null,
+    // This episode's starred Lala pose first (her look changes each
+    // episode), then the show's saved Lala, then the Asset Library's.
+    lalaUrl: defaultPose(src.poses?.lala)?.url || src.style?.lalaUrl || src.cutouts?.[0]?.url || null,
+    // JustAWoman joins only when picked.
+    jawUrl: null,
+  }), []);
+
+  /** Where an episode starts: the show's template, else the show's layout. */
+  const startingSpec = useCallback((src, lk) => (src.template
+    ? fillTemplate(src.template, episodeContent(src))
+    : presetLayers(lk.layout, episodeContent(src), lk)), [episodeContent]);
+
+  // The episode's pictures, its show's style and template, and its own arrangement.
   useEffect(() => {
-    if (!episodeId) { setSources(null); setSpec(null); return; }
+    if (!episodeId) { setSources(null); setSpecState(null); return; }
     let live = true;
     setSaved(null);
+    setExact(null);
+    setSelectedId(null);
+    setDraftNote(null);
     youtubeThumbnailsApi.sources(episodeId).then((src) => {
       if (!live || !src) return;
       setSources(src);
       if (src.show?.id && src.show.id !== showId) setShowId(src.show.id);
-      setFiles({ background: null, lala: null, jaw: null });
-      setSpec({
-        ...src.style,
-        ...episodeWords(src.episode, src.show),
-        backgroundUrl: src.backgrounds?.[0]?.url || null,
-        // This episode's starred Lala pose first (her look changes each
-        // episode), then the show's saved Lala, then the Asset Library's.
-        lalaUrl: defaultPose(src.poses?.lala)?.url || src.style?.lalaUrl || src.cutouts?.[0]?.url || null,
-        // JustAWoman joins only when picked.
-        jawUrl: null,
-      });
+      const lk = { layout: src.style?.layout || 'lala-left', accent: src.style?.accent, textColor: src.style?.textColor, dim: src.style?.dim };
+      setLook(lk);
+      edited.current = false;
+      if (src.draft) {
+        const { savedAt, ...draft } = src.draft;
+        setSpecState(draft);
+        setDraftNote(savedAt ? 'Your arrangement for this episode.' : null);
+      } else {
+        setSpecState(startingSpec(src, lk));
+      }
     }).catch((err) => {
       console.error('[YouTubeThumbnails] sources load failed:', err);
       if (live) setMessage({ type: 'error', text: err?.response?.data?.error || 'Could not load the episode.' });
@@ -164,6 +292,23 @@ export default function YouTubeThumbnailStudio() {
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [episodeId]);
+
+  // Every change is kept for this episode, a moment after the last one.
+  useEffect(() => {
+    if (!spec || !episodeId || !edited.current) return undefined;
+    const t = setTimeout(async () => {
+      try {
+        await youtubeThumbnailsApi.saveDraft(episodeId, spec);
+        setDraftNote('Arrangement kept for this episode.');
+      } catch (err) {
+        console.error('[YouTubeThumbnails] arrangement not kept:', err);
+        setDraftNote(err?.response?.status === 503
+          ? 'Arrangements are kept once the server has its latest update.'
+          : 'This arrangement could not be kept. Save the thumbnail to keep it.');
+      }
+    }, DRAFT_DELAY_MS);
+    return () => clearTimeout(t);
+  }, [spec, episodeId]);
 
   // The episode's saved thumbnails, its current one first.
   const loadHistory = useCallback(async (id) => {
@@ -178,38 +323,95 @@ export default function YouTubeThumbnailStudio() {
   }, []);
   useEffect(() => { loadHistory(episodeId); }, [episodeId, loadHistory]);
 
-  // The preview, a moment after the last change; an older render never replaces a newer one.
-  useEffect(() => {
-    if (!spec || !spec.title?.trim()) return undefined;
-    const id = ++renderId.current;
-    const t = setTimeout(async () => {
-      setRendering(true);
-      try {
-        const blob = await youtubeThumbnailsApi.render(spec, files);
-        if (id !== renderId.current) return;
-        setPreview((old) => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(blob); });
-        // A good preview clears only a failed preview, not e.g. the episode list's error.
-        setMessage((m) => (m?.from === 'preview' ? null : m));
-      } catch (err) {
-        console.error('[YouTubeThumbnails] preview failed:', err);
-        if (id === renderId.current) setMessage({ type: 'error', from: 'preview', text: 'The preview could not be made. Check the pictures.' });
-      } finally {
-        if (id === renderId.current) setRendering(false);
-      }
-    }, PREVIEW_DELAY_MS);
-    return () => clearTimeout(t);
-  }, [spec, files]);
+  useEffect(() => () => { if (exact) URL.revokeObjectURL(exact); }, [exact]);
 
-  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+  /** A change made here: kept as this episode's arrangement. */
+  const edit = useCallback((next) => {
+    edited.current = true;
+    setSaved(null);
+    setExact(null);
+    setSpecState((s) => (typeof next === 'function' ? next(s) : next));
+  }, []);
 
-  const set = useCallback((patch) => { setSpec((s) => ({ ...s, ...patch })); setSaved(null); }, []);
+  const setRole = (role, value) => edit((s) => {
+    if (!value && (role === 'lala' || role === 'jaw')) {
+      const l = layerOf(s, role);
+      return l ? removeLayer(s, l.id) : s;
+    }
+    return setRoleContent(s, role, value, look?.layout);
+  });
+
+  /** Adds a layer (addText, addPicture) and picks it, so its settings show. */
+  const addAndPick = (make) => {
+    const next = make(specRef.current);
+    edit(next);
+    setSelectedId(next.layers.at(-1).id);
+  };
+
+  const setColours = (patch) => {
+    setLook((l) => ({ ...l, ...patch }));
+    edit((s) => applyStyle(s, patch));
+  };
+
+  const pickLayout = (layout) => {
+    if (edited.current && !window.confirm('Start again from this layout? Moved, resized and turned layers go back to where the layout puts them.')) return;
+    const content = {
+      title: roleText(spec, 'title'), kicker: roleText(spec, 'kicker'), badge: roleText(spec, 'badge'),
+      backgroundUrl: roleSrc(spec, 'background'), lalaUrl: roleSrc(spec, 'lala'), jawUrl: roleSrc(spec, 'jaw'),
+    };
+    const lk = { ...look, layout };
+    setLook(lk);
+    setSelectedId(null);
+    edit(presetLayers(layout, content, lk));
+  };
+
+  const resetToTemplate = () => {
+    if (!sources) return;
+    if (!window.confirm(`Start this episode again from ${sources.template ? "the show's template" : "the show's layout"}?`)) return;
+    setSelectedId(null);
+    edit(startingSpec(sources, look));
+  };
+
+  const upload = async (file, then) => {
+    setUploading(file.name);
+    try {
+      const pic = await youtubeThumbnailsApi.uploadPicture(episodeId, file);
+      setUploads((u) => [pic, ...u.filter((x) => x.url !== pic.url)]);
+      then(pic.url, pic.label);
+    } catch (err) {
+      console.error('[YouTubeThumbnails] upload failed:', err);
+      setMessage({ type: 'error', text: err?.response?.data?.error || 'The picture could not be uploaded.' });
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  // The folders, with this session's uploads first.
+  const tree = useMemo(() => [
+    ...(uploads.length ? [{ key: 'uploads', label: 'Uploads', items: uploads }] : []),
+    ...(sources?.folders || []),
+  ], [uploads, sources]);
+
   const pickShow = (id) => { setShowId(id); setEpisodeId(''); setParams(id ? { show: id } : {}); };
   const pickEpisode = (id) => { setEpisodeId(id); setParams(id ? { show: showId, episode: id } : { show: showId }); };
+
+  const seeExactly = async () => {
+    setRendering(true);
+    try {
+      const blob = await youtubeThumbnailsApi.render(spec);
+      setExact((old) => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(blob); });
+    } catch (err) {
+      console.error('[YouTubeThumbnails] render failed:', err);
+      setMessage({ type: 'error', text: err?.response?.data?.error || 'The thumbnail could not be drawn. Check the pictures.' });
+    } finally {
+      setRendering(false);
+    }
+  };
 
   const save = async () => {
     setBusy(true);
     try {
-      const out = await youtubeThumbnailsApi.save(episodeId, spec, files);
+      const out = await youtubeThumbnailsApi.save(episodeId, spec);
       setSaved(out);
       setMessage({ type: 'ok', text: "Saved as the episode's thumbnail." });
       loadHistory(episodeId);
@@ -249,19 +451,21 @@ export default function YouTubeThumbnailStudio() {
     }
   };
 
-  const saveStyle = async () => {
+  const saveTemplate = async () => {
     if (!sources?.show?.id) return;
     setBusy(true);
     try {
       // An episode's pose is that episode's look: the show keeps its own Lala.
-      const isPose = (sources?.poses?.lala || []).some((p) => p.url === spec.lalaUrl);
-      const lalaUrl = files.lala ? null : isPose ? (sources?.style?.lalaUrl || null) : spec.lalaUrl;
-      const style = { layout: spec.layout, accent: spec.accent, textColor: spec.textColor, dim: spec.dim, lalaUrl };
+      const lalaNow = roleSrc(spec, 'lala');
+      const isPose = (sources?.poses?.lala || []).some((p) => p.url === lalaNow);
+      const lalaUrl = isPose || !lalaNow ? (sources?.style?.lalaUrl || null) : lalaNow;
+      const style = { layout: look.layout, accent: look.accent, textColor: look.textColor, dim: look.dim, lalaUrl, template: spec };
       await youtubeThumbnailsApi.saveStyle(sources.show.id, style);
-      setMessage({ type: 'ok', text: `Style saved for ${sources.show.name}: every episode starts from it.` });
+      setSources((s) => ({ ...s, template: spec }));
+      setMessage({ type: 'ok', text: `Template saved for ${sources.show.name}: every episode starts from this arrangement, with its own words and pictures.` });
     } catch (err) {
-      console.error('[YouTubeThumbnails] style save failed:', err);
-      setMessage({ type: 'error', text: err?.response?.data?.error || 'The style could not be saved.' });
+      console.error('[YouTubeThumbnails] template save failed:', err);
+      setMessage({ type: 'error', text: err?.response?.data?.error || 'The template could not be saved.' });
     } finally {
       setBusy(false);
     }
@@ -272,13 +476,16 @@ export default function YouTubeThumbnailStudio() {
     return `${(sources?.show?.name || 'thumbnail').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}${n ? `-ep${n}` : ''}.png`;
   }, [sources]);
 
+  const picked = spec?.layers.find((l) => l.id === selectedId) || null;
+  const shade = layerOf(spec, 'shade');
+
   return (
     <div className="yts">
       <header className="yts-banner">
         <div>
           <p className="yts-kicker"><Link to="/template-studio">Templates</Link> · YouTube</p>
           <h1 className="yts-title"><Youtube size={30} aria-hidden /> YouTube thumbnails</h1>
-          <p className="yts-sub">Each episode's thumbnail, from its show's style. 1280 × 720.</p>
+          <p className="yts-sub">Each episode's thumbnail, from its show's template. Drag, resize and turn anything. 1280 × 720.</p>
         </div>
         <div className="yts-choose">
           <label className="yts-select">
@@ -305,22 +512,41 @@ export default function YouTubeThumbnailStudio() {
       ) : (
         <>
         <div className="yts-work">
-          <section className="yts-stage" aria-label="Preview">
-            <div className={`yts-preview${rendering ? ' is-rendering' : ''}`}>
-              {preview ? <img src={preview} alt="Thumbnail preview" data-testid="yts-preview" /> : <span className="yts-note">Making the preview…</span>}
-            </div>
+          <section className="yts-stage" aria-label="Editor">
+            <ThumbnailCanvas spec={spec} selectedId={selectedId} onSelect={setSelectedId} fontsTick={fontsTick}
+              onChange={(id, patch) => edit((s) => updateLayer(s, id, patch))} />
+            <p className="yts-note" data-testid="yts-draft-note">
+              {draftNote || 'Click a layer to move it, pull a corner to resize, use the top handle to turn it.'}
+            </p>
             <div className="yts-actions">
-              <button type="button" className="yts-btn is-primary" onClick={save} disabled={busy || !spec.title?.trim()} data-testid="yts-save">
+              <button type="button" className="yts-btn is-primary" onClick={save} disabled={busy} data-testid="yts-save">
                 <Save size={16} aria-hidden /> Save as episode thumbnail
               </button>
-              <button type="button" className="yts-btn" onClick={saveStyle} disabled={busy || !sources?.show?.id} data-testid="yts-save-style">
-                <Palette size={16} aria-hidden /> Save style for {sources?.show?.name || 'the show'}
+              <button type="button" className="yts-btn" onClick={seeExactly} disabled={rendering} data-testid="yts-exact">
+                <ScanEye size={16} aria-hidden /> {rendering ? 'Drawing…' : 'See it exactly'}
               </button>
-              {preview && <a className="yts-btn" href={preview} download={fileName}><Download size={16} aria-hidden /> Download</a>}
+              <button type="button" className="yts-btn" onClick={saveTemplate} disabled={busy || !sources?.show?.id} data-testid="yts-save-template">
+                <Palette size={16} aria-hidden /> Save as {sources?.show?.name || 'show'} template
+              </button>
+              <button type="button" className="yts-btn" onClick={resetToTemplate} data-testid="yts-reset">
+                <RotateCcw size={16} aria-hidden /> Start again
+              </button>
             </div>
+            {exact && (
+              <figure className="yts-exact" data-testid="yts-exact-figure">
+                <img src={exact} alt="The thumbnail exactly as it will be saved" data-testid="yts-preview" />
+                <figcaption>
+                  Exactly as it will be saved.
+                  <a className="yts-btn" href={exact} download={fileName}><Download size={16} aria-hidden /> Download</a>
+                  <button type="button" className="yts-icon-btn" onClick={() => setExact(null)} aria-label="Close the exact view"><X size={15} aria-hidden /></button>
+                </figcaption>
+              </figure>
+            )}
             {saved && (
               <p className="yts-saved"><Check size={16} aria-hidden /> Saved. <Link to={`/episodes/${episodeId}?tab=production`}>Back to Production</Link></p>
             )}
+            <LayerSettings layer={picked} onChange={(patch) => edit((s) => updateLayer(s, picked.id, patch))} />
+            <LayersList spec={spec} selectedId={selectedId} onSelect={setSelectedId} onChange={edit} />
           </section>
 
           <section className="yts-panel" aria-label="Thumbnail settings">
@@ -328,7 +554,7 @@ export default function YouTubeThumbnailStudio() {
               <legend className="yts-label">Layout</legend>
               <div className="yts-layouts">
                 {LAYOUTS.map((l) => (
-                  <button key={l.key} type="button" className={`yts-layout is-${l.key}${spec.layout === l.key ? ' is-on' : ''}`} aria-pressed={spec.layout === l.key} onClick={() => set({ layout: l.key })}>
+                  <button key={l.key} type="button" className={`yts-layout is-${l.key}${look?.layout === l.key ? ' is-on' : ''}`} aria-pressed={look?.layout === l.key} onClick={() => pickLayout(l.key)}>
                     <span className="yts-layout-art" aria-hidden><i /><b /></span>{l.label}
                   </button>
                 ))}
@@ -337,61 +563,65 @@ export default function YouTubeThumbnailStudio() {
 
             <label className="yts-field">
               <span className="yts-label">Title</span>
-              <input className="yts-input" value={spec.title} maxLength={90} onChange={(e) => set({ title: e.target.value })} aria-label="Title" />
+              <input className="yts-input" value={roleText(spec, 'title')} maxLength={160} onChange={(e) => setRole('title', e.target.value)} aria-label="Title" />
             </label>
             <div className="yts-row">
               <label className="yts-field">
                 <span className="yts-label">Show name line</span>
-                <input className="yts-input" value={spec.kicker} maxLength={48} onChange={(e) => set({ kicker: e.target.value })} aria-label="Show name line" />
+                <input className="yts-input" value={roleText(spec, 'kicker')} maxLength={160} onChange={(e) => setRole('kicker', e.target.value)} aria-label="Show name line" />
               </label>
               <label className="yts-field is-small">
                 <span className="yts-label">Badge</span>
-                <input className="yts-input" value={spec.badge} maxLength={12} onChange={(e) => set({ badge: e.target.value })} aria-label="Badge" />
+                <input className="yts-input" value={roleText(spec, 'badge')} maxLength={16} onChange={(e) => setRole('badge', e.target.value)} aria-label="Badge" />
               </label>
             </div>
 
-            <FolderPicker title="Background" testid="yts-backgrounds" tree={sources?.folders} start={['scene-sets']} value={spec.backgroundUrl} upload={files.background}
-              noneLabel="Plain" onPick={(url) => { setFiles((f) => ({ ...f, background: null })); set({ backgroundUrl: url }); }}
-              onUpload={(f) => { setFiles((x) => ({ ...x, background: f })); setSaved(null); }}
-              onNone={() => { setFiles((f) => ({ ...f, background: null })); set({ backgroundUrl: null }); }} />
+            <div className="yts-actions">
+              <button type="button" className="yts-btn" onClick={() => addAndPick((s) => addText(s))} data-testid="yts-add-text">
+                <Type size={16} aria-hidden /> Add words
+              </button>
+            </div>
 
-            {spec.layout !== 'center' && (
-              <FolderPicker title="Lala" testid="yts-lala" whole value={spec.lalaUrl} upload={files.lala}
-                tree={sources?.folders} start={['poses/lala', 'library/lala']}
-                noneLabel="No Lala" onPick={(url) => { setFiles((f) => ({ ...f, lala: null })); set({ lalaUrl: url }); }}
-                onUpload={(f) => { setFiles((x) => ({ ...x, lala: f })); setSaved(null); }}
-                onNone={() => { setFiles((f) => ({ ...f, lala: null })); set({ lalaUrl: null }); }} />
+            <FolderPicker title="Background" testid="yts-backgrounds" tree={tree} start={['scene-sets']} value={roleSrc(spec, 'background')}
+              noneLabel="Plain" onPick={(url) => setRole('background', url)} uploading={Boolean(uploading)}
+              onUpload={(f) => upload(f, (url) => setRole('background', url))}
+              onNone={() => setRole('background', null)} />
+
+            <FolderPicker title="Lala" testid="yts-lala" whole value={roleSrc(spec, 'lala')} tree={tree} start={['poses/lala', 'library/lala']}
+              noneLabel="No Lala" onPick={(url) => setRole('lala', url)} uploading={Boolean(uploading)}
+              onUpload={(f) => upload(f, (url) => setRole('lala', url))}
+              onNone={() => setRole('lala', null)} />
+            <FolderPicker title="JustAWoman" testid="yts-jaw" whole value={roleSrc(spec, 'jaw')} tree={tree} start={['poses/justawoman']}
+              noneLabel="No JustAWoman" onPick={(url) => setRole('jaw', url)} uploading={Boolean(uploading)}
+              onUpload={(f) => upload(f, (url) => setRole('jaw', url))}
+              onNone={() => setRole('jaw', null)} />
+            {!(sources?.poses?.lala || []).length && !(sources?.poses?.justawoman || []).length && (
+              <p className="yts-note" data-testid="yts-poses-note"><Sparkles size={14} aria-hidden /> Add Lala and JustAWoman photos on the episode's <Link to={`/episodes/${episodeId}?tab=files`}>Files tab</Link>, labelled by pose; they show here once they are ready. Or upload one.</p>
             )}
-            {spec.layout !== 'center' && (
-              <FolderPicker title="JustAWoman" testid="yts-jaw" whole value={spec.jawUrl} upload={files.jaw}
-                tree={sources?.folders} start={['poses/justawoman']}
-                noneLabel="No JustAWoman" onPick={(url) => { setFiles((f) => ({ ...f, jaw: null })); set({ jawUrl: url }); }}
-                onUpload={(f) => { setFiles((x) => ({ ...x, jaw: f })); setSaved(null); }}
-                onNone={() => { setFiles((f) => ({ ...f, jaw: null })); set({ jawUrl: null }); }} />
-            )}
-            {spec.layout !== 'center' && !(sources?.poses?.lala || []).length && !(sources?.poses?.justawoman || []).length && (
-              <p className="yts-note" data-testid="yts-poses-note"><Sparkles size={14} aria-hidden /> Add Lala and JustAWoman photos on the episode's <Link to={`/episodes/${episodeId}?tab=files`}>Files tab</Link>, labelled by pose; they show here once their background is removed. Or upload a PNG cut-out.</p>
-            )}
+
+            <FolderPicker title="Add a picture" testid="yts-add-picture" whole tree={tree} start={['outfit', 'documents']}
+              onPick={(url, label) => addAndPick((s) => addPicture(s, url, label))} uploading={Boolean(uploading)}
+              onUpload={(f) => upload(f, (url, label) => addAndPick((s) => addPicture(s, url, label)))} />
 
             <fieldset className="yts-field">
               <legend className="yts-label">Accent</legend>
               <div className="yts-swatches">
                 {ACCENTS.map((c) => (
-                  <button key={c} type="button" className={`yts-swatch${spec.accent === c ? ' is-on' : ''}`} style={{ background: c }}
-                    aria-label={`Accent ${c}`} aria-pressed={spec.accent === c} onClick={() => set({ accent: c })} />
+                  <button key={c} type="button" className={`yts-swatch${shade?.accent === c ? ' is-on' : ''}`} style={{ background: c }}
+                    aria-label={`Accent ${c}`} aria-pressed={shade?.accent === c} onClick={() => setColours({ accent: c })} />
                 ))}
               </div>
             </fieldset>
             <div className="yts-row">
               <label className="yts-field">
                 <span className="yts-label">Title colour</span>
-                <select className="yts-input" value={spec.textColor} onChange={(e) => set({ textColor: e.target.value })} aria-label="Title colour">
+                <select className="yts-input" value={layerOf(spec, 'title')?.color || TEXT_COLORS[0].value} onChange={(e) => setColours({ textColor: e.target.value })} aria-label="Title colour">
                   {TEXT_COLORS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
               </label>
               <label className="yts-field">
                 <span className="yts-label">Darken the background</span>
-                <input type="range" min="0" max="0.8" step="0.05" value={spec.dim} onChange={(e) => set({ dim: Number(e.target.value) })} aria-label="Darken the background" />
+                <input type="range" min="0" max="0.8" step="0.05" value={shade?.dim ?? 0} onChange={(e) => setColours({ dim: Number(e.target.value) })} aria-label="Darken the background" disabled={!shade} />
               </label>
             </div>
           </section>

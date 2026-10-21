@@ -1,7 +1,8 @@
 /**
  * YouTube thumbnails (Templates › YouTube thumbnails; Evoni, 2026-10-17):
- * /api/v1/youtube-thumbnails. An episode's 1280x720 thumbnail from its
- * show's style; the server renders it, so the preview is the saved file.
+ * /api/v1/youtube-thumbnails. An episode's 1280x720 thumbnail, as layers
+ * (2026-10-21; lib/thumbnailLayers) that start from the show's template;
+ * the server draws the saved file from the same layers.
  * The one place an episode's thumbnail is edited (Evoni, 2026-10-20): every
  * other page links here with thumbnailStudioHref.
  */
@@ -26,16 +27,6 @@ export const TEXT_COLORS = [
   { value: '#FDF4E3', label: 'Cream' },
   { value: '#FFE9A8', label: 'Gold' },
 ];
-
-/** The request: the spec as JSON, and the uploaded pictures when there are any. */
-export function renderForm(spec, files = {}) {
-  const form = new FormData();
-  form.append('spec', JSON.stringify(spec));
-  if (files.background) form.append('background', files.background);
-  if (files.lala) form.append('lala', files.lala);
-  if (files.jaw) form.append('jaw', files.jaw);
-  return form;
-}
 
 /**
  * The pose a thumbnail starts from: the starred one of the first pose
@@ -113,8 +104,15 @@ export async function currentThumbnail(episodeId) {
 
 export const youtubeThumbnailsApi = {
   sources: (episodeId) => api.get(`${base}/episodes/${episodeId}/sources`).then((r) => r.data?.data),
-  render: (spec, files) => api.post(`${base}/render`, renderForm(spec, files), { responseType: 'blob', timeout: 60000 }).then((r) => r.data),
-  save: (episodeId, spec, files) => api.post(`${base}/episodes/${episodeId}`, renderForm(spec, files), { timeout: 60000 }).then((r) => r.data?.data),
+  render: (spec) => api.post(`${base}/render`, spec, { responseType: 'blob', timeout: 60000 }).then((r) => r.data),
+  save: (episodeId, spec) => api.post(`${base}/episodes/${episodeId}`, spec, { timeout: 60000 }).then((r) => r.data?.data),
+  draft: (episodeId) => api.get(`${base}/episodes/${episodeId}/draft`).then((r) => r.data?.data || null),
+  saveDraft: (episodeId, spec) => api.put(`${base}/episodes/${episodeId}/draft`, spec).then((r) => r.data?.data),
+  uploadPicture: (episodeId, file) => {
+    const form = new FormData();
+    form.append('image', file);
+    return api.post(`${base}/episodes/${episodeId}/pictures`, form, { timeout: 0 }).then((r) => r.data?.data);
+  },
   saved: (episodeId) => api.get(`${base}/episodes/${episodeId}/saved`).then((r) => (Array.isArray(r.data?.data) ? r.data.data : [])),
   makePrimary: (episodeId, thumbnailId) => api.post(`${base}/episodes/${episodeId}/saved/${thumbnailId}/primary`).then((r) => r.data?.data),
   removeSaved: (episodeId, thumbnailId) => api.delete(`${base}/episodes/${episodeId}/saved/${thumbnailId}`).then((r) => r.data?.data),

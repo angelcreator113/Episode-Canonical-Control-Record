@@ -1,0 +1,272 @@
+/**
+ * The YouTube thumbnail as layers, in the browser (Evoni, 2026-10-21: "make
+ * my images bigger or smaller and move things so I can have them at
+ * different angles"). A thumbnail is { version: 2, layers } on a 1280×720
+ * canvas, drawn bottom layer first; the server draws the saved file from
+ * the same layers (src/services/thumbnailLayers.js). FONTS and fitText
+ * mirror the server's, so the editor shows what will be saved.
+ *
+ * Layers with a role are the ones the Studio's controls fill: background,
+ * shade, jaw, lala, kicker, title, badge. The three layouts (Lala left,
+ * Lala right, Title only) are presets: where those roles start.
+ */
+import api from '../services/api';
+
+export const WIDTH = 1280;
+export const HEIGHT = 720;
+export const LINE_HEIGHT = 1.12;
+const MIN_SIZE = 10;
+
+/** The thumbnail fonts: key → family and weight (the server's FONTS). */
+export const FONTS = {
+  serif: { family: 'Thumb Serif', weight: 'bold', label: 'Serif' },
+  display: { family: 'Thumb Display', weight: 'bold', label: 'Elegant' },
+  sans: { family: 'Thumb Sans', weight: 'bold', label: 'Clean' },
+  script: { family: 'Thumb Script', weight: 'normal', label: 'Script' },
+  hand: { family: 'Thumb Hand', weight: 'bold', label: 'Handwritten' },
+};
+
+/** The outline round thumbnail words (dark plum; the server's default stroke). */
+export const OUTLINE = '#2A0A22';
+
+export const fontCss = (key, size) => {
+  const f = FONTS[key] || FONTS.serif;
+  return `${f.weight === 'bold' ? 'bold ' : ''}${size}px "${f.family}"`;
+};
+
+let fontsLoading = null;
+/**
+ * Loads the thumbnail fonts from the server (signed in, so through api)
+ * into the page. Resolves when all are in; a font that fails is skipped
+ * (the editor then measures with a fallback; the saved file is still right).
+ */
+export function loadThumbnailFonts() {
+  if (fontsLoading) return fontsLoading;
+  if (typeof FontFace === 'undefined' || typeof document === 'undefined' || !document.fonts) return Promise.resolve();
+  fontsLoading = Promise.all(Object.entries(FONTS).map(async ([key, f]) => {
+    try {
+      const res = await api.get(`/api/v1/youtube-thumbnails/fonts/${key}`, { responseType: 'arraybuffer' });
+      const face = new FontFace(f.family, res.data, { weight: f.weight === 'bold' ? '700' : '400' });
+      await face.load();
+      document.fonts.add(face);
+    } catch (err) {
+      console.error(`[ThumbnailLayers] font ${key} not loaded:`, err);
+    }
+  }));
+  return fontsLoading;
+}
+
+/** The words in lines that fit width w at size s (the server's wrapWords). */
+export function wrapWords(words, s, w, measure) {
+  const lines = [];
+  let line = '';
+  for (const word of words) {
+    const next = line ? `${line} ${word}` : word;
+    if (!line || measure(next, s) <= w) line = next;
+    else { lines.push(line); line = word; }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+/** The largest size, from `size` down, at which the text fits the box (the server's fitText). */
+export function fitText(text, { w, h, size }, measure) {
+  const words = String(text || '').split(/\s+/).filter(Boolean);
+  if (!words.length) return { size, lines: [] };
+  for (let s = Math.max(MIN_SIZE, size); s >= MIN_SIZE; s -= 2) {
+    const lines = wrapWords(words, s, w, measure);
+    const widest = Math.max(...lines.map((l) => measure(l, s)));
+    if (lines.length * s * LINE_HEIGHT <= h && widest <= w) return { size: s, lines };
+  }
+  return { size: MIN_SIZE, lines: wrapWords(words, MIN_SIZE, w, measure) };
+}
+
+let measureCtx = null;
+/** A measure(text, size) for a font, from a canvas the page never shows. */
+export function measurer(font) {
+  if (!measureCtx && typeof document !== 'undefined') measureCtx = document.createElement('canvas').getContext('2d');
+  return (s, size) => {
+    if (!measureCtx) return String(s).length * size * 0.55;
+    measureCtx.font = fontCss(font, size);
+    return measureCtx.measureText(s).width;
+  };
+}
+
+/** Where a picture is drawn in its box: cover fills (cropped), contain stands on the bottom. */
+export function fitPicture(iw, ih, { w, h, fit }) {
+  if (!iw || !ih) return { crop: null, x: 0, y: 0, w, h };
+  if (fit === 'cover') {
+    const scale = Math.max(w / iw, h / ih);
+    const cw = w / scale;
+    const ch = h / scale;
+    return { crop: { x: (iw - cw) / 2, y: (ih - ch) / 2, width: cw, height: ch }, x: 0, y: 0, w, h };
+  }
+  const scale = Math.min(w / iw, h / ih);
+  const dw = iw * scale;
+  const dh = ih * scale;
+  return { crop: null, x: (w - dw) / 2, y: h - dh, w: dw, h: dh };
+}
+
+export const ROLE_LABELS = {
+  background: 'Background', shade: 'Shade', jaw: 'JustAWoman', lala: 'Lala', kicker: 'Show name', title: 'Title', badge: 'Badge',
+};
+
+/** A layer's name in the layers list. */
+export const layerName = (l) => ROLE_LABELS[l.role] || l.name || (l.kind === 'text' ? (l.text || 'Text').slice(0, 24) : 'Picture');
+
+/** The starting boxes per layout (the earlier fixed layout, as layers). */
+function presetBoxes(layout) {
+  const right = layout === 'lala-right';
+  const center = layout === 'center';
+  const text = center ? { x: 110, w: 1060 } : right ? { x: 70, w: 620 } : { x: 590, w: 640 };
+  return {
+    side: center ? 'center' : right ? 'right' : 'left',
+    align: center ? 'center' : 'left',
+    kicker: { ...text, y: 190, h: 52 },
+    title: { ...text, y: 250, h: 320 },
+    badge: { x: right ? 56 : WIDTH - 170 - 56, y: 44, w: 170, h: 68 },
+    // One figure alone, and the pair (JustAWoman by the edge, Lala in front).
+    lala: center ? null : { x: right ? WIDTH - 30 - 560 : 30, y: 30, w: 560, h: 690 },
+    lalaDuo: center ? null : { x: right ? WIDTH - 390 - 180 : 390 - 180, y: 30, w: 360, h: 690 },
+    jaw: center ? null : { x: right ? WIDTH - 20 - 340 : 20, y: 80, w: 340, h: 640 },
+  };
+}
+
+const roleLayer = (role, kind, box, extra) => ({ id: role, role, kind, visible: true, rotation: 0, opacity: 1, ...box, ...extra });
+
+/**
+ * A thumbnail from a layout: content { title, kicker, badge, backgroundUrl,
+ * lalaUrl, jawUrl } and style { accent, textColor, dim }.
+ */
+export function presetLayers(layout, content = {}, style = {}) {
+  const b = presetBoxes(layout);
+  const accent = style.accent || '#E0689F';
+  const duo = Boolean(content.lalaUrl && content.jawUrl);
+  const layers = [
+    roleLayer('background', 'image', { x: 0, y: 0, w: WIDTH, h: HEIGHT }, { src: content.backgroundUrl || null, fit: 'cover', frame: 'none' }),
+    roleLayer('shade', 'shade', { x: 0, y: 0, w: WIDTH, h: HEIGHT }, { dim: style.dim ?? 0.35, accent, side: b.side }),
+  ];
+  if (b.jaw && content.jawUrl) layers.push(roleLayer('jaw', 'image', b.jaw, { src: content.jawUrl, fit: 'contain', frame: 'none' }));
+  if (b.lala && content.lalaUrl) layers.push(roleLayer('lala', 'image', duo ? b.lalaDuo : b.lala, { src: content.lalaUrl, fit: 'contain', frame: 'none' }));
+  layers.push(
+    roleLayer('kicker', 'text', b.kicker, { text: content.kicker || '', font: 'sans', size: 34, color: accent, stroke: OUTLINE, bg: null, align: b.align, upper: true }),
+    roleLayer('title', 'text', b.title, { text: content.title || '', font: 'serif', size: 96, color: style.textColor || '#FFFFFF', stroke: OUTLINE, bg: null, align: b.align, upper: false }),
+    roleLayer('badge', 'badge', b.badge, { text: content.badge || '', font: 'sans', fill: accent, color: '#FFFFFF' }),
+  );
+  return { version: 2, layers: layers.filter((l) => l.kind !== 'badge' || l.text) };
+}
+
+export const layerOf = (spec, role) => (spec?.layers || []).find((l) => l.role === role) || null;
+
+/** The spec with one layer changed (by id). */
+export const updateLayer = (spec, id, patch) => ({ ...spec, layers: spec.layers.map((l) => (l.id === id ? { ...l, ...patch } : l)) });
+
+/**
+ * Sets what a role shows (a picture or words). A picture role with no
+ * layer yet gets one where the layout puts it (the earlier layer order:
+ * figures above the shade, below the words); null src hides nothing, it
+ * removes the picture.
+ */
+export function setRoleContent(spec, role, value, layout = 'lala-left') {
+  const existing = layerOf(spec, role);
+  const isPicture = ['background', 'lala', 'jaw'].includes(role);
+  if (existing) return updateLayer(spec, existing.id, isPicture ? { src: value || null } : { text: value || '' });
+  if (!value) return spec;
+  const b = presetBoxes(layout === 'center' ? 'lala-left' : layout);
+  if (role === 'lala' || role === 'jaw') {
+    const box = role === 'jaw' ? b.jaw : (layerOf(spec, 'jaw') ? b.lalaDuo : b.lala);
+    const layer = roleLayer(role, 'image', box, { src: value, fit: 'contain', frame: 'none' });
+    // Above the shade and any figure already there, below the words.
+    const firstWords = spec.layers.findIndex((l) => l.kind === 'text' || l.kind === 'badge');
+    const at = firstWords === -1 ? spec.layers.length : firstWords;
+    return { ...spec, layers: [...spec.layers.slice(0, at), layer, ...spec.layers.slice(at)] };
+  }
+  if (role === 'badge') {
+    const shade = layerOf(spec, 'shade');
+    return { ...spec, layers: [...spec.layers, roleLayer('badge', 'badge', b.badge, { text: value, font: 'sans', fill: shade?.accent || '#E0689F', color: '#FFFFFF' })] };
+  }
+  return spec;
+}
+
+/** Applies the colours: the accent (shade stripe, badge, show name), the title colour, the dim. */
+export function applyStyle(spec, { accent, textColor, dim } = {}) {
+  return {
+    ...spec,
+    layers: spec.layers.map((l) => {
+      if (l.role === 'shade') return { ...l, ...(accent ? { accent } : {}), ...(dim !== undefined ? { dim } : {}) };
+      if (l.role === 'badge' && accent) return { ...l, fill: accent };
+      if (l.role === 'kicker' && accent) return { ...l, color: accent };
+      if (l.role === 'title' && textColor) return { ...l, color: textColor };
+      return l;
+    }),
+  };
+}
+
+/**
+ * The show's template with this episode's words and pictures: every role
+ * layer keeps its place, size, turn and look and takes the episode's
+ * content; layers without a role (added text, extra pictures) stay as they
+ * are. A figure the episode has no picture for is left out.
+ */
+export function fillTemplate(template, content = {}) {
+  const pictures = { background: content.backgroundUrl, lala: content.lalaUrl, jaw: content.jawUrl };
+  const words = { title: content.title, kicker: content.kicker, badge: content.badge };
+  const layers = (template?.layers || []).flatMap((l) => {
+    if (l.role in pictures) {
+      const src = pictures[l.role] || null;
+      if (!src && (l.role === 'lala' || l.role === 'jaw')) return [];
+      return [{ ...l, src }];
+    }
+    if (l.role in words) return [{ ...l, text: words[l.role] || '' }];
+    return [l];
+  });
+  return { version: 2, layers };
+}
+
+/** Moves a layer one step up (toward the front) or down. */
+export function moveLayer(spec, id, dir) {
+  const i = spec.layers.findIndex((l) => l.id === id);
+  const j = dir === 'up' ? i + 1 : i - 1;
+  if (i < 0 || j < 0 || j >= spec.layers.length) return spec;
+  const layers = [...spec.layers];
+  [layers[i], layers[j]] = [layers[j], layers[i]];
+  return { ...spec, layers };
+}
+
+export const removeLayer = (spec, id) => ({ ...spec, layers: spec.layers.filter((l) => l.id !== id) });
+
+const newId = (spec, prefix) => {
+  let n = 1;
+  while (spec.layers.some((l) => l.id === `${prefix}-${n}`)) n += 1;
+  return `${prefix}-${n}`;
+};
+
+/** Adds words (no role) in the middle, on top. */
+export const addText = (spec, text = 'Your words') => ({
+  ...spec,
+  layers: [...spec.layers, {
+    id: newId(spec, 'text'), role: null, kind: 'text', visible: true, x: 340, y: 300, w: 600, h: 120, rotation: 0, opacity: 1,
+    text, font: 'script', size: 90, color: '#FFFFFF', stroke: OUTLINE, bg: null, align: 'center', upper: false,
+  }],
+});
+
+/** Adds a picture (no role) in the middle, on top. */
+export const addPicture = (spec, url, name) => ({
+  ...spec,
+  layers: [...spec.layers, {
+    id: newId(spec, 'picture'), role: null, name: name || null, kind: 'image', visible: true, x: 490, y: 210, w: 300, h: 300, rotation: 0, opacity: 1,
+    src: url, fit: 'contain', frame: 'none',
+  }],
+});
+
+/**
+ * A moved or transformed layer's new box. Konva turns a node about its
+ * offset (the box's centre here), so its position is the centre; scale is
+ * folded back into the size.
+ */
+export function boxFromNode({ x, y, scaleX = 1, scaleY = 1, rotation = 0 }, layer) {
+  const w = Math.max(10, Math.round(layer.w * Math.abs(scaleX)));
+  const h = Math.max(10, Math.round(layer.h * Math.abs(scaleY)));
+  const r = ((Math.round(rotation * 10) / 10 + 540) % 360) - 180;
+  return { x: Math.round(x - w / 2), y: Math.round(y - h / 2), w, h, rotation: r };
+}

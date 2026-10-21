@@ -162,6 +162,7 @@ describe('database work', () => {
       [[{ name: 'Lala red', asset_group: 'LALA', asset_type: 'PROMO_LALA', url: 'https://b.s3.amazonaws.com/lala.png' }]],
       [[{ reg: 'episode_wardrobe' }]],
       [[{ name: 'Sweater dress', category: 'dress', url: 'https://b.s3.amazonaws.com/d.png' }]],
+      [[{ reg: null }]], // no drafts table yet: no draft
     );
     const out = await yt.sources(s, 'ep-1');
     expect(out.poses).toEqual({
