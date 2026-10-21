@@ -26,6 +26,11 @@
  *   badge   a pill with a few words ("EP 1").
  *   checklist  rows of a tick box and a few words (Evoni's "Come Style Me":
  *           sweater dress, accessories, hair, vibe); each tick on or off.
+ *   shape   a sticker (Evoni, 2026-10-21): shape is an arrow (pointing
+ *           right; turn it to aim), a ring (to circle something; thickness),
+ *           a burst ("NEW"), sparkles or a price tag; fill, an optional
+ *           outline (stroke, strokeWidth); a burst and a tag carry a few
+ *           words (text, font, color). Each fills its box.
  *
  * role names what a layer is for (background, lala, jaw, title, kicker,
  * badge, shade): the Studio's controls and the show's template find layers
@@ -46,7 +51,8 @@ try {
 const WIDTH = 1280;
 const HEIGHT = 720;
 const MAX_LAYERS = 24;
-const KINDS = Object.freeze(['image', 'shade', 'text', 'badge', 'checklist']);
+const KINDS = Object.freeze(['image', 'shade', 'text', 'badge', 'checklist', 'shape']);
+const SHAPES = Object.freeze(['arrow', 'ring', 'burst', 'sparkle', 'tag']);
 const MAX_ROWS = 6;
 const HEX = /^#[0-9a-f]{6}$/i;
 
@@ -142,6 +148,19 @@ function readLayers(body, allowedUrl) {
         .map((it) => ({ text: str(it?.text, 40), checked: it?.checked !== false }))
         .filter((it) => it.text);
       return { ...base, items, font: pick(l.font, Object.keys(FONTS), 'hand'), color: hex(l.color, '#FFFFFF') };
+    }
+    if (l.kind === 'shape') {
+      return {
+        ...base,
+        shape: pick(l.shape, SHAPES, 'arrow'),
+        fill: hex(l.fill, '#FFD86B'),
+        stroke: HEX.test(String(l.stroke || '')) ? String(l.stroke).toUpperCase() : null,
+        strokeWidth: Math.round(num(l.strokeWidth, 0, 24, 6)),
+        thickness: Math.round(num(l.thickness, 4, 60, 16)),
+        text: str(l.text, 16),
+        font: pick(l.font, Object.keys(FONTS), 'sans'),
+        color: hex(l.color, '#FFFFFF'),
+      };
     }
     if (l.kind === 'badge') {
       return { ...base, text: str(l.text, 16), font: pick(l.font, Object.keys(FONTS), 'sans'), fill: hex(l.fill, '#E0689F'), color: hex(l.color, '#FFFFFF') };
@@ -578,6 +597,130 @@ function checklistRows(l, measure) {
   return { rowH, box, textX, size };
 }
 
+// ── Stickers and shapes (Evoni, 2026-10-21); mirrored in the editor. ──
+
+const polygon = (ctx, pts) => {
+  ctx.beginPath();
+  pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+  ctx.closePath();
+};
+
+/** A four-point star at (cx, cy) in the box's halves (-1..1), r of a half. */
+const sparklePoints = (l, cx, cy, r) => [...Array(8)].map((_, i) => {
+  const a = (i * Math.PI) / 4 - Math.PI / 2;
+  const k = i % 2 ? r * 0.28 : r;
+  return [(cx + Math.cos(a) * k) * (l.w / 2), (cy + Math.sin(a) * k) * (l.h / 2)];
+});
+
+/** The tag's hole (its centre and radius), and where its words go. */
+const tagParts = (l) => ({
+  hole: { x: -l.w / 2 + l.h * 0.32, r: l.h * 0.09 },
+  words: { x0: -l.w / 2 + l.h * 0.5, x1: l.w / 2 - l.h * 0.15 },
+});
+
+/** The shape's outline, centred on the origin (the ring is drawn as a line, not filled). */
+function shapePath(ctx, l) {
+  const { w, h } = l;
+  if (l.shape === 'arrow') {
+    const head = Math.min(w * 0.4, h * 0.9);
+    const shaft = h * 0.36;
+    polygon(ctx, [[-w / 2, -shaft / 2], [w / 2 - head, -shaft / 2], [w / 2 - head, -h / 2], [w / 2, 0],
+      [w / 2 - head, h / 2], [w / 2 - head, shaft / 2], [-w / 2, shaft / 2]]);
+  } else if (l.shape === 'ring') {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, Math.max(1, w / 2 - l.thickness / 2), Math.max(1, h / 2 - l.thickness / 2), 0, 0, Math.PI * 2);
+  } else if (l.shape === 'burst') {
+    polygon(ctx, [...Array(32)].map((_, i) => {
+      const a = (i * Math.PI) / 16 - Math.PI / 2;
+      const k = i % 2 ? 0.78 : 1;
+      return [Math.cos(a) * k * (w / 2), Math.sin(a) * k * (h / 2)];
+    }));
+  } else if (l.shape === 'sparkle') {
+    ctx.beginPath();
+    for (const [cx, cy, r] of [[-0.2, 0.1, 0.8], [0.55, -0.55, 0.4], [0.6, 0.55, 0.28]]) {
+      sparklePoints(l, cx, cy, r).forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+      ctx.closePath();
+    }
+  } else {
+    const notch = -w / 2 + h * 0.45;
+    polygon(ctx, [[-w / 2, 0], [notch, -h / 2], [w / 2, -h / 2], [w / 2, h / 2], [notch, h / 2]]);
+  }
+}
+
+/** The room round the box a shape needs for its outline. */
+const shapeMargin = (l) => Math.ceil(l.stroke ? l.strokeWidth : 0) + 2;
+
+/**
+ * A shape on a canvas of (w + 2m) × (h + 2m), m = shapeMargin(l), to draw
+ * at (-m, -m) in the box: its outline under its fill, the tag's hole
+ * punched through, and a burst's or a tag's words. Mirrored in the editor.
+ */
+function shapeCanvas(l, makeCanvas) {
+  const m = shapeMargin(l);
+  const c = makeCanvas(l.w + m * 2, l.h + m * 2);
+  const ctx = c.getContext('2d');
+  ctx.translate(m + l.w / 2, m + l.h / 2);
+  ctx.lineJoin = 'round';
+  shapePath(ctx, l);
+  if (l.shape === 'ring') {
+    if (l.stroke && l.strokeWidth) {
+      ctx.strokeStyle = l.stroke;
+      ctx.lineWidth = l.thickness + l.strokeWidth * 2;
+      ctx.stroke();
+    }
+    ctx.strokeStyle = l.fill;
+    ctx.lineWidth = l.thickness;
+    ctx.stroke();
+    return c;
+  }
+  if (l.stroke && l.strokeWidth) {
+    ctx.strokeStyle = l.stroke;
+    ctx.lineWidth = l.strokeWidth * 2;
+    ctx.stroke();
+  }
+  ctx.fillStyle = l.fill;
+  ctx.fill();
+  if (l.shape === 'tag') {
+    const { hole } = tagParts(l);
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath();
+    ctx.arc(hole.x, 0, hole.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    if (l.stroke && l.strokeWidth) {
+      ctx.beginPath();
+      ctx.arc(hole.x, 0, hole.r, 0, Math.PI * 2);
+      ctx.strokeStyle = l.stroke;
+      ctx.lineWidth = Math.max(1, l.strokeWidth / 2);
+      ctx.stroke();
+    }
+  }
+  if ((l.shape === 'burst' || l.shape === 'tag') && l.text) shapeWords(ctx, l);
+  return c;
+}
+
+/** The box a burst's or a tag's words fit in: { x (its middle), w, h }. */
+function shapeWordsBox(l) {
+  if (l.shape === 'tag') {
+    const { words } = tagParts(l);
+    return { x: (words.x0 + words.x1) / 2, w: words.x1 - words.x0, h: l.h * 0.7 };
+  }
+  return { x: 0, w: l.w * 0.62, h: l.h * 0.5 };
+}
+
+function shapeWords(ctx, l) {
+  const box = shapeWordsBox(l);
+  const measure = (s, size) => { ctx.font = fontCss(l.font, size); return ctx.measureText(s).width; };
+  const { size, lines } = fitText(l.text, { w: box.w, h: box.h, size: Math.round(box.h * 0.8) }, measure);
+  ctx.font = fontCss(l.font, size);
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = l.color;
+  const lineH = size * LINE_HEIGHT;
+  lines.forEach((line, i) => ctx.fillText(line, box.x, (i - (lines.length - 1) / 2) * lineH));
+}
+
 function drawChecklist(ctx, l) {
   if (!l.items.length) return;
   const measure = (s, size) => { ctx.font = fontCss(l.font, size); return ctx.measureText(s).width; };
@@ -649,6 +792,10 @@ async function renderLayers(spec, pictures = {}) {
       else if (l.kind === 'text') drawText(ctx, l, canvasLib.createCanvas);
       else if (l.kind === 'badge') drawBadge(ctx, l);
       else if (l.kind === 'checklist') drawChecklist(ctx, l);
+      else if (l.kind === 'shape') {
+        const m = shapeMargin(l);
+        ctx.drawImage(shapeCanvas(l, canvasLib.createCanvas), -l.w / 2 - m, -l.h / 2 - m);
+      }
     }
     ctx.restore();
   }
@@ -662,6 +809,6 @@ function fontFile(key) {
 }
 
 module.exports = {
-  WIDTH, HEIGHT, MAX_LAYERS, MAX_ROWS, KINDS, FONTS, LINE_HEIGHT, LayerError,
-  readLayers, wrapWords, fitText, spaced, checklistRows, renderLayers, fontFile, toneValue, stickerMargin, curveLayout, textEffect, wordsMargin, fancyWords,
+  WIDTH, HEIGHT, MAX_LAYERS, MAX_ROWS, KINDS, SHAPES, FONTS, LINE_HEIGHT, LayerError,
+  readLayers, wrapWords, fitText, spaced, checklistRows, renderLayers, fontFile, toneValue, stickerMargin, curveLayout, textEffect, wordsMargin, fancyWords, shapeMargin, shapeWordsBox,
 };

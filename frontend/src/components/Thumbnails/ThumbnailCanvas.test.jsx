@@ -28,7 +28,7 @@ vi.mock('../../lib/picturePreview', () => ({
   usePreview: (url) => url,
 }));
 import ThumbnailCanvas from './ThumbnailCanvas';
-import { presetLayers, updateLayer } from '../../lib/thumbnailLayers';
+import { presetLayers, updateLayer, addShape } from '../../lib/thumbnailLayers';
 
 beforeAll(() => {
   // jsdom has no 2D canvas: measure as half the size a character.
@@ -126,6 +126,28 @@ describe('ThumbnailCanvas', () => {
       // Each letter of the curved title is drawn on its own, turned.
       expect(ctx.fillText.mock.calls.map((c) => c[0]).join('')).toBe(t.text);
       expect(ctx.rotate).toHaveBeenCalledTimes(t.text.length);
+    } finally {
+      HTMLCanvasElement.prototype.getContext = before;
+    }
+  });
+
+  test('a sticker is a box to pick and its picture, drawn as the server draws it, round the box', () => {
+    const ctx = {
+      font: '', measureText: (s) => ({ width: String(s).length * 40 }), translate: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(),
+      closePath: vi.fn(), arc: vi.fn(), ellipse: vi.fn(), save: vi.fn(), restore: vi.fn(), stroke: vi.fn(), fill: vi.fn(), fillText: vi.fn(),
+    };
+    const before = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = () => ctx;
+    try {
+      const spec = addShape(SPEC, 'burst');
+      const burst = spec.layers.at(-1);
+      render(<ThumbnailCanvas spec={spec} selectedId={null} onSelect={() => {}} onChange={() => {}} />);
+      const node = document.querySelector(`[data-id="${burst.id}"]`);
+      const m = burst.strokeWidth + 2;
+      const img = JSON.parse(node.querySelector('[data-konva="Image"]').getAttribute('data-props'));
+      expect(img).toMatchObject({ x: -m, y: -m, width: burst.w + m * 2, height: burst.h + m * 2 });
+      expect(JSON.parse(node.querySelector('[data-konva="Rect"]').getAttribute('data-props'))).toMatchObject({ width: burst.w, height: burst.h });
+      expect(ctx.fillText).toHaveBeenCalledWith('NEW', 0, expect.any(Number));
     } finally {
       HTMLCanvasElement.prototype.getContext = before;
     }
