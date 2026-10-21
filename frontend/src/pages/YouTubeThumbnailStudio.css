@@ -284,3 +284,10 @@
 @media (max-width: 520px) {
   .yts-layer-grip { display: none; }
 }
+
+/* AI help (Evoni, 2026-10-21): title ideas. */
+.yts-ideas { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.yts-idea { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); }
+.yts-idea-title { flex: 1 1 180px; min-width: 0; font-size: 14px; font-weight: 700; color: var(--text-primary); overflow-wrap: anywhere; }
+.yts-idea-hook { padding: 2px 8px; border-radius: 999px; background: var(--accent-dark); color: var(--text-inverse); font-size: 12px; font-weight: 700; }
+.yts-idea-actions { display: flex; gap: 6px; }

@@ -26,6 +26,8 @@
  *   GET  /episodes/:episodeId/draft      the episode's arrangement (layers), or null
  *   PUT  /episodes/:episodeId/draft      keep the episode's arrangement
  *   POST /episodes/:episodeId/pictures   keep an uploaded picture (S3); { url, label }
+ *   POST /episodes/:episodeId/title-ideas         five title ideas with a hook each (AI, within the daily budget)
+ *   POST /episodes/:episodeId/pictures/cut-out    a picture's background removed, kept as an upload (AI image budget)
  *   GET  /fonts/:key                     a thumbnail font, for the editor (thumbnailLayers.FONTS)
  *   GET  /preview?url=&w=                a smaller copy of one of our pictures, for the editor (WebP)
  *
@@ -39,9 +41,11 @@
 const express = require('express');
 const multer = require('multer');
 const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const models = require('../models');
 const yt = require('../services/youtubeThumbnailService');
 const thumbLayers = require('../services/thumbnailLayers');
+const thumbAi = require('../services/thumbnailAiService');
 
 const router = express.Router();
 
@@ -266,6 +270,29 @@ router.post('/episodes/:episodeId/pictures', requireAuth, (req, res) => {
       return sendError(res, err, 'picture upload');
     }
   });
+});
+
+// AI help (Evoni, 2026-10-21), within the daily budgets: title ideas, and a picture's background removed.
+router.post('/episodes/:episodeId/title-ideas', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    return res.json({ success: true, data: await thumbAi.titleIdeas(models.sequelize, req.params.episodeId) });
+  } catch (err) {
+    return sendError(res, err, 'title ideas');
+  }
+});
+
+router.post('/episodes/:episodeId/pictures/cut-out', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const [[episode]] = await models.sequelize.query(
+      'SELECT id FROM episodes WHERE id = :episodeId AND deleted_at IS NULL LIMIT 1',
+      { replacements: { episodeId: req.params.episodeId } });
+    if (!episode) throw new yt.ThumbnailError(404, 'Episode not found');
+    const body = readBody(req);
+    const picture = await thumbAi.cutOut(episode.id, String(body.url || ''), body.name);
+    return res.status(201).json({ success: true, data: picture });
+  } catch (err) {
+    return sendError(res, err, 'cut out');
+  }
 });
 
 // The editor draws smaller copies of the pictures (faster); the saved file uses the full ones.
