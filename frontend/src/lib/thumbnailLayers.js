@@ -497,6 +497,7 @@ export function drawnSize(l, measureFor) {
   if (l.kind === 'text') {
     const text = l.upper ? String(l.text || '').toUpperCase() : String(l.text || '');
     if (!text.trim()) return null;
+    if (l.curve) return curveLayout(text, l, measure).size;
     const pad = l.bg ? Math.round(l.size * 0.25) : 0;
     return fitText(text, { w: l.w - pad * 2, h: l.h - pad * 2, size: l.size }, spaced(measure, l.spacing || 0)).size;
   }
@@ -620,5 +621,152 @@ export function stickerCanvas(l, drawBox, make = makeCanvas) {
   ox.shadowBlur = STICKER_SHADOW.blur;
   ox.shadowOffsetY = STICKER_SHADOW.offsetY;
   ox.drawImage(sticker, 0, 0);
+  return out;
+}
+
+// ── Text effects (Evoni, 2026-10-21): a shadow or a glow, a fade to a second
+// colour, words on a curve; step for step as the server draws them. ──
+
+// A glow starts gold; a fade starts at the show's pink.
+export const GLOW_COLOR = '#FFD86B';
+export const FADE_COLOR = '#E0689F';
+export const EFFECT_SIZE = 16;
+const TEXT_SHADOW = 'rgba(0,0,0,0.6)';
+
+/** The canvas shadow for a text effect: { color, blur, offsetY }, or null. */
+export function textEffect(l) {
+  const blur = l.effectSize || EFFECT_SIZE;
+  if (l.effect === 'glow') return { color: l.effectColor || GLOW_COLOR, blur, offsetY: 0 };
+  if (l.effect === 'shadow') return { color: TEXT_SHADOW, blur, offsetY: Math.round(blur / 3) };
+  return null;
+}
+
+/** Words have an effect, a fade or a curve: drawn on their own canvas (wordsCanvas). */
+export const fancyWords = (l) => Boolean((l.effect && l.effect !== 'none') || l.gradient || l.curve);
+
+/**
+ * Words on an arc (the server's curveLayout): the largest size that fits the
+ * box, and each letter's middle and turn about the box's centre.
+ */
+export function curveLayout(text, l, plain) {
+  const chars = [...String(text)];
+  const theta = (Math.abs(l.curve) * Math.PI) / 180;
+  const spacing = l.spacing || 0;
+  const pad = l.bg ? Math.round(l.size * 0.25) : 0;
+  const fits = (s) => {
+    const width = chars.reduce((n, ch) => n + plain(ch, s) + spacing, 0) - spacing;
+    const R = width / theta;
+    const chord = 2 * R * Math.sin(theta / 2);
+    const rise = R * (1 - Math.cos(theta / 2));
+    return { width, R, ok: chord + s <= l.w - pad * 2 && rise + s * LINE_HEIGHT <= l.h - pad * 2 };
+  };
+  let size = Math.max(MIN_SIZE, l.size);
+  let f = fits(size);
+  while (!f.ok && size > MIN_SIZE) { size -= 2; f = fits(size); }
+  const up = l.curve > 0;
+  const middle = (f.R * (1 + Math.cos(theta / 2))) / 2;
+  let advance = -f.width / 2;
+  const glyphs = chars.map((ch) => {
+    const width = plain(ch, size);
+    const a = (advance + width / 2) / f.R;
+    advance += width + spacing;
+    return {
+      ch,
+      width,
+      x: f.R * Math.sin(a),
+      y: up ? middle - f.R * Math.cos(a) : f.R * Math.cos(a) - middle,
+      rotation: ((up ? a : -a) * 180) / Math.PI,
+    };
+  });
+  return { size, glyphs };
+}
+
+/** The room round the box words need for their outline and their shadow or glow. */
+export function wordsMargin(l) {
+  const effect = textEffect(l);
+  return Math.ceil(l.size / 7) + 2 + (effect ? Math.ceil(effect.blur * 1.5) + effect.offsetY : 0);
+}
+
+/** The server's paintWords: the words (not the box behind them), centred on the origin. */
+export function paintWords(ctx, l) {
+  const text = l.upper ? String(l.text || '').toUpperCase() : String(l.text || '');
+  const spacing = l.spacing || 0;
+  const plain = (s, size) => { ctx.font = fontCss(l.font, size); return ctx.measureText(s).width; };
+  const measure = spaced(plain, spacing);
+  const pad = l.bg ? Math.round(l.size * 0.25) : 0;
+  const curved = l.curve ? curveLayout(text, l, plain) : null;
+  const { size, lines } = curved ? { size: curved.size, lines: [] } : fitText(text, { w: l.w - pad * 2, h: l.h - pad * 2, size: l.size }, measure);
+  ctx.font = fontCss(l.font, size);
+  // The browser's "middle" sits a few points off the server's; as Konva does,
+  // stand the words on their baseline half the font's ascent less descent below the middle.
+  const em = ctx.measureText('M');
+  const ascent = em.fontBoundingBoxAscent ?? em.actualBoundingBoxAscent;
+  const descent = em.fontBoundingBoxDescent ?? em.actualBoundingBoxDescent;
+  const lift = ascent != null && descent != null ? (ascent - descent) / 2 : null;
+  ctx.textBaseline = lift === null ? 'middle' : 'alphabetic';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = Math.max(2, Math.round(size / 7));
+  const lineH = size * LINE_HEIGHT;
+  const fillFor = (y) => {
+    if (!l.gradient) return l.color;
+    const g = ctx.createLinearGradient(0, y - size / 2, 0, y + size / 2);
+    g.addColorStop(0, l.color);
+    g.addColorStop(1, l.gradient);
+    return g;
+  };
+  const paint = (s, x, y) => {
+    const at = y + (lift || 0);
+    if (l.stroke) {
+      ctx.strokeStyle = l.stroke;
+      ctx.strokeText(s, x, at);
+    }
+    ctx.fillStyle = fillFor(y);
+    ctx.fillText(s, x, at);
+  };
+  if (curved) {
+    ctx.textAlign = 'left';
+    for (const g of curved.glyphs) {
+      ctx.save();
+      ctx.translate(g.x, g.y);
+      ctx.rotate((g.rotation * Math.PI) / 180);
+      paint(g.ch, -g.width / 2, 0);
+      ctx.restore();
+    }
+    return;
+  }
+  let y = -((lines.length - 1) * lineH) / 2;
+  for (const line of lines) {
+    if (!spacing) {
+      ctx.textAlign = l.align || 'left';
+      paint(line, l.align === 'center' ? 0 : l.align === 'right' ? l.w / 2 - pad : -l.w / 2 + pad, y);
+    } else {
+      const lineW = measure(line, size) - spacing;
+      let x = l.align === 'center' ? -lineW / 2 : l.align === 'right' ? l.w / 2 - pad - lineW : -l.w / 2 + pad;
+      ctx.textAlign = 'left';
+      for (const ch of line) {
+        paint(ch, x, y);
+        x += plain(ch, size) + spacing;
+      }
+      ctx.font = fontCss(l.font, size);
+    }
+    y += lineH;
+  }
+}
+
+/** The server's wordsCanvas: the words, then one shadow or glow under them all; drawn at (-m, -m) in the box. */
+export function wordsCanvas(l, make = makeCanvas) {
+  const m = wordsMargin(l);
+  const words = make(l.w + m * 2, l.h + m * 2);
+  const wx = words.getContext('2d');
+  wx.translate(m + l.w / 2, m + l.h / 2);
+  paintWords(wx, l);
+  const effect = textEffect(l);
+  if (!effect) return words;
+  const out = make(l.w + m * 2, l.h + m * 2);
+  const ox = out.getContext('2d');
+  ox.shadowColor = effect.color;
+  ox.shadowBlur = effect.blur;
+  ox.shadowOffsetY = effect.offsetY;
+  ox.drawImage(words, 0, 0);
   return out;
 }

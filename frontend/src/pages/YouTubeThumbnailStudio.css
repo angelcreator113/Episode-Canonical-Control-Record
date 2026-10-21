@@ -153,6 +153,7 @@
 
 /* Text and colour tools (Evoni, 2026-10-21) */
 .yts-text-tools { display: flex; flex-direction: column; gap: 10px; }
+.yts-text-effects { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--lala-gold-line); padding-top: 10px; }
 .yts-align { display: flex; gap: 6px; }
 .yts-swatch-any { display: inline-flex; align-items: center; gap: 4px; height: 34px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--accent-dark); cursor: pointer; }
 .yts-swatch-any .yts-color { width: 34px; min-height: 26px; padding: 0; border: 0; }

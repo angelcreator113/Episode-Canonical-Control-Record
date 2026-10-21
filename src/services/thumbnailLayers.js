@@ -19,6 +19,10 @@
  *           (size is the largest they may be); left, centre or right;
  *           letter spacing; optional outline (stroke) and a box behind
  *           them (bg, its see-through bgOpacity and rounded bgRadius).
+ *           Effects (Evoni, 2026-10-21): a drop shadow or a glow behind
+ *           them (effect, effectColor, effectSize), a second colour they
+ *           fade to (gradient, top to bottom), and a curve (one line on an
+ *           arc, curve degrees: above 0 arches up, below 0 bends down).
  *   badge   a pill with a few words ("EP 1").
  *   checklist  rows of a tick box and a few words (Evoni's "Come Style Me":
  *           sweater dress, accessories, hair, vibe); each tick on or off.
@@ -153,6 +157,11 @@ function readLayers(body, allowedUrl) {
       align: pick(l.align, ['left', 'center', 'right'], 'left'),
       // Points between letters (Evoni, 2026-10-21: text tools).
       spacing: Math.round(num(l.spacing, -2, 20, 0)),
+      effect: pick(l.effect, ['none', 'shadow', 'glow'], 'none'),
+      effectColor: hex(l.effectColor, '#FFD86B'),
+      effectSize: Math.round(num(l.effectSize, 4, 40, 16)),
+      gradient: HEX.test(String(l.gradient || '')) ? String(l.gradient).toUpperCase() : null,
+      curve: Math.round(num(l.curve, -180, 180, 0)),
       upper: Boolean(l.upper),
     };
   });
@@ -201,6 +210,56 @@ function fitText(text, { w, h, size }, measure) {
 function spaced(measure, spacing) {
   if (!spacing) return measure;
   return (s, size) => [...String(s)].reduce((w, ch) => w + measure(ch, size) + spacing, 0);
+}
+
+// Text effects (Evoni, 2026-10-21); mirrored in the editor.
+const TEXT_SHADOW = 'rgba(0,0,0,0.6)';
+/** The canvas shadow for a text effect: { color, blur, offsetY }, or null. */
+function textEffect(l) {
+  if (l.effect === 'glow') return { color: l.effectColor, blur: l.effectSize, offsetY: 0 };
+  if (l.effect === 'shadow') return { color: TEXT_SHADOW, blur: l.effectSize, offsetY: Math.round(l.effectSize / 3) };
+  return null;
+}
+
+/**
+ * Words on an arc: the largest size, from l.size down, at which the one
+ * line fits the box (the arc's width and its rise, with a letter's height),
+ * and each letter's middle and turn about the box's centre:
+ * { size, glyphs: [{ ch, x, y, rotation, width }] }. curve is the arc's
+ * angle in degrees: above 0 arches up, below 0 bends down. plain measures
+ * one string at a size (no spacing). Mirrored in the editor.
+ */
+function curveLayout(text, l, plain) {
+  const chars = [...String(text)];
+  const theta = (Math.abs(l.curve) * Math.PI) / 180;
+  const spacing = l.spacing || 0;
+  const pad = l.bg ? Math.round(l.size * 0.25) : 0;
+  const fits = (s) => {
+    const width = chars.reduce((n, ch) => n + plain(ch, s) + spacing, 0) - spacing;
+    const R = width / theta;
+    const chord = 2 * R * Math.sin(theta / 2);
+    const rise = R * (1 - Math.cos(theta / 2));
+    return { width, R, ok: chord + s <= l.w - pad * 2 && rise + s * LINE_HEIGHT <= l.h - pad * 2 };
+  };
+  let size = Math.max(MIN_SIZE, l.size);
+  let f = fits(size);
+  while (!f.ok && size > MIN_SIZE) { size -= 2; f = fits(size); }
+  const up = l.curve > 0;
+  const middle = (f.R * (1 + Math.cos(theta / 2))) / 2;
+  let advance = -f.width / 2;
+  const glyphs = chars.map((ch) => {
+    const width = plain(ch, size);
+    const a = (advance + width / 2) / f.R;
+    advance += width + spacing;
+    return {
+      ch,
+      width,
+      x: f.R * Math.sin(a),
+      y: up ? middle - f.R * Math.cos(a) : f.R * Math.cos(a) - middle,
+      rotation: ((up ? a : -a) * 180) / Math.PI,
+    };
+  });
+  return { size, glyphs };
 }
 
 /** A rounded rectangle's path, centred on the origin. */
@@ -359,33 +418,55 @@ function drawShade(ctx, l) {
   ctx.fillRect(0, HEIGHT - 14, WIDTH, 14);
 }
 
-function drawText(ctx, l) {
+/** Words have an effect, a fade or a curve: drawn on their own canvas (wordsCanvas). */
+const fancyWords = (l) => Boolean((l.effect && l.effect !== 'none') || l.gradient || l.curve);
+
+/** The room round the box words need for their outline and their shadow or glow. */
+function wordsMargin(l) {
+  const effect = textEffect(l);
+  return Math.ceil(l.size / 7) + 2 + (effect ? Math.ceil(effect.blur * 1.5) + effect.offsetY : 0);
+}
+
+/** The words (not the box behind them), centred on the origin. */
+function paintWords(ctx, l) {
   const text = l.upper ? l.text.toUpperCase() : l.text;
   const plain = (s, size) => { ctx.font = fontCss(l.font, size); return ctx.measureText(s).width; };
   const measure = spaced(plain, l.spacing);
   const pad = l.bg ? Math.round(l.size * 0.25) : 0;
-  const { size, lines } = fitText(text, { w: l.w - pad * 2, h: l.h - pad * 2, size: l.size }, measure);
-  if (l.bg) {
-    ctx.save();
-    ctx.globalAlpha *= l.bgOpacity;
-    ctx.fillStyle = l.bg;
-    roundRectPath(ctx, l.w, l.h, l.bgRadius);
-    ctx.fill();
-    ctx.restore();
-  }
+  const curved = l.curve ? curveLayout(text, l, plain) : null;
+  const { size, lines } = curved ? { size: curved.size, lines: [] } : fitText(text, { w: l.w - pad * 2, h: l.h - pad * 2, size: l.size }, measure);
   ctx.font = fontCss(l.font, size);
   ctx.textBaseline = 'middle';
   ctx.lineJoin = 'round';
   ctx.lineWidth = Math.max(2, Math.round(size / 7));
   const lineH = size * LINE_HEIGHT;
+  // The fill: the colour, or the colour fading to the gradient's down one line.
+  const fillFor = (y) => {
+    if (!l.gradient) return l.color;
+    const g = ctx.createLinearGradient(0, y - size / 2, 0, y + size / 2);
+    g.addColorStop(0, l.color);
+    g.addColorStop(1, l.gradient);
+    return g;
+  };
   const paint = (s, x, y) => {
     if (l.stroke) {
       ctx.strokeStyle = l.stroke;
       ctx.strokeText(s, x, y);
     }
-    ctx.fillStyle = l.color;
+    ctx.fillStyle = fillFor(y);
     ctx.fillText(s, x, y);
   };
+  if (curved) {
+    ctx.textAlign = 'left';
+    for (const g of curved.glyphs) {
+      ctx.save();
+      ctx.translate(g.x, g.y);
+      ctx.rotate((g.rotation * Math.PI) / 180);
+      paint(g.ch, -g.width / 2, 0);
+      ctx.restore();
+    }
+    return;
+  }
   let y = -((lines.length - 1) * lineH) / 2;
   for (const line of lines) {
     if (!l.spacing) {
@@ -405,6 +486,46 @@ function drawText(ctx, l) {
     }
     y += lineH;
   }
+}
+
+/**
+ * Words with an effect, a fade or a curve on a canvas of (w + 2m) × (h + 2m),
+ * m = wordsMargin(l), to draw at (-m, -m) in the box: the words, then their
+ * shadow or glow under them all at once (one shadow for the outline and the
+ * fill, as the editor draws it). Mirrored in the editor.
+ */
+function wordsCanvas(l, makeCanvas) {
+  const m = wordsMargin(l);
+  const words = makeCanvas(l.w + m * 2, l.h + m * 2);
+  const wx = words.getContext('2d');
+  wx.translate(m + l.w / 2, m + l.h / 2);
+  paintWords(wx, l);
+  const effect = textEffect(l);
+  if (!effect) return words;
+  const out = makeCanvas(l.w + m * 2, l.h + m * 2);
+  const ox = out.getContext('2d');
+  ox.shadowColor = effect.color;
+  ox.shadowBlur = effect.blur;
+  ox.shadowOffsetY = effect.offsetY;
+  ox.drawImage(words, 0, 0);
+  return out;
+}
+
+function drawText(ctx, l, makeCanvas) {
+  if (l.bg) {
+    ctx.save();
+    ctx.globalAlpha *= l.bgOpacity;
+    ctx.fillStyle = l.bg;
+    roundRectPath(ctx, l.w, l.h, l.bgRadius);
+    ctx.fill();
+    ctx.restore();
+  }
+  if (!fancyWords(l)) {
+    paintWords(ctx, l);
+    return;
+  }
+  const m = wordsMargin(l);
+  ctx.drawImage(wordsCanvas(l, makeCanvas), -l.w / 2 - m, -l.h / 2 - m);
 }
 
 function drawBadge(ctx, l) {
@@ -517,7 +638,7 @@ async function renderLayers(spec, pictures = {}) {
           drawImage(ctx, pic, l);
         }
       }
-      else if (l.kind === 'text') drawText(ctx, l);
+      else if (l.kind === 'text') drawText(ctx, l, canvasLib.createCanvas);
       else if (l.kind === 'badge') drawBadge(ctx, l);
       else if (l.kind === 'checklist') drawChecklist(ctx, l);
     }
@@ -534,5 +655,5 @@ function fontFile(key) {
 
 module.exports = {
   WIDTH, HEIGHT, MAX_LAYERS, MAX_ROWS, KINDS, FONTS, LINE_HEIGHT, LayerError,
-  readLayers, wrapWords, fitText, spaced, checklistRows, renderLayers, fontFile, toneValue, stickerMargin,
+  readLayers, wrapWords, fitText, spaced, checklistRows, renderLayers, fontFile, toneValue, stickerMargin, curveLayout, textEffect, wordsMargin, fancyWords,
 };

@@ -573,6 +573,30 @@ describe('YouTubeThumbnailStudio', () => {
     await waitFor(() => expect(layerOf(lastDraft(), 'title').bg).toBeNull(), { timeout: 3000 });
   });
 
+  test('text effects: a glow in its colour and size, a shadow, a fade to a second colour, a curve and Straighten', async () => {
+    renderPage();
+    await opened();
+    fireEvent.click(screen.getByTestId('canvas-title'));
+    const fx = within(screen.getByTestId('yts-text-effects'));
+    expect(fx.queryByRole('slider', { name: 'Effect size' })).toBeNull();
+    fireEvent.change(fx.getByRole('combobox', { name: 'Words effect' }), { target: { value: 'glow' } });
+    fireEvent.change(fx.getByLabelText('Glow colour'), { target: { value: '#ff0000' } });
+    fireEvent.change(fx.getByRole('slider', { name: 'Effect size' }), { target: { value: '24' } });
+    fireEvent.click(fx.getByRole('checkbox', { name: 'Fade to a second colour' }));
+    fireEvent.change(fx.getByLabelText('Fade to colour'), { target: { value: '#00aaff' } });
+    fireEvent.change(fx.getByRole('slider', { name: 'Curve' }), { target: { value: '-45' } });
+    expect(fx.getByText('Curve (bend down 45°)')).toBeTruthy();
+    expect(fx.getByText('Curved words sit on one line.')).toBeTruthy();
+    await waitFor(() => expect(layerOf(lastDraft(), 'title').curve).toBe(-45), { timeout: 3000 });
+    expect(layerOf(lastDraft(), 'title')).toMatchObject({ effect: 'glow', effectColor: '#FF0000', effectSize: 24, gradient: '#00AAFF' });
+    fireEvent.change(fx.getByRole('combobox', { name: 'Words effect' }), { target: { value: 'shadow' } });
+    expect(fx.queryByLabelText('Glow colour')).toBeNull();
+    expect(fx.getByText('Shadow size (24)')).toBeTruthy();
+    fireEvent.click(fx.getByRole('button', { name: 'Straighten' }));
+    fireEvent.click(fx.getByRole('checkbox', { name: 'Fade to a second colour' }));
+    await waitFor(() => expect(layerOf(lastDraft(), 'title')).toMatchObject({ effect: 'shadow', curve: 0, gradient: null }), { timeout: 3000 });
+  });
+
   test('any colour: the accent and the title from the free picker; picked ones are remembered as swatches', async () => {
     window.localStorage.removeItem('yts-recent-colours');
     renderPage();

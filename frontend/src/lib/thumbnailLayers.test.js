@@ -7,6 +7,7 @@
 import { describe, test, expect } from 'vitest';
 import {
   toneValue, stickerMargin, STICKER_SHADOW,
+  textEffect, fancyWords, curveLayout, wordsMargin, paintWords, wordsCanvas, GLOW_COLOR, EFFECT_SIZE,
   spaced, alignLayers, distributeLayers, layersInBox, youtubeWarnings, drawnSize, fileSize, TIMESTAMP_ZONE,
   presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer, addText, addPicture,
   boxFromNode, fitText, fitPicture, layerName, LINE_HEIGHT, checklistRows, duplicateLayer, snapBox, SNAP,
@@ -299,5 +300,88 @@ describe('picture effects (the server\'s, Evoni 2026-10-21)', () => {
     expect(stickerMargin({ outline: '#FFFFFF', outlineWidth: 12 })).toBe(12);
     expect(stickerMargin({ shadow: true })).toBe(STICKER_SHADOW.blur + STICKER_SHADOW.offsetY);
     expect(stickerMargin({ outline: '#FFFFFF', outlineWidth: 20, shadow: true })).toBe(54);
+  });
+});
+
+describe('text effects (the server\'s, Evoni 2026-10-21)', () => {
+  test('textEffect: a glow in its colour, a shadow below the words, defaults for a layer that has none', () => {
+    expect(textEffect({})).toBeNull();
+    expect(textEffect({ effect: 'none' })).toBeNull();
+    expect(textEffect({ effect: 'glow' })).toEqual({ color: GLOW_COLOR, blur: EFFECT_SIZE, offsetY: 0 });
+    expect(textEffect({ effect: 'glow', effectColor: '#FF0000', effectSize: 30 })).toEqual({ color: '#FF0000', blur: 30, offsetY: 0 });
+    expect(textEffect({ effect: 'shadow', effectSize: 18 })).toEqual({ color: 'rgba(0,0,0,0.6)', blur: 18, offsetY: 6 });
+  });
+
+  test('fancyWords and wordsMargin: room for the outline, plus the effect', () => {
+    expect(fancyWords({ text: 'x' })).toBe(false);
+    expect(fancyWords({ effect: 'shadow' })).toBe(true);
+    expect(fancyWords({ gradient: '#000000' })).toBe(true);
+    expect(fancyWords({ curve: -20 })).toBe(true);
+    expect(wordsMargin({ size: 70 })).toBe(12);
+    expect(wordsMargin({ size: 70, effect: 'shadow', effectSize: 18 })).toBe(12 + 27 + 6);
+  });
+
+  test('curveLayout: the same layout as the server', () => {
+    const plain = (s, size) => String(s).length * size * 0.5;
+    const l = { curve: 90, size: 100, w: 600, h: 300, spacing: 0, bg: null };
+    const up = curveLayout('ABCDE', l, plain);
+    expect(up.size).toBe(100);
+    expect(up.glyphs[2].x).toBeCloseTo(0, 6);
+    expect(up.glyphs[0].x).toBeCloseTo(-up.glyphs[4].x, 6);
+    expect(up.glyphs[2].y).toBeLessThan(up.glyphs[0].y);
+    expect(up.glyphs[0].rotation).toBeLessThan(0);
+    const down = curveLayout('ABCDE', { ...l, curve: -90 }, plain);
+    expect(down.glyphs[2].y).toBeGreaterThan(down.glyphs[0].y);
+    expect(curveLayout('ABCDEFGHIJKLMNOP', l, plain).size).toBeLessThan(100);
+  });
+
+  test('drawnSize: curved words are sized as the curve fits them', () => {
+    const measureFor = () => (s, size) => String(s).length * size * 0.5;
+    const l = { kind: 'text', text: 'ABCDEFGHIJKLMNOP', size: 100, w: 600, h: 300, curve: 90 };
+    expect(drawnSize(l, measureFor)).toBe(curveLayout(l.text, l, measureFor()).size);
+  });
+
+  /** A 2D context that writes down what is drawn. */
+  const recorder = () => {
+    const calls = [];
+    const ctx = {
+      calls,
+      measureText: (s) => ({ width: String(s).length * 10 }),
+      createLinearGradient: (...a) => { const g = { a, stops: [], addColorStop: (o, c) => g.stops.push([o, c]) }; calls.push(['gradient', g]); return g; },
+      fillText: (s, x, y) => calls.push(['fill', s, x, y, ctx.fillStyle]),
+      strokeText: (s) => calls.push(['stroke', s]),
+      translate: (x, y) => calls.push(['translate', x, y]),
+      rotate: (r) => calls.push(['rotate', r]),
+      save: () => {}, restore: () => {},
+      drawImage: (img) => calls.push(['image', img, ctx.shadowColor, ctx.shadowBlur, ctx.shadowOffsetY]),
+    };
+    return ctx;
+  };
+
+  test('paintWords: a fade from the colour to the second one down the line; a curve draws letter by letter, each turned', () => {
+    const ctx = recorder();
+    paintWords(ctx, { kind: 'text', text: 'Hi', font: 'sans', size: 40, w: 400, h: 100, align: 'center', color: '#FFFFFF', gradient: '#0000FF' });
+    const [, g] = ctx.calls.find((c) => c[0] === 'gradient');
+    expect(g.stops).toEqual([[0, '#FFFFFF'], [1, '#0000FF']]);
+    expect(g.a[1]).toBeLessThan(g.a[3]); // top to bottom
+    expect(ctx.calls.find((c) => c[0] === 'fill')[4]).toBe(g);
+    const arc = recorder();
+    paintWords(arc, { kind: 'text', text: 'ABC', font: 'sans', size: 40, w: 400, h: 200, color: '#FFFFFF', stroke: '#000000', curve: 60 });
+    expect(arc.calls.filter((c) => c[0] === 'fill').map((c) => c[1])).toEqual(['A', 'B', 'C']);
+    expect(arc.calls.filter((c) => c[0] === 'stroke').length).toBe(3);
+    expect(arc.calls.filter((c) => c[0] === 'rotate').length).toBe(3);
+  });
+
+  test('wordsCanvas: the words, then one shadow or glow under them all', () => {
+    const made = [];
+    const make = (w, h) => { const c = { w, h, ctx: recorder() }; c.getContext = () => c.ctx; made.push(c); return c; };
+    const l = { kind: 'text', text: 'Hi', font: 'sans', size: 70, w: 400, h: 100, color: '#FFFFFF', effect: 'glow', effectColor: '#FF0000', effectSize: 20 };
+    const out = wordsCanvas(l, make);
+    const m = wordsMargin(l);
+    expect(made.map((c) => [c.w, c.h])).toEqual([[400 + m * 2, 100 + m * 2], [400 + m * 2, 100 + m * 2]]);
+    expect(made[0].ctx.calls[0]).toEqual(['translate', m + 200, m + 50]);
+    expect(out.ctx.calls).toEqual([['image', made[0], '#FF0000', 20, 0]]);
+    const plain = wordsCanvas({ ...l, effect: 'none', curve: 30 }, make);
+    expect(plain).toBe(made[2]);
   });
 });

@@ -106,4 +106,28 @@ describe('ThumbnailCanvas', () => {
     const title = SPEC.layers.find((l) => l.id === 'title');
     expect(lines.every((l) => l.text.length * 40 <= title.w)).toBe(true);
   });
+
+  test('words with an effect, a fade or a curve are one picture drawn as the server draws them, round the box', () => {
+    const ctx = {
+      font: '', measureText: (s) => ({ width: String(s).length * 40 }), translate: vi.fn(), rotate: vi.fn(), save: vi.fn(), restore: vi.fn(),
+      fillText: vi.fn(), strokeText: vi.fn(), drawImage: vi.fn(), createLinearGradient: () => ({ addColorStop: vi.fn() }),
+    };
+    const before = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = () => ctx;
+    try {
+      const spec = updateLayer(SPEC, 'title', { effect: 'glow', effectColor: '#FF0000', effectSize: 20, curve: 40 });
+      render(<ThumbnailCanvas spec={spec} selectedId={null} onSelect={() => {}} onChange={() => {}} />);
+      const title = document.querySelector('[data-id="title"]');
+      const t = spec.layers.find((l) => l.id === 'title');
+      const m = Math.ceil(t.size / 7) + 2 + 30;
+      const img = JSON.parse(title.querySelector('[data-konva="Image"]').getAttribute('data-props'));
+      expect(img).toMatchObject({ x: -m, y: -m, width: t.w + m * 2, height: t.h + m * 2 });
+      expect(title.querySelector('[data-konva="Text"]')).toBeNull();
+      // Each letter of the curved title is drawn on its own, turned.
+      expect(ctx.fillText.mock.calls.map((c) => c[0]).join('')).toBe(t.text);
+      expect(ctx.rotate).toHaveBeenCalledTimes(t.text.length);
+    } finally {
+      HTMLCanvasElement.prototype.getContext = before;
+    }
+  });
 });
