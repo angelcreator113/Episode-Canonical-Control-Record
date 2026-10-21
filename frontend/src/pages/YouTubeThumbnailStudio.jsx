@@ -2,10 +2,10 @@
  * Templates › YouTube thumbnails (Evoni, 2026-10-17): make an episode's
  * 1280x720 YouTube thumbnail from its show's style. Pick the show and the
  * episode; the title, the show's name and "EP n" fill in. Choose the layout,
- * the background (the episode's scene angles, the show cover, or an upload),
- * Lala and JustAWoman (this episode's poses from Files › Character poses,
- * grouped Front, Back, Side, Glamour, with Lala's starred pose picked
- * first; Lala also from the Asset Library; either from an upload),
+ * the background, Lala and JustAWoman. The pictures are in folders
+ * (2026-10-21): Scene sets, Character poses (Lala, JustAWoman › Front, Back,
+ * Side, Glamour; Lala's starred pose picked first), This episode's outfit,
+ * Asset library and Documents; or upload one.
  * the colours and how dark the background is. The preview is rendered by
  * the server, so it is the file that is saved. Save makes it the episode's
  * primary thumbnail (Production's Thumbnail step); Save style keeps the
@@ -21,8 +21,10 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Youtube, Upload, Download, Save, Palette, ImageOff, Check, LayoutTemplate, Sparkles, Star, Trash2, History } from 'lucide-react';
-import { youtubeThumbnailsApi, LAYOUTS, ACCENTS, TEXT_COLORS, episodeWords, poseSections, defaultPose } from '../lib/youtubeThumbnailsApi';
+import { Youtube, Upload, Download, Save, Palette, ImageOff, Check, LayoutTemplate, Sparkles, Star, Trash2, History, Folder, ChevronRight } from 'lucide-react';
+import {
+  youtubeThumbnailsApi, LAYOUTS, ACCENTS, TEXT_COLORS, episodeWords, defaultPose, folderPath, folderCount, folderCover, firstFolder,
+} from '../lib/youtubeThumbnailsApi';
 import './YouTubeThumbnailStudio.css';
 
 const PREVIEW_DELAY_MS = 500;
@@ -37,12 +39,20 @@ function PickButton({ it, value, upload, onPick }) {
 }
 
 /**
- * A picture picker: None, the pictures, Upload. With sections (the
- * character poses: Front, Back, Side, Glamour), each group of pictures
- * gets its own heading under the None and Upload row.
+ * A picture picker in folders (Evoni, 2026-10-21): None and Upload, where
+ * it is ("All folders › Character poses › Lala"), the folders here, and the
+ * pictures here. It opens in the first of `start` that has pictures (the
+ * background in Scene sets, Lala in her poses); any folder is a click away.
  */
-function Picker({ title, items, sections, value, onPick, upload, onUpload, onNone, noneLabel, testid, whole = false }) {
+function FolderPicker({ title, tree, start, value, onPick, upload, onUpload, onNone, noneLabel, testid, whole = false }) {
   const inputRef = useRef(null);
+  const startKey = firstFolder(tree, start);
+  const [at, setAt] = useState(startKey);
+  useEffect(() => { setAt(startKey); }, [startKey]);
+  const path = folderPath(tree, at);
+  const here = path.at(-1) || null;
+  const folders = here ? (here.folders || []) : (tree || []);
+  const items = here?.items || [];
   const grid = `yts-grid${whole ? ' is-whole' : ''}`;
   const none = (
     <button type="button" className={`yts-pick is-none${!value && !upload ? ' is-on' : ''}`} aria-pressed={!value && !upload} onClick={onNone}>
@@ -57,23 +67,38 @@ function Picker({ title, items, sections, value, onPick, upload, onUpload, onNon
   return (
     <fieldset className="yts-field" data-testid={testid}>
       <legend className="yts-label">{title}</legend>
-      {sections ? (
-        <>
-          <div className={grid}>{none}{add}</div>
-          {sections.map((sec) => (
-            <div key={sec.title} className="yts-section" data-testid={`${testid}-${sec.title.toLowerCase().replace(/\s+/g, '-')}`}>
-              <span className="yts-section-title">{sec.title}</span>
-              <div className={grid}>{sec.items.map((it) => <PickButton key={it.url} it={it} value={value} upload={upload} onPick={onPick} />)}</div>
-            </div>
-          ))}
-        </>
-      ) : (
-        <div className={grid}>
-          {none}
-          {items.map((it) => <PickButton key={it.url} it={it} value={value} upload={upload} onPick={onPick} />)}
-          {add}
+      <div className={grid}>{none}{add}</div>
+      <nav className="yts-crumbs" aria-label={`${title}: where you are`} data-testid={`${testid}-crumbs`}>
+        <button type="button" onClick={() => setAt(null)} aria-current={here ? undefined : 'location'}>All folders</button>
+        {path.map((f) => (
+          <React.Fragment key={f.key}>
+            <ChevronRight size={12} aria-hidden />
+            <button type="button" onClick={() => setAt(f.key)} aria-current={f === here ? 'location' : undefined}>{f.label}</button>
+          </React.Fragment>
+        ))}
+      </nav>
+      {folders.length > 0 && (
+        <div className="yts-folders">
+          {folders.map((f) => {
+            const cover = folderCover(f);
+            const n = folderCount(f);
+            return (
+              <button key={f.key} type="button" className="yts-folder" onClick={() => setAt(f.key)} data-testid={`${testid}-folder-${f.key}`}
+                aria-label={`${f.label}, ${n} ${n === 1 ? 'picture' : 'pictures'}`}>
+                <span className="yts-folder-art">{cover ? <img src={cover} alt="" loading="lazy" /> : <Folder size={20} aria-hidden />}</span>
+                <span className="yts-folder-name"><Folder size={12} aria-hidden /> {f.label}</span>
+                <span className="yts-folder-count" aria-hidden>{n} {n === 1 ? 'picture' : 'pictures'}</span>
+              </button>
+            );
+          })}
         </div>
       )}
+      {items.length > 0 && (
+        <div className={grid} data-testid={`${testid}-pictures`}>
+          {items.map((it) => <PickButton key={it.url} it={it} value={value} upload={upload} onPick={onPick} />)}
+        </div>
+      )}
+      {!folders.length && !items.length && <p className="yts-note">No pictures yet. Upload one.</p>}
       <input ref={inputRef} type="file" accept="image/*" hidden data-testid={`${testid}-input`}
         onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value = ''; }} />
     </fieldset>
@@ -325,24 +350,21 @@ export default function YouTubeThumbnailStudio() {
               </label>
             </div>
 
-            <Picker title="Background" testid="yts-backgrounds" items={sources?.backgrounds || []} value={spec.backgroundUrl} upload={files.background}
+            <FolderPicker title="Background" testid="yts-backgrounds" tree={sources?.folders} start={['scene-sets']} value={spec.backgroundUrl} upload={files.background}
               noneLabel="Plain" onPick={(url) => { setFiles((f) => ({ ...f, background: null })); set({ backgroundUrl: url }); }}
               onUpload={(f) => { setFiles((x) => ({ ...x, background: f })); setSaved(null); }}
               onNone={() => { setFiles((f) => ({ ...f, background: null })); set({ backgroundUrl: null }); }} />
 
             {spec.layout !== 'center' && (
-              <Picker title="Lala" testid="yts-lala" whole value={spec.lalaUrl} upload={files.lala}
-                sections={[
-                  ...poseSections(sources?.poses?.lala),
-                  ...((sources?.cutouts || []).length ? [{ title: 'Asset Library', items: sources.cutouts }] : []),
-                ]}
+              <FolderPicker title="Lala" testid="yts-lala" whole value={spec.lalaUrl} upload={files.lala}
+                tree={sources?.folders} start={['poses/lala', 'library/lala']}
                 noneLabel="No Lala" onPick={(url) => { setFiles((f) => ({ ...f, lala: null })); set({ lalaUrl: url }); }}
                 onUpload={(f) => { setFiles((x) => ({ ...x, lala: f })); setSaved(null); }}
                 onNone={() => { setFiles((f) => ({ ...f, lala: null })); set({ lalaUrl: null }); }} />
             )}
             {spec.layout !== 'center' && (
-              <Picker title="JustAWoman" testid="yts-jaw" whole value={spec.jawUrl} upload={files.jaw}
-                sections={poseSections(sources?.poses?.justawoman)}
+              <FolderPicker title="JustAWoman" testid="yts-jaw" whole value={spec.jawUrl} upload={files.jaw}
+                tree={sources?.folders} start={['poses/justawoman']}
                 noneLabel="No JustAWoman" onPick={(url) => { setFiles((f) => ({ ...f, jaw: null })); set({ jawUrl: url }); }}
                 onUpload={(f) => { setFiles((x) => ({ ...x, jaw: f })); setSaved(null); }}
                 onNone={() => { setFiles((f) => ({ ...f, jaw: null })); set({ jawUrl: null }); }} />

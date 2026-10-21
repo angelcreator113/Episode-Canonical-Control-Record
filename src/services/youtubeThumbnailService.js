@@ -297,11 +297,15 @@ async function sources(sequelize, episodeId) {
          FROM assets
         WHERE show_id = :showId AND deleted_at IS NULL
           AND s3_url_processed ILIKE '%.png'
+          -- The shopping-list paper (eventDocumentOverlayService) is a PNG too, not a cut-out.
+          AND asset_type IS DISTINCT FROM 'DOCUMENT_OVERLAY'
         ORDER BY (asset_group = 'LALA' OR character_name ILIKE '%lala%') DESC NULLS LAST, created_at DESC
         LIMIT 40`,
       { replacements: { showId: episode.show_id } })
     : [[]];
   const poses = await readyPoses(sequelize, episode.id);
+  const library = episode.show_id ? await libraryImages(sequelize, episode.show_id) : [];
+  const outfit = await outfitImages(sequelize, episode.id);
   const backgrounds = [
     ...(angles || []).map((a) => ({ url: a.url, label: [a.set_name, a.angle].filter(Boolean).join(' · ') })),
     ...(show?.cover_image_url ? [{ url: show.cover_image_url, label: 'Show cover' }] : []),
@@ -313,7 +317,105 @@ async function sources(sequelize, episodeId) {
     backgrounds,
     cutouts: (cutouts || []).filter((c) => allowedImageUrl(c.url)).map((c) => ({ id: c.id, url: c.url, label: c.name })),
     poses,
+    folders: pictureFolders({ angles, cover: show?.cover_image_url, poses, outfit, library }),
   };
+}
+
+// ── The pictures in folders (Evoni, 2026-10-21: "put them in folders") ──────
+
+const ASSET_GROUP_LABEL = { LALA: 'Lala', SHOW: 'Show', GUEST: 'Guests', EPISODE: 'Episodes', WARDROBE: 'Wardrobe' };
+const IMAGE_FILE = /\.(png|jpe?g|webp|avif)(\?|$)/i;
+
+const folderKey = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'other';
+const titleCase = (s) => String(s || '').replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim();
+
+/** Groups items into folders by a label, in first-seen order. */
+function groupInto(prefix, items, labelOf) {
+  const out = new Map();
+  for (const it of items) {
+    const label = labelOf(it);
+    const key = `${prefix}/${folderKey(label)}`;
+    if (!out.has(key)) out.set(key, { key, label, items: [] });
+    out.get(key).items.push(it);
+  }
+  return [...out.values()];
+}
+
+/** A folder with nothing in it, at any depth, is left out. */
+function prune(folder) {
+  const folders = (folder.folders || []).map(prune).filter(Boolean);
+  const items = folder.items || [];
+  if (!folders.length && !items.length) return null;
+  return { key: folder.key, label: folder.label, ...(folders.length ? { folders } : {}), ...(items.length ? { items } : {}) };
+}
+
+/**
+ * Every picture the Studio offers, in folders by where it comes from:
+ *   Scene sets: one folder per set (its angles), and Show (the cover).
+ *   Character poses: Lala and JustAWoman, then Front, Back, Side, Glamour.
+ *   This episode's outfit: by clothing category.
+ *   Asset library: by asset group (Lala, Show, Guests, Episodes, Wardrobe).
+ *   Documents: the event documents drawn as pictures (the shopping list).
+ * Each folder is { key, label, folders?, items? }; each item { url, label }.
+ * Empty folders are left out; only S3/CloudFront pictures are kept.
+ */
+function pictureFolders({ angles = [], cover = null, poses = { lala: [], justawoman: [] }, outfit = [], library = [] }) {
+  const ok = (it) => it && allowedImageUrl(it.url);
+  const sets = groupInto('scene-sets', (angles || []).map((a) => ({ url: a.url, label: a.angle || a.set_name || 'Angle', set: a.set_name || 'Scene set' })).filter(ok), (a) => a.set)
+    .map((f) => ({ ...f, items: f.items.map(({ url, label }) => ({ url, label })) }));
+  const character = (key, label) => ({
+    key: `poses/${key}`,
+    label,
+    folders: POSE_ORDER.map((p) => ({
+      key: `poses/${key}/${p}`, label: POSE_LABEL[p],
+      items: (poses[key] || []).filter((x) => x.pose === p).map((x) => ({ url: x.url, label: x.label, isDefault: x.isDefault })),
+    })),
+  });
+  const docs = library.filter((a) => a.asset_type === 'DOCUMENT_OVERLAY');
+  const assets = library.filter((a) => a.asset_type !== 'DOCUMENT_OVERLAY');
+  const tree = [
+    { key: 'scene-sets', label: 'Scene sets', folders: [...sets, { key: 'scene-sets/show', label: 'Show', items: [{ url: cover, label: 'Show cover' }].filter(ok) }] },
+    { key: 'poses', label: 'Character poses', folders: [character('lala', 'Lala'), character('justawoman', 'JustAWoman')] },
+    { key: 'outfit', label: "This episode's outfit", folders: groupInto('outfit', outfit.filter(ok), (w) => titleCase(w.category) || 'Other').map((f) => ({ ...f, items: f.items.map(({ url, label }) => ({ url, label })) })) },
+    { key: 'library', label: 'Asset library', folders: groupInto('library', assets.filter(ok), (a) => ASSET_GROUP_LABEL[a.asset_group] || 'Other').map((f) => ({ ...f, items: f.items.map(({ url, label }) => ({ url, label })) })) },
+    { key: 'documents', label: 'Documents', items: docs.filter(ok).map(({ url, label }) => ({ url, label })) },
+  ];
+  return tree.map(prune).filter(Boolean);
+}
+
+/** The show's pictures in the Asset library (newest first, at most 200): { url, label, asset_group, asset_type }. */
+async function libraryImages(sequelize, showId) {
+  const [rows] = await sequelize.query(
+    `SELECT name, asset_group, asset_type, COALESCE(s3_url_processed, s3_url_raw) AS url
+       FROM assets
+      WHERE show_id = :showId AND deleted_at IS NULL AND COALESCE(s3_url_processed, s3_url_raw) IS NOT NULL
+      ORDER BY created_at DESC
+      LIMIT 200`,
+    { replacements: { showId } });
+  return (rows || []).filter((r) => IMAGE_FILE.test(r.url || ''))
+    .map((r) => ({ url: r.url, label: r.name || 'Picture', asset_group: r.asset_group, asset_type: r.asset_type }));
+}
+
+/**
+ * The episode's approved outfit pieces (episode_wardrobe, as
+ * GET /wardrobe/outfit/:episode_id reads it, attachment pieces too): the
+ * background-removed picture when there is one. { url, label, category }.
+ * Empty until the table exists.
+ */
+async function outfitImages(sequelize, episodeId) {
+  const [[reg]] = await sequelize.query("SELECT to_regclass('public.episode_wardrobe') AS reg");
+  if (!reg || !reg.reg) return [];
+  const [rows] = await sequelize.query(
+    `SELECT w.name, w.clothing_category AS category, COALESCE(w.s3_url_processed, w.s3_url, w.thumbnail_url) AS url
+       FROM episode_wardrobe ew
+       JOIN wardrobe w ON (w.id = ew.wardrobe_id OR w.parent_item_id = ew.wardrobe_id) AND w.deleted_at IS NULL
+      WHERE ew.episode_id = :episodeId AND ew.deleted_at IS NULL AND ew.approval_status = 'approved'
+      ORDER BY ew.created_at ASC, w.parent_item_id NULLS FIRST
+      LIMIT 60`,
+    { replacements: { episodeId } });
+  const seen = new Set();
+  return (rows || []).filter((r) => r.url && !seen.has(r.url) && seen.add(r.url))
+    .map((r) => ({ url: r.url, label: r.name || 'Piece', category: r.category }));
 }
 
 const POSE_ORDER = ['front', 'back', 'side', 'glamour'];
@@ -461,6 +563,6 @@ async function removeSaved(sequelize, episodeId, thumbnailId) {
 
 module.exports = {
   WIDTH, HEIGHT, LAYOUTS, DEFAULT_STYLE, ThumbnailError,
-  readStyle, readSpec, allowedImageUrl, fetchImage, layoutBoxes, duoPositions, readyPoses, titleSize, wrapTitle, fitTitle, kickerSize, textSvg, shadeSvg,
+  readStyle, readSpec, allowedImageUrl, fetchImage, layoutBoxes, duoPositions, readyPoses, pictureFolders, libraryImages, outfitImages, titleSize, wrapTitle, fitTitle, kickerSize, textSvg, shadeSvg,
   render, sources, saveStyle, saveAsPrimary, listSaved, makePrimary, removeSaved,
 };

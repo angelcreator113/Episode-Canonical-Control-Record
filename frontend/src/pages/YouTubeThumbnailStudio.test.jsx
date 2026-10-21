@@ -21,7 +21,9 @@ vi.mock('../lib/youtubeThumbnailsApi', async () => {
   };
 });
 
-import { youtubeThumbnailsApi, episodeWords, renderForm, thumbnailStudioHref, poseSections, defaultPose } from '../lib/youtubeThumbnailsApi';
+import {
+  youtubeThumbnailsApi, episodeWords, renderForm, thumbnailStudioHref, defaultPose, folderPath, folderCount, folderCover, firstFolder,
+} from '../lib/youtubeThumbnailsApi';
 import YouTubeThumbnailStudio from './YouTubeThumbnailStudio';
 
 const SOURCES = {
@@ -30,6 +32,15 @@ const SOURCES = {
   style: { layout: 'lala-right', accent: '#B8962E', textColor: '#FFFFFF', dim: 0.3, lalaUrl: 'https://b.s3.amazonaws.com/lala2.png' },
   backgrounds: [{ url: 'https://b.s3.amazonaws.com/wide.jpg', label: 'Bedroom · Wide' }, { url: 'https://b.s3.amazonaws.com/cover.jpg', label: 'Show cover' }],
   cutouts: [{ id: 'a1', url: 'https://b.s3.amazonaws.com/lala1.png', label: 'Lala 1' }, { id: 'a2', url: 'https://b.s3.amazonaws.com/lala2.png', label: 'Lala 2' }],
+  folders: [
+    { key: 'scene-sets', label: 'Scene sets', folders: [
+      { key: 'scene-sets/bedroom', label: 'Bedroom', items: [{ url: 'https://b.s3.amazonaws.com/wide.jpg', label: 'Wide' }] },
+      { key: 'scene-sets/show', label: 'Show', items: [{ url: 'https://b.s3.amazonaws.com/cover.jpg', label: 'Show cover' }] },
+    ] },
+    { key: 'library', label: 'Asset library', folders: [
+      { key: 'library/lala', label: 'Lala', items: [{ url: 'https://b.s3.amazonaws.com/lala1.png', label: 'Lala 1' }, { url: 'https://b.s3.amazonaws.com/lala2.png', label: 'Lala 2' }] },
+    ] },
+  ],
 };
 
 const renderPage = (entry = '/template-studio/youtube?show=show-1&episode=ep-1') => render(
@@ -48,14 +59,24 @@ describe('helpers', () => {
     expect(form.get('lala')).toBeNull();
   });
 
-  test('pose sections and the pose a thumbnail starts from', () => {
+  test('folders: the path to one, how many pictures, the cover, where a picker opens', () => {
+    const tree = SOURCES.folders;
+    expect(folderPath(tree, 'scene-sets/show').map((f) => f.label)).toEqual(['Scene sets', 'Show']);
+    expect(folderPath(tree, 'nope')).toEqual([]);
+    expect(folderPath(tree, null)).toEqual([]);
+    expect(folderCount(tree[0])).toBe(2);
+    expect(folderCover(tree[0])).toBe('https://b.s3.amazonaws.com/wide.jpg');
+    expect(folderCover({ key: 'x', label: 'X' })).toBeNull();
+    expect(firstFolder(tree, ['poses/lala', 'library/lala'])).toBe('library/lala');
+    expect(firstFolder(tree, ['poses/justawoman'])).toBeNull();
+  });
+
+  test('the pose a thumbnail starts from', () => {
     const poses = [
       { url: 'u-f1', pose: 'front', isDefault: true },
       { url: 'u-f2', pose: 'front', isDefault: false },
       { url: 'u-g1', pose: 'glamour', isDefault: false },
     ];
-    expect(poseSections(poses).map((sec) => [sec.title, sec.items.map((i) => i.url)])).toEqual([['Front', ['u-f1', 'u-f2']], ['Glamour', ['u-g1']]]);
-    expect(poseSections(undefined)).toEqual([]);
     expect(defaultPose(poses).url).toBe('u-f1'); // a starred Front beats an unstarred Glamour
     expect(defaultPose([{ url: 'g', pose: 'glamour', isDefault: true }, { url: 'f', pose: 'front', isDefault: true }]).url).toBe('g');
     expect(defaultPose([{ url: 'b', pose: 'back', isDefault: false }]).url).toBe('b');
@@ -108,7 +129,10 @@ describe('YouTubeThumbnailStudio', () => {
     await waitFor(() => expect(youtubeThumbnailsApi.render).toHaveBeenCalledTimes(1), { timeout: 2000 });
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'The Atelier' } });
     fireEvent.click(screen.getByRole('button', { name: /Title only/ }));
-    fireEvent.click(within(screen.getByTestId('yts-backgrounds')).getByTitle('Show cover'));
+    const bg = screen.getByTestId('yts-backgrounds');
+    // The background opens in Scene sets; the cover is in its Show folder.
+    fireEvent.click(within(bg).getByTestId('yts-backgrounds-folder-scene-sets/show'));
+    fireEvent.click(within(bg).getByTitle('Show cover'));
     fireEvent.click(screen.getByRole('button', { name: 'Accent #A46EE0' }));
     await waitFor(() => expect(lastSpec()).toMatchObject({ title: 'The Atelier', layout: 'center', backgroundUrl: 'https://b.s3.amazonaws.com/cover.jpg', accent: '#A46EE0' }), { timeout: 2000 });
     expect(screen.queryByTestId('yts-lala')).toBeNull();
@@ -192,24 +216,44 @@ describe('YouTubeThumbnailStudio', () => {
   });
 
   test('the episode\'s poses: Lala starts on her starred pose, grouped by pose; JustAWoman joins when picked', async () => {
+    const lalaFront = { url: 'https://b.s3.amazonaws.com/lala-front.png', label: 'Front ★', isDefault: true };
+    const lalaSide = { url: 'https://b.s3.amazonaws.com/lala-side.png', label: 'Side', isDefault: false };
+    const jawGlam = { url: 'https://b.s3.amazonaws.com/jaw-glam.png', label: 'Glamour ★', isDefault: true };
     youtubeThumbnailsApi.sources.mockResolvedValue({
       ...SOURCES,
       poses: {
-        lala: [
-          { id: 'p1', url: 'https://b.s3.amazonaws.com/lala-front.png', pose: 'front', label: 'Front ★', isDefault: true },
-          { id: 'p2', url: 'https://b.s3.amazonaws.com/lala-side.png', pose: 'side', label: 'Side', isDefault: false },
-        ],
-        justawoman: [{ id: 'p3', url: 'https://b.s3.amazonaws.com/jaw-glam.png', pose: 'glamour', label: 'Glamour ★', isDefault: true }],
+        lala: [{ id: 'p1', pose: 'front', ...lalaFront }, { id: 'p2', pose: 'side', ...lalaSide }],
+        justawoman: [{ id: 'p3', pose: 'glamour', ...jawGlam }],
       },
+      folders: [
+        ...SOURCES.folders,
+        { key: 'poses', label: 'Character poses', folders: [
+          { key: 'poses/lala', label: 'Lala', folders: [
+            { key: 'poses/lala/front', label: 'Front', items: [lalaFront] },
+            { key: 'poses/lala/side', label: 'Side', items: [lalaSide] },
+          ] },
+          { key: 'poses/justawoman', label: 'JustAWoman', folders: [{ key: 'poses/justawoman/glamour', label: 'Glamour', items: [jawGlam] }] },
+        ] },
+      ],
     });
     renderPage();
     await waitFor(() => expect(youtubeThumbnailsApi.render).toHaveBeenCalled(), { timeout: 2000 });
     expect(lastSpec()).toMatchObject({ lalaUrl: 'https://b.s3.amazonaws.com/lala-front.png', jawUrl: null });
-    expect(within(screen.getByTestId('yts-lala-front')).getByTitle('Front ★')).toBeTruthy();
-    expect(within(screen.getByTestId('yts-lala-side')).getByTitle('Side')).toBeTruthy();
-    expect(within(screen.getByTestId('yts-lala-asset-library')).getByTitle('Lala 1')).toBeTruthy();
+    // Lala's picker opens in her poses: one folder per pose, each with its count.
+    const lala = screen.getByTestId('yts-lala');
+    expect(within(lala).getByTestId('yts-lala-crumbs').textContent).toBe('All foldersCharacter posesLala');
+    expect(within(lala).getByRole('button', { name: 'Front, 1 picture' })).toBeTruthy();
+    fireEvent.click(within(lala).getByRole('button', { name: 'Side, 1 picture' }));
+    expect(within(lala).getByTitle('Side')).toBeTruthy();
+    // Back to all folders, then into the Asset library's Lala.
+    fireEvent.click(within(lala).getByRole('button', { name: 'All folders' }));
+    fireEvent.click(within(lala).getByTestId('yts-lala-folder-library'));
+    fireEvent.click(within(lala).getByTestId('yts-lala-folder-library/lala'));
+    expect(within(lala).getByTitle('Lala 1')).toBeTruthy();
     expect(screen.queryByTestId('yts-poses-note')).toBeNull();
-    fireEvent.click(within(screen.getByTestId('yts-jaw-glamour')).getByTitle('Glamour ★'));
+    const jaw = screen.getByTestId('yts-jaw');
+    fireEvent.click(within(jaw).getByTestId('yts-jaw-folder-poses/justawoman/glamour'));
+    fireEvent.click(within(jaw).getByTitle('Glamour ★'));
     await waitFor(() => expect(lastSpec()).toMatchObject({ jawUrl: 'https://b.s3.amazonaws.com/jaw-glam.png' }), { timeout: 2000 });
     fireEvent.click(within(screen.getByTestId('yts-jaw')).getByRole('button', { name: /No JustAWoman/ }));
     await waitFor(() => expect(lastSpec()).toMatchObject({ jawUrl: null }), { timeout: 2000 });
