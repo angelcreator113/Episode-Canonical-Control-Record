@@ -11,7 +11,7 @@ import {
   SHAPES, addShape, shapeCanvas, shapeMargin, shapeWordsBox,
   spaced, alignLayers, distributeLayers, layersInBox, youtubeWarnings, drawnSize, fileSize, TIMESTAMP_ZONE,
   READABLE_SIZE, readablePatch, clearOfTimestamp, fixWarning, fixAllWarnings, finerCanvas, drawRes, WIDTH, HEIGHT,
-  presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, placeLayer, removeLayer, addText, addPicture, addPieceCard,
+  presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, placeLayer, removeLayer, boxBlur, FONTS, addText, addPicture, addPieceCard,
   boxFromNode, fitText, fitPicture, layerName, LINE_HEIGHT, checklistRows, duplicateLayer, snapBox, SNAP, copyLayers, pasteLayers,
 } from './thumbnailLayers';
 
@@ -527,7 +527,11 @@ describe('stickers and shapes (the server\'s, Evoni 2026-10-21)', () => {
     expect(addShape(one, 'burst').layers[1].id).toBe('burst-2');
     expect(layerName(addShape(empty, 'ring').layers[0])).toBe('Circle');
     expect(addShape(empty, 'nope').layers[0].shape).toBe('arrow');
-    expect(SHAPES.map((x) => x.key)).toEqual(['arrow', 'ring', 'burst', 'sparkle', 'tag']);
+    expect(SHAPES.map((x) => x.key)).toEqual(['arrow', 'ring', 'burst', 'sparkle', 'tag', 'tape', 'paper', 'shadow']);
+    const note = addShape(empty, 'paper').layers[0];
+    expect(note).toMatchObject({ shape: 'paper', text: 'Your note', font: 'hand' });
+    expect(layerName(note)).toBe('Paper: Your note');
+    expect(layerName(addShape(empty, 'tape').layers[0])).toBe('Tape');
   });
 
   test('drawnSize: a tag\'s words, sized in their box; a shape without words has none', () => {
@@ -618,5 +622,65 @@ describe('placeLayer (Layers, dragged)', () => {
     expect(placeLayer(spec, 'b', 'b')).toBe(spec);
     expect(placeLayer(spec, 'x', 'b')).toBe(spec);
     expect(placeLayer(spec, 'b', 'x')).toBe(spec);
+  });
+});
+
+// boxBlur(radius 1) on a 9 x 9 black square with its middle pixel 255: the middle, one and two to its left.
+const BLUR_SAMPLE = [17, 15, 7];
+
+describe('the redesign\'s layouts, fonts and blur (Evoni, 2026-10-21)', () => {
+  const content = {
+    title: 'Gala Night', kicker: 'Styling Adventures', badge: 'EP 4', backgroundUrl: 'https://b.s3.amazonaws.com/bg.jpg',
+    lalaUrl: 'https://b.s3.amazonaws.com/lala.png', jawUrl: 'https://b.s3.amazonaws.com/jaw.png', outfitUrl: 'https://b.s3.amazonaws.com/outfit.png',
+    checklist: [{ text: 'Dress', checked: true }, { text: 'Shoes', checked: true }],
+  };
+  const ids = (s) => s.layers.map((l) => l.id);
+
+  test('Checklist focus: the checklist on a paper note on the left, Lala on the right, the title beside her', () => {
+    const s = presetLayers('checklist-focus', content, { accent: '#E0689F' });
+    expect(ids(s)).toEqual(['background', 'shade', 'note', 'checklist', 'lala', 'kicker', 'title', 'badge']);
+    expect(layerOf(s, 'checklist')).toMatchObject({ x: 80, items: content.checklist, color: '#2C2C2C' });
+    expect(s.layers[2]).toMatchObject({ kind: 'shape', shape: 'paper', role: null, name: 'Note' });
+    expect(layerOf(s, 'lala').x).toBeGreaterThan(640);
+    expect(layerOf(s, 'title')).toMatchObject({ text: 'Gala Night', font: 'playfair' });
+    expect(layerOf(s, 'badge').text).toBe('EPISODE 4');
+    expect(ids(presetLayers('checklist-focus', { ...content, lalaUrl: null, badge: '' }, {}))).not.toContain('lala');
+  });
+
+  test('Before/After: JustAWoman (else the full outfit) left, Lala right, on photo cards with their labels, an arrow between', () => {
+    const s = presetLayers('before-after', content, { accent: '#B8962E' });
+    expect(ids(s)).toEqual(['background', 'shade', 'jaw', 'lala', 'before-label', 'after-label', 'change', 'title', 'kicker', 'badge']);
+    expect(layerOf(s, 'jaw')).toMatchObject({ src: content.jawUrl, frame: 'polaroid' });
+    expect(layerOf(s, 'lala')).toMatchObject({ src: content.lalaUrl, frame: 'polaroid' });
+    expect(s.layers.find((l) => l.id === 'before-label')).toMatchObject({ text: 'BEFORE', bg: '#B8962E', role: null, name: 'Before label' });
+    expect(s.layers.find((l) => l.id === 'change')).toMatchObject({ kind: 'shape', shape: 'arrow', fill: '#B8962E' });
+    const noJaw = presetLayers('before-after', { ...content, jawUrl: null }, {});
+    expect(layerOf(noJaw, 'outfit').src).toBe(content.outfitUrl);
+    expect(layerOf(noJaw, 'jaw')).toBeNull();
+    // No picture for a side: no card and no label for it.
+    const lalaOnly = presetLayers('before-after', { ...content, jawUrl: null, outfitUrl: null }, {});
+    expect(ids(lalaOnly)).not.toContain('before-label');
+    expect(ids(lalaOnly)).toContain('after-label');
+  });
+
+  test('the fonts: Playfair and Montserrat, by the names the server registers', () => {
+    expect(FONTS.playfair).toMatchObject({ family: 'Thumb Playfair', weight: 'bold', label: 'Playfair' });
+    expect(FONTS.montserrat).toMatchObject({ family: 'Thumb Montserrat', weight: 'bold', label: 'Montserrat' });
+  });
+
+  test('boxBlur: the server\'s, whole numbers; a bright pixel spreads evenly; radius 0 changes nothing', () => {
+    const w = 9;
+    const d = new Uint8ClampedArray(w * w * 4);
+    d[(4 * w + 4) * 4] = 255;
+    boxBlur(d, w, w, 0);
+    expect(d[(4 * w + 4) * 4]).toBe(255);
+    boxBlur(d, w, w, 1);
+    const at = (x, y) => d[(y * w + x) * 4];
+    expect(at(4, 4)).toBeGreaterThan(at(3, 4));
+    expect(at(3, 4)).toBe(at(5, 4));
+    expect(at(4, 3)).toBe(at(4, 5));
+    expect(at(0, 0)).toBe(0);
+    // The same numbers the server's copy gives for this pixel (tests/unit/services/thumbnailLayers.test.js runs the same input).
+    expect([at(4, 4), at(3, 4), at(2, 4)]).toEqual(BLUR_SAMPLE);
   });
 });

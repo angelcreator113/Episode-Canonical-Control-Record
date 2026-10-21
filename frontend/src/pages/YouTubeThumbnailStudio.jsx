@@ -33,7 +33,7 @@ import {
   Youtube, Upload, Download, Save, Palette, ImageOff, Check, LayoutTemplate, Sparkles, Star, Trash2, History, Folder, ChevronRight,
   Eye, EyeOff, ArrowUp, ArrowDown, Type, RotateCcw, ScanEye, X, Lock, LockOpen, Copy, Undo2, Redo2, Plus, Pencil, AlignLeft, AlignCenter, AlignRight,
   AlignStartVertical, AlignCenterVertical, AlignEndVertical, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
-  AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, Keyboard, RefreshCw, FlipHorizontal2, ZoomIn, ZoomOut, ClipboardCopy, ClipboardPaste, Columns2, CopyPlus, ArrowRight, Circle, Tag, LayoutGrid, EllipsisVertical, Grid3x3, SquareDashed, GripVertical, ListChecks, Shapes,
+  AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, Keyboard, RefreshCw, FlipHorizontal2, ZoomIn, ZoomOut, ClipboardCopy, ClipboardPaste, Columns2, CopyPlus, ArrowRight, Circle, Tag, LayoutGrid, EllipsisVertical, Grid3x3, SquareDashed, GripVertical, ListChecks, Shapes, Bandage, StickyNote, Eclipse,
 } from 'lucide-react';
 import {
   youtubeThumbnailsApi, LAYOUTS, ACCENTS, TEXT_COLORS, readRecentColours, rememberColour, episodeContent, folderPath, folderCount, folderCover, firstFolder,
@@ -41,7 +41,7 @@ import {
 import {
   FONTS, presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, placeLayer, removeLayer,
   addText, addPicture, addPieceCard, layerName, loadThumbnailFonts, OUTLINE, BOX_COLOR, BOX_OPACITY, STICKER_EDGE, duplicateLayer, WIDTH, HEIGHT, CARD_COLOR,
-  alignLayers, distributeLayers, copyLayers, pasteLayers, CLIPBOARD_KEY, measurer, youtubeWarnings, fixWarning, fixAllWarnings, fileSize, YOUTUBE_SIZES, GLOW_COLOR, FADE_COLOR, EFFECT_SIZE, SHAPES, addShape,
+  alignLayers, distributeLayers, copyLayers, pasteLayers, CLIPBOARD_KEY, measurer, youtubeWarnings, fixWarning, fixAllWarnings, fileSize, YOUTUBE_SIZES, GLOW_COLOR, FADE_COLOR, EFFECT_SIZE, SHAPES, WORDS_SHAPES, addShape,
 } from '../lib/thumbnailLayers';
 import ThumbnailCanvas from '../components/Thumbnails/ThumbnailCanvas';
 import ThumbnailSeason from '../components/Thumbnails/ThumbnailSeason';
@@ -210,6 +210,10 @@ function PictureEffects({ layer, onChange, colours = [], onRemember }) {
           <input type="range" min="-0.5" max="0.5" step="0.05" value={layer.contrast || 0} onChange={(e) => onChange({ contrast: Number(e.target.value) })} aria-label="Contrast" />
         </label>
       </div>
+      <label className="yts-field">
+        <span className="yts-label">Blur ({layer.blur || 0})</span>
+        <input type="range" min="0" max="40" step="1" value={layer.blur || 0} onChange={(e) => onChange({ blur: Number(e.target.value) })} aria-label="Blur" />
+      </label>
       {card ? (
         <p className="yts-note">A photo card has its own edge and shadow.</p>
       ) : (
@@ -359,9 +363,9 @@ function TextEffects({ layer, onChange }) {
   );
 }
 
-const SHAPE_ICONS = { arrow: ArrowRight, ring: Circle, burst: Star, sparkle: Sparkles, tag: Tag };
+const SHAPE_ICONS = { arrow: ArrowRight, ring: Circle, burst: Star, sparkle: Sparkles, tag: Tag, tape: Bandage, paper: StickyNote, shadow: Eclipse };
 
-/** Add a sticker (Evoni, 2026-10-21: stickers and shapes): an arrow, a circle, a burst, sparkles, a price tag. */
+/** Add a sticker (Evoni, 2026-10-21: stickers and shapes): an arrow, a circle, a burst, sparkles, a price tag; tape, paper, a shadow (redesign). */
 function StickerRow({ onAdd }) {
   return (
     <div className="yts-stickers" role="group" aria-label="Add a sticker" data-testid="yts-stickers">
@@ -380,14 +384,14 @@ function StickerRow({ onAdd }) {
   );
 }
 
-/** A sticker's colours, outline, and a burst's or a tag's words. */
+/** A sticker's colours, outline, and a burst's, a tag's or a paper note's words. */
 function ShapeSettings({ layer, onChange }) {
-  const worded = layer.shape === 'burst' || layer.shape === 'tag';
+  const worded = WORDS_SHAPES.includes(layer.shape);
   const width = layer.strokeWidth ?? 6;
   return (
     <div className="yts-text-tools" data-testid="yts-shape-settings">
       {worded && (
-        <input className="yts-input" value={layer.text || ''} maxLength={16} aria-label="Sticker words"
+        <input className="yts-input" value={layer.text || ''} maxLength={layer.shape === 'paper' ? 60 : 16} aria-label="Sticker words"
           onChange={(e) => onChange({ text: e.target.value })} />
       )}
       <div className="yts-row">
@@ -1864,6 +1868,11 @@ export default function YouTubeThumbnailStudio() {
               <label className="yts-field">
                 <span className="yts-label">Darken the background</span>
                 <input type="range" min="0" max="0.8" step="0.05" value={shade?.dim ?? 0} onChange={(e) => setColours({ dim: Number(e.target.value) })} aria-label="Darken the background" disabled={!shade} />
+              </label>
+              <label className="yts-field">
+                <span className="yts-label">Blur the background ({layerOf(spec, 'background')?.blur || 0})</span>
+                <input type="range" min="0" max="40" step="1" value={layerOf(spec, 'background')?.blur || 0} aria-label="Blur the background"
+                  disabled={!layerOf(spec, 'background')?.src} onChange={(e) => edit((s) => updateLayer(s, layerOf(s, 'background').id, { blur: Number(e.target.value) }))} />
               </label>
             </section>
 

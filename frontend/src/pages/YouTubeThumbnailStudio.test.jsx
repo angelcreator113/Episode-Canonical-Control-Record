@@ -787,6 +787,44 @@ describe('YouTubeThumbnailStudio', () => {
       .toEqual([['ring', 30], ['arrow', null], ['sparkle', null], ['tag', null]]), { timeout: 3000 });
   });
 
+  test('the redesign\'s new pieces: tape, paper (with its words) and shadow stickers; Playfair and Montserrat; blur on a picture and on the background', async () => {
+    renderPage();
+    await opened();
+    const row = within(screen.getByTestId('yts-stickers'));
+    fireEvent.click(row.getByRole('button', { name: 'Add paper' }));
+    const settings = within(screen.getByTestId('yts-shape-settings'));
+    const words = settings.getByRole('textbox', { name: 'Sticker words' });
+    expect(words.getAttribute('maxlength')).toBe('60');
+    fireEvent.change(words, { target: { value: 'Wear it twice, style it three ways' } });
+    for (const name of ['Add tape', 'Add shadow']) fireEvent.click(row.getByRole('button', { name }));
+    await waitFor(() => expect(lastDraft().layers.slice(-3).map((l) => l.shape)).toEqual(['paper', 'tape', 'shadow']), { timeout: 3000 });
+    expect(lastDraft().layers.at(-3).text).toBe('Wear it twice, style it three ways');
+    // The fonts are offered for words.
+    fireEvent.click(screen.getByTestId('canvas-title'));
+    const font = within(screen.getByTestId('yts-layer-settings')).getByRole('combobox', { name: 'Font' });
+    expect(within(font).getAllByRole('option').map((o) => o.textContent)).toEqual(expect.arrayContaining(['Playfair', 'Montserrat']));
+    fireEvent.change(font, { target: { value: 'playfair' } });
+    // Blur: on the picked picture, and on the background from its card.
+    fireEvent.click(screen.getByTestId('canvas-lala'));
+    fireEvent.change(within(screen.getByTestId('yts-picture-effects')).getByRole('slider', { name: 'Blur' }), { target: { value: '6' } });
+    fireEvent.change(screen.getByRole('slider', { name: 'Blur the background' }), { target: { value: '12' } });
+    await waitFor(() => expect(layerOf(lastDraft(), 'background').blur).toBe(12), { timeout: 3000 });
+    expect(layerOf(lastDraft(), 'lala').blur).toBe(6);
+    expect(layerOf(lastDraft(), 'title').font).toBe('playfair');
+  });
+
+  test('the redesign\'s layouts: Checklist focus and Before/After', async () => {
+    renderPage();
+    await opened();
+    fireEvent.click(screen.getByRole('button', { name: /Checklist focus/ }));
+    await waitFor(() => expect(lastDraft().layers.map((l) => l.id)).toContain('note'), { timeout: 3000 });
+    expect(layerOf(lastDraft(), 'checklist')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Before\/After/ }));
+    fireEvent.click(within(screen.getByTestId('yts-ask')).getByRole('button', { name: 'Yes' }));
+    await waitFor(() => expect(lastDraft().layers.map((l) => l.id)).toEqual(expect.arrayContaining(['change', 'after-label'])), { timeout: 3000 });
+    expect(screen.getByRole('button', { name: /Before\/After/ }).getAttribute('aria-pressed')).toBe('true');
+  });
+
   test('any colour: the accent and the title from the free picker; picked ones are remembered as swatches', async () => {
     window.localStorage.removeItem('yts-recent-colours');
     renderPage();
