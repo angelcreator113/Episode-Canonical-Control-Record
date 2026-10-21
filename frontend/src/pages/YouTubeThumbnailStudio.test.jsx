@@ -596,6 +596,28 @@ describe('YouTubeThumbnailStudio', () => {
     expect(within(screen.getByTestId('yts-picture-effects')).getByRole('checkbox', { name: "Clear the photo's white background" }).checked).toBe(true);
   });
 
+  test('Remove, by the picked layers: removes them (not locked ones); Undo brings them back', async () => {
+    renderPage();
+    await opened();
+    fireEvent.click(screen.getByTestId('canvas-title'));
+    const bar = () => within(screen.getByTestId('yts-arrange'));
+    fireEvent.click(bar().getByRole('button', { name: /^Remove$/ }));
+    expect(screen.queryByTestId('canvas-title')).toBeNull();
+    expect(screen.queryByTestId('yts-arrange')).toBeNull(); // nothing picked now
+    fireEvent.click(screen.getByRole('button', { name: /Undo/ }));
+    expect(screen.getByTestId('canvas-title')).toBeTruthy();
+    // Two picked, one locked: only the other goes.
+    fireEvent.click(screen.getByTestId('canvas-title'));
+    fireEvent.click(within(screen.getByTestId('yts-layers')).getByRole('button', { name: 'Lock Title' }));
+    fireEvent.click(within(screen.getByTestId('yts-layers')).getByRole('button', { name: 'Badge' }), { shiftKey: true });
+    expect(bar().getByRole('button', { name: /^Remove$/ }).disabled).toBe(false);
+    fireEvent.click(bar().getByRole('button', { name: /^Remove$/ }));
+    expect(screen.queryByTestId('canvas-badge')).toBeNull();
+    expect(screen.getByTestId('canvas-title')).toBeTruthy();
+    // Only a locked one picked: Remove is off.
+    expect(bar().getByRole('button', { name: /^Remove$/ }).disabled).toBe(true);
+  });
+
   test('zoom: in and out by a quarter, 100% to 300%, Fit; +, - and 0 on the keyboard', async () => {
     renderPage();
     await opened();
