@@ -596,6 +596,30 @@ describe('YouTubeThumbnailStudio', () => {
     expect(within(screen.getByTestId('yts-picture-effects')).getByRole('checkbox', { name: "Clear the photo's white background" }).checked).toBe(true);
   });
 
+  test('copy and paste: Copy keeps the picked layers on this browser; Paste (or Ctrl+V) adds them, here nudged; from another episode a missing role is kept', async () => {
+    window.localStorage.removeItem('yts-clipboard');
+    renderPage();
+    await opened();
+    expect(screen.queryByTestId('yts-paste')).toBeNull();
+    fireEvent.click(screen.getByTestId('canvas-title'));
+    fireEvent.click(within(screen.getByTestId('yts-arrange')).getByRole('button', { name: /Copy/ }));
+    const kept = JSON.parse(window.localStorage.getItem('yts-clipboard'));
+    expect(kept.from).toEqual({ episodeId: 'ep-1', title: 'Studio by Sable' });
+    expect(kept.layers.map((l) => l.id)).toEqual(['title']);
+    expect((await screen.findByRole('status')).textContent).toContain('Copied 1 layer. Open any episode and press Paste (Ctrl+V).');
+    fireEvent.click(screen.getByTestId('yts-paste'));
+    await waitFor(() => expect(lastDraft().layers.at(-1)).toMatchObject({ id: 'title-1', role: null, text: kept.layers[0].text, x: kept.layers[0].x + 24 }), { timeout: 3000 });
+    // From another episode, by the keyboard: its badge, and a background this thumbnail lacks.
+    window.localStorage.setItem('yts-clipboard', JSON.stringify({ from: { episodeId: 'ep-9', title: 'Gala Night' }, layers: [
+      { id: 'logo', role: 'logo', kind: 'image', visible: true, src: 'https://b.s3.amazonaws.com/logo.png', fit: 'contain', x: 20, y: 20, w: 120, h: 60, rotation: 0, opacity: 1 },
+    ] }));
+    window.dispatchEvent(new StorageEvent('storage', { key: 'yts-clipboard' }));
+    await waitFor(() => expect(screen.getByTestId('yts-paste').textContent).toContain('Paste 1 layer'));
+    fireEvent.keyDown(window, { key: 'v', ctrlKey: true });
+    await waitFor(() => expect(layerOf(lastDraft(), 'logo')).toMatchObject({ id: 'logo', x: 20, y: 20 }), { timeout: 3000 });
+    expect((await screen.findByRole('status')).textContent).toContain('Pasted 1 layer from "Gala Night". Undo takes them away.');
+  });
+
   test('zoom: in and out by a quarter, 100% to 300%, Fit; +, - and 0 on the keyboard', async () => {
     renderPage();
     await opened();
