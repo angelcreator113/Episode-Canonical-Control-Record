@@ -30,15 +30,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
-  Youtube, Upload, Download, Save, ImageOff, Check, LayoutTemplate, Sparkles, Star, Trash2, History, Folder, ChevronRight,
-  Eye, EyeOff, ArrowUp, ArrowDown, Type, RotateCcw, ScanEye, X, Lock, LockOpen, Copy, Undo2, Redo2, Plus, Pencil,
+  Youtube, Upload, Download, Save, Palette, ImageOff, Check, LayoutTemplate, Sparkles, Star, Trash2, History, Folder, ChevronRight,
+  Eye, EyeOff, ArrowUp, ArrowDown, Type, RotateCcw, ScanEye, X, Lock, LockOpen, Copy, Undo2, Redo2, Plus, Pencil, AlignLeft, AlignCenter, AlignRight,
 } from 'lucide-react';
 import {
-  youtubeThumbnailsApi, LAYOUTS, ACCENTS, TEXT_COLORS, episodeWords, defaultPose, folderPath, folderCount, folderCover, firstFolder,
+  youtubeThumbnailsApi, LAYOUTS, ACCENTS, TEXT_COLORS, readRecentColours, rememberColour, episodeWords, defaultPose, folderPath, folderCount, folderCover, firstFolder,
 } from '../lib/youtubeThumbnailsApi';
 import {
   FONTS, presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer,
-  addText, addPicture, layerName, loadThumbnailFonts, OUTLINE, duplicateLayer, WIDTH, HEIGHT,
+  addText, addPicture, layerName, loadThumbnailFonts, OUTLINE, BOX_COLOR, BOX_OPACITY, duplicateLayer, WIDTH, HEIGHT,
 } from '../lib/thumbnailLayers';
 import ThumbnailCanvas from '../components/Thumbnails/ThumbnailCanvas';
 import { usePreview } from '../lib/picturePreview';
@@ -132,6 +132,61 @@ function FolderPicker({ title, tree, start, value, onPick, onUpload, uploading =
 }
 
 /** The picked layer's own settings: words, font and colour; or a picture's fit and frame; and its turn. */
+const ALIGNS = [['left', 'Left', AlignLeft], ['center', 'Centre', AlignCenter], ['right', 'Right', AlignRight]];
+
+/**
+ * Words' look (Evoni, 2026-10-21: text tools): left, centre or right; the
+ * largest size (they are made smaller until they fit their box); the space
+ * between letters; and a box behind them, its colour, how see-through and
+ * how rounded.
+ */
+function TextTools({ layer, onChange }) {
+  const align = layer.align || 'left';
+  return (
+    <div className="yts-text-tools" data-testid="yts-text-tools">
+      <div className="yts-align" role="group" aria-label="Line up the words">
+        {ALIGNS.map(([key, label, Icon]) => (
+          <button key={key} type="button" className={`yts-icon-btn${align === key ? ' is-on' : ''}`} aria-pressed={align === key}
+            aria-label={`Line up ${label.toLowerCase()}`} title={label} onClick={() => onChange({ align: key })}>
+            <Icon size={15} aria-hidden />
+          </button>
+        ))}
+      </div>
+      <div className="yts-row">
+        <label className="yts-field">
+          <span className="yts-label">Largest size ({layer.size})</span>
+          <input type="range" min="10" max="220" step="2" value={layer.size} onChange={(e) => onChange({ size: Number(e.target.value) })} aria-label="Largest size" />
+        </label>
+        <label className="yts-field">
+          <span className="yts-label">Letter spacing ({layer.spacing || 0})</span>
+          <input type="range" min="-2" max="20" step="1" value={layer.spacing || 0} onChange={(e) => onChange({ spacing: Number(e.target.value) })} aria-label="Letter spacing" />
+        </label>
+      </div>
+      <label className="yts-check">
+        <input type="checkbox" checked={Boolean(layer.bg)} aria-label="Box behind the words"
+          onChange={(e) => onChange(e.target.checked ? { bg: BOX_COLOR, bgOpacity: BOX_OPACITY, bgRadius: 16 } : { bg: null })} />
+        Box behind the words
+      </label>
+      {layer.bg && (
+        <div className="yts-row">
+          <label className="yts-field is-small">
+            <span className="yts-label">Box colour</span>
+            <input type="color" className="yts-color" value={layer.bg} onChange={(e) => onChange({ bg: e.target.value.toUpperCase() })} aria-label="Box colour" />
+          </label>
+          <label className="yts-field">
+            <span className="yts-label">See-through ({Math.round((1 - (layer.bgOpacity ?? 1)) * 100)}%)</span>
+            <input type="range" min="0" max="1" step="0.05" value={1 - (layer.bgOpacity ?? 1)} onChange={(e) => onChange({ bgOpacity: Math.round((1 - Number(e.target.value)) * 100) / 100 })} aria-label="Box see-through" />
+          </label>
+          <label className="yts-field">
+            <span className="yts-label">Rounded ({layer.bgRadius || 0})</span>
+            <input type="range" min="0" max="60" step="2" value={layer.bgRadius || 0} onChange={(e) => onChange({ bgRadius: Number(e.target.value) })} aria-label="Box rounded corners" />
+          </label>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LayerSettings({ layer, onChange }) {
   if (!layer || layer.kind === 'shade') return null;
   return (
@@ -159,6 +214,7 @@ function LayerSettings({ layer, onChange }) {
           </label>
         </div>
       )}
+      {layer.kind === 'text' && <TextTools layer={layer} onChange={onChange} />}
       {layer.kind === 'image' && layer.role !== 'background' && (
         <div className="yts-row">
           <label className="yts-field">
@@ -598,6 +654,10 @@ export default function YouTubeThumbnailStudio() {
     setSelectedId(next.layers.at(-1).id);
   };
 
+  // Colours picked with the free picker, newest first (this browser).
+  const [recentColours, setRecentColours] = useState(readRecentColours);
+  const remember = (c) => setRecentColours(rememberColour(c));
+
   const setColours = (patch) => {
     setLook((l) => ({ ...l, ...patch }));
     edit((s) => applyStyle(s, patch));
@@ -972,18 +1032,32 @@ export default function YouTubeThumbnailStudio() {
             <fieldset className="yts-field">
               <legend className="yts-label">Accent</legend>
               <div className="yts-swatches">
-                {ACCENTS.map((c) => (
+                {[...ACCENTS, ...recentColours.filter((c) => !ACCENTS.includes(c))].map((c) => (
                   <button key={c} type="button" className={`yts-swatch${shade?.accent === c ? ' is-on' : ''}`} style={{ background: c }}
                     aria-label={`Accent ${c}`} aria-pressed={shade?.accent === c} onClick={() => setColours({ accent: c })} />
                 ))}
+                <label className="yts-swatch-any" title="Any colour">
+                  <Palette size={15} aria-hidden />
+                  <input type="color" className="yts-color" value={shade?.accent || ACCENTS[0]} aria-label="Any accent colour"
+                    onChange={(e) => setColours({ accent: e.target.value.toUpperCase() })} onBlur={(e) => remember(e.target.value)} />
+                </label>
               </div>
             </fieldset>
             <div className="yts-row">
               <label className="yts-field">
                 <span className="yts-label">Title colour</span>
-                <select className="yts-input" value={layerOf(spec, 'title')?.color || TEXT_COLORS[0].value} onChange={(e) => setColours({ textColor: e.target.value })} aria-label="Title colour">
-                  {TEXT_COLORS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </select>
+                <span className="yts-title-colour">
+                  <select className="yts-input" value={layerOf(spec, 'title')?.color || TEXT_COLORS[0].value} onChange={(e) => setColours({ textColor: e.target.value })} aria-label="Title colour">
+                    {TEXT_COLORS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    {recentColours.filter((c) => !TEXT_COLORS.some((t) => t.value === c)).map((c) => <option key={c} value={c}>Recent {c}</option>)}
+                    {(() => {
+                      const now = layerOf(spec, 'title')?.color;
+                      return now && !TEXT_COLORS.some((t) => t.value === now) && !recentColours.includes(now) ? <option value={now}>Your colour {now}</option> : null;
+                    })()}
+                  </select>
+                  <input type="color" className="yts-color" value={layerOf(spec, 'title')?.color || TEXT_COLORS[0].value} aria-label="Any title colour"
+                    onChange={(e) => setColours({ textColor: e.target.value.toUpperCase() })} onBlur={(e) => remember(e.target.value)} />
+                </span>
               </label>
               <label className="yts-field">
                 <span className="yts-label">Darken the background</span>

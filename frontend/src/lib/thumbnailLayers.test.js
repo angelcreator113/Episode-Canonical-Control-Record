@@ -6,6 +6,7 @@
  */
 import { describe, test, expect } from 'vitest';
 import {
+  spaced,
   presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer, addText, addPicture,
   boxFromNode, fitText, fitPicture, layerName, LINE_HEIGHT, checklistRows, duplicateLayer, snapBox, SNAP,
 } from './thumbnailLayers';
@@ -191,5 +192,14 @@ describe('editor tools (Evoni, 2026-10-21)', () => {
     // Nothing within reach: stays.
     expect(snapBox({ cx: 300, cy: 200, w: 100, h: 100 })).toEqual({ cx: 300, cy: 200, guides: [] });
     expect(SNAP).toBe(8);
+  });
+});
+
+describe('spaced (the server\'s spaced)', () => {
+  test('each letter, then the spacing after it; no spacing is the plain measure', () => {
+    const measure = (s, size) => String(s).length * size;
+    expect(spaced(measure, 0)).toBe(measure);
+    expect(spaced(measure, 5)('abc', 10)).toBe(3 * 10 + 3 * 5);
+    expect(spaced(measure, -2)('ab', 10)).toBe(2 * 10 - 2 * 2);
   });
 });

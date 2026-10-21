@@ -30,6 +30,34 @@ export const TEXT_COLORS = [
   { value: '#FFE9A8', label: 'Gold' },
 ];
 
+// The colours last picked with the free colour picker, on this browser
+// (Evoni, 2026-10-21: any colour, not only the swatches), newest first.
+const RECENT_KEY = 'yts-recent-colours';
+const RECENT_MAX = 6;
+const isHex = (c) => /^#[0-9a-f]{6}$/i.test(String(c || ''));
+
+export function readRecentColours() {
+  try {
+    const list = JSON.parse(window.localStorage.getItem(RECENT_KEY) || '[]');
+    return Array.isArray(list) ? list.filter(isHex).slice(0, RECENT_MAX) : [];
+  } catch (err) {
+    console.error('[youtubeThumbnailsApi] recent colours unreadable:', err?.message || err);
+    return [];
+  }
+}
+
+/** Puts a colour first in the recent ones (kept on this browser); returns the list. */
+export function rememberColour(colour) {
+  const c = String(colour || '').toUpperCase();
+  const list = isHex(c) ? [c, ...readRecentColours().filter((x) => x.toUpperCase() !== c)].slice(0, RECENT_MAX) : readRecentColours();
+  try {
+    window.localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+  } catch (err) {
+    console.error('[youtubeThumbnailsApi] recent colours not kept:', err?.message || err);
+  }
+  return list;
+}
+
 /**
  * The pose a thumbnail starts from: the starred one of the first pose
  * that has one, in the order Glamour, Front, Side, Back; else the newest

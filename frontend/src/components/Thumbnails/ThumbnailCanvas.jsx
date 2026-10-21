@@ -11,7 +11,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Stage, Layer, Group, Rect, Text, Line, Image as KImage, Transformer } from 'react-konva';
 import {
-  WIDTH, HEIGHT, LINE_HEIGHT, FONTS, fitText, measurer, fitPicture, boxFromNode, layerName, checklistRows, snapBox,
+  WIDTH, HEIGHT, LINE_HEIGHT, FONTS, fitText, measurer, spaced, fitPicture, boxFromNode, layerName, checklistRows, snapBox,
 } from '../../lib/thumbnailLayers';
 import { previewUrl, previewWidth } from '../../lib/picturePreview';
 
@@ -82,17 +82,29 @@ function Picture({ l, scale }) {
 function Words({ l }) {
   const text = l.upper ? String(l.text || '').toUpperCase() : String(l.text || '');
   const pad = l.bg ? Math.round(l.size * 0.25) : 0;
-  const { size, lines } = fitText(text, { w: l.w - pad * 2, h: l.h - pad * 2, size: l.size }, measurer(l.font));
+  const spacing = l.spacing || 0;
+  const measure = spaced(measurer(l.font), spacing);
+  const { size, lines } = fitText(text, { w: l.w - pad * 2, h: l.h - pad * 2, size: l.size }, measure);
   const f = FONTS[l.font] || FONTS.serif;
   const lineH = size * LINE_HEIGHT;
   const top = l.h / 2 - (lines.length * lineH) / 2;
+  const look = {
+    fontFamily: f.family, fontStyle: f.weight === 'bold' ? 'bold' : 'normal', fontSize: size, fill: l.color,
+    stroke: l.stroke || undefined, strokeWidth: l.stroke ? Math.max(2, Math.round(size / 7)) : 0, lineJoin: 'round', fillAfterStrokeEnabled: true,
+  };
+  // Spaced words are placed line by line here, as the server places them
+  // (the space after the last letter is not part of where the line stands).
+  const startOf = (line) => {
+    const lineW = measure(line, size) - spacing;
+    return l.align === 'center' ? (l.w - lineW) / 2 : l.align === 'right' ? l.w - pad - lineW : pad;
+  };
   return (
     <>
-      <Rect width={l.w} height={l.h} fill={l.bg || 'rgba(0,0,0,0.001)'} />
-      {lines.map((line, i) => (
-        <Text key={i} text={line} x={pad} y={top + i * lineH} width={l.w - pad * 2} height={lineH} align={l.align} verticalAlign="middle"
-          fontFamily={f.family} fontStyle={f.weight === 'bold' ? 'bold' : 'normal'} fontSize={size} fill={l.color}
-          stroke={l.stroke || undefined} strokeWidth={l.stroke ? Math.max(2, Math.round(size / 7)) : 0} lineJoin="round" fillAfterStrokeEnabled />
+      <Rect width={l.w} height={l.h} fill="rgba(0,0,0,0.001)" />
+      {l.bg && <Rect width={l.w} height={l.h} fill={l.bg} opacity={l.bgOpacity ?? 1} cornerRadius={Math.min(l.bgRadius || 0, l.w / 2, l.h / 2)} />}
+      {lines.map((line, i) => (spacing
+        ? <Text key={i} text={line} x={startOf(line)} y={top + i * lineH} height={lineH} verticalAlign="middle" letterSpacing={spacing} {...look} />
+        : <Text key={i} text={line} x={pad} y={top + i * lineH} width={l.w - pad * 2} height={lineH} align={l.align} verticalAlign="middle" {...look} />
       ))}
     </>
   );

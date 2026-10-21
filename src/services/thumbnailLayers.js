@@ -12,8 +12,10 @@
  *           (a figure); frame 'polaroid' gives it a white card.
  *   shade   the darkening that keeps text readable: dim, a gradient from
  *           one side, and the accent stripe along the bottom. Whole canvas.
- *   text    words in one of FONTS, made smaller until they fit the box;
- *           optional outline (stroke) and backing colour (bg).
+ *   text    words in one of FONTS, made smaller until they fit the box
+ *           (size is the largest they may be); left, centre or right;
+ *           letter spacing; optional outline (stroke) and a box behind
+ *           them (bg, its see-through bgOpacity and rounded bgRadius).
  *   badge   a pill with a few words ("EP 1").
  *   checklist  rows of a tick box and a few words (Evoni's "Come Style Me":
  *           sweater dress, accessories, hair, vibe); each tick on or off.
@@ -132,7 +134,11 @@ function readLayers(body, allowedUrl) {
       color: hex(l.color, '#FFFFFF'),
       stroke: l.stroke === null ? null : hex(l.stroke, '#2A0A22'),
       bg: HEX.test(String(l.bg || '')) ? String(l.bg).toUpperCase() : null,
+      bgOpacity: num(l.bgOpacity, 0, 1, 1),
+      bgRadius: Math.round(num(l.bgRadius, 0, 60, 0)),
       align: pick(l.align, ['left', 'center', 'right'], 'left'),
+      // Points between letters (Evoni, 2026-10-21: text tools).
+      spacing: Math.round(num(l.spacing, -2, 20, 0)),
       upper: Boolean(l.upper),
     };
   });
@@ -172,6 +178,27 @@ function fitText(text, { w, h, size }, measure) {
     if (lines.length * s * LINE_HEIGHT <= h && widest <= w) return { size: s, lines };
   }
   return { size: MIN_SIZE, lines: wrapWords(words, MIN_SIZE, w, measure) };
+}
+
+/**
+ * measure with letter spacing: each letter's width plus the spacing after
+ * it (how the editor's Konva draws spaced text). Mirrored in the editor.
+ */
+function spaced(measure, spacing) {
+  if (!spacing) return measure;
+  return (s, size) => [...String(s)].reduce((w, ch) => w + measure(ch, size) + spacing, 0);
+}
+
+/** A rounded rectangle's path, centred on the origin. */
+function roundRectPath(ctx, w, h, r) {
+  const rr = Math.max(0, Math.min(r, w / 2, h / 2));
+  ctx.beginPath();
+  ctx.moveTo(-w / 2 + rr, -h / 2);
+  ctx.arcTo(w / 2, -h / 2, w / 2, h / 2, rr);
+  ctx.arcTo(w / 2, h / 2, -w / 2, h / 2, rr);
+  ctx.arcTo(-w / 2, h / 2, -w / 2, -h / 2, rr);
+  ctx.arcTo(-w / 2, -h / 2, w / 2, -h / 2, rr);
+  ctx.closePath();
 }
 
 const fontCss = (key, size) => {
@@ -252,28 +279,48 @@ function drawShade(ctx, l) {
 
 function drawText(ctx, l) {
   const text = l.upper ? l.text.toUpperCase() : l.text;
-  const measure = (s, size) => { ctx.font = fontCss(l.font, size); return ctx.measureText(s).width; };
+  const plain = (s, size) => { ctx.font = fontCss(l.font, size); return ctx.measureText(s).width; };
+  const measure = spaced(plain, l.spacing);
   const pad = l.bg ? Math.round(l.size * 0.25) : 0;
   const { size, lines } = fitText(text, { w: l.w - pad * 2, h: l.h - pad * 2, size: l.size }, measure);
   if (l.bg) {
+    ctx.save();
+    ctx.globalAlpha *= l.bgOpacity;
     ctx.fillStyle = l.bg;
-    ctx.fillRect(-l.w / 2, -l.h / 2, l.w, l.h);
+    roundRectPath(ctx, l.w, l.h, l.bgRadius);
+    ctx.fill();
+    ctx.restore();
   }
   ctx.font = fontCss(l.font, size);
   ctx.textBaseline = 'middle';
-  ctx.textAlign = l.align;
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = Math.max(2, Math.round(size / 7));
   const lineH = size * LINE_HEIGHT;
-  const x = l.align === 'center' ? 0 : l.align === 'right' ? l.w / 2 - pad : -l.w / 2 + pad;
-  let y = -((lines.length - 1) * lineH) / 2;
-  for (const line of lines) {
+  const paint = (s, x, y) => {
     if (l.stroke) {
-      ctx.lineJoin = 'round';
-      ctx.lineWidth = Math.max(2, Math.round(size / 7));
       ctx.strokeStyle = l.stroke;
-      ctx.strokeText(line, x, y);
+      ctx.strokeText(s, x, y);
     }
     ctx.fillStyle = l.color;
-    ctx.fillText(line, x, y);
+    ctx.fillText(s, x, y);
+  };
+  let y = -((lines.length - 1) * lineH) / 2;
+  for (const line of lines) {
+    if (!l.spacing) {
+      ctx.textAlign = l.align;
+      paint(line, l.align === 'center' ? 0 : l.align === 'right' ? l.w / 2 - pad : -l.w / 2 + pad, y);
+    } else {
+      // Letter by letter, as the editor draws spaced words; the space after
+      // the last letter is not part of where the line stands.
+      const lineW = measure(line, size) - l.spacing;
+      let x = l.align === 'center' ? -lineW / 2 : l.align === 'right' ? l.w / 2 - pad - lineW : -l.w / 2 + pad;
+      ctx.textAlign = 'left';
+      for (const ch of line) {
+        paint(ch, x, y);
+        x += plain(ch, size) + l.spacing;
+      }
+      ctx.font = fontCss(l.font, size);
+    }
     y += lineH;
   }
 }
@@ -396,5 +443,5 @@ function fontFile(key) {
 
 module.exports = {
   WIDTH, HEIGHT, MAX_LAYERS, MAX_ROWS, KINDS, FONTS, LINE_HEIGHT, LayerError,
-  readLayers, wrapWords, fitText, checklistRows, renderLayers, fontFile,
+  readLayers, wrapWords, fitText, spaced, checklistRows, renderLayers, fontFile,
 };
