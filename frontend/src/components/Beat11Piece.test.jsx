@@ -10,11 +10,15 @@ import Beat11Piece from './Beat11Piece';
 beforeEach(() => Object.values(apiClient).forEach((fn) => fn.mockReset()));
 
 test('cuts the piece, then saves an edit', async () => {
-  vi.mocked(apiClient.get).mockResolvedValue({ data: { excerpt: null } });
+  // The saved piece arrives a moment late, as on a busy machine (the Cut button waits for it).
+  vi.mocked(apiClient.get).mockImplementation(() => new Promise((ok) => { setTimeout(() => ok({ data: { excerpt: null } }), 30); }));
   vi.mocked(apiClient.post).mockResolvedValue({ data: { excerpt: { text: 'The lights went out at nine.', why: 'Who took the necklace?' } } });
   vi.mocked(apiClient.put).mockImplementation(async (_u, { text }) => ({ data: { excerpt: { text, why: 'Who took the necklace?' } } }));
   render(<Beat11Piece storyId="st1" />);
-  fireEvent.click(await screen.findByText('Cut the beat 11 piece'));
+  // The button shows at once but works only once the saved piece has loaded.
+  const cutButton = (await screen.findByText('Cut the beat 11 piece')).closest('button');
+  await waitFor(() => expect(cutButton.disabled).toBe(false));
+  fireEvent.click(cutButton);
   const box = await screen.findByLabelText('Beat 11 piece');
   expect(box.value).toBe('The lights went out at nine.');
   expect(screen.getByText(/Leaves them asking: Who took the necklace\?/)).toBeTruthy();

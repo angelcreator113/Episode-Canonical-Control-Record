@@ -1,8 +1,9 @@
 // ============================================================================
 // YouTube thumbnail routes (/api/v1/youtube-thumbnails; Evoni, 2026-10-17):
-// the preview is a PNG; saving renders, then stores it as the episode's
-// primary thumbnail; a bad spec or an unknown episode is refused. Mocked:
-// no database, no S3 (saveAsPrimary is a mock); the render is real.
+// the drawing is a PNG of the layers (2026-10-21); saving draws, then
+// stores it as the episode's primary thumbnail; what is not layers, or an
+// unknown episode, is refused. Mocked: no database, no S3 (saveAsPrimary is
+// a mock); the drawing is real (node-canvas).
 // ============================================================================
 
 const express = require('express');
@@ -44,31 +45,35 @@ beforeEach(() => {
   yt.saveAsPrimary.mockClear();
 });
 
-test('render returns a 1280x720 PNG, with an uploaded background', async () => {
-  const bg = await sharp({ create: { width: 800, height: 600, channels: 3, background: '#7A2A6A' } }).png().toBuffer();
-  const res = await request(app).post('/api/v1/youtube-thumbnails/render')
-    .field('spec', JSON.stringify({ title: 'Studio by Sable', badge: 'EP 1', layout: 'center' }))
-    .attach('background', bg, { filename: 'bg.png', contentType: 'image/png' })
-    .buffer(true).parse(binary);
+const LAYERS = {
+  version: 2,
+  layers: [
+    { id: 'shade', role: 'shade', kind: 'shade', dim: 0, accent: '#B8962E', side: 'none' },
+    { id: 'title', role: 'title', kind: 'text', text: 'Studio by Sable', font: 'serif', size: 80, x: 100, y: 200, w: 1080, h: 300 },
+    { id: 'badge', role: 'badge', kind: 'badge', text: 'EP 1', x: 1060, y: 40, w: 170, h: 68 },
+  ],
+};
+
+test('render draws the layers: a 1280x720 PNG', async () => {
+  const res = await request(app).post('/api/v1/youtube-thumbnails/render').send(LAYERS).buffer(true).parse(binary);
   expect(res.status).toBe(200);
   expect(res.headers['content-type']).toMatch(/image\/png/);
   const meta = await sharp(res.body).metadata();
   expect([meta.width, meta.height]).toEqual([1280, 720]);
 });
 
-test('render refuses a spec with no title, and a non-S3 picture', async () => {
-  const noTitle = await request(app).post('/api/v1/youtube-thumbnails/render').field('spec', JSON.stringify({}));
-  expect(noTitle.status).toBe(400);
-  expect(noTitle.body.error).toMatch(/needs a title/);
+test('render refuses what is not layers (the earlier spec too), and a picture that is not ours', async () => {
+  const earlier = await request(app).post('/api/v1/youtube-thumbnails/render').send({ title: 'Studio by Sable', layout: 'center' });
+  expect(earlier.status).toBe(400);
+  expect(earlier.body.error).toMatch(/version: 2/);
   const foreign = await request(app).post('/api/v1/youtube-thumbnails/render')
-    .field('spec', JSON.stringify({ title: 'x', backgroundUrl: 'https://example.com/a.jpg' }));
+    .send({ version: 2, layers: [{ kind: 'image', src: 'https://example.com/a.jpg' }] });
   expect(foreign.status).toBe(400);
-  expect(foreign.body.error).toMatch(/only S3 images/);
+  expect(foreign.body.error).toMatch(/not one of ours/);
 });
 
-test('saving stores the render as the episode\'s primary thumbnail', async () => {
-  const res = await request(app).post('/api/v1/youtube-thumbnails/episodes/ep-1')
-    .field('spec', JSON.stringify({ title: 'Studio by Sable', badge: 'EP 1' }));
+test('saving stores the drawing as the episode\'s primary thumbnail', async () => {
+  const res = await request(app).post('/api/v1/youtube-thumbnails/episodes/ep-1').send(LAYERS);
   expect(res.status).toBe(201);
   expect(res.body.data).toEqual({ id: 7, url: 'https://b.s3.amazonaws.com/t.png', key: 't.png' });
   expect(yt.saveAsPrimary).toHaveBeenCalledWith(expect.anything(), 'ep-1', expect.any(Buffer));
@@ -76,18 +81,9 @@ test('saving stores the render as the episode\'s primary thumbnail', async () =>
 
 test('saving for an unknown episode is a 404, with nothing stored', async () => {
   mockQuery.mockResolvedValue([[]]);
-  const res = await request(app).post('/api/v1/youtube-thumbnails/episodes/gone')
-    .field('spec', JSON.stringify({ title: 'x' }));
+  const res = await request(app).post('/api/v1/youtube-thumbnails/episodes/gone').send(LAYERS);
   expect(res.status).toBe(404);
   expect(yt.saveAsPrimary).not.toHaveBeenCalled();
-});
-
-test('a non-image upload is refused', async () => {
-  const res = await request(app).post('/api/v1/youtube-thumbnails/render')
-    .field('spec', JSON.stringify({ title: 'x' }))
-    .attach('background', Buffer.from('hi'), { filename: 'a.txt', contentType: 'text/plain' });
-  expect(res.status).toBe(400);
-  expect(res.body.error).toMatch(/Only images/);
 });
 
 test('the saved list, making one current, and a refused delete pass through', async () => {
@@ -100,16 +96,4 @@ test('the saved list, making one current, and a refused delete pass through', as
   const del = await request(app).delete('/api/v1/youtube-thumbnails/episodes/ep-1/saved/7');
   expect(del.status).toBe(409);
   expect(del.body.error).toMatch(/Make another one the thumbnail first/);
-});
-
-test('a JustAWoman upload goes into the render beside Lala', async () => {
-  const solid = (r, g, b) => sharp({ create: { width: 300, height: 600, channels: 4, background: { r, g, b, alpha: 1 } } }).png().toBuffer();
-  const res = await request(app).post('/api/v1/youtube-thumbnails/render')
-    .field('spec', JSON.stringify({ title: 'Duo', layout: 'lala-left', dim: 0 }))
-    .attach('lala', await solid(0, 255, 0), { filename: 'l.png', contentType: 'image/png' })
-    .attach('jaw', await solid(0, 0, 255), { filename: 'j.png', contentType: 'image/png' })
-    .buffer(true).parse(binary);
-  expect(res.status).toBe(200);
-  const { data, info } = await sharp(res.body).raw().toBuffer({ resolveWithObject: true });
-  expect(data[(650 * info.width + 60) * info.channels + 2]).toBeGreaterThan(200);
 });

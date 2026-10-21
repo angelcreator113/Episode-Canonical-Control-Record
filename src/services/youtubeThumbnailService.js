@@ -2,16 +2,13 @@
 
 /**
  * YouTube thumbnails (Templates › YouTube thumbnails; Evoni, 2026-10-17):
- * an episode's 1280×720 thumbnail made from its show's style. The style
- * (layout, colours, the Lala cut-out, how dark the background is) is saved
- * once on the show (shows.metadata.youtube_thumbnail) and each episode
- * fills in its own picture, title and episode number.
- *
- * Rendered here with sharp, so the preview is the saved file: the
- * background (cover-fit), a gradient for the text side, the Lala cut-out
- * (bottom-aligned on one side), then the text as SVG (the show's name, the
- * title in up to three lines, the episode badge). Images come from S3 only
- * (allowedImageUrl) or from the request's own upload.
+ * an episode's 1280×720 thumbnail. Since 2026-10-21 it is layers
+ * (thumbnailLayers: moved, resized and turned freely), drawn here with
+ * node-canvas, so "See it exactly" is the saved file. The show's style and
+ * template (shows.metadata.youtube_thumbnail) are where every episode
+ * starts; an episode's own arrangement is its draft
+ * (episode_thumbnail_drafts). Pictures come from S3 only (allowedImageUrl);
+ * a Studio upload is kept in S3 first.
  *
  * Saving makes it the episode's primary thumbnail (thumbnails table) and
  * episodes.thumbnail_url; the one before it stays, as a cover. This page is
@@ -48,7 +45,6 @@ class ThumbnailError extends Error {
 }
 
 const HEX = /^#[0-9a-f]{6}$/i;
-const clean = (v, max) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
 
 /** The show's saved style, filled out with the defaults. */
 function readStyle(raw = {}) {
@@ -59,27 +55,6 @@ function readStyle(raw = {}) {
     textColor: HEX.test(s.textColor || '') ? s.textColor.toUpperCase() : DEFAULT_STYLE.textColor,
     dim: Number.isFinite(Number(s.dim)) ? Math.min(0.8, Math.max(0, Number(s.dim))) : DEFAULT_STYLE.dim,
     lalaUrl: typeof s.lalaUrl === 'string' && s.lalaUrl ? s.lalaUrl : null,
-  };
-}
-
-/** A render request: the style plus this episode's words and pictures. Throws ThumbnailError(400). */
-function readSpec(body = {}) {
-  const b = body && typeof body === 'object' ? body : {};
-  if (b.layout !== undefined && !LAYOUTS.includes(b.layout)) throw new ThumbnailError(400, `layout must be one of ${LAYOUTS.join(', ')}`);
-  for (const k of ['accent', 'textColor']) {
-    if (b[k] !== undefined && !HEX.test(String(b[k]))) throw new ThumbnailError(400, `${k} must be a colour like #E0689F`);
-  }
-  const style = readStyle(b);
-  const title = clean(b.title, 90);
-  if (!title) throw new ThumbnailError(400, 'The thumbnail needs a title');
-  return {
-    ...style,
-    title,
-    kicker: clean(b.kicker, 48),
-    badge: clean(b.badge, 12),
-    backgroundUrl: typeof b.backgroundUrl === 'string' && b.backgroundUrl ? b.backgroundUrl : null,
-    // JustAWoman, beside Lala (an episode's pose; not part of the show's style).
-    jawUrl: typeof b.jawUrl === 'string' && b.jawUrl ? b.jawUrl : null,
   };
 }
 
@@ -140,165 +115,6 @@ async function downloadImage(url) {
   } finally {
     clearTimeout(timer);
   }
-}
-
-// ── Layout and text ─────────────────────────────────────────────────────────
-
-/**
- * Where the figures stand when JustAWoman is beside Lala: both in Lala's
- * column, JustAWoman toward the edge and a little smaller, Lala in front.
- * Returns { lala, jaw } as { left, top } for figures of these sizes.
- */
-function duoPositions(side, lalaSize, jawSize) {
-  const edge = 20;
-  const lalaCenter = 390; // from the figure side's edge
-  const jaw = { left: edge, top: HEIGHT - jawSize.height };
-  const lala = { left: Math.max(edge, lalaCenter - Math.round(lalaSize.width / 2)), top: HEIGHT - lalaSize.height };
-  if (side === 'right') {
-    jaw.left = WIDTH - edge - jawSize.width;
-    lala.left = Math.min(WIDTH - edge - lalaSize.width, WIDTH - lalaCenter - Math.round(lalaSize.width / 2));
-  }
-  return { lala, jaw };
-}
-
-/** Where the text goes and where Lala stands, per layout. */
-function layoutBoxes(layout) {
-  if (layout === 'lala-right') return { text: { x: 70, width: 620, align: 'start' }, lala: { side: 'right', maxWidth: 560 } };
-  if (layout === 'center') return { text: { x: 110, width: 1060, align: 'middle' }, lala: null };
-  return { text: { x: 590, width: 610, align: 'start' }, lala: { side: 'left', maxWidth: 560 } };
-}
-
-/** The title's starting size: big for a few words, smaller for many. */
-function titleSize(title, width) {
-  const n = String(title || '').length;
-  const base = n <= 14 ? 112 : n <= 26 ? 92 : n <= 44 ? 80 : 68;
-  return width < 700 ? base : Math.round(base * 1.1);
-}
-
-const CHAR_EM = 0.56; // bold serif: a little over half an em a character
-
-/** The title in lines that fit the width; more than three only when cut (with …). */
-function wrapTitle(title, width, size, maxLines = 3) {
-  const perLine = Math.max(6, Math.floor(width / (size * CHAR_EM)));
-  const words = String(title || '').split(' ').filter(Boolean);
-  const lines = [];
-  let line = '';
-  for (const w of words) {
-    const next = line ? `${line} ${w}` : w;
-    if (next.length <= perLine || !line) line = next;
-    else { lines.push(line); line = w; }
-  }
-  if (line) lines.push(line);
-  if (lines.length > maxLines) {
-    const kept = lines.slice(0, maxLines);
-    kept[maxLines - 1] = `${kept[maxLines - 1].replace(/[.,;:!?-]*$/, '')}…`;
-    return kept;
-  }
-  return lines;
-}
-
-/** The title's size and lines: the starting size, made smaller until it fits in three lines (54 at least). */
-function fitTitle(title, width) {
-  for (let size = titleSize(title, width); size > 54; size -= 6) {
-    const lines = wrapTitle(title, width, size, Infinity);
-    if (lines.length <= 3) return { size, lines };
-  }
-  return { size: 54, lines: wrapTitle(title, width, 54) };
-}
-
-/** The show's name sized to fit its column on one line (34 at most, 20 at least). */
-function kickerSize(kicker, width) {
-  const n = String(kicker || '').length || 1;
-  return Math.max(20, Math.min(34, Math.floor(width / (n * 0.8 + 1))));
-}
-
-const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-/** The text layer as SVG: the show's name, the title, the episode badge. */
-function textSvg(spec) {
-  const box = layoutBoxes(spec.layout).text;
-  const { size, lines } = fitTitle(spec.title, box.width);
-  const kSize = kickerSize(spec.kicker, box.width);
-  const lineH = Math.round(size * 1.05);
-  const blockH = lines.length * lineH + (spec.kicker ? 64 : 0);
-  let y = Math.round((HEIGHT - blockH) / 2) + (spec.kicker ? 64 : 0) + Math.round(size * 0.8);
-  const x = box.align === 'middle' ? WIDTH / 2 : box.x;
-  const anchor = box.align === 'middle' ? 'middle' : 'start';
-  const kickerY = y - Math.round(size * 0.8) - 22;
-  const parts = [];
-  if (spec.kicker) {
-    parts.push(`<text x="${x}" y="${kickerY}" text-anchor="${anchor}" font-family="DejaVu Sans, Arial, sans-serif" font-size="${kSize}" font-weight="700" letter-spacing="${Math.round(kSize / 8)}" fill="${spec.accent}" stroke="#2A0A22" stroke-width="6" paint-order="stroke">${esc(spec.kicker.toUpperCase())}</text>`);
-  }
-  for (const l of lines) {
-    parts.push(`<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="Georgia, DejaVu Serif, serif" font-size="${size}" font-weight="700" fill="${spec.textColor}" stroke="#2A0A22" stroke-width="${Math.round(size / 9)}" stroke-linejoin="round" paint-order="stroke">${esc(l)}</text>`);
-    y += lineH;
-  }
-  if (spec.badge) {
-    const w = Math.max(120, 40 + spec.badge.length * 30);
-    const bx = spec.layout === 'lala-right' ? 56 : WIDTH - w - 56;
-    parts.push(`<rect x="${bx}" y="44" rx="34" ry="34" width="${w}" height="68" fill="${spec.accent}" stroke="#FFFFFF" stroke-width="4"/>`);
-    parts.push(`<text x="${bx + w / 2}" y="91" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif" font-size="36" font-weight="700" fill="#FFFFFF">${esc(spec.badge.toUpperCase())}</text>`);
-  }
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}">${parts.join('')}</svg>`;
-}
-
-/** The gradient that keeps the text side readable, plus an overall dim. */
-function shadeSvg(spec) {
-  const toward = spec.layout === 'lala-right' ? { x1: 0, x2: 1 } : spec.layout === 'center' ? null : { x1: 1, x2: 0 };
-  const grad = toward
-    ? `<linearGradient id="g" x1="${toward.x1}" y1="0" x2="${toward.x2}" y2="0"><stop offset="0" stop-color="#2A0A22" stop-opacity="0.85"/><stop offset="0.55" stop-color="#2A0A22" stop-opacity="0.35"/><stop offset="1" stop-color="#2A0A22" stop-opacity="0"/></linearGradient>`
-    : '<radialGradient id="g" cx="0.5" cy="0.5" r="0.7"><stop offset="0" stop-color="#2A0A22" stop-opacity="0.65"/><stop offset="1" stop-color="#2A0A22" stop-opacity="0.2"/></radialGradient>';
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}"><defs>${grad}</defs>`
-    + `<rect width="${WIDTH}" height="${HEIGHT}" fill="#000" fill-opacity="${spec.dim}"/>`
-    + `<rect width="${WIDTH}" height="${HEIGHT}" fill="url(#g)"/>`
-    + `<rect x="0" y="${HEIGHT - 14}" width="${WIDTH}" height="14" fill="${spec.accent}"/></svg>`;
-}
-
-const plainBackground = (accent) => Buffer.from(
-  `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}"><defs><linearGradient id="b" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4A1640"/><stop offset="1" stop-color="${accent}"/></linearGradient></defs><rect width="${WIDTH}" height="${HEIGHT}" fill="url(#b)"/></svg>`,
-);
-
-/**
- * Renders the thumbnail: PNG, 1280×720. images: { background, lala, jaw }
- * as Buffers (any may be null). With Lala and JustAWoman both, they stand
- * together on the figure side (duoPositions); with one, she stands alone.
- */
-async function render(spec, images = {}) {
-  let base;
-  try {
-    base = images.background
-      ? await sharp(images.background).rotate().resize(WIDTH, HEIGHT, { fit: 'cover', position: 'attention' }).png().toBuffer()
-      : await sharp(plainBackground(spec.accent)).png().toBuffer();
-  } catch (err) {
-    console.error('[YouTubeThumbnail] background unreadable:', err.message);
-    throw new ThumbnailError(400, 'The background is not an image we can read');
-  }
-  const layers = [{ input: Buffer.from(shadeSvg(spec)), top: 0, left: 0 }];
-  const box = layoutBoxes(spec.layout).lala;
-  const figure = async (buffer, who, size) => {
-    try {
-      const png = await sharp(buffer).rotate().resize({ ...size, fit: 'inside' }).png().toBuffer();
-      const meta = await sharp(png).metadata();
-      return { png, width: meta.width, height: meta.height };
-    } catch (err) {
-      console.error(`[YouTubeThumbnail] ${who} image unreadable:`, err.message);
-      throw new ThumbnailError(400, `The ${who} image is not an image we can read`);
-    }
-  };
-  if (box && images.lala && images.jaw) {
-    const jaw = await figure(images.jaw, 'JustAWoman', { width: 340, height: HEIGHT - 80 });
-    const lala = await figure(images.lala, 'Lala', { width: 360, height: HEIGHT - 30 });
-    const at = duoPositions(box.side, lala, jaw);
-    layers.push({ input: jaw.png, top: at.jaw.top, left: at.jaw.left });
-    layers.push({ input: lala.png, top: at.lala.top, left: at.lala.left });
-  } else if (box && (images.lala || images.jaw)) {
-    const who = images.lala ? 'Lala' : 'JustAWoman';
-    const one = await figure(images.lala || images.jaw, who, { width: box.maxWidth, height: HEIGHT - 30 });
-    const left = box.side === 'left' ? 30 : WIDTH - one.width - 30;
-    layers.push({ input: one.png, top: HEIGHT - one.height, left: Math.max(0, left) });
-  }
-  layers.push({ input: Buffer.from(textSvg(spec)), top: 0, left: 0 });
-  return sharp(base).composite(layers).png({ compressionLevel: 9 }).toBuffer();
 }
 
 // ── Sources and saving ──────────────────────────────────────────────────────
@@ -786,7 +602,7 @@ async function removeSaved(sequelize, episodeId, thumbnailId) {
 
 module.exports = {
   WIDTH, HEIGHT, LAYOUTS, DEFAULT_STYLE, ThumbnailError,
-  readStyle, readSpec, allowedImageUrl, fetchImage, previewImage, PREVIEW_WIDTHS, layoutBoxes, duoPositions, readyPoses, pictureFolders, libraryImages, outfitImages, layoutSuggestions, titleSize, wrapTitle, fitTitle, kickerSize, textSvg, shadeSvg,
-  render, sources, saveStyle, saveAsPrimary, listSaved, makePrimary, removeSaved,
+  readStyle, allowedImageUrl, fetchImage, previewImage, PREVIEW_WIDTHS, readyPoses, pictureFolders, libraryImages, outfitImages, layoutSuggestions,
+  sources, saveStyle, saveAsPrimary, listSaved, makePrimary, removeSaved,
   readTemplate, renderSpec, getDraft, saveDraft, uploadPicture, listUploads, labelOfUpload,
 };
