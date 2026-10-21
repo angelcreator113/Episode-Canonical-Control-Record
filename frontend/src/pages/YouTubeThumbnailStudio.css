@@ -170,6 +170,8 @@
 /* Arranging, shortcuts, questions on the page, loading (Evoni, 2026-10-21) */
 .yts-arrange { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .yts-arrange-count { margin-right: 4px; font-size: 13px; font-weight: 700; color: var(--accent-dark); }
+.yts-remove-btn { margin-left: auto; color: var(--danger-text); border-color: var(--danger-text); }
+.yts-remove-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .yts-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 12px; border: 1.5px solid var(--accent-dark); background: var(--surface-card); color: var(--text-primary); }
 .yts-ask p { flex: 1 1 220px; margin: 0; font-weight: 700; }
 .yts-shortcuts { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 14px; border: 1.5px solid var(--lala-gold-line); background: var(--surface-card); color: var(--text-primary); }

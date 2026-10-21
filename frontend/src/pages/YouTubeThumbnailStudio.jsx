@@ -569,7 +569,7 @@ const ALIGN_TOOLS = [
  * Arranging the picked layers (Evoni, 2026-10-21): one lines up with the
  * canvas, several with each other; three or more spread evenly.
  */
-function ArrangeBar({ count, onAlign, onSpread, onClear }) {
+function ArrangeBar({ count, removable = 0, onAlign, onSpread, onClear, onRemove }) {
   if (!count) return null;
   return (
     <div className="yts-arrange" role="toolbar" aria-label="Arrange" data-testid="yts-arrange">
@@ -584,6 +584,11 @@ function ArrangeBar({ count, onAlign, onSpread, onClear }) {
       <button type="button" className="yts-icon-btn" onClick={() => onSpread('y')} disabled={count < 3}
         aria-label="Spread evenly down" title="Spread evenly down (3 or more)"><AlignVerticalDistributeCenter size={15} aria-hidden /></button>
       <button type="button" className="yts-icon-btn" onClick={onClear} aria-label="Pick nothing" title="Pick nothing (Esc)"><X size={15} aria-hidden /></button>
+      {/* Remove what is picked, right where it is picked (Evoni, 2026-10-21: "no way of deleting anything"). */}
+      <button type="button" className="yts-btn yts-remove-btn" onClick={onRemove} disabled={!removable}
+        title={removable ? 'Remove (Delete key); Undo brings it back' : 'Locked: unlock it to remove it'}>
+        <Trash2 size={15} aria-hidden /> {removable > 1 ? `Remove ${removable}` : 'Remove'}
+      </button>
     </div>
   );
 }
@@ -1562,7 +1567,8 @@ export default function YouTubeThumbnailStudio() {
               <button type="button" className="yts-icon-btn" onClick={() => zoomBy(0.25)} disabled={zoom >= ZOOM_MAX} aria-label="Zoom in" title="Zoom in (+)"><ZoomIn size={15} aria-hidden /></button>
               {zoom > 1 && <button type="button" className="yts-history-btn" onClick={() => setZoom(1)}>Fit</button>}
             </div>
-            <ArrangeBar count={pickedIds.length} onAlign={align} onSpread={spread} onClear={() => setSelectedId(null)} />
+            <ArrangeBar count={pickedIds.length} onAlign={align} onSpread={spread} onClear={() => setSelectedId(null)}
+              removable={(spec?.layers || []).filter((l) => pickedIds.includes(l.id) && !l.locked && l.kind !== 'shade').length} onRemove={removePicked} />
             <p className="yts-note" data-testid="yts-draft-note">
               {draftNote || 'Click a layer to move it, pull a corner to resize, use the top handle to turn it.'}
             </p>
