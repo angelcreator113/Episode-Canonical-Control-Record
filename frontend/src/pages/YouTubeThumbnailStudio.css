@@ -11,7 +11,7 @@
 .yts .yts-title { display: flex; align-items: center; gap: 10px; margin: 4px 0 2px; font-family: var(--font-prose); font-size: 30px; font-weight: 600; color: var(--text-primary); }
 .yts-title svg { color: var(--accent-dark); }
 .yts-sub { margin: 0; font-size: 14px; color: var(--text-secondary); }
-.yts-choose { display: flex; flex-wrap: wrap; gap: 10px; }
+.yts-choose { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
 .yts-select { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: var(--accent-dark); }
 .yts-select select { min-width: 220px; max-width: 100%; min-height: 40px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--accent-light); background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 14px; font-weight: 500; }
 
@@ -207,3 +207,25 @@
 .yts-canvas.is-zoomed { overflow: auto; max-height: 75vh; }
 .yts-zoom { display: flex; align-items: center; gap: 6px; }
 .yts-zoom-level { min-width: 44px; text-align: center; font-size: 13px; font-weight: 700; color: var(--accent-dark); }
+
+/* A whole season at once (Evoni, 2026-10-21): one template on every episode, checked in a grid. */
+.yts-season-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.yts-season-head .yts-label { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
+.yts-season-head .yts-btn { margin-left: auto; }
+.yts-season-controls, .yts-season-bar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 16px; }
+.yts-season-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
+.yts-season-card { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 8px; border-radius: 14px; border: 1.5px solid var(--lala-parchment-3); background: var(--surface-card); }
+.yts-season-card.is-saved { border-color: var(--success-text); }
+.yts-season-card.is-failed { border-color: var(--danger-text); }
+.yts-season-picture { display: grid; place-items: center; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 8px; background: var(--lala-ink); }
+.yts-season-picture img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.yts-season-wait { padding: 8px; font-size: 13px; color: var(--text-inverse); text-align: center; }
+.yts-season-name { margin: 0; font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+.yts-season-card .yts-note.is-warn { color: var(--danger-text); }
+.yts-season-error { margin: 0; font-size: 13px; color: var(--danger-text); }
+.yts-season-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; margin-top: auto; }
+.yts-season-saved { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; font-weight: 700; color: var(--success-text); }
+@media (max-width: 480px) {
+  .yts-season-head .yts-btn { margin-left: 0; }
+  .yts-season-grid { grid-template-columns: minmax(0, 1fr); }
+}
