@@ -131,3 +131,4 @@
 .yts-icon-btn.is-on { border-color: var(--accent-dark); background: var(--accent-subtle); color: var(--accent-dark); }
 .yts-box-fields { flex-wrap: wrap; }
 .yts-box-fields .yts-field.is-small { flex: 1 1 70px; }
+.yts-img-wait { display: block; width: 100%; height: 100%; background-color: var(--lala-parchment-3); }

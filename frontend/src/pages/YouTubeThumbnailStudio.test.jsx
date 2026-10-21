@@ -23,6 +23,11 @@ vi.mock('../lib/youtubeThumbnailsApi', async () => {
     },
   };
 });
+vi.mock('../lib/picturePreview', () => ({
+  previewUrl: (url) => Promise.resolve(url),
+  previewWidth: () => 800,
+  usePreview: (url) => url,
+}));
 vi.mock('../lib/thumbnailLayers', async () => {
   const actual = await vi.importActual('../lib/thumbnailLayers');
   return { ...actual, loadThumbnailFonts: vi.fn(() => Promise.resolve()) };

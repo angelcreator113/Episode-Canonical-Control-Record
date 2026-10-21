@@ -155,6 +155,21 @@ const solid = (w, h, background) => sharp({ create: { width: w, height: h, chann
     expect(sources.template).toBeNull();
   });
 
+  test('the editor\'s smaller copies: WebP, at most the width asked (400, 800 or 1600); a picture that is not ours is a 400; signed in only', async () => {
+    mockStore.set('pics/big.png', await solid(3000, 2000, '#FF00AA'));
+    const binary = (r) => r.buffer(true).parse((res, cb) => { const c = []; res.on('data', (d) => c.push(d)); res.on('end', () => cb(null, Buffer.concat(c))); });
+    const res = await binary(auth(request(app).get(`${base}/preview`)).query({ url: `${BUCKET_URL}pics/big.png`, w: 500 }));
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/image\/webp/);
+    expect(await sharp(res.body).metadata()).toMatchObject({ format: 'webp', width: 800 });
+    // Asked again: from the cache, not fetched from S3 again.
+    const before = fetchSpy.mock.calls.length;
+    await binary(auth(request(app).get(`${base}/preview`)).query({ url: `${BUCKET_URL}pics/big.png`, w: 1600 }));
+    expect(fetchSpy.mock.calls.length).toBe(before);
+    expect((await auth(request(app).get(`${base}/preview`)).query({ url: 'https://evil.example.com/x.png' })).status).toBe(400);
+    expect((await request(app).get(`${base}/preview`).query({ url: `${BUCKET_URL}pics/big.png` })).status).toBe(401);
+  });
+
   test('the editor\'s fonts: a known one is sent; anything else is a 404; signed in only', async () => {
     const font = await auth(request(app).get(`${base}/fonts/script`));
     expect(font.status).toBe(200);

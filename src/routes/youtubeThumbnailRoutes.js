@@ -16,6 +16,7 @@
  *   PUT  /episodes/:episodeId/draft      keep the episode's arrangement
  *   POST /episodes/:episodeId/pictures   keep an uploaded picture (S3); { url, label }
  *   GET  /fonts/:key                     a thumbnail font, for the editor (thumbnailLayers.FONTS)
+ *   GET  /preview?url=&w=                a smaller copy of one of our pictures, for the editor (WebP)
  *
  * This is the one place an episode's thumbnail is edited (Evoni, 2026-10-20).
  *
@@ -197,6 +198,17 @@ router.post('/episodes/:episodeId/pictures', requireAuth, (req, res) => {
       return sendError(res, err, 'picture upload');
     }
   });
+});
+
+// The editor draws smaller copies of the pictures (faster); the saved file uses the full ones.
+router.get('/preview', requireAuth, async (req, res) => {
+  try {
+    const webp = await yt.previewImage(String(req.query.url || ''), req.query.w);
+    res.set('Cache-Control', 'private, max-age=86400');
+    return res.type('image/webp').send(webp);
+  } catch (err) {
+    return sendError(res, err, 'preview');
+  }
 });
 
 // The editor draws with the same fonts the server renders with.

@@ -22,6 +22,7 @@
 
 const sharp = require('sharp');
 const layers = require('./thumbnailLayers');
+const { createCache } = require('./pictureCache');
 const { readDocuments } = require('./eventDocumentsService');
 const { readLogo } = require('./showLogoService');
 const { EPISODE_EVENT_ID_SQL } = require('../utils/episodeEventSql');
@@ -92,8 +93,36 @@ function allowedImageUrl(url) {
   return /^[a-z0-9.-]+\.s3([.-][a-z0-9-]+)?\.amazonaws\.com$/.test(host);
 }
 
+// Recent pictures, and the editor's smaller copies, for a few minutes (pictureCache).
+const pictures = createCache();
+
+/** A picture's bytes: from the cache when it was read lately, else fetched (and kept). */
 async function fetchImage(url) {
   if (!allowedImageUrl(url)) throw new ThumbnailError(400, 'That image is not one of ours (only S3 images can be used)');
+  return pictures.get(`full:${url}`, () => downloadImage(url));
+}
+
+const PREVIEW_WIDTHS = [400, 800, 1600];
+
+/**
+ * A smaller copy of a picture for the editor (Evoni, 2026-10-21: make it
+ * faster): at most `width` wide (rounded up to 400, 800 or 1600), WebP,
+ * transparency kept. The saved thumbnail is still drawn from the full one.
+ */
+async function previewImage(url, width = 800) {
+  const w = PREVIEW_WIDTHS.find((x) => x >= Number(width)) || PREVIEW_WIDTHS[PREVIEW_WIDTHS.length - 1];
+  const full = await fetchImage(url);
+  return pictures.get(`preview:${w}:${url}`, async () => {
+    try {
+      return await sharp(full).rotate().resize({ width: w, height: w * 2, fit: 'inside', withoutEnlargement: true }).webp({ quality: 82 }).toBuffer();
+    } catch (err) {
+      console.error('[YouTubeThumbnail] preview could not be made:', err.message);
+      throw new ThumbnailError(400, 'That is not a picture we can read');
+    }
+  });
+}
+
+async function downloadImage(url) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -710,7 +739,7 @@ async function removeSaved(sequelize, episodeId, thumbnailId) {
 
 module.exports = {
   WIDTH, HEIGHT, LAYOUTS, DEFAULT_STYLE, ThumbnailError,
-  readStyle, readSpec, allowedImageUrl, fetchImage, layoutBoxes, duoPositions, readyPoses, pictureFolders, libraryImages, outfitImages, layoutSuggestions, titleSize, wrapTitle, fitTitle, kickerSize, textSvg, shadeSvg,
+  readStyle, readSpec, allowedImageUrl, fetchImage, previewImage, PREVIEW_WIDTHS, layoutBoxes, duoPositions, readyPoses, pictureFolders, libraryImages, outfitImages, layoutSuggestions, titleSize, wrapTitle, fitTitle, kickerSize, textSvg, shadeSvg,
   render, sources, saveStyle, saveAsPrimary, listSaved, makePrimary, removeSaved,
   readTemplate, renderSpec, getDraft, saveDraft, uploadPicture,
 };

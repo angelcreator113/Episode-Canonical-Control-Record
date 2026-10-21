@@ -22,6 +22,11 @@ vi.mock('react-konva', () => {
   return { Stage: Plain('Stage'), Layer: Plain('Layer'), Group, Rect: Plain('Rect'), Text: Plain('Text'), Line: Plain('Line'), Image: Plain('Image'), Transformer };
 });
 
+vi.mock('../../lib/picturePreview', () => ({
+  previewUrl: (url) => Promise.resolve(url),
+  previewWidth: () => 800,
+  usePreview: (url) => url,
+}));
 import ThumbnailCanvas from './ThumbnailCanvas';
 import { presetLayers, updateLayer } from '../../lib/thumbnailLayers';
 

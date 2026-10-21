@@ -13,18 +13,24 @@ import { Stage, Layer, Group, Rect, Text, Line, Image as KImage, Transformer } f
 import {
   WIDTH, HEIGHT, LINE_HEIGHT, FONTS, fitText, measurer, fitPicture, boxFromNode, layerName, checklistRows, snapBox,
 } from '../../lib/thumbnailLayers';
+import { previewUrl, previewWidth } from '../../lib/picturePreview';
 
-function usePicture(src) {
+/** A picture for a box `points` wide on screen: its smaller copy (picturePreview), loaded. */
+function usePicture(src, points) {
   const [img, setImg] = useState(null);
+  const pixels = previewWidth(points);
   useEffect(() => {
     if (!src) { setImg(null); return undefined; }
     let live = true;
-    const el = new window.Image();
-    el.onload = () => { if (live) setImg(el); };
-    el.onerror = () => { console.error('[ThumbnailCanvas] picture did not load:', src); if (live) setImg(null); };
-    el.src = src;
+    previewUrl(src, pixels).then((address) => {
+      if (!live) return;
+      const el = new window.Image();
+      el.onload = () => { if (live) setImg(el); };
+      el.onerror = () => { console.error('[ThumbnailCanvas] picture did not load:', src); if (live) setImg(null); };
+      el.src = address;
+    });
     return () => { live = false; };
-  }, [src]);
+  }, [src, pixels]);
   return img;
 }
 
@@ -50,8 +56,8 @@ function Shade({ l }) {
   );
 }
 
-function Picture({ l }) {
-  const img = usePicture(l.src);
+function Picture({ l, scale }) {
+  const img = usePicture(l.src, l.w * scale);
   if (l.frame === 'polaroid') {
     const pad = Math.round(Math.min(l.w, l.h) * 0.05);
     const inner = { w: l.w - pad * 2, h: l.h - pad * 2 };
@@ -208,7 +214,7 @@ export default function ThumbnailCanvas({ spec, selectedId, onSelect, onChange, 
                 onDragMove={(e) => snapDrag(l, e)}
                 onDragEnd={(e) => { setGuides([]); change(l, e.target); }}
                 onTransformEnd={(e) => { const node = e.target; change(l, node); node.scaleX(1); node.scaleY(1); }}>
-                <Body l={l} />
+                <Body l={l} scale={scale} />
               </Group>
             );
           })}

@@ -38,6 +38,7 @@ import {
   addText, addPicture, layerName, loadThumbnailFonts, OUTLINE, duplicateLayer, WIDTH, HEIGHT,
 } from '../lib/thumbnailLayers';
 import ThumbnailCanvas from '../components/Thumbnails/ThumbnailCanvas';
+import { usePreview } from '../lib/picturePreview';
 import './YouTubeThumbnailStudio.css';
 
 const DRAFT_DELAY_MS = 1200;
@@ -45,11 +46,17 @@ const DRAFT_DELAY_MS = 1200;
 const UNDO_GROUP_MS = 600;
 const UNDO_STEPS = 50;
 
+/** A folder's picture, from its small copy (the full one can be 4000px). */
+function PreviewImg({ url, alt }) {
+  const src = usePreview(url, 120);
+  return src ? <img src={src} alt={alt} loading="lazy" /> : <span className="yts-img-wait" aria-hidden />;
+}
+
 function PickButton({ it, value, onPick }) {
   return (
     <button type="button" className={`yts-pick${value === it.url ? ' is-on' : ''}`} aria-pressed={value === it.url}
       onClick={() => onPick(it.url, it.label)} title={it.label}>
-      <img src={it.url} alt={it.label || ''} loading="lazy" />
+      <PreviewImg url={it.url} alt={it.label || ''} />
     </button>
   );
 }
@@ -101,7 +108,7 @@ function FolderPicker({ title, tree, start, value, onPick, onUpload, uploading =
             return (
               <button key={f.key} type="button" className="yts-folder" onClick={() => setAt(f.key)} data-testid={`${testid}-folder-${f.key}`}
                 aria-label={`${f.label}, ${n} ${n === 1 ? 'picture' : 'pictures'}`}>
-                <span className="yts-folder-art">{cover ? <img src={cover} alt="" loading="lazy" /> : <Folder size={20} aria-hidden />}</span>
+                <span className="yts-folder-art">{cover ? <PreviewImg url={cover} alt="" /> : <Folder size={20} aria-hidden />}</span>
                 <span className="yts-folder-name"><Folder size={12} aria-hidden /> {f.label}</span>
                 <span className="yts-folder-count" aria-hidden>{n} {n === 1 ? 'picture' : 'pictures'}</span>
               </button>
