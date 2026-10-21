@@ -95,8 +95,15 @@ describe('database work', () => {
       logoUrl: null,
     });
     expect(out.draft).toBeNull();
+    expect(out.versions).toEqual([]); // no versions table yet
     expect(out.templates).toEqual([]);
     expect(out.template).toBeNull();
+  });
+
+  test('nextVersionName: the first of Version A, B, ... not taken, whatever its case', () => {
+    expect(yt.nextVersionName([])).toBe('Version A');
+    expect(yt.nextVersionName(['version a', 'Version C'])).toBe('Version B');
+    expect(yt.nextVersionName([...Array(26)].map((_, i) => `Version ${String.fromCharCode(65 + i)}`))).toBe('Version 27');
   });
 
   test('uploads: the name rides in the key and comes back as the label; listed newest first; a listing that fails is empty', async () => {

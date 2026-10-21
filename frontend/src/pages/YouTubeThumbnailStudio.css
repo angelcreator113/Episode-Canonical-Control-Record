@@ -142,6 +142,11 @@
 .yts-template-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .yts-template-form .yts-input { flex: 1 1 180px; min-width: 0; }
 .yts-check { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+.yts-compare { display: flex; flex-wrap: wrap; gap: 16px; margin: 0; padding: 4px 0 8px; list-style: none; }
+.yts-compare-col { display: flex; flex-direction: column; gap: 8px; flex: 0 0 auto; min-width: 0; max-width: 100%; padding: 10px; border-radius: 12px; border: 2px solid var(--lala-parchment-3); background: var(--lala-parchment-2); }
+.yts-compare-col.is-now { border-color: var(--accent-dark); }
+.yts-compare .yts-note.is-warn { color: var(--danger-text); }
+.yts-version-reads { font-weight: 400; color: var(--text-secondary); }
 .yts-template-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
 .yts-template { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 6px; border-radius: 12px; border: 2px solid var(--lala-parchment-3); background: var(--lala-parchment-2); }
 .yts-template.is-default { border-color: var(--accent-dark); }
