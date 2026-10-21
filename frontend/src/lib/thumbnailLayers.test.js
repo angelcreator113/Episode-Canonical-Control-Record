@@ -11,7 +11,7 @@ import {
   SHAPES, addShape, shapeCanvas, shapeMargin, shapeWordsBox,
   spaced, alignLayers, distributeLayers, layersInBox, youtubeWarnings, drawnSize, fileSize, TIMESTAMP_ZONE,
   READABLE_SIZE, readablePatch, clearOfTimestamp, fixWarning, fixAllWarnings, finerCanvas, drawRes, WIDTH, HEIGHT,
-  presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer, addText, addPicture, addPieceCard,
+  presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, placeLayer, removeLayer, addText, addPicture, addPieceCard,
   boxFromNode, fitText, fitPicture, layerName, LINE_HEIGHT, checklistRows, duplicateLayer, snapBox, SNAP, copyLayers, pasteLayers,
 } from './thumbnailLayers';
 
@@ -603,5 +603,20 @@ describe('copy and paste between episodes (Evoni, 2026-10-21)', () => {
     expect(spec.layers.map((l) => l.id)).toEqual(['background', 'shade', 'title']);
     expect(layerOf(spec, 'title').text).toBe('Red Dress Day');
     expect(pasteLayers(bare, null)).toEqual({ spec: bare, ids: [] });
+  });
+});
+
+describe('placeLayer (Layers, dragged)', () => {
+  const spec = { version: 2, layers: ['a', 'b', 'c', 'd'].map((id) => ({ id })) };
+  const ids = (s) => s.layers.map((l) => l.id);
+  test('toward the front: just in front of the one it is dropped on; toward the back: just behind it', () => {
+    expect(ids(placeLayer(spec, 'a', 'c'))).toEqual(['b', 'c', 'a', 'd']);
+    expect(ids(placeLayer(spec, 'd', 'b'))).toEqual(['a', 'd', 'b', 'c']);
+    expect(ids(placeLayer(spec, 'b', 'd'))).toEqual(['a', 'c', 'd', 'b']);
+  });
+  test('onto itself, or an unknown layer: unchanged', () => {
+    expect(placeLayer(spec, 'b', 'b')).toBe(spec);
+    expect(placeLayer(spec, 'x', 'b')).toBe(spec);
+    expect(placeLayer(spec, 'b', 'x')).toBe(spec);
   });
 });

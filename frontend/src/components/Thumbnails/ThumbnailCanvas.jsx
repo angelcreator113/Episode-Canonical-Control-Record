@@ -13,6 +13,7 @@ import { Stage, Layer, Group, Rect, Text, Line, Image as KImage, Transformer } f
 import {
   WIDTH, HEIGHT, LINE_HEIGHT, FONTS, fitText, measurer, spaced, fitPicture, boxFromNode, layerName, checklistRows, snapBox, layersInBox, adjustedPicture, stickerCanvas, stickerMargin, drawFitted, CARD_COLOR,
   fancyWords, wordsCanvas, wordsMargin, finerCanvas, drawRes, shapeCanvas, shapeMargin,
+  TIMESTAMP_ZONE,
 } from '../../lib/thumbnailLayers';
 import { previewUrl, previewWidth } from '../../lib/picturePreview';
 
@@ -225,12 +226,51 @@ const coarsePointer = () => typeof window !== 'undefined' && typeof window.match
  * touches (onSelectMany). Picked layers move together: one change for all
  * (onChangeMany: { [id]: patch }).
  */
+// The editor's own marks (Evoni, 2026-10-21 redesign), never in the saved file:
+// a grid of 80-point squares with the thirds stronger, and the safe zones
+// (YouTube's timestamp over the bottom right; a 5% margin round the edge).
+const GRID_STEP = 80;
+const SAFE_MARGIN = { x: WIDTH * 0.05, y: HEIGHT * 0.05 };
+
+function Overlays({ grid, safeZones, scale }) {
+  const thin = 1 / scale;
+  const lines = [];
+  if (grid) {
+    for (let x = GRID_STEP; x < WIDTH; x += GRID_STEP) lines.push({ key: `x${x}`, points: [x, 0, x, HEIGHT], third: false });
+    for (let y = GRID_STEP; y < HEIGHT; y += GRID_STEP) lines.push({ key: `y${y}`, points: [0, y, WIDTH, y], third: false });
+    [1, 2].forEach((k) => {
+      lines.push({ key: `tx${k}`, points: [(WIDTH * k) / 3, 0, (WIDTH * k) / 3, HEIGHT], third: true });
+      lines.push({ key: `ty${k}`, points: [0, (HEIGHT * k) / 3, WIDTH, (HEIGHT * k) / 3], third: true });
+    });
+  }
+  return (
+    <>
+      {lines.map((g) => (
+        <Line key={g.key} name={g.third ? 'grid-third' : 'grid-line'} points={g.points} listening={false}
+          stroke={g.third ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.28)'} strokeWidth={(g.third ? 1.5 : 1) * thin} />
+      ))}
+      {safeZones && (
+        <>
+          <Rect name="safe-margin" x={SAFE_MARGIN.x} y={SAFE_MARGIN.y} width={WIDTH - SAFE_MARGIN.x * 2} height={HEIGHT - SAFE_MARGIN.y * 2}
+            stroke="rgba(255,255,255,0.85)" strokeWidth={1.5 * thin} dash={[10 * thin, 6 * thin]} listening={false} />
+          <Rect name="safe-timestamp" x={TIMESTAMP_ZONE.x} y={TIMESTAMP_ZONE.y} width={TIMESTAMP_ZONE.w} height={TIMESTAMP_ZONE.h}
+            fill="rgba(224,104,159,0.35)" stroke="#E0689F" strokeWidth={2 * thin} listening={false} />
+          <Text text="Timestamp" x={TIMESTAMP_ZONE.x} y={TIMESTAMP_ZONE.y + TIMESTAMP_ZONE.h / 2 - 12} width={TIMESTAMP_ZONE.w}
+            align="center" fontSize={22} fontStyle="bold" fill="#FFFFFF" listening={false} />
+        </>
+      )}
+    </>
+  );
+}
+
 export default function ThumbnailCanvas({
   spec, selectedId, selectedIds, onSelect, onSelectMany, onChange, onChangeMany, onSnapshot, fontsTick = 0, zoom = 1,
+  grid = false, safeZones = false,
 }) {
   const wrapRef = useRef(null);
   const stageRef = useRef(null);
   const trRef = useRef(null);
+  const marksRef = useRef(null); // the grid and safe zones, hidden while the snapshot is taken
   const dragFrom = useRef(null); // { id, x, y, others: { [id]: { x, y } } } while picked layers move together
   const [fitWidth, setWidth] = useState(640);
   // Zoomed in (Evoni, 2026-10-21), the canvas is drawn bigger and scrolls inside its frame.
@@ -274,14 +314,17 @@ export default function ThumbnailCanvas({
       const stage = stageRef.current;
       const tr = trRef.current;
       if (!stage) return;
+      const marks = marksRef.current;
       const shown = tr?.visible();
       tr?.visible(false);
+      marks?.visible(false);
       try {
         onSnapshot(stage.toDataURL({ pixelRatio: 720 / width, mimeType: 'image/jpeg', quality: 0.85 }));
       } catch (err) {
         console.error('[ThumbnailCanvas] snapshot failed:', err?.message || err);
       } finally {
         tr?.visible(shown !== false);
+        marks?.visible(true);
       }
     };
     const soon = setTimeout(shoot, 500);
@@ -439,6 +482,11 @@ export default function ThumbnailCanvas({
             borderStroke="#B8962E" anchorStroke="#B8962E" anchorFill="#FFFFFF" anchorSize={anchorSize}
             boundBoxFunc={(oldBox, box) => (Math.abs(box.width) < 12 || Math.abs(box.height) < 12 ? oldBox : box)} />
         </Layer>
+        {(grid || safeZones) && (
+          <Layer ref={marksRef} listening={false}>
+            <Overlays grid={grid} safeZones={safeZones} scale={scale} />
+          </Layer>
+        )}
       </Stage>
     </div>
   );

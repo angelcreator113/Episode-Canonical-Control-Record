@@ -19,7 +19,9 @@ vi.mock('react-konva', () => {
     return <div data-konva="Group" data-id={props.id} onMouseDown={() => props.onMouseDown?.()}>{children}</div>;
   };
   const Transformer = React.forwardRef(() => null);
-  return { Stage: Plain('Stage'), Layer: Plain('Layer'), Group, Rect: Plain('Rect'), Text: Plain('Text'), Line: Plain('Line'), Image: Plain('Image'), Transformer };
+  // The marks layer has a ref (hidden for the snapshot).
+  const Layer = React.forwardRef((props, ref) => Plain('Layer')(props));
+  return { Stage: Plain('Stage'), Layer, Group, Rect: Plain('Rect'), Text: Plain('Text'), Line: Plain('Line'), Image: Plain('Image'), Transformer };
 });
 
 vi.mock('../../lib/picturePreview', () => ({
@@ -158,5 +160,23 @@ describe('ThumbnailCanvas', () => {
       window.devicePixelRatio = ratio;
       HTMLCanvasElement.prototype.getContext = before;
     }
+  });
+
+  test('the grid and the safe zones: drawn over the thumbnail only when asked, in a layer that is never picked', () => {
+    const named = (n) => [...document.querySelectorAll('[data-props]')].filter((el) => JSON.parse(el.dataset.props).name === n);
+    const { rerender } = render(<ThumbnailCanvas spec={SPEC} selectedId={null} onSelect={() => {}} onChange={() => {}} />);
+    expect(named('grid-line')).toHaveLength(0);
+    expect(named('safe-timestamp')).toHaveLength(0);
+    expect(document.querySelectorAll('[data-konva="Layer"]')).toHaveLength(1);
+    rerender(<ThumbnailCanvas spec={SPEC} selectedId={null} onSelect={() => {}} onChange={() => {}} grid />);
+    // 80-point squares (15 across, 8 down) and the thirds.
+    expect(named('grid-line')).toHaveLength(15 + 8);
+    expect(named('grid-third')).toHaveLength(4);
+    const marks = document.querySelectorAll('[data-konva="Layer"]')[1];
+    expect(JSON.parse(marks.dataset.props).listening).toBe(false);
+    rerender(<ThumbnailCanvas spec={SPEC} selectedId={null} onSelect={() => {}} onChange={() => {}} safeZones />);
+    expect(named('grid-line')).toHaveLength(0);
+    expect(JSON.parse(named('safe-timestamp')[0].dataset.props)).toMatchObject({ x: 1090, y: 630, width: 190, height: 90 });
+    expect(JSON.parse(named('safe-margin')[0].dataset.props)).toMatchObject({ x: 64, y: 36, width: 1152, height: 648 });
   });
 });
