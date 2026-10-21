@@ -597,6 +597,30 @@ describe('YouTubeThumbnailStudio', () => {
     await waitFor(() => expect(layerOf(lastDraft(), 'title')).toMatchObject({ effect: 'shadow', curve: 0, gradient: null }), { timeout: 3000 });
   });
 
+  test('stickers: add each one, picked; a burst\'s words, colours, outline; a circle\'s thickness', async () => {
+    renderPage();
+    await opened();
+    const row = within(screen.getByTestId('yts-stickers'));
+    fireEvent.click(row.getByRole('button', { name: 'Add burst' }));
+    const settings = within(screen.getByTestId('yts-shape-settings'));
+    fireEvent.change(settings.getByRole('textbox', { name: 'Sticker words' }), { target: { value: 'SALE' } });
+    fireEvent.change(settings.getByLabelText('Sticker colour'), { target: { value: '#00aa00' } });
+    fireEvent.change(settings.getByLabelText('Sticker words colour'), { target: { value: '#111111' } });
+    fireEvent.change(settings.getByRole('slider', { name: 'Sticker outline width' }), { target: { value: '10' } });
+    await waitFor(() => expect(lastDraft().layers.at(-1).strokeWidth).toBe(10), { timeout: 3000 });
+    expect(lastDraft().layers.at(-1)).toMatchObject({ kind: 'shape', shape: 'burst', text: 'SALE', fill: '#00AA00', color: '#111111', stroke: '#FFFFFF' });
+    expect(screen.getByTestId('yts-layer-settings').querySelector('legend').textContent).toBe('Burst: SALE');
+    fireEvent.click(settings.getByRole('checkbox', { name: 'Sticker outline' }));
+    await waitFor(() => expect(lastDraft().layers.at(-1).stroke).toBeNull(), { timeout: 3000 });
+    fireEvent.click(row.getByRole('button', { name: 'Add circle' }));
+    const ring = within(screen.getByTestId('yts-shape-settings'));
+    expect(ring.queryByRole('textbox', { name: 'Sticker words' })).toBeNull();
+    fireEvent.change(ring.getByRole('slider', { name: 'Circle thickness' }), { target: { value: '30' } });
+    for (const name of ['Add arrow', 'Add sparkles', 'Add price tag']) fireEvent.click(row.getByRole('button', { name }));
+    await waitFor(() => expect(lastDraft().layers.slice(-4).map((l) => [l.shape, l.thickness ?? null]))
+      .toEqual([['ring', 30], ['arrow', null], ['sparkle', null], ['tag', null]]), { timeout: 3000 });
+  });
+
   test('any colour: the accent and the title from the free picker; picked ones are remembered as swatches', async () => {
     window.localStorage.removeItem('yts-recent-colours');
     renderPage();

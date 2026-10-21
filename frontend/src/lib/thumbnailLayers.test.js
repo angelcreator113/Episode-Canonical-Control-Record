@@ -8,6 +8,7 @@ import { describe, test, expect } from 'vitest';
 import {
   toneValue, stickerMargin, STICKER_SHADOW,
   textEffect, fancyWords, curveLayout, wordsMargin, paintWords, wordsCanvas, GLOW_COLOR, EFFECT_SIZE,
+  SHAPES, addShape, shapeCanvas, shapeMargin, shapeWordsBox,
   spaced, alignLayers, distributeLayers, layersInBox, youtubeWarnings, drawnSize, fileSize, TIMESTAMP_ZONE,
   presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, removeLayer, addText, addPicture,
   boxFromNode, fitText, fitPicture, layerName, LINE_HEIGHT, checklistRows, duplicateLayer, snapBox, SNAP,
@@ -383,5 +384,63 @@ describe('text effects (the server\'s, Evoni 2026-10-21)', () => {
     expect(out.ctx.calls).toEqual([['image', made[0], '#FF0000', 20, 0]]);
     const plain = wordsCanvas({ ...l, effect: 'none', curve: 30 }, make);
     expect(plain).toBe(made[2]);
+  });
+});
+
+describe('stickers and shapes (the server\'s, Evoni 2026-10-21)', () => {
+  const empty = { version: 2, layers: [] };
+
+  test('addShape: in the middle, on top, picked as its kind with its starting look; names read well', () => {
+    const one = addShape(empty, 'burst');
+    const [b] = one.layers;
+    expect(b).toMatchObject({ id: 'burst-1', kind: 'shape', shape: 'burst', w: 260, h: 260, x: 510, y: 230, text: 'NEW', visible: true });
+    expect(layerName(b)).toBe('Burst: NEW');
+    expect(addShape(one, 'burst').layers[1].id).toBe('burst-2');
+    expect(layerName(addShape(empty, 'ring').layers[0])).toBe('Circle');
+    expect(addShape(empty, 'nope').layers[0].shape).toBe('arrow');
+    expect(SHAPES.map((x) => x.key)).toEqual(['arrow', 'ring', 'burst', 'sparkle', 'tag']);
+  });
+
+  test('drawnSize: a tag\'s words, sized in their box; a shape without words has none', () => {
+    const measureFor = () => (s, size) => String(s).length * size * 0.5;
+    const tag = addShape(empty, 'tag').layers[0];
+    const box = shapeWordsBox(tag);
+    expect(drawnSize(tag, measureFor)).toBe(fitText('$29', { w: box.w, h: box.h, size: Math.round(box.h * 0.8) }, measureFor()).size);
+    expect(drawnSize(addShape(empty, 'arrow').layers[0], measureFor)).toBeNull();
+  });
+
+  test('shapeCanvas: room for the outline; the outline drawn under the fill; a tag\'s hole punched; its words', () => {
+    const calls = [];
+    const ctx = {
+      measureText: (s) => ({ width: String(s).length * 10 }),
+      translate: (...a) => calls.push(['translate', ...a]), beginPath: () => {}, moveTo: () => {}, lineTo: () => {}, closePath: () => {},
+      arc: () => calls.push(['arc']), ellipse: () => calls.push(['ellipse']), save: () => {}, restore: () => {},
+      stroke: () => calls.push(['stroke', ctx.strokeStyle, ctx.lineWidth]), fill: () => calls.push(['fill', ctx.fillStyle, ctx.globalCompositeOperation]),
+      fillText: (t) => calls.push(['text', t]),
+    };
+    const made = [];
+    const make = (w, h) => { made.push([w, h]); return { getContext: () => ctx }; };
+    const tag = { ...addShape(empty, 'tag').layers[0], stroke: '#000000', strokeWidth: 5 };
+    shapeCanvas(tag, make);
+    const m = shapeMargin(tag);
+    expect(m).toBe(7);
+    expect(made).toEqual([[tag.w + 14, tag.h + 14]]);
+    expect(calls[0]).toEqual(['translate', 7 + tag.w / 2, 7 + tag.h / 2]);
+    const order = calls.filter((c) => c[0] === 'stroke' || c[0] === 'fill' || c[0] === 'text');
+    expect(order[0]).toEqual(['stroke', '#000000', 10]);
+    expect(order[1][0]).toBe('fill');
+    expect(order[2]).toEqual(['fill', expect.anything(), 'destination-out']);
+    expect(order.at(-1)).toEqual(['text', '$29']);
+    expect(shapeMargin({ stroke: null })).toBe(2);
+  });
+
+  test('shapeCanvas: a ring is a line in its colour, its outline a wider line under it', () => {
+    const strokes = [];
+    const ctx = {
+      translate: () => {}, beginPath: () => {}, ellipse: () => {},
+      stroke: () => strokes.push([ctx.strokeStyle, ctx.lineWidth]), fill: () => { throw new Error('a ring is not filled'); },
+    };
+    shapeCanvas({ shape: 'ring', w: 300, h: 200, fill: '#FF3B3B', thickness: 16, stroke: '#FFFFFF', strokeWidth: 4 }, () => ({ getContext: () => ctx }));
+    expect(strokes).toEqual([['#FFFFFF', 24], ['#FF3B3B', 16]]);
   });
 });
