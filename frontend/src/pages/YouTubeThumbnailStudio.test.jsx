@@ -477,7 +477,10 @@ describe('YouTubeThumbnailStudio', () => {
     expect(within(screen.getByTestId('yts-shortcuts')).getByText('Pick everything the box touches')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Close the shortcuts' }));
     expect(screen.queryByTestId('yts-shortcuts')).toBeNull();
-    fireEvent.click(screen.getByTestId('yts-keys-btn'));
+    // The shortcuts are also in the canvas's ⋮ menu.
+    fireEvent.click(screen.getByTestId('yts-more-btn'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Keyboard shortcuts' }));
+    expect(screen.queryByRole('menu')).toBeNull();
     expect(screen.getByTestId('yts-shortcuts')).toBeTruthy();
   });
 
@@ -991,11 +994,30 @@ describe('YouTubeThumbnailStudio', () => {
     expect(screen.getByTestId('yts-jaw')).toBeTruthy();
   });
 
+  test('the canvas toolbar: Save as thumbnail and See it exactly on it; the ⋮ menu opens, closes with Esc or a click away, and starts again', async () => {
+    renderPage();
+    await opened();
+    expect(screen.getByTestId('yts-save').textContent).toContain('Save as thumbnail');
+    const more = screen.getByTestId('yts-more-btn');
+    fireEvent.click(more);
+    expect(more.getAttribute('aria-expanded')).toBe('true');
+    expect(within(screen.getByRole('menu')).getAllByRole('menuitem').map((b) => b.textContent.trim())).toEqual(['Whole season', 'Start again', 'Keyboard shortcuts']);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
+    fireEvent.click(more);
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByRole('menu')).toBeNull();
+    fireEvent.click(more);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Start again' }));
+    expect(within(screen.getByTestId('yts-ask')).getByText(/Start this episode again/)).toBeTruthy();
+  });
+
   test('whole season: the grid in place of the editor; Open in the editor goes back to that episode', async () => {
     youtubeThumbnailsApi.season.mockResolvedValue([{ id: 'ep-1', episode_number: 1, title: 'Studio by Sable', thumbnailUrl: null, hasDraft: false }]);
     youtubeThumbnailsApi.templates.mockResolvedValue([]);
     renderPage();
     await opened();
+    fireEvent.click(screen.getByTestId('yts-more-btn'));
     fireEvent.click(screen.getByTestId('yts-season-open'));
     const grid = within(await screen.findByTestId('yts-season'));
     expect(screen.queryByTestId('yts-canvas')).toBeNull();

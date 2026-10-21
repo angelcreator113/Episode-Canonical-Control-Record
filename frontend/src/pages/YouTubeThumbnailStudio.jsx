@@ -33,7 +33,7 @@ import {
   Youtube, Upload, Download, Save, Palette, ImageOff, Check, LayoutTemplate, Sparkles, Star, Trash2, History, Folder, ChevronRight,
   Eye, EyeOff, ArrowUp, ArrowDown, Type, RotateCcw, ScanEye, X, Lock, LockOpen, Copy, Undo2, Redo2, Plus, Pencil, AlignLeft, AlignCenter, AlignRight,
   AlignStartVertical, AlignCenterVertical, AlignEndVertical, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
-  AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, Keyboard, RefreshCw, FlipHorizontal2, ZoomIn, ZoomOut, ClipboardCopy, ClipboardPaste, Columns2, CopyPlus, ArrowRight, Circle, Tag, LayoutGrid,
+  AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, Keyboard, RefreshCw, FlipHorizontal2, ZoomIn, ZoomOut, ClipboardCopy, ClipboardPaste, Columns2, CopyPlus, ArrowRight, Circle, Tag, LayoutGrid, EllipsisVertical,
 } from 'lucide-react';
 import {
   youtubeThumbnailsApi, LAYOUTS, ACCENTS, TEXT_COLORS, readRecentColours, rememberColour, episodeContent, folderPath, folderCount, folderCover, firstFolder,
@@ -338,7 +338,7 @@ const SHAPE_ICONS = { arrow: ArrowRight, ring: Circle, burst: Star, sparkle: Spa
 function StickerRow({ onAdd }) {
   return (
     <div className="yts-stickers" role="group" aria-label="Add a sticker" data-testid="yts-stickers">
-      <span className="yts-label">Add a sticker</span>
+      <span className="yts-label">Stickers &amp; elements</span>
       <div className="yts-actions">
         {SHAPES.map((sh) => {
           const Icon = SHAPE_ICONS[sh.key];
@@ -584,6 +584,37 @@ function ArrangeBar({ count, removable = 0, onAlign, onSpread, onClear, onCopy, 
         title={removable ? 'Remove (Delete key); Undo brings it back' : 'Locked: unlock it to remove it'}>
         <Trash2 size={15} aria-hidden /> {removable > 1 ? `Remove ${removable}` : 'Remove'}
       </button>
+    </div>
+  );
+}
+
+/** The canvas's ⋮ menu: what is used now and then (the whole season, start again, the shortcuts). */
+function MoreMenu({ items }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const away = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(false); };
+    const esc = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
+  }, [open]);
+  return (
+    <div className="yts-menu" ref={box}>
+      <button type="button" className="yts-icon-btn" onClick={() => setOpen((v) => !v)} aria-haspopup="menu" aria-expanded={open}
+        aria-label="More" title="More" data-testid="yts-more-btn"><EllipsisVertical size={15} aria-hidden /></button>
+      {open && (
+        <ul className="yts-menu-list" role="menu" aria-label="More">
+          {items.map(({ key, testid, icon: Icon, label, onChoose }) => (
+            <li key={key} role="none">
+              <button type="button" role="menuitem" className="yts-menu-item" data-testid={testid} onClick={() => { setOpen(false); onChoose(); }}>
+                <Icon size={15} aria-hidden /> {label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -1563,10 +1594,6 @@ export default function YouTubeThumbnailStudio() {
               {episodes.map((e) => <option key={e.id} value={e.id}>{e.episode_number ? `${e.episode_number}. ` : ''}{e.title || 'Untitled'}</option>)}
             </select>
           </label>
-          <button type="button" className={`yts-btn${season ? ' is-primary' : ''}`} onClick={() => setSeason((v) => !v)} disabled={!showId}
-            aria-pressed={season} data-testid="yts-season-open" title="One template on every episode: check them in a grid, save the ones you like">
-            <LayoutGrid size={15} aria-hidden /> Whole season
-          </button>
         </div>
       </header>
 
@@ -1596,100 +1623,107 @@ export default function YouTubeThumbnailStudio() {
         loading ? (
           <div className="yts-empty" role="status" data-testid="yts-loading"><span className="yts-spinner" aria-hidden /><p>Loading the episode…</p></div>
         ) : (
-          <div className="yts-empty"><LayoutTemplate size={36} aria-hidden /><p>Choose a show and an episode to make its thumbnail.</p></div>
+          <div className="yts-empty">
+            <LayoutTemplate size={36} aria-hidden /><p>Choose a show and an episode to make its thumbnail.</p>
+            {showId && (
+              <button type="button" className="yts-btn" onClick={() => setSeason(true)} data-testid="yts-season-start">
+                <LayoutGrid size={15} aria-hidden /> Or the whole season at once
+              </button>
+            )}
+          </div>
         )
       ) : (
         <>
-        <div className="yts-work">
-          <section className="yts-stage" aria-label="Editor">
-            <ThumbnailCanvas spec={spec} selectedId={selectedId} selectedIds={pickedIds} onSelect={select} onSelectMany={selectMany}
-              fontsTick={fontsTick} onChange={(id, patch) => edit((s) => updateLayer(s, id, patch))} onChangeMany={editMany} onSnapshot={setSnapshot} zoom={zoom} />
-            <div className="yts-zoom" role="group" aria-label="Zoom" data-testid="yts-zoom">
-              <button type="button" className="yts-icon-btn" onClick={() => zoomBy(-0.25)} disabled={zoom <= 1} aria-label="Zoom out" title="Zoom out (-)"><ZoomOut size={15} aria-hidden /></button>
-              <span className="yts-zoom-level" aria-live="polite">{Math.round(zoom * 100)}%</span>
-              <button type="button" className="yts-icon-btn" onClick={() => zoomBy(0.25)} disabled={zoom >= ZOOM_MAX} aria-label="Zoom in" title="Zoom in (+)"><ZoomIn size={15} aria-hidden /></button>
-              {zoom > 1 && <button type="button" className="yts-history-btn" onClick={() => setZoom(1)}>Fit</button>}
-            </div>
-            <ArrangeBar count={pickedIds.length} onAlign={align} onSpread={spread} onClear={() => setSelectedId(null)}
-              removable={(spec?.layers || []).filter((l) => pickedIds.includes(l.id) && !l.locked && l.kind !== 'shade').length} onRemove={removePicked}
-              onCopy={copyPicked} />
-            <p className="yts-note" data-testid="yts-draft-note">
-              {draftNote || 'Click a layer to move it, pull a corner to resize, use the top handle to turn it.'}
-            </p>
-            <div className="yts-actions">
-              <button type="button" className="yts-btn is-primary" onClick={save} disabled={busy} data-testid="yts-save">
-                <Save size={16} aria-hidden /> Save as episode thumbnail
-              </button>
-              <button type="button" className="yts-btn" onClick={seeExactly} disabled={rendering} data-testid="yts-exact">
-                <ScanEye size={16} aria-hidden /> {rendering ? 'Drawing…' : 'See it exactly'}
-              </button>
-              <button type="button" className="yts-btn" onClick={undo} disabled={!past.current.length} data-testid="yts-undo" title="Undo (Ctrl+Z)">
-                <Undo2 size={16} aria-hidden /> Undo
-              </button>
-              <button type="button" className="yts-btn" onClick={redo} disabled={!future.current.length} data-testid="yts-redo" title="Redo (Ctrl+Shift+Z)">
-                <Redo2 size={16} aria-hidden /> Redo
-              </button>
-              <button type="button" className="yts-btn" onClick={resetToTemplate} data-testid="yts-reset">
-                <RotateCcw size={16} aria-hidden /> Start again
-              </button>
-              <button type="button" className="yts-btn" onClick={() => setShowKeys((v) => !v)} aria-expanded={showKeys} data-testid="yts-keys-btn" title="Keyboard shortcuts (?)">
-                <Keyboard size={16} aria-hidden /> Shortcuts
-              </button>
-            </div>
-            {showKeys && <ShortcutsPanel onClose={() => setShowKeys(false)} />}
-            <YouTubePreviews src={snapshot} title={layerOf(spec, 'title')?.text || sources?.episode?.title} channel={sources?.show?.name}
-              warnings={ytWarnings} onPick={(id) => setSelectedId(id)}
-              onFix={(w) => {
-                const next = fixWarning(specRef.current, w, measurer);
-                if (next) edit(next);
-                return Boolean(next);
-              }}
-              onFixAll={() => {
-                const { spec: next, left } = fixAllWarnings(specRef.current, measurer);
-                if (next !== specRef.current) edit(next);
-                return left;
-              }}
-              onSmallOk={(id) => edit((s) => updateLayer(s, id, { smallOk: true }))} />
-            {exact && (
-              <figure className="yts-exact" data-testid="yts-exact-figure">
-                <img src={exact} alt="The thumbnail exactly as it will be saved" data-testid="yts-preview" />
-                <figcaption>
-                  Exactly as it will be saved{exactFile ? ` (${exactFile.type === 'jpeg' ? 'JPEG' : 'PNG'}, ${fileSize(exactFile.bytes)}` : ''}{exactFile?.type === 'jpeg' ? '; over 2 MB as a PNG, so saved as a JPEG for YouTube)' : exactFile ? '; YouTube allows 2 MB)' : ''}.
-                  <a className="yts-btn" href={exact} download={fileName}><Download size={16} aria-hidden /> Download</a>
-                  <button type="button" className="yts-icon-btn" onClick={() => setExact(null)} aria-label="Close the exact view"><X size={15} aria-hidden /></button>
-                </figcaption>
-              </figure>
-            )}
-            <div className="yts-try" data-testid="yts-try">
-              <label className="yts-select">
-                <span>Try it on another episode</span>
-                <select value={tryOn.id} onChange={(e) => tryOnEpisode(e.target.value)} aria-label="Try it on another episode" disabled={tryOn.busy}>
-                  <option value="">Choose an episode</option>
-                  {episodes.filter((e) => e.id !== episodeId).map((e) => <option key={e.id} value={e.id}>{e.episode_number ? `${e.episode_number}. ` : ''}{e.title || 'Untitled'}</option>)}
-                </select>
-              </label>
-              {tryOn.busy && <span className="yts-note">Drawing…</span>}
-            </div>
-            {tryOn.url && (
-              <figure className="yts-exact" data-testid="yts-try-figure">
-                <img src={tryOn.url} alt="This arrangement on the other episode" />
-                <figcaption>
-                  This arrangement with that episode's words and pictures, as the show's template would give it.
-                  <button type="button" className="yts-icon-btn" onClick={() => setTryOn({ id: '', url: null, busy: false })} aria-label="Close the other episode"><X size={15} aria-hidden /></button>
-                </figcaption>
-              </figure>
-            )}
-            {saved && (
-              <p className="yts-saved"><Check size={16} aria-hidden /> Saved. <Link to={`/episodes/${episodeId}?tab=production`}>Back to Production</Link></p>
-            )}
-            <LayerSettings layer={picked} onChange={(patch) => edit((s) => updateLayer(s, picked.id, patch))}
-              colours={[...ACCENTS, ...recentColours.filter((c) => !ACCENTS.includes(c))]} onRemember={remember} />
-            <LayersList spec={spec} selectedId={selectedId} pickedIds={pickedIds} onSelect={select} onChange={edit} onDuplicate={duplicate} />
-          </section>
+        <div className="yts-studio">
+          <div className="yts-main">
+            <section className="yts-card yts-stage" aria-label="Editor">
+              <div className="yts-toolbar" role="toolbar" aria-label="Canvas">
+                <div className="yts-zoom" role="group" aria-label="Zoom" data-testid="yts-zoom">
+                  <button type="button" className="yts-icon-btn" onClick={() => zoomBy(-0.25)} disabled={zoom <= 1} aria-label="Zoom out" title="Zoom out (-)"><ZoomOut size={15} aria-hidden /></button>
+                  <span className="yts-zoom-level" aria-live="polite">{Math.round(zoom * 100)}%</span>
+                  <button type="button" className="yts-icon-btn" onClick={() => zoomBy(0.25)} disabled={zoom >= ZOOM_MAX} aria-label="Zoom in" title="Zoom in (+)"><ZoomIn size={15} aria-hidden /></button>
+                  {zoom > 1 && <button type="button" className="yts-tool-btn" onClick={() => setZoom(1)}>Fit</button>}
+                </div>
+                <div className="yts-toolbar-group" role="group" aria-label="History">
+                  <button type="button" className="yts-icon-btn" onClick={undo} disabled={!past.current.length} data-testid="yts-undo" aria-label="Undo" title="Undo (Ctrl+Z)">
+                    <Undo2 size={15} aria-hidden />
+                  </button>
+                  <button type="button" className="yts-icon-btn" onClick={redo} disabled={!future.current.length} data-testid="yts-redo" aria-label="Redo" title="Redo (Ctrl+Shift+Z)">
+                    <Redo2 size={15} aria-hidden />
+                  </button>
+                </div>
+                <div className="yts-toolbar-end">
+                  <button type="button" className="yts-tool-btn" onClick={seeExactly} disabled={rendering} data-testid="yts-exact">
+                    <ScanEye size={15} aria-hidden /> {rendering ? 'Drawing…' : 'See it exactly'}
+                  </button>
+                  <button type="button" className="yts-tool-btn is-primary" onClick={save} disabled={busy} data-testid="yts-save">
+                    <Save size={15} aria-hidden /> Save as thumbnail
+                  </button>
+                  <MoreMenu items={[
+                    { key: 'season', testid: 'yts-season-open', icon: LayoutGrid, label: 'Whole season', onChoose: () => setSeason(true) },
+                    { key: 'reset', testid: 'yts-reset', icon: RotateCcw, label: 'Start again', onChoose: resetToTemplate },
+                    { key: 'keys', testid: 'yts-keys-btn', icon: Keyboard, label: 'Keyboard shortcuts', onChoose: () => setShowKeys((v) => !v) },
+                  ]} />
+                </div>
+              </div>
+              <ArrangeBar count={pickedIds.length} onAlign={align} onSpread={spread} onClear={() => setSelectedId(null)}
+                removable={(spec?.layers || []).filter((l) => pickedIds.includes(l.id) && !l.locked && l.kind !== 'shade').length} onRemove={removePicked}
+                onCopy={copyPicked} />
+              <ThumbnailCanvas spec={spec} selectedId={selectedId} selectedIds={pickedIds} onSelect={select} onSelectMany={selectMany}
+                fontsTick={fontsTick} onChange={(id, patch) => edit((s) => updateLayer(s, id, patch))} onChangeMany={editMany} onSnapshot={setSnapshot} zoom={zoom} />
+              <p className="yts-note" data-testid="yts-draft-note">
+                {draftNote || 'Click a layer to move it, pull a corner to resize, use the top handle to turn it.'}
+              </p>
+              {saved && (
+                <p className="yts-saved"><Check size={16} aria-hidden /> Saved. <Link to={`/episodes/${episodeId}?tab=production`}>Back to Production</Link></p>
+              )}
+              {showKeys && <ShortcutsPanel onClose={() => setShowKeys(false)} />}
+              {exact && (
+                <figure className="yts-exact" data-testid="yts-exact-figure">
+                  <img src={exact} alt="The thumbnail exactly as it will be saved" data-testid="yts-preview" />
+                  <figcaption>
+                    Exactly as it will be saved{exactFile ? ` (${exactFile.type === 'jpeg' ? 'JPEG' : 'PNG'}, ${fileSize(exactFile.bytes)}` : ''}{exactFile?.type === 'jpeg' ? '; over 2 MB as a PNG, so saved as a JPEG for YouTube)' : exactFile ? '; YouTube allows 2 MB)' : ''}.
+                    <a className="yts-btn" href={exact} download={fileName}><Download size={16} aria-hidden /> Download</a>
+                    <button type="button" className="yts-icon-btn" onClick={() => setExact(null)} aria-label="Close the exact view"><X size={15} aria-hidden /></button>
+                  </figcaption>
+                </figure>
+              )}
+            </section>
 
-          <section className="yts-panel" aria-label="Thumbnail settings">
-            <fieldset className="yts-field">
-              <legend className="yts-label">Layout</legend>
+            <div className="yts-bottom">
+              <section className="yts-card" aria-label="Layers">
+                <LayersList spec={spec} selectedId={selectedId} pickedIds={pickedIds} onSelect={select} onChange={edit} onDuplicate={duplicate} />
+                <div className="yts-actions">
+                  <button type="button" className="yts-btn" onClick={() => addAndPick((s) => addText(s))} data-testid="yts-add-text">
+                    <Type size={16} aria-hidden /> Add words
+                  </button>
+                  {clip?.layers?.length > 0 && (
+                    <button type="button" className="yts-btn" onClick={pasteClip} data-testid="yts-paste"
+                      title={clip.from?.title ? `Copied from ${clip.from.title} (Ctrl+V)` : 'Ctrl+V'}>
+                      <ClipboardPaste size={16} aria-hidden /> Paste {clip.layers.length === 1 ? '1 layer' : `${clip.layers.length} layers`}
+                    </button>
+                  )}
+                </div>
+              </section>
+              <section className="yts-card" aria-label="Assets for this episode">
+                <h2 className="yts-label">Assets for this episode</h2>
+                <FolderPicker title="Add a picture" testid="yts-add-picture" whole tree={tree} start={['outfit', 'documents']}
+                  onPick={addChosenPicture} uploading={Boolean(uploading)}
+                  onUpload={(f) => upload(f, (url, label) => addAndPick((s) => addPicture(s, url, label)))} />
+              </section>
+            </div>
+          </div>
+
+          <aside className="yts-side" aria-label="Thumbnail settings">
+            {picked && picked.kind !== 'shade' && (
+              <section className="yts-card">
+                <LayerSettings layer={picked} onChange={(patch) => edit((s) => updateLayer(s, picked.id, patch))}
+                  colours={[...ACCENTS, ...recentColours.filter((c) => !ACCENTS.includes(c))]} onRemember={remember} />
+              </section>
+            )}
+
+            <section className="yts-card" aria-label="Template layout">
+              <h2 className="yts-label">Template layout</h2>
               <div className="yts-layouts">
                 {LAYOUTS.map((l) => (
                   <button key={l.key} type="button" className={`yts-layout is-${l.key}${look?.layout === l.key ? ' is-on' : ''}`} aria-pressed={look?.layout === l.key} onClick={() => pickLayout(l.key)}>
@@ -1697,98 +1731,94 @@ export default function YouTubeThumbnailStudio() {
                   </button>
                 ))}
               </div>
-            </fieldset>
+            </section>
 
-            {layerOf(spec, 'headline') && (
-              <label className="yts-field">
-                <span className="yts-label">Headline</span>
-                <input className="yts-input" value={roleText(spec, 'headline')} maxLength={160} onChange={(e) => edit((s) => updateLayer(s, 'headline', { text: e.target.value }))} aria-label="Headline" />
-              </label>
-            )}
-            {layerOf(spec, 'title') && (
-              <label className="yts-field">
-                <span className="yts-label">Title</span>
-                <input className="yts-input" value={roleText(spec, 'title')} maxLength={160} onChange={(e) => setRole('title', e.target.value)} aria-label="Title" />
-              </label>
-            )}
-            <div className="yts-row">
-              <label className="yts-field">
-                <span className="yts-label">Show name line</span>
+            <section className="yts-card yts-text-content" aria-label="Text content">
+              <h2 className="yts-label">Text content</h2>
+              {layerOf(spec, 'headline') && (
+                <label className="yts-text-row">
+                  <span className="yts-text-row-label">Headline</span>
+                  <input className="yts-input" value={roleText(spec, 'headline')} maxLength={160} onChange={(e) => edit((s) => updateLayer(s, 'headline', { text: e.target.value }))} aria-label="Headline" />
+                </label>
+              )}
+              {layerOf(spec, 'title') && (
+                <label className="yts-text-row">
+                  <span className="yts-text-row-label">Title</span>
+                  <input className="yts-input" value={roleText(spec, 'title')} maxLength={160} onChange={(e) => setRole('title', e.target.value)} aria-label="Title" />
+                </label>
+              )}
+              <label className="yts-text-row">
+                <span className="yts-text-row-label">Show name line</span>
                 <input className="yts-input" value={roleText(spec, 'kicker')} maxLength={160} onChange={(e) => setRole('kicker', e.target.value)} aria-label="Show name line" />
               </label>
-              <label className="yts-field is-small">
-                <span className="yts-label">Badge</span>
+              <label className="yts-text-row">
+                <span className="yts-text-row-label">Episode badge</span>
                 <input className="yts-input" value={roleText(spec, 'badge')} maxLength={16} onChange={(e) => setRole('badge', e.target.value)} aria-label="Badge" />
               </label>
-            </div>
-
-            {layerOf(spec, 'edition') && (
-              <div className="yts-field">
-                <label className="yts-field">
-                  <span className="yts-label">Edition label</span>
-                  <input className="yts-input" value={roleText(spec, 'edition')} maxLength={160} onChange={(e) => edit((s) => updateLayer(s, 'edition', { text: e.target.value }))} aria-label="Edition label" />
-                </label>
-                {/* The edition label is the episode's title (Evoni, 2026-10-21); an arrangement kept from before has the old words. */}
-                {sources?.episode?.title && roleText(spec, 'edition') !== sources.episode.title && (
-                  <button type="button" className="yts-btn" onClick={() => edit((s) => updateLayer(s, 'edition', { text: sources.episode.title }))}>
-                    Use the episode title
-                  </button>
-                )}
-              </div>
-            )}
-            {layerOf(spec, 'checklist') && (
-              <ChecklistEditor layer={layerOf(spec, 'checklist')} onChange={(patch) => edit((s) => updateLayer(s, layerOf(s, 'checklist').id, patch))} />
-            )}
-
-            <div className="yts-actions">
-              <button type="button" className="yts-btn" onClick={() => addAndPick((s) => addText(s))} data-testid="yts-add-text">
-                <Type size={16} aria-hidden /> Add words
-              </button>
-              {clip?.layers?.length > 0 && (
-                <button type="button" className="yts-btn" onClick={pasteClip} data-testid="yts-paste"
-                  title={clip.from?.title ? `Copied from ${clip.from.title} (Ctrl+V)` : 'Ctrl+V'}>
-                  <ClipboardPaste size={16} aria-hidden /> Paste {clip.layers.length === 1 ? '1 layer' : `${clip.layers.length} layers`}
-                </button>
+              {layerOf(spec, 'edition') && (
+                <div className="yts-text-row">
+                  <label className="yts-text-row">
+                    <span className="yts-text-row-label">Edition label</span>
+                    <input className="yts-input" value={roleText(spec, 'edition')} maxLength={160} onChange={(e) => edit((s) => updateLayer(s, 'edition', { text: e.target.value }))} aria-label="Edition label" />
+                  </label>
+                  {/* The edition label is the episode's title (Evoni, 2026-10-21); an arrangement kept from before has the old words. */}
+                  {sources?.episode?.title && roleText(spec, 'edition') !== sources.episode.title && (
+                    <button type="button" className="yts-btn" onClick={() => edit((s) => updateLayer(s, 'edition', { text: sources.episode.title }))}>
+                      Use the episode title
+                    </button>
+                  )}
+                </div>
               )}
-            </div>
-            <StickerRow onAdd={(key) => addAndPick((s) => addShape(s, key))} />
+            </section>
 
-            <FolderPicker title="Background" testid="yts-backgrounds" tree={tree} start={['scene-sets']} value={roleSrc(spec, 'background')}
-              noneLabel="Plain" onPick={(url) => setRole('background', url)} uploading={Boolean(uploading)}
-              onUpload={(f) => upload(f, (url) => setRole('background', url))}
-              onNone={() => setRole('background', null)} />
+            <section className="yts-card yts-pair" aria-label="Checklist and stickers">
+              {layerOf(spec, 'checklist') && (
+                <ChecklistEditor layer={layerOf(spec, 'checklist')} onChange={(patch) => edit((s) => updateLayer(s, layerOf(s, 'checklist').id, patch))} />
+              )}
+              <StickerRow onAdd={(key) => addAndPick((s) => addShape(s, key))} />
+            </section>
 
-            <FolderPicker title="Lala" testid="yts-lala" whole value={roleSrc(spec, 'lala')} tree={tree} start={['poses/lala', 'library/lala']}
-              noneLabel="No Lala" onPick={(url) => setRole('lala', url)} uploading={Boolean(uploading)}
-              onUpload={(f) => upload(f, (url) => setRole('lala', url))}
-              onNone={() => setRole('lala', null)} />
-            <FolderPicker title="JustAWoman" testid="yts-jaw" whole value={roleSrc(spec, 'jaw')} tree={tree} start={['poses/justawoman']}
-              noneLabel="No JustAWoman" onPick={(url) => setRole('jaw', url)} uploading={Boolean(uploading)}
-              onUpload={(f) => upload(f, (url) => setRole('jaw', url))}
-              onNone={() => setRole('jaw', null)} />
-            {!(sources?.poses?.lala || []).length && !(sources?.poses?.justawoman || []).length && (
-              <p className="yts-note" data-testid="yts-poses-note"><Sparkles size={14} aria-hidden /> Add Lala and JustAWoman photos on the episode's <Link to={`/episodes/${episodeId}?tab=files`}>Files tab</Link>, labelled by pose; they show here once they are ready. Or upload one.</p>
-            )}
+            <section className="yts-card" aria-label="Characters">
+              <h2 className="yts-label">Characters</h2>
+              <FolderPicker title="Lala" testid="yts-lala" whole value={roleSrc(spec, 'lala')} tree={tree} start={['poses/lala', 'library/lala']}
+                noneLabel="No Lala" onPick={(url) => setRole('lala', url)} uploading={Boolean(uploading)}
+                onUpload={(f) => upload(f, (url) => setRole('lala', url))}
+                onNone={() => setRole('lala', null)} />
+              <FolderPicker title="JustAWoman" testid="yts-jaw" whole value={roleSrc(spec, 'jaw')} tree={tree} start={['poses/justawoman']}
+                noneLabel="No JustAWoman" onPick={(url) => setRole('jaw', url)} uploading={Boolean(uploading)}
+                onUpload={(f) => upload(f, (url) => setRole('jaw', url))}
+                onNone={() => setRole('jaw', null)} />
+              {!(sources?.poses?.lala || []).length && !(sources?.poses?.justawoman || []).length && (
+                <p className="yts-note is-block" data-testid="yts-poses-note"><Sparkles size={14} aria-hidden /> Add Lala and JustAWoman photos on the episode's <Link to={`/episodes/${episodeId}?tab=files`}>Files tab</Link>, labelled by pose; they show here once they are ready. Or upload one.</p>
+              )}
+            </section>
 
-            <FolderPicker title="Add a picture" testid="yts-add-picture" whole tree={tree} start={['outfit', 'documents']}
-              onPick={addChosenPicture} uploading={Boolean(uploading)}
-              onUpload={(f) => upload(f, (url, label) => addAndPick((s) => addPicture(s, url, label)))} />
+            <section className="yts-card" aria-label="Background">
+              <FolderPicker title="Background" testid="yts-backgrounds" tree={tree} start={['scene-sets']} value={roleSrc(spec, 'background')}
+                noneLabel="Plain" onPick={(url) => setRole('background', url)} uploading={Boolean(uploading)}
+                onUpload={(f) => upload(f, (url) => setRole('background', url))}
+                onNone={() => setRole('background', null)} />
+              <label className="yts-field">
+                <span className="yts-label">Darken the background</span>
+                <input type="range" min="0" max="0.8" step="0.05" value={shade?.dim ?? 0} onChange={(e) => setColours({ dim: Number(e.target.value) })} aria-label="Darken the background" disabled={!shade} />
+              </label>
+            </section>
 
-            <fieldset className="yts-field">
-              <legend className="yts-label">Accent</legend>
-              <div className="yts-swatches">
-                {[...ACCENTS, ...recentColours.filter((c) => !ACCENTS.includes(c))].map((c) => (
-                  <button key={c} type="button" className={`yts-swatch${shade?.accent === c ? ' is-on' : ''}`} style={{ background: c }}
-                    aria-label={`Accent ${c}`} aria-pressed={shade?.accent === c} onClick={() => setColours({ accent: c })} />
-                ))}
-                <label className="yts-swatch-any" title="Any colour">
-                  <Palette size={15} aria-hidden />
-                  <input type="color" className="yts-color" value={shade?.accent || ACCENTS[0]} aria-label="Any accent colour"
-                    onChange={(e) => setColours({ accent: e.target.value.toUpperCase() })} onBlur={(e) => remember(e.target.value)} />
-                </label>
-              </div>
-            </fieldset>
-            <div className="yts-row">
+            <section className="yts-card" aria-label="Colour palette">
+              <fieldset className="yts-field">
+                <legend className="yts-label">Colour palette</legend>
+                <div className="yts-swatches">
+                  {[...ACCENTS, ...recentColours.filter((c) => !ACCENTS.includes(c))].map((c) => (
+                    <button key={c} type="button" className={`yts-swatch${shade?.accent === c ? ' is-on' : ''}`} style={{ background: c }}
+                      aria-label={`Accent ${c}`} aria-pressed={shade?.accent === c} onClick={() => setColours({ accent: c })} />
+                  ))}
+                  <label className="yts-swatch-any" title="Any colour">
+                    <Palette size={15} aria-hidden />
+                    <input type="color" className="yts-color" value={shade?.accent || ACCENTS[0]} aria-label="Any accent colour"
+                      onChange={(e) => setColours({ accent: e.target.value.toUpperCase() })} onBlur={(e) => remember(e.target.value)} />
+                  </label>
+                </div>
+              </fieldset>
               <label className="yts-field">
                 <span className="yts-label">Title colour</span>
                 <span className="yts-title-colour">
@@ -1804,11 +1834,42 @@ export default function YouTubeThumbnailStudio() {
                     onChange={(e) => setColours({ textColor: e.target.value.toUpperCase() })} onBlur={(e) => remember(e.target.value)} />
                 </span>
               </label>
-              <label className="yts-field">
-                <span className="yts-label">Darken the background</span>
-                <input type="range" min="0" max="0.8" step="0.05" value={shade?.dim ?? 0} onChange={(e) => setColours({ dim: Number(e.target.value) })} aria-label="Darken the background" disabled={!shade} />
-              </label>
-            </div>
+            </section>
+          </aside>
+        </div>
+
+        <div className="yts-more">
+          <YouTubePreviews src={snapshot} title={layerOf(spec, 'title')?.text || sources?.episode?.title} channel={sources?.show?.name}
+            warnings={ytWarnings} onPick={(id) => setSelectedId(id)}
+            onFix={(w) => {
+              const next = fixWarning(specRef.current, w, measurer);
+              if (next) edit(next);
+              return Boolean(next);
+            }}
+            onFixAll={() => {
+              const { spec: next, left } = fixAllWarnings(specRef.current, measurer);
+              if (next !== specRef.current) edit(next);
+              return left;
+            }}
+            onSmallOk={(id) => edit((s) => updateLayer(s, id, { smallOk: true }))} />
+          <section className="yts-card yts-try" data-testid="yts-try">
+            <label className="yts-select">
+              <span>Try it on another episode</span>
+              <select value={tryOn.id} onChange={(e) => tryOnEpisode(e.target.value)} aria-label="Try it on another episode" disabled={tryOn.busy}>
+                <option value="">Choose an episode</option>
+                {episodes.filter((e) => e.id !== episodeId).map((e) => <option key={e.id} value={e.id}>{e.episode_number ? `${e.episode_number}. ` : ''}{e.title || 'Untitled'}</option>)}
+              </select>
+            </label>
+            {tryOn.busy && <span className="yts-note">Drawing…</span>}
+            {tryOn.url && (
+              <figure className="yts-exact" data-testid="yts-try-figure">
+                <img src={tryOn.url} alt="This arrangement on the other episode" />
+                <figcaption>
+                  This arrangement with that episode's words and pictures, as the show's template would give it.
+                  <button type="button" className="yts-icon-btn" onClick={() => setTryOn({ id: '', url: null, busy: false })} aria-label="Close the other episode"><X size={15} aria-hidden /></button>
+                </figcaption>
+              </figure>
+            )}
           </section>
         </div>
         {sources?.show?.id && (
