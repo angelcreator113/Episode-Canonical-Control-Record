@@ -8,7 +8,20 @@ const { logger } = require('../middleware/auditLog');
  * Handles thumbnail image metadata and S3 reference management
  */
 
+// The columns every database has: the ones the migrations create
+// (20240101000003-create-thumbnails). The model also names publish columns
+// (publishStatus, isPrimary, publishedAt, …) that no migration adds, so a read
+// that selects them 500s on a migrations-built database. The two reads the
+// episode header and show overview make select only these (show side check,
+// 2026-10-20, F4).
+const STORED_ATTRIBUTES = Object.freeze([
+  'id', 'episodeId', 's3Bucket', 's3Key', 'fileSizeBytes', 'mimeType', 'widthPixels', 'heightPixels',
+  'format', 'thumbnailType', 'positionSeconds', 'generatedAt', 'qualityRating',
+]);
+
 module.exports = {
+  STORED_ATTRIBUTES,
+
   /**
    * GET /thumbnails - List all thumbnails
    */
@@ -259,7 +272,7 @@ module.exports = {
     const { id } = req.params;
     const { cdn = false } = req.query;
 
-    const thumbnail = await Thumbnail.findByPk(id);
+    const thumbnail = await Thumbnail.findByPk(id, { attributes: STORED_ATTRIBUTES });
     if (!thumbnail) {
       throw new NotFoundError('Thumbnail', id);
     }
@@ -395,6 +408,7 @@ module.exports = {
         episodeId,
         thumbnailType: 'primary',
       },
+      attributes: STORED_ATTRIBUTES,
     });
 
     if (!thumbnail) {

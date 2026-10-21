@@ -138,6 +138,16 @@ describe('YouTubeThumbnailStudio', () => {
     expect(youtubeThumbnailsApi.saveDraft).not.toHaveBeenCalled(); // opening is not a change
   });
 
+  test('the episode list\'s error stays on screen after the thumbnail is drawn', async () => {
+    youtubeThumbnailsApi.episodes.mockRejectedValue(new Error('400'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    renderPage();
+    await opened();
+    fireEvent.click(screen.getByTestId('yts-exact'));
+    await screen.findByTestId('yts-preview');
+    expect(screen.getByText('Could not load the episodes.')).toBeTruthy();
+  });
+
   test('an episode\'s own arrangement comes first; else the show\'s template, with this episode\'s words', async () => {
     const draft = { ...presetLayers('center', { title: 'Kept title', kicker: 'K', badge: '' }, {}), savedAt: '2026-10-21T10:00:00Z' };
     youtubeThumbnailsApi.sources.mockResolvedValueOnce({ ...SOURCES, draft, template: presetLayers('lala-left', { title: 'Old' }, {}) });
