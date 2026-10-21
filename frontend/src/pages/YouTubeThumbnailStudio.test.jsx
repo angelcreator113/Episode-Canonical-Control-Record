@@ -533,6 +533,24 @@ describe('YouTubeThumbnailStudio', () => {
     expect(within(screen.getByTestId('yts-picture-effects')).queryByRole('checkbox', { name: 'Sticker edge' })).toBeNull();
   });
 
+  test('a photo card\'s colour: white, the show\'s colours or any; clearing a photo\'s white background', async () => {
+    renderPage();
+    await opened();
+    fireEvent.click(within(screen.getByTestId('yts-layers')).getByRole('button', { name: 'Lala' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Frame' }), { target: { value: 'polaroid' } });
+    const fx = within(screen.getByTestId('yts-picture-effects'));
+    expect(fx.getByRole('button', { name: 'Card #FFFFFF' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(fx.getByRole('button', { name: 'Card #E0689F' }));
+    fireEvent.click(fx.getByRole('checkbox', { name: "Clear the photo's white background" }));
+    await waitFor(() => expect(layerOf(lastDraft(), 'lala').clearWhite).toBe(true), { timeout: 3000 });
+    expect(layerOf(lastDraft(), 'lala')).toMatchObject({ frame: 'polaroid', cardColor: '#E0689F' });
+    fireEvent.change(fx.getByLabelText('Any card colour'), { target: { value: '#123abc' } });
+    await waitFor(() => expect(layerOf(lastDraft(), 'lala').cardColor).toBe('#123ABC'), { timeout: 3000 });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Frame' }), { target: { value: 'none' } });
+    expect(within(screen.getByTestId('yts-picture-effects')).queryByText('Card colour')).toBeNull();
+    expect(within(screen.getByTestId('yts-picture-effects')).getByRole('checkbox', { name: "Clear the photo's white background" }).checked).toBe(true);
+  });
+
   test('zoom: in and out by a quarter, 100% to 300%, Fit; +, - and 0 on the keyboard', async () => {
     renderPage();
     await opened();
