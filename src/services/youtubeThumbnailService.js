@@ -27,7 +27,7 @@ const { PutObjectCommand, ListObjectsV2Command, S3Client } = require('@aws-sdk/c
 
 const WIDTH = 1280;
 const HEIGHT = 720;
-const LAYOUTS = Object.freeze(['lala-left', 'lala-right', 'center', 'come-style-me']);
+const LAYOUTS = Object.freeze(['lala-left', 'lala-right', 'center', 'come-style-me', 'checklist-focus', 'before-after']);
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 15000;
 const { ASSET_BUCKET: BUCKET, requireAssetBucket } = require('./assetBucket');

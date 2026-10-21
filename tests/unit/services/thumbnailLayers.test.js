@@ -239,6 +239,38 @@ describe('renderLayers', () => {
     expect(await pixel(lighter, 780, 360)).toEqual([51, 51, 255]);
   });
 
+  test('blur: kept to 0..40 points; it softens the picture\'s edges', async () => {
+    expect(pictured({ blur: 99 }).layers[1].blur).toBe(40);
+    expect(pictured({ blur: -2 }).layers[1].blur).toBe(0);
+    expect(pictured({}).layers[1].blur).toBe(0);
+    const white = await solid(1280, 720, '#FFFFFF');
+    const pic = await halves(); // red | blue; drawn cover in 400 x 400, the edge at x 640
+    const plain = await L.renderLayers(pictured({ fit: 'cover' }), { bg: white, p: pic });
+    expect(await pixel(plain, 636, 360)).toEqual([255, 0, 0]);
+    expect(await pixel(plain, 644, 360)).toEqual([0, 0, 255]);
+    const soft = await L.renderLayers(pictured({ fit: 'cover', blur: 20 }), { bg: white, p: pic });
+    const [r, , b] = await pixel(soft, 640, 360);
+    expect(Math.abs(r - b)).toBeLessThan(40); // the edge is a mix
+    expect((await pixel(soft, 636, 360))[2]).toBeGreaterThan(60); // blue reaches into the red
+    expect(await pixel(soft, 470, 360)).toEqual([255, 0, 0]); // far from the edge, still red
+  });
+
+  test('boxBlur: whole numbers; a single bright pixel spreads evenly; radius 0 changes nothing', () => {
+    const w = 9;
+    const d = new Uint8ClampedArray(w * w * 4);
+    d[(4 * w + 4) * 4] = 255;
+    L.boxBlur(d, w, w, 0);
+    expect(d[(4 * w + 4) * 4]).toBe(255);
+    L.boxBlur(d, w, w, 1);
+    const at = (x, y) => d[(y * w + x) * 4];
+    expect(at(4, 4)).toBeGreaterThan(at(3, 4));
+    expect(at(3, 4)).toBe(at(5, 4));
+    expect(at(4, 3)).toBe(at(4, 5));
+    expect(at(0, 0)).toBe(0);
+    // The editor's copy (frontend lib) asserts the same numbers.
+    expect([at(4, 4), at(3, 4), at(2, 4)]).toEqual([17, 15, 7]);
+  });
+
   test('a sticker edge round a cut-out, in its colour; a shadow under it; not on a photo card', async () => {
     const grey = await solid(1280, 720, '#808080');
     // A cut-out: a green square in the middle of a see-through picture.
@@ -403,7 +435,9 @@ describe('renderLayers', () => {
     expect(a.text).toHaveLength(16);
     const [, b] = shaped({ shape: 'tag', stroke: 'none', strokeWidth: -3 }).layers;
     expect(b).toMatchObject({ shape: 'tag', fill: '#FF0000', stroke: null, strokeWidth: 0, thickness: 16, text: '' });
-    expect(L.SHAPES).toEqual(['arrow', 'ring', 'burst', 'sparkle', 'tag']);
+    expect(L.SHAPES).toEqual(['arrow', 'ring', 'burst', 'sparkle', 'tag', 'tape', 'paper', 'shadow']);
+    // A paper note holds more words than a burst or a tag.
+    expect(shaped({ shape: 'paper', text: 'x'.repeat(90) }).layers[1].text).toHaveLength(60);
   });
 
   test('an arrow points right: its head\'s tip at the right edge, the shaft thin at the left', async () => {
@@ -451,7 +485,36 @@ describe('renderLayers', () => {
     expect(await pixel(png, 750, 250)).toEqual([255, 0, 0]); // the small star's centre (0.55, -0.55)
   });
 
+  test('tape: see-through, its ends torn in teeth', async () => {
+    const png = await drawShape({ shape: 'tape', y: 310, h: 100 });
+    expect(await pixel(png, 640, 360)).toEqual([217, 0, 0]); // 85% of the red over black
+    // The first tooth's notch on the left end (12 in, 10 down) leaves the corner beside it clear.
+    expect(await pixel(png, 444, 320)).toEqual([0, 0, 0]);
+    expect(await pixel(png, 470, 320)).toEqual([217, 0, 0]);
+  });
+
+  test('paper: a card with its bottom-right corner folded over; its words on it', async () => {
+    const png = await drawShape({ shape: 'paper' });
+    expect(await pixel(png, 640, 300)).toEqual([255, 0, 0]);
+    expect(await pixel(png, 836, 556)).toEqual([0, 0, 0]); // the folded corner is gone
+    expect(await pixel(png, 795, 515)).toEqual([220, 0, 0]); // the fold, a little darker (14% black over the red)
+    const words = await drawShape({ shape: 'paper', text: 'Wear it twice', color: '#FFFFFF', font: 'hand' });
+    const lit = await over(words, { x0: 480, y0: 300, x1: 800, y1: 420 }, (n, r, g, b) => n + (g > 200 && b > 200 ? 1 : 0), 0);
+    expect(lit).toBeGreaterThan(300);
+  });
+
+  test('shadow: its colour soft in the middle, fading to nothing at its edge; no outline', async () => {
+    const png = await drawShape({ shape: 'shadow', y: 320, h: 80, stroke: '#FFFFFF', strokeWidth: 6 });
+    const [mid] = await pixel(png, 640, 360);
+    expect(mid).toBeGreaterThan(120);
+    expect(mid).toBeLessThan(150);
+    expect((await pixel(png, 445, 360))[0]).toBeLessThan(15);
+    expect(await pixel(png, 640, 318)).toEqual([0, 0, 0]); // above it, nothing (and no outline)
+  });
+
   test('fontFile: only the thumbnail fonts', () => {
+    expect(L.fontFile('playfair')).toMatch(/PlayfairDisplay-Bold\.ttf$/);
+    expect(L.fontFile('montserrat')).toMatch(/Montserrat-Bold\.ttf$/);
     expect(L.fontFile('script')).toMatch(/GreatVibes-Regular\.ttf$/);
     expect(L.fontFile('../../etc/passwd')).toBeNull();
   });

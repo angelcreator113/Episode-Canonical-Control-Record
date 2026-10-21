@@ -26,6 +26,9 @@ export const FONTS = {
   sans: { family: 'Thumb Sans', weight: 'bold', label: 'Clean' },
   script: { family: 'Thumb Script', weight: 'normal', label: 'Script' },
   hand: { family: 'Thumb Hand', weight: 'bold', label: 'Handwritten' },
+  // The redesign's fonts (Evoni, 2026-10-21).
+  playfair: { family: 'Thumb Playfair', weight: 'bold', label: 'Playfair' },
+  montserrat: { family: 'Thumb Montserrat', weight: 'bold', label: 'Montserrat' },
 };
 
 /** The outline round thumbnail words (dark plum; the server's default stroke). */
@@ -197,6 +200,59 @@ function comeStyleMe(content, style) {
   return { version: 2, layers };
 }
 
+/**
+ * "Checklist focus" (Evoni, 2026-10-21 redesign): the checklist large on a
+ * paper note on the left, Lala on the right, the show's name over the title
+ * beside her, the badge under the note.
+ */
+function checklistFocus(content, style) {
+  const accent = style.accent || '#E0689F';
+  const layers = [
+    roleLayer('background', 'image', { x: 0, y: 0, w: WIDTH, h: HEIGHT }, { src: content.backgroundUrl || null, fit: 'cover', frame: 'none' }),
+    roleLayer('shade', 'shade', { x: 0, y: 0, w: WIDTH, h: HEIGHT }, { dim: style.dim ?? 0.3, accent, side: 'left' }),
+    { ...roleLayer('note', 'shape', { x: 40, y: 50, w: 520, h: 520, rotation: -3 }, { fill: '#FDF4E3', stroke: null, strokeWidth: 6, text: '', font: 'hand', color: '#2C2C2C' }), role: null, shape: 'paper', name: 'Note' },
+    roleLayer('checklist', 'checklist', { x: 80, y: 100, w: 440, h: 420, rotation: -3 }, { items: (content.checklist || []).slice(0, 6), font: 'hand', color: '#2C2C2C' }),
+  ];
+  if (content.lalaUrl) layers.push(roleLayer('lala', 'image', { x: 720, y: 30, w: 540, h: 690 }, { src: content.lalaUrl, fit: 'contain', frame: 'none' }));
+  layers.push(
+    roleLayer('kicker', 'text', { x: 590, y: 60, w: 300, h: 50 }, { text: content.kicker || '', font: 'montserrat', size: 30, color: accent, stroke: OUTLINE, bg: null, align: 'left', upper: true }),
+    roleLayer('title', 'text', { x: 590, y: 120, w: 340, h: 300 }, { text: content.title || '', font: 'playfair', size: 80, color: style.textColor || '#FFFFFF', stroke: OUTLINE, bg: null, align: 'left', upper: false }),
+  );
+  if (content.badge) layers.push(roleLayer('badge', 'badge', { x: 60, y: 600, w: 300, h: 74 }, { text: longBadge(content.badge), font: 'playfair', fill: accent, color: '#FFFFFF' }));
+  return { version: 2, layers };
+}
+
+/**
+ * "Before/After" (Evoni, 2026-10-21 redesign): JustAWoman's photo (else
+ * Lala's full outfit) on the left, Lala on the right, both on photo cards
+ * with a label each, an arrow between them, the title along the bottom.
+ */
+function beforeAfter(content, style) {
+  const accent = style.accent || '#E0689F';
+  const before = content.jawUrl ? { role: 'jaw', src: content.jawUrl } : content.outfitUrl ? { role: 'outfit', src: content.outfitUrl } : null;
+  const card = { fit: 'contain', frame: 'polaroid' };
+  const label = (id, text, x, rotation) => ({
+    ...roleLayer(id, 'text', { x, y: 52, w: 260, h: 58, rotation }, { text, font: 'montserrat', size: 34, color: '#FFFFFF', stroke: null, bg: accent, bgOpacity: 1, bgRadius: 6, align: 'center', upper: true }),
+    role: null, name: `${text[0]}${text.slice(1).toLowerCase()} label`,
+  });
+  const layers = [
+    roleLayer('background', 'image', { x: 0, y: 0, w: WIDTH, h: HEIGHT }, { src: content.backgroundUrl || null, fit: 'cover', frame: 'none' }),
+    roleLayer('shade', 'shade', { x: 0, y: 0, w: WIDTH, h: HEIGHT }, { dim: style.dim ?? 0.45, accent, side: 'center' }),
+  ];
+  if (before) layers.push(roleLayer(before.role, 'image', { x: 90, y: 80, w: 420, h: 480, rotation: -4 }, { src: before.src, ...card }));
+  if (content.lalaUrl) layers.push(roleLayer('lala', 'image', { x: 770, y: 80, w: 420, h: 480, rotation: 4 }, { src: content.lalaUrl, ...card }));
+  // Each label only with its picture.
+  if (before) layers.push(label('before-label', 'BEFORE', 170, -6));
+  if (content.lalaUrl) layers.push(label('after-label', 'AFTER', 850, 6));
+  layers.push(
+    { ...roleLayer('change', 'shape', { x: 545, y: 270, w: 190, h: 110 }, { fill: accent, stroke: '#FFFFFF', strokeWidth: 6 }), role: null, shape: 'arrow', name: 'Arrow' },
+    roleLayer('title', 'text', { x: 140, y: 580, w: 1000, h: 120 }, { text: content.title || '', font: 'playfair', size: 84, color: style.textColor || '#FFFFFF', stroke: OUTLINE, bg: null, align: 'center', upper: false }),
+    roleLayer('kicker', 'text', { x: 470, y: 20, w: 340, h: 44 }, { text: content.kicker || '', font: 'montserrat', size: 26, color: '#FFFFFF', stroke: OUTLINE, bg: null, align: 'center', upper: true }),
+  );
+  if (content.badge) layers.push(roleLayer('badge', 'badge', { x: 1090, y: 20, w: 170, h: 64 }, { text: content.badge, font: 'montserrat', fill: accent, color: '#FFFFFF' }));
+  return { version: 2, layers };
+}
+
 /** A layer's name in the layers list. */
 export const layerName = (l) => ROLE_LABELS[l.role] || l.name
   || (l.kind === 'text' ? (l.text || 'Text').slice(0, 24) : l.kind === 'shape' ? shapeLabel(l) : 'Picture');
@@ -227,6 +283,8 @@ const roleLayer = (role, kind, box, extra) => ({ id: role, role, kind, visible: 
  */
 export function presetLayers(layout, content = {}, style = {}) {
   if (layout === 'come-style-me') return comeStyleMe(content, style);
+  if (layout === 'checklist-focus') return checklistFocus(content, style);
+  if (layout === 'before-after') return beforeAfter(content, style);
   const b = presetBoxes(layout);
   const accent = style.accent || '#E0689F';
   const duo = Boolean(content.lalaUrl && content.jawUrl);
@@ -377,10 +435,16 @@ export const SHAPES = [
   { key: 'burst', label: 'Burst', w: 260, h: 260, look: { fill: '#E0689F', stroke: '#FFFFFF', strokeWidth: 6, text: 'NEW', font: 'sans', color: '#FFFFFF' } },
   { key: 'sparkle', label: 'Sparkles', w: 220, h: 220, look: { fill: '#FFD86B', stroke: null, strokeWidth: 6 } },
   { key: 'tag', label: 'Price tag', w: 340, h: 140, look: { fill: '#FFFFFF', stroke: OUTLINE, strokeWidth: 4, text: '$29', font: 'sans', color: OUTLINE } },
+  // The redesign's stickers (Evoni, 2026-10-21): washi tape, a paper note, a soft shadow to stand a piece on.
+  { key: 'tape', label: 'Tape', w: 240, h: 64, look: { fill: '#F7C9DA', stroke: null, strokeWidth: 6 } },
+  { key: 'paper', label: 'Paper', w: 360, h: 260, look: { fill: '#FDF4E3', stroke: null, strokeWidth: 6, text: 'Your note', font: 'hand', color: '#2C2C2C' } },
+  { key: 'shadow', label: 'Shadow', w: 360, h: 80, look: { fill: '#000000', stroke: null, strokeWidth: 6 } },
 ];
+/** Stickers that hold words. */
+export const WORDS_SHAPES = ['burst', 'tag', 'paper'];
 const shapeLabel = (l) => {
   const label = (SHAPES.find((x) => x.key === l.shape) || SHAPES[0]).label;
-  return (l.shape === 'burst' || l.shape === 'tag') && l.text ? `${label}: ${l.text}` : label;
+  return WORDS_SHAPES.includes(l.shape) && l.text ? `${label}: ${l.text}` : label;
 };
 
 /** Adds a sticker in the middle, on top. */
@@ -604,7 +668,7 @@ export function drawnSize(l, measureFor) {
   }
   if (l.kind === 'checklist') return (l.items || []).length ? checklistRows(l, measure).size : null;
   if (l.kind === 'shape') {
-    if (!(l.shape === 'burst' || l.shape === 'tag') || !String(l.text || '').trim()) return null;
+    if (!WORDS_SHAPES.includes(l.shape) || !String(l.text || '').trim()) return null;
     const box = shapeWordsBox(l);
     return fitText(String(l.text), { w: box.w, h: box.h, size: Math.round(box.h * 0.8) }, measure).size;
   }
@@ -791,25 +855,56 @@ export function clearWhiteEdges(d, w, h) {
 }
 
 /** The picture as it is drawn: turned left to right, its white background cleared and toned when asked; else the picture itself. */
+/** The server's boxBlur: radius r, three times across and down, edges held, whole numbers. */
+export function boxBlur(d, w, h, r) {
+  if (r < 1) return;
+  const tmp = new Uint8ClampedArray(d.length);
+  const n = r * 2 + 1;
+  const pass = (src, dst, len, lines, at) => {
+    for (let line = 0; line < lines; line += 1) {
+      for (let c = 0; c < 4; c += 1) {
+        const v = (i) => src[at(line, Math.min(len - 1, Math.max(0, i))) + c];
+        let sum = 0;
+        for (let i = -r; i <= r; i += 1) sum += v(i);
+        for (let i = 0; i < len; i += 1) {
+          dst[at(line, i) + c] = Math.round(sum / n);
+          sum += v(i + r + 1) - v(i - r);
+        }
+      }
+    }
+  };
+  for (let k = 0; k < 3; k += 1) {
+    pass(d, tmp, w, h, (y, x) => (y * w + x) * 4);
+    pass(tmp, d, h, w, (x, y) => (y * w + x) * 4);
+  }
+}
+
+const drawnScale = (img, l) => (l.fit === 'cover' ? Math.max(l.w / img.width, l.h / img.height) : Math.min(l.w / img.width, l.h / img.height));
+
 export function adjustedPicture(img, l, make = makeCanvas) {
-  if (!img || (!l.flipX && !l.brightness && !l.contrast && !l.clearWhite)) return img;
-  const c = make(img.width, img.height);
+  if (!img || (!l.flipX && !l.brightness && !l.contrast && !l.clearWhite && !l.blur)) return img;
+  // As the server: a blurred picture is worked at the size it is drawn, so the blur is in points.
+  const k = l.blur ? Math.min(1, drawnScale(img, l)) : 1;
+  const w = Math.max(1, Math.round(img.width * k));
+  const h = Math.max(1, Math.round(img.height * k));
+  const c = make(w, h);
   const cx = c.getContext('2d');
   if (l.flipX) {
-    cx.translate(img.width, 0);
+    cx.translate(w, 0);
     cx.scale(-1, 1);
   }
-  cx.drawImage(img, 0, 0);
-  if (l.brightness || l.contrast || l.clearWhite) {
+  cx.drawImage(img, 0, 0, w, h);
+  if (l.brightness || l.contrast || l.clearWhite || l.blur) {
     try {
-      const data = cx.getImageData(0, 0, img.width, img.height);
+      const data = cx.getImageData(0, 0, w, h);
       const d = data.data;
-      if (l.clearWhite) clearWhiteEdges(d, img.width, img.height);
+      if (l.clearWhite) clearWhiteEdges(d, w, h);
       for (let i = 0; i < d.length && (l.brightness || l.contrast); i += 4) {
         d[i] = toneValue(d[i], l.brightness || 0, l.contrast || 0);
         d[i + 1] = toneValue(d[i + 1], l.brightness || 0, l.contrast || 0);
         d[i + 2] = toneValue(d[i + 2], l.brightness || 0, l.contrast || 0);
       }
+      if (l.blur) boxBlur(d, w, h, Math.round((l.blur * k) / drawnScale(img, l)));
       cx.putImageData(data, 0, 0);
     } catch (err) {
       // A picture from another address cannot be read back; the saved file still has its tone.
@@ -1041,10 +1136,28 @@ const tagParts = (l) => ({
   words: { x0: -l.w / 2 + l.h * 0.5, x1: l.w / 2 - l.h * 0.15 },
 });
 
+/** The server's tape ends: five teeth down each end. */
+const TAPE_TEETH = 5;
+const tapePoints = (w, h) => {
+  const tooth = Math.min(h * 0.12, w * 0.05);
+  const step = h / (TAPE_TEETH * 2);
+  const end = (x, dir) => [...Array(TAPE_TEETH * 2 + 1)].map((_, i) => [x + (i % 2 ? dir * tooth : 0), -h / 2 + i * step]);
+  return [...end(w / 2, -1), ...end(-w / 2, 1).reverse()];
+};
+const paperFold = (l) => Math.min(l.w, l.h) * 0.14;
+
 /** The server's shapePath: the shape's outline, centred on the origin. */
 export function shapePath(ctx, l) {
   const { w, h } = l;
-  if (l.shape === 'ring') {
+  if (l.shape === 'tape') {
+    polygon(ctx, tapePoints(w, h));
+  } else if (l.shape === 'paper') {
+    const f = paperFold(l);
+    polygon(ctx, [[-w / 2, -h / 2], [w / 2, -h / 2], [w / 2, h / 2 - f], [w / 2 - f, h / 2], [-w / 2, h / 2]]);
+  } else if (l.shape === 'shadow') {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2);
+  } else if (l.shape === 'ring') {
     const t = l.thickness || 16;
     ctx.beginPath();
     ctx.ellipse(0, 0, Math.max(1, w / 2 - t / 2), Math.max(1, h / 2 - t / 2), 0, 0, Math.PI * 2);
@@ -1082,6 +1195,7 @@ export function shapeWordsBox(l) {
     const { words } = tagParts(l);
     return { x: (words.x0 + words.x1) / 2, w: words.x1 - words.x0, h: l.h * 0.7 };
   }
+  if (l.shape === 'paper') return { x: 0, w: l.w * 0.8, h: l.h * 0.72 };
   return { x: 0, w: l.w * 0.62, h: l.h * 0.5 };
 }
 
@@ -1105,6 +1219,16 @@ export function shapeCanvas(l, make = makeCanvas) {
   const ctx = c.getContext('2d');
   ctx.translate(m + l.w / 2, m + l.h / 2);
   ctx.lineJoin = 'round';
+  if (l.shape === 'shadow') {
+    const rgb = [1, 3, 5].map((i) => parseInt(String(l.fill || '#000000').slice(i, i + 2), 16)).join(',');
+    ctx.scale(1, l.h / l.w);
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, l.w / 2);
+    g.addColorStop(0, `rgba(${rgb},0.55)`);
+    g.addColorStop(1, `rgba(${rgb},0)`);
+    ctx.fillStyle = g;
+    ctx.fillRect(-l.w / 2, -l.w / 2, l.w, l.w);
+    return c;
+  }
   shapePath(ctx, l);
   if (l.shape === 'ring') {
     const t = l.thickness || 16;
@@ -1124,7 +1248,15 @@ export function shapeCanvas(l, make = makeCanvas) {
     ctx.stroke();
   }
   ctx.fillStyle = l.fill;
+  ctx.globalAlpha = l.shape === 'tape' ? 0.85 : 1;
   ctx.fill();
+  ctx.globalAlpha = 1;
+  if (l.shape === 'paper') {
+    const f = paperFold(l);
+    polygon(ctx, [[l.w / 2, l.h / 2 - f], [l.w / 2 - f, l.h / 2 - f], [l.w / 2 - f, l.h / 2]]);
+    ctx.fillStyle = 'rgba(0,0,0,0.14)';
+    ctx.fill();
+  }
   if (l.shape === 'tag') {
     const { hole } = tagParts(l);
     ctx.save();
@@ -1141,6 +1273,6 @@ export function shapeCanvas(l, make = makeCanvas) {
       ctx.stroke();
     }
   }
-  if ((l.shape === 'burst' || l.shape === 'tag') && l.text) shapeWords(ctx, l);
+  if (WORDS_SHAPES.includes(l.shape) && l.text) shapeWords(ctx, l);
   return c;
 }

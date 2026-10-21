@@ -19,6 +19,9 @@ export const LAYOUTS = [
   { key: 'center', label: 'Title only' },
   // Evoni's collage (2026-10-21): checklist, Lala, the script headline, the pieces.
   { key: 'come-style-me', label: 'Come Style Me' },
+  // The redesign's layouts (Evoni, 2026-10-21): the checklist large; JustAWoman (before) and Lala (after).
+  { key: 'checklist-focus', label: 'Checklist focus' },
+  { key: 'before-after', label: 'Before/After' },
 ];
 
 // The LalaVerse palette for the accent (the show's name, the badge, the

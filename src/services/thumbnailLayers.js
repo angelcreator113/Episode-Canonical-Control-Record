@@ -55,7 +55,7 @@ const WIDTH = 1280;
 const HEIGHT = 720;
 const MAX_LAYERS = 24;
 const KINDS = Object.freeze(['image', 'shade', 'text', 'badge', 'checklist', 'shape']);
-const SHAPES = Object.freeze(['arrow', 'ring', 'burst', 'sparkle', 'tag']);
+const SHAPES = Object.freeze(['arrow', 'ring', 'burst', 'sparkle', 'tag', 'tape', 'paper', 'shadow']);
 const MAX_ROWS = 6;
 const HEX = /^#[0-9a-f]{6}$/i;
 
@@ -67,6 +67,9 @@ const FONTS = Object.freeze({
   sans: { family: 'Thumb Sans', weight: 'bold', file: 'stylesheet/DMSans-Bold.ttf' },
   script: { family: 'Thumb Script', weight: 'normal', file: 'stylesheet/GreatVibes-Regular.ttf' },
   hand: { family: 'Thumb Hand', weight: 'bold', file: 'documents/Caveat-SemiBold.ttf' },
+  // The redesign's fonts (Evoni, 2026-10-21; OFL, static Bold).
+  playfair: { family: 'Thumb Playfair', weight: 'bold', file: 'stylesheet/PlayfairDisplay-Bold.ttf' },
+  montserrat: { family: 'Thumb Montserrat', weight: 'bold', file: 'stylesheet/Montserrat-Bold.ttf' },
 });
 
 let fontsReady = false;
@@ -143,6 +146,8 @@ function readLayers(body, allowedUrl) {
         shadow: Boolean(l.shadow),
         cardColor: hex(l.cardColor, '#FFFFFF'),
         clearWhite: Boolean(l.clearWhite),
+        // Points of blur (Evoni, 2026-10-21 redesign: a soft background).
+        blur: Math.round(num(l.blur, 0, 40, 0)),
       };
     }
     if (l.kind === 'shade') {
@@ -162,7 +167,7 @@ function readLayers(body, allowedUrl) {
         stroke: HEX.test(String(l.stroke || '')) ? String(l.stroke).toUpperCase() : null,
         strokeWidth: Math.round(num(l.strokeWidth, 0, 24, 6)),
         thickness: Math.round(num(l.thickness, 4, 60, 16)),
-        text: str(l.text, 16),
+        text: str(l.text, l.shape === 'paper' ? 60 : 16),
         font: pick(l.font, Object.keys(FONTS), 'sans'),
         color: hex(l.color, '#FFFFFF'),
       };
@@ -399,25 +404,62 @@ function clearWhiteEdges(d, w, h) {
   }
 }
 
+/**
+ * A box blur of radius r on RGBA pixels, three times across and down (close
+ * to a Gaussian), edges held. Whole numbers only, so the editor's copy gives
+ * the same pixels.
+ */
+function boxBlur(d, w, h, r) {
+  if (r < 1) return;
+  const tmp = new Uint8ClampedArray(d.length);
+  const n = r * 2 + 1;
+  const pass = (src, dst, len, lines, at) => {
+    for (let line = 0; line < lines; line += 1) {
+      for (let c = 0; c < 4; c += 1) {
+        const v = (i) => src[at(line, Math.min(len - 1, Math.max(0, i))) + c];
+        let sum = 0;
+        for (let i = -r; i <= r; i += 1) sum += v(i);
+        for (let i = 0; i < len; i += 1) {
+          dst[at(line, i) + c] = Math.round(sum / n);
+          sum += v(i + r + 1) - v(i - r);
+        }
+      }
+    }
+  };
+  for (let k = 0; k < 3; k += 1) {
+    pass(d, tmp, w, h, (y, x) => (y * w + x) * 4);
+    pass(tmp, d, h, w, (x, y) => (y * w + x) * 4);
+  }
+}
+
+/** The scale a picture is drawn at in its box (cover fills it, contain fits it). */
+const drawnScale = (img, l) => (l.fit === 'cover' ? Math.max(l.w / img.width, l.h / img.height) : Math.min(l.w / img.width, l.h / img.height));
+
 function adjustedPicture(img, l, makeCanvas) {
-  if (!l.flipX && !l.brightness && !l.contrast && !l.clearWhite) return img;
-  const c = makeCanvas(img.width, img.height);
+  if (!l.flipX && !l.brightness && !l.contrast && !l.clearWhite && !l.blur) return img;
+  // A blurred picture is worked at the size it is drawn (no finer is seen), so the blur is in points.
+  const k = l.blur ? Math.min(1, drawnScale(img, l)) : 1;
+  const w = Math.max(1, Math.round(img.width * k));
+  const h = Math.max(1, Math.round(img.height * k));
+  const c = makeCanvas(w, h);
   const cx = c.getContext('2d');
   if (l.flipX) {
-    cx.translate(img.width, 0);
+    cx.translate(w, 0);
     cx.scale(-1, 1);
   }
-  cx.drawImage(img, 0, 0);
-  if (l.brightness || l.contrast || l.clearWhite) {
-    const data = cx.getImageData(0, 0, img.width, img.height);
+  cx.drawImage(img, 0, 0, w, h);
+  if (l.brightness || l.contrast || l.clearWhite || l.blur) {
+    const data = cx.getImageData(0, 0, w, h);
     const d = data.data;
     // The white is found before the tone changes it.
-    if (l.clearWhite) clearWhiteEdges(d, img.width, img.height);
+    if (l.clearWhite) clearWhiteEdges(d, w, h);
     for (let i = 0; i < d.length && (l.brightness || l.contrast); i += 4) {
       d[i] = toneValue(d[i], l.brightness, l.contrast);
       d[i + 1] = toneValue(d[i + 1], l.brightness, l.contrast);
       d[i + 2] = toneValue(d[i + 2], l.brightness, l.contrast);
     }
+    // One point is k / drawnScale working pixels.
+    if (l.blur) boxBlur(d, w, h, Math.round((l.blur * k) / drawnScale(img, l)));
     cx.putImageData(data, 0, 0);
   }
   return c;
@@ -664,10 +706,29 @@ const tagParts = (l) => ({
   words: { x0: -l.w / 2 + l.h * 0.5, x1: l.w / 2 - l.h * 0.15 },
 });
 
+/** Tape's torn ends: five teeth down each end. */
+const TAPE_TEETH = 5;
+const tapePoints = (w, h) => {
+  const tooth = Math.min(h * 0.12, w * 0.05);
+  const step = h / (TAPE_TEETH * 2);
+  const end = (x, dir) => [...Array(TAPE_TEETH * 2 + 1)].map((_, i) => [x + (i % 2 ? dir * tooth : 0), -h / 2 + i * step]);
+  return [...end(w / 2, -1), ...end(-w / 2, 1).reverse()];
+};
+/** Paper's folded corner (bottom right). */
+const paperFold = (l) => Math.min(l.w, l.h) * 0.14;
+
 /** The shape's outline, centred on the origin (the ring is drawn as a line, not filled). */
 function shapePath(ctx, l) {
   const { w, h } = l;
-  if (l.shape === 'arrow') {
+  if (l.shape === 'tape') {
+    polygon(ctx, tapePoints(w, h));
+  } else if (l.shape === 'paper') {
+    const f = paperFold(l);
+    polygon(ctx, [[-w / 2, -h / 2], [w / 2, -h / 2], [w / 2, h / 2 - f], [w / 2 - f, h / 2], [-w / 2, h / 2]]);
+  } else if (l.shape === 'shadow') {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2);
+  } else if (l.shape === 'arrow') {
     const head = Math.min(w * 0.4, h * 0.9);
     const shaft = h * 0.36;
     polygon(ctx, [[-w / 2, -shaft / 2], [w / 2 - head, -shaft / 2], [w / 2 - head, -h / 2], [w / 2, 0],
@@ -707,6 +768,17 @@ function shapeCanvas(l, makeCanvas) {
   const ctx = c.getContext('2d');
   ctx.translate(m + l.w / 2, m + l.h / 2);
   ctx.lineJoin = 'round';
+  if (l.shape === 'shadow') {
+    // A soft shadow to stand a piece on: the colour fading out to its edge.
+    const rgb = [1, 3, 5].map((i) => parseInt(l.fill.slice(i, i + 2), 16)).join(',');
+    ctx.scale(1, l.h / l.w);
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, l.w / 2);
+    g.addColorStop(0, `rgba(${rgb},0.55)`);
+    g.addColorStop(1, `rgba(${rgb},0)`);
+    ctx.fillStyle = g;
+    ctx.fillRect(-l.w / 2, -l.w / 2, l.w, l.w);
+    return c;
+  }
   shapePath(ctx, l);
   if (l.shape === 'ring') {
     if (l.stroke && l.strokeWidth) {
@@ -725,7 +797,16 @@ function shapeCanvas(l, makeCanvas) {
     ctx.stroke();
   }
   ctx.fillStyle = l.fill;
+  // Tape is a little see-through.
+  ctx.globalAlpha = l.shape === 'tape' ? 0.85 : 1;
   ctx.fill();
+  ctx.globalAlpha = 1;
+  if (l.shape === 'paper') {
+    const f = paperFold(l);
+    polygon(ctx, [[l.w / 2, l.h / 2 - f], [l.w / 2 - f, l.h / 2 - f], [l.w / 2 - f, l.h / 2]]);
+    ctx.fillStyle = 'rgba(0,0,0,0.14)';
+    ctx.fill();
+  }
   if (l.shape === 'tag') {
     const { hole } = tagParts(l);
     ctx.save();
@@ -742,7 +823,7 @@ function shapeCanvas(l, makeCanvas) {
       ctx.stroke();
     }
   }
-  if ((l.shape === 'burst' || l.shape === 'tag') && l.text) shapeWords(ctx, l);
+  if (['burst', 'tag', 'paper'].includes(l.shape) && l.text) shapeWords(ctx, l);
   return c;
 }
 
@@ -752,6 +833,7 @@ function shapeWordsBox(l) {
     const { words } = tagParts(l);
     return { x: (words.x0 + words.x1) / 2, w: words.x1 - words.x0, h: l.h * 0.7 };
   }
+  if (l.shape === 'paper') return { x: 0, w: l.w * 0.8, h: l.h * 0.72 };
   return { x: 0, w: l.w * 0.62, h: l.h * 0.5 };
 }
 
@@ -856,5 +938,5 @@ function fontFile(key) {
 
 module.exports = {
   WIDTH, HEIGHT, MAX_LAYERS, MAX_ROWS, KINDS, SHAPES, FONTS, LINE_HEIGHT, LayerError,
-  readLayers, wrapWords, fitText, spaced, checklistRows, renderLayers, fontFile, toneValue, stickerMargin, curveLayout, textEffect, wordsMargin, fancyWords, shapeMargin, shapeWordsBox,
+  readLayers, wrapWords, fitText, spaced, checklistRows, renderLayers, fontFile, toneValue, boxBlur, stickerMargin, curveLayout, textEffect, wordsMargin, fancyWords, shapeMargin, shapeWordsBox,
 };
