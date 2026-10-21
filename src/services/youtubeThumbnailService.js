@@ -22,11 +22,14 @@
 
 const sharp = require('sharp');
 const layers = require('./thumbnailLayers');
+const { readDocuments } = require('./eventDocumentsService');
+const { readLogo } = require('./showLogoService');
+const { EPISODE_EVENT_ID_SQL } = require('../utils/episodeEventSql');
 const { PutObjectCommand, S3Client } = require('@aws-sdk/client-s3');
 
 const WIDTH = 1280;
 const HEIGHT = 720;
-const LAYOUTS = Object.freeze(['lala-left', 'lala-right', 'center']);
+const LAYOUTS = Object.freeze(['lala-left', 'lala-right', 'center', 'come-style-me']);
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 15000;
 const { ASSET_BUCKET: BUCKET, requireAssetBucket } = require('./assetBucket');
@@ -319,6 +322,8 @@ async function sources(sequelize, episodeId) {
     cutouts: (cutouts || []).filter((c) => allowedImageUrl(c.url)).map((c) => ({ id: c.id, url: c.url, label: c.name })),
     poses,
     folders: pictureFolders({ angles, cover: show?.cover_image_url, poses, outfit, library }),
+    // What the "Come Style Me" layout fills in (Evoni, 2026-10-21).
+    suggest: await layoutSuggestions(sequelize, episode.id, outfit, show),
     // The layers: the show's template (null until one is saved) and this episode's draft.
     template: readTemplate(show?.metadata?.youtube_thumbnail?.template),
     draft: await getDraft(sequelize, episode.id),
@@ -385,6 +390,50 @@ function pictureFolders({ angles = [], cover = null, poses = { lala: [], justawo
     { key: 'documents', label: 'Documents', items: docs.filter(ok).map(({ url, label }) => ({ url, label })) },
   ];
   return tree.map(prune).filter(Boolean);
+}
+
+const FALLBACK_CHECKLIST = ['Outfit', 'Accessories', 'Hair', 'Vibe'];
+
+/**
+ * What the "Come Style Me" layout fills in for an episode (Evoni,
+ * 2026-10-21; all of it editable before saving):
+ *   checklist: 3-4 rows, ticked. The slots of the episode's event's shopping
+ *     list (the episode's event by the one rule, utils/episodeEventSql;
+ *     "dress", "shoes", ...); else
+ *     the outfit's categories with Hair and Vibe; else Outfit,
+ *     Accessories, Hair, Vibe.
+ *   edition: "<main piece> Edition" (the outfit's dress, else its first
+ *     piece; else the event's theme), or null.
+ *   pieces: up to four of the outfit's pictures, for the photo cards.
+ *   logoUrl: the show's logo (showLogoService), or null.
+ */
+async function layoutSuggestions(sequelize, episodeId, outfit = [], show = null) {
+  let event = null;
+  try {
+    const [[row]] = await sequelize.query(
+      `SELECT theme, canon_consequences FROM world_events WHERE id = ${EPISODE_EVENT_ID_SQL} LIMIT 1`,
+      { replacements: { episodeId } });
+    event = row || null;
+  } catch (err) {
+    console.error('[YouTubeThumbnail] the episode\'s event did not read; no shopping list for the checklist:', err.message);
+  }
+  const slots = (readDocuments(event).shopping_list?.items || [])
+    .map((it) => titleCase(it?.slot))
+    .filter((s) => s && !/^Item \d+$/.test(s));
+  const fromOutfit = outfit.map((w) => titleCase(w.category)).filter(Boolean);
+  const pickRows = (list) => [...new Set(list)].slice(0, 4);
+  let rows = pickRows(slots);
+  if (rows.length < 3) rows = pickRows([...fromOutfit, 'Hair', 'Vibe']);
+  if (rows.length < 3) rows = FALLBACK_CHECKLIST;
+  const main = outfit.find((w) => /dress/i.test(w.category || '')) || outfit[0] || null;
+  const edition = main?.label ? `${titleCase(main.label)} Edition` : (event?.theme ? `${titleCase(event.theme)} Edition` : null);
+  const logo = readLogo(show?.metadata);
+  return {
+    checklist: rows.map((text) => ({ text, checked: true })),
+    edition: edition ? edition.slice(0, 60) : null,
+    pieces: outfit.filter((w) => allowedImageUrl(w.url)).slice(0, 4).map(({ url, label }) => ({ url, label })),
+    logoUrl: logo && allowedImageUrl(logo.url) ? logo.url : null,
+  };
 }
 
 /** The show's pictures in the Asset library (newest first, at most 200): { url, label, asset_group, asset_type }. */
@@ -661,7 +710,7 @@ async function removeSaved(sequelize, episodeId, thumbnailId) {
 
 module.exports = {
   WIDTH, HEIGHT, LAYOUTS, DEFAULT_STYLE, ThumbnailError,
-  readStyle, readSpec, allowedImageUrl, fetchImage, layoutBoxes, duoPositions, readyPoses, pictureFolders, libraryImages, outfitImages, titleSize, wrapTitle, fitTitle, kickerSize, textSvg, shadeSvg,
+  readStyle, readSpec, allowedImageUrl, fetchImage, layoutBoxes, duoPositions, readyPoses, pictureFolders, libraryImages, outfitImages, layoutSuggestions, titleSize, wrapTitle, fitTitle, kickerSize, textSvg, shadeSvg,
   render, sources, saveStyle, saveAsPrimary, listSaved, makePrimary, removeSaved,
   readTemplate, renderSpec, getDraft, saveDraft, uploadPicture,
 };

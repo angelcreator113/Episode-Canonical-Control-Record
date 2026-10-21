@@ -7,9 +7,9 @@
  * (lib/thumbnailLayers: the same fonts, fitting and picture fit).
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { Stage, Layer, Group, Rect, Text, Image as KImage, Transformer } from 'react-konva';
+import { Stage, Layer, Group, Rect, Text, Line, Image as KImage, Transformer } from 'react-konva';
 import {
-  WIDTH, HEIGHT, LINE_HEIGHT, FONTS, fitText, measurer, fitPicture, boxFromNode, layerName,
+  WIDTH, HEIGHT, LINE_HEIGHT, FONTS, fitText, measurer, fitPicture, boxFromNode, layerName, checklistRows,
 } from '../../lib/thumbnailLayers';
 
 function usePicture(src) {
@@ -102,7 +102,33 @@ function Badge({ l }) {
   );
 }
 
-const BODY = { image: Picture, text: Words, badge: Badge };
+/** Rows of a tick box and words (the server's drawChecklist). */
+function Checklist({ l }) {
+  const items = l.items || [];
+  const { rowH, box, textX, size } = checklistRows(l, measurer(l.font));
+  const f = FONTS[l.font] || FONTS.hand;
+  return (
+    <>
+      <Rect width={l.w} height={l.h} fill="rgba(0,0,0,0.001)" />
+      {items.map((it, i) => {
+        const cy = rowH * (i + 0.5);
+        return (
+          <React.Fragment key={i}>
+            <Rect x={0} y={cy - box / 2} width={box} height={box} stroke={l.color} strokeWidth={Math.max(2, Math.round(box * 0.09))} lineJoin="round" />
+            {it.checked && (
+              <Line points={[box * 0.18, cy, box * 0.42, cy + box * 0.28, box * 0.95, cy - box * 0.45]} stroke={l.color}
+                strokeWidth={Math.max(3, Math.round(box * 0.14))} lineCap="round" lineJoin="round" />
+            )}
+            <Text text={it.text} x={textX} y={cy - rowH / 2} width={l.w - textX} height={rowH} verticalAlign="middle"
+              fontFamily={f.family} fontStyle={f.weight === 'bold' ? 'bold' : 'normal'} fontSize={size} fill={l.color} />
+          </React.Fragment>
+        );
+      })}
+    </>
+  );
+}
+
+const BODY = { image: Picture, text: Words, badge: Badge, checklist: Checklist };
 
 export default function ThumbnailCanvas({ spec, selectedId, onSelect, onChange, fontsTick = 0 }) {
   const wrapRef = useRef(null);

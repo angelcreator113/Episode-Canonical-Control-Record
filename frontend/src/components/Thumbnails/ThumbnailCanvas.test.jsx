@@ -19,7 +19,7 @@ vi.mock('react-konva', () => {
     return <div data-konva="Group" data-id={props.id} onMouseDown={() => props.onMouseDown?.()}>{children}</div>;
   };
   const Transformer = React.forwardRef(() => null);
-  return { Stage: Plain('Stage'), Layer: Plain('Layer'), Group, Rect: Plain('Rect'), Text: Plain('Text'), Image: Plain('Image'), Transformer };
+  return { Stage: Plain('Stage'), Layer: Plain('Layer'), Group, Rect: Plain('Rect'), Text: Plain('Text'), Line: Plain('Line'), Image: Plain('Image'), Transformer };
 });
 
 import ThumbnailCanvas from './ThumbnailCanvas';

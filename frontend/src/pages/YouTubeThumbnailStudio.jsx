@@ -205,6 +205,40 @@ function LayersList({ spec, selectedId, onSelect, onChange }) {
 const roleText = (spec, role) => layerOf(spec, role)?.text || '';
 const roleSrc = (spec, role) => layerOf(spec, role)?.src || null;
 
+/** A head-to-toe pose for Come Style Me's full outfit: her back pose, else her front; not the main one. */
+function outfitPose(poses, mainUrl) {
+  for (const pose of ['back', 'front', 'side']) {
+    const list = (poses || []).filter((p) => p.pose === pose && p.url !== mainUrl);
+    const pick = list.find((p) => p.isDefault) || list[0];
+    if (pick) return pick.url;
+  }
+  return null;
+}
+
+/** The checklist's rows: a tick and a few words each; add one (six at most), remove one. */
+function ChecklistEditor({ layer, onChange }) {
+  const items = layer.items || [];
+  const set = (i, patch) => onChange({ items: items.map((it, j) => (j === i ? { ...it, ...patch } : it)) });
+  return (
+    <fieldset className="yts-field" data-testid="yts-checklist">
+      <legend className="yts-label">Checklist</legend>
+      <ul className="yts-checklist">
+        {items.map((it, i) => (
+          <li key={i}>
+            <input type="checkbox" checked={it.checked} onChange={(e) => set(i, { checked: e.target.checked })} aria-label={`Tick ${it.text || `row ${i + 1}`}`} />
+            <input className="yts-input" value={it.text} maxLength={40} onChange={(e) => set(i, { text: e.target.value })} aria-label={`Checklist row ${i + 1}`} />
+            <button type="button" className="yts-icon-btn is-danger" onClick={() => onChange({ items: items.filter((_, j) => j !== i) })}
+              aria-label={`Remove checklist row ${i + 1}`} title="Remove"><Trash2 size={15} aria-hidden /></button>
+          </li>
+        ))}
+      </ul>
+      {items.length < 6 && (
+        <button type="button" className="yts-btn" onClick={() => onChange({ items: [...items, { text: 'New', checked: true }] })}>Add a row</button>
+      )}
+    </fieldset>
+  );
+}
+
 export default function YouTubeThumbnailStudio() {
   const [params, setParams] = useSearchParams();
   const [shows, setShows] = useState([]);
@@ -248,15 +282,25 @@ export default function YouTubeThumbnailStudio() {
   }, [showId]);
 
   /** This episode's words and pictures, as a template or a layout fills them. */
-  const episodeContent = useCallback((src) => ({
-    ...episodeWords(src.episode, src.show),
-    backgroundUrl: src.backgrounds?.[0]?.url || null,
+  const episodeContent = useCallback((src) => {
     // This episode's starred Lala pose first (her look changes each
     // episode), then the show's saved Lala, then the Asset Library's.
-    lalaUrl: defaultPose(src.poses?.lala)?.url || src.style?.lalaUrl || src.cutouts?.[0]?.url || null,
-    // JustAWoman joins only when picked.
-    jawUrl: null,
-  }), []);
+    const lalaUrl = defaultPose(src.poses?.lala)?.url || src.style?.lalaUrl || src.cutouts?.[0]?.url || null;
+    return {
+      ...episodeWords(src.episode, src.show),
+      backgroundUrl: src.backgrounds?.[0]?.url || null,
+      lalaUrl,
+      // JustAWoman joins only when picked.
+      jawUrl: null,
+      // Come Style Me: the full outfit is another of Lala's poses (her back
+      // or front), the checklist, edition and pieces come from the episode.
+      outfitUrl: outfitPose(src.poses?.lala, lalaUrl),
+      checklist: src.suggest?.checklist || [],
+      edition: src.suggest?.edition || null,
+      pieces: src.suggest?.pieces || [],
+      logoUrl: src.suggest?.logoUrl || null,
+    };
+  }, []);
 
   /** Where an episode starts: the show's template, else the show's layout. */
   const startingSpec = useCallback((src, lk) => (src.template
@@ -355,9 +399,19 @@ export default function YouTubeThumbnailStudio() {
 
   const pickLayout = (layout) => {
     if (edited.current && !window.confirm('Start again from this layout? Moved, resized and turned layers go back to where the layout puts them.')) return;
+    // What is on the thumbnail now, and the episode's own for what is not.
+    const own = sources ? episodeContent(sources) : {};
+    const pieces = ['piece-1', 'piece-2', 'piece-3', 'piece-4'].map((r) => layerOf(spec, r)).filter(Boolean).map((l) => ({ url: l.src, label: l.name }));
     const content = {
-      title: roleText(spec, 'title'), kicker: roleText(spec, 'kicker'), badge: roleText(spec, 'badge'),
+      ...own,
+      title: roleText(spec, 'title') || own.title, kicker: roleText(spec, 'kicker') || own.kicker,
+      badge: roleText(spec, 'badge').replace(/^EPISODE\b/i, 'EP') || own.badge,
       backgroundUrl: roleSrc(spec, 'background'), lalaUrl: roleSrc(spec, 'lala'), jawUrl: roleSrc(spec, 'jaw'),
+      outfitUrl: roleSrc(spec, 'outfit') || own.outfitUrl,
+      checklist: layerOf(spec, 'checklist')?.items || own.checklist,
+      edition: roleText(spec, 'edition') || own.edition,
+      pieces: pieces.length ? pieces : own.pieces,
+      headline: roleText(spec, 'headline') || undefined,
     };
     const lk = { ...look, layout };
     setLook(lk);
@@ -561,10 +615,18 @@ export default function YouTubeThumbnailStudio() {
               </div>
             </fieldset>
 
-            <label className="yts-field">
-              <span className="yts-label">Title</span>
-              <input className="yts-input" value={roleText(spec, 'title')} maxLength={160} onChange={(e) => setRole('title', e.target.value)} aria-label="Title" />
-            </label>
+            {layerOf(spec, 'headline') && (
+              <label className="yts-field">
+                <span className="yts-label">Headline</span>
+                <input className="yts-input" value={roleText(spec, 'headline')} maxLength={160} onChange={(e) => edit((s) => updateLayer(s, 'headline', { text: e.target.value }))} aria-label="Headline" />
+              </label>
+            )}
+            {layerOf(spec, 'title') && (
+              <label className="yts-field">
+                <span className="yts-label">Title</span>
+                <input className="yts-input" value={roleText(spec, 'title')} maxLength={160} onChange={(e) => setRole('title', e.target.value)} aria-label="Title" />
+              </label>
+            )}
             <div className="yts-row">
               <label className="yts-field">
                 <span className="yts-label">Show name line</span>
@@ -575,6 +637,16 @@ export default function YouTubeThumbnailStudio() {
                 <input className="yts-input" value={roleText(spec, 'badge')} maxLength={16} onChange={(e) => setRole('badge', e.target.value)} aria-label="Badge" />
               </label>
             </div>
+
+            {layerOf(spec, 'edition') && (
+              <label className="yts-field">
+                <span className="yts-label">Edition label</span>
+                <input className="yts-input" value={roleText(spec, 'edition')} maxLength={160} onChange={(e) => edit((s) => updateLayer(s, 'edition', { text: e.target.value }))} aria-label="Edition label" />
+              </label>
+            )}
+            {layerOf(spec, 'checklist') && (
+              <ChecklistEditor layer={layerOf(spec, 'checklist')} onChange={(patch) => edit((s) => updateLayer(s, layerOf(s, 'checklist').id, patch))} />
+            )}
 
             <div className="yts-actions">
               <button type="button" className="yts-btn" onClick={() => addAndPick((s) => addText(s))} data-testid="yts-add-text">
