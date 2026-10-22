@@ -346,3 +346,24 @@
   /* The app's breadcrumb already says Template Studio / YouTube Thumbnails. */
   .yts-banner.is-compact .yts-kicker { display: none; }
 }
+
+/* Messages float at the foot of the screen (Evoni, 2026-10-22 layout list):
+   the page under them no longer jumps; above the layer sheet when it is up. */
+.yts-toast { position: fixed; left: 50%; bottom: 16px; z-index: 70; width: min(560px, calc(100% - 24px)); transform: translateX(-50%); flex-wrap: nowrap; box-shadow: var(--shadow-lg); }
+.yts-toast > span { flex: 1; min-width: 0; }
+.yts-toast .yts-icon-btn { flex: none; background: transparent; border-color: transparent; color: inherit; }
+.yts.has-sheet .yts-toast { bottom: calc(50dvh + 12px); }
+
+/* A long Layers list: the top six until "Show all". */
+.yts-more-layers { align-self: flex-start; min-height: 32px; padding: 4px 10px; border: none; border-radius: 8px; background: transparent; color: var(--accent-dark); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.yts-more-layers:hover, .yts-more-layers:focus-visible { background: var(--accent-subtle); }
+
+/* Versions and saved thumbnails under the canvas, each a strip that scrolls sideways. */
+.yts-strip { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.yts-strip .yts-template-grid, .yts-strip .yts-history-grid { display: flex; overflow-x: auto; padding-bottom: 6px; scroll-snap-type: x proximity; scrollbar-width: thin; }
+.yts-strip .yts-template-grid > li, .yts-strip .yts-history-grid > li { flex: 0 0 200px; scroll-snap-align: start; }
+
+/* On a wide screen the canvas stays in view while the page scrolls beside it. */
+@media (min-width: 1101px) and (min-height: 760px) {
+  .yts-stage { position: sticky; top: 12px; z-index: 5; }
+}
