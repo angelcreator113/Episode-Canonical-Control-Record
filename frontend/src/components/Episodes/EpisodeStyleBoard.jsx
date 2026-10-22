@@ -1,25 +1,27 @@
 /**
  * EpisodeStyleBoard — the top of the episode Overview (Evoni's "Episode
- * Style" mock, 2026-10-16): the event, its dress code, the look's goals and
- * rewards, the mood board and inspiration, the wardrobe slots, the look,
- * style notes and quick tools, as one pink-and-gold board.
+ * Style" mock, 2026-10-16): the event, its dress code, the look's goals,
+ * the mood board and inspiration, the wardrobe slots, the look and style
+ * notes, as one pink-and-gold board. Since the shorter Overview (Evoni,
+ * 2026-10-22 layout list) it is the Overview's Style column: the rewards
+ * live in the Stakes band, coins after the episode in the tiles, and the
+ * quick tools were the tabs over again.
  *
  * Every card reads data the episode already has: the source event and the
- * locked outfit (EpisodeOverviewTab loads them), the money plan, and the
+ * locked outfit (EpisodeOverviewTab loads them) and the
  * episode's Lookbook (the Style Page's data, GET /episodes/:id/lookbook;
  * the style sheet is not read here, it inlines every image). Nothing is
  * invented: a card with no data says so and opens the tab where it is made.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  CalendarHeart, Shirt, Target, Trophy, Images, Lightbulb, Gem, ShoppingBag, Sparkles, Shuffle,
-  Wind, Hand, Footprints, NotebookPen, WandSparkles, Plus, Check, Palette, Clapperboard, Coins,
+  CalendarHeart, Shirt, Target, Images, Lightbulb, Gem, ShoppingBag, Sparkles,
+  Wind, Hand, Footprints, NotebookPen, Plus, Check, Palette,
 } from 'lucide-react';
 import { lookbookApi } from '../../lib/lookbookApi';
 import { atHandle } from '../../pages/feed/feedConstants';
 import { resolveEventVenueAndDate } from '../../utils/eventReadiness';
 import { gameSlotFor } from '../../lib/closetGrouping';
-import { coinsAfterPlan } from '../../lib/episodeOverview';
 import './EpisodeStyleBoard.css';
 
 const asList = (v) => {
@@ -89,7 +91,7 @@ function Card({ icon: Icon, title, aside, className = '', children, testid }) {
   );
 }
 
-export default function EpisodeStyleBoard({ episode, source, linkedEvents = [], outfit, money, onOpenTab }) {
+export default function EpisodeStyleBoard({ episode, source, linkedEvents = [], outfit, onOpenTab }) {
   const [lookbook, setLookbook] = useState(undefined);
 
   useEffect(() => {
@@ -107,7 +109,6 @@ export default function EpisodeStyleBoard({ episode, source, linkedEvents = [], 
   const when = [place.eventDate, place.eventTime].filter(Boolean).join(' · ');
   const guests = asList(ev?.canon_consequences?.automation?.guest_profiles);
   const keywords = asList(ev?.dress_code_keywords);
-  const rewards = asObject(ev?.rewards);
   const invitation = linked?.invitation_url || source?.invitationAsset?.s3_url_processed || source?.invitationAsset?.s3_url_raw || null;
   const venueStill = linked?.sceneSet?.base_still_url || null;
 
@@ -120,12 +121,10 @@ export default function EpisodeStyleBoard({ episode, source, linkedEvents = [], 
     .flatMap((k) => lookbook?.images?.[k] || []).map(imgOf).filter(Boolean).slice(0, 5);
   const inspo = (lookbook?.images?.inspo || []).map(imgOf).filter(Boolean).slice(0, 9);
   const pieces = Array.isArray(outfit) ? outfit : [];
-  const coins = money ? coinsAfterPlan(money) : null;
   const beauty = asObject(lookbook?.beauty_notes);
   const go = (tab) => onOpenTab?.(tab);
 
   const fields = [
-    ['Episode', episode?.title || '—'],
     ['Event', ev?.name],
     ['Venue', place.venueName],
     ['Date & time', when],
@@ -137,7 +136,7 @@ export default function EpisodeStyleBoard({ episode, source, linkedEvents = [], 
   return (
     <div className="esb" data-testid="episode-style-board">
       <div className="esb-row esb-row-top">
-        <Card icon={CalendarHeart} title="Episode & event" className="esb-event" testid="esb-event">
+        <Card icon={CalendarHeart} title="The event" className="esb-event is-wide" testid="esb-event">
           <div className="esb-event-body">
             <div className="esb-frame esb-event-img">
               {invitation || venueStill ? <img src={invitation || venueStill} alt={ev?.name ? `${ev.name} invitation` : ''} /> : <span className="esb-empty">No invitation yet</span>}
@@ -151,7 +150,7 @@ export default function EpisodeStyleBoard({ episode, source, linkedEvents = [], 
               ))}
             </dl>
           </div>
-          {!ev && <p className="esb-note">No event linked to this episode yet; link one in the Identity band below.</p>}
+          {!ev && <p className="esb-note">No event linked to this episode yet; link one under Events in the Story column.</p>}
         </Card>
 
         <Card icon={Shirt} title="Dress code" testid="esb-dress">
@@ -174,16 +173,6 @@ export default function EpisodeStyleBoard({ episode, source, linkedEvents = [], 
             ))}
           </ul>
           <button type="button" className="esb-link" onClick={() => go('lookbook')}>Full readiness on the Style Page</button>
-        </Card>
-
-        <Card icon={Trophy} title="Rewards" testid="esb-rewards">
-          <ul className="esb-rewards">
-            {[['Reputation', rewards.reputation], ['Trust', rewards.brand_trust], ['Influence', rewards.influence]].map(([label, n]) => (
-              <li key={label}><span>{label}</span><strong>{Number(n) > 0 ? `+${n}` : '—'}</strong></li>
-            ))}
-            <li><span><Coins size={15} aria-hidden /> Prime coins after</span><strong>{coins?.value ?? '—'}</strong></li>
-          </ul>
-          <p className="esb-note">Paid on a Slay or Pass.</p>
         </Card>
       </div>
 
@@ -211,7 +200,7 @@ export default function EpisodeStyleBoard({ episode, source, linkedEvents = [], 
           ) : <p className="esb-note">No inspiration photos yet. Add them on the Style Page.</p>}
         </Card>
 
-        <Card icon={Shirt} title="Wardrobe slots" className="esb-slots-card" testid="esb-slots"
+        <Card icon={Shirt} title="Wardrobe slots" className="esb-slots-card is-wide" testid="esb-slots"
           aside={<span className="esb-count">{required.filter((s) => s.filled).length} / {required.length} required</span>}>
           <ul className="esb-slots">
             {slots.map((s) => (
@@ -256,15 +245,6 @@ export default function EpisodeStyleBoard({ episode, source, linkedEvents = [], 
               </dl>
             </div>
           )}
-        </Card>
-
-        <Card icon={WandSparkles} title="Quick tools" testid="esb-tools">
-          <div className="esb-tools">
-            <button type="button" className="esb-tool" onClick={() => go('lookbook')}><Palette size={20} aria-hidden /> Style Page</button>
-            <button type="button" className="esb-tool" onClick={() => go('wardrobe')}><Shuffle size={20} aria-hidden /> Mix &amp; match</button>
-            <button type="button" className="esb-tool" onClick={() => go('scenes')}><Clapperboard size={20} aria-hidden /> Scenes</button>
-            <button type="button" className="esb-tool" onClick={() => go('money')}><Coins size={20} aria-hidden /> Coins</button>
-          </div>
         </Card>
       </div>
     </div>

@@ -314,6 +314,8 @@ const EpisodeDetail = () => {
       const compact = headerCompactRef.current;
       if (compact !== wasCompact) { wasCompact = compact; switchedAt = performance.now(); }
       const h = el.offsetHeight;
+      // The tabs stick under the header on a phone (Evoni, 2026-10-22 layout list).
+      el.parentElement?.style.setProperty('--ed-head-h', `${h}px`);
       if (!compact && performance.now() - switchedAt > SETTLE_MS) full = h;
       spacer.style.height = `${Math.max(0, full - h)}px`;
       scroller.style.scrollPaddingTop = compact ? `${h + 12}px` : '';
@@ -797,15 +799,15 @@ const EpisodeDetail = () => {
           </ol>
         </nav>
 
-        <div className="eds-hero">
-          <div className={`eds-cover${showCover ? '' : ' is-empty'}`} data-testid="ed-cover">
-            {showCover ? (
+        {/* The slimmer header (Evoni, 2026-10-22 layout list): the episode
+            number once, in the meta line; the cover only once there is a
+            picture, and small. */}
+        <div className={`eds-hero${showCover ? ' has-cover' : ''}`}>
+          {showCover && (
+            <div className="eds-cover" data-testid="ed-cover">
               <img src={coverUrl} alt="" loading="lazy" onError={() => setFailedCover(coverUrl)} />
-            ) : (
-              episodeNumber ? <span className="eds-cover-number" aria-hidden="true">{episodeNumber}</span> : null
-            )}
-            {episodeNumber && <span className="eds-cover-badge" data-testid="ed-cover-badge">Episode {episodeNumber}</span>}
-          </div>
+            </div>
+          )}
 
           <div className="eds-hero-body">
             {episode.show?.name && (
@@ -995,7 +997,7 @@ const EpisodeDetail = () => {
                 {Icon && <Icon size={16} className="ed-tab-icon" aria-hidden="true" />}
                 <span className="ed-tab-label">{t.label}</span>
                 {t.key === 'production' && checksLeft > 0 && (
-                  <span className="ed-tab-badge" data-testid="ed-production-left">{checksLeft} left</span>
+                  <span className="ed-tab-badge" data-testid="ed-production-left" aria-label={`${checksLeft} left`}>{checksLeft}<span className="ed-tab-badge-word"> left</span></span>
                 )}
               </button>
             );
