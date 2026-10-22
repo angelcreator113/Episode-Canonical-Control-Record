@@ -841,6 +841,16 @@ const savedReady = async (sequelize, transaction) => {
   return Boolean(reg && reg.reg);
 };
 
+// The layers a saved thumbnail was drawn from (20261022130000), so one can
+// become the show's template (Evoni, 2026-10-22); until the column exists, none.
+const savedSpecReady = async (sequelize, transaction) => {
+  const [[col]] = await sequelize.query(
+    `SELECT 1 AS present FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'episode_saved_thumbnails' AND column_name = 'spec'`,
+    { transaction });
+  return Boolean(col);
+};
+
 const requireSaved = async (sequelize) => {
   if (!await savedReady(sequelize)) {
     throw new ThumbnailError(503, 'Saved thumbnails need the latest database update (episode_saved_thumbnails)');
@@ -852,7 +862,7 @@ const requireSaved = async (sequelize) => {
  * the episode's current thumbnail; the one before it stays in the list.
  * Returns { id, url, key, type, bytes } (id null before the table exists).
  */
-async function saveAsPrimary(sequelize, episodeId, png) {
+async function saveAsPrimary(sequelize, episodeId, png, spec = null) {
   const file = await forYouTube(png);
   const key = `episodes/${episodeId}/thumbnails/youtube-${Date.now()}.${file.ext}`;
   await getS3().send(new PutObjectCommand({ Bucket: requireAssetBucket(), Key: key, Body: file.buffer, ContentType: file.mime }));
@@ -864,11 +874,12 @@ async function saveAsPrimary(sequelize, episodeId, png) {
         `UPDATE episode_saved_thumbnails SET is_current = false, updated_at = NOW()
           WHERE episode_id = :episodeId AND is_current AND deleted_at IS NULL`,
         { replacements: { episodeId }, transaction });
+      const withSpec = Boolean(spec) && await savedSpecReady(sequelize, transaction);
       [[created]] = await sequelize.query(
-        `INSERT INTO episode_saved_thumbnails (episode_id, url, s3_bucket, s3_key, mime_type, file_size_bytes, width, height, is_current)
-         VALUES (:episodeId, :url, :bucket, :key, :mime, :size, ${WIDTH}, ${HEIGHT}, true)
+        `INSERT INTO episode_saved_thumbnails (episode_id, url, s3_bucket, s3_key, mime_type, file_size_bytes, width, height, is_current${withSpec ? ', spec' : ''})
+         VALUES (:episodeId, :url, :bucket, :key, :mime, :size, ${WIDTH}, ${HEIGHT}, true${withSpec ? ', CAST(:spec AS jsonb)' : ''})
          RETURNING id`,
-        { replacements: { episodeId, url, bucket: BUCKET, key, mime: file.mime, size: file.bytes }, transaction });
+        { replacements: { episodeId, url, bucket: BUCKET, key, mime: file.mime, size: file.bytes, spec: withSpec ? JSON.stringify(spec) : null }, transaction });
     }
     await sequelize.query('UPDATE episodes SET thumbnail_url = :url WHERE id = :episodeId',
       { replacements: { episodeId, url }, transaction });
@@ -985,8 +996,9 @@ async function listUploads(episodeId) {
 /** The episode's saved thumbnails, its current one first, then newest first ([] before the table exists). */
 async function listSaved(sequelize, episodeId) {
   if (!UUID.test(String(episodeId)) || !await savedReady(sequelize)) return [];
+  const withSpec = await savedSpecReady(sequelize);
   const [rows] = await sequelize.query(
-    `SELECT id, url, is_current, width, height, created_at
+    `SELECT id, url, is_current, width, height, created_at${withSpec ? ', spec' : ''}
        FROM episode_saved_thumbnails
       WHERE episode_id = :episodeId AND deleted_at IS NULL
       ORDER BY is_current DESC, created_at DESC, id
@@ -999,6 +1011,7 @@ async function listSaved(sequelize, episodeId) {
     width: r.width,
     height: r.height,
     savedAt: r.created_at,
+    spec: r.spec || null,
   }));
 }
 

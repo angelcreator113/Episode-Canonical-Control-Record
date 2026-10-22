@@ -1072,6 +1072,12 @@ describe('YouTubeThumbnailStudio', () => {
     fireEvent.click(within(jaw).getByTestId('yts-jaw-folder-poses/justawoman/glamour'));
     fireEvent.click(within(jaw).getByTitle('Glamour ★'));
     expect(screen.getByTestId('canvas-jaw')).toBeTruthy();
+    // JustAWoman works like Lala now (Evoni, 2026-10-22): picked shows pressed; clicked again it comes off.
+    expect(within(jaw).getByTitle('Glamour ★').getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(within(jaw).getByTitle('Glamour ★'));
+    expect(screen.queryByTestId('canvas-jaw')).toBeNull();
+    fireEvent.click(within(jaw).getByTitle('Glamour ★'));
+    expect(screen.getByTestId('canvas-jaw')).toBeTruthy();
     fireEvent.click(within(jaw).getByRole('button', { name: /No JustAWoman/ }));
     expect(screen.queryByTestId('canvas-jaw')).toBeNull();
   });
@@ -1173,6 +1179,45 @@ describe('YouTubeThumbnailStudio', () => {
     const order = (el) => [...document.querySelectorAll('section, [data-testid="yts-strip"]')].indexOf(el);
     expect(order(strip)).toBeGreaterThan(order(screen.getByRole('region', { name: 'Editor' })));
     expect(order(strip)).toBeLessThan(order(screen.getByRole('region', { name: 'Layers' })));
+  });
+
+  // Evoni, 2026-10-22: whether the arrangement is kept yet, by the canvas.
+  test('by the canvas: Saving… while a change waits, then Saved with the time; Not saved when it fails', async () => {
+    let finish;
+    youtubeThumbnailsApi.saveDraft.mockImplementation(() => new Promise((r) => { finish = r; }));
+    renderPage();
+    await opened();
+    expect(screen.queryByTestId('yts-keep')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'The Atelier' } });
+    expect(screen.getByTestId('yts-keep').textContent).toBe('Saving…');
+    await waitFor(() => expect(youtubeThumbnailsApi.saveDraft).toHaveBeenCalled(), { timeout: 3000 });
+    await act(async () => { finish({}); });
+    await waitFor(() => expect(screen.getByTestId('yts-keep').textContent.trim()).toMatch(/^Saved \d/));
+    expect(screen.getByTestId('yts-keep').className).toContain('is-saved');
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    youtubeThumbnailsApi.saveDraft.mockRejectedValueOnce(new Error('offline'));
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'The Atelier 2' } });
+    await waitFor(() => expect(screen.getByTestId('yts-keep').textContent).toBe('Not saved'), { timeout: 3000 });
+  });
+
+  test('a saved thumbnail with its layers becomes the show\'s template in one click', async () => {
+    const layers = { version: 2, layers: [{ id: 'title', role: 'title', kind: 'text', text: 'Old one', x: 0, y: 0, w: 100, h: 50 }] };
+    youtubeThumbnailsApi.saved.mockResolvedValue([
+      { id: 's1', url: 'https://b.s3.amazonaws.com/s1.png', isPrimary: true, savedAt: '2026-10-22T10:00:00Z', spec: layers },
+      { id: 's0', url: 'https://b.s3.amazonaws.com/s0.png', isPrimary: false, savedAt: '2026-10-20T10:00:00Z', spec: null },
+    ]);
+    youtubeThumbnailsApi.createTemplate.mockResolvedValue({});
+    youtubeThumbnailsApi.templates.mockResolvedValue([]);
+    youtubeThumbnailsApi.saveStyle.mockResolvedValue({});
+    renderPage();
+    await opened();
+    expect(screen.queryByTestId('yts-saved-template-s0')).toBeNull(); // saved before layers were kept
+    fireEvent.click(await screen.findByTestId('yts-saved-template-s1'));
+    await waitFor(() => expect(youtubeThumbnailsApi.createTemplate).toHaveBeenCalled());
+    const [showId, body] = youtubeThumbnailsApi.createTemplate.mock.calls[0];
+    expect(showId).toBe('show-1');
+    expect(body).toMatchObject({ spec: layers, makeDefault: false, name: expect.stringMatching(/^Saved /) });
+    expect((await screen.findByTestId('yts-toast')).textContent).toContain('made from that saved thumbnail');
   });
 
   test('the grid and the safe zones: toggled on the toolbar, drawn over the canvas only', async () => {
