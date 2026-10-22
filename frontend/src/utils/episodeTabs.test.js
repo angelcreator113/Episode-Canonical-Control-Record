@@ -63,5 +63,10 @@ describe('the tab layout', () => {
     ]);
     expect(pillFor(production, 'beatplan')).toBe('scenes');
     expect(pillFor(production, 'files')).toBe('files');
+    // Evoni, 2026-10-22 (Results layout): the evaluation is part of Summary.
+    const results = EP_TABS.find((t) => t.key === 'results');
+    expect(pillsOf(results).map((s) => s.label)).toEqual(['Summary', 'Story', 'Distribution']);
+    expect(pillFor(results, 'evaluation')).toBe('summary');
+    expect(resolveEpisodeTab('evaluation')).toEqual({ main: 'results', sub: 'evaluation', key: 'results.evaluation' });
   });
 });
