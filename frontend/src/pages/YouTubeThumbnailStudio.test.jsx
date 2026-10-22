@@ -1101,6 +1101,32 @@ describe('YouTubeThumbnailStudio', () => {
     expect(within(screen.getByTestId('yts-ask')).getByText(/Start this episode again/)).toBeTruthy();
   });
 
+  test('once an episode is open the header is one line, with the episode before and after it', async () => {
+    youtubeThumbnailsApi.episodes.mockResolvedValue([
+      { id: 'ep-0', episode_number: 0, title: 'Pilot' }, { id: 'ep-1', episode_number: 1, title: 'Studio by Sable' }, { id: 'ep-2', episode_number: 2, title: 'Gala' },
+    ]);
+    renderPage();
+    await opened();
+    const banner = document.querySelector('.yts-banner');
+    expect(banner.classList.contains('is-compact')).toBe(true);
+    expect(screen.queryByText(/Drag, resize and turn anything/)).toBeNull();
+    const prev = await screen.findByTestId('yts-prev-episode');
+    await waitFor(() => expect(prev.disabled).toBe(false));
+    expect(prev.getAttribute('title')).toBe('Previous: Pilot');
+    expect(screen.getByTestId('yts-next-episode').getAttribute('title')).toBe('Next: Gala');
+    fireEvent.click(screen.getByTestId('yts-next-episode'));
+    await waitFor(() => expect(youtubeThumbnailsApi.sources).toHaveBeenCalledWith('ep-2'));
+    expect(screen.getByLabelText('Episode').value).toBe('ep-2');
+    await waitFor(() => expect(screen.getByTestId('yts-next-episode').disabled).toBe(true));
+  });
+
+  test('with no episode open the header is the full one, without arrows', async () => {
+    renderPage('/template-studio/youtube?show=show-1');
+    expect(await screen.findByText(/Drag, resize and turn anything/)).toBeTruthy();
+    expect(screen.queryByTestId('yts-prev-episode')).toBeNull();
+    expect(document.querySelector('.yts-banner').classList.contains('is-compact')).toBe(false);
+  });
+
   test('the grid and the safe zones: toggled on the toolbar, drawn over the canvas only', async () => {
     renderPage();
     await opened();
@@ -1234,6 +1260,26 @@ describe('YouTubeThumbnailStudio on a phone', () => {
     fireEvent.click(screen.getByTestId('yts-sheet-done'));
     expect(screen.queryByTestId('yts-sheet')).toBeNull();
     expect(document.querySelector('.yts').classList.contains('has-sheet')).toBe(false);
+  });
+
+  test('the settings one section at a time, in tabs under the canvas; Layers first', async () => {
+    renderPage();
+    await opened();
+    const tabs = within(screen.getByTestId('yts-phone-tabs'));
+    expect(tabs.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Layers', 'Layout', 'Text', 'Assets', 'Characters', 'Background', 'Colours']);
+    expect(tabs.getByRole('tab', { name: 'Layers' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByTestId('yts-layers')).toBeTruthy();
+    expect(screen.queryByLabelText('Title')).toBeNull();
+    expect(screen.queryByTestId('yts-lala')).toBeNull();
+    fireEvent.click(tabs.getByRole('tab', { name: 'Text' }));
+    expect(screen.getByLabelText('Title')).toBeTruthy();
+    expect(screen.getByTestId('yts-ai')).toBeTruthy();
+    expect(screen.queryByTestId('yts-layers')).toBeNull();
+    fireEvent.click(tabs.getByRole('tab', { name: 'Characters' }));
+    expect(screen.getByTestId('yts-lala')).toBeTruthy();
+    expect(screen.queryByLabelText('Title')).toBeNull();
+    fireEvent.click(tabs.getByRole('tab', { name: 'Colours' }));
+    expect(screen.getByRole('button', { name: 'Accent #B8962E' })).toBeTruthy();
   });
 
   test('once the canvas has scrolled away, a small picture of the thumbnail is pinned; a tap goes back to the canvas', async () => {
