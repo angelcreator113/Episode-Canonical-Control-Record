@@ -367,3 +367,9 @@
 @media (min-width: 1101px) and (min-height: 760px) {
   .yts-stage { position: sticky; top: 12px; z-index: 5; }
 }
+
+/* Whether the arrangement is kept yet, by the canvas (Evoni, 2026-10-22). */
+.yts-note-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.yts-keep { display: inline-flex; align-items: center; gap: 4px; flex: none; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--lala-parchment); color: var(--text-secondary); }
+.yts-keep.is-saved { background: var(--success-bg); color: var(--success-text); }
+.yts-keep.is-failed { background: var(--danger-bg); color: var(--danger-text); }

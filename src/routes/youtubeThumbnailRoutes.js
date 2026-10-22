@@ -122,8 +122,9 @@ router.post('/episodes/:episodeId', requireAuth, async (req, res) => {
       'SELECT id FROM episodes WHERE id = :episodeId AND deleted_at IS NULL LIMIT 1',
       { replacements: { episodeId: req.params.episodeId } });
     if (!episode) throw new yt.ThumbnailError(404, 'Episode not found');
-    const png = await renderRequest(req);
-    const saved = await yt.saveAsPrimary(models.sequelize, episode.id, png);
+    // The layers are kept with it, so a saved thumbnail can become the show's template.
+    const spec = thumbLayers.readLayers(readBody(req), yt.allowedImageUrl);
+    const saved = await yt.saveAsPrimary(models.sequelize, episode.id, await yt.renderSpec(spec), spec);
     return res.status(201).json({ success: true, data: saved });
   } catch (err) {
     return sendError(res, err, 'save');

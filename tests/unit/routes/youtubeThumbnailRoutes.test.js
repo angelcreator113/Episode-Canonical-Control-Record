@@ -76,7 +76,8 @@ test('saving stores the drawing as the episode\'s primary thumbnail', async () =
   const res = await request(app).post('/api/v1/youtube-thumbnails/episodes/ep-1').send(LAYERS);
   expect(res.status).toBe(201);
   expect(res.body.data).toEqual({ id: 7, url: 'https://b.s3.amazonaws.com/t.png', key: 't.png' });
-  expect(yt.saveAsPrimary).toHaveBeenCalledWith(expect.anything(), 'ep-1', expect.any(Buffer));
+  // The layers ride along, so a saved thumbnail can become the show's template.
+  expect(yt.saveAsPrimary).toHaveBeenCalledWith(expect.anything(), 'ep-1', expect.any(Buffer), expect.objectContaining({ version: 2, layers: expect.any(Array) }));
 });
 
 test('saving for an unknown episode is a 404, with nothing stored', async () => {

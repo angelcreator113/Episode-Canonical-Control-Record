@@ -220,6 +220,20 @@ describe('database work', () => {
     for (const [sql] of s.query.mock.calls) expect(sql).not.toMatch(/\bthumbnails\b(?!\.)(?! AS)/);
   });
 
+  test('saveAsPrimary keeps the layers with it once the spec column exists', async () => {
+    mockSend.mockResolvedValue({});
+    const layers = { version: 2, layers: [{ id: 'title', kind: 'text' }] };
+    const s = seq(READY, [[]], [[{ present: 1 }]], [[{ id: T9 }]], [[]]);
+    await yt.saveAsPrimary(s, EP, Buffer.from('png'), layers);
+    const [sql, opts] = s.query.mock.calls[3];
+    expect(sql).toMatch(/is_current, spec\)[\s\S]*true, CAST\(:spec AS jsonb\)\)/);
+    expect(JSON.parse(opts.replacements.spec)).toEqual(layers);
+    // No spec column yet: saved without it.
+    const old = seq(READY, [[]], [[]], [[{ id: T9 }]], [[]]);
+    await yt.saveAsPrimary(old, EP, Buffer.from('png'), layers);
+    expect(old.query.mock.calls[3][0]).not.toMatch(/spec/);
+  });
+
   test('saveAsPrimary before the table exists: the file and episodes.thumbnail_url only', async () => {
     mockSend.mockResolvedValue({});
     const s = seq(MISSING, [[]]);
@@ -255,14 +269,19 @@ describe('database work', () => {
   });
 
   test('listSaved: the current one first, deleted ones left out; [] before the table exists or for a bad id', async () => {
-    const s = seq(READY, [[
-      { id: T9, url: 'https://b.s3.amazonaws.com/a.png', is_current: true, width: 1280, height: 720, created_at: '2026-10-22' },
-      { id: T8, url: 'https://b.s3.amazonaws.com/old.png', is_current: false },
+    const layers = { version: 2, layers: [] };
+    const s = seq(READY, [[{ present: 1 }]], [[
+      { id: T9, url: 'https://b.s3.amazonaws.com/a.png', is_current: true, width: 1280, height: 720, created_at: '2026-10-22', spec: layers },
+      { id: T8, url: 'https://b.s3.amazonaws.com/old.png', is_current: false, spec: null },
     ]]);
     const out = await yt.listSaved(s, EP);
-    expect(out[0]).toMatchObject({ id: T9, isPrimary: true, url: 'https://b.s3.amazonaws.com/a.png', width: 1280, savedAt: '2026-10-22' });
-    expect(out[1]).toMatchObject({ id: T8, isPrimary: false });
-    expect(s.query.mock.calls[1][0]).toMatch(/FROM episode_saved_thumbnails[\s\S]*deleted_at IS NULL[\s\S]*ORDER BY is_current DESC/);
+    expect(out[0]).toMatchObject({ id: T9, isPrimary: true, url: 'https://b.s3.amazonaws.com/a.png', width: 1280, savedAt: '2026-10-22', spec: layers });
+    expect(out[1]).toMatchObject({ id: T8, isPrimary: false, spec: null });
+    expect(s.query.mock.calls[2][0]).toMatch(/SELECT id, url, is_current, width, height, created_at, spec\s+FROM episode_saved_thumbnails[\s\S]*deleted_at IS NULL[\s\S]*ORDER BY is_current DESC/);
+    // Before the spec column exists: listed without it.
+    const old = seq(READY, [[]], [[{ id: T8, url: 'https://b.s3.amazonaws.com/old.png', is_current: true }]]);
+    expect((await yt.listSaved(old, EP))[0]).toMatchObject({ id: T8, spec: null });
+    expect(old.query.mock.calls[2][0]).not.toMatch(/spec/);
     expect(await yt.listSaved(seq(MISSING), EP)).toEqual([]);
     const bad = seq();
     expect(await yt.listSaved(bad, 'not-an-episode')).toEqual([]);
