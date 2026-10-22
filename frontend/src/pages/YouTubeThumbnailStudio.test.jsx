@@ -23,7 +23,7 @@ vi.mock('../lib/youtubeThumbnailsApi', async () => {
       templates: vi.fn(), createTemplate: vi.fn(), updateTemplate: vi.fn(), deleteTemplate: vi.fn(),
       versions: vi.fn(), createVersion: vi.fn(), updateVersion: vi.fn(), deleteVersion: vi.fn(),
       season: vi.fn(), renderSmall: vi.fn(),
-      titleIdeas: vi.fn(), cutOut: vi.fn(), zip: vi.fn(),
+      titleIdeas: vi.fn(), cutOut: vi.fn(), zip: vi.fn(), saveBrand: vi.fn(),
     },
     downloadBlob: vi.fn(),
   };
@@ -1259,6 +1259,36 @@ describe('YouTubeThumbnailStudio', () => {
     expect(items[0].spec.layers.length).toBeGreaterThan(3);
     expect(items[2].spec).toEqual(vSpec('Blue'));
     expect(downloadBlob.mock.calls[0][1]).toBe('styling-adventures-ep1-ab.zip');
+  });
+
+  // Evoni, 2026-10-22: a show's own colours, fonts and stickers, offered first.
+  test('the brand kit: the show\'s colours first in the palette, its fonts first in the font list, its stickers first; kept for the show', async () => {
+    youtubeThumbnailsApi.sources.mockResolvedValue({ ...SOURCES, style: { ...SOURCES.style, brand: { colours: ['#123ABC'], fonts: ['hand'], stickers: ['tape'] } } });
+    youtubeThumbnailsApi.saveBrand.mockImplementation((id, b) => Promise.resolve(b));
+    renderPage();
+    await opened();
+    const palette = within(screen.getByRole('region', { name: 'Colour palette' }));
+    const swatches = palette.getAllByRole('button', { name: /^Accent / });
+    expect(swatches[0].getAttribute('aria-label')).toBe('Accent #123ABC');
+    expect(swatches[0].className).toContain('is-brand');
+    // Stickers: the show's first, marked.
+    const stickers = within(screen.getByTestId('yts-stickers')).getAllByRole('button');
+    expect(stickers[0].getAttribute('aria-label')).toBe('Add tape');
+    // Fonts: the show's in their own group, first.
+    fireEvent.click(screen.getByTestId('canvas-title'));
+    const groups = screen.getByRole('combobox', { name: 'Font' }).querySelectorAll('optgroup');
+    expect([...groups].map((g) => g.label)).toEqual(["The show's fonts", 'All fonts']);
+    expect([...groups[0].querySelectorAll('option')].map((o) => o.value)).toEqual(['hand']);
+    // Add the accent in use; take a colour off; tick a font.
+    const kit = within(screen.getByTestId('yts-brand'));
+    fireEvent.click(kit.getByTestId('yts-brand-add'));
+    await waitFor(() => expect(youtubeThumbnailsApi.saveBrand).toHaveBeenCalledWith('show-1', { colours: ['#123ABC', '#B8962E'], fonts: ['hand'], stickers: ['tape'] }));
+    await waitFor(() => expect(kit.queryByTestId('yts-brand-add')).toBeNull());
+    fireEvent.click(kit.getByRole('button', { name: 'Take #123ABC out of the brand kit' }));
+    await waitFor(() => expect(youtubeThumbnailsApi.saveBrand).toHaveBeenLastCalledWith('show-1', { colours: ['#B8962E'], fonts: ['hand'], stickers: ['tape'] }));
+    fireEvent.click(kit.getByRole('button', { name: /Fonts and stickers/ }));
+    fireEvent.click(kit.getByRole('checkbox', { name: 'Clean' }));
+    await waitFor(() => expect(youtubeThumbnailsApi.saveBrand).toHaveBeenLastCalledWith('show-1', { colours: ['#B8962E'], fonts: ['hand', 'sans'], stickers: ['tape'] }));
   });
 
   test('the grid and the safe zones: toggled on the toolbar, drawn over the canvas only', async () => {

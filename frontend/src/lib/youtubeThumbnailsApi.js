@@ -203,6 +203,8 @@ export const youtubeThumbnailsApi = {
   saved: (episodeId) => api.get(`${base}/episodes/${episodeId}/saved`).then((r) => (Array.isArray(r.data?.data) ? r.data.data : [])),
   makePrimary: (episodeId, thumbnailId) => api.post(`${base}/episodes/${episodeId}/saved/${thumbnailId}/primary`).then((r) => r.data?.data),
   removeSaved: (episodeId, thumbnailId) => api.delete(`${base}/episodes/${episodeId}/saved/${thumbnailId}`).then((r) => r.data?.data),
+  // The show's brand kit (Evoni, 2026-10-22): { colours, fonts, stickers }.
+  saveBrand: (showId, brand) => api.put(`${base}/shows/${showId}/brand`, brand).then((r) => r.data?.data),
   saveStyle: (showId, style) => api.put(`${base}/shows/${showId}/style`, style).then((r) => r.data?.data),
   // A show's named templates (Evoni, 2026-10-21); "legacy" is the one kept before them.
   templates: (showId) => api.get(`${base}/shows/${showId}/templates`).then((r) => (Array.isArray(r.data?.data) ? r.data.data : [])),

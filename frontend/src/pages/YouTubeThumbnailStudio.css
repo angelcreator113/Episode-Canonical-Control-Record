@@ -379,3 +379,12 @@
 .yts-kit .yts-btn { align-self: flex-start; }
 .yts-kit-picks { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .yts-kit-pick { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+
+/* The show's brand kit (Evoni, 2026-10-22): its colours, fonts and stickers, offered first. */
+.yts-brand { padding: 10px 12px; border-radius: 12px; border: 1px solid var(--lala-gold-line); background: var(--lala-parchment); }
+.yts-brand-colour { position: relative; display: inline-flex; }
+.yts-brand-remove { position: absolute; top: -6px; right: -6px; display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--text-secondary); cursor: pointer; }
+.yts-brand-picks { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.yts-brand-picks .yts-label { flex-basis: 100%; }
+.yts-swatch.is-brand { outline: 2px dotted var(--lala-gold-line); outline-offset: 2px; }
+.yts-btn.is-brand { border-color: var(--lala-gold-line); }

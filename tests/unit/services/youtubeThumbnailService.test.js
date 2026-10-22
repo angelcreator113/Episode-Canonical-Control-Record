@@ -189,6 +189,27 @@ describe('database work', () => {
     await expect(yt.sources(seq([[]]), 'nope')).rejects.toMatchObject({ status: 404 });
   });
 
+  // Evoni, 2026-10-22: a show's own colours, fonts and stickers.
+  test('readBrand keeps up to eight colours (#RRGGBB, upper case, once each), known fonts and stickers only', () => {
+    const colours = ['#b8962e', '#B8962E', 'red', '#123', '#000000', '#111111', '#222222', '#333333', '#444444', '#555555', '#666666', '#777777'];
+    expect(yt.readBrand({ colours, fonts: ['script', 'nope', 'script', 'sans'], stickers: ['burst', 'laser', 'tape'] })).toEqual({
+      colours: ['#B8962E', '#000000', '#111111', '#222222', '#333333', '#444444', '#555555', '#666666'],
+      fonts: ['script', 'sans'],
+      stickers: ['burst', 'tape'],
+    });
+    expect(yt.readBrand(null)).toEqual({ colours: [], fonts: [], stickers: [] });
+    expect(yt.readBrand({ colours: 'red', fonts: {}, stickers: 5 })).toEqual({ colours: [], fonts: [], stickers: [] });
+  });
+
+  test('saveBrand keeps only the brand kit, beside the rest of the show\'s style; an unknown show is a 404', async () => {
+    const s = seq([[{ id: 'show-1' }]]);
+    await expect(yt.saveBrand(s, 'show-1', { colours: ['#e0689f'], fonts: ['serif'] })).resolves.toEqual({ colours: ['#E0689F'], fonts: ['serif'], stickers: [] });
+    const [sql, opts] = s.query.mock.calls[0];
+    expect(sql).toMatch(/\|\| jsonb_build_object\('brand', CAST\(:brand AS jsonb\)\)/);
+    expect(JSON.parse(opts.replacements.brand)).toEqual({ colours: ['#E0689F'], fonts: ['serif'], stickers: [] });
+    await expect(yt.saveBrand(seq([[]]), 'gone', {})).rejects.toMatchObject({ status: 404 });
+  });
+
   test('saveStyle merges into the show\'s metadata; a foreign Lala image is refused', async () => {
     const s = seq([[{ id: 'show-1' }]]);
     await expect(yt.saveStyle(s, 'show-1', { layout: 'lala-right', accent: '#B8962E' })).resolves.toMatchObject({ layout: 'lala-right', accent: '#B8962E' });
