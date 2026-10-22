@@ -223,45 +223,48 @@ describe('database work', () => {
   const T9 = '99999999-2222-4333-8444-555555555555';
   const READY = [[{ reg: 'episode_saved_thumbnails' }]];
   const MISSING = [[{ reg: null }]];
+  // The episode's row, locked so two saves of one episode take turns (audit, 2026-10-22).
+  const LOCK = [[{ id: EP }]];
 
   // Production's `thumbnails` table is older than its migration (snake_case,
   // an integer episode_id): Evoni, 2026-10-22, "column "s3Bucket" does not exist".
   test('saveAsPrimary uploads the PNG and keeps it as the current saved thumbnail, never in `thumbnails`', async () => {
     mockSend.mockResolvedValue({});
-    const s = seq(READY, [[]], [[{ id: T9 }]], [[]]);
+    const s = seq(LOCK, READY, [[]], [[{ id: T9 }]], [[]]);
     const out = await yt.saveAsPrimary(s, EP, Buffer.from('png'));
     expect(mockSend.mock.calls[0][0].input).toMatchObject({ Key: expect.stringMatching(new RegExp(`^episodes/${EP}/thumbnails/youtube-\\d+\\.png$`)), ContentType: 'image/png' });
-    expect(s.query.mock.calls[1][0]).toMatch(/UPDATE episode_saved_thumbnails SET is_current = false/);
-    const insert = s.query.mock.calls[2][0];
+    expect(s.query.mock.calls[0][0]).toMatch(/FROM episodes WHERE id = :episodeId[\s\S]*FOR UPDATE/);
+    expect(s.query.mock.calls[2][0]).toMatch(/UPDATE episode_saved_thumbnails SET is_current = false/);
+    const insert = s.query.mock.calls[3][0];
     expect(insert).toMatch(/INSERT INTO episode_saved_thumbnails/);
     expect(insert).toMatch(/, true\)/);
     expect(out).toMatchObject({ id: T9, url: expect.stringContaining(out.key), type: 'png', bytes: 3 });
-    expect(s.query.mock.calls[3][0]).toMatch(/UPDATE episodes SET thumbnail_url = :url/);
-    expect(s.query.mock.calls[3][1].replacements).toEqual({ episodeId: EP, url: out.url });
+    expect(s.query.mock.calls[4][0]).toMatch(/UPDATE episodes SET thumbnail_url = :url/);
+    expect(s.query.mock.calls[4][1].replacements).toEqual({ episodeId: EP, url: out.url });
     for (const [sql] of s.query.mock.calls) expect(sql).not.toMatch(/\bthumbnails\b(?!\.)(?! AS)/);
   });
 
   test('saveAsPrimary keeps the layers with it once the spec column exists', async () => {
     mockSend.mockResolvedValue({});
     const layers = { version: 2, layers: [{ id: 'title', kind: 'text' }] };
-    const s = seq(READY, [[]], [[{ present: 1 }]], [[{ id: T9 }]], [[]]);
+    const s = seq(LOCK, READY, [[]], [[{ present: 1 }]], [[{ id: T9 }]], [[]]);
     await yt.saveAsPrimary(s, EP, Buffer.from('png'), layers);
-    const [sql, opts] = s.query.mock.calls[3];
+    const [sql, opts] = s.query.mock.calls[4];
     expect(sql).toMatch(/is_current, spec\)[\s\S]*true, CAST\(:spec AS jsonb\)\)/);
     expect(JSON.parse(opts.replacements.spec)).toEqual(layers);
     // No spec column yet: saved without it.
-    const old = seq(READY, [[]], [[]], [[{ id: T9 }]], [[]]);
+    const old = seq(LOCK, READY, [[]], [[]], [[{ id: T9 }]], [[]]);
     await yt.saveAsPrimary(old, EP, Buffer.from('png'), layers);
-    expect(old.query.mock.calls[3][0]).not.toMatch(/spec/);
+    expect(old.query.mock.calls[4][0]).not.toMatch(/spec/);
   });
 
   test('saveAsPrimary before the table exists: the file and episodes.thumbnail_url only', async () => {
     mockSend.mockResolvedValue({});
-    const s = seq(MISSING, [[]]);
+    const s = seq(LOCK, MISSING, [[]]);
     const out = await yt.saveAsPrimary(s, EP, Buffer.from('png'));
     expect(out).toMatchObject({ id: null, type: 'png' });
-    expect(s.query).toHaveBeenCalledTimes(2);
-    expect(s.query.mock.calls[1][0]).toMatch(/UPDATE episodes SET thumbnail_url = :url/);
+    expect(s.query).toHaveBeenCalledTimes(3);
+    expect(s.query.mock.calls[2][0]).toMatch(/UPDATE episodes SET thumbnail_url = :url/);
   });
 
   // YouTube refuses a custom thumbnail over 2 MB (Evoni, 2026-10-21).
@@ -281,12 +284,12 @@ describe('database work', () => {
   test('saveAsPrimary saves a PNG over 2 MB as a JPEG, with its own type and size', async () => {
     mockSend.mockReset();
     mockSend.mockResolvedValue({});
-    const s = seq(READY, [[]], [[{ id: T9 }]], [[]]);
+    const s = seq(LOCK, READY, [[]], [[{ id: T9 }]], [[]]);
     const out = await yt.saveAsPrimary(s, EP, await noise(1280, 720));
     expect(mockSend.mock.calls[0][0].input).toMatchObject({ Key: expect.stringMatching(/\.jpg$/), ContentType: 'image/jpeg' });
     expect(out).toMatchObject({ type: 'jpeg', bytes: expect.any(Number) });
     expect(out.bytes).toBeLessThanOrEqual(yt.YOUTUBE_MAX_BYTES);
-    expect(s.query.mock.calls[2][1].replacements).toMatchObject({ mime: 'image/jpeg', size: out.bytes });
+    expect(s.query.mock.calls[3][1].replacements).toMatchObject({ mime: 'image/jpeg', size: out.bytes });
   });
 
   test('listSaved: the current one first, deleted ones left out; [] before the table exists or for a bad id', async () => {
@@ -310,28 +313,87 @@ describe('database work', () => {
   });
 
   test('makePrimary: the current one stops being current, this one is, and the episode points at it', async () => {
-    const s = seq(READY, [[{ id: T8, url: 'https://b.s3.amazonaws.com/old.png', is_current: false }]], [[]], [[]], [[]]);
+    const s = seq(READY, LOCK, [[{ id: T8, url: 'https://b.s3.amazonaws.com/old.png', is_current: false }]], [[]], [[]], [[]]);
     await expect(yt.makePrimary(s, EP, T8)).resolves.toEqual({ id: T8, url: 'https://b.s3.amazonaws.com/old.png' });
     expect(s.transaction).toHaveBeenCalled();
-    expect(s.query.mock.calls[2][0]).toMatch(/SET is_current = false[\s\S]*id <> :thumbnailId/);
-    expect(s.query.mock.calls[3][0]).toMatch(/SET is_current = true, updated_at = NOW\(\) WHERE id = :thumbnailId/);
-    expect(s.query.mock.calls[4][0]).toMatch(/UPDATE episodes SET thumbnail_url/);
+    expect(s.query.mock.calls[1][0]).toMatch(/FOR UPDATE/);
+    expect(s.query.mock.calls[3][0]).toMatch(/SET is_current = false[\s\S]*id <> :thumbnailId/);
+    expect(s.query.mock.calls[4][0]).toMatch(/SET is_current = true, updated_at = NOW\(\) WHERE id = :thumbnailId/);
+    expect(s.query.mock.calls[5][0]).toMatch(/UPDATE episodes SET thumbnail_url/);
   });
 
   test('makePrimary: another episode\'s thumbnail or a bad id is a 404; before the table exists a 503', async () => {
-    await expect(yt.makePrimary(seq(READY, [[]]), EP, T8)).rejects.toMatchObject({ status: 404 });
-    const bad = seq(READY);
+    await expect(yt.makePrimary(seq(READY, LOCK, [[]]), EP, T8)).rejects.toMatchObject({ status: 404 });
+    const bad = seq(READY, LOCK);
     await expect(yt.makePrimary(bad, EP, '8; DROP')).rejects.toMatchObject({ status: 404 });
-    expect(bad.query).toHaveBeenCalledTimes(1);
+    expect(bad.query).toHaveBeenCalledTimes(2);
     await expect(yt.makePrimary(seq(MISSING), EP, T8)).rejects.toMatchObject({ status: 503 });
   });
 
   test('removeSaved marks an older one deleted and refuses the current one', async () => {
-    const older = seq(READY, [[{ id: T8, is_current: false }]], [[]]);
+    const older = seq(READY, [[{ id: T8, is_current: false }]], [[{ id: T8 }]]);
     await expect(yt.removeSaved(older, EP, T8)).resolves.toEqual({ id: T8 });
-    expect(older.query.mock.calls[2][0]).toMatch(/UPDATE episode_saved_thumbnails SET deleted_at = NOW\(\)/);
+    expect(older.query.mock.calls[2][0]).toMatch(/UPDATE episode_saved_thumbnails SET deleted_at = NOW\(\)[\s\S]*AND NOT is_current/);
     const current = seq(READY, [[{ id: T9, is_current: true }]]);
     await expect(yt.removeSaved(current, EP, T9)).rejects.toMatchObject({ status: 409 });
     expect(current.query).toHaveBeenCalledTimes(2);
+  });
+
+  // Audit, 2026-10-22: "make current" in one tab and "delete" in another.
+  test('removeSaved deletes nothing when the thumbnail became the current one meanwhile', async () => {
+    const raced = seq(READY, [[{ id: T8, is_current: false }]], [[]]);
+    await expect(yt.removeSaved(raced, EP, T8)).rejects.toMatchObject({ status: 409 });
+  });
+
+  test('a unique index other than a name is "changed at the same moment", not "name taken"', async () => {
+    const VERSION_READY = [[{ reg: 'episode_thumbnail_versions' }]];
+    const clash = (constraint) => {
+      const err = new Error('duplicate key');
+      err.original = { code: '23505', constraint };
+      return err;
+    };
+    const run = (constraint) => {
+      const s = { query: jest.fn(), transaction: jest.fn(async () => { throw clash(constraint); }) };
+      s.query.mockResolvedValueOnce(VERSION_READY);
+      return yt.createVersion(s, EP, { spec: { version: 2, layers: [] }, name: 'A' });
+    };
+    await expect(run('episode_thumbnail_versions_name_per_episode')).rejects.toMatchObject({ status: 409, message: 'That name is taken' });
+    await expect(run('some_other_index')).rejects.toMatchObject({ status: 409, message: expect.stringMatching(/same moment/) });
+  });
+});
+
+// Audit, 2026-10-22: drawing is heavy, so only a few run at once and the rest wait.
+describe('withRenderSlot', () => {
+  test(`at most ${yt.RENDER_SLOTS} at once; the rest wait their turn and all finish`, async () => {
+    let running = 0;
+    let most = 0;
+    const releases = [];
+    const job = () => yt.withRenderSlot(() => new Promise((resolve) => {
+      running += 1;
+      most = Math.max(most, running);
+      releases.push(() => { running -= 1; resolve(); });
+    }));
+    const all = Promise.all(Array.from({ length: 7 }, job));
+    for (let i = 0; i < 7; i++) {
+      await new Promise((r) => setImmediate(r));
+      releases.shift()();
+    }
+    await all;
+    expect(most).toBe(yt.RENDER_SLOTS);
+    expect(running).toBe(0);
+  });
+
+  test('past the queue the answer is busy (503), and a failed drawing frees its slot', async () => {
+    const hold = [];
+    const holders = Array.from({ length: yt.RENDER_SLOTS + yt.RENDER_QUEUE_MAX }, () => yt.withRenderSlot(() => new Promise((r) => hold.push(r))));
+    await expect(yt.withRenderSlot(async () => 'x')).rejects.toMatchObject({ status: 503 });
+    let done = 0;
+    holders.forEach((h) => h.then(() => { done += 1; }));
+    while (done < holders.length) {
+      while (hold.length) hold.shift()();
+      await new Promise((r) => setImmediate(r));
+    }
+    await expect(yt.withRenderSlot(async () => { throw new Error('boom'); })).rejects.toThrow('boom');
+    await expect(yt.withRenderSlot(async () => 'free')).resolves.toBe('free');
   });
 });

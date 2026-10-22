@@ -37,7 +37,7 @@ import {
 } from 'lucide-react';
 import {
   youtubeThumbnailsApi, LAYOUTS, ACCENTS, TEXT_COLORS, readRecentColours, rememberColour, episodeContent, folderPath, folderCount, folderCover, firstFolder,
-  downloadBlob,
+  downloadBlob, saveDraftOnLeave,
 } from '../lib/youtubeThumbnailsApi';
 import {
   FONTS, presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, placeLayer, removeLayer,
@@ -584,12 +584,7 @@ function LayerSettings({ layer, onChange, colours, onRemember, onCutOut, cutting
       {layer.kind === 'image' && <PictureEffects layer={layer} onChange={onChange} colours={colours} onRemember={onRemember} onCutOut={onCutOut} cutting={cutting} />}
       <div className="yts-row yts-box-fields">
         {[['x', 'Left', -WIDTH, WIDTH * 2], ['y', 'Top', -HEIGHT, HEIGHT * 2], ['w', 'Width', 10, WIDTH * 3], ['h', 'Height', 10, HEIGHT * 3]].map(([key, label, min, max]) => (
-          <label key={key} className="yts-field is-small">
-            <span className="yts-label">{label}</span>
-            <input type="number" className="yts-input" value={Math.round(layer[key])} min={min} max={max} disabled={layer.locked}
-              onChange={(e) => { const n = Number(e.target.value); if (Number.isFinite(n)) onChange({ [key]: Math.min(max, Math.max(min, Math.round(n))) }); }}
-              aria-label={`${label} (points)`} />
-          </label>
+          <BoxField key={key} label={label} value={layer[key]} min={min} max={max} disabled={layer.locked} onCommit={(n) => onChange({ [key]: n })} />
         ))}
       </div>
       <label className="yts-field">
@@ -781,6 +776,35 @@ function useScrolledAway(ref, on = true) {
   return away;
 }
 
+/**
+ * A number for the picked layer's place or size (Evoni, 2026-10-21). What
+ * is typed stays as typed; it is checked and kept on Enter or on leaving
+ * the box (audit, 2026-10-22: it was clamped on every key, so typing 300
+ * gave 10, then 100, then 1000).
+ */
+function BoxField({ label, value, min, max, disabled, onCommit }) {
+  const [text, setText] = useState(String(Math.round(value)));
+  const [typing, setTyping] = useState(false);
+  useEffect(() => { if (!typing) setText(String(Math.round(value))); }, [value, typing]);
+  const commit = () => {
+    setTyping(false);
+    const n = Number(text);
+    if (text.trim() === '' || !Number.isFinite(n)) { setText(String(Math.round(value))); return; }
+    const kept = Math.min(max, Math.max(min, Math.round(n)));
+    setText(String(kept));
+    if (kept !== Math.round(value)) onCommit(kept);
+  };
+  return (
+    <label className="yts-field is-small">
+      <span className="yts-label">{label}</span>
+      <input type="number" className="yts-input" value={text} min={min} max={max} disabled={disabled}
+        onFocus={() => setTyping(true)} onChange={(e) => { setTyping(true); setText(e.target.value); }} onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } else if (e.key === 'Escape') { setTyping(false); setText(String(Math.round(value))); } }}
+        aria-label={`${label} (points)`} />
+    </label>
+  );
+}
+
 // On a phone the settings show one section at a time (Evoni, 2026-10-22
 // layout list), in tabs under the canvas.
 const PHONE_TABS = [
@@ -788,9 +812,45 @@ const PHONE_TABS = [
   ['characters', 'Characters'], ['background', 'Background'], ['colours', 'Colours'], ['saved', 'Saved'],
 ];
 
+/**
+ * A question before something is replaced or deleted. It takes the focus
+ * (No, the safe answer), Esc answers No, and focus goes back to where it
+ * was (audit, 2026-10-22).
+ */
+function AskBox({ asking, onYes, onNo }) {
+  const noRef = useRef(null);
+  useEffect(() => {
+    const before = document.activeElement;
+    noRef.current?.focus();
+    const esc = (e) => { if (e.key === 'Escape') { e.preventDefault(); onNo(); } };
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('keydown', esc); if (before && typeof before.focus === 'function') before.focus(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asking]);
+  return (
+    <div className="yts-ask" role="alertdialog" aria-modal="false" aria-label="Confirm" aria-describedby="yts-ask-text" data-testid="yts-ask">
+      <p id="yts-ask-text">{asking.text}</p>
+      <button type="button" className="yts-btn is-primary" onClick={onYes}>Yes</button>
+      <button type="button" className="yts-btn" ref={noRef} onClick={onNo}>No</button>
+    </div>
+  );
+}
+
 function MoreMenu({ items }) {
   const [open, setOpen] = useState(false);
   const box = useRef(null);
+  // Arrow keys, Home and End move through the items; the first is focused on opening (audit, 2026-10-22).
+  const itemsOf = () => [...(box.current?.querySelectorAll('[role^="menuitem"]:not(:disabled)') || [])];
+  useEffect(() => { if (open) itemsOf()[0]?.focus(); }, [open]);
+  const onMenuKey = (e) => {
+    const list = itemsOf();
+    if (!list.length) return;
+    const i = list.indexOf(document.activeElement);
+    const to = { ArrowDown: (i + 1) % list.length, ArrowUp: (i - 1 + list.length) % list.length, Home: 0, End: list.length - 1 }[e.key];
+    if (to === undefined) return;
+    e.preventDefault();
+    list[to].focus();
+  };
   useEffect(() => {
     if (!open) return undefined;
     const away = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(false); };
@@ -804,7 +864,7 @@ function MoreMenu({ items }) {
       <button type="button" className="yts-icon-btn" onClick={() => setOpen((v) => !v)} aria-haspopup="menu" aria-expanded={open}
         aria-label="More" title="More" data-testid="yts-more-btn"><EllipsisVertical size={15} aria-hidden /></button>
       {open && (
-        <ul className="yts-menu-list" role="menu" aria-label="More">
+        <ul className="yts-menu-list" role="menu" aria-label="More" onKeyDown={onMenuKey}>
           {items.map(({ key, testid, icon: Icon, label, onChoose, on, disabled }) => (
             <li key={key} role="none">
               <button type="button" role={on === undefined ? 'menuitem' : 'menuitemcheckbox'} aria-checked={on === undefined ? undefined : on}
@@ -1190,7 +1250,12 @@ export default function YouTubeThumbnailStudio() {
   const setSelectedId = useCallback((v) => { setPrimary(v); setExtraIds([]); }, []);
   const selectedIdRef = useRef(null);
   selectedIdRef.current = selectedId;
-  const pickedIds = useMemo(() => (selectedId ? [selectedId, ...extraIds.filter((id) => id !== selectedId)] : []), [selectedId, extraIds]);
+  // Only layers still there count (audit, 2026-10-22: one removed from the Layers list stayed "picked").
+  const pickedIds = useMemo(() => {
+    if (!selectedId) return [];
+    const there = new Set((spec?.layers || []).map((l) => l.id));
+    return [selectedId, ...extraIds.filter((id) => id !== selectedId && there.has(id))];
+  }, [selectedId, extraIds, spec]);
   const pickedRef = useRef([]);
   pickedRef.current = pickedIds;
   // A question asked on the page before something is replaced or deleted ({ text, yes }).
@@ -1243,6 +1308,22 @@ export default function YouTubeThumbnailStudio() {
   // The layers as they are now (an upload adds to them after its await).
   const specRef = useRef(null);
   specRef.current = spec;
+  // The episode and show on screen now, for answers that arrive after a
+  // switch (audit, 2026-10-22: they were put on the next episode).
+  const episodeRef = useRef(episodeId);
+  episodeRef.current = episodeId;
+  const showRef = useRef(showId);
+  showRef.current = showId;
+  // The episode the layers on screen belong to; null while the next one loads.
+  const specFor = useRef(null);
+  // The arrangement waiting to be kept ({ episodeId, spec }), and the saves in order.
+  const pendingDraft = useRef(null);
+  const draftChain = useRef(Promise.resolve());
+  const draftSeq = useRef(0);
+  const seasonRef = useRef(false);
+  seasonRef.current = season;
+  const askingRef = useRef(null);
+  askingRef.current = asking;
   // Undo and redo (Evoni, 2026-10-21): the arrangements before and after
   // this one; changes close together are one step.
   const past = useRef([]);
@@ -1261,13 +1342,71 @@ export default function YouTubeThumbnailStudio() {
     });
   }, [listsTick]);
   useEffect(() => {
-    if (!showId) { setEpisodes([]); return; }
-    youtubeThumbnailsApi.episodes(showId).then((list) => { setEpisodes(list); setLoadFailed((f) => (f === 'episodes' ? null : f)); }).catch((err) => {
+    if (!showId) { setEpisodes([]); return undefined; }
+    let live = true; // a quick change of show: only the last show's episodes are listed
+    youtubeThumbnailsApi.episodes(showId).then((list) => { if (!live) return; setEpisodes(list); setLoadFailed((f) => (f === 'episodes' ? null : f)); }).catch((err) => {
       console.error('[YouTubeThumbnails] episodes load failed:', err);
+      if (!live) return;
       setLoadFailed('episodes');
       setMessage({ type: 'error', text: 'Could not load the episodes.' });
     });
+    return () => { live = false; };
   }, [showId, listsTick]);
+
+  /**
+   * Keeps an arrangement for its episode (Evoni, 2026-10-21: kept a moment
+   * after each change). The saves go one after another, in order, and only
+   * the newest one's answer is shown, and only on its own episode (audit,
+   * 2026-10-22: an older save landing after a newer one, or on the next
+   * episode's page).
+   */
+  const keepDraft = useCallback((job) => {
+    const n = ++draftSeq.current;
+    const mine = () => n === draftSeq.current && job.episodeId === episodeRef.current;
+    if (mine()) setKeep((k) => ({ ...k, state: 'saving' }));
+    draftChain.current = draftChain.current.then(async () => {
+      try {
+        await youtubeThumbnailsApi.saveDraft(job.episodeId, job.spec);
+        if (!mine()) return;
+        setDraftNote('Arrangement kept for this episode.');
+        setKeep({ state: 'saved', at: new Date() });
+      } catch (err) {
+        console.error('[YouTubeThumbnails] arrangement not kept:', err);
+        if (!mine()) return;
+        setKeep({ state: 'failed', at: null });
+        setDraftNote(err?.response?.status === 503
+          ? 'Arrangements are kept once the server has its latest update.'
+          : 'This arrangement could not be kept. Save the thumbnail to keep it.');
+      }
+    });
+    return draftChain.current;
+  }, []);
+  /** Keeps the waiting arrangement now (leaving the episode, the season, or the page). */
+  const flushDraft = useCallback(() => {
+    const job = pendingDraft.current;
+    pendingDraft.current = null;
+    return job ? keepDraft(job) : Promise.resolve();
+  }, [keepDraft]);
+  // Closing or reloading the page: the waiting arrangement goes out on its own.
+  useEffect(() => {
+    const leave = () => {
+      const job = pendingDraft.current;
+      if (!job) return;
+      pendingDraft.current = null;
+      saveDraftOnLeave(job.episodeId, job.spec);
+    };
+    window.addEventListener('pagehide', leave);
+    return () => { window.removeEventListener('pagehide', leave); leave(); };
+  }, []);
+
+  // The browser's Back and Forward follow the address (audit, 2026-10-22).
+  useEffect(() => {
+    const ep = params.get('episode') || '';
+    if (ep === episodeRef.current) return;
+    setEpisodeId(ep);
+    const sh = params.get('show');
+    if (sh && sh !== showRef.current) setShowId(sh);
+  }, [params]);
 
 
   /** Where an episode starts: the show's template, else the show's layout. */
@@ -1277,7 +1416,16 @@ export default function YouTubeThumbnailStudio() {
 
   // The episode's pictures, its show's style and template, and its own arrangement.
   useEffect(() => {
-    if (!episodeId) { setSources(null); setSpecState(null); return; }
+    // Leaving an episode keeps its last change, then clears its layers, so
+    // nothing of it is shown, kept or saved on the next one (audit, 2026-10-22).
+    flushDraft();
+    specFor.current = null;
+    edited.current = false;
+    past.current = [];
+    future.current = [];
+    setSpecState(null);
+    setUploads([]);
+    if (!episodeId) { setSources(null); setLoading(false); return undefined; }
     let live = true;
     setSaved(null);
     setExact(null);
@@ -1285,9 +1433,12 @@ export default function YouTubeThumbnailStudio() {
     setDraftNote(null);
     setKeep({ state: 'idle', at: null });
     setLoading(true);
+    const forEpisode = episodeId;
     youtubeThumbnailsApi.sources(episodeId).then((src) => {
-      if (!live || !src) return;
+      if (!live) return;
       setLoading(false);
+      if (!src) return;
+      specFor.current = forEpisode;
       setLoadFailed((f) => (f === 'episode' ? null : f));
       setSources(src);
       if (src.show?.id && src.show.id !== showId) setShowId(src.show.id);
@@ -1319,38 +1470,29 @@ export default function YouTubeThumbnailStudio() {
       setLoadFailed('episode');
       setMessage({ type: 'error', text: err?.response?.data?.error || 'Could not load the episode.' });
     });
-    return () => { live = false; };
+    return () => { live = false; setLoading(false); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [episodeId, episodeTick]);
 
   // Every change is kept for this episode, a moment after the last one.
+  // Only the layers of the episode on screen are kept for it.
   useEffect(() => {
-    if (!spec || !episodeId || !edited.current) return undefined;
+    if (!spec || !episodeId || !edited.current || specFor.current !== episodeId) return undefined;
+    pendingDraft.current = { episodeId, spec };
     setKeep((k) => ({ ...k, state: 'waiting' }));
-    const t = setTimeout(async () => {
-      setKeep((k) => ({ ...k, state: 'saving' }));
-      try {
-        await youtubeThumbnailsApi.saveDraft(episodeId, spec);
-        setDraftNote('Arrangement kept for this episode.');
-        setKeep({ state: 'saved', at: new Date() });
-      } catch (err) {
-        console.error('[YouTubeThumbnails] arrangement not kept:', err);
-        setKeep({ state: 'failed', at: null });
-        setDraftNote(err?.response?.status === 503
-          ? 'Arrangements are kept once the server has its latest update.'
-          : 'This arrangement could not be kept. Save the thumbnail to keep it.');
-      }
-    }, DRAFT_DELAY_MS);
+    const t = setTimeout(() => { flushDraft(); }, DRAFT_DELAY_MS);
     return () => clearTimeout(t);
-  }, [spec, episodeId]);
+  }, [spec, episodeId, flushDraft]);
 
   // The episode's saved thumbnails, its current one first.
   const loadHistory = useCallback(async (id) => {
     if (!id) { setHistory([]); return; }
     try {
-      setHistory(await youtubeThumbnailsApi.saved(id));
+      const list = await youtubeThumbnailsApi.saved(id);
+      if (id === episodeRef.current) setHistory(list);
     } catch (err) {
       console.error('[YouTubeThumbnails] saved thumbnails load failed:', err);
+      if (id !== episodeRef.current) return;
       setHistory([]);
       // The server's reason, so a failure can be told apart (Evoni, 2026-10-21).
       const why = err?.response?.data?.error || err?.response?.data?.message;
@@ -1491,7 +1633,8 @@ export default function YouTubeThumbnailStudio() {
   // while typing in a field (it has its own undo).
   useEffect(() => {
     const onKey = (e) => {
-      if (!specRef.current) return;
+      // Not while the season grid hides the editor, or a question waits (audit, 2026-10-22).
+      if (!specRef.current || seasonRef.current || askingRef.current) return;
       const tag = e.target?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target?.isContentEditable) return;
       if (!(e.ctrlKey || e.metaKey)) {
@@ -1554,8 +1697,10 @@ export default function YouTubeThumbnailStudio() {
   useEffect(() => { setIdeas({ busy: false, list: [] }); }, [episodeId]);
   const askIdeas = async () => {
     setIdeas((x) => ({ ...x, busy: true }));
+    const forEpisode = episodeId;
     try {
-      const list = await youtubeThumbnailsApi.titleIdeas(episodeId);
+      const list = await youtubeThumbnailsApi.titleIdeas(forEpisode);
+      if (forEpisode !== episodeRef.current) return;
       setIdeas({ busy: false, list });
     } catch (err) {
       console.error('[YouTubeThumbnails] title ideas failed:', err);
@@ -1567,7 +1712,10 @@ export default function YouTubeThumbnailStudio() {
   const cutOut = async (layer) => {
     setCutting(true);
     try {
-      const pic = await youtubeThumbnailsApi.cutOut(episodeId, layer.src, layerName(layer));
+      const forEpisode = episodeId;
+      const pic = await youtubeThumbnailsApi.cutOut(forEpisode, layer.src, layerName(layer));
+      // Kept in that episode's Uploads on the server either way; put on the canvas only if it is still open.
+      if (forEpisode !== episodeRef.current) return;
       setUploads((u) => [pic, ...u.filter((x) => x.url !== pic.url)]);
       edit((s) => updateLayer(s, layer.id, { src: pic.url, clearWhite: false }));
       setMessage({ type: 'ok', text: 'Background removed. The cut-out is kept in Uploads; Undo puts the photo back.' });
@@ -1585,7 +1733,9 @@ export default function YouTubeThumbnailStudio() {
   const makeBackground = async () => {
     setMakingBg(true);
     try {
-      const pic = await youtubeThumbnailsApi.aiBackground(episodeId, bgWords.trim());
+      const forEpisode = episodeId;
+      const pic = await youtubeThumbnailsApi.aiBackground(forEpisode, bgWords.trim());
+      if (forEpisode !== episodeRef.current) return;
       setUploads((u) => [pic, ...u.filter((x) => x.url !== pic.url)]);
       setRole('background', pic.url);
       const cost = Number.isFinite(pic.cost) ? ` (about $${pic.cost.toFixed(2)} of today's image budget)` : '';
@@ -1649,7 +1799,9 @@ export default function YouTubeThumbnailStudio() {
   const upload = async (file, then) => {
     setUploading(file.name);
     try {
-      const pic = await youtubeThumbnailsApi.uploadPicture(episodeId, file);
+      const forEpisode = episodeId;
+      const pic = await youtubeThumbnailsApi.uploadPicture(forEpisode, file);
+      if (forEpisode !== episodeRef.current) return;
       setUploads((u) => [pic, ...u.filter((x) => x.url !== pic.url)]);
       then(pic.url, pic.label);
     } catch (err) {
@@ -1680,6 +1832,7 @@ export default function YouTubeThumbnailStudio() {
   // This arrangement on another episode, with its words and pictures (as the show's template would be).
   const [tryOn, setTryOn] = useState({ id: '', url: null, busy: false });
   useEffect(() => () => { if (tryOn.url) URL.revokeObjectURL(tryOn.url); }, [tryOn.url]);
+  useEffect(() => { setTryOn({ id: '', url: null, busy: false }); }, [episodeId]);
   const tryOnEpisode = async (id) => {
     setTryOn((t) => ({ ...t, id, url: null }));
     if (!id) return;
@@ -1705,8 +1858,11 @@ export default function YouTubeThumbnailStudio() {
 
   const seeExactly = async () => {
     setRendering(true);
+    const sent = spec;
     try {
-      const blob = await youtubeThumbnailsApi.render(spec);
+      const blob = await youtubeThumbnailsApi.render(sent);
+      // Changed while it was drawn: this picture is no longer "exactly as it will be saved".
+      if (specRef.current !== sent) return;
       setExactFile({ type: /jpe?g/.test(blob.type || '') ? 'jpeg' : 'png', bytes: blob.size });
       setExact((old) => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(blob); });
     } catch (err) {
@@ -1718,6 +1874,8 @@ export default function YouTubeThumbnailStudio() {
   };
 
   const save = async () => {
+    // Only this episode's own layers are saved as its thumbnail (audit, 2026-10-22).
+    if (!spec || specFor.current !== episodeId) return;
     setBusy(true);
     try {
       const out = await youtubeThumbnailsApi.save(episodeId, spec);
@@ -1867,10 +2025,12 @@ export default function YouTubeThumbnailStudio() {
   // The episode's versions to compare (Evoni, 2026-10-21).
   const versionChange = async (run, done, failed) => {
     if (!episodeId) return false;
+    const forEpisode = episodeId;
     setBusy(true);
     try {
       const text = await run();
-      const versions = await youtubeThumbnailsApi.versions(episodeId);
+      const versions = await youtubeThumbnailsApi.versions(forEpisode);
+      if (forEpisode !== episodeRef.current) return false;
       setSources((s) => ({ ...s, versions }));
       // run may say what happened (keeping a version names it); else the usual words.
       setMessage({ type: 'ok', text: typeof text === 'string' ? text : done });
@@ -1899,7 +2059,13 @@ export default function YouTubeThumbnailStudio() {
     edit(v.spec);
     setMessage({ type: 'ok', text: `Now editing "${v.name}". Undo goes back.` });
   };
-  const versionWarnings = useCallback((v) => (v.spec ? youtubeWarnings(v.spec, measurer).length : 0), [fontsTick]);
+  // Measured once per version's layers, not on every keystroke (audit, 2026-10-22); again when the fonts load.
+  const warningCounts = useMemo(() => new WeakMap(), [fontsTick]);
+  const versionWarnings = useCallback((v) => {
+    if (!v.spec) return 0;
+    if (!warningCounts.has(v.spec)) warningCounts.set(v.spec, youtubeWarnings(v.spec, measurer).length);
+    return warningCounts.get(v.spec);
+  }, [warningCounts]);
 
   const useTemplate = (t) => {
     if (!t.spec || !sources) return;
@@ -1918,7 +2084,8 @@ export default function YouTubeThumbnailStudio() {
 
   const picked = spec?.layers.find((l) => l.id === selectedId) || null;
   const shade = layerOf(spec, 'shade');
-  const stageAway = useScrolledAway(stageRef, phone && Boolean(spec));
+  // Off while the season grid shows, so it watches the new canvas when the editor comes back.
+  const stageAway = useScrolledAway(stageRef, phone && Boolean(spec) && !season);
   const sheet = phone && picked && picked.kind !== 'shade';
   // The header shrinks to one line once an episode is open, with the one before and after it.
   const compact = Boolean(episodeId);
@@ -2031,17 +2198,16 @@ export default function YouTubeThumbnailStudio() {
         </div>
       )}
 
-      {asking && (
-        <div className="yts-ask" role="group" aria-label="Confirm" data-testid="yts-ask">
-          <p>{asking.text}</p>
-          <button type="button" className="yts-btn is-primary" onClick={() => { const { yes } = asking; setAsking(null); yes(); }}>Yes</button>
-          <button type="button" className="yts-btn" onClick={() => setAsking(null)}>No</button>
-        </div>
-      )}
+      {asking && <AskBox asking={asking} onYes={() => { const { yes } = asking; setAsking(null); yes(); }} onNo={() => setAsking(null)} />}
 
       {season && showId ? (
-        <ThumbnailSeason showId={showId} onClose={() => setSeason(false)}
-          onOpenEpisode={(id) => { setSeason(false); pickEpisode(id); }} />
+        <ThumbnailSeason showId={showId}
+          onClose={() => { setSeason(false); if (episodeId) { setEpisodeTick((n) => n + 1); loadHistory(episodeId); } }}
+          onOpenEpisode={(id) => {
+            setSeason(false);
+            // The same episode: read again, as the season may have saved it (audit, 2026-10-22).
+            if (id === episodeId) { setEpisodeTick((n) => n + 1); loadHistory(id); } else pickEpisode(id);
+          }} />
       ) : !spec ? (
         loading ? (
           <div className="yts-empty" role="status" data-testid="yts-loading"><span className="yts-spinner" aria-hidden /><p>Loading the episode…</p></div>
@@ -2049,7 +2215,7 @@ export default function YouTubeThumbnailStudio() {
           <div className="yts-empty">
             <LayoutTemplate size={36} aria-hidden /><p>Choose a show and an episode to make its thumbnail.</p>
             {showId && (
-              <button type="button" className="yts-btn" onClick={() => setSeason(true)} data-testid="yts-season-start">
+              <button type="button" className="yts-btn" onClick={() => { flushDraft(); setSeason(true); }} data-testid="yts-season-start">
                 <LayoutGrid size={15} aria-hidden /> Or the whole season at once
               </button>
             )}
@@ -2093,12 +2259,12 @@ export default function YouTubeThumbnailStudio() {
                       <ScanEye size={15} aria-hidden /> {rendering ? 'Drawing…' : 'See it exactly'}
                     </button>
                   )}
-                  <button type="button" className="yts-tool-btn is-primary" onClick={save} disabled={busy} data-testid="yts-save" aria-label="Save as thumbnail">
+                  <button type="button" className="yts-tool-btn is-primary" onClick={save} disabled={busy || loading} data-testid="yts-save" aria-label="Save as thumbnail">
                     <Save size={15} aria-hidden /> {phone ? 'Save' : 'Save as thumbnail'}
                   </button>
                   <MoreMenu items={[
                     ...(phone ? marksItems : []),
-                    { key: 'season', testid: 'yts-season-open', icon: LayoutGrid, label: 'Whole season', onChoose: () => setSeason(true) },
+                    { key: 'season', testid: 'yts-season-open', icon: LayoutGrid, label: 'Whole season', onChoose: () => { flushDraft(); setSeason(true); } },
                     { key: 'reset', testid: 'yts-reset', icon: RotateCcw, label: 'Start again', onChoose: resetToTemplate },
                     ...(phone ? [] : [{ key: 'keys', testid: 'yts-keys-btn', icon: Keyboard, label: 'Keyboard shortcuts', onChoose: () => setShowKeys((v) => !v) }]),
                   ]} />
@@ -2149,6 +2315,7 @@ export default function YouTubeThumbnailStudio() {
               <div className="yts-phone-tabs" role="tablist" aria-label="Settings" data-testid="yts-phone-tabs">
                 {PHONE_TABS.map(([key, label]) => (
                   <button key={key} type="button" role="tab" className={`yts-tab${phoneTab === key ? ' is-on' : ''}`} aria-selected={phoneTab === key}
+                    aria-controls={key === 'saved' ? 'yts-strip' : 'yts-settings'}
                     onClick={() => setPhoneTab(key)} data-testid={`yts-phone-tab-${key}`}>{label}</button>
                 ))}
               </div>
@@ -2156,13 +2323,13 @@ export default function YouTubeThumbnailStudio() {
 
             {/* Versions and saved thumbnails under the canvas, as strips (Evoni, 2026-10-22 layout list); a tab of their own on a phone. */}
             {shown('saved') && (
-              <div className="yts-strip" data-testid="yts-strip">
+              <div className="yts-strip" id="yts-strip" data-testid="yts-strip">
                 {versionsBar}
                 {savedList}
               </div>
             )}
 
-            <div className="yts-bottom">
+            <div className="yts-bottom" id="yts-settings">
               {shown('layers') && (
               <section className="yts-card" aria-label="Layers">
                 <LayersList spec={spec} selectedId={selectedId} pickedIds={pickedIds} onSelect={select} onChange={edit} onDuplicate={duplicate} />

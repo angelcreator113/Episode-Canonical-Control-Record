@@ -543,7 +543,8 @@ export const addPieceCard = (spec, url, name) => {
 // are and the angle between them; then, against where they started, how much
 // bigger and how far turned.
 export function pinchGesture([p, q]) {
-  return { d: Math.hypot(q.x - p.x, q.y - p.y), a: (Math.atan2(q.y - p.y, q.x - p.x) * 180) / Math.PI };
+  // mx, my: the point between the fingers, for moving a zoomed-in canvas (audit, 2026-10-22).
+  return { d: Math.hypot(q.x - p.x, q.y - p.y), a: (Math.atan2(q.y - p.y, q.x - p.x) * 180) / Math.PI, mx: (p.x + q.x) / 2, my: (p.y + q.y) / 2 };
 }
 
 export function pinchDelta(start, now) {
@@ -555,10 +556,47 @@ export function pinchDelta(start, now) {
 }
 
 export function boxFromNode({ x, y, scaleX = 1, scaleY = 1, rotation = 0 }, layer) {
-  const w = Math.max(10, Math.round(layer.w * Math.abs(scaleX)));
-  const h = Math.max(10, Math.round(layer.h * Math.abs(scaleY)));
+  let w = Math.max(10, layer.w * Math.abs(scaleX));
+  let h = Math.max(10, layer.h * Math.abs(scaleY));
+  // Within what the server keeps (readLayers: w ≤ 3 canvases wide, h ≤ 3
+  // high, the corner within a canvas of the edge), shrunk as a whole so the
+  // shape stays: a big pinch no longer saves squashed (audit, 2026-10-22).
+  const fit = Math.min(1, (WIDTH * 3) / w, (HEIGHT * 3) / h);
+  w = Math.round(w * fit);
+  h = Math.round(h * fit);
   const r = ((Math.round(rotation * 10) / 10 + 540) % 360) - 180;
-  return { x: Math.round(x - w / 2), y: Math.round(y - h / 2), w, h, rotation: r };
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  return { x: clamp(Math.round(x - w / 2), -WIDTH, WIDTH * 2), y: clamp(Math.round(y - h / 2), -HEIGHT, HEIGHT * 2), w, h, rotation: r };
+}
+
+/**
+ * The box a turned layer covers on the canvas (its own box turned about its
+ * centre, then the box round that): what snapping lines up, so a turned
+ * layer snaps by the edges she sees (audit, 2026-10-22).
+ */
+export function turnedBox(l) {
+  const a = ((l.rotation || 0) * Math.PI) / 180;
+  const cos = Math.abs(Math.cos(a));
+  const sin = Math.abs(Math.sin(a));
+  const w = l.w * cos + l.h * sin;
+  const h = l.w * sin + l.h * cos;
+  return { x: l.x + l.w / 2 - w / 2, y: l.y + l.h / 2 - h / 2, w, h };
+}
+
+/** Words as the server keeps them (readLayers' str): runs of spaces made one, ends trimmed. */
+export const keptText = (v) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : '');
+
+/**
+ * A layer as the server will draw it (audit, 2026-10-22): its words tidied
+ * the same way, and a checklist without its empty rows (readLayers drops
+ * them). The editor draws this, so what she sees is what is saved.
+ */
+export function drawnLayer(l) {
+  if (l.kind === 'checklist') {
+    return { ...l, items: (l.items || []).map((it) => ({ ...it, text: keptText(it?.text) })).filter((it) => it.text) };
+  }
+  if (typeof l.text === 'string') return { ...l, text: keptText(l.text) };
+  return l;
 }
 
 /**
@@ -892,6 +930,17 @@ export function drawRes(scale, ratio = (typeof window !== 'undefined' && window.
   return Math.min(3, Math.max(1, Math.ceil(scale * ratio * 2) / 2));
 }
 
+// One finer canvas holds at most this many pixels (audit, 2026-10-22: a
+// full-canvas sticker at 3x, zoomed in on a phone, neared Safari's canvas
+// memory limit). Over it, the resolution comes down, never below 1.
+export const MAX_CANVAS_PIXELS = 12e6;
+
+/** drawRes for a box w x h points: as fine as asked, within MAX_CANVAS_PIXELS. */
+export function resFor(res, w, h) {
+  const area = Math.max(1, w * h);
+  return Math.max(1, Math.min(res, Math.sqrt(MAX_CANVAS_PIXELS / area)));
+}
+
 const WHITE = 235;
 const NEAR = 200;
 
@@ -1000,6 +1049,8 @@ const stickerRing = (r) => [...Array(24)].map((_, i) => [Math.cos((i * Math.PI) 
 export function stickerCanvas(l, drawBox, make = makeCanvas) {
   const m = stickerMargin(l);
   const width = l.outlineWidth || 12;
+  // The working canvases are let go as soon as they are drawn from (a phone keeps little canvas memory).
+  const release = (c) => { if (c && 'width' in c) { c.width = 0; c.height = 0; } };
   const box = make(l.w, l.h);
   drawBox(box.getContext('2d'));
   const sticker = make(l.w + m * 2, l.h + m * 2);
@@ -1014,8 +1065,10 @@ export function stickerCanvas(l, drawBox, make = makeCanvas) {
     for (const r of [width, width / 2]) {
       for (const [dx, dy] of stickerRing(r)) sx.drawImage(sil, m + dx, m + dy, l.w, l.h);
     }
+    release(sil);
   }
   sx.drawImage(box, m, m, l.w, l.h);
+  release(box);
   if (!l.shadow) return sticker;
   const out = make(l.w + m * 2, l.h + m * 2);
   const ox = out.getContext('2d');
@@ -1025,6 +1078,7 @@ export function stickerCanvas(l, drawBox, make = makeCanvas) {
   ox.shadowBlur = STICKER_SHADOW.blur * res;
   ox.shadowOffsetY = STICKER_SHADOW.offsetY * res;
   ox.drawImage(sticker, 0, 0, l.w + m * 2, l.h + m * 2);
+  release(sticker);
   return out;
 }
 

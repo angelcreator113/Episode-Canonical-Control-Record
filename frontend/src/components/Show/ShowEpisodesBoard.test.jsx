@@ -125,6 +125,19 @@ describe('ShowEpisodesBoard — Now producing and the pipeline (Evoni\'s mock, 2
     expect(screen.getByRole('link', { name: 'Open episode' }).getAttribute('href')).toBe('/episodes/ep-1');
   });
 
+  test("the card shows the episode's thumbnail, else the Studio's current one", async () => {
+    renderIt([{ ...DRAFT, thumbnail_url: 'https://cdn.example/ep1.jpg' }]);
+    await waitFor(() => expect(screen.getByTestId('seb-hero').querySelector('.seb-thumb img')?.getAttribute('src')).toBe('https://cdn.example/ep1.jpg'));
+  });
+
+  test("with no thumbnail_url, the card shows the Studio's current thumbnail", async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => (url.endsWith('/episodes/ep-1/saved')
+      ? { data: { data: [{ id: 't-1', isPrimary: true, url: 'https://cdn.example/saved.jpg' }] } }
+      : { data: {} }));
+    renderIt([DRAFT]);
+    await waitFor(() => expect(screen.getByTestId('seb-hero').querySelector('.seb-thumb img')?.getAttribute('src')).toBe('https://cdn.example/saved.jpg'));
+  });
+
   test('From the event reads the venue through the automation copy, with its DREAM city', async () => {
     renderIt([DRAFT]);
     await waitFor(() => expect(screen.getByTestId('seb-event').textContent).toContain('Echo Park'));
