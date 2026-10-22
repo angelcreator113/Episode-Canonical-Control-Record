@@ -8,8 +8,10 @@
  *                                        and the pictures to choose from
  *   POST /render                         the file as it would be saved (no saving): PNG, or JPEG over 2 MB
  *   POST /render/small                   the same layers drawn small (JPEG, 640 wide), for the season grid
+ *   POST /render/zip                     several { name, spec } drawn full size as saved, in one zip (at most 60)
  *   POST /episodes/:episodeId            render and save as the episode's primary thumbnail
  *   PUT  /shows/:showId/style            save the show's style for every episode
+ *   PUT  /shows/:showId/brand            the show's brand kit: { colours, fonts, stickers }, offered first
  *   GET  /templates                      every show's named templates, with their pictures (the Templates page)
  *   GET  /shows/:showId/season           the show's episodes, each with its thumbnail (or none) and whether it has its own arrangement
  *   GET  /shows/:showId/templates        the show's named templates, the default first
@@ -28,6 +30,7 @@
  *   POST /episodes/:episodeId/pictures   keep an uploaded picture (S3); { url, label }
  *   POST /episodes/:episodeId/title-ideas         five title ideas with a hook each (AI, within the daily budget)
  *   POST /episodes/:episodeId/pictures/cut-out    a picture's background removed, kept as an upload (AI image budget)
+ *   POST /episodes/:episodeId/backgrounds/ai      a background made from the episode's theme { words? }, kept as an upload (AI image budget)
  *   GET  /fonts/:key                     a thumbnail font, for the editor (thumbnailLayers.FONTS)
  *   GET  /preview?url=&w=                a smaller copy of one of our pictures, for the editor (WebP)
  *
@@ -108,6 +111,24 @@ router.post('/render/small', requireAuth, async (req, res) => {
   }
 });
 
+// Several thumbnails in one zip (Evoni, 2026-10-22): the season's ticked ones, or
+// versions for YouTube's Test & Compare. Every item is checked before the zip starts.
+router.post('/render/zip', requireAuth, async (req, res) => {
+  let started = false;
+  try {
+    const items = yt.zipItems(readBody(req));
+    const name = String(readBody(req).name || 'thumbnails').replace(/[^\w-]+/g, '-').slice(0, 60) || 'thumbnails';
+    res.set({ 'Content-Type': 'application/zip', 'Content-Disposition': `attachment; filename="${name}.zip"`, 'Cache-Control': 'no-store' });
+    started = true;
+    await yt.zipThumbnails(items, res);
+  } catch (err) {
+    if (!started) return sendError(res, err, 'zip');
+    console.error('[YouTubeThumbnail] zip stopped part way:', err.message);
+    res.destroy(err);
+  }
+  return undefined;
+});
+
 router.get('/shows/:showId/season', requireAuth, async (req, res) => {
   try {
     return res.json({ success: true, data: await yt.seasonEpisodes(models.sequelize, req.params.showId) });
@@ -128,6 +149,15 @@ router.post('/episodes/:episodeId', requireAuth, async (req, res) => {
     return res.status(201).json({ success: true, data: saved });
   } catch (err) {
     return sendError(res, err, 'save');
+  }
+});
+
+// The show's brand kit (Evoni, 2026-10-22): its colours, fonts and stickers, offered first.
+router.put('/shows/:showId/brand', requireAuth, async (req, res) => {
+  try {
+    return res.json({ success: true, data: await yt.saveBrand(models.sequelize, req.params.showId, readBody(req)) });
+  } catch (err) {
+    return sendError(res, err, 'brand');
   }
 });
 
@@ -279,6 +309,20 @@ router.post('/episodes/:episodeId/title-ideas', requireAuth, aiRateLimiter, asyn
     return res.json({ success: true, data: await thumbAi.titleIdeas(models.sequelize, req.params.episodeId) });
   } catch (err) {
     return sendError(res, err, 'title ideas');
+  }
+});
+
+// An AI background (Evoni, 2026-10-22): from the episode's theme and her words, within the image budget.
+router.post('/episodes/:episodeId/backgrounds/ai', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const [[episode]] = await models.sequelize.query(
+      'SELECT id FROM episodes WHERE id = :episodeId AND deleted_at IS NULL LIMIT 1',
+      { replacements: { episodeId: req.params.episodeId } });
+    if (!episode) throw new yt.ThumbnailError(404, 'Episode not found');
+    const picture = await thumbAi.aiBackground(models.sequelize, episode.id, String(readBody(req).words || ''));
+    return res.status(201).json({ success: true, data: picture });
+  } catch (err) {
+    return sendError(res, err, 'AI background');
   }
 });
 

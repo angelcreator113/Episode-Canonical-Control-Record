@@ -7,14 +7,15 @@ import React from 'react';
 import { vi, describe, test, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import ThumbnailSeason from './ThumbnailSeason';
-import { youtubeThumbnailsApi } from '../../lib/youtubeThumbnailsApi';
+import { youtubeThumbnailsApi, downloadBlob } from '../../lib/youtubeThumbnailsApi';
 import { presetLayers, layerOf } from '../../lib/thumbnailLayers';
 
 vi.mock('../../lib/youtubeThumbnailsApi', async () => {
   const actual = await vi.importActual('../../lib/youtubeThumbnailsApi');
   return {
     ...actual,
-    youtubeThumbnailsApi: { season: vi.fn(), templates: vi.fn(), sources: vi.fn(), renderSmall: vi.fn(), save: vi.fn(), saveDraft: vi.fn() },
+    youtubeThumbnailsApi: { season: vi.fn(), templates: vi.fn(), sources: vi.fn(), renderSmall: vi.fn(), save: vi.fn(), saveDraft: vi.fn(), zip: vi.fn() },
+    downloadBlob: vi.fn(),
   };
 });
 vi.mock('../../lib/thumbnailLayers', async () => {
@@ -100,6 +101,23 @@ describe('ThumbnailSeason', () => {
     // Episode 3 now has a thumbnail: drawing again is for episode 2 only; episode 3 stays, marked Saved.
     expect(screen.getByTestId('yts-season-draw').textContent).toContain('Draw again 1 episode');
     expect(within(screen.getByTestId('yts-season-ep-3')).getByText('Saved')).toBeTruthy();
+  });
+
+  // Evoni, 2026-10-22: the whole season in one zip.
+  test('downloads the ticked ones in one zip, each full size as it would be saved, named by its episode', async () => {
+    youtubeThumbnailsApi.zip.mockResolvedValue(new Blob(['zip'], { type: 'application/zip' }));
+    renderSeason();
+    fireEvent.click(await screen.findByTestId('yts-season-draw'));
+    await waitFor(() => expect(screen.getByTestId('yts-season-zip').textContent).toContain('Download 2 as a zip'));
+    fireEvent.click(screen.getByTestId('yts-season-zip'));
+    await waitFor(() => expect(downloadBlob).toHaveBeenCalled());
+    const [name, items] = youtubeThumbnailsApi.zip.mock.calls[0];
+    expect(name).toBe('season');
+    expect(items.map((i) => i.name)).toEqual(['2. Red Dress', '3. Gala Night']);
+    expect(items[1].spec).toMatchObject({ version: 2 });
+    expect(downloadBlob.mock.calls[0][1]).toBe('season.zip');
+    expect(screen.getByRole('status').textContent).toBe('2 thumbnails in season.zip.');
+    expect(youtubeThumbnailsApi.save).not.toHaveBeenCalled();
   });
 
   test('one that fails to save says why on its card, and the rest still save', async () => {
