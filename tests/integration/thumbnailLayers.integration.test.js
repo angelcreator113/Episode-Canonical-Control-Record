@@ -28,6 +28,7 @@ const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
 const draftsMigration = require('../../src/migrations/20261021090000-create-episode-thumbnail-drafts');
+const savedMigration = require('../../src/migrations/20261022090000-create-episode-saved-thumbnails');
 
 const { sequelize } = models;
 
@@ -68,6 +69,7 @@ const solid = (w, h, background) => sharp({ create: { width: w, height: h, chann
 
   beforeAll(async () => {
     await draftsMigration.up(sequelize.getQueryInterface(), Sequelize);
+    await savedMigration.up(sequelize.getQueryInterface(), Sequelize);
     token = TokenService.generateTokenPair({
       id: 'test-user-layers', email: 'user@layers.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
     }).accessToken;
@@ -154,9 +156,42 @@ const solid = (w, h, background) => sharp({ create: { width: w, height: h, chann
     expect(saved.status).toBe(201);
     expect(saved.body.data).toMatchObject({ type: 'jpeg', key: expect.stringMatching(/\.jpg$/) });
     expect(saved.body.data.bytes).toBeLessThanOrEqual(2 * 1024 * 1024);
-    const [row] = await rows('SELECT "mimeType", "fileSizeBytes" FROM thumbnails WHERE "episodeId" = :ep', { ep });
-    expect(row).toMatchObject({ mimeType: 'image/jpeg' });
-    expect(Number(row.fileSizeBytes)).toBe(saved.body.data.bytes);
+    const [row] = await rows('SELECT mime_type, file_size_bytes FROM episode_saved_thumbnails WHERE episode_id = :ep', { ep });
+    expect(row).toMatchObject({ mime_type: 'image/jpeg' });
+    expect(Number(row.file_size_bytes)).toBe(saved.body.data.bytes);
+  });
+
+  // Production's `thumbnails` table is older than its migration (Evoni,
+  // 2026-10-22: "column "s3Bucket" does not exist"); the Studio keeps its own.
+  test('saved thumbnails: listed current first; another made current; an older one deleted; the current one kept', async () => {
+    await savedMigration.up(sequelize.getQueryInterface(), Sequelize); // guarded: a second run changes nothing
+    const ep = await episode();
+    mockStore.set('pics/bg.png', await solid(1600, 900, '#0000FF'));
+    const first = (await auth(request(app).post(`${base}/episodes/${ep}`)).send(spec(`${BUCKET_URL}pics/bg.png`))).body.data;
+    const second = (await auth(request(app).post(`${base}/episodes/${ep}`)).send(spec(`${BUCKET_URL}pics/bg.png`))).body.data;
+    expect(first.id).toEqual(expect.any(String));
+
+    let list = (await auth(request(app).get(`${base}/episodes/${ep}/saved`))).body.data;
+    expect(list.map((t) => [t.id, t.isPrimary])).toEqual([[second.id, true], [first.id, false]]);
+    expect(list[0]).toMatchObject({ url: second.url, width: 1280, height: 720 });
+
+    const made = await auth(request(app).post(`${base}/episodes/${ep}/saved/${first.id}/primary`));
+    expect(made.status).toBe(200);
+    list = (await auth(request(app).get(`${base}/episodes/${ep}/saved`))).body.data;
+    expect(list.map((t) => [t.id, t.isPrimary])).toEqual([[first.id, true], [second.id, false]]);
+    const [episodeRow] = await rows('SELECT thumbnail_url FROM episodes WHERE id = :ep', { ep });
+    expect(episodeRow.thumbnail_url).toBe(first.url);
+
+    expect((await auth(request(app).delete(`${base}/episodes/${ep}/saved/${first.id}`))).status).toBe(409);
+    expect((await auth(request(app).delete(`${base}/episodes/${ep}/saved/${second.id}`))).status).toBe(200);
+    list = (await auth(request(app).get(`${base}/episodes/${ep}/saved`))).body.data;
+    expect(list.map((t) => t.id)).toEqual([first.id]);
+    // Another episode's thumbnail, or an id that is not one: 404.
+    expect((await auth(request(app).post(`${base}/episodes/${await episode()}/saved/${first.id}/primary`))).status).toBe(404);
+    expect((await auth(request(app).post(`${base}/episodes/${ep}/saved/42/primary`))).status).toBe(404);
+    // Nothing went to the older `thumbnails` table.
+    const [{ n }] = await rows('SELECT COUNT(*)::int AS n FROM thumbnails WHERE "episodeId" = :ep', { ep });
+    expect(n).toBe(0);
   });
 
   test('the show\'s template: saved with the style, kept when the style is saved without it, cleared with null', async () => {
