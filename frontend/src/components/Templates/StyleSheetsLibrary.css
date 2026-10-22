@@ -1,0 +1,30 @@
+/* Template Studio › Style sheets (Evoni, 2026-10-22). Tokens only: no hex, no rgb. */
+
+.ssl { display: flex; flex-direction: column; gap: 14px; padding: 4px 0 16px; }
+.ssl-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.ssl .ssl-title { margin: 0; font-family: var(--font-prose); font-size: 24px; font-weight: 600; color: var(--text-primary); }
+.ssl-sub { margin: 4px 0 0; max-width: 720px; font-size: 14px; line-height: 1.5; color: var(--text-secondary); }
+.ssl-show { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-secondary); }
+.ssl-show select { min-height: 44px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 14px; }
+.ssl-count { margin: 0; font-size: 13px; font-weight: 700; color: var(--text-secondary); }
+
+.ssl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(236px, 1fr)); gap: 16px; margin: 0; padding: 0; list-style: none; }
+.ssl-card { display: flex; flex-direction: column; gap: 10px; padding: 8px; border-radius: 16px; border: 1.5px solid var(--lala-parchment-3); background: var(--surface-card); box-shadow: var(--shadow-sm); }
+.ssl-card.is-off .ssl-pic { opacity: 0.45; }
+.ssl-pic { position: relative; overflow: hidden; margin: 0 auto; border-radius: 10px; }
+.ssl-scale { position: absolute; top: 0; left: 0; transform-origin: top left; pointer-events: none; }
+.ssl-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px 4px; }
+.ssl-name { margin: 0; font-family: var(--font-prose); font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.ssl-num { font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 400; color: var(--text-secondary); }
+
+.ssl-switch { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--text-secondary); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.ssl-switch.is-on { border-color: var(--primary); background: var(--primary-subtle); color: var(--primary-text); }
+.ssl-switch:disabled { cursor: wait; }
+.ssl-switch:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.ssl-knob { width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; }
+.ssl-switch.is-on .ssl-knob { background: currentColor; }
+.ssl-note { margin: 0; font-size: 12px; color: var(--text-secondary); }
+
+@media (max-width: 520px) {
+  .ssl-grid { grid-template-columns: minmax(0, 1fr); }
+}

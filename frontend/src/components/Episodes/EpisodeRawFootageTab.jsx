@@ -160,9 +160,11 @@ function Lane({ performer, clips, uploads, onFiles, busyId, scenes, ...handlers 
   );
 }
 
-export default function EpisodeRawFootageTab({ episode }) {
+export default function EpisodeRawFootageTab({ episode, onCount }) {
   const episodeId = episode?.id;
   const [clips, setClips] = useState([]);
+  // The Files tab shows how many clips there are on its Footage tab.
+  useEffect(() => { if (onCount) onCount(clips.length); }, [clips.length, onCount]);
   const [uploads, setUploads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

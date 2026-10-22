@@ -141,6 +141,31 @@ async function madeUpCutout() {
     expect(n).toBeGreaterThanOrEqual(1);
   });
 
+  test('a Style photo from To sort is filed as a pose: processed like an upload, and it leaves Style photos', async () => {
+    const ep = await episode();
+    const lb = await auth(request(app).post(`/api/v1/episodes/${ep}/lookbook/images`))
+      .attach('files', await photo(900, 1200), { filename: 'sort-me.jpg', contentType: 'image/jpeg' });
+    expect(lb.status).toBe(201);
+    const imageId = lb.body.data.images[0].id;
+    const from = url(ep, '/from-lookbook');
+    expect((await request(app).post(from).send({ image_id: imageId, character_key: 'justawoman', pose: 'front' })).status).toBe(401);
+    expect((await auth(request(app).post(from)).send({ image_id: 'nope', character_key: 'justawoman', pose: 'front' })).status).toBe(400);
+    expect((await auth(request(app).post(from)).send({ image_id: imageId, character_key: 'justawoman', pose: 'dancing' })).status).toBe(400);
+    expect((await auth(request(app).post(from)).send({ image_id: uuid(), character_key: 'justawoman', pose: 'front' })).status).toBe(404);
+    const other = await episode();
+    expect((await auth(request(app).post(url(other, '/from-lookbook'))).send({ image_id: imageId, character_key: 'justawoman', pose: 'front' })).status).toBe(404);
+
+    const res = await auth(request(app).post(from)).send({ image_id: imageId, character_key: 'justawoman', pose: 'front' });
+    expect(res.status).toBe(202);
+    expect(res.body.data).toMatchObject({ character_key: 'justawoman', pose: 'front', is_default: true, status: 'queued', original_filename: 'sort-me.jpg', width: 900, height: 1200 });
+    const [done] = await settled(ep);
+    expect(done).toMatchObject({ status: 'ready', steps: { background: 'kept' } });
+    const after = await auth(request(app).get(`/api/v1/episodes/${ep}/lookbook`));
+    expect(after.body.data.images.unsorted).toEqual([]);
+    // Filed once: a second try finds nothing.
+    expect((await auth(request(app).post(from)).send({ image_id: imageId, character_key: 'lala', pose: 'side' })).status).toBe(404);
+  });
+
   test('a small photo with no Replicate token: the upscale is skipped and says why', async () => {
     const ep = await episode();
     await upload(ep, 'justawoman', 'glamour', 300, 500);
