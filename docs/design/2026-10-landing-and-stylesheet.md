@@ -92,6 +92,7 @@ Lala's in-world social network is also called "lalaverse". Do not create a publi
   - palette: five colours;
   - tagline: not empty.
 - **Header:** "Style Page", a Draft/Approved pill, "Drop photos to sort", "Approve".
+  - **Changed 2026-10-22 (Evoni: "i dont want the uploads in the style page move them to the files tab"):** the Style Page uploads nothing. "Drop photos to sort", drag-and-drop, the per-spot Upload buttons and the To sort tray are gone; the header has "Photos in Files". Photos are uploaded in Files › Style photos (`EpisodeStylePhotosPanel`), one folder per spot, To sort first. On the Style Page a spot is filled with "Choose from Files" (Style photos and Character poses), and taking a photo off the sheet sends it back to To sort instead of deleting it. A one-photo spot that gets a new photo sends the old one to To sort (`vacateSlot`).
 - **Share & export** (enabled only when Approved), all drawn on the server, as the title overlay is:
   - Style sheet PNG 1024x1536
   - Pinterest pin 1000x1500
