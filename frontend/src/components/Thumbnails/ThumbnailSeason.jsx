@@ -9,8 +9,8 @@
  * used where it has one, unless asked not to.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, LayoutGrid, Pencil, RefreshCw, Save, TriangleAlert, X } from 'lucide-react';
-import { youtubeThumbnailsApi, episodeContent } from '../../lib/youtubeThumbnailsApi';
+import { Check, Download, LayoutGrid, Pencil, RefreshCw, Save, TriangleAlert, X } from 'lucide-react';
+import { youtubeThumbnailsApi, episodeContent, downloadBlob } from '../../lib/youtubeThumbnailsApi';
 import { fillTemplate, presetLayers, youtubeWarnings, measurer, loadThumbnailFonts } from '../../lib/thumbnailLayers';
 
 // Two at a time: quick enough, and gentle on the server that draws them.
@@ -154,6 +154,22 @@ export default function ThumbnailSeason({ showId, onOpenEpisode, onClose }) {
     if (live()) setRunning(null);
   };
 
+  // The ticked ones in one zip, full size as they would be saved (Evoni, 2026-10-22).
+  const zipPicked = async () => {
+    setRunning('zipping');
+    setMessage(null);
+    try {
+      const blob = await youtubeThumbnailsApi.zip('season', picked.map((e) => ({ name: label(e), spec: cards[e.id].spec })));
+      downloadBlob(blob, 'season.zip');
+      setMessage({ type: 'ok', text: `${picked.length} ${picked.length === 1 ? 'thumbnail' : 'thumbnails'} in season.zip.` });
+    } catch (err) {
+      console.error('[ThumbnailSeason] zip failed:', err);
+      setMessage({ type: 'error', text: reason(err, 'The zip could not be made.') });
+    } finally {
+      setRunning(null);
+    }
+  };
+
   const save = async () => {
     const mine = run.current + 1;
     run.current = mine;
@@ -243,6 +259,9 @@ export default function ThumbnailSeason({ showId, onOpenEpisode, onClose }) {
                 </button>
                 <button type="button" className="yts-btn is-primary" onClick={save} disabled={!picked.length || Boolean(running)} data-testid="yts-season-save">
                   <Save size={15} aria-hidden /> {running === 'saving' ? 'Saving…' : `Save ${picked.length} picked`}
+                </button>
+                <button type="button" className="yts-btn" onClick={zipPicked} disabled={!picked.length || Boolean(running)} data-testid="yts-season-zip">
+                  <Download size={15} aria-hidden /> {running === 'zipping' ? 'Making the zip…' : `Download ${picked.length} as a zip`}
                 </button>
               </>
             )}

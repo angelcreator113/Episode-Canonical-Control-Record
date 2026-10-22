@@ -21,8 +21,15 @@ vi.mock('react-konva', () => {
   const Transformer = React.forwardRef(() => null);
   // The marks layer has a ref (hidden for the snapshot).
   const Layer = React.forwardRef((props, ref) => Plain('Layer')(props));
-  return { Stage: Plain('Stage'), Layer, Group, Rect: Plain('Rect'), Text: Plain('Text'), Line: Plain('Line'), Image: Plain('Image'), Transformer };
+  // The stage keeps its props (its touch handlers) and answers for a fake Konva stage.
+  const Stage = React.forwardRef((props, ref) => {
+    stage.props = props;
+    React.useImperativeHandle(ref, () => stage.api);
+    return Plain('Stage')(props);
+  });
+  return { Stage, Layer, Group, Rect: Plain('Rect'), Text: Plain('Text'), Line: Plain('Line'), Image: Plain('Image'), Transformer };
 });
+const stage = { props: null, api: null };
 
 vi.mock('../../lib/picturePreview', () => ({
   previewUrl: (url) => Promise.resolve(url),
@@ -178,5 +185,59 @@ describe('ThumbnailCanvas', () => {
     expect(named('grid-line')).toHaveLength(0);
     expect(JSON.parse(named('safe-timestamp')[0].dataset.props)).toMatchObject({ x: 1090, y: 630, width: 190, height: 90 });
     expect(JSON.parse(named('safe-margin')[0].dataset.props)).toMatchObject({ x: 64, y: 36, width: 1152, height: 648 });
+  });
+});
+
+// Two fingers on the phone canvas (Evoni, 2026-10-22).
+describe('ThumbnailCanvas pinch', () => {
+  const touches = (a, b) => ({ evt: { touches: [{ clientX: a[0], clientY: a[1] }, { clientX: b[0], clientY: b[1] }], preventDefault: vi.fn() } });
+  const fakeNode = () => {
+    const n = { sx: 1, sy: 1, r: 0 };
+    return Object.assign(n, {
+      x: () => 640, y: () => 360,
+      scaleX: vi.fn((v) => { if (v === undefined) return n.sx; n.sx = v; return n; }),
+      scaleY: vi.fn((v) => { if (v === undefined) return n.sy; n.sy = v; return n; }),
+      rotation: vi.fn((v) => { if (v === undefined) return n.r; n.r = v; return n; }),
+      getLayer: () => ({ batchDraw: () => {} }),
+    });
+  };
+  beforeAll(() => { if (!globalThis.CSS?.escape) globalThis.CSS = { ...(globalThis.CSS || {}), escape: (x) => x }; });
+
+  test('on the picked layer: pinch resizes it and a twist turns it, drawn as the fingers move, kept when they lift', () => {
+    const onChange = vi.fn();
+    const lalaNode = fakeNode();
+    stage.api = { find: () => [], findOne: (sel) => (sel === '#lala' ? lalaNode : null) };
+    render(<ThumbnailCanvas spec={SPEC} selectedId="lala" onSelect={() => {}} onChange={onChange} />);
+    act(() => { stage.props.onTouchMove(touches([0, 0], [100, 0])); });
+    act(() => { stage.props.onTouchMove(touches([0, 0], [0, 150])); });
+    expect(lalaNode.sx).toBe(1.5);
+    expect(lalaNode.r).toBe(-6 + 90);
+    expect(onChange).not.toHaveBeenCalled();
+    act(() => { stage.props.onTouchEnd({ evt: { touches: [] } }); });
+    const lala = SPEC.layers.find((l) => l.id === 'lala');
+    expect(onChange).toHaveBeenCalledWith('lala', expect.objectContaining({ w: Math.round(lala.w * 1.5), h: Math.round(lala.h * 1.5), rotation: 84 }));
+    expect(lalaNode.sx).toBe(1);
+  });
+
+  test('with nothing picked, pinch zooms the canvas from where it was', () => {
+    const onZoom = vi.fn();
+    stage.api = { find: () => [], findOne: () => null };
+    render(<ThumbnailCanvas spec={SPEC} selectedId={null} onSelect={() => {}} onChange={() => {}} zoom={1.5} onZoom={onZoom} />);
+    act(() => { stage.props.onTouchMove(touches([0, 0], [100, 0])); });
+    act(() => { stage.props.onTouchMove(touches([0, 0], [200, 0])); });
+    expect(onZoom).toHaveBeenLastCalledWith(3);
+    act(() => { stage.props.onTouchEnd({ evt: { touches: [] } }); });
+  });
+
+  test('a locked picked layer is not pinched; the canvas zooms instead', () => {
+    const onChange = vi.fn();
+    const onZoom = vi.fn();
+    stage.api = { find: () => [], findOne: () => fakeNode() };
+    render(<ThumbnailCanvas spec={updateLayer(SPEC, 'lala', { locked: true })} selectedId="lala" onSelect={() => {}} onChange={onChange} onZoom={onZoom} />);
+    act(() => { stage.props.onTouchMove(touches([0, 0], [100, 0])); });
+    act(() => { stage.props.onTouchMove(touches([0, 0], [120, 0])); });
+    act(() => { stage.props.onTouchEnd({ evt: { touches: [] } }); });
+    expect(onZoom).toHaveBeenLastCalledWith(1.2);
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

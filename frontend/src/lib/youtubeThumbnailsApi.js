@@ -162,6 +162,18 @@ export function episodeContent(src) {
  * first; the older /api/v1/thumbnails reads select model-only columns and
  * fail on a database built from the migrations.
  */
+/** Hands a blob to the browser as a download named name. */
+export function downloadBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export async function currentThumbnail(episodeId) {
   if (!episodeId) return null;
   const saved = await youtubeThumbnailsApi.saved(episodeId);
@@ -173,6 +185,8 @@ export const youtubeThumbnailsApi = {
   sources: (episodeId) => api.get(`${base}/episodes/${episodeId}/sources`).then((r) => r.data?.data),
   render: (spec) => api.post(`${base}/render`, spec, { responseType: 'blob', timeout: 60000 }).then((r) => r.data),
   // A whole season at once (Evoni, 2026-10-21): a small JPEG of the layers, and the show's episodes with their thumbnails.
+  // Several thumbnails in one zip (Evoni, 2026-10-22): [{ name, spec }], drawn full size as saved.
+  zip: (name, items) => api.post(`${base}/render/zip`, { name, items }, { responseType: 'blob', timeout: 0 }).then((r) => r.data),
   renderSmall: (spec) => api.post(`${base}/render/small`, spec, { responseType: 'blob', timeout: 60000 }).then((r) => r.data),
   season: (showId) => api.get(`${base}/shows/${showId}/season`).then((r) => (Array.isArray(r.data?.data) ? r.data.data : [])),
   save: (episodeId, spec) => api.post(`${base}/episodes/${episodeId}`, spec, { timeout: 60000 }).then((r) => r.data?.data),
@@ -180,6 +194,8 @@ export const youtubeThumbnailsApi = {
   saveDraft: (episodeId, spec) => api.put(`${base}/episodes/${episodeId}/draft`, spec).then((r) => r.data?.data),
   // AI help (Evoni, 2026-10-21), within the daily budgets: title ideas; a picture's background removed (kept as an upload).
   titleIdeas: (episodeId) => api.post(`${base}/episodes/${episodeId}/title-ideas`, {}, { timeout: 60000 }).then((r) => (Array.isArray(r.data?.data) ? r.data.data : [])),
+  // An AI background (Evoni, 2026-10-22): from the episode's theme and her words, kept as an upload.
+  aiBackground: (episodeId, words) => api.post(`${base}/episodes/${episodeId}/backgrounds/ai`, { words }, { timeout: 180000 }).then((r) => r.data?.data),
   cutOut: (episodeId, url, name) => api.post(`${base}/episodes/${episodeId}/pictures/cut-out`, { url, name }, { timeout: 120000 }).then((r) => r.data?.data),
   uploadPicture: (episodeId, file) => {
     const form = new FormData();
@@ -189,6 +205,8 @@ export const youtubeThumbnailsApi = {
   saved: (episodeId) => api.get(`${base}/episodes/${episodeId}/saved`).then((r) => (Array.isArray(r.data?.data) ? r.data.data : [])),
   makePrimary: (episodeId, thumbnailId) => api.post(`${base}/episodes/${episodeId}/saved/${thumbnailId}/primary`).then((r) => r.data?.data),
   removeSaved: (episodeId, thumbnailId) => api.delete(`${base}/episodes/${episodeId}/saved/${thumbnailId}`).then((r) => r.data?.data),
+  // The show's brand kit (Evoni, 2026-10-22): { colours, fonts, stickers }.
+  saveBrand: (showId, brand) => api.put(`${base}/shows/${showId}/brand`, brand).then((r) => r.data?.data),
   saveStyle: (showId, style) => api.put(`${base}/shows/${showId}/style`, style).then((r) => r.data?.data),
   // A show's named templates (Evoni, 2026-10-21); "legacy" is the one kept before them.
   templates: (showId) => api.get(`${base}/shows/${showId}/templates`).then((r) => (Array.isArray(r.data?.data) ? r.data.data : [])),

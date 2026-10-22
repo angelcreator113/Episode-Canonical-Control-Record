@@ -23,8 +23,9 @@ vi.mock('../lib/youtubeThumbnailsApi', async () => {
       templates: vi.fn(), createTemplate: vi.fn(), updateTemplate: vi.fn(), deleteTemplate: vi.fn(),
       versions: vi.fn(), createVersion: vi.fn(), updateVersion: vi.fn(), deleteVersion: vi.fn(),
       season: vi.fn(), renderSmall: vi.fn(),
-      titleIdeas: vi.fn(), cutOut: vi.fn(),
+      titleIdeas: vi.fn(), cutOut: vi.fn(), zip: vi.fn(), saveBrand: vi.fn(), aiBackground: vi.fn(),
     },
+    downloadBlob: vi.fn(),
   };
 });
 vi.mock('../lib/picturePreview', () => ({
@@ -39,9 +40,11 @@ vi.mock('../lib/thumbnailLayers', async () => {
 // The canvas: each visible layer as a button that picks it, and a button
 // that "drags" the picked layer (what Konva's drag and transform report).
 vi.mock('../components/Thumbnails/ThumbnailCanvas', () => ({
-  default: ({ spec, selectedId, onSelect, onChange, onSnapshot, grid, safeZones }) => (
+  default: ({ spec, selectedId, onSelect, onChange, onSnapshot, grid, safeZones, onZoom }) => (
     <>
     <button type="button" data-testid="canvas-snapshot" onClick={() => onSnapshot?.('data:image/jpeg;base64,c25hcA==')}>snapshot</button>
+    <button type="button" data-testid="canvas-pinch" onClick={() => onZoom?.(2.1)}>pinch</button>
+    <button type="button" data-testid="canvas-pinch-far" onClick={() => onZoom?.(40)}>pinch far</button>
     <div data-testid="yts-canvas" data-grid={String(Boolean(grid))} data-safe={String(Boolean(safeZones))}>
       {spec.layers.filter((l) => l.visible).map((l) => (
         <button key={l.id} type="button" data-testid={`canvas-${l.id}`} onClick={() => onSelect(l.id)}>{l.id}</button>
@@ -53,7 +56,7 @@ vi.mock('../components/Thumbnails/ThumbnailCanvas', () => ({
 }));
 
 import {
-  youtubeThumbnailsApi, episodeWords, thumbnailStudioHref, defaultPose, folderPath, folderCount, folderCover, firstFolder,
+  youtubeThumbnailsApi, downloadBlob, episodeWords, thumbnailStudioHref, defaultPose, folderPath, folderCount, folderCover, firstFolder,
 } from '../lib/youtubeThumbnailsApi';
 import { presetLayers, layerOf } from '../lib/thumbnailLayers';
 import YouTubeThumbnailStudio from './YouTubeThumbnailStudio';
@@ -1218,6 +1221,93 @@ describe('YouTubeThumbnailStudio', () => {
     expect(showId).toBe('show-1');
     expect(body).toMatchObject({ spec: layers, makeDefault: false, name: expect.stringMatching(/^Saved /) });
     expect((await screen.findByTestId('yts-toast')).textContent).toContain('made from that saved thumbnail');
+  });
+
+  test('a pinch on the canvas with nothing picked zooms it, to the nearest quarter and no further than the most', async () => {
+    renderPage();
+    await opened();
+    fireEvent.click(screen.getByTestId('canvas-pinch'));
+    expect(within(screen.getByTestId('yts-zoom')).getByText('200%')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('canvas-pinch-far'));
+    expect(within(screen.getByTestId('yts-zoom')).getByRole('button', { name: 'Zoom in' }).disabled).toBe(true);
+  });
+
+  // Evoni, 2026-10-22: an A/B kit for YouTube's Test & Compare.
+  test('the A/B kit: Now and up to two versions (three at most), in one zip named A, B, C', async () => {
+    const vSpec = (t) => ({ version: 2, layers: [{ id: 'title', role: 'title', kind: 'text', text: t, x: 0, y: 0, w: 100, h: 50 }] });
+    youtubeThumbnailsApi.sources.mockResolvedValue({ ...SOURCES, versions: [
+      { id: 'v1', name: 'Version A', spec: vSpec('Red'), previewUrl: null },
+      { id: 'v2', name: 'Version B', spec: vSpec('Gold'), previewUrl: null },
+      { id: 'v3', name: 'Version C', spec: vSpec('Blue'), previewUrl: null },
+    ] });
+    youtubeThumbnailsApi.zip.mockResolvedValue(new Blob(['zip']));
+    renderPage();
+    await opened();
+    fireEvent.click(await screen.findByTestId('yts-kit-btn'));
+    const kit = within(screen.getByTestId('yts-kit'));
+    expect(kit.getByRole('checkbox', { name: 'Now' }).checked).toBe(true);
+    expect(screen.getByTestId('yts-kit-download').disabled).toBe(true); // one is not a test
+    fireEvent.click(kit.getByRole('checkbox', { name: 'Version A' }));
+    fireEvent.click(kit.getByRole('checkbox', { name: 'Version C' }));
+    // Three is YouTube's most.
+    expect(kit.getByRole('checkbox', { name: 'Version B' }).disabled).toBe(true);
+    fireEvent.click(screen.getByTestId('yts-kit-download'));
+    await waitFor(() => expect(downloadBlob).toHaveBeenCalled());
+    const [name, items] = youtubeThumbnailsApi.zip.mock.calls[0];
+    expect(name).toBe('styling-adventures-ep1-ab');
+    expect(items.map((i) => i.name)).toEqual(['A Now', 'B Version A', 'C Version C']);
+    expect(items[0].spec.layers.length).toBeGreaterThan(3);
+    expect(items[2].spec).toEqual(vSpec('Blue'));
+    expect(downloadBlob.mock.calls[0][1]).toBe('styling-adventures-ep1-ab.zip');
+  });
+
+  // Evoni, 2026-10-22: a show's own colours, fonts and stickers, offered first.
+  test('the brand kit: the show\'s colours first in the palette, its fonts first in the font list, its stickers first; kept for the show', async () => {
+    youtubeThumbnailsApi.sources.mockResolvedValue({ ...SOURCES, style: { ...SOURCES.style, brand: { colours: ['#123ABC'], fonts: ['hand'], stickers: ['tape'] } } });
+    youtubeThumbnailsApi.saveBrand.mockImplementation((id, b) => Promise.resolve(b));
+    renderPage();
+    await opened();
+    const palette = within(screen.getByRole('region', { name: 'Colour palette' }));
+    const swatches = palette.getAllByRole('button', { name: /^Accent / });
+    expect(swatches[0].getAttribute('aria-label')).toBe('Accent #123ABC');
+    expect(swatches[0].className).toContain('is-brand');
+    // Stickers: the show's first, marked.
+    const stickers = within(screen.getByTestId('yts-stickers')).getAllByRole('button');
+    expect(stickers[0].getAttribute('aria-label')).toBe('Add tape');
+    // Fonts: the show's in their own group, first.
+    fireEvent.click(screen.getByTestId('canvas-title'));
+    const groups = screen.getByRole('combobox', { name: 'Font' }).querySelectorAll('optgroup');
+    expect([...groups].map((g) => g.label)).toEqual(["The show's fonts", 'All fonts']);
+    expect([...groups[0].querySelectorAll('option')].map((o) => o.value)).toEqual(['hand']);
+    // Add the accent in use; take a colour off; tick a font.
+    const kit = within(screen.getByTestId('yts-brand'));
+    fireEvent.click(kit.getByTestId('yts-brand-add'));
+    await waitFor(() => expect(youtubeThumbnailsApi.saveBrand).toHaveBeenCalledWith('show-1', { colours: ['#123ABC', '#B8962E'], fonts: ['hand'], stickers: ['tape'] }));
+    await waitFor(() => expect(kit.queryByTestId('yts-brand-add')).toBeNull());
+    fireEvent.click(kit.getByRole('button', { name: 'Take #123ABC out of the brand kit' }));
+    await waitFor(() => expect(youtubeThumbnailsApi.saveBrand).toHaveBeenLastCalledWith('show-1', { colours: ['#B8962E'], fonts: ['hand'], stickers: ['tape'] }));
+    fireEvent.click(kit.getByRole('button', { name: /Fonts and stickers/ }));
+    fireEvent.click(kit.getByRole('checkbox', { name: 'Clean' }));
+    await waitFor(() => expect(youtubeThumbnailsApi.saveBrand).toHaveBeenLastCalledWith('show-1', { colours: ['#B8962E'], fonts: ['hand', 'sans'], stickers: ['tape'] }));
+  });
+
+  // Evoni, 2026-10-22: a background made with AI from the episode's theme and her words.
+  test('an AI background from her words becomes the background, kept in Uploads; Undo puts the old one back; a refusal says why', async () => {
+    youtubeThumbnailsApi.aiBackground.mockResolvedValue({ url: 'https://b.s3.amazonaws.com/up/ai-bg.jpg', label: 'AI background', cost: 0.04 });
+    renderPage();
+    await opened();
+    const card = within(screen.getByTestId('yts-ai-bg'));
+    fireEvent.change(card.getByLabelText('What the AI background shows'), { target: { value: ' a rooftop at night ' } });
+    fireEvent.click(card.getByTestId('yts-ai-bg-btn'));
+    await waitFor(() => expect(youtubeThumbnailsApi.aiBackground).toHaveBeenCalledWith('ep-1', 'a rooftop at night'));
+    expect((await screen.findByTestId('yts-toast')).textContent).toContain('about $0.04');
+    await waitFor(() => expect(layerOf(lastDraft(), 'background').src).toBe('https://b.s3.amazonaws.com/up/ai-bg.jpg'), { timeout: 3000 });
+    fireEvent.click(screen.getByRole('button', { name: /Undo/ }));
+    await waitFor(() => expect(layerOf(lastDraft(), 'background').src).not.toBe('https://b.s3.amazonaws.com/up/ai-bg.jpg'), { timeout: 3000 });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    youtubeThumbnailsApi.aiBackground.mockRejectedValueOnce({ response: { data: { error: "Today's image budget is used up" } } });
+    fireEvent.click(card.getByTestId('yts-ai-bg-btn'));
+    expect((await screen.findByRole('alert')).textContent).toContain("Today's image budget is used up");
   });
 
   test('the grid and the safe zones: toggled on the toolbar, drawn over the canvas only', async () => {
