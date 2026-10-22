@@ -22,11 +22,13 @@
 const crypto = require('crypto');
 const { uploadPng } = require('./episodeTitleOverlayService');
 
-const CATEGORIES = Object.freeze(['unsorted', 'front', 'side', 'back', 'hero', 'hair', 'nails', 'eyes', 'lips', 'skin', 'venue', 'inspo']);
+// 'detail' (Evoni's designs' DETAIL SHOT / OUTFIT DETAIL, 2026-10-22) needs
+// migration 20261022160000; it is not one of the readiness items.
+const CATEGORIES = Object.freeze(['unsorted', 'front', 'side', 'back', 'hero', 'hair', 'nails', 'eyes', 'lips', 'skin', 'venue', 'inspo', 'detail']);
 // One live photo each; uploading or moving another into it replaces it.
-const SINGLE_SLOT = Object.freeze(['front', 'side', 'back', 'hero', 'hair', 'nails', 'eyes', 'lips', 'skin']);
+const SINGLE_SLOT = Object.freeze(['front', 'side', 'back', 'hero', 'hair', 'nails', 'eyes', 'lips', 'skin', 'detail']);
 // The 11 spots "style sheet ready (x of 11)" counts.
-const READINESS_CATEGORIES = Object.freeze(CATEGORIES.filter((c) => c !== 'unsorted'));
+const READINESS_CATEGORIES = Object.freeze(CATEGORIES.filter((c) => c !== 'unsorted' && c !== 'detail'));
 const MAX_INSPO_UPLOADS = 2; // "Key inspo: up to two uploads"
 const UPLOAD_TYPES = Object.freeze({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' });
 const MAX_FILES = 20;
