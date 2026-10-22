@@ -59,7 +59,7 @@
 .yts-exact figcaption { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); }
 .yts-layer-settings { padding: 12px; border-radius: 14px; border: 1.5px solid var(--accent-light); background: var(--surface-card); }
 .yts-color { width: 100%; min-height: 40px; padding: 2px; border-radius: 10px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); }
-.yts-layers { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.yts-layers { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; container-type: inline-size; }
 .yts-layer { display: flex; align-items: center; gap: 4px; padding: 4px; border-radius: 10px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); }
 .yts-layer.is-on { border-color: var(--accent-dark); background: var(--accent-subtle); }
 .yts-layer.is-hidden .yts-layer-name { color: var(--text-secondary); text-decoration: line-through; }
@@ -139,8 +139,13 @@
 @media (max-width: 1100px) {
   .yts-studio, .yts-more { grid-template-columns: minmax(0, 1fr); }
 }
+/* Layers and Assets one above the other on a phone (Evoni, 2026-10-22: side
+   by side on hers, each about 260px, the layer names cut to one letter). */
+@media (max-width: 760px) {
+  .yts-bottom { grid-template-columns: minmax(0, 1fr); }
+}
 @media (max-width: 520px) {
-  .yts-bottom, .yts-pair { grid-template-columns: minmax(0, 1fr); }
+  .yts-pair { grid-template-columns: minmax(0, 1fr); }
   .yts-text-row { grid-template-columns: minmax(0, 1fr); }
   .yts-text-row > .yts-btn { grid-column: 1; }
   .yts-toolbar-group { padding-left: 0; border-left: none; }
@@ -283,6 +288,14 @@
 .yts-tab.is-on { border-color: var(--accent-dark); background: var(--accent-dark); color: var(--text-inverse); }
 @media (max-width: 520px) {
   .yts-layer-grip { display: none; }
+}
+/* A narrow list: the picture and the whole name on one line, the buttons
+   under them, so no name is cut to a letter. */
+@container (max-width: 420px) {
+  .yts-layer { flex-wrap: wrap; }
+  .yts-layer-grip { display: none; }
+  .yts-layer-name { flex: 1 1 calc(100% - 56px); }
+  .yts-layer-name + .yts-icon-btn { margin-left: 48px; }
 }
 
 /* AI help (Evoni, 2026-10-21): title ideas. */
