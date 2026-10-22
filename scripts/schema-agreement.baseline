@@ -47,12 +47,6 @@ src/controllers/sceneController.js	SceneAsset.findOne	where	role
 src/controllers/sceneStudioController.js	Asset.create	values	label
 src/controllers/sceneStudioController.js	Asset.create	values	type
 src/controllers/sceneStudioController.js	Asset.create	values	usage_type
-src/controllers/thumbnailController.js	Episode.findAndCountAll	attributes	episodeTitle
-src/controllers/thumbnailController.js	Episode.findAndCountAll	attributes	showName
-src/controllers/thumbnailController.js	Episode.findByPk	attributes	episodeNumber
-src/controllers/thumbnailController.js	Episode.findByPk	attributes	episodeTitle
-src/controllers/thumbnailController.js	Episode.findByPk	attributes	seasonNumber
-src/controllers/thumbnailController.js	Episode.findByPk	attributes	showName
 src/controllers/wardrobeLibraryController.js	EpisodeWardrobe.create	values	override_character
 src/controllers/wardrobeLibraryController.js	EpisodeWardrobe.create	values	override_occasion
 src/controllers/wardrobeLibraryController.js	EpisodeWardrobe.create	values	override_season
