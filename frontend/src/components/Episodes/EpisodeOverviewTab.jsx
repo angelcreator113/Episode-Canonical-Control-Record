@@ -1,11 +1,10 @@
 // frontend/src/components/Episodes/EpisodeOverviewTab.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Dices, CalendarHeart, Tv, Globe, Link2, Briefcase, Zap, Trophy, RefreshCw, X, Sparkles, ArrowRight, ListOrdered, Package } from 'lucide-react';
+import { CalendarHeart, Tv, Globe, Link2, Briefcase, Zap, Trophy, RefreshCw, X, Sparkles, ArrowRight, ListOrdered, Package } from 'lucide-react';
 import api from '../../services/api';
 import { getEpisodeEvents } from '../../services/episodeEventsApi';
 import SceneSuggestionReview from '../episode/SceneSuggestionReview';
-import TimelinePlacementsSection from '../episode/TimelinePlacementsSection';
 import EpisodeTeaserSection from './EpisodeTeaserSection';
 import EpisodeMoneyCard from './EpisodeMoneyCard';
 import EpisodeStyleBoard from './EpisodeStyleBoard';
@@ -46,7 +45,6 @@ const TIER_CONFIG = {
  */
 const BAND_NOTES = {
   Identity: 'What this episode is and where it sits.',
-  Production: 'What goes on screen in the video.',
   Source: 'Where it came from on The Pulse.',
   Stakes: "What's at risk, and the money.",
   Reference: 'Snapshots from the event, for reading only.',
@@ -142,6 +140,8 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   // existing /scene-sets endpoint.
   const [sceneSuggestion, setSceneSuggestion] = useState(null);
   const [suggestBusy, setSuggestBusy] = useState(false);
+  // Which column a phone shows: 'story' | 'style'.
+  const [phoneCol, setPhoneCol] = useState('story');
   const [applyBusy, setApplyBusy] = useState(false);
   const [formData, setFormData] = useState({
     title: episode.title || '',
@@ -425,7 +425,6 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   const coinsTile = coinsAfterPlan(money, { accepted: isAccepted });
   const prestige = primaryEvent?.prestige;
   const tiles = [
-    { key: 'checklist', label: 'Production checklist', value: checks ? `${checks.done} / ${checks.total}` : '—', link: { label: 'Open Production', tab: 'checklist' } },
     { key: 'prestige', label: 'Prestige', value: prestige ? `${prestige} / 10` : 'Not set', note: 'from the event' },
     { key: 'coins', label: 'Coins after episode', value: coinsTile.value, link: { label: 'Open Money', tab: 'money' }, note: coinsTile.note },
     { key: 'look', label: "Lala's look", ...lookTile(outfit, outfitPieces), link: { label: 'Open Wardrobe', tab: 'wardrobe' } },
@@ -434,6 +433,53 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   const handleSave = async () => {
     try { await onUpdate(formData); setIsEditing(false); } catch { alert('Failed to save'); }
   };
+
+  // AI scene-set suggester, in the next-step card (Evoni, 2026-10-22
+  // Overview layout list): disabled until the episode has a script, since
+  // there is nothing to analyze otherwise. Fires the suggest endpoint, then
+  // opens SceneSuggestionReview to approve or discard.
+  const suggestScenes = async () => {
+    setSuggestBusy(true);
+    try {
+      const { data } = await api.post(`/api/v1/episodes/${episode.id}/suggest-scenes`);
+      if (data?.success && data?.proposal) {
+        setSceneSuggestion({ proposal: data.proposal, contextSummary: data.context_summary });
+      } else {
+        alert(data?.error || 'No suggestions returned');
+      }
+    } catch (err) {
+      alert(err?.response?.data?.error || err.message || 'Failed to fetch suggestions');
+    } finally {
+      setSuggestBusy(false);
+    }
+  };
+
+  // Allowed outcomes, toggleable: disabling a tier narrows what the script
+  // generator and the evaluator may land on. In the Story brief, beside
+  // Designed intent.
+  const outcomes = brief ? (
+    <div className="eos-field eov-outcomes" data-testid="overview-allowed-outcomes">
+      <span className="eos-field-label">Allowed outcomes</span>
+      <div className="eov-chips" role="group" aria-label="Allowed outcomes">
+        {INTENTS.map(o => {
+          const cfg = TIER_CONFIG[o];
+          const active = draft.allowed_outcomes.includes(o);
+          return (
+            <button
+              key={o}
+              type="button"
+              className={`eov-outcome${active ? ' is-on' : ''}`}
+              style={{ '--tier-color': cfg.color, '--tier-bg': cfg.bg }}
+              aria-pressed={active}
+              disabled={isLocked}
+              onClick={() => toggleOutcome(o)}
+            >{active ? '✓' : '✗'} {cfg.emoji} {o}</button>
+          );
+        })}
+      </div>
+      <span className="eov-card-note">Turn one off and the script and the evaluation won't land on it.</span>
+    </div>
+  ) : null;
 
 
   if (isEditing) {
@@ -501,17 +547,39 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
           were the tabs over again (Locations, Script, Quick tools, the
           button bar) are gone; each still has its tab. */}
       <div className="eov-top">
-        <NextStepBanner step={step} onOpenTab={onOpenTab} />
+        <NextStepBanner
+          step={step} onOpenTab={onOpenTab}
+          meta={checks ? `Production checklist: ${checks.done} of ${checks.total} done` : null}
+          extra={(
+            <button
+              type="button"
+              className="eos-next-btn is-quiet"
+              onClick={suggestScenes}
+              disabled={!scriptInfo?.exists || suggestBusy}
+              title={!scriptInfo?.exists ? 'Add a script first' : 'AI suggests scene sets per beat'}
+            >
+              <Sparkles size={15} aria-hidden="true" /> {suggestBusy ? 'Thinking…' : 'Suggest Scenes'}
+            </button>
+          )}
+        />
         <OverviewTiles tiles={tiles} onOpenTab={onOpenTab} />
       </div>
-      <div className="eov-columns">
-      <section className="eov-col" aria-labelledby="eov-col-story" data-testid="overview-story">
+      {/* On a phone, one column at a time (Evoni, 2026-10-22 Overview layout
+          list); the desktop keeps both side by side. */}
+      <div className="eov-switch" role="group" aria-label="Show">
+        {[['story', 'Story'], ['style', 'Style']].map(([k, label]) => (
+          <button key={k} type="button" className={`eov-switch-btn${phoneCol === k ? ' is-on' : ''}`} aria-pressed={phoneCol === k} onClick={() => setPhoneCol(k)}>{label}</button>
+        ))}
+      </div>
+      <div className="eov-columns" data-phone-col={phoneCol}>
+      <section className="eov-col" data-col="story" aria-labelledby="eov-col-story" data-testid="overview-story">
       <h2 className="eov-col-title" id="eov-col-story">Story</h2>
       <div className="eos-grid">
         <StoryBriefCard
           brief={brief} draft={draft} setDraft={setDraft} saveBriefField={saveBriefField}
           saving={savingBrief} locked={isLocked} synopsis={formData.description}
           onEdit={() => setIsEditing(true)} archetypes={ARCHETYPES} intents={INTENTS}
+          outcomes={outcomes}
         />
         <FromEventCard from={fromEvent} showId={showId} eventId={source?.event?.id} onOpenTab={onOpenTab} />
       </div>
@@ -519,36 +587,9 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
       {/* Viewer teaser (P12, Task #2386) */}
       <EpisodeTeaserSection episode={episode} onUpdate={onUpdate} />
 
-      {/* IDENTITY band — what is this episode? The allowed outcomes
-          (editable on the brief), then the events driving it and where it
-          sits in the season. */}
+      {/* IDENTITY band — what is this episode? The events driving it and
+          where it sits in the season (the allowed outcomes are in the brief). */}
       <SectionBand title="Identity">
-      {/* ALLOWED OUTCOMES — toggleable. Disabling tiers narrows what the
-          script generator and evaluator are allowed to produce. */}
-      {brief && (
-        <div className="eov-card">
-          <CardTitle icon={Dices}>Allowed outcomes</CardTitle>
-          <p className="eov-card-note">Turn one off and the script and the evaluation won't land on it.</p>
-          <div className="eov-chips">
-            {INTENTS.map(o => {
-              const cfg = TIER_CONFIG[o];
-              const active = draft.allowed_outcomes.includes(o);
-              return (
-                <button
-                  key={o}
-                  type="button"
-                  className={`eov-outcome${active ? ' is-on' : ''}`}
-                  style={{ '--tier-color': cfg.color, '--tier-bg': cfg.bg }}
-                  aria-pressed={active}
-                  disabled={isLocked}
-                  onClick={() => toggleOutcome(o)}
-                >{active ? '✓' : '✗'} {cfg.emoji} {o}</button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       <div className="eov-grid">
         {/* Events — multi-link. Each linked event is a row with × to
             unlink. The dropdown below lists every show event not yet
@@ -651,15 +692,6 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
           )}
         </div>
       </div>
-      </SectionBand>
-
-      {/* PRODUCTION band — what's been built? Locations, script status and
-          the timeline overlay placements. */}
-      <SectionBand title="Production">
-      {/* Video UI overlays — invites, checklists, etc. on the rendered
-          video frame. Auto-populated when an invite is approved or the
-          wardrobe checklist is locked, manually editable here. */}
-      <TimelinePlacementsSection episodeId={episode.id} />
       </SectionBand>
 
       {/* SOURCE band — where this episode came from. Feed Origin (when the
@@ -852,41 +884,9 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
         </SectionBand>
       )}
 
-      {/* Suggest Scenes is the Overview's own; Script Writer, Producer Mode,
-          Scene Plan and Edit Details are on the Script and Production tabs
-          and the brief's Edit (Evoni, 2026-10-22 layout list). */}
-      <div className="eov-actions eov-quick">
-        {/* AI scene-set suggester — disabled until the episode has a script
-            since there's nothing to analyze otherwise. Fires the suggest
-            endpoint then opens SceneSuggestionReview for the creator to
-            approve / discard. */}
-        <button
-          type="button"
-          className="eov-btn"
-          onClick={async () => {
-            setSuggestBusy(true);
-            try {
-              const { data } = await api.post(`/api/v1/episodes/${episode.id}/suggest-scenes`);
-              if (data?.success && data?.proposal) {
-                setSceneSuggestion({ proposal: data.proposal, contextSummary: data.context_summary });
-              } else {
-                alert(data?.error || 'No suggestions returned');
-              }
-            } catch (err) {
-              alert(err?.response?.data?.error || err.message || 'Failed to fetch suggestions');
-            } finally {
-              setSuggestBusy(false);
-            }
-          }}
-          disabled={!scriptInfo?.exists || suggestBusy}
-          title={!scriptInfo?.exists ? 'Add a script first' : 'AI suggests scene sets per beat'}
-        >
-          <Sparkles size={15} aria-hidden="true" /> {suggestBusy ? 'Thinking…' : 'Suggest Scenes'}
-        </button>
-      </div>
       </section>
 
-      <section className="eov-col" aria-labelledby="eov-col-style" data-testid="overview-style">
+      <section className="eov-col" data-col="style" aria-labelledby="eov-col-style" data-testid="overview-style">
         <h2 className="eov-col-title" id="eov-col-style">Style</h2>
         <EpisodeStyleBoard episode={episode} source={source} linkedEvents={linkedEvents}
           outfit={outfit} onOpenTab={onOpenTab} />

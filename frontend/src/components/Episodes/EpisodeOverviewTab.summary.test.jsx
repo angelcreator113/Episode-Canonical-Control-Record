@@ -113,10 +113,12 @@ describe('Episode Overview summary', () => {
     expect(onOpenTab).toHaveBeenCalledWith('scripts');
   });
 
-  test('the tiles: the checklist, the prestige, the coins after the episode, the look', async () => {
+  test('the tiles: the prestige, the coins after the episode, the look; the checklist count is in the next step', async () => {
     const { onOpenTab } = renderTab();
     await screen.findByTestId('episode-planning');
-    expect(screen.getByTestId('overview-tile-checklist').textContent).toContain('16 / 21');
+    // Evoni, 2026-10-22 (Overview layout list): the checklist tile repeated the next step.
+    expect(screen.queryByTestId('overview-tile-checklist')).toBeNull();
+    expect(screen.getByTestId('overview-next-step-meta').textContent).toBe('Production checklist: 16 of 21 done');
     expect(screen.getByTestId('overview-tile-prestige').textContent).toContain('3 / 10');
     // The Money plan's projected balance, not 1,900 + 439 − 5,100 from the stored columns (Task #1919).
     await waitFor(() => expect(screen.getByTestId('overview-tile-coins').textContent).toContain('2,239'));

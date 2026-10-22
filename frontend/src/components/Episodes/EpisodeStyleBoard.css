@@ -133,3 +133,22 @@
   .esb-mood-grid:has(.esb-empty) { grid-auto-rows: 56px; }
   .esb-mood-grid:has(.esb-empty) .esb-frame.is-big { grid-row: auto; grid-column: 1 / -1; }
 }
+
+/* Empty cards shrink (Evoni, 2026-10-22 Overview layout list): one line
+   each in "Still to add"; empty wardrobe slots as small chips. */
+.esb-event-body.is-text { grid-template-columns: minmax(0, 1fr); }
+.esb-todo { gap: 6px; }
+.esb-todo-list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.esb-todo-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 8px 0; border-top: 1px solid var(--lala-gold-line); }
+.esb-todo-list li:first-child { border-top: none; }
+.esb-todo-icon { flex: none; color: var(--accent-dark); }
+.esb-todo-text { flex: 1 1 200px; min-width: 0; font-size: 13px; color: var(--text-secondary); }
+.esb-todo-text strong { color: var(--text-primary); font-weight: 700; }
+.esb-slot-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.esb-slot-chip {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 4px 12px; border-radius: 999px;
+  border: 1.5px dashed var(--lala-gold-line); background: var(--surface-card); color: var(--accent-dark);
+  font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.esb-slot-chip.is-required { border-style: solid; border-color: var(--accent-light); }
+.esb-slot-chip:hover { background: var(--accent-subtle); }

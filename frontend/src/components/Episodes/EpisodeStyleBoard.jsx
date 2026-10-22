@@ -12,6 +12,11 @@
  * episode's Lookbook (the Style Page's data, GET /episodes/:id/lookbook;
  * the style sheet is not read here, it inlines every image). Nothing is
  * invented: a card with no data says so and opens the tab where it is made.
+ *
+ * Empty cards shrink (Evoni, 2026-10-22 Overview layout list): a card with
+ * nothing in it is one line in "Still to add", with its link; the wardrobe
+ * slots, while none is filled, are a row of small "+ Body" chips. Each card
+ * is full size once something is in it.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -131,37 +136,61 @@ export default function EpisodeStyleBoard({ episode, source, linkedEvents = [], 
     ['Host', ev?.host || ev?.host_brand],
     ['Attendees', guests.length ? `${guests.length} · ${guests.slice(0, 3).map((g) => g.display_name || (atHandle(g.handle) || null)).filter(Boolean).join(', ')}` : null],
     ['Dress code', ev?.dress_code],
-  ];
+  ].filter(([, v]) => v);
+  const loaded = lookbook !== undefined;
+  const notes = [['Hair', lookbook?.hair_name], ['Nails', lookbook?.nails_name], ['Eyes', beauty.eyes], ['Lips', beauty.lips], ['Skin', beauty.skin]].filter(([, v]) => v);
+  const anySlot = slots.some((s) => s.filled);
+  const eventImage = invitation || venueStill;
+
+  // An empty card is one line in "Still to add": [testid, icon, title, text, link].
+  const empties = [
+    !ev && ['esb-event', CalendarHeart, 'The event', 'No event linked to this episode yet; link one under Events in the Story column.', null],
+    !venueStill && !ev?.dress_code && !keywords.length && ['esb-dress', Shirt, 'Dress code', 'No dress code yet.', null],
+    loaded && !moodImages.length && !palette.length && ['esb-mood', Images, 'Mood board', 'No look photos yet, and no palette.', { label: 'Add images', tab: 'lookbook' }],
+    loaded && !inspo.length && ['esb-inspo', Lightbulb, 'Style inspiration', 'No inspiration photos yet.', { label: 'Add on the Style Page', tab: 'lookbook' }],
+    !pieces.length && ['esb-look', Shirt, 'The look', 'No look locked yet. Choose it in the wardrobe game.', { label: 'Open Wardrobe', tab: 'wardrobe' }],
+    loaded && !lookbook?.tagline && !moodWords.length && !notes.length && ['esb-notes', NotebookPen, 'Style notes', 'No tagline or beauty notes yet.', { label: 'Open the Style Page', tab: 'lookbook' }],
+  ].filter(Boolean);
+  const isEmpty = new Set(empties.map(([id]) => id));
+  // A card whose partner on its row moved to Still to add takes the row.
+  const alone = (partner) => (isEmpty.has(partner) ? ' is-wide' : '');
 
   return (
     <div className="esb" data-testid="episode-style-board">
       <div className="esb-row esb-row-top">
-        <Card icon={CalendarHeart} title="The event" className="esb-event is-wide" testid="esb-event">
-          <div className="esb-event-body">
-            <div className="esb-frame esb-event-img">
-              {invitation || venueStill ? <img src={invitation || venueStill} alt={ev?.name ? `${ev.name} invitation` : ''} /> : <span className="esb-empty">No invitation yet</span>}
-            </div>
-            <dl className="esb-fields">
-              {fields.map(([k, v]) => (
-                <div key={k} className="esb-field">
-                  <dt>{k}</dt>
-                  <dd>{v || <span className="esb-muted">—</span>}</dd>
+        {!isEmpty.has('esb-event') && (
+          <Card icon={CalendarHeart} title="The event" className="esb-event is-wide" testid="esb-event">
+            <div className={`esb-event-body${eventImage ? '' : ' is-text'}`}>
+              {eventImage && (
+                <div className="esb-frame esb-event-img">
+                  <img src={eventImage} alt={ev?.name ? `${ev.name} invitation` : ''} />
                 </div>
-              ))}
-            </dl>
-          </div>
-          {!ev && <p className="esb-note">No event linked to this episode yet; link one under Events in the Story column.</p>}
-        </Card>
+              )}
+              <dl className="esb-fields">
+                {fields.map(([k, v]) => (
+                  <div key={k} className="esb-field">
+                    <dt>{k}</dt>
+                    <dd>{v}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          </Card>
+        )}
 
-        <Card icon={Shirt} title="Dress code" testid="esb-dress">
-          <div className="esb-frame esb-dress-img">
-            {venueStill ? <img src={venueStill} alt={place.venueName ? `${place.venueName}` : 'The venue'} /> : <span className="esb-empty">No venue still yet</span>}
-          </div>
-          <p className="esb-dress-text">{ev?.dress_code || 'No dress code set'}</p>
-          {keywords.length > 0 && <div className="esb-chips">{keywords.slice(0, 6).map((k) => <span key={k} className="esb-chip">{k}</span>)}</div>}
-        </Card>
+        {!isEmpty.has('esb-dress') && (
+          <Card icon={Shirt} title="Dress code" testid="esb-dress">
+            {venueStill && (
+              <div className="esb-frame esb-dress-img">
+                <img src={venueStill} alt={place.venueName ? `${place.venueName}` : 'The venue'} />
+              </div>
+            )}
+            <p className="esb-dress-text">{ev?.dress_code || 'No dress code set'}</p>
+            {keywords.length > 0 && <div className="esb-chips">{keywords.slice(0, 6).map((k) => <span key={k} className="esb-chip">{k}</span>)}</div>}
+          </Card>
+        )}
 
-        <Card icon={Target} title="Style goals" testid="esb-goals"
+        <Card icon={Target} title="Style goals" className={alone('esb-dress').trim()} testid="esb-goals"
           aside={<span className="esb-count">{goals.filter((g) => g.done).length} / {goals.length}</span>}>
           <ul className="esb-goals">
             {goals.map((g) => (
@@ -177,42 +206,56 @@ export default function EpisodeStyleBoard({ episode, source, linkedEvents = [], 
       </div>
 
       <div className="esb-row esb-row-mid">
-        <Card icon={Images} title="Mood board" testid="esb-mood">
-          {lookbook === undefined ? <p className="esb-note">Loading…</p> : (<>
-            <div className="esb-mood-grid">
-              {moodImages.length ? moodImages.map((src, i) => (
-                <div key={src + i} className={`esb-frame${i === 0 ? ' is-big' : ''}`}><img src={src} alt="" /></div>
-              )) : <div className="esb-frame is-big"><span className="esb-empty">No look photos yet</span></div>}
-            </div>
-            <div className="esb-mood-foot">
-              <div className="esb-swatches" aria-label={palette.length ? `Palette: ${palette.join(', ')}` : 'No palette yet'}>
-                {palette.length ? palette.map((hex) => <span key={hex} className="esb-swatch" style={{ background: hex }} title={hex} />)
-                  : <span className="esb-muted"><Palette size={14} aria-hidden /> No palette yet</span>}
+        {!isEmpty.has('esb-mood') && (
+          <Card icon={Images} title="Mood board" className={alone('esb-inspo').trim()} testid="esb-mood">
+            {!loaded ? <p className="esb-note">Loading…</p> : (<>
+              {moodImages.length > 0 && (
+                <div className="esb-mood-grid">
+                  {moodImages.map((src, i) => (
+                    <div key={src + i} className={`esb-frame${i === 0 ? ' is-big' : ''}`}><img src={src} alt="" /></div>
+                  ))}
+                </div>
+              )}
+              <div className="esb-mood-foot">
+                <div className="esb-swatches" aria-label={palette.length ? `Palette: ${palette.join(', ')}` : 'No palette yet'}>
+                  {palette.length ? palette.map((hex) => <span key={hex} className="esb-swatch" style={{ background: hex }} title={hex} />)
+                    : <span className="esb-muted"><Palette size={14} aria-hidden /> No palette yet</span>}
+                </div>
+                <button type="button" className="esb-btn" onClick={() => go('lookbook')}><Plus size={15} aria-hidden /> Add images</button>
               </div>
-              <button type="button" className="esb-btn" onClick={() => go('lookbook')}><Plus size={15} aria-hidden /> Add images</button>
-            </div>
-          </>)}
-        </Card>
+            </>)}
+          </Card>
+        )}
 
-        <Card icon={Lightbulb} title="Style inspiration" testid="esb-inspo">
-          {inspo.length ? (
-            <div className="esb-inspo-grid">{inspo.map((src, i) => <div key={src + i} className="esb-frame"><img src={src} alt="" /></div>)}</div>
-          ) : <p className="esb-note">No inspiration photos yet. Add them on the Style Page.</p>}
-        </Card>
+        {!isEmpty.has('esb-inspo') && (
+          <Card icon={Lightbulb} title="Style inspiration" className={alone('esb-mood').trim()} testid="esb-inspo">
+            {!loaded ? <p className="esb-note">Loading…</p>
+              : <div className="esb-inspo-grid">{inspo.map((src, i) => <div key={src + i} className="esb-frame"><img src={src} alt="" /></div>)}</div>}
+          </Card>
+        )}
 
-        <Card icon={Shirt} title="Wardrobe slots" className="esb-slots-card is-wide" testid="esb-slots"
+        <Card icon={Shirt} title="Wardrobe slots" className={`esb-slots-card is-wide${anySlot ? '' : ' is-chips'}`} testid="esb-slots"
           aside={<span className="esb-count">{required.filter((s) => s.filled).length} / {required.length} required</span>}>
-          <ul className="esb-slots">
+          <ul className={anySlot ? 'esb-slots' : 'esb-slot-chips'}>
             {slots.map((s) => (
               <li key={s.key}>
-                <button type="button" className={`esb-slot${s.filled ? ' is-filled' : ''}${s.required ? ' is-required' : ''}`}
-                  onClick={() => go(s.key === 'nails' ? 'lookbook' : 'wardrobe')}
-                  aria-label={`${s.label}: ${s.filled ? (s.name || 'chosen') : 'empty'}${s.required ? ', required' : ''}`}>
-                  <span className="esb-slot-img">
-                    {s.image ? <img src={s.image} alt="" /> : s.filled ? <s.icon size={22} aria-hidden /> : <Plus size={22} aria-hidden />}
-                  </span>
-                  <span className="esb-slot-label"><s.icon size={14} aria-hidden /> {s.label}</span>
-                </button>
+                {anySlot ? (
+                  <button type="button" className={`esb-slot${s.filled ? ' is-filled' : ''}${s.required ? ' is-required' : ''}`}
+                    onClick={() => go(s.key === 'nails' ? 'lookbook' : 'wardrobe')}
+                    aria-label={`${s.label}: ${s.filled ? (s.name || 'chosen') : 'empty'}${s.required ? ', required' : ''}`}>
+                    <span className="esb-slot-img">
+                      {s.image ? <img src={s.image} alt="" /> : s.filled ? <s.icon size={22} aria-hidden /> : <Plus size={22} aria-hidden />}
+                    </span>
+                    <span className="esb-slot-label"><s.icon size={14} aria-hidden /> {s.label}</span>
+                  </button>
+                ) : (
+                  // Nothing chosen yet: a small "+ Body" chip per slot.
+                  <button type="button" className={`esb-slot-chip${s.required ? ' is-required' : ''}`}
+                    onClick={() => go(s.key === 'nails' ? 'lookbook' : 'wardrobe')}
+                    aria-label={`${s.label}: empty${s.required ? ', required' : ''}`}>
+                    <Plus size={13} aria-hidden /> {s.label}
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -220,9 +263,9 @@ export default function EpisodeStyleBoard({ episode, source, linkedEvents = [], 
       </div>
 
       <div className="esb-row esb-row-bottom">
-        <Card icon={Shirt} title="The look" testid="esb-look"
-          aside={<span className={`esb-pill${pieces.length ? ' is-on' : ''}`}>{pieces.length ? 'Locked' : 'Not locked'}</span>}>
-          {pieces.length ? (
+        {!isEmpty.has('esb-look') && (
+          <Card icon={Shirt} title="The look" className={alone('esb-notes').trim()} testid="esb-look"
+            aside={<span className="esb-pill is-on">Locked</span>}>
             <ul className="esb-look">
               {pieces.slice(0, 6).map((p) => (
                 <li key={p.id}>
@@ -231,22 +274,40 @@ export default function EpisodeStyleBoard({ episode, source, linkedEvents = [], 
                 </li>
               ))}
             </ul>
-          ) : <p className="esb-note">No look locked yet. Choose it in the wardrobe game.</p>}
-        </Card>
+          </Card>
+        )}
 
-        <Card icon={NotebookPen} title="Style notes" testid="esb-notes">
-          {lookbook === undefined ? <p className="esb-note">Loading…</p> : (
-            <div className="esb-notes">
-              {lookbook?.tagline ? <p className="esb-tagline">“{lookbook.tagline}”</p> : <p className="esb-note">No tagline yet.</p>}
-              {moodWords.length > 0 && <div className="esb-chips">{moodWords.map((w) => <span key={w} className="esb-chip">{w}</span>)}</div>}
-              <dl className="esb-fields is-compact">
-                {[['Hair', lookbook?.hair_name], ['Nails', lookbook?.nails_name], ['Eyes', beauty.eyes], ['Lips', beauty.lips], ['Skin', beauty.skin]]
-                  .filter(([, v]) => v).map(([k, v]) => <div key={k} className="esb-field"><dt>{k}</dt><dd>{v}</dd></div>)}
-              </dl>
-            </div>
-          )}
-        </Card>
+        {!isEmpty.has('esb-notes') && (
+          <Card icon={NotebookPen} title="Style notes" className={alone('esb-look').trim()} testid="esb-notes">
+            {!loaded ? <p className="esb-note">Loading…</p> : (
+              <div className="esb-notes">
+                {lookbook?.tagline ? <p className="esb-tagline">“{lookbook.tagline}”</p> : <p className="esb-note">No tagline yet.</p>}
+                {moodWords.length > 0 && <div className="esb-chips">{moodWords.map((w) => <span key={w} className="esb-chip">{w}</span>)}</div>}
+                <dl className="esb-fields is-compact">
+                  {notes.map(([k, v]) => <div key={k} className="esb-field"><dt>{k}</dt><dd>{v}</dd></div>)}
+                </dl>
+              </div>
+            )}
+          </Card>
+        )}
       </div>
+
+      {empties.length > 0 && (
+        <section className="esb-card esb-todo is-wide" aria-labelledby="esb-todo-title" data-testid="esb-todo">
+          <header className="esb-card-head">
+            <h3 className="esb-card-title" id="esb-todo-title"><Plus size={18} aria-hidden /> Still to add</h3>
+          </header>
+          <ul className="esb-todo-list">
+            {empties.map(([id, Icon, title, text, link]) => (
+              <li key={id} data-testid={id}>
+                <Icon size={15} aria-hidden className="esb-todo-icon" />
+                <span className="esb-todo-text"><strong>{title}</strong> {text}</span>
+                {link && <button type="button" className="esb-link" onClick={() => go(link.tab)}>{link.label}</button>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }
