@@ -6,7 +6,7 @@
  */
 import { describe, test, expect } from 'vitest';
 import {
-  toneValue, stickerMargin, STICKER_SHADOW, clearWhiteEdges,
+  drawnLayer, turnedBox, keptText, resFor, MAX_CANVAS_PIXELS, toneValue, stickerMargin, STICKER_SHADOW, clearWhiteEdges,
   textEffect, fancyWords, curveLayout, wordsMargin, paintWords, wordsCanvas, GLOW_COLOR, EFFECT_SIZE,
   SHAPES, addShape, shapeCanvas, shapeMargin, shapeWordsBox,
   spaced, alignLayers, distributeLayers, layersInBox, youtubeWarnings, drawnSize, fileSize, TIMESTAMP_ZONE,
@@ -738,7 +738,7 @@ describe('more than one Lala', () => {
 describe('pinch', () => {
   test('how far apart and at what angle; then how much bigger and how far turned', () => {
     const start = pinchGesture([{ x: 0, y: 0 }, { x: 100, y: 0 }]);
-    expect(start).toEqual({ d: 100, a: 0 });
+    expect(start).toEqual({ d: 100, a: 0, mx: 50, my: 0 });
     const now = pinchGesture([{ x: 0, y: 0 }, { x: 0, y: 150 }]);
     expect(pinchDelta(start, now)).toEqual({ k: 1.5, turn: 90 });
     // Turning past the half-turn line takes the short way round.
@@ -749,4 +749,43 @@ describe('pinch', () => {
     expect(pinchDelta({ d: 100, a: 0 }, { d: 5000, a: 0 }).k).toBe(10);
     expect(pinchDelta({ d: 0, a: 0 }, { d: 50, a: 0 }).k).toBe(1);
   });
+});
+
+// Audit, 2026-10-22: what the editor draws is what the server saves.
+describe('drawn as the server draws it', () => {
+  test('boxFromNode keeps a big pinch within what the server keeps, shape and centre kept', () => {
+    const l = { w: 560, h: 690 };
+    const b = boxFromNode({ x: 640, y: 360, scaleX: 4, scaleY: 4 }, l);
+    expect(b.h).toBeLessThanOrEqual(HEIGHT * 3);
+    expect(b.w).toBeLessThanOrEqual(WIDTH * 3);
+    expect(b.w / b.h).toBeCloseTo(560 / 690, 2);
+    // Far off the canvas, the corner stays where the server would put it.
+    const far = boxFromNode({ x: 99999, y: -99999 }, { w: 100, h: 100 });
+    expect([far.x, far.y]).toEqual([WIDTH * 2, -HEIGHT]);
+  });
+
+  test('turnedBox: a quarter turn swaps width and height about the same centre', () => {
+    expect(turnedBox({ x: 0, y: 0, w: 200, h: 100, rotation: 0 })).toEqual({ x: 0, y: 0, w: 200, h: 100 });
+    const q = turnedBox({ x: 0, y: 0, w: 200, h: 100, rotation: 90 });
+    expect(q.w).toBeCloseTo(100);
+    expect(q.h).toBeCloseTo(200);
+    expect(q.x + q.w / 2).toBeCloseTo(100);
+    expect(q.y + q.h / 2).toBeCloseTo(50);
+  });
+
+  test('drawnLayer tidies words as readLayers does and leaves out empty checklist rows', () => {
+    expect(drawnLayer({ kind: 'text', text: '  Get   ready ' }).text).toBe('Get ready');
+    expect(drawnLayer({ kind: 'checklist', items: [{ text: 'Dress', checked: true }, { text: '   ' }, { text: ' Shoes  now ' }] }).items)
+      .toEqual([{ text: 'Dress', checked: true }, { text: 'Shoes now' }]);
+    const pic = { kind: 'image', src: 'x' };
+    expect(drawnLayer(pic)).toBe(pic);
+    expect(keptText(null)).toBe('');
+  });
+});
+
+test('resFor keeps a finer canvas within its pixel budget, never below 1', () => {
+  expect(resFor(2, 400, 300)).toBe(2);
+  const big = resFor(3, 3840, 2160);
+  expect(3840 * 2160 * big * big).toBeLessThanOrEqual(MAX_CANVAS_PIXELS + 1);
+  expect(resFor(3, 20000, 20000)).toBe(1);
 });
