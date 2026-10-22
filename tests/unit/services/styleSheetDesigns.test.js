@@ -7,6 +7,7 @@
 const sharp = require('sharp');
 const {
   DESIGNS, SIZES, DESIGN_WIDTH, DESIGN_HEIGHT, findDesign, fitDesign, designPhotoPaths, designPhotos, designFields, designPalette, designSpots, designsForPage,
+  designChoice, designsOn, libraryView,
 } = require('../../../src/services/styleSheetDesigns');
 const { renderDesign } = require('../../../src/services/styleSheetRenderService');
 
@@ -99,6 +100,25 @@ describe('the values', () => {
     expect(page.designs).toBe(DESIGNS);
     expect(page.sizes.map((s) => s.key)).toEqual(Object.keys(SIZES));
     expect(Object.keys(page.values)).toEqual(['photo_paths', 'fields', 'palette']);
+  });
+});
+
+describe('on or off for the show (Template Studio › Style sheets)', () => {
+  test("the show's choice: off keys kept once, unknown ones dropped; none stored means all on", () => {
+    expect(designChoice({ style_designs: { off: ['runway', 'poster', 'runway'] } })).toEqual({ off: ['runway'] });
+    expect(designChoice({})).toEqual({ off: [] });
+    expect(designChoice(null)).toEqual({ off: [] });
+    expect(designChoice({ style_designs: { off: 'runway' } })).toEqual({ off: [] });
+    expect(designsOn(['runway', 'invited']).map((d) => d.key)).toEqual(['episode_look', 'style_diary', 'color_story']);
+  });
+
+  test('the page gets only the designs that are on; the library gets them all with the off list', () => {
+    expect(designsForPage({}, { off: ['style_diary'] }).designs.map((d) => d.key)).toEqual(['episode_look', 'runway', 'color_story', 'invited']);
+    expect(designsForPage({}).designs).toEqual(DESIGNS);
+    const lib = libraryView({ style_designs: { off: ['invited'] } });
+    expect(lib.designs).toBe(DESIGNS);
+    expect(lib.off).toEqual(['invited']);
+    expect(lib.sizes.map((z) => z.key)).toEqual(Object.keys(SIZES));
   });
 });
 

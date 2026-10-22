@@ -429,9 +429,10 @@ async function buildStyleSheet(models, episodeId) {
     files: Object.fromEntries(Object.entries(fromFiles).map(([angle, p]) => [angle, p.url])),
   })).digest('hex');
   sheet.inputs_hash = hash;
-  // The five designs (Evoni's Canva deck, 2026-10-22) and this sheet's values for them.
-  const { designsForPage } = require('./styleSheetDesigns');
-  const forPage = designsForPage(sheet);
+  // The five designs (Evoni's Canva deck, 2026-10-22) that are on for the
+  // show (Template Studio › Style sheets), and this sheet's values for them.
+  const { designsForPage, designChoice } = require('./styleSheetDesigns');
+  const forPage = designsForPage(sheet, designChoice(parseJson(showRow?.metadata, {})));
   sheet.designs = forPage.designs;
   sheet.design_sizes = forPage.sizes;
   sheet.design_values = forPage.values;
@@ -490,28 +491,37 @@ function checkDesign(design, size) {
   }
 }
 
+// A design switched off for the show is not exported.
+function requireOn(sheet, design) {
+  if (!sheet.designs.some((d) => d.key === design)) {
+    throw new LookbookError('That design is switched off for this show; turn it on in Template Studio › Style sheets.', 409, 'DESIGN_OFF');
+  }
+}
+
 /** One of the five designs in one size (Evoni, 2026-10-22), approved sheets only. */
 async function exportDesign(models, episodeId, design, size) {
   checkDesign(design, size === 'all' ? '' : size);
   const sheet = await buildStyleSheet(models, episodeId);
   requireApproved(sheet, 'exporting it');
+  requireOn(sheet, design);
   const out = await require('./styleSheetRenderService').renderDesign(sheet, design, size);
   return { ...out, filename: designFilename(sheet, design, size) };
 }
 
 /**
- * All five designs in one size, or in every size ("all"), as one zip
- * (stored, not compressed: PNGs do not shrink).
+ * Every design that is on for the show, in one size or in every size
+ * ("all"), as one zip (stored, not compressed: PNGs do not shrink).
  */
 async function exportDesignsZip(models, episodeId, size) {
   const { DESIGNS, SIZES } = require('./styleSheetDesigns');
   checkDesign(DESIGNS[0].key, size);
   const sheet = await buildStyleSheet(models, episodeId);
   requireApproved(sheet, 'exporting it');
+  if (!sheet.designs.length) throw new LookbookError('Every design is switched off for this show; turn one on in Template Studio › Style sheets.', 409, 'DESIGN_OFF');
   const { renderDesign } = require('./styleSheetRenderService');
   const sizes = size === 'all' ? Object.keys(SIZES) : [size];
   const files = [];
-  for (const d of DESIGNS) {
+  for (const d of sheet.designs) {
     for (const s of sizes) files.push({ name: designFilename(sheet, d.key, s), buffer: (await renderDesign(sheet, d.key, s)).buffer });
   }
   const archiver = require('archiver');

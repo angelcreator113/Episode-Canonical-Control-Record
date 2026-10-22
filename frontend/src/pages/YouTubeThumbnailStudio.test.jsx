@@ -26,6 +26,7 @@ vi.mock('../lib/youtubeThumbnailsApi', async () => {
       titleIdeas: vi.fn(), cutOut: vi.fn(), zip: vi.fn(), saveBrand: vi.fn(), aiBackground: vi.fn(),
     },
     downloadBlob: vi.fn(),
+    saveDraftOnLeave: vi.fn(() => true),
   };
 });
 vi.mock('../lib/picturePreview', () => ({
@@ -325,6 +326,7 @@ describe('YouTubeThumbnailStudio', () => {
     const width = screen.getByRole('spinbutton', { name: 'Width (points)' });
     expect(width.disabled).toBe(false);
     fireEvent.change(width, { target: { value: '300' } });
+    fireEvent.blur(width);
     fireEvent.keyDown(window, { key: 'd', ctrlKey: true });
     await waitFor(() => expect(youtubeThumbnailsApi.saveDraft).toHaveBeenCalled(), { timeout: 3000 });
     const spec = lastDraft();
@@ -1378,6 +1380,119 @@ describe('YouTubeThumbnailStudio', () => {
     fireEvent.click((await grid.findByTestId('yts-season-ep-1')).querySelector('button'));
     expect(await opened()).toBeTruthy();
     expect(screen.queryByTestId('yts-season')).toBeNull();
+    // The same episode is read again (the season may have saved it).
+    expect(youtubeThumbnailsApi.sources.mock.calls.filter(([id]) => id === 'ep-1').length).toBe(2);
+  });
+
+  test('the question takes the focus on No, and Esc answers No', async () => {
+    renderPage();
+    await opened();
+    fireEvent.click(screen.getByRole('button', { name: /Title only/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Lala left/ }));
+    const box = screen.getByTestId('yts-ask');
+    expect(box.getAttribute('role')).toBe('alertdialog');
+    expect(document.activeElement).toBe(within(box).getByRole('button', { name: 'No' }));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('yts-ask')).toBeNull();
+    expect(screen.getByRole('button', { name: /Lala left/ }).getAttribute('aria-pressed')).toBe('false');
+  });
+
+  test('the ⋮ menu: the first item takes the focus; arrow keys, Home and End move through it', async () => {
+    renderPage();
+    await opened();
+    fireEvent.click(screen.getByTestId('yts-more-btn'));
+    const menu = screen.getByRole('menu', { name: 'More' });
+    const items = [...menu.querySelectorAll('[role^="menuitem"]')].filter((b) => !b.disabled);
+    expect(document.activeElement).toBe(items[0]);
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(items[1]);
+    fireEvent.keyDown(menu, { key: 'ArrowUp' });
+    fireEvent.keyDown(menu, { key: 'ArrowUp' });
+    expect(document.activeElement).toBe(items[items.length - 1]);
+    fireEvent.keyDown(menu, { key: 'Home' });
+    expect(document.activeElement).toBe(items[0]);
+  });
+
+  // Audit, 2026-10-22: the box was clamped on every key (3 became 10, then 100, then 1000).
+  test('a size is kept as typed when Enter is pressed or the box is left; Escape puts it back', async () => {
+    renderPage();
+    await opened();
+    fireEvent.click(screen.getByTestId('canvas-title'));
+    const width = screen.getByRole('spinbutton', { name: 'Width (points)' });
+    const before = width.value;
+    fireEvent.focus(width);
+    for (const v of ['3', '30', '300']) fireEvent.change(width, { target: { value: v } });
+    expect(width.value).toBe('300');
+    fireEvent.keyDown(width, { key: 'Enter' });
+    await waitFor(() => expect(youtubeThumbnailsApi.saveDraft).toHaveBeenCalled(), { timeout: 3000 });
+    expect(layerOf(lastDraft(), 'title').w).toBe(300);
+    fireEvent.focus(width);
+    fireEvent.change(width, { target: { value: '' } });
+    fireEvent.keyDown(width, { key: 'Escape' });
+    expect(width.value).toBe('300');
+    fireEvent.change(width, { target: { value: '99999' } });
+    fireEvent.blur(width);
+    expect(Number(width.value)).toBe(3840);
+    expect(before).not.toBe('300');
+  });
+
+  // Audit, 2026-10-22: switching episodes.
+  describe('switching episodes', () => {
+    const TWO = [{ id: 'ep-1', episode_number: 1, title: 'Studio by Sable' }, { id: 'ep-2', episode_number: 2, title: 'Gala' }];
+    const SOURCES_2 = { ...SOURCES, episode: { id: 'ep-2', title: 'Gala', episode_number: 2 } };
+
+    test("the last change is kept for the episode being left, and its layers are never kept, shown or saved on the next", async () => {
+      youtubeThumbnailsApi.episodes.mockResolvedValue(TWO);
+      let openTwo;
+      youtubeThumbnailsApi.sources.mockImplementation((id) => (id === 'ep-2' ? new Promise((r) => { openTwo = r; }) : Promise.resolve(SOURCES)));
+      renderPage();
+      await opened();
+      fireEvent.click(screen.getByTestId('canvas-title'));
+      fireEvent.click(screen.getByTestId('canvas-drag'));
+      const next = await screen.findByTestId('yts-next-episode');
+      await waitFor(() => expect(next.disabled).toBe(false));
+      fireEvent.click(next);
+      // Kept for ep-1 at once, not a moment later.
+      await waitFor(() => expect(youtubeThumbnailsApi.saveDraft).toHaveBeenCalledWith('ep-1', expect.objectContaining({ version: 2 })));
+      expect(layerOf(youtubeThumbnailsApi.saveDraft.mock.calls[0][1], 'title')).toMatchObject({ x: 99, y: 11 });
+      // While ep-2 loads, ep-1's layers are gone.
+      expect(screen.queryByTestId('yts-canvas')).toBeNull();
+      await new Promise((r) => setTimeout(r, 1400));
+      expect(youtubeThumbnailsApi.saveDraft.mock.calls.every(([id]) => id === 'ep-1')).toBe(true);
+      expect(youtubeThumbnailsApi.save).not.toHaveBeenCalled();
+      await act(async () => { openTwo(SOURCES_2); });
+      expect(await opened()).toBeTruthy();
+      expect(screen.getByLabelText('Title').value).toBe('Gala');
+    });
+
+    test("a slow answer for the episode left is not put on the next one", async () => {
+      youtubeThumbnailsApi.episodes.mockResolvedValue(TWO);
+      youtubeThumbnailsApi.sources.mockImplementation((id) => Promise.resolve(id === 'ep-2' ? SOURCES_2 : SOURCES));
+      let oldList;
+      youtubeThumbnailsApi.saved.mockImplementation((id) => (id === 'ep-1' ? new Promise((r) => { oldList = r; }) : Promise.resolve([])));
+      renderPage();
+      await opened();
+      const next = await screen.findByTestId('yts-next-episode');
+      await waitFor(() => expect(next.disabled).toBe(false));
+      fireEvent.click(next);
+      await waitFor(() => expect(screen.getByLabelText('Title').value).toBe('Gala'));
+      await act(async () => { oldList([{ id: 'old-1', url: 'https://b.s3.amazonaws.com/a.png', isPrimary: true }]); });
+      expect(screen.queryByText('Use this one')).toBeNull();
+    });
+
+    test('keyboard shortcuts do nothing while the season grid hides the editor', async () => {
+      youtubeThumbnailsApi.season.mockResolvedValue([]);
+      youtubeThumbnailsApi.templates.mockResolvedValue([]);
+      renderPage();
+      await opened();
+      fireEvent.click(screen.getByTestId('canvas-title'));
+      fireEvent.click(screen.getByTestId('yts-more-btn'));
+      fireEvent.click(screen.getByTestId('yts-season-open'));
+      await screen.findByTestId('yts-season');
+      fireEvent.keyDown(document.body, { key: 'Backspace' });
+      await new Promise((r) => setTimeout(r, 1400));
+      expect(youtubeThumbnailsApi.saveDraft).not.toHaveBeenCalled();
+    });
   });
 });
 

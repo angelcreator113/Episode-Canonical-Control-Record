@@ -18,7 +18,7 @@ vi.mock('react-konva', () => {
     if (props.id) groups[props.id] = props;
     return <div data-konva="Group" data-id={props.id} onMouseDown={() => props.onMouseDown?.()}>{children}</div>;
   };
-  const Transformer = React.forwardRef(() => null);
+  const Transformer = React.forwardRef((props) => { stage.transformer = props; return null; });
   // The marks layer has a ref (hidden for the snapshot).
   const Layer = React.forwardRef((props, ref) => Plain('Layer')(props));
   // The stage keeps its props (its touch handlers) and answers for a fake Konva stage.
@@ -239,5 +239,57 @@ describe('ThumbnailCanvas pinch', () => {
     act(() => { stage.props.onTouchEnd({ evt: { touches: [] } }); });
     expect(onZoom).toHaveBeenLastCalledWith(1.2);
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+// Audit, 2026-10-22: the editor draws what the server saves.
+describe('ThumbnailCanvas as the saved file', () => {
+  const textProps = () => [...document.querySelectorAll('[data-konva="Text"]')].map((el) => JSON.parse(el.dataset.props));
+
+  test("the server's plum-to-accent ground is drawn under everything", () => {
+    render(<ThumbnailCanvas spec={SPEC} selectedId={null} onSelect={() => {}} onChange={() => {}} />);
+    const first = document.querySelector('[data-konva="Layer"] > [data-konva]');
+    expect(JSON.parse(first.dataset.props)).toMatchObject({ name: 'ground', listening: false });
+  });
+
+  test('a handle pulled past the far edge never flips the layer', () => {
+    render(<ThumbnailCanvas spec={SPEC} selectedId="lala" onSelect={() => {}} onChange={() => {}} />);
+    expect(stage.transformer.flipEnabled).toBe(false);
+  });
+
+  test('the badge is one line and words never wrap by themselves, as the server draws them', () => {
+    render(<ThumbnailCanvas spec={SPEC} selectedId={null} onSelect={() => {}} onChange={() => {}} />);
+    const badge = textProps().find((t) => t.text === 'EP 1');
+    expect(badge).toMatchObject({ wrap: 'none' });
+    expect(textProps().every((t) => t.wrap === 'none' || t.text === 'Timestamp')).toBe(true);
+  });
+
+  test('an empty checklist row is not drawn (the server leaves it out); words are tidied', () => {
+    const spec = { version: 2, layers: [{ id: 'list', kind: 'checklist', x: 0, y: 0, w: 600, h: 300, visible: true, font: 'hand', color: '#FFFFFF',
+      items: [{ text: 'Dress', checked: true }, { text: '  ', checked: false }, { text: ' Shoes   on ', checked: false }] }] };
+    render(<ThumbnailCanvas spec={spec} selectedId={null} onSelect={() => {}} onChange={() => {}} />);
+    expect(textProps().map((t) => t.text)).toEqual(['Dress', 'Shoes on']);
+  });
+
+  test('a pinch that stops a drag is one change, not two (one undo step)', () => {
+    const onChange = vi.fn();
+    const n = { sx: 1, sy: 1, r: 0 };
+    const lalaNode = Object.assign(n, {
+      x: () => 640, y: () => 360,
+      scaleX: vi.fn((v) => { if (v === undefined) return n.sx; n.sx = v; return n; }),
+      scaleY: vi.fn((v) => { if (v === undefined) return n.sy; n.sy = v; return n; }),
+      rotation: vi.fn((v) => { if (v === undefined) return n.r; n.r = v; return n; }),
+      getLayer: () => ({ batchDraw: () => {} }),
+    });
+    if (!globalThis.CSS?.escape) globalThis.CSS = { ...(globalThis.CSS || {}), escape: (x) => x };
+    // The drag the first finger started ends when the second comes down.
+    const dragging = { isDragging: () => true, stopDrag: () => groups.lala.onDragEnd({ target: lalaNode }) };
+    stage.api = { find: () => [dragging], findOne: (sel) => (sel === '#lala' ? lalaNode : null) };
+    render(<ThumbnailCanvas spec={SPEC} selectedId="lala" onSelect={() => {}} onChange={onChange} />);
+    const touches = (a, b) => ({ evt: { touches: [{ clientX: a[0], clientY: a[1] }, { clientX: b[0], clientY: b[1] }], preventDefault: vi.fn() } });
+    act(() => { stage.props.onTouchMove(touches([0, 0], [100, 0])); });
+    act(() => { stage.props.onTouchMove(touches([0, 0], [150, 0])); });
+    act(() => { stage.props.onTouchEnd({ evt: { touches: [] } }); });
+    expect(onChange).toHaveBeenCalledTimes(1);
   });
 });

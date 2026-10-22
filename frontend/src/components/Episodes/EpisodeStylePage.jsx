@@ -292,6 +292,11 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
           ))}
         </div>
       )}
+      {/* The designs are templates in the Template Studio, on or off per show (Evoni, 2026-10-22). */}
+      <p className="esp2-hint esp2-designs-link">
+        {designs.length ? `${designs.length} design${designs.length === 1 ? '' : 's'} on for this show.` : 'No designs are on for this show; only the classic sheet.'}{' '}
+        <a className="esp2-link" href="/template-studio?view=style" data-testid="esp2-choose-designs">Choose designs in Template Studio</a>
+      </p>
 
       <div className="esp2-layout">
         <div className="esp2-sheet-col" ref={sheetCol}>
