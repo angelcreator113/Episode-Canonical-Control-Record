@@ -553,6 +553,18 @@ router.post('/:id/lookbook/images', validateUUIDParam('id'), requireAuth, (req, 
   }
 });
 
+// One of the Files tab's ready pose photos put in a spot: { pose_id,
+// category } (Evoni, 2026-10-22). Copied into the Lookbook like an upload.
+router.post('/:id/lookbook/images/from-pose', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { addPoseImage } = require('../services/episodeLookbookService');
+    return res.status(201).json({ success: true, data: await addPoseImage(models, req.params.id, req.body || {}) });
+  } catch (err) {
+    return sendLookbookError(res, err, 'POST /:id/lookbook/images/from-pose');
+  }
+});
+
 // A pre-filled venue image (the event's look, set base or an angle) in or
 // out of the Lookbook: { source, ref_id, in_lookbook } (Task #2813).
 router.put('/:id/lookbook/venue', validateUUIDParam('id'), requireAuth, async (req, res) => {

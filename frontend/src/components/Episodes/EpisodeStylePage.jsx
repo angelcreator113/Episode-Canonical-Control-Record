@@ -18,6 +18,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Download, ImagePlus, Loader2, Lock, RotateCcw, Send, Shirt, Trash2, Upload } from 'lucide-react';
 import { downloadStyleSheetExport, styleSheetDistributionApi, styleSheetError } from '../../lib/styleSheetApi';
 import { lookbookApi } from '../../lib/lookbookApi';
+import { CHARACTERS, POSES, episodePosesApi } from '../../lib/episodePosesApi';
 import StyleAudiencePick from './StyleAudiencePick';
 import { styleReadiness } from '../../lib/styleReadiness';
 import { extractPalette } from '../../lib/stylePalette';
@@ -179,6 +180,7 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
   const info = selected ? SPOT_INFO[selected] : null;
 
   const upload = (files, category) => run(() => lookbookApi.upload(episodeId, files, category));
+  const fromPose = (poseId, category) => run(() => lookbookApi.fromPose(episodeId, poseId, category));
   const remove = (imageId) => run(() => lookbookApi.remove(episodeId, imageId));
   const move = (imageId, changes) => run(() => lookbookApi.move(episodeId, imageId, changes));
   const saveFields = (fields) => run(() => lookbookApi.save(episodeId, fields));
@@ -296,6 +298,7 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
               locked={locked}
               venueCandidates={venueCandidates}
               upload={upload}
+              fromPose={fromPose}
               remove={remove}
               move={move}
               saveFields={saveFields}
@@ -336,9 +339,11 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
   );
 }
 
-function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, text, setText, commitText, tray, locked, venueCandidates, upload, remove, move, saveFields, swapVenue, toggleOption, onOpenTab, episode }) {
+function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, text, setText, commitText, tray, locked, venueCandidates, upload, fromPose, remove, move, saveFields, swapVenue, toggleOption, onOpenTab, episode }) {
   const images = lb.images || {};
   const current = info.photo && spot !== 'venue' && spot !== 'inspo' ? (images[spot] || [])[0] || null : null;
+  // Front, Side and Back show Lala's pose from Files until a photo is put there.
+  const fromFiles = !current ? sheet.look_from_files?.[spot] || null : null;
   const inspo = (images.inspo || []).filter((i) => i.source === 'upload');
   const notes = lb.beauty_notes || {};
   const fullInspo = spot === 'inspo' && inspo.length >= MAX_INSPO;
@@ -354,6 +359,13 @@ function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, te
           <button type="button" className="esp2-icon-btn" aria-label={`Remove ${info.label} photo`} disabled={locked} onClick={() => remove(current.id)}>
             <Trash2 size={16} aria-hidden="true" />
           </button>
+        </div>
+      )}
+
+      {fromFiles && (
+        <div className="esp2-current" data-testid="esp2-from-files">
+          <img src={fromFiles.url} alt={`${info.label}: ${fromFiles.label}`} />
+          <span className="esp2-hint">From Files · {fromFiles.label}. Upload or choose another to replace it.</span>
         </div>
       )}
 
@@ -410,6 +422,10 @@ function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, te
             disabled={locked || fullInspo}
           />
         </div>
+      )}
+
+      {info.photo && (
+        <FilesPicker episodeId={episode?.id} spot={spot} label={info.label} disabled={locked || fullInspo} onPick={(poseId) => fromPose(poseId, spot)} onOpenTab={onOpenTab} />
       )}
 
       {info.photo && (
@@ -504,6 +520,70 @@ function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, te
 // Each export size as a download, enabled only while the sheet is approved
 // and up to date; the server refuses the rest (409). Send to Distribution
 // puts every size in the episode's Distribution with a caption draft (Task #2878).
+/**
+ * Choose from Files (Evoni, 2026-10-22): the episode's ready photos of
+ * Lala and JustAWoman from Files › Character poses. Picking one copies it
+ * into this spot.
+ */
+function FilesPicker({ episodeId, spot, label, disabled, onPick, onOpenTab }) {
+  const [open, setOpen] = useState(false);
+  const [poses, setPoses] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!open || poses || !episodeId) return undefined;
+    let cancelled = false;
+    episodePosesApi.list(episodeId)
+      .then((rows) => { if (!cancelled) setPoses(rows.filter((r) => r.status === 'ready' && r.final_url)); })
+      .catch((err) => {
+        console.error('[StylePage] Files photos could not be read:', err);
+        if (!cancelled) setError(errorText(err));
+      });
+    return () => { cancelled = true; };
+  }, [open, poses, episodeId]);
+
+  const poseLabel = (key) => POSES.find((p) => p.key === key)?.label || key;
+  return (
+    <div className="esp2-files">
+      <button type="button" className="esp2-btn" aria-expanded={open} disabled={disabled} data-testid="esp2-files-open" onClick={() => setOpen((o) => !o)}>
+        <ImagePlus size={16} aria-hidden="true" /> Choose from Files
+      </button>
+      {open && (
+        <div className="esp2-files-body" data-testid="esp2-files">
+          {error && <p className="esp2-error" role="alert">{error}</p>}
+          {!poses && !error && <p className="esp2-hint"><Loader2 size={14} className="esp2-spin" aria-hidden="true" /> Loading your Files photos…</p>}
+          {poses && poses.length === 0 && (
+            <p className="esp2-hint">
+              No ready photos in Files yet.{' '}
+              <button type="button" className="esp2-link" disabled={!onOpenTab} onClick={() => onOpenTab && onOpenTab('files')}>Open Files</button>
+            </p>
+          )}
+          {poses && CHARACTERS.map((c) => {
+            const mine = poses.filter((p) => p.character_key === c.key);
+            if (!mine.length) return null;
+            return (
+              <div key={c.key}>
+                <p className="esp2-tray-label">{c.label}</p>
+                <ul className="esp2-thumbs">
+                  {mine.map((p) => (
+                    <li key={p.id}>
+                      <button type="button" className="esp2-thumb" disabled={disabled} aria-label={`Use ${c.label} ${poseLabel(p.pose)} for ${label}`}
+                        onClick={() => { onPick(p.id); setOpen(false); }}>
+                        <img src={p.final_url} alt="" />
+                        <span>{poseLabel(p.pose)}{p.is_default ? ' ★' : ''}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ShareExport({ episodeId, episodeNumber, canExport, approved, stale, onOpenTab }) {
   const [busySize, setBusySize] = useState(null);
   const [error, setError] = useState(null);
