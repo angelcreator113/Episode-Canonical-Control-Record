@@ -37,9 +37,11 @@ describe('Files › Style photos', () => {
     }));
     expect(api.get).toHaveBeenCalledWith(LB_URL);
     expect(screen.getByRole('heading', { level: 2, name: 'Style photos' })).toBeTruthy();
+    // Folders with photos (and To sort) in full; the empty ones as small chips (2026-10-22).
     const titles = [...screen.getByTestId('esph').querySelectorAll('.esph-folder .epp-pose-title')].map((h) => h.textContent);
-    expect(titles).toEqual(STYLE_FOLDERS.map((f) => f.label));
-    expect(titles[0]).toBe('To sort');
+    expect(titles).toEqual(['To sort', 'Hero', 'Venue']);
+    const chips = [...within(screen.getByTestId('esph-empty')).getAllByRole('button')].map((b) => b.getAttribute('aria-label'));
+    expect(chips).toEqual(STYLE_FOLDERS.filter((f) => !['unsorted', 'hero', 'venue'].includes(f.key)).map((f) => `Add ${f.label}`));
     expect(folder('hero').getByAltText('h1.png')).toBeTruthy();
     expect(folder('venue').getByAltText('v1.png')).toBeTruthy();
     expect(folder('venue').queryByAltText('s1.png')).toBeNull();
@@ -79,14 +81,27 @@ describe('Files › Style photos', () => {
   test('a photo moves to another folder, or is deleted', async () => {
     await renderPanel(lookbook({ unsorted: [photo('u1', 'unsorted')] }));
     api.patch.mockResolvedValue({ data: { data: { lookbook: lookbook({ hero: [photo('u1', 'hero')] }) } } });
-    fireEvent.change(folder('unsorted').getByLabelText('Which folder'), { target: { value: 'hero' } });
+    fireEvent.click(folder('unsorted').getByRole('button', { name: 'Photo options' }));
+    fireEvent.change(folder('unsorted').getByLabelText('File as'), { target: { value: 'hero' } });
     await waitFor(() => expect(api.patch).toHaveBeenCalledWith(`${LB_URL}/images/u1`, { category: 'hero' }));
     await waitFor(() => expect(folder('hero').getByAltText('u1.png')).toBeTruthy());
 
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     api.delete.mockResolvedValue({ data: { data: { lookbook: lookbook() } } });
+    fireEvent.click(folder('hero').getByRole('button', { name: 'Photo options' }));
     fireEvent.click(folder('hero').getByRole('button', { name: 'Delete this photo' }));
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith(`${LB_URL}/images/u1`));
+  });
+
+  test('a photo is filed as a character pose: it leaves Style photos and the Files tab is told', async () => {
+    await renderPanel(lookbook({ unsorted: [photo('u1', 'unsorted')] }));
+    api.post.mockResolvedValue({ data: { data: { id: 'pose-1' } } });
+    api.get.mockResolvedValue({ data: { data: lookbook() } });
+    fireEvent.click(folder('unsorted').getByRole('button', { name: 'Photo options' }));
+    fireEvent.change(folder('unsorted').getByLabelText('File as'), { target: { value: 'pose:lala:back' } });
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/episode-poses/ep-1/from-lookbook', { image_id: 'u1', character_key: 'lala', pose: 'back' }));
+    expect((await screen.findByTestId('esph-note')).textContent).toBe('Filed as Lala · Back in Character poses. It is being processed there.');
+    await waitFor(() => expect(folder('unsorted').queryByAltText('u1.png')).toBeNull());
   });
 
   test('a failed read shows its message', async () => {

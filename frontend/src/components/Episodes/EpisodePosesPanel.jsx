@@ -7,7 +7,9 @@
  * original is always kept. A pose can hold several photos:
  * the starred one is its default, the one the thumbnail editor picks first.
  * Each photo shows before and after, can be starred, moved to another pose,
- * processed again, or deleted.
+ * processed again, or deleted. Lighter cards (Evoni, 2026-10-22): the photo,
+ * its star and status show; the rest is behind "⋯" (CardMenu). An empty pose
+ * is one small "+ Back" chip (AddChip) instead of a tall tile.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -16,6 +18,7 @@ import {
 import {
   episodePosesApi, CHARACTERS, POSES, PHOTO_ACCEPT, isPhoto, anyProcessing, photosFor, stepsNote, keepsBackground,
 } from '../../lib/episodePosesApi';
+import { AddChip, CardMenu } from './FileCardParts';
 import './EpisodePosesPanel.css';
 
 const POLL_MS = 3000;
@@ -39,7 +42,7 @@ function PhotoCard({ photo, onStar, onMove, onReprocess, onDelete, busy }) {
   const note = stepsNote(photo.steps);
   const name = photo.original_filename || 'photo';
   return (
-    <li className={`epp-card${photo.is_default ? ' is-default' : ''}`} data-testid={`epp-photo-${photo.id}`}>
+    <li className={`epp-card is-light${photo.is_default ? ' is-default' : ''}`} data-testid={`epp-photo-${photo.id}`}>
       <div className={`epp-frame${showAfter && !keeps ? ' is-checker' : ''}`}>
         {src ? <img src={src} alt={showAfter ? `${name}, ${keeps ? 'enhanced' : 'background removed'}` : name} loading="lazy" /> : <ImageOff size={24} aria-hidden />}
         <button type="button" className={`epp-star${photo.is_default ? ' is-on' : ''}`} onClick={() => !photo.is_default && onStar(photo)}
@@ -48,32 +51,38 @@ function PhotoCard({ photo, onStar, onMove, onReprocess, onDelete, busy }) {
           title={photo.is_default ? 'Default for this pose' : 'Make default'}>
           <Star size={15} aria-hidden />
         </button>
-      </div>
-      {ready && (
-        <div className="epp-toggle" role="group" aria-label="Which version">
-          <button type="button" className={view === 'before' ? 'is-on' : ''} aria-pressed={view === 'before'} onClick={() => setView('before')}>Before</button>
-          <button type="button" className={view === 'after' ? 'is-on' : ''} aria-pressed={view === 'after'} onClick={() => setView('after')}>After</button>
-        </div>
-      )}
-      <span className={`epp-status ${st.tone}`} data-testid="epp-status">
-        <st.Icon size={12} aria-hidden className={photo.status === 'processing' ? 'epp-spin' : undefined} /> {st.label}
-      </span>
-      {photo.status === 'failed' && photo.error && <p className="epp-error">{photo.error}</p>}
-      {note && <p className="epp-note">{note}</p>}
-      <div className="epp-actions">
-        <select value={photo.pose} onChange={(e) => onMove(photo, e.target.value)} aria-label="Which pose this is" disabled={busy || working}>
-          {POSES.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
-        </select>
-        {!working && (
-          <button type="button" className="epp-icon-btn" onClick={() => onReprocess(photo)} disabled={busy}
-            aria-label={photo.status === 'failed' ? 'Retry' : 'Process again'} title={photo.status === 'failed' ? 'Retry' : 'Process again'}>
-            <RefreshCw size={15} aria-hidden />
+        <CardMenu>
+          {ready && (
+            <div className="epp-toggle" role="group" aria-label="Which version">
+              <button type="button" className={view === 'before' ? 'is-on' : ''} aria-pressed={view === 'before'} onClick={() => setView('before')}>Before</button>
+              <button type="button" className={view === 'after' ? 'is-on' : ''} aria-pressed={view === 'after'} onClick={() => setView('after')}>After</button>
+            </div>
+          )}
+          {note && <p className="epp-note">{note}</p>}
+          <select value={photo.pose} onChange={(e) => onMove(photo, e.target.value)} aria-label="Which pose this is" disabled={busy || working}>
+            {POSES.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+          </select>
+          {!working && photo.status !== 'failed' && (
+            <button type="button" className="epp-menu-item" onClick={() => onReprocess(photo)} disabled={busy}>
+              <RefreshCw size={15} aria-hidden /> Process again
+            </button>
+          )}
+          <button type="button" className="epp-menu-item is-danger" onClick={() => onDelete(photo)} disabled={busy} aria-label="Delete this photo">
+            <Trash2 size={15} aria-hidden /> Delete
           </button>
-        )}
-        <button type="button" className="epp-icon-btn is-danger" onClick={() => onDelete(photo)} disabled={busy} aria-label="Delete this photo" title="Delete">
-          <Trash2 size={15} aria-hidden />
-        </button>
+        </CardMenu>
+        <span className={`epp-status epp-badge ${st.tone}`} data-testid="epp-status">
+          <st.Icon size={12} aria-hidden className={photo.status === 'processing' ? 'epp-spin' : undefined} /> {st.label}
+        </span>
       </div>
+      {photo.status === 'failed' && (
+        <>
+          {photo.error && <p className="epp-error">{photo.error}</p>}
+          <button type="button" className="epp-menu-item" onClick={() => onReprocess(photo)} disabled={busy}>
+            <RefreshCw size={15} aria-hidden /> Retry
+          </button>
+        </>
+      )}
     </li>
   );
 }
@@ -122,7 +131,7 @@ function PoseRow({ character, pose, photos, uploads, onFiles, busyId, ...handler
   );
 }
 
-export default function EpisodePosesPanel({ episode }) {
+export default function EpisodePosesPanel({ episode, reloadKey = 0, onCount }) {
   const episodeId = episode?.id;
   const [photos, setPhotos] = useState([]);
   const [uploads, setUploads] = useState([]);
@@ -143,7 +152,9 @@ export default function EpisodePosesPanel({ episode }) {
     }
   }, [episodeId]);
 
-  useEffect(() => { load(); }, [load]);
+  // reloadKey: the Files tab asks again after a Style photo is filed as a pose.
+  useEffect(() => { load(); }, [load, reloadKey]);
+  useEffect(() => { if (onCount) onCount(photos.length); }, [photos.length, onCount]);
 
   // While a photo is being processed, check back every few seconds.
   useEffect(() => {
@@ -226,12 +237,26 @@ export default function EpisodePosesPanel({ episode }) {
           {CHARACTERS.map((c) => (
             <section key={c.key} className={`epp-character is-${c.key}`} data-testid={`epp-character-${c.key}`} aria-label={`${c.label} poses`}>
               <h3 className="epp-character-title">{c.label}</h3>
-              {POSES.map((p) => (
+              {POSES.filter((p) => photosFor(photos, c.key, p.key).length || uploads.some((u) => u.characterKey === c.key && u.pose === p.key)).map((p) => (
                 <PoseRow key={p.key} character={c} pose={p} busyId={busyId} onFiles={onFiles}
                   photos={photosFor(photos, c.key, p.key)}
                   uploads={uploads.filter((u) => u.characterKey === c.key && u.pose === p.key)}
                   {...handlers} />
               ))}
+              {/* Empty poses: one row of small chips that still take a drop. */}
+              {(() => {
+                const empty = POSES.filter((p) => !photosFor(photos, c.key, p.key).length && !uploads.some((u) => u.characterKey === c.key && u.pose === p.key));
+                if (!empty.length) return null;
+                return (
+                  <div className="epp-empty-row">
+                    <span className="epp-empty-label">No photos yet:</span>
+                    {empty.map((p) => (
+                      <AddChip key={p.key} label={p.label} accept={PHOTO_ACCEPT} testId={`epp-${c.key}-${p.key}`} inputTestId={`epp-input-${c.key}-${p.key}`}
+                        onFiles={(files) => { const list = [...(files || [])]; const good = list.filter(isPhoto); onFiles(c.key, p.key, good, list.length - good.length); }} />
+                    ))}
+                  </div>
+                );
+              })()}
             </section>
           ))}
         </div>
