@@ -194,6 +194,8 @@ export const youtubeThumbnailsApi = {
   saveDraft: (episodeId, spec) => api.put(`${base}/episodes/${episodeId}/draft`, spec).then((r) => r.data?.data),
   // AI help (Evoni, 2026-10-21), within the daily budgets: title ideas; a picture's background removed (kept as an upload).
   titleIdeas: (episodeId) => api.post(`${base}/episodes/${episodeId}/title-ideas`, {}, { timeout: 60000 }).then((r) => (Array.isArray(r.data?.data) ? r.data.data : [])),
+  // An AI background (Evoni, 2026-10-22): from the episode's theme and her words, kept as an upload.
+  aiBackground: (episodeId, words) => api.post(`${base}/episodes/${episodeId}/backgrounds/ai`, { words }, { timeout: 180000 }).then((r) => r.data?.data),
   cutOut: (episodeId, url, name) => api.post(`${base}/episodes/${episodeId}/pictures/cut-out`, { url, name }, { timeout: 120000 }).then((r) => r.data?.data),
   uploadPicture: (episodeId, file) => {
     const form = new FormData();
