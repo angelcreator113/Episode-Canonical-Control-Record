@@ -41,7 +41,7 @@ import {
 import {
   FONTS, presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, placeLayer, removeLayer,
   addText, addPicture, addPieceCard, layerName, loadThumbnailFonts, OUTLINE, BOX_COLOR, BOX_OPACITY, STICKER_EDGE, duplicateLayer, WIDTH, HEIGHT, CARD_COLOR,
-  alignLayers, distributeLayers, copyLayers, pasteLayers, CLIPBOARD_KEY, measurer, youtubeWarnings, fixWarning, fixAllWarnings, fileSize, YOUTUBE_SIZES, GLOW_COLOR, FADE_COLOR, EFFECT_SIZE, SHAPES, WORDS_SHAPES, addShape,
+  alignLayers, distributeLayers, copyLayers, pasteLayers, CLIPBOARD_KEY, figureLayers, toggleFigure, clearFigure, measurer, youtubeWarnings, fixWarning, fixAllWarnings, fileSize, YOUTUBE_SIZES, GLOW_COLOR, FADE_COLOR, EFFECT_SIZE, SHAPES, WORDS_SHAPES, addShape,
 } from '../lib/thumbnailLayers';
 import ThumbnailCanvas from '../components/Thumbnails/ThumbnailCanvas';
 import ThumbnailSeason from '../components/Thumbnails/ThumbnailSeason';
@@ -60,9 +60,9 @@ function PreviewImg({ url, alt }) {
   return src ? <img src={src} alt={alt} loading="lazy" /> : <span className="yts-img-wait" aria-hidden />;
 }
 
-function PickButton({ it, value, onPick }) {
+function PickButton({ it, on, onPick }) {
   return (
-    <button type="button" className={`yts-pick${value === it.url ? ' is-on' : ''}`} aria-pressed={value === it.url}
+    <button type="button" className={`yts-pick${on ? ' is-on' : ''}`} aria-pressed={on}
       onClick={() => onPick(it.url, it.label)} title={it.label}>
       <PreviewImg url={it.url} alt={it.label || ''} />
     </button>
@@ -103,7 +103,7 @@ function AssetTabs({ tree, onPick, onUpload, uploading }) {
  * background in Scene sets, Lala in her poses); any folder is a click away.
  * Without onNone there is no None button (adding a picture).
  */
-function FolderPicker({ title, tree, start, value, onPick, onUpload, uploading = false, onNone, noneLabel, testid, whole = false }) {
+function FolderPicker({ title, tree, start, value, values = null, onPick, onUpload, uploading = false, onNone, noneLabel, testid, whole = false, hint = null }) {
   const inputRef = useRef(null);
   const startKey = firstFolder(tree, start);
   const [at, setAt] = useState(startKey);
@@ -113,12 +113,16 @@ function FolderPicker({ title, tree, start, value, onPick, onUpload, uploading =
   const folders = here ? (here.folders || []) : (tree || []);
   const items = here?.items || [];
   const grid = `yts-grid${whole ? ' is-whole' : ''}`;
+  // Several at once (values) or one (value).
+  const isOn = (url) => (values ? values.includes(url) : value === url);
+  const none = values ? !values.length : !value;
   return (
     <fieldset className="yts-field" data-testid={testid}>
       <legend className="yts-label">{title}</legend>
+      {hint && <p className="yts-note">{hint}</p>}
       <div className={grid}>
         {onNone && (
-          <button type="button" className={`yts-pick is-none${!value ? ' is-on' : ''}`} aria-pressed={!value} onClick={onNone}>
+          <button type="button" className={`yts-pick is-none${none ? ' is-on' : ''}`} aria-pressed={none} onClick={onNone}>
             <ImageOff size={18} aria-hidden /><span>{noneLabel}</span>
           </button>
         )}
@@ -153,7 +157,7 @@ function FolderPicker({ title, tree, start, value, onPick, onUpload, uploading =
       )}
       {items.length > 0 && (
         <div className={grid} data-testid={`${testid}-pictures`}>
-          {items.map((it) => <PickButton key={it.url} it={it} value={value} onPick={onPick} />)}
+          {items.map((it) => <PickButton key={it.url} it={it} on={isOn(it.url)} onPick={onPick} />)}
         </div>
       )}
       {!folders.length && !items.length && <p className="yts-note">No pictures yet. Upload one.</p>}
@@ -1918,10 +1922,12 @@ export default function YouTubeThumbnailStudio() {
 
             <section className="yts-card" aria-label="Characters">
               <h2 className="yts-label">Characters</h2>
-              <FolderPicker title="Lala" testid="yts-lala" whole value={roleSrc(spec, 'lala')} tree={tree} start={['poses/lala', 'library/lala']}
-                noneLabel="No Lala" onPick={(url) => setRole('lala', url)} uploading={Boolean(uploading)}
-                onUpload={(f) => upload(f, (url) => setRole('lala', url))}
-                onNone={() => setRole('lala', null)} />
+              {/* More than one Lala (Evoni, 2026-10-22): each picture clicked is added beside her; clicked again, taken off. */}
+              <FolderPicker title="Lala" testid="yts-lala" whole values={figureLayers(spec, 'lala').map((l) => l.src)} tree={tree} start={['poses/lala', 'library/lala']}
+                hint="Click as many as you like; click one again to take it off."
+                noneLabel="No Lala" onPick={(url) => edit((s) => toggleFigure(s, 'lala', url, look?.layout))} uploading={Boolean(uploading)}
+                onUpload={(f) => upload(f, (url) => edit((s) => toggleFigure(s, 'lala', url, look?.layout)))}
+                onNone={() => edit((s) => clearFigure(s, 'lala'))} />
               <FolderPicker title="JustAWoman" testid="yts-jaw" whole value={roleSrc(spec, 'jaw')} tree={tree} start={['poses/justawoman']}
                 noneLabel="No JustAWoman" onPick={(url) => setRole('jaw', url)} uploading={Boolean(uploading)}
                 onUpload={(f) => upload(f, (url) => setRole('jaw', url))}
