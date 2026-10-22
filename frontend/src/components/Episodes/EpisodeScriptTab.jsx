@@ -871,7 +871,7 @@ function useLineIds(beatId, lines, opRef) {
   return held.current.ids;
 }
 
-function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, proposal = null, onAcceptProposal, onDiscardProposal, onEdit, onDeleteLine, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, writing = false, onScreen, onAddMoment, phoneUpAtStart = false, request = null, onRequestDone, people = [], lalaSlots = [], dressCode = '', lineOpRef = null, lineIdsRef = null, onOpenEdit = null, onFocusLater = null, status = 'draft', healthRows = [], hasPhone = false, worn = [], look = [], storyTime = null, linesTools = null, onStep = null, prevBeatId = null, nextBeatId = null }) {
+function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded, onToggle, onApprove, proposal = null, onAcceptProposal, onDiscardProposal, onEdit, onDeleteLine, onRewrite, rewritingLine, locking, onOpenMap, onMoveBeat, onMoveLine, drag, onRegenerate, regenerating, writing = false, onScreen, onAddMoment, phoneUpAtStart = false, request = null, onRequestDone, people = [], lalaSlots = [], dressCode = '', lineOpRef = null, lineIdsRef = null, onOpenEdit = null, onFocusLater = null, status = 'draft', healthRows = [], hasPhone = false, worn = [], look = [], storyTime = null, onStep = null, prevBeatId = null, nextBeatId = null }) {
   const scene = scenePlan?.find(p => p.beat_number === beat.number);
   const cardRef = useRef(null);
   const [picking, setPicking] = useState(false);
@@ -888,14 +888,27 @@ function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded
   const handledRequest = useRef(null);
   // The adder or picker a bar tap opened, to be shown (Script page audit, 2026-10-19).
   const [reveal, setReveal] = useState(null);
-  // An "Add:" chip shows its adder and focuses it as the bar does, and focus
-  // goes back to the chip when the adder closes (Script page audit 3,
-  // 2026-10-19: the adder opened above the chip, out of Tab's reach).
+  // An "Add line" item shows its adder and focuses it as the bar does, and
+  // focus goes back to the "+ Add line" button when the adder closes (Script
+  // page audit 3, 2026-10-19: the adder opened above the chip, out of Tab's
+  // reach). The kinds are one menu since Evoni's layout list of 2026-10-22.
   const chipRef = useRef(null);
-  const openFromChip = (e) => { chipRef.current = e.currentTarget; setReveal({ n: Date.now() }); };
+  const addToggleRef = useRef(null);
+  const [addMenu, setAddMenu] = useState(false);
+  const openFromChip = () => { chipRef.current = addToggleRef.current; setAddMenu(false); setReveal({ n: Date.now() }); };
+  useEffect(() => {
+    if (!addMenu) return undefined;
+    const away = (e) => { if (!e.target.closest?.(`[data-add-menu="${beat.id}"]`)) setAddMenu(false); };
+    const esc = (e) => { if (e.key === 'Escape') { setAddMenu(false); addToggleRef.current?.focus(); } };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
+  }, [addMenu, beat.id]);
+  // The beat's details (scene, assets, checklist) folded away (Evoni, 2026-10-22).
+  const [details, setDetails] = useState(false);
   const closeAdder = (close) => {
     close();
-    const back = chipRef.current?.isConnected ? chipRef.current : cardRef.current?.querySelector(`[data-testid="script-add-line-${beat.number}"]`);
+    const back = chipRef.current?.isConnected ? chipRef.current : addToggleRef.current;
     chipRef.current = null;
     if (back) setTimeout(() => back.focus(), 0);
   };
@@ -1035,7 +1048,7 @@ function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded
               </span>
             </div>
           </div>
-          {picture && !expanded && <span className="esp-beat-thumb" aria-hidden="true"><img src={picture} alt="" loading="lazy" /></span>}
+          {picture && <span className="esp-beat-thumb" aria-hidden="true"><img src={picture} alt="" loading="lazy" /></span>}
           <span className="esp-beat-count">{visibleLines} line{visibleLines === 1 ? '' : 's'}<span className="esp-beat-runtime" data-testid={`script-beat-runtime-${beat.number}`} title="Rough length: words at 150 a minute, a few seconds per action or moment">{formatRuntime(beatSeconds(beat.lines))}</span></span>
           {/* Beside the beat list the open beat's head doesn't fold it, so the
               chevron hides there (EpisodeScriptPage.css; Script page audit 4,
@@ -1065,60 +1078,18 @@ function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded
       {expanded && (
         <div className="esp-beat-body">
           {proposal && <ProposalCard proposal={proposal} onAccept={onAcceptProposal} onDiscard={onDiscardProposal} />}
-          {/* Scene Visuals: the scene this beat plays in (Task #2789), the
-              picture the Scenes tab shows, and the plan's other pictures of it. */}
-          <section className="esp-section esp-visuals" aria-label="Scene visuals">
-            <div className="esp-section-head">
-              <span className="esp-section-tab"><Images size={15} aria-hidden="true" /> Scene Visuals</span>
-              {big && <Link className="esp-link esp-section-link" to="?tab=beatplan" onClick={(e) => e.stopPropagation()}>Scenes plan</Link>}
-            </div>
-            {big ? (
-              <div className={`esp-visuals-grid${pictures.length > 1 ? ' has-thumbs' : ''}`}>
-                <button type="button" className="esp-beat-picture" data-testid={`script-picture-${beat.number}`} onClick={(e) => { e.stopPropagation(); setZoomed(true); }} aria-label="See the scene larger">
-                  <img src={big.url} alt={big.label || scene?.scene_set_name || 'The scene'} loading="lazy" />
-                  {big.label && <span className="esp-beat-picture-label">{big.label}</span>}
-                </button>
-                {pictures.length > 1 && (
-                  <ul className="esp-thumbs" aria-label="Pictures of this scene" data-testid={`script-thumbs-${beat.number}`}>
-                    {pictures.map((p, k) => (
-                      <li key={p.url}>
-                        <button type="button" className={`esp-thumb${p === big ? ' is-on' : ''}`} aria-pressed={p === big} aria-label={`Show ${p.label || `picture ${k + 1}`}`} onClick={(e) => { e.stopPropagation(); setPicAt(k); }}>
-                          <img src={p.url} alt="" loading="lazy" />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ) : (
-              <p className="esp-beat-nopicture" data-testid={`script-nopicture-${beat.number}`}>No picture for this beat yet · <Link className="esp-link" to="?tab=beatplan" onClick={(e) => e.stopPropagation()}>Open the Scenes plan</Link></p>
-            )}
-            {used.length > 0 && (
-              <div className="esp-build" data-testid={`script-build-${beat.number}`}>
-                <span className="esp-build-title">Builds the scene</span>
-                <span className="esp-build-strip">
-                  {picture && <span className="esp-build-item is-scene"><img src={picture} alt="" loading="lazy" /><span>Scene</span></span>}
-                  {used.map((u) => (
-                    <span key={u.name} className={`esp-build-item is-${u.kind}`}>
-                      {u.url ? <img src={u.url} alt="" loading="lazy" /> : (u.kind === 'phone' || u.kind === 'device' ? <Smartphone size={16} aria-hidden="true" /> : <ImageIcon size={16} aria-hidden="true" />)}
-                      <span>{u.name}</span>
-                    </span>
-                  ))}
-                </span>
-              </div>
-            )}
-            {expects && (
-              <p className="esp-beat-expects" data-testid={`script-expects-${beat.number}`}>
-                <Smartphone size={13} aria-hidden="true" /> On screen: {expects.what}{expects.where ? ` · ${expects.where}` : ''}
-              </p>
-            )}
-          </section>
+          {/* What the beat puts on screen, by its lines (the picture is a
+              small thumbnail on the head; the rest is under Details). */}
+          {expects && (
+            <p className="esp-beat-expects" data-testid={`script-expects-${beat.number}`}>
+              <Smartphone size={13} aria-hidden="true" /> On screen: {expects.what}{expects.where ? ` · ${expects.where}` : ''}
+            </p>
+          )}
           {/* Script Lines: one card per line; a line opens its editor from a
               click or the keyboard; Table read and the raw editor sit here. */}
           <section className="esp-section esp-script-lines" aria-label="Script lines">
             <div className="esp-section-head">
               <h4 className="esp-section-title"><ScrollText size={18} aria-hidden="true" /> Script Lines</h4>
-              {linesTools && <div className="esp-section-tools">{linesTools}</div>}
             </div>
             {voice?.ready === false && <p className="esp-voice-off" role="status" data-testid="script-voice-off">{VOICE_NOT_READY}</p>}
             <div className="esp-lines">{beat.lines.map((line, i) => {
@@ -1145,16 +1116,20 @@ function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded
                 onClose={() => closeAdder(() => setPicking(false))}
                 onAdd={(line, after) => onAddMoment(beat.id, line, after)} />
             )}
-            {/* "+ Add Line" (Task #2884): one tap to each kind the parser knows. */}
+            {/* "+ Add line" (Task #2884): each kind the parser knows, in one
+                menu since Evoni's layout list of 2026-10-22 (it was seven chips). */}
             {!beat.approved && (
-              <div className="esp-addrow">
-                <span className="esp-add-chips" role="group" aria-label="Add" data-testid={`script-add-chips-${beat.number}`}>
-                  <span className="esp-add-label"><Plus size={14} aria-hidden="true" /> Add line</span>
+              <div className="esp-addrow" data-add-menu={beat.id}>
+                <button type="button" ref={addToggleRef} className="esp-add-toggle" aria-expanded={addMenu} aria-controls={`script-add-chips-${beat.number}`}
+                  data-testid={`script-add-menu-${beat.number}`} onClick={(e) => { e.stopPropagation(); setAddMenu((o) => !o); }}>
+                  <Plus size={14} aria-hidden="true" /> Add line <ChevronDown size={14} aria-hidden="true" />
+                </button>
+                {/* No phone in the cutscene, beats 11–13 (Script page re-audit,
+                    2026-10-19): its kinds are not offered there, and it says why. */}
+                {cutsceneBeat && <span className="esp-beat-nophone" data-testid={`script-cutscene-note-${beat.number}`}>{CUTSCENE_NO_PHONE}</span>}
+                <span className="esp-add-chips" id={`script-add-chips-${beat.number}`} role="group" aria-label="Add" hidden={!addMenu} data-testid={`script-add-chips-${beat.number}`}>
                   <button type="button" className="esp-moment-btn" data-testid={`script-add-action-${beat.number}`} onClick={e => { e.stopPropagation(); openFromChip(e); setPicking(false); setMessaging(null); setAdding('action'); }}>Action</button>
                   <button type="button" className="esp-moment-btn" data-testid={`script-add-line-${beat.number}`} onClick={e => { e.stopPropagation(); openFromChip(e); setPicking(false); setMessaging(null); setAdding('Lala'); }}>Dialogue</button>
-                  {/* No phone in the cutscene, beats 11–13 (Script page re-audit,
-                      2026-10-19): its chips are not offered there, and it says why. */}
-                  {cutsceneBeat && <span className="esp-beat-nophone" data-testid={`script-cutscene-note-${beat.number}`}>{CUTSCENE_NO_PHONE}</span>}
                   {!cutsceneBeat && <button type="button" className="esp-moment-btn" data-testid={`script-add-moment-${beat.number}`} onClick={e => { e.stopPropagation(); openFromChip(e); setAdding(false); setMessaging(null); setPicking({}); }}>Open a screen</button>}
                   {!cutsceneBeat && <button type="button" className="esp-moment-btn" data-testid={`script-add-scroll-${beat.number}`} onClick={e => { e.stopPropagation(); openFromChip(e); setAdding(false); setMessaging(null); setPicking({ verb: 'SCROLL', title: 'Scroll the feed', feed: true }); }}>Scroll the feed</button>}
                   {/* Task #2885: a notification, a DM or a post. */}
@@ -1176,7 +1151,23 @@ function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded
                 <button type="button" className="esp-move-btn" aria-label="Move beat down" data-testid={`script-beat-down-${beat.number}`} disabled={index >= beatCount - 1 || locking} onClick={e => { e.stopPropagation(); onMoveBeat(index, index + 1); }}><ArrowDown size={14} aria-hidden="true" /> Down</button>
               </span>
             )}
+            {/* How to change the order, behind a "?" beside Up and Down (Script page
+                audit 4, 2026-10-19: the list's handles, or the beat's own handle
+                onto a pill where the list is hidden, and Up and Down where
+                nothing drags; folded since Evoni's layout list of 2026-10-22). */}
+                {beatCount > 1 && (
+                  <details className="esp-order-help">
+                  <summary className="esp-order-help-btn" aria-label="How to change the order" title="How to change the order">?</summary>
+                  <p className="esp-order-hint" data-testid="script-order-hint">
+                    <span className="esp-order-hint-list" data-testid="script-order-hint-list">Drag a beat by its handle in the beat list, or a line within its beat, to change the order. </span>
+                    <span className="esp-order-hint-pills" data-testid="script-order-hint-pills">Drag the beat by the handle on its head onto a beat pill, or a line within its beat, to change the order. </span>
+                    On a touch screen, use Up and Down at the foot of the open beat. A beat keeps its number and name wherever it goes. Approved beats stay where they are.
+                  </p>
+                  </details>
+                )}
             {!beat.approved && <button type="button" className="esp-regen-btn" data-testid={`script-regen-beat-${beat.number}`} disabled={cantWrite} onClick={e => { e.stopPropagation(); onRegenerate(beat.id); }}>{regenerating ? '⏳ Writing…' : '↻ Regenerate beat'}</button>}
+            {/* Ask and Approve stay at the foot of the screen on a phone (Evoni, 2026-10-22). */}
+            <div className="esp-beat-commit" data-testid={`script-commit-${beat.number}`}>
             {!beat.approved && (
               <span className="esp-ask" data-testid={`script-ask-${beat.number}`}>
                 <input type="text" className="esp-ask-input" data-testid={`script-ask-input-${beat.number}`} value={ask} maxLength={300}
@@ -1186,13 +1177,65 @@ function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded
               </span>
             )}
             <button type="button" className={`esp-lock-btn${beat.approved ? ' is-locked' : ''}`} data-testid={`script-lock-${beat.number}`} aria-disabled={locking || undefined} onClick={e => { e.stopPropagation(); if (locking) return; onApprove(beat.id); }}>{beat.approved ? 'Unlock' : '✓ Approve & lock'}</button>
+            </div>
           </div>
-          {/* Scene Context, Assets & Links and the Beat Checklist, read-only. */}
-          <div className="esp-beat-cards">
-            <SceneContextCard beatNumber={beat.number} rows={contextRows} />
-            <AssetsCard beatNumber={beat.number} assets={assets} />
-            <BeatChecklistCard beatNumber={beat.number} checklist={checklist} />
-          </div>
+          {/* Details (Evoni, 2026-10-22 layout list: "the lines come first"):
+              the scene's pictures, Scene Context, Assets & Links and the Beat
+              Checklist, read-only, folded until opened. */}
+          <details className="esp-beat-details" data-testid={`script-details-${beat.number}`} open={details}
+            onToggle={(e) => setDetails(e.currentTarget.open)}>
+            <summary className="esp-beat-details-sum">
+              Details <span className="esp-beat-details-what">scene · assets · checklist {checklist.done}/{checklist.total}</span>
+            </summary>
+            {/* Scene Visuals: the scene this beat plays in (Task #2789), the
+                picture the Scenes tab shows, and the plan's other pictures of it. */}
+            <section className="esp-section esp-visuals" aria-label="Scene visuals">
+              <div className="esp-section-head">
+                <span className="esp-section-tab"><Images size={15} aria-hidden="true" /> Scene Visuals</span>
+                {big && <Link className="esp-link esp-section-link" to="?tab=beatplan" onClick={(e) => e.stopPropagation()}>Scenes plan</Link>}
+              </div>
+              {big ? (
+                <div className={`esp-visuals-grid${pictures.length > 1 ? ' has-thumbs' : ''}`}>
+                  <button type="button" className="esp-beat-picture" data-testid={`script-picture-${beat.number}`} onClick={(e) => { e.stopPropagation(); setZoomed(true); }} aria-label="See the scene larger">
+                    <img src={big.url} alt={big.label || scene?.scene_set_name || 'The scene'} loading="lazy" />
+                    {big.label && <span className="esp-beat-picture-label">{big.label}</span>}
+                  </button>
+                  {pictures.length > 1 && (
+                    <ul className="esp-thumbs" aria-label="Pictures of this scene" data-testid={`script-thumbs-${beat.number}`}>
+                      {pictures.map((p, k) => (
+                        <li key={p.url}>
+                          <button type="button" className={`esp-thumb${p === big ? ' is-on' : ''}`} aria-pressed={p === big} aria-label={`Show ${p.label || `picture ${k + 1}`}`} onClick={(e) => { e.stopPropagation(); setPicAt(k); }}>
+                            <img src={p.url} alt="" loading="lazy" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ) : (
+                <p className="esp-beat-nopicture" data-testid={`script-nopicture-${beat.number}`}>No picture for this beat yet · <Link className="esp-link" to="?tab=beatplan" onClick={(e) => e.stopPropagation()}>Open the Scenes plan</Link></p>
+              )}
+              {used.length > 0 && (
+                <div className="esp-build" data-testid={`script-build-${beat.number}`}>
+                  <span className="esp-build-title">Builds the scene</span>
+                  <span className="esp-build-strip">
+                    {picture && <span className="esp-build-item is-scene"><img src={picture} alt="" loading="lazy" /><span>Scene</span></span>}
+                    {used.map((u) => (
+                      <span key={u.name} className={`esp-build-item is-${u.kind}`}>
+                        {u.url ? <img src={u.url} alt="" loading="lazy" /> : (u.kind === 'phone' || u.kind === 'device' ? <Smartphone size={16} aria-hidden="true" /> : <ImageIcon size={16} aria-hidden="true" />)}
+                        <span>{u.name}</span>
+                      </span>
+                    ))}
+                  </span>
+                </div>
+              )}
+            </section>
+            <div className="esp-beat-cards">
+              <SceneContextCard beatNumber={beat.number} rows={contextRows} />
+              <AssetsCard beatNumber={beat.number} assets={assets} />
+              <BeatChecklistCard beatNumber={beat.number} checklist={checklist} />
+            </div>
+          </details>
         </div>
       )}
       {zoomed && big && (
@@ -1363,6 +1406,9 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   const [barRequest, setBarRequest] = useState(null);
   const clearBarRequest = useCallback(() => setBarRequest(null), []);
   const [contextOpen, setContextOpen] = useState(false);
+  // The context panel's open tab (Evoni, 2026-10-22 layout list); null: the
+  // first that fits (True now once there is a script, else Uses).
+  const [sideTab, setSideTab] = useState(null);
   // The phone's Context sheet closes on Escape too (Script page audit, 2026-10-19).
   const contextCloseRef = useRef(null);
   // A modal sheet: Tab stays in it while it is on top (Script page audit 3, 2026-10-19).
@@ -2208,11 +2254,23 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   const statuses = Object.fromEntries(beats.map((b) => [b.id, beatStatus(b, healthRows)]));
   const runtimes = Object.fromEntries(beats.map((b) => [b.id, formatRuntime(beatSeconds(b.lines))]));
   const wornInOpen = openBeat ? piecesWornIn(beats, openIndex, outfit) : [];
-  // Table read, Export and the raw editor sit on the open beat's Script
-  // Lines card; with no beat open, or in the raw editor, on the script's card.
+  // Table read, Teleprompter, Export and the raw editor work on the whole
+  // script, so they sit on the script's bar (Evoni, 2026-10-22 layout list;
+  // they were on the open beat's Script Lines card).
   const readActions = <ScriptReadActions scriptText={scriptText} title={episode?.title || (episode?.episode_number ? `Episode ${episode.episode_number}` : 'Script')} dirty={scriptText !== savedScript} onScreen={onScreenWithDrafts} scenePlan={scenePlan} startBeat={Math.max(0, beats.indexOf(openBeat))} episodeId={episodeId} beatNumber={openBeat?.number ?? null} />;
   const rawToggle = <button type="button" ref={rawToggleRef} className={`esp-btn${developerMode ? ' is-on' : ''}`} onClick={() => { rawRefocusRef.current = true; setDeveloperMode(d => !d); }}>{developerMode ? 'Beat view' : 'Raw editor'}</button>;
-  const toolsInBeat = showBeatList && !!openBeat;
+  // The context panel's tabs: what generation reads, what must be covered,
+  // what is true at the open beat, the open beat's checks, and the voices.
+  const checkGaps = (check ? check.taps.filter((t) => !t.ok).length + check.missing.length : 0) + wearIssues.length + dealIssues.length;
+  const hasChecks = hasScript && !!openBeat && (!!check || wearIssues.length > 0 || dealIssues.length > 0 || (openBeatNumber === 14 && (!!beat14 || beat14Failed)));
+  const sideTabs = [
+    ['uses', 'Uses'],
+    ...(hasScript ? [['cover', 'Must cover']] : []),
+    ...(hasScript && truth ? [['truth', 'True now']] : []),
+    ...(hasChecks ? [['checks', 'Checks']] : []),
+    ['voice', 'Voice'],
+  ];
+  const sideOn = sideTabs.some(([k]) => k === sideTab) ? sideTab : (sideTabs.find(([k]) => k === 'truth') || sideTabs[0])[0];
   return (
     <div className={`esp${showBeatList ? ' has-beatlist' : ''}${contextOpen ? ' is-context-open' : ''}`}>
     <div className="esp-top">
@@ -2244,8 +2302,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
               flash('An earlier version is on the page ✦ Save to keep it.', 'success', 5000);
               return true;
             }} />
-            {!toolsInBeat && readActions}
-            {!toolsInBeat && rawToggle}
+            <span className="esp-tools" role="group" aria-label="Script tools" data-testid="script-tools">{readActions}{rawToggle}</span>
             {/* Not while a lock or a save is on its way (Script page audit,
                 2026-10-19: the new script landed over the lock's or save's answer). */}
             <button type="button" className="esp-btn" data-testid="script-regenerate" onClick={() => {
@@ -2314,10 +2371,158 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
 
     {/* The Episode Beats card (Evoni's mockup, 2026-10-19; Task #2881): the
         beats this script has; choosing one opens it in the centre. */}
+    {/* The rail (Evoni, 2026-10-22 layout list): the beat list and the
+        context panel together, staying in view beside the open beat. */}
+    <div className="esp-rail" data-testid="script-rail">
     {showBeatList && (
       <ScriptBeatList beats={beats} openId={openId} onChoose={chooseBeat} statuses={statuses} scenePlan={scenePlan} phoneBeats={phoneBeats}
         runtimes={runtimes} totalRuntime={formatRuntime(scriptSeconds(beats))} drag={drag} onMoveBeat={handleMoveBeat} onApprove={handleApprove} locking={locking || busy} />
     )}
+      {/* What generation reads, and where the voices come from (Evoni's Episode mock). */}
+      {/* On a phone, open, it is a modal sheet (Script page audit 3, 2026-10-19). */}
+      <aside className="esp-side" data-testid="script-side" ref={contextSheetRef}
+        {...(contextOpen ? { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Context' } : {})}>
+        {contextOpen && (
+          <button type="button" ref={contextCloseRef} className="esp-side-close" onClick={() => setContextOpen(false)} data-testid="script-context-close"><X size={16} aria-hidden="true" /> Close</button>
+        )}
+        <div className="esp-side-card">
+        <div className="esp-side-tabs" role="tablist" aria-label="Context" data-testid="script-side-tabs">
+          {sideTabs.map(([k, label]) => (
+            <button key={k} type="button" role="tab" id={`script-side-tab-${k}`} aria-selected={sideOn === k} aria-controls="script-side-panel"
+              className={`esp-side-tab${sideOn === k ? ' is-on' : ''}`} data-testid={`script-side-tab-${k}`} onClick={() => setSideTab(k)}>
+              {label}{k === 'checks' && checkGaps > 0 && <span className="esp-side-tab-count" aria-label={`${checkGaps} to look at`}>{checkGaps}</span>}
+            </button>
+          ))}
+        </div>
+        <div className="esp-side-panel" id="script-side-panel" role="tabpanel" aria-labelledby={`script-side-tab-${sideOn}`}>
+        {sideOn === 'uses' && (
+        <section className="esp-uses" data-testid="script-uses">
+          <h3 className="esp-side-title">What the script will use</h3>
+          <ul className="esp-uses-list">
+            {inputs.map((i) => (
+              <li key={i.key} className={i.ok ? 'is-ok' : 'is-gap'} data-testid={`script-uses-${i.key}`} data-ok={i.ok ? 'true' : 'false'}>
+                <span className="esp-dot" aria-hidden="true" />
+                <span><strong>{i.label}</strong> {i.detail}
+                  {i.fix === 'wardrobe' && !i.ok && <> · <Link className="esp-link" to="?tab=wardrobe">Open Wardrobe</Link></>}
+                  {i.fix === 'event' && !i.ok && i.to && <> · <Link className="esp-link" to={i.to}>Open the event</Link></>}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="esp-uses-note">Amber items won't block generating; the script fills the gap and flags it.</p>
+        </section>
+        )}
+        {sideOn === 'cover' && hasScript && (
+          <section className="esp-cover" data-testid="script-cover">
+            <h3 className="esp-side-title">This episode must cover</h3>
+            {cover.length ? (
+              <ul className="esp-cover-list">
+                {cover.map((c) => (
+                  <li key={c.key} className={c.beat ? 'is-covered' : ''} data-testid={`script-cover-${c.key}`} data-covered={c.beat ? 'true' : 'false'}>
+                    {c.beat ? <Check size={14} aria-label="In the script" /> : <Circle size={14} aria-label="Not in the script yet" />}
+                    <span><strong>{c.source}</strong> {c.label}{c.beat ? <span className="esp-cover-beat"> · Beat {c.beat}</span> : null}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="esp-cover-empty" data-testid="script-cover-empty">Nothing to cover: the event has no goals, the brief has no forward hook, and beat 14 has no opportunity coming.</p>
+            )}
+            <p className="esp-uses-note">From the event package, the brief and beat 14&apos;s opportunity. Ticked when the script mentions it; the opportunity, when beat 14 delivers it as a DM or notification.</p>
+          </section>
+        )}
+        {sideOn === 'truth' && hasScript && truth && (
+          <section className="esp-truth" data-testid="script-beat-state">
+            <h3 className="esp-side-title">True at Beat {truth.number}</h3>
+            <dl className="esp-truth-list">
+              <div data-testid="script-truth-coins"><dt><Coins size={14} aria-hidden="true" /> Coins</dt><dd>{truth.coins.text}{truth.coins.detail && <span className="esp-truth-note">{truth.coins.detail}</span>}
+                {/* Spent so far on the look by this beat (Task #3189), from the saved script; hidden at zero. */}
+                {Number(shoppingAt?.spent_so_far) > 0 && <span className="esp-truth-note" data-testid="script-truth-spent">Spent on the look so far: 🪙 {Number(shoppingAt.spent_so_far).toLocaleString('en-US')}</span>}</dd></div>
+              <div data-testid="script-truth-wearing"><dt><Shirt size={14} aria-hidden="true" /> Wearing</dt><dd>{truth.wearing.text}</dd></div>
+              {shoppingAt?.tasks?.length > 0 && (
+                <div data-testid="script-truth-shopping"><dt><ListChecks size={14} aria-hidden="true" /> Shopping list</dt><dd>
+                  {shoppingAt.completion?.completed ?? 0} of {shoppingAt.completion?.total ?? shoppingAt.tasks.length} crossed off
+                  {shoppingAt.tasks.some((t) => t.completed) && <span className="esp-truth-note">{shoppingAt.tasks.filter((t) => t.completed).map((t) => t.label || t.slot).join(' · ')}</span>}
+                </dd></div>
+              )}
+              {todoMode && (
+                <div data-testid="script-truth-todo" data-mode={todoMode.mode}><dt><ListChecks size={14} aria-hidden="true" /> To-do on her phone</dt><dd>
+                  {TODO_MODE_LABELS[todoMode.mode]}{todoMode.source === 'cue' ? ' (set in this beat)' : ''}
+                  {todoMode.mode === 'deal' && dealItems.length > 0 && (
+                    <span className="esp-truth-note">{deal.label} · {delivered.size} of {dealItems.length} delivered
+                      {dealItems.some((i) => delivered.has(String(i.id)) && i.status !== 'approved') ? ' · ready to approve in Money' : ''}</span>
+                  )}
+                </dd></div>
+              )}
+              <div data-testid="script-truth-where"><dt><MapPin size={14} aria-hidden="true" /> Where</dt><dd>{truth.where}</dd></div>
+              <div data-testid="script-truth-room"><dt><Users size={14} aria-hidden="true" /> In the room</dt><dd>Speaking: {truth.speaking}{truth.cast && <span className="esp-truth-note">Cast: {truth.cast}</span>}</dd></div>
+              <div data-testid="script-truth-time"><dt><Clock size={14} aria-hidden="true" /> Story time</dt><dd>{truth.storyTime}{truth.eventTimed && <span className="esp-truth-note">The event&apos;s date and time; a beat has no clock of its own</span>}</dd></div>
+            </dl>
+          </section>
+        )}
+        {sideOn === 'checks' && hasScript && openBeatNumber === 14 && beat14 && (
+          <Beat14Opportunity showId={showId} episodeId={episodeId} data={beat14} onChange={loadBeat14} designedIntent={brief?.designed_intent || null} />
+        )}
+        {sideOn === 'checks' && hasScript && openBeatNumber === 14 && !beat14 && beat14Failed && (
+          <p className="esp-cover-empty" role="status" data-testid="script-beat14-unread">Couldn&apos;t read beat 14&apos;s opportunity.</p>
+        )}
+        {sideOn === 'checks' && hasScript && openBeat && check && (
+          <section className="esp-phonecheck" data-testid="script-phone-check">
+            <h3 className="esp-side-title">Phone check · Beat {openBeat.number}</h3>
+            {check.moments === 0 ? (
+              <p className="esp-cover-empty">No phone or overlay moments in this beat.</p>
+            ) : (
+              <ul className="esp-cover-list">
+                {check.taps.map((t) => (
+                  <li key={`tap-${t.i}`} className={t.ok ? 'is-covered' : 'is-gap'} data-testid="script-phone-check-tap" data-ok={t.ok ? 'true' : 'false'}>
+                    {t.ok ? <Check size={14} aria-hidden="true" /> : <AlertTriangle size={14} aria-hidden="true" />}
+                    <span>{t.ok ? `Tap ${t.name}: a real path` : t.why}</span>
+                  </li>
+                ))}
+                {check.missing.map((m) => (
+                  <li key={`missing-${m.i}`} className="is-gap" data-testid="script-phone-check-missing">
+                    <AlertTriangle size={14} aria-hidden="true" /><span>Not made yet: {m.name}</span>
+                  </li>
+                ))}
+                {!check.taps.length && !check.missing.length && <li className="is-covered"><Check size={14} aria-hidden="true" /><span>Every screen and overlay it names is made.</span></li>}
+              </ul>
+            )}
+          </section>
+        )}
+        {sideOn === 'checks' && hasScript && openBeat && wearIssues.length > 0 && (
+          <section className="esp-phonecheck" data-testid="script-wear-check">
+            <h3 className="esp-side-title">Wardrobe cues · Beat {openBeat.number}</h3>
+            <ul className="esp-cover-list">
+              {wearIssues.map((f) => (
+                <li key={`wear-${f.lineIndex}`} className="is-gap" data-testid="script-wear-flag" data-flag={f.flag}>
+                  <AlertTriangle size={14} aria-hidden="true" /><span>{f.text}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {sideOn === 'checks' && hasScript && openBeat && dealIssues.length > 0 && (
+          <section className="esp-phonecheck" data-testid="script-deliver-check">
+            <h3 className="esp-side-title">Deal cues · Beat {openBeat.number}</h3>
+            <ul className="esp-cover-list">
+              {dealIssues.map((f) => (
+                <li key={`deal-${f.lineIndex}`} className="is-gap" data-testid="script-deliver-flag" data-flag={f.flag}>
+                  <AlertTriangle size={14} aria-hidden="true" /><span>{f.text}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {sideOn === 'voice' && (
+        <section className="esp-voice" data-testid="script-voice">
+          <h3 className="esp-side-title">Voice</h3>
+          <p>Lala's voice signature and the cast's voices come from their profiles.</p>
+          <Link className="esp-link" to="/character-registry?view=world">Open Character Studio</Link>
+        </section>
+        )}
+        </div>
+        </div>
+      </aside>
+    </div>
     <div className="esp-main" onClickCapture={pinTappedBeat}>
       {/* At phone width (Task #2881): the beats as pills, and the open beat's
           context from the episode's own data. */}
@@ -2354,22 +2559,12 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
 
       {!developerMode && (hasScript ? (
         <div className={`esp-beats${busy ? ' is-busy' : ''}${openBeat ? ' has-open' : ''}`} aria-busy={busy || undefined} data-testid="script-beats">
-          {/* Says how at each width (Script page audit 4, 2026-10-19): the
-              beat list's handles, or the beat's own handle onto a pill where
-              the list is hidden, and Up and Down where nothing drags. */}
-          {beats.length > 1 && (
-            <p className="esp-order-hint" data-testid="script-order-hint">
-              <span className="esp-order-hint-list" data-testid="script-order-hint-list">Drag a beat by its handle in the beat list, or a line within its beat, to change the order. </span>
-              <span className="esp-order-hint-pills" data-testid="script-order-hint-pills">Drag the beat by the handle on its head onto a beat pill, or a line within its beat, to change the order. </span>
-              On a touch screen, use Up and Down at the foot of the open beat. A beat keeps its number and name wherever it goes. Approved beats stay where they are.
-            </p>
-          )}
           {beats.map((beat, index) => {
             const open = openId === beat.id;
             const phoneUp = phoneUpAtStart[index] || false;
             return <BeatSection key={beat.id} voice={voice} request={open && barRequest?.beatId === beat.id ? barRequest : null} beat={beat} index={index} beatCount={beats.length} scenePlan={scenePlan} expanded={open} onToggle={() => setExpandedBeat(open && !isPhoneWidth() && !showBeatList ? null : beat.id)} onApprove={handleApprove} proposal={proposal?.beatId === beat.id ? proposal : null} onAcceptProposal={acceptProposal} onDiscardProposal={() => setProposal(null)} onEdit={handleEditLine} onDeleteLine={handleDeleteLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} locking={locking || busy} onOpenMap={() => setShowMap(true)} onMoveBeat={handleMoveBeat} onMoveLine={handleMoveLine} drag={drag} onRegenerate={handleRegenerateBeat} regenerating={regeneratingBeat === beat.id} writing={!!regeneratingBeat || busy} onRequestDone={clearBarRequest} onScreen={onScreenWithDrafts} onAddMoment={handleAddMoment} lineOpRef={lineOpRef} lineIdsRef={lineIdsRef} onOpenEdit={trackOpenEdit} onFocusLater={focusLineLater} phoneUpAtStart={phoneUp} people={people} lalaSlots={lineSlots.filter((s) => s.beatIndex === index)} dressCode={source?.event?.dress_code || ''}
               status={statuses[beat.id]} healthRows={open ? healthRows : []} hasPhone={phoneBeats.has(beat.id)} worn={open ? wornInOpen : []} look={outfit || []}
-              storyTime={open && truth?.eventTimed ? truth.storyTime : null} linesTools={open && toolsInBeat ? <>{readActions}{rawToggle}</> : null}
+              storyTime={open && truth?.eventTimed ? truth.storyTime : null}
               onStep={stepBeat} prevBeatId={index > 0 ? beats[index - 1].id : null} nextBeatId={index < beats.length - 1 ? beats[index + 1].id : null} />;
           })}
           {/* Franchise Guard Results */}
@@ -2429,134 +2624,6 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       )}
     </div>
 
-    {/* What generation reads, and where the voices come from (Evoni's Episode mock). */}
-    {/* On a phone, open, it is a modal sheet (Script page audit 3, 2026-10-19). */}
-    <aside className="esp-side" data-testid="script-side" ref={contextSheetRef}
-      {...(contextOpen ? { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Context' } : {})}>
-      {contextOpen && (
-        <button type="button" ref={contextCloseRef} className="esp-side-close" onClick={() => setContextOpen(false)} data-testid="script-context-close"><X size={16} aria-hidden="true" /> Close</button>
-      )}
-      <section className="esp-uses" data-testid="script-uses">
-        <h3 className="esp-side-title">What the script will use</h3>
-        <ul className="esp-uses-list">
-          {inputs.map((i) => (
-            <li key={i.key} className={i.ok ? 'is-ok' : 'is-gap'} data-testid={`script-uses-${i.key}`} data-ok={i.ok ? 'true' : 'false'}>
-              <span className="esp-dot" aria-hidden="true" />
-              <span><strong>{i.label}</strong> {i.detail}
-                {i.fix === 'wardrobe' && !i.ok && <> · <Link className="esp-link" to="?tab=wardrobe">Open Wardrobe</Link></>}
-                {i.fix === 'event' && !i.ok && i.to && <> · <Link className="esp-link" to={i.to}>Open the event</Link></>}
-              </span>
-            </li>
-          ))}
-        </ul>
-        <p className="esp-uses-note">Amber items won't block generating; the script fills the gap and flags it.</p>
-      </section>
-      {hasScript && (
-        <section className="esp-cover" data-testid="script-cover">
-          <h3 className="esp-side-title">This episode must cover</h3>
-          {cover.length ? (
-            <ul className="esp-cover-list">
-              {cover.map((c) => (
-                <li key={c.key} className={c.beat ? 'is-covered' : ''} data-testid={`script-cover-${c.key}`} data-covered={c.beat ? 'true' : 'false'}>
-                  {c.beat ? <Check size={14} aria-label="In the script" /> : <Circle size={14} aria-label="Not in the script yet" />}
-                  <span><strong>{c.source}</strong> {c.label}{c.beat ? <span className="esp-cover-beat"> · Beat {c.beat}</span> : null}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="esp-cover-empty" data-testid="script-cover-empty">Nothing to cover: the event has no goals, the brief has no forward hook, and beat 14 has no opportunity coming.</p>
-          )}
-          <p className="esp-uses-note">From the event package, the brief and beat 14&apos;s opportunity. Ticked when the script mentions it; the opportunity, when beat 14 delivers it as a DM or notification.</p>
-        </section>
-      )}
-      {hasScript && truth && (
-        <section className="esp-truth" data-testid="script-beat-state">
-          <h3 className="esp-side-title">True at Beat {truth.number}</h3>
-          <dl className="esp-truth-list">
-            <div data-testid="script-truth-coins"><dt><Coins size={14} aria-hidden="true" /> Coins</dt><dd>{truth.coins.text}{truth.coins.detail && <span className="esp-truth-note">{truth.coins.detail}</span>}
-              {/* Spent so far on the look by this beat (Task #3189), from the saved script; hidden at zero. */}
-              {Number(shoppingAt?.spent_so_far) > 0 && <span className="esp-truth-note" data-testid="script-truth-spent">Spent on the look so far: 🪙 {Number(shoppingAt.spent_so_far).toLocaleString('en-US')}</span>}</dd></div>
-            <div data-testid="script-truth-wearing"><dt><Shirt size={14} aria-hidden="true" /> Wearing</dt><dd>{truth.wearing.text}</dd></div>
-            {shoppingAt?.tasks?.length > 0 && (
-              <div data-testid="script-truth-shopping"><dt><ListChecks size={14} aria-hidden="true" /> Shopping list</dt><dd>
-                {shoppingAt.completion?.completed ?? 0} of {shoppingAt.completion?.total ?? shoppingAt.tasks.length} crossed off
-                {shoppingAt.tasks.some((t) => t.completed) && <span className="esp-truth-note">{shoppingAt.tasks.filter((t) => t.completed).map((t) => t.label || t.slot).join(' · ')}</span>}
-              </dd></div>
-            )}
-            {todoMode && (
-              <div data-testid="script-truth-todo" data-mode={todoMode.mode}><dt><ListChecks size={14} aria-hidden="true" /> To-do on her phone</dt><dd>
-                {TODO_MODE_LABELS[todoMode.mode]}{todoMode.source === 'cue' ? ' (set in this beat)' : ''}
-                {todoMode.mode === 'deal' && dealItems.length > 0 && (
-                  <span className="esp-truth-note">{deal.label} · {delivered.size} of {dealItems.length} delivered
-                    {dealItems.some((i) => delivered.has(String(i.id)) && i.status !== 'approved') ? ' · ready to approve in Money' : ''}</span>
-                )}
-              </dd></div>
-            )}
-            <div data-testid="script-truth-where"><dt><MapPin size={14} aria-hidden="true" /> Where</dt><dd>{truth.where}</dd></div>
-            <div data-testid="script-truth-room"><dt><Users size={14} aria-hidden="true" /> In the room</dt><dd>Speaking: {truth.speaking}{truth.cast && <span className="esp-truth-note">Cast: {truth.cast}</span>}</dd></div>
-            <div data-testid="script-truth-time"><dt><Clock size={14} aria-hidden="true" /> Story time</dt><dd>{truth.storyTime}{truth.eventTimed && <span className="esp-truth-note">The event&apos;s date and time; a beat has no clock of its own</span>}</dd></div>
-          </dl>
-        </section>
-      )}
-      {hasScript && openBeatNumber === 14 && beat14 && (
-        <Beat14Opportunity showId={showId} episodeId={episodeId} data={beat14} onChange={loadBeat14} designedIntent={brief?.designed_intent || null} />
-      )}
-      {hasScript && openBeatNumber === 14 && !beat14 && beat14Failed && (
-        <p className="esp-cover-empty" role="status" data-testid="script-beat14-unread">Couldn&apos;t read beat 14&apos;s opportunity.</p>
-      )}
-      {hasScript && openBeat && check && (
-        <section className="esp-phonecheck" data-testid="script-phone-check">
-          <h3 className="esp-side-title">Phone check · Beat {openBeat.number}</h3>
-          {check.moments === 0 ? (
-            <p className="esp-cover-empty">No phone or overlay moments in this beat.</p>
-          ) : (
-            <ul className="esp-cover-list">
-              {check.taps.map((t) => (
-                <li key={`tap-${t.i}`} className={t.ok ? 'is-covered' : 'is-gap'} data-testid="script-phone-check-tap" data-ok={t.ok ? 'true' : 'false'}>
-                  {t.ok ? <Check size={14} aria-hidden="true" /> : <AlertTriangle size={14} aria-hidden="true" />}
-                  <span>{t.ok ? `Tap ${t.name}: a real path` : t.why}</span>
-                </li>
-              ))}
-              {check.missing.map((m) => (
-                <li key={`missing-${m.i}`} className="is-gap" data-testid="script-phone-check-missing">
-                  <AlertTriangle size={14} aria-hidden="true" /><span>Not made yet: {m.name}</span>
-                </li>
-              ))}
-              {!check.taps.length && !check.missing.length && <li className="is-covered"><Check size={14} aria-hidden="true" /><span>Every screen and overlay it names is made.</span></li>}
-            </ul>
-          )}
-        </section>
-      )}
-      {hasScript && openBeat && wearIssues.length > 0 && (
-        <section className="esp-phonecheck" data-testid="script-wear-check">
-          <h3 className="esp-side-title">Wardrobe cues · Beat {openBeat.number}</h3>
-          <ul className="esp-cover-list">
-            {wearIssues.map((f) => (
-              <li key={`wear-${f.lineIndex}`} className="is-gap" data-testid="script-wear-flag" data-flag={f.flag}>
-                <AlertTriangle size={14} aria-hidden="true" /><span>{f.text}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      {hasScript && openBeat && dealIssues.length > 0 && (
-        <section className="esp-phonecheck" data-testid="script-deliver-check">
-          <h3 className="esp-side-title">Deal cues · Beat {openBeat.number}</h3>
-          <ul className="esp-cover-list">
-            {dealIssues.map((f) => (
-              <li key={`deal-${f.lineIndex}`} className="is-gap" data-testid="script-deliver-flag" data-flag={f.flag}>
-                <AlertTriangle size={14} aria-hidden="true" /><span>{f.text}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      <section className="esp-voice" data-testid="script-voice">
-        <h3 className="esp-side-title">Voice</h3>
-        <p>Lala's voice signature and the cast's voices come from their profiles.</p>
-        <Link className="esp-link" to="/character-registry?view=world">Open Character Studio</Link>
-      </section>
-    </aside>
 
       {/* DREAM Map Modal */}
       {showMap && (

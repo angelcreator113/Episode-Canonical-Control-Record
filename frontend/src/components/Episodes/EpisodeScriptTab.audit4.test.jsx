@@ -70,8 +70,9 @@ describe('Script page audit 4', () => {
 
   test('Raw editor and Beat view keep focus on the toggle', async () => {
     renderTab();
-    const beat = await screen.findByTestId('script-beat-1');
-    const raw = within(beat).getByRole('button', { name: 'Raw editor' });
+    await screen.findByTestId('script-beat-1');
+    // On the script's bar (Evoni, 2026-10-22 layout list).
+    const raw = within(screen.getByTestId('script-tools')).getByRole('button', { name: 'Raw editor' });
     raw.focus(); fireEvent.click(raw);
     await screen.findByLabelText('Raw script');
     expect(document.activeElement.textContent).toBe('Beat view');
