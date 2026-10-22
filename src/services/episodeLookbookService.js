@@ -338,11 +338,15 @@ async function imageSize(buffer) {
 }
 
 // Soft-delete the photo now in a single-photo spot (a replace).
+// A one-photo spot is emptied for a new photo. Her own photo goes back to
+// To sort (Files › Style photos keeps it, Evoni 2026-10-22); anything else
+// in the spot is removed.
 async function vacateSlot(models, lookbook, category, transaction, keepId = null) {
   if (!SINGLE_SLOT.includes(category)) return;
   const { Op } = require('sequelize');
   const where = { lookbook_id: lookbook.id, episode_id: lookbook.episode_id, category };
   if (keepId) where.id = { [Op.ne]: keepId };
+  await models.EpisodeLookbookImage.update({ category: 'unsorted' }, { where: { ...where, source: 'upload' }, transaction });
   await models.EpisodeLookbookImage.destroy({ where, transaction });
 }
 
@@ -359,7 +363,7 @@ async function assertInspoRoom(models, lookbook, adding, transaction, exceptId =
 /**
  * Add photos (multipart "files"). Without a category they land in the
  * To sort tray; with a single-photo spot, exactly one photo replaces the
- * one there.
+ * one there, which goes back to To sort.
  */
 async function addImages(models, episodeId, files = [], { category } = {}) {
   const ep = await loadLiveEpisode(models, episodeId);

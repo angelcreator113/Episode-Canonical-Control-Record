@@ -3,9 +3,11 @@
  * stylesheet.md Part 2, "Style Page"; Task #2876). The style sheet is the
  * editor: it is drawn at its real layout on the left (scaled to fit), every
  * empty spot is a dashed "+ Add" button in place, and the spot you tap opens
- * in the panel on the right: Upload, a picker from the To sort tray, and the
- * readiness bar ("Ready x of 12", one chip per item, from styleReadiness).
- * What you see is what exports.
+ * in the panel on the right: Choose from Files, and the readiness bar
+ * ("Ready x of 12", one chip per item, from styleReadiness). What you see is
+ * what exports. Photos are uploaded in Files › Style photos, never here
+ * (Evoni, 2026-10-22: "i dont want the uploads in the style page move them
+ * to the files tab"); taking one off the sheet sends it back to To sort.
  *
  * Data: the Lookbook routes (lib/lookbookApi) and GET /episodes/:id/style-
  * sheet for the sheet itself. Share & export (Task #2877) downloads the
@@ -15,10 +17,11 @@
  * data only). Reloads keep the page in place, and tapping never scrolls it.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Download, ImagePlus, Loader2, Lock, RotateCcw, Send, Shirt, Trash2, Upload } from 'lucide-react';
+import { CheckCircle2, Download, FolderOpen, ImagePlus, Loader2, Lock, RotateCcw, Send, Shirt, X } from 'lucide-react';
 import { downloadStyleDesign, downloadStyleDesignsZip, downloadStyleSheetExport, styleSheetDistributionApi, styleSheetError } from '../../lib/styleSheetApi';
 import { lookbookApi } from '../../lib/lookbookApi';
 import { CHARACTERS, POSES, episodePosesApi } from '../../lib/episodePosesApi';
+import { STYLE_FOLDERS, filesIn, folderLabel } from '../../lib/stylePhotoFolders';
 import StyleAudiencePick from './StyleAudiencePick';
 import { styleReadiness } from '../../lib/styleReadiness';
 import { extractPalette } from '../../lib/stylePalette';
@@ -27,7 +30,6 @@ import StyleSheetTemplate, { SHEET_HEIGHT, SHEET_WIDTH } from './StyleSheetTempl
 import StyleDesign, { DESIGN_HEIGHT, DESIGN_WIDTH, designValues } from './StyleDesign';
 import './EpisodeStylePage.css';
 
-const ACCEPT = 'image/png,image/jpeg,image/webp';
 const MAX_INSPO = 2;
 const errorText = (err) => err?.response?.data?.error || err?.message || 'Something went wrong.';
 
@@ -43,7 +45,7 @@ export const SPOT_INFO = {
   eyes: { section: 'Beauty details', label: 'Eyes', hint: 'A close-up of the eye makeup.', photo: true, notes: true },
   lips: { section: 'Beauty details', label: 'Lips', hint: 'A close-up of the lips.', photo: true, notes: true },
   skin: { section: 'Beauty details', label: 'Skin', hint: 'A close-up of the skin and base.', photo: true, notes: true },
-  venue: { section: 'The venue', label: 'Venue', hint: "From the event's scene set: Swap cycles its images, or add your own.", photo: true },
+  venue: { section: 'The venue', label: 'Venue', hint: "From the event's scene set: Swap cycles its images, or choose your own from Files.", photo: true },
   inspo: { section: 'Key inspo', label: 'Inspo', hint: "Up to two of your photos; the two textures are cut from the look's pieces automatically.", photo: true },
   wardrobe: { section: 'Wardrobe breakdown', label: 'Pieces', hint: "The pieces come from the episode's saved look. Every required slot, Body included, needs one." },
   palette: { section: 'Color palette', label: 'Palette', hint: "Five colours taken from the pieces' images; adjust any of them." },
@@ -73,30 +75,6 @@ const CLASSIC = 'classic';
 /** The panel spots one design shows. */
 const designPanelSpots = (design) => [...new Set(design.elements.filter((e) => e.kind === 'photo').map((e) => DESIGN_SPOT[e.spot]).filter(Boolean))];
 
-function FileButton({ label, onFiles, multiple = false, disabled, className = '', icon: Icon = Upload }) {
-  const inputRef = useRef(null);
-  return (
-    <>
-      <button type="button" className={`esp2-btn ${className}`} disabled={disabled} onClick={() => inputRef.current?.click()}>
-        <Icon size={16} aria-hidden="true" /> {label}
-      </button>
-      <input
-        ref={inputRef}
-        type="file"
-        accept={ACCEPT}
-        multiple={multiple}
-        hidden
-        aria-label={label}
-        onChange={(e) => {
-          const files = [...(e.target.files || [])];
-          e.target.value = '';
-          if (files.length) onFiles(files);
-        }}
-      />
-    </>
-  );
-}
-
 export default function EpisodeStylePage({ episode, onOpenTab }) {
   const episodeId = episode?.id;
   const [lb, setLb] = useState(null);
@@ -107,7 +85,6 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);
   const [text, setText] = useState({ tagline: '', hair_name: '', nails_name: '' });
-  const [dragging, setDragging] = useState(false);
   const sheetCol = useRef(null);
   const [scale, setScale] = useState(0.5);
   const [view, setView] = useState(CLASSIC);
@@ -189,7 +166,6 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
   // nothing locks while it is approved; only a save in flight does.
   const locked = busy;
   const canExport = approved && !sheet.stale;
-  const tray = lb.images?.unsorted || [];
   const readiness = styleReadiness({ lookbook: lb, sheet, palette });
   const info = selected ? SPOT_INFO[selected] : null;
   const designs = sheet.designs || [];
@@ -201,9 +177,7 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
   const notOnDesign = design ? Object.keys(DESIGN_SPOT).map((k) => DESIGN_SPOT[k]).filter((v, i, a) => a.indexOf(v) === i)
     .filter((spot) => !designPanelSpots(design).includes(spot)).map((spot) => (spot === 'eyes' ? 'Beauty' : SPOT_INFO[spot].label)) : [];
 
-  const upload = (files, category) => run(() => lookbookApi.upload(episodeId, files, category));
   const fromPose = (poseId, category) => run(() => lookbookApi.fromPose(episodeId, poseId, category));
-  const remove = (imageId) => run(() => lookbookApi.remove(episodeId, imageId));
   const move = (imageId, changes) => run(() => lookbookApi.move(episodeId, imageId, changes));
   const saveFields = (fields) => run(() => lookbookApi.save(episodeId, fields));
   const commitText = (field) => {
@@ -246,14 +220,6 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
   });
   const reopen = () => run(async () => { await styleSheetApi.reopen(episodeId); return lookbookApi.get(episodeId); });
 
-  const onDrop = (e) => {
-    e.preventDefault();
-    setDragging(false);
-    if (locked) return;
-    const files = [...(e.dataTransfer?.files || [])].filter((f) => ACCEPT.split(',').includes(f.type));
-    if (files.length) upload(files);
-  };
-
   const edit = {
     selected,
     onSelect: setSelected,
@@ -266,13 +232,7 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
   };
 
   return (
-    <div
-      className={`esp2-page${dragging ? ' is-dragging' : ''}`}
-      data-testid="episode-style-page"
-      onDragOver={(e) => { e.preventDefault(); if (!locked) setDragging(true); }}
-      onDragLeave={(e) => { if (e.currentTarget === e.target) setDragging(false); }}
-      onDrop={onDrop}
-    >
+    <div className="esp2-page" data-testid="episode-style-page">
       <header className="esp2-header">
         <div className="esp2-title-row">
           <h2 className="esp2-title">Style Page</h2>
@@ -282,7 +242,9 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
           {sheet.stale && <span className="esp2-pill is-stale">Out of date: the event or look changed since approval</span>}
         </div>
         <div className="esp2-header-actions">
-          <FileButton label="Drop photos to sort" icon={ImagePlus} multiple onFiles={(files) => upload(files)} disabled={locked} />
+          <button type="button" className="esp2-btn" disabled={!onOpenTab} data-testid="esp2-open-files" onClick={() => onOpenTab && onOpenTab('files')}>
+            <FolderOpen size={16} aria-hidden="true" /> Photos in Files
+          </button>
           {approved ? (
             <button type="button" className="esp2-btn" disabled={busy} onClick={reopen}><RotateCcw size={16} aria-hidden="true" /> Reopen</button>
           ) : (
@@ -343,12 +305,9 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
               text={text}
               setText={(field, value) => setText((t) => ({ ...t, [field]: value }))}
               commitText={commitText}
-              tray={tray}
               locked={locked}
               venueCandidates={venueCandidates}
-              upload={upload}
               fromPose={fromPose}
-              remove={remove}
               move={move}
               saveFields={saveFields}
               swapVenue={swapVenue}
@@ -390,7 +349,7 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
   );
 }
 
-function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, text, setText, commitText, tray, locked, venueCandidates, upload, fromPose, remove, move, saveFields, swapVenue, toggleOption, onOpenTab, episode, designUse }) {
+function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, text, setText, commitText, locked, venueCandidates, fromPose, move, saveFields, swapVenue, toggleOption, onOpenTab, episode, designUse }) {
   const images = lb.images || {};
   const current = info.photo && spot !== 'venue' && spot !== 'inspo' ? (images[spot] || [])[0] || null : null;
   // Front, Side and Back show Lala's pose from Files until a photo is put there.
@@ -398,6 +357,8 @@ function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, te
   const inspo = (images.inspo || []).filter((i) => i.source === 'upload');
   const notes = lb.beauty_notes || {};
   const fullInspo = spot === 'inspo' && inspo.length >= MAX_INSPO;
+  // Off the sheet, still in Files: back to To sort.
+  const takeOff = (id) => move(id, { category: 'unsorted' });
 
   return (
     <section className="esp2-spot" aria-labelledby="esp2-spot-title" data-testid="esp2-spot-panel">
@@ -408,8 +369,8 @@ function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, te
       {current && (
         <div className="esp2-current">
           <img src={current.image_url} alt={`${info.label} photo`} />
-          <button type="button" className="esp2-icon-btn" aria-label={`Remove ${info.label} photo`} disabled={locked} onClick={() => remove(current.id)}>
-            <Trash2 size={16} aria-hidden="true" />
+          <button type="button" className="esp2-icon-btn" aria-label={`Take the ${info.label} photo off the sheet (it stays in Files)`} title="Off the sheet; it stays in Files" disabled={locked} onClick={() => takeOff(current.id)}>
+            <X size={16} aria-hidden="true" />
           </button>
         </div>
       )}
@@ -417,7 +378,7 @@ function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, te
       {fromFiles && (
         <div className="esp2-current" data-testid="esp2-from-files">
           <img src={fromFiles.url} alt={`${info.label}: ${fromFiles.label}`} />
-          <span className="esp2-hint">From Files · {fromFiles.label}. Upload or choose another to replace it.</span>
+          <span className="esp2-hint">From Files · {fromFiles.label}. Choose another from Files to replace it.</span>
         </div>
       )}
 
@@ -426,8 +387,8 @@ function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, te
           {inspo.map((p, i) => (
             <li key={p.id} className="esp2-current">
               <img src={p.image_url} alt={`Inspo ${i + 1}`} />
-              <button type="button" className="esp2-icon-btn" aria-label={`Remove inspo ${i + 1}`} disabled={locked} onClick={() => remove(p.id)}>
-                <Trash2 size={16} aria-hidden="true" />
+              <button type="button" className="esp2-icon-btn" aria-label={`Take inspo ${i + 1} off the sheet (it stays in Files)`} title="Off the sheet; it stays in Files" disabled={locked} onClick={() => takeOff(p.id)}>
+                <X size={16} aria-hidden="true" />
               </button>
             </li>
           ))}
@@ -451,15 +412,15 @@ function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, te
               ))}
             </ul>
           )}
-          {!lb.scene_set && <p className="esp2-hint">{lb.event ? "The event has no scene set yet; add your own venue photo." : 'This episode has no event yet; add your own venue photo.'}</p>}
+          {!lb.scene_set && <p className="esp2-hint">{lb.event ? 'The event has no scene set yet; choose a venue photo from Files.' : 'This episode has no event yet; choose a venue photo from Files.'}</p>}
           {(images.venue || []).filter((i) => i.source === 'upload').map((v) => (
             <div key={v.id} className="esp2-current">
               <img src={v.image_url} alt="Your venue photo" />
               <button type="button" className="esp2-chip" aria-pressed={v.in_lookbook} disabled={locked} onClick={() => move(v.id, { in_lookbook: !v.in_lookbook })}>
                 {v.in_lookbook ? 'In lookbook' : 'Add to lookbook'}
               </button>
-              <button type="button" className="esp2-icon-btn" aria-label="Remove venue photo" disabled={locked} onClick={() => remove(v.id)}>
-                <Trash2 size={16} aria-hidden="true" />
+              <button type="button" className="esp2-icon-btn" aria-label="Take your venue photo off the sheet (it stays in Files)" title="Off the sheet; it stays in Files" disabled={locked} onClick={() => takeOff(v.id)}>
+                <X size={16} aria-hidden="true" />
               </button>
             </div>
           ))}
@@ -467,38 +428,10 @@ function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, te
       )}
 
       {info.photo && (
-        <div className="esp2-row">
-          <FileButton
-            label={spot === 'venue' ? 'Upload your own' : current ? `Replace ${info.label}` : `Upload ${info.label}`}
-            onFiles={(files) => upload(spot === 'inspo' || spot === 'venue' ? files.slice(0, spot === 'inspo' ? MAX_INSPO - inspo.length : files.length) : files.slice(0, 1), spot)}
-            disabled={locked || fullInspo}
-          />
-        </div>
+        <FilesPicker episodeId={episode?.id} lb={lb} spot={spot} label={info.label} disabled={locked || fullInspo}
+          onPickPose={(poseId) => fromPose(poseId, spot)} onPickFile={(imageId) => move(imageId, { category: spot })} onOpenTab={onOpenTab} />
       )}
-
-      {info.photo && (
-        <FilesPicker episodeId={episode?.id} spot={spot} label={info.label} disabled={locked || fullInspo} onPick={(poseId) => fromPose(poseId, spot)} onOpenTab={onOpenTab} />
-      )}
-
-      {info.photo && (
-        <div className="esp2-tray">
-          <p className="esp2-tray-label">From To sort {tray.length > 0 && <span className="esp2-count">{tray.length}</span>}</p>
-          {tray.length === 0 ? (
-            <p className="esp2-hint">Nothing to sort. Drop photos on the page, or use "Drop photos to sort".</p>
-          ) : (
-            <ul className="esp2-thumbs">
-              {tray.map((t) => (
-                <li key={t.id}>
-                  <button type="button" className="esp2-thumb" disabled={locked || fullInspo} aria-label={`Use ${t.file_name || 'this photo'} for ${info.label}`}
-                    onClick={() => move(t.id, { category: spot })}>
-                    <img src={t.image_url} alt="" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+      {fullInspo && <p className="esp2-hint">Key inspo holds two of your photos; take one off to choose another.</p>}
 
       {info.name && (
         <label className="esp2-field" htmlFor={`esp2-${info.name}`}>
@@ -569,15 +502,14 @@ function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, te
   );
 }
 
-// Each export size as a download, enabled only while the sheet is approved
-// and up to date; the server refuses the rest (409). Send to Distribution
-// puts every size in the episode's Distribution with a caption draft (Task #2878).
 /**
- * Choose from Files (Evoni, 2026-10-22): the episode's ready photos of
- * Lala and JustAWoman from Files › Character poses. Picking one copies it
- * into this spot.
+ * Choose from Files (Evoni, 2026-10-22): the episode's photos in Files ›
+ * Style photos, folder by folder (To sort first), and the ready photos of
+ * Lala and JustAWoman from Files › Character poses. A Style photo is filed
+ * in this spot's folder; a pose is copied into it (and then shows in that
+ * folder too). Uploading happens in Files.
  */
-function FilesPicker({ episodeId, spot, label, disabled, onPick, onOpenTab }) {
+function FilesPicker({ episodeId, lb, spot, label, disabled, onPickPose, onPickFile, onOpenTab }) {
   const [open, setOpen] = useState(false);
   const [poses, setPoses] = useState(null);
   const [error, setError] = useState(null);
@@ -595,6 +527,11 @@ function FilesPicker({ episodeId, spot, label, disabled, onPick, onOpenTab }) {
   }, [open, poses, episodeId]);
 
   const poseLabel = (key) => POSES.find((p) => p.key === key)?.label || key;
+  const folders = STYLE_FOLDERS.filter((f) => f.key !== spot).map((f) => ({ ...f, photos: filesIn(lb, f.key) })).filter((f) => f.photos.length);
+  const nothing = poses && poses.length === 0 && folders.length === 0;
+  const openFiles = (
+    <button type="button" className="esp2-link" disabled={!onOpenTab} onClick={() => onOpenTab && onOpenTab('files')}>Open Files</button>
+  );
   return (
     <div className="esp2-files">
       <button type="button" className="esp2-btn" aria-expanded={open} disabled={disabled} data-testid="esp2-files-open" onClick={() => setOpen((o) => !o)}>
@@ -604,12 +541,22 @@ function FilesPicker({ episodeId, spot, label, disabled, onPick, onOpenTab }) {
         <div className="esp2-files-body" data-testid="esp2-files">
           {error && <p className="esp2-error" role="alert">{error}</p>}
           {!poses && !error && <p className="esp2-hint"><Loader2 size={14} className="esp2-spin" aria-hidden="true" /> Loading your Files photos…</p>}
-          {poses && poses.length === 0 && (
-            <p className="esp2-hint">
-              No ready photos in Files yet.{' '}
-              <button type="button" className="esp2-link" disabled={!onOpenTab} onClick={() => onOpenTab && onOpenTab('files')}>Open Files</button>
-            </p>
-          )}
+          {nothing && <p className="esp2-hint">No photos in Files yet. Upload them in Files › Style photos. {openFiles}</p>}
+          {folders.map((f) => (
+            <div key={f.key} data-testid={`esp2-files-folder-${f.key}`}>
+              <p className="esp2-tray-label">Style photos · {f.label}</p>
+              <ul className="esp2-thumbs">
+                {f.photos.map((p) => (
+                  <li key={p.id}>
+                    <button type="button" className="esp2-thumb" disabled={disabled} aria-label={`Use ${p.file_name || `this ${folderLabel(f.key).toLowerCase()} photo`} for ${label}`}
+                      onClick={() => { onPickFile(p.id); setOpen(false); }}>
+                      <img src={p.image_url} alt="" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
           {poses && CHARACTERS.map((c) => {
             const mine = poses.filter((p) => p.character_key === c.key);
             if (!mine.length) return null;
@@ -620,7 +567,7 @@ function FilesPicker({ episodeId, spot, label, disabled, onPick, onOpenTab }) {
                   {mine.map((p) => (
                     <li key={p.id}>
                       <button type="button" className="esp2-thumb" disabled={disabled} aria-label={`Use ${c.label} ${poseLabel(p.pose)} for ${label}`}
-                        onClick={() => { onPick(p.id); setOpen(false); }}>
+                        onClick={() => { onPickPose(p.id); setOpen(false); }}>
                         <img src={p.final_url} alt="" />
                         <span>{poseLabel(p.pose)}{p.is_default ? ' ★' : ''}</span>
                       </button>
@@ -630,12 +577,16 @@ function FilesPicker({ episodeId, spot, label, disabled, onPick, onOpenTab }) {
               </div>
             );
           })}
+          {!nothing && poses && <p className="esp2-hint">To add photos, upload them in Files. {openFiles}</p>}
         </div>
       )}
     </div>
   );
 }
 
+// Each export size as a download, enabled only while the sheet is approved
+// and up to date; the server refuses the rest (409). Send to Distribution
+// puts every size in the episode's Distribution with a caption draft (Task #2878).
 function ShareExport({ episodeId, episodeNumber, canExport, approved, stale, onOpenTab, designs = [], sizes = [], design = null }) {
   const [busySize, setBusySize] = useState(null);
   const [sizeKey, setSizeKey] = useState('pinterest');

@@ -1,7 +1,8 @@
 /**
  * Production → Style Page (was Lookbook; Task #2876; spec Part 2, "Style
  * Page"): the sheet is the editor. Every spot can be tapped on the sheet and
- * filled from the panel (Upload, or a photo from To sort); the tagline and
+ * filled from the panel by choosing from Files (photos are uploaded in
+ * Files › Style photos, never here; Evoni, 2026-10-22); the tagline and
  * the hair and nails names edit in place; the venue Swap shows the event
  * scene set's next image; readiness is the shared 12-chip rule; Approve and
  * Reopen. Every write goes through the existing Lookbook and style sheet
@@ -84,11 +85,13 @@ const panel = () => within(screen.getByTestId('esp2-spot-panel'));
 beforeEach(() => { vi.clearAllMocks(); });
 
 describe('Style Page', () => {
-  test('header: Style Page, Draft, Drop photos to sort, Approve; the sheet at its real layout', async () => {
-    await renderPage();
+  test('header: Style Page, Draft, Photos in Files, Approve; the sheet at its real layout', async () => {
+    const { onOpenTab } = await renderPage();
     expect(screen.getByRole('heading', { level: 2, name: 'Style Page' })).toBeTruthy();
     expect(screen.getByTestId('esp2-status').textContent).toBe('Draft');
-    expect(screen.getByRole('button', { name: /Drop photos to sort/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Drop photos to sort/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Photos in Files/ }));
+    expect(onOpenTab).toHaveBeenCalledWith('files');
     expect(screen.getByRole('button', { name: /Approve/ })).toBeTruthy();
     // Real values from the episode's own data, not invented.
     expect(sheetEl().getAllByText('Wearable Experiments Studio Session').length).toBeGreaterThan(0);
@@ -107,29 +110,39 @@ describe('Style Page', () => {
     expect(sheetEl().queryByRole('button', { name: 'Add Front' })).toBeNull();
   });
 
-  test('tapping a spot selects it and opens it in the panel; Upload sends the photo to that spot', async () => {
+  test('tapping a spot selects it and opens it in the panel; nothing uploads on the Style Page', async () => {
     await renderPage();
     expect(screen.getByText(/Tap a spot on the sheet/)).toBeTruthy();
     fireEvent.click(sheetEl().getByRole('button', { name: 'Add Side' }));
     expect(sheetEl().getByRole('button', { name: 'Add Side' }).getAttribute('aria-pressed')).toBe('true');
     expect(panel().getByRole('heading', { name: 'Editing Lala in the look · Side' })).toBeTruthy();
     expect(panel().getByText(SPOT_INFO.side.hint)).toBeTruthy();
-    api.post.mockResolvedValue({ data: { data: { lookbook: lookbook() } } });
-    const file = new File(['x'], 'side.png', { type: 'image/png' });
-    fireEvent.change(panel().getByLabelText('Upload Side'), { target: { files: [file] } });
-    await waitFor(() => expect(api.post).toHaveBeenCalled());
-    const [url, form] = api.post.mock.calls[0];
-    expect(url).toBe(`${LB_URL}/images`);
-    expect(form.get('category')).toBe('side');
-    expect(form.getAll('files')).toEqual([file]);
+    // Uploading happens in Files › Style photos (Evoni, 2026-10-22).
+    expect(screen.getByTestId('episode-style-page').querySelector('input[type="file"]')).toBeNull();
+    expect(panel().queryByRole('button', { name: /Upload/ })).toBeNull();
+    expect(panel().getByTestId('esp2-files-open')).toBeTruthy();
   });
 
-  test('a photo from To sort goes into the selected spot', async () => {
-    await renderPage();
+  test('Choose from Files lists her Style photos folder by folder, and files the picked one in the spot', async () => {
+    await renderPage({ lb: lookbook({ images: { ...lookbook().images, hero: [photo('h1', 'hero')] } }) });
     fireEvent.click(sheetEl().getByRole('button', { name: 'Add Back' }));
+    fireEvent.click(panel().getByTestId('esp2-files-open'));
+    const files = within(await screen.findByTestId('esp2-files'));
+    expect(files.getByTestId('esp2-files-folder-unsorted').textContent).toContain('Style photos · To sort');
+    expect(files.getByRole('button', { name: 'Use h1.png for Back' })).toBeTruthy();
+    expect(files.getByRole('button', { name: 'Use f1.png for Back' })).toBeTruthy();
     api.patch.mockResolvedValue({ data: { data: { lookbook: lookbook() } } });
-    fireEvent.click(panel().getByRole('button', { name: 'Use u1.png for Back' }));
+    fireEvent.click(files.getByRole('button', { name: 'Use u1.png for Back' }));
     await waitFor(() => expect(api.patch).toHaveBeenCalledWith(`${LB_URL}/images/u1`, { category: 'back' }));
+  });
+
+  test("taking a photo off the sheet sends it back to To sort; it stays in Files", async () => {
+    await renderPage();
+    fireEvent.click(sheetEl().getByRole('button', { name: 'Edit Front' }));
+    api.patch.mockResolvedValue({ data: { data: { lookbook: lookbook() } } });
+    fireEvent.click(panel().getByRole('button', { name: 'Take the Front photo off the sheet (it stays in Files)' }));
+    await waitFor(() => expect(api.patch).toHaveBeenCalledWith(`${LB_URL}/images/f1`, { category: 'unsorted' }));
+    expect(api.delete).not.toHaveBeenCalled();
   });
 
   test('Choose from Files lists the ready Lala and JustAWoman photos and puts the picked one in the spot', async () => {
@@ -150,11 +163,12 @@ describe('Style Page', () => {
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${LB_URL}/images/from-pose`, { pose_id: 'p1', category: 'side' }));
   });
 
-  test('with no ready photos in Files, Choose from Files offers Open Files', async () => {
-    const { onOpenTab } = await renderPage({ poses: [] });
+  test('with no photos in Files, Choose from Files offers Open Files', async () => {
+    const { onOpenTab } = await renderPage({ poses: [], lb: lookbook({ images: Object.fromEntries(CATS.map((c) => [c, []])) }) });
     fireEvent.click(sheetEl().getByRole('button', { name: 'Add Hero' }));
     fireEvent.click(panel().getByTestId('esp2-files-open'));
-    fireEvent.click(await screen.findByRole('button', { name: 'Open Files' }));
+    expect(await screen.findByText(/Upload them in Files › Style photos/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Open Files' }));
     expect(onOpenTab).toHaveBeenCalledWith('files');
   });
 
@@ -249,16 +263,6 @@ describe('Style Page', () => {
     for (const id of ['esp2-design-download', 'esp2-designs-zip', 'esp2-designs-zip-all']) expect(screen.getByTestId(id).disabled).toBe(true);
   });
 
-  test('"Drop photos to sort" uploads into To sort', async () => {
-    await renderPage();
-    api.post.mockResolvedValue({ data: { data: { lookbook: lookbook() } } });
-    const files = [new File(['a'], 'a.png', { type: 'image/png' }), new File(['b'], 'b.jpg', { type: 'image/jpeg' })];
-    fireEvent.change(screen.getByLabelText('Drop photos to sort'), { target: { files } });
-    await waitFor(() => expect(api.post).toHaveBeenCalled());
-    expect(api.post.mock.calls[0][1].get('category')).toBeNull();
-    expect(api.post.mock.calls[0][1].getAll('files')).toHaveLength(2);
-  });
-
   test('the tagline edits in place on the footer and saves when left', async () => {
     await renderPage();
     fireEvent.click(sheetEl().getByRole('button', { name: 'Tap to write a tagline' }));
@@ -345,7 +349,7 @@ describe('Style Page', () => {
     await waitFor(() => expect(screen.getByTestId('esp2-status').textContent).toContain('Approved'));
     expect(screen.getByText(/Editing anything returns it to Draft/)).toBeTruthy();
     fireEvent.click(sheetEl().getByRole('button', { name: 'Add Side' }));
-    expect(panel().getByRole('button', { name: /Upload Side/ }).disabled).toBe(false);
+    expect(panel().getByTestId('esp2-files-open').disabled).toBe(false);
     expect(screen.getByRole('button', { name: /Reopen/ })).toBeTruthy();
   });
 
@@ -408,10 +412,11 @@ describe('Style Page', () => {
 
   test('a failed save shows its message and keeps the page', async () => {
     await renderPage();
-    api.post.mockRejectedValue({ response: { data: { error: 'Only PNG, JPEG or WebP.' } } });
+    api.patch.mockRejectedValue({ response: { data: { error: 'Photo not found in this episode\'s Lookbook' } } });
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    fireEvent.change(screen.getByLabelText('Drop photos to sort'), { target: { files: [new File(['a'], 'a.png', { type: 'image/png' })] } });
-    expect((await screen.findByRole('alert')).textContent).toBe('Only PNG, JPEG or WebP.');
+    fireEvent.click(sheetEl().getByRole('button', { name: 'Edit Front' }));
+    fireEvent.click(panel().getByRole('button', { name: /Take the Front photo off the sheet/ }));
+    expect((await screen.findByRole('alert')).textContent).toBe("Photo not found in this episode's Lookbook");
     expect(screen.getByTestId('episode-style-page')).toBeTruthy();
   });
 });

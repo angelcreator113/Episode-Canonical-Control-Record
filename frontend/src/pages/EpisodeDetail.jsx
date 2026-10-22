@@ -20,6 +20,7 @@ import SceneLibraryPicker from '../components/SceneLibraryPicker';
 // because the player overlay only mounts when "Preview Phone" is clicked.
 const EpisodeRawFootageTab = lazy(() => import('../components/Episodes/EpisodeRawFootageTab'));
 const EpisodePosesPanel = lazy(() => import('../components/Episodes/EpisodePosesPanel'));
+const EpisodeStylePhotosPanel = lazy(() => import('../components/Episodes/EpisodeStylePhotosPanel'));
 const EpisodeTodoList = lazy(() => import('../components/Episodes/EpisodeTodoList'));
 const EpisodeSceneWorkspace = lazy(() => import('../components/Episodes/EpisodeSceneWorkspace'));
 const EpisodeProductionHeader = lazy(() => import('../components/Episodes/EpisodeProductionHeader'));
@@ -1074,11 +1075,13 @@ const EpisodeDetail = () => {
           />
         )}
 
-        {/* Files: Lala and JustAWoman pose photos (Evoni, 2026-10-20), then the
-            episode's raw video clips, by who is on camera (Evoni, 2026-10-17) */}
+        {/* Files: Lala and JustAWoman pose photos (Evoni, 2026-10-20), the
+            Style Page's photos (Evoni, 2026-10-22), then the episode's raw
+            video clips, by who is on camera (Evoni, 2026-10-17) */}
         {tabKey === 'production.files' && (
           <>
             <EpisodePosesPanel episode={episode} />
+            <EpisodeStylePhotosPanel episode={episode} />
             <EpisodeRawFootageTab episode={episode} />
           </>
         )}

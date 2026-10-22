@@ -134,20 +134,23 @@ const png = (r = 200) => sharp({ create: { width: 4, height: 6, channels: 3, bac
     expect(after.body.data.readiness.missing).toContain('venue');
   });
 
-  it('replaces: a new photo in a single-photo spot soft-deletes the old one', async () => {
+  it('replaces: a new photo in a single-photo spot sends the old one back to To sort (Files keeps it)', async () => {
     const ids = await seed();
     const first = await upload(ids.ep, { category: 'front' });
     const second = await upload(ids.ep, { category: 'front', r: 10 });
     expect(second.status).toBe(201);
     const res = await auth(request(app).get(base(ids.ep)));
     expect(res.body.data.images.front.map((i) => i.id)).toEqual([second.body.data.images[0].id]);
-    const [[old]] = await run('SELECT deleted_at FROM episode_lookbook_images WHERE id = :id', { id: first.body.data.images[0].id });
-    expect(old.deleted_at).not.toBeNull();
-    // Sorting a tray photo into the spot replaces it too.
+    const firstId = first.body.data.images[0].id;
+    expect(res.body.data.images.unsorted.map((i) => i.id)).toEqual([firstId]);
+    const [[old]] = await run('SELECT category, deleted_at FROM episode_lookbook_images WHERE id = :id', { id: firstId });
+    expect(old).toEqual({ category: 'unsorted', deleted_at: null });
+    // Sorting a tray photo into the spot replaces it too; the one it replaces goes to To sort.
     const tray = await upload(ids.ep);
     await auth(request(app).patch(`${base(ids.ep)}/images/${tray.body.data.images[0].id}`)).send({ category: 'front' });
     const now = await auth(request(app).get(base(ids.ep)));
     expect(now.body.data.images.front.map((i) => i.id)).toEqual([tray.body.data.images[0].id]);
+    expect(now.body.data.images.unsorted.map((i) => i.id).sort()).toEqual([firstId, second.body.data.images[0].id].sort());
     // A single-photo spot takes one file per upload.
     const two = await upload(ids.ep, { category: 'hair', files: 2 });
     expect(two.status).toBe(400);

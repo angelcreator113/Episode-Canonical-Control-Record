@@ -12,7 +12,6 @@
      layout keeps its size while a save runs. */
   overflow-anchor: none;
 }
-.esp2-page.is-dragging { outline: 2px dashed var(--lala-lavender-line); outline-offset: -4px; }
 
 .esp2-loading { flex-direction: row; align-items: center; gap: 8px; color: var(--text-secondary); }
 .esp2-spin { animation: esp2-spin 1s linear infinite; }
