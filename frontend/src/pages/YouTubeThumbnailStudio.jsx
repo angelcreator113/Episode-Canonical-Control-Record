@@ -37,7 +37,7 @@ import {
 } from 'lucide-react';
 import {
   youtubeThumbnailsApi, LAYOUTS, ACCENTS, TEXT_COLORS, readRecentColours, rememberColour, episodeContent, folderPath, folderCount, folderCover, firstFolder,
-  downloadBlob,
+  downloadBlob, saveDraftOnLeave,
 } from '../lib/youtubeThumbnailsApi';
 import {
   FONTS, presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, placeLayer, removeLayer,
@@ -1190,7 +1190,12 @@ export default function YouTubeThumbnailStudio() {
   const setSelectedId = useCallback((v) => { setPrimary(v); setExtraIds([]); }, []);
   const selectedIdRef = useRef(null);
   selectedIdRef.current = selectedId;
-  const pickedIds = useMemo(() => (selectedId ? [selectedId, ...extraIds.filter((id) => id !== selectedId)] : []), [selectedId, extraIds]);
+  // Only layers still there count (audit, 2026-10-22: one removed from the Layers list stayed "picked").
+  const pickedIds = useMemo(() => {
+    if (!selectedId) return [];
+    const there = new Set((spec?.layers || []).map((l) => l.id));
+    return [selectedId, ...extraIds.filter((id) => id !== selectedId && there.has(id))];
+  }, [selectedId, extraIds, spec]);
   const pickedRef = useRef([]);
   pickedRef.current = pickedIds;
   // A question asked on the page before something is replaced or deleted ({ text, yes }).
@@ -1243,6 +1248,22 @@ export default function YouTubeThumbnailStudio() {
   // The layers as they are now (an upload adds to them after its await).
   const specRef = useRef(null);
   specRef.current = spec;
+  // The episode and show on screen now, for answers that arrive after a
+  // switch (audit, 2026-10-22: they were put on the next episode).
+  const episodeRef = useRef(episodeId);
+  episodeRef.current = episodeId;
+  const showRef = useRef(showId);
+  showRef.current = showId;
+  // The episode the layers on screen belong to; null while the next one loads.
+  const specFor = useRef(null);
+  // The arrangement waiting to be kept ({ episodeId, spec }), and the saves in order.
+  const pendingDraft = useRef(null);
+  const draftChain = useRef(Promise.resolve());
+  const draftSeq = useRef(0);
+  const seasonRef = useRef(false);
+  seasonRef.current = season;
+  const askingRef = useRef(null);
+  askingRef.current = asking;
   // Undo and redo (Evoni, 2026-10-21): the arrangements before and after
   // this one; changes close together are one step.
   const past = useRef([]);
@@ -1261,13 +1282,71 @@ export default function YouTubeThumbnailStudio() {
     });
   }, [listsTick]);
   useEffect(() => {
-    if (!showId) { setEpisodes([]); return; }
-    youtubeThumbnailsApi.episodes(showId).then((list) => { setEpisodes(list); setLoadFailed((f) => (f === 'episodes' ? null : f)); }).catch((err) => {
+    if (!showId) { setEpisodes([]); return undefined; }
+    let live = true; // a quick change of show: only the last show's episodes are listed
+    youtubeThumbnailsApi.episodes(showId).then((list) => { if (!live) return; setEpisodes(list); setLoadFailed((f) => (f === 'episodes' ? null : f)); }).catch((err) => {
       console.error('[YouTubeThumbnails] episodes load failed:', err);
+      if (!live) return;
       setLoadFailed('episodes');
       setMessage({ type: 'error', text: 'Could not load the episodes.' });
     });
+    return () => { live = false; };
   }, [showId, listsTick]);
+
+  /**
+   * Keeps an arrangement for its episode (Evoni, 2026-10-21: kept a moment
+   * after each change). The saves go one after another, in order, and only
+   * the newest one's answer is shown, and only on its own episode (audit,
+   * 2026-10-22: an older save landing after a newer one, or on the next
+   * episode's page).
+   */
+  const keepDraft = useCallback((job) => {
+    const n = ++draftSeq.current;
+    const mine = () => n === draftSeq.current && job.episodeId === episodeRef.current;
+    if (mine()) setKeep((k) => ({ ...k, state: 'saving' }));
+    draftChain.current = draftChain.current.then(async () => {
+      try {
+        await youtubeThumbnailsApi.saveDraft(job.episodeId, job.spec);
+        if (!mine()) return;
+        setDraftNote('Arrangement kept for this episode.');
+        setKeep({ state: 'saved', at: new Date() });
+      } catch (err) {
+        console.error('[YouTubeThumbnails] arrangement not kept:', err);
+        if (!mine()) return;
+        setKeep({ state: 'failed', at: null });
+        setDraftNote(err?.response?.status === 503
+          ? 'Arrangements are kept once the server has its latest update.'
+          : 'This arrangement could not be kept. Save the thumbnail to keep it.');
+      }
+    });
+    return draftChain.current;
+  }, []);
+  /** Keeps the waiting arrangement now (leaving the episode, the season, or the page). */
+  const flushDraft = useCallback(() => {
+    const job = pendingDraft.current;
+    pendingDraft.current = null;
+    return job ? keepDraft(job) : Promise.resolve();
+  }, [keepDraft]);
+  // Closing or reloading the page: the waiting arrangement goes out on its own.
+  useEffect(() => {
+    const leave = () => {
+      const job = pendingDraft.current;
+      if (!job) return;
+      pendingDraft.current = null;
+      saveDraftOnLeave(job.episodeId, job.spec);
+    };
+    window.addEventListener('pagehide', leave);
+    return () => { window.removeEventListener('pagehide', leave); leave(); };
+  }, []);
+
+  // The browser's Back and Forward follow the address (audit, 2026-10-22).
+  useEffect(() => {
+    const ep = params.get('episode') || '';
+    if (ep === episodeRef.current) return;
+    setEpisodeId(ep);
+    const sh = params.get('show');
+    if (sh && sh !== showRef.current) setShowId(sh);
+  }, [params]);
 
 
   /** Where an episode starts: the show's template, else the show's layout. */
@@ -1277,7 +1356,16 @@ export default function YouTubeThumbnailStudio() {
 
   // The episode's pictures, its show's style and template, and its own arrangement.
   useEffect(() => {
-    if (!episodeId) { setSources(null); setSpecState(null); return; }
+    // Leaving an episode keeps its last change, then clears its layers, so
+    // nothing of it is shown, kept or saved on the next one (audit, 2026-10-22).
+    flushDraft();
+    specFor.current = null;
+    edited.current = false;
+    past.current = [];
+    future.current = [];
+    setSpecState(null);
+    setUploads([]);
+    if (!episodeId) { setSources(null); setLoading(false); return undefined; }
     let live = true;
     setSaved(null);
     setExact(null);
@@ -1285,9 +1373,12 @@ export default function YouTubeThumbnailStudio() {
     setDraftNote(null);
     setKeep({ state: 'idle', at: null });
     setLoading(true);
+    const forEpisode = episodeId;
     youtubeThumbnailsApi.sources(episodeId).then((src) => {
-      if (!live || !src) return;
+      if (!live) return;
       setLoading(false);
+      if (!src) return;
+      specFor.current = forEpisode;
       setLoadFailed((f) => (f === 'episode' ? null : f));
       setSources(src);
       if (src.show?.id && src.show.id !== showId) setShowId(src.show.id);
@@ -1319,38 +1410,29 @@ export default function YouTubeThumbnailStudio() {
       setLoadFailed('episode');
       setMessage({ type: 'error', text: err?.response?.data?.error || 'Could not load the episode.' });
     });
-    return () => { live = false; };
+    return () => { live = false; setLoading(false); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [episodeId, episodeTick]);
 
   // Every change is kept for this episode, a moment after the last one.
+  // Only the layers of the episode on screen are kept for it.
   useEffect(() => {
-    if (!spec || !episodeId || !edited.current) return undefined;
+    if (!spec || !episodeId || !edited.current || specFor.current !== episodeId) return undefined;
+    pendingDraft.current = { episodeId, spec };
     setKeep((k) => ({ ...k, state: 'waiting' }));
-    const t = setTimeout(async () => {
-      setKeep((k) => ({ ...k, state: 'saving' }));
-      try {
-        await youtubeThumbnailsApi.saveDraft(episodeId, spec);
-        setDraftNote('Arrangement kept for this episode.');
-        setKeep({ state: 'saved', at: new Date() });
-      } catch (err) {
-        console.error('[YouTubeThumbnails] arrangement not kept:', err);
-        setKeep({ state: 'failed', at: null });
-        setDraftNote(err?.response?.status === 503
-          ? 'Arrangements are kept once the server has its latest update.'
-          : 'This arrangement could not be kept. Save the thumbnail to keep it.');
-      }
-    }, DRAFT_DELAY_MS);
+    const t = setTimeout(() => { flushDraft(); }, DRAFT_DELAY_MS);
     return () => clearTimeout(t);
-  }, [spec, episodeId]);
+  }, [spec, episodeId, flushDraft]);
 
   // The episode's saved thumbnails, its current one first.
   const loadHistory = useCallback(async (id) => {
     if (!id) { setHistory([]); return; }
     try {
-      setHistory(await youtubeThumbnailsApi.saved(id));
+      const list = await youtubeThumbnailsApi.saved(id);
+      if (id === episodeRef.current) setHistory(list);
     } catch (err) {
       console.error('[YouTubeThumbnails] saved thumbnails load failed:', err);
+      if (id !== episodeRef.current) return;
       setHistory([]);
       // The server's reason, so a failure can be told apart (Evoni, 2026-10-21).
       const why = err?.response?.data?.error || err?.response?.data?.message;
@@ -1491,7 +1573,8 @@ export default function YouTubeThumbnailStudio() {
   // while typing in a field (it has its own undo).
   useEffect(() => {
     const onKey = (e) => {
-      if (!specRef.current) return;
+      // Not while the season grid hides the editor, or a question waits (audit, 2026-10-22).
+      if (!specRef.current || seasonRef.current || askingRef.current) return;
       const tag = e.target?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target?.isContentEditable) return;
       if (!(e.ctrlKey || e.metaKey)) {
@@ -1554,8 +1637,10 @@ export default function YouTubeThumbnailStudio() {
   useEffect(() => { setIdeas({ busy: false, list: [] }); }, [episodeId]);
   const askIdeas = async () => {
     setIdeas((x) => ({ ...x, busy: true }));
+    const forEpisode = episodeId;
     try {
-      const list = await youtubeThumbnailsApi.titleIdeas(episodeId);
+      const list = await youtubeThumbnailsApi.titleIdeas(forEpisode);
+      if (forEpisode !== episodeRef.current) return;
       setIdeas({ busy: false, list });
     } catch (err) {
       console.error('[YouTubeThumbnails] title ideas failed:', err);
@@ -1567,7 +1652,10 @@ export default function YouTubeThumbnailStudio() {
   const cutOut = async (layer) => {
     setCutting(true);
     try {
-      const pic = await youtubeThumbnailsApi.cutOut(episodeId, layer.src, layerName(layer));
+      const forEpisode = episodeId;
+      const pic = await youtubeThumbnailsApi.cutOut(forEpisode, layer.src, layerName(layer));
+      // Kept in that episode's Uploads on the server either way; put on the canvas only if it is still open.
+      if (forEpisode !== episodeRef.current) return;
       setUploads((u) => [pic, ...u.filter((x) => x.url !== pic.url)]);
       edit((s) => updateLayer(s, layer.id, { src: pic.url, clearWhite: false }));
       setMessage({ type: 'ok', text: 'Background removed. The cut-out is kept in Uploads; Undo puts the photo back.' });
@@ -1585,7 +1673,9 @@ export default function YouTubeThumbnailStudio() {
   const makeBackground = async () => {
     setMakingBg(true);
     try {
-      const pic = await youtubeThumbnailsApi.aiBackground(episodeId, bgWords.trim());
+      const forEpisode = episodeId;
+      const pic = await youtubeThumbnailsApi.aiBackground(forEpisode, bgWords.trim());
+      if (forEpisode !== episodeRef.current) return;
       setUploads((u) => [pic, ...u.filter((x) => x.url !== pic.url)]);
       setRole('background', pic.url);
       const cost = Number.isFinite(pic.cost) ? ` (about $${pic.cost.toFixed(2)} of today's image budget)` : '';
@@ -1649,7 +1739,9 @@ export default function YouTubeThumbnailStudio() {
   const upload = async (file, then) => {
     setUploading(file.name);
     try {
-      const pic = await youtubeThumbnailsApi.uploadPicture(episodeId, file);
+      const forEpisode = episodeId;
+      const pic = await youtubeThumbnailsApi.uploadPicture(forEpisode, file);
+      if (forEpisode !== episodeRef.current) return;
       setUploads((u) => [pic, ...u.filter((x) => x.url !== pic.url)]);
       then(pic.url, pic.label);
     } catch (err) {
@@ -1680,6 +1772,7 @@ export default function YouTubeThumbnailStudio() {
   // This arrangement on another episode, with its words and pictures (as the show's template would be).
   const [tryOn, setTryOn] = useState({ id: '', url: null, busy: false });
   useEffect(() => () => { if (tryOn.url) URL.revokeObjectURL(tryOn.url); }, [tryOn.url]);
+  useEffect(() => { setTryOn({ id: '', url: null, busy: false }); }, [episodeId]);
   const tryOnEpisode = async (id) => {
     setTryOn((t) => ({ ...t, id, url: null }));
     if (!id) return;
@@ -1705,8 +1798,11 @@ export default function YouTubeThumbnailStudio() {
 
   const seeExactly = async () => {
     setRendering(true);
+    const sent = spec;
     try {
-      const blob = await youtubeThumbnailsApi.render(spec);
+      const blob = await youtubeThumbnailsApi.render(sent);
+      // Changed while it was drawn: this picture is no longer "exactly as it will be saved".
+      if (specRef.current !== sent) return;
       setExactFile({ type: /jpe?g/.test(blob.type || '') ? 'jpeg' : 'png', bytes: blob.size });
       setExact((old) => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(blob); });
     } catch (err) {
@@ -1718,6 +1814,8 @@ export default function YouTubeThumbnailStudio() {
   };
 
   const save = async () => {
+    // Only this episode's own layers are saved as its thumbnail (audit, 2026-10-22).
+    if (!spec || specFor.current !== episodeId) return;
     setBusy(true);
     try {
       const out = await youtubeThumbnailsApi.save(episodeId, spec);
@@ -1867,10 +1965,12 @@ export default function YouTubeThumbnailStudio() {
   // The episode's versions to compare (Evoni, 2026-10-21).
   const versionChange = async (run, done, failed) => {
     if (!episodeId) return false;
+    const forEpisode = episodeId;
     setBusy(true);
     try {
       const text = await run();
-      const versions = await youtubeThumbnailsApi.versions(episodeId);
+      const versions = await youtubeThumbnailsApi.versions(forEpisode);
+      if (forEpisode !== episodeRef.current) return false;
       setSources((s) => ({ ...s, versions }));
       // run may say what happened (keeping a version names it); else the usual words.
       setMessage({ type: 'ok', text: typeof text === 'string' ? text : done });
@@ -1918,7 +2018,8 @@ export default function YouTubeThumbnailStudio() {
 
   const picked = spec?.layers.find((l) => l.id === selectedId) || null;
   const shade = layerOf(spec, 'shade');
-  const stageAway = useScrolledAway(stageRef, phone && Boolean(spec));
+  // Off while the season grid shows, so it watches the new canvas when the editor comes back.
+  const stageAway = useScrolledAway(stageRef, phone && Boolean(spec) && !season);
   const sheet = phone && picked && picked.kind !== 'shade';
   // The header shrinks to one line once an episode is open, with the one before and after it.
   const compact = Boolean(episodeId);
@@ -2040,8 +2141,13 @@ export default function YouTubeThumbnailStudio() {
       )}
 
       {season && showId ? (
-        <ThumbnailSeason showId={showId} onClose={() => setSeason(false)}
-          onOpenEpisode={(id) => { setSeason(false); pickEpisode(id); }} />
+        <ThumbnailSeason showId={showId}
+          onClose={() => { setSeason(false); if (episodeId) { setEpisodeTick((n) => n + 1); loadHistory(episodeId); } }}
+          onOpenEpisode={(id) => {
+            setSeason(false);
+            // The same episode: read again, as the season may have saved it (audit, 2026-10-22).
+            if (id === episodeId) { setEpisodeTick((n) => n + 1); loadHistory(id); } else pickEpisode(id);
+          }} />
       ) : !spec ? (
         loading ? (
           <div className="yts-empty" role="status" data-testid="yts-loading"><span className="yts-spinner" aria-hidden /><p>Loading the episode…</p></div>
@@ -2049,7 +2155,7 @@ export default function YouTubeThumbnailStudio() {
           <div className="yts-empty">
             <LayoutTemplate size={36} aria-hidden /><p>Choose a show and an episode to make its thumbnail.</p>
             {showId && (
-              <button type="button" className="yts-btn" onClick={() => setSeason(true)} data-testid="yts-season-start">
+              <button type="button" className="yts-btn" onClick={() => { flushDraft(); setSeason(true); }} data-testid="yts-season-start">
                 <LayoutGrid size={15} aria-hidden /> Or the whole season at once
               </button>
             )}
@@ -2093,12 +2199,12 @@ export default function YouTubeThumbnailStudio() {
                       <ScanEye size={15} aria-hidden /> {rendering ? 'Drawing…' : 'See it exactly'}
                     </button>
                   )}
-                  <button type="button" className="yts-tool-btn is-primary" onClick={save} disabled={busy} data-testid="yts-save" aria-label="Save as thumbnail">
+                  <button type="button" className="yts-tool-btn is-primary" onClick={save} disabled={busy || loading} data-testid="yts-save" aria-label="Save as thumbnail">
                     <Save size={15} aria-hidden /> {phone ? 'Save' : 'Save as thumbnail'}
                   </button>
                   <MoreMenu items={[
                     ...(phone ? marksItems : []),
-                    { key: 'season', testid: 'yts-season-open', icon: LayoutGrid, label: 'Whole season', onChoose: () => setSeason(true) },
+                    { key: 'season', testid: 'yts-season-open', icon: LayoutGrid, label: 'Whole season', onChoose: () => { flushDraft(); setSeason(true); } },
                     { key: 'reset', testid: 'yts-reset', icon: RotateCcw, label: 'Start again', onChoose: resetToTemplate },
                     ...(phone ? [] : [{ key: 'keys', testid: 'yts-keys-btn', icon: Keyboard, label: 'Keyboard shortcuts', onChoose: () => setShowKeys((v) => !v) }]),
                   ]} />

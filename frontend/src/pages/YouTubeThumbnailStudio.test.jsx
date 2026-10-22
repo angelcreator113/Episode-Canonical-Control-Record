@@ -1378,6 +1378,67 @@ describe('YouTubeThumbnailStudio', () => {
     fireEvent.click((await grid.findByTestId('yts-season-ep-1')).querySelector('button'));
     expect(await opened()).toBeTruthy();
     expect(screen.queryByTestId('yts-season')).toBeNull();
+    // The same episode is read again (the season may have saved it).
+    expect(youtubeThumbnailsApi.sources.mock.calls.filter(([id]) => id === 'ep-1').length).toBe(2);
+  });
+
+  // Audit, 2026-10-22: switching episodes.
+  describe('switching episodes', () => {
+    const TWO = [{ id: 'ep-1', episode_number: 1, title: 'Studio by Sable' }, { id: 'ep-2', episode_number: 2, title: 'Gala' }];
+    const SOURCES_2 = { ...SOURCES, episode: { id: 'ep-2', title: 'Gala', episode_number: 2 } };
+
+    test("the last change is kept for the episode being left, and its layers are never kept, shown or saved on the next", async () => {
+      youtubeThumbnailsApi.episodes.mockResolvedValue(TWO);
+      let openTwo;
+      youtubeThumbnailsApi.sources.mockImplementation((id) => (id === 'ep-2' ? new Promise((r) => { openTwo = r; }) : Promise.resolve(SOURCES)));
+      renderPage();
+      await opened();
+      fireEvent.click(screen.getByTestId('canvas-title'));
+      fireEvent.click(screen.getByTestId('canvas-drag'));
+      const next = await screen.findByTestId('yts-next-episode');
+      await waitFor(() => expect(next.disabled).toBe(false));
+      fireEvent.click(next);
+      // Kept for ep-1 at once, not a moment later.
+      await waitFor(() => expect(youtubeThumbnailsApi.saveDraft).toHaveBeenCalledWith('ep-1', expect.objectContaining({ version: 2 })));
+      expect(layerOf(youtubeThumbnailsApi.saveDraft.mock.calls[0][1], 'title')).toMatchObject({ x: 99, y: 11 });
+      // While ep-2 loads, ep-1's layers are gone.
+      expect(screen.queryByTestId('yts-canvas')).toBeNull();
+      await new Promise((r) => setTimeout(r, 1400));
+      expect(youtubeThumbnailsApi.saveDraft.mock.calls.every(([id]) => id === 'ep-1')).toBe(true);
+      expect(youtubeThumbnailsApi.save).not.toHaveBeenCalled();
+      await act(async () => { openTwo(SOURCES_2); });
+      expect(await opened()).toBeTruthy();
+      expect(screen.getByLabelText('Title').value).toBe('Gala');
+    });
+
+    test("a slow answer for the episode left is not put on the next one", async () => {
+      youtubeThumbnailsApi.episodes.mockResolvedValue(TWO);
+      youtubeThumbnailsApi.sources.mockImplementation((id) => Promise.resolve(id === 'ep-2' ? SOURCES_2 : SOURCES));
+      let oldList;
+      youtubeThumbnailsApi.saved.mockImplementation((id) => (id === 'ep-1' ? new Promise((r) => { oldList = r; }) : Promise.resolve([])));
+      renderPage();
+      await opened();
+      const next = await screen.findByTestId('yts-next-episode');
+      await waitFor(() => expect(next.disabled).toBe(false));
+      fireEvent.click(next);
+      await waitFor(() => expect(screen.getByLabelText('Title').value).toBe('Gala'));
+      await act(async () => { oldList([{ id: 'old-1', url: 'https://b.s3.amazonaws.com/a.png', isPrimary: true }]); });
+      expect(screen.queryByText('Use this one')).toBeNull();
+    });
+
+    test('keyboard shortcuts do nothing while the season grid hides the editor', async () => {
+      youtubeThumbnailsApi.season.mockResolvedValue([]);
+      youtubeThumbnailsApi.templates.mockResolvedValue([]);
+      renderPage();
+      await opened();
+      fireEvent.click(screen.getByTestId('canvas-title'));
+      fireEvent.click(screen.getByTestId('yts-more-btn'));
+      fireEvent.click(screen.getByTestId('yts-season-open'));
+      await screen.findByTestId('yts-season');
+      fireEvent.keyDown(document.body, { key: 'Backspace' });
+      await new Promise((r) => setTimeout(r, 1400));
+      expect(youtubeThumbnailsApi.saveDraft).not.toHaveBeenCalled();
+    });
   });
 });
 
