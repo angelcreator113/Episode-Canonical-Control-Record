@@ -30,7 +30,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
-  Youtube, Upload, Download, Save, Palette, ImageOff, Check, LayoutTemplate, Sparkles, Star, Trash2, History, Folder, ChevronRight,
+  Youtube, Upload, Download, ChevronLeft, Save, Palette, ImageOff, Check, LayoutTemplate, Sparkles, Star, Trash2, History, Folder, ChevronRight,
   Eye, EyeOff, ArrowUp, ArrowDown, Type, RotateCcw, ScanEye, X, Lock, LockOpen, Copy, Undo2, Redo2, Plus, Pencil, AlignLeft, AlignCenter, AlignRight,
   AlignStartVertical, AlignCenterVertical, AlignEndVertical, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
   AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, Keyboard, RefreshCw, FlipHorizontal2, ZoomIn, ZoomOut, ClipboardCopy, ClipboardPaste, Columns2, CopyPlus, ArrowRight, Circle, Tag, LayoutGrid, EllipsisVertical, Grid3x3, SquareDashed, GripVertical, ListChecks, Shapes, Bandage, StickyNote, Eclipse, Wand2,
@@ -694,6 +694,13 @@ function useScrolledAway(ref, on = true) {
   return away;
 }
 
+// On a phone the settings show one section at a time (Evoni, 2026-10-22
+// layout list), in tabs under the canvas.
+const PHONE_TABS = [
+  ['layers', 'Layers'], ['layout', 'Layout'], ['text', 'Text'], ['assets', 'Assets'],
+  ['characters', 'Characters'], ['background', 'Background'], ['colours', 'Colours'],
+];
+
 function MoreMenu({ items }) {
   const [open, setOpen] = useState(false);
   const box = useRef(null);
@@ -1102,6 +1109,9 @@ export default function YouTubeThumbnailStudio() {
   // pinned at the top once the canvas has scrolled away.
   const phone = useIsPhone();
   const stageRef = useRef(null);
+  const [phoneTab, setPhoneTab] = useState('layers');
+  // A section shows when its tab is open on a phone; always on a wider screen.
+  const shown = (tab) => !phone || phoneTab === tab;
   const edited = useRef(false);
   // The layers as they are now (an upload adds to them after its await).
   const specRef = useRef(null);
@@ -1715,6 +1725,11 @@ export default function YouTubeThumbnailStudio() {
   const shade = layerOf(spec, 'shade');
   const stageAway = useScrolledAway(stageRef, phone && Boolean(spec));
   const sheet = phone && picked && picked.kind !== 'shade';
+  // The header shrinks to one line once an episode is open, with the one before and after it.
+  const compact = Boolean(episodeId);
+  const at = episodes.findIndex((e) => e.id === episodeId);
+  const prevEpisode = at > 0 ? episodes[at - 1] : null;
+  const nextEpisode = at >= 0 && at < episodes.length - 1 ? episodes[at + 1] : null;
   const pickedSettings = picked && picked.kind !== 'shade' && (
     <LayerSettings layer={picked} onChange={(patch) => edit((s) => updateLayer(s, picked.id, patch))} onCutOut={cutOut} cutting={cutting}
       colours={[...ACCENTS, ...recentColours.filter((c) => !ACCENTS.includes(c))]} onRemember={remember} />
@@ -1727,12 +1742,16 @@ export default function YouTubeThumbnailStudio() {
 
   return (
     <div className={`yts${sheet ? ' has-sheet' : ''}`}>
-      <header className="yts-banner">
-        <div>
-          <p className="yts-kicker"><Link to="/template-studio">Templates</Link> · YouTube</p>
-          <h1 className="yts-title"><Youtube size={30} aria-hidden /> YouTube thumbnails</h1>
-          <p className="yts-sub">Each episode's thumbnail, from its show's template. Drag, resize and turn anything. 1280 × 720.</p>
-        </div>
+      <header className={`yts-banner${compact ? ' is-compact' : ''}`}>
+        {compact ? (
+          <p className="yts-kicker"><Link to="/template-studio">Templates</Link> · <Youtube size={14} aria-hidden /> YouTube</p>
+        ) : (
+          <div>
+            <p className="yts-kicker"><Link to="/template-studio">Templates</Link> · YouTube</p>
+            <h1 className="yts-title"><Youtube size={30} aria-hidden /> YouTube thumbnails</h1>
+            <p className="yts-sub">Each episode's thumbnail, from its show's template. Drag, resize and turn anything. 1280 × 720.</p>
+          </div>
+        )}
         <div className="yts-choose">
           <label className="yts-select">
             <span>Show</span>
@@ -1741,13 +1760,27 @@ export default function YouTubeThumbnailStudio() {
               {shows.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </label>
-          <label className="yts-select">
-            <span>Episode</span>
-            <select value={episodeId} onChange={(e) => pickEpisode(e.target.value)} aria-label="Episode" disabled={!showId}>
-              <option value="">Choose an episode</option>
-              {episodes.map((e) => <option key={e.id} value={e.id}>{e.episode_number ? `${e.episode_number}. ` : ''}{e.title || 'Untitled'}</option>)}
-            </select>
-          </label>
+          <div className="yts-episode-nav">
+            {compact && (
+              <button type="button" className="yts-icon-btn" onClick={() => pickEpisode(prevEpisode.id)} disabled={!prevEpisode}
+                aria-label="Previous episode" title={prevEpisode ? `Previous: ${prevEpisode.title || 'Untitled'}` : 'Previous episode'} data-testid="yts-prev-episode">
+                <ChevronLeft size={16} aria-hidden />
+              </button>
+            )}
+            <label className="yts-select">
+              <span>Episode</span>
+              <select value={episodeId} onChange={(e) => pickEpisode(e.target.value)} aria-label="Episode" disabled={!showId}>
+                <option value="">Choose an episode</option>
+                {episodes.map((e) => <option key={e.id} value={e.id}>{e.episode_number ? `${e.episode_number}. ` : ''}{e.title || 'Untitled'}</option>)}
+              </select>
+            </label>
+            {compact && (
+              <button type="button" className="yts-icon-btn" onClick={() => pickEpisode(nextEpisode.id)} disabled={!nextEpisode}
+                aria-label="Next episode" title={nextEpisode ? `Next: ${nextEpisode.title || 'Untitled'}` : 'Next episode'} data-testid="yts-next-episode">
+                <ChevronRight size={16} aria-hidden />
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
@@ -1860,7 +1893,17 @@ export default function YouTubeThumbnailStudio() {
               )}
             </section>
 
+            {phone && (
+              <div className="yts-phone-tabs" role="tablist" aria-label="Settings" data-testid="yts-phone-tabs">
+                {PHONE_TABS.map(([key, label]) => (
+                  <button key={key} type="button" role="tab" className={`yts-tab${phoneTab === key ? ' is-on' : ''}`} aria-selected={phoneTab === key}
+                    onClick={() => setPhoneTab(key)} data-testid={`yts-phone-tab-${key}`}>{label}</button>
+                ))}
+              </div>
+            )}
+
             <div className="yts-bottom">
+              {shown('layers') && (
               <section className="yts-card" aria-label="Layers">
                 <LayersList spec={spec} selectedId={selectedId} pickedIds={pickedIds} onSelect={select} onChange={edit} onDuplicate={duplicate} />
                 <div className="yts-actions">
@@ -1875,17 +1918,21 @@ export default function YouTubeThumbnailStudio() {
                   )}
                 </div>
               </section>
+              )}
+              {shown('assets') && (
               <section className="yts-card" aria-label="Assets for this episode">
                 <h2 className="yts-label">Assets for this episode</h2>
                 <AssetTabs tree={tree} onPick={addChosenPicture} uploading={Boolean(uploading)}
                   onUpload={(f) => upload(f, (url, label) => addAndPick((s) => addPicture(s, url, label)))} />
               </section>
+              )}
             </div>
           </div>
 
           <aside className="yts-side" aria-label="Thumbnail settings">
             {pickedSettings && !phone && <section className="yts-card">{pickedSettings}</section>}
 
+            {shown('layout') && (
             <section className="yts-card" aria-label="Template layout">
               <h2 className="yts-label">Template layout</h2>
               <div className="yts-layouts">
@@ -1896,7 +1943,9 @@ export default function YouTubeThumbnailStudio() {
                 ))}
               </div>
             </section>
+            )}
 
+            {shown('text') && (
             <section className="yts-card yts-text-content" aria-label="Text content">
               <h2 className="yts-label">Text content</h2>
               {layerOf(spec, 'headline') && (
@@ -1934,7 +1983,9 @@ export default function YouTubeThumbnailStudio() {
                 </div>
               )}
             </section>
+            )}
 
+            {shown('text') && (
             <section className="yts-card" aria-label="AI help" data-testid="yts-ai">
               <h2 className="yts-label"><Sparkles size={14} aria-hidden /> AI help</h2>
               <div className="yts-actions">
@@ -1960,14 +2011,18 @@ export default function YouTubeThumbnailStudio() {
                 </ul>
               )}
             </section>
+            )}
 
+            {shown('assets') && (
             <section className="yts-card yts-pair" aria-label="Checklist and stickers">
               {layerOf(spec, 'checklist') && (
                 <ChecklistEditor layer={layerOf(spec, 'checklist')} onChange={(patch) => edit((s) => updateLayer(s, layerOf(s, 'checklist').id, patch))} />
               )}
               <StickerRow onAdd={(key) => addAndPick((s) => addShape(s, key))} />
             </section>
+            )}
 
+            {shown('characters') && (
             <section className="yts-card" aria-label="Characters">
               <h2 className="yts-label">Characters</h2>
               {/* More than one Lala (Evoni, 2026-10-22): each picture clicked is added beside her; clicked again, taken off. */}
@@ -1984,7 +2039,9 @@ export default function YouTubeThumbnailStudio() {
                 <p className="yts-note is-block" data-testid="yts-poses-note"><Sparkles size={14} aria-hidden /> Add Lala and JustAWoman photos on the episode's <Link to={`/episodes/${episodeId}?tab=files`}>Files tab</Link>, labelled by pose; they show here once they are ready. Or upload one.</p>
               )}
             </section>
+            )}
 
+            {shown('background') && (
             <section className="yts-card" aria-label="Background">
               <FolderPicker title="Background" testid="yts-backgrounds" tree={tree} start={['scene-sets']} value={roleSrc(spec, 'background')}
                 noneLabel="Plain" onPick={(url) => setRole('background', url)} uploading={Boolean(uploading)}
@@ -2000,7 +2057,9 @@ export default function YouTubeThumbnailStudio() {
                   disabled={!layerOf(spec, 'background')?.src} onChange={(e) => edit((s) => updateLayer(s, layerOf(s, 'background').id, { blur: Number(e.target.value) }))} />
               </label>
             </section>
+            )}
 
+            {shown('colours') && (
             <section className="yts-card" aria-label="Colour palette">
               <fieldset className="yts-field">
                 <legend className="yts-label">Colour palette</legend>
@@ -2032,6 +2091,7 @@ export default function YouTubeThumbnailStudio() {
                 </span>
               </label>
             </section>
+            )}
           </aside>
         </div>
 

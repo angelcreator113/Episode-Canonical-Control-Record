@@ -324,3 +324,25 @@
   .yts-toolbar-end { flex-wrap: nowrap; gap: 4px; margin-left: auto; }
   .yts-zoom { gap: 4px; }
 }
+
+/* Once an episode is open (Evoni, 2026-10-22 layout list): the header on one
+   line, with the episode before and after it; on a phone, the settings one
+   section at a time in tabs under the canvas. */
+.yts-banner.is-compact { align-items: center; padding: 8px 14px; gap: 8px 14px; }
+.yts-banner.is-compact .yts-kicker { margin: 0; }
+.yts-banner.is-compact .yts-select > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.yts-banner.is-compact .yts-choose { flex: 1; justify-content: flex-end; align-items: center; }
+.yts-episode-nav { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.yts-episode-nav .yts-select { min-width: 0; }
+.yts-phone-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: thin; }
+.yts-phone-tabs .yts-tab { flex: none; }
+@media (max-width: 760px) {
+  .yts-banner.is-compact { padding: 6px 10px; }
+  .yts-banner.is-compact .yts-choose { width: 100%; flex-wrap: nowrap; gap: 6px; }
+  .yts-banner.is-compact .yts-choose > .yts-select { flex: 0 1 40%; }
+  .yts-banner.is-compact .yts-episode-nav { flex: 1 1 60%; }
+  .yts-banner.is-compact .yts-episode-nav .yts-select { flex: 1; }
+  .yts-banner.is-compact .yts-select select { min-width: 0; width: 100%; }
+  /* The app's breadcrumb already says Template Studio / YouTube Thumbnails. */
+  .yts-banner.is-compact .yts-kicker { display: none; }
+}
