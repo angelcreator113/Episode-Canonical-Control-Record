@@ -86,6 +86,7 @@ const withHero = () => ({
   sh: sheet({ look: { ...EPISODE_ONE.look, front: 'data:image/png;base64,f1', hero: 'data:image/png;base64,h1' } }),
 });
 const panel = () => within(screen.getByTestId('esp2-spot-panel'));
+const goTo = (step) => fireEvent.click(screen.getByTestId(`esp2-step-${step}`));
 
 beforeEach(() => { vi.clearAllMocks(); });
 
@@ -97,7 +98,12 @@ describe('Style Page', () => {
     expect(screen.queryByRole('button', { name: /Drop photos to sort/ })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Photos in Files/ }));
     expect(onOpenTab).toHaveBeenCalledWith('files');
-    expect(screen.getByRole('button', { name: /Approve/ })).toBeTruthy();
+    // Three steps (Evoni, 2026-10-22); the page opens on Fill.
+    const steps = within(screen.getByTestId('esp2-steps')).getAllByRole('tab');
+    expect(steps.map((t) => t.querySelector('.esp2-step-label').textContent)).toEqual(['Fill', 'Approve', 'Share']);
+    expect(screen.getByTestId('esp2-step-fill').getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByTestId('esp2-step-fill').textContent).toContain('Ready 2 of 12');
+    expect(screen.queryByTestId('esp2-export')).toBeNull();
     // Real values from the episode's own data, not invented.
     expect(sheetEl().getAllByText('Wearable Experiments Studio Session').length).toBeGreaterThan(0);
     expect(api.get).toHaveBeenCalledWith(LB_URL);
@@ -267,6 +273,7 @@ describe('Style Page', () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     const blob = new Blob(['png'], { type: 'image/png' });
     api.get.mockImplementation(async () => ({ data: blob, headers: {} }));
+    goTo('share');
     // On Classic there is no design to download alone.
     expect(screen.getByTestId('esp2-design-download').disabled).toBe(true);
     fireEvent.click(screen.getByTestId('esp2-design-style_diary'));
@@ -283,6 +290,7 @@ describe('Style Page', () => {
 
   test('while Draft the designs cannot be downloaded', async () => {
     await renderPage({ sh: withDesigns() });
+    goTo('share');
     fireEvent.click(screen.getByTestId('esp2-design-episode_look'));
     for (const id of ['esp2-design-download', 'esp2-designs-zip', 'esp2-designs-zip-all']) expect(screen.getByTestId(id).disabled).toBe(true);
   });
@@ -364,21 +372,43 @@ describe('Style Page', () => {
     expect(onOpenTab).toHaveBeenCalledWith('wardrobe');
   });
 
-  test('Approve approves the sheet; approved, editing stays open (it returns the sheet to Draft)', async () => {
+  test('Approve approves the sheet and moves to Share; approved, editing stays open (it returns the sheet to Draft)', async () => {
     await renderPage();
+    goTo('approve');
+    const step = within(screen.getByTestId('esp2-approve'));
+    expect(step.getByText('10 still to fill. Tap one to fill it, or approve the sheet as it is.')).toBeTruthy();
+    // The sheet is not editable outside Fill.
+    expect(sheetEl().queryByRole('button', { name: 'Add Side' })).toBeNull();
     api.post.mockResolvedValue({ data: { data: sheet({ status: 'approved' }) } });
     mockRoutes({ lb: lookbook({ sheet_status: 'approved' }), sh: sheet({ status: 'approved' }) });
-    fireEvent.click(screen.getByRole('button', { name: /Approve/ }));
+    fireEvent.click(step.getByRole('button', { name: 'Approve' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${SHEET_URL}/approve`));
     await waitFor(() => expect(screen.getByTestId('esp2-status').textContent).toContain('Approved'));
+    expect(screen.getByTestId('esp2-step-share').getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByTestId('esp2-export-pin').disabled).toBe(false);
     expect(screen.getByText(/Editing anything returns it to Draft/)).toBeTruthy();
+    goTo('fill');
     fireEvent.click(sheetEl().getByRole('button', { name: 'Add Side' }));
     expect(panel().getByTestId('esp2-files-open').disabled).toBe(false);
-    expect(screen.getByRole('button', { name: /Reopen/ })).toBeTruthy();
+    goTo('approve');
+    expect(within(screen.getByTestId('esp2-approve')).getByRole('button', { name: /Reopen/ })).toBeTruthy();
+  });
+
+  test("Approve lists what is missing; a chip opens its spot in Fill. Share before approval points to Approve", async () => {
+    await renderPage();
+    goTo('share');
+    const gate = within(screen.getByTestId('esp2-share-gate'));
+    expect(gate.getByText(/Approve the sheet first/)).toBeTruthy();
+    fireEvent.click(gate.getByRole('button', { name: /Go to Approve/ }));
+    expect(screen.getByTestId('esp2-step-approve').getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(within(screen.getByTestId('esp2-approve')).getByTestId('esp2-chip-hero'));
+    expect(screen.getByTestId('esp2-step-fill').getAttribute('aria-selected')).toBe('true');
+    expect(panel().getByRole('heading', { name: 'Editing Lala in the look · Hero' })).toBeTruthy();
   });
 
   test('Share & export: six sizes, off while Draft', async () => {
     await renderPage();
+    goTo('share');
     const exp = within(screen.getByTestId('esp2-export'));
     expect(exp.getByText('Approve the sheet to export it.')).toBeTruthy();
     expect(EXPORT_SIZES.map((e) => e.size)).toEqual(['sheet', 'pin', 'story', 'post', 'look', 'pdf']);
@@ -387,6 +417,7 @@ describe('Style Page', () => {
 
   test('Share & export: approved and up to date, a size downloads from the server', async () => {
     await renderPage({ lb: lookbook({ sheet_status: 'approved' }), sh: sheet({ status: 'approved' }) });
+    goTo('share');
     const blob = new Blob(['png'], { type: 'image/png' });
     api.get.mockResolvedValueOnce({ data: blob, headers: { 'content-disposition': 'attachment; filename="style-sheet-episode-01-pin.png"' } });
     URL.createObjectURL = vi.fn(() => 'blob:sheet');
@@ -402,18 +433,21 @@ describe('Style Page', () => {
 
   test('Share & export: an approved sheet that is out of date cannot be exported', async () => {
     await renderPage({ lb: lookbook({ sheet_status: 'approved' }), sh: sheet({ status: 'approved', stale: true }) });
+    goTo('share');
     expect(within(screen.getByTestId('esp2-export')).getByText(/approve the sheet again/)).toBeTruthy();
     expect(screen.getByTestId('esp2-export-sheet').disabled).toBe(true);
   });
 
   test('Send to Distribution is off while Draft', async () => {
     await renderPage();
+    goTo('share');
     expect(screen.getByTestId('esp2-send-distribution').disabled).toBe(true);
     expect(screen.getByLabelText('Include Shop the Look links').disabled).toBe(true);
   });
 
   test('Send to Distribution sends every size, with Shop the Look links when ticked, and links to Distribution', async () => {
     const { onOpenTab } = await renderPage({ lb: lookbook({ sheet_status: 'approved' }), sh: sheet({ status: 'approved' }) });
+    goTo('share');
     api.post.mockResolvedValue({ data: { data: {
       sent: true, items: EXPORT_SIZES.map((e) => ({ size: e.size })), disclosure: 'Some links are affiliate links; I may earn a commission.',
     } } });
@@ -428,6 +462,7 @@ describe('Style Page', () => {
 
   test('a refused send shows the server\'s message', async () => {
     await renderPage({ lb: lookbook({ sheet_status: 'approved' }), sh: sheet({ status: 'approved' }) });
+    goTo('share');
     vi.spyOn(console, 'error').mockImplementation(() => {});
     api.post.mockRejectedValue({ response: { data: { error: 'Approve the style sheet before sending it to Distribution.' } } });
     fireEvent.click(screen.getByTestId('esp2-send-distribution'));

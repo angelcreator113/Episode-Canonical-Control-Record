@@ -5,7 +5,10 @@
  * empty spot is a dashed "+ Add" button in place, and the spot you tap opens
  * in the panel on the right: Choose from Files, and the readiness bar
  * ("Ready x of 12", one chip per item, from styleReadiness). What you see is
- * what exports. Photos are uploaded in Files › Style photos, never here
+ * what exports. Three steps across the top (Evoni, 2026-10-22): Fill (the
+ * sheet is the editor), Approve (what is missing, Approve or Reopen) and
+ * Share (every download and Send to Distribution, open once approved); the
+ * sheet stays on the left in each. Photos are uploaded in Files › Style photos, never here
  * (Evoni, 2026-10-22: "i dont want the uploads in the style page move them
  * to the files tab"); taking one off the sheet sends it back to To sort.
  *
@@ -72,6 +75,7 @@ const DESIGN_SPOT = {
   beauty: 'eyes', hair: 'hair', nails: 'nails', body: 'wardrobe', shoes: 'wardrobe', bag: 'wardrobe', jewelry: 'wardrobe', perfume: 'wardrobe',
 };
 const CLASSIC = 'classic';
+const STEPS = [{ key: 'fill', label: 'Fill' }, { key: 'approve', label: 'Approve' }, { key: 'share', label: 'Share' }];
 
 /** The panel spots one design shows. */
 const designPanelSpots = (design) => [...new Set(design.elements.filter((e) => e.kind === 'photo').map((e) => DESIGN_SPOT[e.spot]).filter(Boolean))];
@@ -89,6 +93,7 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
   const sheetCol = useRef(null);
   const [scale, setScale] = useState(0.5);
   const [view, setView] = useState(CLASSIC);
+  const [step, setStep] = useState('fill');
 
   const loadSheet = useCallback(async () => {
     try {
@@ -219,9 +224,20 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
     // The palette shown is the one approved: save one taken from the pieces first.
     if (!sheet.palette && palette?.length) await lookbookApi.save(episodeId, { palette });
     await styleSheetApi.approve(episodeId);
-    return lookbookApi.get(episodeId);
+    const next = await lookbookApi.get(episodeId);
+    setStep('share');
+    return next;
   });
   const reopen = () => run(async () => { await styleSheetApi.reopen(episodeId); return lookbookApi.get(episodeId); });
+
+  const filling = step === 'fill';
+  // A readiness chip opens its spot in Fill.
+  const openSpot = (spot) => { setStep('fill'); setSelected(spot); };
+  const stepNote = {
+    fill: `Ready ${readiness.done} of ${readiness.total}`,
+    approve: approved ? (sheet.stale ? 'Out of date' : 'Approved') : 'Draft',
+    share: canExport ? 'Ready to export' : 'After approval',
+  };
 
   const edit = {
     selected,
@@ -248,13 +264,19 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
           <button type="button" className="esp2-btn" disabled={!onOpenTab} data-testid="esp2-open-files" onClick={() => onOpenTab && onOpenTab('files')}>
             <FolderOpen size={16} aria-hidden="true" /> Photos in Files
           </button>
-          {approved ? (
-            <button type="button" className="esp2-btn" disabled={busy} onClick={reopen}><RotateCcw size={16} aria-hidden="true" /> Reopen</button>
-          ) : (
-            <button type="button" className="esp2-btn esp2-btn-primary" disabled={busy} onClick={approve}><CheckCircle2 size={16} aria-hidden="true" /> Approve</button>
-          )}
         </div>
       </header>
+
+      <div className="esp2-steps" role="tablist" aria-label="Steps" data-testid="esp2-steps">
+        {STEPS.map((st, i) => (
+          <button key={st.key} type="button" role="tab" aria-selected={step === st.key} data-testid={`esp2-step-${st.key}`}
+            className={`esp2-step${step === st.key ? ' is-active' : ''}${(st.key === 'approve' && approved) || (st.key === 'share' && canExport) ? ' is-done' : ''}`}
+            onClick={() => setStep(st.key)}>
+            <span className="esp2-step-num" aria-hidden="true">{i + 1}</span>
+            <span className="esp2-step-text"><span className="esp2-step-label">{st.label}</span><span className="esp2-step-note">{stepNote[st.key]}</span></span>
+          </button>
+        ))}
+      </div>
 
       {approved && <p className="esp2-note">Approved. Editing anything returns it to Draft, and it needs approving again before it can be exported.</p>}
       {error && <p className="esp2-error" role="alert">{error}</p>}
@@ -278,78 +300,124 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
               <div className="esp2-sheet-frame" style={{ height: DESIGN_HEIGHT * designScale }} data-testid="esp2-design-preview">
                 <div className="esp2-sheet-scale" style={{ transform: `scale(${designScale})`, width: DESIGN_WIDTH }}>
                   <StyleDesign design={design} values={values}
-                    edit={{ isSelected: (spot) => DESIGN_SPOT[spot] === selected, onSelect: (spot) => setSelected(DESIGN_SPOT[spot]) }} />
+                    edit={filling ? { isSelected: (spot) => DESIGN_SPOT[spot] === selected, onSelect: (spot) => setSelected(DESIGN_SPOT[spot]) } : null} />
                 </div>
               </div>
               <p className="esp2-hint esp2-design-note">
-                Tap a frame to edit it. Empty text shows faintly here and is left blank in downloads.
+                {filling ? 'Tap a frame to edit it. ' : ''}Empty text shows faintly here and is left blank in downloads.
                 {notOnDesign.length > 0 && <> Not on this design: {notOnDesign.join(', ')}.</>}
               </p>
             </>
           ) : (
             <div className="esp2-sheet-frame" style={{ height: SHEET_HEIGHT * scale }}>
               <div className="esp2-sheet-scale" style={{ transform: `scale(${scale})`, width: SHEET_WIDTH }}>
-                <StyleSheetTemplate sheet={sheet} palette={palette} edit={edit} />
+                <StyleSheetTemplate sheet={sheet} palette={palette} edit={filling ? edit : null} />
               </div>
             </div>
           )}
         </div>
 
-        <aside className="esp2-panel" aria-label="Editing panel">
-          {info ? (
-            <SpotPanel
-              spot={selected}
-              info={info}
-              lb={lb}
-              sheet={sheet}
-              palette={palette}
-              setPalette={setPalette}
-              savePalette={savePalette}
-              text={text}
-              setText={(field, value) => setText((t) => ({ ...t, [field]: value }))}
-              commitText={commitText}
-              locked={locked}
-              venueCandidates={venueCandidates}
-              fromPose={fromPose}
-              starPose={starPose}
-              move={move}
-              saveFields={saveFields}
-              swapVenue={swapVenue}
-              toggleOption={(o) => run(() => lookbookApi.venue(episodeId, { source: o.source, ref_id: o.ref_id, in_lookbook: !o.in_lookbook }))}
-              onOpenTab={onOpenTab}
-              episode={episode}
-              designUse={designs.length ? { used: designUse, total: designs.length } : null}
-            />
-          ) : (
-            <p className="esp2-panel-empty">Tap a spot on the sheet to edit it. Dashed spots are waiting for a photo.</p>
+        <aside className="esp2-panel" aria-label={step === 'fill' ? 'Editing panel' : step === 'approve' ? 'Approve' : 'Share'}>
+          {step === 'fill' && (
+            <>
+              {info ? (
+                <SpotPanel
+                  spot={selected}
+                  info={info}
+                  lb={lb}
+                  sheet={sheet}
+                  palette={palette}
+                  setPalette={setPalette}
+                  savePalette={savePalette}
+                  text={text}
+                  setText={(field, value) => setText((t) => ({ ...t, [field]: value }))}
+                  commitText={commitText}
+                  locked={locked}
+                  venueCandidates={venueCandidates}
+                  fromPose={fromPose}
+                  starPose={starPose}
+                  move={move}
+                  saveFields={saveFields}
+                  swapVenue={swapVenue}
+                  toggleOption={(o) => run(() => lookbookApi.venue(episodeId, { source: o.source, ref_id: o.ref_id, in_lookbook: !o.in_lookbook }))}
+                  onOpenTab={onOpenTab}
+                  episode={episode}
+                  designUse={designs.length ? { used: designUse, total: designs.length } : null}
+                />
+              ) : (
+                <p className="esp2-panel-empty">Tap a spot on the sheet to edit it. Dashed spots are waiting for a photo.</p>
+              )}
+              <Readiness readiness={readiness} selected={selected} onPick={openSpot} />
+            </>
           )}
 
-          <section className="esp2-ready" aria-label="Readiness">
-            <div className="esp2-ready-head">
-              <span className="esp2-ready-label" data-testid="esp2-ready">Ready {readiness.done} of {readiness.total}</span>
-            </div>
-            <div className="esp2-bar" role="progressbar" aria-label="Style sheet readiness" aria-valuemin={0} aria-valuemax={readiness.total} aria-valuenow={readiness.done}>
-              <span style={{ width: `${Math.round((readiness.done / readiness.total) * 100)}%` }} />
-            </div>
-            <ul className="esp2-chips">
-              {readiness.items.map((c) => (
-                <li key={c.key}>
-                  <button type="button" className={`esp2-chip${c.ready ? ' is-ready' : ''}${selected === (CHIP_SPOT[c.key] || c.key) ? ' is-selected' : ''}`}
-                    aria-pressed={selected === (CHIP_SPOT[c.key] || c.key)} data-testid={`esp2-chip-${c.key}`}
-                    onClick={() => setSelected(CHIP_SPOT[c.key] || c.key)}>
-                    {c.ready ? <CheckCircle2 size={14} aria-hidden="true" /> : <span className="esp2-chip-dot" aria-hidden="true" />}
-                    {c.label}<span className="esp2-sr">{c.ready ? ', ready' : ', not ready'}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
+          {step === 'approve' && (
+            <section className="esp2-approve" aria-labelledby="esp2-approve-title" data-testid="esp2-approve">
+              <h3 id="esp2-approve-title" className="esp2-spot-title">{approved ? 'Approved' : 'Approve the sheet'}</h3>
+              <p className="esp2-hint">
+                {approved
+                  ? (sheet.stale ? 'The event or the look changed since approval: approve it again to export.' : 'It can be exported. Reopen it to change anything; it needs approving again after.')
+                  : readiness.done < readiness.total
+                    ? `${readiness.total - readiness.done} still to fill. Tap one to fill it, or approve the sheet as it is.`
+                    : 'Everything is filled. Approve it to export and share.'}
+              </p>
+              <Readiness readiness={readiness} selected={null} onPick={openSpot} />
+              <div className="esp2-row">
+                {approved && !sheet.stale ? (
+                  <>
+                    <button type="button" className="esp2-btn esp2-btn-primary" onClick={() => setStep('share')}><Send size={16} aria-hidden="true" /> Go to Share</button>
+                    <button type="button" className="esp2-btn" disabled={busy} onClick={reopen}><RotateCcw size={16} aria-hidden="true" /> Reopen</button>
+                  </>
+                ) : (
+                  <button type="button" className="esp2-btn esp2-btn-primary" disabled={busy} onClick={approve}><CheckCircle2 size={16} aria-hidden="true" /> Approve</button>
+                )}
+              </div>
+            </section>
+          )}
 
-          <ShareExport episodeId={episodeId} episodeNumber={sheet.episode?.number} canExport={canExport} approved={approved} stale={sheet.stale} onOpenTab={onOpenTab}
-            designs={designs} sizes={sheet.design_sizes || []} design={design} />
+          {step === 'share' && (
+            <>
+              {!canExport && (
+                <div className="esp2-gate" data-testid="esp2-share-gate">
+                  <p className="esp2-hint">{approved && sheet.stale ? 'The event or the look changed since approval: approve the sheet again to share it.' : 'Approve the sheet first; then every size downloads from here.'}</p>
+                  <button type="button" className="esp2-btn" onClick={() => setStep('approve')}><CheckCircle2 size={16} aria-hidden="true" /> Go to Approve</button>
+                </div>
+              )}
+              <ShareExport episodeId={episodeId} episodeNumber={sheet.episode?.number} canExport={canExport} approved={approved} stale={sheet.stale} onOpenTab={onOpenTab}
+                designs={designs} sizes={sheet.design_sizes || []} design={design} />
+            </>
+          )}
         </aside>
       </div>
     </div>
+  );
+}
+
+/** Ready x of 12, a chip per item; a chip opens its spot. */
+function Readiness({ readiness, selected, onPick }) {
+  return (
+    <section className="esp2-ready" aria-label="Readiness">
+      <div className="esp2-ready-head">
+        <span className="esp2-ready-label" data-testid="esp2-ready">Ready {readiness.done} of {readiness.total}</span>
+      </div>
+      <div className="esp2-bar" role="progressbar" aria-label="Style sheet readiness" aria-valuemin={0} aria-valuemax={readiness.total} aria-valuenow={readiness.done}>
+        <span style={{ width: `${Math.round((readiness.done / readiness.total) * 100)}%` }} />
+      </div>
+      <ul className="esp2-chips">
+        {readiness.items.map((c) => {
+          const spot = CHIP_SPOT[c.key] || c.key;
+          return (
+            <li key={c.key}>
+              <button type="button" className={`esp2-chip${c.ready ? ' is-ready' : ''}${selected === spot ? ' is-selected' : ''}`}
+                aria-pressed={selected === spot} data-testid={`esp2-chip-${c.key}`} onClick={() => onPick(spot)}>
+                {c.ready ? <CheckCircle2 size={14} aria-hidden="true" /> : <span className="esp2-chip-dot" aria-hidden="true" />}
+                {c.label}<span className="esp2-sr">{c.ready ? ', ready' : ', not ready'}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 

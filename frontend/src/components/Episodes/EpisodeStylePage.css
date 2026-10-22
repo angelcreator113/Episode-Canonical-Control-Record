@@ -79,6 +79,25 @@
   cursor: pointer;
 }
 
+/* Three steps: Fill, Approve, Share (Evoni, 2026-10-22). */
+.esp2-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+.esp2-step { display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 8px 14px; border-radius: 12px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--text-primary); font: inherit; text-align: left; cursor: pointer; }
+.esp2-step.is-active { border: 2px solid var(--primary); background: var(--primary-subtle); color: var(--text-primary); }
+.esp2-step:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.esp2-step-num { display: grid; place-items: center; flex: 0 0 auto; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--lala-parchment-3); font-family: 'DM Mono', monospace; font-size: 13px; }
+.esp2-step.is-active .esp2-step-num { border-color: var(--primary); background: var(--primary); color: var(--text-inverse); }
+.esp2-step.is-done .esp2-step-num { border-color: var(--success-border); background: var(--success-bg); color: var(--success-text); }
+.esp2-step-text { display: flex; flex-direction: column; min-width: 0; }
+.esp2-step-label { font-family: 'Lora', Georgia, serif; font-size: 16px; font-weight: 600; }
+.esp2-step-note { font-size: 12px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.esp2-approve { display: flex; flex-direction: column; gap: 12px; }
+.esp2-gate { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+
+@media (max-width: 480px) {
+  .esp2-step { flex-direction: column; align-items: flex-start; gap: 4px; padding: 8px 10px; }
+  .esp2-step-num { width: 24px; height: 24px; font-size: 12px; }
+}
+
 /* Sheet left, panel right; on a phone the sheet is on top. */
 .esp2-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 380px); gap: 20px; align-items: start; }
 .esp2-sheet-col { min-width: 0; }
