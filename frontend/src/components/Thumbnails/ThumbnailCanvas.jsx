@@ -14,7 +14,7 @@ import Konva from 'konva';
 import {
   WIDTH, HEIGHT, LINE_HEIGHT, FONTS, fitText, measurer, spaced, fitPicture, boxFromNode, layerName, checklistRows, snapBox, layersInBox, adjustedPicture, stickerCanvas, stickerMargin, drawFitted, CARD_COLOR,
   fancyWords, wordsCanvas, wordsMargin, finerCanvas, drawRes, shapeCanvas, shapeMargin,
-  TIMESTAMP_ZONE, pinchGesture, pinchDelta,
+  TIMESTAMP_ZONE, pinchGesture, pinchDelta, drawnLayer, turnedBox, resFor,
 } from '../../lib/thumbnailLayers';
 import { previewUrl, previewWidth } from '../../lib/picturePreview';
 
@@ -66,9 +66,11 @@ function Shade({ l }) {
 function Picture({ l, scale }) {
   const loaded = usePicture(l.src, l.w * scale);
   // Flipped and toned as the server does it (Evoni, 2026-10-21: picture effects).
-  const img = useMemo(() => (loaded ? adjustedPicture(loaded, l) : null), [loaded, l.flipX, l.brightness, l.contrast, l.clearWhite]);
+  // Blur, and the size and fit it is measured against, redraw it too (audit, 2026-10-22).
+  const img = useMemo(() => (loaded ? adjustedPicture(loaded, l) : null),
+    [loaded, l.flipX, l.brightness, l.contrast, l.clearWhite, l.blur, l.w, l.h, l.fit]);
   // Drawn as fine as the screen shows it, so the edge and shadow stay sharp (Evoni, 2026-10-21).
-  const res = drawRes(scale);
+  const res = resFor(drawRes(scale), l.w + 2 * stickerMargin(l), l.h + 2 * stickerMargin(l));
   const sticker = useMemo(() => (img && l.frame !== 'polaroid' && (l.outline || l.shadow)
     ? stickerCanvas(l, (bx) => drawFitted(bx, img, { x: 0, y: 0, w: l.w, h: l.h, fit: l.fit }), finerCanvas(res))
     : null), [img, res, l.w, l.h, l.fit, l.frame, l.outline, l.outlineWidth, l.shadow]);
@@ -106,7 +108,7 @@ function Words({ l, scale = 1 }) {
   // A shadow or glow, a fade or a curve (Evoni, 2026-10-21: text effects):
   // drawn on a canvas as the server draws them, one shadow under it all.
   const fancy = fancyWords(l);
-  const res = drawRes(scale);
+  const res = resFor(drawRes(scale), l.w + 2 * wordsMargin(l), l.h + 2 * wordsMargin(l));
   const drawn = useMemo(() => {
     if (!fancy) return null;
     try {
@@ -151,8 +153,8 @@ function Words({ l, scale = 1 }) {
       <Rect width={l.w} height={l.h} fill="rgba(0,0,0,0.001)" />
       {l.bg && <Rect width={l.w} height={l.h} fill={l.bg} opacity={l.bgOpacity ?? 1} cornerRadius={Math.min(l.bgRadius || 0, l.w / 2, l.h / 2)} />}
       {lines.map((line, i) => (spacing
-        ? <Text key={i} text={line} x={startOf(line)} y={top + i * lineH} height={lineH} verticalAlign="middle" letterSpacing={spacing} {...look} />
-        : <Text key={i} text={line} x={pad} y={top + i * lineH} width={l.w - pad * 2} height={lineH} align={l.align} verticalAlign="middle" {...look} />
+        ? <Text key={i} text={line} x={startOf(line)} y={top + i * lineH} height={lineH} verticalAlign="middle" letterSpacing={spacing} wrap="none" {...look} />
+        : <Text key={i} text={line} x={pad} y={top + i * lineH} width={l.w - pad * 2} height={lineH} align={l.align} verticalAlign="middle" wrap="none" {...look} />
       ))}
     </>
   );
@@ -160,11 +162,12 @@ function Words({ l, scale = 1 }) {
 
 function Badge({ l }) {
   const f = FONTS[l.font] || FONTS.sans;
-  const { size } = fitText(String(l.text || '').toUpperCase(), { w: l.w * 0.8, h: l.h * 0.7, size: Math.round(l.h * 0.55) }, measurer(l.font));
+  const { size, lines } = fitText(String(l.text || '').toUpperCase(), { w: l.w * 0.8, h: l.h * 0.7, size: Math.round(l.h * 0.55) }, measurer(l.font));
   return (
     <>
       <Rect width={l.w} height={l.h} cornerRadius={Math.min(l.h / 2, l.w / 2)} fill={l.fill} stroke="#FFFFFF" strokeWidth={4} />
-      <Text text={String(l.text || '').toUpperCase()} width={l.w} height={l.h} align="center" verticalAlign="middle"
+      {/* One line, as the server draws it (drawBadge joins the fitted lines). */}
+      <Text text={lines.join(' ')} width={l.w} height={l.h} align="center" verticalAlign="middle" wrap="none"
         fontFamily={f.family} fontStyle={f.weight === 'bold' ? 'bold' : 'normal'} fontSize={size} fill={l.color} />
     </>
   );
@@ -187,7 +190,7 @@ function Checklist({ l }) {
               <Line points={[box * 0.18, cy, box * 0.42, cy + box * 0.28, box * 0.95, cy - box * 0.45]} stroke={l.color}
                 strokeWidth={Math.max(3, Math.round(box * 0.14))} lineCap="round" lineJoin="round" />
             )}
-            <Text text={it.text} x={textX} y={cy - rowH / 2} width={l.w - textX} height={rowH} verticalAlign="middle"
+            <Text text={it.text} x={textX} y={cy - rowH / 2} width={l.w - textX} height={rowH} verticalAlign="middle" wrap="none"
               fontFamily={f.family} fontStyle={f.weight === 'bold' ? 'bold' : 'normal'} fontSize={size} fill={l.color} />
           </React.Fragment>
         );
@@ -199,7 +202,7 @@ function Checklist({ l }) {
 /** A sticker (Evoni, 2026-10-21: stickers and shapes), drawn on a canvas as the server draws it. */
 function Shape({ l, scale = 1 }) {
   // As fine as the screen shows it, so the sticker stays sharp (Evoni, 2026-10-21).
-  const res = drawRes(scale);
+  const res = resFor(drawRes(scale), l.w + 2 * shapeMargin(l), l.h + 2 * shapeMargin(l));
   const drawn = useMemo(() => {
     try {
       return shapeCanvas(l, finerCanvas(res));
@@ -309,7 +312,7 @@ export default function ThumbnailCanvas({
     tr.nodes(nodes);
     tr.getLayer()?.batchDraw();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [picksKey, spec, width]);
+  }, [picksKey, spec, width, fontsTick]);
 
   // A small picture of the thumbnail for the YouTube previews (Evoni,
   // 2026-10-21), without the handles: a moment after each change, and once
@@ -339,7 +342,9 @@ export default function ThumbnailCanvas({
   }, [spec, width, fontsTick, onSnapshot]);
 
   const scale = width / WIDTH;
-  const layers = (spec?.layers || []).filter((l) => l.visible);
+  // Drawn as the server will draw them (words tidied, empty checklist rows left out).
+  const layers = (spec?.layers || []).filter((l) => l.visible).map(drawnLayer);
+  const shadeLayer = layers.find((l) => l.kind === 'shade');
   const change = (l, node) => onChange(l.id, boxFromNode({
     x: node.x(), y: node.y(), scaleX: node.scaleX(), scaleY: node.scaleY(), rotation: node.rotation(),
   }, l));
@@ -362,8 +367,9 @@ export default function ThumbnailCanvas({
       return;
     }
     if (e.evt?.altKey) { setGuides([]); return; }
-    const others = layers.filter((o) => o.id !== l.id && o.kind !== 'shade' && o.role !== 'background');
-    const s = snapBox({ cx: node.x(), cy: node.y(), w: l.w, h: l.h }, others);
+    const others = layers.filter((o) => o.id !== l.id && o.kind !== 'shade' && o.role !== 'background').map(turnedBox);
+    const seen = turnedBox(l);
+    const s = snapBox({ cx: node.x(), cy: node.y(), w: seen.w, h: seen.h }, others);
     node.position({ x: s.cx, y: s.cy });
     setGuides(s.guides);
   };
@@ -383,6 +389,9 @@ export default function ThumbnailCanvas({
 
   const onDragEnd = (l, e) => {
     setGuides([]);
+    // A pinch stops the drag it started from; its own end keeps the change,
+    // so one pinch is one undo step (audit, 2026-10-22).
+    if (pinch.current) return;
     const from = dragFrom.current;
     if (following(l)) return;
     if (!from || from.id !== l.id) { dragFrom.current = null; change(l, e.target); return; }
@@ -455,21 +464,31 @@ export default function ThumbnailCanvas({
     if (!pts) return false;
     e.evt.preventDefault?.();
     const stage = stageRef.current;
-    stage?.find('Group').forEach((n) => { if (n.isDragging?.()) n.stopDrag(); });
     setMarquee(null);
     const g = pinchGesture(pts);
     if (!pinch.current) {
       const one = picks.length === 1 ? layers.find((x) => x.id === picks[0]) : null;
       const target = one && !one.locked && one.kind !== 'shade' ? one : null;
       pinch.current = { ...g, id: target?.id || null, rotation: target?.rotation || 0, zoom };
+      // Stopped once the pinch is known, so the drag's end is not kept as a change of its own.
+      stage?.find('Group').forEach((n) => { if (n.isDragging?.()) n.stopDrag(); });
       return true;
     }
     const { k, turn } = pinchDelta(pinch.current, g);
     if (pinch.current.id) {
       const node = stage?.findOne(`#${CSS.escape(pinch.current.id)}`);
       if (node) { node.scaleX(k); node.scaleY(k); node.rotation(pinch.current.rotation + turn); node.getLayer()?.batchDraw(); }
-    } else if (onZoom) {
-      onZoom(pinch.current.zoom * k);
+    } else {
+      if (onZoom) onZoom(pinch.current.zoom * k);
+      // Zoomed in, two fingers also move the canvas round its frame (one
+      // finger moves layers there, so the frame cannot scroll by touch).
+      const wrap = wrapRef.current;
+      if (wrap && pinch.current.mx !== undefined) {
+        wrap.scrollLeft -= g.mx - pinch.current.mx;
+        wrap.scrollTop -= g.my - pinch.current.my;
+      }
+      pinch.current.mx = g.mx;
+      pinch.current.my = g.my;
     }
     return true;
   };
@@ -499,6 +518,11 @@ export default function ThumbnailCanvas({
         onTouchMove={(e) => { if (!pinchMove(e)) boxMove(e); }}
         onMouseUp={boxEnd} onTouchEnd={(e) => { if (!pinchEnd()) boxEnd(e); }} onMouseLeave={boxEnd}>
         <Layer key={fontsTick}>
+          {/* Under everything, the server's plum-to-accent ground (renderLayers), so a
+              see-through or missing background looks here as it will in the file. */}
+          <Rect name="ground" width={WIDTH} height={HEIGHT} listening={false}
+            fillLinearGradientStartPoint={{ x: 0, y: 0 }} fillLinearGradientEndPoint={{ x: WIDTH, y: HEIGHT }}
+            fillLinearGradientColorStops={[0, '#4A1640', 1, shadeLayer?.accent || '#E0689F']} />
           {layers.map((l) => {
             if (l.kind === 'shade') return <Shade key={l.id} l={l} />;
             const Body = BODY[l.kind];
@@ -527,7 +551,9 @@ export default function ThumbnailCanvas({
               width={Math.abs(marquee.x1 - marquee.x0)} height={Math.abs(marquee.y1 - marquee.y0)}
               fill="rgba(184,150,46,0.12)" stroke="#B8962E" strokeWidth={1.5 / scale} dash={[6 / scale, 4 / scale]} listening={false} />
           )}
-          <Transformer ref={trRef} rotateEnabled keepRatio={false} rotationSnaps={[0, 90, 180, 270]} rotationSnapTolerance={4}
+          {/* flipEnabled off: pulling a handle past the far edge stops there instead of
+              turning the layer upside down (audit, 2026-10-22). */}
+          <Transformer ref={trRef} rotateEnabled keepRatio={false} flipEnabled={false} rotationSnaps={[0, 90, 180, 270]} rotationSnapTolerance={4}
             borderStroke="#B8962E" anchorStroke="#B8962E" anchorFill="#FFFFFF" anchorSize={anchorSize}
             boundBoxFunc={(oldBox, box) => (Math.abs(box.width) < 12 || Math.abs(box.height) < 12 ? oldBox : box)} />
         </Layer>
