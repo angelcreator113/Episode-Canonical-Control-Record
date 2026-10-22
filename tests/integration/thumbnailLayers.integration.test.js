@@ -29,6 +29,7 @@ const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
 const draftsMigration = require('../../src/migrations/20261021090000-create-episode-thumbnail-drafts');
 const savedMigration = require('../../src/migrations/20261022090000-create-episode-saved-thumbnails');
+const savedSpecMigration = require('../../src/migrations/20261022130000-add-spec-to-episode-saved-thumbnails');
 
 const { sequelize } = models;
 
@@ -70,6 +71,7 @@ const solid = (w, h, background) => sharp({ create: { width: w, height: h, chann
   beforeAll(async () => {
     await draftsMigration.up(sequelize.getQueryInterface(), Sequelize);
     await savedMigration.up(sequelize.getQueryInterface(), Sequelize);
+    await savedSpecMigration.up(sequelize.getQueryInterface(), Sequelize);
     token = TokenService.generateTokenPair({
       id: 'test-user-layers', email: 'user@layers.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
     }).accessToken;
@@ -174,6 +176,9 @@ const solid = (w, h, background) => sharp({ create: { width: w, height: h, chann
     let list = (await auth(request(app).get(`${base}/episodes/${ep}/saved`))).body.data;
     expect(list.map((t) => [t.id, t.isPrimary])).toEqual([[second.id, true], [first.id, false]]);
     expect(list[0]).toMatchObject({ url: second.url, width: 1280, height: 720 });
+    // Each keeps the layers it was drawn from (so it can become the show's template).
+    expect(list[0].spec.layers.map((l) => l.id)).toEqual(['bg', 'shade', 'title']);
+    await savedSpecMigration.up(sequelize.getQueryInterface(), Sequelize); // guarded
 
     const made = await auth(request(app).post(`${base}/episodes/${ep}/saved/${first.id}/primary`));
     expect(made.status).toBe(200);

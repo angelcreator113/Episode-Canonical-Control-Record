@@ -1116,6 +1116,8 @@ export default function YouTubeThumbnailStudio() {
     return () => clearTimeout(t);
   }, [message]);
   const [draftNote, setDraftNote] = useState(null);
+  // Whether the arrangement is kept yet (Evoni, 2026-10-22): waiting, saving, saved (and when), or not kept.
+  const [keep, setKeep] = useState({ state: 'idle', at: null });
   const [saved, setSaved] = useState(null);
   const [history, setHistory] = useState([]);
   const [fontsTick, setFontsTick] = useState(0);
@@ -1175,6 +1177,7 @@ export default function YouTubeThumbnailStudio() {
     setExact(null);
     setSelectedId(null);
     setDraftNote(null);
+    setKeep({ state: 'idle', at: null });
     setLoading(true);
     youtubeThumbnailsApi.sources(episodeId).then((src) => {
       if (!live || !src) return;
@@ -1217,12 +1220,16 @@ export default function YouTubeThumbnailStudio() {
   // Every change is kept for this episode, a moment after the last one.
   useEffect(() => {
     if (!spec || !episodeId || !edited.current) return undefined;
+    setKeep((k) => ({ ...k, state: 'waiting' }));
     const t = setTimeout(async () => {
+      setKeep((k) => ({ ...k, state: 'saving' }));
       try {
         await youtubeThumbnailsApi.saveDraft(episodeId, spec);
         setDraftNote('Arrangement kept for this episode.');
+        setKeep({ state: 'saved', at: new Date() });
       } catch (err) {
         console.error('[YouTubeThumbnails] arrangement not kept:', err);
+        setKeep({ state: 'failed', at: null });
         setDraftNote(err?.response?.status === 503
           ? 'Arrangements are kept once the server has its latest update.'
           : 'This arrangement could not be kept. Save the thumbnail to keep it.');
@@ -1671,6 +1678,15 @@ export default function YouTubeThumbnailStudio() {
     await youtubeThumbnailsApi.createTemplate(sources.show.id, { name: name.trim(), spec, makeDefault });
   }, `Template "${name.trim()}" saved for ${sources?.show?.name}.${makeDefault ? ' Every episode starts from it.' : ''}`, 'The template could not be saved.');
 
+  // A saved thumbnail as the show's template (Evoni, 2026-10-22): its own layers, named by when it was saved.
+  const templateFromSaved = (t) => {
+    const when = t.savedAt ? new Date(t.savedAt) : new Date();
+    const name = `Saved ${when.toLocaleDateString()} ${when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+    return templateChange(async () => {
+      await youtubeThumbnailsApi.createTemplate(sources.show.id, { name, spec: t.spec, makeDefault: false });
+    }, `Template "${name}" made from that saved thumbnail.`, 'The template could not be made.');
+  };
+
   const renameTemplate = (t, name) => templateChange(
     () => youtubeThumbnailsApi.updateTemplate(sources.show.id, t.id, { name: name.trim() }),
     `Renamed to "${name.trim()}".`, 'The template could not be renamed.');
@@ -1782,6 +1798,11 @@ export default function YouTubeThumbnailStudio() {
                     <Trash2 size={13} aria-hidden />
                   </button>
                 </>
+              )}
+              {t.spec && sources?.show?.id && (
+                <button type="button" className="yts-history-btn" onClick={() => templateFromSaved(t)} disabled={busy} data-testid={`yts-saved-template-${t.id}`}>
+                  <LayoutTemplate size={13} aria-hidden /> Make it a template
+                </button>
               )}
               {t.savedAt && <span className="yts-history-date">{new Date(t.savedAt).toLocaleDateString()}</span>}
             </div>
@@ -1928,9 +1949,18 @@ export default function YouTubeThumbnailStudio() {
               <ThumbnailCanvas spec={spec} selectedId={selectedId} selectedIds={pickedIds} onSelect={select} onSelectMany={selectMany}
                 fontsTick={fontsTick} onChange={(id, patch) => edit((s) => updateLayer(s, id, patch))} onChangeMany={editMany} onSnapshot={setSnapshot} zoom={zoom}
                 grid={marks.grid} safeZones={marks.safe} />
-              <p className="yts-note" data-testid="yts-draft-note">
-                {draftNote || 'Click a layer to move it, pull a corner to resize, use the top handle to turn it.'}
-              </p>
+              <div className="yts-note-row">
+                {keep.state !== 'idle' && (
+                  <span className={`yts-keep is-${keep.state}`} data-testid="yts-keep" aria-live="polite">
+                    {keep.state === 'saved' ? <><Check size={13} aria-hidden /> Saved {keep.at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</>
+                      : keep.state === 'failed' ? 'Not saved'
+                        : 'Saving…'}
+                  </span>
+                )}
+                <p className="yts-note" data-testid="yts-draft-note">
+                  {draftNote || 'Click a layer to move it, pull a corner to resize, use the top handle to turn it.'}
+                </p>
+              </div>
               {saved && (
                 <p className="yts-saved"><Check size={16} aria-hidden /> Saved. <Link to={`/episodes/${episodeId}?tab=production`}>Back to Production</Link></p>
               )}
@@ -2099,10 +2129,12 @@ export default function YouTubeThumbnailStudio() {
                 noneLabel="No Lala" onPick={(url) => edit((s) => toggleFigure(s, 'lala', url, look?.layout))} uploading={Boolean(uploading)}
                 onUpload={(f) => upload(f, (url) => edit((s) => toggleFigure(s, 'lala', url, look?.layout)))}
                 onNone={() => edit((s) => clearFigure(s, 'lala'))} />
-              <FolderPicker title="JustAWoman" testid="yts-jaw" whole value={roleSrc(spec, 'jaw')} tree={tree} start={['poses/justawoman']}
-                noneLabel="No JustAWoman" onPick={(url) => setRole('jaw', url)} uploading={Boolean(uploading)}
-                onUpload={(f) => upload(f, (url) => setRole('jaw', url))}
-                onNone={() => setRole('jaw', null)} />
+              {/* More than one JustAWoman too (Evoni, 2026-10-22), the way Lala works. */}
+              <FolderPicker title="JustAWoman" testid="yts-jaw" whole values={figureLayers(spec, 'jaw').map((l) => l.src)} tree={tree} start={['poses/justawoman']}
+                hint="Click as many as you like; click one again to take it off."
+                noneLabel="No JustAWoman" onPick={(url) => edit((s) => toggleFigure(s, 'jaw', url, look?.layout))} uploading={Boolean(uploading)}
+                onUpload={(f) => upload(f, (url) => edit((s) => toggleFigure(s, 'jaw', url, look?.layout)))}
+                onNone={() => edit((s) => clearFigure(s, 'jaw'))} />
               {!(sources?.poses?.lala || []).length && !(sources?.poses?.justawoman || []).length && (
                 <p className="yts-note is-block" data-testid="yts-poses-note"><Sparkles size={14} aria-hidden /> Add Lala and JustAWoman photos on the episode's <Link to={`/episodes/${episodeId}?tab=files`}>Files tab</Link>, labelled by pose; they show here once they are ready. Or upload one.</p>
               )}
