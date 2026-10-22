@@ -233,7 +233,9 @@ const hasText = (v) => typeof v === 'string' && v.trim().length > 0;
  * The one readiness rule (Task #2877; it lived in the browser in #2876).
  * The Style Page, the Production checklist and the Wardrobe panel all read
  * the result from GET /style-sheet.
- *   Front, Side, Back, Hero   a photo in that spot
+ *   Front, Side, Back, Hero   a photo in that spot (Front, Side and Back
+ *                             also count Lala's pose from the Files tab the
+ *                             sheet falls back to; Evoni, 2026-10-22)
  *   Hair, Nails               a photo AND a name
  *   Beauty                    a photo in any of eyes, lips, skin
  *   Venue                     an image on the sheet (one In lookbook, or the
@@ -251,7 +253,10 @@ function styleReadiness(lb, sheet) {
   const columns = sheet.wardrobe?.columns || [];
   const saved = Array.isArray(lb.palette) ? lb.palette : null;
   const ready = {
-    front: has('front'), side: has('side'), back: has('back'), hero: has('hero'),
+    front: has('front') || Boolean(sheet.look_from_files?.front),
+    side: has('side') || Boolean(sheet.look_from_files?.side),
+    back: has('back') || Boolean(sheet.look_from_files?.back),
+    hero: has('hero'),
     hair: has('hair') && hasText(lb.hair_name),
     nails: has('nails') && hasText(lb.nails_name),
     beauty: has('eyes') || has('lips') || has('skin'),
@@ -269,6 +274,26 @@ function styleReadiness(lb, sheet) {
 // ── The sheet ──
 
 const firstImage = (lb, spot) => lb.images?.[spot]?.[0] || null;
+
+const ANGLES = Object.freeze(['front', 'side', 'back']);
+
+/**
+ * Lala's ready pose for each angle from the Files tab's Character poses
+ * (Evoni, 2026-10-22: "this page can use the same images from the files
+ * tab"): the default one, else the newest. { front, side, back }, each
+ * { id, url, label } or missing.
+ */
+async function lalaPoses(sequelize, episodeId) {
+  const { readyPoses } = require('./youtubeThumbnailService');
+  const { lala } = await readyPoses(sequelize, episodeId);
+  const out = {};
+  for (const angle of ANGLES) {
+    const mine = lala.filter((p) => p.pose === angle);
+    const pick = mine.find((p) => p.isDefault) || mine[0];
+    if (pick) out[angle] = { id: pick.id, url: pick.url, label: `Lala · ${angle}` };
+  }
+  return out;
+}
 
 async function buildStyleSheet(models, episodeId) {
   const { sequelize } = models;
@@ -289,6 +314,12 @@ async function buildStyleSheet(models, episodeId) {
     .map((i) => ({ id: i.id, label: i.source === 'upload' ? 'Your photo' : (lb.venue_options || []).find((o) => o.image_id === i.id)?.label || 'Venue', url: i.image_url }));
   const venueFallback = (lb.venue_options || [])[0] || null;
   const chosenVenue = venueImages[0] || (venueFallback ? { id: null, label: venueFallback.label, url: venueFallback.image_url } : null);
+
+  // FRONT, SIDE, BACK: her Lookbook photo, else Lala's pose from Files.
+  const poses = await lalaPoses(sequelize, episodeId);
+  const fromFiles = {};
+  for (const angle of ANGLES) if (!firstImage(lb, angle) && poses[angle]) fromFiles[angle] = poses[angle];
+  const angleUrl = (angle) => firstImage(lb, angle)?.image_url || fromFiles[angle]?.url || null;
 
   const hairPhoto = firstImage(lb, 'hair');
   const nailsPhoto = firstImage(lb, 'nails');
@@ -325,14 +356,18 @@ async function buildStyleSheet(models, episodeId) {
       options: await Promise.all(venueImages.map(async (v) => ({ id: v.id, label: v.label, image: await inline(v.url) }))),
     },
     look: {
-      front: await inline(firstImage(lb, 'front')?.image_url),
-      side: await inline(firstImage(lb, 'side')?.image_url),
-      back: await inline(firstImage(lb, 'back')?.image_url),
+      front: await inline(angleUrl('front')),
+      side: await inline(angleUrl('side')),
+      back: await inline(angleUrl('back')),
       hero: await inline(firstImage(lb, 'hero')?.image_url),
+      // The designs' DETAIL SHOT / OUTFIT DETAIL (Evoni, 2026-10-22).
+      detail: await inline(firstImage(lb, 'detail')?.image_url),
     },
     look_images: {
       front: firstImage(lb, 'front'), side: firstImage(lb, 'side'), back: firstImage(lb, 'back'), hero: firstImage(lb, 'hero'),
     },
+    // The angles taken from the Files tab's poses, { front: { id, url, label } }.
+    look_from_files: fromFiles,
     wardrobe: { state: wardrobe.state, columns },
     // The saved look's wardrobe rows, for Shop the Look in Distribution (Task #2878).
     wardrobe_piece_ids: [...new Set(wardrobe.pieces.map((p) => String(p.id ?? '')).filter((id) => UUID_RE.test(id)))],
@@ -392,8 +427,15 @@ async function buildStyleSheet(models, episodeId) {
     episode: sheet.episode, logo: logo?.url || null, event: details, venue: { ...venue, url: chosenVenue?.url || null },
     columns: columns.map((c) => [c.key, c.name, c.needed]), lookbook: lb.images, notes, palette: sheet.palette,
     mood: sheet.mood_words, tagline: sheet.tagline, hair: sheet.hair_name, nails: sheet.nails_name,
+    files: Object.fromEntries(Object.entries(fromFiles).map(([angle, p]) => [angle, p.url])),
   })).digest('hex');
   sheet.inputs_hash = hash;
+  // The five designs (Evoni's Canva deck, 2026-10-22) and this sheet's values for them.
+  const { designsForPage } = require('./styleSheetDesigns');
+  const forPage = designsForPage(sheet);
+  sheet.designs = forPage.designs;
+  sheet.design_sizes = forPage.sizes;
+  sheet.design_values = forPage.values;
   sheet.status = lb.sheet_status;
   sheet.approved_at = lb.approved_at || null;
   const stored = await models.EpisodeLookbook.findOne({ where: { episode_id: ep.id }, attributes: ['sheet_inputs_hash'] });
@@ -433,6 +475,60 @@ async function exportStyleSheet(models, episodeId, size) {
   return { ...out, filename: `style-sheet-episode-${n}-${size}.${out.ext}` };
 }
 
+function requireApproved(sheet, verb) {
+  if (sheet.status !== 'approved') throw new LookbookError(`Approve the style sheet before ${verb}.`, 409, 'SHEET_NOT_APPROVED');
+  if (sheet.stale) throw new LookbookError(`The event or the look changed since approval; approve the style sheet again before ${verb}.`, 409, 'SHEET_OUT_OF_DATE');
+}
+
+const episodeTag = (sheet) => (sheet.episode?.number != null ? String(sheet.episode.number).padStart(2, '0') : 'episode');
+const designFilename = (sheet, design, size) => `style-${design.replace(/_/g, '-')}-episode-${episodeTag(sheet)}-${size.replace(/_/g, '-')}.png`;
+
+function checkDesign(design, size) {
+  const { DESIGNS, SIZES } = require('./styleSheetDesigns');
+  if (!DESIGNS.some((d) => d.key === design)) throw new LookbookError(`design is one of: ${DESIGNS.map((d) => d.key).join(', ')}.`, 400, 'UNKNOWN_DESIGN');
+  if (size !== 'all' && !Object.prototype.hasOwnProperty.call(SIZES, size)) {
+    throw new LookbookError(`size is one of: ${Object.keys(SIZES).join(', ')}.`, 400, 'UNKNOWN_SIZE');
+  }
+}
+
+/** One of the five designs in one size (Evoni, 2026-10-22), approved sheets only. */
+async function exportDesign(models, episodeId, design, size) {
+  checkDesign(design, size === 'all' ? '' : size);
+  const sheet = await buildStyleSheet(models, episodeId);
+  requireApproved(sheet, 'exporting it');
+  const out = await require('./styleSheetRenderService').renderDesign(sheet, design, size);
+  return { ...out, filename: designFilename(sheet, design, size) };
+}
+
+/**
+ * All five designs in one size, or in every size ("all"), as one zip
+ * (stored, not compressed: PNGs do not shrink).
+ */
+async function exportDesignsZip(models, episodeId, size) {
+  const { DESIGNS, SIZES } = require('./styleSheetDesigns');
+  checkDesign(DESIGNS[0].key, size);
+  const sheet = await buildStyleSheet(models, episodeId);
+  requireApproved(sheet, 'exporting it');
+  const { renderDesign } = require('./styleSheetRenderService');
+  const sizes = size === 'all' ? Object.keys(SIZES) : [size];
+  const files = [];
+  for (const d of DESIGNS) {
+    for (const s of sizes) files.push({ name: designFilename(sheet, d.key, s), buffer: (await renderDesign(sheet, d.key, s)).buffer });
+  }
+  const archiver = require('archiver');
+  const buffer = await new Promise((resolve, reject) => {
+    const zip = archiver('zip', { store: true });
+    const chunks = [];
+    zip.on('data', (c) => chunks.push(c));
+    zip.on('end', () => resolve(Buffer.concat(chunks)));
+    zip.on('error', reject);
+    for (const f of files) zip.append(f.buffer, { name: f.name });
+    zip.finalize();
+  });
+  const tag = size === 'all' ? 'every-size' : size.replace(/_/g, '-');
+  return { buffer, type: 'application/zip', count: files.length, filename: `style-designs-episode-${episodeTag(sheet)}-${tag}.zip` };
+}
+
 /** Reopen an approved sheet: back to Draft, so the Lookbook can change. */
 async function reopenStyleSheet(models, episodeId) {
   const { sequelize } = models;
@@ -443,4 +539,7 @@ async function reopenStyleSheet(models, episodeId) {
   return buildStyleSheet(models, episodeId);
 }
 
-module.exports = { COLUMNS, READINESS_CHIPS, styleReadiness, buildStyleSheet, approveStyleSheet, reopenStyleSheet, exportStyleSheet, inlineImage, isBag, columnContent };
+module.exports = {
+  COLUMNS, READINESS_CHIPS, styleReadiness, buildStyleSheet, approveStyleSheet, reopenStyleSheet, exportStyleSheet,
+  exportDesign, exportDesignsZip, designFilename, inlineImage, isBag, columnContent,
+};

@@ -44,6 +44,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     for (const [k, v] of Object.entries(savedBuckets)) if (v !== undefined) process.env[k] = v;
     for (const show of shows) {
       await run('DELETE FROM episode_lookbook_images WHERE episode_id IN (SELECT id FROM episodes WHERE show_id = :show)', { show });
+      await run('DELETE FROM episode_character_poses WHERE episode_id IN (SELECT id FROM episodes WHERE show_id = :show)', { show });
       await run('DELETE FROM episode_lookbooks WHERE episode_id IN (SELECT id FROM episodes WHERE show_id = :show)', { show });
       await run('DELETE FROM episode_wardrobe WHERE episode_id IN (SELECT id FROM episodes WHERE show_id = :show)', { show });
       await run('DELETE FROM wardrobe WHERE show_id = :show', { show });
@@ -237,6 +238,146 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await run("UPDATE world_events SET dress_code = 'black tie' WHERE id = :event", ids);
     res = await auth(request(app).get(`${sheetUrl(ids.ep)}/export/pin`));
     expect([res.status, res.body.code]).toEqual([409, 'SHEET_OUT_OF_DATE']);
+  });
+
+  // A zip's file names, read from its central directory (no unzip library).
+  function zipNames(buf) {
+    const names = [];
+    let at = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+    const count = buf.readUInt16LE(at + 10);
+    at = buf.readUInt32LE(at + 16);
+    for (let i = 0; i < count; i++) {
+      const nameLen = buf.readUInt16LE(at + 28);
+      const extra = buf.readUInt16LE(at + 30);
+      const comment = buf.readUInt16LE(at + 32);
+      names.push(buf.slice(at + 46, at + 46 + nameLen).toString());
+      at += 46 + nameLen + extra + comment;
+    }
+    return names;
+  }
+
+  it("Evoni's five designs: the page gets them with this episode's values; downloads once approved, one or zipped", async () => {
+    const ids = await seedEpisodeOne();
+    const bin = (url) => auth(request(app).get(url)).buffer(true).parse((res, cb) => {
+      const chunks = []; res.on('data', (c) => chunks.push(c)); res.on('end', () => cb(null, Buffer.concat(chunks)));
+    });
+    const s = (await auth(request(app).get(sheetUrl(ids.ep)))).body.data;
+    expect(s.designs.map((d) => d.key)).toEqual(['episode_look', 'style_diary', 'runway', 'color_story', 'invited']);
+    expect(s.design_sizes.map((z) => z.key)).toEqual(['pinterest', 'fb_feed', 'fb_story', 'ig_feed', 'ig_story', 'tiktok']);
+    expect(s.design_values.fields.episode_event).toBe("EPISODE 01  •  WEARABLE EXPERIMENTS STUDIO SESSION / STUDIO BY SABLE'S STUDIO");
+    expect(s.design_values.photo_paths.shoes).toMatch(/^wardrobe\.columns\.\d\.image$/);
+
+    const one = `${sheetUrl(ids.ep)}/design/runway/ig_story`;
+    expect((await request(app).get(one)).status).toBe(401);
+    let res = await auth(request(app).get(one));
+    expect([res.status, res.body.code]).toEqual([409, 'SHEET_NOT_APPROVED']);
+    res = await auth(request(app).get(`${sheetUrl(ids.ep)}/design/poster/ig_story`));
+    expect([res.status, res.body.code]).toEqual([400, 'UNKNOWN_DESIGN']);
+    res = await auth(request(app).get(`${sheetUrl(ids.ep)}/design/runway/billboard`));
+    expect([res.status, res.body.code]).toEqual([400, 'UNKNOWN_SIZE']);
+    res = await auth(request(app).get(`${sheetUrl(ids.ep)}/designs-zip/pinterest`));
+    expect([res.status, res.body.code]).toEqual([409, 'SHEET_NOT_APPROVED']);
+
+    expect((await auth(request(app).post(`${sheetUrl(ids.ep)}/approve`))).status).toBe(200);
+    res = await bin(one);
+    expect([res.status, res.headers['content-type'], res.headers['content-disposition']])
+      .toEqual([200, 'image/png', 'attachment; filename="style-runway-episode-01-ig-story.png"']);
+    const meta = await sharp(res.body).metadata();
+    expect([meta.width, meta.height]).toEqual([1080, 1920]);
+
+    res = await bin(`${sheetUrl(ids.ep)}/designs-zip/pinterest`);
+    expect([res.status, res.headers['content-type']]).toEqual([200, 'application/zip']);
+    expect(res.headers['content-disposition']).toBe('attachment; filename="style-designs-episode-01-pinterest.zip"');
+    expect(zipNames(res.body)).toEqual(['episode-look', 'style-diary', 'runway', 'color-story', 'invited'].map((d) => `style-${d}-episode-01-pinterest.png`));
+    res = await bin(`${sheetUrl(ids.ep)}/designs-zip/all`);
+    expect(zipNames(res.body)).toHaveLength(30);
+  });
+
+  it('the Detail spot (the designs\' Detail shot) holds one photo and shows on the sheet', async () => {
+    const ids = await seedEpisodeOne();
+    const png = await sharp({ create: { width: 4, height: 4, channels: 3, background: { r: 9, g: 90, b: 9 } } }).png().toBuffer();
+    let res = await auth(request(app).post(`/api/v1/episodes/${ids.ep}/lookbook/images`)).field('category', 'detail').attach('files', png, { filename: 'd.png', contentType: 'image/png' });
+    expect(res.status).toBe(201);
+    res = await auth(request(app).post(`/api/v1/episodes/${ids.ep}/lookbook/images`)).field('category', 'detail')
+      .attach('files', png, { filename: 'a.png', contentType: 'image/png' }).attach('files', png, { filename: 'b.png', contentType: 'image/png' });
+    expect(res.status).toBe(400);
+    const s = (await auth(request(app).get(sheetUrl(ids.ep)))).body.data;
+    expect(s.look.detail).toMatch(/^data:image\//);
+    expect(s.design_values.photo_paths.detail).toBe('look.detail');
+    expect(s.readiness.total).toBe(12); // not one of the readiness items
+  });
+
+  // The Files tab's Character poses (Evoni, 2026-10-22). Pose photos live in
+  // S3; the test answers those reads with a small PNG.
+  async function addPose(ep, character, pose, extra = {}) {
+    const id = uuid();
+    await run(`INSERT INTO episode_character_poses (id, episode_id, character_key, pose, is_default, original_key, status, final_url)
+               VALUES (:id, :ep, :character, :pose, :isDefault, 'k', :status, :url)`,
+      { id, ep, character, pose, isDefault: Boolean(extra.isDefault), status: extra.status || 'ready', url: extra.url === undefined ? `https://bucket.s3.amazonaws.com/${id}.png` : extra.url });
+    return id;
+  }
+  async function poseReads() {
+    const png = await sharp({ create: { width: 6, height: 9, channels: 4, background: { r: 200, g: 100, b: 150, alpha: 1 } } }).png().toBuffer();
+    const axios = require('axios');
+    const axiosGet = jest.spyOn(axios, 'get').mockImplementation(async () => ({ data: png }));
+    const fetchSpy = jest.spyOn(global, 'fetch').mockImplementation(async () => new Response(png, { status: 200, headers: { 'content-type': 'image/png' } }));
+    return () => { axiosGet.mockRestore(); fetchSpy.mockRestore(); };
+  }
+
+  it("Front, Side and Back fall back to Lala's default pose from Files; her own photo wins", async () => {
+    const ids = await seedEpisodeOne();
+    const restore = await poseReads();
+    try {
+      await addPose(ids.ep, 'lala', 'back');
+      const defaultBack = await addPose(ids.ep, 'lala', 'back', { isDefault: true });
+      await addPose(ids.ep, 'justawoman', 'side', { isDefault: true }); // only Lala's fill the look
+      await addPose(ids.ep, 'lala', 'front', { status: 'processing', url: null }); // not ready
+      const s = (await auth(request(app).get(sheetUrl(ids.ep)))).body.data;
+      expect(Object.keys(s.look_from_files)).toEqual(['back']);
+      expect(s.look_from_files.back).toEqual({ id: defaultBack, url: `https://bucket.s3.amazonaws.com/${defaultBack}.png`, label: 'Lala · back' });
+      expect(s.look.back).toMatch(/^data:image\/png;base64,/);
+      expect(s.look.front).toBeNull();
+      expect(s.look.side).toBeNull();
+      const chip = (key) => s.readiness.items.find((i) => i.key === key).ready;
+      expect([chip('front'), chip('side'), chip('back')]).toEqual([false, false, true]);
+
+      // Her own Back photo replaces the pose.
+      const png = await sharp({ create: { width: 4, height: 4, channels: 3, background: { r: 9, g: 9, b: 9 } } }).jpeg().toBuffer();
+      await auth(request(app).post(`/api/v1/episodes/${ids.ep}/lookbook/images`)).field('category', 'back').attach('files', png, { filename: 'b.jpg', contentType: 'image/jpeg' });
+      const after = (await auth(request(app).get(sheetUrl(ids.ep)))).body.data;
+      expect(after.look_from_files).toEqual({});
+      expect(after.readiness.items.find((i) => i.key === 'back').ready).toBe(true);
+    } finally {
+      restore();
+    }
+  });
+
+  it('Choose from Files copies a ready pose into a spot; another episode\'s or an unready one is refused', async () => {
+    const ids = await seedEpisodeOne();
+    const other = await seedEpisodeOne();
+    const restore = await poseReads();
+    try {
+      const url = `/api/v1/episodes/${ids.ep}/lookbook/images/from-pose`;
+      const glamour = await addPose(ids.ep, 'lala', 'glamour');
+      const theirs = await addPose(other.ep, 'lala', 'front');
+      const busy = await addPose(ids.ep, 'justawoman', 'front', { status: 'processing', url: null });
+
+      expect((await request(app).post(url).send({ pose_id: glamour, category: 'hero' })).status).toBe(401);
+      const res = await auth(request(app).post(url)).send({ pose_id: glamour, category: 'hero' });
+      expect(res.status).toBe(201);
+      const hero = res.body.data.lookbook.images.hero;
+      expect(hero).toHaveLength(1);
+      expect(hero[0]).toMatchObject({ source: 'upload', file_name: 'lala glamour.png' });
+      const s = (await auth(request(app).get(sheetUrl(ids.ep)))).body.data;
+      expect(s.look.hero).toMatch(/^data:image\/png;base64,/);
+
+      expect((await auth(request(app).post(url)).send({ pose_id: theirs, category: 'hero' })).status).toBe(404);
+      expect((await auth(request(app).post(url)).send({ pose_id: busy, category: 'front' })).status).toBe(409);
+      expect((await auth(request(app).post(url)).send({ pose_id: 'nope', category: 'front' })).status).toBe(400);
+      expect((await auth(request(app).post(url)).send({ pose_id: glamour, category: 'elbow' })).status).toBe(400);
+    } finally {
+      restore();
+    }
   });
 
   it('an unknown episode is 404', async () => {

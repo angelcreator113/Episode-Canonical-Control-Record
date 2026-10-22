@@ -1,0 +1,24 @@
+/* One of Evoni's five designs (StyleDesign.jsx), at 960 x 1440; the Style Page scales it. */
+.sd-page { position: relative; width: 960px; height: 1440px; overflow: hidden; font-family: 'DM Sans', sans-serif; }
+.sd-page > * { position: absolute; box-sizing: border-box; }
+
+.sd-frame { border: 1.7px solid #BE955B; overflow: hidden; display: flex; align-items: center; justify-content: center; padding: 0; margin: 0; font: inherit; color: inherit; }
+.sd-tap { cursor: pointer; }
+.sd-tap:hover { box-shadow: 0 0 0 3px rgba(224, 90, 138, 0.35); }
+.sd-tap:focus-visible { outline: 4px solid #5A3769; outline-offset: 2px; }
+.sd-tap.is-selected { box-shadow: 0 0 0 5px #E05A8A; }
+.sd-photo { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sd-piece { width: calc(100% - 16px); height: calc(100% - 16px); object-fit: contain; display: block; }
+.sd-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: #5A3769; text-align: center; padding: 0 8px; }
+.sd-diagonal { position: absolute; left: 17px; top: 17px; width: calc(100% - 34px); height: calc(100% - 34px); }
+.sd-diagonal line { stroke: #E8B9CA; stroke-width: 1.3px; vector-effect: non-scaling-stroke; }
+.sd-add { position: relative; font-size: 14.7px; font-weight: 700; }
+.sd-label { position: relative; font-size: 13.3px; }
+
+.sd-box { border: 1.7px solid #BE955B; }
+.sd-swatch { border-radius: 50%; border: 1.7px solid #BE955B; }
+.sd-rule { height: 0; border-top-style: solid; }
+.sd-text { display: flex; align-items: center; line-height: 1.25; overflow: hidden; }
+.sd-text > span { width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sd-text.is-placeholder { opacity: 0.55; }
+.sd-text.is-one-line > span { white-space: pre; }

@@ -22,11 +22,13 @@
 const crypto = require('crypto');
 const { uploadPng } = require('./episodeTitleOverlayService');
 
-const CATEGORIES = Object.freeze(['unsorted', 'front', 'side', 'back', 'hero', 'hair', 'nails', 'eyes', 'lips', 'skin', 'venue', 'inspo']);
+// 'detail' (Evoni's designs' DETAIL SHOT / OUTFIT DETAIL, 2026-10-22) needs
+// migration 20261022160000; it is not one of the readiness items.
+const CATEGORIES = Object.freeze(['unsorted', 'front', 'side', 'back', 'hero', 'hair', 'nails', 'eyes', 'lips', 'skin', 'venue', 'inspo', 'detail']);
 // One live photo each; uploading or moving another into it replaces it.
-const SINGLE_SLOT = Object.freeze(['front', 'side', 'back', 'hero', 'hair', 'nails', 'eyes', 'lips', 'skin']);
+const SINGLE_SLOT = Object.freeze(['front', 'side', 'back', 'hero', 'hair', 'nails', 'eyes', 'lips', 'skin', 'detail']);
 // The 11 spots "style sheet ready (x of 11)" counts.
-const READINESS_CATEGORIES = Object.freeze(CATEGORIES.filter((c) => c !== 'unsorted'));
+const READINESS_CATEGORIES = Object.freeze(CATEGORIES.filter((c) => c !== 'unsorted' && c !== 'detail'));
 const MAX_INSPO_UPLOADS = 2; // "Key inspo: up to two uploads"
 const UPLOAD_TYPES = Object.freeze({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' });
 const MAX_FILES = 20;
@@ -449,6 +451,48 @@ async function deleteImage(models, episodeId, imageId) {
   return { deleted: img.id, lookbook: await getLookbook(models, episodeId) };
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SHARP_TYPES = Object.freeze({ png: 'image/png', jpeg: 'image/jpeg', webp: 'image/webp' });
+
+/**
+ * One of this episode's ready photos from the Files tab's Character poses,
+ * put in a spot like an upload (Evoni, 2026-10-22: "this page can use the
+ * same images from the files tab"). The picture is copied into the
+ * Lookbook, so the sheet keeps it if the pose is later replaced.
+ * body: { pose_id, category }.
+ */
+async function addPoseImage(models, episodeId, body = {}) {
+  const ep = await loadLiveEpisode(models, episodeId);
+  const poseId = String(body.pose_id || '');
+  if (!UUID_RE.test(poseId)) throw new LookbookError('Choose a photo from the Files tab.', 400, 'INVALID_POSE');
+  const cat = cleanCategory(body.category);
+  const [[reg]] = await models.sequelize.query("SELECT to_regclass('public.episode_character_poses') AS reg");
+  const rows = reg && reg.reg ? (await models.sequelize.query(
+    `SELECT id, character_key, pose, status, final_url FROM episode_character_poses
+      WHERE id = :poseId AND episode_id = :episodeId AND deleted_at IS NULL`,
+    { replacements: { poseId, episodeId: ep.id } }))[0] : [];
+  const pose = rows[0];
+  if (!pose) throw new LookbookError("That photo is not in this episode's Files tab.", 404, 'POSE_NOT_FOUND');
+  if (pose.status !== 'ready' || !pose.final_url) throw new LookbookError('That photo is still being processed in the Files tab.', 409, 'POSE_NOT_READY');
+
+  let buffer;
+  let mimetype;
+  try {
+    buffer = await require('./youtubeThumbnailService').fetchImage(pose.final_url);
+    const { format } = await require('sharp')(buffer, { failOn: 'none' }).metadata();
+    mimetype = SHARP_TYPES[format];
+    if (!mimetype) {
+      buffer = await require('sharp')(buffer, { failOn: 'none' }).png().toBuffer();
+      mimetype = 'image/png';
+    }
+  } catch (err) {
+    console.error('[Lookbook] pose photo could not be read:', err.message);
+    throw new LookbookError('That photo could not be read. Try again.', 502, 'POSE_UNREADABLE');
+  }
+  const name = `${pose.character_key} ${pose.pose}.${UPLOAD_TYPES[mimetype]}`;
+  return addImages(models, episodeId, [{ buffer, mimetype, originalname: name }], { category: cat });
+}
+
 module.exports = {
   CATEGORIES,
   SINGLE_SLOT,
@@ -465,6 +509,7 @@ module.exports = {
   lookSources,
   VENUE_SOURCES,
   addImages,
+  addPoseImage,
   updateImage,
   deleteImage,
 };

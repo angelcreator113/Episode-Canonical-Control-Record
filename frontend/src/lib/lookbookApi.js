@@ -16,6 +16,8 @@ export const lookbookApi = {
     if (category) form.append('category', category);
     return api.post(`${base(episodeId)}/images`, form).then((r) => r.data?.data?.lookbook);
   },
+  // One of the Files tab's ready pose photos into a spot (Evoni, 2026-10-22).
+  fromPose: (episodeId, poseId, category) => api.post(`${base(episodeId)}/images/from-pose`, { pose_id: poseId, category }).then((r) => r.data?.data?.lookbook),
   move: (episodeId, imageId, changes) => api.patch(`${base(episodeId)}/images/${imageId}`, changes).then((r) => r.data?.data?.lookbook),
   remove: (episodeId, imageId) => api.delete(`${base(episodeId)}/images/${imageId}`).then((r) => r.data?.data?.lookbook),
   venue: (episodeId, body) => api.put(`${base(episodeId)}/venue`, body).then((r) => r.data?.data),

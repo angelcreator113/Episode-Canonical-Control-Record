@@ -553,6 +553,18 @@ router.post('/:id/lookbook/images', validateUUIDParam('id'), requireAuth, (req, 
   }
 });
 
+// One of the Files tab's ready pose photos put in a spot: { pose_id,
+// category } (Evoni, 2026-10-22). Copied into the Lookbook like an upload.
+router.post('/:id/lookbook/images/from-pose', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { addPoseImage } = require('../services/episodeLookbookService');
+    return res.status(201).json({ success: true, data: await addPoseImage(models, req.params.id, req.body || {}) });
+  } catch (err) {
+    return sendLookbookError(res, err, 'POST /:id/lookbook/images/from-pose');
+  }
+});
+
 // A pre-filled venue image (the event's look, set base or an angle) in or
 // out of the Lookbook: { source, ref_id, in_lookbook } (Task #2813).
 router.put('/:id/lookbook/venue', validateUUIDParam('id'), requireAuth, async (req, res) => {
@@ -622,6 +634,36 @@ router.get('/:id/style-sheet/export/:size', validateUUIDParam('id'), requireAuth
     return res.send(out.buffer);
   } catch (err) {
     return sendLookbookError(res, err, 'GET /:id/style-sheet/export/:size');
+  }
+});
+
+// Evoni's five designs (2026-10-22): one design in one size, or all five
+// in one size (or "all" sizes) as a zip. Approved, up-to-date sheets only.
+router.get('/:id/style-sheet/design/:design/:size', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { exportDesign } = require('../services/styleSheetService');
+    const out = await exportDesign(models, req.params.id, req.params.design, req.params.size);
+    res.set('Content-Type', out.type);
+    res.set('Content-Disposition', `attachment; filename="${out.filename}"`);
+    res.set('Cache-Control', 'private, no-store');
+    return res.send(out.buffer);
+  } catch (err) {
+    return sendLookbookError(res, err, 'GET /:id/style-sheet/design/:design/:size');
+  }
+});
+
+router.get('/:id/style-sheet/designs-zip/:size', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { exportDesignsZip } = require('../services/styleSheetService');
+    const out = await exportDesignsZip(models, req.params.id, req.params.size);
+    res.set('Content-Type', out.type);
+    res.set('Content-Disposition', `attachment; filename="${out.filename}"`);
+    res.set('Cache-Control', 'private, no-store');
+    return res.send(out.buffer);
+  } catch (err) {
+    return sendLookbookError(res, err, 'GET /:id/style-sheet/designs-zip/:size');
   }
 });
 
