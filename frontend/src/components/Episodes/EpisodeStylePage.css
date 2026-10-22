@@ -131,6 +131,12 @@
 .esp2-thumb.is-in { border-color: var(--primary); color: var(--text-primary); }
 .esp2-thumb:disabled { opacity: 0.55; cursor: not-allowed; }
 
+/* Choose from Files (Evoni, 2026-10-22) */
+.esp2-files { display: flex; flex-direction: column; gap: 8px; }
+.esp2-files > .esp2-btn { align-self: flex-start; }
+.esp2-files-body { display: flex; flex-direction: column; gap: 10px; padding: 10px; border: 1px solid var(--lala-parchment-3); border-radius: 10px; background: var(--surface-card); }
+.esp2-files-body .esp2-thumb img { width: 64px; height: 84px; }
+
 .esp2-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-secondary); }
 .esp2-field input, .esp2-field textarea {
   min-height: 44px;
