@@ -8,7 +8,11 @@
  * it, with no new table (Evoni, 2026-10-10):
  *
  *   { sent_at, sent_by, sheet_hash, items: [{ size, label, ... }],
+ *     designs: [{ design, name, sizes: [{ size, label, ... }] }],
  *     caption, caption_edited, include_shop_links }
+ *
+ * `designs` (Evoni, 2026-10-22) are her five Canva designs in the six
+ * platform sizes, drawn by GET /episodes/:id/style-sheet/design/:design/:size.
  *
  * The items are the export sizes of the sheet that was approved; each is
  * drawn on request by GET /episodes/:id/style-sheet/export/:size, so no
@@ -175,6 +179,7 @@ async function view(models, episodeId, entry, sheet) {
     items: (entry.items || []).filter((i) => EXPORTS[i.size]).map((i) => ({
       ...i, path: `/api/v1/episodes/${episodeId}/style-sheet/export/${i.size}`,
     })),
+    designs: designsView(episodeId, entry),
     caption: entry.caption || '',
     caption_max: CAPTION_MAX,
     include_shop_links: Boolean(entry.include_shop_links),
@@ -184,6 +189,31 @@ async function view(models, episodeId, entry, sheet) {
     post_text: postText(entry.caption || '', included, disclosure),
     site: siteView(entry),
   };
+}
+
+/**
+ * Evoni's five designs (2026-10-22), each in the six sizes, as sent. The
+ * caption, the Shop the Look links and their disclosure go with them as
+ * with the sheet: one post text for the whole set.
+ */
+function designItems(sheet) {
+  const { DESIGNS, SIZES } = require('./styleSheetDesigns');
+  const { designFilename } = require('./styleSheetService');
+  return DESIGNS.map((d) => ({
+    design: d.key,
+    name: d.name,
+    sizes: Object.entries(SIZES).map(([size, z]) => ({ size, label: z.label, width: z.width, height: z.height, filename: designFilename(sheet, d.key, size) })),
+  }));
+}
+
+function designsView(episodeId, entry) {
+  const { DESIGNS, SIZES } = require('./styleSheetDesigns');
+  return (Array.isArray(entry.designs) ? entry.designs : [])
+    .filter((d) => d && DESIGNS.some((x) => x.key === d.design))
+    .map((d) => ({
+      ...d,
+      sizes: (d.sizes || []).filter((z) => SIZES[z.size]).map((z) => ({ ...z, path: `/api/v1/episodes/${episodeId}/style-sheet/design/${d.design}/${z.size}` })),
+    }));
 }
 
 /** The website state of a sent sheet, as the Distribution card shows it. */
@@ -229,6 +259,7 @@ async function sendStyleSheetToDistribution(models, episodeId, { includeShopLink
     items: Object.entries(EXPORTS).map(([size, e]) => ({
       size, label: e.label, width: e.width, height: e.height, type: e.type, filename: `style-sheet-episode-${n}-${size}.${e.ext}`,
     })),
+    designs: designItems(sheet),
     caption: keepCaption ? previous.caption : captionDraft(sheet),
     caption_edited: Boolean(keepCaption),
     include_shop_links: Boolean(includeShopLinks),

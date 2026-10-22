@@ -240,6 +240,73 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect([res.status, res.body.code]).toEqual([409, 'SHEET_OUT_OF_DATE']);
   });
 
+  // A zip's file names, read from its central directory (no unzip library).
+  function zipNames(buf) {
+    const names = [];
+    let at = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+    const count = buf.readUInt16LE(at + 10);
+    at = buf.readUInt32LE(at + 16);
+    for (let i = 0; i < count; i++) {
+      const nameLen = buf.readUInt16LE(at + 28);
+      const extra = buf.readUInt16LE(at + 30);
+      const comment = buf.readUInt16LE(at + 32);
+      names.push(buf.slice(at + 46, at + 46 + nameLen).toString());
+      at += 46 + nameLen + extra + comment;
+    }
+    return names;
+  }
+
+  it("Evoni's five designs: the page gets them with this episode's values; downloads once approved, one or zipped", async () => {
+    const ids = await seedEpisodeOne();
+    const bin = (url) => auth(request(app).get(url)).buffer(true).parse((res, cb) => {
+      const chunks = []; res.on('data', (c) => chunks.push(c)); res.on('end', () => cb(null, Buffer.concat(chunks)));
+    });
+    const s = (await auth(request(app).get(sheetUrl(ids.ep)))).body.data;
+    expect(s.designs.map((d) => d.key)).toEqual(['episode_look', 'style_diary', 'runway', 'color_story', 'invited']);
+    expect(s.design_sizes.map((z) => z.key)).toEqual(['pinterest', 'fb_feed', 'fb_story', 'ig_feed', 'ig_story', 'tiktok']);
+    expect(s.design_values.fields.episode_event).toBe("EPISODE 01  •  WEARABLE EXPERIMENTS STUDIO SESSION / STUDIO BY SABLE'S STUDIO");
+    expect(s.design_values.photo_paths.shoes).toMatch(/^wardrobe\.columns\.\d\.image$/);
+
+    const one = `${sheetUrl(ids.ep)}/design/runway/ig_story`;
+    expect((await request(app).get(one)).status).toBe(401);
+    let res = await auth(request(app).get(one));
+    expect([res.status, res.body.code]).toEqual([409, 'SHEET_NOT_APPROVED']);
+    res = await auth(request(app).get(`${sheetUrl(ids.ep)}/design/poster/ig_story`));
+    expect([res.status, res.body.code]).toEqual([400, 'UNKNOWN_DESIGN']);
+    res = await auth(request(app).get(`${sheetUrl(ids.ep)}/design/runway/billboard`));
+    expect([res.status, res.body.code]).toEqual([400, 'UNKNOWN_SIZE']);
+    res = await auth(request(app).get(`${sheetUrl(ids.ep)}/designs-zip/pinterest`));
+    expect([res.status, res.body.code]).toEqual([409, 'SHEET_NOT_APPROVED']);
+
+    expect((await auth(request(app).post(`${sheetUrl(ids.ep)}/approve`))).status).toBe(200);
+    res = await bin(one);
+    expect([res.status, res.headers['content-type'], res.headers['content-disposition']])
+      .toEqual([200, 'image/png', 'attachment; filename="style-runway-episode-01-ig-story.png"']);
+    const meta = await sharp(res.body).metadata();
+    expect([meta.width, meta.height]).toEqual([1080, 1920]);
+
+    res = await bin(`${sheetUrl(ids.ep)}/designs-zip/pinterest`);
+    expect([res.status, res.headers['content-type']]).toEqual([200, 'application/zip']);
+    expect(res.headers['content-disposition']).toBe('attachment; filename="style-designs-episode-01-pinterest.zip"');
+    expect(zipNames(res.body)).toEqual(['episode-look', 'style-diary', 'runway', 'color-story', 'invited'].map((d) => `style-${d}-episode-01-pinterest.png`));
+    res = await bin(`${sheetUrl(ids.ep)}/designs-zip/all`);
+    expect(zipNames(res.body)).toHaveLength(30);
+  });
+
+  it('the Detail spot (the designs\' Detail shot) holds one photo and shows on the sheet', async () => {
+    const ids = await seedEpisodeOne();
+    const png = await sharp({ create: { width: 4, height: 4, channels: 3, background: { r: 9, g: 90, b: 9 } } }).png().toBuffer();
+    let res = await auth(request(app).post(`/api/v1/episodes/${ids.ep}/lookbook/images`)).field('category', 'detail').attach('files', png, { filename: 'd.png', contentType: 'image/png' });
+    expect(res.status).toBe(201);
+    res = await auth(request(app).post(`/api/v1/episodes/${ids.ep}/lookbook/images`)).field('category', 'detail')
+      .attach('files', png, { filename: 'a.png', contentType: 'image/png' }).attach('files', png, { filename: 'b.png', contentType: 'image/png' });
+    expect(res.status).toBe(400);
+    const s = (await auth(request(app).get(sheetUrl(ids.ep)))).body.data;
+    expect(s.look.detail).toMatch(/^data:image\//);
+    expect(s.design_values.photo_paths.detail).toBe('look.detail');
+    expect(s.readiness.total).toBe(12); // not one of the readiness items
+  });
+
   // The Files tab's Character poses (Evoni, 2026-10-22). Pose photos live in
   // S3; the test answers those reads with a small PNG.
   async function addPose(ep, character, pose, extra = {}) {

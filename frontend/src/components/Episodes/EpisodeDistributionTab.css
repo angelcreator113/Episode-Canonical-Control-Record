@@ -887,6 +887,10 @@
   background: var(--warning-bg); color: var(--warning-text); font-size: 13px;
 }
 .episode-distribution-tab .ssd-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.episode-distribution-tab .ssd-designs { display: flex; flex-direction: column; gap: 10px; }
+.episode-distribution-tab .ssd-designs-title { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.episode-distribution-tab .ssd-design { display: flex; flex-direction: column; gap: 6px; }
+.episode-distribution-tab .ssd-design-name { font-family: 'Lora', Georgia, serif; font-weight: 600; font-size: 14px; }
 .episode-distribution-tab .ssd-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 8px 14px;
   border: 1px solid var(--border-medium); border-radius: 8px; background: var(--surface-card); color: var(--text-primary);

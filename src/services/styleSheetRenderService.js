@@ -71,6 +71,10 @@ function registerFonts() {
   registerFont(path.join(fonts, 'stylesheet', 'DMSans-Medium.ttf'), { family: 'DM Sans', weight: '500' });
   registerFont(path.join(fonts, 'stylesheet', 'DMSans-Bold.ttf'), { family: 'DM Sans', weight: 'bold' });
   registerFont(path.join(fonts, 'stylesheet', 'GreatVibes-Regular.ttf'), { family: 'Great Vibes' });
+  // The five designs' headings (Georgia in Evoni's deck; Gelasio is its metric twin).
+  registerFont(path.join(fonts, 'stylesheet', 'Gelasio-Regular.ttf'), { family: 'Gelasio' });
+  registerFont(path.join(fonts, 'stylesheet', 'Gelasio-Bold.ttf'), { family: 'Gelasio', weight: 'bold' });
+  registerFont(path.join(fonts, 'stylesheet', 'Gelasio-Italic.ttf'), { family: 'Gelasio', style: 'italic' });
   fontsReady = true;
 }
 
@@ -485,4 +489,137 @@ async function renderExport(sheet, size) {
   return { buffer: out.toBuffer('image/png'), ...spec };
 }
 
-module.exports = { EXPORTS, renderSheetCanvas, renderExport, LOOK_STRIP };
+// ── The five designs (Evoni's Canva deck, 2026-10-22; styleSheetDesigns) ──
+
+const DESIGN_W = 960;
+const DESIGN_H = 1440;
+const DESIGN_GOLD = '#BE955B';
+const DESIGN_PLUM = '#5A3769';
+const DESIGN_DIAGONAL = '#E8B9CA';
+const PIECE_SPOTS = new Set(['body', 'shoes', 'bag', 'jewelry', 'hair', 'perfume', 'nails']);
+const PLACEHOLDER_ALPHA = 0.55;
+
+/** One line of design text, shrunk to its box's width (to 60% at most), or wrapped when it holds more lines. */
+function designText(ctx, el, words, { faint = false } = {}) {
+  const family = el.font === 'serif' ? 'Gelasio' : SANS;
+  const style = `${el.italic ? 'italic ' : ''}${el.bold ? 'bold ' : ''}`;
+  let size = el.size;
+  ctx.font = `${style}${size}px ${family}`;
+  const lineH = (s) => s * 1.25;
+  const maxLines = Math.max(1, Math.floor(el.h / lineH(el.size * 0.8)));
+  let lines = [words];
+  while (size > el.size * 0.6) {
+    ctx.font = `${style}${size}px ${family}`;
+    lines = maxLines > 1 ? wrap(ctx, words, el.w, maxLines) : [words];
+    if (lines.every((l) => ctx.measureText(l).width <= el.w) && lines.length * lineH(size) <= el.h + 1) break;
+    size -= 0.5;
+  }
+  ctx.fillStyle = el.color;
+  ctx.globalAlpha = faint ? PLACEHOLDER_ALPHA : 1;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = el.align;
+  const x = el.align === 'center' ? el.x + el.w / 2 : el.align === 'right' ? el.x + el.w : el.x;
+  const top = el.y + el.h / 2 - ((lines.length - 1) * lineH(size)) / 2;
+  lines.forEach((l, i) => ctx.fillText(l, x, top + i * lineH(size)));
+  ctx.globalAlpha = 1;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+}
+
+/**
+ * Draw one of the five designs at 960 x 1440 units (the caller scales).
+ * `placeholders` prints an empty field's deck words faintly (the Style
+ * Page's preview); a download leaves an empty field blank.
+ */
+async function drawDesign(ctx, design, sheet, { placeholders = false } = {}) {
+  const { designPhotos, designFields, designPalette } = require('./styleSheetDesigns');
+  const photos = designPhotos(sheet);
+  const fields = designFields(sheet);
+  const palette = designPalette(sheet);
+  const images = {};
+  await Promise.all(Object.entries(photos).map(async ([spot, src]) => { images[spot] = await loadImage(src); }));
+
+  ctx.fillStyle = design.background;
+  ctx.fillRect(0, 0, DESIGN_W, DESIGN_H);
+  for (const el of design.elements) {
+    if (el.kind === 'photo') {
+      const img = images[el.spot];
+      roundRect(ctx, el.x, el.y, el.w, el.h, el.radius);
+      ctx.fillStyle = el.fill;
+      ctx.fill();
+      if (img) {
+        const piece = PIECE_SPOTS.has(el.spot);
+        const inset = piece ? 8 : 0;
+        if (piece && SHEET_COLUMN_SLOT[el.spot]) paintBackdrop(ctx, SHEET_COLUMN_SLOT[el.spot], el.x, el.y, el.w, el.h, { radius: el.radius });
+        drawImageIn(ctx, img, el.x + inset, el.y + inset, el.w - 2 * inset, el.h - 2 * inset, { fit: piece ? 'contain' : 'cover', radius: piece ? 0 : el.radius });
+      } else {
+        // The deck's empty frame: a pink diagonal, ADD PHOTO and its caption.
+        ctx.strokeStyle = DESIGN_DIAGONAL;
+        ctx.lineWidth = 1.3;
+        ctx.beginPath();
+        ctx.moveTo(el.x + 17, el.y + 17);
+        ctx.lineTo(el.x + el.w - 17, el.y + el.h - 17);
+        ctx.stroke();
+        const cy = el.y + el.h / 2;
+        designText(ctx, { x: el.x + 8, y: cy - 23, w: el.w - 16, h: 24, size: 14.7, color: DESIGN_PLUM, font: 'sans', bold: true, align: 'center' }, 'ADD PHOTO');
+        designText(ctx, { x: el.x + 8, y: cy + 6, w: el.w - 16, h: 27, size: 13.3, color: DESIGN_PLUM, font: 'sans', align: 'center' }, el.label);
+      }
+      roundRect(ctx, el.x, el.y, el.w, el.h, el.radius);
+      ctx.lineWidth = 1.7;
+      ctx.strokeStyle = DESIGN_GOLD;
+      ctx.stroke();
+    } else if (el.kind === 'box') {
+      roundRect(ctx, el.x, el.y, el.w, el.h, el.radius);
+      ctx.fillStyle = el.fill || '#FFFFFF';
+      ctx.fill();
+      ctx.lineWidth = 1.7;
+      ctx.strokeStyle = el.stroke || DESIGN_GOLD;
+      ctx.stroke();
+    } else if (el.kind === 'swatch') {
+      ctx.beginPath();
+      ctx.arc(el.x + el.w / 2, el.y + el.h / 2, el.w / 2, 0, Math.PI * 2);
+      ctx.fillStyle = palette[el.index] || el.fill;
+      ctx.fill();
+      ctx.lineWidth = 1.7;
+      ctx.strokeStyle = DESIGN_GOLD;
+      ctx.stroke();
+    } else if (el.kind === 'rule') {
+      ctx.strokeStyle = el.color;
+      ctx.lineWidth = el.width;
+      ctx.beginPath();
+      ctx.moveTo(el.x, el.y);
+      ctx.lineTo(el.x + el.w, el.y + el.h);
+      ctx.stroke();
+    } else if (el.kind === 'text') {
+      const value = el.field ? fields[el.field] : el.text;
+      if (value) designText(ctx, el, value);
+      else if (placeholders && el.placeholder) designText(ctx, el, el.placeholder, { faint: true });
+    }
+  }
+}
+
+/** One design in one size: the whole design, centred, its background around it. */
+async function renderDesign(sheet, designKey, sizeKey, { preview = false } = {}) {
+  const { findDesign, SIZES, fitDesign } = require('./styleSheetDesigns');
+  const design = findDesign(designKey);
+  const size = SIZES[sizeKey];
+  if (!design) throw new Error(`Unknown design: ${designKey}`);
+  if (!size) throw new Error(`Unknown size: ${sizeKey}`);
+  registerFonts();
+  const { createCanvas } = require('canvas');
+  const k = preview ? 0.5 : 1;
+  const out = createCanvas(Math.round(size.width * k), Math.round(size.height * k));
+  const ctx = out.getContext('2d');
+  ctx.fillStyle = design.background;
+  ctx.fillRect(0, 0, out.width, out.height);
+  const fit = fitDesign(size);
+  ctx.save();
+  ctx.scale(k, k);
+  ctx.translate(fit.x, fit.y);
+  ctx.scale(fit.scale, fit.scale);
+  await drawDesign(ctx, design, sheet, { placeholders: preview });
+  ctx.restore();
+  return { buffer: out.toBuffer('image/png'), width: out.width, height: out.height, type: 'image/png', ext: 'png', label: `${design.name}, ${size.label}` };
+}
+
+module.exports = { EXPORTS, renderSheetCanvas, renderExport, LOOK_STRIP, drawDesign, renderDesign };

@@ -1,7 +1,7 @@
 // frontend/src/components/Episodes/StyleSheetDistributionCard.jsx
 import React, { useEffect, useState } from 'react';
 import { Copy, Download, Loader2, Lock, Trash2 } from 'lucide-react';
-import { downloadStyleSheetExport, styleSheetDistributionApi, styleSheetError } from '../../lib/styleSheetApi';
+import { downloadStyleDesign, downloadStyleSheetExport, styleSheetDistributionApi, styleSheetError } from '../../lib/styleSheetApi';
 
 /**
  * The approved style sheet in Distribution (Task #2878): every export size as
@@ -140,6 +140,29 @@ export default function StyleSheetDistributionCard({ episodeId, episodeNumber })
           </li>
         ))}
       </ul>
+
+      {(entry.designs || []).length > 0 && (
+        <div className="ssd-designs" data-testid="ssd-designs">
+          <p className="ssd-designs-title">Your {entry.designs.length} designs (the caption and Shop the Look links go with them)</p>
+          {entry.designs.map((d) => (
+            <div key={d.design} className="ssd-design">
+              <span className="ssd-design-name">{d.name}</span>
+              <ul className="ssd-items">
+                {d.sizes.map((z) => (
+                  <li key={z.size}>
+                    <button type="button" className="ssd-btn ssd-item" disabled={entry.out_of_date || working}
+                      onClick={() => act('download', () => downloadStyleDesign(episodeId, d.design, z.size), 'The export could not be made.')}
+                      data-testid={`ssd-design-${d.design}-${z.size}`}>
+                      <Download size={16} aria-hidden="true" />
+                      <span className="ssd-item-text"><span>{z.label}</span><span className="ssd-item-detail">{z.width} × {z.height}</span></span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
 
       {entry.disclosure && (
         <p className="ssd-disclosure" data-testid="ssd-disclosure">
