@@ -1948,7 +1948,8 @@ export default function YouTubeThumbnailStudio() {
                 onCopy={copyPicked} />
               <ThumbnailCanvas spec={spec} selectedId={selectedId} selectedIds={pickedIds} onSelect={select} onSelectMany={selectMany}
                 fontsTick={fontsTick} onChange={(id, patch) => edit((s) => updateLayer(s, id, patch))} onChangeMany={editMany} onSnapshot={setSnapshot} zoom={zoom}
-                grid={marks.grid} safeZones={marks.safe} />
+                grid={marks.grid} safeZones={marks.safe}
+                onZoom={(z) => setZoom(Math.min(ZOOM_MAX, Math.max(1, Math.round(z * 4) / 4)))} />
               <div className="yts-note-row">
                 {keep.state !== 'idle' && (
                   <span className={`yts-keep is-${keep.state}`} data-testid="yts-keep" aria-live="polite">

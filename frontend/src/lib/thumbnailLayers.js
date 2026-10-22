@@ -539,6 +539,21 @@ export const addPieceCard = (spec, url, name) => {
  * offset (the box's centre here), so its position is the centre; scale is
  * folded back into the size.
  */
+// Two fingers on the phone canvas (Evoni, 2026-10-22): how far apart they
+// are and the angle between them; then, against where they started, how much
+// bigger and how far turned.
+export function pinchGesture([p, q]) {
+  return { d: Math.hypot(q.x - p.x, q.y - p.y), a: (Math.atan2(q.y - p.y, q.x - p.x) * 180) / Math.PI };
+}
+
+export function pinchDelta(start, now) {
+  const k = start.d > 0 ? now.d / start.d : 1;
+  let turn = now.a - start.a;
+  if (turn > 180) turn -= 360;
+  if (turn < -180) turn += 360;
+  return { k: Math.min(10, Math.max(0.1, k)), turn };
+}
+
 export function boxFromNode({ x, y, scaleX = 1, scaleY = 1, rotation = 0 }, layer) {
   const w = Math.max(10, Math.round(layer.w * Math.abs(scaleX)));
   const h = Math.max(10, Math.round(layer.h * Math.abs(scaleY)));
