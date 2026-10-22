@@ -88,6 +88,8 @@ module.exports = {
             'script_content',
             // The board's Script step needs the approved beats (2026-10-19).
             'script_locked_beats',
+            // The board's card shows the saved thumbnail (2026-10-22).
+            'thumbnail_url',
             'created_at',
             'updated_at',
           ],
@@ -110,7 +112,7 @@ module.exports = {
           attributes: [
             'id', 'episode_number', 'season_number', 'title', 'description',
             'air_date', 'status', 'categories', 'show_id',
-            'evaluation_json', 'evaluation_status', 'script_content', 'script_locked_beats',
+            'evaluation_json', 'evaluation_status', 'script_content', 'script_locked_beats', 'thumbnail_url',
             'created_at', 'updated_at',
           ],
         }));

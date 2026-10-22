@@ -15,7 +15,11 @@ const made = new Map(); // `${w}|${url}` -> Promise<string>
 /** The preview width for a picture shown `points` wide: twice that (sharp screens), rounded up to 400, 800 or 1600. */
 export const previewWidth = (points) => WIDTHS.find((w) => w >= points * 2) || WIDTHS[WIDTHS.length - 1];
 
-const ours = (url) => /^https:\/\/[a-z0-9.-]+\.s3([.-][a-z0-9-]+)?\.amazonaws\.com\//i.test(String(url || ''));
+// Every https picture goes through the server's copy (the server says which
+// are ours: S3 and the CloudFront domain). The copy is same-site, so the
+// editor can read its pixels: a CloudFront original would block the
+// effects and the snapshot (audit, 2026-10-22).
+const ours = (url) => /^https:\/\//i.test(String(url || ''));
 
 /** A local address for a copy at least `pixels` wide (400, 800 or 1600), or the original address when there is none. */
 export function previewUrl(url, pixels = 800) {

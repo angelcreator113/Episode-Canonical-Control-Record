@@ -163,6 +163,30 @@ export function episodeContent(src) {
  * fail on a database built from the migrations.
  */
 /** Hands a blob to the browser as a download named name. */
+/**
+ * Keeps an arrangement as the page closes or reloads (audit, 2026-10-22:
+ * the last change was lost). A keepalive request goes on after the page is
+ * gone; its body is limited to 64 KB, so a bigger one is left (the change
+ * before it was kept). Signed in as the api module signs requests.
+ */
+export function saveDraftOnLeave(episodeId, spec) {
+  try {
+    const body = JSON.stringify(spec);
+    if (!episodeId || body.length > 60000 || typeof fetch !== 'function') return false;
+    const token = window.localStorage.getItem('authToken') || window.localStorage.getItem('token');
+    fetch(`${api.defaults?.baseURL || ''}${base}/episodes/${episodeId}/draft`, {
+      method: 'PUT',
+      keepalive: true,
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body,
+    }).catch((err) => console.error('[youtubeThumbnailsApi] arrangement not kept on leaving:', err));
+    return true;
+  } catch (err) {
+    console.error('[youtubeThumbnailsApi] arrangement not kept on leaving:', err);
+    return false;
+  }
+}
+
 export function downloadBlob(blob, name) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
