@@ -8,8 +8,10 @@
  *                                        and the pictures to choose from
  *   POST /render                         the file as it would be saved (no saving): PNG, or JPEG over 2 MB
  *   POST /render/small                   the same layers drawn small (JPEG, 640 wide), for the season grid
+ *   POST /render/zip                     several { name, spec } drawn full size as saved, in one zip (at most 60)
  *   POST /episodes/:episodeId            render and save as the episode's primary thumbnail
  *   PUT  /shows/:showId/style            save the show's style for every episode
+ *   PUT  /shows/:showId/brand            the show's brand kit: { colours, fonts, stickers }, offered first
  *   GET  /templates                      every show's named templates, with their pictures (the Templates page)
  *   GET  /shows/:showId/season           the show's episodes, each with its thumbnail (or none) and whether it has its own arrangement
  *   GET  /shows/:showId/templates        the show's named templates, the default first
@@ -146,6 +148,15 @@ router.post('/episodes/:episodeId', requireAuth, async (req, res) => {
     return res.status(201).json({ success: true, data: saved });
   } catch (err) {
     return sendError(res, err, 'save');
+  }
+});
+
+// The show's brand kit (Evoni, 2026-10-22): its colours, fonts and stickers, offered first.
+router.put('/shows/:showId/brand', requireAuth, async (req, res) => {
+  try {
+    return res.json({ success: true, data: await yt.saveBrand(models.sequelize, req.params.showId, readBody(req)) });
+  } catch (err) {
+    return sendError(res, err, 'brand');
   }
 });
 

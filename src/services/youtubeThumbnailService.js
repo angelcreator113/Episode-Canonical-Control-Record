@@ -59,6 +59,22 @@ function readStyle(raw = {}) {
   };
 }
 
+// A show's brand kit (Evoni, 2026-10-22): its own colours, fonts and stickers,
+// offered first in the Studio. Kept beside the style, in the show's metadata.
+const BRAND_COLOURS_MAX = 8;
+const uniq = (xs) => [...new Set(xs)];
+
+/** A brand kit, read and checked: up to eight colours (#RRGGBB), known fonts and stickers. */
+function readBrand(raw) {
+  const b = raw && typeof raw === 'object' ? raw : {};
+  const list = (v) => (Array.isArray(v) ? v : []);
+  return {
+    colours: uniq(list(b.colours).filter((c) => typeof c === 'string' && HEX.test(c)).map((c) => c.toUpperCase())).slice(0, BRAND_COLOURS_MAX),
+    fonts: uniq(list(b.fonts).filter((f) => typeof f === 'string' && Object.prototype.hasOwnProperty.call(layers.FONTS, f))),
+    stickers: uniq(list(b.stickers).filter((k) => typeof k === 'string' && layers.SHAPES.includes(k))),
+  };
+}
+
 /** Only https images in S3 (or the CloudFront domain) are fetched. */
 function allowedImageUrl(url) {
   let u;
@@ -163,7 +179,7 @@ async function sources(sequelize, episodeId) {
   return {
     episode: { id: episode.id, title: episode.title, episode_number: episode.episode_number },
     show: show ? { id: show.id, name: show.name } : null,
-    style: readStyle(show?.metadata?.youtube_thumbnail),
+    style: { ...readStyle(show?.metadata?.youtube_thumbnail), brand: readBrand(show?.metadata?.youtube_thumbnail?.brand) },
     backgrounds,
     cutouts: (cutouts || []).filter((c) => allowedImageUrl(c.url)).map((c) => ({ id: c.id, url: c.url, label: c.name })),
     poses,
@@ -398,6 +414,18 @@ async function saveStyle(sequelize, showId, body = {}) {
     { replacements: { showId, style: JSON.stringify(style) } });
   if (!(rows || []).length) throw new ThumbnailError(404, 'Show not found');
   return style;
+}
+
+/** Keeps the show's brand kit, leaving the rest of its style as it is. */
+async function saveBrand(sequelize, showId, body = {}) {
+  const brand = readBrand(body);
+  const [rows] = await sequelize.query(
+    `UPDATE shows SET metadata = jsonb_set(COALESCE(metadata::jsonb, '{}'::jsonb), '{youtube_thumbnail}',
+        COALESCE(metadata::jsonb -> 'youtube_thumbnail', '{}'::jsonb) || jsonb_build_object('brand', CAST(:brand AS jsonb)), true), updated_at = NOW()
+      WHERE id = :showId AND deleted_at IS NULL RETURNING id`,
+    { replacements: { showId, brand: JSON.stringify(brand) } });
+  if (!(rows || []).length) throw new ThumbnailError(404, 'Show not found');
+  return brand;
 }
 
 // ── A show's named templates (Evoni, 2026-10-21: several per show, each
@@ -1139,6 +1167,9 @@ async function zipThumbnails(items, out) {
 }
 
 module.exports = {
+  readBrand,
+  saveBrand,
+  BRAND_COLOURS_MAX,
   zipItems,
   zipThumbnails,
   ZIP_MAX,
