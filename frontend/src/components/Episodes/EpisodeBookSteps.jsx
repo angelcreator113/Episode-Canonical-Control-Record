@@ -1,27 +1,35 @@
 /**
- * EpisodeBookSteps — the book follows the show, for one episode, on its
- * Results › Story tab (Evoni, 2026-10-19: "This week's episode should be a
- * tab under results... Story"). It was the /this-week page; that route now
- * only opens the episode that still owes something here (pages/ThisWeekPage).
+ * EpisodeBookSteps — the story path for one episode, on its Results › Story
+ * tab (Evoni, 2026-10-19: "This week's episode should be a tab under
+ * results... Story"). It was the /this-week page; that route now only opens
+ * the episode that still owes something here (pages/ThisWeekPage).
  *
- * The book follows the show (Evoni, 2026-10-15; docs/CANON.md). Each episode
- * is told three ways after the episode itself:
- *   1. the short story   the event in full (written here, read on Stories)
- *   2. the beat 11 piece the short story's animated moment at beat 11
- *   3. the chapter       everything the viewer does not see, in JustAWoman's
+ * The book follows the show (Evoni, 2026-10-15; docs/CANON.md). One path, in
+ * the order the work happens (Evoni, 2026-10-22 layout list):
+ *   1. the story record  what the audience saw (EpisodeStoryRecord), approved
+ *   2. the short story   the event in full (written here, read on Stories);
+ *                        written in this one place only
+ *   3. the canon check   what the story adds, accepted or dismissed
+ *                        (EpisodeStoryCanon)
+ *   4. the beat 11 piece the short story's animated moment at beat 11
+ *   5. the chapter       everything the viewer does not see, in JustAWoman's
  *                        point of view (started here, written in Write Mode)
- * Below, "Plan the next chapters" plans the book from the episodes that still
- * owe a chapter (it replaces the Story Engine's fixed 50-chapter plan): a
- * preview to edit, then added to the book. It plans across episodes, so it
- * is the same on every episode's Story tab.
+ * Each step says done or to do; the first open one is the next, and its
+ * button is the only highlighted one. A done step folds to its title.
+ * children (the Story tab's other formats) sit under the path; below them,
+ * folded, "Plan the next chapters" plans the book from the episodes that
+ * still owe a chapter (it replaces the Story Engine's fixed 50-chapter plan).
+ * It plans across episodes, so it is the same on every episode's Story tab.
  *
- * APIs: /api/v1/book-from-show (ledger, chapter's episode), the show's
- * generate-story, and the storyteller books and chapters.
+ * APIs: /api/v1/book-from-show (ledger, record, canon, chapter's episode),
+ * the show's generate-story, and the storyteller books and chapters.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import Beat11Piece from '../Beat11Piece';
+import EpisodeStoryRecord from './EpisodeStoryRecord';
+import EpisodeStoryCanon from './EpisodeStoryCanon';
 import './EpisodeBookSteps.css';
 
 const BOOK_KEY = 'this-week-book';
@@ -96,8 +104,11 @@ export function useBookLedger(showId) {
   return { books, bookId, setBookId, ledger, loadLedger, error, setError };
 }
 
-/** Plan the next chapters from the episodes (book-from-show plan, then apply). */
-export function PlanChapters({ bookId, showId, onApplied }) {
+/**
+ * Plan the next chapters from the episodes (book-from-show plan, then apply).
+ * `folded`: inside the Story tab's closed section, which carries the title.
+ */
+export function PlanChapters({ bookId, showId, onApplied, folded = false }) {
   const [count, setCount] = useState(4);
   const [plan, setPlan] = useState(null);
   const [picked, setPicked] = useState(new Set());
@@ -139,8 +150,8 @@ export function PlanChapters({ bookId, showId, onApplied }) {
   };
 
   return (
-    <section className="tw-plan" aria-labelledby="tw-plan-h">
-      <h2 id="tw-plan-h" className="tw-plan-h">Plan the next chapters</h2>
+    <section className={`tw-plan${folded ? ' is-folded' : ''}`} {...(folded ? { 'aria-label': 'Plan the next chapters' } : { 'aria-labelledby': 'tw-plan-h' })}>
+      {!folded && <h2 id="tw-plan-h" className="tw-plan-h">Plan the next chapters</h2>}
       <p className="tw-note">From the episodes that still owe a chapter: what the viewer does not see, in JustAWoman's point of view. Edit it, then add it to the book. An existing chapter only gets its empty plan fields filled.</p>
       <div className="tw-actions">
         <label className="tw-inline">
@@ -180,40 +191,83 @@ export function PlanChapters({ bookId, showId, onApplied }) {
   );
 }
 
-function Step({ n, title, done, children }) {
+/** A small "?" that opens the longer explanation (Evoni, 2026-10-22: shorter text). */
+export function Why({ id, label = 'What this is', children }) {
+  const [open, setOpen] = useState(false);
   return (
-    <li className={`tw-step${done ? ' is-done' : ''}`}>
+    <>
+      <button type="button" className="tw-why" aria-expanded={open} aria-controls={id} aria-label={label} onClick={() => setOpen((o) => !o)}>?</button>
+      <p id={id} className="tw-why-text" hidden={!open}>{children}</p>
+    </>
+  );
+}
+
+function Step({ n, id, title, line, help, done, next, state, children }) {
+  const [open, setOpen] = useState(!done);
+  // A step that becomes done folds; one that opens again unfolds.
+  useEffect(() => { setOpen(!done); }, [done]);
+  const helpId = `tw-help-${id}`;
+  const bodyId = `tw-body-${id}`;
+  const [why, setWhy] = useState(false);
+  return (
+    <li className={`tw-step${done ? ' is-done' : ''}${next ? ' is-next' : ''}`} data-testid={`tw-step-${id}`}>
       <div className="tw-step-head">
         <span className="tw-step-n" aria-hidden="true">{done ? '✓' : n}</span>
         <h3 className="tw-step-title">{title}</h3>
-        <span className="tw-step-state">{done ? 'Done' : 'To do'}</span>
+        <span className="tw-step-state">{state || (done ? 'Done' : next ? 'Next' : 'To do')}</span>
+        {help && <button type="button" className="tw-why" aria-expanded={why} aria-controls={helpId} aria-label={`What ${title.toLowerCase()} is`} onClick={() => setWhy((o) => !o)}>?</button>}
+        {done && (
+          <button type="button" className="tw-fold" aria-expanded={open} aria-controls={bodyId} onClick={() => setOpen((o) => !o)}>{open ? 'Close' : 'Open'}</button>
+        )}
       </div>
-      <div className="tw-step-body">{children}</div>
+      {help && <p id={helpId} className="tw-why-text" hidden={!why}>{help}</p>}
+      {/* Folded, not unmounted: the record and canon steps keep reporting. */}
+      <div id={bodyId} className="tw-step-body" hidden={!open}>
+        {line && <p className="tw-note">{line}</p>}
+        {children}
+      </div>
     </li>
   );
 }
 
+const ORDER = ['record', 'story', 'canon', 'beat11', 'chapter'];
+
 /**
- * The episode's place in the book. refreshKey reloads the ledger (the Story
- * tab bumps it when a format card writes the short story); onStoryWritten
- * tells the tab when this block wrote it.
+ * The episode's story path. children render under the path, above the
+ * folded plan.
  */
-export default function EpisodeBookSteps({ episode, refreshKey = 0, onStoryWritten }) {
+export default function EpisodeBookSteps({ episode, children }) {
   const navigate = useNavigate();
   const showId = episode?.show_id || episode?.showId || null;
+  const episodeId = episode?.id || null;
   const { books, bookId, setBookId, ledger, loadLedger, error, setError } = useBookLedger(showId);
   const [busy, setBusy] = useState(null);     // 'story' | 'chapter'
+  const [record, setRecord] = useState(null); // null | 'draft' | 'approved'
+  const [canon, setCanon] = useState(null);   // { stories, pending }
+  const [canonKey, setCanonKey] = useState(0);
 
-  useEffect(() => { if (refreshKey) loadLedger(); }, [refreshKey, loadLedger]);
-
-  const ep = useMemo(() => (ledger?.episodes || []).find((e) => e.id === episode?.id) || null, [ledger, episode?.id]);
+  const ep = useMemo(() => (ledger?.episodes || []).find((e) => e.id === episodeId) || null, [ledger, episodeId]);
+  // The short story: the book's, else the newest one canon approval lists
+  // (an episode with no book still has its stories).
+  const stories = canon?.stories || [];
+  const storyId = ep?.short_story?.id || stories[stories.length - 1]?.id || null;
+  const unchecked = stories.filter((s) => !s.reviewed_at).length;
+  const done = {
+    record: record === 'approved',
+    story: !!storyId,
+    canon: stories.length > 0 && unchecked === 0 && !canon?.pending,
+    beat11: !!ep?.short_story?.has_beat11,
+    chapter: !!ep?.chapter?.written,
+  };
+  const next = ORDER.find((k) => !done[k]) || null;
+  const primary = (key) => `tw-btn${next === key ? ' is-primary' : ''}`;
 
   const writeStory = async () => {
     setBusy('story'); setError(null);
     try {
-      await writeShortStoryApi(showId, ep.id);
+      await writeShortStoryApi(showId, episodeId);
       await loadLedger();
-      onStoryWritten?.();
+      setCanonKey((n) => n + 1);
     } catch (err) {
       console.error('[EpisodeBookSteps] short story not written:', err);
       setError(errorOf(err, 'The short story was not written. Try again.'));
@@ -236,16 +290,15 @@ export default function EpisodeBookSteps({ episode, refreshKey = 0, onStoryWritt
     }
   };
 
-  if (!showId) return null;
+  if (!showId || !episodeId) return null;
+
+  const owed = ledger?.owed && (
+    `The book owes ${ledger.owed.short_stories} short ${ledger.owed.short_stories === 1 ? 'story' : 'stories'}, ${ledger.owed.beat11} beat 11 ${ledger.owed.beat11 === 1 ? 'piece' : 'pieces'} and ${ledger.owed.chapters} ${ledger.owed.chapters === 1 ? 'chapter' : 'chapters'}.`
+    + (ledger.transfer ? ` The consciousness transfer is in Episode ${ledger.transfer.episode_number}.` : ' The consciousness transfer is not placed yet.')
+  );
 
   return (
-    <section className="tw-book" aria-labelledby="tw-book-h" data-testid="episode-book-steps">
-      <h2 id="tw-book-h" className="tw-book-h">The book follows the show</h2>
-      <p className="tw-note">
-        The episode is what the viewer sees, the short story is the event in full,
-        and the chapter is everything the viewer does not see, in JustAWoman's point of view.
-      </p>
-
+    <section className="tw-book" aria-label="The story path" data-testid="episode-book-steps">
       {books && books.length > 1 && (
         <div className="tw-pickers">
           <label className="tw-field">
@@ -258,50 +311,80 @@ export default function EpisodeBookSteps({ episode, refreshKey = 0, onStoryWritt
       )}
 
       {error && <p className="tw-error" role="alert">{error}</p>}
-      {books === null && !error && <p className="tw-note">Loading…</p>}
-      {books && books.length === 0 && !error && <p className="tw-note">No book yet. Make one in the Universe, then come back.</p>}
-      {ledger && !ep && <p className="tw-note">This episode is not in the book's list of episodes yet.</p>}
 
-      {ep && (
-        <ol className="tw-steps" aria-label={`Episode ${ep.episode_number ?? ''} in the book`}>
-          <Step n={1} title="The short story" done={!!ep.short_story}>
-            <p className="tw-note">The event in full.{ep.short_story ? ` ${ep.short_story.word_count || 0} words, ${ep.short_story.status}.` : ''}</p>
-            <div className="tw-actions">
-              {ep.short_story
-                ? <Link className="tw-btn" to="/stories">Read it on Stories</Link>
-                : <button type="button" className="tw-btn is-primary" disabled={!!busy} onClick={writeStory}>{busy === 'story' ? 'Writing…' : 'Write the short story'}</button>}
-            </div>
-          </Step>
+      <ol className="tw-steps" aria-label="From the episode to the book">
+        <Step
+          n={1} id="record" title="The story record" done={done.record} next={next === 'record'}
+          state={record === 'draft' ? 'Draft' : null}
+          line="What the audience saw. Approve it and the writers read it."
+          help="What happened, what each person knew and learned, the secrets hinted at, and what is left open. Once you approve it, the short story and the chapter writers read it, and its secrets move on with the audience."
+        >
+          <EpisodeStoryRecord episodeId={episodeId} embedded onStatus={setRecord} />
+        </Step>
 
-          <Step n={2} title="The beat 11 piece" done={!!ep.short_story?.has_beat11}>
-            <p className="tw-note">The animated moment at beat 11 that makes viewers ask what happened at the event. It shows on the Scene Planner's beat 11.</p>
-            {ep.short_story
-              ? <Beat11Piece storyId={ep.short_story.id} key={ep.short_story.id} />
-              : <p className="tw-note">Write the short story first.</p>}
-            <div className="tw-actions">
-              <Link className="tw-btn" to={`/episodes/${ep.id}/plan`}>Scene Planner</Link>
-            </div>
-          </Step>
+        <Step
+          n={2} id="story" title="The short story" done={done.story} next={next === 'story'}
+          line={`The event in full.${ep?.short_story ? ` ${ep.short_story.word_count || 0} words, ${ep.short_story.status}.` : ''}`}
+          help="Two to three thousand words, from the episode's script and result, and its story record once approved. It goes to the Stories Library."
+        >
+          <div className="tw-actions">
+            {storyId
+              ? <Link className="tw-btn" to="/stories">Read it on Stories</Link>
+              : <button type="button" className={primary('story')} disabled={!!busy} onClick={writeStory}>{busy === 'story' ? 'Writing…' : 'Write the short story'}</button>}
+          </div>
+        </Step>
 
-          <Step n={3} title="The chapter" done={!!ep.chapter?.written}>
-            <p className="tw-note">Everything the viewer does not see, in JustAWoman's point of view.{ep.chapter ? ` "${ep.chapter.title || 'Untitled'}"${ep.chapter.written ? '' : ', not written yet'}.` : ''}</p>
+        <Step
+          n={3} id="canon" title="The canon check" done={done.canon} next={next === 'canon'}
+          state={canon?.pending > 0 ? `${canon.pending} to decide` : unchecked > 0 ? 'To check' : null}
+          line="Accept what the story adds that is true; dismiss the rest."
+          help="A short story may go beneath the episode, never against it. What it adds is proposed here, not canon: accept what is true and the chapter writer builds on it; dismiss the rest and it is kept out."
+        >
+          {!storyId && <p className="tw-note">Write the short story first.</p>}
+          <EpisodeStoryCanon episodeId={episodeId} refreshKey={canonKey} embedded onStatus={setCanon} />
+        </Step>
+
+        <Step
+          n={4} id="beat11" title="The beat 11 piece" done={done.beat11} next={next === 'beat11'}
+          line="The animated moment at beat 11."
+          help="The moment that makes viewers ask what happened at the event. It shows on the Scene Planner's beat 11."
+        >
+          {storyId
+            ? <Beat11Piece storyId={storyId} key={storyId} embedded onChange={loadLedger} />
+            : <p className="tw-note">Write the short story first.</p>}
+          <div className="tw-actions">
+            <Link className="tw-btn" to={`/episodes/${episodeId}/plan`}>Scene Planner</Link>
+          </div>
+        </Step>
+
+        <Step
+          n={5} id="chapter" title="The chapter" done={done.chapter} next={next === 'chapter'}
+          line={`Everything the viewer does not see, in JustAWoman's point of view.${ep?.chapter ? ` "${ep.chapter.title || 'Untitled'}"${ep.chapter.written ? '' : ', not written yet'}.` : ''}`}
+          help={'The episode is what the viewer sees, the short story is the event in full, and the chapter is everything the viewer does not see. In Write Mode, "From the show" › "Write this chapter from the episode" drafts it.'}
+        >
+          {books === null && !error && <p className="tw-note">Loading…</p>}
+          {books && books.length === 0 && !error && <p className="tw-note">No book yet. Make one in the Universe, then come back.</p>}
+          {ledger && !ep && <p className="tw-note">This episode is not in the book's list of episodes yet.</p>}
+          {ep && (
             <div className="tw-actions">
               {ep.chapter
-                ? <Link className="tw-btn is-primary" to={`/chapter/${bookId}/${ep.chapter.id}`}>Open in Write Mode</Link>
-                : <button type="button" className="tw-btn is-primary" disabled={!!busy || !bookId} onClick={startChapter}>{busy === 'chapter' ? 'Starting…' : 'Start the chapter'}</button>}
+                ? <Link className={primary('chapter')} to={`/chapter/${bookId}/${ep.chapter.id}`}>Open in Write Mode</Link>
+                : <button type="button" className={primary('chapter')} disabled={!!busy || !bookId} onClick={startChapter}>{busy === 'chapter' ? 'Starting…' : 'Start the chapter'}</button>}
             </div>
-            {ep.chapter && !ep.chapter.written && <p className="tw-note">In Write Mode, "From the show" › "Write this chapter from the episode" drafts it.</p>}
-          </Step>
-        </ol>
-      )}
+          )}
+        </Step>
+      </ol>
 
-      {ledger && bookId && <PlanChapters bookId={bookId} showId={showId} onApplied={loadLedger} />}
+      {children}
 
-      {ledger?.owed && (
-        <p className="tw-owed">
-          The book owes {ledger.owed.short_stories} short {ledger.owed.short_stories === 1 ? 'story' : 'stories'}, {ledger.owed.beat11} beat 11 {ledger.owed.beat11 === 1 ? 'piece' : 'pieces'} and {ledger.owed.chapters} {ledger.owed.chapters === 1 ? 'chapter' : 'chapters'}.
-          {ledger.transfer ? ` The consciousness transfer is in Episode ${ledger.transfer.episode_number}.` : ' The consciousness transfer is not placed yet.'}
-        </p>
+      {ledger && bookId && (
+        <details className="tw-plan-fold" data-testid="tw-plan-fold">
+          <summary>
+            <span className="tw-plan-h">Plan the next chapters</span>
+            {owed && <span className="tw-owed">{owed}</span>}
+          </summary>
+          <PlanChapters bookId={bookId} showId={showId} onApplied={loadLedger} folded />
+        </details>
       )}
     </section>
   );

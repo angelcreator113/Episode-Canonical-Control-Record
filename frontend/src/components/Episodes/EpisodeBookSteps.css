@@ -1,9 +1,9 @@
 /* EpisodeBookSteps — the book follows the show, on an episode's Results › Story (components/Episodes/EpisodeBookSteps.jsx); pages/ThisWeekPage only redirects there. */
 .tw-page { max-width: 860px; margin: 0 auto; padding: 24px 16px 48px; color: var(--text-primary); }
 .tw-head { margin-bottom: 16px; }
-.tw-book { margin-top: 20px; padding: 18px 16px; border: 1px solid var(--lala-parchment-3); border-radius: 14px; background: var(--surface-card); color: var(--text-primary); display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+/* Results › Story: the path is the page (Evoni, 2026-10-22 layout list), so no card around it. */
+.tw-book { color: var(--text-primary); display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .tw-book-h { margin: 0; font-family: 'Lora', Georgia, serif; font-size: 20px; font-weight: 600; }
-.tw-book .tw-step { background: var(--lala-parchment); }
 .tw-book .tw-pickers { margin-bottom: 0; }
 .tw-h1 { margin: 0 0 6px; font-family: 'Lora', Georgia, serif; font-size: 26px; font-weight: 600; }
 .tw-note { margin: 0; font-size: 14px; line-height: 1.55; color: var(--text-secondary); }
@@ -14,12 +14,32 @@
 .tw-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 .tw-step { border: 1px solid var(--lala-parchment-3); border-radius: 12px; background: var(--surface-card); padding: 14px 16px; }
 .tw-step.is-done { border-color: var(--success-text); }
-.tw-step-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.tw-step-head { display: flex; align-items: center; gap: 10px; }
 .tw-step-n { flex: none; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--lala-gold-soft); color: var(--lala-gold-text); font-family: 'DM Mono', monospace; font-weight: 700; }
 .tw-step.is-done .tw-step-n { background: var(--success-bg); color: var(--success-text); }
 .tw-step-title { flex: 1; min-width: 0; margin: 0; font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
 .tw-step-state { flex: none; font-family: 'DM Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
-.tw-step-body { display: flex; flex-direction: column; gap: 10px; }
+.tw-step-body { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.tw-step-body[hidden] { display: none; }
+/* The next step is the one to do now: the only highlighted one. */
+.tw-step.is-next { border-color: var(--lala-gold); box-shadow: 0 0 0 1px var(--lala-gold); }
+.tw-step.is-next .tw-step-state { color: var(--lala-gold-text); font-weight: 700; }
+.tw-step.is-done .tw-step-state { color: var(--success-text); }
+/* The "?" that opens the longer explanation, and a done step's Open/Close. */
+.tw-why { flex: none; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--text-secondary); font-size: 13px; font-weight: 700; cursor: pointer; }
+.tw-why[aria-expanded="true"] { border-color: var(--lala-gold); color: var(--lala-gold-text); }
+.tw-why-text { margin: 8px 0 0; flex-basis: 100%; order: 10; font-size: 13px; line-height: 1.55; color: var(--text-secondary); }
+.tw-fold { flex: none; min-height: 32px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--text-primary); font-size: 13px; cursor: pointer; }
+/* Plan the next chapters: for the whole book, so closed at the bottom. */
+.tw-plan-fold { border: 1px solid var(--lala-parchment-3); border-radius: 12px; background: var(--surface-card); padding: 12px 16px; }
+.tw-plan-fold > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; min-height: 32px; cursor: pointer; }
+.tw-plan-fold > summary .tw-plan-h { font-size: 17px; }
+.tw-plan-fold > summary { list-style: none; position: relative; padding-right: 76px; }
+.tw-plan-fold > summary::-webkit-details-marker { display: none; }
+.tw-plan-fold > summary::after { content: 'Open'; position: absolute; right: 0; top: 0; padding: 4px 12px; border: 1px solid var(--lala-parchment-3); border-radius: 999px; font-size: 13px; color: var(--text-primary); }
+.tw-plan-fold[open] > summary::after { content: 'Close'; }
+.tw-plan-fold > summary .tw-owed { margin: 0; }
+.tw-plan.is-folded { margin-top: 12px; padding-top: 12px; }
 .tw-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .tw-btn { display: inline-flex; align-items: center; min-height: 40px; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--text-primary); font-size: 14px; text-decoration: none; cursor: pointer; }
 .tw-btn.is-primary { border-color: var(--lala-gold); background: var(--lala-gold-soft); color: var(--lala-gold-text); font-weight: 600; }
@@ -28,6 +48,8 @@
 @media (max-width: 480px) {
   .tw-h1 { font-size: 22px; }
   .tw-step { padding: 12px; }
+  .tw-step-head { flex-wrap: wrap; gap: 8px; }
+  .tw-plan-fold { padding: 12px; }
   .tw-btn { flex: 1 1 100%; justify-content: center; }
 }
 .tw-plan { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--lala-parchment-3); display: flex; flex-direction: column; gap: 10px; }
