@@ -10,8 +10,8 @@
  * (episode_thumbnail_drafts). Pictures come from S3 only (allowedImageUrl);
  * a Studio upload is kept in S3 first.
  *
- * Saving makes it the episode's primary thumbnail (thumbnails table) and
- * episodes.thumbnail_url; the one before it stays, as a cover. This page is
+ * Saving makes it the episode's current thumbnail (episode_saved_thumbnails)
+ * and episodes.thumbnail_url; the one before it stays in the list. This page is
  * the one place an episode's thumbnail is edited (Evoni, 2026-10-20), so the
  * saved ones are listed here too: make one the episode's thumbnail again, or
  * delete one that is not.
@@ -829,33 +829,52 @@ async function forYouTube(png) {
   return { buffer: jpeg, type: 'jpeg', mime: 'image/jpeg', ext: 'jpg', bytes: jpeg.length, pngBytes: png.length };
 }
 
+// ── Saved thumbnails (episode_saved_thumbnails) ────────────────────────────
+// Production's `thumbnails` table is an older one than its migration makes
+// (snake_case columns, an integer episode_id that cannot hold an episode's
+// UUID; Evoni, 2026-10-22: "column "s3Bucket" does not exist"), so the
+// Studio keeps its saved thumbnails in a table of its own. Until that table
+// exists, a save still sets episodes.thumbnail_url and the list is empty.
+
+const savedReady = async (sequelize, transaction) => {
+  const [[reg]] = await sequelize.query("SELECT to_regclass('public.episode_saved_thumbnails') AS reg", { transaction });
+  return Boolean(reg && reg.reg);
+};
+
+const requireSaved = async (sequelize) => {
+  if (!await savedReady(sequelize)) {
+    throw new ThumbnailError(503, 'Saved thumbnails need the latest database update (episode_saved_thumbnails)');
+  }
+};
+
 /**
  * Uploads the thumbnail (as forYouTube gives it: under 2 MB) and makes it
- * the episode's primary thumbnail; the one before it becomes a cover.
- * Returns { id, url, key, type, bytes }.
+ * the episode's current thumbnail; the one before it stays in the list.
+ * Returns { id, url, key, type, bytes } (id null before the table exists).
  */
 async function saveAsPrimary(sequelize, episodeId, png) {
   const file = await forYouTube(png);
   const key = `episodes/${episodeId}/thumbnails/youtube-${Date.now()}.${file.ext}`;
   await getS3().send(new PutObjectCommand({ Bucket: requireAssetBucket(), Key: key, Body: file.buffer, ContentType: file.mime }));
   const url = `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`;
-  // Only the columns the thumbnails migration creates (isPrimary and the
-  // publish columns are model-only; scripts/schema-agreement-step2.baseline).
   const row = await sequelize.transaction(async (transaction) => {
-    await sequelize.query(
-      `UPDATE thumbnails SET "thumbnailType" = 'cover'
-        WHERE "episodeId" = :episodeId AND "thumbnailType" = 'primary'`,
-      { replacements: { episodeId }, transaction });
-    const [[created]] = await sequelize.query(
-      `INSERT INTO thumbnails ("episodeId", "s3Bucket", "s3Key", "fileSizeBytes", "mimeType", "widthPixels", "heightPixels", format, "thumbnailType", "generatedAt")
-       VALUES (:episodeId, :bucket, :key, :size, :mime, ${WIDTH}, ${HEIGHT}, 'thumbnail', 'primary', NOW())
-       RETURNING id`,
-      { replacements: { episodeId, bucket: BUCKET, key, size: file.bytes, mime: file.mime }, transaction });
+    let created = null;
+    if (await savedReady(sequelize, transaction)) {
+      await sequelize.query(
+        `UPDATE episode_saved_thumbnails SET is_current = false, updated_at = NOW()
+          WHERE episode_id = :episodeId AND is_current AND deleted_at IS NULL`,
+        { replacements: { episodeId }, transaction });
+      [[created]] = await sequelize.query(
+        `INSERT INTO episode_saved_thumbnails (episode_id, url, s3_bucket, s3_key, mime_type, file_size_bytes, width, height, is_current)
+         VALUES (:episodeId, :url, :bucket, :key, :mime, :size, ${WIDTH}, ${HEIGHT}, true)
+         RETURNING id`,
+        { replacements: { episodeId, url, bucket: BUCKET, key, mime: file.mime, size: file.bytes }, transaction });
+    }
     await sequelize.query('UPDATE episodes SET thumbnail_url = :url WHERE id = :episodeId',
       { replacements: { episodeId, url }, transaction });
     return created;
   });
-  return { id: row?.id, url, key, type: file.type, bytes: file.bytes };
+  return { id: row?.id || null, url, key, type: file.type, bytes: file.bytes };
 }
 
 /** The pictures a thumbnail's visible image layers use, fetched: { [layerId]: Buffer }. */
@@ -963,66 +982,69 @@ async function listUploads(episodeId) {
   }
 }
 
-const rowUrl = (r) => r.url || `https://${r.s3Bucket}.s3.${REGION}.amazonaws.com/${r.s3Key}`;
-
-/** The episode's saved thumbnails, its current one first, then newest first. */
+/** The episode's saved thumbnails, its current one first, then newest first ([] before the table exists). */
 async function listSaved(sequelize, episodeId) {
+  if (!UUID.test(String(episodeId)) || !await savedReady(sequelize)) return [];
   const [rows] = await sequelize.query(
-    `SELECT id, "s3Bucket", "s3Key", url, "thumbnailType", "widthPixels", "heightPixels", "generatedAt"
-       FROM thumbnails
-      WHERE "episodeId" = :episodeId
-      ORDER BY ("thumbnailType" = 'primary') DESC, "generatedAt" DESC NULLS LAST, id DESC
+    `SELECT id, url, is_current, width, height, created_at
+       FROM episode_saved_thumbnails
+      WHERE episode_id = :episodeId AND deleted_at IS NULL
+      ORDER BY is_current DESC, created_at DESC, id
       LIMIT 100`,
     { replacements: { episodeId } });
   return (rows || []).map((r) => ({
     id: r.id,
-    url: rowUrl(r),
-    isPrimary: r.thumbnailType === 'primary',
-    width: r.widthPixels,
-    height: r.heightPixels,
-    savedAt: r.generatedAt,
+    url: r.url,
+    isPrimary: Boolean(r.is_current),
+    width: r.width,
+    height: r.height,
+    savedAt: r.created_at,
   }));
 }
 
 async function findSaved(sequelize, episodeId, thumbnailId, transaction) {
-  const [[row]] = await sequelize.query(
-    `SELECT id, "s3Bucket", "s3Key", url, "thumbnailType" FROM thumbnails
-      WHERE id = :thumbnailId AND "episodeId" = :episodeId LIMIT 1`,
-    { replacements: { episodeId, thumbnailId }, transaction });
+  const [[row]] = UUID.test(String(episodeId)) && UUID.test(String(thumbnailId))
+    ? await sequelize.query(
+      `SELECT id, url, is_current FROM episode_saved_thumbnails
+        WHERE id = :thumbnailId AND episode_id = :episodeId AND deleted_at IS NULL LIMIT 1`,
+      { replacements: { episodeId, thumbnailId }, transaction })
+    : [[]];
   if (!row) throw new ThumbnailError(404, 'That thumbnail is not one of this episode\'s');
   return row;
 }
 
-/** Makes a saved thumbnail the episode's thumbnail again; the current one becomes a cover. */
+/** Makes a saved thumbnail the episode's thumbnail again; the current one stays in the list. */
 async function makePrimary(sequelize, episodeId, thumbnailId) {
-  if (!/^\d+$/.test(String(thumbnailId))) throw new ThumbnailError(400, 'Unknown thumbnail');
+  await requireSaved(sequelize);
   return sequelize.transaction(async (transaction) => {
     const row = await findSaved(sequelize, episodeId, thumbnailId, transaction);
-    const url = rowUrl(row);
     await sequelize.query(
-      `UPDATE thumbnails SET "thumbnailType" = 'cover'
-        WHERE "episodeId" = :episodeId AND "thumbnailType" = 'primary' AND id <> :thumbnailId`,
+      `UPDATE episode_saved_thumbnails SET is_current = false, updated_at = NOW()
+        WHERE episode_id = :episodeId AND is_current AND deleted_at IS NULL AND id <> :thumbnailId`,
       { replacements: { episodeId, thumbnailId }, transaction });
     await sequelize.query(
-      `UPDATE thumbnails SET "thumbnailType" = 'primary' WHERE id = :thumbnailId`,
+      'UPDATE episode_saved_thumbnails SET is_current = true, updated_at = NOW() WHERE id = :thumbnailId',
       { replacements: { thumbnailId }, transaction });
     await sequelize.query('UPDATE episodes SET thumbnail_url = :url WHERE id = :episodeId',
-      { replacements: { episodeId, url }, transaction });
-    return { id: row.id, url };
+      { replacements: { episodeId, url: row.url }, transaction });
+    return { id: row.id, url: row.url };
   });
 }
 
 /**
- * Deletes a saved thumbnail that is not the episode's current one (its row;
- * the S3 file stays). The current one is refused: make another current first.
+ * Deletes a saved thumbnail that is not the episode's current one (marked
+ * deleted; the S3 file stays). The current one is refused: make another
+ * current first.
  */
 async function removeSaved(sequelize, episodeId, thumbnailId) {
-  if (!/^\d+$/.test(String(thumbnailId))) throw new ThumbnailError(400, 'Unknown thumbnail');
+  await requireSaved(sequelize);
   const row = await findSaved(sequelize, episodeId, thumbnailId);
-  if (row.thumbnailType === 'primary') {
+  if (row.is_current) {
     throw new ThumbnailError(409, 'This is the episode\'s thumbnail. Make another one the thumbnail first.');
   }
-  await sequelize.query('DELETE FROM thumbnails WHERE id = :thumbnailId AND "episodeId" = :episodeId',
+  await sequelize.query(
+    `UPDATE episode_saved_thumbnails SET deleted_at = NOW(), updated_at = NOW()
+      WHERE id = :thumbnailId AND episode_id = :episodeId AND deleted_at IS NULL`,
     { replacements: { episodeId, thumbnailId } });
   return { id: row.id };
 }
@@ -1040,15 +1062,12 @@ const SMALL_WIDTH = 640;
 async function seasonEpisodes(sequelize, showId) {
   const show = await findShow(sequelize, showId);
   const drafts = await draftsReady(sequelize);
+  const saved = await savedReady(sequelize);
   const [rows] = await sequelize.query(
-    `SELECT e.id, e.title, e.episode_number, e.thumbnail_url, t.url, t."s3Bucket", t."s3Key",
+    `SELECT e.id, e.title, e.episode_number, e.thumbnail_url,
+            ${saved ? '(SELECT s.url FROM episode_saved_thumbnails s WHERE s.episode_id = e.id AND s.is_current AND s.deleted_at IS NULL LIMIT 1)' : 'NULL'} AS current_url,
             ${drafts ? 'EXISTS (SELECT 1 FROM episode_thumbnail_drafts d WHERE d.episode_id = e.id AND d.deleted_at IS NULL)' : 'false'} AS has_draft
        FROM episodes e
-       LEFT JOIN LATERAL (
-         SELECT url, "s3Bucket", "s3Key" FROM thumbnails
-          WHERE "episodeId" = e.id AND "thumbnailType" = 'primary'
-          ORDER BY "generatedAt" DESC NULLS LAST, id DESC LIMIT 1
-       ) t ON true
       WHERE e.show_id = :showId AND e.deleted_at IS NULL
       ORDER BY e.episode_number ASC NULLS LAST, e.created_at ASC
       LIMIT ${SEASON_MAX}`,
@@ -1057,7 +1076,7 @@ async function seasonEpisodes(sequelize, showId) {
     id: r.id,
     title: r.title,
     episode_number: r.episode_number,
-    thumbnailUrl: (r.s3Key || r.url ? rowUrl(r) : null) || r.thumbnail_url || null,
+    thumbnailUrl: r.current_url || r.thumbnail_url || null,
     hasDraft: Boolean(r.has_draft),
   }));
 }
