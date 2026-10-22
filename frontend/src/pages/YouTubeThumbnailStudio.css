@@ -388,3 +388,7 @@
 .yts-brand-picks .yts-label { flex-basis: 100%; }
 .yts-swatch.is-brand { outline: 2px dotted var(--lala-gold-line); outline-offset: 2px; }
 .yts-btn.is-brand { border-color: var(--lala-gold-line); }
+
+/* An AI background (Evoni, 2026-10-22): her words, then the button. */
+.yts-ai-bg { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; border: 1px dashed var(--accent-light); }
+.yts-ai-bg .yts-btn { align-self: flex-start; }

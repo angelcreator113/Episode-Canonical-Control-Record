@@ -1579,6 +1579,25 @@ export default function YouTubeThumbnailStudio() {
     }
   };
 
+  // An AI background (Evoni, 2026-10-22): from the episode's theme and her words, within the image budget.
+  const [bgWords, setBgWords] = useState('');
+  const [makingBg, setMakingBg] = useState(false);
+  const makeBackground = async () => {
+    setMakingBg(true);
+    try {
+      const pic = await youtubeThumbnailsApi.aiBackground(episodeId, bgWords.trim());
+      setUploads((u) => [pic, ...u.filter((x) => x.url !== pic.url)]);
+      setRole('background', pic.url);
+      const cost = Number.isFinite(pic.cost) ? ` (about $${pic.cost.toFixed(2)} of today's image budget)` : '';
+      setMessage({ type: 'ok', text: `Background made${cost} and kept in Uploads. Undo puts the old one back.` });
+    } catch (err) {
+      console.error('[YouTubeThumbnails] AI background failed:', err);
+      setMessage({ type: 'error', text: err?.response?.data?.error || 'The background could not be made. Try again.' });
+    } finally {
+      setMakingBg(false);
+    }
+  };
+
   // Colours picked with the free picker, newest first (this browser).
   const [recentColours, setRecentColours] = useState(readRecentColours);
   const remember = (c) => setRecentColours(rememberColour(c));
@@ -2290,6 +2309,17 @@ export default function YouTubeThumbnailStudio() {
                 noneLabel="Plain" onPick={(url) => setRole('background', url)} uploading={Boolean(uploading)}
                 onUpload={(f) => upload(f, (url) => setRole('background', url))}
                 onNone={() => setRole('background', null)} />
+              <div className="yts-ai-bg" data-testid="yts-ai-bg">
+                <label className="yts-field">
+                  <span className="yts-label"><Sparkles size={13} aria-hidden /> Make one with AI</span>
+                  <input className="yts-input" value={bgWords} maxLength={200} onChange={(e) => setBgWords(e.target.value)}
+                    placeholder="A rooftop at night, a boutique… (or leave it to the episode)" aria-label="What the AI background shows" />
+                </label>
+                <button type="button" className="yts-btn" onClick={makeBackground} disabled={makingBg} data-testid="yts-ai-bg-btn">
+                  <Wand2 size={15} aria-hidden /> {makingBg ? 'Making the background…' : 'Make a background (AI)'}
+                </button>
+                <p className="yts-note">From this episode's theme and your words; counts toward the daily image budget. Kept in Uploads.</p>
+              </div>
               <label className="yts-field">
                 <span className="yts-label">Darken the background</span>
                 <input type="range" min="0" max="0.8" step="0.05" value={shade?.dim ?? 0} onChange={(e) => setColours({ dim: Number(e.target.value) })} aria-label="Darken the background" disabled={!shade} />

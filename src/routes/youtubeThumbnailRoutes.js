@@ -30,6 +30,7 @@
  *   POST /episodes/:episodeId/pictures   keep an uploaded picture (S3); { url, label }
  *   POST /episodes/:episodeId/title-ideas         five title ideas with a hook each (AI, within the daily budget)
  *   POST /episodes/:episodeId/pictures/cut-out    a picture's background removed, kept as an upload (AI image budget)
+ *   POST /episodes/:episodeId/backgrounds/ai      a background made from the episode's theme { words? }, kept as an upload (AI image budget)
  *   GET  /fonts/:key                     a thumbnail font, for the editor (thumbnailLayers.FONTS)
  *   GET  /preview?url=&w=                a smaller copy of one of our pictures, for the editor (WebP)
  *
@@ -308,6 +309,20 @@ router.post('/episodes/:episodeId/title-ideas', requireAuth, aiRateLimiter, asyn
     return res.json({ success: true, data: await thumbAi.titleIdeas(models.sequelize, req.params.episodeId) });
   } catch (err) {
     return sendError(res, err, 'title ideas');
+  }
+});
+
+// An AI background (Evoni, 2026-10-22): from the episode's theme and her words, within the image budget.
+router.post('/episodes/:episodeId/backgrounds/ai', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const [[episode]] = await models.sequelize.query(
+      'SELECT id FROM episodes WHERE id = :episodeId AND deleted_at IS NULL LIMIT 1',
+      { replacements: { episodeId: req.params.episodeId } });
+    if (!episode) throw new yt.ThumbnailError(404, 'Episode not found');
+    const picture = await thumbAi.aiBackground(models.sequelize, episode.id, String(readBody(req).words || ''));
+    return res.status(201).json({ success: true, data: picture });
+  } catch (err) {
+    return sendError(res, err, 'AI background');
   }
 });
 

@@ -23,7 +23,7 @@ vi.mock('../lib/youtubeThumbnailsApi', async () => {
       templates: vi.fn(), createTemplate: vi.fn(), updateTemplate: vi.fn(), deleteTemplate: vi.fn(),
       versions: vi.fn(), createVersion: vi.fn(), updateVersion: vi.fn(), deleteVersion: vi.fn(),
       season: vi.fn(), renderSmall: vi.fn(),
-      titleIdeas: vi.fn(), cutOut: vi.fn(), zip: vi.fn(), saveBrand: vi.fn(),
+      titleIdeas: vi.fn(), cutOut: vi.fn(), zip: vi.fn(), saveBrand: vi.fn(), aiBackground: vi.fn(),
     },
     downloadBlob: vi.fn(),
   };
@@ -1289,6 +1289,25 @@ describe('YouTubeThumbnailStudio', () => {
     fireEvent.click(kit.getByRole('button', { name: /Fonts and stickers/ }));
     fireEvent.click(kit.getByRole('checkbox', { name: 'Clean' }));
     await waitFor(() => expect(youtubeThumbnailsApi.saveBrand).toHaveBeenLastCalledWith('show-1', { colours: ['#B8962E'], fonts: ['hand', 'sans'], stickers: ['tape'] }));
+  });
+
+  // Evoni, 2026-10-22: a background made with AI from the episode's theme and her words.
+  test('an AI background from her words becomes the background, kept in Uploads; Undo puts the old one back; a refusal says why', async () => {
+    youtubeThumbnailsApi.aiBackground.mockResolvedValue({ url: 'https://b.s3.amazonaws.com/up/ai-bg.jpg', label: 'AI background', cost: 0.04 });
+    renderPage();
+    await opened();
+    const card = within(screen.getByTestId('yts-ai-bg'));
+    fireEvent.change(card.getByLabelText('What the AI background shows'), { target: { value: ' a rooftop at night ' } });
+    fireEvent.click(card.getByTestId('yts-ai-bg-btn'));
+    await waitFor(() => expect(youtubeThumbnailsApi.aiBackground).toHaveBeenCalledWith('ep-1', 'a rooftop at night'));
+    expect((await screen.findByTestId('yts-toast')).textContent).toContain('about $0.04');
+    await waitFor(() => expect(layerOf(lastDraft(), 'background').src).toBe('https://b.s3.amazonaws.com/up/ai-bg.jpg'), { timeout: 3000 });
+    fireEvent.click(screen.getByRole('button', { name: /Undo/ }));
+    await waitFor(() => expect(layerOf(lastDraft(), 'background').src).not.toBe('https://b.s3.amazonaws.com/up/ai-bg.jpg'), { timeout: 3000 });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    youtubeThumbnailsApi.aiBackground.mockRejectedValueOnce({ response: { data: { error: "Today's image budget is used up" } } });
+    fireEvent.click(card.getByTestId('yts-ai-bg-btn'));
+    expect((await screen.findByRole('alert')).textContent).toContain("Today's image budget is used up");
   });
 
   test('the grid and the safe zones: toggled on the toolbar, drawn over the canvas only', async () => {
