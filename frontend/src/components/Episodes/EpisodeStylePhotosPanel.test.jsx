@@ -36,10 +36,13 @@ describe('Files › Style photos', () => {
       venue: [photo('v1', 'venue'), photo('s1', 'venue', { source: 'scene_angle' })],
     }));
     expect(api.get).toHaveBeenCalledWith(LB_URL);
-    expect(screen.getByRole('heading', { level: 2, name: 'Style photos' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 2, name: 'Style spots' })).toBeTruthy();
+    // To sort sits above the poses; Front, Side and Back are not folders (they are Lala's poses).
+    expect(STYLE_FOLDERS.map((f) => f.key)).not.toEqual(expect.arrayContaining(['front']));
     // Folders with photos (and To sort) in full; the empty ones as small chips (2026-10-22).
     const titles = [...screen.getByTestId('esph').querySelectorAll('.esph-folder .epp-pose-title')].map((h) => h.textContent);
-    expect(titles).toEqual(['To sort', 'Hero', 'Venue']);
+    expect(titles).toEqual(['Hero', 'Venue']);
+    expect(folder('unsorted').getByRole('heading', { name: 'To sort' })).toBeTruthy();
     const chips = [...within(screen.getByTestId('esph-empty')).getAllByRole('button')].map((b) => b.getAttribute('aria-label'));
     expect(chips).toEqual(STYLE_FOLDERS.filter((f) => !['unsorted', 'hero', 'venue'].includes(f.key)).map((f) => `Add ${f.label}`));
     expect(folder('hero').getByAltText('h1.png')).toBeTruthy();
@@ -102,6 +105,16 @@ describe('Files › Style photos', () => {
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/episode-poses/ep-1/from-lookbook', { image_id: 'u1', character_key: 'lala', pose: 'back' }));
     expect((await screen.findByTestId('esph-note')).textContent).toBe('Filed as Lala · Back in Character poses. It is being processed there.');
     await waitFor(() => expect(folder('unsorted').queryByAltText('u1.png')).toBeNull());
+  });
+
+  test('the poses sit between To sort and the Style spots; a photo filed under front before shows in To sort', async () => {
+    api.get.mockResolvedValue({ data: { data: lookbook({ unsorted: [photo('u1', 'unsorted')], front: [photo('f1', 'front')] }) } });
+    render(<EpisodeStylePhotosPanel episode={{ id: EP }} posesSlot={<div data-testid="slot">poses</div>} />);
+    await screen.findByTestId('esph-unsorted');
+    const order = [...document.querySelectorAll('[data-testid="esph-unsorted"], [data-testid="slot"], [data-testid="esph"]')].map((n) => n.dataset.testid);
+    expect(order).toEqual(['esph-unsorted', 'slot', 'esph']);
+    expect(folder('unsorted').getByAltText('f1.png')).toBeTruthy();
+    expect(folder('unsorted').getByText('2 photos')).toBeTruthy();
   });
 
   test('a failed read shows its message', async () => {

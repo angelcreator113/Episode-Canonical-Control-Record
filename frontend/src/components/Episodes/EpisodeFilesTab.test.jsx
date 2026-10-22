@@ -32,25 +32,29 @@ const panel = (key) => document.getElementById(`eft-panel-${key}`);
 beforeEach(() => { vi.clearAllMocks(); });
 
 describe('Production › Files', () => {
-  test('three tabs with their counts; Poses shows first, the others are hidden until picked', async () => {
+  test('two tabs with their counts: Photos (To sort, the poses, the Style spots) and Footage', async () => {
     routes();
     render(<EpisodeFilesTab episode={{ id: EP }} />);
-    await waitFor(() => expect(tab('style').textContent).toBe('Style photos2'));
-    expect(tab('poses').textContent).toBe('Poses1');
+    await waitFor(() => expect(tab('photos').textContent).toBe('Photos3'));
     expect(tab('footage').textContent).toBe('Footage0');
-    expect(tab('poses').getAttribute('aria-selected')).toBe('true');
-    expect(panel('poses').hidden).toBe(false);
-    expect(panel('style').hidden).toBe(true);
-    fireEvent.click(tab('style'));
-    expect(panel('style').hidden).toBe(false);
-    expect(panel('poses').hidden).toBe(true);
-    expect(within(panel('style')).getByTestId('esph-photo-u1')).toBeTruthy();
+    expect(tab('photos').getAttribute('aria-selected')).toBe('true');
+    expect(panel('photos').hidden).toBe(false);
+    expect(panel('footage').hidden).toBe(true);
+    const photos = within(panel('photos'));
+    expect(photos.getByTestId('esph-photo-u1')).toBeTruthy();
+    expect(photos.getByTestId('epp-photo-p1')).toBeTruthy();
+    expect(photos.getByRole('heading', { level: 2, name: 'Character poses' })).toBeTruthy();
+    expect(photos.getByRole('heading', { level: 2, name: 'Style spots' })).toBeTruthy();
+    fireEvent.click(tab('footage'));
+    expect(panel('footage').hidden).toBe(false);
+    expect(panel('photos').hidden).toBe(true);
   });
 
-  test('photos dropped at the top land in To sort, and the Style photos tab opens with a note', async () => {
+  test('photos dropped at the top land in To sort, and the Photos tab opens with a note', async () => {
     routes();
     render(<EpisodeFilesTab episode={{ id: EP }} />);
-    await waitFor(() => expect(tab('style').textContent).toBe('Style photos2'));
+    await waitFor(() => expect(tab('photos').textContent).toBe('Photos3'));
+    fireEvent.click(tab('footage'));
     api.post.mockResolvedValue({ data: { data: { lookbook: lookbook() } } });
     const files = [new File(['a'], 'a.png', { type: 'image/png' }), new File(['b'], 'b.jpg', { type: 'image/jpeg' })];
     fireEvent.drop(screen.getByTestId('eft-drop'), { dataTransfer: { files } });
@@ -59,7 +63,7 @@ describe('Production › Files', () => {
     expect(api.post.mock.calls[0][1].get('category')).toBeNull();
     expect(api.post.mock.calls[0][1].getAll('files')).toHaveLength(2);
     expect((await screen.findByTestId('eft-message')).textContent).toMatch(/^2 photos are in To sort/);
-    expect(tab('style').getAttribute('aria-selected')).toBe('true');
+    expect(tab('photos').getAttribute('aria-selected')).toBe('true');
     // Style photos is read again.
     await waitFor(() => expect(api.get.mock.calls.filter(([u]) => u === `/api/v1/episodes/${EP}/lookbook`).length).toBe(2));
   });
@@ -77,10 +81,9 @@ describe('Production › Files', () => {
   test('a Style photo filed as a pose: Poses is read again', async () => {
     routes();
     render(<EpisodeFilesTab episode={{ id: EP }} />);
-    await waitFor(() => expect(tab('style').textContent).toBe('Style photos2'));
-    fireEvent.click(tab('style'));
+    await waitFor(() => expect(tab('photos').textContent).toBe('Photos3'));
     api.post.mockResolvedValue({ data: { data: { id: 'p2' } } });
-    const card = within(panel('style')).getByTestId('esph-photo-u1');
+    const card = within(panel('photos')).getByTestId('esph-photo-u1');
     fireEvent.click(within(card).getByRole('button', { name: 'Photo options' }));
     fireEvent.change(within(card).getByLabelText('File as'), { target: { value: 'pose:justawoman:side' } });
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(`/api/v1/episode-poses/${EP}/from-lookbook`, { image_id: 'u1', character_key: 'justawoman', pose: 'side' }));

@@ -35,9 +35,10 @@ const errorText = (err) => err?.response?.data?.error || err?.message || 'Someth
 
 // Every spot on the sheet: its section, its name, and the panel's one-line hint.
 export const SPOT_INFO = {
-  front: { section: 'Lala in the look', label: 'Front', hint: 'Full body, from the front.', photo: true },
-  side: { section: 'Lala in the look', label: 'Side', hint: 'Full body, from the side.', photo: true },
-  back: { section: 'Lala in the look', label: 'Back', hint: 'Full body, from the back.', photo: true },
+  // Front, Side and Back are Lala's starred poses in Files (Evoni, 2026-10-22).
+  front: { section: 'Lala in the look', label: 'Front', hint: "Lala's starred Front pose in Files › Photos.", photo: true, angle: true },
+  side: { section: 'Lala in the look', label: 'Side', hint: "Lala's starred Side pose in Files › Photos.", photo: true, angle: true },
+  back: { section: 'Lala in the look', label: 'Back', hint: "Lala's starred Back pose in Files › Photos.", photo: true, angle: true },
   hero: { section: 'Lala in the look', label: 'Hero', hint: 'The big shot, in the tilted frame.', photo: true },
   detail: { section: 'Lala in the look', label: 'Detail', hint: 'A close-up of the outfit: Detail shot and Outfit detail in your designs.', photo: true },
   hair: { section: 'Wardrobe breakdown', label: 'Hair', hint: 'A photo of the hair and its name; the name prints under HAIR.', photo: true, name: 'hair_name' },
@@ -178,6 +179,8 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
     .filter((spot) => !designPanelSpots(design).includes(spot)).map((spot) => (spot === 'eyes' ? 'Beauty' : SPOT_INFO[spot].label)) : [];
 
   const fromPose = (poseId, category) => run(() => lookbookApi.fromPose(episodeId, poseId, category));
+  // Front, Side, Back: starring a Lala pose makes it the sheet's (the server reads the starred one).
+  const starPose = (poseId) => run(async () => { await episodePosesApi.update(episodeId, poseId, { is_default: true }); return null; });
   const move = (imageId, changes) => run(() => lookbookApi.move(episodeId, imageId, changes));
   const saveFields = (fields) => run(() => lookbookApi.save(episodeId, fields));
   const commitText = (field) => {
@@ -308,6 +311,7 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
               locked={locked}
               venueCandidates={venueCandidates}
               fromPose={fromPose}
+              starPose={starPose}
               move={move}
               saveFields={saveFields}
               swapVenue={swapVenue}
@@ -349,9 +353,9 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
   );
 }
 
-function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, text, setText, commitText, locked, venueCandidates, fromPose, move, saveFields, swapVenue, toggleOption, onOpenTab, episode, designUse }) {
+function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, text, setText, commitText, locked, venueCandidates, fromPose, starPose, move, saveFields, swapVenue, toggleOption, onOpenTab, episode, designUse }) {
   const images = lb.images || {};
-  const current = info.photo && spot !== 'venue' && spot !== 'inspo' ? (images[spot] || [])[0] || null : null;
+  const current = info.photo && !info.angle && spot !== 'venue' && spot !== 'inspo' ? (images[spot] || [])[0] || null : null;
   // Front, Side and Back show Lala's pose from Files until a photo is put there.
   const fromFiles = !current ? sheet.look_from_files?.[spot] || null : null;
   const inspo = (images.inspo || []).filter((i) => i.source === 'upload');
@@ -378,7 +382,7 @@ function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, te
       {fromFiles && (
         <div className="esp2-current" data-testid="esp2-from-files">
           <img src={fromFiles.url} alt={`${info.label}: ${fromFiles.label}`} />
-          <span className="esp2-hint">From Files · {fromFiles.label}. Choose another from Files to replace it.</span>
+          <span className="esp2-hint">From Files · {fromFiles.label}. Choose another {info.label} pose to replace it.</span>
         </div>
       )}
 
@@ -428,8 +432,8 @@ function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, te
       )}
 
       {info.photo && (
-        <FilesPicker episodeId={episode?.id} lb={lb} spot={spot} label={info.label} disabled={locked || fullInspo}
-          onPickPose={(poseId) => fromPose(poseId, spot)} onPickFile={(imageId) => move(imageId, { category: spot })} onOpenTab={onOpenTab} />
+        <FilesPicker episodeId={episode?.id} lb={lb} spot={spot} label={info.label} disabled={locked || fullInspo} angle={Boolean(info.angle)}
+          onPickPose={(poseId) => (info.angle ? starPose(poseId) : fromPose(poseId, spot))} onPickFile={(imageId) => move(imageId, { category: spot })} onOpenTab={onOpenTab} />
       )}
       {fullInspo && <p className="esp2-hint">Key inspo holds two of your photos; take one off to choose another.</p>}
 
@@ -504,12 +508,13 @@ function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, te
 
 /**
  * Choose from Files (Evoni, 2026-10-22): the episode's photos in Files ›
- * Style photos, folder by folder (To sort first), and the ready photos of
- * Lala and JustAWoman from Files › Character poses. A Style photo is filed
- * in this spot's folder; a pose is copied into it (and then shows in that
- * folder too). Uploading happens in Files.
+ * Photos: the Style spots folder by folder (To sort first), and the ready
+ * photos of Lala and JustAWoman. A Style photo is filed in this spot's
+ * folder; a pose is copied into it. For Front, Side and Back (`angle`) only
+ * Lala's poses of that angle are offered, and picking one stars it.
+ * Uploading happens in Files.
  */
-function FilesPicker({ episodeId, lb, spot, label, disabled, onPickPose, onPickFile, onOpenTab }) {
+function FilesPicker({ episodeId, lb, spot, label, disabled, angle = false, onPickPose, onPickFile, onOpenTab }) {
   const [open, setOpen] = useState(false);
   const [poses, setPoses] = useState(null);
   const [error, setError] = useState(null);
@@ -527,8 +532,9 @@ function FilesPicker({ episodeId, lb, spot, label, disabled, onPickPose, onPickF
   }, [open, poses, episodeId]);
 
   const poseLabel = (key) => POSES.find((p) => p.key === key)?.label || key;
-  const folders = STYLE_FOLDERS.filter((f) => f.key !== spot).map((f) => ({ ...f, photos: filesIn(lb, f.key) })).filter((f) => f.photos.length);
-  const nothing = poses && poses.length === 0 && folders.length === 0;
+  const folders = angle ? [] : STYLE_FOLDERS.filter((f) => f.key !== spot).map((f) => ({ ...f, photos: filesIn(lb, f.key) })).filter((f) => f.photos.length);
+  const offered = poses && (angle ? poses.filter((p) => p.character_key === 'lala' && p.pose === spot) : poses);
+  const nothing = offered && offered.length === 0 && folders.length === 0;
   const openFiles = (
     <button type="button" className="esp2-link" disabled={!onOpenTab} onClick={() => onOpenTab && onOpenTab('files')}>Open Files</button>
   );
@@ -541,7 +547,7 @@ function FilesPicker({ episodeId, lb, spot, label, disabled, onPickPose, onPickF
         <div className="esp2-files-body" data-testid="esp2-files">
           {error && <p className="esp2-error" role="alert">{error}</p>}
           {!poses && !error && <p className="esp2-hint"><Loader2 size={14} className="esp2-spin" aria-hidden="true" /> Loading your Files photos…</p>}
-          {nothing && <p className="esp2-hint">No photos in Files yet. Upload them in Files › Style photos. {openFiles}</p>}
+          {nothing && <p className="esp2-hint">{angle ? `No ready ${label} pose of Lala in Files yet.` : 'No photos in Files yet.'} Upload them in Files › Photos. {openFiles}</p>}
           {folders.map((f) => (
             <div key={f.key} data-testid={`esp2-files-folder-${f.key}`}>
               <p className="esp2-tray-label">Style photos · {f.label}</p>
@@ -557,8 +563,8 @@ function FilesPicker({ episodeId, lb, spot, label, disabled, onPickPose, onPickF
               </ul>
             </div>
           ))}
-          {poses && CHARACTERS.map((c) => {
-            const mine = poses.filter((p) => p.character_key === c.key);
+          {offered && CHARACTERS.map((c) => {
+            const mine = offered.filter((p) => p.character_key === c.key);
             if (!mine.length) return null;
             return (
               <div key={c.key}>
@@ -566,7 +572,7 @@ function FilesPicker({ episodeId, lb, spot, label, disabled, onPickPose, onPickF
                 <ul className="esp2-thumbs">
                   {mine.map((p) => (
                     <li key={p.id}>
-                      <button type="button" className="esp2-thumb" disabled={disabled} aria-label={`Use ${c.label} ${poseLabel(p.pose)} for ${label}`}
+                      <button type="button" className={`esp2-thumb${angle && p.is_default ? ' is-in' : ''}`} disabled={disabled} aria-label={`Use ${c.label} ${poseLabel(p.pose)}${angle && p.is_default ? ' (starred)' : ''} for ${label}`}
                         onClick={() => { onPickPose(p.id); setOpen(false); }}>
                         <img src={p.final_url} alt="" />
                         <span>{poseLabel(p.pose)}{p.is_default ? ' ★' : ''}</span>
@@ -577,7 +583,7 @@ function FilesPicker({ episodeId, lb, spot, label, disabled, onPickPose, onPickF
               </div>
             );
           })}
-          {!nothing && poses && <p className="esp2-hint">To add photos, upload them in Files. {openFiles}</p>}
+          {!nothing && offered && <p className="esp2-hint">To add photos, upload them in Files. {openFiles}</p>}
         </div>
       )}
     </div>

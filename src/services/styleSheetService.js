@@ -253,9 +253,9 @@ function styleReadiness(lb, sheet) {
   const columns = sheet.wardrobe?.columns || [];
   const saved = Array.isArray(lb.palette) ? lb.palette : null;
   const ready = {
-    front: has('front') || Boolean(sheet.look_from_files?.front),
-    side: has('side') || Boolean(sheet.look_from_files?.side),
-    back: has('back') || Boolean(sheet.look_from_files?.back),
+    front: Boolean(sheet.look_from_files?.front),
+    side: Boolean(sheet.look_from_files?.side),
+    back: Boolean(sheet.look_from_files?.back),
     hero: has('hero'),
     hair: has('hair') && hasText(lb.hair_name),
     nails: has('nails') && hasText(lb.nails_name),
@@ -280,8 +280,10 @@ const ANGLES = Object.freeze(['front', 'side', 'back']);
 /**
  * Lala's ready pose for each angle from the Files tab's Character poses
  * (Evoni, 2026-10-22: "this page can use the same images from the files
- * tab"): the default one, else the newest. { front, side, back }, each
- * { id, url, label } or missing.
+ * tab"): the default (starred) one, else the newest. { front, side, back },
+ * each { id, url, label } or missing. These are the sheet's Front, Side and
+ * Back (Evoni, 2026-10-22: "Front back glamor side are the same poses as
+ * front side back"); there is no separate Style photo for them.
  */
 async function lalaPoses(sequelize, episodeId) {
   const { readyPoses } = require('./youtubeThumbnailService');
@@ -315,11 +317,9 @@ async function buildStyleSheet(models, episodeId) {
   const venueFallback = (lb.venue_options || [])[0] || null;
   const chosenVenue = venueImages[0] || (venueFallback ? { id: null, label: venueFallback.label, url: venueFallback.image_url } : null);
 
-  // FRONT, SIDE, BACK: her Lookbook photo, else Lala's pose from Files.
-  const poses = await lalaPoses(sequelize, episodeId);
-  const fromFiles = {};
-  for (const angle of ANGLES) if (!firstImage(lb, angle) && poses[angle]) fromFiles[angle] = poses[angle];
-  const angleUrl = (angle) => firstImage(lb, angle)?.image_url || fromFiles[angle]?.url || null;
+  // FRONT, SIDE, BACK: Lala's starred pose of each angle, from Files.
+  const fromFiles = await lalaPoses(sequelize, episodeId);
+  const angleUrl = (angle) => fromFiles[angle]?.url || null;
 
   const hairPhoto = firstImage(lb, 'hair');
   const nailsPhoto = firstImage(lb, 'nails');
@@ -363,9 +363,8 @@ async function buildStyleSheet(models, episodeId) {
       // The designs' DETAIL SHOT / OUTFIT DETAIL (Evoni, 2026-10-22).
       detail: await inline(firstImage(lb, 'detail')?.image_url),
     },
-    look_images: {
-      front: firstImage(lb, 'front'), side: firstImage(lb, 'side'), back: firstImage(lb, 'back'), hero: firstImage(lb, 'hero'),
-    },
+    // Front, Side and Back are Lala's poses (look_from_files); Hero is a Style photo.
+    look_images: { hero: firstImage(lb, 'hero') },
     // The angles taken from the Files tab's poses, { front: { id, url, label } }.
     look_from_files: fromFiles,
     wardrobe: { state: wardrobe.state, columns },

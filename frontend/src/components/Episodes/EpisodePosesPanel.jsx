@@ -222,7 +222,7 @@ export default function EpisodePosesPanel({ episode, reloadKey = 0, onCount }) {
       <header className="epp-head">
         <div>
           <h2 className="epp-title">Character poses</h2>
-          <p className="epp-sub">Photos of Lala and JustAWoman for this episode. Each one is enhanced; Lala's also have their background removed, JustAWoman's keep theirs. The original is always kept. The starred photo of a pose is the one the thumbnail editor picks first.</p>
+          <p className="epp-sub">Photos of Lala and JustAWoman for this episode. Each one is enhanced; Lala's also have their background removed, JustAWoman's keep theirs. The original is always kept. The starred photo of a pose is the one the thumbnail editor picks first, and Lala's starred Front, Side and Back are the Style Page's.</p>
         </div>
         <span className="epp-total">{photos.length} {photos.length === 1 ? 'photo' : 'photos'}</span>
       </header>

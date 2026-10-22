@@ -1,6 +1,9 @@
 /**
- * Files › Style photos (Evoni, 2026-10-22: "i dont want the uploads in the
- * style page move them to the files tab"): every photo the Style Page uses
+ * Files › Photos (Evoni, 2026-10-22: "i dont want the uploads in the style
+ * page move them to the files tab"; "Character poses and style images are
+ * basically the same thing"): To sort, then the character poses
+ * (`posesSlot`, EpisodePosesPanel), then the Style spots. Every photo the
+ * Style Page uses
  * is uploaded and kept here, one folder per spot (lib/stylePhotoFolders).
  * The Style Page only picks from Files. Photos upload to To sort, or straight
  * into a folder; each can be filed in another folder, filed as a character
@@ -90,7 +93,7 @@ function Folder({ folder, photos, busy, onFiles, onFile, onDelete }) {
   );
 }
 
-export default function EpisodeStylePhotosPanel({ episode, reloadKey = 0, onCount, onFiledAsPose }) {
+export default function EpisodeStylePhotosPanel({ episode, reloadKey = 0, onCount, onFiledAsPose, posesSlot = null }) {
   const episodeId = episode?.id;
   const [lb, setLb] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -157,24 +160,35 @@ export default function EpisodeStylePhotosPanel({ episode, reloadKey = 0, onCoun
     run(() => lookbookApi.remove(episodeId, photo.id));
   };
 
-  const shown = STYLE_FOLDERS.filter((f) => f.key === 'unsorted' || filesIn(lb, f.key).length);
-  const empty = STYLE_FOLDERS.filter((f) => f.key !== 'unsorted' && !filesIn(lb, f.key).length);
+  const sort = STYLE_FOLDERS[0];
+  const spots = STYLE_FOLDERS.slice(1);
+  const shown = spots.filter((f) => filesIn(lb, f.key).length);
+  const empty = spots.filter((f) => !filesIn(lb, f.key).length);
   return (
-    <div className="epp esph" data-testid="esph">
-      <header className="epp-head">
-        <div>
-          <h2 className="epp-title">Style photos</h2>
-          <p className="epp-sub">The photos for the Style Page, one folder per spot. Upload them here; on the Style Page, tap a spot and choose from Files. A folder that holds one photo sends the one it had back to To sort.</p>
-        </div>
-        <span className="epp-total">{total} {total === 1 ? 'photo' : 'photos'}</span>
-      </header>
+    <div className="esph-wrap">
       {error && (
-        <div className="epp-alert" role="alert">
+        <div className="epp epp-alert" role="alert">
           <span>{error}</span>
           <button type="button" className="epp-icon-btn" onClick={() => setError(null)} aria-label="Dismiss"><X size={16} aria-hidden /></button>
         </div>
       )}
       {note && <p className="epp-note" role="status" data-testid="esph-note">{note}</p>}
+      {!loading && (
+        <div className="epp esph-sort">
+          <div className="esph-folders">
+            <Folder folder={sort} photos={filesIn(lb, sort.key)} busy={busy} onFiles={onFiles} onFile={onFile} onDelete={onDelete} />
+          </div>
+        </div>
+      )}
+      {posesSlot}
+      <div className="epp esph" data-testid="esph">
+      <header className="epp-head">
+        <div>
+          <h2 className="epp-title">Style spots</h2>
+          <p className="epp-sub">The Style Page's other photos, one folder per spot (its Front, Side and Back are Lala's starred poses above). On the Style Page, tap a spot and choose from Files. A folder that holds one photo sends the one it had back to To sort.</p>
+        </div>
+        <span className="epp-total">{total} {total === 1 ? 'photo' : 'photos'}</span>
+      </header>
       {loading ? <p className="epp-empty">Loading photos…</p> : (
         <div className="esph-folders">
           {shown.map((f) => (
@@ -192,6 +206,7 @@ export default function EpisodeStylePhotosPanel({ episode, reloadKey = 0, onCoun
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }

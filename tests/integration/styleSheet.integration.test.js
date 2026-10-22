@@ -324,7 +324,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     return () => { axiosGet.mockRestore(); fetchSpy.mockRestore(); };
   }
 
-  it("Front, Side and Back fall back to Lala's default pose from Files; her own photo wins", async () => {
+  it("Front, Side and Back are Lala's starred pose from Files; a Lookbook photo filed under back is not used", async () => {
     const ids = await seedEpisodeOne();
     const restore = await poseReads();
     try {
@@ -341,11 +341,12 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       const chip = (key) => s.readiness.items.find((i) => i.key === key).ready;
       expect([chip('front'), chip('side'), chip('back')]).toEqual([false, false, true]);
 
-      // Her own Back photo replaces the pose.
+      // A photo filed under back in the Lookbook (before 2026-10-22) is not the sheet's Back: the pose stays.
       const png = await sharp({ create: { width: 4, height: 4, channels: 3, background: { r: 9, g: 9, b: 9 } } }).jpeg().toBuffer();
       await auth(request(app).post(`/api/v1/episodes/${ids.ep}/lookbook/images`)).field('category', 'back').attach('files', png, { filename: 'b.jpg', contentType: 'image/jpeg' });
       const after = (await auth(request(app).get(sheetUrl(ids.ep)))).body.data;
-      expect(after.look_from_files).toEqual({});
+      expect(after.look_from_files.back.id).toBe(defaultBack);
+      expect(after.look.back).toBe(s.look.back);
       expect(after.readiness.items.find((i) => i.key === 'back').ready).toBe(true);
     } finally {
       restore();
