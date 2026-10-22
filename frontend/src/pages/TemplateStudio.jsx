@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import {
   LayoutGrid, CheckCircle2, PenLine, Archive, Lock, Search, Plus, Copy, Send,
-  Trash2, ImageIcon, Layers, Maximize2, ChevronLeft, ChevronRight, Youtube, Unlock, Type, Star, LayoutTemplate, Palette,
+  Trash2, Layers, Maximize2, ChevronLeft, ChevronRight, Youtube, Unlock, Type, Star, LayoutTemplate, Palette, MoreHorizontal, X,
 } from 'lucide-react';
 import apiClient from '../services/api';
 import { youtubeThumbnailsApi, thumbnailStudioHref } from '../lib/youtubeThumbnailsApi';
@@ -166,13 +166,38 @@ function ShowTemplatePicture({ url, name }) {
 
 /**
  * Every show's YouTube thumbnail templates (Evoni, 2026-10-21: several per
- * show, each with its picture, renamed at will). Open one in the Studio on
- * that show; rename it here (Enter saves, Escape cancels).
+ * show, each with its picture, renamed at will). The Template Studio's first
+ * tab (Evoni, 2026-10-22: "organize by use"; "better thumbnail cards"): big
+ * 16:9 picture cards, a Default badge, and Open, Rename, Make default and
+ * Delete behind "⋯"; the last card starts a new one from an episode in the
+ * Thumbnail Studio.
  */
+function CardMenu({ label, children }) {
+  const [open, setOpen] = useState(false);
+  const box = React.useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const away = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(false); };
+    const esc = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('pointerdown', away);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', esc); };
+  }, [open]);
+  return (
+    <div className="ts-card-menu" ref={box}>
+      <button type="button" className="ts-card-menu-btn" aria-label={label} aria-expanded={open} title={label} onClick={() => setOpen((o) => !o)}>
+        <MoreHorizontal size={18} aria-hidden />
+      </button>
+      {open && <div className="ts-card-menu-body" role="group" aria-label={label} onClick={() => setOpen(false)}>{children}</div>}
+    </div>
+  );
+}
+
 function ShowTemplates({ say }) {
   const [groups, setGroups] = useState(null);
   const [failed, setFailed] = useState(null);
   const [renaming, setRenaming] = useState(null); // { showId, id, name }
+  const [asking, setAsking] = useState(null); // { showId, t }
 
   const load = async () => {
     setFailed(null);
@@ -201,6 +226,29 @@ function ShowTemplates({ say }) {
     }
   };
 
+  const makeDefault = async (showId, t) => {
+    try {
+      await youtubeThumbnailsApi.updateTemplate(showId, t.id, { isDefault: true });
+      say('ok', `"${t.name}" is the show's default.`);
+      await load();
+    } catch (err) {
+      console.error('[TemplateStudio] make default failed:', err);
+      say('error', err?.response?.data?.error || errorText(err, 'The default could not be changed.'));
+    }
+  };
+
+  const remove = async (showId, t) => {
+    setAsking(null);
+    try {
+      await youtubeThumbnailsApi.deleteTemplate(showId, t.id);
+      say('ok', `"${t.name}" is deleted.`);
+      await load();
+    } catch (err) {
+      console.error('[TemplateStudio] show template delete failed:', err);
+      say('error', err?.response?.data?.error || errorText(err, 'The template could not be deleted.'));
+    }
+  };
+
   if (failed) {
     return (
       <div className="ts-state" role="alert">
@@ -212,13 +260,20 @@ function ShowTemplates({ say }) {
   if (!groups) {
     return <div className="ts-state"><div className="ts-spinner"></div><p>Loading show templates...</p></div>;
   }
+  const newCard = (
+    <li className="ts-show-card ts-show-new">
+      <Link className="ts-show-new-link" to="/template-studio/youtube" data-testid="ts-show-new">
+        <span className="ts-show-pic"><Plus size={30} aria-hidden /></span>
+        <span className="ts-show-card-name">New from an episode</span>
+        <span className="ts-show-hint">Arrange a thumbnail in the Thumbnail Studio, then Save as template.</span>
+      </Link>
+    </li>
+  );
   if (!groups.length) {
     return (
-      <div className="ts-state">
-        <Youtube size={40} aria-hidden className="ts-state-icon" />
-        <h3>No show templates yet</h3>
-        <p>Arrange an episode's thumbnail in YouTube thumbnails, then save it as a template.</p>
-        <Link className="ts-new" to="/template-studio/youtube">Open YouTube thumbnails</Link>
+      <div className="ts-show-templates" data-testid="ts-show-templates">
+        <p className="ts-show-intro">No show templates yet. Arrange an episode's thumbnail in the Thumbnail Studio, then save it as a template.</p>
+        <ul className="ts-show-grid">{newCard}</ul>
       </div>
     );
   }
@@ -230,7 +285,17 @@ function ShowTemplates({ say }) {
           <ul className="ts-show-grid">
             {templates.map((t) => (
               <li key={t.id} className={`ts-show-card${t.isDefault ? ' is-default' : ''}`} data-testid={`ts-show-template-${t.id}`}>
-                <div className="ts-show-pic"><ShowTemplatePicture url={t.previewUrl} name={t.name} /></div>
+                <div className="ts-show-pic">
+                  <ShowTemplatePicture url={t.previewUrl} name={t.name} />
+                  {t.isDefault && <span className="ts-show-badge"><Star size={12} aria-hidden /> Default</span>}
+                </div>
+                {/* Outside the picture, so its edge never cuts the menu off. */}
+                <CardMenu label={`${t.name} options`}>
+                    <Link className="ts-card-menu-item" to={thumbnailStudioHref({ showId: show.id, templateId: t.id })}>Open</Link>
+                    <button type="button" className="ts-card-menu-item" onClick={() => setRenaming({ showId: show.id, id: t.id, name: t.name })}>Rename</button>
+                    {!t.isDefault && <button type="button" className="ts-card-menu-item" onClick={() => makeDefault(show.id, t)}>Make default</button>}
+                    {!t.legacy && <button type="button" className="ts-card-menu-item is-danger" onClick={() => setAsking({ showId: show.id, t })}>Delete</button>}
+                </CardMenu>
                 {renaming?.id === t.id ? (
                   <form className="ts-rename" onSubmit={(e) => rename(e, t)}>
                     <input className="ts-rename-input" value={renaming.name} maxLength={80} autoFocus aria-label={`New name for ${t.name}`}
@@ -240,16 +305,19 @@ function ShowTemplates({ say }) {
                     <button type="button" className="ts-clear" onClick={() => setRenaming(null)}>Cancel</button>
                   </form>
                 ) : (
-                  <p className="ts-show-card-name" onDoubleClick={() => setRenaming({ showId: show.id, id: t.id, name: t.name })} title="Double-click to rename">
-                    {t.isDefault && <Star size={14} aria-label="Default" />} {t.name}
-                  </p>
+                  <Link className="ts-show-card-name" to={thumbnailStudioHref({ showId: show.id, templateId: t.id })}
+                    onDoubleClick={(e) => { e.preventDefault(); setRenaming({ showId: show.id, id: t.id, name: t.name }); }}>{t.name}</Link>
                 )}
-                <div className="ts-show-actions">
-                  <Link className="ts-clear" to={thumbnailStudioHref({ showId: show.id, templateId: t.id })}>Open</Link>
-                  <button type="button" className="ts-clear" onClick={() => setRenaming({ showId: show.id, id: t.id, name: t.name })}>Rename</button>
-                </div>
+                {asking?.t.id === t.id && (
+                  <div className="ts-ask" role="group" aria-label="Confirm">
+                    <p>Delete "{t.name}"? Thumbnails already saved keep their look.</p>
+                    <button type="button" className="ts-action is-primary" onClick={() => remove(show.id, t)}>Yes</button>
+                    <button type="button" className="ts-action" onClick={() => setAsking(null)}>No</button>
+                  </div>
+                )}
               </li>
             ))}
+            {newCard}
           </ul>
         </section>
       ))}
@@ -271,10 +339,13 @@ function TemplateStudio() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('recently_used');
   const [selectedId, setSelectedId] = useState(null);
-  // The layout templates (template_studio), or every show's YouTube thumbnail templates.
-  // ?view=style opens Style sheets (the Style Page links here).
+  // Organized by use (Evoni, 2026-10-22): YouTube thumbnails first, then
+  // Style sheets, then the layout templates. ?view=style|layouts opens one
+  // (the Style Page links to style).
   const [searchParams] = useSearchParams();
-  const [view, setView] = useState(['shows', 'style'].includes(searchParams.get('view')) ? searchParams.get('view') : 'layouts');
+  const [view, setView] = useState(['shows', 'style', 'layouts'].includes(searchParams.get('view')) ? searchParams.get('view') : 'shows');
+  // Phone: a layout's preview and actions open in a sheet from the bottom.
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   useEffect(() => {
     loadTemplates();
@@ -422,59 +493,33 @@ function TemplateStudio() {
 
   return (
     <div className="template-studio">
-      {/* ── Banner ─────────────────────────────────────────────── */}
-      <header className="ts-banner">
-        <div className="ts-banner-left">
-          <span className="ts-brand">LalaVerse</span>
-          <div>
-            <h1 className="ts-title">Template Studio</h1>
-            <div className="ts-tagline">Create · Customize · Publish · Reuse</div>
-          </div>
-        </div>
-        <button type="button" onClick={handleCreateNew} className="ts-new">
-          <Plus size={20} aria-hidden /> New Template
-        </button>
+      {/* ── Header: one line (Evoni, 2026-10-22: "slimmer header") ── */}
+      <header className="ts-head">
+        <h1 className="ts-title">Template Studio</h1>
+        {view === 'shows' && (
+          <Link className="ts-new" to="/template-studio/youtube" data-testid="ts-youtube-link"><Youtube size={18} aria-hidden /> Open Thumbnail Studio</Link>
+        )}
+        {view === 'layouts' && (
+          <button type="button" onClick={handleCreateNew} className="ts-new"><Plus size={18} aria-hidden /> New layout</button>
+        )}
       </header>
 
-      <div className="ts-body">
-        {/* ── Rail ───────────────────────────────────────────────── */}
-        <aside className="ts-rail" aria-label="Template folders">
-          <nav className="ts-rail-nav">
-            {Object.entries(STATUSES).map(([key, s]) => {
-              const Icon = s.icon;
-              const n = key === 'ALL' ? templates.length : (statusCounts[key] || 0);
-              return (
-                <button key={key} type="button" aria-pressed={view === 'layouts' && statusFilter === key}
-                  className={`ts-rail-btn ${view === 'layouts' && statusFilter === key ? 'is-active' : ''}`}
-                  onClick={() => { setView('layouts'); setStatusFilter(key); }}>
-                  <Icon size={20} aria-hidden />
-                  <span className="ts-rail-label">{s.label}</span>
-                  <span className="ts-rail-count">{n}</span>
-                </button>
-              );
-            })}
-          </nav>
-          <div className="ts-rail-divider" />
-          <nav className="ts-rail-nav">
-            <button type="button" aria-pressed={view === 'shows'} data-testid="ts-show-templates-btn"
-              className={`ts-rail-btn ${view === 'shows' ? 'is-active' : ''}`} onClick={() => setView('shows')}>
-              <LayoutTemplate size={20} aria-hidden />
-              <span className="ts-rail-label">Show templates</span>
-            </button>
-            <button type="button" aria-pressed={view === 'style'} data-testid="ts-style-sheets-btn"
-              className={`ts-rail-btn ${view === 'style' ? 'is-active' : ''}`} onClick={() => setView('style')}>
-              <Palette size={20} aria-hidden />
-              <span className="ts-rail-label">Style sheets</span>
-            </button>
-          </nav>
-          <div className="ts-rail-divider" />
-          <div className="ts-rail-heading">Elsewhere in the studio</div>
-          <nav className="ts-rail-nav">
-            <Link className="ts-rail-btn" to="/template-studio/youtube" data-testid="ts-youtube-link"><Youtube size={20} aria-hidden /><span className="ts-rail-label">YouTube thumbnails</span></Link>
-            <Link className="ts-rail-btn" to="/assets"><ImageIcon size={20} aria-hidden /><span className="ts-rail-label">Asset Library</span></Link>
-          </nav>
-        </aside>
+      <nav className="ts-views" role="tablist" aria-label="Templates">
+        <button type="button" role="tab" aria-selected={view === 'shows'} data-testid="ts-show-templates-btn"
+          className={`ts-view ${view === 'shows' ? 'is-active' : ''}`} onClick={() => setView('shows')}>
+          <Youtube size={18} aria-hidden /> YouTube thumbnails
+        </button>
+        <button type="button" role="tab" aria-selected={view === 'style'} data-testid="ts-style-sheets-btn"
+          className={`ts-view ${view === 'style' ? 'is-active' : ''}`} onClick={() => setView('style')}>
+          <Palette size={18} aria-hidden /> Style sheets
+        </button>
+        <button type="button" role="tab" aria-selected={view === 'layouts'} data-testid="ts-layouts-btn"
+          className={`ts-view ${view === 'layouts' ? 'is-active' : ''}`} onClick={() => setView('layouts')}>
+          <LayoutTemplate size={18} aria-hidden /> Layouts <span className="ts-view-count">{templates.length}</span>
+        </button>
+      </nav>
 
+      <div className="ts-body">
         {/* ── Main ───────────────────────────────────────────────── */}
         <div className="ts-main">
           {view === 'shows' || view === 'style' ? (
@@ -489,6 +534,20 @@ function TemplateStudio() {
             </>
           ) : (
           <>
+          {/* status: All, Published, Drafts, Archived (was the side menu) */}
+          <div className="ts-statuses" role="group" aria-label="Status">
+            {Object.entries(STATUSES).map(([key, s]) => {
+              const Icon = s.icon;
+              const n = key === 'ALL' ? templates.length : (statusCounts[key] || 0);
+              return (
+                <button key={key} type="button" aria-pressed={statusFilter === key}
+                  className={`ts-status-chip ${statusFilter === key ? 'is-active' : ''}`} onClick={() => setStatusFilter(key)}>
+                  <Icon size={16} aria-hidden /> {s.label} <span className="ts-rail-count">{n}</span>
+                </button>
+              );
+            })}
+          </div>
+
           {/* format tabs */}
           <div className="ts-tabs" role="tablist" aria-label="Formats">
             <button type="button" role="tab" aria-selected={formatFilter === 'ALL'}
@@ -568,7 +627,7 @@ function TemplateStudio() {
                   <button key={t.id} type="button"
                     className={`ts-card ${selected.id === t.id ? 'is-selected' : ''}`}
                     aria-pressed={selected.id === t.id}
-                    onClick={() => setSelectedId(t.id)}
+                    onClick={() => { setSelectedId(t.id); setSheetOpen(true); }}
                     onDoubleClick={() => t.status === 'DRAFT' && !t.locked && handleEdit(t)}>
                     <div className="ts-card-media"><TemplatePreview template={t} fit={1.2} /></div>
                     <div className="ts-card-foot">
@@ -581,9 +640,13 @@ function TemplateStudio() {
                 ))}
               </div>
 
-              {/* preview panel */}
-              <section className="ts-panel" aria-label={`Preview: ${selected.name}`}>
+              {/* preview panel; on a phone, a sheet from the bottom */}
+              {sheetOpen && <button type="button" className="ts-sheet-backdrop" aria-label="Close the preview" onClick={() => setSheetOpen(false)} />}
+              <section className={`ts-panel${sheetOpen ? ' is-open' : ''}`} aria-label={`Preview: ${selected.name}`}>
                 <div className="ts-panel-bar">
+                  <button type="button" className="ts-icon-btn ts-sheet-close" onClick={() => setSheetOpen(false)} aria-label="Close the preview">
+                    <X size={18} aria-hidden />
+                  </button>
                   <button type="button" className="ts-icon-btn" onClick={() => step(-1)} disabled={selIndex <= 0} aria-label="Previous template">
                     <ChevronLeft size={18} aria-hidden />
                   </button>
