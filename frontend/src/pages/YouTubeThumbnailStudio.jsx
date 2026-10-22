@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import {
   youtubeThumbnailsApi, LAYOUTS, ACCENTS, TEXT_COLORS, readRecentColours, rememberColour, episodeContent, folderPath, folderCount, folderCover, firstFolder,
+  downloadBlob,
 } from '../lib/youtubeThumbnailsApi';
 import {
   FONTS, presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, placeLayer, removeLayer,
@@ -379,21 +380,94 @@ function TextEffects({ layer, onChange }) {
 const SHAPE_ICONS = { arrow: ArrowRight, ring: Circle, burst: Star, sparkle: Sparkles, tag: Tag, tape: Bandage, paper: StickyNote, shadow: Eclipse };
 
 /** Add a sticker (Evoni, 2026-10-21: stickers and shapes): an arrow, a circle, a burst, sparkles, a price tag; tape, paper, a shadow (redesign). */
+// A show's brand kit (Evoni, 2026-10-22): its colours, fonts and stickers,
+// offered first wherever the Studio offers colours, fonts or stickers.
+const NO_BRAND = Object.freeze({ colours: [], fonts: [], stickers: [] });
+const BrandContext = React.createContext(NO_BRAND);
+const brandFirst = (all, mine, key = (x) => x) => [...all.filter((x) => mine.includes(key(x))), ...all.filter((x) => !mine.includes(key(x)))];
+
+/** The fonts, the show's own first. */
+function FontOptions() {
+  const brand = React.useContext(BrandContext);
+  const entries = Object.entries(FONTS);
+  if (!brand.fonts.length) return entries.map(([k, f]) => <option key={k} value={k}>{f.label}</option>);
+  return (
+    <>
+      <optgroup label="The show's fonts">
+        {entries.filter(([k]) => brand.fonts.includes(k)).map(([k, f]) => <option key={k} value={k}>{f.label}</option>)}
+      </optgroup>
+      <optgroup label="All fonts">
+        {entries.filter(([k]) => !brand.fonts.includes(k)).map(([k, f]) => <option key={k} value={k}>{f.label}</option>)}
+      </optgroup>
+    </>
+  );
+}
+
 function StickerRow({ onAdd }) {
+  const brand = React.useContext(BrandContext);
   return (
     <div className="yts-stickers" role="group" aria-label="Add a sticker" data-testid="yts-stickers">
       <span className="yts-label">Stickers &amp; elements</span>
       <div className="yts-actions">
-        {SHAPES.map((sh) => {
+        {brandFirst(SHAPES, brand.stickers, (sh) => sh.key).map((sh) => {
           const Icon = SHAPE_ICONS[sh.key];
+          const mine = brand.stickers.includes(sh.key);
           return (
-            <button key={sh.key} type="button" className="yts-btn" onClick={() => onAdd(sh.key)} aria-label={`Add ${sh.label.toLowerCase()}`}>
-              <Icon size={16} aria-hidden /> {sh.label}
+            <button key={sh.key} type="button" className={`yts-btn${mine ? ' is-brand' : ''}`} onClick={() => onAdd(sh.key)} aria-label={`Add ${sh.label.toLowerCase()}`}
+              title={mine ? "One of the show's stickers" : undefined}>
+              <Icon size={16} aria-hidden /> {sh.label}{mine && <Star size={11} aria-hidden />}
             </button>
           );
         })}
       </div>
     </div>
+  );
+}
+
+/**
+ * The show's brand kit (Evoni, 2026-10-22): its colours (add the accent in
+ * use, take one off), the fonts and stickers it uses. Kept for every episode.
+ */
+function BrandKit({ brand, accent, busy, onSave }) {
+  const [open, setOpen] = useState(false);
+  const toggle = (list, x) => (list.includes(x) ? list.filter((y) => y !== x) : [...list, x]);
+  return (
+    <fieldset className="yts-field yts-brand" data-testid="yts-brand">
+      <legend className="yts-label"><Star size={13} aria-hidden /> The show's brand kit</legend>
+      <div className="yts-swatches">
+        {brand.colours.map((c) => (
+          <span key={c} className="yts-brand-colour">
+            <span className="yts-swatch" style={{ background: c }} aria-hidden />
+            <button type="button" className="yts-brand-remove" onClick={() => onSave({ ...brand, colours: brand.colours.filter((x) => x !== c) })} disabled={busy}
+              aria-label={`Take ${c} out of the brand kit`}><X size={12} aria-hidden /></button>
+          </span>
+        ))}
+        {accent && !brand.colours.includes(accent) && brand.colours.length < BRAND_COLOURS_MAX && (
+          <button type="button" className="yts-btn" onClick={() => onSave({ ...brand, colours: [...brand.colours, accent] })} disabled={busy} data-testid="yts-brand-add">
+            <Plus size={14} aria-hidden /> Add {accent}
+          </button>
+        )}
+      </div>
+      <button type="button" className="yts-more-layers" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        {open ? 'Done with fonts and stickers' : `Fonts and stickers (${brand.fonts.length + brand.stickers.length})`}
+      </button>
+      {open && (
+        <div className="yts-brand-picks">
+          <span className="yts-label">Fonts</span>
+          {Object.entries(FONTS).map(([k, f]) => (
+            <label key={k} className="yts-kit-pick">
+              <input type="checkbox" checked={brand.fonts.includes(k)} disabled={busy} onChange={() => onSave({ ...brand, fonts: toggle(brand.fonts, k) })} /> {f.label}
+            </label>
+          ))}
+          <span className="yts-label">Stickers</span>
+          {SHAPES.map((sh) => (
+            <label key={sh.key} className="yts-kit-pick">
+              <input type="checkbox" checked={brand.stickers.includes(sh.key)} disabled={busy} onChange={() => onSave({ ...brand, stickers: toggle(brand.stickers, sh.key) })} /> {sh.label}
+            </label>
+          ))}
+        </div>
+      )}
+    </fieldset>
   );
 }
 
@@ -425,7 +499,7 @@ function ShapeSettings({ layer, onChange }) {
             <label className="yts-field">
               <span className="yts-label">Font</span>
               <select className="yts-input" value={layer.font || 'sans'} onChange={(e) => onChange({ font: e.target.value })} aria-label="Sticker font">
-                {Object.entries(FONTS).map(([k, f]) => <option key={k} value={k}>{f.label}</option>)}
+                <FontOptions />
               </select>
             </label>
             <label className="yts-field is-small">
@@ -474,7 +548,7 @@ function LayerSettings({ layer, onChange, colours, onRemember, onCutOut, cutting
           <label className="yts-field">
             <span className="yts-label">Font</span>
             <select className="yts-input" value={layer.font} onChange={(e) => onChange({ font: e.target.value })} aria-label="Font">
-              {Object.entries(FONTS).map(([k, f]) => <option key={k} value={k}>{f.label}</option>)}
+              <FontOptions />
             </select>
           </label>
           <label className="yts-field is-small">
@@ -987,8 +1061,16 @@ function CompareVersions({ now, nowWarnings, versions, warningsOf, busy, onUse }
  * the arrangement as Version A, B, ...; each with its picture; use one,
  * rename it, update it with the arrangement, delete it; compare them all.
  */
-function VersionsBar({ versions, busy, now, nowWarnings, warningsOf, onKeep, onUse, onRename, onUpdate, onDelete }) {
+// YouTube's Test & Compare takes up to three thumbnails (Evoni, 2026-10-22: an A/B kit).
+const KIT_MAX = 3;
+const BRAND_COLOURS_MAX = 8;
+
+function VersionsBar({ versions, busy, now, nowWarnings, warningsOf, onKeep, onUse, onRename, onUpdate, onDelete, onKit }) {
   const [renaming, setRenaming] = useState(null); // { id, name }
+  // The A/B kit: which go in ('now' and version ids), up to three.
+  const [kit, setKit] = useState(null);
+  const inKit = (id) => Boolean(kit?.includes(id));
+  const toggleKit = (id) => setKit((k) => (k.includes(id) ? k.filter((x) => x !== id) : k.length < KIT_MAX ? [...k, id] : k));
   const [asking, setAsking] = useState(null); // { id, kind: 'update' | 'delete' }
   const [comparing, setComparing] = useState(false);
   const rename = async (e, v) => {
@@ -1013,8 +1095,32 @@ function VersionsBar({ versions, busy, now, nowWarnings, warningsOf, onKeep, onU
           <button type="button" className="yts-btn" onClick={onKeep} disabled={busy} data-testid="yts-keep-version">
             <CopyPlus size={16} aria-hidden /> Keep as a version
           </button>
+          {versions.length > 0 && onKit && (
+            <button type="button" className={`yts-btn${kit ? ' is-primary' : ''}`} aria-pressed={Boolean(kit)} onClick={() => setKit((k) => (k ? null : ['now']))} data-testid="yts-kit-btn">
+              <Download size={16} aria-hidden /> {kit ? 'Close the A/B kit' : 'A/B kit'}
+            </button>
+          )}
         </div>
       </div>
+      {kit && (
+        <div className="yts-kit" role="group" aria-label="A/B kit" data-testid="yts-kit">
+          <p className="yts-note">Up to {KIT_MAX} for YouTube's Test &amp; Compare (in YouTube Studio, the video's thumbnail › Test &amp; compare). Each is under 2 MB.</p>
+          <div className="yts-kit-picks">
+            <label className="yts-kit-pick">
+              <input type="checkbox" checked={inKit('now')} onChange={() => toggleKit('now')} disabled={!inKit('now') && kit.length >= KIT_MAX} /> Now
+            </label>
+            {versions.filter((v) => v.spec).map((v) => (
+              <label key={v.id} className="yts-kit-pick">
+                <input type="checkbox" checked={inKit(v.id)} onChange={() => toggleKit(v.id)} disabled={!inKit(v.id) && kit.length >= KIT_MAX} /> {v.name}
+              </label>
+            ))}
+          </div>
+          <button type="button" className="yts-btn is-primary" disabled={busy || kit.length < 2} data-testid="yts-kit-download"
+            onClick={() => onKit(kit.map((id) => (id === 'now' ? { id: 'now' } : versions.find((v) => v.id === id))).filter(Boolean))}>
+            <Download size={16} aria-hidden /> Download {kit.length} for Test &amp; Compare
+          </button>
+        </div>
+      )}
       {comparing && versions.length > 0 && (
         <CompareVersions now={now} nowWarnings={nowWarnings} versions={versions} warningsOf={warningsOf} busy={busy}
           onUse={(v) => { setComparing(false); onUse(v); }} />
@@ -1704,6 +1810,41 @@ export default function YouTubeThumbnailStudio() {
     () => youtubeThumbnailsApi.deleteTemplate(sources.show.id, t.id),
     `"${t.name}" is deleted.`, 'The template could not be deleted.');
 
+  // The show's brand kit (Evoni, 2026-10-22).
+  const brand = sources?.style?.brand || NO_BRAND;
+  const saveBrand = async (next) => {
+    if (!sources?.show?.id) return;
+    setBusy(true);
+    try {
+      const kept = await youtubeThumbnailsApi.saveBrand(sources.show.id, next);
+      setSources((s) => ({ ...s, style: { ...s.style, brand: kept || next } }));
+    } catch (err) {
+      console.error('[YouTubeThumbnails] brand kit not kept:', err);
+      setMessage({ type: 'error', text: err?.response?.data?.error || 'The brand kit could not be kept.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // The A/B kit (Evoni, 2026-10-22): 2–3 of this arrangement and its versions in one zip, for YouTube's Test & Compare.
+  const downloadKit = async (picks) => {
+    const n = sources?.episode?.episode_number;
+    const base = `${(sources?.show?.name || 'thumbnail').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}${n ? `-ep${n}` : ''}-ab`;
+    setBusy(true);
+    try {
+      const blob = await youtubeThumbnailsApi.zip(base, picks.map((v, i) => ({
+        name: `${String.fromCharCode(65 + i)} ${v.id === 'now' ? 'Now' : v.name}`, spec: v.id === 'now' ? specRef.current : v.spec,
+      })));
+      downloadBlob(blob, `${base}.zip`);
+      setMessage({ type: 'ok', text: `${picks.length} thumbnails in ${base}.zip, ready for YouTube's Test & Compare.` });
+    } catch (err) {
+      console.error('[YouTubeThumbnails] A/B kit failed:', err);
+      setMessage({ type: 'error', text: err?.response?.data?.error || 'The A/B kit could not be made.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   // The episode's versions to compare (Evoni, 2026-10-21).
   const versionChange = async (run, done, failed) => {
     if (!episodeId) return false;
@@ -1767,7 +1908,7 @@ export default function YouTubeThumbnailStudio() {
   const nextEpisode = at >= 0 && at < episodes.length - 1 ? episodes[at + 1] : null;
   const pickedSettings = picked && picked.kind !== 'shade' && (
     <LayerSettings layer={picked} onChange={(patch) => edit((s) => updateLayer(s, picked.id, patch))} onCutOut={cutOut} cutting={cutting}
-      colours={[...ACCENTS, ...recentColours.filter((c) => !ACCENTS.includes(c))]} onRemember={remember} />
+      colours={[...brand.colours, ...[...ACCENTS, ...recentColours.filter((c) => !ACCENTS.includes(c))].filter((c) => !brand.colours.includes(c))]} onRemember={remember} />
   );
   const marksItems = [
     { key: 'exact', testid: 'yts-menu-exact', icon: ScanEye, label: rendering ? 'Drawing…' : 'See it exactly', onChoose: seeExactly, disabled: rendering },
@@ -1777,7 +1918,7 @@ export default function YouTubeThumbnailStudio() {
 
   const versionsBar = episodeId && sources && (
     <VersionsBar versions={sources.versions || []} busy={busy} now={snapshot} nowWarnings={ytWarnings.length} warningsOf={versionWarnings}
-      onKeep={keepVersion} onUse={useVersion} onRename={renameVersion} onUpdate={updateVersion} onDelete={deleteVersion} />
+      onKeep={keepVersion} onUse={useVersion} onRename={renameVersion} onUpdate={updateVersion} onDelete={deleteVersion} onKit={downloadKit} />
   );
   const savedList = history.length > 0 && (
     <section className="yts-history" aria-label="Saved thumbnails" data-testid="yts-history">
@@ -1813,6 +1954,7 @@ export default function YouTubeThumbnailStudio() {
   );
 
   return (
+    <BrandContext.Provider value={brand}>
     <div className={`yts${sheet ? ' has-sheet' : ''}`}>
       <header className={`yts-banner${compact ? ' is-compact' : ''}`}>
         {compact ? (
@@ -2162,11 +2304,12 @@ export default function YouTubeThumbnailStudio() {
 
             {shown('colours') && (
             <section className="yts-card" aria-label="Colour palette">
+              {sources?.show?.id && <BrandKit brand={brand} accent={shade?.accent} busy={busy} onSave={saveBrand} />}
               <fieldset className="yts-field">
                 <legend className="yts-label">Colour palette</legend>
                 <div className="yts-swatches">
-                  {[...ACCENTS, ...recentColours.filter((c) => !ACCENTS.includes(c))].map((c) => (
-                    <button key={c} type="button" className={`yts-swatch${shade?.accent === c ? ' is-on' : ''}`} style={{ background: c }}
+                  {[...brand.colours, ...[...ACCENTS, ...recentColours.filter((c) => !ACCENTS.includes(c))].filter((c) => !brand.colours.includes(c))].map((c) => (
+                    <button key={c} type="button" className={`yts-swatch${shade?.accent === c ? ' is-on' : ''}${brand.colours.includes(c) ? ' is-brand' : ''}`} style={{ background: c }}
                       aria-label={`Accent ${c}`} aria-pressed={shade?.accent === c} onClick={() => setColours({ accent: c })} />
                   ))}
                   <label className="yts-swatch-any" title="Any colour">
@@ -2255,5 +2398,6 @@ export default function YouTubeThumbnailStudio() {
         </>
       )}
     </div>
+    </BrandContext.Provider>
   );
 }
