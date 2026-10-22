@@ -17,6 +17,8 @@ const Anthropic = require('@anthropic-ai/sdk');
 const yt = require('./youtubeThumbnailService');
 const { removeBackground, cleanEdges } = require('./episodePoseMedia');
 const { isBudgetError } = require('./imageCostService');
+const axios = require('axios');
+const images = require('./imageGenerationService');
 
 // A side call: the repo's Haiku (CLAUDE.md, AI conventions).
 const MODELS = ['claude-haiku-4-5-20251001'];
@@ -121,4 +123,55 @@ async function cutOut(episodeId, url, name = 'Picture') {
   return { ...kept, provider: cut.provider };
 }
 
-module.exports = { titleIdeas, cutOut, readIdeas, ideaContext, IDEAS, TITLE_MAX, HOOK_MAX };
+// ── An AI background (Evoni, 2026-10-22) ───────────────────────────────────
+// A setting drawn from the episode's theme (and her own words, if any), within
+// the daily image budget (imageGenerationService → imageCostService), kept as
+// one of the episode's uploads.
+
+const BACKGROUND_WORDS_MAX = 200;
+const MADE_MAX_BYTES = 15 * 1024 * 1024;
+
+/** What the background is drawn from: the show, the episode's theme, her words. */
+function backgroundPrompt(src, words = '') {
+  const theme = [src.suggest?.edition, src.episode?.title].filter(Boolean)
+    .filter((t, i, all) => all.indexOf(t) === i).join(', ');
+  const extra = String(words || '').replace(/\s+/g, ' ').trim().slice(0, BACKGROUND_WORDS_MAX);
+  return [
+    `Background photograph for a YouTube thumbnail of the fashion styling show "${src.show?.name || 'Styling Adventures with Lala'}".`,
+    theme ? `The episode: ${theme}.` : null,
+    extra ? `The setting: ${extra}.` : null,
+    'A place only: no people, no faces, no hands, no text, no letters, no logos, no watermarks.',
+    'Wide 16:9, soft depth of field, warm glamorous light, open space on one side for a person and on the other for a title.',
+  ].filter(Boolean).join(' ');
+}
+
+/** A background made for the episode and kept as one of its uploads: { url, label, cost }. */
+async function aiBackground(sequelize, episodeId, words = '') {
+  const src = await yt.sources(sequelize, episodeId);
+  const prompt = backgroundPrompt(src, words);
+  let made;
+  try {
+    made = await images.generateImage(prompt, { useCase: 'thumbnail', size: 'landscape' });
+  } catch (err) {
+    if (budgetError(err)) throw new yt.ThumbnailError(429, `Today's image budget is used up: ${err.message}`);
+    if (/not configured/i.test(err.message)) throw new yt.ThumbnailError(503, 'AI backgrounds are not set up on the server (FAL_KEY).');
+    console.error('[ThumbnailAI] background not made:', err.message);
+    throw new yt.ThumbnailError(502, 'The background could not be made this time. Try again.');
+  }
+  if (made.nsfw_flagged) throw new yt.ThumbnailError(502, 'That one came back blank. Try other words.');
+  let buffer;
+  try {
+    const got = await axios.get(made.url, { responseType: 'arraybuffer', timeout: 60000, maxContentLength: MADE_MAX_BYTES });
+    buffer = Buffer.from(got.data);
+  } catch (err) {
+    console.error('[ThumbnailAI] made background not fetched:', err.message);
+    throw new yt.ThumbnailError(502, 'The background was made but could not be fetched. Try again.');
+  }
+  const kept = await yt.uploadPicture(episodeId, buffer, 'AI background');
+  return { ...kept, cost: made.cost_estimate ?? null };
+}
+
+module.exports = {
+  titleIdeas, cutOut, readIdeas, ideaContext, IDEAS, TITLE_MAX, HOOK_MAX,
+  aiBackground, backgroundPrompt, BACKGROUND_WORDS_MAX,
+};

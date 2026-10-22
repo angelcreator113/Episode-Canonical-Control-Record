@@ -373,3 +373,22 @@
 .yts-keep { display: inline-flex; align-items: center; gap: 4px; flex: none; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--lala-parchment); color: var(--text-secondary); }
 .yts-keep.is-saved { background: var(--success-bg); color: var(--success-text); }
 .yts-keep.is-failed { background: var(--danger-bg); color: var(--danger-text); }
+
+/* The A/B kit (Evoni, 2026-10-22): up to three for YouTube's Test & Compare, in one zip. */
+.yts-kit { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 12px; border: 1px dashed var(--accent-light); background: var(--accent-subtle); color: var(--text-primary); }
+.yts-kit .yts-btn { align-self: flex-start; }
+.yts-kit-picks { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.yts-kit-pick { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+
+/* The show's brand kit (Evoni, 2026-10-22): its colours, fonts and stickers, offered first. */
+.yts-brand { padding: 10px 12px; border-radius: 12px; border: 1px solid var(--lala-gold-line); background: var(--lala-parchment); }
+.yts-brand-colour { position: relative; display: inline-flex; }
+.yts-brand-remove { position: absolute; top: -6px; right: -6px; display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 1px solid var(--lala-parchment-3); background: var(--surface-card); color: var(--text-secondary); cursor: pointer; }
+.yts-brand-picks { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.yts-brand-picks .yts-label { flex-basis: 100%; }
+.yts-swatch.is-brand { outline: 2px dotted var(--lala-gold-line); outline-offset: 2px; }
+.yts-btn.is-brand { border-color: var(--lala-gold-line); }
+
+/* An AI background (Evoni, 2026-10-22): her words, then the button. */
+.yts-ai-bg { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; border: 1px dashed var(--accent-light); }
+.yts-ai-bg .yts-btn { align-self: flex-start; }
