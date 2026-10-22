@@ -392,3 +392,13 @@
 /* An AI background (Evoni, 2026-10-22): her words, then the button. */
 .yts-ai-bg { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; border: 1px dashed var(--accent-light); }
 .yts-ai-bg .yts-btn { align-self: flex-start; }
+
+/* Touch targets on a phone (audit, 2026-10-22): 44px at least, so Remove
+   and Lock beside each other are not mis-tapped. The layer rows wrap
+   (the container rule above), so the bigger buttons still fit at 375px. */
+@media (max-width: 760px) {
+  .yts-icon-btn { width: 44px; height: 44px; }
+  .yts-layer-name, .yts-history-btn, .yts-crumbs button, .yts-tab, .yts-more-layers, .yts-tool-btn, .yts-swatch-any { min-height: 44px; }
+  .yts-swatch { width: 44px; height: 44px; }
+  .yts-layer { flex-wrap: wrap; }
+}

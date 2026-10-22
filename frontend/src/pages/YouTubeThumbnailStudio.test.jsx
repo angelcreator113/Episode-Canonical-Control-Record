@@ -26,6 +26,7 @@ vi.mock('../lib/youtubeThumbnailsApi', async () => {
       titleIdeas: vi.fn(), cutOut: vi.fn(), zip: vi.fn(), saveBrand: vi.fn(), aiBackground: vi.fn(),
     },
     downloadBlob: vi.fn(),
+    saveDraftOnLeave: vi.fn(() => true),
   };
 });
 vi.mock('../lib/picturePreview', () => ({
@@ -325,6 +326,7 @@ describe('YouTubeThumbnailStudio', () => {
     const width = screen.getByRole('spinbutton', { name: 'Width (points)' });
     expect(width.disabled).toBe(false);
     fireEvent.change(width, { target: { value: '300' } });
+    fireEvent.blur(width);
     fireEvent.keyDown(window, { key: 'd', ctrlKey: true });
     await waitFor(() => expect(youtubeThumbnailsApi.saveDraft).toHaveBeenCalled(), { timeout: 3000 });
     const spec = lastDraft();
@@ -1380,6 +1382,58 @@ describe('YouTubeThumbnailStudio', () => {
     expect(screen.queryByTestId('yts-season')).toBeNull();
     // The same episode is read again (the season may have saved it).
     expect(youtubeThumbnailsApi.sources.mock.calls.filter(([id]) => id === 'ep-1').length).toBe(2);
+  });
+
+  test('the question takes the focus on No, and Esc answers No', async () => {
+    renderPage();
+    await opened();
+    fireEvent.click(screen.getByRole('button', { name: /Title only/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Lala left/ }));
+    const box = screen.getByTestId('yts-ask');
+    expect(box.getAttribute('role')).toBe('alertdialog');
+    expect(document.activeElement).toBe(within(box).getByRole('button', { name: 'No' }));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('yts-ask')).toBeNull();
+    expect(screen.getByRole('button', { name: /Lala left/ }).getAttribute('aria-pressed')).toBe('false');
+  });
+
+  test('the ⋮ menu: the first item takes the focus; arrow keys, Home and End move through it', async () => {
+    renderPage();
+    await opened();
+    fireEvent.click(screen.getByTestId('yts-more-btn'));
+    const menu = screen.getByRole('menu', { name: 'More' });
+    const items = [...menu.querySelectorAll('[role^="menuitem"]')].filter((b) => !b.disabled);
+    expect(document.activeElement).toBe(items[0]);
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(items[1]);
+    fireEvent.keyDown(menu, { key: 'ArrowUp' });
+    fireEvent.keyDown(menu, { key: 'ArrowUp' });
+    expect(document.activeElement).toBe(items[items.length - 1]);
+    fireEvent.keyDown(menu, { key: 'Home' });
+    expect(document.activeElement).toBe(items[0]);
+  });
+
+  // Audit, 2026-10-22: the box was clamped on every key (3 became 10, then 100, then 1000).
+  test('a size is kept as typed when Enter is pressed or the box is left; Escape puts it back', async () => {
+    renderPage();
+    await opened();
+    fireEvent.click(screen.getByTestId('canvas-title'));
+    const width = screen.getByRole('spinbutton', { name: 'Width (points)' });
+    const before = width.value;
+    fireEvent.focus(width);
+    for (const v of ['3', '30', '300']) fireEvent.change(width, { target: { value: v } });
+    expect(width.value).toBe('300');
+    fireEvent.keyDown(width, { key: 'Enter' });
+    await waitFor(() => expect(youtubeThumbnailsApi.saveDraft).toHaveBeenCalled(), { timeout: 3000 });
+    expect(layerOf(lastDraft(), 'title').w).toBe(300);
+    fireEvent.focus(width);
+    fireEvent.change(width, { target: { value: '' } });
+    fireEvent.keyDown(width, { key: 'Escape' });
+    expect(width.value).toBe('300');
+    fireEvent.change(width, { target: { value: '99999' } });
+    fireEvent.blur(width);
+    expect(Number(width.value)).toBe(3840);
+    expect(before).not.toBe('300');
   });
 
   // Audit, 2026-10-22: switching episodes.

@@ -584,12 +584,7 @@ function LayerSettings({ layer, onChange, colours, onRemember, onCutOut, cutting
       {layer.kind === 'image' && <PictureEffects layer={layer} onChange={onChange} colours={colours} onRemember={onRemember} onCutOut={onCutOut} cutting={cutting} />}
       <div className="yts-row yts-box-fields">
         {[['x', 'Left', -WIDTH, WIDTH * 2], ['y', 'Top', -HEIGHT, HEIGHT * 2], ['w', 'Width', 10, WIDTH * 3], ['h', 'Height', 10, HEIGHT * 3]].map(([key, label, min, max]) => (
-          <label key={key} className="yts-field is-small">
-            <span className="yts-label">{label}</span>
-            <input type="number" className="yts-input" value={Math.round(layer[key])} min={min} max={max} disabled={layer.locked}
-              onChange={(e) => { const n = Number(e.target.value); if (Number.isFinite(n)) onChange({ [key]: Math.min(max, Math.max(min, Math.round(n))) }); }}
-              aria-label={`${label} (points)`} />
-          </label>
+          <BoxField key={key} label={label} value={layer[key]} min={min} max={max} disabled={layer.locked} onCommit={(n) => onChange({ [key]: n })} />
         ))}
       </div>
       <label className="yts-field">
@@ -781,6 +776,35 @@ function useScrolledAway(ref, on = true) {
   return away;
 }
 
+/**
+ * A number for the picked layer's place or size (Evoni, 2026-10-21). What
+ * is typed stays as typed; it is checked and kept on Enter or on leaving
+ * the box (audit, 2026-10-22: it was clamped on every key, so typing 300
+ * gave 10, then 100, then 1000).
+ */
+function BoxField({ label, value, min, max, disabled, onCommit }) {
+  const [text, setText] = useState(String(Math.round(value)));
+  const [typing, setTyping] = useState(false);
+  useEffect(() => { if (!typing) setText(String(Math.round(value))); }, [value, typing]);
+  const commit = () => {
+    setTyping(false);
+    const n = Number(text);
+    if (text.trim() === '' || !Number.isFinite(n)) { setText(String(Math.round(value))); return; }
+    const kept = Math.min(max, Math.max(min, Math.round(n)));
+    setText(String(kept));
+    if (kept !== Math.round(value)) onCommit(kept);
+  };
+  return (
+    <label className="yts-field is-small">
+      <span className="yts-label">{label}</span>
+      <input type="number" className="yts-input" value={text} min={min} max={max} disabled={disabled}
+        onFocus={() => setTyping(true)} onChange={(e) => { setTyping(true); setText(e.target.value); }} onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } else if (e.key === 'Escape') { setTyping(false); setText(String(Math.round(value))); } }}
+        aria-label={`${label} (points)`} />
+    </label>
+  );
+}
+
 // On a phone the settings show one section at a time (Evoni, 2026-10-22
 // layout list), in tabs under the canvas.
 const PHONE_TABS = [
@@ -788,9 +812,45 @@ const PHONE_TABS = [
   ['characters', 'Characters'], ['background', 'Background'], ['colours', 'Colours'], ['saved', 'Saved'],
 ];
 
+/**
+ * A question before something is replaced or deleted. It takes the focus
+ * (No, the safe answer), Esc answers No, and focus goes back to where it
+ * was (audit, 2026-10-22).
+ */
+function AskBox({ asking, onYes, onNo }) {
+  const noRef = useRef(null);
+  useEffect(() => {
+    const before = document.activeElement;
+    noRef.current?.focus();
+    const esc = (e) => { if (e.key === 'Escape') { e.preventDefault(); onNo(); } };
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('keydown', esc); if (before && typeof before.focus === 'function') before.focus(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asking]);
+  return (
+    <div className="yts-ask" role="alertdialog" aria-modal="false" aria-label="Confirm" aria-describedby="yts-ask-text" data-testid="yts-ask">
+      <p id="yts-ask-text">{asking.text}</p>
+      <button type="button" className="yts-btn is-primary" onClick={onYes}>Yes</button>
+      <button type="button" className="yts-btn" ref={noRef} onClick={onNo}>No</button>
+    </div>
+  );
+}
+
 function MoreMenu({ items }) {
   const [open, setOpen] = useState(false);
   const box = useRef(null);
+  // Arrow keys, Home and End move through the items; the first is focused on opening (audit, 2026-10-22).
+  const itemsOf = () => [...(box.current?.querySelectorAll('[role^="menuitem"]:not(:disabled)') || [])];
+  useEffect(() => { if (open) itemsOf()[0]?.focus(); }, [open]);
+  const onMenuKey = (e) => {
+    const list = itemsOf();
+    if (!list.length) return;
+    const i = list.indexOf(document.activeElement);
+    const to = { ArrowDown: (i + 1) % list.length, ArrowUp: (i - 1 + list.length) % list.length, Home: 0, End: list.length - 1 }[e.key];
+    if (to === undefined) return;
+    e.preventDefault();
+    list[to].focus();
+  };
   useEffect(() => {
     if (!open) return undefined;
     const away = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(false); };
@@ -804,7 +864,7 @@ function MoreMenu({ items }) {
       <button type="button" className="yts-icon-btn" onClick={() => setOpen((v) => !v)} aria-haspopup="menu" aria-expanded={open}
         aria-label="More" title="More" data-testid="yts-more-btn"><EllipsisVertical size={15} aria-hidden /></button>
       {open && (
-        <ul className="yts-menu-list" role="menu" aria-label="More">
+        <ul className="yts-menu-list" role="menu" aria-label="More" onKeyDown={onMenuKey}>
           {items.map(({ key, testid, icon: Icon, label, onChoose, on, disabled }) => (
             <li key={key} role="none">
               <button type="button" role={on === undefined ? 'menuitem' : 'menuitemcheckbox'} aria-checked={on === undefined ? undefined : on}
@@ -1999,7 +2059,13 @@ export default function YouTubeThumbnailStudio() {
     edit(v.spec);
     setMessage({ type: 'ok', text: `Now editing "${v.name}". Undo goes back.` });
   };
-  const versionWarnings = useCallback((v) => (v.spec ? youtubeWarnings(v.spec, measurer).length : 0), [fontsTick]);
+  // Measured once per version's layers, not on every keystroke (audit, 2026-10-22); again when the fonts load.
+  const warningCounts = useMemo(() => new WeakMap(), [fontsTick]);
+  const versionWarnings = useCallback((v) => {
+    if (!v.spec) return 0;
+    if (!warningCounts.has(v.spec)) warningCounts.set(v.spec, youtubeWarnings(v.spec, measurer).length);
+    return warningCounts.get(v.spec);
+  }, [warningCounts]);
 
   const useTemplate = (t) => {
     if (!t.spec || !sources) return;
@@ -2132,13 +2198,7 @@ export default function YouTubeThumbnailStudio() {
         </div>
       )}
 
-      {asking && (
-        <div className="yts-ask" role="group" aria-label="Confirm" data-testid="yts-ask">
-          <p>{asking.text}</p>
-          <button type="button" className="yts-btn is-primary" onClick={() => { const { yes } = asking; setAsking(null); yes(); }}>Yes</button>
-          <button type="button" className="yts-btn" onClick={() => setAsking(null)}>No</button>
-        </div>
-      )}
+      {asking && <AskBox asking={asking} onYes={() => { const { yes } = asking; setAsking(null); yes(); }} onNo={() => setAsking(null)} />}
 
       {season && showId ? (
         <ThumbnailSeason showId={showId}
@@ -2255,6 +2315,7 @@ export default function YouTubeThumbnailStudio() {
               <div className="yts-phone-tabs" role="tablist" aria-label="Settings" data-testid="yts-phone-tabs">
                 {PHONE_TABS.map(([key, label]) => (
                   <button key={key} type="button" role="tab" className={`yts-tab${phoneTab === key ? ' is-on' : ''}`} aria-selected={phoneTab === key}
+                    aria-controls={key === 'saved' ? 'yts-strip' : 'yts-settings'}
                     onClick={() => setPhoneTab(key)} data-testid={`yts-phone-tab-${key}`}>{label}</button>
                 ))}
               </div>
@@ -2262,13 +2323,13 @@ export default function YouTubeThumbnailStudio() {
 
             {/* Versions and saved thumbnails under the canvas, as strips (Evoni, 2026-10-22 layout list); a tab of their own on a phone. */}
             {shown('saved') && (
-              <div className="yts-strip" data-testid="yts-strip">
+              <div className="yts-strip" id="yts-strip" data-testid="yts-strip">
                 {versionsBar}
                 {savedList}
               </div>
             )}
 
-            <div className="yts-bottom">
+            <div className="yts-bottom" id="yts-settings">
               {shown('layers') && (
               <section className="yts-card" aria-label="Layers">
                 <LayersList spec={spec} selectedId={selectedId} pickedIds={pickedIds} onSelect={select} onChange={edit} onDuplicate={duplicate} />
