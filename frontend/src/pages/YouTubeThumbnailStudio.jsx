@@ -545,6 +545,9 @@ function LayerThumb({ l }) {
 }
 
 /** The layers, front first: pick, hide or show, lock, copy, move forward or back, remove. */
+const LAYERS_SHORT = 6;
+const TOAST_MS = 5000;
+
 function LayersList({ spec, selectedId, pickedIds, onSelect, onChange, onDuplicate }) {
   const picked = new Set(pickedIds || (selectedId ? [selectedId] : []));
   const front = [...(spec?.layers || [])].reverse();
@@ -552,11 +555,16 @@ function LayersList({ spec, selectedId, pickedIds, onSelect, onChange, onDuplica
   const [drag, setDrag] = useState(null);
   const [over, setOver] = useState(null);
   const done = () => { setDrag(null); setOver(null); };
+  // A long list (Evoni, 2026-10-22 layout list): the top six, and any picked
+  // one further down, until "Show all".
+  const [all, setAll] = useState(false);
+  const long = front.length > LAYERS_SHORT + 2;
+  const rows = long && !all ? front.filter((l, i) => i < LAYERS_SHORT || picked.has(l.id)) : front;
   return (
     <fieldset className="yts-field" data-testid="yts-layers">
       <legend className="yts-label">Layers</legend>
       <ul className="yts-layers">
-        {front.map((l, i) => (
+        {rows.map((l) => { const i = front.indexOf(l); return (
           <li key={l.id} className={`yts-layer${picked.has(l.id) ? ' is-on' : ''}${l.visible ? '' : ' is-hidden'}${over === l.id ? ' is-over' : ''}${drag === l.id ? ' is-dragged' : ''}`}
             draggable data-testid={`yts-layer-${l.id}`}
             onDragStart={(e) => { setDrag(l.id); e.dataTransfer?.setData?.('text/plain', l.id); if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'; }}
@@ -591,8 +599,13 @@ function LayersList({ spec, selectedId, pickedIds, onSelect, onChange, onDuplica
             <button type="button" className="yts-icon-btn is-danger" onClick={() => { if (l.id === selectedId) onSelect(null); onChange(removeLayer(spec, l.id)); }}
               aria-label={`Remove ${layerName(l)}`} title="Remove"><Trash2 size={15} aria-hidden /></button>
           </li>
-        ))}
+        ); })}
       </ul>
+      {long && (
+        <button type="button" className="yts-more-layers" onClick={() => setAll((v) => !v)} aria-expanded={all} data-testid="yts-layers-all">
+          {all ? 'Show fewer' : `Show all ${front.length} layers`}
+        </button>
+      )}
     </fieldset>
   );
 }
@@ -698,7 +711,7 @@ function useScrolledAway(ref, on = true) {
 // layout list), in tabs under the canvas.
 const PHONE_TABS = [
   ['layers', 'Layers'], ['layout', 'Layout'], ['text', 'Text'], ['assets', 'Assets'],
-  ['characters', 'Characters'], ['background', 'Background'], ['colours', 'Colours'],
+  ['characters', 'Characters'], ['background', 'Background'], ['colours', 'Colours'], ['saved', 'Saved'],
 ];
 
 function MoreMenu({ items }) {
@@ -1096,6 +1109,12 @@ export default function YouTubeThumbnailStudio() {
   const [rendering, setRendering] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(null);
+  // A success fades by itself (Evoni, 2026-10-22 layout list); an error stays until closed.
+  useEffect(() => {
+    if (message?.type !== 'ok') return undefined;
+    const t = setTimeout(() => setMessage((m) => (m === message ? null : m)), TOAST_MS);
+    return () => clearTimeout(t);
+  }, [message]);
   const [draftNote, setDraftNote] = useState(null);
   const [saved, setSaved] = useState(null);
   const [history, setHistory] = useState([]);
@@ -1740,6 +1759,38 @@ export default function YouTubeThumbnailStudio() {
     { key: 'safe', testid: 'yts-menu-safe', icon: SquareDashed, label: 'Safe zones', on: marks.safe, onChoose: () => setMarks((m) => ({ ...m, safe: !m.safe })) },
   ];
 
+  const versionsBar = episodeId && sources && (
+    <VersionsBar versions={sources.versions || []} busy={busy} now={snapshot} nowWarnings={ytWarnings.length} warningsOf={versionWarnings}
+      onKeep={keepVersion} onUse={useVersion} onRename={renameVersion} onUpdate={updateVersion} onDelete={deleteVersion} />
+  );
+  const savedList = history.length > 0 && (
+    <section className="yts-history" aria-label="Saved thumbnails" data-testid="yts-history">
+      <h2 className="yts-label"><History size={14} aria-hidden /> Saved thumbnails</h2>
+      <ul className="yts-history-grid">
+        {history.map((t) => (
+          <li key={t.id} className={`yts-history-item${t.isPrimary ? ' is-current' : ''}`} data-testid={`yts-saved-${t.id}`}>
+            <img src={t.url} alt={t.isPrimary ? "The episode's thumbnail" : 'An earlier thumbnail'} loading="lazy" />
+            <div className="yts-history-row">
+              {t.isPrimary ? (
+                <span className="yts-history-badge"><Star size={13} aria-hidden /> Episode thumbnail</span>
+              ) : (
+                <>
+                  <button type="button" className="yts-history-btn" onClick={() => makeCurrent(t)} disabled={busy}>
+                    <Star size={13} aria-hidden /> Use this one
+                  </button>
+                  <button type="button" className="yts-history-btn is-danger" onClick={() => removeSaved(t)} disabled={busy} aria-label="Delete this saved thumbnail">
+                    <Trash2 size={13} aria-hidden />
+                  </button>
+                </>
+              )}
+              {t.savedAt && <span className="yts-history-date">{new Date(t.savedAt).toLocaleDateString()}</span>}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+
   return (
     <div className={`yts${sheet ? ' has-sheet' : ''}`}>
       <header className={`yts-banner${compact ? ' is-compact' : ''}`}>
@@ -1785,13 +1836,16 @@ export default function YouTubeThumbnailStudio() {
       </header>
 
       {message && (
-        <div className={`yts-message is-${message.type}`} role={message.type === 'error' ? 'alert' : 'status'}>
+        <div className={`yts-message yts-toast is-${message.type}`} role={message.type === 'error' ? 'alert' : 'status'} data-testid="yts-toast">
           <span>{message.text}</span>
           {loadFailed && message.type === 'error' && (
             <button type="button" className="yts-btn" onClick={() => { setMessage(null); retryLoad(); }} data-testid="yts-retry">
               <RefreshCw size={15} aria-hidden /> Try again
             </button>
           )}
+          <button type="button" className="yts-icon-btn" onClick={() => setMessage(null)} aria-label="Close the message" data-testid="yts-toast-close">
+            <X size={15} aria-hidden />
+          </button>
         </div>
       )}
 
@@ -1880,6 +1934,10 @@ export default function YouTubeThumbnailStudio() {
               {saved && (
                 <p className="yts-saved"><Check size={16} aria-hidden /> Saved. <Link to={`/episodes/${episodeId}?tab=production`}>Back to Production</Link></p>
               )}
+            </section>
+
+            {(showKeys || exact) && (
+            <section className="yts-card" aria-label="See it exactly">
               {showKeys && <ShortcutsPanel onClose={() => setShowKeys(false)} />}
               {exact && (
                 <figure className="yts-exact" data-testid="yts-exact-figure">
@@ -1892,6 +1950,8 @@ export default function YouTubeThumbnailStudio() {
                 </figure>
               )}
             </section>
+            )}
+
 
             {phone && (
               <div className="yts-phone-tabs" role="tablist" aria-label="Settings" data-testid="yts-phone-tabs">
@@ -1899,6 +1959,14 @@ export default function YouTubeThumbnailStudio() {
                   <button key={key} type="button" role="tab" className={`yts-tab${phoneTab === key ? ' is-on' : ''}`} aria-selected={phoneTab === key}
                     onClick={() => setPhoneTab(key)} data-testid={`yts-phone-tab-${key}`}>{label}</button>
                 ))}
+              </div>
+            )}
+
+            {/* Versions and saved thumbnails under the canvas, as strips (Evoni, 2026-10-22 layout list); a tab of their own on a phone. */}
+            {shown('saved') && (
+              <div className="yts-strip" data-testid="yts-strip">
+                {versionsBar}
+                {savedList}
               </div>
             )}
 
@@ -2133,37 +2201,6 @@ export default function YouTubeThumbnailStudio() {
           <TemplatesBar showName={sources.show.name} templates={sources.templates || []} busy={busy}
             onUse={useTemplate} onCreate={createTemplate} onRename={renameTemplate} onDefault={defaultTemplate}
             onUpdate={updateTemplate} onDelete={deleteTemplate} />
-        )}
-        {episodeId && sources && (
-          <VersionsBar versions={sources.versions || []} busy={busy} now={snapshot} nowWarnings={ytWarnings.length} warningsOf={versionWarnings}
-            onKeep={keepVersion} onUse={useVersion} onRename={renameVersion} onUpdate={updateVersion} onDelete={deleteVersion} />
-        )}
-        {history.length > 0 && (
-          <section className="yts-history" aria-label="Saved thumbnails" data-testid="yts-history">
-            <h2 className="yts-label"><History size={14} aria-hidden /> Saved thumbnails</h2>
-            <ul className="yts-history-grid">
-              {history.map((t) => (
-                <li key={t.id} className={`yts-history-item${t.isPrimary ? ' is-current' : ''}`} data-testid={`yts-saved-${t.id}`}>
-                  <img src={t.url} alt={t.isPrimary ? "The episode's thumbnail" : 'An earlier thumbnail'} loading="lazy" />
-                  <div className="yts-history-row">
-                    {t.isPrimary ? (
-                      <span className="yts-history-badge"><Star size={13} aria-hidden /> Episode thumbnail</span>
-                    ) : (
-                      <>
-                        <button type="button" className="yts-history-btn" onClick={() => makeCurrent(t)} disabled={busy}>
-                          <Star size={13} aria-hidden /> Use this one
-                        </button>
-                        <button type="button" className="yts-history-btn is-danger" onClick={() => removeSaved(t)} disabled={busy} aria-label="Delete this saved thumbnail">
-                          <Trash2 size={13} aria-hidden />
-                        </button>
-                      </>
-                    )}
-                    {t.savedAt && <span className="yts-history-date">{new Date(t.savedAt).toLocaleDateString()}</span>}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </section>
         )}
         {sheet && (
           <section className="yts-sheet" aria-label="The picked layer" data-testid="yts-sheet">

@@ -1127,6 +1127,54 @@ describe('YouTubeThumbnailStudio', () => {
     expect(document.querySelector('.yts-banner').classList.contains('is-compact')).toBe(false);
   });
 
+  // Evoni, 2026-10-22 layout list: messages float at the foot of the screen.
+  test('a message floats at the foot of the screen; a success fades by itself, any message closes with ×', async () => {
+    renderPage();
+    await opened();
+    // Copying layers changes nothing on the thumbnail; it only says so.
+    const copy = () => { fireEvent.click(screen.getByTestId('canvas-title')); fireEvent.keyDown(window, { key: 'c', ctrlKey: true }); };
+    try {
+      copy();
+      const toast = await screen.findByTestId('yts-toast');
+      expect(toast.classList.contains('yts-toast')).toBe(true);
+      expect(toast.getAttribute('role')).toBe('status');
+      expect(toast.textContent).toContain('Copied 1 layer');
+      fireEvent.click(screen.getByTestId('yts-toast-close'));
+      expect(screen.queryByTestId('yts-toast')).toBeNull();
+      // Again, and this time it fades by itself.
+      vi.useFakeTimers();
+      copy();
+      expect(screen.getByTestId('yts-toast')).toBeTruthy();
+      act(() => { vi.advanceTimersByTime(5100); });
+      expect(screen.queryByTestId('yts-toast')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+      window.localStorage.removeItem('yts-clipboard');
+    }
+  });
+
+  test('a long Layers list shows the top six until Show all; versions and saved thumbnails are strips under the canvas', async () => {
+    youtubeThumbnailsApi.saved.mockResolvedValue([{ id: 's1', url: 'https://b.s3.amazonaws.com/s1.png', isPrimary: true }]);
+    renderPage();
+    await opened();
+    expect(screen.queryByTestId('yts-layers-all')).toBeNull(); // six layers: all shown
+    for (let i = 0; i < 4; i += 1) fireEvent.click(screen.getByTestId('yts-add-text'));
+    const more = screen.getByTestId('yts-layers-all');
+    expect(more.textContent).toBe('Show all 10 layers');
+    expect(within(screen.getByTestId('yts-layers')).getAllByRole('listitem')).toHaveLength(6);
+    expect(screen.queryByTestId('yts-layer-background')).toBeNull();
+    fireEvent.click(more);
+    expect(screen.getByTestId('yts-layer-background')).toBeTruthy();
+    expect(more.textContent).toBe('Show fewer');
+    // The strip: right under the canvas, before the Layers card.
+    const strip = await screen.findByTestId('yts-strip');
+    expect(within(strip).getByTestId('yts-versions')).toBeTruthy();
+    expect(await within(strip).findByTestId('yts-saved-s1')).toBeTruthy();
+    const order = (el) => [...document.querySelectorAll('section, [data-testid="yts-strip"]')].indexOf(el);
+    expect(order(strip)).toBeGreaterThan(order(screen.getByRole('region', { name: 'Editor' })));
+    expect(order(strip)).toBeLessThan(order(screen.getByRole('region', { name: 'Layers' })));
+  });
+
   test('the grid and the safe zones: toggled on the toolbar, drawn over the canvas only', async () => {
     renderPage();
     await opened();
@@ -1266,7 +1314,7 @@ describe('YouTubeThumbnailStudio on a phone', () => {
     renderPage();
     await opened();
     const tabs = within(screen.getByTestId('yts-phone-tabs'));
-    expect(tabs.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Layers', 'Layout', 'Text', 'Assets', 'Characters', 'Background', 'Colours']);
+    expect(tabs.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Layers', 'Layout', 'Text', 'Assets', 'Characters', 'Background', 'Colours', 'Saved']);
     expect(tabs.getByRole('tab', { name: 'Layers' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByTestId('yts-layers')).toBeTruthy();
     expect(screen.queryByLabelText('Title')).toBeNull();
@@ -1280,6 +1328,9 @@ describe('YouTubeThumbnailStudio on a phone', () => {
     expect(screen.queryByLabelText('Title')).toBeNull();
     fireEvent.click(tabs.getByRole('tab', { name: 'Colours' }));
     expect(screen.getByRole('button', { name: 'Accent #B8962E' })).toBeTruthy();
+    expect(screen.queryByTestId('yts-strip')).toBeNull();
+    fireEvent.click(tabs.getByRole('tab', { name: 'Saved' }));
+    expect(within(screen.getByTestId('yts-strip')).getByTestId('yts-versions')).toBeTruthy();
   });
 
   test('once the canvas has scrolled away, a small picture of the thumbnail is pinned; a tap goes back to the canvas', async () => {
