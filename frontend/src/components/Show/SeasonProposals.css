@@ -29,3 +29,9 @@
 .sp-btn-soft { border: 1px solid var(--accent-light); background: var(--surface-card); color: var(--accent-dark); }
 .sp-btn:disabled, .sp-btn-soft:disabled { opacity: 0.6; cursor: not-allowed; }
 .sp-empty, .sp-note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+
+/* Nothing proposed: one line (Evoni, 2026-10-22 layout list). */
+.sp-card.is-quiet { padding-top: 10px; padding-bottom: 10px; }
+.sp-quiet { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.sp-quiet .sp-title { margin: 0; font-size: 16px; }
+.sp-quiet .sp-empty { flex: 1 1 200px; margin: 0; }

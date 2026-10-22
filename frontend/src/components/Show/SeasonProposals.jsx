@@ -102,6 +102,20 @@ export default function SeasonProposals({ showId, api, onApplied }) {
   const chosenCount = Object.values(keep).filter(Boolean).length;
   const moved = signalLines(open?.signals);
 
+  // Nothing proposed: one line with its check (Evoni, 2026-10-22 layout list).
+  if (!open) {
+    return (
+      <section className="sp-card is-quiet" aria-labelledby="sp-title" data-testid="season-proposals">
+        <div className="sp-quiet">
+          <h3 id="sp-title" className="sp-title"><Sparkles size={16} aria-hidden="true" /> From The Pulse</h3>
+          <p className="sp-empty" title="The season is checked against the feed when an episode is accepted, a Pulse storyline pays off, or a character’s followers jump.">Nothing proposed right now.</p>
+          <button type="button" className="sp-btn-soft" onClick={check} disabled={!!busy}>{busy === 'check' ? 'Reading The Pulse…' : 'Check The Pulse now'}</button>
+        </div>
+        {note && <p className="sp-note" role="status">{note}</p>}
+      </section>
+    );
+  }
+
   return (
     <section className="sp-card" aria-labelledby="sp-title" data-testid="season-proposals">
       <header className="sp-head">
@@ -112,7 +126,7 @@ export default function SeasonProposals({ showId, api, onApplied }) {
         <button type="button" className="sp-btn-soft" onClick={check} disabled={!!busy}>{busy === 'check' ? 'Reading The Pulse…' : 'Check The Pulse now'}</button>
       </header>
 
-      {open ? (
+      {open && (
         <div className="sp-open">
           {open.summary && <p className="sp-summary">{open.summary}</p>}
           {moved.length > 0 && (
@@ -145,10 +159,6 @@ export default function SeasonProposals({ showId, api, onApplied }) {
             <button type="button" className="sp-btn-soft" disabled={!!busy} onClick={() => decide('dismiss')}>Dismiss</button>
           </div>
         </div>
-      ) : (
-        <p className="sp-empty">
-          Nothing proposed right now. The season is checked against the feed when an episode is accepted, a Pulse storyline pays off, or a character’s followers jump.
-        </p>
       )}
       {note && <p className="sp-note" role="status">{note}</p>}
     </section>
