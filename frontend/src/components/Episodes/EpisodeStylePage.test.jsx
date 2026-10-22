@@ -80,6 +80,11 @@ const renderPage = async (opts) => {
   return { onOpenTab };
 };
 const sheetEl = () => within(screen.getByTestId('style-sheet'));
+// A Hero photo in the Lookbook and on the sheet.
+const withHero = () => ({
+  lb: lookbook({ images: { ...lookbook().images, hero: [photo('h1', 'hero')] } }),
+  sh: sheet({ look: { ...EPISODE_ONE.look, front: 'data:image/png;base64,f1', hero: 'data:image/png;base64,h1' } }),
+});
 const panel = () => within(screen.getByTestId('esp2-spot-panel'));
 const goTo = (step) => fireEvent.click(screen.getByTestId(`esp2-step-${step}`));
 
@@ -131,49 +136,68 @@ describe('Style Page', () => {
 
   test('Choose from Files lists her Style photos folder by folder, and files the picked one in the spot', async () => {
     await renderPage({ lb: lookbook({ images: { ...lookbook().images, hero: [photo('h1', 'hero')] } }) });
-    fireEvent.click(sheetEl().getByRole('button', { name: 'Add Back' }));
+    fireEvent.click(sheetEl().getByRole('button', { name: 'Add Hair' }));
     fireEvent.click(panel().getByTestId('esp2-files-open'));
     const files = within(await screen.findByTestId('esp2-files'));
     expect(files.getByTestId('esp2-files-folder-unsorted').textContent).toContain('Style photos · To sort');
-    expect(files.getByRole('button', { name: 'Use h1.png for Back' })).toBeTruthy();
-    expect(files.getByRole('button', { name: 'Use f1.png for Back' })).toBeTruthy();
+    expect(files.getByRole('button', { name: 'Use h1.png for Hair' })).toBeTruthy();
+    // A photo filed under front before 2026-10-22 shows in To sort.
+    expect(within(files.getByTestId('esp2-files-folder-unsorted')).getByRole('button', { name: 'Use f1.png for Hair' })).toBeTruthy();
     api.patch.mockResolvedValue({ data: { data: { lookbook: lookbook() } } });
-    fireEvent.click(files.getByRole('button', { name: 'Use u1.png for Back' }));
-    await waitFor(() => expect(api.patch).toHaveBeenCalledWith(`${LB_URL}/images/u1`, { category: 'back' }));
+    fireEvent.click(files.getByRole('button', { name: 'Use u1.png for Hair' }));
+    await waitFor(() => expect(api.patch).toHaveBeenCalledWith(`${LB_URL}/images/u1`, { category: 'hair' }));
   });
 
   test("taking a photo off the sheet sends it back to To sort; it stays in Files", async () => {
-    await renderPage();
-    fireEvent.click(sheetEl().getByRole('button', { name: 'Edit Front' }));
+    await renderPage(withHero());
+    fireEvent.click(sheetEl().getByRole('button', { name: 'Edit Hero' }));
     api.patch.mockResolvedValue({ data: { data: { lookbook: lookbook() } } });
-    fireEvent.click(panel().getByRole('button', { name: 'Take the Front photo off the sheet (it stays in Files)' }));
-    await waitFor(() => expect(api.patch).toHaveBeenCalledWith(`${LB_URL}/images/f1`, { category: 'unsorted' }));
+    fireEvent.click(panel().getByRole('button', { name: 'Take the Hero photo off the sheet (it stays in Files)' }));
+    await waitFor(() => expect(api.patch).toHaveBeenCalledWith(`${LB_URL}/images/h1`, { category: 'unsorted' }));
     expect(api.delete).not.toHaveBeenCalled();
   });
 
-  test('Choose from Files lists the ready Lala and JustAWoman photos and puts the picked one in the spot', async () => {
-    await renderPage({ poses: [
-      pose('p1', 'lala', 'side', { is_default: true }), pose('p2', 'lala', 'glamour'),
-      pose('p3', 'justawoman', 'front'), pose('p4', 'lala', 'back', { status: 'processing', final_url: null }),
-    ] });
+  const POSES_ALL = [
+    pose('p1', 'lala', 'side', { is_default: true }), pose('p5', 'lala', 'side'), pose('p2', 'lala', 'glamour'),
+    pose('p3', 'justawoman', 'side'), pose('p4', 'lala', 'back', { status: 'processing', final_url: null }),
+  ];
+
+  test("Front, Side and Back are Lala's poses: Choose from Files offers that angle's, and picking one stars it", async () => {
+    await renderPage({ poses: POSES_ALL });
     fireEvent.click(sheetEl().getByRole('button', { name: 'Add Side' }));
+    expect(panel().getByText("Lala's starred Side pose in Files › Photos.")).toBeTruthy();
     fireEvent.click(panel().getByTestId('esp2-files-open'));
     const files = within(await screen.findByTestId('esp2-files'));
-    await files.findByRole('button', { name: 'Use Lala Side for Side' });
-    expect(files.getByRole('button', { name: 'Use Lala Glamour for Side' })).toBeTruthy();
-    expect(files.getByRole('button', { name: 'Use JustAWoman Front for Side' })).toBeTruthy();
+    await files.findByRole('button', { name: 'Use Lala Side (starred) for Side' });
+    expect(files.getByRole('button', { name: 'Use Lala Side for Side' })).toBeTruthy();
+    // Only Lala's Side poses: not Glamour, not JustAWoman, no Style photos.
+    expect(files.queryByRole('button', { name: /Glamour|JustAWoman/ })).toBeNull();
+    expect(files.queryByTestId('esp2-files-folder-unsorted')).toBeNull();
+    api.patch.mockResolvedValue({ data: { data: {} } });
+    fireEvent.click(files.getByRole('button', { name: 'Use Lala Side for Side' }));
+    await waitFor(() => expect(api.patch).toHaveBeenCalledWith(`/api/v1/episode-poses/${EP}/p5`, { is_default: true }));
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  test('for another spot, Choose from Files lists every ready pose of Lala and JustAWoman and copies the pick', async () => {
+    await renderPage({ poses: POSES_ALL });
+    fireEvent.click(sheetEl().getByRole('button', { name: 'Add Hero' }));
+    fireEvent.click(panel().getByTestId('esp2-files-open'));
+    const files = within(await screen.findByTestId('esp2-files'));
+    await files.findByRole('button', { name: 'Use Lala Glamour for Hero' });
+    expect(files.getByRole('button', { name: 'Use JustAWoman Side for Hero' })).toBeTruthy();
     // A photo still being processed is not offered.
     expect(files.queryByRole('button', { name: /Lala Back/ })).toBeNull();
     api.post.mockResolvedValue({ data: { data: { lookbook: lookbook() } } });
-    fireEvent.click(files.getByRole('button', { name: 'Use Lala Side for Side' }));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${LB_URL}/images/from-pose`, { pose_id: 'p1', category: 'side' }));
+    fireEvent.click(files.getByRole('button', { name: 'Use Lala Glamour for Hero' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${LB_URL}/images/from-pose`, { pose_id: 'p2', category: 'hero' }));
   });
 
   test('with no photos in Files, Choose from Files offers Open Files', async () => {
     const { onOpenTab } = await renderPage({ poses: [], lb: lookbook({ images: Object.fromEntries(CATS.map((c) => [c, []])) }) });
     fireEvent.click(sheetEl().getByRole('button', { name: 'Add Hero' }));
     fireEvent.click(panel().getByTestId('esp2-files-open'));
-    expect(await screen.findByText(/Upload them in Files › Style photos/)).toBeTruthy();
+    expect(await screen.findByText(/Upload them in Files › Photos/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Open Files' }));
     expect(onOpenTab).toHaveBeenCalledWith('files');
   });
@@ -446,11 +470,11 @@ describe('Style Page', () => {
   });
 
   test('a failed save shows its message and keeps the page', async () => {
-    await renderPage();
+    await renderPage(withHero());
     api.patch.mockRejectedValue({ response: { data: { error: 'Photo not found in this episode\'s Lookbook' } } });
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    fireEvent.click(sheetEl().getByRole('button', { name: 'Edit Front' }));
-    fireEvent.click(panel().getByRole('button', { name: /Take the Front photo off the sheet/ }));
+    fireEvent.click(sheetEl().getByRole('button', { name: 'Edit Hero' }));
+    fireEvent.click(panel().getByRole('button', { name: /Take the Hero photo off the sheet/ }));
     expect((await screen.findByRole('alert')).textContent).toBe("Photo not found in this episode's Lookbook");
     expect(screen.getByTestId('episode-style-page')).toBeTruthy();
   });

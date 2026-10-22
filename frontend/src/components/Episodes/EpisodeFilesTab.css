@@ -1,0 +1,19 @@
+/* Production › Files (Evoni, 2026-10-22): one drop zone, then three tabs.
+   Tokens only: no hex, no rgb. */
+
+.eft { display: flex; flex-direction: column; gap: 12px; }
+.eft-drop { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 14px 16px; border-radius: 16px; border: 1.5px dashed var(--accent-light); background: var(--surface-card); color: var(--accent-dark); }
+.eft-drop.is-over { background: var(--accent-subtle); color: var(--accent-dark); }
+.eft-drop-text { flex: 1 1 260px; font-size: 14px; color: var(--text-primary); }
+.eft-drop-btn { min-height: 44px; padding: 8px 16px; border-radius: 999px; border: 1px solid var(--accent-dark); background: var(--accent-dark); color: var(--text-inverse); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.eft-drop-btn:disabled { opacity: 0.6; cursor: wait; }
+.eft-message { margin: 0; padding: 8px 12px; border-radius: 10px; font-size: 13px; }
+.eft-message.is-ok { background: var(--success-bg); color: var(--success-text); }
+.eft-message.is-info { background: var(--warning-bg); color: var(--warning-text); }
+.eft-message.is-error { background: var(--danger-bg); color: var(--danger-text); }
+
+.eft-tabs { display: flex; gap: 6px; overflow-x: auto; border-bottom: 1px solid var(--lala-parchment-3); }
+.eft-tab { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 16px; border: none; border-bottom: 3px solid transparent; background: transparent; color: var(--text-secondary); font: inherit; font-size: 15px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.eft-tab.is-active { border-bottom-color: var(--accent-dark); color: var(--text-primary); }
+.eft-count { padding: 1px 8px; border-radius: 999px; background: var(--lala-gold-soft); color: var(--lala-gold-text); font-size: 12px; font-weight: 700; }
+.eft-drop-btn:focus-visible, .eft-tab:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 2px; }

@@ -39,44 +39,6 @@
 }
 
 /* ── Banner ──────────────────────────────────────────────────────── */
-.template-studio .ts-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 16px;
-  padding: 18px 24px;
-  border-radius: var(--ts-radius);
-  border: 1.5px solid var(--ts-gold-soft);
-  background: linear-gradient(115deg, rgba(74, 22, 64, 0.94) 0%, rgba(150, 46, 110, 0.9) 55%, rgba(233, 139, 181, 0.85) 100%);
-  box-shadow: 0 8px 28px rgba(110, 29, 79, 0.25);
-}
-.template-studio .ts-banner-left { display: flex; align-items: center; gap: 18px; min-width: 0; }
-.template-studio .ts-brand {
-  font-family: var(--ts-serif);
-  font-style: italic;
-  font-weight: 700;
-  font-size: 30px;
-  color: #ffd9e8;
-  text-shadow: 0 0 12px rgba(255, 150, 200, 0.7), 0 1px 0 var(--ts-gold);
-  white-space: nowrap;
-}
-.template-studio .ts-title {
-  margin: 0;
-  font-family: var(--ts-serif);
-  font-size: 34px;
-  line-height: 1.1;
-  font-weight: 700;
-  color: #fff;
-}
-.template-studio .ts-tagline {
-  margin-top: 4px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: #fbe3ee;
-}
 .template-studio .ts-new {
   display: inline-flex;
   align-items: center;
@@ -97,45 +59,6 @@
 /* ── Body ────────────────────────────────────────────────────────── */
 .template-studio .ts-body { display: flex; gap: 12px; margin-top: 12px; align-items: flex-start; }
 
-.template-studio .ts-rail {
-  position: sticky;
-  top: 12px;
-  width: 230px;
-  flex-shrink: 0;
-  padding: 12px 10px;
-  border-radius: var(--ts-radius);
-  border: 1.5px solid var(--ts-gold-soft);
-  background: var(--ts-glass);
-  box-shadow: var(--ts-shadow);
-}
-.template-studio .ts-rail-nav { display: flex; flex-direction: column; gap: 2px; }
-.template-studio .ts-rail-btn {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 10px 14px;
-  border-radius: 14px;
-  border: 1.5px solid transparent;
-  background: transparent;
-  color: var(--ts-plum);
-  font: inherit;
-  font-size: 15px;
-  font-weight: 600;
-  text-align: left;
-  text-decoration: none;
-  cursor: pointer;
-}
-.template-studio .ts-rail-btn svg { color: var(--ts-magenta); flex-shrink: 0; }
-.template-studio .ts-rail-btn:hover { background: var(--ts-blush); }
-.template-studio .ts-rail-btn.is-active {
-  color: #fff;
-  border-color: var(--ts-gold-soft);
-  background: linear-gradient(135deg, #e0689f, #c2407f);
-  box-shadow: 0 4px 14px rgba(194, 64, 127, 0.35), 0 0 0 3px rgba(255, 255, 255, 0.4) inset;
-}
-.template-studio .ts-rail-btn.is-active svg { color: #fff; }
-.template-studio .ts-rail-label { flex: 1; min-width: 0; }
 .template-studio .ts-rail-count {
   font-size: 12px;
   font-weight: 700;
@@ -143,20 +66,6 @@
   border-radius: 999px;
   background: rgba(194, 64, 127, 0.1);
   color: var(--ts-magenta);
-}
-.template-studio .ts-rail-btn.is-active .ts-rail-count { background: #fff; }
-.template-studio .ts-rail-divider {
-  height: 1px;
-  margin: 10px 8px;
-  background: linear-gradient(90deg, transparent, var(--ts-gold-soft), transparent);
-}
-.template-studio .ts-rail-heading {
-  padding: 2px 14px 6px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--ts-muted);
 }
 
 .template-studio .ts-main {
@@ -559,7 +468,7 @@
 @media (max-width: 1100px) {
   .template-studio .ts-workspace {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "panel" "grid" "versions";
+    grid-template-areas: "grid" "panel" "versions";
   }
   .template-studio .ts-panel { position: static; }
 }
@@ -567,28 +476,10 @@
 @media (max-width: 900px) {
   .template-studio .ts-body { flex-direction: column; align-items: stretch; }
   .template-studio .ts-main { width: 100%; }
-  .template-studio .ts-rail {
-    position: static;
-    width: 100%;
-    padding: 8px;
-    overflow-x: auto;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .template-studio .ts-rail-nav { flex-direction: row; flex-shrink: 0; }
-  .template-studio .ts-rail-btn { width: auto; flex-shrink: 0; padding: 8px 12px; font-size: 14px; gap: 8px; }
-  .template-studio .ts-rail-divider { width: 1px; height: 28px; margin: 0 4px; flex-shrink: 0;
-    background: linear-gradient(180deg, transparent, var(--ts-gold-soft), transparent); }
-  .template-studio .ts-rail-heading { display: none; }
 }
 
 @media (max-width: 600px) {
   .template-studio { padding: 8px; }
-  .template-studio .ts-banner { padding: 14px 16px; }
-  .template-studio .ts-brand { display: none; }
-  .template-studio .ts-title { font-size: 26px; }
-  .template-studio .ts-tagline { font-size: 10px; letter-spacing: 0.14em; }
   .template-studio .ts-new { width: 100%; justify-content: center; }
   .template-studio .ts-main { padding: 10px; }
   .template-studio .ts-search { flex-basis: 100%; min-width: 0; }
@@ -620,3 +511,49 @@
 .template-studio .ts-show-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .template-studio .ts-show-actions a { text-decoration: none; }
 .template-studio .ts-spinner.is-small { width: 22px; height: 22px; }
+
+/* ── Organized by use (Evoni, 2026-10-22) ─────────────────────────────
+   A one-line header, three tabs (YouTube thumbnails, Style sheets,
+   Layouts), the layouts' status chips, bigger thumbnail cards with "⋯",
+   and on a phone a layout's preview as a sheet from the bottom. */
+.template-studio .ts-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 4px 0; }
+.template-studio .ts-title { margin: 0; font-family: var(--ts-serif); font-size: 26px; line-height: 1.2; font-weight: 700; color: var(--ts-plum); }
+.template-studio a.ts-new { text-decoration: none; }
+.template-studio .ts-views { display: flex; gap: 4px; margin-top: 10px; overflow-x: auto; border-bottom: 1.5px solid var(--ts-gold-soft); }
+.template-studio .ts-view { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 16px; border: none; border-bottom: 3px solid transparent; background: transparent; color: var(--ts-muted); font: inherit; font-size: 15px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+.template-studio .ts-view.is-active { border-bottom-color: var(--ts-magenta); color: var(--ts-plum); }
+.template-studio .ts-view-count { padding: 1px 8px; border-radius: 999px; background: var(--ts-blush); color: var(--ts-plum); font-size: 12px; }
+.template-studio .ts-body { display: block; margin-top: 12px; }
+
+.template-studio .ts-statuses { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.template-studio .ts-status-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 6px 12px; border-radius: 999px; border: 1.5px solid var(--ts-gold-soft); background: #fff; color: var(--ts-plum); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.template-studio .ts-status-chip.is-active { border-color: var(--ts-magenta); background: var(--ts-blush); }
+
+.template-studio .ts-show-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.template-studio .ts-show-pic { position: relative; }
+.template-studio .ts-show-badge { position: absolute; left: 8px; top: 8px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 999px; background: var(--ts-plum); color: #fff; font-size: 12px; font-weight: 700; }
+.template-studio a.ts-show-card-name { text-decoration: none; cursor: pointer; }
+.template-studio .ts-show-intro { margin: 0; color: var(--ts-muted); }
+.template-studio .ts-show-new { border-style: dashed; background: #fff; }
+.template-studio .ts-show-new-link { display: flex; flex-direction: column; gap: 6px; color: inherit; text-decoration: none; }
+.template-studio .ts-show-hint { font-size: 13px; color: var(--ts-muted); }
+.template-studio .ts-show-card { position: relative; }
+.template-studio .ts-card-menu { position: absolute; z-index: 5; top: 16px; right: 16px; }
+.template-studio .ts-card-menu-btn { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--ts-gold-soft); background: #fff; color: var(--ts-plum); cursor: pointer; }
+.template-studio .ts-card-menu-body { position: absolute; z-index: 20; top: 40px; right: 0; display: flex; flex-direction: column; gap: 4px; width: 170px; padding: 6px; border-radius: 12px; border: 1px solid var(--ts-gold-soft); background: #fff; box-shadow: 0 8px 24px rgba(110, 29, 79, 0.18); }
+.template-studio .ts-card-menu-item { display: flex; align-items: center; min-height: 40px; padding: 6px 10px; border: none; border-radius: 8px; background: transparent; color: var(--ts-plum); font: inherit; font-size: 14px; font-weight: 600; text-align: left; text-decoration: none; cursor: pointer; }
+.template-studio .ts-card-menu-item:hover { background: var(--ts-blush); }
+.template-studio .ts-card-menu-item.is-danger { color: #b3261e; }
+
+.template-studio .ts-sheet-close, .template-studio .ts-sheet-backdrop { display: none; }
+
+@media (max-width: 760px) {
+  .template-studio .ts-title { font-size: 22px; }
+  .template-studio .ts-head .ts-new { width: auto; padding: 8px 14px; font-size: 14px; }
+  .template-studio .ts-show-grid { grid-template-columns: minmax(0, 1fr); }
+  /* The list first; a tapped layout opens in a sheet from the bottom. */
+  .template-studio .ts-panel { position: fixed; z-index: 60; left: 0; right: 0; bottom: 0; max-height: 85dvh; overflow-y: auto; margin: 0; border-radius: 18px 18px 0 0; transform: translateY(105%); transition: transform 0.2s ease; }
+  .template-studio .ts-panel.is-open { transform: none; }
+  .template-studio .ts-sheet-close { display: grid; }
+  .template-studio .ts-sheet-backdrop { display: block; position: fixed; z-index: 55; inset: 0; border: none; background: rgba(44, 20, 36, 0.35); }
+}
