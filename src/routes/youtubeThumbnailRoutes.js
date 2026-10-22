@@ -52,13 +52,25 @@ const thumbAi = require('../services/thumbnailAiService');
 
 const router = express.Router();
 
+// Every id in an address is a UUID; anything else is a 404 before the
+// database is asked (audit, 2026-10-22: a bad id was a 500 with Postgres's words).
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+for (const [param, what] of [['episodeId', 'Episode'], ['showId', 'Show'], ['templateId', 'Template'], ['versionId', 'Version'], ['thumbnailId', 'Thumbnail']]) {
+  router.param(param, (req, res, next, value) => (UUID.test(String(value)) ? next() : res.status(404).json({ success: false, error: `${what} not found` })));
+}
+
 const sendError = (res, err, what) => {
   if (err instanceof multer.MulterError) {
     return res.status(400).json({ success: false, error: err.code === 'LIMIT_FILE_SIZE' ? 'An image is over 15 MB' : err.message });
   }
   if (err.status) return res.status(err.status).json({ success: false, error: err.message });
   console.error(`[YouTubeThumbnail] ${what} failed:`, err.message);
-  return res.status(500).json({ success: false, error: err.message });
+  // Two changes that met at once (a unique index); otherwise the database's
+  // own words stay in the log, not in the answer (audit, 2026-10-22).
+  if (err?.original?.code === '23505' || err?.parent?.code === '23505') {
+    return res.status(409).json({ success: false, error: 'Something else changed this at the same moment; try again' });
+  }
+  return res.status(500).json({ success: false, error: `The ${what} could not be done. Try again.` });
 };
 
 const pictureUpload = multer({

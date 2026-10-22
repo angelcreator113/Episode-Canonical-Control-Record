@@ -118,7 +118,8 @@ async function downloadImage(url) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(url, { signal: controller.signal });
+    // No redirects: an address we allow must not lead somewhere we don't.
+    const res = await fetch(url, { signal: controller.signal, redirect: 'error' });
     if (!res.ok) throw new ThumbnailError(400, `Could not read an image (${res.status})`);
     const len = Number(res.headers.get('content-length'));
     if (len && len > MAX_IMAGE_BYTES) throw new ThumbnailError(400, 'An image is too big (25 MB at most)');
@@ -548,7 +549,12 @@ async function setPreview(sequelize, templateId, url) {
     { replacements: { url, templateId } });
 }
 
-const nameTaken = (err) => err?.original?.code === '23505' || err?.parent?.code === '23505';
+const uniqueViolation = (err) => err?.original?.code === '23505' || err?.parent?.code === '23505';
+const violatedConstraint = (err) => String(err?.original?.constraint || err?.parent?.constraint || '');
+// A name already in use (the name-per-show / name-per-episode indexes); any
+// other unique index means two changes met at once (audit, 2026-10-22).
+const nameTaken = (err) => uniqueViolation(err) && /_name_per_(show|episode)$/.test(violatedConstraint(err));
+const BUSY = 'Something else changed this at the same moment; try again';
 
 /**
  * The metadata template becomes a real row ("Default") the first time a
@@ -596,6 +602,7 @@ async function createTemplate(sequelize, showId, body = {}, userId = null) {
     });
   } catch (err) {
     if (nameTaken(err)) throw new ThumbnailError(409, 'That name is taken');
+    if (uniqueViolation(err)) throw new ThumbnailError(409, BUSY);
     throw err;
   }
   if (adopted) {
@@ -645,6 +652,7 @@ async function updateTemplate(sequelize, showId, rawTemplateId, body = {}, userI
     });
   } catch (err) {
     if (nameTaken(err)) throw new ThumbnailError(409, 'That name is taken');
+    if (uniqueViolation(err)) throw new ThumbnailError(409, BUSY);
     throw err;
   }
   if (spec || (templateId === LEGACY_ID && !row.preview_url)) {
@@ -722,10 +730,12 @@ function nextVersionName(names) {
 
 const versionOut = (r) => ({ id: r.id, name: r.name, previewUrl: r.preview_url || null, spec: readTemplate(r.spec), updatedAt: r.updated_at });
 
-async function findEpisode(sequelize, episodeId, transaction) {
+async function findEpisode(sequelize, episodeId, transaction, { lock = false } = {}) {
   if (!UUID.test(String(episodeId))) throw new ThumbnailError(404, 'Episode not found');
+  // lock: the episode's row is held until the transaction ends, so two
+  // changes to one episode's versions or thumbnails take turns.
   const [[episode]] = await sequelize.query(
-    'SELECT id FROM episodes WHERE id = :episodeId AND deleted_at IS NULL LIMIT 1',
+    `SELECT id FROM episodes WHERE id = :episodeId AND deleted_at IS NULL LIMIT 1${lock && transaction ? ' FOR UPDATE' : ''}`,
     { replacements: { episodeId }, transaction });
   if (!episode) throw new ThumbnailError(404, 'Episode not found');
   return episode;
@@ -756,7 +766,7 @@ async function createVersion(sequelize, episodeId, body = {}, userId = null) {
   let row;
   try {
     row = await sequelize.transaction(async (transaction) => {
-      const episode = await findEpisode(sequelize, episodeId, transaction);
+      const episode = await findEpisode(sequelize, episodeId, transaction, { lock: true });
       const [names] = await sequelize.query(
         'SELECT name FROM episode_thumbnail_versions WHERE episode_id = :episodeId AND deleted_at IS NULL',
         { replacements: { episodeId: episode.id }, transaction });
@@ -771,6 +781,7 @@ async function createVersion(sequelize, episodeId, body = {}, userId = null) {
     });
   } catch (err) {
     if (nameTaken(err)) throw new ThumbnailError(409, 'That name is taken');
+    if (uniqueViolation(err)) throw new ThumbnailError(409, BUSY);
     throw err;
   }
   row.preview_url = await drawVersionPreview(episodeId, row.id, spec);
@@ -801,6 +812,7 @@ async function updateVersion(sequelize, episodeId, rawVersionId, body = {}) {
     });
   } catch (err) {
     if (nameTaken(err)) throw new ThumbnailError(409, 'That name is taken');
+    if (uniqueViolation(err)) throw new ThumbnailError(409, BUSY);
     throw err;
   }
   if (spec) {
@@ -898,6 +910,9 @@ async function saveAsPrimary(sequelize, episodeId, png, spec = null) {
   const url = `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`;
   const row = await sequelize.transaction(async (transaction) => {
     let created = null;
+    // Two saves of one episode take turns, so the second sees the first's
+    // current row and the one-current index is never hit (audit, 2026-10-22).
+    await findEpisode(sequelize, episodeId, transaction, { lock: true });
     if (await savedReady(sequelize, transaction)) {
       await sequelize.query(
         `UPDATE episode_saved_thumbnails SET is_current = false, updated_at = NOW()
@@ -917,18 +932,55 @@ async function saveAsPrimary(sequelize, episodeId, png, spec = null) {
   return { id: row?.id || null, url, key, type: file.type, bytes: file.bytes };
 }
 
+// One thumbnail's pictures together stay under this (audit, 2026-10-22:
+// 24 layers × 25 MB could hold 600 MB for one request).
+const MAX_SPEC_PICTURE_BYTES = 120 * 1024 * 1024;
+
 /** The pictures a thumbnail's visible image layers use, fetched: { [layerId]: Buffer }. */
 async function layerPictures(spec) {
   const out = {};
-  await Promise.all(spec.layers.filter((l) => l.kind === 'image' && l.visible && l.src).map(async (l) => {
-    out[l.id] = await fetchImage(l.src);
-  }));
+  let total = 0;
+  const wanted = spec.layers.filter((l) => l.kind === 'image' && l.visible && l.src);
+  // A few at a time, so the running total is checked as they come.
+  for (let i = 0; i < wanted.length; i += 4) {
+    const got = await Promise.all(wanted.slice(i, i + 4).map(async (l) => [l.id, await fetchImage(l.src)]));
+    for (const [id, buf] of got) {
+      total += buf.length;
+      if (total > MAX_SPEC_PICTURE_BYTES) throw new ThumbnailError(400, 'The pictures in this thumbnail are too big together (120 MB at most)');
+      out[id] = buf;
+    }
+  }
   return out;
+}
+
+/**
+ * At most RENDER_SLOTS thumbnails are drawn at once on this server; the rest
+ * wait their turn, and past RENDER_QUEUE_MAX waiting the answer is "busy"
+ * (audit, 2026-10-22: drawing is heavy and holds the server while it runs).
+ */
+const RENDER_SLOTS = 3;
+const RENDER_QUEUE_MAX = 60;
+let rendering = 0;
+const waiting = [];
+async function withRenderSlot(fn) {
+  if (rendering < RENDER_SLOTS) {
+    rendering += 1;
+  } else {
+    if (waiting.length >= RENDER_QUEUE_MAX) throw new ThumbnailError(503, 'The thumbnail drawer is busy; try again in a moment');
+    await new Promise((resolve) => waiting.push(resolve)); // the slot is handed over, already counted
+  }
+  try {
+    return await fn();
+  } finally {
+    const next = waiting.shift();
+    if (next) next();
+    else rendering -= 1;
+  }
 }
 
 /** Renders a layered thumbnail ({ version: 2, layers }, already read): PNG, 1280×720. */
 async function renderSpec(spec) {
-  return layers.renderLayers(spec, await layerPictures(spec));
+  return withRenderSlot(async () => layers.renderLayers(spec, await layerPictures(spec)));
 }
 
 const draftsReady = async (sequelize) => {
@@ -1059,6 +1111,7 @@ async function findSaved(sequelize, episodeId, thumbnailId, transaction) {
 async function makePrimary(sequelize, episodeId, thumbnailId) {
   await requireSaved(sequelize);
   return sequelize.transaction(async (transaction) => {
+    await findEpisode(sequelize, episodeId, transaction, { lock: true });
     const row = await findSaved(sequelize, episodeId, thumbnailId, transaction);
     await sequelize.query(
       `UPDATE episode_saved_thumbnails SET is_current = false, updated_at = NOW()
@@ -1084,10 +1137,16 @@ async function removeSaved(sequelize, episodeId, thumbnailId) {
   if (row.is_current) {
     throw new ThumbnailError(409, 'This is the episode\'s thumbnail. Make another one the thumbnail first.');
   }
-  await sequelize.query(
+  // NOT is_current: if it was made the thumbnail meanwhile (another tab),
+  // nothing is deleted and the same answer comes back (audit, 2026-10-22).
+  const [gone] = await sequelize.query(
     `UPDATE episode_saved_thumbnails SET deleted_at = NOW(), updated_at = NOW()
-      WHERE id = :thumbnailId AND episode_id = :episodeId AND deleted_at IS NULL`,
+      WHERE id = :thumbnailId AND episode_id = :episodeId AND deleted_at IS NULL AND NOT is_current
+      RETURNING id`,
     { replacements: { episodeId, thumbnailId } });
+  if (!gone || !gone.length) {
+    throw new ThumbnailError(409, 'This is the episode\'s thumbnail. Make another one the thumbnail first.');
+  }
   return { id: row.id };
 }
 
@@ -1167,6 +1226,7 @@ async function zipThumbnails(items, out) {
 }
 
 module.exports = {
+  withRenderSlot, RENDER_SLOTS, RENDER_QUEUE_MAX, MAX_SPEC_PICTURE_BYTES,
   readBrand,
   saveBrand,
   BRAND_COLOURS_MAX,

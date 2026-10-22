@@ -932,7 +932,8 @@ async function renderLayers(spec, pictures = {}) {
 
 /** The font file for a key, for the browser editor (FONTS only). */
 function fontFile(key) {
-  const f = FONTS[key];
+  // Own keys only: "constructor" or "toString" is not a font (audit, 2026-10-22).
+  const f = Object.prototype.hasOwnProperty.call(FONTS, key) ? FONTS[key] : null;
   return f ? path.join(FONT_DIR, f.file) : null;
 }
 

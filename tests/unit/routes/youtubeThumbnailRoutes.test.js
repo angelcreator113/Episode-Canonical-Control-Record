@@ -41,7 +41,7 @@ const binary = (res, cb) => {
 };
 
 beforeEach(() => {
-  mockQuery.mockReset().mockImplementation(async (sql) => (/FROM episodes/.test(sql) ? [[{ id: 'ep-1' }]] : [[]]));
+  mockQuery.mockReset().mockImplementation(async (sql) => (/FROM episodes/.test(sql) ? [[{ id: '11111111-2222-4333-8444-555555555555' }]] : [[]]));
   yt.saveAsPrimary.mockClear();
 });
 
@@ -73,11 +73,11 @@ test('render refuses what is not layers (the earlier spec too), and a picture th
 });
 
 test('saving stores the drawing as the episode\'s primary thumbnail', async () => {
-  const res = await request(app).post('/api/v1/youtube-thumbnails/episodes/ep-1').send(LAYERS);
+  const res = await request(app).post('/api/v1/youtube-thumbnails/episodes/11111111-2222-4333-8444-555555555555').send(LAYERS);
   expect(res.status).toBe(201);
   expect(res.body.data).toEqual({ id: 7, url: 'https://b.s3.amazonaws.com/t.png', key: 't.png' });
   // The layers ride along, so a saved thumbnail can become the show's template.
-  expect(yt.saveAsPrimary).toHaveBeenCalledWith(expect.anything(), 'ep-1', expect.any(Buffer), expect.objectContaining({ version: 2, layers: expect.any(Array) }));
+  expect(yt.saveAsPrimary).toHaveBeenCalledWith(expect.anything(), '11111111-2222-4333-8444-555555555555', expect.any(Buffer), expect.objectContaining({ version: 2, layers: expect.any(Array) }));
 });
 
 test('saving for an unknown episode is a 404, with nothing stored', async () => {
@@ -88,13 +88,43 @@ test('saving for an unknown episode is a 404, with nothing stored', async () => 
 });
 
 test('the saved list, making one current, and a refused delete pass through', async () => {
-  const list = await request(app).get('/api/v1/youtube-thumbnails/episodes/ep-1/saved');
+  const list = await request(app).get('/api/v1/youtube-thumbnails/episodes/11111111-2222-4333-8444-555555555555/saved');
   expect(list.status).toBe(200);
   expect(list.body.data).toEqual([{ id: 7, url: 'https://b.s3.amazonaws.com/t.png', isPrimary: true }]);
-  const made = await request(app).post('/api/v1/youtube-thumbnails/episodes/ep-1/saved/6/primary');
+  const made = await request(app).post('/api/v1/youtube-thumbnails/episodes/11111111-2222-4333-8444-555555555555/saved/66666666-2222-4333-8444-555555555555/primary');
   expect(made.status).toBe(200);
-  expect(yt.makePrimary).toHaveBeenCalledWith(expect.anything(), 'ep-1', '6');
-  const del = await request(app).delete('/api/v1/youtube-thumbnails/episodes/ep-1/saved/7');
+  expect(yt.makePrimary).toHaveBeenCalledWith(expect.anything(), '11111111-2222-4333-8444-555555555555', '66666666-2222-4333-8444-555555555555');
+  const del = await request(app).delete('/api/v1/youtube-thumbnails/episodes/11111111-2222-4333-8444-555555555555/saved/77777777-2222-4333-8444-555555555555');
   expect(del.status).toBe(409);
   expect(del.body.error).toMatch(/Make another one the thumbnail first/);
+});
+
+// Audit, 2026-10-22.
+test('an id that is not a UUID is a 404 before the database is asked', async () => {
+  for (const url of ['/episodes/not-a-uuid/sources', '/episodes/11111111-2222-4333-8444-555555555555/saved/7/primary', '/shows/1; DROP/templates', '/episodes/11111111-2222-4333-8444-555555555555/versions/x']) {
+    mockQuery.mockClear();
+    const res = await request(app)[url.endsWith('primary') ? 'post' : 'get']('/api/v1/youtube-thumbnails' + url);
+    expect([url, res.status]).toEqual([url, 404]);
+    expect(mockQuery).not.toHaveBeenCalled();
+  }
+});
+
+test("a font's name is one of ours: \"constructor\" is a 404, not a crash", async () => {
+  for (const key of ['constructor', 'toString', '__proto__', 'nope']) {
+    const res = await request(app).get(`/api/v1/youtube-thumbnails/fonts/${key}`);
+    expect([key, res.status]).toEqual([key, 404]);
+  }
+});
+
+test("a database failure answers in plain words, not the database's", async () => {
+  jest.spyOn(console, 'error').mockImplementation(() => {});
+  yt.listSaved.mockRejectedValueOnce(new Error('relation "x" does not exist'));
+  const res = await request(app).get('/api/v1/youtube-thumbnails/episodes/11111111-2222-4333-8444-555555555555/saved');
+  expect(res.status).toBe(500);
+  expect(res.body.error).not.toMatch(/relation/);
+  const clash = new Error('duplicate key value violates unique constraint');
+  clash.original = { code: '23505' };
+  yt.listSaved.mockRejectedValueOnce(clash);
+  const again = await request(app).get('/api/v1/youtube-thumbnails/episodes/11111111-2222-4333-8444-555555555555/saved');
+  expect(again.status).toBe(409);
 });
