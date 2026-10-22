@@ -39,9 +39,11 @@ vi.mock('../lib/thumbnailLayers', async () => {
 // The canvas: each visible layer as a button that picks it, and a button
 // that "drags" the picked layer (what Konva's drag and transform report).
 vi.mock('../components/Thumbnails/ThumbnailCanvas', () => ({
-  default: ({ spec, selectedId, onSelect, onChange, onSnapshot, grid, safeZones }) => (
+  default: ({ spec, selectedId, onSelect, onChange, onSnapshot, grid, safeZones, onZoom }) => (
     <>
     <button type="button" data-testid="canvas-snapshot" onClick={() => onSnapshot?.('data:image/jpeg;base64,c25hcA==')}>snapshot</button>
+    <button type="button" data-testid="canvas-pinch" onClick={() => onZoom?.(2.1)}>pinch</button>
+    <button type="button" data-testid="canvas-pinch-far" onClick={() => onZoom?.(40)}>pinch far</button>
     <div data-testid="yts-canvas" data-grid={String(Boolean(grid))} data-safe={String(Boolean(safeZones))}>
       {spec.layers.filter((l) => l.visible).map((l) => (
         <button key={l.id} type="button" data-testid={`canvas-${l.id}`} onClick={() => onSelect(l.id)}>{l.id}</button>
@@ -1218,6 +1220,15 @@ describe('YouTubeThumbnailStudio', () => {
     expect(showId).toBe('show-1');
     expect(body).toMatchObject({ spec: layers, makeDefault: false, name: expect.stringMatching(/^Saved /) });
     expect((await screen.findByTestId('yts-toast')).textContent).toContain('made from that saved thumbnail');
+  });
+
+  test('a pinch on the canvas with nothing picked zooms it, to the nearest quarter and no further than the most', async () => {
+    renderPage();
+    await opened();
+    fireEvent.click(screen.getByTestId('canvas-pinch'));
+    expect(within(screen.getByTestId('yts-zoom')).getByText('200%')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('canvas-pinch-far'));
+    expect(within(screen.getByTestId('yts-zoom')).getByRole('button', { name: 'Zoom in' }).disabled).toBe(true);
   });
 
   test('the grid and the safe zones: toggled on the toolbar, drawn over the canvas only', async () => {
