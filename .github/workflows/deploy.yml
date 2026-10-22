@@ -13,15 +13,16 @@
 # rule applies in full and deploys stay her manual action.
 #
 # What it does, in order (docs/reads/2026-10-10-deploy-path-read.md §6):
-#   plan (read-only, on the box) -> RDS snapshot -> wait until available ->
+#   plan (read-only, on the box) -> remove older deploy-* snapshots (keep the
+#   newest few) -> RDS snapshot -> wait until available ->
 #   fast-forward + vite build -> db:migrate if pending -> restart API, /health,
 #   restart the worker if it was online (a stopped one stays stopped) ->
 #   public health check -> job summary.
 # On any failure it stops. It never rolls back by itself: the summary names
 # the snapshot and the runbook says what to do.
 #
-# Credentials: GitHub OIDC only, to a role that can create and describe
-# deploy-* snapshots and send the PrimeStudios-Deploy SSM document to one
+# Credentials: GitHub OIDC only, to a role that can create, describe and
+# delete deploy-* snapshots and send the PrimeStudios-Deploy SSM document to one
 # instance. No stored AWS keys, no SSH, no Cognito, no database credential:
 # the box keeps its own.
 # =============================================================================
@@ -189,14 +190,31 @@ jobs:
             exit 1
           fi
 
+      # RDS allows 100 manual snapshots, and each run keeps one (runs #145 and
+      # #146 stopped at the snapshot on 2026-10-22). Keeps the newest
+      # DEPLOY_SNAPSHOTS_KEEP (default 10, at least 3) deploy-* snapshots and
+      # never stops the run: without the delete permission it only warns.
+      - name: Remove older deploy snapshots (keeps the newest few)
+        id: prune
+        env:
+          KEEP: ${{ vars.DEPLOY_SNAPSHOTS_KEEP }}
+        run: bash scripts/deploy/prune-snapshots.sh
+
       - name: Snapshot the database
         id: snapshot
         run: |
           SNAP="deploy-${TARGET_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          aws rds create-db-snapshot \
+          if ! OUT="$(aws rds create-db-snapshot \
             --db-instance-identifier "$RDS_INSTANCE_ID" \
             --db-snapshot-identifier "$SNAP" \
-            --query "DBSnapshot.[DBSnapshotIdentifier,Status]" --output text
+            --query "DBSnapshot.[DBSnapshotIdentifier,Status]" --output text 2>&1)"; then
+            echo "$OUT"
+            if printf '%s' "$OUT" | grep -q SnapshotQuotaExceeded; then
+              echo "::error::RDS already holds its limit of manual snapshots. Nothing on the box was changed. Remove old deploy-* snapshots in RDS → Snapshots → Manual, or give the role the delete permission so the run removes them ($RUNBOOK, §2.1 and §7), then start a new run."
+            fi
+            exit 1
+          fi
+          echo "$OUT"
           # Recorded only once the snapshot exists, so the summary never names one that does not.
           echo "name=${SNAP}" >>"$GITHUB_OUTPUT"
           echo "Snapshot ${SNAP} requested."
@@ -308,6 +326,9 @@ jobs:
           COMMITS: ${{ steps.plan.outputs.commits }}
           MIGRATIONS: ${{ steps.plan.outputs.migrations }}
           SNAP: ${{ steps.snapshot.outputs.name }}
+          PRUNE_REMOVED: ${{ steps.prune.outputs.removed }}
+          PRUNE_KEPT: ${{ steps.prune.outputs.kept }}
+          PRUNE_NOTE: ${{ steps.prune.outputs.note }}
           MIGRATE_RAN: ${{ steps.migrate.outputs.ran }}
           RESTART_OUTCOME: ${{ steps.restart.outcome }}
           WORKER_BEFORE: ${{ steps.restart.outputs.worker_before }}
@@ -326,6 +347,13 @@ jobs:
               echo "| Mode | resumed: the box was already at this commit |"
             fi
             echo "| Commits in range | ${COMMITS:-?} |"
+            case "$PRUNE_NOTE" in
+              ok) echo "| Older deploy snapshots removed | ${PRUNE_REMOVED} (the newest ${PRUNE_KEPT} kept) |" ;;
+              not-permitted) echo "| Older deploy snapshots removed | none: the role may not delete them (runbook §2.1) |" ;;
+              list-failed) echo "| Older deploy snapshots removed | none: they could not be listed |" ;;
+              some-failed) echo "| Older deploy snapshots removed | ${PRUNE_REMOVED}; some could not be removed (see the step's log) |" ;;
+              *) echo "| Older deploy snapshots removed | not reached |" ;;
+            esac
             echo "| Snapshot | \`${SNAP:-none taken}\` |"
             echo "| New migration files | ${MIGRATIONS:-?} |"
             case "$MIGRATE_RAN" in
