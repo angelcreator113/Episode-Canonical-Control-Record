@@ -10,7 +10,7 @@
  * older one deleted. The canvas itself is stubbed (ThumbnailCanvas.test).
  */
 import { vi, describe, beforeEach, afterEach, test, expect } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../lib/youtubeThumbnailsApi', async () => {
@@ -1169,5 +1169,89 @@ describe('YouTubeThumbnailStudio', () => {
     fireEvent.click((await grid.findByTestId('yts-season-ep-1')).querySelector('button'));
     expect(await opened()).toBeTruthy();
     expect(screen.queryByTestId('yts-season')).toBeNull();
+  });
+});
+
+// On a phone (Evoni, 2026-10-22 layout list): the toolbar on one row, the
+// picked layer's settings in a sheet from the bottom, and a small picture of
+// the thumbnail pinned at the top once the canvas has scrolled away.
+describe('YouTubeThumbnailStudio on a phone', () => {
+  let seen = null;
+  const realMatchMedia = window.matchMedia;
+  const realIO = window.IntersectionObserver;
+  beforeEach(() => {
+    window.matchMedia = vi.fn((q) => ({ matches: q.includes('760'), media: q, addEventListener: () => {}, removeEventListener: () => {} }));
+    window.IntersectionObserver = class {
+      constructor(cb) { seen = cb; }
+      observe() {}
+      disconnect() {}
+    };
+    Object.values(youtubeThumbnailsApi).forEach((fn) => fn.mockReset());
+    youtubeThumbnailsApi.shows.mockResolvedValue([{ id: 'show-1', name: 'Styling Adventures' }]);
+    youtubeThumbnailsApi.episodes.mockResolvedValue([{ id: 'ep-1', episode_number: 1, title: 'Studio by Sable' }]);
+    youtubeThumbnailsApi.sources.mockResolvedValue(SOURCES);
+    youtubeThumbnailsApi.saved.mockResolvedValue([]);
+    youtubeThumbnailsApi.saveDraft.mockResolvedValue({});
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    window.matchMedia = realMatchMedia;
+    window.IntersectionObserver = realIO;
+    seen = null;
+  });
+
+  test('the toolbar on one row: grid, safe zones and See it exactly in the ⋮ menu; Save says Save', async () => {
+    renderPage();
+    await opened();
+    expect(screen.queryByTestId('yts-grid-btn')).toBeNull();
+    expect(screen.queryByTestId('yts-exact')).toBeNull();
+    expect(screen.getByTestId('yts-save').textContent.trim()).toBe('Save');
+    expect(screen.getByTestId('yts-save').getAttribute('aria-label')).toBe('Save as thumbnail');
+    fireEvent.click(screen.getByTestId('yts-more-btn'));
+    expect(screen.queryByTestId('yts-keys-btn')).toBeNull();
+    const grid = screen.getByTestId('yts-menu-grid');
+    expect(grid.getAttribute('role')).toBe('menuitemcheckbox');
+    expect(grid.getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(grid);
+    expect(screen.getByTestId('yts-canvas').dataset.grid).toBe('true');
+    fireEvent.click(screen.getByTestId('yts-more-btn'));
+    expect(screen.getByTestId('yts-menu-grid').getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(screen.getByTestId('yts-menu-safe'));
+    expect(screen.getByTestId('yts-canvas').dataset.safe).toBe('true');
+    fireEvent.click(screen.getByTestId('yts-more-btn'));
+    expect(screen.getByTestId('yts-menu-exact').textContent).toContain('See it exactly');
+  });
+
+  test('a picked layer\'s settings come up in a sheet from the bottom, not the side; Done puts it away', async () => {
+    renderPage();
+    await opened();
+    expect(screen.queryByTestId('yts-sheet')).toBeNull();
+    fireEvent.click(screen.getByTestId('canvas-title'));
+    const sheet = screen.getByTestId('yts-sheet');
+    expect(within(sheet).getByTestId('yts-layer-settings').querySelector('legend').textContent).toBe('Title');
+    expect(within(screen.getByRole('complementary', { name: 'Thumbnail settings' })).queryByTestId('yts-layer-settings')).toBeNull();
+    expect(document.querySelector('.yts').classList.contains('has-sheet')).toBe(true);
+    fireEvent.click(screen.getByTestId('yts-sheet-done'));
+    expect(screen.queryByTestId('yts-sheet')).toBeNull();
+    expect(document.querySelector('.yts').classList.contains('has-sheet')).toBe(false);
+  });
+
+  test('once the canvas has scrolled away, a small picture of the thumbnail is pinned; a tap goes back to the canvas', async () => {
+    renderPage();
+    await opened();
+    fireEvent.click(screen.getByTestId('canvas-snapshot'));
+    expect(screen.queryByTestId('yts-mini')).toBeNull();
+    const stage = screen.getByRole('region', { name: 'Editor' });
+    stage.scrollIntoView = vi.fn();
+    // Below the screen is not "scrolled away".
+    act(() => seen([{ intersectionRatio: 0, boundingClientRect: { top: 900 } }]));
+    expect(screen.queryByTestId('yts-mini')).toBeNull();
+    act(() => seen([{ intersectionRatio: 0, boundingClientRect: { top: -400 } }]));
+    const mini = screen.getByTestId('yts-mini');
+    expect(mini.querySelector('img').getAttribute('src')).toBe('data:image/jpeg;base64,c25hcA==');
+    fireEvent.click(mini);
+    expect(stage.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+    act(() => seen([{ intersectionRatio: 1, boundingClientRect: { top: 80 } }]));
+    expect(screen.queryByTestId('yts-mini')).toBeNull();
   });
 });

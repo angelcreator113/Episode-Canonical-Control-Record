@@ -663,6 +663,37 @@ function ArrangeBar({ count, removable = 0, onAlign, onSpread, onClear, onCopy, 
 }
 
 /** The canvas's ⋮ menu: what is used now and then (the whole season, start again, the shortcuts). */
+// A phone (Evoni, 2026-10-22 layout list): the width the app's other pages
+// call a phone (EpisodeScriptTab). No matchMedia (tests): not a phone.
+const PHONE = '(max-width: 760px)';
+const phoneQuery = () => {
+  try { return window.matchMedia?.(PHONE) || null; } catch (err) { console.error('[YouTubeThumbnail] width check failed:', err); return null; }
+};
+function useIsPhone() {
+  const [phone, setPhone] = useState(() => Boolean(phoneQuery()?.matches));
+  useEffect(() => {
+    const mq = phoneQuery();
+    if (!mq?.addEventListener) return undefined;
+    const on = () => setPhone(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return phone;
+}
+
+/** True once the element has scrolled up out of view (not when it is below). */
+function useScrolledAway(ref, on = true) {
+  const [away, setAway] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!on || !el || typeof IntersectionObserver === 'undefined') { setAway(false); return undefined; }
+    const io = new IntersectionObserver(([e]) => setAway(e.intersectionRatio < 0.25 && e.boundingClientRect.top < 0), { threshold: [0, 0.25, 1] });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [ref, on]);
+  return away;
+}
+
 function MoreMenu({ items }) {
   const [open, setOpen] = useState(false);
   const box = useRef(null);
@@ -680,9 +711,10 @@ function MoreMenu({ items }) {
         aria-label="More" title="More" data-testid="yts-more-btn"><EllipsisVertical size={15} aria-hidden /></button>
       {open && (
         <ul className="yts-menu-list" role="menu" aria-label="More">
-          {items.map(({ key, testid, icon: Icon, label, onChoose }) => (
+          {items.map(({ key, testid, icon: Icon, label, onChoose, on, disabled }) => (
             <li key={key} role="none">
-              <button type="button" role="menuitem" className="yts-menu-item" data-testid={testid} onClick={() => { setOpen(false); onChoose(); }}>
+              <button type="button" role={on === undefined ? 'menuitem' : 'menuitemcheckbox'} aria-checked={on === undefined ? undefined : on}
+                className={`yts-menu-item${on ? ' is-on' : ''}`} data-testid={testid} disabled={disabled} onClick={() => { setOpen(false); onChoose(); }}>
                 <Icon size={15} aria-hidden /> {label}
               </button>
             </li>
@@ -1065,6 +1097,11 @@ export default function YouTubeThumbnailStudio() {
   const [season, setSeason] = useState(false);
   // The grid and safe zones over the canvas (Evoni, 2026-10-21 redesign); never saved.
   const [marks, setMarks] = useState({ grid: false, safe: false });
+  // On a phone (Evoni, 2026-10-22): the toolbar on one row, the picked layer's
+  // settings in a sheet from the bottom, and a small picture of the thumbnail
+  // pinned at the top once the canvas has scrolled away.
+  const phone = useIsPhone();
+  const stageRef = useRef(null);
   const edited = useRef(false);
   // The layers as they are now (an upload adds to them after its await).
   const specRef = useRef(null);
@@ -1676,9 +1713,20 @@ export default function YouTubeThumbnailStudio() {
 
   const picked = spec?.layers.find((l) => l.id === selectedId) || null;
   const shade = layerOf(spec, 'shade');
+  const stageAway = useScrolledAway(stageRef, phone && Boolean(spec));
+  const sheet = phone && picked && picked.kind !== 'shade';
+  const pickedSettings = picked && picked.kind !== 'shade' && (
+    <LayerSettings layer={picked} onChange={(patch) => edit((s) => updateLayer(s, picked.id, patch))} onCutOut={cutOut} cutting={cutting}
+      colours={[...ACCENTS, ...recentColours.filter((c) => !ACCENTS.includes(c))]} onRemember={remember} />
+  );
+  const marksItems = [
+    { key: 'exact', testid: 'yts-menu-exact', icon: ScanEye, label: rendering ? 'Drawing…' : 'See it exactly', onChoose: seeExactly, disabled: rendering },
+    { key: 'grid', testid: 'yts-menu-grid', icon: Grid3x3, label: 'Show grid', on: marks.grid, onChoose: () => setMarks((m) => ({ ...m, grid: !m.grid })) },
+    { key: 'safe', testid: 'yts-menu-safe', icon: SquareDashed, label: 'Safe zones', on: marks.safe, onChoose: () => setMarks((m) => ({ ...m, safe: !m.safe })) },
+  ];
 
   return (
-    <div className="yts">
+    <div className={`yts${sheet ? ' has-sheet' : ''}`}>
       <header className="yts-banner">
         <div>
           <p className="yts-kicker"><Link to="/template-studio">Templates</Link> · YouTube</p>
@@ -1742,11 +1790,11 @@ export default function YouTubeThumbnailStudio() {
         <>
         <div className="yts-studio">
           <div className="yts-main">
-            <section className="yts-card yts-stage" aria-label="Editor">
+            <section className="yts-card yts-stage" aria-label="Editor" ref={stageRef}>
               <div className="yts-toolbar" role="toolbar" aria-label="Canvas">
                 <div className="yts-zoom" role="group" aria-label="Zoom" data-testid="yts-zoom">
                   <button type="button" className="yts-icon-btn" onClick={() => zoomBy(-0.25)} disabled={zoom <= 1} aria-label="Zoom out" title="Zoom out (-)"><ZoomOut size={15} aria-hidden /></button>
-                  <span className="yts-zoom-level" aria-live="polite">{Math.round(zoom * 100)}%</span>
+                  {!phone && <span className="yts-zoom-level" aria-live="polite">{Math.round(zoom * 100)}%</span>}
                   <button type="button" className="yts-icon-btn" onClick={() => zoomBy(0.25)} disabled={zoom >= ZOOM_MAX} aria-label="Zoom in" title="Zoom in (+)"><ZoomIn size={15} aria-hidden /></button>
                   {zoom > 1 && <button type="button" className="yts-tool-btn" onClick={() => setZoom(1)}>Fit</button>}
                 </div>
@@ -1758,6 +1806,7 @@ export default function YouTubeThumbnailStudio() {
                     <Redo2 size={15} aria-hidden />
                   </button>
                 </div>
+                {!phone && (
                 <div className="yts-toolbar-group" role="group" aria-label="Marks">
                   <button type="button" className={`yts-tool-btn${marks.grid ? ' is-on' : ''}`} aria-pressed={marks.grid} data-testid="yts-grid-btn"
                     onClick={() => setMarks((m) => ({ ...m, grid: !m.grid }))} title="Squares and thirds over the canvas (not saved)">
@@ -1768,17 +1817,21 @@ export default function YouTubeThumbnailStudio() {
                     <SquareDashed size={15} aria-hidden /> Safe zones
                   </button>
                 </div>
+                )}
                 <div className="yts-toolbar-end">
-                  <button type="button" className="yts-tool-btn" onClick={seeExactly} disabled={rendering} data-testid="yts-exact">
-                    <ScanEye size={15} aria-hidden /> {rendering ? 'Drawing…' : 'See it exactly'}
-                  </button>
-                  <button type="button" className="yts-tool-btn is-primary" onClick={save} disabled={busy} data-testid="yts-save">
-                    <Save size={15} aria-hidden /> Save as thumbnail
+                  {!phone && (
+                    <button type="button" className="yts-tool-btn" onClick={seeExactly} disabled={rendering} data-testid="yts-exact">
+                      <ScanEye size={15} aria-hidden /> {rendering ? 'Drawing…' : 'See it exactly'}
+                    </button>
+                  )}
+                  <button type="button" className="yts-tool-btn is-primary" onClick={save} disabled={busy} data-testid="yts-save" aria-label="Save as thumbnail">
+                    <Save size={15} aria-hidden /> {phone ? 'Save' : 'Save as thumbnail'}
                   </button>
                   <MoreMenu items={[
+                    ...(phone ? marksItems : []),
                     { key: 'season', testid: 'yts-season-open', icon: LayoutGrid, label: 'Whole season', onChoose: () => setSeason(true) },
                     { key: 'reset', testid: 'yts-reset', icon: RotateCcw, label: 'Start again', onChoose: resetToTemplate },
-                    { key: 'keys', testid: 'yts-keys-btn', icon: Keyboard, label: 'Keyboard shortcuts', onChoose: () => setShowKeys((v) => !v) },
+                    ...(phone ? [] : [{ key: 'keys', testid: 'yts-keys-btn', icon: Keyboard, label: 'Keyboard shortcuts', onChoose: () => setShowKeys((v) => !v) }]),
                   ]} />
                 </div>
               </div>
@@ -1831,12 +1884,7 @@ export default function YouTubeThumbnailStudio() {
           </div>
 
           <aside className="yts-side" aria-label="Thumbnail settings">
-            {picked && picked.kind !== 'shade' && (
-              <section className="yts-card">
-                <LayerSettings layer={picked} onChange={(patch) => edit((s) => updateLayer(s, picked.id, patch))} onCutOut={cutOut} cutting={cutting}
-                  colours={[...ACCENTS, ...recentColours.filter((c) => !ACCENTS.includes(c))]} onRemember={remember} />
-              </section>
-            )}
+            {pickedSettings && !phone && <section className="yts-card">{pickedSettings}</section>}
 
             <section className="yts-card" aria-label="Template layout">
               <h2 className="yts-label">Template layout</h2>
@@ -2056,6 +2104,23 @@ export default function YouTubeThumbnailStudio() {
               ))}
             </ul>
           </section>
+        )}
+        {sheet && (
+          <section className="yts-sheet" aria-label="The picked layer" data-testid="yts-sheet">
+            <div className="yts-sheet-head">
+              <span className="yts-sheet-grip" aria-hidden />
+              <button type="button" className="yts-tool-btn is-primary" onClick={() => setSelectedId(null)} data-testid="yts-sheet-done">
+                <Check size={15} aria-hidden /> Done
+              </button>
+            </div>
+            {pickedSettings}
+          </section>
+        )}
+        {phone && stageAway && snapshot && !season && (
+          <button type="button" className="yts-mini" data-testid="yts-mini" aria-label="Back to the canvas"
+            onClick={() => stageRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })}>
+            <img src={snapshot} alt="" />
+          </button>
         )}
         </>
       )}
