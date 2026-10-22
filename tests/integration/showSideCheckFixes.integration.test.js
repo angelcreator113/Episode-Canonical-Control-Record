@@ -6,8 +6,8 @@
  *       (ADMIN, aiRateLimiter, MODELS two-attempt loop, utils/aiFailure); the
  *       panel used /memories/ai, which never existed
  *   F2  Scene Studio's Transform on a scene set: POST /scene-sets/:id/transform-object
- *   F4  GET /thumbnails/:id/url and /thumbnails/episode/:id/primary read only the
- *       columns the migrations create, so they no longer 500
+ *   F4  /api/v1/thumbnails is retired (2026-10-22: no page called it; its model
+ *       is not production's thumbnails table): its reads answer 404
  *   F7  GET /social-profiles/underground reaches the underground router instead of
  *       500ing in GET /social-profiles/:id
  *   P4  wardrobe-events suggest and world events ai-fix: rate-limited, two tries
@@ -49,7 +49,6 @@ const overBudget = () => Object.assign(new Error('Daily AI budget reached.'), { 
     show: crypto.randomUUID(), episode: crypto.randomUUID(), event: crypto.randomUUID(), set: crypto.randomUUID(),
   };
   const profiles = {};
-  let thumbnailId;
   let adminToken;
   let editorToken;
   const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
@@ -75,9 +74,6 @@ const overBudget = () => Object.assign(new Error('Daily AI budget reached.'), { 
                VALUES (:event, :show, 'Velvet Hour', 'cocktail', 6, NOW(), NOW())`, ids);
     await run(`INSERT INTO scene_sets (id, name, scene_type, show_id, generation_status, created_at, updated_at)
                VALUES (:set, 'Show fix set', 'HOME_BASE', :show, 'complete', NOW(), NOW())`, ids);
-    const [[thumb]] = await run(`INSERT INTO thumbnails ("episodeId", "s3Bucket", "s3Key", "thumbnailType")
-               VALUES (:episode, 'test-bucket', :key, 'primary') RETURNING id`, { ...ids, key: `show-fix/${TAG}.jpg` });
-    thumbnailId = thumb.id;
     await addProfile('slowsift');
     await addProfile('jaw', 'locked');
   });
@@ -91,7 +87,6 @@ const overBudget = () => Object.assign(new Error('Daily AI budget reached.'), { 
   afterEach(() => jest.restoreAllMocks());
 
   afterAll(async () => {
-    await run('DELETE FROM thumbnails WHERE id = :id', { id: thumbnailId });
     await run('DELETE FROM scene_sets WHERE id = :set', ids);
     await run('DELETE FROM world_events WHERE id = :event', ids);
     await run('DELETE FROM episodes WHERE id = :episode', ids);
@@ -169,17 +164,10 @@ const overBudget = () => Object.assign(new Error('Daily AI budget reached.'), { 
     });
   });
 
-  describe('F4: thumbnails on a migrations-built database', () => {
-    it('GET /thumbnails/:id/url answers 200', async () => {
-      const res = await request(app).get(`/api/v1/thumbnails/${thumbnailId}/url`);
-      expect(res.status).toBe(200);
-      expect(res.body.data).toMatchObject({ id: thumbnailId, s3Key: `show-fix/${TAG}.jpg` });
-    });
-
-    it('GET /thumbnails/episode/:episodeId/primary answers 200', async () => {
-      const res = await request(app).get(`/api/v1/thumbnails/episode/${ids.episode}/primary`);
-      expect(res.status).toBe(200);
-      expect(res.body.data.id).toBe(thumbnailId);
+  describe('F4: /api/v1/thumbnails is retired', () => {
+    it('its reads answer 404; the Studio\'s saved list is the way to an episode\'s thumbnail', async () => {
+      expect((await request(app).get('/api/v1/thumbnails/1/url')).status).toBe(404);
+      expect((await request(app).get(`/api/v1/thumbnails/episode/${ids.episode}/primary`)).status).toBe(404);
     });
   });
 
