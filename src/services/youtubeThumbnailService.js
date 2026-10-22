@@ -19,6 +19,7 @@
 
 const sharp = require('sharp');
 const layers = require('./thumbnailLayers');
+const archiver = require('archiver');
 const { createCache } = require('./pictureCache');
 const { readDocuments } = require('./eventDocumentsService');
 const { readLogo } = require('./showLogoService');
@@ -55,6 +56,22 @@ function readStyle(raw = {}) {
     textColor: HEX.test(s.textColor || '') ? s.textColor.toUpperCase() : DEFAULT_STYLE.textColor,
     dim: Number.isFinite(Number(s.dim)) ? Math.min(0.8, Math.max(0, Number(s.dim))) : DEFAULT_STYLE.dim,
     lalaUrl: typeof s.lalaUrl === 'string' && s.lalaUrl ? s.lalaUrl : null,
+  };
+}
+
+// A show's brand kit (Evoni, 2026-10-22): its own colours, fonts and stickers,
+// offered first in the Studio. Kept beside the style, in the show's metadata.
+const BRAND_COLOURS_MAX = 8;
+const uniq = (xs) => [...new Set(xs)];
+
+/** A brand kit, read and checked: up to eight colours (#RRGGBB), known fonts and stickers. */
+function readBrand(raw) {
+  const b = raw && typeof raw === 'object' ? raw : {};
+  const list = (v) => (Array.isArray(v) ? v : []);
+  return {
+    colours: uniq(list(b.colours).filter((c) => typeof c === 'string' && HEX.test(c)).map((c) => c.toUpperCase())).slice(0, BRAND_COLOURS_MAX),
+    fonts: uniq(list(b.fonts).filter((f) => typeof f === 'string' && Object.prototype.hasOwnProperty.call(layers.FONTS, f))),
+    stickers: uniq(list(b.stickers).filter((k) => typeof k === 'string' && layers.SHAPES.includes(k))),
   };
 }
 
@@ -162,7 +179,7 @@ async function sources(sequelize, episodeId) {
   return {
     episode: { id: episode.id, title: episode.title, episode_number: episode.episode_number },
     show: show ? { id: show.id, name: show.name } : null,
-    style: readStyle(show?.metadata?.youtube_thumbnail),
+    style: { ...readStyle(show?.metadata?.youtube_thumbnail), brand: readBrand(show?.metadata?.youtube_thumbnail?.brand) },
     backgrounds,
     cutouts: (cutouts || []).filter((c) => allowedImageUrl(c.url)).map((c) => ({ id: c.id, url: c.url, label: c.name })),
     poses,
@@ -397,6 +414,18 @@ async function saveStyle(sequelize, showId, body = {}) {
     { replacements: { showId, style: JSON.stringify(style) } });
   if (!(rows || []).length) throw new ThumbnailError(404, 'Show not found');
   return style;
+}
+
+/** Keeps the show's brand kit, leaving the rest of its style as it is. */
+async function saveBrand(sequelize, showId, body = {}) {
+  const brand = readBrand(body);
+  const [rows] = await sequelize.query(
+    `UPDATE shows SET metadata = jsonb_set(COALESCE(metadata::jsonb, '{}'::jsonb), '{youtube_thumbnail}',
+        COALESCE(metadata::jsonb -> 'youtube_thumbnail', '{}'::jsonb) || jsonb_build_object('brand', CAST(:brand AS jsonb)), true), updated_at = NOW()
+      WHERE id = :showId AND deleted_at IS NULL RETURNING id`,
+    { replacements: { showId, brand: JSON.stringify(brand) } });
+  if (!(rows || []).length) throw new ThumbnailError(404, 'Show not found');
+  return brand;
 }
 
 // ── A show's named templates (Evoni, 2026-10-21: several per show, each
@@ -1099,7 +1128,51 @@ async function smallPreview(png) {
   return sharp(png).resize(SMALL_WIDTH).flatten({ background: '#000000' }).jpeg({ quality: 82, mozjpeg: true }).toBuffer();
 }
 
+// ── Several thumbnails in one zip (Evoni, 2026-10-22) ───────────────────────
+// The season's ticked ones, or 2–3 versions for YouTube's Test & Compare; each
+// as it would be saved (under YouTube's 2 MB, forYouTube).
+
+const ZIP_MAX = 60;
+
+const fileSlug = (name) => String(name || 'thumbnail').normalize('NFKD').replace(/[^\w\s-]/g, '').trim()
+  .replace(/\s+/g, '-').slice(0, 60) || 'thumbnail';
+
+/** The items asked for, read and checked before anything is sent: [{ name, spec }]. */
+function zipItems(body, allowedUrl = allowedImageUrl) {
+  const items = body && Array.isArray(body.items) ? body.items : null;
+  if (!items || !items.length) throw new ThumbnailError(400, 'items must be a list of { name, spec }');
+  if (items.length > ZIP_MAX) throw new ThumbnailError(400, `At most ${ZIP_MAX} thumbnails in one zip`);
+  return items.map((it, i) => ({
+    name: `${String(i + 1).padStart(2, '0')}-${fileSlug(it && it.name)}`,
+    spec: layers.readLayers(it && it.spec, allowedUrl),
+  }));
+}
+
+/** Draws each and streams them into a zip on out (a response), one after another. */
+async function zipThumbnails(items, out) {
+  // Pictures are compressed already: stored, not squeezed again.
+  const archive = archiver('zip', { store: true });
+  const done = new Promise((resolve, reject) => {
+    archive.on('error', reject);
+    out.on('close', resolve);
+    out.on('finish', resolve);
+  });
+  archive.pipe(out);
+  for (const it of items) {
+    const file = await forYouTube(await renderSpec(it.spec));
+    archive.append(file.buffer, { name: `${it.name}.${file.ext}` });
+  }
+  await archive.finalize();
+  await done;
+}
+
 module.exports = {
+  readBrand,
+  saveBrand,
+  BRAND_COLOURS_MAX,
+  zipItems,
+  zipThumbnails,
+  ZIP_MAX,
   WIDTH, HEIGHT, LAYOUTS, DEFAULT_STYLE, ThumbnailError, YOUTUBE_MAX_BYTES, forYouTube,
   readStyle, allowedImageUrl, fetchImage, previewImage, PREVIEW_WIDTHS, readyPoses, pictureFolders, libraryImages, outfitImages, layoutSuggestions,
   sources, saveStyle, saveAsPrimary, listSaved, makePrimary, removeSaved, seasonEpisodes, smallPreview, SMALL_WIDTH,

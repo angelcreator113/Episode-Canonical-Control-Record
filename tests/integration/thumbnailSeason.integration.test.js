@@ -107,6 +107,48 @@ const BUCKET_URL = `https://${process.env.S3_PRIMARY_BUCKET}.s3.us-east-1.amazon
     expect((await request(app).get(`${base}/shows/${show}/season`)).status).toBe(401);
   });
 
+  // Evoni, 2026-10-22: the season's thumbnails, or versions for YouTube's Test & Compare, in one zip.
+  test('a zip: each thumbnail drawn full size as it would be saved, numbered and named; bad items are a 400 before anything is sent', async () => {
+    // A stored zip read from its central directory (no unzip package needed).
+    const readZip = (buf) => {
+      const end = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+      const count = buf.readUInt16LE(end + 10);
+      let at = buf.readUInt32LE(end + 16);
+      const files = {};
+      for (let i = 0; i < count; i += 1) {
+        const size = buf.readUInt32LE(at + 20);
+        const nameLen = buf.readUInt16LE(at + 28);
+        const skip = nameLen + buf.readUInt16LE(at + 30) + buf.readUInt16LE(at + 32);
+        const local = buf.readUInt32LE(at + 42);
+        const name = buf.toString('utf8', at + 46, at + 46 + nameLen);
+        const data = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28);
+        files[name] = buf.subarray(data, data + size);
+        at += 46 + skip;
+      }
+      return files;
+    };
+    const res = await auth(request(app).post(`${base}/render/zip`))
+      .send({ name: 'Season one', items: [{ name: 'Pilot', spec: spec('Pilot') }, { name: 'Red Dress!', spec: spec('Red Dress') }] })
+      .buffer(true).parse((r, cb) => { const chunks = []; r.on('data', (c) => chunks.push(c)); r.on('end', () => cb(null, Buffer.concat(chunks))); });
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/^application\/zip/);
+    expect(res.headers['content-disposition']).toBe('attachment; filename="Season-one.zip"');
+    const zip = readZip(res.body);
+    expect(Object.keys(zip)).toEqual(['01-Pilot.png', '02-Red-Dress.png']);
+    const first = zip['01-Pilot.png'];
+    expect(await sharp(first).metadata()).toMatchObject({ format: 'png', width: 1280, height: 720 });
+    expect(first.length).toBeLessThanOrEqual(2 * 1024 * 1024);
+
+    const none = await auth(request(app).post(`${base}/render/zip`)).send({ items: [] });
+    expect(none.status).toBe(400);
+    const bad = await auth(request(app).post(`${base}/render/zip`)).send({ items: [{ name: 'A', spec: spec('A') }, { name: 'B', spec: { version: 2, layers: 'nope' } }] });
+    expect(bad.status).toBe(400);
+    expect(bad.headers['content-type']).toMatch(/json/);
+    const tooMany = await auth(request(app).post(`${base}/render/zip`)).send({ items: Array.from({ length: 61 }, (_, i) => ({ name: `E${i}`, spec: spec('x') })) });
+    expect(tooMany.status).toBe(400);
+    expect((await request(app).post(`${base}/render/zip`).send({ items: [] })).status).toBe(401);
+  });
+
   test('the small picture: the layers drawn 640 wide as a JPEG; bad layers are a 400', async () => {
     const res = await auth(request(app).post(`${base}/render/small`)).send(spec('Small')).buffer(true)
       .parse((r, cb) => { const chunks = []; r.on('data', (c) => chunks.push(c)); r.on('end', () => cb(null, Buffer.concat(chunks))); });

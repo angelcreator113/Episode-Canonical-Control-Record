@@ -23,8 +23,9 @@ vi.mock('../lib/youtubeThumbnailsApi', async () => {
       templates: vi.fn(), createTemplate: vi.fn(), updateTemplate: vi.fn(), deleteTemplate: vi.fn(),
       versions: vi.fn(), createVersion: vi.fn(), updateVersion: vi.fn(), deleteVersion: vi.fn(),
       season: vi.fn(), renderSmall: vi.fn(),
-      titleIdeas: vi.fn(), cutOut: vi.fn(),
+      titleIdeas: vi.fn(), cutOut: vi.fn(), zip: vi.fn(), saveBrand: vi.fn(),
     },
+    downloadBlob: vi.fn(),
   };
 });
 vi.mock('../lib/picturePreview', () => ({
@@ -55,7 +56,7 @@ vi.mock('../components/Thumbnails/ThumbnailCanvas', () => ({
 }));
 
 import {
-  youtubeThumbnailsApi, episodeWords, thumbnailStudioHref, defaultPose, folderPath, folderCount, folderCover, firstFolder,
+  youtubeThumbnailsApi, downloadBlob, episodeWords, thumbnailStudioHref, defaultPose, folderPath, folderCount, folderCover, firstFolder,
 } from '../lib/youtubeThumbnailsApi';
 import { presetLayers, layerOf } from '../lib/thumbnailLayers';
 import YouTubeThumbnailStudio from './YouTubeThumbnailStudio';
@@ -1229,6 +1230,65 @@ describe('YouTubeThumbnailStudio', () => {
     expect(within(screen.getByTestId('yts-zoom')).getByText('200%')).toBeTruthy();
     fireEvent.click(screen.getByTestId('canvas-pinch-far'));
     expect(within(screen.getByTestId('yts-zoom')).getByRole('button', { name: 'Zoom in' }).disabled).toBe(true);
+  });
+
+  // Evoni, 2026-10-22: an A/B kit for YouTube's Test & Compare.
+  test('the A/B kit: Now and up to two versions (three at most), in one zip named A, B, C', async () => {
+    const vSpec = (t) => ({ version: 2, layers: [{ id: 'title', role: 'title', kind: 'text', text: t, x: 0, y: 0, w: 100, h: 50 }] });
+    youtubeThumbnailsApi.sources.mockResolvedValue({ ...SOURCES, versions: [
+      { id: 'v1', name: 'Version A', spec: vSpec('Red'), previewUrl: null },
+      { id: 'v2', name: 'Version B', spec: vSpec('Gold'), previewUrl: null },
+      { id: 'v3', name: 'Version C', spec: vSpec('Blue'), previewUrl: null },
+    ] });
+    youtubeThumbnailsApi.zip.mockResolvedValue(new Blob(['zip']));
+    renderPage();
+    await opened();
+    fireEvent.click(await screen.findByTestId('yts-kit-btn'));
+    const kit = within(screen.getByTestId('yts-kit'));
+    expect(kit.getByRole('checkbox', { name: 'Now' }).checked).toBe(true);
+    expect(screen.getByTestId('yts-kit-download').disabled).toBe(true); // one is not a test
+    fireEvent.click(kit.getByRole('checkbox', { name: 'Version A' }));
+    fireEvent.click(kit.getByRole('checkbox', { name: 'Version C' }));
+    // Three is YouTube's most.
+    expect(kit.getByRole('checkbox', { name: 'Version B' }).disabled).toBe(true);
+    fireEvent.click(screen.getByTestId('yts-kit-download'));
+    await waitFor(() => expect(downloadBlob).toHaveBeenCalled());
+    const [name, items] = youtubeThumbnailsApi.zip.mock.calls[0];
+    expect(name).toBe('styling-adventures-ep1-ab');
+    expect(items.map((i) => i.name)).toEqual(['A Now', 'B Version A', 'C Version C']);
+    expect(items[0].spec.layers.length).toBeGreaterThan(3);
+    expect(items[2].spec).toEqual(vSpec('Blue'));
+    expect(downloadBlob.mock.calls[0][1]).toBe('styling-adventures-ep1-ab.zip');
+  });
+
+  // Evoni, 2026-10-22: a show's own colours, fonts and stickers, offered first.
+  test('the brand kit: the show\'s colours first in the palette, its fonts first in the font list, its stickers first; kept for the show', async () => {
+    youtubeThumbnailsApi.sources.mockResolvedValue({ ...SOURCES, style: { ...SOURCES.style, brand: { colours: ['#123ABC'], fonts: ['hand'], stickers: ['tape'] } } });
+    youtubeThumbnailsApi.saveBrand.mockImplementation((id, b) => Promise.resolve(b));
+    renderPage();
+    await opened();
+    const palette = within(screen.getByRole('region', { name: 'Colour palette' }));
+    const swatches = palette.getAllByRole('button', { name: /^Accent / });
+    expect(swatches[0].getAttribute('aria-label')).toBe('Accent #123ABC');
+    expect(swatches[0].className).toContain('is-brand');
+    // Stickers: the show's first, marked.
+    const stickers = within(screen.getByTestId('yts-stickers')).getAllByRole('button');
+    expect(stickers[0].getAttribute('aria-label')).toBe('Add tape');
+    // Fonts: the show's in their own group, first.
+    fireEvent.click(screen.getByTestId('canvas-title'));
+    const groups = screen.getByRole('combobox', { name: 'Font' }).querySelectorAll('optgroup');
+    expect([...groups].map((g) => g.label)).toEqual(["The show's fonts", 'All fonts']);
+    expect([...groups[0].querySelectorAll('option')].map((o) => o.value)).toEqual(['hand']);
+    // Add the accent in use; take a colour off; tick a font.
+    const kit = within(screen.getByTestId('yts-brand'));
+    fireEvent.click(kit.getByTestId('yts-brand-add'));
+    await waitFor(() => expect(youtubeThumbnailsApi.saveBrand).toHaveBeenCalledWith('show-1', { colours: ['#123ABC', '#B8962E'], fonts: ['hand'], stickers: ['tape'] }));
+    await waitFor(() => expect(kit.queryByTestId('yts-brand-add')).toBeNull());
+    fireEvent.click(kit.getByRole('button', { name: 'Take #123ABC out of the brand kit' }));
+    await waitFor(() => expect(youtubeThumbnailsApi.saveBrand).toHaveBeenLastCalledWith('show-1', { colours: ['#B8962E'], fonts: ['hand'], stickers: ['tape'] }));
+    fireEvent.click(kit.getByRole('button', { name: /Fonts and stickers/ }));
+    fireEvent.click(kit.getByRole('checkbox', { name: 'Clean' }));
+    await waitFor(() => expect(youtubeThumbnailsApi.saveBrand).toHaveBeenLastCalledWith('show-1', { colours: ['#B8962E'], fonts: ['hand', 'sans'], stickers: ['tape'] }));
   });
 
   test('the grid and the safe zones: toggled on the toolbar, drawn over the canvas only', async () => {
