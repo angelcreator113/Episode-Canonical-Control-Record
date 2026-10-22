@@ -27,7 +27,8 @@ On 2026-10-10, run #22 was waiting, and #23 was cancelled the moment #24 was que
 | 2 | OIDC: assume the deploy role (no stored keys) | runner | Nothing changed |
 | 3 | Preflight: the instance is `Online` in SSM | runner | Nothing changed |
 | 4 | **Plan**, read-only: clean tree; the target is on `origin/main` and a fast-forward; **no package or lock file changes** (else stop: deploy that range by hand); no existing migration file modified; the ledger has nothing pending for the current code, unless an earlier deploy that did not finish left them (they are carried into this run; see below) | box | Nothing changed |
-| 5 | **Snapshot**: `deploy-<sha12>-<run id>-<attempt>` of the RDS instance | runner | Nothing on the box changed |
+| 4a | **Remove older deploy snapshots** (`scripts/deploy/prune-snapshots.sh`, 2026-10-22): keep the newest `DEPLOY_SNAPSHOTS_KEEP` (default 10, never fewer than 3) available `deploy-*` manual snapshots of the instance and delete the older ones. Snapshots with other names, and any not yet available, are never touched. Without the delete permission (§2.1), or if a listing or delete fails, it warns and the run goes on. The summary says how many it removed | runner | Never stops the run |
+| 5 | **Snapshot**: `deploy-<sha12>-<run id>-<attempt>` of the RDS instance. If RDS already holds its 100 manual snapshots (`SnapshotQuotaExceeded`, runs #145 and #146 on 2026-10-22), it stops and says so | runner | Nothing on the box changed |
 | 6 | **Wait** until the snapshot is `available` (up to 60 min) | runner | Nothing on the box changed |
 | 6a | **Hand over the build**, only when `DEPLOY_ARTIFACT_BUCKET` is set (§2.5): check the pack's sha256 against the build job's, upload it to `s3://<bucket>/deploy-builds/`, and make a link to it that expires in 15 minutes (masked in the log) | runner | Nothing on the box changed |
 | 7 | **Deploy**, with the runner's build (§2.5): download the pack through the link and check its sha256 and that it holds only `dist/`, all before anything changes; back up `frontend/dist`, `git merge --ff-only`, mark the deploy unfinished, put the pack's `dist/` in place of `frontend/dist`. No build on the box | box | §4, row "Deploy" |
@@ -109,6 +110,12 @@ Do these in order. Placeholders: `<ACCOUNT_ID>`, `<REGION>`, `<RDS_INSTANCE_ID>`
       ]
     },
     {
+      "Sid": "DeleteOldDeploySnapshots",
+      "Effect": "Allow",
+      "Action": "rds:DeleteDBSnapshot",
+      "Resource": "arn:aws:rds:<REGION>:<ACCOUNT_ID>:snapshot:deploy-*"
+    },
+    {
       "Sid": "SendOnlyTheDeployDocument",
       "Effect": "Allow",
       "Action": "ssm:SendCommand",
@@ -129,14 +136,26 @@ Do these in order. Placeholders: `<ACCOUNT_ID>`, `<REGION>`, `<RDS_INSTANCE_ID>`
       "Action": [
         "cognito-idp:*", "cognito-identity:*", "secretsmanager:*",
         "ssm:GetParameter*", "ssm:PutParameter", "ssm:StartSession", "kms:Decrypt",
-        "rds-db:connect", "rds:Delete*", "rds:Modify*", "rds:Restore*",
+        "rds-db:connect", "rds:Modify*", "rds:Restore*",
         "rds:RebootDBInstance", "rds:StopDBInstance", "iam:*", "ec2:*"
       ],
       "Resource": "*"
+    },
+    {
+      "Sid": "NeverDeleteAnythingElse",
+      "Effect": "Deny",
+      "Action": "rds:Delete*",
+      "NotResource": "arn:aws:rds:<REGION>:<ACCOUNT_ID>:snapshot:deploy-*"
     }
   ]
 }
 ```
+
+   **Adding the delete permission to an existing role (once; Evoni, 2026-10-22).** IAM → Roles → the deploy role → its inline policy → **Edit** → JSON:
+   1. Add the `DeleteOldDeploySnapshots` statement above.
+   2. In `NeverThese`, remove `"rds:Delete*"` from the list. An explicit deny always wins, so with it there the role still could not delete anything.
+   3. Add the `NeverDeleteAnythingElse` statement above. It denies every other RDS delete (the instance, clusters, other snapshots) everywhere except `deploy-*` snapshots.
+   4. **Save.** The next run removes the older `deploy-*` snapshots itself. Until then, it warns and goes on, and old snapshots are removed by hand (§7).
 
    When the frontend is built on the runner (§2.5), add one more statement to the `Statement` list, with your bucket's name:
 
@@ -229,6 +248,7 @@ stat -c '%a %U' /home/ubuntu/.episode-migrate.env    # must print: 600 ubuntu
 | `RDS_INSTANCE_ID` | the canon instance's identifier |
 | `EC2_INSTANCE_ID` | the production box's instance id |
 | `HEALTH_URL` | the public `/health` URL of the site |
+| `DEPLOY_SNAPSHOTS_KEEP` | optional: how many `deploy-*` snapshots a run keeps before taking its own (default 10, never fewer than 3) |
 
 **Moving `AWS_ROLE_ARN` from a variable to a secret (once; Evoni, in the browser).** Step 1 can be done before #2863 merges, since an unused secret changes nothing; that way no run ever stops for it. Step 2 comes after the merge.
 1. **Settings → Environments → `production` → Environment secrets → Add environment secret.** Name `AWS_ROLE_ARN`; value: copy it from the existing repository variable (Settings → Secrets and variables → Actions → Variables → `AWS_ROLE_ARN`), unchanged.
@@ -338,7 +358,7 @@ Read the step's log: the on-box output says where it stopped and what had alread
 | Stopped at | State | What to do |
 |---|---|---|
 | Configuration, OIDC, preflight, plan | Nothing changed | Fix the cause (variables, role, SSM, the plan's message), then re-run. A plan that stops on **package files** means: deploy that range by hand (`DEVELOPMENT_WORKFLOW.md` §7.1), then later runs resume normally |
-| Snapshot or wait | Nothing on the box changed | Look at the snapshot in RDS; re-run |
+| Snapshot or wait | Nothing on the box changed | Look at the snapshot in RDS; re-run. "RDS already holds its limit of manual snapshots" (`SnapshotQuotaExceeded`): remove old `deploy-*` snapshots in RDS → Snapshots → Manual, or add the delete permission (§2.1), then start a new run |
 | Deploy | Tree may be fast-forwarded, `frontend/dist` rebuilt or partly rebuilt; **the API still runs the old code**; database untouched | Re-run (it resumes), approve the next run (it carries the stopped deploy's migrations, §1), or roll back the code (§6). "the vite build failed" with an out-of-memory abort in its last lines: the heap the log names was too small for the box. "the vite build ran past 1200 s" (or, before that limit existed, SSM status `TimedOut` right after the "vite build with a … MB heap" line, as in runs 80–81): the box was short of memory; the log prints `Memory:` and `Swap:` lines before and after. "a vite build is still running on the box": a build left by a timed-out deploy; nothing was changed. On the box, `pgrep -af 'vite(\.js)? build'` lists it and `sudo kill <pid>` stops it (it runs as `ubuntu`); then approve a new run. With the runner's build (§2.5): "could not be downloaded (the link may have expired)", "sha256 is …, not …", "is not a readable archive", "holds something other than dist/" or "has no dist/index.html" all stop before the backup, with nothing changed: start a new run |
 | Build (step 0) | Nothing changed | Read the build log; it is the same `vite build` a contributor runs. Fix forward by PR |
 | Migrate | **The database may be partly migrated**; the API still runs the old code | Read the migration error. Usually fix forward: a new PR, merged, then a new run. If the data is damaged, restore from the snapshot (§5) |
@@ -374,7 +394,7 @@ Do this only if a migration damaged data. A restore creates a **new** RDS instan
 
 ## 7. Housekeeping
 
-- **Snapshots:** each run keeps one manual snapshot, and those are billed until deleted. The role cannot delete them. Evoni removes old `deploy-*` snapshots in RDS → Snapshots → Manual. Keep at least the newest few.
+- **Snapshots:** each run takes one manual snapshot, and those are billed until deleted. RDS allows 100 manual snapshots in all, and a run stops at its snapshot once there are 100 (runs #145 and #146, 2026-10-22). With the delete permission (§2.1), each run first removes the older `deploy-*` snapshots and keeps the newest `DEPLOY_SNAPSHOTS_KEEP` (default 10), so they no longer pile up. Without it, Evoni removes old `deploy-*` snapshots in RDS → Snapshots → Manual and keeps at least the newest few. Manual snapshots with other names are never removed by a run.
 - **Frontend backups:** `/home/ubuntu/dist-backup-*` and `/home/ubuntu/vite-build-*.log` accumulate in `ubuntu`'s home directory. Remove old ones by hand.
 - **Runner builds (§2.5):** the bucket's lifecycle rule deletes `deploy-builds/` objects after a day, and the run artifact expires after a day. The box deletes its downloaded copy once it is unpacked.
 - **Changing the workflow:** by PR only. The scripts the box runs come from the commit being deployed. A change to `scripts/deploy/workflow-deploy.sh` therefore takes effect on the first run that deploys it.
