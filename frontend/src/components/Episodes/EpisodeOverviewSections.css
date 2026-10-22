@@ -6,6 +6,28 @@
 
 .eov { margin: 0 auto; }
 
+/* The shorter Overview (Evoni, 2026-10-22 layout list): the next step and
+   the four tiles on one row, then the Story and Style columns side by side;
+   one column below 1100px. */
+.eov-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr); gap: 14px; align-items: stretch; margin-bottom: 20px; }
+.eov-top > .eos-next { margin: 0; flex-direction: column; align-items: flex-start; justify-content: center; }
+.eov-top > .eos-tiles { margin: 0; }
+.eov-columns { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.eov-col { min-width: 0; }
+.eov .eov-col-title { margin: 0 0 12px; font-family: var(--font-prose); font-size: 24px; font-weight: 600; color: var(--lala-ink); }
+.eov-col .eos-grid, .eov-col .eov-grid { grid-template-columns: minmax(0, 1fr); }
+.eov-col .eov-grid > .eov-card + .eov-card { margin-top: 0; }
+.eov-col .eov-band:first-of-type { margin-top: 18px; }
+.eov-col .esb { margin-bottom: 0; }
+.eov-col .eov-quick { margin-top: 18px; }
+@media (max-width: 1100px) {
+  .eov-top, .eov-columns { grid-template-columns: minmax(0, 1fr); }
+  .eov-top > .eos-next { flex-direction: row; align-items: center; justify-content: space-between; }
+}
+@media (max-width: 480px) {
+  .eov-top > .eos-next { flex-direction: column; align-items: stretch; }
+}
+
 /* A part of the page: a heading in the prose face and what it is for. */
 .eov-band { margin: 26px 0 0; }
 .eov-band-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 12px; }

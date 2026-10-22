@@ -3280,10 +3280,13 @@
 .ed-page.ed-studio .eds-crumbs a:hover { color: var(--studio-magenta); background: none; transform: none; }
 .eds-crumb-current { padding: 0 6px; color: var(--studio-ink); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60ch; }
 
+/* The slimmer header (Evoni, 2026-10-22 layout list): no placeholder cover
+   (the episode number is in the meta line); a small cover once there is a
+   picture. */
 .eds-hero {
   display: grid;
-  grid-template-columns: minmax(180px, 248px) minmax(0, 1fr) auto;
-  gap: 24px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px;
   align-items: start;
   padding: 12px;
   background: var(--studio-card);
@@ -3291,10 +3294,11 @@
   border-radius: calc(var(--studio-radius) + 6px);
   box-shadow: var(--studio-shadow);
 }
+.eds-hero.has-cover { grid-template-columns: 176px minmax(0, 1fr) auto; }
 
 .eds-cover {
   position: relative;
-  aspect-ratio: 16 / 11;
+  aspect-ratio: 16 / 9;
   border-radius: var(--studio-radius);
   overflow: hidden;
   background: linear-gradient(135deg, var(--studio-magenta-soft), var(--studio-purple-soft));
@@ -3302,16 +3306,8 @@
   place-items: center;
 }
 .eds-cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.eds-cover-number { font-family: var(--font-prose); font-size: 64px; font-weight: 600; line-height: 1; color: var(--studio-magenta); }
-.eds-cover-badge {
-  position: absolute; top: 10px; left: 10px;
-  padding: 4px 10px; border-radius: 8px;
-  background: var(--studio-card); color: var(--studio-ink);
-  font-family: var(--font-ui); font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
-  box-shadow: var(--studio-shadow);
-}
 
-.eds-hero-body { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; min-width: 0; padding: 6px 0; }
+.eds-hero-body { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; padding: 4px 0 4px 6px; }
 .ed-page.ed-studio .eds-show-pill {
   display: inline-flex; align-items: center; min-height: 28px; padding: 2px 12px; border-radius: 8px;
   border: 1px solid var(--studio-line-strong); background: var(--studio-purple-soft); color: var(--studio-purple);
@@ -3324,7 +3320,7 @@
   margin: 0;
   font-family: var(--font-prose);
   font-weight: 600;
-  font-size: 34px;
+  font-size: 30px;
   line-height: 1.18;
   letter-spacing: 0;
   color: var(--studio-ink);
@@ -3343,10 +3339,11 @@
 .ed-page.ed-studio .ed-source-event-link:hover .ed-source-event-name { color: var(--studio-magenta); text-decoration: underline; }
 .ed-page.ed-studio .ed-source-event-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; color: var(--studio-ink-muted); }
 .eds-meta-sub { white-space: nowrap; }
-.eds-description { margin: 0; max-width: 72ch; font-size: 14px; line-height: 1.55; color: var(--studio-ink-muted); }
+.eds-description { margin: 0; max-width: 72ch; font-size: 14px; line-height: 1.55; color: var(--studio-ink-muted);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 .ed-page.ed-studio .ed-title-chip { margin: 0; }
 
-.eds-hero-side { display: flex; flex-direction: column; align-items: flex-end; gap: 14px; padding: 6px 4px 0 0; }
+.eds-hero-side { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; padding: 4px 4px 0 0; }
 .eds-nav-row, .eds-chip-row { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .eds-nav { display: inline-flex; align-items: center; gap: 8px; }
 .ed-page.ed-studio .ed-ep-step {
@@ -3524,7 +3521,8 @@
 
 /* Tablet: the actions go under the title, beside the cover. */
 @media (max-width: 1024px) {
-  .eds-hero { grid-template-columns: minmax(160px, 220px) minmax(0, 1fr); }
+  .eds-hero { grid-template-columns: minmax(0, 1fr); }
+  .eds-hero.has-cover { grid-template-columns: 144px minmax(0, 1fr); }
   .eds-hero-side { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; padding: 0; }
   .eds-nav-row, .eds-chip-row { justify-content: flex-start; }
 }
@@ -3532,11 +3530,9 @@
 /* Phones: the hero stacks (cover, then the words, then the actions); the
    tabs scroll sideways. */
 @media (max-width: 640px) {
-  .eds-hero { grid-template-columns: minmax(0, 1fr); gap: 14px; padding: 10px; }
-  .eds-cover { aspect-ratio: 16 / 9; }
-  /* No image: a short band, not a screenful of placeholder. */
-  .eds-cover.is-empty { aspect-ratio: 3 / 1; }
-  .eds-cover.is-empty .eds-cover-number { font-size: 44px; }
+  .eds-hero { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 10px; }
+  /* A cover sits small beside the title. */
+  .eds-hero.has-cover { grid-template-columns: 96px minmax(0, 1fr); align-items: start; }
   .eds-hero-body { padding: 0 4px; }
   .eds-hero-side { padding: 0 4px 4px; }
 }
@@ -3557,6 +3553,32 @@
   .ed-page.ed-studio .ed-tabs-modern { margin: 12px 0 0; }
   .ed-page.ed-studio .ed-tab { padding: 0 14px; }
   .ed-subpills { margin: 10px 0 0; }
+}
+
+/* The tabs stay at the top on a phone (Evoni, 2026-10-22 layout list): the
+   main tabs stick under the episode header (its height is --ed-head-h, set
+   as it changes), Production's pills under them. */
+@media (max-width: 768px) {
+  .ed-page { --ed-tabs-h: 58px; }
+  /* clip, not hidden: hidden makes .ed-wrap a scroller, and nothing in it sticks. */
+  .ed-page .ed-wrap { overflow-x: clip; }
+  .ed-page.ed-studio .ed-tabs-modern {
+    position: sticky; z-index: 45;
+    top: calc(var(--app-header-h, 0px) + var(--ed-head-h, 0px));
+  }
+  .ed-page.ed-studio .ed-subpills {
+    position: sticky; z-index: 44;
+    top: calc(var(--app-header-h, 0px) + var(--ed-head-h, 0px) + var(--ed-tabs-h));
+    margin-top: 0; padding: 8px 2px 6px;
+    background: var(--studio-page);
+  }
+}
+/* All four tabs fit at phone width: no icons, the checks left as a number. */
+@media (max-width: 480px) {
+  .ed-page.ed-studio .ed-tab { flex: 1 1 auto; justify-content: center; gap: 4px; padding: 0 8px; }
+  .ed-page.ed-studio .ed-tab .ed-tab-icon { display: none; }
+  .ed-page.ed-studio .ed-tab-label { font-size: 13px; }
+  .ed-tab-badge-word { display: none; }
 }
 
 .ed-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

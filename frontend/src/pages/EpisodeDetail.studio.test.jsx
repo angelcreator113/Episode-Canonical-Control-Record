@@ -121,7 +121,7 @@ describe('the studio header', () => {
     });
   });
 
-  test('breadcrumb, cover badge, show pill, title, meta and description from the episode', async () => {
+  test('breadcrumb, cover, show pill, title, meta and description from the episode', async () => {
     vi.mocked(episodeService.getEpisode).mockResolvedValue(FULL);
     renderAt('/episodes/ep-1?tab=scripts');
     const header = await screen.findByTestId('ed-header');
@@ -138,7 +138,8 @@ describe('the studio header', () => {
 
     const cover = screen.getByTestId('ed-cover');
     expect(cover.querySelector('img').getAttribute('src')).toBe(FULL.thumbnail_url);
-    expect(screen.getByTestId('ed-cover-badge').textContent).toBe('Episode 1');
+    // The episode number once, in the meta line (Evoni, 2026-10-22 layout list).
+    expect(screen.queryByTestId('ed-cover-badge')).toBeNull();
 
     const meta = within(header).getByRole('list', { name: 'Episode details' });
     expect(meta.textContent).toContain('Episode 1');
@@ -167,10 +168,9 @@ describe('the studio header', () => {
     renderAt('/episodes/ep-1?tab=overview');
     const header = await screen.findByTestId('ed-header');
     await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/v1/episodes/ep-1/events'));
-    const cover = screen.getByTestId('ed-cover');
-    expect(cover.querySelector('img')).toBeNull();
-    expect(cover.className).toContain('is-empty');
-    expect(screen.getByTestId('ed-cover-badge').textContent).toBe('Episode 4');
+    // No picture, no cover: no placeholder number (Evoni, 2026-10-22 layout list).
+    expect(screen.queryByTestId('ed-cover')).toBeNull();
+    expect(header.querySelector('.eds-hero').className).not.toContain('has-cover');
     expect(screen.queryByTestId('ed-show-pill')).toBeNull();
     expect(screen.queryByTestId('ed-source-event')).toBeNull();
     const meta = within(header).getByRole('list', { name: 'Episode details' });
