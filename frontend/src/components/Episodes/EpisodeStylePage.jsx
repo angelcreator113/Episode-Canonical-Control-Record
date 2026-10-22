@@ -16,7 +16,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Download, ImagePlus, Loader2, Lock, RotateCcw, Send, Shirt, Trash2, Upload } from 'lucide-react';
-import { downloadStyleSheetExport, styleSheetDistributionApi, styleSheetError } from '../../lib/styleSheetApi';
+import { downloadStyleDesign, downloadStyleDesignsZip, downloadStyleSheetExport, styleSheetDistributionApi, styleSheetError } from '../../lib/styleSheetApi';
 import { lookbookApi } from '../../lib/lookbookApi';
 import { CHARACTERS, POSES, episodePosesApi } from '../../lib/episodePosesApi';
 import StyleAudiencePick from './StyleAudiencePick';
@@ -24,6 +24,7 @@ import { styleReadiness } from '../../lib/styleReadiness';
 import { extractPalette } from '../../lib/stylePalette';
 import { styleSheetApi } from './EpisodeStyleSheetPanel';
 import StyleSheetTemplate, { SHEET_HEIGHT, SHEET_WIDTH } from './StyleSheetTemplate';
+import StyleDesign, { DESIGN_HEIGHT, DESIGN_WIDTH, designValues } from './StyleDesign';
 import './EpisodeStylePage.css';
 
 const ACCEPT = 'image/png,image/jpeg,image/webp';
@@ -36,6 +37,7 @@ export const SPOT_INFO = {
   side: { section: 'Lala in the look', label: 'Side', hint: 'Full body, from the side.', photo: true },
   back: { section: 'Lala in the look', label: 'Back', hint: 'Full body, from the back.', photo: true },
   hero: { section: 'Lala in the look', label: 'Hero', hint: 'The big shot, in the tilted frame.', photo: true },
+  detail: { section: 'Lala in the look', label: 'Detail', hint: 'A close-up of the outfit: Detail shot and Outfit detail in your designs.', photo: true },
   hair: { section: 'Wardrobe breakdown', label: 'Hair', hint: 'A photo of the hair and its name; the name prints under HAIR.', photo: true, name: 'hair_name' },
   nails: { section: 'Wardrobe breakdown', label: 'Nails', hint: 'A photo of the nails and their name; the name prints under NAILS.', photo: true, name: 'nails_name' },
   eyes: { section: 'Beauty details', label: 'Eyes', hint: 'A close-up of the eye makeup.', photo: true, notes: true },
@@ -59,6 +61,17 @@ export const EXPORT_SIZES = [
 
 // A readiness chip opens its spot (Beauty opens Eyes).
 const CHIP_SPOT = { beauty: 'eyes' };
+
+// A photo frame on one of the five designs opens its spot in the panel
+// (Evoni's Canva deck, 2026-10-22; src/services/styleSheetDesigns.js).
+const DESIGN_SPOT = {
+  hero: 'hero', front: 'front', side: 'side', back: 'back', detail: 'detail', venue: 'venue', inspo: 'inspo',
+  beauty: 'eyes', hair: 'hair', nails: 'nails', body: 'wardrobe', shoes: 'wardrobe', bag: 'wardrobe', jewelry: 'wardrobe', perfume: 'wardrobe',
+};
+const CLASSIC = 'classic';
+
+/** The panel spots one design shows. */
+const designPanelSpots = (design) => [...new Set(design.elements.filter((e) => e.kind === 'photo').map((e) => DESIGN_SPOT[e.spot]).filter(Boolean))];
 
 function FileButton({ label, onFiles, multiple = false, disabled, className = '', icon: Icon = Upload }) {
   const inputRef = useRef(null);
@@ -97,6 +110,7 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
   const [dragging, setDragging] = useState(false);
   const sheetCol = useRef(null);
   const [scale, setScale] = useState(0.5);
+  const [view, setView] = useState(CLASSIC);
 
   const loadSheet = useCallback(async () => {
     try {
@@ -178,6 +192,14 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
   const tray = lb.images?.unsorted || [];
   const readiness = styleReadiness({ lookbook: lb, sheet, palette });
   const info = selected ? SPOT_INFO[selected] : null;
+  const designs = sheet.designs || [];
+  const design = designs.find((d) => d.key === view) || null;
+  const values = designValues(sheet);
+  const designScale = scale * (SHEET_WIDTH / DESIGN_WIDTH);
+  // "In 3 of 5 designs" for the open spot; "Not on this design" under the preview.
+  const designUse = selected ? designs.filter((d) => designPanelSpots(d).includes(selected)).length : 0;
+  const notOnDesign = design ? Object.keys(DESIGN_SPOT).map((k) => DESIGN_SPOT[k]).filter((v, i, a) => a.indexOf(v) === i)
+    .filter((spot) => !designPanelSpots(design).includes(spot)).map((spot) => (spot === 'eyes' ? 'Beauty' : SPOT_INFO[spot].label)) : [];
 
   const upload = (files, category) => run(() => lookbookApi.upload(episodeId, files, category));
   const fromPose = (poseId, category) => run(() => lookbookApi.fromPose(episodeId, poseId, category));
@@ -272,13 +294,40 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
       {approved && <p className="esp2-note">Approved. Editing anything returns it to Draft, and it needs approving again before it can be exported.</p>}
       {error && <p className="esp2-error" role="alert">{error}</p>}
 
+      {designs.length > 0 && (
+        <div className="esp2-designs" role="tablist" aria-label="Designs" data-testid="esp2-designs">
+          {[{ key: CLASSIC, number: 'Classic', name: 'The style sheet' }, ...designs].map((d) => (
+            <button key={d.key} type="button" role="tab" aria-selected={view === d.key} className={`esp2-design-tab${view === d.key ? ' is-active' : ''}`}
+              data-testid={`esp2-design-${d.key}`} onClick={() => setView(d.key)}>
+              <span className="esp2-design-num">{d.number}</span>
+              <span className="esp2-design-name">{d.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="esp2-layout">
         <div className="esp2-sheet-col" ref={sheetCol}>
-          <div className="esp2-sheet-frame" style={{ height: SHEET_HEIGHT * scale }}>
-            <div className="esp2-sheet-scale" style={{ transform: `scale(${scale})`, width: SHEET_WIDTH }}>
-              <StyleSheetTemplate sheet={sheet} palette={palette} edit={edit} />
+          {design ? (
+            <>
+              <div className="esp2-sheet-frame" style={{ height: DESIGN_HEIGHT * designScale }} data-testid="esp2-design-preview">
+                <div className="esp2-sheet-scale" style={{ transform: `scale(${designScale})`, width: DESIGN_WIDTH }}>
+                  <StyleDesign design={design} values={values}
+                    edit={{ isSelected: (spot) => DESIGN_SPOT[spot] === selected, onSelect: (spot) => setSelected(DESIGN_SPOT[spot]) }} />
+                </div>
+              </div>
+              <p className="esp2-hint esp2-design-note">
+                Tap a frame to edit it. Empty text shows faintly here and is left blank in downloads.
+                {notOnDesign.length > 0 && <> Not on this design: {notOnDesign.join(', ')}.</>}
+              </p>
+            </>
+          ) : (
+            <div className="esp2-sheet-frame" style={{ height: SHEET_HEIGHT * scale }}>
+              <div className="esp2-sheet-scale" style={{ transform: `scale(${scale})`, width: SHEET_WIDTH }}>
+                <StyleSheetTemplate sheet={sheet} palette={palette} edit={edit} />
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         <aside className="esp2-panel" aria-label="Editing panel">
@@ -306,6 +355,7 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
               toggleOption={(o) => run(() => lookbookApi.venue(episodeId, { source: o.source, ref_id: o.ref_id, in_lookbook: !o.in_lookbook }))}
               onOpenTab={onOpenTab}
               episode={episode}
+              designUse={designs.length ? { used: designUse, total: designs.length } : null}
             />
           ) : (
             <p className="esp2-panel-empty">Tap a spot on the sheet to edit it. Dashed spots are waiting for a photo.</p>
@@ -332,14 +382,15 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
             </ul>
           </section>
 
-          <ShareExport episodeId={episodeId} episodeNumber={sheet.episode?.number} canExport={canExport} approved={approved} stale={sheet.stale} onOpenTab={onOpenTab} />
+          <ShareExport episodeId={episodeId} episodeNumber={sheet.episode?.number} canExport={canExport} approved={approved} stale={sheet.stale} onOpenTab={onOpenTab}
+            designs={designs} sizes={sheet.design_sizes || []} design={design} />
         </aside>
       </div>
     </div>
   );
 }
 
-function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, text, setText, commitText, tray, locked, venueCandidates, upload, fromPose, remove, move, saveFields, swapVenue, toggleOption, onOpenTab, episode }) {
+function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, text, setText, commitText, tray, locked, venueCandidates, upload, fromPose, remove, move, saveFields, swapVenue, toggleOption, onOpenTab, episode, designUse }) {
   const images = lb.images || {};
   const current = info.photo && spot !== 'venue' && spot !== 'inspo' ? (images[spot] || [])[0] || null : null;
   // Front, Side and Back show Lala's pose from Files until a photo is put there.
@@ -352,6 +403,7 @@ function SpotPanel({ spot, info, lb, sheet, palette, setPalette, savePalette, te
     <section className="esp2-spot" aria-labelledby="esp2-spot-title" data-testid="esp2-spot-panel">
       <h3 id="esp2-spot-title" className="esp2-spot-title">Editing {info.section} · {info.label}</h3>
       <p className="esp2-hint">{info.hint}</p>
+      {designUse && <p className="esp2-hint" data-testid="esp2-design-use">In {designUse.used} of {designUse.total} designs</p>}
 
       {current && (
         <div className="esp2-current">
@@ -584,8 +636,9 @@ function FilesPicker({ episodeId, spot, label, disabled, onPick, onOpenTab }) {
   );
 }
 
-function ShareExport({ episodeId, episodeNumber, canExport, approved, stale, onOpenTab }) {
+function ShareExport({ episodeId, episodeNumber, canExport, approved, stale, onOpenTab, designs = [], sizes = [], design = null }) {
   const [busySize, setBusySize] = useState(null);
+  const [sizeKey, setSizeKey] = useState('pinterest');
   const [error, setError] = useState(null);
   const [withLinks, setWithLinks] = useState(false);
   const [sending, setSending] = useState(false);
@@ -597,6 +650,19 @@ function ShareExport({ episodeId, episodeNumber, canExport, approved, stale, onO
       await downloadStyleSheetExport(episodeId, size, episodeNumber);
     } catch (err) {
       console.error('[StylePage] export failed:', err);
+      setError(await styleSheetError(err, 'The export could not be made.'));
+    } finally {
+      setBusySize(null);
+    }
+  };
+  // The five designs (Evoni, 2026-10-22): this one, all five, or all five in every size.
+  const fetchDesigns = async (busyKey, fn) => {
+    setBusySize(busyKey);
+    setError(null);
+    try {
+      await fn();
+    } catch (err) {
+      console.error('[StylePage] design export failed:', err);
       setError(await styleSheetError(err, 'The export could not be made.'));
     } finally {
       setBusySize(null);
@@ -633,6 +699,36 @@ function ShareExport({ episodeId, episodeNumber, canExport, approved, stale, onO
           </li>
         ))}
       </ul>
+      {designs.length > 0 && (
+        <div className="esp2-design-export" data-testid="esp2-design-export">
+          <p className="esp2-tray-label">Your {designs.length} designs</p>
+          <div className="esp2-sizes" role="radiogroup" aria-label="Size">
+            {sizes.map((z) => (
+              <button key={z.key} type="button" role="radio" aria-checked={sizeKey === z.key} className={`esp2-size${sizeKey === z.key ? ' is-active' : ''}`}
+                data-testid={`esp2-size-${z.key}`} onClick={() => setSizeKey(z.key)}>
+                <span>{z.label}</span><span className="esp2-export-detail">{z.width} × {z.height}</span>
+              </button>
+            ))}
+          </div>
+          <div className="esp2-row">
+            <button type="button" className="esp2-btn" disabled={!canExport || !design || busySize !== null} data-testid="esp2-design-download"
+              onClick={() => fetchDesigns('one', () => downloadStyleDesign(episodeId, design.key, sizeKey))}>
+              {busySize === 'one' ? <Loader2 size={16} className="esp2-spin" aria-hidden="true" /> : <Download size={16} aria-hidden="true" />}
+              {design ? `Download ${design.name}` : 'Pick a design to download it'}
+            </button>
+            <button type="button" className="esp2-btn" disabled={!canExport || busySize !== null} data-testid="esp2-designs-zip"
+              onClick={() => fetchDesigns('zip', () => downloadStyleDesignsZip(episodeId, sizeKey))}>
+              {busySize === 'zip' ? <Loader2 size={16} className="esp2-spin" aria-hidden="true" /> : <Download size={16} aria-hidden="true" />}
+              All {designs.length} · zip
+            </button>
+            <button type="button" className="esp2-btn" disabled={!canExport || busySize !== null} data-testid="esp2-designs-zip-all"
+              onClick={() => fetchDesigns('all', () => downloadStyleDesignsZip(episodeId, 'all'))}>
+              {busySize === 'all' ? <Loader2 size={16} className="esp2-spin" aria-hidden="true" /> : <Download size={16} aria-hidden="true" />}
+              Every size · zip
+            </button>
+          </div>
+        </div>
+      )}
       <div className="esp2-send">
         <label className="esp2-check" htmlFor="esp2-send-links">
           <input id="esp2-send-links" type="checkbox" checked={withLinks} disabled={!canExport || sending} onChange={(e) => setWithLinks(e.target.checked)} />
@@ -645,7 +741,7 @@ function ShareExport({ episodeId, episodeNumber, canExport, approved, stale, onO
       </div>
       {sent?.sent && (
         <p className="esp2-hint" role="status" data-testid="esp2-sent">
-          Sent: {sent.items.length} sizes and a caption draft are in Distribution.
+          Sent: {sent.items.length} sizes{sent.designs?.length ? `, your ${sent.designs.length} designs in every size` : ''} and a caption draft are in Distribution.
           {sent.disclosure ? ' The disclosure is added.' : ''}{' '}
           <button type="button" className="esp2-link" disabled={!onOpenTab} onClick={() => onOpenTab && onOpenTab('distribution')}>Open Distribution</button>
         </p>

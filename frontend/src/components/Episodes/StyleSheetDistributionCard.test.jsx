@@ -72,6 +72,30 @@ describe('Style sheet in Distribution', () => {
     click.mockRestore();
   });
 
+  test("Evoni's designs, sent with the sheet: each in every size downloads; the caption and links go with them", async () => {
+    const designs = [['episode_look', 'The Episode Look'], ['invited', 'Invited to Slay']].map(([design, name]) => ({
+      design, name,
+      sizes: [['pinterest', 'Pinterest', 1000, 1500], ['tiktok', 'TikTok', 1080, 1920]].map(([size, label, width, height]) => ({
+        size, label, width, height, path: `/api/v1/episodes/${EP}/style-sheet/design/${design}/${size}`,
+      })),
+    }));
+    await renderCard(entry({ designs }));
+    expect(screen.getByText(/Your 2 designs \(the caption and Shop the Look links go with them\)/)).toBeTruthy();
+    expect(screen.getByText('Invited to Slay')).toBeTruthy();
+    api.get.mockResolvedValueOnce({ data: new Blob(['png'], { type: 'image/png' }), headers: {} });
+    URL.createObjectURL = vi.fn(() => 'blob:x');
+    URL.revokeObjectURL = vi.fn();
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    fireEvent.click(screen.getByTestId('ssd-design-invited-tiktok'));
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith(`/api/v1/episodes/${EP}/style-sheet/design/invited/tiktok`, { responseType: 'blob' }));
+    click.mockRestore();
+  });
+
+  test('sent before the designs: only the sheet sizes show', async () => {
+    await renderCard();
+    expect(screen.queryByTestId('ssd-designs')).toBeNull();
+  });
+
   test('with an Amazon link, both sentences show, locked', async () => {
     const both = 'Some links are affiliate links; I may earn a commission. As an Amazon Associate I earn from qualifying purchases.';
     await renderCard(entry({ include_shop_links: true, disclosure: both, disclosure_locked: true }));

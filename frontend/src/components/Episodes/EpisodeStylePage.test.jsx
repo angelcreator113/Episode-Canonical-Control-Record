@@ -167,6 +167,88 @@ describe('Style Page', () => {
     expect(note.getByRole('img').getAttribute('src')).toBe(url);
   });
 
+  // Two of Evoni's designs, cut down (the real five come from the server's styleSheetDesigns).
+  const DESIGN = (key, name, number, spots) => ({
+    key, name, number, background: '#FFF9F5',
+    elements: [
+      { kind: 'text', x: 0, y: 0, w: 960, h: 40, text: name.toUpperCase(), size: 30, color: '#38283B', font: 'serif', align: 'center' },
+      { kind: 'text', x: 0, y: 40, w: 960, h: 30, field: 'episode_event', placeholder: 'EPISODE __ • EVENT / VENUE', size: 16, color: '#5A3769', font: 'sans', align: 'center' },
+      ...spots.map(([spot, label], i) => ({ kind: 'photo', spot, label, x: 10 + i * 100, y: 100, w: 90, h: 120, fill: '#F6D8E6', radius: 10 })),
+    ],
+  });
+  const DESIGNS = [
+    DESIGN('episode_look', 'The Episode Look', '01', [['hero', 'HERO / LALA'], ['front', 'FRONT'], ['shoes', 'SHOES']]),
+    DESIGN('style_diary', 'The Style Diary', '02', [['hero', 'MAIN OUTFIT'], ['detail', 'DETAIL SHOT'], ['beauty', 'BEAUTY']]),
+  ];
+  const SIZES = [
+    { key: 'pinterest', label: 'Pinterest', width: 1000, height: 1500 },
+    { key: 'ig_story', label: 'Instagram story', width: 1080, height: 1920 },
+  ];
+  const withDesigns = (over = {}) => sheet({
+    designs: DESIGNS,
+    design_sizes: SIZES,
+    design_values: { photo_paths: { hero: 'look.front', front: 'look.front' }, fields: { episode_event: 'EPISODE 01  •  WEARABLE EXPERIMENTS' }, palette: [] },
+    ...over,
+  });
+
+  test("the designs: Classic and Evoni's designs as tabs; a design shows with this episode's values", async () => {
+    await renderPage({ sh: withDesigns() });
+    const tabs = within(screen.getByTestId('esp2-designs'));
+    expect(tabs.getAllByRole('tab').map((t) => t.textContent)).toEqual(['ClassicThe style sheet', '01The Episode Look', '02The Style Diary']);
+    expect(screen.getByTestId('esp2-design-classic').getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByTestId('style-sheet')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('esp2-design-episode_look'));
+    const d = within(screen.getByTestId('style-design-episode_look'));
+    expect(screen.queryByTestId('style-sheet')).toBeNull();
+    expect(d.getByText(/^EPISODE 01\s+•\s+WEARABLE EXPERIMENTS$/)).toBeTruthy();
+    // Front is filled (the main photo falls back to it); Shoes waits for a photo.
+    expect(d.getByRole('button', { name: 'Edit hero / lala' }).querySelector('img').getAttribute('src')).toBe('data:image/png;base64,f1');
+    expect(d.getByRole('button', { name: 'Add shoes' })).toBeTruthy();
+    expect(screen.getByText(/Not on this design: .*Detail/)).toBeTruthy();
+  });
+
+  test('tapping a frame on a design opens its spot, and says how many designs use it', async () => {
+    await renderPage({ sh: withDesigns() });
+    fireEvent.click(screen.getByTestId('esp2-design-style_diary'));
+    const d = within(screen.getByTestId('style-design-style_diary'));
+    fireEvent.click(d.getByRole('button', { name: 'Add detail shot' }));
+    expect(panel().getByRole('heading', { name: 'Editing Lala in the look · Detail' })).toBeTruthy();
+    expect(panel().getByTestId('esp2-design-use').textContent).toBe('In 1 of 2 designs');
+    expect(d.getByRole('button', { name: 'Add detail shot' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(d.getByRole('button', { name: 'Edit main outfit' }));
+    expect(panel().getByTestId('esp2-design-use').textContent).toBe('In 2 of 2 designs');
+    fireEvent.click(d.getByRole('button', { name: 'Add beauty' }));
+    expect(panel().getByRole('heading', { name: 'Editing Beauty details · Eyes' })).toBeTruthy();
+  });
+
+  test('the designs download once approved: this one in the chosen size, all of them, or every size', async () => {
+    await renderPage({ lb: lookbook({ sheet_status: 'approved' }), sh: withDesigns({ status: 'approved' }) });
+    URL.createObjectURL = vi.fn(() => 'blob:design');
+    URL.revokeObjectURL = vi.fn();
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const blob = new Blob(['png'], { type: 'image/png' });
+    api.get.mockImplementation(async () => ({ data: blob, headers: {} }));
+    // On Classic there is no design to download alone.
+    expect(screen.getByTestId('esp2-design-download').disabled).toBe(true);
+    fireEvent.click(screen.getByTestId('esp2-design-style_diary'));
+    fireEvent.click(screen.getByTestId('esp2-size-ig_story'));
+    expect(screen.getByTestId('esp2-size-ig_story').getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(screen.getByTestId('esp2-design-download'));
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith(`${SHEET_URL}/design/style_diary/ig_story`, { responseType: 'blob' }));
+    fireEvent.click(screen.getByTestId('esp2-designs-zip'));
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith(`${SHEET_URL}/designs-zip/ig_story`, { responseType: 'blob' }));
+    fireEvent.click(screen.getByTestId('esp2-designs-zip-all'));
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith(`${SHEET_URL}/designs-zip/all`, { responseType: 'blob' }));
+    click.mockRestore();
+  });
+
+  test('while Draft the designs cannot be downloaded', async () => {
+    await renderPage({ sh: withDesigns() });
+    fireEvent.click(screen.getByTestId('esp2-design-episode_look'));
+    for (const id of ['esp2-design-download', 'esp2-designs-zip', 'esp2-designs-zip-all']) expect(screen.getByTestId(id).disabled).toBe(true);
+  });
+
   test('"Drop photos to sort" uploads into To sort', async () => {
     await renderPage();
     api.post.mockResolvedValue({ data: { data: { lookbook: lookbook() } } });
