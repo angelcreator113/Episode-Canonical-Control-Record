@@ -1055,6 +1055,17 @@ describe('YouTubeThumbnailStudio', () => {
     expect(within(lala).getByTestId('yts-lala-crumbs').textContent).toBe('All foldersCharacter posesLala');
     fireEvent.click(within(lala).getByRole('button', { name: 'Front, 1 picture' }));
     expect(within(lala).getByTitle('Front ★').getAttribute('aria-pressed')).toBe('true');
+    // More than one Lala (Evoni, 2026-10-22): Side is added beside Front, both picked; clicked again, Side comes off.
+    fireEvent.click(within(within(lala).getByTestId('yts-lala-crumbs')).getByRole('button', { name: 'Lala' }));
+    fireEvent.click(within(lala).getByRole('button', { name: 'Side, 1 picture' }));
+    fireEvent.click(within(lala).getByTitle(lalaSide.label));
+    expect(within(lala).getByTitle(lalaSide.label).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('canvas-lala')).toBeTruthy();
+    expect(screen.getByTestId('canvas-picture-1')).toBeTruthy();
+    expect(within(screen.getByTestId('yts-layers')).getByRole('button', { name: 'Lala 2' })).toBeTruthy();
+    fireEvent.click(within(lala).getByTitle(lalaSide.label));
+    expect(screen.queryByTestId('canvas-picture-1')).toBeNull();
+    expect(screen.getByTestId('canvas-lala')).toBeTruthy();
     expect(screen.queryByTestId('yts-poses-note')).toBeNull();
     expect(screen.queryByTestId('canvas-jaw')).toBeNull();
     const jaw = screen.getByTestId('yts-jaw');

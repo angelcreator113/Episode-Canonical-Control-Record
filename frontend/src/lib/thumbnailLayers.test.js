@@ -13,6 +13,7 @@ import {
   READABLE_SIZE, readablePatch, clearOfTimestamp, fixWarning, fixAllWarnings, finerCanvas, drawRes, WIDTH, HEIGHT,
   presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, placeLayer, removeLayer, boxBlur, FONTS, addText, addPicture, addPieceCard,
   boxFromNode, fitText, fitPicture, layerName, LINE_HEIGHT, checklistRows, duplicateLayer, snapBox, SNAP, copyLayers, pasteLayers,
+  figureLayers, toggleFigure, clearFigure,
 } from './thumbnailLayers';
 
 const CONTENT = {
@@ -682,5 +683,53 @@ describe('the redesign\'s layouts, fonts and blur (Evoni, 2026-10-21)', () => {
     expect(at(0, 0)).toBe(0);
     // The same numbers the server's copy gives for this pixel (tests/unit/services/thumbnailLayers.test.js runs the same input).
     expect([at(4, 4), at(3, 4), at(2, 4)]).toEqual(BLUR_SAMPLE);
+  });
+});
+
+// Evoni, 2026-10-22: "I need to be able to click more than one lala image".
+describe('more than one Lala', () => {
+  const A = 'https://b.s3.amazonaws.com/lala.png';
+  const B = 'https://b.s3.amazonaws.com/lala-side.png';
+  const C = 'https://b.s3.amazonaws.com/lala-back.png';
+
+  test('each picture clicked is added beside her, with her look, under the words; the first keeps the role', () => {
+    let spec = presetLayers('lala-left', CONTENT, STYLE);
+    spec = updateLayer(spec, layerOf(spec, 'lala').id, { shadow: true, outline: '#FFFFFF', locked: true });
+    spec = toggleFigure(spec, 'lala', B);
+    spec = toggleFigure(spec, 'lala', C);
+    const lalas = figureLayers(spec, 'lala');
+    expect(lalas.map((l) => [l.role, l.name, l.src])).toEqual([['lala', undefined, A], [null, 'Lala 2', B], [null, 'Lala 3', C]]);
+    expect(lalas.map(layerName)).toEqual(['Lala', 'Lala 2', 'Lala 3']);
+    const [main, two, three] = lalas;
+    expect(two).toMatchObject({ kind: 'image', shadow: true, outline: '#FFFFFF', locked: false, fit: main.fit });
+    // Beside her, a little smaller, standing on the same line, inside the frame.
+    expect(two.x).toBeGreaterThan(main.x);
+    expect(two.w).toBeLessThan(main.w);
+    expect(two.y + two.h).toBe(main.y + main.h);
+    for (const l of [two, three]) expect(l.x >= 0 && l.x + l.w <= WIDTH).toBe(true);
+    // Below the words.
+    const at = (id) => spec.layers.findIndex((l) => l.id === id);
+    expect(at(three.id)).toBeLessThan(at(layerOf(spec, 'title').id));
+    expect(new Set(spec.layers.map((l) => l.id)).size).toBe(spec.layers.length);
+  });
+
+  test('clicked again, a picture is taken off; taking off the first hands the role to the next; No Lala takes off all', () => {
+    let spec = toggleFigure(toggleFigure(presetLayers('lala-left', CONTENT, STYLE), 'lala', B), 'lala', C);
+    expect(figureLayers(toggleFigure(spec, 'lala', B), 'lala').map((l) => l.src)).toEqual([A, C]);
+    spec = toggleFigure(spec, 'lala', A);
+    expect(layerOf(spec, 'lala')).toMatchObject({ src: B, name: null });
+    expect(figureLayers(spec, 'lala').map((l) => l.src)).toEqual([B, C]);
+    const none = clearFigure(spec, 'lala');
+    expect(figureLayers(none, 'lala')).toEqual([]);
+    expect(none.layers.length).toBe(spec.layers.length - 2);
+  });
+
+  test('with no Lala, the first picture goes where the layout puts her; a plain picture named otherwise is not hers', () => {
+    const bare = presetLayers('lala-left', { ...CONTENT, lalaUrl: null }, STYLE);
+    expect(layerOf(bare, 'lala')).toBeNull();
+    const spec = toggleFigure(bare, 'lala', B, 'lala-left');
+    expect(layerOf(spec, 'lala')).toMatchObject({ src: B });
+    const other = addPicture(spec, C, 'Lala at the gala');
+    expect(figureLayers(other, 'lala').map((l) => l.src)).toEqual([B]);
   });
 });

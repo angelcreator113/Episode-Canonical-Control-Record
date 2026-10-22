@@ -334,6 +334,61 @@ export function setRoleContent(spec, role, value, layout = 'lala-left') {
   return spec;
 }
 
+// More than one Lala (Evoni, 2026-10-22: "I need to be able to click more
+// than one lala image"). The first keeps the role, so templates and the
+// show's style still find her; each one added beside her is a picture
+// named "Lala 2", "Lala 3", with the first one's look.
+const FIGURE_NAMES = { lala: 'Lala', jaw: 'JustAWoman' };
+
+/** A figure's pictures: the one with its role, then the ones added beside it. */
+export function figureLayers(spec, role) {
+  const name = FIGURE_NAMES[role];
+  const extra = name ? new RegExp(`^${name} \\d+$`) : null;
+  return spec.layers.filter((l) => l.kind === 'image' && (l.role === role || (!l.role && extra?.test(l.name || ''))));
+}
+
+/**
+ * A figure's picture clicked: added when it is not there (the first takes
+ * the role, the next stand beside it), taken off when it is. Taking off the
+ * one with the role hands the role to the next.
+ */
+export function toggleFigure(spec, role, url, layout = 'lala-left') {
+  if (!url) return spec;
+  const mine = figureLayers(spec, role);
+  const on = mine.find((l) => l.src === url);
+  if (on) {
+    let next = removeLayer(spec, on.id);
+    const heir = on.role === role ? mine.find((l) => l !== on) : null;
+    if (heir) next = updateLayer(next, heir.id, { role, name: null });
+    return next;
+  }
+  if (!mine.length) return setRoleContent(spec, role, url, layout);
+  const empty = mine.find((l) => !l.src);
+  if (empty) return updateLayer(spec, empty.id, { src: url });
+  const main = mine.find((l) => l.role === role) || mine[0];
+  let n = 2;
+  while (spec.layers.some((l) => l.name === `${FIGURE_NAMES[role]} ${n}`)) n += 1;
+  const w = Math.round(main.w * 0.85);
+  const h = Math.round(main.h * 0.85);
+  const step = mine.length * Math.round(main.w * 0.45);
+  let x = main.x + step;
+  if (x + w > WIDTH) x = main.x - step;
+  x = Math.min(Math.max(x, 0), WIDTH - w);
+  const layer = {
+    ...main, id: newId(spec, 'picture'), role: null, name: `${FIGURE_NAMES[role]} ${n}`, src: url,
+    x, y: main.y + main.h - h, w, h, locked: false,
+  };
+  // Just above the figure's last picture, so the words stay on top.
+  const last = Math.max(...mine.map((l) => spec.layers.indexOf(l)));
+  return { ...spec, layers: [...spec.layers.slice(0, last + 1), layer, ...spec.layers.slice(last + 1)] };
+}
+
+/** "No Lala": every picture of the figure taken off. */
+export function clearFigure(spec, role) {
+  const ids = new Set(figureLayers(spec, role).map((l) => l.id));
+  return { ...spec, layers: spec.layers.filter((l) => !ids.has(l.id)) };
+}
+
 /** Applies the colours: the accent (shade stripe, badge, show name), the title colour, the dim. */
 export function applyStyle(spec, { accent, textColor, dim } = {}) {
   return {
