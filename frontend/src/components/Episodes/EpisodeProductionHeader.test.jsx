@@ -87,15 +87,21 @@ describe('EpisodeProductionHeader', () => {
     expect(screen.getByTestId('eph-step-thumbnail').className).toContain('is-done');
   });
 
-  test('the episode at a glance and the progress by section', () => {
-    renderHeader();
-    expect(screen.getByText('Episode 1')).toBeTruthy();
-    expect(screen.getByText('Studio by Sable')).toBeTruthy();
-    expect(screen.getByText('Lala attends a creative workshop.')).toBeTruthy();
-    expect(screen.getByText('3 of 4 checks')).toBeTruthy();
-    expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('75');
-    expect(screen.getByText('1/2')).toBeTruthy();
+  // Evoni, 2026-10-22 (Production layout): one thin strip. The episode card
+  // repeated the header and is gone; the progress by section is the
+  // Checklist tab's own; the strip names the current step and counts the
+  // checks, which open the Checklist.
+  test('the strip names the current step and counts the checks; no episode card, no progress card', () => {
+    const onOpenTab = vi.fn();
+    renderHeader({ onOpenTab });
+    expect(screen.getByTestId('eph-now').textContent).toBe('Step 3 of 7: Scenes');
+    fireEvent.click(screen.getByTestId('eph-count'));
+    expect(screen.getByTestId('eph-count').textContent).toBe('3/4 checks');
+    expect(onOpenTab).toHaveBeenCalledWith('checklist');
+    expect(screen.queryByText('Lala attends a creative workshop.')).toBeNull();
+    expect(screen.queryByRole('progressbar')).toBeNull();
   });
+
 
   test('Mark Ready while the episode is not yet In review; then the status shows instead', () => {
     const onMarkReady = vi.fn();

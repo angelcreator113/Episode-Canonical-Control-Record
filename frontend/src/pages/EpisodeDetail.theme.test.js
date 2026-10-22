@@ -71,8 +71,9 @@ describe('Episode shell theme', () => {
   });
 
   test('the Production pills are magenta when chosen and mark it with aria-current', () => {
-    expect(jsx).toMatch(/aria-current=\{epSubTab === s\.key \? 'page' : undefined\}/);
-    expect(jsx).toMatch(/className=\{`ed-subpill\$\{epSubTab === s\.key \? ' is-active' : ''\}`\}/);
+    // The pill a sub-tab lights (Scenes for its Plan view, 2026-10-22).
+    expect(jsx).toMatch(/aria-current=\{lit === s\.key \? 'page' : undefined\}/);
+    expect(jsx).toMatch(/className=\{`ed-subpill\$\{lit === s\.key \? ' is-active' : ''\}`\}/);
     expect(redesign).toMatch(/\.ed-subpill \{[^}]*border: 1px solid var\(--studio-line-strong\);[^}]*color: var\(--studio-magenta\);/);
     expect(redesign).toMatch(/\.ed-subpill\.is-active \{ background: var\(--studio-magenta\); border-color: var\(--studio-magenta\); color: var\(--text-inverse\);/);
   });

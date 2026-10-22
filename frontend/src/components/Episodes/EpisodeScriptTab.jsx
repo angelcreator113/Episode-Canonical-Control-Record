@@ -1070,7 +1070,7 @@ function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded
           <section className="esp-section esp-visuals" aria-label="Scene visuals">
             <div className="esp-section-head">
               <span className="esp-section-tab"><Images size={15} aria-hidden="true" /> Scene Visuals</span>
-              {big && <Link className="esp-link esp-section-link" to="?tab=beatplan" onClick={(e) => e.stopPropagation()}>Beat Plan</Link>}
+              {big && <Link className="esp-link esp-section-link" to="?tab=beatplan" onClick={(e) => e.stopPropagation()}>Scenes plan</Link>}
             </div>
             {big ? (
               <div className={`esp-visuals-grid${pictures.length > 1 ? ' has-thumbs' : ''}`}>
@@ -1091,7 +1091,7 @@ function BeatSection({ voice = null, beat, index, beatCount, scenePlan, expanded
                 )}
               </div>
             ) : (
-              <p className="esp-beat-nopicture" data-testid={`script-nopicture-${beat.number}`}>No picture for this beat yet · <Link className="esp-link" to="?tab=beatplan" onClick={(e) => e.stopPropagation()}>Open Beat Plan</Link></p>
+              <p className="esp-beat-nopicture" data-testid={`script-nopicture-${beat.number}`}>No picture for this beat yet · <Link className="esp-link" to="?tab=beatplan" onClick={(e) => e.stopPropagation()}>Open the Scenes plan</Link></p>
             )}
             {used.length > 0 && (
               <div className="esp-build" data-testid={`script-build-${beat.number}`}>
