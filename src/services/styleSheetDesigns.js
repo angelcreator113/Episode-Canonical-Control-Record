@@ -261,9 +261,29 @@ function designSpots(design) {
 }
 
 /** What the Style Page needs to lay the designs out: the designs, the sizes, and this sheet's values. */
-function designsForPage(sheet) {
+/**
+ * The show's choice of designs (Evoni, 2026-10-22: the designs live in the
+ * Template Studio, each on or off for the show). Stored on
+ * shows.metadata.style_designs as { off: [keys] }, so a design added later
+ * starts on. Unknown keys are dropped.
+ */
+function designChoice(metadata) {
+  const raw = metadata && typeof metadata === 'object' ? metadata.style_designs : null;
+  const off = Array.isArray(raw?.off) ? raw.off.filter((k) => DESIGNS.some((d) => d.key === k)) : [];
+  return { off: [...new Set(off)] };
+}
+
+/** The designs that are on for a show. */
+const designsOn = (off = []) => (off.length ? DESIGNS.filter((d) => !off.includes(d.key)) : DESIGNS);
+
+/** The Template Studio's view: every design, the sizes, and which are off. */
+function libraryView(metadata) {
+  return { designs: DESIGNS, sizes: Object.entries(SIZES).map(([key, s]) => ({ key, ...s })), off: designChoice(metadata).off };
+}
+
+function designsForPage(sheet, { off = [] } = {}) {
   return {
-    designs: DESIGNS,
+    designs: designsOn(off),
     sizes: Object.entries(SIZES).map(([key, s]) => ({ key, ...s })),
     values: { photo_paths: designPhotoPaths(sheet), fields: designFields(sheet), palette: designPalette(sheet) },
   };
@@ -272,4 +292,5 @@ function designsForPage(sheet) {
 module.exports = {
   DESIGNS, SIZES, DESIGN_WIDTH, DESIGN_HEIGHT, findDesign, fitDesign,
   designPhotoPaths, designPhotos, designFields, designPalette, designSpots, designsForPage,
+  designChoice, designsOn, libraryView,
 };

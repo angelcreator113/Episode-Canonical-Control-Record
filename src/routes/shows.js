@@ -465,6 +465,45 @@ router.put('/:id/financial-config', requireAuth, async (req, res) => {
 });
 
 /**
+ * GET /api/v1/shows/:id/style-designs
+ * PUT /api/v1/shows/:id/style-designs   Body: { off: [design keys] }
+ * Template Studio › Style sheets (Evoni, 2026-10-22): the five Style Page
+ * designs, each on or off for the show. Stored on Show.metadata.style_designs;
+ * the Style Page, its downloads and Send to Distribution use the ones on.
+ */
+router.get('/:id/style-designs', requireAuth, async (req, res) => {
+  try {
+    const Show = getShow();
+    const show = await Show.findByPk(req.params.id);
+    if (!show) return res.status(404).json({ error: 'Show not found' });
+    const { libraryView } = require('../services/styleSheetDesigns');
+    return res.json({ success: true, data: libraryView(show.metadata || {}) });
+  } catch (err) {
+    console.error('GET /shows/:id/style-designs error:', err);
+    return res.status(500).json({ error: 'The style designs could not be read.' });
+  }
+});
+
+router.put('/:id/style-designs', requireAuth, async (req, res) => {
+  try {
+    const Show = getShow();
+    const show = await Show.findByPk(req.params.id);
+    if (!show) return res.status(404).json({ error: 'Show not found' });
+    const { DESIGNS, libraryView } = require('../services/styleSheetDesigns');
+    const off = req.body?.off;
+    if (!Array.isArray(off) || off.some((k) => !DESIGNS.some((d) => d.key === k))) {
+      return res.status(400).json({ error: `off is a list of: ${DESIGNS.map((d) => d.key).join(', ')}.` });
+    }
+    const nextMeta = { ...(show.metadata || {}), style_designs: { off: [...new Set(off)] } };
+    await show.update({ metadata: nextMeta });
+    return res.json({ success: true, data: libraryView(nextMeta) });
+  } catch (err) {
+    console.error('PUT /shows/:id/style-designs error:', err);
+    return res.status(500).json({ error: 'The style designs could not be saved.' });
+  }
+});
+
+/**
  * GET /api/v1/shows/:id/lala-home
  * PUT /api/v1/shows/:id/lala-home   Body: { address?, neighbourhood?, city }
  * Lala's home, a show setting (D13 travel, Evoni 2026-09-30): stored on

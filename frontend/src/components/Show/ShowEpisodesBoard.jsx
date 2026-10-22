@@ -99,7 +99,7 @@ function useLocations(needed) {
 
 /** The hero's footage and primary thumbnail, for its seven steps. */
 function useHeroMedia(episodeId) {
-  const [media, setMedia] = useState({ clips: [], hasThumbnail: false });
+  const [media, setMedia] = useState({ clips: [], hasThumbnail: false, thumbnailUrl: null });
   useEffect(() => {
     if (!episodeId) return undefined;
     let live = true;
@@ -109,16 +109,16 @@ function useHeroMedia(episodeId) {
       .catch((err) => console.error('[ShowEpisodesBoard] clips load failed:', err));
     // The editor's saved list (episodePipeline also counts episodes.thumbnail_url).
     Promise.resolve().then(() => currentThumbnail(episodeId))
-      .then((thumb) => { if (live) setMedia((m) => ({ ...m, hasThumbnail: Boolean(thumb) })); })
+      .then((thumb) => { if (live) setMedia((m) => ({ ...m, hasThumbnail: Boolean(thumb), thumbnailUrl: thumb?.url || null })); })
       .catch((err) => console.error('[ShowEpisodesBoard] thumbnail check failed:', err));
     return () => { live = false; };
   }, [episodeId]);
   return media;
 }
 
-/** The episode's thumbnail, or its code on the show's pink. */
-function Thumb({ episode, small = false }) {
-  const src = episode.thumbnail_url || episode.thumbnailUrl || null;
+/** The episode's thumbnail (else the Studio's current one, `saved`), or its code on the show's pink. */
+function Thumb({ episode, saved = null, small = false }) {
+  const src = episode.thumbnail_url || episode.thumbnailUrl || saved || null;
   return (
     <span className={`seb-thumb${small ? ' is-small' : ''}${src ? '' : ' is-empty'}`} aria-hidden="true">
       {src ? <img src={src} alt="" /> : <span className="seb-thumb-mark">{small ? episodeCode(episode) : 'Styling Adventures with Lala'}</span>}
@@ -207,7 +207,7 @@ function NowProducing({ showId, episode, checks, panel, onTagsSaved }) {
     <section className="seb-hero" data-testid="seb-hero" aria-labelledby="seb-hero-title">
       <div className="seb-hero-card">
         <div className="seb-hero-art">
-          <Thumb episode={episode} />
+          <Thumb episode={episode} saved={media.thumbnailUrl} />
           <span className="seb-badge">{episodeCode(episode)}</span>
           <span className="seb-badge is-status">{STATUS_LABEL[episode.status] || episode.status}</span>
           <Link className="seb-thumb-edit" to={thumbnailStudioHref({ episodeId: episode.id })}><Pencil size={14} aria-hidden="true" /> Edit Thumbnail</Link>
