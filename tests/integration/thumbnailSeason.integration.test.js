@@ -28,6 +28,7 @@ const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
 const draftsMigration = require('../../src/migrations/20261021090000-create-episode-thumbnail-drafts');
+const savedMigration = require('../../src/migrations/20261022090000-create-episode-saved-thumbnails');
 
 const { sequelize } = models;
 
@@ -65,6 +66,7 @@ const BUCKET_URL = `https://${process.env.S3_PRIMARY_BUCKET}.s3.us-east-1.amazon
 
   beforeAll(async () => {
     await draftsMigration.up(sequelize.getQueryInterface(), Sequelize);
+    await savedMigration.up(sequelize.getQueryInterface(), Sequelize);
     token = TokenService.generateTokenPair({
       id: 'test-user-season', email: 'user@season.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
     }).accessToken;
