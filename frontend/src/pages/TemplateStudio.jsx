@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import {
   LayoutGrid, CheckCircle2, PenLine, Archive, Lock, Search, Plus, Copy, Send,
-  Trash2, ImageIcon, Layers, Maximize2, ChevronLeft, ChevronRight, Youtube, Unlock, Type, Star, LayoutTemplate,
+  Trash2, ImageIcon, Layers, Maximize2, ChevronLeft, ChevronRight, Youtube, Unlock, Type, Star, LayoutTemplate, Palette,
 } from 'lucide-react';
 import apiClient from '../services/api';
 import { youtubeThumbnailsApi, thumbnailStudioHref } from '../lib/youtubeThumbnailsApi';
 import { usePreview } from '../lib/picturePreview';
+import StyleSheetsLibrary from '../components/Templates/StyleSheetsLibrary';
 import './TemplateStudio.css';
 
 // ─── Track 6 CP10 module-scope helpers (Pattern F prophylactic — Api suffix) ───
@@ -271,7 +272,9 @@ function TemplateStudio() {
   const [sortBy, setSortBy] = useState('recently_used');
   const [selectedId, setSelectedId] = useState(null);
   // The layout templates (template_studio), or every show's YouTube thumbnail templates.
-  const [view, setView] = useState('layouts');
+  // ?view=style opens Style sheets (the Style Page links here).
+  const [searchParams] = useSearchParams();
+  const [view, setView] = useState(['shows', 'style'].includes(searchParams.get('view')) ? searchParams.get('view') : 'layouts');
 
   useEffect(() => {
     loadTemplates();
@@ -458,6 +461,11 @@ function TemplateStudio() {
               <LayoutTemplate size={20} aria-hidden />
               <span className="ts-rail-label">Show templates</span>
             </button>
+            <button type="button" aria-pressed={view === 'style'} data-testid="ts-style-sheets-btn"
+              className={`ts-rail-btn ${view === 'style' ? 'is-active' : ''}`} onClick={() => setView('style')}>
+              <Palette size={20} aria-hidden />
+              <span className="ts-rail-label">Style sheets</span>
+            </button>
           </nav>
           <div className="ts-rail-divider" />
           <div className="ts-rail-heading">Elsewhere in the studio</div>
@@ -469,7 +477,7 @@ function TemplateStudio() {
 
         {/* ── Main ───────────────────────────────────────────────── */}
         <div className="ts-main">
-          {view === 'shows' ? (
+          {view === 'shows' || view === 'style' ? (
             <>
               {message && (
                 <div className={`ts-message is-${message.kind}`} role={message.kind === 'error' ? 'alert' : 'status'}>
@@ -477,7 +485,7 @@ function TemplateStudio() {
                   <button type="button" className="ts-message-close" onClick={() => setMessage(null)} aria-label="Dismiss">×</button>
                 </div>
               )}
-              <ShowTemplates say={say} />
+              {view === 'shows' ? <ShowTemplates say={say} /> : <StyleSheetsLibrary say={say} />}
             </>
           ) : (
           <>

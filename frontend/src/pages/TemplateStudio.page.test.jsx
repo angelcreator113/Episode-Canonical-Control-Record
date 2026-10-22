@@ -125,4 +125,17 @@ describe('TemplateStudio page', () => {
     await waitFor(() => expect(apiClient.patch).toHaveBeenCalledWith('/api/v1/youtube-thumbnails/shows/s-1/templates/t-2', { name: 'Big Haul' }, expect.anything()));
     expect((await screen.findByRole('status')).textContent).toContain('Renamed to "Big Haul".');
   });
+  test('Style sheets in the rail, and ?view=style opens it: the Style Page designs, on or off for the show', async () => {
+    vi.mocked(apiClient.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/shows') return { data: { data: [{ id: 's-1', name: 'Styling Adventures with Lala' }] } };
+      if (url === '/api/v1/shows/s-1/style-designs') {
+        return { data: { data: { designs: [{ key: 'runway', name: 'Runway to Reality', number: '03', background: '#FFF9F5', elements: [] }], sizes: [], off: [] } } };
+      }
+      return { data: { data: [] } };
+    });
+    render(<MemoryRouter initialEntries={['/template-studio?view=style']}><TemplateStudio /></MemoryRouter>);
+    expect(await screen.findByRole('heading', { level: 2, name: 'Style sheets' })).toBeTruthy();
+    expect(screen.getByTestId('ts-style-sheets-btn').getAttribute('aria-pressed')).toBe('true');
+    expect(await screen.findByTestId('ssl-design-runway')).toBeTruthy();
+  });
 });
