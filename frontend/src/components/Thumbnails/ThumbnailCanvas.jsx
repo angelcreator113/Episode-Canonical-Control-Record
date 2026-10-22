@@ -10,12 +10,17 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Stage, Layer, Group, Rect, Text, Line, Image as KImage, Transformer } from 'react-konva';
+import Konva from 'konva';
 import {
   WIDTH, HEIGHT, LINE_HEIGHT, FONTS, fitText, measurer, spaced, fitPicture, boxFromNode, layerName, checklistRows, snapBox, layersInBox, adjustedPicture, stickerCanvas, stickerMargin, drawFitted, CARD_COLOR,
   fancyWords, wordsCanvas, wordsMargin, finerCanvas, drawRes, shapeCanvas, shapeMargin,
-  TIMESTAMP_ZONE,
+  TIMESTAMP_ZONE, pinchGesture, pinchDelta,
 } from '../../lib/thumbnailLayers';
 import { previewUrl, previewWidth } from '../../lib/picturePreview';
+
+// A second finger while the first drags a layer (Evoni, 2026-10-22: pinch to
+// resize and turn): Konva hides touch moves during a drag unless asked.
+Konva.hitOnDragEnabled = true;
 
 /** A picture for a box `points` wide on screen: its smaller copy (picturePreview), loaded. */
 function usePicture(src, points) {
@@ -265,13 +270,14 @@ function Overlays({ grid, safeZones, scale }) {
 
 export default function ThumbnailCanvas({
   spec, selectedId, selectedIds, onSelect, onSelectMany, onChange, onChangeMany, onSnapshot, fontsTick = 0, zoom = 1,
-  grid = false, safeZones = false,
+  grid = false, safeZones = false, onZoom = null,
 }) {
   const wrapRef = useRef(null);
   const stageRef = useRef(null);
   const trRef = useRef(null);
   const marksRef = useRef(null); // the grid and safe zones, hidden while the snapshot is taken
   const dragFrom = useRef(null); // { id, x, y, others: { [id]: { x, y } } } while picked layers move together
+  const pinch = useRef(null); // { d, a, id, rotation, zoom } while two fingers are down
   const [fitWidth, setWidth] = useState(640);
   // Zoomed in (Evoni, 2026-10-21), the canvas is drawn bigger and scrolls inside its frame.
   const width = Math.round(fitWidth * zoom);
@@ -437,6 +443,48 @@ export default function ThumbnailCanvas({
     if (!together(l)) onSelect(l.id);
   };
 
+  // Two fingers (Evoni, 2026-10-22): on the one picked layer, pinch to resize
+  // it and twist to turn it (drawn as they move, kept when they lift); with
+  // nothing picked, pinch zooms the canvas.
+  const twoFingers = (evt) => {
+    const t = evt?.touches;
+    return t && t.length >= 2 ? [{ x: t[0].clientX, y: t[0].clientY }, { x: t[1].clientX, y: t[1].clientY }] : null;
+  };
+  const pinchMove = (e) => {
+    const pts = twoFingers(e.evt);
+    if (!pts) return false;
+    e.evt.preventDefault?.();
+    const stage = stageRef.current;
+    stage?.find('Group').forEach((n) => { if (n.isDragging?.()) n.stopDrag(); });
+    setMarquee(null);
+    const g = pinchGesture(pts);
+    if (!pinch.current) {
+      const one = picks.length === 1 ? layers.find((x) => x.id === picks[0]) : null;
+      const target = one && !one.locked && one.kind !== 'shade' ? one : null;
+      pinch.current = { ...g, id: target?.id || null, rotation: target?.rotation || 0, zoom };
+      return true;
+    }
+    const { k, turn } = pinchDelta(pinch.current, g);
+    if (pinch.current.id) {
+      const node = stage?.findOne(`#${CSS.escape(pinch.current.id)}`);
+      if (node) { node.scaleX(k); node.scaleY(k); node.rotation(pinch.current.rotation + turn); node.getLayer()?.batchDraw(); }
+    } else if (onZoom) {
+      onZoom(pinch.current.zoom * k);
+    }
+    return true;
+  };
+  const pinchEnd = () => {
+    const p = pinch.current;
+    if (!p) return false;
+    pinch.current = null;
+    if (p.id) {
+      const node = stageRef.current?.findOne(`#${CSS.escape(p.id)}`);
+      const l = layers.find((x) => x.id === p.id);
+      if (node && l) { change(l, node); node.scaleX(1); node.scaleY(1); }
+    }
+    return true;
+  };
+
   const main = (spec?.layers || []).find((x) => x.id === picks[0]);
   const anchorSize = coarsePointer() ? 18 : 10;
   return (
@@ -447,8 +495,9 @@ export default function ThumbnailCanvas({
           ? (main.locked ? `Thumbnail editor. ${layerName(main)} is picked and locked.` : `Thumbnail editor. ${layerName(main)} is picked: drag to move, pull a corner to resize, use the top handle to turn; arrow keys nudge.`)
           : 'Thumbnail editor. Click a layer to move, resize or turn it; drag across the canvas to pick several.'}>
       <Stage ref={stageRef} width={width} height={Math.round((width * HEIGHT) / WIDTH)} scaleX={scale} scaleY={scale}
-        onMouseDown={boxStart} onTouchStart={boxStart} onMouseMove={boxMove} onTouchMove={boxMove}
-        onMouseUp={boxEnd} onTouchEnd={boxEnd} onMouseLeave={boxEnd}>
+        onMouseDown={boxStart} onTouchStart={(e) => { if (!twoFingers(e.evt)) boxStart(e); }} onMouseMove={boxMove}
+        onTouchMove={(e) => { if (!pinchMove(e)) boxMove(e); }}
+        onMouseUp={boxEnd} onTouchEnd={(e) => { if (!pinchEnd()) boxEnd(e); }} onMouseLeave={boxEnd}>
         <Layer key={fontsTick}>
           {layers.map((l) => {
             if (l.kind === 'shade') return <Shade key={l.id} l={l} />;
