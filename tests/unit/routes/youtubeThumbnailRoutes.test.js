@@ -101,6 +101,10 @@ test('the saved list, making one current, and a refused delete pass through', as
 
 // Audit, 2026-10-22.
 test('an id that is not a UUID is a 404 before the database is asked', async () => {
+  // The show's template from before named ones is "legacy": that one id is let through.
+  mockQuery.mockClear();
+  const legacy = await request(app).delete('/api/v1/youtube-thumbnails/shows/11111111-2222-4333-8444-555555555555/templates/legacy');
+  expect(legacy.status).not.toBe(404);
   for (const url of ['/episodes/not-a-uuid/sources', '/episodes/11111111-2222-4333-8444-555555555555/saved/7/primary', '/shows/1; DROP/templates', '/episodes/11111111-2222-4333-8444-555555555555/versions/x']) {
     mockQuery.mockClear();
     const res = await request(app)[url.endsWith('primary') ? 'post' : 'get']('/api/v1/youtube-thumbnails' + url);

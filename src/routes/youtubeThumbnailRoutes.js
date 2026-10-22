@@ -56,7 +56,11 @@ const router = express.Router();
 // database is asked (audit, 2026-10-22: a bad id was a 500 with Postgres's words).
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 for (const [param, what] of [['episodeId', 'Episode'], ['showId', 'Show'], ['templateId', 'Template'], ['versionId', 'Version'], ['thumbnailId', 'Thumbnail']]) {
-  router.param(param, (req, res, next, value) => (UUID.test(String(value)) ? next() : res.status(404).json({ success: false, error: `${what} not found` })));
+  router.param(param, (req, res, next, value) => {
+    // A show's template kept before named ones is "legacy" (yt.LEGACY_ID) until it is adopted.
+    if (UUID.test(String(value)) || (param === 'templateId' && value === yt.LEGACY_ID)) return next();
+    return res.status(404).json({ success: false, error: `${what} not found` });
+  });
 }
 
 const sendError = (res, err, what) => {
