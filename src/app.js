@@ -482,7 +482,9 @@ const characterRoutes = trackRouteLoad('characters', () => require('./routes/cha
 
 const episodeRoutes = trackRouteLoad('episodes', () => require('./routes/episodes'));
 
-const thumbnailRoutes = trackRouteLoad('thumbnails', () => require('./routes/thumbnails'));
+// /api/v1/thumbnails is retired (Evoni, 2026-10-22): no page called it, and its
+// model's columns are not production's thumbnails table. The Studio's own routes
+// are /api/v1/youtube-thumbnails.
 
 const metadataRoutes = trackRouteLoad('metadata', () => require('./routes/metadata'));
 
@@ -687,7 +689,6 @@ app.use('/api/v1/episodes', episodeRoutes);
 const timelineDataRoutes = trackRouteLoad('timelineData', () => require('./routes/timelineData'));
 app.use('/api/v1/episodes', timelineDataRoutes);
 
-app.use('/api/v1/thumbnails', thumbnailRoutes);
 app.use('/api/v1/metadata', metadataRoutes);
 app.use('/api/v1/processing-queue', processingRoutes);
 
@@ -1823,7 +1824,7 @@ app.get('/api/v1', (req, res) => {
     opensearch: isOpenSearchReady ? 'ready' : 'initializing',
     endpoints: {
       episodes: '/api/v1/episodes',
-      thumbnails: '/api/v1/thumbnails',
+      'youtube-thumbnails': '/api/v1/youtube-thumbnails',
       metadata: '/api/v1/metadata',
       'processing-queue': '/api/v1/processing-queue',
       files: '/api/v1/files',

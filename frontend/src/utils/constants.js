@@ -6,7 +6,6 @@
 export const API_ENDPOINTS = {
   AUTH: '/api/v1/auth',
   EPISODES: '/api/v1/episodes',
-  THUMBNAILS: '/api/v1/thumbnails',
   SEARCH: '/api/v1/search',
   METADATA: '/api/v1/metadata',
   COMPOSITIONS: '/api/v1/compositions',
