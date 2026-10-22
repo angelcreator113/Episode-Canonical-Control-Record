@@ -19,6 +19,7 @@
 
 const sharp = require('sharp');
 const layers = require('./thumbnailLayers');
+const archiver = require('archiver');
 const { createCache } = require('./pictureCache');
 const { readDocuments } = require('./eventDocumentsService');
 const { readLogo } = require('./showLogoService');
@@ -1099,7 +1100,48 @@ async function smallPreview(png) {
   return sharp(png).resize(SMALL_WIDTH).flatten({ background: '#000000' }).jpeg({ quality: 82, mozjpeg: true }).toBuffer();
 }
 
+// ── Several thumbnails in one zip (Evoni, 2026-10-22) ───────────────────────
+// The season's ticked ones, or 2–3 versions for YouTube's Test & Compare; each
+// as it would be saved (under YouTube's 2 MB, forYouTube).
+
+const ZIP_MAX = 60;
+
+const fileSlug = (name) => String(name || 'thumbnail').normalize('NFKD').replace(/[^\w\s-]/g, '').trim()
+  .replace(/\s+/g, '-').slice(0, 60) || 'thumbnail';
+
+/** The items asked for, read and checked before anything is sent: [{ name, spec }]. */
+function zipItems(body, allowedUrl = allowedImageUrl) {
+  const items = body && Array.isArray(body.items) ? body.items : null;
+  if (!items || !items.length) throw new ThumbnailError(400, 'items must be a list of { name, spec }');
+  if (items.length > ZIP_MAX) throw new ThumbnailError(400, `At most ${ZIP_MAX} thumbnails in one zip`);
+  return items.map((it, i) => ({
+    name: `${String(i + 1).padStart(2, '0')}-${fileSlug(it && it.name)}`,
+    spec: layers.readLayers(it && it.spec, allowedUrl),
+  }));
+}
+
+/** Draws each and streams them into a zip on out (a response), one after another. */
+async function zipThumbnails(items, out) {
+  // Pictures are compressed already: stored, not squeezed again.
+  const archive = archiver('zip', { store: true });
+  const done = new Promise((resolve, reject) => {
+    archive.on('error', reject);
+    out.on('close', resolve);
+    out.on('finish', resolve);
+  });
+  archive.pipe(out);
+  for (const it of items) {
+    const file = await forYouTube(await renderSpec(it.spec));
+    archive.append(file.buffer, { name: `${it.name}.${file.ext}` });
+  }
+  await archive.finalize();
+  await done;
+}
+
 module.exports = {
+  zipItems,
+  zipThumbnails,
+  ZIP_MAX,
   WIDTH, HEIGHT, LAYOUTS, DEFAULT_STYLE, ThumbnailError, YOUTUBE_MAX_BYTES, forYouTube,
   readStyle, allowedImageUrl, fetchImage, previewImage, PREVIEW_WIDTHS, readyPoses, pictureFolders, libraryImages, outfitImages, layoutSuggestions,
   sources, saveStyle, saveAsPrimary, listSaved, makePrimary, removeSaved, seasonEpisodes, smallPreview, SMALL_WIDTH,

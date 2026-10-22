@@ -108,6 +108,24 @@ router.post('/render/small', requireAuth, async (req, res) => {
   }
 });
 
+// Several thumbnails in one zip (Evoni, 2026-10-22): the season's ticked ones, or
+// versions for YouTube's Test & Compare. Every item is checked before the zip starts.
+router.post('/render/zip', requireAuth, async (req, res) => {
+  let started = false;
+  try {
+    const items = yt.zipItems(readBody(req));
+    const name = String(readBody(req).name || 'thumbnails').replace(/[^\w-]+/g, '-').slice(0, 60) || 'thumbnails';
+    res.set({ 'Content-Type': 'application/zip', 'Content-Disposition': `attachment; filename="${name}.zip"`, 'Cache-Control': 'no-store' });
+    started = true;
+    await yt.zipThumbnails(items, res);
+  } catch (err) {
+    if (!started) return sendError(res, err, 'zip');
+    console.error('[YouTubeThumbnail] zip stopped part way:', err.message);
+    res.destroy(err);
+  }
+  return undefined;
+});
+
 router.get('/shows/:showId/season', requireAuth, async (req, res) => {
   try {
     return res.json({ success: true, data: await yt.seasonEpisodes(models.sequelize, req.params.showId) });

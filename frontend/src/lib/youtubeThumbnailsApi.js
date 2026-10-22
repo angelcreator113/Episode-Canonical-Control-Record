@@ -162,6 +162,18 @@ export function episodeContent(src) {
  * first; the older /api/v1/thumbnails reads select model-only columns and
  * fail on a database built from the migrations.
  */
+/** Hands a blob to the browser as a download named name. */
+export function downloadBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export async function currentThumbnail(episodeId) {
   if (!episodeId) return null;
   const saved = await youtubeThumbnailsApi.saved(episodeId);
@@ -173,6 +185,8 @@ export const youtubeThumbnailsApi = {
   sources: (episodeId) => api.get(`${base}/episodes/${episodeId}/sources`).then((r) => r.data?.data),
   render: (spec) => api.post(`${base}/render`, spec, { responseType: 'blob', timeout: 60000 }).then((r) => r.data),
   // A whole season at once (Evoni, 2026-10-21): a small JPEG of the layers, and the show's episodes with their thumbnails.
+  // Several thumbnails in one zip (Evoni, 2026-10-22): [{ name, spec }], drawn full size as saved.
+  zip: (name, items) => api.post(`${base}/render/zip`, { name, items }, { responseType: 'blob', timeout: 0 }).then((r) => r.data),
   renderSmall: (spec) => api.post(`${base}/render/small`, spec, { responseType: 'blob', timeout: 60000 }).then((r) => r.data),
   season: (showId) => api.get(`${base}/shows/${showId}/season`).then((r) => (Array.isArray(r.data?.data) ? r.data.data : [])),
   save: (episodeId, spec) => api.post(`${base}/episodes/${episodeId}`, spec, { timeout: 60000 }).then((r) => r.data?.data),

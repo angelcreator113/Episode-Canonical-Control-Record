@@ -23,8 +23,9 @@ vi.mock('../lib/youtubeThumbnailsApi', async () => {
       templates: vi.fn(), createTemplate: vi.fn(), updateTemplate: vi.fn(), deleteTemplate: vi.fn(),
       versions: vi.fn(), createVersion: vi.fn(), updateVersion: vi.fn(), deleteVersion: vi.fn(),
       season: vi.fn(), renderSmall: vi.fn(),
-      titleIdeas: vi.fn(), cutOut: vi.fn(),
+      titleIdeas: vi.fn(), cutOut: vi.fn(), zip: vi.fn(),
     },
+    downloadBlob: vi.fn(),
   };
 });
 vi.mock('../lib/picturePreview', () => ({
@@ -55,7 +56,7 @@ vi.mock('../components/Thumbnails/ThumbnailCanvas', () => ({
 }));
 
 import {
-  youtubeThumbnailsApi, episodeWords, thumbnailStudioHref, defaultPose, folderPath, folderCount, folderCover, firstFolder,
+  youtubeThumbnailsApi, downloadBlob, episodeWords, thumbnailStudioHref, defaultPose, folderPath, folderCount, folderCover, firstFolder,
 } from '../lib/youtubeThumbnailsApi';
 import { presetLayers, layerOf } from '../lib/thumbnailLayers';
 import YouTubeThumbnailStudio from './YouTubeThumbnailStudio';
@@ -1229,6 +1230,35 @@ describe('YouTubeThumbnailStudio', () => {
     expect(within(screen.getByTestId('yts-zoom')).getByText('200%')).toBeTruthy();
     fireEvent.click(screen.getByTestId('canvas-pinch-far'));
     expect(within(screen.getByTestId('yts-zoom')).getByRole('button', { name: 'Zoom in' }).disabled).toBe(true);
+  });
+
+  // Evoni, 2026-10-22: an A/B kit for YouTube's Test & Compare.
+  test('the A/B kit: Now and up to two versions (three at most), in one zip named A, B, C', async () => {
+    const vSpec = (t) => ({ version: 2, layers: [{ id: 'title', role: 'title', kind: 'text', text: t, x: 0, y: 0, w: 100, h: 50 }] });
+    youtubeThumbnailsApi.sources.mockResolvedValue({ ...SOURCES, versions: [
+      { id: 'v1', name: 'Version A', spec: vSpec('Red'), previewUrl: null },
+      { id: 'v2', name: 'Version B', spec: vSpec('Gold'), previewUrl: null },
+      { id: 'v3', name: 'Version C', spec: vSpec('Blue'), previewUrl: null },
+    ] });
+    youtubeThumbnailsApi.zip.mockResolvedValue(new Blob(['zip']));
+    renderPage();
+    await opened();
+    fireEvent.click(await screen.findByTestId('yts-kit-btn'));
+    const kit = within(screen.getByTestId('yts-kit'));
+    expect(kit.getByRole('checkbox', { name: 'Now' }).checked).toBe(true);
+    expect(screen.getByTestId('yts-kit-download').disabled).toBe(true); // one is not a test
+    fireEvent.click(kit.getByRole('checkbox', { name: 'Version A' }));
+    fireEvent.click(kit.getByRole('checkbox', { name: 'Version C' }));
+    // Three is YouTube's most.
+    expect(kit.getByRole('checkbox', { name: 'Version B' }).disabled).toBe(true);
+    fireEvent.click(screen.getByTestId('yts-kit-download'));
+    await waitFor(() => expect(downloadBlob).toHaveBeenCalled());
+    const [name, items] = youtubeThumbnailsApi.zip.mock.calls[0];
+    expect(name).toBe('styling-adventures-ep1-ab');
+    expect(items.map((i) => i.name)).toEqual(['A Now', 'B Version A', 'C Version C']);
+    expect(items[0].spec.layers.length).toBeGreaterThan(3);
+    expect(items[2].spec).toEqual(vSpec('Blue'));
+    expect(downloadBlob.mock.calls[0][1]).toBe('styling-adventures-ep1-ab.zip');
   });
 
   test('the grid and the safe zones: toggled on the toolbar, drawn over the canvas only', async () => {

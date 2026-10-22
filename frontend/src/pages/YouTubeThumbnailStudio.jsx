@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import {
   youtubeThumbnailsApi, LAYOUTS, ACCENTS, TEXT_COLORS, readRecentColours, rememberColour, episodeContent, folderPath, folderCount, folderCover, firstFolder,
+  downloadBlob,
 } from '../lib/youtubeThumbnailsApi';
 import {
   FONTS, presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, placeLayer, removeLayer,
@@ -987,8 +988,15 @@ function CompareVersions({ now, nowWarnings, versions, warningsOf, busy, onUse }
  * the arrangement as Version A, B, ...; each with its picture; use one,
  * rename it, update it with the arrangement, delete it; compare them all.
  */
-function VersionsBar({ versions, busy, now, nowWarnings, warningsOf, onKeep, onUse, onRename, onUpdate, onDelete }) {
+// YouTube's Test & Compare takes up to three thumbnails (Evoni, 2026-10-22: an A/B kit).
+const KIT_MAX = 3;
+
+function VersionsBar({ versions, busy, now, nowWarnings, warningsOf, onKeep, onUse, onRename, onUpdate, onDelete, onKit }) {
   const [renaming, setRenaming] = useState(null); // { id, name }
+  // The A/B kit: which go in ('now' and version ids), up to three.
+  const [kit, setKit] = useState(null);
+  const inKit = (id) => Boolean(kit?.includes(id));
+  const toggleKit = (id) => setKit((k) => (k.includes(id) ? k.filter((x) => x !== id) : k.length < KIT_MAX ? [...k, id] : k));
   const [asking, setAsking] = useState(null); // { id, kind: 'update' | 'delete' }
   const [comparing, setComparing] = useState(false);
   const rename = async (e, v) => {
@@ -1013,8 +1021,32 @@ function VersionsBar({ versions, busy, now, nowWarnings, warningsOf, onKeep, onU
           <button type="button" className="yts-btn" onClick={onKeep} disabled={busy} data-testid="yts-keep-version">
             <CopyPlus size={16} aria-hidden /> Keep as a version
           </button>
+          {versions.length > 0 && onKit && (
+            <button type="button" className={`yts-btn${kit ? ' is-primary' : ''}`} aria-pressed={Boolean(kit)} onClick={() => setKit((k) => (k ? null : ['now']))} data-testid="yts-kit-btn">
+              <Download size={16} aria-hidden /> {kit ? 'Close the A/B kit' : 'A/B kit'}
+            </button>
+          )}
         </div>
       </div>
+      {kit && (
+        <div className="yts-kit" role="group" aria-label="A/B kit" data-testid="yts-kit">
+          <p className="yts-note">Up to {KIT_MAX} for YouTube's Test &amp; Compare (in YouTube Studio, the video's thumbnail › Test &amp; compare). Each is under 2 MB.</p>
+          <div className="yts-kit-picks">
+            <label className="yts-kit-pick">
+              <input type="checkbox" checked={inKit('now')} onChange={() => toggleKit('now')} disabled={!inKit('now') && kit.length >= KIT_MAX} /> Now
+            </label>
+            {versions.filter((v) => v.spec).map((v) => (
+              <label key={v.id} className="yts-kit-pick">
+                <input type="checkbox" checked={inKit(v.id)} onChange={() => toggleKit(v.id)} disabled={!inKit(v.id) && kit.length >= KIT_MAX} /> {v.name}
+              </label>
+            ))}
+          </div>
+          <button type="button" className="yts-btn is-primary" disabled={busy || kit.length < 2} data-testid="yts-kit-download"
+            onClick={() => onKit(kit.map((id) => (id === 'now' ? { id: 'now' } : versions.find((v) => v.id === id))).filter(Boolean))}>
+            <Download size={16} aria-hidden /> Download {kit.length} for Test &amp; Compare
+          </button>
+        </div>
+      )}
       {comparing && versions.length > 0 && (
         <CompareVersions now={now} nowWarnings={nowWarnings} versions={versions} warningsOf={warningsOf} busy={busy}
           onUse={(v) => { setComparing(false); onUse(v); }} />
@@ -1704,6 +1736,25 @@ export default function YouTubeThumbnailStudio() {
     () => youtubeThumbnailsApi.deleteTemplate(sources.show.id, t.id),
     `"${t.name}" is deleted.`, 'The template could not be deleted.');
 
+  // The A/B kit (Evoni, 2026-10-22): 2–3 of this arrangement and its versions in one zip, for YouTube's Test & Compare.
+  const downloadKit = async (picks) => {
+    const n = sources?.episode?.episode_number;
+    const base = `${(sources?.show?.name || 'thumbnail').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}${n ? `-ep${n}` : ''}-ab`;
+    setBusy(true);
+    try {
+      const blob = await youtubeThumbnailsApi.zip(base, picks.map((v, i) => ({
+        name: `${String.fromCharCode(65 + i)} ${v.id === 'now' ? 'Now' : v.name}`, spec: v.id === 'now' ? specRef.current : v.spec,
+      })));
+      downloadBlob(blob, `${base}.zip`);
+      setMessage({ type: 'ok', text: `${picks.length} thumbnails in ${base}.zip, ready for YouTube's Test & Compare.` });
+    } catch (err) {
+      console.error('[YouTubeThumbnails] A/B kit failed:', err);
+      setMessage({ type: 'error', text: err?.response?.data?.error || 'The A/B kit could not be made.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   // The episode's versions to compare (Evoni, 2026-10-21).
   const versionChange = async (run, done, failed) => {
     if (!episodeId) return false;
@@ -1777,7 +1828,7 @@ export default function YouTubeThumbnailStudio() {
 
   const versionsBar = episodeId && sources && (
     <VersionsBar versions={sources.versions || []} busy={busy} now={snapshot} nowWarnings={ytWarnings.length} warningsOf={versionWarnings}
-      onKeep={keepVersion} onUse={useVersion} onRename={renameVersion} onUpdate={updateVersion} onDelete={deleteVersion} />
+      onKeep={keepVersion} onUse={useVersion} onRename={renameVersion} onUpdate={updateVersion} onDelete={deleteVersion} onKit={downloadKit} />
   );
   const savedList = history.length > 0 && (
     <section className="yts-history" aria-label="Saved thumbnails" data-testid="yts-history">
