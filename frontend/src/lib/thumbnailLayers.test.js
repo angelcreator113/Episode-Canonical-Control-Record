@@ -13,7 +13,7 @@ import {
   READABLE_SIZE, readablePatch, clearOfTimestamp, fixWarning, fixAllWarnings, finerCanvas, drawRes, WIDTH, HEIGHT,
   presetLayers, fillTemplate, applyStyle, setRoleContent, layerOf, updateLayer, moveLayer, placeLayer, removeLayer, boxBlur, FONTS, addText, addPicture, addPieceCard,
   boxFromNode, fitText, fitPicture, layerName, LINE_HEIGHT, checklistRows, duplicateLayer, snapBox, SNAP, copyLayers, pasteLayers,
-  figureLayers, toggleFigure, clearFigure,
+  figureLayers, toggleFigure, clearFigure, pinchGesture, pinchDelta,
 } from './thumbnailLayers';
 
 const CONTENT = {
@@ -731,5 +731,22 @@ describe('more than one Lala', () => {
     expect(layerOf(spec, 'lala')).toMatchObject({ src: B });
     const other = addPicture(spec, C, 'Lala at the gala');
     expect(figureLayers(other, 'lala').map((l) => l.src)).toEqual([B]);
+  });
+});
+
+// Two fingers on the phone canvas (Evoni, 2026-10-22).
+describe('pinch', () => {
+  test('how far apart and at what angle; then how much bigger and how far turned', () => {
+    const start = pinchGesture([{ x: 0, y: 0 }, { x: 100, y: 0 }]);
+    expect(start).toEqual({ d: 100, a: 0 });
+    const now = pinchGesture([{ x: 0, y: 0 }, { x: 0, y: 150 }]);
+    expect(pinchDelta(start, now)).toEqual({ k: 1.5, turn: 90 });
+    // Turning past the half-turn line takes the short way round.
+    expect(pinchDelta({ d: 100, a: 170 }, { d: 100, a: -170 }).turn).toBe(20);
+    expect(pinchDelta({ d: 100, a: -170 }, { d: 100, a: 170 }).turn).toBe(-20);
+    // Kept within a tenth and ten times; fingers on one spot change nothing.
+    expect(pinchDelta({ d: 100, a: 0 }, { d: 1, a: 0 }).k).toBe(0.1);
+    expect(pinchDelta({ d: 100, a: 0 }, { d: 5000, a: 0 }).k).toBe(10);
+    expect(pinchDelta({ d: 0, a: 0 }, { d: 50, a: 0 }).k).toBe(1);
   });
 });

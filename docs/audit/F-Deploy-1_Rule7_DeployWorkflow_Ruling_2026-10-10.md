@@ -1,3 +1,11 @@
+> **AMENDMENT BANNER 1 — §1 ITEM 5: THE ROLE MAY ALSO DELETE `deploy-*`
+> SNAPSHOTS (added 2026-10-22, after `d9075eb3`, additive).**
+>
+> **Banners on this document are read newest-first.** This banner points and
+> carries nothing: Evoni's decision, and what the repository says, are in
+> `F-Deploy-1_Rule7_DeployRole_SnapshotDelete_Amendment_2026-10-22.md`.
+> The body below is not edited.
+
 | **PRIME STUDIOS** **F-DEPLOY-1 RULING** *Evoni's Rule 7 decision on agent access to production: deploys and migrations run only through an approved Deploy workflow. A ruling note, not a Fix Plan revision.* |
 | --- |
 

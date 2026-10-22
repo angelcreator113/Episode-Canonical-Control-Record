@@ -14,6 +14,11 @@ jest.mock('../../../src/services/episodePoseMedia', () => ({
   cleanEdges: (...a) => mockClean(...a),
 }));
 
+const mockGenerate = jest.fn();
+jest.mock('../../../src/services/imageGenerationService', () => ({ generateImage: (...a) => mockGenerate(...a) }));
+const mockAxiosGet = jest.fn();
+jest.mock('axios', () => ({ get: (...a) => mockAxiosGet(...a) }));
+
 const mockYt = {};
 jest.mock('../../../src/services/youtubeThumbnailService', () => {
   class ThumbnailError extends Error {
@@ -114,6 +119,44 @@ describe('thumbnailAiService', () => {
     jest.spyOn(console, 'error').mockImplementation(() => {});
     mockRemove.mockRejectedValueOnce(new Error('socket hang up'));
     await expect(ai.cutOut('ep-1', 'https://b.s3.amazonaws.com/a.jpg')).rejects.toMatchObject({ status: 502 });
+    expect(mockYt.uploadPicture).not.toHaveBeenCalled();
+  });
+
+  // Evoni, 2026-10-22: a background made from the episode's theme.
+  test('backgroundPrompt: the show, the episode\'s theme and her words; a place only, no people or words', () => {
+    const p = ai.backgroundPrompt(SOURCES, '  a rooftop   at night ');
+    expect(p).toContain('"Styling Adventures with Lala"');
+    expect(p).toContain('The episode: Gala Night.'); // the edition and the title are the same: once
+    expect(p).toContain('The setting: a rooftop at night.');
+    expect(p).toMatch(/no people, no faces, no hands, no text/);
+    expect(ai.backgroundPrompt(SOURCES)).not.toContain('The setting');
+    expect(ai.backgroundPrompt(SOURCES, 'x'.repeat(500))).toContain(`${'x'.repeat(ai.BACKGROUND_WORDS_MAX)}.`);
+  });
+
+  test('aiBackground: made wide, fetched, kept as an upload named AI background', async () => {
+    mockGenerate.mockResolvedValue({ url: 'https://fal.media/x.jpg', cost_estimate: 0.04, nsfw_flagged: false });
+    mockAxiosGet.mockResolvedValue({ data: Buffer.from('jpg') });
+    mockYt.uploadPicture.mockResolvedValue({ url: 'https://b.s3.amazonaws.com/up/bg.jpg', label: 'AI background' });
+    const out = await ai.aiBackground({}, 'ep-1', 'a rooftop');
+    expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('The setting: a rooftop.'), { useCase: 'thumbnail', size: 'landscape' });
+    expect(mockAxiosGet).toHaveBeenCalledWith('https://fal.media/x.jpg', expect.objectContaining({ responseType: 'arraybuffer' }));
+    expect(mockYt.uploadPicture).toHaveBeenCalledWith('ep-1', Buffer.from('jpg'), 'AI background');
+    expect(out).toEqual({ url: 'https://b.s3.amazonaws.com/up/bg.jpg', label: 'AI background', cost: 0.04 });
+  });
+
+  test('aiBackground: past the image budget 429; not set up 503; a blank one or a failed fetch 502; nothing kept', async () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    mockGenerate.mockRejectedValueOnce(Object.assign(new Error('Daily image budget reached ($10.00)'), { status: 429, code: 'AI_BUDGET_EXCEEDED' }));
+    await expect(ai.aiBackground({}, 'ep-1')).rejects.toMatchObject({ status: 429, message: expect.stringContaining('image budget') });
+    mockGenerate.mockRejectedValueOnce(new Error('FAL_KEY not configured'));
+    await expect(ai.aiBackground({}, 'ep-1')).rejects.toMatchObject({ status: 503, message: expect.stringContaining('FAL_KEY') });
+    mockGenerate.mockResolvedValueOnce({ url: 'https://fal.media/x.jpg', nsfw_flagged: true });
+    await expect(ai.aiBackground({}, 'ep-1')).rejects.toMatchObject({ status: 502, message: expect.stringContaining('blank') });
+    mockGenerate.mockResolvedValueOnce({ url: 'https://fal.media/x.jpg', nsfw_flagged: false });
+    mockAxiosGet.mockRejectedValueOnce(new Error('timeout'));
+    await expect(ai.aiBackground({}, 'ep-1')).rejects.toMatchObject({ status: 502, message: expect.stringContaining('could not be fetched') });
+    mockGenerate.mockRejectedValueOnce(new Error('socket hang up'));
+    await expect(ai.aiBackground({}, 'ep-1')).rejects.toMatchObject({ status: 502 });
     expect(mockYt.uploadPicture).not.toHaveBeenCalled();
   });
 });
