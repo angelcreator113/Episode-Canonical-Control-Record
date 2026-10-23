@@ -39,6 +39,9 @@
  * PUT    /world/:showId/season/twists/:twistId — Change one
  * DELETE /world/:showId/season/twists/:twistId — Delete it (soft)
  * POST   /world/:showId/season/twists/:twistId/restore — Undo a delete
+ * POST   /world/:showId/season/twists/suggest — 3-5 drafted twists from the AI (one call); nothing saved
+ * GET    /episodes/:episodeId/season-twists — The twists this episode plants and pays off (the Script tab)
+ * POST   /episodes/:episodeId/season-twists/:twistId/mark — { as: planted|paid_off }: Evoni marks it done here
  *
  * Extend (lengthen the current phase, pushing the season past 24) is removed:
  * "Remove Extend; phase boundaries can shift within the 24, only across slots
@@ -513,6 +516,40 @@ router.delete('/world/:showId/season/twists/:twistId', requireAuth, async (req, 
     return res.json({ success: true, ...(await deleteTwist(models.sequelize, req.params.showId, req.params.twistId)) });
   } catch (err) {
     return sendTwistError(res, err, 'delete twist');
+  }
+});
+
+// POST /world/:showId/season/twists/suggest — drafts from the AI, for Evoni to keep, edit or drop
+router.post('/world/:showId/season/twists/suggest', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { suggestTwists } = require('../services/seasonTwists');
+    return res.json({ success: true, ...(await suggestTwists(models.sequelize, req.params.showId)) });
+  } catch (err) {
+    return sendTwistError(res, err, 'suggest twists');
+  }
+});
+
+// GET /episodes/:episodeId/season-twists — what the episode plants and pays off
+router.get('/episodes/:episodeId/season-twists', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { twistsForEpisode } = require('../services/seasonTwists');
+    return res.json({ success: true, ...(await twistsForEpisode(models.sequelize, req.params.episodeId)) });
+  } catch (err) {
+    return sendTwistError(res, err, 'episode twists');
+  }
+});
+
+// POST /episodes/:episodeId/season-twists/:twistId/mark — { as: planted|paid_off }
+router.post('/episodes/:episodeId/season-twists/:twistId/mark', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { markTwist } = require('../services/seasonTwists');
+    const result = await markTwist(models.sequelize, req.params.episodeId, req.params.twistId, req.body?.as);
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return sendTwistError(res, err, 'mark twist');
   }
 });
 
