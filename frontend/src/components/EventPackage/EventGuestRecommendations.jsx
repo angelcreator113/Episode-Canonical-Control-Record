@@ -12,9 +12,12 @@
  *
  * Props: guests (guest_profiles), organizerProfileId, venueLocationId,
  * slots (how many more can be featured), onFeature(rec), saving.
+ *
+ * A Feed that fails to load says so in one line with Retry, rather than the
+ * recommendations silently not appearing.
  */
 import { useEffect, useState } from 'react';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, AlertCircle, RotateCw } from 'lucide-react';
 import api from '../../services/api';
 import { recommendGuests } from '../../utils/recommendGuests';
 
@@ -24,6 +27,8 @@ const roleLabel = (r) => (r ? r.charAt(0).toUpperCase() + r.slice(1) : '');
 
 export default function EventGuestRecommendations({ guests, organizerProfileId, venueLocationId, slots, onFeature, saving }) {
   const [profiles, setProfiles] = useState(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const invitedKey = (guests || []).map((g) => g.profile_id).filter((id) => id != null).join(',');
 
   useEffect(() => {
@@ -37,16 +42,27 @@ export default function EventGuestRecommendations({ guests, organizerProfileId, 
         const extra = await Promise.all(missing.map((id) => api.get(`/api/v1/social-profiles/${id}`)
           .then((r) => r.data?.profile || null)
           .catch((err) => { console.error('[EventGuests] profile load failed:', id, err); return null; })));
-        if (!cancelled) setProfiles([...list, ...extra.filter(Boolean)]);
+        if (!cancelled) { setProfiles([...list, ...extra.filter(Boolean)]); setFailed(false); }
       } catch (err) {
         console.error('[EventGuests] Feed load failed:', err);
-        if (!cancelled) setProfiles([]);
+        if (!cancelled) { setProfiles(null); setFailed(true); }
       }
     })();
     return () => { cancelled = true; };
-  }, [invitedKey]);
+  }, [invitedKey, attempt]);
 
-  if (profiles === null || slots <= 0) return null;
+  if (slots <= 0) return null;
+  if (failed) {
+    return (
+      <p className="epp-looks-note" data-testid="guest-recs-failed">
+        <AlertCircle size={12} aria-hidden="true" /> Couldn&apos;t load recommendations.{' '}
+        <button type="button" className="epp-inline-link" onClick={() => { setFailed(false); setAttempt((n) => n + 1); }} data-testid="guest-recs-retry">
+          <RotateCw size={11} aria-hidden="true" /> Retry
+        </button>
+      </p>
+    );
+  }
+  if (profiles === null) return null;
   const recs = recommendGuests({ guests, profiles, organizerProfileId, venueLocationId, count: Math.min(3, slots) });
   if (!recs.length) return null;
 

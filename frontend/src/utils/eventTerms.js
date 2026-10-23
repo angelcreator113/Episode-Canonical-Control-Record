@@ -22,10 +22,25 @@ import dealTypesMirror from '../constants/dealTypes.json';
 import deliverableTypesMirror from '../constants/deliverableTypes.json';
 import dealPlansMirror from '../constants/dealPlans.json';
 import dealComponentsMirror from '../constants/dealComponents.json';
+import { formatEventDate } from './eventDate';
 
 // The access-requirement keys the next-event suggester checks (the
 // suggest-events route in src/routes/careerGoals.js) and the old editor
 // writes (WorldAdmin EMPTY_EVENT.requirements).
+/**
+ * A typed whole number of coins: { empty: true } for a blank field,
+ * { value } for a whole number of at least `min`, else { invalid: true }.
+ * The one parser for the Terms forms' "whole number, 0 or more" fields
+ * (requirements, fees, cost amounts, bonus tiers, the paid amount).
+ */
+export function parseWholeNumber(raw, { min = 0 } = {}) {
+  const text = String(raw ?? '').trim();
+  if (text === '') return { empty: true };
+  const n = Number(text);
+  if (!Number.isInteger(n) || n < min) return { invalid: true };
+  return { value: n };
+}
+
 export const REQUIREMENT_KEYS = [
   { key: 'reputation_min', label: 'Reputation at least' },
   { key: 'brand_trust_min', label: 'Brand trust at least' },
@@ -107,13 +122,13 @@ export function buildRequirementsUpdate(event, draft) {
   const next = { ...current };
   const errors = [];
   for (const { key, label } of REQUIREMENT_KEYS) {
-    const raw = String(draft?.[key] ?? '').trim();
-    if (raw === '') { delete next[key]; continue; }
-    const n = Number(raw);
-    if (!Number.isInteger(n) || n < 0) {
+    const parsed = parseWholeNumber(draft?.[key]);
+    if (parsed.empty) { delete next[key]; continue; }
+    if (parsed.invalid) {
       errors.push({ key, message: `${label.replace(/ at least$/, '')} must be a whole number of 0 or more` });
       continue;
     }
+    const n = parsed.value;
     if (n === 0) delete next[key];
     else next[key] = n;
   }
@@ -181,12 +196,11 @@ export function buildCompensationUpdate(event, draft) {
   const isPaid = !!draft?.is_paid;
   let amount = current.amount > 0 ? current.amount : 0;
   if (isPaid) {
-    const raw = String(draft?.payment_amount ?? '').trim();
-    const n = Number(raw);
-    if (raw === '' || !Number.isInteger(n) || n <= 0) {
+    const parsed = parseWholeNumber(draft?.payment_amount, { min: 1 });
+    if (parsed.empty || parsed.invalid) {
       errors.push({ key: 'payment_amount', message: 'A paid appearance needs a whole number of coins above 0' });
     } else {
-      amount = n;
+      amount = parsed.value;
     }
   }
   return {
@@ -238,13 +252,9 @@ export function buildDeliverableBody(draft) {
   if (!type && draft?.legacy_type) delete body.deliverable_type;
   // The fee (deal build PR 3, Task #2341), sent only when the form has one.
   if (draft && Object.prototype.hasOwnProperty.call(draft, 'fee')) {
-    const raw = String(draft.fee ?? '').trim();
-    if (raw === '') body.fee = null;
-    else {
-      const fee = Number(raw);
-      if (!Number.isInteger(fee) || fee < 0) return { error: 'Fee: a whole number of Prime Coins, 0 or more' };
-      body.fee = fee;
-    }
+    const parsed = parseWholeNumber(draft.fee);
+    if (parsed.invalid) return { error: 'Fee: a whole number of Prime Coins, 0 or more' };
+    body.fee = parsed.empty ? null : parsed.value;
   }
   return { body };
 }
@@ -298,10 +308,7 @@ export function deliverableAdvanceLabel(next) {
 
 /** A stored timestamp as a short date, or null when absent or unreadable. */
 export function formatFulfilmentDate(value) {
-  if (!value) return null;
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  return formatEventDate(value, { style: 'full', locale: null, fallback: false });
 }
 
 /**
@@ -390,7 +397,7 @@ const normalizeComponents = (list) => {
 export function componentsOf(event) {
   let stored = event?.deal_components;
   if (typeof stored === 'string') {
-    try { stored = JSON.parse(stored); } catch { stored = null; }
+    try { stored = JSON.parse(stored); } catch (err) { console.error('[eventTerms] deal_components is not JSON:', err.message); stored = null; }
   }
   if (Array.isArray(stored)) return normalizeComponents(stored);
   const base = COMPONENTS_BY_DEAL_TYPE[event?.deal_type];
@@ -663,11 +670,9 @@ export function missingPriceLabels(event, deliverables = []) {
 
 /** The event PUT body for one component's typed value; { error } when it is not a whole number, 0 or more. */
 export function buildComponentFeeUpdate(field, raw) {
-  const text = String(raw ?? '').trim();
-  if (text === '') return { body: { [field]: null } };
-  const n = Number(text);
-  if (!Number.isInteger(n) || n < 0) return { error: 'A whole number of Prime Coins, 0 or more' };
-  return { body: { [field]: n } };
+  const parsed = parseWholeNumber(raw);
+  if (parsed.invalid) return { error: 'A whole number of Prime Coins, 0 or more' };
+  return { body: { [field]: parsed.empty ? null : parsed.value } };
 }
 
 // ─── Performance bonus (deal build PR 5) ────────────────────────────────
@@ -682,7 +687,7 @@ export const BONUS_TIER_LABELS = { slay: 'SLAY', pass: 'PASS', safe: 'SAFE' };
 function parseBonusTerms(value) {
   if (value == null) return {};
   if (typeof value === 'string') {
-    try { return JSON.parse(value) || {}; } catch { return {}; }
+    try { return JSON.parse(value) || {}; } catch (err) { console.error('[eventTerms] bonus_terms is not JSON:', err.message); return {}; }
   }
   return typeof value === 'object' && !Array.isArray(value) ? value : {};
 }
@@ -740,11 +745,10 @@ export function bonusDraftFrom(event) {
 export function buildBonusTermsUpdate(draft) {
   const value = {};
   for (const t of BONUS_TIERS) {
-    const text = String(draft?.[t] ?? '').trim();
-    if (text === '') continue;
-    const n = Number(text);
-    if (!Number.isInteger(n) || n < 1) return { error: `${BONUS_TIER_LABELS[t]}: a whole number of Prime Coins, 1 or more` };
-    value[t] = n;
+    const parsed = parseWholeNumber(draft?.[t], { min: 1 });
+    if (parsed.empty) continue;
+    if (parsed.invalid) return { error: `${BONUS_TIER_LABELS[t]}: a whole number of Prime Coins, 1 or more` };
+    value[t] = parsed.value;
   }
   return { body: { bonus_terms: Object.keys(value).length ? value : null } };
 }

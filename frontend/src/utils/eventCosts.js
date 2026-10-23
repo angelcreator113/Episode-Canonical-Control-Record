@@ -17,6 +17,8 @@
  * shows here and moves to the episode's spending at Start Episode.
  */
 
+import { parseWholeNumber } from './eventTerms';
+
 export const COST_KINDS = ['entry', 'travel', 'glam', 'styling', 'accommodation', 'extras', 'other'];
 
 // The kinds a terms cost can be given: every kind but extras (event spending).
@@ -66,11 +68,11 @@ export function buildCostBody(draft) {
   const d = draft || {};
   if (!COST_KINDS.includes(d.kind)) return { error: 'Choose a kind of cost.' };
   if (!COST_PAID_BY.includes(d.paid_by)) return { error: 'Choose who pays.' };
-  const raw = String(d.amount ?? '').trim();
-  const amount = raw === '' ? null : Number(raw);
-  if (amount !== null && (!Number.isInteger(amount) || amount < 0)) {
+  const parsed = parseWholeNumber(d.amount);
+  if (parsed.invalid) {
     return { error: 'The amount is a whole number of coins, 0 or more, or empty while the price is not known.' };
   }
+  const amount = parsed.empty ? null : parsed.value;
   const label = String(d.label || '').trim();
   if (label.length > COST_LABEL_MAX) return { error: `The label is at most ${COST_LABEL_MAX} characters.` };
   return { body: { kind: d.kind, label: label || null, amount, paid_by: d.paid_by } };
@@ -101,12 +103,29 @@ export function costAmountLabel(cost) {
   return cost?.amount == null ? 'Price required' : `${Number(cost.amount).toLocaleString()} coins`;
 }
 
-/** { lala, comped }: what Lala pays, and what the host or brand covers. */
+/**
+ * { lala, comped, unpriced }: what Lala pays, what the host or brand covers,
+ * and how many lines Lala pays have no amount yet ("Price required"). An
+ * unpriced line adds nothing to `lala`, so the total is a floor until
+ * `unpriced` is 0.
+ */
 export function costTotals(costs) {
-  let lala = 0; let comped = 0;
+  let lala = 0; let comped = 0; let unpriced = 0;
   for (const c of costs || []) {
+    if (c.paid_by === 'lala' && c.amount == null) unpriced += 1;
     const amount = Number(c.amount) || 0;
     if (c.paid_by === 'lala') lala += amount; else comped += amount;
   }
-  return { lala, comped };
+  return { lala, comped, unpriced };
+}
+
+/**
+ * Mirror of eventCostsService.missingCostPrices (D13 travel, 2026-09-30):
+ * every line Lala pays with no amount yet, as the label Start Episode's
+ * refusal names it.
+ */
+export function missingCostPriceLabels(costs) {
+  return (Array.isArray(costs) ? costs : [])
+    .filter((c) => c && c.paid_by === 'lala' && c.amount == null)
+    .map((c) => `"${c.label || c.kind}"`);
 }

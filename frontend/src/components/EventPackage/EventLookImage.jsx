@@ -29,18 +29,26 @@
  * says the look or the base is generating, not only after its own Confirm
  * (reloading the event can remount it mid-run), and says when it finishes
  * or fails, with the reason. A run stuck for 10 minutes is marked failed by
- * the server (GET .../look), so the refresh always ends.
+ * the server (GET .../look), so the refresh normally ends. If the refresh
+ * cap is reached while the server still says generating, the spinner stops
+ * and the section says "Still running" with Check again, which refreshes
+ * again.
+ *
+ * A write that succeeds (generate, upload) but whose page refresh
+ * (onSaved) fails reads "couldn't refresh", never as a failed write: a
+ * generate reported as failed invites a second paid run.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import OpenInSceneSets from '../OpenInSceneSets';
-import { Sparkles, Loader2, Upload } from 'lucide-react';
+import { Sparkles, Loader2, Upload, X } from 'lucide-react';
 import api from '../../services/api';
 import SceneBriefConfirm from '../SceneBriefConfirm';
 import './EventLookImage.css';
 
 export const POLL_MS = 4000;
 // Longer than the server's 10-minute stuck timeout, so a stuck run is seen failing.
-const POLL_MAX = 180;
+export const POLL_MAX = 180;
+export const REFRESH_FAILED_MESSAGE = "Done — couldn't refresh the page. Reload to see it.";
 
 const lookGenerating = (d) => d?.look?.status === 'generating';
 const baseGenerating = (d) => d?.scene_set?.generation_status === 'generating';
@@ -48,7 +56,7 @@ const baseGenerating = (d) => d?.scene_set?.generation_status === 'generating';
 // refreshKey: changes with the venue's base and its approval (seventh
 // audit), so a base approved, un-approved or replaced in the same panel is
 // read again.
-export default function EventLookImage({ showId, eventId, onToast, onSaved, pollMs = POLL_MS, canGenerate = false, fromLabel = 'Event', refreshKey = '' }) {
+export default function EventLookImage({ showId, eventId, onToast, onSaved, pollMs = POLL_MS, pollMax = POLL_MAX, canGenerate = false, fromLabel = 'Event', refreshKey = '' }) {
   const base = `/api/v1/world/${showId}/events/${eventId}/look`;
   const [state, setState] = useState(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -58,6 +66,7 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
   const [brief, setBrief] = useState(null); // { step, title, note }
   const [waiting, setWaiting] = useState(null); // 'look' | 'base', from Confirm until the server shows it
   const [uploading, setUploading] = useState(false);
+  const [timedOut, setTimedOut] = useState(false); // the refresh cap reached while the server still says generating
   const pendingFile = useRef(null); // an upload waiting for the set to be chosen
   const fileInput = useRef(null);
   const polls = useRef(0);
@@ -81,6 +90,22 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
     if (finished) Promise.resolve(savedRef.current?.()).catch((err) => console.error('[EventLookImage] refresh after a run failed:', err));
   };
 
+  // Another event (the page reused for a new eventId): nothing seen for the
+  // old one carries over — not its state, not a set chosen for it, not a
+  // file waiting for that choice, and not `last`, which would announce the
+  // old event's run finishing on this one.
+  useEffect(() => {
+    last.current = null;
+    pendingFile.current = null;
+    setState(null);
+    setLoadFailed(false);
+    setChoose(null);
+    setChosenSet(null);
+    setBrief(null);
+    setWaiting(null);
+    setTimedOut(false);
+  }, [base]);
+
   const load = useCallback(async () => {
     try {
       const res = await api.get(base);
@@ -89,6 +114,7 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
       last.current = data;
       setState(data);
       setLoadFailed(false);
+      if (!lookGenerating(data) && !baseGenerating(data)) setTimedOut(false);
       return data;
     } catch (err) {
       console.error('[EventLookImage] load failed:', err);
@@ -109,23 +135,51 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
 
   const serverGenerating = lookGenerating(state) || baseGenerating(state);
   const generating = Boolean(waiting) || serverGenerating;
+  // Past the refresh cap the spinner stops; "Still running" takes its place.
+  const polling = generating && !timedOut;
 
   // Refresh while anything is generating (answer 6; DJ bug 1).
   useEffect(() => {
-    if (!generating) return undefined;
+    if (!polling) return undefined;
     polls.current = 0;
     const timer = setInterval(async () => {
       polls.current += 1;
       const data = await load();
       const still = lookGenerating(data) || baseGenerating(data);
       if (data && !still) setWaiting(null);
-      if (polls.current >= POLL_MAX) {
+      if (polls.current >= pollMax) {
         clearInterval(timer);
         setWaiting(null);
+        if (still || !data) setTimedOut(true);
       }
     }, pollMs);
     return () => clearInterval(timer);
-  }, [generating, load, pollMs]);
+  }, [polling, load, pollMs, pollMax]);
+
+  const checkAgain = async () => {
+    setTimedOut(false);
+    await load();
+  };
+
+  // The page's refresh after a write that already succeeded: its failure is
+  // logged and said as a refresh failure, never as the write's.
+  const refreshAfterWrite = async () => {
+    try {
+      await onSaved?.();
+      return true;
+    } catch (err) {
+      console.error('[EventLookImage] refresh after a write failed:', err);
+      onToast?.(REFRESH_FAILED_MESSAGE, 'error');
+      return false;
+    }
+  };
+
+  // The set chooser's Cancel: nothing chosen, and no upload left waiting.
+  const cancelChoose = () => {
+    pendingFile.current = null;
+    setChosenSet(null);
+    setChoose(null);
+  };
 
   const ask = async (setId = chosenSet) => {
     setAsking(true);
@@ -156,23 +210,27 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
   const confirm = async (overrides) => {
     const step = brief.step;
     setBrief(null);
+    let data;
     try {
       const body = { overrides };
       if (chosenSet) body.scene_set_id = chosenSet;
       const res = await api.post(`${base}/generate`, body);
-      const data = res.data?.data || {};
-      await onSaved?.();
-      await load();
-      if (data.step === 'awaiting_approval') {
-        onToast?.('The base is waiting for your approval in Scene Sets');
-        return;
-      }
-      setWaiting(step);
+      data = res.data?.data || {};
     } catch (err) {
       console.error('[EventLookImage] generate failed:', err);
       if (err.response?.data?.code === 'CHOOSE_SET') setChoose(err.response.data.options || []);
       onToast?.(err.response?.data?.error || err.message || 'Could not generate the look', 'error');
+      return;
     }
+    // The run is started (and paid for): from here nothing reads as a failed generate.
+    setTimedOut(false);
+    await refreshAfterWrite();
+    await load();
+    if (data.step === 'awaiting_approval') {
+      onToast?.('The base is waiting for your approval in Scene Sets');
+      return;
+    }
+    setWaiting(step);
   };
 
   // Evoni, 2026-10-15: the event's look from her own image, beside "Generate
@@ -185,22 +243,23 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
       form.append('image', file);
       if (setId) form.append('scene_set_id', setId);
       await api.post(`${base}/upload`, form);
-      pendingFile.current = null;
-      setChoose(null);
-      await onSaved?.();
-      await load();
-      onToast?.('The look is uploaded');
     } catch (err) {
       console.error('[EventLookImage] upload failed:', err);
+      setUploading(false);
       if (err.response?.data?.code === 'CHOOSE_SET') {
         pendingFile.current = file;
         setChoose(err.response.data.options || []);
         return;
       }
       onToast?.(err.response?.data?.error || err.message || 'Could not upload the look', 'error');
-    } finally {
-      setUploading(false);
+      return;
     }
+    pendingFile.current = null;
+    setChoose(null);
+    const refreshed = await refreshAfterWrite();
+    await load();
+    if (refreshed) onToast?.('The look is uploaded');
+    setUploading(false);
   };
 
   const set = state?.scene_set || null;
@@ -233,8 +292,14 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
         )}
       </div>
 
-      {generating && (
+      {polling && (
         <p className="ell-status" data-testid="event-look-generating"><Loader2 size={14} className="epp-spin-icon" aria-hidden="true" /> Generating…</p>
+      )}
+      {generating && timedOut && (
+        <p className="ell-note" data-testid="event-look-timed-out">
+          Still running: this is taking longer than usual.{' '}
+          <button type="button" className="ell-link" onClick={checkAgain} data-testid="event-look-check-again">Check again</button>
+        </p>
       )}
       {!generating && lookReady && (
         <figure className="ell-figure">
@@ -303,6 +368,9 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
               {o.name}
             </button>
           ))}
+          <button type="button" className="epp-btn epp-btn-small" onClick={cancelChoose} data-testid="event-look-choose-cancel">
+            <X size={14} aria-hidden="true" /> Cancel
+          </button>
         </div>
       )}
 

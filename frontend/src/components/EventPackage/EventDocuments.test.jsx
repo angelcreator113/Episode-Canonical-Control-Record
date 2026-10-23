@@ -158,10 +158,46 @@ describe('EventDocuments', () => {
     expect(api.post).toHaveBeenCalledWith(`${BASE}/shopping_list/approve`);
     expect(within(shop).queryByRole('button', { name: /Approve/ })).toBeNull();
 
+    // Redraft over an approved, edited document asks first.
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     api.post.mockResolvedValueOnce({ data: { success: true, data: { ...SHOP, version: 3 } } });
     fireEvent.click(within(shop).getByRole('button', { name: /Redraft/ }));
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.getByTestId('evd-state-shopping_list').textContent).toBe('Draft'));
     expect(api.post).toHaveBeenLastCalledWith(`${BASE}/shopping_list/draft`);
+    confirmSpy.mockRestore();
+  });
+
+  test('Redraft: no confirm over an untouched draft; declined over an edited one, nothing is sent; off while editing', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: SHOP, career_plan: { ...PLAN, source: 'edited' } } } });
+    api.post.mockResolvedValue({ data: { success: true, data: { ...SHOP, version: 2 } } });
+    renderDocs();
+    const shop = await screen.findByTestId('evd-shopping_list');
+    fireEvent.click(within(shop).getByTestId('evd-redraft-shopping_list'));
+    expect(confirmSpy).not.toHaveBeenCalled();
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${BASE}/shopping_list/draft`));
+
+    api.post.mockClear();
+    const plan = screen.getByTestId('evd-career_plan');
+    fireEvent.click(within(plan).getByTestId('evd-redraft-career_plan'));
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(api.post).not.toHaveBeenCalled();
+
+    fireEvent.click(within(plan).getByRole('button', { name: /Edit/ }));
+    expect(within(plan).getByTestId('evd-redraft-career_plan').disabled).toBe(true);
+    confirmSpy.mockRestore();
+  });
+
+  test('the documents are read again when the outfit\'s pieces change', async () => {
+    api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: SHOP, career_plan: null } } });
+    const { rerender } = render(<EventDocuments showId="show-1" eventId="ev-1" event={EVENT} outfitPieces={[{ id: 'p1', name: 'A', category: 'dress' }]} />);
+    await screen.findByTestId('evd-shopping_list');
+    expect(api.get).toHaveBeenCalledTimes(1);
+    rerender(<EventDocuments showId="show-1" eventId="ev-1" event={EVENT} outfitPieces={[{ id: 'p1', name: 'A', category: 'dress' }]} />);
+    expect(api.get).toHaveBeenCalledTimes(1);
+    rerender(<EventDocuments showId="show-1" eventId="ev-1" event={EVENT} outfitPieces={[{ id: 'p2', name: 'B', category: 'dress' }]} />);
+    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
   });
 
   test('a failed step says why', async () => {

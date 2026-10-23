@@ -122,3 +122,66 @@ describe('EventCostsTerm (Task #2365)', () => {
     expect(screen.queryByTestId('terms-costs')).toBeNull();
   });
 });
+
+describe('EventCostsTerm: edit, remove, the page refresh and unpriced lines', () => {
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    mockGet();
+  });
+
+  test('editing a cost saves through PUT and refreshes the page (its tiles)', async () => {
+    vi.mocked(api.put).mockResolvedValue({ data: { success: true } });
+    const { onSaved, onToast } = renderCosts();
+    await screen.findByTestId('terms-cost-c1');
+    fireEvent.click(screen.getByLabelText('Edit Drinks'));
+    fireEvent.change(screen.getByTestId('terms-cost-amount'), { target: { value: '120' } });
+    fireEvent.click(screen.getByTestId('terms-cost-save'));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    expect(api.put).toHaveBeenCalledWith(`${costsUrl}/c1`, { kind: 'extras', label: 'Drinks', amount: 120, paid_by: 'lala' });
+    expect(onToast).toHaveBeenCalledWith('Cost saved');
+  });
+
+  test('remove asks first; declined, nothing is sent; confirmed, it is removed and the page refreshes', async () => {
+    vi.mocked(api.delete).mockResolvedValue({ data: { success: true } });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    const { onSaved } = renderCosts();
+    await screen.findByTestId('terms-cost-c2');
+    fireEvent.click(screen.getByLabelText('Remove Valet'));
+    expect(confirmSpy).toHaveBeenCalledWith('Remove the cost "Valet"?');
+    expect(api.delete).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByLabelText('Remove Valet'));
+    await waitFor(() => expect(api.delete).toHaveBeenCalledWith(`${costsUrl}/c2`));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    confirmSpy.mockRestore();
+  });
+
+  test('a write that succeeds while the page refresh fails reads "couldn\'t refresh", not a failed save', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { success: true } });
+    const onSaved = vi.fn().mockRejectedValue(new Error('reload failed'));
+    const { onToast } = renderCosts({ onSaved });
+    fireEvent.click(await screen.findByTestId('terms-cost-add'));
+    fireEvent.change(screen.getByTestId('terms-cost-amount'), { target: { value: '40' } });
+    fireEvent.click(screen.getByTestId('terms-cost-save'));
+    await waitFor(() => expect(onToast).toHaveBeenCalledWith(expect.stringMatching(/^Saved — couldn't refresh/)));
+    expect(onToast).toHaveBeenCalledWith('Cost added');
+    expect(onToast.mock.calls.some(([m]) => /Failed/.test(m))).toBe(false);
+    expect(screen.queryByTestId('terms-cost-form')).toBeNull();
+  });
+
+  test('an unpriced line Lala pays shows as "+N unpriced", and the rows reach onCostsChange', async () => {
+    const rows = [...COSTS, { id: 'c4', kind: 'travel', label: 'Car', amount: null, paid_by: 'lala' }];
+    mockGet(rows, {});
+    const onCostsChange = vi.fn();
+    renderCosts({ onCostsChange });
+    const totals = await screen.findByTestId('terms-cost-totals');
+    expect(totals.textContent).toContain('Lala pays 170 coins');
+    expect(screen.getByTestId('terms-cost-unpriced').textContent).toBe(' +1 unpriced');
+    expect(onCostsChange).toHaveBeenLastCalledWith(rows);
+  });
+
+  test('the note names Finalize, where the costs are charged', async () => {
+    renderCosts();
+    await screen.findByTestId('terms-cost-c1');
+    expect(screen.getByText(/charged at Finalize/)).toBeTruthy();
+  });
+});

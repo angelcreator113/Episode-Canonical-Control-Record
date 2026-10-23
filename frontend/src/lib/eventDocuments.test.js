@@ -93,5 +93,8 @@ describe('eventDocuments (Evoni, 2026-10-06)', () => {
     expect(documentByline({ host_brand: 'Studio by Sable', event_date: '2026-11-12' })).toBe('for Studio by Sable · Nov 12');
     expect(documentByline({ name: 'Gala' })).toBe('for Gala');
     expect(documentByline(null)).toBe('');
+    // Free text is kept, not dropped by new Date(); "March 15" is not read as a moment.
+    expect(documentByline({ host_brand: 'Velour', event_date: 'Friday, March 15th' })).toBe('for Velour · Friday, March 15th');
+    expect(documentByline({ host_brand: 'Velour', event_date: 'March 15' })).toBe('for Velour · March 15');
   });
 });
