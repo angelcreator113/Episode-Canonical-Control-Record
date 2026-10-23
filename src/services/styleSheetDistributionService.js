@@ -197,9 +197,10 @@ async function view(models, episodeId, entry, sheet) {
  * with the sheet: one post text for the whole set.
  */
 function designItems(sheet) {
-  const { DESIGNS, SIZES } = require('./styleSheetDesigns');
+  const { SIZES } = require('./styleSheetDesigns');
   const { designFilename } = require('./styleSheetService');
-  return DESIGNS.map((d) => ({
+  // The designs on for the show (Template Studio › Style sheets).
+  return (sheet.designs || []).map((d) => ({
     design: d.key,
     name: d.name,
     sizes: Object.entries(SIZES).map(([size, z]) => ({ size, label: z.label, width: z.width, height: z.height, filename: designFilename(sheet, d.key, size) })),

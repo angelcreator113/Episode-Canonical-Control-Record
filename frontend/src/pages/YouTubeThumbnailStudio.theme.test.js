@@ -18,19 +18,21 @@ describe('YouTube thumbnail builder theme', () => {
   });
 
   // Evoni, 2026-10-22, on her phone: Layers and Assets side by side, each
-  // about 260px, every layer's name cut to one letter. Checked in Chromium
-  // at 375, 560 and 900px.
-  test('on a phone, Layers and Assets stack, and a narrow layer list puts its buttons under the name', () => {
+  // about 260px, every layer's name cut to one letter. Now (2026-10-22 layout
+  // list) a row is picture, name, eye and ⋯, and on a phone everything stacks.
+  test('the layers beside the canvas on a wide screen; on a phone one column, and a layer row never wraps', () => {
     const block = (head) => {
       const at = css.indexOf(head);
       expect(at, head).toBeGreaterThan(-1);
       return css.slice(at, css.indexOf('\n}', at));
     };
-    expect(block('@media (max-width: 760px)')).toMatch(/\.yts-bottom \{ grid-template-columns: minmax\(0, 1fr\); \}/);
-    expect(css).toMatch(/\.yts-layers \{[^}]*container-type: inline-size;/);
-    const narrow = block('@container (max-width: 420px)');
-    expect(narrow).toMatch(/\.yts-layer \{ flex-wrap: wrap; \}/);
-    expect(narrow).toMatch(/\.yts-layer-name \{ flex: 1 1 calc\(100% - 56px\); \}/);
+    expect(css).toMatch(/\.yts-studio \{[^}]*grid-template-areas: "layers main side";/);
+    const one = block('@media (max-width: 1100px)');
+    expect(one).toMatch(/\.yts-main \{ display: contents; \}/);
+    expect(one).toMatch(/\.yts-layers-col \{ order: 1; \}/);
+    expect(one).toMatch(/\.yts-strip \{ order: 3; \}/);
+    expect(css).not.toMatch(/\.yts-layer \{ flex-wrap: wrap; \}/);
+    expect(css).toMatch(/\.yts-menu-list \{ position: fixed;/);
   });
 
   test('each text-on-fill pair reads 4.5:1', () => {

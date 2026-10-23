@@ -253,9 +253,9 @@ function styleReadiness(lb, sheet) {
   const columns = sheet.wardrobe?.columns || [];
   const saved = Array.isArray(lb.palette) ? lb.palette : null;
   const ready = {
-    front: has('front') || Boolean(sheet.look_from_files?.front),
-    side: has('side') || Boolean(sheet.look_from_files?.side),
-    back: has('back') || Boolean(sheet.look_from_files?.back),
+    front: Boolean(sheet.look_from_files?.front),
+    side: Boolean(sheet.look_from_files?.side),
+    back: Boolean(sheet.look_from_files?.back),
     hero: has('hero'),
     hair: has('hair') && hasText(lb.hair_name),
     nails: has('nails') && hasText(lb.nails_name),
@@ -280,8 +280,10 @@ const ANGLES = Object.freeze(['front', 'side', 'back']);
 /**
  * Lala's ready pose for each angle from the Files tab's Character poses
  * (Evoni, 2026-10-22: "this page can use the same images from the files
- * tab"): the default one, else the newest. { front, side, back }, each
- * { id, url, label } or missing.
+ * tab"): the default (starred) one, else the newest. { front, side, back },
+ * each { id, url, label } or missing. These are the sheet's Front, Side and
+ * Back (Evoni, 2026-10-22: "Front back glamor side are the same poses as
+ * front side back"); there is no separate Style photo for them.
  */
 async function lalaPoses(sequelize, episodeId) {
   const { readyPoses } = require('./youtubeThumbnailService');
@@ -315,11 +317,9 @@ async function buildStyleSheet(models, episodeId) {
   const venueFallback = (lb.venue_options || [])[0] || null;
   const chosenVenue = venueImages[0] || (venueFallback ? { id: null, label: venueFallback.label, url: venueFallback.image_url } : null);
 
-  // FRONT, SIDE, BACK: her Lookbook photo, else Lala's pose from Files.
-  const poses = await lalaPoses(sequelize, episodeId);
-  const fromFiles = {};
-  for (const angle of ANGLES) if (!firstImage(lb, angle) && poses[angle]) fromFiles[angle] = poses[angle];
-  const angleUrl = (angle) => firstImage(lb, angle)?.image_url || fromFiles[angle]?.url || null;
+  // FRONT, SIDE, BACK: Lala's starred pose of each angle, from Files.
+  const fromFiles = await lalaPoses(sequelize, episodeId);
+  const angleUrl = (angle) => fromFiles[angle]?.url || null;
 
   const hairPhoto = firstImage(lb, 'hair');
   const nailsPhoto = firstImage(lb, 'nails');
@@ -363,9 +363,8 @@ async function buildStyleSheet(models, episodeId) {
       // The designs' DETAIL SHOT / OUTFIT DETAIL (Evoni, 2026-10-22).
       detail: await inline(firstImage(lb, 'detail')?.image_url),
     },
-    look_images: {
-      front: firstImage(lb, 'front'), side: firstImage(lb, 'side'), back: firstImage(lb, 'back'), hero: firstImage(lb, 'hero'),
-    },
+    // Front, Side and Back are Lala's poses (look_from_files); Hero is a Style photo.
+    look_images: { hero: firstImage(lb, 'hero') },
     // The angles taken from the Files tab's poses, { front: { id, url, label } }.
     look_from_files: fromFiles,
     wardrobe: { state: wardrobe.state, columns },
@@ -430,9 +429,10 @@ async function buildStyleSheet(models, episodeId) {
     files: Object.fromEntries(Object.entries(fromFiles).map(([angle, p]) => [angle, p.url])),
   })).digest('hex');
   sheet.inputs_hash = hash;
-  // The five designs (Evoni's Canva deck, 2026-10-22) and this sheet's values for them.
-  const { designsForPage } = require('./styleSheetDesigns');
-  const forPage = designsForPage(sheet);
+  // The five designs (Evoni's Canva deck, 2026-10-22) that are on for the
+  // show (Template Studio › Style sheets), and this sheet's values for them.
+  const { designsForPage, designChoice } = require('./styleSheetDesigns');
+  const forPage = designsForPage(sheet, designChoice(parseJson(showRow?.metadata, {})));
   sheet.designs = forPage.designs;
   sheet.design_sizes = forPage.sizes;
   sheet.design_values = forPage.values;
@@ -491,28 +491,37 @@ function checkDesign(design, size) {
   }
 }
 
+// A design switched off for the show is not exported.
+function requireOn(sheet, design) {
+  if (!sheet.designs.some((d) => d.key === design)) {
+    throw new LookbookError('That design is switched off for this show; turn it on in Template Studio › Style sheets.', 409, 'DESIGN_OFF');
+  }
+}
+
 /** One of the five designs in one size (Evoni, 2026-10-22), approved sheets only. */
 async function exportDesign(models, episodeId, design, size) {
   checkDesign(design, size === 'all' ? '' : size);
   const sheet = await buildStyleSheet(models, episodeId);
   requireApproved(sheet, 'exporting it');
+  requireOn(sheet, design);
   const out = await require('./styleSheetRenderService').renderDesign(sheet, design, size);
   return { ...out, filename: designFilename(sheet, design, size) };
 }
 
 /**
- * All five designs in one size, or in every size ("all"), as one zip
- * (stored, not compressed: PNGs do not shrink).
+ * Every design that is on for the show, in one size or in every size
+ * ("all"), as one zip (stored, not compressed: PNGs do not shrink).
  */
 async function exportDesignsZip(models, episodeId, size) {
   const { DESIGNS, SIZES } = require('./styleSheetDesigns');
   checkDesign(DESIGNS[0].key, size);
   const sheet = await buildStyleSheet(models, episodeId);
   requireApproved(sheet, 'exporting it');
+  if (!sheet.designs.length) throw new LookbookError('Every design is switched off for this show; turn one on in Template Studio › Style sheets.', 409, 'DESIGN_OFF');
   const { renderDesign } = require('./styleSheetRenderService');
   const sizes = size === 'all' ? Object.keys(SIZES) : [size];
   const files = [];
-  for (const d of DESIGNS) {
+  for (const d of sheet.designs) {
     for (const s of sizes) files.push({ name: designFilename(sheet, d.key, s), buffer: (await renderDesign(sheet, d.key, s)).buffer });
   }
   const archiver = require('archiver');

@@ -125,6 +125,19 @@ describe('ShowEpisodesBoard — Now producing and the pipeline (Evoni\'s mock, 2
     expect(screen.getByRole('link', { name: 'Open episode' }).getAttribute('href')).toBe('/episodes/ep-1');
   });
 
+  test("the card shows the episode's thumbnail, else the Studio's current one", async () => {
+    renderIt([{ ...DRAFT, thumbnail_url: 'https://cdn.example/ep1.jpg' }]);
+    await waitFor(() => expect(screen.getByTestId('seb-hero').querySelector('.seb-thumb img')?.getAttribute('src')).toBe('https://cdn.example/ep1.jpg'));
+  });
+
+  test("with no thumbnail_url, the card shows the Studio's current thumbnail", async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => (url.endsWith('/episodes/ep-1/saved')
+      ? { data: { data: [{ id: 't-1', isPrimary: true, url: 'https://cdn.example/saved.jpg' }] } }
+      : { data: {} }));
+    renderIt([DRAFT]);
+    await waitFor(() => expect(screen.getByTestId('seb-hero').querySelector('.seb-thumb img')?.getAttribute('src')).toBe('https://cdn.example/saved.jpg'));
+  });
+
   test('From the event reads the venue through the automation copy, with its DREAM city', async () => {
     renderIt([DRAFT]);
     await waitFor(() => expect(screen.getByTestId('seb-event').textContent).toContain('Echo Park'));
@@ -143,7 +156,8 @@ describe('ShowEpisodesBoard — Now producing and the pipeline (Evoni\'s mock, 2
     await waitFor(() => expect(screen.getByTestId('seb-count').textContent).toBe('2 episodes · 2 open slots'));
     const cols = [...document.querySelectorAll('.seb-col')];
     expect(cols.map((c) => c.querySelector('.seb-col-name > span').textContent)).toEqual(['Planning', 'Script', 'Production', 'Edit', 'Released']);
-    expect(cols[0].textContent).toContain('S1 E1Draft');
+    // The code once (on the thumbnail), no status chip repeating the column (Evoni, 2026-10-22 layout list).
+    expect(cols[0].querySelector('[data-testid="seb-card-ep-1"]').textContent).toBe('S1 E1I Designed My Outfit0 of 24 checks');
     expect(cols[0].textContent).toContain('S1 · E2Open Slot');
     expect(cols[1].textContent).toContain('No episodes in script stage yet');
     expect(cols[0].textContent).toContain('Lala lands her first real styling opportunity');
@@ -181,12 +195,13 @@ describe('ShowEpisodesBoard — the Episode Pipeline mock (2026-10-17)', () => {
     expect(onChanged).toHaveBeenCalled();
   });
 
-  test('search narrows every column; Continue opens the episode', async () => {
+  test('search narrows every column; the card opens the episode', async () => {
     renderIt([DRAFT, { id: 'ep-9', episode_number: 9, season_number: 1, title: 'Gala', status: 'in_review' }]);
     fireEvent.change(await screen.findByLabelText('Search episodes'), { target: { value: 'gala' } });
     expect(screen.queryByTestId('seb-card-ep-1')).toBeNull();
     const gala = screen.getByTestId('seb-card-ep-9');
-    fireEvent.click(within(gala).getByRole('button', { name: 'Continue' }));
+    expect(within(gala).queryByRole('button', { name: 'Continue' })).toBeNull();
+    fireEvent.click(within(gala).getByRole('button', { name: 'Gala' }));
     expect(where).toBe('/episodes/ep-9');
   });
 
@@ -195,5 +210,64 @@ describe('ShowEpisodesBoard — the Episode Pipeline mock (2026-10-17)', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'More' }));
     expect(screen.getByRole('menuitem', { name: /Checklist/ }).getAttribute('href')).toBe('/episodes/ep-1?tab=checklist');
     expect(screen.getByRole('menuitem', { name: 'Edit details' }).getAttribute('href')).toBe('/episodes/ep-1/edit');
+  });
+});
+
+// Evoni, 2026-10-22 (layout list): the slim Now producing card, lean board
+// cards with a ⋯ "Move to", and one stage at a time on a phone.
+describe('ShowEpisodesBoard — layout', () => {
+  const DRAFT = { id: 'ep-1', episode_number: 1, season_number: 1, title: 'I Designed My Outfit', status: 'draft' };
+  const BUILD = { id: 'ep-4', episode_number: 4, season_number: 1, title: 'Gala Night', status: 'in_build', thumbnail_url: 'https://cdn.example/4.jpg', script_content: 'x' };
+  beforeEach(() => {
+    where = null;
+    vi.mocked(api.get).mockReset().mockResolvedValue({ data: {} });
+    vi.mocked(loadProductionChecks).mockReset().mockResolvedValue({ checks: null, linkedEvent: null });
+    Object.values(episodeService).forEach((fn) => fn.mockReset());
+  });
+
+  test('Now producing is one card: the episode, the event and the steps along its foot', async () => {
+    renderIt([DRAFT]);
+    const card = (await screen.findByTestId('seb-hero')).querySelector('.seb-hero-card');
+    for (const part of ['.seb-hero-art', '.seb-hero-main', '.seb-hero-event', '.seb-hero-steps']) expect(card.querySelector(`:scope > ${part}`), part).toBeTruthy();
+    expect(card.querySelector('.seb-hero-kicker').textContent).toBe('Now producingS1 E1Draft');
+  });
+
+  test('a card shows its code once and a line only when it says something new', async () => {
+    renderIt([DRAFT, BUILD]);
+    const build = await screen.findByTestId('seb-card-ep-4');
+    // A picture: the code is a chip; "In build" would repeat the column, so no line.
+    expect(build.querySelector('.seb-chip').textContent).toBe('S1 E4');
+    expect(build.querySelector('.seb-card-line')).toBeNull();
+    expect(build.textContent).not.toContain('In build');
+  });
+
+  test('⋯ moves a card to another stage without dragging', async () => {
+    vi.mocked(episodeService.updateEpisode).mockResolvedValue({});
+    const onChanged = renderIt([DRAFT, BUILD]);
+    const card = await screen.findByTestId('seb-card-ep-1');
+    fireEvent.click(within(card).getByRole('button', { name: 'Move I Designed My Outfit' }));
+    const menu = within(card).getByRole('menu');
+    expect(within(menu).getAllByRole('menuitem').map((b) => b.textContent)).toEqual(['Move to Script', 'Move to Production', 'Move to Edit', 'Move to Released']);
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Move to Production' }));
+    await waitFor(() => expect(episodeService.updateEpisode).toHaveBeenCalledWith('ep-1', { status: 'in_build' }));
+    expect(onChanged).toHaveBeenCalled();
+    // Opening the menu did not open the episode.
+    expect(where).toBeNull();
+  });
+
+  test('on a phone, the stage tabs pick the one column shown; it starts on Now producing\'s stage', async () => {
+    renderIt([DRAFT, BUILD]);
+    const board = await screen.findByTestId('seb-board');
+    const tabs = screen.getByRole('group', { name: 'Stage' });
+    expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Planning 1', 'Script 0', 'Production 1', 'Edit 0', 'Released 0']);
+    expect(screen.getByTestId('seb-hero').querySelector('.seb-hero-title').textContent).toBe('I Designed My Outfit');
+    expect(board.dataset.phoneStage).toBe('planning');
+    fireEvent.click(within(tabs).getByRole('button', { name: /Production/ }));
+    expect(board.dataset.phoneStage).toBe('production');
+    expect(within(tabs).getByRole('button', { name: /Production/ }).getAttribute('aria-pressed')).toBe('true');
+    const { readFileSync } = await import('fs');
+    const { resolve } = await import('path');
+    const css = readFileSync(resolve(__dirname, 'ShowEpisodesBoard.css'), 'utf8');
+    expect(css).toMatch(/@media \(max-width: 600px\) \{[^@]*\.seb-board\[data-phone-stage="planning"\] > \.seb-col\[data-stage="planning"\]/);
   });
 });

@@ -3,7 +3,6 @@
    file only lays out the folders. Tokens only: no hex, no rgb. */
 
 .esph-folders { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; align-items: start; padding: 14px; border-radius: 18px; border: 1.5px solid var(--lala-gold-line); background: var(--surface-card); box-shadow: var(--shadow-sm); }
-.esph-folder:first-child { grid-column: 1 / -1; }
 
 /* Phone: two folders a row, smaller tiles, so thirteen folders stay short. */
 @media (max-width: 760px) {
@@ -12,3 +11,11 @@
   .esph .epp-drop { min-height: 96px; }
   .esph .epp-pose-head { flex-direction: column; align-items: flex-start; gap: 0; }
 }
+
+/* Empty folders as one row of chips, across the whole panel. */
+.esph-empty { grid-column: 1 / -1; }
+.esph-file-as { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-secondary); }
+
+/* Files › Photos: To sort on top, then the poses, then the Style spots. */
+.esph-wrap { display: flex; flex-direction: column; gap: 18px; }
+.esph-sort .esph-folders { grid-template-columns: minmax(0, 1fr); border-color: var(--accent-light); }

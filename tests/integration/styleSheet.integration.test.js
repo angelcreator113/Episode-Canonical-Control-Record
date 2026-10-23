@@ -293,6 +293,41 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(zipNames(res.body)).toHaveLength(30);
   });
 
+  it('Template Studio › Style sheets: a design switched off for the show leaves the page, the zip and single downloads', async () => {
+    const ids = await seedEpisodeOne();
+    const lib = `/api/v1/shows/${ids.show}/style-designs`;
+    const bin = (url) => auth(request(app).get(url)).buffer(true).parse((res, cb) => {
+      const chunks = []; res.on('data', (c) => chunks.push(c)); res.on('end', () => cb(null, Buffer.concat(chunks)));
+    });
+    expect((await request(app).get(lib)).status).toBe(401);
+    let res = await auth(request(app).get(lib));
+    expect(res.status).toBe(200);
+    expect(res.body.data.designs.map((d) => d.key)).toEqual(['episode_look', 'style_diary', 'runway', 'color_story', 'invited']);
+    expect(res.body.data.off).toEqual([]);
+    expect((await auth(request(app).put(lib)).send({ off: ['poster'] })).status).toBe(400);
+    expect((await auth(request(app).put(lib)).send({ off: 'runway' })).status).toBe(400);
+    // Another metadata key is kept.
+    await run("UPDATE shows SET metadata = '{\"tagline\":\"kept\"}' WHERE id = :show", ids);
+    res = await auth(request(app).put(lib)).send({ off: ['runway', 'invited', 'runway'] });
+    expect([res.status, res.body.data.off]).toEqual([200, ['runway', 'invited']]);
+    const [[show]] = await run('SELECT metadata FROM shows WHERE id = :show', ids);
+    const meta = typeof show.metadata === 'string' ? JSON.parse(show.metadata) : show.metadata;
+    expect(meta).toEqual({ tagline: 'kept', style_designs: { off: ['runway', 'invited'] } });
+
+    const s = (await auth(request(app).get(sheetUrl(ids.ep)))).body.data;
+    expect(s.designs.map((d) => d.key)).toEqual(['episode_look', 'style_diary', 'color_story']);
+    expect((await auth(request(app).post(`${sheetUrl(ids.ep)}/approve`))).status).toBe(200);
+    res = await auth(request(app).get(`${sheetUrl(ids.ep)}/design/runway/ig_story`));
+    expect([res.status, res.body.code]).toEqual([409, 'DESIGN_OFF']);
+    res = await bin(`${sheetUrl(ids.ep)}/designs-zip/pinterest`);
+    expect(zipNames(res.body)).toEqual(['episode-look', 'style-diary', 'color-story'].map((d) => `style-${d}-episode-01-pinterest.png`));
+    // Every design off: the zip is refused.
+    await auth(request(app).put(lib)).send({ off: ['episode_look', 'style_diary', 'runway', 'color_story', 'invited'] });
+    res = await auth(request(app).get(`${sheetUrl(ids.ep)}/designs-zip/pinterest`));
+    expect([res.status, res.body.code]).toEqual([409, 'DESIGN_OFF']);
+    expect((await auth(request(app).get('/api/v1/shows/00000000-0000-4000-8000-000000000000/style-designs'))).status).toBe(404);
+  });
+
   it('the Detail spot (the designs\' Detail shot) holds one photo and shows on the sheet', async () => {
     const ids = await seedEpisodeOne();
     const png = await sharp({ create: { width: 4, height: 4, channels: 3, background: { r: 9, g: 90, b: 9 } } }).png().toBuffer();
@@ -324,7 +359,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     return () => { axiosGet.mockRestore(); fetchSpy.mockRestore(); };
   }
 
-  it("Front, Side and Back fall back to Lala's default pose from Files; her own photo wins", async () => {
+  it("Front, Side and Back are Lala's starred pose from Files; a Lookbook photo filed under back is not used", async () => {
     const ids = await seedEpisodeOne();
     const restore = await poseReads();
     try {
@@ -341,11 +376,12 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       const chip = (key) => s.readiness.items.find((i) => i.key === key).ready;
       expect([chip('front'), chip('side'), chip('back')]).toEqual([false, false, true]);
 
-      // Her own Back photo replaces the pose.
+      // A photo filed under back in the Lookbook (before 2026-10-22) is not the sheet's Back: the pose stays.
       const png = await sharp({ create: { width: 4, height: 4, channels: 3, background: { r: 9, g: 9, b: 9 } } }).jpeg().toBuffer();
       await auth(request(app).post(`/api/v1/episodes/${ids.ep}/lookbook/images`)).field('category', 'back').attach('files', png, { filename: 'b.jpg', contentType: 'image/jpeg' });
       const after = (await auth(request(app).get(sheetUrl(ids.ep)))).body.data;
-      expect(after.look_from_files).toEqual({});
+      expect(after.look_from_files.back.id).toBe(defaultBack);
+      expect(after.look.back).toBe(s.look.back);
       expect(after.readiness.items.find((i) => i.key === 'back').ready).toBe(true);
     } finally {
       restore();

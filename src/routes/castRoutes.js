@@ -60,6 +60,9 @@
  *                                                  from their character file (ADMIN)
  *   POST   /api/v1/cast/characters/:id/appearance/portrait     one generated portrait from
  *                                                  the saved look (ADMIN, budget-gated)
+ *   POST   /api/v1/cast/characters/:id/appearance/portrait/upload  multipart "image": a photo
+ *                                                  of them added to their portraits; their
+ *                                                  profile photo when they have none (ADMIN, no AI)
  *   POST   /api/v1/cast/characters/:id/appearance/portrait/use { url }: it becomes their
  *                                                  profile photo (ADMIN)
  *   POST   /api/v1/cast/characters/:id/appearance/portrait/remove { url }: drop one
@@ -151,6 +154,7 @@
  */
 
 const express = require('express');
+const multer = require('multer');
 const { requireAuth, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
@@ -637,6 +641,7 @@ const appearanceOut = (character) => {
 const appearanceError = (res, err, what) => {
   const { AppearanceError } = require('../services/characterAppearance');
   if (err instanceof AppearanceError) return res.status(err.status).json({ success: false, error: err.message });
+  if (err instanceof require('../services/pulseImageService').PulseImageError) return res.status(err.status).json({ success: false, error: err.message, code: err.code });
   if (require('../services/imageCostService').isBudgetError(err)) return res.status(429).json({ success: false, error: err.message, code: err.code });
   console.error(`[Cast] ${what} error:`, err);
   return res.status(500).json({ success: false, error: err.message });
@@ -693,6 +698,25 @@ router.post('/characters/:id/appearance/portrait', requireAuth, authorize(['ADMI
     return res.json({ success: true, ...made, ...appearanceOut(character) });
   } catch (err) {
     return appearanceError(res, err, 'POST /characters/:id/appearance/portrait');
+  }
+});
+
+// POST portrait/upload, multipart field "image" (ADMIN, no AI): a photo of them, added to their portraits.
+const appearancePhoto = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024, files: 1 } }).single('image');
+const oneAppearancePhoto = (req, res, next) => appearancePhoto(req, res, (err) => {
+  if (!err) return next();
+  console.error('[Cast] appearance photo upload rejected:', err.message);
+  return res.status(400).json({ success: false, error: err.code === 'LIMIT_FILE_SIZE' ? 'The photo is 15 MB at most.' : err.message });
+});
+router.post('/characters/:id/appearance/portrait/upload', requireAuth, authorize(['ADMIN']), oneAppearancePhoto, async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
+    const character = await getModels().RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+    const made = await require('../services/characterAppearance').uploadPortrait(character, req.file);
+    return res.json({ success: true, ...made, ...appearanceOut(character) });
+  } catch (err) {
+    return appearanceError(res, err, 'POST /characters/:id/appearance/portrait/upload');
   }
 });
 
