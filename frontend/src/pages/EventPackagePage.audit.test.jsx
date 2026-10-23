@@ -57,6 +57,12 @@ function payload() {
   };
 }
 
+// A finished section starts folded (2026-10-23); its Edit opens it.
+function openSection(anchor) {
+  const fold = screen.queryByTestId(`fold-${anchor}`);
+  if (fold && fold.getAttribute('aria-expanded') === 'false') fireEvent.click(fold);
+}
+
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={['/shows/show-1/events/ev-1']}>
@@ -102,11 +108,13 @@ describe('EventPackagePage audit fixes', () => {
     }));
 
     renderPage();
-    fireEvent.click(within(await screen.findByTestId('basics-dressCode')).getByRole('button', { name: 'Edit' }));
-    const dialog = await screen.findByRole('dialog');
-    expect(dialog.getAttribute('aria-label')).toBe('Dress code');
-    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'Cocktail' } });
-    fireEvent.click(within(dialog).getByRole('button', { name: /save/i }));
+    await screen.findByTestId('basics-dressCode');
+    openSection('identity');
+    fireEvent.click(within(screen.getByTestId('basics-dressCode')).getByRole('button', { name: 'Edit' }));
+    // Edited in its row now (2026-10-23), not in a dialog.
+    const editor = await screen.findByRole('group', { name: 'Dress code' });
+    fireEvent.change(within(editor).getByRole('textbox'), { target: { value: 'Cocktail' } });
+    fireEvent.click(within(editor).getByRole('button', { name: /save/i }));
 
     const banner = await screen.findByTestId('refresh-error');
     expect(banner.textContent).toContain('Server unavailable');
@@ -120,15 +128,16 @@ describe('EventPackagePage audit fixes', () => {
 
   test('Enter on an empty Basics field saves nothing', async () => {
     renderPage();
-    fireEvent.click(within(await screen.findByTestId('basics-dressCode')).getByRole('button', { name: 'Edit' }));
-    const dialog = await screen.findByRole('dialog');
-    expect(dialog.getAttribute('aria-label')).toBe('Dress code');
-    const input = within(dialog).getByRole('textbox');
+    await screen.findByTestId('basics-dressCode');
+    openSection('identity');
+    fireEvent.click(within(screen.getByTestId('basics-dressCode')).getByRole('button', { name: 'Edit' }));
+    const editor = await screen.findByRole('group', { name: 'Dress code' });
+    const input = within(editor).getByRole('textbox');
     fireEvent.change(input, { target: { value: '   ' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     await new Promise((r) => setTimeout(r, 20));
     expect(api.put).not.toHaveBeenCalled();
-    expect(screen.getByRole('dialog', { name: 'Dress code' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Dress code' })).toBeTruthy();
 
     // A value saves on Enter.
     fireEvent.change(input, { target: { value: 'Cocktail' } });
