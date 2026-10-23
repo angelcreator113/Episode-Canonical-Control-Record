@@ -13,15 +13,75 @@
  *   of her own work could reach 500 and refuse even the sign-in request.
  *   It sets req.rateLimitUser only, never req.user: it gives no identity to a
  *   route (F-AUTH-1 FD-67 removed the global optionalAuth on purpose).
+ * - recentRefusals(): the last 200 refusals, kept in memory for the admin
+ *   list (Admin › Tools), so a lockout can be read without the server logs.
  */
 
 const { verifyToken } = require('./auth');
 
-function minutesLeft(req) {
+function msLeft(req) {
   const reset = req.rateLimit && req.rateLimit.resetTime;
   if (!reset) return null;
-  const ms = new Date(reset).getTime() - Date.now();
+  return new Date(reset).getTime() - Date.now();
+}
+
+function minutesLeft(req) {
+  const ms = msLeft(req);
+  if (ms === null) return null;
   return ms > 0 ? Math.ceil(ms / 60000) : 1;
+}
+
+// The login page counts down from this, so it is exact to the second.
+function secondsLeft(req) {
+  const ms = msLeft(req);
+  if (ms === null) return null;
+  return ms > 0 ? Math.ceil(ms / 1000) : 1;
+}
+
+// ── Recent refusals ─────────────────────────────────────────────────────────
+// In memory only: the list starts empty whenever the server restarts.
+// Production runs one API process (ecosystem.config.js, the
+// episode-api-prod-hotfix app: instances 1, fork mode), so this one list sees
+// every refusal. If the app is ever run in PM2 cluster mode, each process
+// keeps its own list (and its own limiter counts) and the admin list shows
+// only the process that answered.
+const REFUSALS_KEPT = 200;
+const refusals = [];
+
+// The last part of the address is hidden: enough to tell devices apart, not
+// a full address kept on a page. IPv4 (also IPv4-mapped IPv6) loses its last
+// number, IPv6 its last group.
+function maskIp(ip) {
+  if (!ip || typeof ip !== 'string') return 'unknown';
+  const v4 = /^(.*?)(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}$/.exec(ip);
+  if (v4) return `${v4[1]}${v4[2]}.x`;
+  const cut = ip.lastIndexOf(':');
+  if (cut >= 0) return `${ip.slice(0, cut + 1)}x`;
+  return 'x';
+}
+
+function recordRefusal({ limit, code, method, url, ip, at = new Date() }) {
+  refusals.push({
+    at: at.toISOString(),
+    limit,
+    code,
+    method: method || '',
+    path: String(url || '').split('?')[0],
+    ip: maskIp(ip),
+  });
+  if (refusals.length > REFUSALS_KEPT) refusals.splice(0, refusals.length - REFUSALS_KEPT);
+}
+
+/** Newest first, with a count per limit. */
+function recentRefusals() {
+  const list = refusals.slice().reverse();
+  const counts = {};
+  for (const r of list) counts[r.limit] = (counts[r.limit] || 0) + 1;
+  return { refusals: list, counts, kept: REFUSALS_KEPT };
+}
+
+function clearRefusals() {
+  refusals.length = 0;
 }
 
 /**
@@ -34,6 +94,7 @@ function minutesLeft(req) {
 function refusedBy(limit, code, wording) {
   return (req, res, _next, options) => {
     const mins = minutesLeft(req);
+    recordRefusal({ limit, code, method: req.method, url: req.originalUrl, ip: req.ip });
     console.warn(`[rate-limit] ${limit} limit refused ${req.method} ${req.originalUrl} ip=${req.ip}${mins ? ` resets in ${mins} min` : ''}`);
     res.status(options.statusCode).json({
       error: 'Too Many Requests',
@@ -41,6 +102,7 @@ function refusedBy(limit, code, wording) {
       limit,
       message: wording(mins),
       retry_after_minutes: mins,
+      retry_after_seconds: secondsLeft(req),
     });
   };
 }
@@ -60,4 +122,6 @@ async function markSignedIn(req, _res, next) {
 
 const waitText = (mins) => (mins ? `about ${mins} minute${mins === 1 ? '' : 's'}` : 'a few minutes');
 
-module.exports = { refusedBy, markSignedIn, waitText };
+module.exports = {
+  refusedBy, markSignedIn, waitText, recordRefusal, recentRefusals, clearRefusals, maskIp,
+};
