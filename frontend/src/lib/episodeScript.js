@@ -192,8 +192,9 @@ export function quoteParts(line, mark = null, max = 140) {
 }
 
 /**
- * [{ key, label, source, beat }] in the order: goals, beat 14's opportunity,
- * the brief's hook. beat
+ * [{ key, label, source, beat }] in the order: goals, follow-ups carried
+ * from an earlier episode (`carried`: the to-do list's goal tasks with a
+ * follow_up_id), beat 14's opportunity, the brief's hook. beat
  * is the number of the beat that mentions it, or null. What she owes is not
  * on the list: deliverables are not always shown in the show (Evoni,
  * 2026-10-18; beat 12 is The Fashion Challenge). `deliverables` is kept in
@@ -204,7 +205,7 @@ export function quoteParts(line, mark = null, max = 140) {
  * `mark`, the name in it to emphasise (quoteParts). `profiles`: the
  * event's people's social profiles, by id (goalPerson).
  */
-export function mustCover({ beats = [], event = null, brief = null, opportunity = null, profiles = [] } = {}) {
+export function mustCover({ beats = [], event = null, brief = null, opportunity = null, profiles = [], carried = [] } = {}) {
   const items = [];
   relationshipGoalsOf(event).forEach((g, n) => {
     const label = String(g.label).trim();
@@ -220,6 +221,15 @@ export function mustCover({ beats = [], event = null, brief = null, opportunity 
       ...(m?.line ? { line: m.line, mark: m.as || named || null } : {}),
       ...(m?.as && words(m.as).join(' ') !== words(named).join(' ') ? { who: { name: named, as: m.as } } : {}),
     });
+  });
+  // What Lala owes from an earlier episode (Evoni, 2026-10-23): Start
+  // Episode's goal tasks carried from a follow-up (follow_up_id;
+  // services/storyCarryForward), matched like a goal.
+  (Array.isArray(carried) ? carried : []).forEach((t) => {
+    const label = String(t?.label || '').trim();
+    if (!label || !t.follow_up_id) return;
+    const m = goalMatch(beats, t, goalPerson(t, event, profiles));
+    items.push({ key: `carried-${t.follow_up_id}`, label, source: 'Follow-up', slot: t.slot, beat: m ? m.beat : null });
   });
   // Beat 14's opportunity (Evoni, 2026-10-19), when one is attached and it
   // comes (the caller passes null when the episode is designed to fail or the

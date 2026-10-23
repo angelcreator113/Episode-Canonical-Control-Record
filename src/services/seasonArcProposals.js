@@ -141,8 +141,17 @@ async function seasonOf(db, showId) {
   const goals = await rows(sequelize, 'goals',
     `SELECT title, target_metric, current_value, target_value FROM career_goals
       WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL ORDER BY priority ASC LIMIT 8`, { showId });
+  // The last approved story record and what Lala still owes people
+  // (services/storyCarryForward; Evoni, 2026-10-23).
+  let carried = '';
+  try {
+    carried = await require('./storyCarryForward').carryForShow(sequelize, showId);
+  } catch (err) {
+    console.error('[seasonArcProposals] carry-forward load failed:', err.message);
+  }
   return {
     arc,
+    carried,
     phases: Array.isArray(phases) ? phases : [],
     debt: parse(arc.narrative_debt, []) || [],
     openSlots: slots.filter((s) => s.intention_source !== 'edited'),
@@ -166,7 +175,7 @@ LALA'S GOALS:
 ${lines(season.goals, (g) => `- ${g.title}: ${g.current_value}/${g.target_value} ${g.target_metric}`)}
 NARRATIVE DEBT:
 ${lines(season.debt, (d) => `- ${d.goal_title || d.title || ''}: ${d.narrative_weight || ''}`)}
-
+${season.carried ? `\n${season.carried}` : ''}
 WHAT MOVED ON THE FEED:
 Followers (accepted changes): ${lines(signals.followers, (f) => `@${f.handle} ${f.change > 0 ? '+' : ''}${f.change} (now ${f.now ?? '?'})`)}
 Profiles whose state changed: ${lines(signals.states, (s) => `@${s.handle}: ${s.from || '?'} → ${s.to}`)}
