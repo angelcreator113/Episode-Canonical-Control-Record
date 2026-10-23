@@ -62,7 +62,7 @@ describe('ScenePlannerPage: re-planning only (S9 d)', () => {
     expect(within(one).getByText('Locked')).toBeTruthy();
     expect(within(screen.getByTestId('beat-card-2')).getByText('Chosen by you')).toBeTruthy();
     expect(screen.getByTestId('beat-plan-scope').textContent)
-      .toBe('A re-plan keeps locked and chosen beats. Change a beat\'s background, lock or unlock it on the Beat Plan tab.');
+      .toBe('A re-plan keeps locked and chosen beats. Change a beat\'s background, lock or unlock it on Scenes › Plan.');
   });
 
   test('a missing image is a status here, fixed in Scenes; the removed-set repair is in Scenes too', async () => {

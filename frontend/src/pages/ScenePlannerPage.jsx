@@ -36,7 +36,7 @@ function LocationsStrip({ locations, showId, episodeId }) {
 
 // S9 (d) (Evoni, 2026-10-02; §8(hh)): "the Beat Plan page keeps
 // re-planning only, and every per-beat change happens in Scenes." A beat's
-// missing image is a status here; it is changed on the Beat Plan tab.
+// missing image is a status here; it is changed on Scenes › Plan.
 const scenesPath = (episodeId) => `/episodes/${episodeId}?tab=beatplan`;
 const BeatStatus = ({ beat }) => <MissingAngle beat={beat} statusOnly />;
 function ChangeInScenes({ episodeId, className }) {
@@ -313,8 +313,8 @@ export default function ScenePlannerPage() {
           </p>
           {plan.length > 0 && (
             <p className="scene-planner-scope" data-testid="beat-plan-scope">
-              A re-plan keeps locked and chosen beats. Change a beat&apos;s background, lock or unlock it on the{' '}
-              <Link to={scenesPath(episodeId)}>Beat Plan tab</Link>.
+              A re-plan keeps locked and chosen beats. Change a beat&apos;s background, lock or unlock it on{' '}
+              <Link to={scenesPath(episodeId)}>Scenes › Plan</Link>.
             </p>
           )}
           {/* L5, Q21 (Evoni, 2026-10-02, §8(hh)): flagged, never blocking. */}
