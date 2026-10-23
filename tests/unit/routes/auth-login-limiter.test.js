@@ -74,5 +74,18 @@ describe('POST /login rate limit', () => {
     const sixth = await login(app, 'wrong-password');
     expect(sixth.status).toBe(429);
     expect(cognitoPasswordAuthService.initiatePasswordAuth).toHaveBeenCalledTimes(5);
+    // It says which limit it was and how long to wait (Evoni, 2026-10-23).
+    expect(sixth.body).toMatchObject({ code: 'AUTH_TOO_MANY_FAILED_SIGNINS', limit: 'sign-in' });
+    expect(sixth.body.message).toMatch(/^Too many wrong passwords from this device\. Try again in about 1[45] minutes\.$/);
+  });
+
+  test("Cognito's own limit is named as the sign-in service, not this server", async () => {
+    const err = new Error('Password attempts exceeded');
+    err.name = 'LimitExceededException';
+    cognitoPasswordAuthService.initiatePasswordAuth.mockRejectedValue(err);
+    const res = await login(buildApp(), 'wrong-password');
+    expect(res.status).toBe(429);
+    expect(res.body).toMatchObject({ code: 'AUTH_TOO_MANY_REQUESTS', limit: 'cognito' });
+    expect(res.body.message).toMatch(/^The sign-in service has paused sign-ins/);
   });
 });

@@ -5,6 +5,7 @@
 
 const express = require('express');
 const rateLimit = require('express-rate-limit');
+const { refusedBy, waitText } = require('../middleware/rateLimits');
 const router = express.Router();
 const TokenService = require('../services/tokenService');
 const cognitoPasswordAuthService = require('../services/cognitoPasswordAuthService');
@@ -44,17 +45,21 @@ const COGNITO_LOGIN_ERROR_MAP = {
     code: 'AUTH_PASSWORD_RESET_REQUIRED',
     message: 'A password reset is required for this account.',
   },
+  // Cognito's own limits, worded apart from this server's (Evoni,
+  // 2026-10-23: every refusal read "Too many login attempts").
   TooManyRequestsException: {
     status: 429,
     error: 'Too Many Requests',
     code: 'AUTH_TOO_MANY_REQUESTS',
-    message: 'Too many login attempts. Please try again later.',
+    limit: 'cognito',
+    message: 'The sign-in service is busy right now. Wait a minute and try again.',
   },
   LimitExceededException: {
     status: 429,
     error: 'Too Many Requests',
     code: 'AUTH_TOO_MANY_REQUESTS',
-    message: 'Too many login attempts. Please try again later.',
+    limit: 'cognito',
+    message: 'The sign-in service has paused sign-ins for this account after several wrong passwords. Wait a few minutes and try again.',
   },
 };
 
@@ -62,9 +67,10 @@ const COGNITO_LOGIN_ERROR_MAP = {
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // 5 failed login attempts per 15 minutes
-  message: 'Too many login attempts, please try again later',
   standardHeaders: true,
   legacyHeaders: false,
+  handler: refusedBy('sign-in', 'AUTH_TOO_MANY_FAILED_SIGNINS', (mins) =>
+    `Too many wrong passwords from this device. Try again in ${waitText(mins)}.`),
   // Only failed attempts count (Evoni, 2026-10-23: signing out and back in a
   // few times locked her out for 15 minutes).
   skipSuccessfulRequests: true,
@@ -74,8 +80,9 @@ const loginLimiter = rateLimit({
 const refreshLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 10, // 10 refresh attempts per minute
-  message: 'Too many token refresh attempts, please try again later',
   standardHeaders: true,
+  handler: refusedBy('refresh', 'AUTH_TOO_MANY_REFRESHES', (mins) =>
+    `Too many session refreshes from this device. Try again in ${waitText(mins)}.`),
   legacyHeaders: false,
   skip: (_req) => process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test',
 });
@@ -157,6 +164,7 @@ router.post('/login', optionalAuth, loginLimiter, validateLoginRequest, async (r
         error: mapped.error,
         message: mapped.message,
         code: mapped.code,
+        ...(mapped.limit ? { limit: mapped.limit } : {}),
       });
     }
     return res.status(500).json({

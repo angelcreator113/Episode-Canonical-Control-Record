@@ -41,7 +41,8 @@ export default function Login() {
       } else if (status === 401) {
         errorMsg = 'Invalid email or password. Please try again.';
       } else if (status === 429) {
-        errorMsg = 'Too many attempts. Please wait a moment and try again.';
+        // The server names which limit refused (rateLimits.refusedBy); this is only the fallback.
+        errorMsg = 'The server is limiting requests from this device. Please wait a few minutes and try again.';
       } else if (status >= 500) {
         errorMsg = 'Server error. Please try again in a few moments.';
       } else {
