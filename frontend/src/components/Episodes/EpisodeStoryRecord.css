@@ -59,3 +59,6 @@
 .esr-prop-text { margin: 0; font-size: 14px; line-height: 1.5; color: var(--lala-ink); }
 .esr-prop .esr-badge { align-self: flex-start; }
 .esr-warn { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 12px; font-weight: 700; color: var(--danger-text); }
+
+/* Inside a step of the story path (EpisodeBookSteps): the step is the card. */
+.esr.is-embedded { margin: 0; padding: 0; border: none; border-radius: 0; background: none; }

@@ -4,9 +4,11 @@
  * at or revealed, and what is left open. Drafted from the episode (after
  * completion, or here); it counts once approved: the short story and the
  * chapter writers read it, and its secrets move on with the audience
- * (services/episodeStoryRecord). Results → Story, above the story formats.
+ * (services/episodeStoryRecord). Results → Story, step 1 of the story path
+ * (EpisodeBookSteps): `embedded` leaves the title and the intro to the step,
+ * and onStatus hears the record's status (null, 'draft' or 'approved').
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollText, Sparkles, Check, Plus, X } from 'lucide-react';
 import api from '../../services/api';
 import './EpisodeStoryRecord.css';
@@ -25,12 +27,15 @@ const body = (form) => ({
   threads: form.threads.map(({ thread_id, title, note }) => ({ thread_id, title, note })),
 });
 
-export default function EpisodeStoryRecord({ episodeId }) {
+export default function EpisodeStoryRecord({ episodeId, embedded = false, onStatus }) {
   const base = `/api/v1/book-from-show/episodes/${episodeId}/record`;
   const [data, setData] = useState(null);
   const [form, setForm] = useState(formOf(null));
   const [busy, setBusy] = useState(null);
   const [note, setNote] = useState(null);
+  const heard = useRef(onStatus);
+  heard.current = onStatus;
+  useEffect(() => { if (data) heard.current?.(data.record?.status || null); }, [data]);
 
   const take = useCallback((d) => {
     const next = { record: d?.record || null, cast: d?.cast || [], threads: d?.threads || [] };
@@ -77,16 +82,20 @@ export default function EpisodeStoryRecord({ episodeId }) {
   const locked = !!busy;
 
   return (
-    <section className="esr" aria-labelledby="esr-title" data-testid="episode-story-record">
-      <header className="esr-head">
-        <ScrollText size={18} aria-hidden="true" className="esr-icon" />
-        <h3 id="esr-title" className="esr-title">Story record</h3>
-        {record && <span className={`esr-badge is-${record.status}`}>{record.status === 'approved' ? 'Approved' : 'Draft'}</span>}
-      </header>
-      <p className="esr-note">
-        What the audience saw: what happened, what each person knew and learned, the secrets hinted at, and what is left open.
-        Once you approve it, the short story and the chapter writers read it, and its secrets move on with the audience.
-      </p>
+    <section className={`esr${embedded ? ' is-embedded' : ''}`} {...(embedded ? { 'aria-label': 'Story record' } : { 'aria-labelledby': 'esr-title' })} data-testid="episode-story-record">
+      {!embedded && (
+        <>
+          <header className="esr-head">
+            <ScrollText size={18} aria-hidden="true" className="esr-icon" />
+            <h3 id="esr-title" className="esr-title">Story record</h3>
+            {record && <span className={`esr-badge is-${record.status}`}>{record.status === 'approved' ? 'Approved' : 'Draft'}</span>}
+          </header>
+          <p className="esr-note">
+            What the audience saw: what happened, what each person knew and learned, the secrets hinted at, and what is left open.
+            Once you approve it, the short story and the chapter writers read it, and its secrets move on with the audience.
+          </p>
+        </>
+      )}
       {note && <p className={`esr-note${note.error ? ' is-error' : ' is-done'}`} role="status">{note.text}</p>}
 
       {!record ? (

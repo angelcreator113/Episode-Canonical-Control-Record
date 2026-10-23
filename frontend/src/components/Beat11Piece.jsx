@@ -6,7 +6,9 @@
  * viewer asking "what happened at that event?" (Evoni, 2026-10-15;
  * docs/CANON.md). Cut it from the story, edit it, keep it for animation.
  * Saved on the story (stories.metadata.beat11_excerpt) by
- * routes/bookFromShowRoutes.js.
+ * routes/bookFromShowRoutes.js. Also step 4 of an episode's story path
+ * (Episodes/EpisodeBookSteps): `embedded` leaves the title and the intro to
+ * the step and drops the box; onChange hears each cut or save.
  */
 import { useEffect, useState } from 'react';
 import apiClient from '../services/api';
@@ -19,7 +21,7 @@ export const saveBeat11Api = (storyId, text) => apiClient.put(`${API}/${storyId}
 
 const btn = { padding: '8px 14px', minHeight: 36, borderRadius: 6, border: '1px solid #B8962E40', background: '#FAF7F0', color: '#8a6d1d', fontSize: 12, fontWeight: 600, cursor: 'pointer' };
 
-export default function Beat11Piece({ storyId }) {
+export default function Beat11Piece({ storyId, embedded = false, onChange }) {
   const [excerpt, setExcerpt] = useState(null);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(null);   // 'cut' | 'save'
@@ -41,6 +43,7 @@ export default function Beat11Piece({ storyId }) {
     try {
       const res = await cutBeat11Api(storyId);
       setExcerpt(res.data.excerpt); setText(res.data.excerpt.text);
+      onChange?.();
     } catch (err) {
       console.error('[Beat11Piece] cut failed:', err);
       setError(err?.response?.data?.error || 'The piece was not cut. Try again.');
@@ -53,6 +56,7 @@ export default function Beat11Piece({ storyId }) {
     try {
       const res = await saveBeat11Api(storyId, text);
       setExcerpt(res.data.excerpt);
+      onChange?.();
     } catch (err) {
       console.error('[Beat11Piece] save failed:', err);
       setError(err?.response?.data?.error || 'The piece was not saved. Try again.');
@@ -64,12 +68,14 @@ export default function Beat11Piece({ storyId }) {
   const changed = excerpt && text.trim() !== (excerpt.text || '');
 
   return (
-    <section data-testid="beat11-piece" style={{ background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', padding: '16px 20px', marginBottom: 16 }}>
+    <section data-testid="beat11-piece" aria-label={embedded ? 'Beat 11 piece' : undefined} style={embedded ? undefined : { background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', padding: '16px 20px', marginBottom: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>Beat 11 piece</h2>
-          <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748b' }}>The animated moment in the episode that makes viewers ask what happened at the event.</p>
-        </div>
+        {!embedded && (
+          <div>
+            <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>Beat 11 piece</h2>
+            <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748b' }}>The animated moment in the episode that makes viewers ask what happened at the event.</p>
+          </div>
+        )}
         <button type="button" onClick={cut} disabled={!!busy || !loaded} style={btn}>
           {busy === 'cut' ? 'Cutting…' : excerpt ? 'Cut again' : 'Cut the beat 11 piece'}
         </button>

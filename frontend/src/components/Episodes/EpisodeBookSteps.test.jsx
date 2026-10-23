@@ -1,12 +1,13 @@
 /**
  * The book follows the show, on an episode's Results › Story (Evoni,
- * 2026-10-19; it was "This week's episode", Evoni, 2026-10-15): the
- * episode's short story, beat 11 piece and chapter, and "Plan the next
- * chapters".
+ * 2026-10-19; it was "This week's episode", Evoni, 2026-10-15): one path,
+ * in order (Evoni, 2026-10-22 layout list): the story record, the short
+ * story, the canon check, the beat 11 piece and the chapter, then "Plan the
+ * next chapters" folded at the bottom.
  */
 import React from 'react';
 import { vi, beforeEach, describe, test, expect } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
@@ -19,17 +20,23 @@ import { EpisodeResultsStory } from './EpisodeResultsPages';
 const EP1 = { id: 'e1', episode_number: 1, title: 'The Gala', status: 'published', short_story: { id: 'st1', status: 'draft', word_count: 2400, has_beat11: true }, chapter: { id: 'c1', title: 'One', written: true } };
 const EP2 = { id: 'e2', episode_number: 2, title: 'The Brunch', status: 'draft', short_story: null, chapter: null };
 let ledger;
+let record;
+let canon;
+let books;
 
 beforeEach(() => {
   window.localStorage.clear();
   Object.values(api).forEach((fn) => fn.mockReset());
   ledger = { show_id: 's1', episodes: [EP1, EP2], owed: { short_stories: 1, beat11: 0, chapters: 1 }, transfer: null };
+  record = null;
+  canon = { stories: [], pending: 0 };
+  books = [{ id: 'b1', title: 'Before Lala' }];
   vi.mocked(api.get).mockImplementation(async (url, opts) => {
-    if (url === '/api/v1/storyteller/books') return { data: { books: opts?.params?.show_id ? [] : [{ id: 'b1', title: 'Before Lala' }] } };
+    if (url === '/api/v1/storyteller/books') return { data: { books: opts?.params?.show_id ? [] : books } };
     if (url === '/api/v1/book-from-show/books/b1/ledger') return { data: ledger };
     if (url.endsWith('/beat11-excerpt')) return { data: { excerpt: null } };
-    if (url.endsWith('/record')) return { data: { record: null, cast: [], threads: [] } };
-    if (url.endsWith('/canon')) return { data: { stories: [], pending: 0 } };
+    if (url.endsWith('/record')) return { data: { record, cast: [], threads: [] } };
+    if (url.endsWith('/canon')) return { data: canon };
     throw new Error(`unexpected ${url}`);
   });
 });
@@ -51,12 +58,19 @@ test('the episode that still owes something is the one /this-week opens', () => 
 
 test('walks this episode: the book with no show is used, its steps say what is owed', async () => {
   renderIt();
-  expect(await screen.findByText('Write the short story')).toBeTruthy();
-  expect(screen.getByRole('heading', { name: 'The book follows the show' })).toBeTruthy();
-  expect(screen.getByText('Write the short story first.')).toBeTruthy();
-  expect(screen.getByText('Start the chapter')).toBeTruthy();
+  expect(await screen.findByText('Start the chapter')).toBeTruthy();
+  // One path, in the order the work happens.
+  const steps = screen.getAllByRole('listitem').filter((li) => li.dataset.testid?.startsWith('tw-step-'));
+  expect(steps.map((li) => li.dataset.testid)).toEqual(['tw-step-record', 'tw-step-story', 'tw-step-canon', 'tw-step-beat11', 'tw-step-chapter']);
+  expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent).slice(0, 5))
+    .toEqual(['The story record', 'The short story', 'The canon check', 'The beat 11 piece', 'The chapter']);
+  expect(screen.getByText('Write the short story')).toBeTruthy();
+  expect(screen.getAllByText('Write the short story first.')).toHaveLength(2);
   expect(screen.getByRole('link', { name: 'Scene Planner' }).getAttribute('href')).toBe('/episodes/e2/plan');
-  expect(screen.getByText(/The book owes 1 short story, 0 beat 11 pieces and 1 chapter\. The consciousness transfer is not placed yet\./)).toBeTruthy();
+  // The plan is for the whole book: folded at the bottom, with what the book owes.
+  const fold = screen.getByTestId('tw-plan-fold');
+  expect(fold.open).toBe(false);
+  expect(within(fold.querySelector('summary')).getByText(/The book owes 1 short story, 0 beat 11 pieces and 1 chapter\. The consciousness transfer is not placed yet\./)).toBeTruthy();
   // No episode picker: the tab is the episode.
   expect(screen.queryByLabelText('Episode')).toBeNull();
 });
@@ -101,16 +115,81 @@ test("an episode missing from the book's list says so", async () => {
   renderIt({ id: 'e9', show_id: 's1' });
   expect(await screen.findByText("This episode is not in the book's list of episodes yet.")).toBeTruthy();
   // The plan still shows: it plans across episodes.
-  expect(screen.getByRole('heading', { name: 'Plan the next chapters' })).toBeTruthy();
+  expect(screen.getByTestId('tw-plan-fold').textContent).toContain('Plan the next chapters');
 });
 
-test('Results › Story carries it below the story record and the formats', async () => {
+test('Results › Story: the path, the other formats as a row under it, the plan folded last', async () => {
   render(<MemoryRouter><EpisodeResultsStory episode={{ id: 'e2', show_id: 's1' }} /></MemoryRouter>);
-  const block = await screen.findByTestId('episode-book-steps');
-  expect(await screen.findByText('Write the short story')).toBeTruthy();
-  const formats = screen.getByTestId('results-story-short_story');
-  expect(formats.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(screen.getByRole('heading', { name: 'Plan the next chapters' })).toBeTruthy();
+  const path = await screen.findByRole('list', { name: 'From the episode to the book' });
+  // The short story is written in one place only: step 2.
+  expect(await screen.findAllByText('Write the short story')).toHaveLength(1);
+  expect(screen.queryByTestId('results-story-short_story')).toBeNull();
+  const more = screen.getByRole('heading', { name: 'More ways to tell it' });
+  expect(path.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(['social_fiction', 'snippet', 'recap'].every((f) => screen.getByTestId(`results-story-${f}`))).toBe(true);
+  const fold = await screen.findByTestId('tw-plan-fold');
+  expect(more.compareDocumentPosition(fold) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test('the next step is the only highlighted one; a done step folds and opens on tap', async () => {
+  record = { status: 'approved', what_happened: 'She found the look.', characters: [], secrets: [], threads: [] };
+  renderIt();
+  const story = await screen.findByTestId('tw-step-story');
+  const first = screen.getByTestId('tw-step-record');
+  await waitFor(() => expect(first.className).toContain('is-done'));
+  expect(story.className).toContain('is-next');
+  expect(document.querySelectorAll('.tw-step.is-next')).toHaveLength(1);
+  expect(screen.getByText('Write the short story').className).toContain('is-primary');
+  expect(screen.getByText('Start the chapter').className).not.toContain('is-primary');
+  // The approved record folds to its title; Open shows it again.
+  const body = first.querySelector('.tw-step-body');
+  expect(body.hidden).toBe(true);
+  fireEvent.click(within(first).getByRole('button', { name: 'Open' }));
+  expect(body.hidden).toBe(false);
+  expect(within(first).getByDisplayValue('She found the look.')).toBeTruthy();
+});
+
+test('a draft record is the next step and says Draft', async () => {
+  record = { status: 'draft', what_happened: 'x', characters: [], secrets: [], threads: [] };
+  renderIt();
+  const first = await screen.findByTestId('tw-step-record');
+  await waitFor(() => expect(within(first).getByText('Draft')).toBeTruthy());
+  expect(first.className).toContain('is-next');
+});
+
+test('the canon check says what is left to decide, on the newest story when the book has none', async () => {
+  books = [];
+  canon = { stories: [
+    { id: 'old', title: 'First', reviewed_at: '2026-10-20', proposals: [] },
+    { id: 'new', title: 'Second', reviewed_at: '2026-10-21', proposals: [{ id: 'p1', kind: 'fact', text: 'She kept the ticket.', status: 'pending' }] },
+  ], pending: 1 };
+  renderIt();
+  const step = await screen.findByTestId('tw-step-canon');
+  await waitFor(() => expect(within(step).getByText('1 to decide')).toBeTruthy());
+  expect(screen.getByTestId('tw-step-story').className).toContain('is-done');
+  expect(screen.getByText('No book yet. Make one in the Universe, then come back.')).toBeTruthy();
+  // The beat 11 piece reads the newest story.
+  await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/v1/book-from-show/stories/new/beat11-excerpt'));
+});
+
+test('with no book the short story is still written here, and canon reloads for it', async () => {
+  books = [];
+  vi.mocked(api.post).mockResolvedValue({ data: { success: true } });
+  renderIt();
+  fireEvent.click(await screen.findByText('Write the short story'));
+  await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/s1/episodes/e2/generate-story', { format: 'short_story' }, { timeout: 180000 }));
+  await waitFor(() => expect(vi.mocked(api.get).mock.calls.filter(([u]) => u.endsWith('/e2/canon'))).toHaveLength(2));
+});
+
+test('each step keeps one line; the "?" opens the rest', async () => {
+  renderIt();
+  const first = await screen.findByTestId('tw-step-record');
+  const why = within(first).getByRole('button', { name: 'What the story record is' });
+  const text = document.getElementById(why.getAttribute('aria-controls'));
+  expect(text.hidden).toBe(true);
+  fireEvent.click(why);
+  expect(text.hidden).toBe(false);
+  expect(text.textContent).toContain('its secrets move on with the audience');
 });
 
 test('the sidebar no longer lists "This week\'s episode" or sends "Structure" back to Stories', () => {
