@@ -10,16 +10,24 @@ import {
   Heart, ChevronRight, Plus, Sparkles, GitBranch, Download,
   Users, Flame, HeartHandshake, Sprout, Link2, BookOpen, Activity,
 } from 'lucide-react';
-import { TENSION, LALA_CONN, cname, initials, roleColor } from './tokens';
+import {
+  TENSION, LALA_CONN, STAGE_TONE, cname, initials, roleColor, sideName,
+  typeLabel, stageLabel, humanize, isLoveInterest, isFamily,
+} from './tokens';
 import { Pill } from './primitives';
 import { findLala } from '../../lib/theCast';
 
 /* tension → closeness score (0 = strained, 100 = close) */
 const CLOSENESS = { calm: 95, healing: 70, simmering: 45, volatile: 20, fractured: 5 };
 
-const otherSide = (r, id) => (r.character_id_a === id
-  ? { id: r.character_id_b, name: r.character_b_selected || r.character_b_name }
-  : { id: r.character_id_a, name: r.character_a_selected || r.character_a_name });
+const otherSide = (r, id, charById) => (r.character_id_a === id
+  ? { id: r.character_id_b, name: sideName(r, 'b', charById) }
+  : { id: r.character_id_a, name: sideName(r, 'a', charById) });
+
+function Stage({ stage }) {
+  if (!stage) return null;
+  return <span className={`re-stage ${STAGE_TONE[stage] || ''}`}>{stageLabel(stage)}</span>;
+}
 
 function Avatar({ char, name, size = 'md' }) {
   const label = char ? cname(char) : (name || '?');
@@ -78,9 +86,9 @@ export default function ProfileView({
         { key: 'calm',     label: 'Calm',     icon: HeartHandshake, tone: 'rose',
           n: count(r => r.tension_state === 'calm' || r.tension_state === 'healing') },
         { key: 'family',   label: 'Family',   icon: Users,          tone: 'orchid',
-          n: count(r => r.is_blood_relation || r.family_role || r.relationship_type === 'familial') },
+          n: count(r => isFamily(r) || r.relationship_type === 'familial') },
         { key: 'romantic', label: 'Romantic', icon: Heart,          tone: 'teal',
-          n: count(r => r.is_romantic || r.relationship_type === 'romantic') },
+          n: count(r => isLoveInterest(r) || r.relationship_type === 'romantic') },
         { key: 'tension',  label: 'Tension',  icon: Flame,          tone: 'gold',
           n: count(r => ['simmering', 'volatile', 'fractured'].includes(r.tension_state)) },
       ],
@@ -90,11 +98,13 @@ export default function ProfileView({
   const connections = useMemo(() => {
     const seen = new Map();
     mine.forEach(r => {
-      const o = otherSide(r, char.id);
+      const o = otherSide(r, char.id, charById);
       if (!seen.has(o.id)) seen.set(o.id, { ...o, char: charById[o.id], rel: r });
     });
     return [...seen.values()];
   }, [mine, char, charById]);
+
+  const loves = mine.filter(isLoveInterest);
 
   if (!char) {
     return (
@@ -161,7 +171,7 @@ export default function ProfileView({
             : (
               <ul className="rp-rows">
                 {mine.slice(0, 5).map(r => {
-                  const o = otherSide(r, char.id);
+                  const o = otherSide(r, char.id, charById);
                   const tc = r.tension_state && TENSION[r.tension_state];
                   return (
                     <li key={r.id}>
@@ -169,9 +179,10 @@ export default function ProfileView({
                         <Avatar char={charById[o.id]} name={o.name} size="sm" />
                         <span className="rp-row-text">
                           <span className="rp-row-title">{o.name}</span>
-                          <span className="rp-row-sub">{[r.relationship_type, r.connection_mode, r.status].filter(Boolean).join(' · ')}</span>
+                          <span className="rp-row-sub">{[typeLabel(r), r.connection_mode, r.status].filter(Boolean).join(' · ')}</span>
                         </span>
-                        {tc && <Pill color={tc.color} bg={tc.bg}>{r.tension_state}</Pill>}
+                        <Stage stage={r.stage} />
+                        {tc && <Pill color={tc.color} bg={tc.bg}>{humanize(r.tension_state)}</Pill>}
                         <ChevronRight size={18} aria-hidden className="rp-chev" />
                       </button>
                     </li>
@@ -184,6 +195,31 @@ export default function ProfileView({
 
       {/* ── RIGHT COLUMN ─────────────────────────────────────────── */}
       <div className="rp-col">
+        <Card icon={Heart} title="Love interests" className="rp-love">
+          {loves.length === 0
+            ? <p className="rp-muted rp-pad">No love interest for {cname(char)} yet.</p>
+            : (
+              <ul className="rp-rows">
+                {loves.map(r => {
+                  const o = otherSide(r, char.id, charById);
+                  return (
+                    <li key={r.id}>
+                      <button type="button" className="rp-row" onClick={() => onRelClick(r)}>
+                        <span className="rp-love-heart"><Heart size={16} fill="currentColor" aria-hidden /></span>
+                        <span className="rp-row-text">
+                          <span className="rp-row-title">{o.name}</span>
+                          <span className="rp-row-sub">{r.situation || typeLabel(r)}</span>
+                        </span>
+                        <Stage stage={r.stage} />
+                        <ChevronRight size={18} aria-hidden className="rp-chev" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+        </Card>
+
         <Card icon={Heart} title="Relationship Status">
           <div className="rp-meter" role="meter" aria-valuemin={0} aria-valuemax={100}
             aria-valuenow={stats.closeness ?? undefined} aria-label={`Overall: ${statusWord}`}>
@@ -216,10 +252,11 @@ export default function ProfileView({
                 {connections.slice(0, 8).map(c => (
                   <button key={c.id} type="button" className="rp-conn"
                     onClick={() => c.char && onSelectChar(c.char)}
-                    title={`${c.name} — ${c.rel.relationship_type || 'connected'}`}>
+                    title={`${c.name} — ${typeLabel(c.rel)}`}>
                     <Avatar char={c.char} name={c.name} size="lg" />
                     <span className="rp-conn-name">{c.name}</span>
-                    <span className="rp-conn-type">{c.rel.relationship_type}</span>
+                    <span className="rp-conn-type">{typeLabel(c.rel)}</span>
+                    <Stage stage={c.rel.stage} />
                   </button>
                 ))}
               </div>
@@ -233,13 +270,13 @@ export default function ProfileView({
             : (
               <ul className="rp-rows">
                 {seeds.slice(0, 3).map(sd => {
-                  const o = otherSide(sd, char.id);
+                  const o = otherSide(sd, char.id, charById);
                   return (
                     <li key={sd.id} className="rp-row is-static">
                       <span className="rp-seed-icon"><Sparkles size={16} aria-hidden /></span>
                       <span className="rp-row-text">
                         <span className="rp-row-title">{o.name}</span>
-                        <span className="rp-row-sub">{sd.relationship_type}{sd.situation ? ` · ${sd.situation}` : ''}</span>
+                        <span className="rp-row-sub">{typeLabel(sd)}{sd.situation ? ` · ${sd.situation}` : ''}</span>
                       </span>
                     </li>
                   );

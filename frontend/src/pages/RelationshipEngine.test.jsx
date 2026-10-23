@@ -32,10 +32,10 @@ vi.mock('../components/RelationshipEngine', () => ({
 
 import apiClient from '../services/api';
 import {
-  fetchRelationshipTree,
-  loadCastIds,
-  fetchPendingRelationships,
-  fetchFamilyTree,
+  fetchCast,
+  restoreRelationship,
+  mergeSeeds,
+  deepLinkState,
   confirmRelationship,
   dismissRelationship,
   deleteRelationship,
@@ -51,22 +51,17 @@ describe('RelationshipEngine — Track 3 helpers', () => {
     Object.values(apiClient).forEach((fn) => fn?.mockReset?.());
   });
 
-  test('fetchRelationshipTree GET on /relationships/tree/:regId', async () => {
+  // One read for the whole page (2026-10-23): the cast across registries.
+  test('fetchCast GET on /relationships/cast', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: {} });
-    await fetchRelationshipTree('reg-1');
-    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/relationships/tree/reg-1');
+    await fetchCast();
+    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/relationships/cast');
   });
 
-  test('fetchPendingRelationships GET on /relationships/pending', async () => {
-    vi.mocked(apiClient.get).mockResolvedValue({ data: { candidates: [] } });
-    await fetchPendingRelationships();
-    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/relationships/pending');
-  });
-
-  test('fetchFamilyTree GET on /relationships/family-tree/:regId', async () => {
-    vi.mocked(apiClient.get).mockResolvedValue({ data: {} });
-    await fetchFamilyTree('reg-1');
-    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/relationships/family-tree/reg-1');
+  test('restoreRelationship POST on /relationships/:id/restore (Undo)', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({ data: {} });
+    await restoreRelationship('rel-3');
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/relationships/rel-3/restore');
   });
 
   test('confirmRelationship POST on /relationships/confirm/:id', async () => {
@@ -140,39 +135,22 @@ describe('RelationshipEngine — Track 3 helpers', () => {
     await expect(confirmRelationship('cand-x')).rejects.toThrow('not found');
   });
 
-  // ── Track 6 CP8 helper added (file-local duplicate of listRegistriesApi) ──
-  test('listRegistriesApi GET on /character-registry/registries (CP8 added)', async () => {
-    const { listRegistriesApi } = await import('./RelationshipEngine');
-    vi.mocked(apiClient.get).mockResolvedValue({ data: { registries: [] } });
-    await listRegistriesApi();
-    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/character-registry/registries');
-  });
 });
 
-describe('RelationshipEngine — the cast (Lala\'s world only)', () => {
-  beforeEach(() => {
-    Object.values(apiClient).forEach((fn) => fn?.mockReset?.());
+describe('RelationshipEngine — seeds and deep links (2026-10-23)', () => {
+  test('new seeds join the pending list, newest first, each once', () => {
+    expect(mergeSeeds([{ id: 'a' }, { id: 'b' }], [{ id: 'c' }, { id: 'a', fresh: true }]))
+      .toEqual([{ id: 'c' }, { id: 'a', fresh: true }, { id: 'b' }]);
+    expect(mergeSeeds([{ id: 'a' }], [])).toEqual([{ id: 'a' }]);
   });
 
-  test('loadCastIds keeps live LalaVerse profiles that name a character', async () => {
-    vi.mocked(apiClient.get).mockResolvedValue({ data: { profiles: [
-      { id: 'p1', registry_character_id: 'c1', status: 'active' },
-      { id: 'p2', registry_character_id: 'c2', status: 'archived' },
-      { id: 'p3', registry_character_id: null, status: 'active' },
-      { id: 'p4', registry_character_id: 'c4' },
-    ] } });
-    const ids = await loadCastIds();
-    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/social-profiles?feed_layer=lalaverse&limit=100&page=1');
-    expect([...ids].sort()).toEqual(['c1', 'c4']);
-  });
-
-  test('loadCastIds reads every page', async () => {
-    const full = Array.from({ length: 100 }, (_, i) => ({ id: `p${i}`, registry_character_id: `c${i}` }));
-    vi.mocked(apiClient.get)
-      .mockResolvedValueOnce({ data: { profiles: full } })
-      .mockResolvedValueOnce({ data: { profiles: [{ id: 'last', registry_character_id: 'c-last' }] } });
-    const ids = await loadCastIds();
-    expect(apiClient.get).toHaveBeenCalledTimes(2);
-    expect(ids.size).toBe(101);
+  test('?char= selects that person, ?rel= opens that relationship, ?tab= picks a tab; unknown ids do nothing', () => {
+    const chars = [{ id: 'c-1' }, { id: 'c-2' }];
+    const rels = [{ id: 'r-1' }];
+    expect(deepLinkState('?char=c-2', { chars, rels })).toEqual({ selChar: chars[1] });
+    expect(deepLinkState('?rel=r-1', { chars, rels })).toEqual({ selRel: rels[0], panel: true });
+    expect(deepLinkState('?char=c-1&tab=web', { chars, rels })).toEqual({ selChar: chars[0], tab: 'web' });
+    expect(deepLinkState('?char=nobody&rel=none&tab=bogus', { chars, rels })).toBeNull();
+    expect(deepLinkState('', { chars, rels })).toBeNull();
   });
 });

@@ -34,6 +34,10 @@ describe('confidentialCharacters', () => {
     for (const p of ['routes/memories/engine.js', 'routes/sceneProposeRoute.js', 'routes/characterAI.js', 'routes/tierFeatures.js', 'routes/relationships.js']) {
       expect(read(p)).toMatch(/confidentialCharacters/);
     }
-    expect((read('routes/relationships.js').match(/notConfidentialSql/g) || []).length).toBe(2);
+    // Both generators read the cast through loadCastCharacters(db, { forAI: true }),
+    // the one place relationships.js applies it.
+    const rel = read('routes/relationships.js');
+    expect((rel.match(/notConfidentialSql/g) || []).length).toBe(1);
+    expect((rel.match(/loadCastCharacters\(db, \{ forAI: true \}\)/g) || []).length).toBe(2);
   });
 });

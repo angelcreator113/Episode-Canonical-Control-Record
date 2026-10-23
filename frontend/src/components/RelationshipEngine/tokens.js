@@ -59,6 +59,24 @@ export const LAYER = {
   'series-2':   { label: 'Series 2',   short: 'S2', color: T.rose   },
 };
 
+/*
+ * The Tree's bands (2026-10-23): everyone here lives in Lala's world, so the
+ * bands are Lala and then each person's role, not the old real-world /
+ * LalaVerse / "Series 2" layers (Lala's stored role 'special' put her in
+ * "Series 2").
+ */
+export const BANDS = [
+  { key: 'lala',     label: 'Lala',               color: T.rose,    roles: [] },
+  { key: 'support',  label: 'Friends & support',  color: '#6bba9a', roles: ['support', 'protagonist'] },
+  { key: 'pressure', label: 'Pressure & rivals',  color: T.steel,   roles: ['pressure'] },
+  { key: 'mirror',   label: 'Mirrors & shadows',  color: T.orchid,  roles: null }, // everyone else
+];
+export function bandOf(c, lalaId) {
+  if (c && lalaId && String(c.id) === String(lalaId)) return 'lala';
+  const b = BANDS.find(x => x.roles && x.roles.includes(c?.role_type));
+  return b ? b.key : 'mirror';
+}
+
 export const EDGE_COLOR = {
   romantic:      T.rose,
   familial:      '#6bba9a',
@@ -75,20 +93,54 @@ export const NODE_R = { special: 36, protagonist: 36, pressure: 28, mirror: 24, 
 export const CONN_MODES = ['IRL', 'Online Only', 'Passing', 'Professional', 'One-sided'];
 export const STATUSES   = ['Active', 'Past', 'One-sided', 'Complicated'];
 export const TENSIONS   = ['calm', 'simmering', 'volatile', 'fractured', 'healing'];
+// worldStudio writes knows_protagonist and independent too.
 export const LALA_CONN  = [
   { v: 'none',              l: 'No connection' },
   { v: 'knows_lala',        l: 'Knows Lala directly' },
+  { v: 'knows_protagonist', l: 'Knows the protagonist' },
   { v: 'through_justwoman', l: 'Through JustAWoman (unaware)' },
   { v: 'interacts_content', l: 'Interacts with content' },
+  { v: 'independent',       l: 'Independent of Lala' },
   { v: 'unaware',           l: 'Completely unaware' },
 ];
+// A love interest is romantic (episode story records write love_interest).
 export const REL_PRESETS = [
-  'Sister','Brother','Mother','Father','Husband','Wife',
-  'Best Friend','Friend','Collaborator','Rival','Mentor','Manager','Stylist','Fan',
+  { label: 'Love interest', type: 'love_interest', romantic: true },
+  ...['Sister', 'Brother', 'Mother', 'Father', 'Husband', 'Wife',
+    'Best Friend', 'Friend', 'Collaborator', 'Rival', 'Mentor', 'Manager', 'Stylist', 'Fan',
+  ].map(label => ({ label, type: label.toLowerCase(), romantic: ['Husband', 'Wife'].includes(label) })),
 ];
 
+/*
+ * Where two people are on their timeline (relationship_events.relationship_stage),
+ * in story order; the episode story record writes these.
+ */
+export const STAGES = ['strangers', 'acquaintances', 'flirting', 'friends', 'close_friends', 'lovers', 'partners', 'exes', 'enemies'];
+export const STAGE_TONE = {
+  strangers: 'is-cool', acquaintances: 'is-cool', flirting: 'is-warm', friends: 'is-calm', close_friends: 'is-calm',
+  lovers: 'is-hot', partners: 'is-hot', exes: 'is-sore', enemies: 'is-sore',
+};
+
 /* ─── helpers ────────────────────────────────────────────────────────── */
-export const cname    = c => c.selected_name || c.display_name || c.character_key || '?';
+// One name per person everywhere: the chosen name, then the display name
+// (often the feed handle). The server names relationship rows the same way.
+export const cname    = c => (c && (c.selected_name || c.display_name || c.character_key)) || '?';
+/** A relationship side's name: the loaded person's, else the row's. */
+export const sideName = (r, side, charById = {}) => {
+  const id = side === 'a' ? r.character_id_a : r.character_id_b;
+  const c = charById[id];
+  if (c) return cname(c);
+  return (side === 'a' ? (r.character_a_name || r.character_a_selected) : (r.character_b_name || r.character_b_selected)) || '?';
+};
+/** Words for a stored label: "love_interest" reads "Love interest". */
+export const humanize = v => {
+  const w = String(v || '').replace(/_+/g, ' ').replace(/\s+/g, ' ').trim();
+  return w ? w.charAt(0).toUpperCase() + w.slice(1) : '';
+};
+export const typeLabel  = r => humanize(typeof r === 'string' ? r : r?.relationship_type) || 'Connected';
+export const stageLabel = s => humanize(s);
+export const isLoveInterest = r => !!r && (r.is_romantic === true || r.relationship_type === 'love_interest');
+export const isFamily = r => !!r && !isLoveInterest(r) && !!(r.family_role || r.is_blood_relation);
 export const clayer   = c => {
   if (c.universe === 'lalaverse' || c.layer === 'lalaverse') return 'lalaverse';
   if (c.universe === 'series-2'  || c.layer === 'series-2')  return 'series-2';
