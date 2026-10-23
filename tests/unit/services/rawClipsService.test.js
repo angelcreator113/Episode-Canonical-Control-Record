@@ -167,7 +167,7 @@ describe('beat_marks: a full-episode take\'s beat markers (Record whole episode,
     await expect(clips.updateClip({ query: jest.fn().mockRejectedValue(pgErr) }, 'ep', 'c1', { beat_marks: [{ beat: 1, t: 0 }] }))
       .rejects.toMatchObject({ status: 409, message: clips.BEAT_MARKS_MISSING });
     expect(clips.BEAT_MARKS_MISSING).toMatch(/database update .* hasn't run yet/);
-    expect(spy).toHaveBeenCalledWith(expect.stringMatching(/migration 20261023210000 not run/), expect.any(String));
+    expect(spy).toHaveBeenCalledWith(expect.stringMatching(/migration 20261023220000 not run/), expect.any(String));
     spy.mockRestore();
   });
 });
