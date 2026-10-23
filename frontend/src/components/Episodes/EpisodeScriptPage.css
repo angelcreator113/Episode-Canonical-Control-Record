@@ -545,6 +545,11 @@
 .esp-cover-list li.is-covered svg { color: var(--success-text); }
 .esp-cover-list li.is-gap svg { color: var(--warning-text); }
 .esp-cover-beat { color: var(--studio-purple); }
+/* A covered goal: the beat and who on their own line, then Tick it (Evoni, 2026-10-23). */
+.esp-cover-goal { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+.esp-cover-tick { margin-top: 2px; }
+.esp-cover-ticked { font-size: 12px; font-weight: 600; color: var(--success-text); }
+.esp-cover-fail { font-size: 12px; color: var(--warning-text); }
 .esp-cover-empty { margin: 8px 0 0; font-size: 13px; color: var(--studio-ink-muted); }
 .esp-truth-list { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 0; }
 .esp-truth-list > div { display: flex; flex-direction: column; gap: 2px; }

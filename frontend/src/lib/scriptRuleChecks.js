@@ -109,6 +109,10 @@ const speaks = (who, c) => {
   return [c.name, ...(c.aliases || [])].map(norm).filter(Boolean)
     .some((n) => n === w || (w.length >= 3 && !w.includes(' ') && n.split(' ')[0] === w));
 };
+const profilesById = (profiles) => new Map((profiles || []).filter((p) => p && p.id != null).map((p) => [String(p.id), p]));
+// A person's names as the writer names them: creator_name, else
+// display_name, else handle, then the event's own copies of them.
+const namesOf = (p, own = []) => [p?.creator_name, p?.display_name, p?.handle, ...own].filter((n) => typeof n === 'string' && n.trim());
 
 /**
  * The event's host and two featured guests, as the writer names them
@@ -124,10 +128,9 @@ function eventCast(event, profiles = []) {
     try { cc = JSON.parse(cc); } catch (err) { console.error('[scriptRuleChecks] canon_consequences unreadable:', err.message); cc = null; }
   }
   const auto = cc?.automation && typeof cc.automation === 'object' ? cc.automation : {};
-  const byId = new Map((profiles || []).filter((p) => p && p.id != null).map((p) => [String(p.id), p]));
+  const byId = profilesById(profiles);
   const person = (role, id, own = []) => {
-    const p = id != null ? byId.get(String(id)) : null;
-    const names = [p?.creator_name, p?.display_name, p?.handle, ...own].filter((n) => typeof n === 'string' && n.trim());
+    const names = namesOf(id != null ? byId.get(String(id)) : null, own);
     return names.length ? { name: names[0].trim(), role, aliases: names.slice(1) } : null;
   };
   const out = [];
@@ -143,6 +146,84 @@ function eventCast(event, profiles = []) {
     if (guest && !out.some((c) => norm(c.name) === norm(guest.name))) out.push(guest);
   }
   return out;
+}
+
+/**
+ * The person a relationship goal is about (Evoni, 2026-10-23: "Get to know
+ * Truthville" never ticked when the script named her by her real name):
+ * the goal's own profile_id (dealTermsDraftService draftRelationshipGoals),
+ * else its slot: relationship_host is the host eventCast reads,
+ * relationship_guest the Event Package's first named guest, the one the
+ * goal was written for; a brand goal is about nobody. { id, name, names, shown,
+ * shared } or null: `names` are every name of theirs as norm reads it
+ * (creator_name, display_name, handle, the event's copies of them, the
+ * first name of each), `shown` each as written. A first name another of
+ * the event's people has too is not one of theirs (`shared`), so a lone
+ * "Marcus" names nobody when there are two; a surname never is.
+ */
+function goalPerson(goal, event, profiles = []) {
+  if (!goal || goal.slot === 'relationship_brand') return null;
+  let cc = event?.canon_consequences;
+  if (typeof cc === 'string') {
+    try { cc = JSON.parse(cc); } catch (err) { console.error('[scriptRuleChecks] canon_consequences unreadable:', err.message); cc = null; }
+  }
+  const auto = cc?.automation && typeof cc.automation === 'object' ? cc.automation : {};
+  const byId = profilesById(profiles);
+  const key = (id) => (id == null || id === '' ? null : String(id));
+  const hostId = key(event?.source_profile_id ?? auto.host_profile_id);
+  const guests = (Array.isArray(auto.guest_profiles) ? auto.guest_profiles : []).filter(Boolean);
+  // Everyone at the event, each with the names the event has for them.
+  const people = [];
+  if (hostId) people.push({ id: hostId, own: [event?.host, ...(key(auto.host_profile_id) === hostId ? [auto.host_display_name, auto.host_handle] : [])] });
+  for (const g of guests) people.push({ id: key(g.profile_id ?? g.id), own: [g.creator_name, g.display_name, g.handle] });
+  let id = key(goal.profile_id);
+  if (!id && goal.slot === 'relationship_host') id = hostId;
+  // The guest the goal was written for: the first with a name (draftRelationshipGoals).
+  const named = guests.find((g) => g.display_name || g.handle);
+  if (!id && goal.slot === 'relationship_guest' && named) id = key(named.profile_id ?? named.id);
+  if (!id) return null;
+  const full = (p) => namesOf(byId.get(p.id), p.own).map((n) => n.trim());
+  const mine = [...new Set(full({ id, own: people.filter((p) => p.id === id).flatMap((p) => p.own) }))];
+  if (!mine.length) return null;
+  const firstOf = (n) => n.split(' ')[0];
+  const theirs = new Set(people.filter((p) => p.id && p.id !== id).flatMap(full).map((n) => firstOf(norm(n))));
+  const names = [];
+  const shown = [];
+  const shared = [];
+  const add = (n, as) => { if (n && !names.includes(n)) { names.push(n); shown.push(as); } };
+  for (const n of mine) add(norm(n), n);
+  for (const n of mine) {
+    const f = firstOf(norm(n));
+    if (f === norm(n) || f.length < 3) continue;
+    if (theirs.has(f)) { if (!shared.includes(f)) shared.push(f); } else add(f, firstOf(n));
+  }
+  return { id, name: mine[0], names, shown, shared };
+}
+
+// Words as names are matched: norm, then letters and digits only
+// ("D'Angelo" is d angelo, "@truth_ville" truth ville).
+const nameWords = (v) => norm(v).replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
+
+/**
+ * The name the goal's person (goalPerson) goes by in these lines, as
+ * written, or null: they speak (a speaker line, as speaks reads it, but not
+ * by a first name another of the event's people has too), or one of their
+ * names is in the lines, whole.
+ */
+function personIn(lines = [], person = null) {
+  if (!person?.names?.length) return null;
+  for (const l of lines) {
+    const m = String(l ?? '').match(SPEAKER);
+    if (!m || person.shared?.includes(norm(m[1])) || !speaks(m[1], { name: person.names[0], aliases: person.names.slice(1) })) continue;
+    const at = person.names.indexOf(norm(m[1]));
+    return at >= 0 ? person.shown[at] : m[1].replace(/^[\s*_]+|[\s*_]+$/g, '');
+  }
+  const have = nameWords(lines.join(' '));
+  const at = person.names.findIndex((n) => {
+    const w = nameWords(n);
+    return w.length > 0 && have.some((_, i) => w.every((x, j) => have[i + j] === x));
+  });
+  return at >= 0 ? person.shown[at] : null;
 }
 
 // The closet beat: the one given, else the one that opens the closet, else beat 8.
@@ -416,6 +497,30 @@ export function featuredGuestIds(event) {
   return guests.filter((g) => g && g.featured).slice(0, 2).map((g) => g.profile_id ?? g.id).filter((id) => id != null && id !== '').map(String);
 }
 
+/**
+ * The ids of the people the event's relationship goals are about
+ * (goalPerson): each goal's profile_id, else the host for a host goal and
+ * the first named guest for a guest goal; not the source profile, which
+ * comes with the event. The tab reads their
+ * profiles too, so a goal ticks when the script names them by their real
+ * name (Evoni, 2026-10-23).
+ */
+export function goalProfileIds(event) {
+  let cc = event?.canon_consequences;
+  if (typeof cc === 'string') {
+    try { cc = JSON.parse(cc); } catch (err) { console.error('[scriptRuleChecks] goals unreadable:', err); return []; }
+  }
+  const auto = cc?.automation || {};
+  const goals = Array.isArray(auto.relationship_goals) ? auto.relationship_goals.filter(Boolean) : [];
+  const named = (Array.isArray(auto.guest_profiles) ? auto.guest_profiles : []).find((g) => g && (g.display_name || g.handle));
+  const host = event?.source_profile_id ?? auto.host_profile_id ?? null;
+  const ids = goals.map((g) => g.profile_id
+    ?? (g.slot === 'relationship_host' ? host : null)
+    ?? (g.slot === 'relationship_guest' && named ? named.profile_id ?? named.id : null));
+  // The source profile comes with the event (sourceProfile).
+  return [...new Set(ids.filter((id) => id != null && id !== '').map(String))].filter((id) => id !== String(event?.source_profile_id ?? ''));
+}
+
 /** Whether the event's shopping list is approved: true / false, null when the event is not read. */
 export function shoppingListApproved(event) {
   if (!event) return null;
@@ -442,4 +547,4 @@ export function scriptRuleRows(beats = [], rules = null, { closetNumber = null }
   return found.map((f) => ({ key: `rule-${f.key}`, ok: f.ok, beatId: beatAt(beats, f.beat)?.id || null, text: f.text }));
 }
 
-export { statEntries, coinChange, scriptRuleFindings, cutsceneFindings, eventCast, SHOPPING_LIST, JUDGED_ON };
+export { statEntries, coinChange, scriptRuleFindings, cutsceneFindings, eventCast, goalPerson, personIn, speaks, norm, SHOPPING_LIST, JUDGED_ON };

@@ -19,7 +19,7 @@ import { speakerLine, unquote } from '../../lib/scriptSpeaker';
 import { beatImage, beatImageLabel, SHOT_LABELS, fmtType } from '../BeatPlan/BeatPlanParts';
 import { beatSeconds, scriptSeconds, formatRuntime } from '../../lib/scriptRuntime';
 import { scriptHealth } from '../../lib/scriptHealth';
-import { scriptMoneyFrom, shoppingListApproved, eventCast, featuredGuestIds } from '../../lib/scriptRuleChecks';
+import { scriptMoneyFrom, shoppingListApproved, eventCast, featuredGuestIds, goalProfileIds } from '../../lib/scriptRuleChecks';
 import { scriptWithPhonePaths } from '../../lib/phonePaths';
 import { scriptWithShowRules, isCutsceneBeat } from '../../lib/scriptShowRules';
 import ScriptHealthPanel, { shownText } from './ScriptHealthPanel';
@@ -1346,9 +1346,11 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   const [brief, setBrief] = useState(null);
   const [source, setSource] = useState(null);
   // The featured guests' profiles, so beat 11 names them as the writer does,
-  // creator_name first (Script page audit 3, 2026-10-19).
+  // creator_name first (Script page audit 3, 2026-10-19), and the people
+  // the goals are about, so a goal ticks when the script names them by
+  // their real name (Evoni, 2026-10-23).
   const [guestProfiles, setGuestProfiles] = useState([]);
-  const guestKey = featuredGuestIds(source?.event).join(',');
+  const guestKey = [...new Set([...featuredGuestIds(source?.event), ...goalProfileIds(source?.event)])].join(',');
   useEffect(() => {
     let live = true;
     Promise.all(guestKey.split(',').filter(Boolean).map((id) => api.get(`/api/v1/social-profiles/${id}`)
@@ -1358,6 +1360,38 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     return () => { live = false; };
   }, [guestKey]);
   const [deliverables, setDeliverables] = useState([]);
+  // Lala's goal tasks (episode_todo_lists.social_tasks, task_source 'goal';
+  // Start Episode copies them from the event's goals): null until read, or
+  // when the episode has no to-do list. Tick it completes one from the
+  // script; nothing ticks on its own (Evoni, 2026-10-23).
+  const [goalTasks, setGoalTasks] = useState(null);
+  const [ticking, setTicking] = useState(null);
+  const [tickFailed, setTickFailed] = useState(null);
+  const hasGoals = (source?.event?.canon_consequences?.automation?.relationship_goals || []).length > 0;
+  useEffect(() => {
+    if (!episodeId || !hasGoals) { setGoalTasks(null); return undefined; }
+    let live = true;
+    api.get(`/api/v1/episodes/${episodeId}/todo/social`)
+      .then((res) => { if (live) setGoalTasks(Array.isArray(res?.data?.social_tasks) ? res.data.social_tasks.filter((t) => t?.task_source === 'goal') : null); })
+      .catch((err) => { console.error('[EpisodeScript] goal tasks load failed:', err); if (live) setGoalTasks(null); });
+    return () => { live = false; };
+  }, [episodeId, hasGoals]);
+  // The goal's task: the one Start Episode wrote from it, by slot and label.
+  const goalTaskOf = (c) => (goalTasks || []).find((t) => (t.slot || 'relationship') === c.slot && String(t.label || '').trim() === c.label) || null;
+  const tickGoal = async (c) => {
+    setTicking(c.key);
+    setTickFailed(null);
+    try {
+      const res = await api.post(`/api/v1/episodes/${episodeId}/todo/complete/${encodeURIComponent(c.slot)}`, { completed: true, source: 'script', beat: c.beat });
+      const next = res?.data?.social_tasks;
+      if (Array.isArray(next)) setGoalTasks(next.filter((t) => t?.task_source === 'goal'));
+    } catch (err) {
+      console.error('[EpisodeScript] tick goal failed:', err);
+      setTickFailed(c.key);
+    } finally {
+      setTicking(null);
+    }
+  };
   // Beat 14's opportunity (Evoni, 2026-10-19; Beat14Opportunity): null until
   // read; a read that fails or answers in another shape leaves it null, so
   // nothing is claimed about it.
@@ -2211,7 +2245,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // Beat 14's opportunity is on the list only when it comes: not when the
   // episode is designed to fail, nor once it expired (Script page audit,
   // 2026-10-19; lib/beat14Invitation beat14Outcome).
-  const cover = mustCover({ beats, event: source?.event || null, brief, opportunity: beat14Outcome(beat14?.opportunity, brief?.designed_intent || null) === 'invitation' ? beat14.opportunity : null });
+  const cover = mustCover({ beats, event: source?.event || null, brief, opportunity: beat14Outcome(beat14?.opportunity, brief?.designed_intent || null) === 'invitation' ? beat14.opportunity : null, profiles: [source?.sourceProfile, ...guestProfiles].filter(Boolean) });
   // The phone starts each beat where the beat before left it, not on the
   // home screen (Script tab audit, 2026-10-15); at home when it was put
   // away (from beat 11; Script page audit, 2026-10-19).
@@ -2417,17 +2451,35 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
             <h3 className="esp-side-title">This episode must cover</h3>
             {cover.length ? (
               <ul className="esp-cover-list">
-                {cover.map((c) => (
-                  <li key={c.key} className={c.beat ? 'is-covered' : ''} data-testid={`script-cover-${c.key}`} data-covered={c.beat ? 'true' : 'false'}>
-                    {c.beat ? <Check size={14} aria-label="In the script" /> : <Circle size={14} aria-label="Not in the script yet" />}
-                    <span><strong>{c.source}</strong> {c.label}{c.beat ? <span className="esp-cover-beat"> · Beat {c.beat}</span> : null}</span>
-                  </li>
-                ))}
+                {cover.map((c) => {
+                  // A covered goal (Evoni, 2026-10-23): the beat, who it is
+                  // when the script names them otherwise, and Tick it when
+                  // its task is not done yet.
+                  const goal = c.source === 'Goal' && c.beat;
+                  const task = goal ? goalTaskOf(c) : null;
+                  return (
+                    <li key={c.key} className={c.beat ? 'is-covered' : ''} data-testid={`script-cover-${c.key}`} data-covered={c.beat ? 'true' : 'false'}>
+                      {c.beat ? <Check size={14} aria-label="In the script" /> : <Circle size={14} aria-label="Not in the script yet" />}
+                      {goal ? (
+                        <span className="esp-cover-goal">
+                          <span><strong>{c.source}</strong> {c.label}</span>
+                          <span className="esp-cover-beat" data-testid={`script-cover-${c.key}-where`}>Covered in beat {c.beat}{c.who ? ` · ${c.who.name}, as ${c.who.as}` : ''}</span>
+                          {task && (task.completed
+                            ? <span className="esp-cover-ticked" data-testid={`script-cover-${c.key}-ticked`}>Ticked</span>
+                            : <button type="button" className="esp-btn is-small esp-cover-tick" data-testid={`script-cover-${c.key}-tick`} disabled={ticking === c.key} onClick={() => tickGoal(c)}>{ticking === c.key ? 'Ticking…' : 'Tick it'}</button>)}
+                          {tickFailed === c.key && <span className="esp-cover-fail" role="alert">Couldn&apos;t tick it. Try again.</span>}
+                        </span>
+                      ) : (
+                        <span><strong>{c.source}</strong> {c.label}{c.beat ? <span className="esp-cover-beat"> · Beat {c.beat}</span> : null}</span>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
               <p className="esp-cover-empty" data-testid="script-cover-empty">Nothing to cover: the event has no goals, the brief has no forward hook, and beat 14 has no opportunity coming.</p>
             )}
-            <p className="esp-uses-note">From the event package, the brief and beat 14&apos;s opportunity. Ticked when the script mentions it; the opportunity, when beat 14 delivers it as a DM or notification.</p>
+            <p className="esp-uses-note">From the event package, the brief and beat 14&apos;s opportunity. Ticked when the script mentions it, a goal also when its person is there by any of their names; the opportunity, when beat 14 delivers it as a DM or notification. Tick it marks the goal done on her to-do list.</p>
           </section>
         )}
         {sideOn === 'truth' && hasScript && truth && (

@@ -63,7 +63,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(context.career.deliverables.map((d) => d.description).sort()).toEqual([
       'A get-ready-with-me video in the Maison Rue dress', 'Tag the brand in a story set',
     ]);
-    expect(context.career.goals).toEqual([{ label: 'Get Maison Rue to book her again', description: 'Sable decides the next campaign' }]);
+    // slot and profile_id say who the goal is about (scriptCareerService; PR 1, goal check-off).
+    expect(context.career.goals).toEqual([{ label: 'Get Maison Rue to book her again', description: 'Sable decides the next campaign', slot: 1, profile_id: null }]);
 
     const prompt = buildFullPrompt(context);
     expect(prompt).toContain("═══ LALA'S CAREER IN THIS EPISODE ═══");
