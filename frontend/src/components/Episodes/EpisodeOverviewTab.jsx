@@ -1,7 +1,7 @@
 // frontend/src/components/Episodes/EpisodeOverviewTab.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Dices, CalendarHeart, Tv, MapPin, FileText, Globe, Link2, Briefcase, Zap, Trophy, RefreshCw, X, PenLine, Clapperboard, Sparkles, Pencil, LayoutGrid, ArrowRight, ListOrdered, Package } from 'lucide-react';
+import { Dices, CalendarHeart, Tv, Globe, Link2, Briefcase, Zap, Trophy, RefreshCw, X, Sparkles, ArrowRight, ListOrdered, Package } from 'lucide-react';
 import api from '../../services/api';
 import { getEpisodeEvents } from '../../services/episodeEventsApi';
 import SceneSuggestionReview from '../episode/SceneSuggestionReview';
@@ -11,7 +11,6 @@ import EpisodeMoneyCard from './EpisodeMoneyCard';
 import EpisodeStyleBoard from './EpisodeStyleBoard';
 import { NextStepBanner, OverviewTiles, StoryBriefCard, FromEventCard } from './EpisodeOverviewSummary';
 import { episodePlanning } from '../../utils/episodePlanning';
-import { resolveEventVenueAndDate } from '../../utils/eventReadiness';
 import { fromEventItems, nextStep, coinsAfterPlan } from '../../lib/episodeOverview';
 import './EpisodeOverviewSections.css';
 
@@ -47,7 +46,7 @@ const TIER_CONFIG = {
  */
 const BAND_NOTES = {
   Identity: 'What this episode is and where it sits.',
-  Production: "What's been made for it so far.",
+  Production: 'What goes on screen in the video.',
   Source: 'Where it came from on The Pulse.',
   Stakes: "What's at risk, and the money.",
   Reference: 'Snapshots from the event, for reading only.',
@@ -111,7 +110,6 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   // each linked event into a name + thumbnail. Locations don't propagate
   // to the episode directly; the Locations card reads them through the
   // linked events. One source of truth.
-  const [worldLocations, setWorldLocations] = useState([]);
   // Episode-scoped financial ledger — every transaction (event_payment,
   // wardrobe_purchase, tier_reward, event_reward, etc.) tagged with this
   // episode_id. Surfaced as a breakdown card in the Stakes band so the
@@ -201,7 +199,6 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
     }
     api.get(`/api/v1/episodes/${episode.id}/scene-sets`).then(({ data }) => setSceneSets(data?.data || []))
       .catch((err) => console.error('[EpisodeOverviewTab] scene sets load failed:', err));
-    api.get(`/api/v1/world/locations`).then(({ data }) => setWorldLocations(data?.locations || [])).catch(() => {});
     api.get(`/api/v1/episodes/${episode.id}/scripts?includeAllVersions=false`).then(({ data }) => {
       const scripts = data?.data || data?.scripts || [];
       if (scripts.length > 0) setScriptInfo({ exists: true, wordCount: scripts[0].content?.split(/\s+/).length || 0 });
@@ -352,27 +349,6 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
     }
   };
 
-  // Locations derived from the linked events. Each event can point at a
-  // WorldLocation via venue_location_id; we resolve those to full
-  // location objects (name, district, image) for display. Deduped by id
-  // so two events at the same venue don't show twice. Falls back to the
-  // event's free-text venue_name when no FK is set. Both are read through
-  // resolveEventVenueAndDate, so the automation copy counts as on the Place.
-  const eventLocations = (() => {
-    const seen = new Map();
-    linkedEvents.forEach(ev => {
-      const place = resolveEventVenueAndDate(ev);
-      if (place.venueLocationId) {
-        const loc = worldLocations.find(l => l.id === place.venueLocationId);
-        if (loc && !seen.has(loc.id)) seen.set(loc.id, { kind: 'location', loc, eventName: ev.name });
-      } else if (place.venueName) {
-        const key = `name:${String(place.venueName).toLowerCase()}`;
-        if (!seen.has(key)) seen.set(key, { kind: 'venue_name', name: place.venueName, eventName: ev.name });
-      }
-    });
-    return Array.from(seen.values());
-  })();
-
   // Financials
   // P&L derivation moved below the ledger derivations so it can prefer
   // the live ledger sums over the cached columns. See block after
@@ -518,13 +494,19 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
         </div>
       )}
 
-      <NextStepBanner step={step} onOpenTab={onOpenTab} />
-      {/* The Episode Style board (Evoni's mock, 2026-10-16): event, dress
-          code, goals, rewards, mood board, wardrobe slots, look, notes. The
-          tiles, brief and bands below stay as they were. */}
-      <EpisodeStyleBoard episode={episode} source={source} linkedEvents={linkedEvents}
-        outfit={outfit} money={money} onOpenTab={onOpenTab} />
-      <OverviewTiles tiles={tiles} onOpenTab={onOpenTab} />
+      {/* The shorter Overview (Evoni, 2026-10-22 layout list): the next step
+          and the four tiles on one row, then two columns, Story (the brief,
+          the teaser, the outcomes, the events, the stakes) and Style (the
+          Episode Style board, Evoni's mock of 2026-10-16). The cards that
+          were the tabs over again (Locations, Script, Quick tools, the
+          button bar) are gone; each still has its tab. */}
+      <div className="eov-top">
+        <NextStepBanner step={step} onOpenTab={onOpenTab} />
+        <OverviewTiles tiles={tiles} onOpenTab={onOpenTab} />
+      </div>
+      <div className="eov-columns">
+      <section className="eov-col" aria-labelledby="eov-col-story" data-testid="overview-story">
+      <h2 className="eov-col-title" id="eov-col-story">Story</h2>
       <div className="eos-grid">
         <StoryBriefCard
           brief={brief} draft={draft} setDraft={setDraft} saveBriefField={saveBriefField}
@@ -674,53 +656,6 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
       {/* PRODUCTION band — what's been built? Locations, script status and
           the timeline overlay placements. */}
       <SectionBand title="Production">
-      <div className="eov-grid">
-        {/* Locations — derived from the linked events' venue_location_id
-            (or venue_name when no FK is set). No standalone state on the
-            episode; locations are always read through the events so
-            there's no risk of drift. Hint creators that empty = link an
-            event with a venue. */}
-        <div className="eov-card">
-          <CardTitle icon={MapPin}>Locations <span className="eov-count">{eventLocations.length}</span></CardTitle>
-          {eventLocations.length > 0 ? (
-            <div className="eov-places">
-              {eventLocations.map((entry, i) => {
-                const name = entry.kind === 'location' ? entry.loc.name : entry.name;
-                const district = entry.kind === 'location' ? entry.loc.district : null;
-                return (
-                  <div key={i} className="eov-place">
-                    <div className="eov-place-thumb" aria-hidden="true"><MapPin size={20} /></div>
-                    <div className="eov-place-text">
-                      <div className="eov-place-name">{name}</div>
-                      {district && <div className="eov-place-meta">{district}</div>}
-                      <div className="eov-place-meta">via {entry.eventName}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="eov-empty">
-              {linkedEvents.length === 0 ? 'Link an event to see its location here' : 'Linked events have no venue set'}
-            </p>
-          )}
-        </div>
-
-        {/* Script */}
-        <div className="eov-card">
-          <CardTitle icon={FileText}>Script</CardTitle>
-          {scriptInfo?.exists ? (
-            <div className="eov-script">
-              <span className="eov-pill is-ok">✓ Script written</span>
-              <span className="eov-muted">{scriptInfo.wordCount?.toLocaleString()} words</span>
-            </div>
-          ) : (
-            <p className="eov-empty">No script yet</p>
-          )}
-          {onOpenTab && <button type="button" className="eov-link" onClick={() => onOpenTab('scripts')}>Open Script <ArrowRight size={14} aria-hidden="true" /></button>}
-        </div>
-      </div>
-
       {/* Video UI overlays — invites, checklists, etc. on the rendered
           video frame. Auto-populated when an invite is approved or the
           wardrobe checklist is locked, manually editable here. */}
@@ -917,11 +852,10 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
         </SectionBand>
       )}
 
-      {/* Quick Actions */}
+      {/* Suggest Scenes is the Overview's own; Script Writer, Producer Mode,
+          Scene Plan and Edit Details are on the Script and Production tabs
+          and the brief's Edit (Evoni, 2026-10-22 layout list). */}
       <div className="eov-actions eov-quick">
-        <button type="button" className="eov-btn-primary" onClick={() => navigate(`/episodes/${episode.id}/script-writer`)}><PenLine size={15} aria-hidden="true" /> Script Writer</button>
-        {showId && <button type="button" className="eov-btn" onClick={() => navigate(`/shows/${showId}/world?tab=events`)}><LayoutGrid size={15} aria-hidden="true" /> Producer Mode</button>}
-        <button type="button" className="eov-btn" onClick={() => navigate(`/episodes/${episode.id}/plan`)}><Clapperboard size={15} aria-hidden="true" /> Scene Plan</button>
         {/* AI scene-set suggester — disabled until the episode has a script
             since there's nothing to analyze otherwise. Fires the suggest
             endpoint then opens SceneSuggestionReview for the creator to
@@ -949,7 +883,14 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
         >
           <Sparkles size={15} aria-hidden="true" /> {suggestBusy ? 'Thinking…' : 'Suggest Scenes'}
         </button>
-        <button type="button" className="eov-btn" onClick={() => setIsEditing(true)}><Pencil size={15} aria-hidden="true" /> Edit Details</button>
+      </div>
+      </section>
+
+      <section className="eov-col" aria-labelledby="eov-col-style" data-testid="overview-style">
+        <h2 className="eov-col-title" id="eov-col-style">Style</h2>
+        <EpisodeStyleBoard episode={episode} source={source} linkedEvents={linkedEvents}
+          outfit={outfit} onOpenTab={onOpenTab} />
+      </section>
       </div>
       {sceneSuggestion && (
         <SceneSuggestionReview

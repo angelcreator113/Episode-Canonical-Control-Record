@@ -213,8 +213,10 @@ describe('touch targets and the steps strip (Script page audit 4)', () => {
     expect(ephCss).toMatch(/@media \(pointer: coarse\)/);
     expect(coarse(ephCss)).toMatch(/\.eph-btn[^{]*\{[^}]*min-height:\s*44px/s);
   });
-  test('the production steps strip lets the next step peek in at phone width', () => {
+  // The steps are numbered marks in one row since Evoni's layout list of
+  // 2026-10-22 ("steps as a thin strip"): all seven fit at phone width.
+  test('the production steps strip fits all seven marks at phone width', () => {
     const phone = ephCss.slice(ephCss.indexOf('@media (max-width: 760px)'));
-    expect(phone).toMatch(/\.eph-step\s*\{\s*flex:\s*0 0 84px/);
+    expect(phone).toMatch(/\.eph-steps \{ flex-basis: 100%; justify-content: space-between; \}/);
   });
 });

@@ -42,21 +42,25 @@ describe('EpisodeStyleBoard', () => {
     vi.mocked(api.get).mockResolvedValue({ data: { data: LOOKBOOK } });
   });
 
-  test('the event card names the episode, event, venue, date, host, attendees and dress code', async () => {
+  test('the event card names the event, venue, date, host, attendees and dress code (the episode is in the header)', async () => {
     renderBoard();
     const card = screen.getByTestId('esb-event');
-    for (const text of ['Garden Party', 'Velour Society Garden Soirée', 'Radiance Row', 'Oct 18 · 9 PM', 'Velour', '2 · Marisol Vega, @slowsift', 'Garden glamour']) {
+    expect(card.textContent).not.toContain('Garden Party');
+    for (const text of ['Velour Society Garden Soirée', 'Radiance Row', 'Oct 18 · 9 PM', 'Velour', '2 · Marisol Vega, @slowsift', 'Garden glamour']) {
       expect(card.textContent).toContain(text);
     }
     expect(within(card).getByRole('img').getAttribute('src')).toBe('https://x/inv.jpg');
     expect(api.get).toHaveBeenCalledWith('/api/v1/episodes/ep-1/lookbook');
   });
 
-  test('dress code keywords and rewards come from the event; coins after the plan from money', () => {
+  test('dress code keywords come from the event; rewards and quick tools are not repeated here', () => {
     renderBoard();
     expect(screen.getByTestId('esb-dress').textContent).toContain('florals');
-    const rewards = within(screen.getByTestId('esb-rewards')).getAllByRole('listitem').map((li) => li.textContent.trim());
-    expect(rewards).toEqual(['Reputation+3', 'Trust+2', 'Influence—', 'Prime coins after2,239']);
+    // The shorter Overview (Evoni, 2026-10-22 layout list): rewards are in
+    // the Stakes band, coins after the episode in the tiles, and the quick
+    // tools were the tabs over again.
+    expect(screen.queryByTestId('esb-rewards')).toBeNull();
+    expect(screen.queryByTestId('esb-tools')).toBeNull();
   });
 
   test('wardrobe slots fill from the locked outfit and the Lookbook nails; body and shoes are required', async () => {

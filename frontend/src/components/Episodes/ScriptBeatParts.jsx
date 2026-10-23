@@ -148,7 +148,7 @@ export function SceneContextCard({ beatNumber, rows }) {
           {rows.map((r) => <div key={r.key} data-testid={`script-context-${r.key}`}><dt>{r.label}</dt><dd>{r.value}</dd></div>)}
         </dl>
       ) : (
-        <p className="esp-card-empty">No scene planned for this beat yet · <Link className="esp-link" to="?tab=beatplan">Open Beat Plan</Link></p>
+        <p className="esp-card-empty">No scene planned for this beat yet · <Link className="esp-link" to="?tab=beatplan">Open the Scenes plan</Link></p>
       )}
     </section>
   );
