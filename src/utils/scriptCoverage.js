@@ -26,7 +26,7 @@
 const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
 const { splitScriptBeats } = require('./scriptBeatLocks');
 const { beat14Delivers } = require('./beat14Invitation');
-const { scriptRuleItems, personIn } = require('./scriptRuleChecks');
+const { scriptRuleItems, personLine } = require('./scriptRuleChecks');
 const { isClosetScreen } = require('./scriptWear');
 
 // ─── The tab's must-cover rule (frontend/src/lib/episodeScript.js) ───────────
@@ -46,26 +46,56 @@ function mentionedIn(beats, text) {
   return null;
 }
 
+// How many of the key words a line has.
+const hits = (line, keys) => { const have = new Set(words(line)); return keys.filter((k) => have.has(k)).length; };
+
 /**
- * The first beat (its number) that covers a relationship goal, else null
- * (Evoni, 2026-10-23: "Get to know Truthville" never ticked when the
- * script named her by her real name). Covered when the goal is mentioned
- * as written (mentionedIn), or when the rest of its words are (the rule
- * above, the person's own names left out) and the person is there by any
- * of their names, or speaks (utils/scriptRuleChecks personIn). `person`:
- * goalPerson's, or null (a brand goal: as written only).
+ * The line that shows a covered goal, { line, as }: the one with most of
+ * the goal's key words, the person's (personLine) first when two have as
+ * many; `mustName`, only lines where the person is. The first such.
+ */
+function coveringLine(lines, keys, person, { mustName = false } = {}) {
+  let best = null;
+  for (const l of lines) {
+    const named = personLine([l], person);
+    if (mustName && !named) continue;
+    const score = hits(l, keys) + (named ? 0.5 : 0);
+    if ((score > 0 || mustName) && (!best || score > best.score)) best = { score, line: l, as: named?.as || null };
+  }
+  return best ? { line: best.line, as: best.as } : null;
+}
+
+/**
+ * Where a relationship goal is covered, { beat, line, as } or null (Evoni,
+ * 2026-10-23: "Get to know Truthville" never ticked when the script named
+ * her by her real name). Covered when the goal is mentioned as written
+ * (mentionedIn), or when the rest of its words are (the rule above, the
+ * person's own names left out) and the person is there by any of their
+ * names, or speaks (utils/scriptRuleChecks personLine). `line` is the
+ * beat's line that shows it (coveringLine), `as` the name the person goes
+ * by in it, or null. `person`: goalPerson's, or null (as written only).
  */
 function goalCovered(beats, goal, person) {
   const label = String(goal?.label || '').trim();
-  const literal = mentionedIn(beats, label);
-  if (literal !== null || !person?.names?.length) return literal;
+  const keys = keyWords(label);
+  const linesOf = (b) => b.text.split('\n').slice(1);
+  // A brand's goal as written needs the brand named in that beat: "studio"
+  // with the rest of the goal is not Studio by Sable.
+  const first = mentionedIn(beats, label);
+  const literal = first !== null && (!person?.whole || personLine(linesOf(beats.find((b) => b.number === first)), person)) ? first : null;
+  if (literal !== null) {
+    const shown = coveringLine(linesOf(beats.find((b) => b.number === literal)), keys, person);
+    return { beat: literal, line: shown?.line || null, as: shown?.as || null };
+  }
+  if (!person?.names?.length) return null;
   const own = new Set(person.names.flatMap(words));
-  const rest = keyWords(label).filter((k) => !own.has(k));
+  const rest = keys.filter((k) => !own.has(k));
   const need = rest.length <= 2 ? rest.length : Math.ceil(rest.length * 0.75);
   for (const b of beats) {
-    const lines = b.text.split('\n').slice(1);
-    const have = new Set(words(lines.join(' ')));
-    if (rest.filter((k) => have.has(k)).length >= need && personIn(lines, person)) return b.number;
+    const lines = linesOf(b);
+    if (hits(lines.join(' '), rest) < need || !personLine(lines, person)) continue;
+    const shown = coveringLine(lines, keys, person, { mustName: true });
+    return { beat: b.number, line: shown.line, as: shown.as };
   }
   return null;
 }
@@ -87,7 +117,8 @@ const opensCloset = (line) => { const m = String(line).match(OPEN_LINE); return 
 /**
  * { items, missing } for the script. `facts`:
  *   deliverables: [{ description, platform, deliverable_type }]
- *   goals: [{ label, person }] (person: goalPerson's, or null)
+ *   goals: [{ label, person }] (person: goalPerson's, or null; a covered
+ *          goal's item also has `line`, the line that covers it)
  *   forwardHook: string
  *   opportunity: { name, from } (beat 14's when it is delivered, or null)
  *   lockedPieces: [{ id, name }]
@@ -102,7 +133,9 @@ function scriptCoverage(script, facts = {}) {
 
   for (const g of facts.goals || []) {
     const label = String(g?.label || '').trim();
-    if (label) items.push({ kind: 'goal', label, beat: goalCovered(beats, g, g.person || null), target: 11 });
+    if (!label) continue;
+    const m = goalCovered(beats, g, g.person || null);
+    items.push({ kind: 'goal', label, beat: m ? m.beat : null, ...(m?.line ? { line: m.line } : {}), target: 11 });
   }
   const hook = typeof facts.forwardHook === 'string' ? facts.forwardHook.trim() : '';
   const opp = facts.opportunity && String(facts.opportunity.name || '').trim();

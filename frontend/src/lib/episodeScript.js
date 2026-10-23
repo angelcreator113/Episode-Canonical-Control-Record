@@ -23,7 +23,7 @@ import { dealLabelFor, relationshipGoalsOf } from '../utils/eventTerms';
 import { describeEventOrganizer } from '../utils/eventOrganizer';
 import { beatSpeakers } from './scriptMoments';
 import { beat14Delivers, BEAT } from './beat14Invitation';
-import { goalPerson, personIn } from './scriptRuleChecks';
+import { goalPerson, personLine } from './scriptRuleChecks';
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -112,30 +112,83 @@ export function mentionedIn(beats = [], text) {
   return null;
 }
 
+// How many of the key words a line has.
+const hits = (line, keys) => { const have = new Set(words(line)); return keys.filter((k) => have.has(k)).length; };
+
 /**
- * Where a relationship goal is covered, { beat, as } or null (Evoni,
+ * The line that shows a covered goal, { line, as }: the one with most of
+ * the goal's key words, the person's (personLine) first when two have as
+ * many; `mustName`, only lines where the person is. The first such
+ * (utils/scriptCoverage coveringLine, the server's copy).
+ */
+function coveringLine(lines, keys, person, { mustName = false } = {}) {
+  let best = null;
+  for (const l of lines) {
+    const named = personLine([l], person);
+    if (mustName && !named) continue;
+    const score = hits(l, keys) + (named ? 0.5 : 0);
+    if ((score > 0 || mustName) && (!best || score > best.score)) best = { score, line: l, as: named?.as || null };
+  }
+  return best ? { line: best.line, as: best.as } : null;
+}
+
+/**
+ * Where a relationship goal is covered, { beat, as, line } or null (Evoni,
  * 2026-10-23: "Get to know Truthville" never ticked when the script named
  * her by her real name; utils/scriptCoverage goalCovered, the server's
- * copy). Covered when the goal is mentioned as written (as: null), or when
- * the rest of its words are and the person (goalPerson) is there by any of
- * their names or speaks; `as` is the name they go by there.
+ * copy). Covered when the goal is mentioned as written, or when the rest
+ * of its words are and the person (goalPerson) is there by any of their
+ * names or speaks. `line` is the beat's line that shows it, `as` the name
+ * the person goes by in it (null when the goal is there as written and
+ * they are not named in that line).
  */
 export function goalMatch(beats = [], goal, person) {
   const label = String(goal?.label || '').trim();
-  const literal = mentionedIn(beats, label);
-  if (literal !== null) return { beat: literal, as: null };
+  const keys = keyWords(label);
+  // A brand's goal as written needs the brand named in that beat: "studio"
+  // with the rest of the goal is not Studio by Sable.
+  const linesAt = (n) => beats.find((b) => b.number === n)?.lines || [];
+  const first = mentionedIn(beats, label);
+  const literal = first !== null && (!person?.whole || personLine(linesAt(first), person)) ? first : null;
+  if (literal !== null) {
+    const shown = coveringLine(linesAt(literal), keys, person);
+    return { beat: literal, as: shown?.as || null, line: shown?.line || null };
+  }
   if (!person?.names?.length) return null;
   const own = new Set(person.names.flatMap(words));
-  const rest = keyWords(label).filter((k) => !own.has(k));
+  const rest = keys.filter((k) => !own.has(k));
   const need = rest.length <= 2 ? rest.length : Math.ceil(rest.length * 0.75);
   for (const b of beats) {
     const lines = b.lines || [];
-    const have = new Set(words(lines.join(' ')));
-    if (rest.filter((k) => have.has(k)).length < need) continue;
-    const as = personIn(lines, person);
-    if (as) return { beat: b.number, as };
+    if (hits(lines.join(' '), rest) < need || !personLine(lines, person)) continue;
+    const shown = coveringLine(lines, keys, person, { mustName: true });
+    return { beat: b.number, as: shown.as, line: shown.line };
   }
   return null;
+}
+
+/**
+ * A covered goal's line as the tab quotes it (Evoni, 2026-10-23): { before,
+ * mark, after }, Markdown bold let go, at most `max` characters around the
+ * name it was matched by (`mark`, emphasised; none when it is not in the
+ * line as written), with an ellipsis where it is cut. Null for no line.
+ */
+export function quoteParts(line, mark = null, max = 140) {
+  const text = String(line ?? '').replace(/\*\*|__/g, '').replace(/\s+/g, ' ').trim();
+  if (!text) return null;
+  const at = mark ? text.toLowerCase().indexOf(String(mark).toLowerCase()) : -1;
+  const len = at >= 0 ? String(mark).length : 0;
+  let start = 0;
+  let end = text.length;
+  if (text.length > max) {
+    start = at >= 0 ? Math.max(0, Math.min(at - Math.floor((max - len) / 2), text.length - max)) : 0;
+    end = start + max;
+  }
+  const cut = (a, b) => text.slice(a, b);
+  const pre = start > 0 ? '…' : '';
+  const post = end < text.length ? '…' : '';
+  if (at < 0) return { before: `${pre}${cut(start, end).trim()}${post}`, mark: null, after: '' };
+  return { before: `${pre}${cut(start, at).replace(/^\s+/, '')}`, mark: cut(at, at + len), after: `${cut(at + len, end).replace(/\s+$/, '')}${post}` };
 }
 
 /**
@@ -147,8 +200,9 @@ export function goalMatch(beats = [], goal, person) {
  * the call for its callers and read no more. A goal also has its slot, and
  * when its person is there under another name, `who`: the name the goal
  * gives them and `as`, the one the script uses ("Truthville", "Marcus
- * Hale"). `profiles`: the event's people's social profiles, by id
- * (goalPerson).
+ * Hale"). A covered goal has `line`, the beat's line that covers it, and
+ * `mark`, the name in it to emphasise (quoteParts). `profiles`: the
+ * event's people's social profiles, by id (goalPerson).
  */
 export function mustCover({ beats = [], event = null, brief = null, opportunity = null, profiles = [] } = {}) {
   const items = [];
@@ -161,6 +215,9 @@ export function mustCover({ beats = [], event = null, brief = null, opportunity 
     const named = person ? person.shown.find((s) => words(s).length && words(s).every((w) => inLabel.has(w))) || person.name : null;
     items.push({
       key: `goal-${n}`, label, source: 'Goal', slot: g.slot || 'relationship', beat: m ? m.beat : null,
+      // The line that covers it, and the name to emphasise in it: the one
+      // the person goes by there, else the goal's own name for them.
+      ...(m?.line ? { line: m.line, mark: m.as || named || null } : {}),
       ...(m?.as && words(m.as).join(' ') !== words(named).join(' ') ? { who: { name: named, as: m.as } } : {}),
     });
   });
