@@ -14,7 +14,7 @@ vi.mock('../services/api', () => ({
 }));
 
 import apiClient from '../services/api';
-import ShowManagement, { showFields, showStats, visibleShows } from './ShowManagement';
+import ShowManagement, { showFields, showStats, visibleShows, showActivity, sameNameTag } from './ShowManagement';
 
 const ROWS = [
   { id: 's1', name: 'Styling Adventures with Lala', status: 'active', episodeCount: 12, coverImageUrl: 'https://x/s1.jpg', description: 'Fashion and real life', updatedAt: '2026-10-16T10:00:00Z' },
@@ -60,7 +60,8 @@ describe('My Shows helpers', () => {
 
 describe('My Shows page', () => {
   beforeEach(() => {
-    vi.mocked(apiClient.get).mockReset().mockResolvedValue({ data: { data: ROWS } });
+    localStorage.removeItem('primeStudios.activeShowId');
+    vi.mocked(apiClient.get).mockReset().mockImplementation(async (url) => ({ data: { data: url.includes('/episodes?') ? [] : ROWS } }));
     vi.mocked(apiClient.delete).mockReset().mockResolvedValue({ data: {} });
   });
 
@@ -113,5 +114,78 @@ describe('My Shows page', () => {
     expect(window.confirm).toHaveBeenCalled();
     expect(apiClient.delete).toHaveBeenCalledWith(expect.stringMatching(/\/shows\/s4$/));
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', expect.stringContaining('Show has episodes'));
+  });
+});
+
+// Evoni's layout list, 2026-10-23.
+const EPS = [
+  { id: 'e1', season_number: 1, episode_number: 1, title: 'One', status: 'published', updated_at: '2026-10-01T00:00:00Z' },
+  { id: 'e2', season_number: 1, episode_number: 2, title: 'Two', status: 'scripted', updated_at: '2026-10-10T00:00:00Z', air_date: '2026-11-01T12:00:00Z' },
+  { id: 'e3', season_number: 1, episode_number: 3, title: 'Three', status: 'in_build', updated_at: '2026-10-20T00:00:00Z', air_date: '2026-11-08T12:00:00Z' },
+  { id: 'e0', season_number: 1, episode_number: 9, title: 'Gone', status: 'archived' },
+];
+
+describe('My Shows layout list', () => {
+  test('showActivity: by stage, the one to continue, the next air date', () => {
+    const a = showActivity(EPS, Date.parse('2026-10-23T00:00:00Z'));
+    expect(a.released).toBe(1);
+    expect(a.inProgress).toBe(2);
+    expect(a.current.id).toBe('e3');
+    expect(a.nextAir).toEqual({ date: '2026-11-01T12:00:00Z', code: 'S1 E2' });
+    expect(showActivity([], 0)).toEqual({ released: 0, inProgress: 0, current: null, nextAir: null });
+  });
+
+  test('sameNameTag tells same-name shows apart and leaves the rest alone', () => {
+    const shows = [{ id: 'abcdef123456', name: 'Lala' }, { id: 'zzzzzzzz9', name: 'Lala' }, { id: 'q', name: 'Other' }];
+    expect(sameNameTag(shows[0], shows)).toBe('Show ID abcdef12');
+    expect(sameNameTag(shows[2], shows)).toBe('');
+  });
+
+  test('visibleShows puts the pinned show first, whatever the sort', () => {
+    const shows = ROWS.map(showFields);
+    expect(visibleShows(shows, { pinned: 's4' }).map((s) => s.id)[0]).toBe('s4');
+    expect(visibleShows(shows, { sort: 'name', pinned: 's4' }).map((s) => s.id)).toEqual(['s4', 's3', 's1', 's2']);
+  });
+
+  describe('on the page', () => {
+    const TWINS = [
+      { id: 'aaaaaaaa-1', name: 'Styling Adventures with Lala', status: 'active', episodeCount: 6, updatedAt: '2026-10-01T10:00:00Z' },
+      { id: 'bbbbbbbb-2', name: 'Styling Adventures with Lala', status: 'active', episodeCount: 0, updatedAt: '2026-10-20T10:00:00Z' },
+    ];
+    beforeEach(() => {
+      localStorage.setItem('primeStudios.activeShowId', 'aaaaaaaa-1');
+      vi.mocked(apiClient.get).mockReset().mockImplementation(async (url) => {
+        if (url.includes('/episodes?show_id=aaaaaaaa-1')) return { data: { data: EPS } };
+        if (url.includes('/episodes?')) return { data: { data: [] } };
+        return { data: { data: TWINS } };
+      });
+    });
+
+    test('the show being worked on comes first with its badge; the twins are told apart', async () => {
+      renderPage();
+      await waitFor(() => expect(screen.getAllByTestId('sm-card')).toHaveLength(2));
+      const [first, second] = screen.getAllByTestId('sm-card');
+      expect(within(first).getByTestId('sm-working').textContent).toBe('Working on');
+      expect(within(second).queryByTestId('sm-working')).toBeNull();
+      expect(within(first).getByTestId('sm-card-tag').textContent).toBe('Show ID aaaaaaaa');
+      expect(within(second).getByTestId('sm-card-tag').textContent).toBe('Show ID bbbbbbbb');
+    });
+
+    test('each card says what is happening, with Continue', async () => {
+      renderPage();
+      const first = await waitFor(() => screen.getAllByTestId('sm-card')[0]);
+      await waitFor(() => expect(within(first).getByTestId('sm-card-stages').textContent).toMatch(/^2 in production · 1 released/));
+      expect(within(first).getByTestId('sm-continue').getAttribute('href')).toBe('/episodes/e3');
+      expect(within(first).getByTestId('sm-continue').textContent).toContain('Continue S1 E3');
+      // A show with no episodes says nothing more.
+      expect(within(screen.getAllByTestId('sm-card')[1]).queryByTestId('sm-card-stages')).toBeNull();
+    });
+
+    test('the totals are one line; empty status tabs are hidden', async () => {
+      renderPage();
+      await waitFor(() => expect(screen.getAllByTestId('sm-card')).toHaveLength(2));
+      expect(screen.getByLabelText('Show totals').textContent).toBe('2 shows · 2 active · 0 coming soon · 6 episodes');
+      expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['All Shows', 'Active2']);
+    });
   });
 });
