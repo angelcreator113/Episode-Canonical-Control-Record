@@ -1931,9 +1931,6 @@
     padding: 6px 8px;
     gap: 4px;
   }
-  .re-header-left {
-    display: none; /* hide the title — redundant inside WorldStudio tab */
-  }
   .re-header { margin: 8px 8px 0; }
   .re-body { padding: 8px; gap: 8px; }
   .re-layer-select { width: 100%; }
@@ -1989,11 +1986,321 @@
   .cg-table td {
     padding: 8px;
   }
-  .re-webview-info {
-    display: none;
-  }
   .re-toast-tray {
     left: 8px;
     right: 8px;
   }
+}
+/* ═══════════════════════════════════════════════════════════════════════
+   2026-10-23 — story so far, stages, love interests, phone layout
+   ═══════════════════════════════════════════════════════════════════════ */
+.rw-node-label { font-size: 12px; }
+.rw-node-initials { font-size: 12px; font-weight: 700; pointer-events: none; }
+
+/* toast with an action (Undo) */
+.cg-toast { display: flex; align-items: center; gap: 12px; }
+.re-toast-action {
+  margin-left: auto;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1.5px solid currentColor;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* type pills in the sub-header */
+.re-type-pills { display: flex; gap: 4px; flex-wrap: wrap; margin-right: 8px; }
+.re-type-pill {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(168, 137, 200, 0.12);
+  color: var(--ps-lavender);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* a stage on the timeline: strangers, acquaintances, flirting … */
+.re-stage {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  border: 1px solid #e3d6ec;
+  background: #f6f1fa;
+  color: #6a5784;
+}
+.re-stage.is-warm { background: #fdeaf3; border-color: #f2b9d2; color: #a8336c; }
+.re-stage.is-hot  { background: #fbe0ea; border-color: #e98bb5; color: #8f1f55; }
+.re-stage.is-calm { background: #eaf5ee; border-color: #b0d8be; color: #2f6e46; }
+.re-stage.is-sore { background: #f3eafa; border-color: #c8a8e8; color: #5d2d8a; }
+.re-stage.is-current { box-shadow: 0 0 0 2px rgba(194, 64, 127, 0.18); }
+
+/* Inspector: story so far */
+.re-story { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+.re-story-title {
+  margin: 0;
+  font-family: var(--re-serif);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--re-plum);
+}
+.re-story-muted { margin: 0; font-size: 13px; color: var(--ps-ink-light); line-height: 1.5; }
+.re-story-journey { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.re-story-step { display: inline-flex; align-items: center; gap: 4px; }
+.re-story-arrow { color: var(--ps-ink-light); flex-shrink: 0; }
+.re-story-list { list-style: none; margin: 0; padding: 0 0 0 12px; border-left: 2px solid var(--re-gold-soft); display: flex; flex-direction: column; gap: 12px; }
+.re-story-item { position: relative; display: flex; flex-direction: column; gap: 4px; }
+.re-story-item::before {
+  content: '';
+  position: absolute;
+  left: -18px;
+  top: 6px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--re-magenta);
+  box-shadow: 0 0 0 3px #fff;
+}
+.re-story-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.re-story-kind { font-size: 12px; font-weight: 700; color: var(--re-plum); }
+.re-story-meta { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--ps-ink-light); }
+.re-story-note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--ps-ink); }
+.re-story-quote {
+  margin: 0;
+  padding: 6px 10px;
+  border-left: 3px solid var(--re-magenta-soft);
+  background: rgba(253, 233, 241, 0.7);
+  border-radius: 0 8px 8px 0;
+  font-family: var(--re-serif);
+  font-style: italic;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--re-plum);
+}
+.re-story-ep {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--re-magenta);
+  text-decoration: none;
+}
+.re-story-ep:hover { text-decoration: underline; }
+
+.re-check { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 13px; color: var(--ps-ink-mid); cursor: pointer; }
+.re-check input { width: 16px; height: 16px; accent-color: var(--re-magenta); }
+
+.re-inspector-title { display: inline-flex; align-items: center; gap: 6px; }
+.re-inspector-link-icon { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.re-inspector-confirm { display: flex; flex-direction: column; gap: 8px; width: 100%; font-size: 13px; color: var(--ps-ink); }
+.re-inspector-confirm-actions { display: flex; gap: 8px; }
+
+/* List: cards on a phone */
+.re-list-cards { display: none; list-style: none; margin: 0; padding: 10px; flex-direction: column; gap: 8px; }
+.re-list-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1.5px solid var(--re-gold-soft);
+  background: #fff;
+  text-align: left;
+  font: inherit;
+  color: var(--ps-ink);
+  cursor: pointer;
+}
+.re-list-card-pair { font-weight: 700; font-size: 15px; }
+.re-list-card-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.re-list-card-note { font-size: 13px; color: var(--ps-ink-mid); line-height: 1.45; }
+
+/* Overview: love interests */
+.rp-love .rp-card-title svg { color: var(--re-magenta); fill: var(--re-magenta); }
+.rp-love-heart {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--re-blush);
+  color: var(--re-magenta);
+}
+.rp-conn .re-stage { margin-top: 2px; }
+
+/* Family: romance apart from family */
+.re-family-romance { padding: 0 16px 16px; }
+.re-family-unconn-chip.is-romantic {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1.5px solid #f2b9d2;
+  background: #fdeaf3;
+  color: #a8336c;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Web: a person's relationships in the panel */
+.re-webview-info-rels { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.re-webview-info-rels button {
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--ps-border);
+  background: var(--ps-surface-alt);
+  font: inherit;
+  font-size: 13px;
+  color: var(--ps-ink);
+  cursor: pointer;
+}
+.re-webview-info-link { min-height: 36px; font-size: 13px; }
+
+.re-sheet-backdrop { display: none; }
+.re-sheet-grip { display: none; }
+
+/* Tree and Web keep a real height, whatever holds the page (it can sit in
+   a container with no fixed height, or stack on a phone). */
+.re-view.is-tree, .re-view.is-web { display: flex; flex-direction: column; min-height: 600px; }
+.re-view.is-tree > .re-tree-wrap, .re-view.is-web > .re-webview { flex: 1; min-height: 600px; }
+.re-webview-canvas { min-height: 540px; }
+.rw-svg { touch-action: none; }
+.rw-node-g:focus { outline: none; }
+.rw-node-g:focus-visible circle:nth-of-type(2) { stroke-width: 3; }
+@media (max-width: 768px) {
+  .re-view.is-tree, .re-view.is-web { min-height: 0; }
+  .re-view.is-tree > .re-tree-wrap { flex: none; height: auto; min-height: 440px; }
+  .re-tree-svg { height: 440px; }
+  .re-view.is-web > .re-webview { flex: none; height: auto; min-height: 480px; }
+  .re-webview-canvas { flex: none; min-height: 440px; height: 440px; }
+  .rw-svg { height: 440px; }
+}
+
+/* ── Phone (≤ 600px) ───────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .re-header-left { display: flex; }
+  .re-title-block { display: block; }
+  .re-wordmark { font-size: 22px; }
+  .re-tagline { display: none; }
+
+  /* tabs: a 3 × 2 grid */
+  .re-nav {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    overflow: visible;
+    padding: 8px;
+  }
+  .re-nav-btn {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+    padding: 8px 6px;
+    font-size: 14px;
+    gap: 6px;
+  }
+  .re-nav-label { flex: none; }
+
+  /* people: one row of chips that scrolls sideways */
+  .re-sidebar-chars {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-height: none;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+    gap: 6px;
+    padding: 6px 8px 10px;
+  }
+  .re-sidebar-chars .cg-world-card {
+    flex: 0 0 auto;
+    width: auto;
+    min-height: 44px;
+    padding: 6px 12px 6px 6px;
+    border-radius: 999px;
+    scroll-snap-align: start;
+  }
+  .re-sidebar-chars .re-char-role { display: none; }
+  .re-sidebar-chars .re-char-name { max-width: 9em; }
+
+  /* List: cards, not a wide table */
+  .re-list-table { display: none; }
+  .re-list-cards { display: flex; }
+
+  /* Inspector: a bottom sheet */
+  .re-sheet-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 900;
+    background: rgba(44, 20, 40, 0.38);
+  }
+  .re-inspector-panel.is-sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 901;
+    width: 100%;
+    min-width: 0;
+    max-height: 85vh;
+    overflow-y: auto;
+    border-radius: 20px 20px 0 0;
+    border-bottom: none;
+    background: #fff9fb;
+    box-shadow: 0 -10px 30px rgba(110, 29, 79, 0.25);
+    overscroll-behavior: contain;
+  }
+  .re-inspector.is-sheet .re-sheet-grip {
+    display: block;
+    width: 44px;
+    height: 5px;
+    margin: 8px auto 0;
+    border-radius: 999px;
+    background: var(--re-gold-soft);
+  }
+  .re-inspector.is-sheet .re-close-btn { min-width: 44px; min-height: 44px; font-size: 24px; }
+  .re-inspector.is-sheet .re-inspector-footer {
+    position: sticky;
+    bottom: 0;
+    background: #fff9fb;
+  }
+
+  /* Web: the person panel as a card across the bottom of the graph */
+  .re-webview-info {
+    display: block;
+    top: auto;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    width: auto;
+    max-height: 60%;
+    overflow-y: auto;
+  }
+  .re-webview-tooltip { display: none; }
+}
+.re-pill { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.re-pill svg, .re-story-quote svg { display: inline-block; flex-shrink: 0; }
+.re-story-quote svg { vertical-align: -1px; margin-right: 4px; color: var(--re-magenta); }
+@media (max-width: 600px) {
+  /* Recent rows: the name gets the line; stage and tension wrap under it */
+  .rp-row { flex-wrap: wrap; row-gap: 6px; }
+  .rp-row-text { flex: 1 1 calc(100% - 90px); min-width: 0; }
+  .rp-row > .re-stage:first-of-type { margin-left: 48px; }
 }

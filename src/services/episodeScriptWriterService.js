@@ -23,6 +23,7 @@ const { LINKED_CHARACTER_JOIN } = require('../utils/registryLink');
 const { storyBrief, BRIEF_COLUMNS } = require('./characterStoryBrief');
 const { secretsFor } = require('./characterSecrets');
 const { planForEpisode, withPlan } = require('./seasonRevealPlan');
+const { lalaStoryTies, lalaTieFields } = require('./relationshipTruth');
 const { latestWorldSnapshotForShow } = require('./worldSnapshotForShow');
 const { loadScriptCareer, careerBlock } = require('./scriptCareerService');
 const { episodeEventId } = require('../utils/episodeEventSql');
@@ -305,11 +306,13 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
       const secrets = await secretsFor(sequelize, (rows || []).map(r => r.registry_character_id));
       // The season's reveal plan for this episode decides what it may hint at or reveal.
       const plan = await planForEpisode(sequelize, episodeId);
+      // Lala's story pair with each, where there is one, decides their tie to her (services/relationshipTruth).
+      const lalaTies = await lalaStoryTies(sequelize, (rows || []).map(r => r.registry_character_id));
       context.socialProfiles = (rows || []).map(r => {
         // Parse personality JSON if present
         let personality = r.personality;
         if (typeof personality === 'string') try { personality = JSON.parse(personality); } catch { personality = null; }
-        return { ...r, personality, story_role: storyRoleByProfileId.get(r.id) || null, secrets: withPlan(secrets.get(r.registry_character_id) || [], plan, 'episode') };
+        return { ...r, personality, story_role: storyRoleByProfileId.get(r.id) || null, secrets: withPlan(secrets.get(r.registry_character_id) || [], plan, 'episode'), ...lalaTieFields(r, lalaTies.get(r.registry_character_id)) };
       });
       // A confirmed romance with Lala (character_relationships, written by
       // the "What changed" card; Evoni, 2026-10-23): the script plays them
@@ -418,6 +421,15 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
     console.error('[ScriptWriter] season twists failed (non-blocking):', err.message);
   }
 
+  // 13d. The last episode's approved story record and what Lala still owes
+  // people (services/storyCarryForward, 2026-10-23: Episode 1 feeds Episode 2); '' with none.
+  context.carryBlock = '';
+  try {
+    context.carryBlock = await require('./storyCarryForward').carryForEpisode(sequelize, episodeId);
+  } catch (err) {
+    console.error('[ScriptWriter] carry-forward failed (non-blocking):', err.message);
+  }
+
   // 14. Character state — exact coin balance for internal monologue
   context.characterState = null;
   try {
@@ -461,8 +473,11 @@ function storyContextBlocks(context, { withSeason = true } = {}) {
   Archetype: ${p.archetype || 'unknown'} | Tier: ${p.celebrity_tier || 'accessible'}
   Voice: ${p.posting_voice || 'Standard social media voice'}
   Lala follows because: ${p.follow_motivation || 'general interest'}${p.follow_emotion ? ` (feels: ${p.follow_emotion})` : ''}`;
+      if (p.lala_story_tie) block += `\n  With Lala in the story: ${p.lala_story_tie}`;
       if (p.story_role) block += `\n  Story role: ${p.story_role}`;
-      const ties = [LALA_TIES[p.lala_relationship], p.lala_romance !== undefined ? `love interest${p.lala_romance ? `: ${p.lala_romance}` : ''}` : null].filter(Boolean);
+      // The story pair's line already says a romance; the romance is not said twice.
+      const romance = p.lala_romance !== undefined && !p.lala_story_tie ? `love interest${p.lala_romance ? `: ${p.lala_romance}` : ''}` : null;
+      const ties = [LALA_TIES[p.lala_relationship], romance].filter(Boolean);
       if (ties.length) block += `\n  With Lala: ${ties.join('; ')}`;
 
       // Character literary depth (from registry) + therapy + life simulation
@@ -543,6 +558,7 @@ function storyContextBlocks(context, { withSeason = true } = {}) {
   // both writers: the Script tab's passes withSeason false for its own
   // season block, not for these.
   const twistBlock = context.twistBlock || '';
+  const carryBlock = context.carryBlock || '';
 
   // Designed intent direction
   let intentBlock = '';
@@ -565,7 +581,7 @@ function storyContextBlocks(context, { withSeason = true } = {}) {
 
   const pulseBlock = require('./scriptPulsePosts').pulseScriptBlock(context.pulsePosts);
 
-  return [socialBlock, pulseBlock, taskBlock, prevBlock, arcBlock, twistBlock, intentBlock, charBlock].filter(Boolean).join('\n');
+  return [socialBlock, pulseBlock, taskBlock, prevBlock, carryBlock, arcBlock, twistBlock, intentBlock, charBlock].filter(Boolean).join('\n');
 }
 
 // Lala's money for the prompt: pressure, balance, the episode so far, and

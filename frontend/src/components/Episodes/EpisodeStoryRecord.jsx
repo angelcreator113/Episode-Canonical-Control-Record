@@ -215,6 +215,8 @@ export default function EpisodeStoryRecord({ episodeId, embedded = false, onStat
   const spare = cast.flatMap((c) => (c.secrets || []).filter((s) => !listed.has(s.id)).map((s) => ({ ...s, character_id: c.id, name: c.name })));
   const locked = !!busy;
   const saved = (kind, x) => wasSaved(kind, x, applied);
+  // Goals carried from an earlier episode's follow-ups (services/storyCarryForward).
+  const carriedSlots = new Set((data.goals || []).filter((g) => g.follow_up_id).map((g) => g.slot));
   const kept = LISTS.filter((k) => k !== 'characters').reduce((n, k) => n + form[k].filter((x) => ticked(k, x) && !saved(k, x)).length, 0);
   // Ticking a goal the script did not cover says it is covered after all.
   const onKeep = (kind, i, v) => setAt(kind, i, kind === 'goals' && v ? { keep: true, covered: true } : { keep: v });
@@ -237,6 +239,7 @@ export default function EpisodeStoryRecord({ episodeId, embedded = false, onStat
       <p className="wc-line">{g.label}</p>
       <p className="wc-meta">
         <span className={`wc-chip${g.covered ? ' is-good' : ''}`}>{g.covered ? `Covered${g.beat ? ` in beat ${g.beat}` : ''}` : 'Not covered'}</span>
+        {carriedSlots.has(g.slot) && <span className="wc-chip" title="A follow-up from an earlier episode: Save marks it done">Carried over</span>}
         {g.note && <span className="wc-sub">{g.note}</span>}
       </p>
       <Quote text={g.quote} />

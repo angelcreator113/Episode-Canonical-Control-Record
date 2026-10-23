@@ -219,6 +219,12 @@ describe('What changed', () => {
     confirm.mockRestore();
   });
 
+  test('a goal carried from an earlier episode says so', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { ...DATA().data, goals: [{ slot: 'relationship_guest', label: 'Get to know Truthville', follow_up_id: 'f1' }] } });
+    renderCard();
+    expect(await within(await screen.findByTestId('wc-goals-0')).findByText('Carried over')).toBeTruthy();
+  });
+
   test('read it again asks first', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     renderCard();

@@ -89,7 +89,7 @@ async function sharePlace(models, { characterId, sceneSetId, caption }) {
   const character = await characterAndShow(sequelize, characterId);
   if (!character) throw new PlaceShareError('Character not found', 404, 'CHARACTER_NOT_FOUND');
   if (!character.feed_profile_id) {
-    throw new PlaceShareError('They need a feed profile to post on The Pulse. Match them to a feed person on The cast.', 409, 'NO_FEED_PROFILE');
+    throw new PlaceShareError('They need a Pulse profile to post on The Pulse. Match them to a Pulse profile on The cast.', 409, 'NO_FEED_PROFILE');
   }
   const { show_id: showId, places } = await placesForCharacter(sequelize, characterId);
   const place = places.find((p) => String(p.scene_set_id) === String(sceneSetId));
@@ -97,7 +97,7 @@ async function sharePlace(models, { characterId, sceneSetId, caption }) {
   if (!place.image_url) throw new PlaceShareError(`"${place.scene_set_name}" has no picture yet. Upload or generate its base first.`, 409, 'NO_PICTURE');
 
   const profile = await models.SocialProfile.findByPk(character.feed_profile_id, { attributes: ['id', 'handle', 'display_name'] });
-  if (!profile) throw new PlaceShareError('Their feed profile was not found', 404, 'NO_FEED_PROFILE');
+  if (!profile) throw new PlaceShareError('Their Pulse profile was not found', 404, 'NO_FEED_PROFILE');
 
   const text = typeof caption === 'string' && caption.trim() ? caption.trim().slice(0, CAPTION_MAX) : `${place.role === 'home' ? 'home' : place.scene_set_name}.`;
   const alt = `${character.selected_name || character.display_name}'s ${place.role === 'other' ? (place.label || place.scene_set_name) : place.role}`;

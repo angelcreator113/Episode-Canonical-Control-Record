@@ -342,3 +342,46 @@ body.stp-open { overflow: hidden; }
   .stp-remote, .stp-voicebox { right: 8px; bottom: 8px; width: calc(100% - 16px); }
   .stp-remote-qr { width: 168px; height: 168px; }
 }
+
+/* ── On-screen moments, the cutscene, and the whole-episode take (Evoni, 2026-10-23) ── */
+.stp-screen {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; margin: 0 0 0.8em; padding: 0.3em 0.6em;
+  border: 1px dashed var(--studio-prompter-mark); border-radius: 10px; background: var(--studio-prompter-bar);
+  font-family: 'DM Mono', var(--font-mono); font-size: max(14px, 0.42em); line-height: 1.35; color: var(--studio-prompter-cue);
+}
+.stp-screen-icon { flex: none; color: var(--studio-prompter-mark); }
+.stp-screen-kicker, .stp-screen-react { font-size: max(11px, 0.75em); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--studio-prompter-mark); }
+.stp-screen-kicker::after { content: ' ·'; }
+.stp-screen-text { flex: 1 1 10em; min-width: 0; color: var(--studio-prompter-ink); overflow-wrap: anywhere; }
+.stp-screen-react::before { content: '· '; }
+.stp-root.is-same .stp-screen { font-size: max(14px, 0.6em); }
+.stp-quiet.is-screen .stp-quiet-who { color: var(--studio-prompter-ink); overflow-wrap: anywhere; }
+.stp-cutscene {
+  display: flex; align-items: center; gap: 8px; margin: 0 0 0.8em; padding: 0.35em 0.6em; border-radius: 10px;
+  border: 1px solid var(--studio-prompter-line); background: var(--studio-prompter-bar);
+  font-family: 'DM Mono', var(--font-mono); font-size: max(13px, 0.36em); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--studio-prompter-mark);
+}
+/* Whole-episode REC bar: wraps between its parts, never inside one, as a card not a pill. */
+.stp-recdot { flex-wrap: wrap; row-gap: 2px; border-radius: 12px; }
+.stp-recdot > span { white-space: nowrap; }
+.stp-recdot.is-paused .stp-dot { animation: none; background: var(--studio-prompter-dim); }
+.stp-recwarn {
+  display: flex; align-items: flex-start; gap: 6px; max-width: 320px; padding: 6px 12px; border-radius: 12px;
+  background: var(--studio-prompter-scrim); color: var(--studio-prompter-rec); font-size: 14px; font-weight: 600;
+}
+.stp-scope { display: inline-flex; align-items: center; gap: 4px; }
+.stp-marks { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.stp-mark { font-family: 'DM Mono', var(--font-mono); font-size: 13px; }
+.stp-takes-group { display: flex; flex-direction: column; gap: 6px; padding-top: 6px; border-top: 1px solid var(--studio-prompter-line); }
+.stp-takes-group .stp-takes-title { display: inline-flex; align-items: center; gap: 6px; }
+.stp-take.is-full { flex-direction: column; align-items: stretch; }
+.stp-take-row { display: flex; align-items: center; gap: 6px; }
+@media (max-width: 600px) {
+  .stp-hud { max-width: calc(100% - 132px); }
+  .stp-recdot { font-size: 13px; padding: 6px 10px; }
+  /* No room for the size on a phone; the near-the-limit warning still shows. */
+  .stp-rec-size { display: none; }
+  .stp-scope { flex: 1 1 100%; order: 9; }
+  .stp-scope .stp-btn { flex: 1; }
+}

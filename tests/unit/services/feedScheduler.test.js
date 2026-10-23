@@ -445,8 +445,43 @@ describe('feedScheduler', () => {
       const spark = scheduler.generateCreatorSpark('lalaverse');
 
       expect(spark).toHaveProperty('city');
-      expect(spark).toHaveProperty('lala_relationship');
       expect(spark).toHaveProperty('career_pressure');
+    });
+
+    it('never picks a tie to Lala: the Lala story pair decides it (Evoni, 2026-10-23)', () => {
+      const random = jest.spyOn(Math, 'random');
+      try {
+        for (const r of [0, 0.3, 0.6, 0.99]) {
+          random.mockReturnValue(r);
+          expect(scheduler.generateCreatorSpark('lalaverse').lala_relationship).toBeUndefined();
+        }
+      } finally {
+        random.mockRestore();
+      }
+    });
+
+    it('a tie to Lala the AI makes up for a spark is not saved: the profile starts with none', async () => {
+      const db = createMockDb();
+      db.SocialProfile.count.mockResolvedValue(0);
+      db.SocialProfile.findAll.mockResolvedValue([]);
+      let calls = 0;
+      mockCreate.mockImplementation(() => {
+        calls++;
+        if (calls === 1) {
+          return Promise.resolve({ content: [{ text: JSON.stringify([
+            { handle: '@tied', platform: 'instagram', vibe_sentence: 'v', archetype: 'soft_life', follower_tier: 'mid', city: 'dazzle_district', lala_relationship: 'competitive' },
+          ]) }] });
+        }
+        return Promise.resolve({ content: [{ text: JSON.stringify({ display_name: 'Tied', follower_tier: 'mid', archetype: 'soft_life', current_trajectory: 'rising' }) }] });
+      });
+
+      await scheduler.autoGenerateBatch(db, 'lalaverse', 1);
+
+      const prompts = mockCreate.mock.calls.map((c) => JSON.stringify(c[0]?.messages || ''));
+      expect(prompts[0]).not.toMatch(/lala_relationship/);
+      const made = db.SocialProfile.create.mock.calls[0]?.[0];
+      expect(made).toBeDefined();
+      expect(made.lala_relationship).toBeNull();
     });
 
     it('should NOT include lalaverse-specific fields for real_world layer', () => {

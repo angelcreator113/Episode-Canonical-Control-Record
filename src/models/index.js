@@ -127,7 +127,7 @@ let BrainFingerprint; // Novel Intelligence: brain dedup fingerprints
 let SocialProfile; // The Feed: social media creator profiles
 let SocialProfileFollower; // The Feed: character-follows-profile join table
 let CharacterFollowProfile; // Consumer follow system: character consumption affinities
-let SocialProfileRelationship; // The Feed: creator-to-creator relationships (drama, collabs, couples)
+let SocialProfileRelationship; // Pulse profile pairs (drama, collabs, couples); the Relationship Map's old table is retired (migration 20261023230000)
 let CharacterEntanglement; // Entanglement Layer: character ↔ influencer links
 let EntanglementEvent; // Entanglement Layer: ripple log — state changes + content events
 let EntanglementUnfollow; // Entanglement Layer: unfollow as narrative event
@@ -149,7 +149,6 @@ let StoryClockMarker; // Story Calendar: named story positions with calendar dat
 let StoryCalendarEvent; // Story Calendar: events in LalaVerse time
 let CalendarEventAttendee; // Story Calendar: per-character event experience
 let CalendarEventRipple; // Story Calendar: event propagation / ripple threads
-let FeedProfileRelationship; // Feed Relationship Map: influencer-to-influencer
 let CharacterCrossing; // Character Crossings: interior → public transition
 let AuthorNote; // Author Layer: polymorphic creative decision notes
 let PageContent; // Page Content: editable page data (JSONB)
@@ -444,7 +443,6 @@ try {
   StoryCalendarEvent = require('./StoryCalendarEvent')(sequelize, DataTypes);
   CalendarEventAttendee = require('./CalendarEventAttendee')(sequelize, DataTypes);
   CalendarEventRipple = require('./CalendarEventRipple')(sequelize, DataTypes);
-  FeedProfileRelationship = require('./FeedProfileRelationship')(sequelize, DataTypes);
   CharacterCrossing = require('./CharacterCrossing')(sequelize, DataTypes);
   AuthorNote = require('./AuthorNote')(sequelize, DataTypes);
   PageContent = require('./PageContent')(sequelize, DataTypes);
@@ -634,7 +632,6 @@ const requiredModels = {
   StoryCalendarEvent,
   CalendarEventAttendee,
   CalendarEventRipple,
-  FeedProfileRelationship,
   CharacterCrossing,
   AuthorNote,
   PageContent,
@@ -857,9 +854,6 @@ if (CalendarEventAttendee && CalendarEventAttendee.associate) {
 }
 if (CalendarEventRipple && CalendarEventRipple.associate) {
   CalendarEventRipple.associate(requiredModels);
-}
-if (FeedProfileRelationship && FeedProfileRelationship.associate) {
-  FeedProfileRelationship.associate(requiredModels);
 }
 if (CharacterCrossing && CharacterCrossing.associate) {
   CharacterCrossing.associate(requiredModels);
@@ -2175,7 +2169,6 @@ module.exports.StoryClockMarker = StoryClockMarker;
 module.exports.StoryCalendarEvent = StoryCalendarEvent;
 module.exports.CalendarEventAttendee = CalendarEventAttendee;
 module.exports.CalendarEventRipple = CalendarEventRipple;
-module.exports.FeedProfileRelationship = FeedProfileRelationship;
 module.exports.CharacterCrossing = CharacterCrossing;
 module.exports.AuthorNote = AuthorNote;
 module.exports.PageContent = PageContent;
