@@ -382,6 +382,15 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
     console.error('[ScriptWriter] season position failed (non-blocking):', err.message);
   }
 
+  // 13c. The season twists this episode's slot plants or pays off
+  // (services/seasonTwists, 2026-10-23); '' with none.
+  context.twistBlock = '';
+  try {
+    context.twistBlock = await require('./seasonTwists').twistBlock(sequelize, episodeId);
+  } catch (err) {
+    console.error('[ScriptWriter] season twists failed (non-blocking):', err.message);
+  }
+
   // 14. Character state — exact coin balance for internal monologue
   context.characterState = null;
   try {
@@ -502,6 +511,11 @@ function storyContextBlocks(context, { withSeason = true } = {}) {
   }
   if (withSeason) arcBlock += buildSeasonPositionBlock(context.seasonPosition);
 
+  // The season twists to plant or pay off here (services/seasonTwists), by
+  // both writers: the Script tab's passes withSeason false for its own
+  // season block, not for these.
+  const twistBlock = context.twistBlock || '';
+
   // Designed intent direction
   let intentBlock = '';
   if (context.designedIntent) {
@@ -523,7 +537,7 @@ function storyContextBlocks(context, { withSeason = true } = {}) {
 
   const pulseBlock = require('./scriptPulsePosts').pulseScriptBlock(context.pulsePosts);
 
-  return [socialBlock, pulseBlock, taskBlock, prevBlock, arcBlock, intentBlock, charBlock].filter(Boolean).join('\n');
+  return [socialBlock, pulseBlock, taskBlock, prevBlock, arcBlock, twistBlock, intentBlock, charBlock].filter(Boolean).join('\n');
 }
 
 // Lala's money for the prompt: pressure, balance, the episode so far, and
