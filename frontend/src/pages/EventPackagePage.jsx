@@ -3,6 +3,22 @@
  *
  * Route: /shows/:showId/events/:eventId
  *
+ * Today the page is, top to bottom: the hero (title and five tiles), the
+ * readiness strip (a tile per section, what each needs, the next step with
+ * Continue / Start Episode), "On this page", then the numbered sections
+ * (1 The Event with its invitation, 2 People, 3 Place, 4 Lala's Look,
+ * 5 Deal & Money with the Terms, 6 Story Stakes, 7 In-world documents,
+ * 8 Behind the Scenes) and the action bar. The notes below are the history
+ * of how each part came to be.
+ *
+ * Audit (Evoni, 2026-10-23: "fix all of them"): a save no longer swaps the
+ * page for the spinner (the sections that read their own data remount on
+ * reloadTick instead); one page per event, so nothing carries over between
+ * events; Start Episode waits for the money check; Enter never clears a
+ * Basics field; dialogs close on Escape, keep focus inside and return it;
+ * the toast is announced and floats at the foot of the screen; phone
+ * targets are 40-44px and dialogs are bottom sheets.
+ *
  * Summary sections (Basics, People, Place, Invitation, Style, Terms,
  * Stakes & Money, Review) plus a readiness count, and three actions:
  * Change Organizer (Change Host until Task #1761), Edit details (opens
@@ -114,6 +130,8 @@ function fmtLabel(value) {
 // this fixed set; no role is forced onto a featured guest.
 const STORY_ROLES = ['friend', 'tension', 'opportunity', 'wildcard', 'romantic', 'mentor', 'rival'];
 const MAX_FEATURED_GUESTS = 5;
+// The "On this page" dots' states, read out (they are colour only on screen).
+const TOC_STATE_TEXT = { blocking: 'needed to start', warning: 'has a warning', complete: 'complete' };
 // The Full Guest List shows ten at a time; the rest fold behind Show more (2026-10-05).
 const GUESTS_SHOWN = 10;
 // The description clamps to two lines past this length, as in Evoni's mock (Show more / Show less).
@@ -264,24 +282,55 @@ function HeroTitle({ context, showId, name }) {
   );
 }
 
+/**
+ * The page, one instance per event (audit, 2026-10-23): moving from one
+ * event to another mounts a fresh page, so nothing of the last event (its
+ * name suggestions, brands, invitation approval, terms offer, a load still
+ * in flight) carries over to the next.
+ */
 export default function EventPackagePage() {
+  const { eventId } = useParams();
+  return <EventPackageView key={eventId} />;
+}
+
+function EventPackageView() {
   const { showId, eventId } = useParams();
   const navigate = useNavigate();
 
   const [data, setData] = useState(null);
+  // loading: the first load only (the page shows its spinner). A reload
+  // after a save keeps the page on screen (audit, 2026-10-23: every save used
+  // to swap the whole page for the spinner, losing the scroll and every open
+  // fold); reloadTick remounts the sections that read their own data, so
+  // they still refetch as before. refreshError: a reload that failed, the
+  // page still showing what it had.
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
+  const [refreshError, setRefreshError] = useState(null);
+  const [reloadTick, setReloadTick] = useState(0);
+  const loadSeqRef = useRef(0);
   const [starting, setStarting] = useState(false);
   // Start Anyway confirm (Task #1775): open while warnings are listed.
   const [startConfirmOpen, setStartConfirmOpen] = useState(false);
   // Episode Locations step (L3, §8(hh)): the proposal shown before Start
   // Episode creates anything; null while closed.
   const [locationsStep, setLocationsStep] = useState(null);
-  const [toast, setToast] = useState(null);
+  // The toast: each message is new, so the same text twice still restarts
+  // its timer (audit, 2026-10-23); setToast(text) as before.
+  const [toastState, setToastState] = useState(null);
+  const toastSeqRef = useRef(0);
+  const setToast = useCallback((text) => {
+    setToastState(text ? { text, n: ++toastSeqRef.current } : null);
+  }, []);
+  const toast = toastState?.text || null;
   const [seasonContext, setSeasonContext] = useState(null);
   // Episode Money Phase B, MB4 (§8(gg)): the money warnings Start Episode
   // shows early, from Lala's ledger balance and the event's whole plan.
   const [moneyPreview, setMoneyPreview] = useState(null);
+  // 'loading' until the money preview answers, then 'ready' or 'failed':
+  // Start Episode waits for it, so its warnings can't be skipped by a quick
+  // tap, and a failed check is itself a warning (audit, 2026-10-23).
+  const [moneyStatus, setMoneyStatus] = useState('loading');
   // Owned here, not inside InvitationButton (Task #1668): load() below sets
   // loading=true while it refetches, which unmounts this page's whole JSX
   // subtree — including InvitationButton — until it resolves. Local state
@@ -330,6 +379,9 @@ export default function EventPackagePage() {
   const [venuePickerOpen, setVenuePickerOpen] = useState(false);
   const [venueLocations, setVenueLocations] = useState(null);
   const [venueLocationsLoading, setVenueLocationsLoading] = useState(false);
+  // The locations read failed: the pickers say so with Try again, and the
+  // list stays unfetched (null) so the next open reads it again.
+  const [venueLocationsError, setVenueLocationsError] = useState(null);
   const [venueSearch, setVenueSearch] = useState('');
   const [venueSaving, setVenueSaving] = useState(false);
   const [locationCreateOpen, setLocationCreateOpen] = useState(false);
@@ -384,16 +436,28 @@ export default function EventPackagePage() {
   }
 
   const load = useCallback(async () => {
-    setLoading(true); setLoadError(null);
+    // Only the newest load may land: an older one finishing last would put
+    // stale data (and a stale save version) on the page.
+    const seq = ++loadSeqRef.current;
+    const first = !loadedEventRef.current;
+    if (first) setLoading(true);
+    setLoadError(null);
+    setRefreshError(null);
     try {
       const res = await api.get(`/api/v1/world/${showId}/events/${eventId}`);
+      if (seq !== loadSeqRef.current) return;
       loadedEventRef.current = res.data?.event || null;
       saveQueueRef.current.setVersion(res.data?.event?.updated_at);
       setData(res.data);
+      if (!first) setReloadTick((n) => n + 1);
     } catch (err) {
-      setLoadError(err.response?.data?.error || err.message || 'Failed to load event');
+      if (seq !== loadSeqRef.current) return;
+      console.error('[EventPackage] event load failed:', err);
+      const message = err.response?.data?.error || err.message || 'Failed to load event';
+      if (first) setLoadError(message);
+      else setRefreshError(message);
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) setLoading(false);
     }
   }, [showId, eventId]);
 
@@ -412,11 +476,16 @@ export default function EventPackagePage() {
   // event (its costs and terms can change here). Never blocks the page.
   useEffect(() => {
     const ev = data?.event;
-    if (!ev || ev.used_in_episode_id) { setMoneyPreview(null); return undefined; }
+    if (!ev) return undefined;
+    if (ev.used_in_episode_id) { setMoneyPreview(null); setMoneyStatus('ready'); return undefined; }
     let cancelled = false;
+    setMoneyStatus((st) => (st === 'ready' ? st : 'loading'));
     api.get(`/api/v1/world/${showId}/events/${eventId}/money-preview`)
-      .then((res) => { if (!cancelled) setMoneyPreview(res.data?.data || null); })
-      .catch((err) => { console.error('[EventPackage] money preview load failed:', err); });
+      .then((res) => { if (!cancelled) { setMoneyPreview(res.data?.data || null); setMoneyStatus('ready'); } })
+      .catch((err) => {
+        console.error('[EventPackage] money preview load failed:', err);
+        if (!cancelled) setMoneyStatus('failed');
+      });
     return () => { cancelled = true; };
   }, [showId, eventId, data]);
 
@@ -427,14 +496,16 @@ export default function EventPackagePage() {
     try {
       return await saveQueueRef.current.save(`/api/v1/world/${showId}/events/${eventId}`, body);
     } catch (err) {
+      // The caller's catch logs and shows the message.
       if (isStaleSaveError(err)) load();
       throw err;
     }
   };
 
   useEffect(() => {
-    if (toast) { const t = setTimeout(() => setToast(null), 4000); return () => clearTimeout(t); }
-  }, [toast]);
+    if (toastState) { const t = setTimeout(() => setToastState(null), 4000); return () => clearTimeout(t); }
+    return undefined;
+  }, [toastState]);
 
   // Debounced creator search for the Change Organizer picker's Creator
   // tab. "For this show": social profiles carry no show_id (the list route
@@ -442,19 +513,24 @@ export default function EventPackagePage() {
   // the show, feed_layer=lalaverse (NewEpisodeChooseHost in App.jsx); the
   // route also returns the real-world profiles Lala follows for that layer.
   useEffect(() => {
-    if (!organizerPickerOpen || organizerTab !== 'creator') return;
+    if (!organizerPickerOpen || organizerTab !== 'creator') return undefined;
     setHostSearching(true);
+    // A newer search (or closing the picker) makes this one's answer stale.
+    let stale = false;
     const t = setTimeout(() => {
       const qs = new URLSearchParams();
       qs.set('feed_layer', 'lalaverse');
       if (hostSearch.trim()) qs.set('search', hostSearch.trim());
       qs.set('limit', '20');
       api.get(`/api/v1/social-profiles?${qs.toString()}`)
-        .then((res) => setHostResults(res.data?.profiles || []))
-        .catch(() => setHostResults([]))
-        .finally(() => setHostSearching(false));
+        .then((res) => { if (!stale) setHostResults(res.data?.profiles || []); })
+        .catch((err) => {
+          console.error('[EventPackage] organizer search failed:', err);
+          if (!stale) setHostResults([]);
+        })
+        .finally(() => { if (!stale) setHostSearching(false); });
     }, 300);
-    return () => clearTimeout(t);
+    return () => { stale = true; clearTimeout(t); };
   }, [organizerPickerOpen, organizerTab, hostSearch]);
 
   // Brand list for the Brand tab, fetched once on first use: GET
@@ -479,31 +555,38 @@ export default function EventPackagePage() {
   // or feed-layer scoping, matching assembleGuestList itself
   // (eventAutomationService.js), which does not scope by show either.
   useEffect(() => {
-    if (!guestFeedPickerOpen) return;
+    if (!guestFeedPickerOpen) return undefined;
     setGuestFeedSearching(true);
+    let stale = false;
     const t = setTimeout(() => {
       const qs = new URLSearchParams();
       if (guestFeedSearch.trim()) qs.set('search', guestFeedSearch.trim());
       qs.set('limit', '20');
       api.get(`/api/v1/social-profiles?${qs.toString()}`)
-        .then((res) => setGuestFeedResults(res.data?.profiles || []))
-        .catch(() => setGuestFeedResults([]))
-        .finally(() => setGuestFeedSearching(false));
+        .then((res) => { if (!stale) setGuestFeedResults(res.data?.profiles || []); })
+        .catch((err) => {
+          console.error('[EventPackage] guest search failed:', err);
+          if (!stale) setGuestFeedResults([]);
+        })
+        .finally(() => { if (!stale) setGuestFeedSearching(false); });
     }, 300);
-    return () => clearTimeout(t);
+    return () => { stale = true; clearTimeout(t); };
   }, [guestFeedPickerOpen, guestFeedSearch]);
 
   // Fetched once on first use (picker open or "change scene set" click),
   // then cached — with only a handful of World Locations, no debounced
   // server search is needed; both pickers filter this same client-side.
   useEffect(() => {
-    if (!venuePickerOpen || venueLocations !== null) return;
+    if (!venuePickerOpen || venueLocations !== null || venueLocationsError) return;
     setVenueLocationsLoading(true);
     api.get('/api/v1/world/locations')
       .then((res) => setVenueLocations(res.data?.locations || []))
-      .catch(() => setVenueLocations([]))
+      .catch((err) => {
+        console.error('[EventPackage] locations load failed:', err);
+        setVenueLocationsError(err.response?.data?.error || err.message || 'Could not load the locations');
+      })
       .finally(() => setVenueLocationsLoading(false));
-  }, [venuePickerOpen, venueLocations]);
+  }, [venuePickerOpen, venueLocations, venueLocationsError]);
 
   // A link to a section (#epp-sec-deal from Money's "Open terms in the
   // event") lands on it once the page has loaded; it used to stay at the top
@@ -548,10 +631,49 @@ export default function EventPackagePage() {
     }
   }, [activeAnchor]);
 
+  // The open dialog (audit, 2026-10-23): Escape closes the top one (as its
+  // own X would, so not while it saves), Tab stays inside it, focus starts
+  // in it and goes back where it was when it closes. closeTopDialogRef is set
+  // each render, below, once the close functions exist.
+  const closeTopDialogRef = useRef(null);
+  const anyDialogOpen = startConfirmOpen || !!basicsEditing || !!stakesDraft || organizerPickerOpen
+    || guestFeedPickerOpen || venuePickerOpen || scenePickerOpen || outfitPickerOpen;
+  useEffect(() => {
+    if (!anyDialogOpen) return undefined;
+    const opener = document.activeElement;
+    const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const topDialog = () => {
+      const all = [...document.querySelectorAll('[role="dialog"]')].filter((d) => !d.closest('.els-overlay') || d.classList.contains('els-overlay'));
+      return all[all.length - 1] || null;
+    };
+    const dlg = topDialog();
+    if (dlg && !dlg.contains(document.activeElement)) dlg.querySelector(FOCUSABLE)?.focus?.();
+    const onKey = (e) => {
+      const top = topDialog();
+      if (!top || top.classList.contains('els-overlay')) return; // the Locations step handles its own keys
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeTopDialogRef.current?.();
+      } else if (e.key === 'Tab') {
+        const items = [...top.querySelectorAll(FOCUSABLE)].filter((el) => el.offsetParent !== null || el === document.activeElement);
+        if (!items.length) return;
+        const first = items[0]; const last = items[items.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        else if (!top.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      if (opener && document.contains(opener)) opener.focus?.();
+    };
+  }, [anyDialogOpen]);
+
   if (loading) {
     return (
       <div className="epp-page epp-center">
-        <div className="epp-spinner" aria-label="Loading event" />
+        <div className="epp-spinner" role="status" aria-label="Loading event" />
       </div>
     );
   }
@@ -560,7 +682,8 @@ export default function EventPackagePage() {
     return (
       <div className="epp-page epp-center">
         <AlertCircle size={28} color="var(--lala-danger)" />
-        <p className="epp-error">{loadError || 'Event not found'}</p>
+        <p className="epp-error" role="alert">{loadError || 'Event not found'}</p>
+        {loadError && <button type="button" className="epp-btn epp-btn-primary" onClick={load}>Try again</button>}
         <button className="epp-btn epp-btn-secondary" onClick={() => navigate(`/shows/${showId}/world?tab=events`)}>
           <ArrowLeft size={16} /> Back to Events
         </button>
@@ -574,7 +697,10 @@ export default function EventPackagePage() {
   // P2, else the used_in_episode_id stamp), so the page never offers an edit
   // the server would refuse.
   const used = !!event.used_in_episode_id || !!termsLockedBy;
-  const moneyWarnings = moneyPreview?.warnings || [];
+  const moneyWarnings = moneyStatus === 'failed'
+    ? [{ code: 'money_check_unavailable', message: 'Lala\u2019s money couldn\u2019t be checked for this episode; her balance may go below zero.' }]
+    : (moneyPreview?.warnings || []);
+  const moneyPending = !used && moneyStatus === 'loading';
   const lockEpisode = termsLockedBy || usedInEpisode || null;
   // Featured attendees (Evoni, 2026-10-09: "im not able to choose a
   // featured guest" after Start Episode, while the episode asked for them):
@@ -658,6 +784,7 @@ export default function EventPackagePage() {
       setToast(successMessage || (value ? `${spec.label} saved` : `${spec.label} cleared`));
       await load();
     } catch (err) {
+      console.error('[EventPackage] saveBasicsField failed:', err);
       setToast(err.response?.data?.error || err.message || `Failed to save ${spec.label.toLowerCase()}`);
     } finally {
       setBasicsSaving(false);
@@ -792,6 +919,7 @@ export default function EventPackagePage() {
       setToast('Stakes saved');
       await load();
     } catch (err) {
+      console.error('[EventPackage] saveStakes failed:', err);
       setToast(err.response?.data?.error || err.message || 'Failed to save stakes');
     } finally {
       setStakesSaving(false);
@@ -830,6 +958,7 @@ export default function EventPackagePage() {
       setToast(`Organizer set to ${pending.label} (${pending.kind})`);
       await load();
     } catch (err) {
+      console.error('[EventPackage] saveOrganizer failed:', err);
       setToast(err.response?.data?.error || err.message || 'Failed to change organizer');
     } finally {
       setOrganizerSaving(false);
@@ -891,19 +1020,24 @@ export default function EventPackagePage() {
       if (successMessage) setToast(successMessage);
       await load();
     } catch (err) {
+      console.error('[EventPackage] saveGuestProfiles failed:', err);
       setToast(err.response?.data?.error || err.message || 'Failed to update guests');
     } finally {
       setGuestSaving(false);
     }
   };
 
+  // At most MAX_FEATURED_GUESTS featured; says so when full.
+  const featuredFull = () => {
+    if (guestList.filter((g) => g.featured).length < MAX_FEATURED_GUESTS) return false;
+    setToast(`Only ${MAX_FEATURED_GUESTS} guests can be featured at once — remove one first.`);
+    return true;
+  };
+
   const toggleFeatured = (index) => {
     const guest = guestList[index];
     const name = guest.display_name || guest.handle || 'Guest';
-    if (!guest.featured && guestList.filter((g) => g.featured).length >= MAX_FEATURED_GUESTS) {
-      setToast(`Only ${MAX_FEATURED_GUESTS} guests can be featured at once — remove one first.`);
-      return;
-    }
+    if (!guest.featured && featuredFull()) return;
     const updated = guestList.map((g, i) => (i === index ? { ...g, featured: !g.featured } : g));
     saveGuestProfiles(updated, guest.featured ? `Removed ${name} from Featured` : `${name} is now Featured`);
   };
@@ -930,10 +1064,7 @@ export default function EventPackagePage() {
       toggleFeatured(at);
       return;
     }
-    if (guestList.filter((g) => g.featured).length >= MAX_FEATURED_GUESTS) {
-      setToast(`Only ${MAX_FEATURED_GUESTS} guests can be featured at once — remove one first.`);
-      return;
-    }
+    if (featuredFull()) return;
     // Same shape assembleGuestList writes (eventAutomationService.js) —
     // profile_id, not id — so relationship-sync and every other
     // profile_id-reading consumer finds this guest too (Task #1686).
@@ -952,10 +1083,7 @@ export default function EventPackagePage() {
   // featured with the role; anyone else joins the guest list featured, in
   // the shape Add from Feed writes.
   const featureRecommended = (rec) => {
-    if (guestList.filter((g) => g.featured).length >= MAX_FEATURED_GUESTS) {
-      setToast(`Only ${MAX_FEATURED_GUESTS} guests can be featured at once — remove one first.`);
-      return;
-    }
+    if (featuredFull()) return;
     const at = guestList.findIndex((g) => String(g.profile_id) === String(rec.profile_id));
     const updated = at >= 0
       ? guestList.map((g, i) => (i === at ? { ...g, featured: true, story_role: rec.role } : g))
@@ -973,6 +1101,7 @@ export default function EventPackagePage() {
       const res = await api.post(`/api/v1/world/${showId}/events/${eventId}/suggest-names`);
       setNameSuggestions(res.data?.names || []);
     } catch (err) {
+      console.error('[EventPackage] fetchNameSuggestions failed:', err);
       setNameSuggestError(err.response?.data?.error || err.message || 'Failed to suggest names');
     } finally {
       setNameSuggesting(false);
@@ -996,6 +1125,7 @@ export default function EventPackagePage() {
       setCustomName('');
       await load();
     } catch (err) {
+      console.error('[EventPackage] saveEventName failed:', err);
       setToast(err.response?.data?.error || err.message || 'Failed to save name');
     } finally {
       setNameSaving(false);
@@ -1003,6 +1133,9 @@ export default function EventPackagePage() {
   };
 
   const closeVenuePicker = () => {
+    // Not while a save runs: it would land on a closed picker and reopen
+    // the scene-set one (audit, 2026-10-23).
+    if (venueSaving || locationCreateSaving) return;
     setVenuePickerOpen(false);
     setVenueSearch('');
     setLocationCreateOpen(false);
@@ -1011,6 +1144,7 @@ export default function EventPackagePage() {
   };
 
   const closeScenePicker = () => {
+    if (sceneSaving || sceneCreateSaving) return;
     setScenePickerOpen(false);
     setSceneVenue(null);
     setSceneCreateOpen(false);
@@ -1038,6 +1172,7 @@ export default function EventPackagePage() {
       await load();
       openScenePicker({ id: location.id, name: location.name });
     } catch (err) {
+      console.error('[EventPackage] chooseVenue failed:', err);
       setToast(err.response?.data?.error || err.message || 'Failed to change venue');
     } finally {
       setVenueSaving(false);
@@ -1058,6 +1193,7 @@ export default function EventPackagePage() {
         await chooseVenue(locWithSets);
       }
     } catch (err) {
+      console.error('[EventPackage] createLocation failed:', err);
       setToast(err.response?.data?.error || err.message || 'Failed to create location');
     } finally {
       setLocationCreateSaving(false);
@@ -1099,6 +1235,7 @@ export default function EventPackagePage() {
       await load();
       return true;
     } catch (err) {
+      console.error('[EventPackage] chooseSceneSet failed:', err);
       setToast(err.response?.data?.error || err.message || 'Failed to change scene set');
       return false;
     } finally {
@@ -1123,6 +1260,7 @@ export default function EventPackagePage() {
       const set = res.data?.data;
       if (set && await chooseSceneSet(set, { quiet: true })) setToast(`${set.name} is chosen: make its base in Scene Sets`);
     } catch (err) {
+      console.error('[EventPackage] createSceneSet failed:', err);
       setToast(err.response?.data?.error || err.message || 'Failed to create scene set');
     } finally {
       setSceneCreateSaving(false);
@@ -1134,7 +1272,7 @@ export default function EventPackagePage() {
   // Start Episode: blocked while any gate item is missing; with warnings
   // open it asks first (Start Anyway); with none it starts directly.
   const requestStartEpisode = () => {
-    if (!gatesMet || used || starting) return;
+    if (!gatesMet || used || starting || moneyPending) return;
     if (readiness.warningItems.length || moneyWarnings.length) setStartConfirmOpen(true);
     else handleStartEpisode();
   };
@@ -1192,9 +1330,30 @@ export default function EventPackagePage() {
   const venueNames = Object.fromEntries((venueLocations || []).map((l) => [l.id, l.name]));
   const pickerGroups = searchSceneSets(orderSceneSetsForEvent(pickerSets, sceneVenue?.id || null, showId), pickerSearch, venueNames);
 
+  const dealTilesNow = dealTiles(moneyPreview);
+
+  // The topmost open dialog's close, for Escape (see anyDialogOpen above).
+  closeTopDialogRef.current = scenePickerOpen ? closeScenePicker
+    : venuePickerOpen ? closeVenuePicker
+      : guestFeedPickerOpen ? () => setGuestFeedPickerOpen(false)
+        : organizerPickerOpen ? () => { if (!organizerSaving) closeOrganizerPicker(); }
+          : stakesDraft ? () => { if (!stakesSaving) setStakesDraft(null); }
+            : basicsEditing ? () => { if (!basicsSaving) { setBasicsEditing(null); setBasicsDraft(''); setFillRound(null); } }
+              : startConfirmOpen ? () => { if (!starting) setStartConfirmOpen(false); }
+                : outfitPickerOpen ? () => setOutfitPickerOpen(false)
+                  : null;
+
   return (
     <div className="epp-page">
-      {toast && <div className="epp-toast">{toast}</div>}
+      <div className="epp-toast-live" role="status" aria-live="polite">
+        {toast && <div className="epp-toast" key={toastState.n}>{toast}</div>}
+      </div>
+      {refreshError && (
+        <div className="epp-refresh-error" role="alert" data-testid="refresh-error">
+          <AlertCircle size={16} aria-hidden /> Couldn&apos;t refresh the event: {refreshError}. What you see may be out of date.
+          <button type="button" className="epp-btn epp-btn-secondary epp-btn-small" onClick={load}>Retry</button>
+        </div>
+      )}
 
       <header className="epp-hero" data-testid="package-hero">
         <div className="epp-hero-top">
@@ -1266,7 +1425,7 @@ export default function EventPackagePage() {
             <span className={`epp-readiness-label ${gatesMet ? 'is-ready' : ''}`} data-testid="readiness-label">{gatesMet ? 'READY' : 'PRE-FLIGHT'}</span>
             <span className="epp-readiness-summary">
               {gatesMet
-                ? (readiness.warningItems.length ? `Start Episode is open. ${readiness.warningItems.length} warning${readiness.warningItems.length === 1 ? '' : 's'} to review.` : 'Every section is complete.')
+                ? (confirmCount ? `Start Episode is open. ${confirmCount} warning${confirmCount === 1 ? '' : 's'} to review.` : 'Every section is complete.')
                 : `${readiness.blockingItems.length} item${readiness.blockingItems.length === 1 ? '' : 's'} must be set before Start Episode.`}
             </span>
           </div>
@@ -1348,9 +1507,10 @@ export default function EventPackagePage() {
           {gatesMet ? (
             <button
               type="button" className="epp-btn epp-btn-small epp-btn-primary epp-next-btn"
-              data-testid="start-episode" onClick={requestStartEpisode} disabled={starting}
+              data-testid="start-episode" onClick={requestStartEpisode} disabled={starting || moneyPending}
+              title={moneyPending ? 'Checking Lala\u2019s money first' : undefined}
             >
-              <PlayCircle size={14} aria-hidden="true" /> {starting ? 'Starting…' : 'Start Episode'}
+              <PlayCircle size={14} aria-hidden="true" /> {starting ? 'Starting…' : moneyPending ? 'Checking money…' : 'Start Episode'}
             </button>
           ) : (
             <button
@@ -1375,6 +1535,8 @@ export default function EventPackagePage() {
                 aria-current={s.anchor === activeAnchor ? 'location' : undefined} data-testid={`toc-${s.anchor}`}
               >
                 <span className="epp-toc-dot" aria-hidden="true" />{s.label}
+                {/* The dot's state in words too, not colour alone (audit, 2026-10-23). */}
+                {TOC_STATE_TEXT[s.state] && <span className="epp-sr-only"> ({TOC_STATE_TEXT[s.state]})</span>}
               </a>
             </li>
           ))}
@@ -1472,7 +1634,7 @@ export default function EventPackagePage() {
                   <RefreshCw size={13} /> Regenerate
                 </button>
                 <input
-                  type="text" className="epp-name-suggest-input" placeholder="Or type your own"
+                  type="text" className="epp-name-suggest-input" aria-label="Your own name" placeholder="Or type your own"
                   value={customName} onChange={(e) => setCustomName(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') saveEventName(customName); }}
                   maxLength={40}
@@ -1502,7 +1664,7 @@ export default function EventPackagePage() {
                 Choose an organizer first — the invitation names them.
               </div>
             ) : (
-              <InvitationButton
+              <InvitationButton key={`reload-${reloadTick}`}
                 mode="inline"
                 event={{ ...event, invitation_url: invitationAsset?.s3_url_processed || null }}
                 showId={showId}
@@ -1610,7 +1772,11 @@ export default function EventPackagePage() {
                   <li key={guest.profile_id || guest.handle || index} className="epp-featured-item">
                     <div className="epp-featured-info">
                       <span className="epp-host-name">{guest.display_name || guest.handle}</span>
-                      {!used ? (
+                      {/* A featured guest's role and Remove only steer the
+                          script, so like featuring (castLocked) they stay open
+                          until the episode is accepted (audit, 2026-10-23);
+                          adding someone new invites them, which stays locked. */}
+                      {!castLocked ? (
                         <select
                           className="epp-role-select"
                           value={guest.story_role || ''}
@@ -1625,7 +1791,7 @@ export default function EventPackagePage() {
                         <span className="epp-saved-copy">{fmtLabel(guest.story_role)}</span>
                       ) : null}
                     </div>
-                    {!used && (
+                    {!castLocked && (
                       <button type="button" className="epp-inline-link" onClick={() => toggleFeatured(index)} disabled={guestSaving}>
                         Remove from Featured
                       </button>
@@ -1641,7 +1807,7 @@ export default function EventPackagePage() {
             )}
 
             {!used && featuredGuests.length < MAX_FEATURED_GUESTS && (
-              <EventGuestRecommendations
+              <EventGuestRecommendations key={`reload-${reloadTick}`}
                 guests={guestList}
                 organizerProfileId={event.source_profile_id}
                 venueLocationId={event.venue_location_id}
@@ -1723,7 +1889,7 @@ export default function EventPackagePage() {
           <div className="epp-split even epp-place">
           <div className="epp-split-side epp-place-image">
             {/* L7-L9 (§8(hh)): the look made into an image on the venue's set. */}
-            <EventLookImage showId={showId} eventId={eventId} onToast={setToast} onSaved={load} />
+            <EventLookImage key={`reload-${reloadTick}`} showId={showId} eventId={eventId} onToast={setToast} onSaved={load} />
           </div>
           <div className="epp-split-main">
           <dl className="epp-fields">
@@ -1774,7 +1940,7 @@ export default function EventPackagePage() {
           </dl>
           {/* L1 (§8(hh)): how the venue is dressed for this occasion. Its own
               lock (Q9): editable until the episode is accepted. */}
-          <EventVenueLook showId={showId} eventId={eventId} onToast={setToast} onSaved={load} />
+          <EventVenueLook key={`reload-${reloadTick}`} showId={showId} eventId={eventId} onToast={setToast} onSaved={load} />
           </div>
           </div>
         </section>
@@ -1856,7 +2022,7 @@ export default function EventPackagePage() {
           {/* Recommended looks (episode creation step 3): whole outfits from
               the closet while none is chosen. */}
           {!used && outfitPieces.length === 0 && (
-            <EventLookRecommendations
+            <EventLookRecommendations key={`reload-${reloadTick}`}
               showId={showId} eventId={eventId}
               onSaved={load} onToast={setToast} onBrowse={() => setOutfitPickerOpen(true)}
             />
@@ -1883,9 +2049,9 @@ export default function EventPackagePage() {
           </div>
           {used && !termsReopen && <span className="epp-chip" data-testid="deal-locked"><Lock size={11} aria-hidden="true" /> Locked at Start Episode</span>}
         </div>
-        {dealTiles(moneyPreview) && (
+        {dealTilesNow && (
           <ul className="epp-deal-tiles" data-testid="deal-tiles">
-            {dealTiles(moneyPreview).map((t) => (
+            {dealTilesNow.map((t) => (
               <li key={t.key} className={`epp-deal-tile tile-${t.key}`} data-testid={`deal-${t.key}`}>
                 <span>{t.label}</span>
                 <strong>{t.value}</strong>
@@ -1897,7 +2063,7 @@ export default function EventPackagePage() {
         {/* Reopen terms (Task #2378) sits directly above the Terms it
             reopens, where the lock label is (Evoni, 2026-09-30: the line
             under the page banner was not found). */}
-        <TermsReopenPanel
+        <TermsReopenPanel key={`reload-${reloadTick}`}
           showId={showId}
           eventId={eventId}
           locked={used}
@@ -1910,7 +2076,7 @@ export default function EventPackagePage() {
           onToast={setToast}
         />
 
-        <EventTermsSection
+        <EventTermsSection key={`reload-${reloadTick}`}
           showId={showId}
           eventId={eventId}
           event={event}
@@ -2062,7 +2228,7 @@ export default function EventPackagePage() {
           <div className="epp-section-header">
             <div className="epp-section-heading"><h2 className="epp-section-title"><span className="epp-section-num">7.</span> In-world documents</h2><p className="epp-section-sub">The papers the event gives her, drafted from it.</p></div>
           </div>
-          <EventDocuments
+          <EventDocuments key={`reload-${reloadTick}`}
             showId={showId}
             eventId={eventId}
             event={event}
@@ -2105,7 +2271,7 @@ export default function EventPackagePage() {
 
       {startConfirmOpen && gatesMet && !used && (
         <div className="epp-modal-backdrop" onClick={() => { if (!starting) setStartConfirmOpen(false); }}>
-          <div className="epp-modal epp-start-confirm" role="dialog" aria-label="Start Episode with warnings" data-testid="start-confirm" onClick={(e) => e.stopPropagation()}>
+          <div className="epp-modal epp-start-confirm" role="dialog" aria-modal="true" aria-label="Start Episode with warnings" data-testid="start-confirm" onClick={(e) => e.stopPropagation()}>
             <div className="epp-modal-header">
               <h3><AlertTriangle size={15} aria-hidden="true" /> Start with {confirmCount} warning{confirmCount === 1 ? '' : 's'}?</h3>
               <button className="epp-icon-btn" onClick={() => setStartConfirmOpen(false)} aria-label="Close" disabled={starting}>
@@ -2166,7 +2332,7 @@ export default function EventPackagePage() {
         const inputType = nativeOk ? spec.input : 'text';
         return (
           <div className="epp-modal-backdrop" onClick={closeBasics}>
-            <div className="epp-modal" role="dialog" aria-label={spec.title} onClick={(e) => e.stopPropagation()}>
+            <div className="epp-modal" role="dialog" aria-modal="true" aria-label={spec.title} onClick={(e) => e.stopPropagation()}>
               <div className="epp-modal-header">
                 <h3>{spec.title}</h3>
                 <button className="epp-icon-btn" onClick={closeBasics} aria-label="Close" disabled={basicsSaving}>
@@ -2207,7 +2373,9 @@ export default function EventPackagePage() {
                   <input
                     autoFocus type={inputType} value={basicsDraft} maxLength={spec.maxLength}
                     onChange={(e) => setBasicsDraft(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') saveBasicsField(key, basicsDraft); }}
+                    // Enter saves like the Save button, which an empty draft
+                    // disables: Enter never clears a field (audit, 2026-10-23).
+                    onKeyDown={(e) => { if (e.key === 'Enter' && basicsDraft.trim() && !basicsSaving) saveBasicsField(key, basicsDraft); }}
                     placeholder={key === 'dressCode' ? 'e.g. black tie formal' : ''}
                     aria-label={spec.title}
                   />
@@ -2255,7 +2423,7 @@ export default function EventPackagePage() {
         );
         return (
           <div className="epp-modal-backdrop" onClick={closeStakes}>
-            <div className="epp-modal" role="dialog" aria-label="Edit stakes" onClick={(e) => e.stopPropagation()}>
+            <div className="epp-modal" role="dialog" aria-modal="true" aria-label="Edit stakes" onClick={(e) => e.stopPropagation()}>
               <div className="epp-modal-header">
                 <h3>Edit stakes</h3>
                 <button className="epp-icon-btn" onClick={closeStakes} aria-label="Close" disabled={stakesSaving}>
@@ -2302,7 +2470,7 @@ export default function EventPackagePage() {
 
       {organizerPickerOpen && !used && (
         <div className="epp-modal-backdrop" onClick={() => { if (!organizerSaving) closeOrganizerPicker(); }}>
-          <div className="epp-modal" role="dialog" aria-label="Change Organizer" onClick={(e) => e.stopPropagation()}>
+          <div className="epp-modal" role="dialog" aria-modal="true" aria-label="Change Organizer" onClick={(e) => e.stopPropagation()}>
             <div className="epp-modal-header">
               <h3>Change Organizer</h3>
               <button className="epp-icon-btn" onClick={closeOrganizerPicker} aria-label="Close" disabled={organizerSaving}>
@@ -2345,16 +2513,27 @@ export default function EventPackagePage() {
               </>
             ) : (
               <>
-                <div className="epp-organizer-tabs" role="tablist">
+                {/* Tabs as tabs (audit, 2026-10-23): one in the Tab order,
+                    arrows move between them, each controls the panel below. */}
+                <div className="epp-organizer-tabs" role="tablist" aria-label="Organizer kind"
+                  onKeyDown={(e) => {
+                    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+                    e.preventDefault();
+                    const next = organizerTab === 'creator' ? 'brand' : 'creator';
+                    setOrganizerTab(next);
+                    document.getElementById(`epp-organizer-tab-${next}`)?.focus();
+                  }}>
                   <button
-                    type="button" role="tab" aria-selected={organizerTab === 'creator'}
+                    type="button" role="tab" aria-selected={organizerTab === 'creator'} id="epp-organizer-tab-creator"
+                    aria-controls="epp-organizer-panel" tabIndex={organizerTab === 'creator' ? 0 : -1}
                     className={`epp-organizer-tab ${organizerTab === 'creator' ? 'is-active' : ''}`}
                     onClick={() => setOrganizerTab('creator')}
                   >
                     <User size={14} /> Creator
                   </button>
                   <button
-                    type="button" role="tab" aria-selected={organizerTab === 'brand'}
+                    type="button" role="tab" aria-selected={organizerTab === 'brand'} id="epp-organizer-tab-brand"
+                    aria-controls="epp-organizer-panel" tabIndex={organizerTab === 'brand' ? 0 : -1}
                     className={`epp-organizer-tab ${organizerTab === 'brand' ? 'is-active' : ''}`}
                     onClick={() => setOrganizerTab('brand')}
                   >
@@ -2362,6 +2541,7 @@ export default function EventPackagePage() {
                   </button>
                 </div>
 
+                <div role="tabpanel" id="epp-organizer-panel" aria-labelledby={`epp-organizer-tab-${organizerTab}`}>
                 {organizerTab === 'creator' ? (
                   <>
                     <div className="epp-modal-search">
@@ -2455,6 +2635,7 @@ export default function EventPackagePage() {
                     </div>
                   </>
                 )}
+                </div>
               </>
             )}
           </div>
@@ -2463,7 +2644,7 @@ export default function EventPackagePage() {
 
       {guestFeedPickerOpen && (
         <div className="epp-modal-backdrop" onClick={() => setGuestFeedPickerOpen(false)}>
-          <div className="epp-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="epp-modal" role="dialog" aria-modal="true" aria-label="Add from The Pulse" onClick={(e) => e.stopPropagation()}>
             <div className="epp-modal-header">
               <h3>Add from The Pulse</h3>
               <button className="epp-icon-btn" onClick={() => setGuestFeedPickerOpen(false)} aria-label="Close">
@@ -2474,7 +2655,7 @@ export default function EventPackagePage() {
               <Search size={14} />
               <input
                 autoFocus
-                placeholder="Search creators…"
+                aria-label="Search creators" placeholder="Search creators…"
                 value={guestFeedSearch}
                 onChange={(e) => setGuestFeedSearch(e.target.value)}
               />
@@ -2513,7 +2694,7 @@ export default function EventPackagePage() {
 
       {venuePickerOpen && (
         <div className="epp-modal-backdrop" onClick={closeVenuePicker}>
-          <div className="epp-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="epp-modal" role="dialog" aria-modal="true" aria-label="Choose venue" onClick={(e) => e.stopPropagation()}>
             <div className="epp-modal-header">
               <h3>Choose Venue</h3>
               <button className="epp-icon-btn" onClick={closeVenuePicker} aria-label="Close">
@@ -2524,7 +2705,7 @@ export default function EventPackagePage() {
               <Search size={14} />
               <input
                 autoFocus
-                placeholder="Search locations…"
+                aria-label="Search locations" placeholder="Search locations…"
                 value={venueSearch}
                 onChange={(e) => setVenueSearch(e.target.value)}
               />
@@ -2532,6 +2713,11 @@ export default function EventPackagePage() {
             <div className="epp-modal-results">
               {venueLocationsLoading ? (
                 <div className="epp-empty">Loading locations…</div>
+              ) : venueLocationsError ? (
+                <div className="epp-empty" role="alert" data-testid="venue-locations-error">
+                  Couldn&apos;t load the locations: {venueLocationsError}{' '}
+                  <button type="button" className="epp-inline-link" onClick={() => setVenueLocationsError(null)}>Try again</button>
+                </div>
               ) : filteredVenueLocations.length ? (
                 filteredVenueLocations.map((l) => (
                   <button key={l.id} className="epp-modal-result" disabled={venueSaving} onClick={() => chooseVenue(l)}>
@@ -2554,11 +2740,11 @@ export default function EventPackagePage() {
               ) : (
                 <div className="epp-inline-create">
                   <input
-                    type="text" placeholder="Location name" value={locationCreateName}
+                    type="text" aria-label="Location name" placeholder="Location name" value={locationCreateName}
                     onChange={(e) => setLocationCreateName(e.target.value)} maxLength={80}
                   />
                   <input
-                    type="text" placeholder="City" value={locationCreateCity}
+                    type="text" aria-label="City" placeholder="City" value={locationCreateCity}
                     onChange={(e) => setLocationCreateCity(e.target.value)} maxLength={80}
                   />
                   <div className="epp-inline-create-actions">
@@ -2582,7 +2768,7 @@ export default function EventPackagePage() {
 
       {scenePickerOpen && (
         <div className="epp-modal-backdrop" onClick={closeScenePicker}>
-          <div className="epp-modal" role="dialog" aria-label="Choose the scene set" data-testid="scene-set-picker" onClick={(e) => e.stopPropagation()}>
+          <div className="epp-modal" role="dialog" aria-modal="true" aria-label="Choose the scene set" data-testid="scene-set-picker" onClick={(e) => e.stopPropagation()}>
             <div className="epp-modal-header">
               <h3>Scene Set — {event.name}</h3>
               <button className="epp-icon-btn" onClick={closeScenePicker} aria-label="Close">

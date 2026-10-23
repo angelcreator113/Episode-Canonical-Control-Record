@@ -122,10 +122,13 @@ describe('PUT /world/:showId/events/:eventId — stale-save check', () => {
   });
 
   test('a save with no version keeps last-write-wins (optional check)', async () => {
+    // The row is still locked for the write (audit, 2026-10-23), but no
+    // version is compared: an older stored row does not refuse it.
+    mockRows[EV].updated_at = parsePgDate('2026-09-24 16:00:00.000000+00');
     const res = await put({ name: 'Gala Night' });
     expect(res.status).toBe(200);
     expect(updates()).toHaveLength(1);
-    expect(mockCalls.some((c) => /FOR UPDATE$/.test(c.sql))).toBe(false);
+    expect(mockRows[EV].name).toBe('Gala Night');
   });
 
   test('a version that is not a date is a 400, and nothing is written', async () => {

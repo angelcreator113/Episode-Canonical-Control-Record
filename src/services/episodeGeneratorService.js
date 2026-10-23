@@ -397,11 +397,21 @@ async function resumeEpisodeSetup(models, episodeId) {
  * at it.
  */
 async function stampEventUsed(sequelize, eventId, episodeId, { transaction } = {}) {
+  // Only an event with no live episode is stamped (audit High, 2026-10-23):
+  // a link to a missing or soft-deleted episode does not block, as in
+  // findLiveLinkedEpisode; a regenerate has soft-deleted the episode it
+  // replaces earlier in the same transaction.
   const [rows] = await sequelize.query(
-    `UPDATE world_events SET status = 'used', used_in_episode_id = :episodeId, times_used = COALESCE(times_used, 0) + 1, updated_at = NOW() WHERE id = :eventId RETURNING id`,
+    `UPDATE world_events SET status = 'used', used_in_episode_id = :episodeId, times_used = COALESCE(times_used, 0) + 1, updated_at = NOW()
+      WHERE id = :eventId
+        AND (used_in_episode_id IS NULL
+             OR NOT EXISTS (SELECT 1 FROM episodes ep WHERE ep.id = world_events.used_in_episode_id AND ep.deleted_at IS NULL))
+      RETURNING id`,
     { replacements: { episodeId, eventId }, transaction }
   );
   if (!Array.isArray(rows) || rows.length === 0) {
+    const live = await findLiveLinkedEpisode(sequelize, eventId, { transaction });
+    if (live) throw eventEpisodeConflictError(live);
     throw new Error(`Event ${eventId} could not be linked to episode ${episodeId}: no world_events row was updated`);
   }
 }
@@ -627,6 +637,20 @@ Return ONLY JSON.` }],
   // is non-blocking by design, runs after the commit, and logs its own
   // failures.
   const { episode, brief } = await models.sequelize.transaction(async (transaction) => {
+    // Start Episode runs once per event (audit High, 2026-10-23): the event
+    // row is locked first, and the one-event-one-episode guard above is
+    // asked again under the lock. A second Start that raced the first waits
+    // here, then finds the first one's episode and is refused with 409
+    // (EVENT_ALREADY_HAS_EPISODE) before it creates anything.
+    await models.sequelize.query(
+      'SELECT used_in_episode_id FROM world_events WHERE id = :eventId FOR UPDATE',
+      { replacements: { eventId }, transaction }
+    );
+    const liveUnderLock = await findLiveLinkedEpisode(models.sequelize, eventId, { transaction });
+    if (liveUnderLock && !(replacingEpisodeId && liveUnderLock.id === replacingEpisodeId)) {
+      throw eventEpisodeConflictError(liveUnderLock);
+    }
+
     const episode = await Episode.create({
       show_id: showId,
       title: episodeTitle,

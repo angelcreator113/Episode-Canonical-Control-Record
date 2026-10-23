@@ -17,6 +17,9 @@ const { withoutServerOwnedKeys } = require('../../../src/utils/eventTermsLock');
 function fakeModels(event) {
   const row = { ...event };
   const sequelize = {
+    // A read-modify-write runs in one transaction with the row locked
+    // (audit, 2026-10-23); here the callback just runs.
+    transaction: jest.fn(async (fn) => fn({ id: 'tx' })),
     query: jest.fn(async (sql, { replacements }) => {
       if (/^SELECT/.test(sql.trim())) {
         return [row.id === replacements.eventId && row.show_id === replacements.showId ? [JSON.parse(JSON.stringify(row))] : []];
@@ -93,6 +96,33 @@ describe('eventDocumentsService', () => {
     const redrafted = await svc.draftDocument(models, { ...ids, type: 'shopping_list' });
     expect(redrafted).toMatchObject({ status: 'draft', version: 3, source: 'draft', approved_at: null });
     expect(redrafted.history.map((h) => [h.version, h.status])).toEqual([[2, 'approved'], [1, 'draft']]);
+  });
+
+  test('approve reads and writes under the event row lock, and a stale version is refused (audit, 2026-10-23)', async () => {
+    const { models, row } = fakeModels(EVENT);
+    await svc.draftDocument(models, { ...ids, type: 'shopping_list' });
+    await svc.editDocument(models, { ...ids, type: 'shopping_list', items: [{ label: 'Gold heels', slot: 'shoes' }] });
+
+    // The client last read version 1; version 2 (the edit) is stored now.
+    const writesBefore = models.sequelize.query.mock.calls.filter(([sql]) => /^UPDATE/.test(sql.trim())).length;
+    await expect(svc.approveDocument(models, { ...ids, type: 'shopping_list', version: 1 })).rejects.toMatchObject({ status: 409 });
+    expect(models.sequelize.query.mock.calls.filter(([sql]) => /^UPDATE/.test(sql.trim()))).toHaveLength(writesBefore);
+    expect(row.canon_consequences.documents.shopping_list).toMatchObject({ version: 2, status: 'draft' });
+
+    // Without a version it approves what is stored at that moment: the edit,
+    // read FOR UPDATE inside the transaction.
+    const approved = await svc.approveDocument(models, { ...ids, type: 'shopping_list' });
+    expect(approved).toMatchObject({ version: 2, status: 'approved' });
+    expect(approved.items.map((i) => i.label)).toEqual(['Gold heels']);
+    const lockRead = models.sequelize.query.mock.calls.find(([sql, opts]) => /FOR UPDATE$/.test(sql) && opts.transaction);
+    expect(lockRead).toBeDefined();
+    expect(models.sequelize.transaction).toHaveBeenCalled();
+  });
+
+  test('a version that is not a whole number is a 400', async () => {
+    const { models } = fakeModels(EVENT);
+    await svc.draftDocument(models, { ...ids, type: 'shopping_list' });
+    await expect(svc.approveDocument(models, { ...ids, type: 'shopping_list', version: 'latest' })).rejects.toMatchObject({ status: 400 });
   });
 
   test('history keeps the last ten versions', () => {
