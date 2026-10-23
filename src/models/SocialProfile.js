@@ -147,6 +147,10 @@ module.exports = (sequelize, DataTypes) => {
     status:                { type: DataTypes.ENUM('draft','generated','finalized','crossed','archived'), defaultValue: 'draft' },
     generation_model:      { type: DataTypes.STRING(60), allowNull: true },
     full_profile:          { type: DataTypes.JSONB, defaultValue: {} },
+    // "Also known as" (migration 20261023220000; Evoni, 2026-10-23): the other
+    // names they go by, nicknames like "Truth" for Truthville. A goal about
+    // them ticks when the script uses one (utils/scriptRuleChecks goalPerson).
+    aliases:               { type: DataTypes.JSONB, defaultValue: [] },
 
     /* ── Mirror Field (Component 2) ── */
     justawoman_mirror: {

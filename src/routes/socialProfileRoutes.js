@@ -1770,6 +1770,21 @@ router.post('/:id/cross', requireAuth, authorize(['ADMIN']), guardJustAWomanReco
   }
 });
 
+/**
+ * "Also known as" as saved (Evoni, 2026-10-23): a list of names, or one
+ * string with commas between them; each trimmed, at most 60 characters,
+ * each once (case aside), at most 12. Anything else is no names.
+ */
+function cleanAliases(value) {
+  const list = Array.isArray(value) ? value : (typeof value === 'string' ? value.split(',') : []);
+  const out = [];
+  for (const v of list) {
+    const name = typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, 60).trim() : '';
+    if (name && !out.some((o) => o.toLowerCase() === name.toLowerCase())) out.push(name);
+  }
+  return out.slice(0, 12);
+}
+
 // ── PUT /:id ─────────────────────────────────────────────────────────────────
 // Update editable fields on a profile
 // ADMIN only (Evoni, 2026-10-19: this whole part of the site is admin only; the profile audit).
@@ -1802,6 +1817,7 @@ router.put('/:id', requireAuth, authorize(['ADMIN']), guardJustAWomanRecord, asy
     for (const key of allowed) {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
     }
+    if (req.body.aliases !== undefined) updates.aliases = cleanAliases(req.body.aliases);
 
     await profile.update(updates);
 
@@ -1849,6 +1865,7 @@ router.patch('/:id', requireAuth, authorize(['ADMIN']), guardJustAWomanRecord, a
     for (const key of allowed) {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
     }
+    if (req.body.aliases !== undefined) updates.aliases = cleanAliases(req.body.aliases);
 
     await profile.update(updates);
 
@@ -3264,3 +3281,4 @@ module.exports.autoAssignAllFollowers = autoAssignAllFollowers;
 module.exports.computeFollowScore = computeFollowScore;
 module.exports.autoLinkRelationships = autoLinkRelationships;
 module.exports.CHARACTER_FOLLOW_PROFILES = CHARACTER_FOLLOW_PROFILES;
+module.exports.cleanAliases = cleanAliases;
