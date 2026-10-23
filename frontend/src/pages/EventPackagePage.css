@@ -854,19 +854,6 @@
   border-top: 1px solid var(--lala-parchment-3);
 }
 
-.epp-actions {
-  position: sticky;
-  bottom: 0;
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 20px;
-  padding: 12px 0;
-  background: linear-gradient(to top, var(--lala-parchment) 60%, transparent);
-}
-
 .epp-btn {
   display: inline-flex;
   align-items: center;
@@ -1812,7 +1799,7 @@
   color: var(--text-inverse);
 }
 .epp-next-btn.epp-btn-primary:hover:not(:disabled) { background: var(--lala-lavender-dark); border-color: var(--lala-lavender-dark); }
-.epp-section, .epp-strip { scroll-margin-top: 16px; }
+.epp-section, .epp-strip, .epp-bar { scroll-margin-top: calc(var(--app-header-h, 0px) + var(--epp-bar-h, 56px) + 12px); }
 .epp-stakes-field textarea { resize: vertical; font-size: 13px; }
 
 /* Money: Lala's balance, the planned lines and the projection. */
@@ -1837,9 +1824,7 @@
 .epp-money-lines .is-neg { color: var(--lala-danger); }
 .epp-money-lines .is-pos { color: var(--primary-text); }
 
-@media (max-width: 480px) {
-  .epp-next-btn.epp-btn-primary { margin-left: 0; flex: 1 1 auto; justify-content: center; }
-}
+
 
 /* Recommended looks (episode creation step 3): whole outfits from the
    closet. Soft pink cards, teal Use this look. */
@@ -1954,10 +1939,9 @@
 .epp-strip-tile.is-blocking { background: var(--danger-bg); border-color: var(--danger-border); border-top-color: var(--danger); }
 .epp-strip-tile.is-blocking span { color: var(--danger-text); }
 .epp-strip-tile:hover { box-shadow: var(--shadow-xs); }
-.epp-strip .epp-next { margin: 12px 0 0; }
 
 .epp-body { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 20px; align-items: start; }
-.epp-toc { position: sticky; top: 16px; padding: 14px 16px; border-radius: 16px; background: var(--lala-surface); border: 1px solid var(--lala-parchment-3); }
+.epp-toc { position: sticky; top: calc(var(--app-header-h, 0px) + var(--epp-bar-h, 56px) + 16px); padding: 14px 16px; border-radius: 16px; background: var(--lala-surface); border: 1px solid var(--lala-parchment-3); }
 .epp-toc-eyebrow { display: block; margin-bottom: 8px; font-family: var(--font-sans); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--lala-ink-muted); }
 .epp-toc ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .epp-toc a { display: flex; align-items: center; gap: 10px; padding: 7px 4px; border-radius: 8px; font-family: var(--font-sans); font-size: 13px; color: var(--lala-ink); text-decoration: none; }
@@ -1975,11 +1959,11 @@
   /* Item 9 (Evoni's review): the chip row stays under the header while the
      sections scroll, on the page's own background, under the app's top
      bar (Header.jsx publishes --app-header-h). */
-  .epp-toc { position: sticky; top: var(--app-header-h, 0px); z-index: 5; margin: 0 -4px; padding: 8px 4px; background: var(--lala-parchment); border: none; border-radius: 0; box-shadow: 0 6px 8px -8px rgba(44, 44, 44, 0.25); }
+  .epp-toc { position: sticky; top: calc(var(--app-header-h, 0px) + var(--epp-bar-h, 56px)); z-index: 5; margin: 0 -4px; padding: 8px 4px; background: var(--lala-parchment); border: none; border-radius: 0; box-shadow: 0 6px 8px -8px rgba(44, 44, 44, 0.25); }
   .epp-toc-eyebrow { display: none; }
   .epp-toc ul { position: relative; display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
   .epp-toc ul::-webkit-scrollbar { display: none; }
-  .epp-section, .epp-strip { scroll-margin-top: calc(var(--app-header-h, 0px) + 64px); }
+  .epp-section, .epp-strip, .epp-bar { scroll-margin-top: calc(var(--app-header-h, 0px) + var(--epp-bar-h, 56px) + 64px); }
   .epp-toc li { flex: none; }
   .epp-toc a { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--lala-parchment-3); background: var(--lala-surface); white-space: nowrap; }
   .epp-toc a.is-active { border-color: var(--lala-lavender-line); background: var(--lala-lavender-soft); }
@@ -2075,7 +2059,7 @@
   .epp-place .epp-place-image { position: sticky; top: 16px; align-self: start; }
 }
 /* The description clamps to two lines until Show more (Evoni's mock). */
-.epp-basic-prose.is-clamped { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.epp-basic-prose-wrap.is-clamped > .epp-basic-prose { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .epp-basic .epp-show-more { margin: 4px 0 0; }
 
 /* Lala's look once the event has started an episode: each piece owned or to
@@ -2178,7 +2162,6 @@
   .epp-btn-small { min-height: 40px; padding: 8px 14px; font-size: 13px; }
   .epp-inline-link { display: inline-flex; align-items: center; min-height: 40px; padding: 0 6px; font-size: 14px; }
   .epp-toc a { min-height: 40px; }
-  .epp-actions { position: static; background: none; }
   .epp-modal-backdrop { align-items: flex-end; padding: 0; }
   .epp-modal {
     max-width: none;
@@ -2189,4 +2172,276 @@
 }
 @supports not (height: 1dvh) {
   @media (max-width: 600px) { .epp-modal { max-height: 88vh; } }
+}
+
+/* ─── Enhancements (Evoni, 2026-10-23: "I want them all") ─────────────── */
+
+/* A primary pill keeps its white label: the lavender .epp-btn colour above
+   (item 7) came later in the file and turned it lavender on lavender. */
+.epp-btn.epp-btn-primary { color: var(--text-inverse); }
+
+/* One sticky readiness bar: N of M ready (a disclosure for the list), the
+   next step, Lala's balance and Continue / Start Episode. It stays under the
+   app's top bar on desktop and phone; the open list floats beneath it. */
+.epp-bar {
+  position: sticky;
+  top: var(--app-header-h, 0px);
+  z-index: 20;
+  margin: 0 0 16px;
+}
+.epp-bar > .epp-next {
+  margin: 0;
+  border-radius: 12px;
+  box-shadow: 0 6px 16px -10px rgba(44, 44, 44, 0.35);
+}
+.epp-next.is-used { border-color: var(--lala-lavender-line); background: var(--lala-lavender-soft); }
+button.epp-next-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 4px 10px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: var(--lala-surface);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+button.epp-next-count:hover { background: var(--lala-parchment); }
+button.epp-next-count:focus-visible, .epp-basic-value-btn:focus-visible, .epp-toast-undo:focus-visible {
+  outline: 2px solid var(--lala-lavender);
+  outline-offset: 2px;
+}
+.epp-next .epp-next-text { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.epp-balance-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--lala-lavender-line);
+  background: var(--lala-surface);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--lala-ink);
+  white-space: nowrap;
+}
+.epp-balance-after { font-weight: 400; color: var(--lala-ink-muted); }
+.epp-balance-chip.is-warn { border-color: var(--warning-border); background: var(--warning-bg); color: var(--warning-text); }
+.epp-balance-chip.is-warn .epp-balance-after { color: var(--warning-text); }
+.epp-balance-chip.is-muted { color: var(--lala-ink-muted); font-weight: 400; }
+.epp-bar-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  max-height: calc(100vh - var(--app-header-h, 0px) - var(--epp-bar-h, 56px) - 24px);
+  overflow-y: auto;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--lala-parchment-3);
+  background: var(--lala-surface);
+  box-shadow: 0 16px 36px -12px rgba(44, 44, 44, 0.35);
+  box-sizing: border-box;
+}
+.epp-bar-panel[hidden], .epp-section-body[hidden] { display: none; }
+.epp-bar-panel .epp-strip-details { scroll-margin-top: 0; }
+.epp-bar-panel-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 12px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--lala-parchment-3);
+}
+.epp-shortcuts-link { display: inline-flex; align-items: center; gap: 4px; margin-right: auto; background: none; border: none; cursor: pointer; }
+@media (hover: none) and (pointer: coarse) { .epp-shortcuts-link { display: none; } }
+
+/* Folded sections: a finished section is one line, with Edit to open it. */
+.epp-section-header { justify-content: flex-start; }
+.epp-section-header > .epp-section-heading { flex: 1 1 260px; }
+.epp-section-header > .epp-fold-btn { order: 3; }
+.epp-section.is-folded .epp-section-header > :not(.epp-section-heading):not(.epp-fold-btn) { display: none; }
+.epp-section.is-folded .epp-section-sub { display: none; }
+.epp-section.is-folded .epp-section-heading { margin: 0; }
+.epp-section.is-folded { padding-top: 14px; padding-bottom: 14px; }
+.epp-fold-summary {
+  display: block;
+  margin: 6px 0 0;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--lala-ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.epp-fold-summary svg { display: inline-block; margin-right: 4px; vertical-align: -2px; color: var(--success-text); }
+.epp-section.is-folded .epp-section-header { flex-wrap: nowrap; }
+.epp-section.is-folded .epp-section-header > .epp-section-heading { flex: 1 1 0; min-width: 0; }
+.epp-section.is-folded .epp-fold-btn { flex: none; }
+
+/* Basics edited in place: the value is the way in, the editor sits in the row. */
+.epp-basic-value-btn {
+  display: inline;
+  padding: 0;
+  border: none;
+  border-bottom: 1px dashed transparent;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.epp-basic-value-btn:hover:not(:disabled) { border-bottom-color: var(--lala-lavender); }
+.epp-basic-prose-wrap { display: block; }
+.epp-basic-prose-wrap > .epp-basic-prose { display: block; width: 100%; }
+.epp-basic.is-editing > dd { width: 100%; }
+.epp-inline-edit {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--lala-lavender-line);
+  background: var(--lala-lavender-soft);
+}
+.epp-inline-edit input, .epp-inline-edit select, .epp-inline-edit textarea,
+.epp-suggest-body input, .epp-suggest-body select, .epp-suggest-body textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: 8px;
+  background: var(--lala-surface);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--lala-ink);
+}
+.epp-inline-edit textarea, .epp-suggest-body textarea { resize: vertical; }
+.epp-inline-edit .epp-basics-note { margin: 0; }
+.epp-inline-edit .epp-basics-fill { justify-self: start; }
+.epp-inline-edit-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+/* Suggest with AI, and the review list it opens. */
+.epp-ai-suggest { margin-top: 12px; }
+.epp-ai-suggest-error { display: flex; align-items: center; gap: 6px; margin: 8px 0 0; font-size: 13px; color: var(--danger-text); }
+.epp-suggest-review {
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--lala-gold-line);
+  background: var(--lala-parchment);
+}
+.epp-suggest-review-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.epp-suggest-review-head h3 { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-family: var(--font-prose); font-size: 17px; font-weight: 600; color: var(--lala-ink); }
+.epp-suggest-review-head h3:focus { outline: none; }
+.epp-suggest-review-note { margin: 4px 0 10px; font-size: 12px; color: var(--lala-ink-muted); }
+.epp-suggest-empty { margin: 0 0 10px; font-size: 13px; color: var(--lala-ink); }
+.epp-suggest-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.epp-suggest-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--lala-parchment-3);
+  background: var(--lala-surface);
+}
+.epp-suggest-row.is-off { opacity: 0.6; }
+.epp-suggest-row > input[type="checkbox"] { width: 20px; height: 20px; min-width: 0; min-height: 0; max-width: 20px; max-height: 20px; padding: 0; margin: 2px 0 0; accent-color: var(--lala-lavender); }
+.epp-suggest-body { display: grid; gap: 4px; min-width: 0; }
+.epp-suggest-label { font-size: 12px; font-weight: 600; color: var(--lala-ink-muted); cursor: pointer; }
+.epp-suggest-value { font-size: 14px; color: var(--lala-ink); }
+.epp-suggest-reason { font-size: 12px; color: var(--lala-ink-muted); overflow-wrap: anywhere; }
+.epp-suggest-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+/* Undo on the toast: the toast takes taps while it offers one. */
+.epp-toast.has-undo { display: flex; align-items: center; gap: 12px; pointer-events: auto; }
+.epp-toast-undo {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--lala-lavender-line);
+  background: var(--lala-surface);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lala-lavender-text);
+  cursor: pointer;
+}
+.epp-toast-undo:hover { background: var(--lala-lavender-soft); }
+
+/* The keyboard shortcuts' help (desktop). */
+.epp-shortcuts {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1050;
+  width: min(360px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--lala-parchment-3);
+  background: var(--lala-surface);
+  box-shadow: 0 16px 36px -12px rgba(44, 44, 44, 0.35);
+  box-sizing: border-box;
+}
+.epp-shortcuts-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.epp-shortcuts-head strong { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+.epp-shortcuts dl { display: grid; gap: 6px; margin: 8px 0 0; }
+.epp-shortcuts dl > div { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 8px; font-size: 13px; }
+.epp-shortcuts dt { margin: 0; color: var(--lala-ink); white-space: nowrap; }
+.epp-shortcuts dd { margin: 0; color: var(--lala-ink-muted); }
+.epp-shortcuts kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 1px 5px;
+  border: 1px solid var(--lala-parchment-3);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--lala-parchment);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: center;
+}
+.epp-shortcuts-note { margin: 8px 0 0; font-size: 12px; color: var(--lala-ink-muted); }
+
+/* The hero's date, shown on a phone only (the When tile has it on desktop). */
+.epp-hero-date { display: none; }
+
+@media (max-width: 600px) {
+  /* The bar stays compact: the count and the next step on one line (cut
+     with …), the balance and the action under it. */
+  .epp-bar > .epp-next { gap: 8px; padding: 8px 10px; }
+  .epp-bar .epp-next-text { flex: 1 1 140px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
+  .epp-bar .epp-next-text svg { vertical-align: -2px; }
+  button.epp-next-count { min-height: 40px; }
+  .epp-bar .epp-next-btn.epp-btn-primary { margin-left: auto; }
+  .epp-bar-panel { max-height: calc(100dvh - var(--app-header-h, 0px) - var(--epp-bar-h, 56px) - 16px); }
+  .epp-toast-undo { min-height: 40px; }
+
+  /* The hero is one line: name, date and status. */
+  .epp-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas: "back back back" "eye eye eye" "title date badge";
+    align-items: center;
+    column-gap: 6px;
+    padding: 6px 14px 12px;
+  }
+  .epp-hero-top, .epp-hero-title { display: contents; }
+  .epp-hero-top .epp-back { grid-area: back; justify-self: start; }
+  .epp-hero-top .epp-status-badge { grid-area: badge; white-space: nowrap; }
+  .epp-hero-eyebrow { grid-area: eye; }
+  .epp-hero .epp-title { grid-area: title; min-width: 0; font-size: 19px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; }
+  .epp-hero-summary, .epp-hero-tiles { display: none; }
+  .epp-hero-date { grid-area: date; display: inline; font-size: 12px; color: var(--lala-ink-muted); white-space: nowrap; }
+  .epp-hero .epp-used-banner { grid-column: 1 / -1; margin-top: 10px; }
+  .epp-shortcuts { display: none; }
 }
