@@ -165,7 +165,8 @@ const MAX_PRIVATE_TEXT = 300;   // characters of each
  * character_id_a, target_knows when they are character_id_b, never
  * reader_knows (the audience's knowledge). Returns [{ person, knows }].
  * Knowing it never authorizes posting it: the drafter keeps it PRIVATE and
- * the gate sends a draft that quotes it to Review.
+ * the gate sends a draft that quotes it to Review. The secret and rumoured
+ * relationships they know of come last, each saying it is not to be posted.
  */
 async function privateKnowledge(db, characterId) {
   if (!characterId) return [];
@@ -177,10 +178,13 @@ async function privateKnowledge(db, characterId) {
        JOIN registry_characters rb ON rb.id = cr.character_id_b AND rb.deleted_at IS NULL
       WHERE cr.confirmed = true AND (cr.character_id_a = :id OR cr.character_id_b = :id)
       ORDER BY cr.created_at ASC`, { replacements: { id: characterId } });
-  return rows
+  const notes = rows
     .map((r) => ({ person: r.person || 'someone', knows: String(r.knows || '').replace(/\s+/g, ' ').trim().slice(0, MAX_PRIVATE_TEXT) }))
     .filter((r) => r.knows)
     .slice(0, MAX_PRIVATE);
+  // The secret and rumoured relationships they know of (services/relationshipKnowers,
+  // 2026-10-23), so a post never gives a secret romance away.
+  return [...notes, ...await require('./relationshipKnowers').secretsKnownBy(db.sequelize, characterId)];
 }
 
 module.exports = { CLOSE_LINE, showEvents, closeTies, publicEventIds, namedIn, knowsAt, unknownMentions, knowledgeLine, privateKnowledge };

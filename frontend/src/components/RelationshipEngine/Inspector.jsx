@@ -13,6 +13,7 @@ import {
 } from './tokens';
 import { Btn, Field, Label, Input, Select, Pill, useFocusTrap } from './primitives';
 import StoryTimeline from './StoryTimeline';
+import WhoKnows from './WhoKnows';
 
 const formOf = rel => ({
   relationship_type:    rel.relationship_type || '',
@@ -33,7 +34,7 @@ const formOf = rel => ({
   is_romantic:          !!rel.is_romantic,
 });
 
-export default function Inspector({ rel, charById = {}, onClose, onUpdate, onDelete, sheet = false }) {
+export default function Inspector({ rel, charById = {}, onClose, onUpdate, onDelete, onSaved, sheet = false }) {
   const [edit, setEdit] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [f, setF] = useState(() => formOf(rel));
@@ -140,6 +141,8 @@ export default function Inspector({ rel, charById = {}, onClose, onUpdate, onDel
         ) : (
           <>
             <StoryTimeline relId={rel.id} />
+            <hr className="re-inspector-divider-light" />
+            <WhoKnows rel={rel} charById={charById} onSaved={onSaved} />
             <hr className="re-inspector-divider-light" />
             <Field label="Type" value={typeLabel(rel)} />
             <Field label="Mode" value={rel.connection_mode} />

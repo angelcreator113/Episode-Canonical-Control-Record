@@ -49,6 +49,12 @@ module.exports = (sequelize) => {
     target_knows:           { type: DataTypes.TEXT, allowNull: true, defaultValue: null },
     reader_knows:           { type: DataTypes.TEXT, allowNull: true, defaultValue: null },
 
+    /* ── Who knows about it (services/relationshipKnowers, 2026-10-23) ── */
+    // Besides the two of them: [{ registry_character_id | profile_id | name, since_episode_id?, how? }]
+    known_by:               { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
+    // Everyone else: secret | rumoured | known
+    public_state:           { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'known' },
+
     /* ── Scene Brief Classification ── */
     // role_tag: ally | detractor | mentor | dependency | rival | partner | family | neutral
     role_tag:               { type: DataTypes.STRING(50), allowNull: true, defaultValue: null },

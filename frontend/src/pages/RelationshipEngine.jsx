@@ -579,6 +579,7 @@ export default function RelationshipEngine() {
               ? <Inspector rel={s.selRel} charById={charById} sheet={isPhone}
                   onClose={closeRel}
                   onUpdate={u => updateRel(s.selRel.id, u)}
+                  onSaved={r => dispatch({ type: 'UPDATE_REL', id: r.id, fields: r })}
                   onDelete={() => del(s.selRel)} />
               : (
                 <div className="re-inspector-empty">

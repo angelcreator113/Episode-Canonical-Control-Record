@@ -61,6 +61,7 @@ const REL_SELECT = `
   cr.family_role, cr.is_blood_relation, cr.is_romantic,
   cr.conflict_summary, cr.knows_about_connection,
   cr.source_knows, cr.target_knows, cr.reader_knows,
+  cr.known_by, cr.public_state,
   cr.created_at, cr.updated_at,
   (SELECT re.relationship_stage FROM relationship_events re
     WHERE re.relationship_id = cr.id AND re.deleted_at IS NULL AND re.relationship_stage IS NOT NULL
@@ -137,7 +138,7 @@ async function loadCastCharacters(db, { forAI = false } = {}) {
             role_type, role_label, appearance_mode, status,
             core_belief, pressure_type, description,
             belief_pressured, emotional_function, personality,
-            portrait_url, sort_order
+            portrait_url, sort_order, feed_profile_id
        FROM registry_characters
       WHERE id IN (:ids) AND deleted_at IS NULL
         ${forAI ? `AND ${require('../utils/confidentialCharacters').notConfidentialSql('')}` : ''}
@@ -818,6 +819,10 @@ router.put('/:relId', requireAuth, authorize(['ADMIN']), async (req, res) => {
       replacements.is_romantic = body.is_romantic === true || body.is_romantic === 'true';
       sets.push('is_romantic = :is_romantic');
     }
+    // Who knows about it and where everyone else stands (services/relationshipKnowers).
+    const knowers = await require('../services/relationshipKnowers').knowersPatch(db.sequelize, relId, body);
+    sets.push(...knowers.sets);
+    Object.assign(replacements, knowers.replacements);
 
     const [, meta] = await db.sequelize.query(
       `UPDATE character_relationships
@@ -838,6 +843,7 @@ router.put('/:relId', requireAuth, authorize(['ADMIN']), async (req, res) => {
     res.json({ relationship: updated });
   } catch (err) {
     console.error('PUT /relationships/:id error:', err);
+    if (err.name === 'KnowerError') return res.status(err.status).json({ error: err.message });
     res.status(500).json({ error: err.message });
   }
 });
