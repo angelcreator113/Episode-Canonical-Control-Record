@@ -32,7 +32,7 @@ import FamilySection from '../components/CharacterFamily/FamilySection';
 import { API_URL } from '../config/api';
 import InnerLifeWorkspace from '../components/InnerLife/InnerLifeWorkspace';
 import { dimensionOf as dimension, dimensionText } from '../lib/innerLifeSections';
-import { platformLabel, atHandle, followersOf } from './feed/feedConstants';
+import { platformLabel, atHandle, followersOf, aliasList } from './feed/feedConstants';
 import apiClient from '../services/api';
 import { ROLE_LABELS } from '../constants/characterConstants';
 import { findLala } from '../lib/theCast';
@@ -573,10 +573,15 @@ function TheirNames({ character, feedProfile, onSaved, onFeedSaved, gen }) {
       </NameRow>
       {genNote && <p className={`ch-note${genNote.error ? ' is-error' : ''}`} role="status">{genNote.text}</p>}
       {feedProfile ? (
-        <NameRow label="Social media name" value={feedProfile.display_name || null} placeholder="The name on their profile" locked={locked}
-          save={async (v) => { await updateSocialProfileApi(feedProfile.id, { display_name: v }); onFeedSaved({ display_name: v }); }}>
-          {handle && <span className="ch-note">{handle}</span>}
-        </NameRow>
+        <>
+          <NameRow label="Social media name" value={feedProfile.display_name || null} placeholder="The name on their profile" locked={locked}
+            save={async (v) => { await updateSocialProfileApi(feedProfile.id, { display_name: v }); onFeedSaved({ display_name: v }); }}>
+            {handle && <span className="ch-note">{handle}</span>}
+          </NameRow>
+          {/* Nicknames (Evoni, 2026-10-23): a goal about them ticks when the script uses one. */}
+          <NameRow label="Also known as" value={aliasList(feedProfile).join(', ') || null} placeholder="Other names, commas between" locked={locked}
+            save={async (v) => { const res = await updateSocialProfileApi(feedProfile.id, { aliases: v || [] }); onFeedSaved({ aliases: aliasList(res?.data?.profile) }); }} />
+        </>
       ) : (
         <div className="ch-name-row">
           <span className="ch-name-label">Social media name</span>

@@ -802,8 +802,10 @@ async function executeAssistantAction(action, params = {}, context = {}) {
         if (char.belief_pressured)    detailLines.push(`Belief Under Pressure: ${char.belief_pressured}`);
         if (char.emotional_function)  detailLines.push(`Emotional Function: ${char.emotional_function}`);
         if (char.writer_notes)        detailLines.push(`Writer Notes: ${char.writer_notes}`);
-        if (char.relationships_map && Object.keys(char.relationships_map).length > 0) {
-          detailLines.push(`Relationships: ${JSON.stringify(char.relationships_map)}`);
+        // Its names from the story pairs (services/relationshipTruth).
+        const relationshipsMap = await require('../../services/relationshipTruth').relationshipsMapOf(sequelize, char);
+        if (relationshipsMap && Object.keys(relationshipsMap).length > 0) {
+          detailLines.push(`Relationships: ${JSON.stringify(relationshipsMap)}`);
         }
         if (char.voice_signature && Object.keys(char.voice_signature).length > 0) {
           detailLines.push(`Voice: ${JSON.stringify(char.voice_signature)}`);

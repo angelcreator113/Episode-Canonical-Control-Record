@@ -298,7 +298,9 @@ function generateCreatorSpark(layer) {
   const spark = { handle, platform, vibe_sentence, archetype, follower_tier: tier };
   if (layer === 'lalaverse') {
     spark.city = randomFeedCity();
-    spark.lala_relationship = ['direct', 'competitive', 'aware', 'mutual_unaware'][Math.floor(Math.random() * 4)];
+    // No tie to Lala is picked here: it is the story's to decide (a Lala
+    // story pair, services/relationshipTruth; Evoni, 2026-10-23), so a new
+    // profile starts with none.
     spark.career_pressure = ['ahead', 'level', 'behind', 'different_lane'][Math.floor(Math.random() * 4)];
   }
   return spark;
@@ -337,7 +339,7 @@ async function generateSmartSparks(db, layer, count = 5) {
   const layerContext = layer === 'lalaverse'
     ? `These creators live in the LALAVERSE — a constructed digital reality Lala believes is real.
 Cities: ${Object.entries(cityCulture).map(([k, v]) => `${k}: ${v}`).join('\n')}
-For each spark, include: city (one of: ${LALAVERSE_CITIES.join(', ')}), lala_relationship (direct|competitive|aware|mutual_unaware|one_sided), career_pressure (ahead|level|behind|different_lane).`
+For each spark, include: city (one of: ${LALAVERSE_CITIES.join(', ')}), career_pressure (ahead|level|behind|different_lane).`
     : `These creators exist in JustAWoman's real-world feed — the parasocial ecosystem she watches, follows, envies, and obsesses over.
 JustAWoman is a Black woman, mother, wife, content creator in fashion/beauty/lifestyle. She does everything right and the right room has not found her yet. She wants to be legendary.
 She posts for women. Men show up with their wallets and something in her responds. She watches certain creators alone, at night, and does not tell her husband.`;
@@ -427,7 +429,7 @@ Return a JSON array of exactly ${count} objects:
       "drama_hint": "optional controversy or tension",
       "aesthetic_hint": "visual style keywords",
       "revenue_hint": "how they make money"
-    }${layer === 'lalaverse' ? ',\n    "city": "dazzle_district",\n    "lala_relationship": "aware",\n    "career_pressure": "ahead"' : ''}${societyPicks.length ? ',\n    "society_archetype": "this spark\'s name from SOCIETY ARCHETYPES"' : ''}
+    }${layer === 'lalaverse' ? ',\n    "city": "dazzle_district",\n    "career_pressure": "ahead"' : ''}${societyPicks.length ? ',\n    "society_archetype": "this spark\'s name from SOCIETY ARCHETYPES"' : ''}
   }
 ]
 
@@ -460,7 +462,8 @@ Return ONLY the JSON array. No markdown, no explanation.`;
   // social is The Pulse, whatever the AI wrote.
   if (layer === 'lalaverse') {
     sparks.forEach((s) => {
-      if (s && typeof s === 'object') { s.city = feedCity(s.city) || randomFeedCity(); s.platform = PULSE; }
+      // A tie to Lala the AI made up is dropped: the story decides it.
+      if (s && typeof s === 'object') { s.city = feedCity(s.city) || randomFeedCity(); s.platform = PULSE; delete s.lala_relationship; }
     });
   }
 
@@ -634,7 +637,7 @@ async function generateAndSaveProfile(db, spark, layer) {
 PROTAGONIST: ${ctx.name} — ${ctx.description} Wound: ${ctx.wound} Goal: ${ctx.goal}.
 
 CREATOR: ${spark.handle} on ${platformLabel(spark.platform)}. "${spark.vibe_sentence}"${advHints ? `\nHints: ${advHints}` : ''}
-${layer === 'lalaverse' && city ? `\nLALAVERSE: Lives in ${city.replace(/_/g, ' ')} — ${cityCulture || ''}. Lala relationship: ${spark.lala_relationship || 'mutual_unaware'}. Career pressure: ${spark.career_pressure || 'level'}. Do not reference JustAWoman or the real world.` : ''}${hierarchy}${societyArchetypeLine(society)}${brain.block || ''}
+${layer === 'lalaverse' && city ? `\nLALAVERSE: Lives in ${city.replace(/_/g, ' ')} — ${cityCulture || ''}. ${spark.lala_relationship ? `Lala relationship: ${spark.lala_relationship}. ` : ''}Career pressure: ${spark.career_pressure || 'level'}. Do not reference JustAWoman or the real world.` : ''}${hierarchy}${societyArchetypeLine(society)}${brain.block || ''}
 
 IMPORTANT RULES:
 ${isPulseLayer(layer) ? `- Every creator is on The Pulse. Some also keep a PRIVATE Pulse account (close friends, an alt) with a DIFFERENT persona
@@ -804,7 +807,8 @@ Return ONLY valid JSON with these fields:
     influencer_tier_detail:generated.influencer_tier_detail,
     feed_layer:            layer,
     city:                  layer === 'lalaverse' ? city : null,
-    lala_relationship:     layer === 'lalaverse' ? (spark.lala_relationship || 'mutual_unaware') : null,
+    // Only a tie someone chose; none otherwise (the Lala story pair decides it).
+    lala_relationship:     layer === 'lalaverse' ? (spark.lala_relationship || null) : null,
     career_pressure:       layer === 'lalaverse' ? (spark.career_pressure || 'level') : null,
     is_justawoman_record:  false,
     lalaverse_cap_exempt:  false,

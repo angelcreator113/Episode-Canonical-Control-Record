@@ -63,7 +63,7 @@ test('walks this episode: the book with no show is used, its steps say what is o
   const steps = screen.getAllByRole('listitem').filter((li) => li.dataset.testid?.startsWith('tw-step-'));
   expect(steps.map((li) => li.dataset.testid)).toEqual(['tw-step-record', 'tw-step-story', 'tw-step-canon', 'tw-step-beat11', 'tw-step-chapter']);
   expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent).slice(0, 5))
-    .toEqual(['The story record', 'The short story', 'The canon check', 'The beat 11 piece', 'The chapter']);
+    .toEqual(['What changed', 'The short story', 'The canon check', 'The beat 11 piece', 'The chapter']);
   expect(screen.getByText('Write the short story')).toBeTruthy();
   expect(screen.getAllByText('Write the short story first.')).toHaveLength(2);
   expect(screen.getByRole('link', { name: 'Scene Planner' }).getAttribute('href')).toBe('/episodes/e2/plan');
@@ -149,6 +149,19 @@ test('the next step is the only highlighted one; a done step folds and opens on 
   expect(within(first).getByDisplayValue('She found the look.')).toBeTruthy();
 });
 
+test('Save in What changed keeps the step open, so what it wrote shows', async () => {
+  record = { status: 'draft', what_happened: 'x', characters: [], secrets: [], threads: [], relationships: [], follow_ups: [], goals: [], twists: [], applied: {} };
+  vi.mocked(api.post).mockImplementation(async (url) => (url.endsWith('/record/approve')
+    ? { data: { record: { ...record, status: 'approved' }, cast: [], threads: [], result: { written: [{ kind: 'thread', text: 'New thread: Who?' }], skipped: [] } } }
+    : { data: {} }));
+  renderIt();
+  const first = await screen.findByTestId('tw-step-record');
+  fireEvent.click(await within(first).findByTestId('wc-save'));
+  expect(await within(first).findByText('New thread: Who?')).toBeTruthy();
+  await waitFor(() => expect(first.className).toContain('is-done'));
+  expect(first.querySelector('.tw-step-body').hidden).toBe(false);
+});
+
 test('a draft record is the next step and says Draft', async () => {
   record = { status: 'draft', what_happened: 'x', characters: [], secrets: [], threads: [] };
   renderIt();
@@ -184,7 +197,7 @@ test('with no book the short story is still written here, and canon reloads for 
 test('each step keeps one line; the "?" opens the rest', async () => {
   renderIt();
   const first = await screen.findByTestId('tw-step-record');
-  const why = within(first).getByRole('button', { name: 'What the story record is' });
+  const why = within(first).getByRole('button', { name: 'About What changed' });
   const text = document.getElementById(why.getAttribute('aria-controls'));
   expect(text.hidden).toBe(true);
   fireEvent.click(why);

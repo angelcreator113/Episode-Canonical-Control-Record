@@ -183,6 +183,8 @@ router.post('/episodes/:episodeId/todo/complete/:slot', requireAuth, async (req,
       'UPDATE episode_todo_lists SET social_tasks = :socialTasks, updated_at = NOW() WHERE id = :id',
       { replacements: { socialTasks: JSON.stringify(updatedSocialTasks), id: todoList.id } }
     );
+    // A follow-up carried from an earlier episode is done here, or open again.
+    await require('../services/storyCarryForward').settleFollowUps(sequelize, updatedSocialTasks.filter(t => t.slot === slot), { episodeId });
 
     const allTasks = [...tasks, ...updatedSocialTasks];
     const completion = {
@@ -385,6 +387,8 @@ router.post('/episodes/:episodeId/todo/complete-social/:slot', requireAuth, asyn
       'UPDATE episode_todo_lists SET social_tasks = :tasks, updated_at = NOW() WHERE id = :id',
       { replacements: { tasks: JSON.stringify(socialTasks), id: todoList.id } }
     );
+    // A follow-up carried from an earlier episode is done here, or open again.
+    await require('../services/storyCarryForward').settleFollowUps(sequelize, socialTasks.filter(t => t.slot === slot), { episodeId });
 
     const completion = {
       total: socialTasks.length,

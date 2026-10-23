@@ -95,7 +95,7 @@ async function episodeCast(sequelize, event) {
       // The newest registry entry should two be linked. The join on
       // sp.registry_character_id compared an integer to a UUID and failed.
       const [rows] = await sequelize.query(
-        `SELECT sp.handle, sp.display_name, sp.creator_name, sp.archetype, sp.posting_voice,
+        `SELECT sp.id AS profile_id, sp.handle, sp.display_name, sp.creator_name, sp.archetype, sp.posting_voice,
                 rc.id as char_id, rc.display_name as char_name, rc.core_belief, rc.role_type, rc.depth_level,
                 rc.personality, rc.pressure_type, rc.therapy_primary_defense,
                 rc.signature_trait, rc.character_archetype,

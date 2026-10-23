@@ -3,9 +3,10 @@ import api from '../services/api';
 import useActiveShow from '../hooks/useActiveShow';
 import { platformLabel, atHandle } from './feed/feedConstants';
 import SuggestedPairs from '../components/SuggestedPairs/SuggestedPairs';
+import RelationshipDrift from '../components/RelationshipDrift/RelationshipDrift';
 import PairStoryline from '../components/SuggestedPairs/PairStoryline';
 
-/* ── Feed Relationship Map ──────────────────────────────────────────────────
+/* ── Pulse Relationship Map ──────────────────────────────────────────────────
  * SVG canvas showing influencer-to-influencer relationships.
  * Follows existing RelationshipEngine.jsx architecture:
  *   - Circular nodes, handle as label
@@ -287,7 +288,7 @@ export default function FeedRelationshipMap() {
           color: '#1a1a1a',
           margin: 0,
         }}>
-          Feed Relationship Map
+          Pulse Relationship Map
         </h1>
         <p style={{
           fontFamily: "'DM Sans', sans-serif",
@@ -295,7 +296,7 @@ export default function FeedRelationshipMap() {
           color: '#888',
           marginTop: 4,
         }}>
-          Influencer-to-influencer connections, the ones The Pulse reads — click a node to see entangled characters
+          Pulse profile to Pulse profile: the relationships The Pulse reads — click a node to see entangled characters
         </p>
       </div>
 
@@ -405,6 +406,7 @@ export default function FeedRelationshipMap() {
 
       {/* Suggested pairs: who should know each other, for Evoni to keep (idea 4) */}
       <SuggestedPairs onKept={loadCanvas} />
+      <RelationshipDrift onFixed={loadCanvas} />
 
       {/* Create relationship form */}
       {createOpen && (
@@ -413,7 +415,7 @@ export default function FeedRelationshipMap() {
           borderRadius: 10, display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap',
         }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <label style={{ fontSize: 10, color: '#6b7280', fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>Profile A</label>
+            <label style={{ fontSize: 10, color: '#6b7280', fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>Pulse profile A</label>
             <select
               value={formA}
               onChange={e => setFormA(e.target.value)}
@@ -438,7 +440,7 @@ export default function FeedRelationshipMap() {
             </select>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <label style={{ fontSize: 10, color: '#6b7280', fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>Profile B</label>
+            <label style={{ fontSize: 10, color: '#6b7280', fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>Pulse profile B</label>
             <select
               value={formB}
               onChange={e => setFormB(e.target.value)}
@@ -478,11 +480,11 @@ export default function FeedRelationshipMap() {
         }}>
           {loading ? (
             <div style={{ padding: 60, textAlign: 'center', color: '#aaa', fontSize: 14 }}>
-              Loading feed relationships...
+              Loading Pulse relationships...
             </div>
           ) : nodes.length === 0 ? (
             <div style={{ padding: 60, textAlign: 'center', color: '#aaa', fontSize: 14, fontStyle: 'italic' }}>
-              No feed relationships yet. Create relationships between social profiles to see the map.
+              No Pulse relationships yet. Create relationships between Pulse profiles to see the map.
             </div>
           ) : (
             <>

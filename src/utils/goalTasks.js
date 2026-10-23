@@ -235,10 +235,13 @@ function composeGoalTasks(fields, bounds, { upTo = bounds.max, where = 'goalTask
  * combined goal list (Start Episode goals plus Career Checklist);
  * deliverables don't count toward it." Lala's own items are every task that
  * is not a deliverable (no deliverable_id): her goals and optional ideas,
- * from Start Episode and from the Career Checklist alike.
+ * from Start Episode and from the Career Checklist alike. A follow-up
+ * carried from an earlier episode (follow_up_id; services/storyCarryForward,
+ * at most three) is owed already, like a deliverable: it neither counts nor
+ * is dropped.
  */
 function isLalaGoal(task) {
-  return Boolean(task) && !task.deliverable_id;
+  return Boolean(task) && !task.deliverable_id && !task.follow_up_id;
 }
 
 function lalaGoalCount(tasks) {

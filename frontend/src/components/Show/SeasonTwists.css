@@ -5,6 +5,7 @@
 }
 .stw-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .stw-head > div { flex: 1 1 260px; min-width: 0; }
+.stw-head > .stw-head-actions { flex: 0 1 auto; display: flex; flex-wrap: wrap; gap: 8px; }
 .stw-title { display: flex; align-items: center; gap: 8px; margin: 0; font-family: var(--font-prose); font-size: 20px; font-weight: 700; color: var(--text-primary); }
 .stw-title svg { color: var(--accent-dark); }
 .stw-about { margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
@@ -63,6 +64,9 @@
 }
 .stw-btn.is-quiet { border: 1px solid var(--lala-gold-line); background: var(--surface-card); color: var(--text-primary); }
 .stw-btn:disabled, .stw-link-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.stw-drafts { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px dashed var(--accent-dark); border-radius: 12px; background: var(--accent-subtle); }
+.stw-drafts-about { margin: 0; font-size: 12px; font-weight: 700; color: var(--accent-dark); }
+.stw-twist.is-draft { background: var(--surface-card); }
 /* Phone width: plant over payoff, the arrow pointing down between them. */
 @media (max-width: 560px) {
   .stw-path { flex-direction: column; align-items: flex-start; gap: 2px; }

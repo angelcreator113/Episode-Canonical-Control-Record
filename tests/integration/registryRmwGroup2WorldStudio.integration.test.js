@@ -8,11 +8,9 @@
  * characterGenerationRoutes.js #2186/#2192; consciousness.js #2198;
  * memories/interview.js #2203.
  *
- * The test adds an ally to the first character's relationships_map just before
- * the backfill's UPDATE of that character (or, when the fix locks the row, lets
- * that write wait on the lock for a short timeout). On origin/main the
- * backfill writes back the map it read earlier and the ally is lost; with the
- * fix both the seeded ally and the concurrent one survive.
+ * Since 2026-10-23 (one truth for relationships) the backfill is gone:
+ * relationships_map is read from the story pairs, so the seed writes no map
+ * at all and an entry another request added cannot be lost.
  */
 jest.unmock('uuid');
 
@@ -66,26 +64,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await run(`DELETE FROM character_registries WHERE id = :reg`, ids); // cascades characters
   });
 
-  it('row 60: the seeded ally and a concurrent ally both survive', async () => {
-    // A concurrent writer that appends to allies in one statement.
-    const addConcurrentAlly = () => sequelize.query(
-      `UPDATE registry_characters
-          SET relationships_map = jsonb_set(COALESCE(relationships_map, CAST('{}' AS jsonb)), '{allies}',
-                COALESCE(relationships_map->'allies', CAST('[]' AS jsonb)) || CAST('["Concurrent Ally"]' AS jsonb))
-        WHERE id = :id`,
-      { replacements: { id: ids.rcA } }
-    );
-
-    // Just before the backfill's UPDATE of the first character's map, run the
-    // concurrent write; if the row is locked, give it 600 ms, then go on.
+  it('row 60: seeding writes no relationships_map any more, so nothing it holds can be lost (Evoni, 2026-10-23)', async () => {
+    // relationships_map is read from the story pairs (services/relationshipTruth),
+    // so the seed only makes the pairs and leaves the stored map alone.
+    await run(`UPDATE registry_characters SET relationships_map = CAST('{"allies": ["Concurrent Ally"]}' AS jsonb) WHERE id = :rcA`, ids);
+    const writes = [];
     const original = sequelize.query.bind(sequelize);
-    let concurrent = null;
     jest.spyOn(sequelize, 'query').mockImplementation(async (sql, opts, ...rest) => {
       const text = typeof sql === 'string' ? sql : sql?.query || '';
-      if (!concurrent && /UPDATE registry_characters SET relationships_map = :map/.test(text) && opts?.replacements?.id === ids.rcA) {
-        concurrent = original(`SELECT 1`).then(() => { jest.restoreAllMocks(); return addConcurrentAlly(); });
-        await Promise.race([concurrent.then(() => {}, () => {}), sleep(600)]);
-      }
+      if (/UPDATE registry_characters SET relationships_map/i.test(text)) writes.push(text);
       return original(sql, opts, ...rest);
     });
 
@@ -94,11 +81,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       .set('Authorization', `Bearer ${token}`)
       .send({ world_tag: tag });
     jest.restoreAllMocks();
-    await concurrent;
 
     expect(res.status).toBe(200);
-    expect(concurrent).not.toBeNull();
+    expect(writes).toEqual([]);
     const [row] = await q(`SELECT relationships_map FROM registry_characters WHERE id = :rcA`, ids);
-    expect(row.relationships_map.allies).toEqual(expect.arrayContaining(['Peer Beta', 'Concurrent Ally']));
+    expect(row.relationships_map).toEqual({ allies: ['Concurrent Ally'] });
+    const [pair] = await q(`SELECT relationship_type FROM character_relationships
+                             WHERE (character_id_a = :rcA AND character_id_b = :rcB) OR (character_id_a = :rcB AND character_id_b = :rcA)`, ids);
+    expect(pair).toBeDefined();
   });
 });

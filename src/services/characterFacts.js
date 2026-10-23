@@ -188,7 +188,7 @@ function nextCanonFacts(current, body) {
 async function setFacts(db, { character, feedProfile = null, showId = null, body = {}, by = null }) {
   const feedChanges = {};
   if ('handle' in body || 'account_status' in body || 'followers' in body) {
-    if (!feedProfile) throw new FactsError(409, 'They have no feed profile, so they have no handle, followers or account status yet.');
+    if (!feedProfile) throw new FactsError(409, 'They have no Pulse profile, so they have no handle, followers or account status yet.');
   }
   if ('handle' in body) {
     const raw = String(body.handle ?? '').trim();
