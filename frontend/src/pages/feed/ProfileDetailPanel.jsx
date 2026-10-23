@@ -3,7 +3,7 @@ import apiClient from '../../services/api';
 import {
   API, C, PLATFORMS, ARCHETYPE_LABELS, STATUS_LABELS, STATUS_COLORS,
   FEED_STATE_CONFIG, PROTAGONISTS, lalaClass, fp,
-  profileName, atHandle, platformLabel,
+  profileName, atHandle, platformLabel, aliasList,
 } from './feedConstants';
 
 // Local Spinner, as in FeedViews.jsx. It stayed behind in
@@ -78,7 +78,7 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
   const lColor = lc==='high'?C.lavender:lc==='mid'?C.blue:C.inkLight;
 
   const startEdit = ()=>{
-    setDraft({ handle:p.handle||'', display_name:profileName(p), platform:p.platform||'', vibe_sentence:p.vibe_sentence||'', content_persona:p.content_persona||d.content_persona||'', real_signal:p.real_signal||d.real_signal||'', posting_voice:p.posting_voice||d.posting_voice||'', comment_energy:p.comment_energy||d.comment_energy||'', parasocial_function:p.parasocial_function||d.parasocial_function||'', emotional_activation:d.emotional_activation||p.emotional_activation||'', watch_reason:d.watch_reason||p.watch_reason||'', what_it_costs_her:d.what_it_costs_her||p.what_it_costs_her||'', current_trajectory:p.current_trajectory||d.current_trajectory||'', pinned_post:p.pinned_post||d.pinned_post||'' });
+    setDraft({ handle:p.handle||'', display_name:profileName(p), platform:p.platform||'', vibe_sentence:p.vibe_sentence||'', content_persona:p.content_persona||d.content_persona||'', real_signal:p.real_signal||d.real_signal||'', posting_voice:p.posting_voice||d.posting_voice||'', comment_energy:p.comment_energy||d.comment_energy||'', parasocial_function:p.parasocial_function||d.parasocial_function||'', emotional_activation:d.emotional_activation||p.emotional_activation||'', watch_reason:d.watch_reason||p.watch_reason||'', what_it_costs_her:d.what_it_costs_her||p.what_it_costs_her||'', current_trajectory:p.current_trajectory||d.current_trajectory||'', pinned_post:p.pinned_post||d.pinned_post||'', aliases:aliasList(p).join(', ') });
     setEditing(true);
   };
 
@@ -125,6 +125,7 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
             <div style={{fontSize:20,fontWeight:700,color:C.ink,marginBottom:2}} data-testid="spg-detail-handle">{atHandle(p.handle)}</div>
             <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
               {profileName(p)&&<span style={{fontSize:13,color:C.inkMid}} data-testid="spg-detail-profile-name" title="Profile name">{profileName(p)}</span>}
+              {aliasList(p).length>0&&<span style={{fontSize:11,color:C.inkLight}} data-testid="spg-detail-aliases">Also known as {aliasList(p).join(', ')}</span>}
               {p.registry_character_name&&p.registry_character_name!==profileName(p)&&<span style={{fontSize:11,color:C.inkLight}} data-testid="spg-detail-character">Character: {p.registry_character_name}</span>}
               <span style={{fontSize:11,fontWeight:600,padding:'2px 8px',borderRadius:8,background:C.blueLight,color:C.blue}}>{platformLabel(p.platform)}</span>
               {(p.archetype||d.archetype)&&<span style={{fontSize:11,color:C.inkLight}}>{ARCHETYPE_LABELS[p.archetype||d.archetype]||p.archetype||d.archetype}</span>}
@@ -178,6 +179,11 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px 16px'}}>
                   {/* A LalaVerse profile's platform is The Pulse, not an edit (the server sets it). */}
                   {inp('Handle','handle')}{inp('Profile name','display_name')}{p.feed_layer==='lalaverse'?null:inp('Platform','platform')}{inp('Vibe Sentence','vibe_sentence')}
+                </div>
+                <div style={{marginBottom:8}} data-testid="spg-edit-aliases">
+                  <label htmlFor="spg-aliases" style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:3,display:'block'}}>Also known as</label>
+                  <input id="spg-aliases" value={draft.aliases||''} placeholder="Truth, T-Ville" onChange={e=>setDraft(f=>({...f,aliases:e.target.value}))} style={{width:'100%',padding:'7px 10px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:12,color:C.ink,fontFamily:C.font,boxSizing:'border-box'}}/>
+                  <div style={{fontSize:11,color:C.inkLight,marginTop:3,lineHeight:1.5}}>Other names they go by, commas between. A goal about them ticks when the script uses one; a name under 3 letters, or one someone else at the event has too, does not count.</div>
                 </div>
                 {inp('Content Persona','content_persona',true)}{inp('Real Signal','real_signal',true)}{inp('Posting Voice','posting_voice',true)}{inp('Comment Energy','comment_energy',true)}{inp('Parasocial Function','parasocial_function',true)}{inp('Emotional Activation','emotional_activation',true)}{inp('Why She Watches','watch_reason',true)}{inp('What It Costs Her','what_it_costs_her',true)}{inp('Trajectory','current_trajectory')}{inp('Pinned Post','pinned_post',true)}
                 {/* Social Intelligence */}

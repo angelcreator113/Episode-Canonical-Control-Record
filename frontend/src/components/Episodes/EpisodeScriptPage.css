@@ -501,6 +501,10 @@
 .esp-guard-item { margin-bottom: 4px; padding: 6px 10px; border: 1px solid var(--danger-border); border-radius: 8px; background: var(--studio-card); color: var(--danger-text); font-size: 12px; }
 .esp-done { margin-top: 16px; padding: 20px 24px; border: 1px solid var(--studio-ok); border-radius: var(--studio-radius); background: var(--studio-ok-soft); text-align: center; }
 .esp-done-text { margin: 0 0 12px; font-size: 15px; font-weight: 700; color: var(--studio-ok); }
+.esp-done-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.esp-done-hint { margin: 10px auto 0; max-width: 560px; font-size: 13px; line-height: 1.5; color: var(--studio-ink-muted); }
+/* Read the finished script: the What changed card under the done box (EpisodeStoryRecord). */
+.esp-what-changed { margin-top: 16px; }
 
 /* The scene picture, larger. */
 .esp-zoom { position: fixed; inset: 0; z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 16px; background: color-mix(in srgb, var(--gray-900) 70%, transparent); cursor: zoom-out; }
@@ -550,6 +554,11 @@
 .esp-cover-tick { margin-top: 2px; }
 .esp-cover-ticked { font-size: 12px; font-weight: 600; color: var(--success-text); }
 .esp-cover-fail { font-size: 12px; color: var(--warning-text); }
+.esp-cover-all { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 0; }
+.esp-cover-all .esp-btn { display: inline-flex; align-items: center; gap: 6px; }
+/* The line that covered a goal: quoted, the name it was matched by in bold. */
+.esp-cover-quote { font-family: var(--font-prose); font-style: italic; font-size: 12.5px; color: var(--studio-ink-muted); border-left: 2px solid var(--studio-line-strong); padding-left: 8px; overflow-wrap: anywhere; }
+.esp-cover-quote strong { font-style: normal; font-weight: 700; color: var(--studio-ink); }
 .esp-cover-empty { margin: 8px 0 0; font-size: 13px; color: var(--studio-ink-muted); }
 .esp-truth-list { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 0; }
 .esp-truth-list > div { display: flex; flex-direction: column; gap: 2px; }

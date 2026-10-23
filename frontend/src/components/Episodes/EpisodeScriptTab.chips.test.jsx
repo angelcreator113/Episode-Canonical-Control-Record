@@ -94,7 +94,7 @@ describe('Script tab: Add chips, must cover, phone check', () => {
     await waitFor(() => expect(screen.getByTestId('script-cover-goal-0').dataset.covered).toBe('false'));
     expect(screen.queryByTestId('script-cover-deliverable-d1')).toBeNull();
     expect(screen.getByTestId('script-cover-hook').textContent).toContain('A second invitation arrives.');
-    expect(screen.getByTestId('script-cover').textContent).toContain("From the event package, the brief and beat 14's opportunity");
+    expect(screen.getByTestId('script-cover').textContent).toContain("From the event package, the brief, beat 14's opportunity and what Lala still owes from an earlier episode");
   });
 
   test('must cover with nothing in the data says so', async () => {

@@ -74,7 +74,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(file.inner.core_wound).toBe(`worthless without achievement ${tag}`);
     expect(file.mask).toMatchObject({ public_persona: `effortless calm ${tag}`, lifestyle_claim: 'slow mornings, linen, no alarms' });
     expect(file.behind.private_reality).toBe(`retakes every photo eleven times ${tag}`);
-    expect(file.relationships).toEqual([{ person: 'kai', kind: 'rival', status: 'Active', knows: `Kai is broke ${tag}` }]);
+    expect(file.relationships).toEqual([{ person: 'kai', kind: 'rival', status: 'Active', love_interest: false, stage: null, knows: `Kai is broke ${tag}` }]);
     expect(file.recentPosts).toEqual([`still beautiful ${tag}`, `older post ${tag}`]);
 
     const block = characterFileBlock(file);

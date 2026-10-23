@@ -151,4 +151,4 @@ async function lalaProfileId(sequelize) {
   return (await lalaProfile(sequelize, character?.feed_profile_id))?.id || null;
 }
 
-module.exports = { getLalaFeedProfile, lalaProfileId, followersOf, FRIENDS_SHOWN, FRIENDS_ALL };
+module.exports = { getLalaFeedProfile, lalaProfileId, lalaCharacter, followersOf, FRIENDS_SHOWN, FRIENDS_ALL };

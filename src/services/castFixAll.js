@@ -74,7 +74,7 @@ function recordFor(found, field) {
     throw new FixAllError(400, 'That field cannot be changed here.');
   }
   const record = source === 'feed' ? found.feedProfile : found.character;
-  if (!record) throw new FixAllError(409, 'They have no feed profile.');
+  if (!record) throw new FixAllError(409, 'They have no Pulse profile.');
   if (!(top in (record.constructor?.rawAttributes || {}))) throw new FixAllError(400, 'That field cannot be changed here.');
   return { record, top, rest };
 }
@@ -111,14 +111,14 @@ async function matchFeedProfile(db, character) {
       WHERE deleted_at IS NULL AND feed_layer = 'lalaverse'
         AND (LOWER(TRIM(display_name)) IN (:names) OR LOWER(LTRIM(handle, '@')) = :key)`,
     { replacements: { names: names.length ? names : [''], key: key || '' } });
-  if (rows.length === 0) return { left: 'Match them to a feed person: no LalaVerse feed profile has their name.' };
+  if (rows.length === 0) return { left: 'Match them to a Pulse profile: no LalaVerse Pulse profile has their name.' };
   if (rows.length > 1) {
-    return { left: `Match them to a feed person: ${rows.length} feed profiles fit (${rows.map((r) => `@${String(r.handle).replace(/^@+/, '')}`).join(', ')}), so you choose.` };
+    return { left: `Match them to a Pulse profile: ${rows.length} Pulse profiles fit (${rows.map((r) => `@${String(r.handle).replace(/^@+/, '')}`).join(', ')}), so you choose.` };
   }
   const profile = rows[0];
   const holder = await db.RegistryCharacter.findOne({ where: { feed_profile_id: profile.id }, attributes: ['id', 'display_name'] });
   if (holder && holder.id !== character.id) {
-    return { left: `Match them to a feed person: @${String(profile.handle).replace(/^@+/, '')} is already ${holder.display_name}'s.` };
+    return { left: `Match them to a Pulse profile: @${String(profile.handle).replace(/^@+/, '')} is already ${holder.display_name}'s.` };
   }
   const before = { feed_profile_id: character.feed_profile_id ?? null, social_presence: character.social_presence ?? null };
   await character.update({ feed_profile_id: profile.id, social_presence: true });

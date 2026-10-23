@@ -92,4 +92,12 @@ describe('FeedRelationshipMap closeness', () => {
     expect(await screen.findByTestId('pair-storyline')).toBeTruthy();
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/feed-relationships/e1/storyline-seed', { show_id: 'show-1' }));
   });
+
+  test('says Pulse, not Feed, and carries "Where relationships disagree" (Evoni, 2026-10-23)', async () => {
+    const { container } = render(<MemoryRouter><FeedRelationshipMap /></MemoryRouter>);
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Pulse Relationship Map');
+    expect(await screen.findByTestId('relationship-drift')).toBeTruthy();
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/v1/relationships/drift'));
+    expect(container.textContent).not.toMatch(/feed relationship|social profile/i);
+  });
 });
