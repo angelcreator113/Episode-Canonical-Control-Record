@@ -128,26 +128,32 @@ describe('Continue → at the top of the Package', () => {
     expect(screen.getAllByTestId('start-episode')).toHaveLength(1);
   });
 
-  // Item 4: the foot of the page lists what is missing in the strip tiles' own words.
-  test('the foot lists each blocking section exactly as its strip tile reads, linking to it', async () => {
+  // Item 4, now in the one sticky bar (2026-10-23): its count opens the
+  // list of sections, each blocking one marked and linking to its section;
+  // the footer bar that repeated them is gone.
+  test('the bar\'s count opens the list; each blocking section is marked and links to it', async () => {
     stored = { ...GATED_EVENT, venue_location_id: null };
     renderPage();
-    const foot = await screen.findByTestId('start-blocked');
+    const count = await screen.findByTestId('package-next-count');
+    expect(count.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByTestId('readiness-panel').hidden).toBe(true);
+    fireEvent.click(count);
+    expect(count.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByTestId('readiness-panel').hidden).toBe(false);
     const tile = screen.getByTestId('strip-place');
-    const link = within(foot).getByTestId('start-blocked-place');
-    const [label, text] = [tile.querySelector('strong').textContent, tile.querySelector('span').textContent];
-    expect(link.textContent).toBe(text === label ? label : `${label}: ${text}`);
-    expect(link.getAttribute('href')).toBe(tile.getAttribute('href'));
-    const blockingTiles = [...screen.getByTestId('readiness-strip').querySelectorAll('.epp-strip-tile[data-state="blocking"]')];
-    expect(foot.querySelectorAll('a')).toHaveLength(blockingTiles.length);
+    expect(tile.getAttribute('data-state')).toBe('blocking');
+    expect(tile.getAttribute('href')).toBe('#epp-sec-place');
+    expect(screen.queryByTestId('start-blocked')).toBeNull();
+    expect(screen.queryByTestId('package-foot')).toBeNull();
   });
 
-  test('a ready Package has no missing list at the foot, only the way back up', async () => {
+  test('a ready Package: Start Episode in the bar, and no footer bar', async () => {
     stored = { ...COMPLETE_EVENT };
     renderPage();
-    await screen.findByTestId('package-next');
+    const bar = await screen.findByTestId('package-next');
+    expect(within(bar).getByTestId('start-episode')).toBeTruthy();
     expect(screen.queryByTestId('start-blocked')).toBeNull();
-    expect(screen.getByTestId('package-foot-top').getAttribute('href')).toBe('#epp-readiness');
+    expect(screen.queryByTestId('package-foot-top')).toBeNull();
   });
 
   test('a used event shows no next step', async () => {

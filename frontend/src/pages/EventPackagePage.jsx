@@ -19,6 +19,16 @@
  * the toast is announced and floats at the foot of the screen; phone
  * targets are 40-44px and dialogs are bottom sheets.
  *
+ * Enhancements (Evoni, 2026-10-23: "I want them all and show me first"):
+ * one sticky readiness bar (eventPackage/ReadinessBar) replaces the strip's
+ * tiles, the next-step bar and the footer action bar, with Lala's balance
+ * beside Start; finished sections fold to one line (useSectionFolds);
+ * Basics are edited in their rows (InlineBasicsField); Suggest with AI asks
+ * POST …/suggest-basics and opens a review list (SuggestReview) saved in one
+ * PUT; the page's one-tap guest and organizer changes offer Undo on the
+ * toast; desktop shortcuts (usePackageShortcuts); the Terms' deliverable and
+ * cost prices feed the readiness gate; on a phone the hero is one line.
+ *
  * Summary sections (Basics, People, Place, Invitation, Style, Terms,
  * Stakes & Money, Review) plus a readiness count, and three actions:
  * Change Organizer (Change Host until Task #1761), Edit details (opens
@@ -78,11 +88,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import {
-  ArrowLeft, ArrowRight, User, UserPlus, Pencil, PlayCircle, Lock, AlertCircle,
+  ArrowLeft, User, UserPlus, Pencil, PlayCircle, Lock, AlertCircle,
   Search, X, CheckCircle2, Sparkles, RefreshCw, Loader2, MapPin, Plus,
   Lightbulb, CircleDashed, CalendarClock, Building2, Hourglass,
   ChevronDown, ChevronUp, ChevronRight, Coins, Gauge, HeartHandshake, TrendingUp, Info,
-  Tag, Users, Mail, Shirt, AlertTriangle, PackagePlus,
+  Tag, Users, Mail, Shirt, AlertTriangle, PackagePlus, Undo2, Keyboard,
 } from 'lucide-react';
 import api from '../services/api';
 import { fetchAllSceneSets } from '../lib/fetchAllPages';
@@ -95,7 +105,7 @@ import {
   filterBrands, brandIsListed, profileName, describeStartedFrom, BRAND_NAME_MAX,
 } from '../utils/eventOrganizer';
 import { dealLabelFor, describeCompensation } from '../utils/eventTerms';
-import { heroTiles, packageBadge, readinessTile, readinessHeadline, pageNav, dealTiles } from '../lib/eventPackageHero';
+import { heroTiles, packageBadge, pageNav, dealTiles, shortDate } from '../lib/eventPackageHero';
 import {
   resolveEventStakes, stakesDraftFrom, buildStakesUpdate, STAKES_TEXTS,
   DEADLINE_TYPES, CAREER_TIERS, COST_READ_ONLY_REASON, STORED_ORIGIN_NOTE,
@@ -119,6 +129,11 @@ import ShowMoreToggle from '../components/ShowMoreToggle';
 import { visibleSlice } from '../lib/showMore';
 import EventLookImage from '../components/EventPackage/EventLookImage';
 import { pieceChargeText } from '../lib/lookCharge';
+import ReadinessBar from './eventPackage/ReadinessBar';
+import InlineBasicsField from './eventPackage/InlineBasicsField';
+import SuggestReview from './eventPackage/SuggestReview';
+import useSectionFolds from './eventPackage/useSectionFolds';
+import usePackageShortcuts from './eventPackage/usePackageShortcuts';
 import './EventPackagePage.css';
 
 function fmtLabel(value) {
@@ -166,7 +181,19 @@ const CONTINUE_BASICS = {
 };
 const coins = (n) => Number(n || 0).toLocaleString();
 const signedCoins = (n) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${coins(Math.abs(n))}`;
-const nextStepLabel = (it) => (it.label === it.sectionLabel ? it.label : `${it.sectionLabel}: ${it.label.toLowerCase()}`);
+// The sections that fold to one line once their readiness items are all
+// complete (Evoni, 2026-10-23). Deal & Money and the documents carry no
+// readiness item of their own, so they always stay open.
+const FOLDABLE = new Set(['identity', 'people', 'place', 'look', 'stakes']);
+// "Suggest with AI" (Evoni, 2026-10-23): the server's column names ↔ the
+// page's Basics keys.
+const AI_FIELD_TO_BASICS = {
+  event_date: 'date', event_time: 'time', description: 'description',
+  dress_code: 'dressCode', category: 'category', format: 'format',
+};
+// How long the toast keeps its Undo (the page's own one-tap changes).
+const UNDO_MS = 8000;
+const TOAST_MS = 4000;
 const BASICS_STATE_LABEL = { set: 'Set', edited: 'Edited', suggested: 'Suggested', missing: 'Missing' };
 // Task #2128 (doctrine rule 14): a drafted field reads "Auto-drafted ·
 // <source>" until Evoni changes it, then "Edited".
@@ -317,12 +344,29 @@ function EventPackageView() {
   const [locationsStep, setLocationsStep] = useState(null);
   // The toast: each message is new, so the same text twice still restarts
   // its timer (audit, 2026-10-23); setToast(text) as before.
+  // A toast may carry an Undo (Evoni, 2026-10-23): { undo } restores what
+  // the page's own one-tap change replaced; it then stays for UNDO_MS.
   const [toastState, setToastState] = useState(null);
   const toastSeqRef = useRef(0);
-  const setToast = useCallback((text) => {
-    setToastState(text ? { text, n: ++toastSeqRef.current } : null);
+  const setToast = useCallback((text, opts = {}) => {
+    setToastState(text ? { text, n: ++toastSeqRef.current, undo: opts.undo || null } : null);
   }, []);
   const toast = toastState?.text || null;
+  // The sticky readiness bar's list (the count is its disclosure).
+  const [barOpen, setBarOpen] = useState(false);
+  // The shortcut help (desktop: "?").
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  // The deal's deliverable and cost rows, reported by EventTermsSection so a
+  // missing price there holds the readiness gate too.
+  const [priceInputs, setPriceInputs] = useState(null);
+  // Suggest with AI: idle | loading | review | error, the review's rows,
+  // whether the AI had nothing new, and the error text.
+  const [aiSuggest, setAiSuggest] = useState({ status: 'idle', rows: [], aiEmpty: false, error: null, n: 0 });
+  const [suggestSaving, setSuggestSaving] = useState(false);
+  const folds = useSectionFolds(eventId);
+  const setFoldOpen = folds.setOpen;
+  const pageRef = useRef(null);
+  const shortcutsRef = useRef({});
   const [seasonContext, setSeasonContext] = useState(null);
   // Episode Money Phase B, MB4 (§8(gg)): the money warnings Start Episode
   // shows early, from Lala's ledger balance and the event's whole plan.
@@ -503,7 +547,7 @@ function EventPackageView() {
   };
 
   useEffect(() => {
-    if (toastState) { const t = setTimeout(() => setToastState(null), 4000); return () => clearTimeout(t); }
+    if (toastState) { const t = setTimeout(() => setToastState(null), toastState.undo ? UNDO_MS : TOAST_MS); return () => clearTimeout(t); }
     return undefined;
   }, [toastState]);
 
@@ -601,8 +645,13 @@ function EventPackageView() {
     // The episode's "Choose featured attendees" lands on People with the
     // guest list open, where each name features or unfeatures that guest.
     if (hash === '#epp-sec-people') setFullGuestListOpen(true);
+    // A folded section opens where a link lands on it (the invitation lives
+    // in The Event; the old Review anchor is in the readiness bar's list).
+    const anchor = hash.slice('#epp-sec-'.length);
+    if (anchor === 'review') setBarOpen(true);
+    else setFoldOpen(anchor === 'invitation' ? 'identity' : anchor, true);
     el.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
-  }, [loading, hash]);
+  }, [loading, hash, setFoldOpen]);
 
   // "On this page" marks the section in view (Evoni's review, item 9): on a
   // phone the chip row stays under the header, so this shows where you are
@@ -636,7 +685,7 @@ function EventPackageView() {
   // in it and goes back where it was when it closes. closeTopDialogRef is set
   // each render, below, once the close functions exist.
   const closeTopDialogRef = useRef(null);
-  const anyDialogOpen = startConfirmOpen || !!basicsEditing || !!stakesDraft || organizerPickerOpen
+  const anyDialogOpen = startConfirmOpen || !!stakesDraft || organizerPickerOpen
     || guestFeedPickerOpen || venuePickerOpen || scenePickerOpen || outfitPickerOpen;
   useEffect(() => {
     if (!anyDialogOpen) return undefined;
@@ -669,6 +718,25 @@ function EventPackageView() {
       if (opener && document.contains(opener)) opener.focus?.();
     };
   }, [anyDialogOpen]);
+
+  // Desktop shortcuts (g then 1–9, s, ?); the handlers are set each render below.
+  usePackageShortcuts({ enabled: !loading && !!data?.event, dialogOpen: anyDialogOpen, handlersRef: shortcutsRef });
+
+  // The sticky bar's height, so the "On this page" menu and the sections'
+  // scroll targets sit under it rather than behind it.
+  useEffect(() => {
+    if (loading) return undefined;
+    // The bar's own row, not its open list, which floats over the page.
+    const bar = document.querySelector('#epp-readiness > .epp-next');
+    const page = pageRef.current;
+    if (!bar || !page) return undefined;
+    const apply = () => page.style.setProperty('--epp-bar-h', `${Math.round(bar.getBoundingClientRect().height)}px`);
+    apply();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(apply);
+    ro.observe(bar);
+    return () => ro.disconnect();
+  }, [loading]);
 
   if (loading) {
     return (
@@ -707,7 +775,9 @@ function EventPackageView() {
   // they only steer the script, so like the scene set (L13) they stay
   // editable until the episode is accepted. Who is invited stays locked.
   const castLocked = used && !!placeLocked;
-  const readiness = computeEventPackageReadiness(event, { suggest: !used, venueLocation });
+  // The deal's deliverable and cost rows (EventTermsSection's
+  // onPriceInputsChange) hold the price gate too, once they have loaded.
+  const readiness = computeEventPackageReadiness(event, { suggest: !used, venueLocation, ...(priceInputs ? { prices: priceInputs } : {}) });
   const confirmCount = readiness.warningItems.length + moneyWarnings.length;
   const { gatesMet } = readiness;
   const nextStep = nextPackageStep(readiness);
@@ -753,6 +823,28 @@ function EventPackageView() {
 
   const openEditor = () => navigate(`/shows/${showId}/world?tab=events&event=${eventId}`);
 
+  // Folded sections (Evoni, 2026-10-23): a section whose readiness items are
+  // all complete starts as one line with Edit; the person's own open/closed
+  // choice is remembered per event (useSectionFolds).
+  const nav = pageNav(readiness, { has: { concept: hasConcept(event) } });
+  const navState = Object.fromEntries(nav.map((s) => [s.anchor, s.state]));
+  const sectionOpen = (anchor) => !FOLDABLE.has(anchor) || folds.isOpen(anchor, navState[anchor] === 'complete');
+  const openSection = (anchor) => { if (FOLDABLE.has(anchor) && !sectionOpen(anchor)) folds.setOpen(anchor, true); };
+  const scrollToSection = (anchor) => {
+    // After the section has opened (next frame), so it lands at its full height.
+    setTimeout(() => {
+      const el = document.getElementById(`epp-sec-${anchor}`);
+      if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+  };
+  // A section jumped to from the bar's list, the menu or a shortcut opens.
+  const jumpToSection = (anchor) => {
+    const target = anchor === 'invitation' ? 'identity' : anchor;
+    openSection(target);
+    setBarOpen(false);
+    scrollToSection(anchor);
+  };
+
   // Saves one Basics field through the existing PUT (all four columns are in
   // its allowedFields). An empty value clears the column (the route turns ''
   // into NULL). Nothing in canon_consequences is touched: a drafted field's
@@ -797,15 +889,103 @@ function EventPackageView() {
     saveBasicsField(key, suggestion.value, `${BASICS_FIELDS[key].label} set to ${fmtBasicsValue(key, suggestion.value)}`);
   };
 
+  // Suggest with AI (Evoni, 2026-10-23: "use real AI for the suggestions").
+  // Asks the server for the empty fields (or all six, for new ideas when
+  // none is empty); the review list then shows each with a checkbox, beside
+  // the page's own suggestions the AI did not cover. Nothing is written
+  // until Save checked, which writes every checked value in one PUT.
+  const factsRows = (covered) => {
+    const rows = BASICS_PAGE_ORDER
+      .filter((key) => basics[key]?.state === 'suggested' && basics[key].suggestion && !covered.has(key))
+      .map((key) => ({
+        id: `facts-${key}`, key, source: 'facts', label: BASICS_FIELDS[key].label, spec: BASICS_FIELDS[key],
+        value: basics[key].suggestion.value, reason: basics[key].suggestion.basis || '',
+      }));
+    if (startedFrom?.suggestOrganizer && organizer && !organizer.hasOrganizer) {
+      const update = buildCreatorOrganizerUpdate(event, startedFrom.profile);
+      if (!update.unchanged) {
+        rows.push({
+          id: 'facts-organizer', key: 'organizer', source: 'facts', fixed: true, label: 'Organizer',
+          value: startedFrom.name, display: `${startedFrom.name} (creator)`, update,
+          reason: 'You started this event from their Pulse profile',
+        });
+      }
+    }
+    return rows;
+  };
+  const askAiSuggestions = async () => {
+    if (used || aiSuggest.status === 'loading') return;
+    const empty = Object.entries(AI_FIELD_TO_BASICS).filter(([, key]) => !hasValueState(basics[key]?.state)).map(([col]) => col);
+    setAiSuggest((st) => ({ ...st, status: 'loading', error: null }));
+    try {
+      const res = await api.post(`/api/v1/world/${showId}/events/${eventId}/suggest-basics`,
+        empty.length ? {} : { fields: Object.keys(AI_FIELD_TO_BASICS) });
+      const list = Array.isArray(res.data?.data?.suggestions) ? res.data.data.suggestions : [];
+      const aiRows = list
+        .map((sg, i) => {
+          const key = AI_FIELD_TO_BASICS[sg?.field];
+          if (!key || sg.value === undefined || sg.value === null || String(sg.value).trim() === '') return null;
+          return {
+            id: `ai-${key}-${i}`, key, source: 'ai', label: BASICS_FIELDS[key].label, spec: BASICS_FIELDS[key],
+            value: String(sg.value), reason: sg.reason ? String(sg.reason) : '',
+          };
+        })
+        .filter(Boolean);
+      const covered = new Set(aiRows.map((r) => r.key));
+      setAiSuggest((st) => ({ status: 'review', rows: [...aiRows, ...factsRows(covered)], aiEmpty: aiRows.length === 0, error: null, n: st.n + 1 }));
+    } catch (err) {
+      console.error('[EventPackage] suggest basics failed:', err);
+      const status = err.response?.status;
+      const serverText = err.response?.data?.error;
+      const message = (status === 429 || status === 402 || status === 502) && serverText
+        ? serverText
+        : 'Couldn\u2019t get suggestions right now. Try again in a moment.';
+      setAiSuggest((st) => ({ ...st, status: 'error', error: message }));
+    }
+  };
+  const closeAiSuggestions = () => {
+    if (suggestSaving) return;
+    setAiSuggest((st) => ({ ...st, status: 'idle', rows: [], aiEmpty: false, error: null }));
+  };
+  const saveCheckedSuggestions = async (checked) => {
+    if (used || suggestSaving || !checked.length) return;
+    const body = {};
+    for (const row of checked) {
+      if (row.key === 'organizer') Object.assign(body, row.update.body);
+      else body[BASICS_FIELDS[row.key].column] = row.value;
+    }
+    setSuggestSaving(true);
+    try {
+      await putEvent(body);
+      setAiSuggest((st) => ({ ...st, status: 'idle', rows: [], aiEmpty: false, error: null }));
+      setToast(`Saved ${checked.length} suggestion${checked.length === 1 ? '' : 's'}`);
+      await load();
+    } catch (err) {
+      console.error('[EventPackage] save suggestions failed:', err);
+      setToast(err.response?.data?.error || err.message || 'Failed to save the suggestions');
+    } finally {
+      setSuggestSaving(false);
+    }
+  };
+
+  // Each field is edited in its own row now (Evoni, 2026-10-23), not in a
+  // dialog; The Event opens if it was folded.
   const openBasicsEditor = (key) => {
     if (used) return;
+    openSection('identity');
     setBasicsDraft(basics[key]?.value || '');
     setBasicsEditing(key);
+  };
+  const closeBasicsEditor = () => {
+    if (basicsSaving) return;
+    setBasicsEditing(null); setBasicsDraft(''); setFillRound(null);
   };
 
   // Fill in: opens each field still to fill in turn; a save moves on to the
   // next one not yet opened this round, Cancel stops.
   const toFill = BASICS_PAGE_ORDER.filter((key) => isToFill(basics[key]));
+  // The one open in its row is not listed again under Still to fill.
+  const toFillShown = toFill.filter((key) => key !== basicsEditing);
   const startFillIn = () => {
     if (!toFill.length) return;
     setFillRound([toFill[0]]);
@@ -815,12 +995,19 @@ function EventPackageView() {
   const renderBasicsRow = (key) => {
     const spec = BASICS_FIELDS[key];
     const f = basics[key];
-    if (isToFill(f)) return null;
+    const editing = basicsEditing === key && !used;
+    if (isToFill(f) && !editing) return null;
     const StateIcon = basicsStateIcon(f);
     const hasValue = hasValueState(f.state);
     const clampDescription = key === 'description' && hasValue && String(f.value || '').length > DESCRIPTION_CLAMP_AT;
+    // Tapping the value edits it in the row (Evoni, 2026-10-23).
+    const valueButton = (children, className = 'epp-basic-value') => (used ? <span className={className}>{children}</span> : (
+      <button type="button" className={`${className} epp-basic-value-btn`} onClick={() => openBasicsEditor(key)} disabled={basicsSaving} title={`Edit ${spec.label.toLowerCase()}`}>
+        {children}
+      </button>
+    ));
     return (
-      <div key={key} className={`epp-basic is-${f.state}`} data-testid={`basics-${key}`} data-state={f.state}>
+      <div key={key} className={`epp-basic is-${f.state}${editing ? ' is-editing' : ''}`} data-testid={`basics-${key}`} data-state={f.state}>
         <dt>
           {spec.label}
           {f.state !== 'set' && (
@@ -828,13 +1015,18 @@ function EventPackageView() {
           )}
         </dt>
         <dd>
+          {editing ? (
+            <InlineBasicsField
+              fieldKey={key} spec={spec} field={f} draft={basicsDraft} onDraft={setBasicsDraft} saving={basicsSaving}
+              onSave={() => saveBasicsField(key, basicsDraft)} onCancel={closeBasicsEditor}
+              onClear={() => saveBasicsField(key, '')} formatValue={fmtBasicsValue}
+            />
+          ) : <>
           {hasValue && key === 'description' ? (
             <>
-              <span
-                id="epp-description-text" data-testid="basics-description-text"
-                className={`epp-basic-value epp-basic-prose${clampDescription && !descriptionOpen ? ' is-clamped' : ''}`}
-              >
-                {fmtBasicsValue(key, f.value)}
+              <span id="epp-description-text" data-testid="basics-description-text"
+                className={`epp-basic-prose-wrap${clampDescription && !descriptionOpen ? ' is-clamped' : ''}`}>
+                {valueButton(fmtBasicsValue(key, f.value), 'epp-basic-value epp-basic-prose')}
               </span>
               {clampDescription && (
                 <ShowMoreToggle
@@ -844,7 +1036,7 @@ function EventPackageView() {
               )}
             </>
           ) : hasValue ? (
-            <span className="epp-basic-value">{fmtBasicsValue(key, f.value)}</span>
+            valueButton(fmtBasicsValue(key, f.value))
           ) : (
             <span className="epp-basic-unset">Not set</span>
           )}
@@ -873,6 +1065,7 @@ function EventPackageView() {
               </button>
             </div>
           )}
+          </>}
         </dd>
       </div>
     );
@@ -893,11 +1086,21 @@ function EventPackageView() {
   // (the invitation, the featured attendees, a default cost) only scrolls.
   const continueTo = (it) => {
     if (!it || used) return;
-    const anchor = it.section === 'organizer' ? 'people' : it.section;
-    const el = document.getElementById(`epp-sec-${anchor}`);
-    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setBarOpen(false);
     const basicsKey = CONTINUE_BASICS[`${it.section}.${it.key}`];
-    if (basicsKey) { openBasicsEditor(basicsKey); return; }
+    if (basicsKey) {
+      // The field opens in its row in The Event (the dress code too), so
+      // that row is where the page lands.
+      openBasicsEditor(basicsKey);
+      setTimeout(() => {
+        const row = document.querySelector(`[data-testid="basics-editor-${basicsKey}"]`);
+        if (row && typeof row.scrollIntoView === 'function') row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 0);
+      return;
+    }
+    const anchor = it.section === 'organizer' ? 'people' : it.section;
+    openSection(anchor === 'invitation' ? 'identity' : anchor);
+    scrollToSection(anchor);
     switch (`${it.section}.${it.key}`) {
       case 'organizer.organizer': openOrganizerPicker(); break;
       case 'identity.name': openNameSuggest(); break;
@@ -952,10 +1155,26 @@ function EventPackageView() {
       return;
     }
     setOrganizerSaving(true);
+    // What the choice replaces, for the toast's Undo: each column it writes
+    // and each automation key it patches, as they were (the PUT merges
+    // canon_consequences, so only those keys go back).
+    const before = loadedEventRef.current || event;
+    const undoBody = {};
+    for (const col of Object.keys(pending.update.body)) {
+      if (col === 'canon_consequences') {
+        const auto = before.canon_consequences?.automation || {};
+        const patch = pending.update.body.canon_consequences?.automation || {};
+        undoBody.canon_consequences = { automation: Object.fromEntries(Object.keys(patch).map((k) => [k, auto[k] ?? null])) };
+      } else {
+        undoBody[col] = before[col] ?? null;
+      }
+    }
     try {
       await putEvent(pending.update.body);
       closeOrganizerPicker();
-      setToast(`Organizer set to ${pending.label} (${pending.kind})`);
+      setToast(`Organizer set to ${pending.label} (${pending.kind})`, {
+        undo: () => undoChange(undoBody, 'Organizer change undone'),
+      });
       await load();
     } catch (err) {
       console.error('[EventPackage] saveOrganizer failed:', err);
@@ -1006,24 +1225,47 @@ function EventPackageView() {
   // event's full canon_consequences with only automation.guest_profiles
   // replaced, or every other automation field (host, venue, ...) would be
   // wiped.
-  const saveGuestProfiles = async (newGuestProfiles, successMessage) => {
+  // The event as last loaded, not this render's copy: an Undo runs after
+  // the reload, and must not write back an older canon_consequences.
+  const guestBody = (list) => {
+    const base = loadedEventRef.current || event;
+    return {
+      canon_consequences: {
+        ...(base.canon_consequences || {}),
+        automation: { ...(base.canon_consequences?.automation || {}), guest_profiles: list },
+      },
+    };
+  };
+  // { undoable: true } offers Undo on the toast (Evoni, 2026-10-23), which
+  // puts the guest list back as it was before this change, in one save.
+  const saveGuestProfiles = async (newGuestProfiles, successMessage, { undoable = false } = {}) => {
     setGuestSaving(true);
+    const previous = guestList;
     try {
-      const updatedCC = {
-        ...(event.canon_consequences || {}),
-        automation: {
-          ...(event.canon_consequences?.automation || {}),
-          guest_profiles: newGuestProfiles,
-        },
-      };
-      await putEvent({ canon_consequences: updatedCC });
-      if (successMessage) setToast(successMessage);
+      await putEvent(guestBody(newGuestProfiles));
+      if (undoable) {
+        setToast(successMessage || 'Guests updated', { undo: () => undoChange(() => guestBody(previous), 'Undone') });
+      } else if (successMessage) setToast(successMessage);
       await load();
     } catch (err) {
       console.error('[EventPackage] saveGuestProfiles failed:', err);
       setToast(err.response?.data?.error || err.message || 'Failed to update guests');
     } finally {
       setGuestSaving(false);
+    }
+  };
+
+  // Undo on the toast: one save that restores what the change replaced.
+  // body may be a function, read when Undo is pressed.
+  const undoChange = async (body, doneMessage) => {
+    setToastState(null);
+    try {
+      await putEvent(typeof body === 'function' ? body() : body);
+      setToast(doneMessage);
+      await load();
+    } catch (err) {
+      console.error('[EventPackage] undo failed:', err);
+      setToast(err.response?.data?.error || err.message || 'Couldn\u2019t undo that change');
     }
   };
 
@@ -1039,12 +1281,14 @@ function EventPackageView() {
     const name = guest.display_name || guest.handle || 'Guest';
     if (!guest.featured && featuredFull()) return;
     const updated = guestList.map((g, i) => (i === index ? { ...g, featured: !g.featured } : g));
-    saveGuestProfiles(updated, guest.featured ? `Removed ${name} from Featured` : `${name} is now Featured`);
+    saveGuestProfiles(updated, guest.featured ? `Removed ${name} from Featured` : `${name} is now Featured`, { undoable: true });
   };
 
   const setGuestStoryRole = (index, role) => {
+    const guest = guestList[index];
+    const name = guest.display_name || guest.handle || 'Guest';
     const updated = guestList.map((g, i) => (i === index ? { ...g, story_role: role || null } : g));
-    saveGuestProfiles(updated);
+    saveGuestProfiles(updated, role ? `${name}'s role: ${fmtLabel(role)}` : `${name} has no role now`, { undoable: true });
   };
 
   // Add from Feed is where Featured Attendees are chosen (Task #3138). A
@@ -1076,7 +1320,7 @@ function EventPackageView() {
       story_role: null,
     };
     setGuestFeedPickerOpen(false); setGuestFeedSearch(''); setGuestFeedResults([]);
-    saveGuestProfiles([...guestList, newGuest], `${newGuest.display_name} added and featured`);
+    saveGuestProfiles([...guestList, newGuest], `${newGuest.display_name} added and featured`, { undoable: true });
   };
 
   // A recommended attendee (episode creation step 5): an invited guest is
@@ -1091,7 +1335,7 @@ function EventPackageView() {
         profile_id: rec.profile_id, handle: rec.handle, display_name: rec.display_name,
         featured: true, story_role: rec.role,
       }];
-    saveGuestProfiles(updated, `${rec.display_name} featured as ${rec.role}`);
+    saveGuestProfiles(updated, `${rec.display_name} featured as ${rec.role}`, { undoable: true });
   };
 
   const fetchNameSuggestions = async () => {
@@ -1338,15 +1582,66 @@ function EventPackageView() {
       : guestFeedPickerOpen ? () => setGuestFeedPickerOpen(false)
         : organizerPickerOpen ? () => { if (!organizerSaving) closeOrganizerPicker(); }
           : stakesDraft ? () => { if (!stakesSaving) setStakesDraft(null); }
-            : basicsEditing ? () => { if (!basicsSaving) { setBasicsEditing(null); setBasicsDraft(''); setFillRound(null); } }
               : startConfirmOpen ? () => { if (!starting) setStartConfirmOpen(false); }
                 : outfitPickerOpen ? () => setOutfitPickerOpen(false)
                   : null;
 
+  // Desktop shortcuts (usePackageShortcuts): g then N jumps to the Nth
+  // section in the menu's order, s saves the open Basics field, ? the help.
+  shortcutsRef.current = {
+    onJump: (n) => { const target = nav[n - 1]; if (target) jumpToSection(target.anchor); },
+    onSave: () => {
+      if (!basicsEditing || used || basicsSaving) return false;
+      const spec = BASICS_FIELDS[basicsEditing];
+      if (!basicsDraft.trim() || (spec.input === 'select' && !spec.options.includes(basicsDraft))) return false;
+      saveBasicsField(basicsEditing, basicsDraft);
+      return true;
+    },
+    onHelp: () => setShortcutsOpen((o) => !o),
+    onEscape: () => { if (!shortcutsOpen) return false; setShortcutsOpen(false); return true; },
+  };
+
+  // The one-line summary a folded section shows (Evoni, 2026-10-23).
+  const foldSummary = {
+    identity: [event.name, fmtBasicsValue('date', basics.date.value), fmtBasicsValue('time', basics.time.value), basics.category.value && taxonomyLabel(basics.category.value)].filter(Boolean).join(' · '),
+    people: [organizer.hasOrganizer ? `Organized by ${organizer.name || 'Unnamed'}` : 'No organizer', `${featuredGuests.length} featured`, `${guestList.length} invited`].join(' · '),
+    place: [venueDate.venueName || 'No venue', sceneSet?.name ? `set: ${sceneSet.name}` : null].filter(Boolean).join(' · '),
+    look: [lookSummary, event.dress_code ? `dress code: ${event.dress_code}` : null].filter(Boolean).join(' · '),
+    stakes: [stakes.relationship.summary, projection.complete ? `${projection.label.text} challenge` : null].filter(Boolean).join(' · '),
+  };
+  // A section's header pieces when it folds: its Edit (expand) / Collapse
+  // button and the summary line.
+  const foldButton = (anchor, title) => {
+    if (!FOLDABLE.has(anchor)) return null;
+    const open = sectionOpen(anchor);
+    return (
+      <button
+        type="button" className="epp-btn epp-btn-small epp-fold-btn" data-testid={`fold-${anchor}`}
+        aria-expanded={open} aria-controls={`epp-body-${anchor}`} aria-label={open ? `Collapse ${title}` : `Edit ${title}`}
+        onClick={() => folds.setOpen(anchor, !open)}
+      >
+        {open ? <><ChevronUp size={13} aria-hidden="true" /> Collapse</> : <><Pencil size={13} aria-hidden="true" /> Edit</>}
+      </button>
+    );
+  };
+  const foldLine = (anchor) => (FOLDABLE.has(anchor) && !sectionOpen(anchor)
+    ? <p className="epp-fold-summary" data-testid={`fold-summary-${anchor}`}><CheckCircle2 size={13} aria-hidden="true" /> {foldSummary[anchor] || 'Complete'}</p>
+    : null);
+  const sectionClass = (anchor, extra = '') => `epp-section${extra ? ` ${extra}` : ''}${FOLDABLE.has(anchor) && !sectionOpen(anchor) ? ' is-folded' : ''}`;
+
   return (
-    <div className="epp-page">
+    <div className="epp-page" ref={pageRef}>
       <div className="epp-toast-live" role="status" aria-live="polite">
-        {toast && <div className="epp-toast" key={toastState.n}>{toast}</div>}
+        {toast && (
+          <div className={`epp-toast${toastState.undo ? ' has-undo' : ''}`} key={toastState.n} data-testid="page-toast">
+            <span>{toast}</span>
+            {toastState.undo && (
+              <button type="button" className="epp-toast-undo" data-testid="toast-undo" onClick={toastState.undo}>
+                <Undo2 size={13} aria-hidden="true" /> Undo
+              </button>
+            )}
+          </div>
+        )}
       </div>
       {refreshError && (
         <div className="epp-refresh-error" role="alert" data-testid="refresh-error">
@@ -1363,6 +1658,9 @@ function EventPackageView() {
           <span className={`epp-status-badge epp-status-${badge.state}`} data-testid="package-status">{badge.label}</span>
         </div>
         <HeroTitle context={seasonContext} showId={showId} name={event.name} />
+        {/* On a phone the hero is one line: name, date, status (the tiles
+            below hide; the readiness list is behind the bar's count). */}
+        <span className="epp-hero-date" data-testid="hero-date">{shortDate(venueDate.eventDate || event.event_date) || 'No date'}</span>
         <ul className="epp-hero-tiles" aria-label="At a glance">
           {heroTiles({ event, venueDate, organizer, projection, dealLabel: dealLabelFor(event), compensation: describeCompensation(event) }).map((t) => (
             <li key={t.key} className={`epp-hero-tile${t.empty ? ' empty' : ''}`} data-testid={`hero-${t.key}`}>
@@ -1396,29 +1694,18 @@ function EventPackageView() {
 
       </header>
 
-      {/* Readiness at the top (the redesign): a tile per section, and while
-          the event is unused, the next step with Continue or Start Episode. */}
-      <section className="epp-strip" id="epp-readiness" data-testid="readiness-strip" aria-label="Readiness">
-        <div className="epp-strip-head">
-          <span className="epp-strip-eyebrow">Readiness</span>
-          <strong className="epp-strip-headline">{used ? 'Locked at Start Episode' : readinessHeadline(readiness, moneyWarnings.length)}</strong>
-        </div>
-        <ul className="epp-strip-tiles">
-          {readiness.sections.map((sec) => {
-            const tile = readinessTile(sec);
-            const anchor = sec.key === 'organizer' ? 'people' : sec.key;
-            return (
-              <li key={sec.key}>
-                <a className={`epp-strip-tile is-${tile.kind}`} href={`#epp-sec-${anchor}`} data-testid={`strip-${sec.key}`} data-state={tile.kind}>
-                  <strong>{tile.label}</strong>
-                  <span>{tile.text}</span>
-                </a>
-              </li>
-            );
-          })}
-        </ul>
-      {/* What each section still needs, folded under the tiles (it was the
-          Review section at the foot of the page). */}
+      {/* One sticky readiness bar (Evoni, 2026-10-23): it replaces the
+          strip's tiles, the next-step bar and the footer action bar. The
+          count opens the list of sections; "What each section needs" (the
+          old Review, under its old anchor) folds inside it. */}
+      <ReadinessBar
+        readiness={readiness} nextStep={nextStep} used={used} gatesMet={gatesMet}
+        moneyWarningCount={moneyWarnings.length} moneyStatus={moneyStatus} moneyPreview={moneyPreview}
+        starting={starting} moneyPending={moneyPending}
+        open={barOpen} onOpenChange={setBarOpen}
+        onContinue={continueTo} onStart={requestStartEpisode} onJump={jumpToSection} onEditDetails={openEditor}
+        onShowShortcuts={() => { setBarOpen(false); setShortcutsOpen(true); }}
+      >
       <details className="epp-strip-details" id="epp-sec-review" data-testid="readiness-details">
         <summary>What each section needs</summary>
           <div className="epp-readiness" data-testid="readiness">
@@ -1484,54 +1771,32 @@ function EventPackageView() {
             </div>
           )}
       </details>
-      {/* The Package's one action, in one place (Evoni's review, item 8):
-          Continue while a gate is missing, then Start Episode only. A
-          recommended item left open is a quiet Review beside it, never a
-          second primary. */}
-      {!used && (
-        <div className={`epp-next is-${gatesMet ? 'ready' : nextStep.kind}`} data-testid="package-next" data-kind={nextStep.kind}>
-          <span className="epp-next-count" data-testid="package-next-count">{nextStep.done} of {nextStep.total} ready</span>
-          <span className="epp-next-text">
-            {nextStep.next
-              ? <>{nextStep.kind === 'gate' ? 'Needed to start' : 'Recommended'}: {nextStepLabel(nextStep.next)}</>
-              : 'Every section is complete.'}
-          </span>
-          {nextStep.kind === 'warning' && (
-            <button
-              type="button" className="epp-btn epp-btn-small epp-btn-secondary"
-              data-testid="package-continue" onClick={() => continueTo(nextStep.next)}
-            >
-              Review
-            </button>
-          )}
-          {gatesMet ? (
-            <button
-              type="button" className="epp-btn epp-btn-small epp-btn-primary epp-next-btn"
-              data-testid="start-episode" onClick={requestStartEpisode} disabled={starting || moneyPending}
-              title={moneyPending ? 'Checking Lala\u2019s money first' : undefined}
-            >
-              <PlayCircle size={14} aria-hidden="true" /> {starting ? 'Starting…' : moneyPending ? 'Checking money…' : 'Start Episode'}
-            </button>
-          ) : (
-            <button
-              type="button" className="epp-btn epp-btn-small epp-btn-primary epp-next-btn"
-              data-testid="package-continue" onClick={() => continueTo(nextStep.next)}
-            >
-              Continue <ArrowRight size={14} aria-hidden="true" />
-            </button>
-          )}
+      </ReadinessBar>
+
+      {shortcutsOpen && (
+        <div className="epp-shortcuts" role="region" aria-label="Keyboard shortcuts" data-testid="shortcuts-help">
+          <div className="epp-shortcuts-head">
+            <strong><Keyboard size={14} aria-hidden="true" /> Keyboard shortcuts</strong>
+            <button type="button" className="epp-icon-btn" onClick={() => setShortcutsOpen(false)} aria-label="Close shortcuts"><X size={14} /></button>
+          </div>
+          <dl>
+            <div><dt><kbd>g</kbd> then <kbd>1</kbd>–<kbd>{Math.min(9, nav.length)}</kbd></dt><dd>Go to that section: {nav.slice(0, 9).map((s, i) => `${i + 1} ${s.label}`).join(' · ')}</dd></div>
+            <div><dt><kbd>s</kbd></dt><dd>Save the Basics field you are editing (click outside its box first)</dd></div>
+            <div><dt><kbd>?</kbd></dt><dd>Show or hide this list</dd></div>
+          </dl>
+          <p className="epp-shortcuts-note">Not while typing in a field or with a dialog open.</p>
         </div>
       )}
-      </section>
 
       <div className="epp-body">
       <nav className="epp-toc" aria-label="On this page" data-testid="package-toc">
         <span className="epp-toc-eyebrow">On this page</span>
         <ul ref={tocListRef}>
-          {pageNav(readiness, { has: { concept: hasConcept(event) } }).map((s) => (
+          {nav.map((s) => (
             <li key={s.anchor}>
               <a
                 href={`#epp-sec-${s.anchor}`} className={`state-${s.state}${s.anchor === activeAnchor ? ' is-active' : ''}`}
+                onClick={() => openSection(s.anchor)}
                 aria-current={s.anchor === activeAnchor ? 'location' : undefined} data-testid={`toc-${s.anchor}`}
               >
                 <span className="epp-toc-dot" aria-hidden="true" />{s.label}
@@ -1544,15 +1809,18 @@ function EventPackageView() {
       </nav>
 
       <div className="epp-sections">
-        <section id="epp-sec-identity" className="epp-section">
+        <section id="epp-sec-identity" className={sectionClass('identity')}>
           <div className="epp-section-header">
             <div className="epp-section-heading"><h2 className="epp-section-title"><span className="epp-section-num">1.</span> The Event</h2><p className="epp-section-sub">What guests see: the name, when, the dress code, and the invitation.</p></div>
+            {foldButton('identity', 'The Event')}
             {!used && !nameSuggestOpen && (
               <button className="epp-btn epp-btn-small" onClick={openNameSuggest}>
                 <Sparkles size={14} /> Suggest names
               </button>
             )}
           </div>
+          {foldLine('identity')}
+          <div id="epp-body-identity" className="epp-section-body" hidden={!sectionOpen('identity')}>
           <div className="epp-split">
           <div className="epp-split-main">
           <dl className="epp-fields">
@@ -1576,11 +1844,11 @@ function EventPackageView() {
             {renderBasicsRow('format')}
           </dl>
 
-          {toFill.length > 0 && (
+          {toFillShown.length > 0 && (
             <div className="epp-to-fill" data-testid="basics-to-fill">
               <span className="epp-to-fill-label">Still to fill</span>
               <ul className="epp-to-fill-list">
-                {toFill.map((key) => {
+                {toFillShown.map((key) => {
                   const f = basics[key];
                   return (
                     <li key={key} className={`epp-to-fill-item is-${f.state}`} data-testid={`basics-${key}`} data-state={f.state}>
@@ -1600,6 +1868,35 @@ function EventPackageView() {
                 <button type="button" className="epp-btn epp-btn-small epp-to-fill-go" data-testid="basics-fill-in" onClick={startFillIn} disabled={basicsSaving}>
                   <Pencil size={13} aria-hidden="true" /> Fill in
                 </button>
+              )}
+            </div>
+          )}
+
+          {/* Suggest with AI (Evoni, 2026-10-23): one ask for the empty
+              fields, reviewed before anything is saved. */}
+          {!used && (
+            <div className="epp-ai-suggest">
+              {aiSuggest.status !== 'review' && (
+                <button
+                  type="button" className="epp-btn epp-btn-small epp-ai-suggest-btn" data-testid="ai-suggest"
+                  onClick={askAiSuggestions} disabled={aiSuggest.status === 'loading' || basicsSaving}
+                  aria-busy={aiSuggest.status === 'loading'}
+                >
+                  {aiSuggest.status === 'loading'
+                    ? <><Loader2 size={13} className="epp-spin-icon" aria-hidden="true" /> Asking AI…</>
+                    : <><Sparkles size={13} aria-hidden="true" /> Suggest with AI</>}
+                </button>
+              )}
+              {aiSuggest.status === 'error' && (
+                <p className="epp-ai-suggest-error" role="alert" data-testid="ai-suggest-error">
+                  <AlertCircle size={13} aria-hidden="true" /> {aiSuggest.error}
+                </p>
+              )}
+              {aiSuggest.status === 'review' && (
+                <SuggestReview
+                  key={aiSuggest.n} rows={aiSuggest.rows} aiEmpty={aiSuggest.aiEmpty}
+                  saving={suggestSaving} onSave={saveCheckedSuggestions} onCancel={closeAiSuggestions}
+                />
               )}
             </div>
           )}
@@ -1664,7 +1961,7 @@ function EventPackageView() {
                 Choose an organizer first — the invitation names them.
               </div>
             ) : (
-              <InvitationButton key={`reload-${reloadTick}`}
+              <InvitationButton key={`invitation-${reloadTick}`}
                 mode="inline"
                 event={{ ...event, invitation_url: invitationAsset?.s3_url_processed || null }}
                 showId={showId}
@@ -1678,17 +1975,21 @@ function EventPackageView() {
             )}
           </div>
           </div>
+                  </div>
         </section>
 
-        <section id="epp-sec-people" className="epp-section">
+        <section id="epp-sec-people" className={sectionClass('people')}>
           <div className="epp-section-header">
             <div className="epp-section-heading"><h2 className="epp-section-title"><span className="epp-section-num">2.</span> People</h2><p className="epp-section-sub">Who hosts it and who Lala meets there.</p></div>
+            {foldButton('people', 'People')}
             {!used && (
               <button className="epp-btn epp-btn-small" onClick={openOrganizerPicker} data-testid="change-organizer">
                 <UserPlus size={14} /> Change Organizer
               </button>
             )}
           </div>
+          {foldLine('people')}
+          <div id="epp-body-people" className="epp-section-body" hidden={!sectionOpen('people')}>
           <div className="epp-split even">
           <div className="epp-people-card">
           <div className="epp-organizer-line" data-testid="organizer-line" data-kind={organizer.kind || 'none'}>
@@ -1807,7 +2108,7 @@ function EventPackageView() {
             )}
 
             {!used && featuredGuests.length < MAX_FEATURED_GUESTS && (
-              <EventGuestRecommendations key={`reload-${reloadTick}`}
+              <EventGuestRecommendations key={`guest-recs-${reloadTick}`}
                 guests={guestList}
                 organizerProfileId={event.source_profile_id}
                 venueLocationId={event.venue_location_id}
@@ -1875,21 +2176,25 @@ function EventPackageView() {
             )}
           </div>
           </div>
+                  </div>
         </section>
 
-        <section id="epp-sec-place" className="epp-section">
+        <section id="epp-sec-place" className={sectionClass('place')}>
           <div className="epp-section-header">
             <div className="epp-section-heading"><h2 className="epp-section-title"><span className="epp-section-num">3.</span> Place</h2><p className="epp-section-sub">Where it happens, and the set the episode films on.</p></div>
+            {foldButton('place', 'Place')}
             {!used && (
               <button className="epp-btn epp-btn-small" onClick={() => setVenuePickerOpen(true)}>
                 <MapPin size={14} /> {venueDate.venueLocationId ? 'Change venue' : 'Choose venue'}
               </button>
             )}
           </div>
+          {foldLine('place')}
+          <div id="epp-body-place" className="epp-section-body" hidden={!sectionOpen('place')}>
           <div className="epp-split even epp-place">
           <div className="epp-split-side epp-place-image">
             {/* L7-L9 (§8(hh)): the look made into an image on the venue's set. */}
-            <EventLookImage key={`reload-${reloadTick}`} showId={showId} eventId={eventId} onToast={setToast} onSaved={load} />
+            <EventLookImage key={`look-image-${reloadTick}`} showId={showId} eventId={eventId} onToast={setToast} onSaved={load} />
           </div>
           <div className="epp-split-main">
           <dl className="epp-fields">
@@ -1940,9 +2245,10 @@ function EventPackageView() {
           </dl>
           {/* L1 (§8(hh)): how the venue is dressed for this occasion. Its own
               lock (Q9): editable until the episode is accepted. */}
-          <EventVenueLook key={`reload-${reloadTick}`} showId={showId} eventId={eventId} onToast={setToast} onSaved={load} />
+          <EventVenueLook key={`venue-look-${reloadTick}`} showId={showId} eventId={eventId} onToast={setToast} onSaved={load} />
           </div>
           </div>
+                  </div>
         </section>
 
 
@@ -1955,13 +2261,16 @@ function EventPackageView() {
             /outfit, saved on world_events.outfit_pieces) as the Events
             card's ⋯ menu. Once used it stays read-only, as the rest of the
             package does. */}
-        <section id="epp-sec-look" className={`epp-section epp-look-section${outfitPieces.length ? '' : ' no-outfit'}`} data-testid="style-section">
+        <section id="epp-sec-look" className={sectionClass('look', `epp-look-section${outfitPieces.length ? '' : ' no-outfit'}`)} data-testid="style-section">
           <div className="epp-section-header">
             <div className="epp-section-heading"><h2 className="epp-section-title"><span className="epp-section-num">4.</span> Lala&apos;s Look</h2><p className="epp-section-sub">What she wears, from her closet.</p></div>
+            {foldButton('look', "Lala's Look")}
             <span className={`epp-chip${outfitPieces.length && episodeLook?.state !== 'chosen' ? '' : ' warn'}`} data-testid="style-outfit-summary">
               {lookSummary}
             </span>
           </div>
+          {foldLine('look')}
+          <div id="epp-body-look" className="epp-section-body" hidden={!sectionOpen('look')}>
           <div className="epp-split">
             {/* What the event asks of her: the dress code and the creation
                 draft's styling brief (automation.styling_brief). */}
@@ -2022,11 +2331,13 @@ function EventPackageView() {
           {/* Recommended looks (episode creation step 3): whole outfits from
               the closet while none is chosen. */}
           {!used && outfitPieces.length === 0 && (
-            <EventLookRecommendations key={`reload-${reloadTick}`}
+            <EventLookRecommendations key={`look-recs-${reloadTick}`}
               showId={showId} eventId={eventId}
               onSaved={load} onToast={setToast} onBrowse={() => setOutfitPickerOpen(true)}
+              hasOutfit={!!event.outfit_set_id || outfitPieces.length > 0}
             />
           )}
+                  </div>
         </section>
 
         {outfitPickerOpen && !used && (
@@ -2063,7 +2374,7 @@ function EventPackageView() {
         {/* Reopen terms (Task #2378) sits directly above the Terms it
             reopens, where the lock label is (Evoni, 2026-09-30: the line
             under the page banner was not found). */}
-        <TermsReopenPanel key={`reload-${reloadTick}`}
+        <TermsReopenPanel key={`terms-reopen-${reloadTick}`}
           showId={showId}
           eventId={eventId}
           locked={used}
@@ -2076,7 +2387,7 @@ function EventPackageView() {
           onToast={setToast}
         />
 
-        <EventTermsSection key={`reload-${reloadTick}`}
+        <EventTermsSection key={`terms-${reloadTick}`}
           showId={showId}
           eventId={eventId}
           event={event}
@@ -2084,6 +2395,7 @@ function EventPackageView() {
           putEvent={putEvent}
           onSaved={load}
           onToast={setToast}
+          onPriceInputsChange={setPriceInputs}
         />
         <div className="epp-deal-money">
             <div className="epp-stake">
@@ -2124,15 +2436,18 @@ function EventPackageView() {
         </div>
         </section>
 
-        <section id="epp-sec-stakes" className="epp-section epp-stakes" data-testid="stakes-section">
+        <section id="epp-sec-stakes" className={sectionClass('stakes', 'epp-stakes')} data-testid="stakes-section">
           <div className="epp-section-header">
             <div className="epp-section-heading"><h2 className="epp-section-title"><span className="epp-section-num">6.</span> Story Stakes</h2><p className="epp-section-sub">What this night means for her story.</p></div>
+            {foldButton('stakes', 'Story Stakes')}
             {!used && (
               <button className="epp-btn epp-btn-small" onClick={openStakesEditor} data-testid="stakes-edit">
                 <Pencil size={14} /> Edit stakes
               </button>
             )}
           </div>
+          {foldLine('stakes')}
+          <div id="epp-body-stakes" className="epp-section-body" hidden={!sectionOpen('stakes')}>
           <div className="epp-stakes-summary" data-testid="stakes-summary">
             <div className="epp-stake">
               <div className="epp-stake-head"><TrendingUp size={14} aria-hidden="true" /> Career opportunity</div>
@@ -2219,6 +2534,7 @@ function EventPackageView() {
               <p className="epp-stakes-origin"><Lock size={13} aria-hidden="true" /> {COST_READ_ONLY_REASON}</p>
             </div>
           )}
+                  </div>
         </section>
 
         {/* 7. In-world documents (Evoni, 2026-10-06): the shopping list and
@@ -2228,7 +2544,7 @@ function EventPackageView() {
           <div className="epp-section-header">
             <div className="epp-section-heading"><h2 className="epp-section-title"><span className="epp-section-num">7.</span> In-world documents</h2><p className="epp-section-sub">The papers the event gives her, drafted from it.</p></div>
           </div>
-          <EventDocuments key={`reload-${reloadTick}`}
+          <EventDocuments key={`documents-${reloadTick}`}
             showId={showId}
             eventId={eventId}
             event={event}
@@ -2241,33 +2557,6 @@ function EventPackageView() {
 
       </div>
       </div>
-
-      {/* The foot of the page (Evoni's review, item 4): what is still
-          needed, worded exactly as the strip's tiles, each linking to its
-          section; Start Episode itself lives only in the strip. */}
-      {!used && (
-        <div className="epp-actions" data-testid="package-foot">
-          {!gatesMet && (
-            <div className="epp-start-blocked" data-testid="start-blocked">
-              <Lock size={13} aria-hidden="true" /> Still needed to start:
-              {readiness.sections.filter((sec) => !sec.complete && sec.kind === 'blocking').map((sec) => {
-                const tile = readinessTile(sec);
-                return (
-                  <a key={sec.key} className="epp-start-blocked-link" href={`#epp-sec-${sec.key === 'organizer' ? 'people' : sec.key}`} data-testid={`start-blocked-${sec.key}`}>
-                    {tile.text === tile.label ? tile.label : `${tile.label}: ${tile.text}`}
-                  </a>
-                );
-              })}
-            </div>
-          )}
-          <a className="epp-foot-top" href="#epp-readiness" data-testid="package-foot-top">
-            {gatesMet ? 'Start Episode is in Readiness ↑' : 'Back to Readiness ↑'}
-          </a>
-          <button className="epp-btn epp-btn-secondary" onClick={openEditor}>
-            <Pencil size={16} /> Edit details
-          </button>
-        </div>
-      )}
 
       {startConfirmOpen && gatesMet && !used && (
         <div className="epp-modal-backdrop" onClick={() => { if (!starting) setStartConfirmOpen(false); }}>
@@ -2319,93 +2608,6 @@ function EventPackageView() {
           onCancel={() => setLocationsStep(null)}
         />
       )}
-
-      {basicsEditing && !used && (() => {
-        const key = basicsEditing;
-        const spec = BASICS_FIELDS[key];
-        const f = basics[key];
-        const closeBasics = () => { if (!basicsSaving) { setBasicsEditing(null); setBasicsDraft(''); setFillRound(null); } };
-        // A stored value the native date/time input can't show (older
-        // free-text rows) falls back to a text input, so it isn't lost.
-        const nativeOk = (spec.input === 'date' && (!basicsDraft || ISO_DATE.test(basicsDraft)))
-          || (spec.input === 'time' && (!basicsDraft || HH_MM.test(basicsDraft)));
-        const inputType = nativeOk ? spec.input : 'text';
-        return (
-          <div className="epp-modal-backdrop" onClick={closeBasics}>
-            <div className="epp-modal" role="dialog" aria-modal="true" aria-label={spec.title} onClick={(e) => e.stopPropagation()}>
-              <div className="epp-modal-header">
-                <h3>{spec.title}</h3>
-                <button className="epp-icon-btn" onClick={closeBasics} aria-label="Close" disabled={basicsSaving}>
-                  <X size={16} />
-                </button>
-              </div>
-              <div className="epp-basics-dialog">
-                {f.state === 'auto_drafted' && (
-                  <p className="epp-basics-note" data-testid="basics-dialog-draft-note">
-                    {f.source === DATE_DRAFT_SOURCE ? (
-                      <><CalendarClock size={13} aria-hidden="true" /> Auto-drafted · schedule: 45 days after the event was created. Changing it marks it Edited.</>
-                    ) : (
-                      <><Sparkles size={13} aria-hidden="true" /> Auto-drafted · AI draft. Changing it marks it Edited.</>
-                    )}
-                  </p>
-                )}
-                {spec.input === 'select' ? (
-                  <select
-                    autoFocus value={basicsDraft}
-                    onChange={(e) => setBasicsDraft(e.target.value)}
-                    aria-label={spec.title}
-                    data-testid={`basics-input-${key}`}
-                  >
-                    <option value="">Choose {spec.label.toLowerCase()}…</option>
-                    {basicsDraft && !spec.options.includes(basicsDraft) && (
-                      <option value={basicsDraft} disabled>{basicsDraft} (not an allowed value)</option>
-                    )}
-                    {spec.options.map((o) => <option key={o} value={o}>{taxonomyLabel(o)}</option>)}
-                  </select>
-                ) : spec.input === 'textarea' ? (
-                  <textarea
-                    autoFocus rows={5} value={basicsDraft}
-                    onChange={(e) => setBasicsDraft(e.target.value)}
-                    placeholder="What is this event?"
-                    aria-label={spec.title}
-                  />
-                ) : (
-                  <input
-                    autoFocus type={inputType} value={basicsDraft} maxLength={spec.maxLength}
-                    onChange={(e) => setBasicsDraft(e.target.value)}
-                    // Enter saves like the Save button, which an empty draft
-                    // disables: Enter never clears a field (audit, 2026-10-23).
-                    onKeyDown={(e) => { if (e.key === 'Enter' && basicsDraft.trim() && !basicsSaving) saveBasicsField(key, basicsDraft); }}
-                    placeholder={key === 'dressCode' ? 'e.g. black tie formal' : ''}
-                    aria-label={spec.title}
-                  />
-                )}
-                {f.suggestion && (
-                  <button type="button" className="epp-inline-link epp-basics-fill" onClick={() => setBasicsDraft(f.suggestion.value)}>
-                    Fill in suggestion: {fmtBasicsValue(key, f.suggestion.value)}
-                  </button>
-                )}
-              </div>
-              <div className="epp-modal-footer epp-basics-actions">
-                {f.value && (
-                  <button type="button" className="epp-btn epp-btn-small" onClick={() => saveBasicsField(key, '')} disabled={basicsSaving}>
-                    Clear
-                  </button>
-                )}
-                <div className="epp-basics-spacer" />
-                <button type="button" className="epp-btn epp-btn-small" onClick={closeBasics} disabled={basicsSaving}>Cancel</button>
-                <button
-                  type="button" className="epp-btn epp-btn-small epp-btn-primary"
-                  onClick={() => saveBasicsField(key, basicsDraft)}
-                  disabled={basicsSaving || !basicsDraft.trim() || (spec.input === 'select' && !spec.options.includes(basicsDraft))}
-                >
-                  {basicsSaving ? 'Saving…' : 'Save'}
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {stakesDraft && !used && (() => {
         const closeStakes = () => { if (!stakesSaving) setStakesDraft(null); };

@@ -49,6 +49,12 @@ function Probe() {
   const loc = useLocation();
   return <div data-testid="landed">{loc.pathname}{loc.search}</div>;
 }
+// A finished section starts folded (2026-10-23); its Edit opens it.
+function openSection(anchor) {
+  const fold = screen.queryByTestId(`fold-${anchor}`);
+  if (fold && fold.getAttribute('aria-expanded') === 'false') fireEvent.click(fold);
+}
+
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={['/shows/show-1/events/ev-1']}>
@@ -144,6 +150,7 @@ describe('Place: the scene set for the event (S7)', () => {
     renderPage();
     const link = await screen.findByTestId('place-scene-set-link');
     expect(link.textContent).toBe('Glasshouse Hall');
+    openSection('place');
     expect(within(screen.getByTestId('place-scene-set')).getByRole('button').textContent).toBe('Change scene set');
     fireEvent.click(link);
     // With the way back to the Event Package (eighth audit).
@@ -156,6 +163,7 @@ describe('Place: the scene set for the event (S7)', () => {
     placeLocked = true;
     renderPage();
     expect((await screen.findByTestId('place-scene-set-link')).textContent).toBe('Glasshouse Hall');
+    openSection('place');
     expect(within(screen.getByTestId('place-scene-set')).queryByRole('button')).toBeNull();
   });
 
@@ -204,7 +212,9 @@ describe('Place: the scene-set picker shows thumbnails, search and angles (L2)',
 
   test('each set shows a thumbnail (its base, else its cover angle) and its venue', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Change scene set' }));
+    await screen.findByTestId('place-scene-set');
+    openSection('place');
+    fireEvent.click(screen.getByRole('button', { name: 'Change scene set' }));
     const bistro = await screen.findByTestId('scene-set-option-set-other-b');
     expect(bistro.querySelector('img').getAttribute('src')).toBe('x.jpg');
     await waitFor(() => expect(bistro.textContent).toContain('Rue Bistro'));
@@ -214,7 +224,9 @@ describe('Place: the scene-set picker shows thumbnails, search and angles (L2)',
 
   test("the event's set opens highlighted with its angles in order; another set's angles open on request", async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Change scene set' }));
+    await screen.findByTestId('place-scene-set');
+    openSection('place');
+    fireEvent.click(screen.getByRole('button', { name: 'Change scene set' }));
     const strip = await screen.findByTestId('scene-set-angles-set-venue-hall');
     expect(within(strip).getAllByRole('figure').map((f) => f.textContent)).toEqual(['No imageMain hall', 'Bar close-up']);
 
@@ -226,7 +238,9 @@ describe('Place: the scene-set picker shows thumbnails, search and angles (L2)',
 
   test('search covers name, venue and type', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Change scene set' }));
+    await screen.findByTestId('place-scene-set');
+    openSection('place');
+    fireEvent.click(screen.getByRole('button', { name: 'Change scene set' }));
     // Venue names arrive with the World Locations.
     await waitFor(() => expect(screen.getByTestId('scene-set-option-set-other-b').textContent).toContain('Rue Bistro'));
     const search = screen.getByTestId('scene-set-search');
