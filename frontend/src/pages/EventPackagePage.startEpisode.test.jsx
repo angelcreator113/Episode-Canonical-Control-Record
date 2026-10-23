@@ -66,6 +66,14 @@ function LocationProbe() {
   return <div data-testid="landed">{loc.pathname}{loc.search}</div>;
 }
 
+// Start Episode opens once the money check has answered (the audit fix:
+// it stays disabled while "Checking money…").
+async function readyStart() {
+  const start = await screen.findByTestId('start-episode');
+  await waitFor(() => expect(start.disabled).toBe(false));
+  return start;
+}
+
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={['/shows/show-1/events/ev-1']}>
@@ -106,7 +114,7 @@ describe('EventPackagePage — Start Episode lands on the Overview', () => {
 
   test('with warnings open: Start Anyway navigates to /episodes/:id?tab=overview', async () => {
     renderPage();
-    const start = await screen.findByTestId('start-episode');
+    const start = await readyStart();
     expect(start.disabled).toBe(false);
 
     fireEvent.click(start);
@@ -123,7 +131,7 @@ describe('EventPackagePage — Start Episode lands on the Overview', () => {
   test('with no warnings: Start Episode starts directly and lands on ?tab=overview', async () => {
     stored = JSON.parse(JSON.stringify(COMPLETE_EVENT));
     renderPage();
-    const start = await screen.findByTestId('start-episode');
+    const start = await readyStart();
 
     fireEvent.click(start);
     fireEvent.click(await screen.findByTestId('els-confirm'));
@@ -164,7 +172,7 @@ describe('EventPackagePage — the Episode Locations step at Start Episode', () 
 
   test('shows the proposal and asks for a role with no default; nothing is created before Confirm', async () => {
     renderPage();
-    fireEvent.click(await screen.findByTestId('start-episode'));
+    fireEvent.click(await readyStart());
     const step = await screen.findByTestId('episode-locations-step');
     expect(screen.getByTestId('els-row-home').textContent).toContain("Lala's Apartment");
     expect(screen.getByTestId('els-row-closet').textContent).toContain('No saved default: choose one.');
@@ -178,7 +186,7 @@ describe('EventPackagePage — the Episode Locations step at Start Episode', () 
 
   test('changing home, adding a named extra and creating a closet are sent with Start', async () => {
     renderPage();
-    fireEvent.click(await screen.findByTestId('start-episode'));
+    fireEvent.click(await readyStart());
     await screen.findByTestId('episode-locations-step');
 
     // Home → Downtown Loft. Another show's set is not offered.
@@ -215,7 +223,7 @@ describe('EventPackagePage — the Episode Locations step at Start Episode', () 
 
   test('one set cannot hold two roles', async () => {
     renderPage();
-    fireEvent.click(await screen.findByTestId('start-episode'));
+    fireEvent.click(await readyStart());
     await screen.findByTestId('episode-locations-step');
     fireEvent.click(screen.getByTestId('els-change-closet'));
     fireEvent.click(await screen.findByTestId('els-option-set-home'));
@@ -233,7 +241,7 @@ describe('EventPackagePage — the Episode Locations step at Start Episode', () 
       return { data: { success: true } };
     });
     renderPage();
-    fireEvent.click(await screen.findByTestId('start-episode'));
+    fireEvent.click(await readyStart());
     fireEvent.click(await screen.findByTestId('els-confirm'));
     await screen.findByText('This scene set belongs to another show');
     expect(screen.getByTestId('episode-locations-step')).toBeTruthy();
@@ -251,7 +259,7 @@ describe('EventPackagePage — the Episode Locations step at Start Episode', () 
       return base(url);
     });
     renderPage();
-    fireEvent.click(await screen.findByTestId('start-episode'));
+    fireEvent.click(await readyStart());
     const look = await screen.findByTestId('els-event-look');
     expect(look.textContent).toContain('A candlelit greenhouse gala. · Areas: Bar, Runway');
     expect(look.querySelector('textarea, input')).toBeNull();
@@ -275,7 +283,7 @@ describe('EventPackagePage — the Episode Locations step at Start Episode', () 
       return base(url);
     });
     renderPage();
-    fireEvent.click(await screen.findByTestId('start-episode'));
+    fireEvent.click(await readyStart());
     await screen.findByTestId('episode-locations-step');
     expect(screen.getAllByTestId('els-gap-event').map((g) => g.textContent)).toEqual([
       'Entrance or exterior angle missing (beat 10)', 'Main interior angle missing (beats 11, 12)',

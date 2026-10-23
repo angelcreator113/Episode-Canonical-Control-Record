@@ -184,15 +184,20 @@ describe('EventPackagePage Basics — category and format suggestions', () => {
     const first = list.querySelector('[data-state] button').textContent;
     fireEvent.click(screen.getByTestId('basics-fill-in'));
     const dialog = await screen.findByRole('dialog');
-    expect(dialog.getAttribute('aria-label')).toMatch(new RegExp(first === 'Time' ? 'Start time' : first, 'i'));
+    const firstLabel = dialog.getAttribute('aria-label');
+    expect(firstLabel).toMatch(new RegExp(first === 'Time' ? 'Start time' : first, 'i'));
     const input = dialog.querySelector('input, select, textarea');
     fireEvent.change(input, { target: { value: input.tagName === 'SELECT' ? input.options[1].value : (input.type === 'time' ? '19:45' : 'Something') } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
 
-    // Saved, and the next field opens on its own.
+    // Saved, and the next field opens on its own (the page stays on screen
+    // while it reloads, so the dialog changes in place).
     await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
-    const next = await screen.findByRole('dialog');
-    expect(next.getAttribute('aria-label')).not.toBe(dialog.getAttribute('aria-label'));
+    const next = await waitFor(() => {
+      const d = screen.getByRole('dialog');
+      expect(d.getAttribute('aria-label')).not.toBe(firstLabel);
+      return d;
+    });
     fireEvent.click(within(next).getByRole('button', { name: 'Close' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });

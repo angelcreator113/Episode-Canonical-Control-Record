@@ -40,14 +40,6 @@
   font-size: 13px;
 }
 
-.epp-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-}
-
 .epp-back {
   display: inline-flex;
   align-items: center;
@@ -89,14 +81,50 @@
 .epp-status-needs_organizer { background: var(--danger-bg); color: var(--danger-text); }
 .epp-status-archived { background: var(--lala-parchment-2); color: var(--lala-ink-muted); }
 
+/* The toast floats at the foot of the screen, so it is seen wherever the
+   page is scrolled (saves no longer reload the page to its top). */
+.epp-toast-live {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 1100;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  pointer-events: none;
+}
 .epp-toast {
   background: var(--lala-gold-soft);
   border: 1px solid var(--lala-gold-line);
   color: var(--lala-ink);
   border-radius: 8px;
-  padding: 8px 12px;
+  padding: 10px 14px;
   font-size: 13px;
-  margin-bottom: 16px;
+  box-shadow: 0 6px 18px rgba(44, 44, 44, 0.18);
+}
+.epp-refresh-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border, var(--danger));
+  color: var(--danger-text);
+  font-size: 13px;
+}
+.epp-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .epp-used-banner {
@@ -192,28 +220,8 @@
 }
 .epp-reopen-confirm-body p { margin: 0 0 8px; }
 
-/* Season Context (Season Arc §8(ff) A4): read-only */
-.epp-season {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 10px;
-  margin: 0 0 16px;
-  padding: 10px 14px;
-  background: var(--lala-parchment);
-  border: 1px solid var(--lala-parchment-3);
-  border-left: 3px solid var(--lala-gold);
-  border-radius: var(--lala-radius, 8px);
-  min-width: 0;
-}
-.epp-season-label {
-  font-family: var(--font-sans);
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--lala-gold-text);
-}
-.epp-season-text { font-size: 13px; color: var(--lala-ink); }
-.epp-season-purpose { flex-basis: 100%; font-family: 'Lora', serif; font-size: 13px; color: var(--lala-ink-muted); }
+/* Season Context (Season Arc §8(ff) A4): read-only; the rest of its
+   old block was never rendered (audit, 2026-10-23). */
 .epp-season-link { color: var(--lala-gold-text); }
 
 .epp-sections {
@@ -895,7 +903,14 @@
   cursor: pointer;
   color: var(--lala-ink-muted);
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* A close button big enough to tap (audit, 2026-10-23: it was the 16px icon). */
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 8px;
 }
+.epp-icon-btn:hover:not(:disabled) { background: var(--lala-parchment-2); }
 
 .epp-modal-backdrop {
   position: fixed;
@@ -2153,3 +2168,25 @@
 /* The section's status chip (Lala's Look: "1 piece chosen") keeps clear of
    what follows when it wraps under the title on a phone. */
 .epp-section-header > .epp-chip { margin-bottom: 12px; }
+
+/* Phone (audit, 2026-10-23): targets at least 44px, dialogs as bottom sheets
+   that fit above the keyboard, and the bottom action bar no longer sticks
+   under the sticky "On this page" row, so the reading area isn't squeezed. */
+@media (max-width: 600px) {
+  .epp-back { min-height: 44px; padding: 10px 8px 10px 0; font-size: 14px; }
+  .epp-icon-btn { min-width: 44px; min-height: 44px; }
+  .epp-btn-small { min-height: 40px; padding: 8px 14px; font-size: 13px; }
+  .epp-inline-link { display: inline-flex; align-items: center; min-height: 40px; padding: 0 6px; font-size: 14px; }
+  .epp-toc a { min-height: 40px; }
+  .epp-actions { position: static; background: none; }
+  .epp-modal-backdrop { align-items: flex-end; padding: 0; }
+  .epp-modal {
+    max-width: none;
+    max-height: 88dvh;
+    border-radius: 16px 16px 0 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+@supports not (height: 1dvh) {
+  @media (max-width: 600px) { .epp-modal { max-height: 88vh; } }
+}
