@@ -445,6 +445,19 @@ async function loadScriptContext(episodeId, showId, models, { lite = false } = {
   return context;
 }
 
+/**
+ * A cast member's two lines about Lala, as the cast block writes them (the
+ * character page's "What the writers know" shows the same): her story tie
+ * in words, and their tie and love interest. Each null when there is none.
+ */
+function lalaTieLines(p) {
+  const ties = [LALA_TIES[p?.lala_relationship], p?.lala_romance !== undefined ? `love interest${p.lala_romance ? `: ${p.lala_romance}` : ''}` : null].filter(Boolean);
+  return {
+    story: p?.lala_story_tie ? `With Lala in the story: ${p.lala_story_tie}` : null,
+    withLala: ties.length ? `With Lala: ${ties.join('; ')}` : null,
+  };
+}
+
 // Their family ties as one block under the cast; '' when there are none.
 function familyBlock(lines) {
   return lines?.length ? `\n\nTHEIR FAMILY (stay consistent with it):\n${lines.map(l => `- ${l}`).join('\n')}` : '';
@@ -482,10 +495,10 @@ function storyContextBlocks(context, { withSeason = true } = {}) {
   Archetype: ${p.archetype || 'unknown'} | Tier: ${p.celebrity_tier || 'accessible'}
   Voice: ${p.posting_voice || 'Standard social media voice'}
   Lala follows because: ${p.follow_motivation || 'general interest'}${p.follow_emotion ? ` (feels: ${p.follow_emotion})` : ''}`;
-      if (p.lala_story_tie) block += `\n  With Lala in the story: ${p.lala_story_tie}`;
+      const lala = lalaTieLines(p);
+      if (lala.story) block += `\n  ${lala.story}`;
       if (p.story_role) block += `\n  Story role: ${p.story_role}`;
-      const ties = [LALA_TIES[p.lala_relationship], p.lala_romance !== undefined ? `love interest${p.lala_romance ? `: ${p.lala_romance}` : ''}` : null].filter(Boolean);
-      if (ties.length) block += `\n  With Lala: ${ties.join('; ')}`;
+      if (lala.withLala) block += `\n  ${lala.withLala}`;
 
       // Character literary depth (from registry) + therapy + life simulation
       if (p.core_belief || p.pressure_type || p.depth_level || p.core_wound || p.wound || p.want_architecture) {
@@ -1218,4 +1231,4 @@ function renderScriptText(scriptJson) {
   }).join('\n\n');
 }
 
-module.exports = { generateEpisodeScript, loadScriptContext, renderScriptText, buildFullPrompt, buildSeasonPositionBlock, eventContextBlock, storyContextBlocks, financialContextText, LALA_TIES, lalaRomances, writeScriptReply, scriptTextAfterFixes, familyBlock, relationshipSecrecyBlock };
+module.exports = { generateEpisodeScript, loadScriptContext, renderScriptText, buildFullPrompt, buildSeasonPositionBlock, eventContextBlock, storyContextBlocks, financialContextText, LALA_TIES, lalaRomances, writeScriptReply, scriptTextAfterFixes, familyBlock, relationshipSecrecyBlock, lalaTieLines };

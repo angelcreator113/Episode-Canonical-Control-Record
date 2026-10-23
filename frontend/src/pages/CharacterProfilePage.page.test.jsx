@@ -64,7 +64,7 @@ describe('the character page', () => {
     expect(screen.getByRole('button', { name: 'Export Profile' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'The cast' }).getAttribute('href')).toBe('/character-registry');
     const tabs = within(screen.getByRole('navigation', { name: 'Character sections' })).getAllByRole('link');
-    expect(tabs.map((t) => t.textContent)).toEqual(['Overview', 'Inner Life', 'Appearance', 'Voice & Pulse', 'Connections', 'In the World', 'Places & Gallery', 'Story & Events', 'Talk', 'Settings']);
+    expect(tabs.map((t) => t.textContent)).toEqual(['Overview', 'Person', 'Inner Life', 'Appearance', 'Voice & Pulse', 'Connections', 'In the World', 'Places & Gallery', 'Story & Events', 'Talk', 'Settings']);
     expect(tabs[0].getAttribute('aria-current')).toBe('page');
   });
 
@@ -81,6 +81,24 @@ describe('the character page', () => {
     fireEvent.click(screen.getByRole('link', { name: 'Overview' }));
     await waitFor(() => expect(screen.getByRole('link', { name: 'Overview' }).getAttribute('aria-current')).toBe('page'));
     expect(screen.getByTestId('ch-shows')).toBeTruthy();
+  });
+
+  test('?tab=person opens the Person tab: their page in one read', async () => {
+    const base = vi.mocked(api.get).getMockImplementation();
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/person/c1') {
+        return { data: { person: { id: 'c1', who: { name: 'Sable', aliases: [] }, pulse: null, relationships: [], episodes: [], writers: { in_cast_block: false } } } };
+      }
+      return base(url);
+    });
+    render(
+      <MemoryRouter initialEntries={['/character/c1?tab=person']}>
+        <Routes><Route path="/character/:id" element={<CharacterProfilePage />} /></Routes>
+      </MemoryRouter>,
+    );
+    expect((await screen.findByRole('link', { name: 'Person' })).getAttribute('aria-current')).toBe('page');
+    expect(await screen.findByTestId('person-page')).toBeTruthy();
+    expect(screen.getByTestId('ch-family')).toBeTruthy();
   });
 
   test('an unknown ?tab opens the Overview', async () => {

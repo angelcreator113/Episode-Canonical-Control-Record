@@ -1,0 +1,23 @@
+/* Person tab, Episode history (PersonEpisodes.jsx). */
+.pep-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.pep-item { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--lala-lavender-line); min-width: 0; }
+.pep-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; min-width: 0; }
+.pep-num { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 700; color: var(--accent-dark); }
+.pep-title { font-family: 'Lora', serif; font-weight: 700; font-size: 16px; overflow-wrap: anywhere; min-width: 0; }
+.pep-go { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
+.pep-via { margin: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.pep-tag { padding: 2px 9px; border-radius: 999px; font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 600; background: var(--lala-lavender-soft); color: var(--lala-lavender-text); }
+.pep-tag.is-draft { background: var(--warning-bg); color: var(--warning-text); }
+.pep-event { padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--lala-gold-soft); color: var(--lala-gold-text); }
+/* !important: the app's phone rule sizes every h3 up with !important. */
+.pep-h3 { margin: 4px 0 0; font-family: 'DM Mono', monospace; font-size: 11px !important; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-secondary); }
+.pep-rec { margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.pep-rec-row { display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 8px; }
+.pep-rec-row dt { font-size: 13px; font-weight: 700; color: var(--lala-gold-text); }
+.pep-rec-row dd { margin: 0; font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+.pep-changes { margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.45; }
+
+@media (max-width: 600px) {
+  .pep-go { margin-left: 0; }
+  .pep-rec-row { grid-template-columns: minmax(0, 1fr); gap: 0; }
+}

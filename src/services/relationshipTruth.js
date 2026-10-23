@@ -27,6 +27,7 @@
  *   applyDriftFix(sequelize, key)      apply one item's suggested fix
  *   keepDifferent(sequelize, key, …)   mark one item "different on purpose"
  *   lalaStoryTies(sequelize, ids)      Map(character id → Lala's story tie to them)
+ *   tieWords(tie)                      a lala_relationship value in words ("knows Lala in person")
  *   storyRelationshipsMap(sequelize, characterId) / withStoryMap(stored, computed)
  *
  * Raw SQL only, so the migration that backfills the link can run it.
@@ -633,7 +634,7 @@ async function keepDifferent(db, key, { note = null, by = null } = {}) {
 }
 
 module.exports = {
-  storyCategory, pulseKindFor, storyWords, PULSE_FOR, LALA_TIE,
+  storyCategory, pulseKindFor, storyWords, tieWords, PULSE_FOR, LALA_TIE,
   linkStoryAndPulse, syncStoryPair, afterStorySave,
   lalaStoryTies, lalaTieFields, storyRelationshipsMap, withStoryMap, relationshipsMapOf,
   driftReport, applyDriftFix, keepDifferent, DriftError,

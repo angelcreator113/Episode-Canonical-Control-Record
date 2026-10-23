@@ -18,7 +18,7 @@ import {
   BarChart3, CalendarDays, Download, Link2, MapPin, Palette, Crown, Instagram,
   Quote, Star, TrendingUp, Briefcase, IdCard, Activity, FileText, CirclePlay, Flame,
   Copy, BadgeCheck, Lock, Eye, Smartphone, Plus, ExternalLink, Share2, Search,
-  Building2, BookOpen, Radio, Settings as SettingsIcon, AlertTriangle, Archive, RotateCcw, Link as LinkIcon, MessageCircle,
+  Building2, BookOpen, Radio, Settings as SettingsIcon, AlertTriangle, Archive, RotateCcw, Link as LinkIcon, MessageCircle, UserRound,
 } from 'lucide-react';
 import Pager, { usePaged } from '../components/Pager/Pager';
 import CharacterPlacesTab from '../components/CharacterPlaces/CharacterPlacesTab';
@@ -29,6 +29,7 @@ import PulseTrust from '../components/PulseTrust/PulseTrust';
 import CharacterTalkTab from '../components/CharacterTalk/CharacterTalkTab';
 import CharacterGalleryTab from '../components/CharacterGallery/CharacterGalleryTab';
 import FamilySection from '../components/CharacterFamily/FamilySection';
+import PersonPage from '../components/PersonPage/PersonPage';
 import { API_URL } from '../config/api';
 import InnerLifeWorkspace from '../components/InnerLife/InnerLifeWorkspace';
 import { dimensionOf as dimension, dimensionText } from '../lib/innerLifeSections';
@@ -168,6 +169,9 @@ export const applyInteriorApi = (id, values) =>
 // (the redesign, Evoni's mocks, 2026-10-18); Overview is the page with no tab.
 export const TABS = [
   { id: 'overview',    label: 'Overview',     icon: LayoutDashboard },
+  // Evoni, 2026-10-23: "one person page": who they are, their Pulse account,
+  // relationships, family and episodes in one place (components/PersonPage).
+  { id: 'person',      label: 'Person',       icon: UserRound },
   { id: 'inner',       label: 'Inner Life',   icon: Heart },
   // Evoni, 2026-10-17: how they look, a generator for it, and portraits.
   { id: 'appearance',  label: 'Appearance',   icon: Palette },
@@ -3791,6 +3795,7 @@ export default function CharacterProfilePage() {
 
       <div className="ch-panel">
         {activeTab === 'overview' && <TabOverview character={character} appearances={appearances} feedProfile={feedProfile} relationships={relationships} entanglements={entanglements} onSaved={onSaved} onFeedSaved={onFeedSaved} gen={gen} openTab={setActiveTab} />}
+        {activeTab === 'person' && <PersonPage key={character.id} character={character} openTab={setActiveTab} />}
         {activeTab === 'inner' && (
           <div className="ch-card">
             <InnerLifeWorkspace character={character} gen={gen} onSaved={onSaved}
