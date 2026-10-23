@@ -42,7 +42,7 @@ export default function GenModal({ chars, genning, onGenerate, onClose }) {
         </div>
         <div className="re-modal-body">
           <p className="re-gen-desc">
-            Claude will analyse your registry and propose <strong>3–5 relationship candidates</strong> with tension states, LalaVerse mirrors, and career echoes.
+            Claude will look at the cast and propose <strong>3–5 relationship candidates</strong> with tension states, LalaVerse mirrors, and career echoes. They join the seeds already waiting.
           </p>
           <Label>Focus Character (optional)</Label>
           <Select value={focus} onChange={e => setFocus(e.target.value)}>

@@ -10,6 +10,8 @@ const { authorize } = require('../middleware/auth');
 // "this whole part of the site is admin only").
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // ── Lazy-load models / sequelize ───────────────────────────────────────
 let _db = null;
 function getDb() {
@@ -44,6 +46,12 @@ function isLayerCompatible(_layerA, _layerB) {
 }
 
 // ── Column SELECT helpers ──────────────────────────────────────────────
+// A row counts while deleted_at is empty: Delete sets it (so the pair's
+// relationship_events history stays) and Undo clears it.
+const LIVE = 'cr.deleted_at IS NULL';
+
+// The latest stage on the pair's timeline (relationship_events), e.g.
+// "flirting"; null before anything has happened between them.
 const REL_SELECT = `
   cr.id, cr.character_id_a, cr.character_id_b,
   cr.relationship_type, cr.connection_mode, cr.lala_connection,
@@ -53,23 +61,92 @@ const REL_SELECT = `
   cr.family_role, cr.is_blood_relation, cr.is_romantic,
   cr.conflict_summary, cr.knows_about_connection,
   cr.source_knows, cr.target_knows, cr.reader_knows,
-  cr.created_at, cr.updated_at`;
+  cr.created_at, cr.updated_at,
+  (SELECT re.relationship_stage FROM relationship_events re
+    WHERE re.relationship_id = cr.id AND re.deleted_at IS NULL AND re.relationship_stage IS NOT NULL
+    ORDER BY re.created_at DESC LIMIT 1) AS stage`;
 
 const CHAR_JOIN = `
   JOIN registry_characters ca ON ca.id = cr.character_id_a AND ca.deleted_at IS NULL
   JOIN registry_characters cb ON cb.id = cr.character_id_b AND cb.deleted_at IS NULL`;
 
+// One name per person everywhere: the chosen name, else the display name
+// (which is often the feed handle, e.g. "Truthville" for Marcus Hale).
+const nameSql = (alias) => `COALESCE(NULLIF(${alias}.selected_name, ''), ${alias}.display_name)`;
+const nameOf = (c) => (c && (c.selected_name || c.display_name)) || '?';
+
 const CHAR_SELECT_A = `
-  ca.display_name AS character_a_name, ca.selected_name AS character_a_selected,
+  ${nameSql('ca')} AS character_a_name, ca.display_name AS character_a_display, ca.selected_name AS character_a_selected,
   ca.role_type AS character_a_type, ca.role_label AS character_a_role_label,
   ca.appearance_mode AS character_a_appearance, ca.icon AS character_a_icon,
   ca.portrait_url AS character_a_portrait`;
 
 const CHAR_SELECT_B = `
-  cb.display_name AS character_b_name, cb.selected_name AS character_b_selected,
+  ${nameSql('cb')} AS character_b_name, cb.display_name AS character_b_display, cb.selected_name AS character_b_selected,
   cb.role_type AS character_b_type, cb.role_label AS character_b_role_label,
   cb.appearance_mode AS character_b_appearance, cb.icon AS character_b_icon,
   cb.portrait_url AS character_b_portrait`;
+
+// What PUT /:relId writes, each with the value an empty field becomes.
+const SPOUSE_ROLES = new Set(['wife', 'husband', 'spouse', 'partner', 'ex-wife', 'ex-husband', 'ex-partner', 'fiancé', 'fiancée', 'fiance', 'fiancee']);
+
+const EDITABLE = {
+  relationship_type: null, connection_mode: 'IRL', lala_connection: 'none', status: 'Active',
+  notes: null, situation: null, tension_state: null, pain_point_category: null,
+  lala_mirror: null, career_echo_potential: null,
+  family_role: null, conflict_summary: null, source_knows: null, target_knows: null, reader_knows: null,
+};
+
+/**
+ * The cast this page works with (Evoni, 2026-10-16: "only use the 6 cast
+ * members we have outside of Lala"): the registry characters a live
+ * LalaVerse feed profile names (registry_characters.feed_profile_id, ruling
+ * C3), and Lala, from the registry holding most of them. The page and the
+ * generators read the same list, across every registry.
+ */
+async function loadCastIds(db) {
+  const linked = await db.sequelize.query(
+    `SELECT DISTINCT ON (sp.id) rc.id, rc.registry_id
+       FROM social_profiles sp
+       JOIN registry_characters rc ON rc.feed_profile_id = sp.id AND rc.deleted_at IS NULL
+      WHERE sp.feed_layer::text = 'lalaverse' AND sp.deleted_at IS NULL AND COALESCE(sp.status::text, '') <> 'archived'
+      ORDER BY sp.id, rc.updated_at DESC`,
+    { type: db.sequelize.QueryTypes.SELECT }
+  );
+  const ids = new Set(linked.map((r) => String(r.id)));
+  const held = {};
+  linked.forEach((r) => { held[r.registry_id] = (held[r.registry_id] || 0) + 1; });
+  // Each registry can hold its own Lala; one is enough (her key, else her name).
+  const lalas = await db.sequelize.query(
+    `SELECT id, registry_id, (LOWER(COALESCE(character_key, '')) = 'lala') AS by_key
+       FROM registry_characters
+      WHERE deleted_at IS NULL AND (LOWER(COALESCE(character_key, '')) = 'lala' OR LOWER(COALESCE(display_name, '')) = 'lala')`,
+    { type: db.sequelize.QueryTypes.SELECT }
+  );
+  const lala = lalas.sort((a, b) => ((held[b.registry_id] || 0) - (held[a.registry_id] || 0)) || (b.by_key - a.by_key))[0];
+  if (lala) ids.add(String(lala.id));
+  return { ids: [...ids], lalaId: lala ? String(lala.id) : null };
+}
+
+/** The cast's characters (with what the generators read), Lala first. */
+async function loadCastCharacters(db, { forAI = false } = {}) {
+  const { ids, lalaId } = await loadCastIds(db);
+  if (!ids.length) return { characters: [], lalaId };
+  const characters = await db.sequelize.query(
+    `SELECT id, registry_id, display_name, selected_name, character_key, icon,
+            role_type, role_label, appearance_mode, status,
+            core_belief, pressure_type, description,
+            belief_pressured, emotional_function, personality,
+            portrait_url, sort_order
+       FROM registry_characters
+      WHERE id IN (:ids) AND deleted_at IS NULL
+        ${forAI ? `AND ${require('../utils/confidentialCharacters').notConfidentialSql('')}` : ''}
+      ORDER BY sort_order ASC, display_name ASC`,
+    { replacements: { ids }, type: db.sequelize.QueryTypes.SELECT }
+  );
+  characters.sort((a, b) => (String(b.id) === lalaId) - (String(a.id) === lalaId));
+  return { characters, lalaId };
+}
 
 // ════════════════════════════════════════════════════════════════════════
 // GET /api/v1/relationships
@@ -80,7 +157,7 @@ router.get('/', requireAuth, async (req, res) => {
     const db = getDb();
     const { character_id } = req.query;
 
-    let where = 'WHERE cr.confirmed = true';
+    let where = `WHERE cr.confirmed = true AND ${LIVE}`;
     const replacements = {};
     if (character_id) {
       where += ' AND (cr.character_id_a = :char_id OR cr.character_id_b = :char_id)';
@@ -112,7 +189,7 @@ router.get('/pending', requireAuth, async (req, res) => {
     const rows = await db.sequelize.query(
       `SELECT ${REL_SELECT}, ${CHAR_SELECT_A}, ${CHAR_SELECT_B}
        FROM character_relationships cr ${CHAR_JOIN}
-       WHERE cr.confirmed = false
+       WHERE cr.confirmed = false AND ${LIVE}
        ORDER BY cr.created_at DESC`,
       { type: db.sequelize.QueryTypes.SELECT }
     );
@@ -140,6 +217,7 @@ router.get('/character/:charId', requireAuth, async (req, res) => {
       `SELECT ${REL_SELECT}, ${CHAR_SELECT_A}, ${CHAR_SELECT_B}
        FROM character_relationships cr ${CHAR_JOIN}
        WHERE (cr.character_id_a = :char_id OR cr.character_id_b = :char_id)
+         AND ${LIVE}
          ${confirmedOnly ? 'AND cr.confirmed = true' : ''}
        ORDER BY cr.confirmed DESC, cr.created_at DESC`,
       { replacements: { char_id: charId }, type: db.sequelize.QueryTypes.SELECT }
@@ -149,7 +227,7 @@ router.get('/character/:charId', requireAuth, async (req, res) => {
       return {
         ...r,
         related_id: isA ? r.character_id_b : r.character_id_a,
-        related_name: isA ? (r.character_b_selected || r.character_b_name) : (r.character_a_selected || r.character_a_name),
+        related_name: isA ? r.character_b_name : r.character_a_name,
         // Their portrait, for the character page's Connections (2026-10-18).
         related_portrait: (isA ? r.character_b_portrait : r.character_a_portrait) || null,
       };
@@ -187,14 +265,16 @@ router.get('/tree/:registryId', requireAuth, async (req, res) => {
 
     const charIds = characters.map(c => c.id);
 
-    // All relationships between characters in this registry
+    // The confirmed relationships between characters in this registry; an
+    // unconfirmed seed shows only on the Seeds tab (GET /pending).
     let relationships = [];
     if (charIds.length > 0) {
       relationships = await db.sequelize.query(
         `SELECT ${REL_SELECT}, ${CHAR_SELECT_A}, ${CHAR_SELECT_B}
          FROM character_relationships cr ${CHAR_JOIN}
          WHERE cr.character_id_a IN (:ids) AND cr.character_id_b IN (:ids)
-         ORDER BY cr.confirmed DESC, cr.created_at DESC`,
+           AND cr.confirmed = true AND ${LIVE}
+         ORDER BY cr.created_at DESC`,
         { replacements: { ids: charIds }, type: db.sequelize.QueryTypes.SELECT }
       );
     }
@@ -226,6 +306,86 @@ router.get('/tree/:registryId', requireAuth, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════
+// GET /api/v1/relationships/cast
+// What the Relationships page shows: the cast (loadCastIds, across every
+// registry, so a pair split across two registries still shows), their
+// confirmed relationships with each other and the seeds still pending.
+// Every tab reads these same pairs.
+// ════════════════════════════════════════════════════════════════════════
+router.get('/cast', requireAuth, async (req, res) => {
+  try {
+    const db = getDb();
+    const { characters, lalaId } = await loadCastCharacters(db);
+    const ids = characters.map((c) => c.id);
+    let rows = [];
+    if (ids.length) {
+      rows = await db.sequelize.query(
+        `SELECT ${REL_SELECT}, ${CHAR_SELECT_A}, ${CHAR_SELECT_B}
+         FROM character_relationships cr ${CHAR_JOIN}
+         WHERE cr.character_id_a IN (:ids) AND cr.character_id_b IN (:ids) AND ${LIVE}
+         ORDER BY cr.updated_at DESC`,
+        { replacements: { ids }, type: db.sequelize.QueryTypes.SELECT }
+      );
+    }
+    res.json({
+      characters,
+      lala_id: lalaId,
+      relationships: rows.filter((r) => r.confirmed),
+      candidates: rows.filter((r) => !r.confirmed),
+    });
+  } catch (err) {
+    console.error('GET /relationships/cast error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════
+// GET /api/v1/relationships/:relId/events
+// The story so far between two people, oldest first: each event's stage
+// (and the stage before it), tension before and after, the beat, the note,
+// the script's quote, and the episode it happened in (metadata.episode_id,
+// written when an episode's story record is saved).
+// ════════════════════════════════════════════════════════════════════════
+router.get('/:relId/events', requireAuth, async (req, res) => {
+  try {
+    const db = getDb();
+    const { relId } = req.params;
+    if (!UUID_RE.test(relId)) return res.status(404).json({ error: 'Relationship not found' });
+    const [rel] = await db.sequelize.query(
+      `SELECT id FROM character_relationships cr WHERE cr.id = :id AND ${LIVE}`,
+      { replacements: { id: relId }, type: db.sequelize.QueryTypes.SELECT }
+    );
+    if (!rel) return res.status(404).json({ error: 'Relationship not found' });
+    const rows = await db.sequelize.query(
+      `SELECT re.id, re.event_type, re.title, re.description, re.story_date,
+              re.tension_before, re.tension_after, re.relationship_stage,
+              re.metadata, re.created_at,
+              e.id AS episode_id, e.episode_number, COALESCE(e.episode_title, e.title) AS episode_title
+         FROM relationship_events re
+         LEFT JOIN episodes e
+           ON e.id::text = re.metadata->>'episode_id' AND e.deleted_at IS NULL
+        WHERE re.relationship_id = :id AND re.deleted_at IS NULL
+        ORDER BY re.created_at ASC`,
+      { replacements: { id: relId }, type: db.sequelize.QueryTypes.SELECT }
+    );
+    const events = rows.map(({ metadata, ...r }) => {
+      const m = metadata && typeof metadata === 'object' ? metadata : {};
+      const beat = Number.parseInt(m.beat, 10);
+      return {
+        ...r,
+        stage_before: m.stage_before || null,
+        beat: Number.isFinite(beat) ? beat : null,
+        quote: typeof m.quote === 'string' && m.quote.trim() ? m.quote.trim() : null,
+      };
+    });
+    res.json({ events });
+  } catch (err) {
+    console.error('GET /relationships/:id/events error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════
 // POST /api/v1/relationships
 // Manually create a confirmed relationship
 // ════════════════════════════════════════════════════════════════════════
@@ -246,6 +406,7 @@ router.post('/', requireAuth, authorize(['ADMIN']), async (req, res) => {
       lala_mirror          = null,
       career_echo_potential = null,
       confirmed            = true,
+      is_romantic          = false,
     } = req.body;
 
     if (!character_id_a || !character_id_b || !relationship_type) {
@@ -277,10 +438,10 @@ router.post('/', requireAuth, authorize(['ADMIN']), async (req, res) => {
       });
     }
 
-    // ── Duplicate check (bidirectional) ─────────────────────────────
+    // ── Duplicate check (bidirectional; a deleted one does not count) ──
     const [existing] = await db.sequelize.query(
       `SELECT id FROM character_relationships
-       WHERE relationship_type = :rel_type
+       WHERE relationship_type = :rel_type AND deleted_at IS NULL
          AND (
            (character_id_a = :char_a AND character_id_b = :char_b)
            OR
@@ -298,34 +459,44 @@ router.post('/', requireAuth, authorize(['ADMIN']), async (req, res) => {
       });
     }
 
-    const id  = uuidv4();
     const now = new Date();
 
-    await db.sequelize.query(
+    // The unique index (a, b, type) counts a deleted row: that one comes
+    // back with the new fields (its timeline with it).
+    const [row] = await db.sequelize.query(
       `INSERT INTO character_relationships
          (id, character_id_a, character_id_b, relationship_type,
           connection_mode, lala_connection, status, notes,
           situation, tension_state, pain_point_category,
-          lala_mirror, career_echo_potential, confirmed,
+          lala_mirror, career_echo_potential, confirmed, is_romantic,
           created_at, updated_at)
        VALUES
          (:id, :char_a, :char_b, :rel_type,
           :conn_mode, :lala_conn, :status, :notes,
           :situation, :tension_state, :pain_cat,
-          :lala_mirror, :career_echo, :confirmed,
-          :now, :now)`,
+          :lala_mirror, :career_echo, :confirmed, :is_romantic,
+          :now, :now)
+       ON CONFLICT (character_id_a, character_id_b, relationship_type) DO UPDATE SET
+          connection_mode = EXCLUDED.connection_mode, lala_connection = EXCLUDED.lala_connection,
+          status = EXCLUDED.status, notes = EXCLUDED.notes, situation = EXCLUDED.situation,
+          tension_state = EXCLUDED.tension_state, pain_point_category = EXCLUDED.pain_point_category,
+          lala_mirror = EXCLUDED.lala_mirror, career_echo_potential = EXCLUDED.career_echo_potential,
+          confirmed = EXCLUDED.confirmed, is_romantic = EXCLUDED.is_romantic,
+          deleted_at = NULL, updated_at = EXCLUDED.updated_at
+       RETURNING id`,
       {
         replacements: {
-          id, char_a: character_id_a, char_b: character_id_b,
-          rel_type: relationship_type, conn_mode: connection_mode,
-          lala_conn: lala_connection, status, notes,
-          situation, tension_state, pain_cat: pain_point_category,
+          id: uuidv4(), char_a: character_id_a, char_b: character_id_b,
+          rel_type: relationship_type, conn_mode: connection_mode || 'IRL',
+          lala_conn: lala_connection || 'none', status: status || 'Active', notes,
+          situation: situation || null, tension_state: tension_state || null, pain_cat: pain_point_category || null,
           lala_mirror, career_echo: career_echo_potential,
-          confirmed, now,
+          confirmed, is_romantic: is_romantic === true, now,
         },
-        type: db.sequelize.QueryTypes.INSERT,
+        type: db.sequelize.QueryTypes.SELECT,
       }
     );
+    const { id } = row;
 
     const [created] = await db.sequelize.query(
       `SELECT ${REL_SELECT}, ${CHAR_SELECT_A}, ${CHAR_SELECT_B}
@@ -343,37 +514,25 @@ router.post('/', requireAuth, authorize(['ADMIN']), async (req, res) => {
 
 // ════════════════════════════════════════════════════════════════════════
 // POST /api/v1/relationships/generate
-// Use Claude AI to generate 3-5 candidate relationships
+// Use Claude AI to generate 3-5 candidate relationships between the cast
+// (loadCastIds; registry_id is no longer needed). They land as seeds.
 // ════════════════════════════════════════════════════════════════════════
 router.post('/generate', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const db   = getDb();
-    const { registry_id, focus_character_id } = req.body;
+    const { focus_character_id } = req.body;
 
-    if (!registry_id) {
-      return res.status(400).json({ error: 'registry_id is required' });
-    }
-
-    // Fetch all characters in the registry
-    const characters = await db.sequelize.query(
-      `SELECT id, display_name, selected_name, role_type, role_label,
-              core_belief, pressure_type, personality, description,
-              belief_pressured, emotional_function
-       FROM registry_characters
-       WHERE registry_id = :registry_id AND deleted_at IS NULL
-         AND ${require('../utils/confidentialCharacters').notConfidentialSql('')}
-       ORDER BY sort_order ASC`,
-      { replacements: { registry_id }, type: db.sequelize.QueryTypes.SELECT }
-    );
+    const { characters } = await loadCastCharacters(db, { forAI: true });
 
     if (characters.length < 2) {
-      return res.status(400).json({ error: 'Need at least 2 characters to generate relationships' });
+      return res.status(400).json({ error: 'Need at least 2 people in the cast to generate relationships' });
     }
 
-    // Fetch existing relationships to avoid duplicates
+    // Every pair already there (seeds too, and deleted ones, which the
+    // unique index still counts) is skipped; the prompt lists the live ones.
     const charIds = characters.map(c => c.id);
     const existing = await db.sequelize.query(
-      `SELECT character_id_a, character_id_b, relationship_type
+      `SELECT character_id_a, character_id_b, relationship_type, deleted_at
        FROM character_relationships
        WHERE character_id_a IN (:ids) AND character_id_b IN (:ids)`,
       { replacements: { ids: charIds }, type: db.sequelize.QueryTypes.SELECT }
@@ -382,23 +541,23 @@ router.post('/generate', requireAuth, authorize(['ADMIN']), aiRateLimiter, async
     const existingPairs = new Set(
       existing.map(r => `${r.character_id_a}|${r.character_id_b}`)
     );
+    const live = existing.filter(r => !r.deleted_at);
+    const nameById = (id) => nameOf(characters.find(c => c.id === id));
 
     // Build character context for Claude
     const charContext = characters.map(c => (
-      `- ${c.display_name} [id=${c.id}] (${c.role_type}): ${c.core_belief || 'no core belief'}, ` +
+      `- ${nameOf(c)} [id=${c.id}] (${c.role_type}): ${c.core_belief || 'no core belief'}, ` +
       `pressure: ${c.pressure_type || 'none'}, personality: ${(c.personality || '').slice(0, 120)}`
     )).join('\n');
 
-    const existingContext = existing.length > 0
-      ? `\nExisting relationships (do NOT duplicate):\n${existing.map(r => {
-          const a = characters.find(c => c.id === r.character_id_a);
-          const b = characters.find(c => c.id === r.character_id_b);
-          return `- ${a?.display_name || '?'} ↔ ${b?.display_name || '?'}: ${r.relationship_type}`;
-        }).join('\n')}\n`
+    const existingContext = live.length > 0
+      ? `\nExisting relationships (do NOT duplicate):\n${live.map(r => (
+          `- ${nameById(r.character_id_a)} ↔ ${nameById(r.character_id_b)}: ${r.relationship_type}`
+        )).join('\n')}\n`
       : '';
 
     const focusNote = focus_character_id
-      ? `\nFocus on generating relationships involving the character with ID: ${focus_character_id} (${characters.find(c => c.id === focus_character_id)?.display_name || 'unknown'})`
+      ? `\nFocus on generating relationships involving the character with ID: ${focus_character_id} (${nameById(focus_character_id)})`
       : '';
 
     const Anthropic = require('@anthropic-ai/sdk');
@@ -413,7 +572,7 @@ router.post('/generate', requireAuth, authorize(['ADMIN']), aiRateLimiter, async
           role: 'user',
           content: `You are a literary relationship analyst for a creative writing universe called the LalaVerse.
 
-IMPORTANT RULE: Characters from the real world (protagonist, pressure, support role types) can ONLY have relationships with other real-world characters. LalaVerse characters (mirror, shadow role types) can ONLY have relationships with other LalaVerse characters or series-2 (special) characters. NEVER suggest cross-layer relationships between real-world and LalaVerse characters.
+Everyone below lives in Lala's world, so any two of them can be connected; role_type is a narrative archetype, not a world.
 
 MORAL DEPTH RULE: Relationships should reflect real human complexity:
 - Marriages and partnerships CAN be tested by temptation, jealousy, or emotional affairs.
@@ -423,7 +582,7 @@ MORAL DEPTH RULE: Relationships should reflect real human complexity:
 - "Emotional Affair" is a valid relationship_type: an intimate bond that never becomes physical but is still a betrayal.
 - A character can be a "temptation" — someone who pulls a committed person toward a choice they'll have to live with.
 
-Characters in this registry:
+The cast:
 ${charContext}
 ${existingContext}${focusNote}
 
@@ -435,7 +594,7 @@ For each, provide:
 - connection_mode (one of: IRL, Online Only, Passing, Professional, One-sided)
 - situation (1-2 sentences describing the dynamic — include moral tension if relevant: who's tempted, who's faithful, who's lied, who's choosing)
 - tension_state (one of: calm, simmering, volatile, fractured, healing)
-- lala_connection (one of: none, knows_lala, through_justwoman, interacts_content, unaware)
+- lala_connection (one of: none, knows_lala, knows_protagonist, through_justwoman, interacts_content, independent, unaware)
 - pain_point_category (like "identity", "trust", "ambition", "loyalty", "family", "self-worth", "fidelity", "betrayal", "guilt", "temptation")
 - lala_mirror (1 sentence: how this relationship mirrors in the LalaVerse)
 - career_echo_potential (1 sentence: career/professional echo)
@@ -498,7 +657,8 @@ No markdown fences, no explanation.`,
            (:id, :char_a, :char_b, :rel_type,
             :conn_mode, :lala_conn, :status, :situation,
             :tension_state, :pain_cat, :lala_mirror,
-            :career_echo, false, :now, :now)`,
+            :career_echo, false, :now, :now)
+         ON CONFLICT (character_id_a, character_id_b, relationship_type) DO NOTHING`,
         {
           replacements: {
             id, char_a: c.character_a_id, char_b: c.character_b_id,
@@ -560,7 +720,7 @@ router.post('/confirm/:relationshipId', requireAuth, authorize(['ADMIN']), async
        FROM character_relationships cr
        LEFT JOIN registry_characters ca ON ca.id = cr.character_id_a
        LEFT JOIN registry_characters cb ON cb.id = cr.character_id_b
-       WHERE cr.id = :id`,
+       WHERE cr.id = :id AND ${LIVE}`,
       { replacements: { id: relationshipId }, type: db.sequelize.QueryTypes.SELECT }
     );
     if (!candidate) return res.status(404).json({ error: 'Relationship not found' });
@@ -577,7 +737,7 @@ router.post('/confirm/:relationshipId', requireAuth, authorize(['ADMIN']), async
     await db.sequelize.query(
       `UPDATE character_relationships
        SET confirmed = true, updated_at = NOW()
-       WHERE id = :id AND confirmed = false`,
+       WHERE id = :id AND confirmed = false AND deleted_at IS NULL`,
       { replacements: { id: relationshipId }, type: db.sequelize.QueryTypes.UPDATE }
     );
 
@@ -606,7 +766,7 @@ router.delete('/dismiss/:relationshipId', requireAuth, authorize(['ADMIN']), asy
     const { relationshipId } = req.params;
 
     const [row] = await db.sequelize.query(
-      `SELECT id, confirmed FROM character_relationships WHERE id = :id`,
+      `SELECT id, confirmed FROM character_relationships WHERE id = :id AND deleted_at IS NULL`,
       { replacements: { id: relationshipId }, type: db.sequelize.QueryTypes.SELECT }
     );
 
@@ -635,59 +795,42 @@ router.put('/:relId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const db = getDb();
     const { relId } = req.params;
-    const {
-      relationship_type, connection_mode, lala_connection,
-      status, notes, situation, tension_state,
-      pain_point_category, lala_mirror, career_echo_potential,
-    } = req.body;
+    if (!UUID_RE.test(relId)) return res.status(404).json({ error: 'Relationship not found' });
 
-    // The Inspector also edits these (Task #3119): written when sent, and
-    // an empty value clears the field.
-    const CLEARABLE = ['family_role', 'conflict_summary', 'source_knows', 'target_knows', 'reader_knows'];
-    const sent = CLEARABLE.filter((k) => req.body[k] !== undefined);
-    const clearable = Object.fromEntries(sent.map((k) => {
-      const v = req.body[k];
-      return [k, typeof v === 'string' && v.trim() ? v : null];
-    }));
+    // A field sent is written: an empty value clears it (Evoni can empty a
+    // situation or a tension). A field not sent stays as it is. The four
+    // required columns go back to their defaults when emptied, except the
+    // type, which a relationship cannot be without.
+    const body = req.body || {};
+    if (body.relationship_type !== undefined && !String(body.relationship_type || '').trim()) {
+      return res.status(400).json({ error: 'A relationship needs a type' });
+    }
+    const sets = [];
+    const replacements = { id: relId };
+    for (const k of Object.keys(EDITABLE)) {
+      if (body[k] === undefined) continue;
+      const v = body[k];
+      const text = typeof v === 'string' ? v.trim() : v;
+      replacements[k] = text === '' || text == null ? EDITABLE[k] : text;
+      sets.push(`${k} = :${k}`);
+    }
+    if (body.is_romantic !== undefined) {
+      replacements.is_romantic = body.is_romantic === true || body.is_romantic === 'true';
+      sets.push('is_romantic = :is_romantic');
+    }
 
-    await db.sequelize.query(
+    const [, meta] = await db.sequelize.query(
       `UPDATE character_relationships
-       SET ${sent.map((k) => `${k} = :${k},`).join(' ')}
-           relationship_type    = COALESCE(:rel_type,    relationship_type),
-           connection_mode      = COALESCE(:conn_mode,   connection_mode),
-           lala_connection      = COALESCE(:lala_conn,   lala_connection),
-           status               = COALESCE(:status,      status),
-           notes                = COALESCE(:notes,       notes),
-           situation            = COALESCE(:situation,   situation),
-           tension_state        = COALESCE(:tension,     tension_state),
-           pain_point_category  = COALESCE(:pain_cat,    pain_point_category),
-           lala_mirror          = COALESCE(:lala_m,      lala_mirror),
-           career_echo_potential = COALESCE(:career,     career_echo_potential),
-           updated_at           = NOW()
-       WHERE id = :id`,
-      {
-        replacements: {
-          id: relId,
-          rel_type:  relationship_type || null,
-          conn_mode: connection_mode   || null,
-          lala_conn: lala_connection   || null,
-          status:    status            || null,
-          notes:     notes !== undefined ? notes : null,
-          situation: situation         || null,
-          tension:   tension_state     || null,
-          pain_cat:  pain_point_category || null,
-          lala_m:    lala_mirror       || null,
-          career:    career_echo_potential || null,
-          ...clearable,
-        },
-        type: db.sequelize.QueryTypes.UPDATE,
-      }
+       SET ${sets.map((x) => `${x}, `).join('')}updated_at = NOW()
+       WHERE id = :id AND deleted_at IS NULL`,
+      { replacements }
     );
+    if (!(meta?.rowCount)) return res.status(404).json({ error: 'Relationship not found' });
 
     const [updated] = await db.sequelize.query(
       `SELECT ${REL_SELECT}, ${CHAR_SELECT_A}, ${CHAR_SELECT_B}
        FROM character_relationships cr ${CHAR_JOIN}
-       WHERE cr.id = :id`,
+       WHERE cr.id = :id AND ${LIVE}`,
       { replacements: { id: relId }, type: db.sequelize.QueryTypes.SELECT }
     );
 
@@ -701,18 +844,48 @@ router.put('/:relId', requireAuth, authorize(['ADMIN']), async (req, res) => {
 
 // ════════════════════════════════════════════════════════════════════════
 // DELETE /api/v1/relationships/:relId
-// Permanently remove a relationship
+// Remove a relationship: it is marked deleted, so its relationship_events
+// (the story so far) stay, and POST /:relId/restore brings it back.
 // ════════════════════════════════════════════════════════════════════════
 router.delete('/:relId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const db = getDb();
-    await db.sequelize.query(
-      'DELETE FROM character_relationships WHERE id = :id',
-      { replacements: { id: req.params.relId }, type: db.sequelize.QueryTypes.DELETE }
+    if (!UUID_RE.test(req.params.relId)) return res.status(404).json({ error: 'Relationship not found' });
+    const [, meta] = await db.sequelize.query(
+      'UPDATE character_relationships SET deleted_at = NOW(), updated_at = NOW() WHERE id = :id AND deleted_at IS NULL',
+      { replacements: { id: req.params.relId } }
     );
-    res.json({ deleted: true });
+    if (!(meta?.rowCount)) return res.status(404).json({ error: 'Relationship not found' });
+    res.json({ deleted: true, id: req.params.relId });
   } catch (err) {
     console.error('DELETE /relationships/:id error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════
+// POST /api/v1/relationships/:relId/restore
+// Undo a delete.
+// ════════════════════════════════════════════════════════════════════════
+router.post('/:relId/restore', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const db = getDb();
+    const { relId } = req.params;
+    if (!UUID_RE.test(relId)) return res.status(404).json({ error: 'Relationship not found' });
+    const [, meta] = await db.sequelize.query(
+      'UPDATE character_relationships SET deleted_at = NULL, updated_at = NOW() WHERE id = :id AND deleted_at IS NOT NULL',
+      { replacements: { id: relId } }
+    );
+    if (!(meta?.rowCount)) return res.status(404).json({ error: 'No deleted relationship to restore' });
+    const [row] = await db.sequelize.query(
+      `SELECT ${REL_SELECT}, ${CHAR_SELECT_A}, ${CHAR_SELECT_B}
+       FROM character_relationships cr ${CHAR_JOIN}
+       WHERE cr.id = :id AND ${LIVE}`,
+      { replacements: { id: relId }, type: db.sequelize.QueryTypes.SELECT }
+    );
+    res.json({ relationship: row || null });
+  } catch (err) {
+    console.error('POST /relationships/:id/restore error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -749,7 +922,8 @@ router.get('/family-tree/:registryId', requireAuth, async (req, res) => {
        FROM character_relationships cr ${CHAR_JOIN}
        WHERE (cr.character_id_a IN (:ids) OR cr.character_id_b IN (:ids))
          AND (cr.family_role IS NOT NULL OR cr.is_blood_relation = true)
-         AND cr.confirmed = true
+         AND cr.is_romantic = false
+         AND cr.confirmed = true AND ${LIVE}
        ORDER BY cr.created_at ASC`,
       { replacements: { ids: charIds }, type: db.sequelize.QueryTypes.SELECT }
     );
@@ -760,7 +934,7 @@ router.get('/family-tree/:registryId', requireAuth, async (req, res) => {
        FROM character_relationships cr ${CHAR_JOIN}
        WHERE (cr.character_id_a IN (:ids) OR cr.character_id_b IN (:ids))
          AND cr.is_romantic = true
-         AND cr.confirmed = true
+         AND cr.confirmed = true AND ${LIVE}
        ORDER BY cr.created_at ASC`,
       { replacements: { ids: charIds }, type: db.sequelize.QueryTypes.SELECT }
     );
@@ -787,22 +961,40 @@ router.put('/:relId/family', requireAuth, authorize(['ADMIN']), async (req, res)
     const db = getDb();
     const { relId } = req.params;
     const { family_role, is_blood_relation, is_romantic, conflict_summary } = req.body;
+    if (!UUID_RE.test(relId)) return res.status(404).json({ error: 'Relationship not found' });
 
+    const [current] = await db.sequelize.query(
+      `SELECT id, is_romantic FROM character_relationships cr WHERE cr.id = :id AND ${LIVE}`,
+      { replacements: { id: relId }, type: db.sequelize.QueryTypes.SELECT }
+    );
+    if (!current) return res.status(404).json({ error: 'Relationship not found' });
+    // A love interest is not family: the Family tab's edit wrote "mother"
+    // onto Lala and Marcus (2026-10-23 audit). A spouse or partner role is
+    // the one family role a romantic relationship can carry.
+    const role = typeof family_role === 'string' ? family_role.trim() : family_role;
+    const romantic = is_romantic != null ? is_romantic === true : current.is_romantic;
+    if (role && romantic && !SPOUSE_ROLES.has(String(role).toLowerCase())) {
+      return res.status(400).json({ error: 'This is a romantic relationship, not family. Give the family role to a family relationship.' });
+    }
+
+    // Sent fields are written (an empty family role clears it); others stay.
     await db.sequelize.query(
       `UPDATE character_relationships
-       SET family_role       = COALESCE(:family_role, family_role),
+       SET family_role       = CASE WHEN :role_sent THEN :family_role ELSE family_role END,
            is_blood_relation = COALESCE(:is_blood, is_blood_relation),
            is_romantic       = COALESCE(:is_romantic, is_romantic),
-           conflict_summary  = COALESCE(:conflict, conflict_summary),
+           conflict_summary  = CASE WHEN :conflict_sent THEN :conflict ELSE conflict_summary END,
            updated_at        = NOW()
-       WHERE id = :id`,
+       WHERE id = :id AND deleted_at IS NULL`,
       {
         replacements: {
           id: relId,
-          family_role: family_role || null,
+          role_sent: family_role !== undefined,
+          family_role: role || null,
           is_blood: is_blood_relation != null ? is_blood_relation : null,
           is_romantic: is_romantic != null ? is_romantic : null,
-          conflict: conflict_summary || null,
+          conflict_sent: conflict_summary !== undefined,
+          conflict: typeof conflict_summary === 'string' && conflict_summary.trim() ? conflict_summary.trim() : null,
         },
         type: db.sequelize.QueryTypes.UPDATE,
       }
@@ -825,29 +1017,18 @@ router.put('/:relId/family', requireAuth, authorize(['ADMIN']), async (req, res)
 
 // ════════════════════════════════════════════════════════════════════════
 // POST /api/v1/relationships/generate-family
-// Use AI to auto-generate family relationships for a registry
+// Use AI to propose family relationships between the cast (loadCastIds).
+// They land as seeds (confirmed = false) for Evoni to confirm on the Seeds
+// tab, like every other generated relationship.
 // ════════════════════════════════════════════════════════════════════════
 router.post('/generate-family', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const db = getDb();
-    const { registry_id } = req.body;
 
-    if (!registry_id) {
-      return res.status(400).json({ error: 'registry_id is required' });
-    }
-
-    const characters = await db.sequelize.query(
-      `SELECT id, display_name, selected_name, role_type, role_label,
-              core_belief, personality, description, character_key
-       FROM registry_characters
-       WHERE registry_id = :registry_id AND deleted_at IS NULL
-         AND ${require('../utils/confidentialCharacters').notConfidentialSql('')}
-       ORDER BY sort_order ASC`,
-      { replacements: { registry_id }, type: db.sequelize.QueryTypes.SELECT }
-    );
+    const { characters } = await loadCastCharacters(db, { forAI: true });
 
     if (characters.length < 2) {
-      return res.status(400).json({ error: 'Need at least 2 characters to generate family tree' });
+      return res.status(400).json({ error: 'Need at least 2 people in the cast to generate family' });
     }
 
     // Get existing family/romantic relationships to avoid duplicates
@@ -855,7 +1036,7 @@ router.post('/generate-family', requireAuth, authorize(['ADMIN']), aiRateLimiter
     const existing = await db.sequelize.query(
       `SELECT character_id_a, character_id_b, family_role, is_romantic, relationship_type
        FROM character_relationships
-       WHERE (character_id_a IN (:ids) OR character_id_b IN (:ids))
+       WHERE character_id_a IN (:ids) AND character_id_b IN (:ids) AND deleted_at IS NULL
          AND (family_role IS NOT NULL OR is_blood_relation = true OR is_romantic = true)`,
       { replacements: { ids: charIds }, type: db.sequelize.QueryTypes.SELECT }
     );
@@ -863,17 +1044,16 @@ router.post('/generate-family', requireAuth, authorize(['ADMIN']), aiRateLimiter
     const existingPairs = new Set(
       existing.map(r => `${r.character_id_a}|${r.character_id_b}`)
     );
+    const nameById = (id) => nameOf(characters.find(c => c.id === id));
 
     const charContext = characters.map(c => (
-      `- ${c.display_name} [id=${c.id}] (${c.role_type}): ${c.description?.slice(0, 150) || c.personality?.slice(0, 150) || 'no description'}`
+      `- ${nameOf(c)} [id=${c.id}] (${c.role_type}): ${c.description?.slice(0, 150) || c.personality?.slice(0, 150) || 'no description'}`
     )).join('\n');
 
     const existingContext = existing.length > 0
-      ? `\nExisting family/romantic bonds (do NOT duplicate):\n${existing.map(r => {
-          const a = characters.find(c => c.id === r.character_id_a);
-          const b = characters.find(c => c.id === r.character_id_b);
-          return `- ${a?.display_name || '?'} → ${b?.display_name || '?'}: ${r.family_role || r.relationship_type} ${r.is_romantic ? '(romantic)' : ''}`;
-        }).join('\n')}\n`
+      ? `\nExisting family/romantic bonds (do NOT duplicate):\n${existing.map(r => (
+          `- ${nameById(r.character_id_a)} → ${nameById(r.character_id_b)}: ${r.family_role || r.relationship_type} ${r.is_romantic ? '(romantic)' : ''}`
+        )).join('\n')}\n`
       : '';
 
     const Anthropic = require('@anthropic-ai/sdk');
@@ -922,7 +1102,7 @@ No markdown fences, no explanation.`,
       return res.status(500).json({ error: 'Failed to parse AI response' });
     }
 
-    // Insert as confirmed relationships
+    // Insert as seeds (unconfirmed)
     const inserted = [];
     for (const bond of familyBonds) {
       const aExists = characters.find(ch => ch.id === bond.character_a_id);
@@ -948,8 +1128,9 @@ No markdown fences, no explanation.`,
            (:id, :char_a, :char_b, :rel_type,
             :family_role, :is_blood, :is_romantic,
             :conflict, :notes, 'IRL',
-            'none', 'Active', true,
-            :now, :now)`,
+            'none', 'Active', false,
+            :now, :now)
+         ON CONFLICT (character_id_a, character_id_b, relationship_type) DO NOTHING`,
         {
           replacements: {
             id, char_a: bond.character_a_id, char_b: bond.character_b_id,
@@ -984,7 +1165,7 @@ No markdown fences, no explanation.`,
     res.status(201).json({
       family_bonds: results,
       count: results.length,
-      message: `Generated ${results.length} family relationship(s)`,
+      message: `Proposed ${results.length} family seed(s)`,
     });
   } catch (err) {
     console.error('POST /relationships/generate-family error:', err);

@@ -1,64 +1,75 @@
 /**
- * Inspector — right-panel relationship detail & editor
+ * Inspector — relationship detail, its story so far, and the editor.
  * Prime Studios · LalaVerse
+ *
+ * On a phone (sheet) it is a bottom sheet: focus stays inside, Escape or
+ * the close button closes it.
  */
 import { useState, useEffect } from 'react';
-import { T, TENSION, CONN_MODES, STATUSES, TENSIONS, LALA_CONN, initials } from './tokens';
-import { Btn, Field, Label, Input, Select, Pill } from './primitives';
+import { Heart } from 'lucide-react';
+import {
+  TENSION, CONN_MODES, STATUSES, TENSIONS, LALA_CONN, initials,
+  sideName, typeLabel, humanize, stageLabel, STAGE_TONE, isLoveInterest,
+} from './tokens';
+import { Btn, Field, Label, Input, Select, Pill, useFocusTrap } from './primitives';
+import StoryTimeline from './StoryTimeline';
 
-export default function Inspector({ rel, onClose, onUpdate, onDelete }) {
+const formOf = rel => ({
+  relationship_type:    rel.relationship_type || '',
+  connection_mode:      rel.connection_mode || 'IRL',
+  lala_connection:      rel.lala_connection || 'none',
+  status:               rel.status || 'Active',
+  tension_state:        rel.tension_state || '',
+  pain_point_category:  rel.pain_point_category || '',
+  situation:            rel.situation || '',
+  lala_mirror:          rel.lala_mirror || '',
+  career_echo_potential: rel.career_echo_potential || '',
+  notes:                rel.notes || '',
+  family_role:          rel.family_role || '',
+  conflict_summary:     rel.conflict_summary || '',
+  source_knows:         rel.source_knows || '',
+  target_knows:         rel.target_knows || '',
+  reader_knows:         rel.reader_knows || '',
+  is_romantic:          !!rel.is_romantic,
+});
+
+export default function Inspector({ rel, charById = {}, onClose, onUpdate, onDelete, sheet = false }) {
   const [edit, setEdit] = useState(false);
-  const [f, setF]       = useState({
-    relationship_type:    rel.relationship_type || '',
-    connection_mode:      rel.connection_mode || 'IRL',
-    lala_connection:      rel.lala_connection || 'none',
-    status:               rel.status || 'Active',
-    tension_state:        rel.tension_state || '',
-    pain_point_category:  rel.pain_point_category || '',
-    situation:            rel.situation || '',
-    lala_mirror:          rel.lala_mirror || '',
-    career_echo_potential: rel.career_echo_potential || '',
-    notes:                rel.notes || '',
-    family_role:          rel.family_role || '',
-    conflict_summary:     rel.conflict_summary || '',
-    source_knows:         rel.source_knows || '',
-    target_knows:         rel.target_knows || '',
-    reader_knows:         rel.reader_knows || '',
-  });
+  const [confirming, setConfirming] = useState(false);
+  const [f, setF] = useState(() => formOf(rel));
   const set = k => e => setF(p => ({ ...p, [k]: e.target.value }));
+  const trapRef = useFocusTrap(sheet, onClose);
 
   useEffect(() => {
-    setF({
-      relationship_type:    rel.relationship_type || '',
-      connection_mode:      rel.connection_mode || 'IRL',
-      lala_connection:      rel.lala_connection || 'none',
-      status:               rel.status || 'Active',
-      tension_state:        rel.tension_state || '',
-      pain_point_category:  rel.pain_point_category || '',
-      situation:            rel.situation || '',
-      lala_mirror:          rel.lala_mirror || '',
-      career_echo_potential: rel.career_echo_potential || '',
-      notes:                rel.notes || '',
-      family_role:          rel.family_role || '',
-      conflict_summary:     rel.conflict_summary || '',
-      source_knows:         rel.source_knows || '',
-      target_knows:         rel.target_knows || '',
-      reader_knows:         rel.reader_knows || '',
-    });
+    setF(formOf(rel));
     setEdit(false);
+    setConfirming(false);
+    // A new relationship resets the form; edits to this one do not.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rel.id]);
 
+  const nameA = sideName(rel, 'a', charById);
+  const nameB = sideName(rel, 'b', charById);
+  const lalaConn = LALA_CONN.find(o => o.v === rel.lala_connection);
+  const tc = rel.tension_state && TENSION[rel.tension_state];
+  const romantic = isLoveInterest(rel);
+  // A value not in the list (written elsewhere) stays selectable as itself.
+  const lalaOptions = LALA_CONN.some(o => o.v === f.lala_connection)
+    ? LALA_CONN : [...LALA_CONN, { v: f.lala_connection, l: humanize(f.lala_connection) }];
+
   return (
-    <div className="re-inspector" role="complementary" aria-label="Relationship inspector">
+    <div ref={trapRef} className={`re-inspector ${sheet ? 'is-sheet' : ''}`}
+      role={sheet ? 'dialog' : 'complementary'} aria-modal={sheet ? 'true' : undefined}
+      aria-label={`${nameA} and ${nameB}`}>
+      {sheet && <span className="re-sheet-grip" aria-hidden />}
       {/* header */}
       <div className="re-inspector-header">
         <div className="re-inspector-header-top">
-          <span className="re-inspector-title">Detail</span>
-          <button onClick={onClose} className="re-close-btn" aria-label="Close inspector">×</button>
+          <span className="re-inspector-title">{romantic && <Heart size={14} fill="currentColor" aria-hidden />} {typeLabel(rel)}</span>
+          <button onClick={onClose} className="re-close-btn" aria-label="Close inspector" data-autofocus>×</button>
         </div>
-        {/* character pair */}
         <div className="re-inspector-pair">
-          {[rel.character_a_name, rel.character_b_name].map((nm, i) => (
+          {[nameA, nameB].map((nm, i) => (
             <div key={i} className="re-inspector-char">
               <div className="re-inspector-avatar">{initials(nm || '?')}</div>
               <div className="re-inspector-char-name">{nm}</div>
@@ -66,11 +77,8 @@ export default function Inspector({ rel, onClose, onUpdate, onDelete }) {
           ))}
           <div className="re-inspector-link-icon">
             <span className="re-inspector-arrow">↔</span>
-            {rel.tension_state && TENSION[rel.tension_state] && (
-              <Pill color={TENSION[rel.tension_state].color} bg={TENSION[rel.tension_state].bg}>
-                {rel.tension_state}
-              </Pill>
-            )}
+            {rel.stage && <span className={`re-stage ${STAGE_TONE[rel.stage] || ''} is-current`}>{stageLabel(rel.stage)}</span>}
+            {tc && <Pill color={tc.color} bg={tc.bg}>{humanize(rel.tension_state)}</Pill>}
           </div>
         </div>
       </div>
@@ -80,7 +88,11 @@ export default function Inspector({ rel, onClose, onUpdate, onDelete }) {
         {edit ? (
           <>
             <Label>Relationship Type</Label>
-            <Input value={f.relationship_type} onChange={set('relationship_type')} />
+            <Input value={f.relationship_type} onChange={set('relationship_type')} placeholder="love_interest, rival, mentor…" />
+            <label className="re-check">
+              <input type="checkbox" checked={f.is_romantic} onChange={e => setF(p => ({ ...p, is_romantic: e.target.checked }))} />
+              Romantic (a love interest)
+            </label>
             <Label>Connection Mode</Label>
             <Select value={f.connection_mode} onChange={set('connection_mode')}>
               {CONN_MODES.map(m => <option key={m} value={m}>{m}</option>)}
@@ -92,20 +104,24 @@ export default function Inspector({ rel, onClose, onUpdate, onDelete }) {
             <Label>Tension State</Label>
             <Select value={f.tension_state} onChange={set('tension_state')}>
               <option value="">None</option>
-              {TENSIONS.map(t => <option key={t} value={t}>{t}</option>)}
+              {TENSIONS.map(t => <option key={t} value={t}>{humanize(t)}</option>)}
             </Select>
             <Label>Pain Point</Label>
             <Input value={f.pain_point_category} onChange={set('pain_point_category')} placeholder="identity, loyalty, trust…" />
             <Label>Situation</Label>
             <Input value={f.situation} onChange={set('situation')} multiline />
-            <Label>Family Role</Label>
-            <Input value={f.family_role} onChange={set('family_role')} placeholder="mother, brother…" />
+            {!f.is_romantic && (
+              <>
+                <Label>Family Role</Label>
+                <Input value={f.family_role} onChange={set('family_role')} placeholder="mother, brother…" />
+              </>
+            )}
             <Label>Conflict Summary</Label>
             <Input value={f.conflict_summary} onChange={set('conflict_summary')} multiline />
             <hr className="re-inspector-divider" />
-            <Label>{rel.character_a_name || 'A'} knows</Label>
+            <Label>{nameA} knows</Label>
             <Input value={f.source_knows} onChange={set('source_knows')} multiline />
-            <Label>{rel.character_b_name || 'B'} knows</Label>
+            <Label>{nameB} knows</Label>
             <Input value={f.target_knows} onChange={set('target_knows')} multiline />
             <Label>Reader knows</Label>
             <Input value={f.reader_knows} onChange={set('reader_knows')} multiline />
@@ -116,23 +132,26 @@ export default function Inspector({ rel, onClose, onUpdate, onDelete }) {
             <Input value={f.career_echo_potential} onChange={set('career_echo_potential')} multiline />
             <Label>Lala Connection</Label>
             <Select value={f.lala_connection} onChange={set('lala_connection')}>
-              {LALA_CONN.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+              {lalaOptions.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
             </Select>
             <Label>Notes</Label>
             <Input value={f.notes} onChange={set('notes')} multiline />
           </>
         ) : (
           <>
-            <Field label="Type" value={rel.relationship_type} />
+            <StoryTimeline relId={rel.id} />
+            <hr className="re-inspector-divider-light" />
+            <Field label="Type" value={typeLabel(rel)} />
             <Field label="Mode" value={rel.connection_mode} />
             <Field label="Status" value={rel.status} />
+            <Field label="With Lala" value={rel.lala_connection && rel.lala_connection !== 'none' ? (lalaConn?.l || humanize(rel.lala_connection)) : null} />
             <Field label="Pain Point" value={rel.pain_point_category} />
             <Field label="Situation" value={rel.situation} />
             <Field label="Family Role" value={rel.family_role} />
             <Field label="Conflict" value={rel.conflict_summary} />
             {(rel.source_knows || rel.target_knows || rel.reader_knows) && <hr className="re-inspector-divider-light" />}
-            <Field label={`${rel.character_a_name || 'A'} knows`} value={rel.source_knows} />
-            <Field label={`${rel.character_b_name || 'B'} knows`} value={rel.target_knows} />
+            <Field label={`${nameA} knows`} value={rel.source_knows} />
+            <Field label={`${nameB} knows`} value={rel.target_knows} />
             <Field label="Reader knows" value={rel.reader_knows} />
             {(rel.lala_mirror || rel.career_echo_potential) && <hr className="re-inspector-divider-light" />}
             <Field label="Lala Mirror" value={rel.lala_mirror} />
@@ -146,13 +165,23 @@ export default function Inspector({ rel, onClose, onUpdate, onDelete }) {
       <div className="re-inspector-footer">
         {edit ? (
           <>
-            <Btn variant="primary" onClick={() => { onUpdate(f); setEdit(false); }} className="re-inspector-save">Save</Btn>
+            <Btn variant="primary" disabled={!f.relationship_type.trim()}
+              onClick={() => { onUpdate({ ...f, family_role: f.is_romantic ? rel.family_role || '' : f.family_role }); setEdit(false); }}
+              className="re-inspector-save">Save</Btn>
             <Btn variant="ghost" onClick={() => setEdit(false)}>Cancel</Btn>
           </>
+        ) : confirming ? (
+          <div className="re-inspector-confirm" role="alert">
+            <span>Delete {nameA} and {nameB}? Their story so far is kept, and you can undo.</span>
+            <span className="re-inspector-confirm-actions">
+              <Btn variant="rose" onClick={() => { setConfirming(false); onDelete(); }}>Yes, delete</Btn>
+              <Btn variant="ghost" onClick={() => setConfirming(false)}>Keep it</Btn>
+            </span>
+          </div>
         ) : (
           <>
             <Btn variant="outline" onClick={() => setEdit(true)} className="re-inspector-edit">Edit</Btn>
-            <Btn variant="rose" onClick={onDelete} aria-label="Delete this relationship">Delete</Btn>
+            <Btn variant="rose" onClick={() => setConfirming(true)} aria-label="Delete this relationship">Delete</Btn>
           </>
         )}
       </div>

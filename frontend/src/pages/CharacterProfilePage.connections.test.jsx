@@ -51,7 +51,14 @@ describe('Relationship overview', () => {
   test('none yet: where to add them', () => {
     inRouter(<RelationshipOverview character={CHARACTER} relationships={[]} />);
     expect(screen.getByTestId('ch-rel-overview').textContent).toContain('No relationships yet.');
-    expect(screen.getAllByRole('link', { name: /Relationship Engine|Add connection/ })[0].getAttribute('href')).toBe('/relationships');
+    // The Relationships page opens with this person selected (?char=; 2026-10-23).
+    const links = screen.getAllByRole('link', { name: /Relationship Engine|Add connection/ });
+    expect(links.map((l) => l.getAttribute('href'))).toEqual(['/relationships?char=c1', '/relationships?char=c1']);
+  });
+
+  test('View full map opens the Web with this person selected', () => {
+    inRouter(<ConnectionMap character={CHARACTER} relationships={many} />);
+    expect(screen.getByRole('link', { name: 'View full map' }).getAttribute('href')).toBe('/relationships?char=c1&tab=web');
   });
 });
 

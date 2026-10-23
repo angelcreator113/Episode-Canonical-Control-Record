@@ -1,11 +1,18 @@
 /**
- * ListView — tabular relationship view
+ * ListView — every confirmed relationship: a table, and cards on a phone
+ * (the CSS shows one or the other under 600px).
  * Prime Studios · LalaVerse
  */
-import { TENSION } from './tokens';
+import { Heart } from 'lucide-react';
+import { TENSION, STAGE_TONE, sideName, typeLabel, stageLabel, humanize, isLoveInterest } from './tokens';
 import { Pill } from './primitives';
 
-export default function ListView({ rels, onSelect }) {
+function Stage({ stage }) {
+  if (!stage) return <span className="re-list-dim">—</span>;
+  return <span className={`re-stage ${STAGE_TONE[stage] || ''}`}>{stageLabel(stage)}</span>;
+}
+
+export default function ListView({ rels, charById = {}, onSelect }) {
   if (!rels.length) return (
     <div className="re-empty" role="status">
       <div className="re-empty-icon" style={{ fontSize: 32 }}>≡</div>
@@ -14,34 +21,50 @@ export default function ListView({ rels, onSelect }) {
     </div>
   );
 
+  const rows = rels.map(r => ({ r, a: sideName(r, 'a', charById), b: sideName(r, 'b', charById), tc: r.tension_state && TENSION[r.tension_state] }));
+
   return (
     <div className="re-list-wrap">
-      <table className="cg-table" role="grid" aria-label="Relationships list">
+      <table className="cg-table re-list-table" aria-label="Relationships list">
         <thead>
           <tr>
-            {['Character A', 'Type', 'Character B', 'Mode', 'Tension', 'Status'].map(h => (
+            {['Character A', 'Type', 'Character B', 'Stage', 'Mode', 'Tension', 'Status'].map(h => (
               <th key={h} scope="col">{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {rels.map(r => {
-            const tc = r.tension_state && TENSION[r.tension_state];
-            return (
-              <tr key={r.id} onClick={() => onSelect(r)} tabIndex={0}
-                onKeyDown={ev => { if (ev.key === 'Enter') onSelect(r); }}
-                aria-label={`${r.character_a_name} ${r.relationship_type} ${r.character_b_name}`}>
-                <td className="re-list-name">{r.character_a_name}</td>
-                <td><Pill color="#a889c8">{r.relationship_type}</Pill></td>
-                <td className="re-list-name">{r.character_b_name}</td>
-                <td className="re-list-dim">{r.connection_mode}</td>
-                <td>{tc && <Pill color={tc.color} bg={tc.bg}>{r.tension_state}</Pill>}</td>
-                <td className="re-list-dim">{r.status}</td>
-              </tr>
-            );
-          })}
+          {rows.map(({ r, a, b, tc }) => (
+            <tr key={r.id} onClick={() => onSelect(r)} tabIndex={0}
+              onKeyDown={ev => { if (ev.key === 'Enter') onSelect(r); }}
+              aria-label={`${a} ${typeLabel(r)} ${b}`}>
+              <td className="re-list-name">{a}</td>
+              <td><Pill color="#a889c8">{isLoveInterest(r) && <Heart size={10} fill="currentColor" aria-hidden />} {typeLabel(r)}</Pill></td>
+              <td className="re-list-name">{b}</td>
+              <td><Stage stage={r.stage} /></td>
+              <td className="re-list-dim">{r.connection_mode}</td>
+              <td>{tc && <Pill color={tc.color} bg={tc.bg}>{humanize(r.tension_state)}</Pill>}</td>
+              <td className="re-list-dim">{r.status}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
+
+      <ul className="re-list-cards" aria-label="Relationships">
+        {rows.map(({ r, a, b, tc }) => (
+          <li key={r.id}>
+            <button type="button" className="re-list-card" onClick={() => onSelect(r)}>
+              <span className="re-list-card-pair">{a} <span aria-hidden>↔</span> {b}</span>
+              <span className="re-list-card-meta">
+                <Pill color="#a889c8">{isLoveInterest(r) && <Heart size={10} fill="currentColor" aria-hidden />} {typeLabel(r)}</Pill>
+                {r.stage && <Stage stage={r.stage} />}
+                {tc && <Pill color={tc.color} bg={tc.bg}>{humanize(r.tension_state)}</Pill>}
+              </span>
+              {r.situation && <span className="re-list-card-note">{r.situation}</span>}
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

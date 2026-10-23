@@ -2095,6 +2095,8 @@ function Avatar({ src, name, size = 44 }) {
 }
 
 const toPerson = (r) => (r.related_id ? `/character/${r.related_id}` : null);
+// The Relationships page with this person selected (?char=; 2026-10-23).
+export const relationshipsFor = (character, extra = '') => (character?.id ? `/relationships?char=${encodeURIComponent(character.id)}${extra}` : '/relationships');
 const sinceOf = (r) => (activityDate(r.created_at) ? activityWhen(activityDate(r.created_at)) : null);
 
 export function RelationshipOverview({ character, relationships }) {
@@ -2124,7 +2126,7 @@ export function RelationshipOverview({ character, relationships }) {
           <h2 id="ch-ro" className="ch-h2">Relationship overview</h2>
           <span className="ch-note">The people in {name}&rsquo;s world and how they connect.</span>
         </span>
-        <Link className="ch-pill-btn" to="/relationships"><Plus size={14} aria-hidden="true" /> Add connection</Link>
+        <Link className="ch-pill-btn" to={relationshipsFor(character)}><Plus size={14} aria-hidden="true" /> Add connection</Link>
       </div>
       <ul className="ch-ro-tiles">
         {tiles.map(({ key, label, n, icon: Icon, tone }) => (
@@ -2136,7 +2138,7 @@ export function RelationshipOverview({ character, relationships }) {
         ))}
       </ul>
       {stats.total === 0 ? (
-        <p className="ch-note">No relationships yet. Add them in the <Link to="/relationships">Relationship Engine</Link>.</p>
+        <p className="ch-note">No relationships yet. Add them in the <Link to={relationshipsFor(character)}>Relationship Engine</Link>.</p>
       ) : (
         <>
           <div className="ch-filter" role="group" aria-label="Show connections">
@@ -2200,7 +2202,7 @@ export function ConnectionMap({ character, relationships }) {
     <section className="ch-card" aria-labelledby="ch-cm" data-testid="ch-conn-map">
       <div className="ch-card-head">
         <h2 id="ch-cm" className="ch-h2"><Share2 size={20} aria-hidden="true" className="ch-h2-icon" /> Connection map</h2>
-        <Link className="ch-pill-btn" to="/relationships">View full map</Link>
+        <Link className="ch-pill-btn" to={relationshipsFor(character, '&tab=web')}>View full map</Link>
       </div>
       {points.length === 0 ? <p className="ch-note">No one to map yet.</p> : (
         <>

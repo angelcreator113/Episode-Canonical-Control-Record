@@ -1,19 +1,46 @@
 /**
  * WebView — D3 force-directed relationship graph
  * Prime Studios · LalaVerse
+ *
+ * It draws the page's own people and relationships (character_relationships,
+ * the cast's confirmed pairs), so the Web shows the same pairs as every
+ * other tab; it used to read the old /memories/relationship-map, which
+ * carried other pairs.
  */
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import * as d3 from 'd3';
-import apiClient from '../../services/api';
-import { T, EDGE_COLOR, NODE_R, roleColor, initials } from './tokens';
-import { Spinner, Pill } from './primitives';
+import { T, EDGE_COLOR, NODE_R, roleColor, initials, cname, sideName, typeLabel, humanize, isLoveInterest, isFamily } from './tokens';
+import { Pill } from './primitives';
 
-// File-local helper.
-export const getRelationshipMapApi = () =>
-  apiClient.get('/api/v1/memories/relationship-map').then((r) => r.data);
+/** The kind of line a relationship draws (EDGE_COLOR's keys). */
+export function edgeKind(r) {
+  if (isLoveInterest(r)) return 'romantic';
+  if (isFamily(r)) return 'familial';
+  if (['volatile', 'fractured', 'simmering'].includes(r.tension_state)) return 'pressure';
+  if (r.connection_mode === 'Professional') return 'transactional';
+  return 'support';
+}
+
+/** Nodes and edges for the graph: one node per person, one edge per relationship. */
+export function buildWeb(chars, rels, lalaId = null) {
+  const charById = Object.fromEntries((chars || []).map(c => [c.id, c]));
+  const nodes = (chars || []).map(c => ({
+    id: c.id, label: cname(c),
+    role_type: lalaId && String(c.id) === String(lalaId) ? 'special' : c.role_type,
+    bio: c.description || c.personality || null, char: c,
+  }));
+  const edges = (rels || [])
+    .filter(r => charById[r.character_id_a] && charById[r.character_id_b])
+    .map(r => ({
+      id: r.id, from: r.character_id_a, to: r.character_id_b, type: edgeKind(r), rel: r,
+      fromName: sideName(r, 'a', charById), toName: sideName(r, 'b', charById),
+      label: typeLabel(r), stage: r.stage || null, from_knows: r.source_knows || null,
+    }));
+  return { nodes, edges };
+}
 
 /* ─── D3 force‐simulation hook ────────────────────────────────────── */
-function useD3(svgRef, nodes, edges, onNodeClick, onEdgeHover, lastDrag, focusId) {
+function useD3(svgRef, nodes, edges, onNodeClick, onEdgeHover, onEdgeClick, lastDrag, focusId) {
   useEffect(() => {
     if (!svgRef.current || !nodes.length) return;
     let dead = false, sim = null, ro = null;
@@ -64,8 +91,14 @@ function useD3(svgRef, nodes, edges, onNodeClick, onEdgeHover, lastDrag, focusId
         .selectAll('line').data(se).join('line')
         .attr('stroke', e => EDGE_COLOR[e.type] || '#94a3b8').attr('stroke-width', 1.5).attr('stroke-opacity', 0.5)
         .attr('marker-end', e => `url(#a-${e.type})`).attr('class', 'rw-edge')
+        .style('cursor', 'pointer')
         .on('mouseenter', (ev, e) => onEdgeHover(e, ev))
-        .on('mouseleave', () => onEdgeHover(null, null));
+        .on('mouseleave', () => onEdgeHover(null, null))
+        .on('click', (ev, e) => { ev.stopPropagation(); onEdgeClick(e); });
+      // A wide invisible line over each edge: one a finger can tap.
+      const hits = g.append('g').selectAll('line').data(se).join('line')
+        .attr('stroke', 'transparent').attr('stroke-width', 18).style('cursor', 'pointer')
+        .on('click', (ev, e) => { ev.stopPropagation(); onEdgeClick(e); });
 
       /* nodes */
       const ngs = g.append('g').attr('role', 'list').attr('aria-label', 'Character nodes')
@@ -73,13 +106,14 @@ function useD3(svgRef, nodes, edges, onNodeClick, onEdgeHover, lastDrag, focusId
         .attr('class', 'rw-node-g').attr('role', 'listitem').attr('tabindex', '0')
         .attr('aria-label', dd => dd.label)
         .call(d3.drag()
-          .on('start', (ev, dd) => { if (!ev.active) sim.alphaTarget(0.15).restart(); dd.fx = dd.x; dd.fy = dd.y; })
-          .on('drag', (ev, dd) => { dd.fx = ev.x; dd.fy = ev.y; })
-          .on('end', (ev, dd) => { if (!ev.active) sim.alphaTarget(0); dd.fx = null; dd.fy = null; lastDrag.current = Date.now(); }))
+          .on('start', (ev, dd) => { if (!ev.active) sim.alphaTarget(0.15).restart(); dd.fx = dd.x; dd.fy = dd.y; dd.moved = false; })
+          .on('drag', (ev, dd) => { dd.fx = ev.x; dd.fy = ev.y; dd.moved = true; })
+          // Only a real drag swallows the click after it: a tap (no move) still opens the person.
+          .on('end', (ev, dd) => { if (!ev.active) sim.alphaTarget(0); dd.fx = null; dd.fy = null; if (dd.moved) lastDrag.current = Date.now(); }))
         .on('click', (ev, dd) => { ev.stopPropagation(); onNodeClick(dd); })
         .on('keydown', (ev, dd) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); onNodeClick(dd); } });
 
-      ngs.append('circle').attr('r', dd => (NODE_R[dd.role_type] || 24) + 8).attr('fill', dd => roleColor(dd.role_type)).attr('opacity', 0.06);
+      ngs.append('circle').attr('r', dd => Math.max(22, (NODE_R[dd.role_type] || 24) + 8)).attr('fill', dd => roleColor(dd.role_type)).attr('opacity', 0.06);
       ngs.append('circle').attr('r', dd => NODE_R[dd.role_type] || 24).attr('fill', T.white).attr('stroke', dd => roleColor(dd.role_type)).attr('stroke-width', 1.5);
       ngs.append('text').attr('class', 'rw-node-label').attr('text-anchor', 'middle')
         .attr('dy', dd => (NODE_R[dd.role_type] || 24) + 15).attr('fill', T.inkMid).text(dd => dd.label);
@@ -109,6 +143,7 @@ function useD3(svgRef, nodes, edges, onNodeClick, onEdgeHover, lastDrag, focusId
 
       /* tick */
       sim.on('tick', () => {
+        hits.attr('x1', e => e.source.x).attr('y1', e => e.source.y).attr('x2', e => e.target.x).attr('y2', e => e.target.y);
         lines.each(function (e) {
           const dx = e.target.x - e.source.x;
           const dy = e.target.y - e.source.y;
@@ -141,47 +176,20 @@ function useD3(svgRef, nodes, edges, onNodeClick, onEdgeHover, lastDrag, focusId
     });
 
     return () => { dead = true; cancelAnimationFrame(raf); if (sim) sim.stop(); if (ro) ro.disconnect(); };
-  }, [nodes, edges, onNodeClick, onEdgeHover, lastDrag, focusId]);
+  }, [nodes, edges, onNodeClick, onEdgeHover, onEdgeClick, lastDrag, focusId]);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
    WebView
    ═══════════════════════════════════════════════════════════════════════ */
-export default function WebView({ navigate, castKeys = null }) {
+export default function WebView({ chars = [], rels = [], lalaId = null, navigate, onRelClick }) {
   const svgRef   = useRef(null);
   const lastDrag = useRef(0);
 
-  const [nds, setNds]   = useState([]);
-  const [eds, setEds]   = useState([]);
-  const [wl, setWl]     = useState(true);
-  const [err, setErr]   = useState(null);
+  const { nodes: nds, edges: eds } = useMemo(() => buildWeb(chars, rels, lalaId), [chars, rels, lalaId]);
   const [sel, setSel]   = useState(null);
   const [hovE, setHovE] = useState(null);
   const [tip, setTip]   = useState(null);
-
-  /* fetch data */
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setWl(true);
-      try {
-        const d = await getRelationshipMapApi();
-        if (!cancelled) {
-          // Only the cast: the map also carries the old Book 1 seed people.
-          const keep = castKeys && new Set(castKeys);
-          const nodes = (d.nodes || []).filter(n => !keep || keep.has(n.id));
-          const ids = new Set(nodes.map(n => n.id));
-          setNds(nodes);
-          setEds((d.edges || []).filter(e => ids.has(e.from) && ids.has(e.to)));
-        }
-      } catch {
-        if (!cancelled) setErr('Could not load relationship data.');
-      } finally {
-        if (!cancelled) setWl(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [castKeys?.join('|')]);
 
   const onNodeClick = useCallback(n => {
     if (Date.now() - lastDrag.current < 200) return;
@@ -191,35 +199,45 @@ export default function WebView({ navigate, castKeys = null }) {
     setHovE(e);
     if (ev) setTip({ x: ev.clientX, y: ev.clientY });
   }, []);
+  const onEdgeClick = useCallback(e => { setHovE(null); onRelClick?.(e.rel); }, [onRelClick]);
 
-  useD3(svgRef, nds, eds, onNodeClick, onEdgeHover, lastDrag, sel?.id);
+  useD3(svgRef, nds, eds, onNodeClick, onEdgeHover, onEdgeClick, lastDrag, sel?.id);
 
-  if (wl) return <Spinner />;
+  const selRels = sel ? eds.filter(e => e.from === sel.id || e.to === sel.id) : [];
 
   return (
     <div className="re-webview" role="region" aria-label="Relationship web graph">
-      {/* filter bar */}
       <div className="re-webview-bar">
-        <span className="re-webview-stats">{nds.length} people · {eds.length} connections</span>
+        <span className="re-webview-stats">{nds.length} people · {eds.length} connections · tap a person or a line</span>
       </div>
 
-      {/* graph */}
       <div className="re-webview-canvas">
-        {err && <div className="re-webview-error" role="alert">{err}</div>}
+        {nds.length === 0 && <div className="re-webview-error" role="status">No one in Lala&rsquo;s world yet.</div>}
         <svg ref={svgRef} className="rw-svg" aria-label="Relationship force graph"
           onClick={() => { setSel(null); setHovE(null); }} />
 
-        {/* node info panel */}
+        {/* person panel: a card beside the graph, a sheet across the bottom on a phone */}
         {sel && (
           <div className="re-webview-info re-fade-in" role="dialog" aria-label={`Character: ${sel.label}`}>
             <div className="re-accent-bar" />
             <div className="re-webview-info-body">
               <button onClick={() => setSel(null)} className="re-close-btn" aria-label="Close panel">×</button>
               <div className="re-webview-info-name">{sel.label}</div>
-              <div className="re-webview-info-role" style={{ color: roleColor(sel.role_type) }}>{sel.role_type}</div>
+              <div className="re-webview-info-role" style={{ color: roleColor(sel.role_type) }}>{humanize(sel.char?.role_type) || '—'}</div>
               {sel.bio && <div className="re-webview-info-bio">{sel.bio}</div>}
-              <button onClick={() => navigate('/character-registry')} className="cg-btn-secondary re-webview-info-link">
-                Open Character →
+              {selRels.length > 0 && (
+                <ul className="re-webview-info-rels">
+                  {selRels.map(e => (
+                    <li key={e.id}>
+                      <button type="button" onClick={() => onRelClick?.(e.rel)}>
+                        {e.from === sel.id ? e.toName : e.fromName} · {e.label}{e.stage ? ` · ${humanize(e.stage)}` : ''}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <button onClick={() => navigate(`/character/${sel.id}`)} className="cg-btn-secondary re-webview-info-link">
+                Open {sel.label} →
               </button>
             </div>
           </div>
@@ -230,17 +248,13 @@ export default function WebView({ navigate, castKeys = null }) {
       {hovE && tip && (
         <div className="re-webview-tooltip" role="tooltip" style={{ left: tip.x + 10, top: tip.y - 6 }}>
           <div className="re-webview-tooltip-header">
-            <span>{hovE.from}</span>
-            <span style={{ color: EDGE_COLOR[hovE.type] || T.inkFaint }}>
-              {hovE.direction === 'two_way' ? '↔' : '→'}
-            </span>
-            <span>{hovE.to}</span>
-            <Pill color={EDGE_COLOR[hovE.type] || T.inkDim}>{hovE.type}</Pill>
+            <span>{hovE.fromName}</span>
+            <span style={{ color: EDGE_COLOR[hovE.type] || T.inkFaint }}>↔</span>
+            <span>{hovE.toName}</span>
+            <Pill color={EDGE_COLOR[hovE.type] || T.inkDim}>{hovE.label}</Pill>
           </div>
+          {hovE.stage && <div className="re-webview-tooltip-detail">{humanize(hovE.stage)}</div>}
           {hovE.from_knows && <div className="re-webview-tooltip-detail">{hovE.from_knows}</div>}
-          {!hovE.to_knows && hovE.direction === 'one_way' && (
-            <div className="re-webview-tooltip-unaware">{hovE.to} is unaware.</div>
-          )}
         </div>
       )}
     </div>
