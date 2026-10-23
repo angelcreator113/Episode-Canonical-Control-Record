@@ -17,6 +17,7 @@ import { contrast, readToken, stripTaskRefs } from '../styles/contrast';
 
 const jsx = readFileSync(resolve(__dirname, 'WorldAdmin.jsx'), 'utf8');
 const board = readFileSync(resolve(__dirname, '../components/Show/ShowEpisodesBoard.jsx'), 'utf8');
+const css = readFileSync(resolve(__dirname, 'WorldAdmin.css'), 'utf8');
 const tokens = readFileSync(resolve(__dirname, '../styles/design-tokens.css'), 'utf8');
 const HEX = /#[0-9a-f]{3,8}\b/i;
 
@@ -42,21 +43,26 @@ describe('Episodes tab theme', () => {
     expect(jsx).toMatch(/const TIER_TEXT = \{ slay: 'var\(--lala-gold-text\)', pass: 'var\(--success-text\)', safe: 'var\(--warning-text\)', fail: 'var\(--danger-text\)' \};/);
     expect(jsx).not.toMatch(/TIER_COLORS\[[a-z]+\] \+ '/);
     expect(jsx).not.toMatch(/\$\{TIER_COLORS\[[a-z]+\]\}[0-9a-f]{2}\b/);
-    expect(ledger).toMatch(/background: TIER_BG\[tier\], border: `2px solid \$\{TIER_BORDER\[tier\]\}`/);
+    // The tiers are chips in the summary strip (Evoni, 2026-10-22 layout list).
+    expect(ledger).toMatch(/background: TIER_BG\[tier\], borderColor: TIER_BORDER\[tier\]/);
     expect(jsx).toMatch(/tierPill: \(t\) => \(\{[^}]*background: TIER_BG\[t\], color: TIER_TEXT\[t\] \}\)/);
     expect(board).toMatch(/const TIERS = \{ slay: \{ e: '👑', c: 'var\(--lala-gold-text\)' \}, pass: \{ e: '✨', c: 'var\(--success-text\)' \}, safe: \{ e: '😐', c: 'var\(--warning-text\)' \}, fail: \{ e: '💔', c: 'var\(--danger-text\)' \} \};/);
   });
 
   test('Generate Script is the primary; the money, event and wardrobe chips read the families', () => {
     expect(ledger).toMatch(/background: generating \? 'var\(--lala-parchment-2\)' : 'var\(--primary\)', color: generating \? 'var\(--text-secondary\)' : 'var\(--text-inverse\)'/);
-    expect(ledger).toMatch(/background: net >= 0 \? 'var\(--success-bg\)' : 'var\(--danger-bg\)', border: `1px solid \$\{net >= 0 \? 'var\(--success-border\)' : 'var\(--danger-border\)'\}`/);
+    // The season's money is a line in the summary strip: income and a positive net in the success text, expenses and a loss in the danger text.
+    expect(ledger).toMatch(/<div className=\{net >= 0 \? 'is-in' : 'is-out'\}><dt>Net P&L<\/dt>/);
+    expect(css).toMatch(/\.wa-ledger-money \.is-in dd \{ color: var\(--success-text\); \}/);
+    expect(css).toMatch(/\.wa-ledger-money \.is-out dd \{ color: var\(--danger-text\); \}/);
     expect(ledger).toMatch(/color: v > 0 \? 'var\(--success-text\)' : v < 0 \? 'var\(--danger-text\)' : 'var\(--text-primary\)'/);
     expect(ledger).toMatch(/background: 'var\(--primary-subtle\)', borderRadius: 4, fontSize: 10, color: 'var\(--primary-text\)'/);
     expect(ledger).toMatch(/background: 'var\(--accent-subtle\)', border: '1px solid var\(--accent-light\)', borderRadius: 6, fontSize: 10, color: 'var\(--accent-dark\)'/);
     expect(ledger).toMatch(/background: 'var\(--warning-bg\)', borderRadius: 6, fontSize: 11, fontWeight: 600, color: 'var\(--warning-text\)'/);
     expect(ledger).toMatch(/background: 'var\(--surface-bg\)', borderColor: 'var\(--lala-parchment-3\)', color: 'var\(--lala-gold-text\)'/);
     expect(ledger).toMatch(/background: 'var\(--primary-subtle\)', borderColor: 'var\(--primary-light\)', color: 'var\(--primary-text\)'/);
-    expect(ledger).toMatch(/border: isExpanded \? '2px solid var\(--primary\)' : '1px solid var\(--lala-parchment-3\)'/);
+    expect(css).toMatch(/\.wa-ledger-row \{[^}]*border: 1px solid var\(--lala-parchment-3\);/);
+    expect(css).toMatch(/\.wa-ledger-row\.is-open \{ border: 2px solid var\(--primary\); \}/);
     expect(ledger).not.toMatch(/color: 'var\(--lala-gold\)'/);
   });
 
