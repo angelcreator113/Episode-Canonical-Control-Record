@@ -362,7 +362,9 @@ body.stp-open { overflow: hidden; }
   font-family: 'DM Mono', var(--font-mono); font-size: max(13px, 0.36em); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--studio-prompter-mark);
 }
-.stp-recdot { flex-wrap: wrap; }
+/* Whole-episode REC bar: wraps between its parts, never inside one, as a card not a pill. */
+.stp-recdot { flex-wrap: wrap; row-gap: 2px; border-radius: 12px; }
+.stp-recdot > span { white-space: nowrap; }
 .stp-recdot.is-paused .stp-dot { animation: none; background: var(--studio-prompter-dim); }
 .stp-recwarn {
   display: flex; align-items: flex-start; gap: 6px; max-width: 320px; padding: 6px 12px; border-radius: 12px;
@@ -378,6 +380,8 @@ body.stp-open { overflow: hidden; }
 @media (max-width: 600px) {
   .stp-hud { max-width: calc(100% - 132px); }
   .stp-recdot { font-size: 13px; padding: 6px 10px; }
+  /* No room for the size on a phone; the near-the-limit warning still shows. */
+  .stp-rec-size { display: none; }
   .stp-scope { flex: 1 1 100%; order: 9; }
   .stp-scope .stp-btn { flex: 1; }
 }

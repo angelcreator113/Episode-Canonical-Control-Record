@@ -1084,7 +1084,7 @@ export default function TeleprompterReader({ source, startBeat = null, onClose, 
               <div className={`stp-recdot${rec.paused ? ' is-paused' : ''}`} role="status" data-testid="stp-recording">
                 <span className="stp-dot" aria-hidden="true" /> {rec.paused ? 'PAUSED' : 'REC'} {clock(rec.elapsed)}
                 {whole && liveNumber != null && <span data-testid="stp-rec-beat">· Beat {liveNumber} of {lastNumber}</span>}
-                {whole && <span data-testid="stp-rec-size">· {sizeText(takeSize)}</span>}
+                {whole && <span className="stp-rec-size" data-testid="stp-rec-size">· {sizeText(takeSize)}</span>}
               </div>
             )}
             {recording && whole && takeSize >= WARN_BYTES && (
