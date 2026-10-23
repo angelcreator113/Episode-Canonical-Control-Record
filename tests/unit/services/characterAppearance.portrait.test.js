@@ -15,7 +15,7 @@ const sharp = require('sharp');
 const axios = require('axios');
 const { generateImage } = require('../../../src/services/imageGenerationService');
 const { storePulseImage } = require('../../../src/services/pulseImageService');
-const { generatePortrait, removePortrait, isBlank, AppearanceError } = require('../../../src/services/characterAppearance');
+const { generatePortrait, uploadPortrait, removePortrait, isBlank, AppearanceError } = require('../../../src/services/characterAppearance');
 
 const jpeg = (rgb) => sharp({ create: { width: 64, height: 64, channels: 3, background: rgb } }).jpeg().toBuffer();
 const character = (extra = {}) => ({
@@ -77,4 +77,27 @@ test('Remove drops a portrait, and clears the profile photo when it was that one
   await removePortrait(c, 'a');
   expect(c.appearance.portraits).toEqual([]);
   await expect(removePortrait(c, 'nope')).rejects.toMatchObject({ status: 400 });
+});
+
+test('an uploaded photo is stored, added first and marked uploaded; their profile photo only when they have none', async () => {
+  const file = { buffer: face, mimetype: 'image/jpeg', originalname: 'me.jpg' };
+  const c = character({ appearance: null });
+  expect(await uploadPortrait(c, file)).toEqual({ url: 'https://store/p.jpg' });
+  expect(storePulseImage).toHaveBeenCalledWith(file, expect.objectContaining({ keyPrefix: 'characters/c1/uploaded', label: 'The photo' }));
+  expect(generateImage).not.toHaveBeenCalled();
+  expect(c.appearance.portraits).toEqual([expect.objectContaining({ url: 'https://store/p.jpg', uploaded: true })]);
+  expect(c.portrait_url).toBe('https://store/p.jpg');
+
+  storePulseImage.mockResolvedValueOnce({ url: 'https://store/q.jpg' });
+  await uploadPortrait(c, file);
+  expect(c.appearance.portraits.map((p) => p.url)).toEqual(['https://store/q.jpg', 'https://store/p.jpg']);
+  expect(c.portrait_url).toBe('https://store/p.jpg');
+});
+
+test('a refused upload saves nothing', async () => {
+  storePulseImage.mockRejectedValueOnce(new Error('The photo must be a PNG, JPEG or WebP image.'));
+  const c = character();
+  await expect(uploadPortrait(c, { buffer: Buffer.from('x'), mimetype: 'image/gif' })).rejects.toThrow('PNG, JPEG or WebP');
+  expect(c.update).not.toHaveBeenCalled();
+  await expect(uploadPortrait(null, {})).rejects.toBeInstanceOf(AppearanceError);
 });
