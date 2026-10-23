@@ -120,8 +120,10 @@ function cashTotalOf(event, deliverables = []) {
  * Answer 6: at most 2 relationship goals, written from the event's own
  * fields. Pure. INFERRED wording, from the design note's examples ("Follow
  * up with {host} after the event", "Co-style a moment with {brand}").
+ * `brandProfileId`: the brand's Pulse account (brandProfileIdFor), kept on
+ * the brand goal so it ticks like the others.
  */
-function draftRelationshipGoals(event) {
+function draftRelationshipGoals(event, { brandProfileId = null } = {}) {
   const automation = parseJson(event?.canon_consequences, {})?.automation || {};
   const host = String(event?.host || '').trim() || null;
   const brand = String(event?.host_brand || automation.host_brand || '').trim() || null;
@@ -136,7 +138,7 @@ function draftRelationshipGoals(event) {
     goals.push({ slot: 'relationship_host', label: `Follow up with ${host} after the event`, description: 'A thank-you, and a reason to work together again', ...about(event?.source_profile_id ?? automation.host_profile_id) });
   }
   if (brand && brand !== host) {
-    goals.push({ slot: 'relationship_brand', label: `Co-style a moment with ${brand}`, description: `Something ${brand} would want to share` });
+    goals.push({ slot: 'relationship_brand', label: `Co-style a moment with ${brand}`, description: `Something ${brand} would want to share`, ...about(brandProfileId) });
   }
   if (guests.length) {
     goals.push({ slot: 'relationship_guest', label: `Get to know ${guests[0].display_name || guests[0].handle}`, description: 'One real conversation, and a reason to talk again', ...about(guests[0].profile_id ?? guests[0].id) });
@@ -164,6 +166,49 @@ function relationshipGoalTasks(event) {
       required: false,
       completed: false,
     }));
+}
+
+/**
+ * The event's brand's Pulse account (social_profiles.id), or null (Evoni,
+ * 2026-10-23: the brand goal ticks when the script names the brand). The
+ * company is the event's opportunity's (opportunities.company_id), else
+ * the company named host_brand; its account is the profile whose
+ * full_profile.lalaverse_brand_id is the company's id (services/brandPulse).
+ * With no company, a brand account named host_brand. A failed read is no
+ * account: the goal is still drafted, without it.
+ */
+async function brandProfileIdFor(sequelize, event, { transaction } = {}) {
+  const automation = parseJson(event?.canon_consequences, {})?.automation || {};
+  const brand = String(event?.host_brand || automation.host_brand || '').trim();
+  if (!brand) return null;
+  // Inside the caller's transaction, a savepoint: a failed read rolls back
+  // to it and leaves the draft's transaction usable.
+  const inSavepoint = (fn) => (transaction ? sequelize.transaction({ transaction }, fn) : fn(undefined));
+  try {
+    return await inSavepoint((t) => lookup(t));
+  } catch (err) {
+    console.error('[DealTermsDraft] brand account lookup failed:', err.message);
+    return null;
+  }
+  async function lookup(t) {
+    const first = async (sql, replacements) => {
+      const [rows] = await sequelize.query(sql, { replacements, transaction: t });
+      return rows?.[0] || null;
+    };
+    let company = null;
+    if (event.opportunity_id) {
+      company = (await first('SELECT company_id FROM opportunities WHERE id = :id AND deleted_at IS NULL', { id: event.opportunity_id }))?.company_id || null;
+    }
+    if (!company) {
+      company = (await first('SELECT id FROM lalaverse_brands WHERE deleted_at IS NULL AND LOWER(TRIM(name)) = LOWER(:brand) ORDER BY created_at ASC LIMIT 1', { brand }))?.id || null;
+    }
+    if (company) {
+      const account = await first(`SELECT id FROM social_profiles WHERE deleted_at IS NULL AND full_profile->>'lalaverse_brand_id' = :id ORDER BY id ASC LIMIT 1`, { id: String(company) });
+      if (account) return account.id;
+    }
+    const named = await first(`SELECT id FROM social_profiles WHERE deleted_at IS NULL AND full_profile->>'account' = 'brand' AND LOWER(TRIM(display_name)) = LOWER(:brand) ORDER BY id ASC LIMIT 1`, { brand });
+    return named?.id ?? null;
+  }
 }
 
 async function insertCost(sequelize, eventId, line, { transaction }) {
@@ -381,7 +426,7 @@ async function draftTerms(sequelize, eventId, { transaction, premiums = {}, over
   const nextAutomation = { ...automation };
   const currentGoals = automation.relationship_goals;
   if (currentGoals === undefined || sameJson(currentGoals, draftedValues.relationship_goals)) {
-    const goals = draftRelationshipGoals(event);
+    const goals = draftRelationshipGoals(event, { brandProfileId: await brandProfileIdFor(sequelize, event, { transaction }) });
     if (!sameJson(goals, currentGoals)) changes.goals = true;
     nextAutomation.relationship_goals = goals;
     autoDrafted.relationship_goals = DEAL_DRAFT_SOURCE;
@@ -446,6 +491,7 @@ module.exports = {
   suggestedBonus,
   cashTotalOf,
   draftRelationshipGoals,
+  brandProfileIdFor,
   relationshipGoalTasks,
   draftTerms,
   syncDraftedTerms,

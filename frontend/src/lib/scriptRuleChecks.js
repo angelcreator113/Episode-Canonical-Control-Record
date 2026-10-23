@@ -110,9 +110,20 @@ const speaks = (who, c) => {
     .some((n) => n === w || (w.length >= 3 && !w.includes(' ') && n.split(' ')[0] === w));
 };
 const profilesById = (profiles) => new Map((profiles || []).filter((p) => p && p.id != null).map((p) => [String(p.id), p]));
+// "Also known as" (social_profiles.aliases; Evoni, 2026-10-23): the other
+// names they go by, nicknames like "Truth" for Truthville. A list, or the
+// JSON of one when read raw.
+const aliasesOf = (p) => {
+  let a = p?.aliases;
+  if (typeof a === 'string') {
+    try { a = JSON.parse(a); } catch (err) { console.error('[scriptRuleChecks] aliases unreadable:', err.message); a = []; }
+  }
+  return Array.isArray(a) ? a : [];
+};
 // A person's names as the writer names them: creator_name, else
-// display_name, else handle, then the event's own copies of them.
-const namesOf = (p, own = []) => [p?.creator_name, p?.display_name, p?.handle, ...own].filter((n) => typeof n === 'string' && n.trim());
+// display_name, else handle, then their "also known as" names and the
+// event's own copies of them.
+const namesOf = (p, own = []) => [p?.creator_name, p?.display_name, p?.handle, ...aliasesOf(p), ...own].filter((n) => typeof n === 'string' && n.trim());
 
 /**
  * The event's host and two featured guests, as the writer names them
@@ -154,15 +165,20 @@ function eventCast(event, profiles = []) {
  * the goal's own profile_id (dealTermsDraftService draftRelationshipGoals),
  * else its slot: relationship_host is the host eventCast reads,
  * relationship_guest the Event Package's first named guest, the one the
- * goal was written for; a brand goal is about nobody. { id, name, names, shown,
- * shared } or null: `names` are every name of theirs as norm reads it
- * (creator_name, display_name, handle, the event's copies of them, the
- * first name of each), `shown` each as written. A first name another of
- * the event's people has too is not one of theirs (`shared`), so a lone
- * "Marcus" names nobody when there are two; a surname never is.
+ * goal was written for. A brand goal is about the brand: its profile_id
+ * (the brand's Pulse account), and the event's brand name either way, so
+ * an older goal with no profile_id still has one. { id, name, names,
+ * shown, shared, whole } or null: `names` are every name of theirs as norm
+ * reads it (creator_name, display_name, handle, their "also known as"
+ * names, the event's copies of them, the first name of each), `shown` each
+ * as written. A name needs 3 letters or more. A name another of the
+ * event's people has too, whole or as a first name, is not one of theirs
+ * (`shared`), so a lone "Marcus" names nobody when there are two; a
+ * surname never is. A brand (`whole`) is named only by a whole name of its
+ * own, and never by common words alone ("Studio", "The House").
  */
 function goalPerson(goal, event, profiles = []) {
-  if (!goal || goal.slot === 'relationship_brand') return null;
+  if (!goal) return null;
   let cc = event?.canon_consequences;
   if (typeof cc === 'string') {
     try { cc = JSON.parse(cc); } catch (err) { console.error('[scriptRuleChecks] canon_consequences unreadable:', err.message); cc = null; }
@@ -176,54 +192,83 @@ function goalPerson(goal, event, profiles = []) {
   const people = [];
   if (hostId) people.push({ id: hostId, own: [event?.host, ...(key(auto.host_profile_id) === hostId ? [auto.host_display_name, auto.host_handle] : [])] });
   for (const g of guests) people.push({ id: key(g.profile_id ?? g.id), own: [g.creator_name, g.display_name, g.handle] });
+  const brand = goal.slot === 'relationship_brand';
   let id = key(goal.profile_id);
   if (!id && goal.slot === 'relationship_host') id = hostId;
   // The guest the goal was written for: the first with a name (draftRelationshipGoals).
   const named = guests.find((g) => g.display_name || g.handle);
   if (!id && goal.slot === 'relationship_guest' && named) id = key(named.profile_id ?? named.id);
-  if (!id) return null;
+  const brandName = brand ? String(event?.host_brand || auto.host_brand || '').trim() : '';
+  if (!id && !brandName) return null;
   const full = (p) => namesOf(byId.get(p.id), p.own).map((n) => n.trim());
-  const mine = [...new Set(full({ id, own: people.filter((p) => p.id === id).flatMap((p) => p.own) }))];
+  const mine = [...new Set(brand
+    ? [...(id ? namesOf(byId.get(id)) : []), brandName].map((n) => n.trim()).filter(Boolean)
+    : full({ id, own: people.filter((p) => p.id === id).flatMap((p) => p.own) }))];
   if (!mine.length) return null;
   const firstOf = (n) => n.split(' ')[0];
-  const theirs = new Set(people.filter((p) => p.id && p.id !== id).flatMap(full).map((n) => firstOf(norm(n))));
+  const letters = (n) => n.replace(/[^a-z0-9]/g, '').length;
+  // Each other person's names, whole and first.
+  const theirs = new Set(people.filter((p) => !id || (p.id && p.id !== id)).flatMap(full).map(norm).flatMap((n) => [n, firstOf(n)]));
   const names = [];
   const shown = [];
   const shared = [];
-  const add = (n, as) => { if (n && !names.includes(n)) { names.push(n); shown.push(as); } };
+  const add = (n, as) => {
+    if (!n || names.includes(n) || letters(n) < 3) return;
+    if (brand && !nameWords(n).some((w) => !BRAND_WORDS.has(w))) return;
+    if (theirs.has(n)) { if (!shared.includes(n)) shared.push(n); return; }
+    names.push(n); shown.push(as);
+  };
   for (const n of mine) add(norm(n), n);
-  for (const n of mine) {
-    const f = firstOf(norm(n));
-    if (f === norm(n) || f.length < 3) continue;
-    if (theirs.has(f)) { if (!shared.includes(f)) shared.push(f); } else add(f, firstOf(n));
+  if (!brand) {
+    for (const n of mine) {
+      const f = firstOf(norm(n));
+      if (f !== norm(n)) add(f, firstOf(n));
+    }
   }
-  return { id, name: mine[0], names, shown, shared };
+  if (!names.length) return null;
+  return { id: id || null, name: mine[0], names, shown, shared, ...(brand ? { whole: true } : {}) };
 }
+
+// Words a brand's name may hold that name no one alone: "Studio" is not
+// Studio by Sable, "The House" no house.
+const BRAND_WORDS = new Set(['the', 'a', 'an', 'by', 'and', 'of', 'for', 'co', 'company', 'inc', 'studio', 'studios', 'house', 'atelier', 'beauty', 'brand', 'brands', 'boutique', 'collective', 'label', 'design', 'designs', 'fashion', 'style', 'styles', 'official', 'group', 'agency', 'media', 'shop', 'store', 'lab', 'labs', 'club', 'closet', 'wear', 'couture', 'collection', 'apparel', 'goods']);
 
 // Words as names are matched: norm, then letters and digits only
 // ("D'Angelo" is d angelo, "@truth_ville" truth ville).
 const nameWords = (v) => norm(v).replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
 
 /**
- * The name the goal's person (goalPerson) goes by in these lines, as
- * written, or null: they speak (a speaker line, as speaks reads it, but not
- * by a first name another of the event's people has too), or one of their
- * names is in the lines, whole.
+ * Where the goal's person (goalPerson) is in these lines: { as, line } or
+ * null; `as` is the name they go by there, as written, `line` the line.
+ * They speak (a speaker line, as speaks reads it, but not by a first name
+ * another of the event's people has too; a brand only by a whole name of
+ * its own), or one of their names is in a line, whole.
  */
-function personIn(lines = [], person = null) {
+function personLine(lines = [], person = null) {
   if (!person?.names?.length) return null;
   for (const l of lines) {
     const m = String(l ?? '').match(SPEAKER);
-    if (!m || person.shared?.includes(norm(m[1])) || !speaks(m[1], { name: person.names[0], aliases: person.names.slice(1) })) continue;
-    const at = person.names.indexOf(norm(m[1]));
-    return at >= 0 ? person.shown[at] : m[1].replace(/^[\s*_]+|[\s*_]+$/g, '');
+    if (!m) continue;
+    const who = norm(m[1]);
+    if (person.shared?.includes(who)) continue;
+    if (person.whole ? !person.names.includes(who) : !speaks(m[1], { name: person.names[0], aliases: person.names.slice(1) })) continue;
+    const at = person.names.indexOf(who);
+    return { as: at >= 0 ? person.shown[at] : m[1].replace(/^[\s*_]+|[\s*_]+$/g, ''), line: String(l) };
   }
-  const have = nameWords(lines.join(' '));
-  const at = person.names.findIndex((n) => {
-    const w = nameWords(n);
-    return w.length > 0 && have.some((_, i) => w.every((x, j) => have[i + j] === x));
-  });
-  return at >= 0 ? person.shown[at] : null;
+  for (const l of lines) {
+    const have = nameWords(l);
+    const at = person.names.findIndex((n) => {
+      const w = nameWords(n);
+      return w.length > 0 && have.some((_, i) => w.every((x, j) => have[i + j] === x));
+    });
+    if (at >= 0) return { as: person.shown[at], line: String(l) };
+  }
+  return null;
+}
+
+/** The name the goal's person goes by in these lines, as written, or null (personLine). */
+function personIn(lines = [], person = null) {
+  return personLine(lines, person)?.as ?? null;
 }
 
 // The closet beat: the one given, else the one that opens the closet, else beat 8.
@@ -547,4 +592,4 @@ export function scriptRuleRows(beats = [], rules = null, { closetNumber = null }
   return found.map((f) => ({ key: `rule-${f.key}`, ok: f.ok, beatId: beatAt(beats, f.beat)?.id || null, text: f.text }));
 }
 
-export { statEntries, coinChange, scriptRuleFindings, cutsceneFindings, eventCast, goalPerson, personIn, speaks, norm, SHOPPING_LIST, JUDGED_ON };
+export { statEntries, coinChange, scriptRuleFindings, cutsceneFindings, eventCast, goalPerson, personIn, personLine, speaks, norm, SHOPPING_LIST, JUDGED_ON };

@@ -213,3 +213,16 @@ export function atHandle(handle) {
 // (services/api.js). Deletion verified zero importers via grep prior to commit.
 // The unreachable sessionStorage.token fallback path has been fully eliminated
 // from frontend production code.
+
+/**
+ * "Also known as" (social_profiles.aliases; Evoni, 2026-10-23): the other
+ * names they go by, as a list. The edit box holds them with commas between;
+ * the server saves the list (routes/socialProfileRoutes cleanAliases).
+ */
+export function aliasList(p) {
+  let a = p?.aliases;
+  if (typeof a === 'string') {
+    try { a = JSON.parse(a); } catch (err) { console.error('[feedConstants] aliases unreadable:', err); a = []; }
+  }
+  return Array.isArray(a) ? a.filter((n) => typeof n === 'string' && n.trim()) : [];
+}

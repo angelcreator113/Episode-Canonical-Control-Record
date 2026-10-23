@@ -485,7 +485,7 @@ function coverageFacts(inputs) {
     // The show's rules checked after writing (utils/scriptRuleChecks.js).
     rules: { money: inputs?.money || null, shoppingApproved: Boolean(inputs?.money?.shopping), cast: require('../utils/scriptRuleChecks').eventCast(inputs?.eventData || null, inputs?.story?.socialProfiles || []) },
     // Each goal with its person, so one named by her real name is covered (utils/scriptCoverage goalCovered).
-    goals: (career?.goals || []).map((g) => ({ ...g, person: require('../utils/scriptRuleChecks').goalPerson(g, inputs?.eventData || null, inputs?.story?.socialProfiles || []) })),
+    goals: (career?.goals || []).map((g) => ({ ...g, person: require('../utils/scriptRuleChecks').goalPerson(g, inputs?.eventData || null, [...(inputs?.story?.socialProfiles || []), ...(inputs?.story?.goalProfiles || [])]) })),
     forwardHook: inputs?.brief?.forward_hook || '',
     lockedPieces: (inputs?.outfitScore?.items || []).filter((p) => p?.id).map((p) => ({ id: p.id, name: p.name })),
     // Beat 14's opportunity, when it comes (Evoni, 2026-10-19): it must
