@@ -10,12 +10,20 @@
  * Package: undo instead of confirm). The reveal plan beside it stays the
  * plan for the characters' kept secrets.
  *
+ * 2nd round (Evoni, 2026-10-23): the season line (SeasonTwistLine) draws
+ * each twist from its plant to its payoff with the warnings beside it;
+ * "Suggest twists" asks the AI for 3-5 drafts from the season, its open
+ * threads and the characters' relationships (POST .../twists/suggest).
+ * A draft is only shown: Keep saves it as it is, Edit opens it in the form,
+ * Drop discards it. Nothing is saved without her.
+ *
  * Props: showId, api (the page's client).
  */
 import { useCallback, useEffect, useState } from 'react';
-import { Route, Plus, Pencil, Trash2, AlertTriangle, ArrowRight } from 'lucide-react';
+import { Route, Plus, Pencil, Trash2, AlertTriangle, ArrowRight, Sparkles, Check, X } from 'lucide-react';
 import UndoNotice from '../EventPackage/UndoNotice';
 import { useUndo } from '../EventPackage/useUndo';
+import SeasonTwistLine from './SeasonTwistLine';
 import './SeasonTwists.css';
 
 const STATUS_LABEL = { planned: 'Planned', planted: 'Planted', paid_off: 'Paid off', dropped: 'Dropped' };
@@ -30,6 +38,9 @@ export default function SeasonTwists({ showId, api }) {
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
+  // The AI's drafts, shown until each is kept or dropped; never saved on their own.
+  const [drafts, setDrafts] = useState([]);
+  const [suggesting, setSuggesting] = useState(false);
   const undo = useUndo(`twists:${showId}`, { setData });
 
   const load = useCallback(async () => {
@@ -45,17 +56,48 @@ export default function SeasonTwists({ showId, api }) {
 
   const save = async () => {
     setBusy(true); setNote(null);
-    const { id, ...body } = form;
+    const { id, draftKey, ...body } = form;
     try {
       const res = id ? await api.put(`${base}/${id}`, body) : await api.put(base, body);
       setData(res.data);
       setForm(null);
+      if (draftKey) setDrafts((ds) => ds.filter((d) => d.key !== draftKey));
       setNote({ text: id ? 'Twist saved.' : 'Twist added.' });
     } catch (err) {
       console.error('[SeasonTwists] save failed:', err);
       setNote({ error: true, text: errorOf(err, 'The twist was not saved.') });
     } finally { setBusy(false); }
   };
+
+  const suggest = async () => {
+    setSuggesting(true); setNote(null);
+    try {
+      const res = await api.post(`${base}/suggest`);
+      const stamp = Date.now();
+      setDrafts((res.data?.drafts || []).map((d, i) => ({ ...d, key: `d-${stamp}-${i}` })));
+    } catch (err) {
+      console.error('[SeasonTwists] suggest failed:', err);
+      setNote({ error: true, text: errorOf(err, 'No twists could be suggested. Try again.') });
+    } finally { setSuggesting(false); }
+  };
+
+  const draftBody = (d) => ({
+    title: d.title, description: d.description || '', plant_slot_id: d.plant_slot_id || '', payoff_slot_id: d.payoff_slot_id || '',
+    status: 'planned', thread_ids: d.thread_ids || [], character_ids: d.character_ids || [], note: '',
+  });
+  const keepDraft = async (d) => {
+    setBusy(true); setNote(null);
+    try {
+      setData((await api.put(base, draftBody(d))).data);
+      setDrafts((ds) => ds.filter((x) => x.key !== d.key));
+      setNote({ text: `Kept “${d.title}”.` });
+    } catch (err) {
+      console.error('[SeasonTwists] keep draft failed:', err);
+      setNote({ error: true, text: errorOf(err, 'The twist was not saved.') });
+    } finally { setBusy(false); }
+  };
+  const editDraft = (d) => { setNote(null); setForm({ ...BLANK, ...draftBody(d), draftKey: d.key }); };
+  const dropDraft = (d) => setDrafts((ds) => ds.filter((x) => x.key !== d.key));
 
   const remove = async (t) => {
     setBusy(true); setNote(null);
@@ -118,14 +160,64 @@ export default function SeasonTwists({ showId, api }) {
             subtly, without explaining it; the payoff episode&apos;s script is told to pay it off.
           </p>
         </div>
-        {!form && (
-          <button type="button" className="stw-btn" disabled={busy} onClick={() => { setNote(null); setForm({ ...BLANK }); }}>
-            <Plus size={14} aria-hidden="true" /> Add a twist
+        <div className="stw-head-actions">
+          <button type="button" className="stw-btn is-quiet" disabled={busy || suggesting} onClick={suggest} data-testid="stw-suggest">
+            <Sparkles size={14} aria-hidden="true" /> {suggesting ? 'Suggesting…' : 'Suggest twists'}
           </button>
-        )}
+          {!form && (
+            <button type="button" className="stw-btn" disabled={busy} onClick={() => { setNote(null); setForm({ ...BLANK }); }}>
+              <Plus size={14} aria-hidden="true" /> Add a twist
+            </button>
+          )}
+        </div>
       </header>
       {note && <p className={`stw-note${note.error ? ' is-error' : ' is-done'}`} role="status">{note.text}</p>}
+      {suggesting && <p className="stw-note" role="status" data-testid="stw-suggesting">Reading the season, its open threads and the relationships…</p>}
       <UndoNotice undo={undo} testId="stw-undo" />
+
+      {drafts.length > 0 && (
+        <section className="stw-drafts" aria-label="Suggested twists" data-testid="stw-drafts">
+          <p className="stw-drafts-about">Suggested by AI. Nothing is saved until you keep it.</p>
+          <ul className="stw-list">
+            {drafts.map((d) => {
+              const plant = slotById.get(d.plant_slot_id);
+              const payoff = slotById.get(d.payoff_slot_id);
+              const threads = (d.thread_ids || []).map((id) => threadById.get(id)?.title).filter(Boolean);
+              const people = (d.character_ids || []).map((id) => characterById.get(id)?.name).filter(Boolean);
+              return (
+                <li key={d.key} className="stw-twist is-draft" data-testid={`stw-draft-${d.key}`}>
+                  <span className="stw-twist-title">{d.title}</span>
+                  {d.description && <p className="stw-desc">{d.description}</p>}
+                  <p className="stw-path">
+                    <span className={`stw-slot${plant ? '' : ' is-open'}`}><span className="stw-slot-role">Plant</span> {plant ? slotText(plant) : 'Choose in Edit'}</span>
+                    <ArrowRight size={14} aria-hidden="true" className="stw-arrow" />
+                    <span className={`stw-slot${payoff ? '' : ' is-open'}`}><span className="stw-slot-role">Pay off</span> {payoff ? slotText(payoff) : 'Not chosen yet'}</span>
+                  </p>
+                  {(threads.length > 0 || people.length > 0) && (
+                    <p className="stw-links">
+                      {threads.map((x) => <span key={`t-${x}`} className="stw-tag">Thread: {x}</span>)}
+                      {people.map((x) => <span key={`c-${x}`} className="stw-tag is-person">{x}</span>)}
+                    </p>
+                  )}
+                  <div className="stw-actions">
+                    <button type="button" className="stw-link-btn" disabled={busy || !plant} onClick={() => keepDraft(d)} aria-label={`Keep ${d.title}`}>
+                      <Check size={13} aria-hidden="true" /> Keep
+                    </button>
+                    <button type="button" className="stw-link-btn" disabled={busy} onClick={() => editDraft(d)} aria-label={`Edit ${d.title} before keeping it`}>
+                      <Pencil size={13} aria-hidden="true" /> Edit
+                    </button>
+                    <button type="button" className="stw-link-btn is-danger" disabled={busy} onClick={() => dropDraft(d)} aria-label={`Drop ${d.title}`}>
+                      <X size={13} aria-hidden="true" /> Drop
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
+      <SeasonTwistLine slots={data.slots} twists={data.twists} warnings={data.warnings} />
 
       {data.twists.length === 0 ? (
         <p className="stw-note" data-testid="stw-empty">No twists yet — plant one in an episode and pay it off later.</p>
@@ -167,7 +259,7 @@ export default function SeasonTwists({ showId, api }) {
 
       {form && (
         <fieldset className="stw-form" data-testid="stw-form">
-          <legend className="stw-legend">{form.id ? 'Edit the twist' : 'Add a twist'}</legend>
+          <legend className="stw-legend">{form.id ? 'Edit the twist' : form.draftKey ? 'Edit the suggestion, then add it' : 'Add a twist'}</legend>
           <label className="stw-field is-wide">
             <span>Title</span>
             <input type="text" value={form.title} maxLength={200} placeholder="The ring is not hers" onChange={set('title')} />
