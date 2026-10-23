@@ -56,6 +56,10 @@ describe('From the feed', () => {
     await waitFor(() => expect(api.post).toHaveBeenLastCalledWith('/api/v1/world/s1/season/proposals'));
     expect(await screen.findByText('Nothing new on The Pulse.')).toBeTruthy();
     expect(screen.getByText(/Nothing proposed right now/)).toBeTruthy();
+    // Nothing open: one line with its check, not the full card (Evoni, 2026-10-22 layout list).
+    const card = screen.getByTestId('season-proposals');
+    expect(card.className).toBe('sp-card is-quiet');
+    expect(card.querySelector('.sp-about')).toBeNull();
   });
 
   test('signal lines read nothing from no signals', () => {

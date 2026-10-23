@@ -56,7 +56,8 @@ describe('Season Arc without Auto-Reorder (#2363)', () => {
     renderAt('season');
 
     await waitFor(() => expect(screen.getByText(/Season 1: Soft Luxury Ascension/)).toBeTruthy());
-    expect(screen.getByText('Episodes Done')).toBeTruthy();
+    // The counts are one line now (Evoni, 2026-10-22 layout list).
+    expect(screen.getByTestId('season-counts').textContent).toMatch(/episodes? done/);
 
     expect(screen.queryByText(/Auto-Reorder/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /reorder/i })).toBeNull();

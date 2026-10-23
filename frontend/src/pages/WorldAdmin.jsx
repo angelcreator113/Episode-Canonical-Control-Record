@@ -468,6 +468,9 @@ function WorldAdmin() {
     setSearchParams({ tab: firstSub || tabKey });
   };
   const [expandedEpisode, setExpandedEpisode] = useState(null);
+  // Results: which episodes show, and in what order (Evoni, 2026-10-22 layout list).
+  const [ledgerFilter, setLedgerFilter] = useState('all');
+  const [ledgerSort, setLedgerSort] = useState('number');
   const [episodeBlueprint, setEpisodeBlueprint] = useState(null); // holds generated episode data for modal
 
   // Event editor state
@@ -584,6 +587,8 @@ function WorldAdmin() {
   // unless the creator opts in. (Bulk-select state already lives above
   // as bulkMode / selectedEvents — reused here for multi-event generate.)
   const [draftScriptOnGenerate, setDraftScriptOnGenerate] = useState(false);
+  // Events as cards or as a list (Evoni, 2026-10-22 layout list).
+  const [eventLayout, setEventLayout] = useState('cards');
   const [selectedEvents, setSelectedEvents] = useState(new Set());
   const [bulkMode, setBulkMode] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
@@ -1888,24 +1893,28 @@ The revised event should feel like a completely different experience from the si
       )}
 
       {/* ════════════════════════ EPISODE LEDGER ════════════════════════ */}
-      {activeTab === 'episodes' && subTab === 'episodes-ledger' && (
-        <div style={S.content}>
-          {/* Tiers across the season's evaluated episodes (moved from the Overview). */}
-          {Object.keys(tierCounts).length > 0 && (
-            <div style={S.card}>
-              <h2 style={S.cardTitle}>🏆 Tier Distribution</h2>
-              <div style={{ display: 'flex', gap: 12 }}>
-                {['slay', 'pass', 'safe', 'fail'].map(tier => (
-                  <div key={tier} style={{ flex: 1, padding: 14, borderRadius: 10, textAlign: 'center', background: TIER_BG[tier], border: `2px solid ${TIER_BORDER[tier]}` }}>
-                    <div style={{ fontSize: 22 }}>{TIER_EMOJIS[tier]}</div>
-                    <div style={{ fontSize: 26, fontWeight: 800 }}>{tierCounts[tier] || 0}</div>
-                    <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1 }}>{tier.toUpperCase()}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
+      {activeTab === 'episodes' && subTab === 'episodes-ledger' && (() => {
+        // From the ledger (M4): each listed episode's posted rows.
+        const moneyOf = (e) => episodeMoney[e.id] || { income: 0, expenses: 0 };
+        const totalIncome = episodes.reduce((sum, e) => sum + (Number(moneyOf(e).income) || 0), 0);
+        const totalExpenses = episodes.reduce((sum, e) => sum + (Number(moneyOf(e).expenses) || 0), 0);
+        const net = totalIncome - totalExpenses;
+        const epsWithFinancials = episodes.filter(e => moneyOf(e).income > 0 || moneyOf(e).expenses > 0).length;
+        const evaluated = (ep) => ep.evaluation_status === 'accepted';
+        // Filter and sort (Evoni, 2026-10-22 layout list).
+        const shown = episodes
+          .filter((ep) => ledgerFilter === 'all' || (ledgerFilter === 'evaluated' ? evaluated(ep) : !evaluated(ep)))
+          .slice()
+          .sort((a, b) => (ledgerSort === 'score'
+            ? (Number(b.evaluation_json?.score) || -1) - (Number(a.evaluation_json?.score) || -1)
+            : (a.episode_number || 0) - (b.episode_number || 0)));
+        const filters = [
+          ['all', 'All', episodes.length],
+          ['evaluated', 'Evaluated', acceptedEpisodes.length],
+          ['open', 'Not evaluated', episodes.length - acceptedEpisodes.length],
+        ];
+        return (
+        <div style={S.content} className="wa-ledger">
           {/* Results in the Producer Mode look (2026-10-07): the title in the prose face with its line. */}
           <div className="wa-results-head">
             <div>
@@ -1915,38 +1924,51 @@ The revised event should feel like a completely different experience from the si
             <div className="wa-results-count">{episodes.length} episodes · {acceptedEpisodes.length} evaluated</div>
           </div>
 
-          {/* Financial Summary */}
-          {(() => {
-            // From the ledger (M4): each listed episode's posted rows.
-            const moneyOf = (e) => episodeMoney[e.id] || { income: 0, expenses: 0 };
-            const totalIncome = episodes.reduce((s, e) => s + (Number(moneyOf(e).income) || 0), 0);
-            const totalExpenses = episodes.reduce((s, e) => s + (Number(moneyOf(e).expenses) || 0), 0);
-            const net = totalIncome - totalExpenses;
-            const epsWithFinancials = episodes.filter(e => moneyOf(e).income > 0 || moneyOf(e).expenses > 0).length;
-            if (epsWithFinancials === 0) return null;
-            return (
-              <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-                <div style={{ flex: 1, minWidth: 120, padding: '10px 14px', background: 'var(--success-bg)', border: '1px solid var(--success-border)', borderRadius: 10 }}>
-                  <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: 'var(--success-text)', marginBottom: 4 }}>Total Income</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--success-text)' }}>{totalIncome.toLocaleString()}</div>
-                </div>
-                <div style={{ flex: 1, minWidth: 120, padding: '10px 14px', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 10 }}>
-                  <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: 'var(--danger-text)', marginBottom: 4 }}>Total Expenses</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--danger-text)' }}>{totalExpenses.toLocaleString()}</div>
-                </div>
-                <div style={{ flex: 1, minWidth: 120, padding: '10px 14px', background: net >= 0 ? 'var(--success-bg)' : 'var(--danger-bg)', border: `1px solid ${net >= 0 ? 'var(--success-border)' : 'var(--danger-border)'}`, borderRadius: 10 }}>
-                  <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: net >= 0 ? 'var(--success-text)' : 'var(--danger-text)', marginBottom: 4 }}>Net P&L</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: net >= 0 ? 'var(--success-text)' : 'var(--danger-text)' }}>{net >= 0 ? '+' : ''}{net.toLocaleString()}</div>
-                </div>
-                <div style={{ flex: 1, minWidth: 120, padding: '10px 14px', background: 'var(--surface-bg)', border: '1px solid var(--lala-parchment-3)', borderRadius: 10 }}>
-                  <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: 4 }}>Episodes with P&L</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)' }}>{epsWithFinancials} / {episodes.length}</div>
-                </div>
-              </div>
-            );
-          })()}
+          {/* One summary strip: the tiers and the season's money (Evoni,
+              2026-10-22 layout list; two rows of four big boxes before). */}
+          {(Object.keys(tierCounts).length > 0 || epsWithFinancials > 0) && (
+            <div className="wa-ledger-strip" data-testid="ledger-summary">
+              {Object.keys(tierCounts).length > 0 && (
+                <ul className="wa-ledger-tiers" aria-label="Tiers">
+                  {['slay', 'pass', 'safe', 'fail'].map(tier => (
+                    <li key={tier} style={{ background: TIER_BG[tier], borderColor: TIER_BORDER[tier] }}>
+                      <span aria-hidden="true">{TIER_EMOJIS[tier]}</span> <strong>{tierCounts[tier] || 0}</strong> {tier.charAt(0).toUpperCase() + tier.slice(1)}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {epsWithFinancials > 0 && (
+                <dl className="wa-ledger-money">
+                  <div className="is-in"><dt>Total Income</dt><dd>{totalIncome.toLocaleString()}</dd></div>
+                  <div className="is-out"><dt>Total Expenses</dt><dd>{totalExpenses.toLocaleString()}</dd></div>
+                  <div className={net >= 0 ? 'is-in' : 'is-out'}><dt>Net P&L</dt><dd>{net >= 0 ? '+' : ''}{net.toLocaleString()}</dd></div>
+                  <div><dt>Episodes with P&L</dt><dd>{epsWithFinancials} / {episodes.length}</dd></div>
+                </dl>
+              )}
+            </div>
+          )}
 
-          {episodes.map((ep, i) => {
+          {episodes.length > 0 && (
+            <div className="wa-ledger-tools">
+              <div className="wa-ledger-filters" role="group" aria-label="Show">
+                {filters.map(([key, label, n]) => (
+                  <button key={key} type="button" aria-pressed={ledgerFilter === key} className={ledgerFilter === key ? 'active' : ''} onClick={() => setLedgerFilter(key)}>
+                    {label} <span className="wa-ledger-n">{n}</span>
+                  </button>
+                ))}
+              </div>
+              <label className="wa-ledger-sort">
+                <span>Sort</span>
+                <select value={ledgerSort} onChange={(e) => setLedgerSort(e.target.value)}>
+                  <option value="number">Episode number</option>
+                  <option value="score">Score, highest first</option>
+                </select>
+              </label>
+            </div>
+          )}
+          {episodes.length > 0 && shown.length === 0 && <p className="wa-ledger-none">No episodes here.</p>}
+
+          {shown.map((ep, i) => {
             const ej = ep.evaluation_json;
             const tier = ej?.tier_final;
             const score = ej?.score;
@@ -1962,159 +1984,168 @@ The revised event should feel like a completely different experience from the si
             const linkedEvent = worldEvents.find(ev => ev.used_in_episode_id && String(ev.used_in_episode_id) === String(ep.id));
 
             return (
-              <div key={ep.id} style={{ background: 'var(--surface-card)', border: isExpanded ? '2px solid var(--primary)' : '1px solid var(--lala-parchment-3)', borderRadius: 12, marginBottom: 10, overflow: 'hidden', transition: 'border 0.2s' }}>
-                {/* Row header — always visible */}
-                <div onClick={() => setExpandedEpisode(isExpanded ? null : ep.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', cursor: 'pointer' }}>
-                  <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--primary-text)', flex: '0 0 36px' }}>
-                    {ep.episode_number || i + 1}
+              <div key={ep.id} className={`wa-ledger-row${isExpanded ? ' is-open' : ''}`} data-testid={`ledger-row-${ep.id}`}>
+                {/* The row's header: a button, so it opens from the keyboard and says whether it is open. */}
+                <button type="button" className="wa-ledger-row-head" aria-expanded={isExpanded} aria-controls={`ledger-case-${ep.id}`} onClick={() => setExpandedEpisode(isExpanded ? null : ep.id)}>
+                  <span className="wa-ledger-num">{ep.episode_number || i + 1}</span>
+                  <span className="wa-ledger-name">
+                    <span className="wa-ledger-title">{ep.title || 'Untitled'}</span>
+                    {linkedEvent && <span className="wa-ledger-event">{EVENT_TYPE_ICONS[linkedEvent.event_type]} {linkedEvent.name}</span>}
                   </span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{ep.title || 'Untitled'}</div>
-                    {linkedEvent && <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{EVENT_TYPE_ICONS[linkedEvent.event_type]} {linkedEvent.name}</div>}
-                  </div>
-                  {tier && <span style={S.tierPill(tier)}>{TIER_EMOJIS[tier]} {tier.toUpperCase()}</span>}
-                  {score && <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', margin: '0 8px' }}>{score}</span>}
-                  {/* The evaluation in words; it read the raw value, so an episode never evaluated said "draft" whatever its status. */}
-                  <span style={S.statusPill(ep.evaluation_status)}>{EVALUATION_LABEL[ep.evaluation_status] || 'Not evaluated yet'}</span>
-                  {deltas && (
-                    <div style={{ display: 'flex', gap: 3, marginLeft: 8 }}>
-                      {Object.entries(deltas).filter(([, v]) => typeof v === 'number' && v !== 0).slice(0, 3).map(([k, v]) => (
-                        <span key={k} style={{ ...S.deltaBadge(v), fontSize: 10 }}>{STAT_ICONS[k]}{v > 0 ? '+' : ''}{v}</span>
-                      ))}
-                    </div>
-                  )}
-                  <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 8 }}>{isExpanded ? '▲' : '▼'}</span>
-                </div>
+                  <span className="wa-ledger-meta">
+                    {tier && <span style={S.tierPill(tier)}>{TIER_EMOJIS[tier]} {tier.toUpperCase()}</span>}
+                    {score && <span className="wa-ledger-score">{score}</span>}
+                    {/* The evaluation in words; it read the raw value, so an episode never evaluated said "draft" whatever its status. */}
+                    <span style={S.statusPill(ep.evaluation_status)}>{EVALUATION_LABEL[ep.evaluation_status] || 'Not evaluated yet'}</span>
+                    {deltas && Object.entries(deltas).filter(([, v]) => typeof v === 'number' && v !== 0).slice(0, 3).map(([k, v]) => (
+                      <span key={k} style={{ ...S.deltaBadge(v), fontSize: 10 }}>{STAT_ICONS[k]}{v > 0 ? '+' : ''}{v}</span>
+                    ))}
+                  </span>
+                  <span className="wa-ledger-chev" aria-hidden="true">{isExpanded ? '▲' : '▼'}</span>
+                </button>
 
-                {/* Expanded case file */}
+                {/* Expanded case file: its actions first, then the stats, the money and the event side by side. */}
                 {isExpanded && (
-                  <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--lala-parchment-3)' }}>
+                  <div className="wa-ledger-case" id={`ledger-case-${ep.id}`}>
+                    <div className="wa-ledger-actions">
+                      <Link to={`/episodes/${ep.id}`} style={{ ...S.smBtn, textDecoration: 'none' }}>Open episode</Link>
+                      <Link to={`/episodes/${ep.id}/evaluate`} style={{ ...S.smBtn, textDecoration: 'none', background: 'var(--primary-subtle)', borderColor: 'var(--primary-light)', color: 'var(--primary-text)' }}>{evaluated(ep) ? 'Re-evaluate' : 'Evaluate'}</Link>
+                      <Link to={`/episodes/${ep.id}/todo`} style={{ ...S.smBtn, textDecoration: 'none', background: 'var(--surface-bg)', borderColor: 'var(--lala-parchment-3)', color: 'var(--lala-gold-text)' }}>Todo List</Link>
+                      {ep.script_content && <span style={{ ...S.smBtn, color: 'var(--success-text)' }}>✅ Has Script ({(ep.script_content || '').split('\n').length} lines)</span>}
+                    </div>
 
-                    {/* ── Stat Impact ── */}
-                    {deltas && (
-                      <div style={{ marginTop: 14 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>📊 Stat Impact</div>
-                        <div className="wa-grid wa-grid-5col" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
-                          {Object.entries(deltas).map(([k, v]) => {
-                            if (typeof v !== 'number') return null;
-                            const afterVal = stateAfter ? stateAfter[k] : null;
-                            const beforeVal = afterVal !== null ? afterVal - v : null;
-                            return (
-                              <div key={k} style={{ padding: 10, background: v > 0 ? 'var(--success-bg)' : v < 0 ? 'var(--danger-bg)' : 'var(--surface-bg)', borderRadius: 8, textAlign: 'center' }}>
-                                <div style={{ fontSize: 14 }}>{STAT_ICONS[k]}</div>
-                                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 2 }}>{k.replace(/_/g, ' ')}</div>
-                                {beforeVal !== null ? (
-                                  <div style={{ fontSize: 13, fontWeight: 700 }}>
-                                    <span style={{ color: 'var(--text-secondary)' }}>{beforeVal}</span>
-                                    <span style={{ color: 'var(--text-secondary)', margin: '0 3px' }}>→</span>
-                                    <span style={{ color: v > 0 ? 'var(--success-text)' : v < 0 ? 'var(--danger-text)' : 'var(--text-primary)' }}>{afterVal}</span>
+                    <div className="wa-ledger-cols">
+                        {/* ── Stat Impact ── */}
+                        {deltas && (
+                          <div className="wa-ledger-col">
+                            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>📊 Stat Impact</div>
+                            <div className="wa-ledger-stats">
+                              {Object.entries(deltas).map(([k, v]) => {
+                                if (typeof v !== 'number') return null;
+                                const afterVal = stateAfter ? stateAfter[k] : null;
+                                const beforeVal = afterVal !== null ? afterVal - v : null;
+                                return (
+                                  <div key={k} style={{ padding: 10, background: v > 0 ? 'var(--success-bg)' : v < 0 ? 'var(--danger-bg)' : 'var(--surface-bg)', borderRadius: 8, textAlign: 'center' }}>
+                                    <div style={{ fontSize: 14 }}>{STAT_ICONS[k]}</div>
+                                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 2 }}>{k.replace(/_/g, ' ')}</div>
+                                    {beforeVal !== null ? (
+                                      <div style={{ fontSize: 13, fontWeight: 700 }}>
+                                        <span style={{ color: 'var(--text-secondary)' }}>{beforeVal}</span>
+                                        <span style={{ color: 'var(--text-secondary)', margin: '0 3px' }}>→</span>
+                                        <span style={{ color: v > 0 ? 'var(--success-text)' : v < 0 ? 'var(--danger-text)' : 'var(--text-primary)' }}>{afterVal}</span>
+                                      </div>
+                                    ) : (
+                                      <div style={{ fontSize: 14, fontWeight: 700, color: v > 0 ? 'var(--success-text)' : v < 0 ? 'var(--danger-text)' : 'var(--text-secondary)' }}>
+                                        {v > 0 ? '+' : ''}{v}
+                                      </div>
+                                    )}
                                   </div>
-                                ) : (
-                                  <div style={{ fontSize: 14, fontWeight: 700, color: v > 0 ? 'var(--success-text)' : v < 0 ? 'var(--danger-text)' : 'var(--text-secondary)' }}>
-                                    {v > 0 ? '+' : ''}{v}
-                                  </div>
-                                )}
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ── Episode Financials ── */}
+                        {(epIncome > 0 || epExpenses > 0) && (
+                          <div className="wa-ledger-col">
+                            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>💰 Episode P&L</div>
+                            {/* Lala's money across the season has one home: Cast & Continuity → Lala's Finances. */}
+                            <button type="button" onClick={() => goTo('finances')} data-testid={`ledger-finances-link-${ep.id}`}
+                              style={{ background: 'none', border: 'none', padding: 0, marginBottom: 8, color: 'var(--lala-gold-text)', fontSize: 12, fontWeight: 600, textDecoration: 'underline', cursor: 'pointer' }}>
+                              Lala's Finances →
+                            </button>
+                            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                              <div style={{ padding: '8px 14px', background: 'var(--success-bg)', borderRadius: 8, textAlign: 'center' }}>
+                                <div style={{ fontSize: 10, color: 'var(--success-text)' }}>Income</div>
+                                <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--success-text)' }}>{epIncome}</div>
                               </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* ── Event Reference ── */}
-                    {linkedEvent && (
-                      <div style={{ marginTop: 14 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>💌 Event</div>
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                          <span style={{ fontSize: 14, fontWeight: 700 }}>{linkedEvent.name}</span>
-                          <span style={S.eTag}>⭐ {linkedEvent.prestige}</span>
-                          {/* No 🪙 cost_coins tag (§8(ff) Q14): the Episode Ledger's money is the ledger's. A deal's difficulty is not money. */}
-                          {linkedEvent.deal_type && <span style={S.eTag}>Difficulty {linkedEvent.cost_coins}</span>}
-                          <span style={S.eTag}>📏 {linkedEvent.strictness}</span>
-                          {linkedEvent.is_paid && <span style={{ padding: '2px 8px', background: 'var(--success-bg)', borderRadius: 4, fontSize: 10, fontWeight: 600, color: 'var(--success-text)' }}>💰 Paid</span>}
-                          {linkedEvent.career_milestone && <span style={{ padding: '2px 8px', background: 'var(--primary-subtle)', borderRadius: 4, fontSize: 10, color: 'var(--primary-text)' }}>🎯 {linkedEvent.career_milestone}</span>}
-                        </div>
-                        {linkedEvent.narrative_stakes && <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic', marginTop: 4 }}>{linkedEvent.narrative_stakes}</div>}
-                      </div>
-                    )}
-
-                    {/* ── Scene Set ── */}
-                    {linkedEvent?.scene_set_id && (() => {
-                      const ss = sceneSets.find(s => s.id === linkedEvent.scene_set_id);
-                      return ss ? (
-                        <div style={{ marginTop: 14 }}>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>📍 Location</div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            {ss.base_still_url && <img src={ss.base_still_url} alt={ss.name} style={{ width: 80, height: 50, objectFit: 'cover', borderRadius: 6 }} />}
-                            <div>
-                              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{ss.name}</div>
-                              <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{ss.scene_type?.replace(/_/g, ' ')} · {ss.angles?.length || 0} angles</div>
+                              <div style={{ padding: '8px 14px', background: 'var(--danger-bg)', borderRadius: 8, textAlign: 'center' }}>
+                                <div style={{ fontSize: 10, color: 'var(--danger-text)' }}>Expenses</div>
+                                <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--danger-text)' }}>{epExpenses}</div>
+                              </div>
+                              <div style={{ padding: '8px 14px', background: epIncome >= epExpenses ? 'var(--success-bg)' : 'var(--danger-bg)', borderRadius: 8, textAlign: 'center' }}>
+                                <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Net</div>
+                                <div style={{ fontSize: 16, fontWeight: 800, color: epIncome >= epExpenses ? 'var(--success-text)' : 'var(--danger-text)' }}>
+                                  {(epIncome - epExpenses).toFixed(0)}
+                                </div>
+                              </div>
+                              {ep.financial_score && (
+                                <div style={{ padding: '8px 14px', background: 'var(--surface-bg)', borderRadius: 8, textAlign: 'center' }}>
+                                  <div style={{ fontSize: 10, color: 'var(--lala-gold-text)' }}>Financial IQ</div>
+                                  <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--lala-gold-text)' }}>{ep.financial_score}/10</div>
+                                </div>
+                              )}
                             </div>
                           </div>
-                        </div>
-                      ) : null;
-                    })()}
+                        )}
 
-                    {/* ── Wardrobe for this episode ── */}
-                    {(() => {
-                      const epWardrobe = wardrobeItems.filter(w => w.episode_id === ep.id);
-                      return epWardrobe.length > 0 ? (
-                        <div style={{ marginTop: 14 }}>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>👗 Wardrobe ({epWardrobe.length})</div>
-                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                            {epWardrobe.slice(0, 6).map(w => (
-                              <span key={w.id} style={{ padding: '3px 8px', background: 'var(--accent-subtle)', border: '1px solid var(--accent-light)', borderRadius: 6, fontSize: 10, color: 'var(--accent-dark)', fontWeight: 600 }}>
-                                {w.name || w.category || 'Item'}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null;
-                    })()}
+                        {(linkedEvent || wardrobeItems.some(w => w.episode_id === ep.id)) && (
+                          <div className="wa-ledger-col">
+                            {/* ── Event Reference ── */}
+                            {linkedEvent && (
+                              <div>
+                                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>💌 Event</div>
+                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                                  <span style={{ fontSize: 14, fontWeight: 700 }}>{linkedEvent.name}</span>
+                                  <span style={S.eTag}>⭐ {linkedEvent.prestige}</span>
+                                  {/* No 🪙 cost_coins tag (§8(ff) Q14): the Episode Ledger's money is the ledger's. A deal's difficulty is not money. */}
+                                  {linkedEvent.deal_type && <span style={S.eTag}>Difficulty {linkedEvent.cost_coins}</span>}
+                                  <span style={S.eTag}>📏 {linkedEvent.strictness}</span>
+                                  {linkedEvent.is_paid && <span style={{ padding: '2px 8px', background: 'var(--success-bg)', borderRadius: 4, fontSize: 10, fontWeight: 600, color: 'var(--success-text)' }}>💰 Paid</span>}
+                                  {linkedEvent.career_milestone && <span style={{ padding: '2px 8px', background: 'var(--primary-subtle)', borderRadius: 4, fontSize: 10, color: 'var(--primary-text)' }}>🎯 {linkedEvent.career_milestone}</span>}
+                                </div>
+                                {linkedEvent.narrative_stakes && <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic', marginTop: 4 }}>{linkedEvent.narrative_stakes}</div>}
+                              </div>
+                            )}
 
-                    {/* ── Generate Script button ── */}
-                    {linkedEvent && (
-                      <div style={{ marginTop: 14 }}>
-                        <button onClick={() => handleGenerateScriptFromEvent(linkedEvent.id, ep.id)} disabled={generating}
-                          style={{ padding: '6px 16px', background: generating ? 'var(--lala-parchment-2)' : 'var(--primary)', color: generating ? 'var(--text-secondary)' : 'var(--text-inverse)', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: generating ? 'wait' : 'pointer' }}>
-                          {generating ? '⏳ Generating...' : '📝 Generate Script from Event'}
-                        </button>
-                      </div>
-                    )}
+                            {/* ── Scene Set ── */}
+                            {linkedEvent?.scene_set_id && (() => {
+                              const ss = sceneSets.find(s => s.id === linkedEvent.scene_set_id);
+                              return ss ? (
+                                <div style={{ marginTop: 14 }}>
+                                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>📍 Location</div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                    {ss.base_still_url && <img src={ss.base_still_url} alt={ss.name} style={{ width: 80, height: 50, objectFit: 'cover', borderRadius: 6 }} />}
+                                    <div>
+                                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{ss.name}</div>
+                                      <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{ss.scene_type?.replace(/_/g, ' ')} · {ss.angles?.length || 0} angles</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : null;
+                            })()}
 
-                    {/* ── Episode Financials ── */}
-                    {(epIncome > 0 || epExpenses > 0) && (
-                      <div style={{ marginTop: 14 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>💰 Episode P&L</div>
-                        {/* Lala's money across the season has one home: Cast & Continuity → Lala's Finances. */}
-                        <button type="button" onClick={() => goTo('finances')} data-testid={`ledger-finances-link-${ep.id}`}
-                          style={{ background: 'none', border: 'none', padding: 0, marginBottom: 8, color: 'var(--lala-gold-text)', fontSize: 12, fontWeight: 600, textDecoration: 'underline', cursor: 'pointer' }}>
-                          Lala's Finances →
-                        </button>
-                        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                          <div style={{ padding: '8px 14px', background: 'var(--success-bg)', borderRadius: 8, textAlign: 'center' }}>
-                            <div style={{ fontSize: 10, color: 'var(--success-text)' }}>Income</div>
-                            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--success-text)' }}>{epIncome}</div>
+                            {/* ── Wardrobe for this episode ── */}
+                            {(() => {
+                              const epWardrobe = wardrobeItems.filter(w => w.episode_id === ep.id);
+                              return epWardrobe.length > 0 ? (
+                                <div style={{ marginTop: 14 }}>
+                                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>👗 Wardrobe ({epWardrobe.length})</div>
+                                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                    {epWardrobe.slice(0, 6).map(w => (
+                                      <span key={w.id} style={{ padding: '3px 8px', background: 'var(--accent-subtle)', border: '1px solid var(--accent-light)', borderRadius: 6, fontSize: 10, color: 'var(--accent-dark)', fontWeight: 600 }}>
+                                        {w.name || w.category || 'Item'}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null;
+                            })()}
+
+                            {/* ── Generate Script button ── */}
+                            {linkedEvent && (
+                              <div style={{ marginTop: 14 }}>
+                                <button onClick={() => handleGenerateScriptFromEvent(linkedEvent.id, ep.id)} disabled={generating}
+                                  style={{ padding: '6px 16px', background: generating ? 'var(--lala-parchment-2)' : 'var(--primary)', color: generating ? 'var(--text-secondary)' : 'var(--text-inverse)', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: generating ? 'wait' : 'pointer' }}>
+                                  {generating ? '⏳ Generating...' : '📝 Generate Script from Event'}
+                                </button>
+                              </div>
+                            )}
+
                           </div>
-                          <div style={{ padding: '8px 14px', background: 'var(--danger-bg)', borderRadius: 8, textAlign: 'center' }}>
-                            <div style={{ fontSize: 10, color: 'var(--danger-text)' }}>Expenses</div>
-                            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--danger-text)' }}>{epExpenses}</div>
-                          </div>
-                          <div style={{ padding: '8px 14px', background: epIncome >= epExpenses ? 'var(--success-bg)' : 'var(--danger-bg)', borderRadius: 8, textAlign: 'center' }}>
-                            <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Net</div>
-                            <div style={{ fontSize: 16, fontWeight: 800, color: epIncome >= epExpenses ? 'var(--success-text)' : 'var(--danger-text)' }}>
-                              {(epIncome - epExpenses).toFixed(0)}
-                            </div>
-                          </div>
-                          {ep.financial_score && (
-                            <div style={{ padding: '8px 14px', background: 'var(--surface-bg)', borderRadius: 8, textAlign: 'center' }}>
-                              <div style={{ fontSize: 10, color: 'var(--lala-gold-text)' }}>Financial IQ</div>
-                              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--lala-gold-text)' }}>{ep.financial_score}/10</div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
+                        )}
+                    </div>
 
                     {/* ── Social Tasks + Beats (load on demand; opens and closes) ── */}
                     <EpisodeTasksPanel
@@ -2124,7 +2155,8 @@ The revised event should feel like a completely different experience from the si
                     />
 
                     {/* ── Evaluation Details ── */}
-                    {ej && (
+                    {/* Only when there is something to show (it was often an empty heading). */}
+                    {ej && (ej.outfit_match !== undefined || ej.accessory_match !== undefined || ej.event_prestige_score !== undefined || ej.timing_score !== undefined || (ej.overrides || []).length > 0 || ej.narrative_line) && (
                       <div style={{ marginTop: 14 }}>
                         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>🏆 Evaluation</div>
                         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
@@ -2181,13 +2213,6 @@ The revised event should feel like a completely different experience from the si
                       </div>
                     )}
 
-                    {/* ── Actions ── */}
-                    <div style={{ display: 'flex', gap: 8, marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--lala-parchment-3)' }}>
-                      <Link to={`/episodes/${ep.id}`} style={{ ...S.smBtn, textDecoration: 'none' }}>Edit Episode</Link>
-                      <Link to={`/episodes/${ep.id}/todo`} style={{ ...S.smBtn, textDecoration: 'none', background: 'var(--surface-bg)', borderColor: 'var(--lala-parchment-3)', color: 'var(--lala-gold-text)' }}>Todo List</Link>
-                      <Link to={`/episodes/${ep.id}/evaluate`} style={{ ...S.smBtn, textDecoration: 'none', background: 'var(--primary-subtle)', borderColor: 'var(--primary-light)', color: 'var(--primary-text)' }}>Evaluate</Link>
-                      {ep.script_content && <span style={{ ...S.smBtn, color: 'var(--success-text)' }}>✅ Has Script ({(ep.script_content || '').split('\n').length} lines)</span>}
-                    </div>
                   </div>
                 )}
               </div>
@@ -2202,7 +2227,8 @@ The revised event should feel like a completely different experience from the si
             </div>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {/* ════════════════════════ EVENTS LIBRARY ════════════════════════ */}
       {activeTab === 'events' && (
@@ -2218,99 +2244,128 @@ The revised event should feel like a completely different experience from the si
               <h2>Events</h2>
               <span>Invitations and opportunities that can become episodes · {worldEvents.length} events</span>
             </div>
+            {/* One toolbar (Evoni, 2026-10-22 layout list): search, deal type,
+                sort, the layout, Ideas, ⋯ and New event. Auto-Fill This Month
+                and the draft-script switch are in ⋯. */}
             <div className="wa-ev-head-actions">
               <label className="wa-ev-search">
                 <Search size={15} aria-hidden="true" />
                 <input type="text" value={eventSearch} onChange={e => setEventSearch(e.target.value)} placeholder="Search events" aria-label="Search events" />
               </label>
-              <button onClick={() => navigate(`/shows/${showId}/new-episode`)} style={S.primaryBtn}>
-                <Plus size={14} style={{ verticalAlign: -2, marginRight: 4 }} />New event
-              </button>
-            </div>
-            <div className="wa-ev-head-tools">
-              <button onClick={async () => {
-                setAutoFilling(true);
-                setToast('🗓️ Generating events for this month...');
-                try {
-                  // Step 1: Generate seasonal calendar events
-                  const month = new Date().getMonth();
-                  console.log('[AutoFill] Starting for month', month, 'show', showId);
-                  const calRes = await api.post('/api/v1/calendar/events/generate-seasonal', { month, count: 3, show_id: showId });
-                  console.log('[AutoFill] Calendar response:', calRes.data);
-                  if (!calRes.data.success) throw new Error(calRes.data.error || 'Calendar generation failed');
-                  const seasonalCount = calRes.data.data?.count || 0;
-                  setToast(`📅 ${seasonalCount} seasonal events created. Spawning world events...`);
-
-                  // Step 2: Auto-spawn world events from each seasonal event
-                  const calEvents = calRes.data.data?.created || [];
-                  let spawned = 0;
-                  for (const ce of calEvents) {
-                    try {
-                      console.log('[AutoFill] Spawning from calendar event:', ce.id, ce.title);
-                      const spawnRes = await api.post(`/api/v1/calendar/events/${ce.id}/auto-spawn`, {
-                        show_id: showId, event_count: 1, max_guests: 6,
-                      });
-                      console.log('[AutoFill] Spawn result:', spawnRes.data);
-                      if (spawnRes.data.success) spawned += spawnRes.data.data?.events_created || 0;
-                    } catch (spawnErr) {
-                      console.error('[AutoFill] Spawn failed:', spawnErr.response?.data || spawnErr.message);
-                    }
-                  }
-                  setToast(`✅ Created ${seasonalCount} seasonal + ${spawned} world events with hosts & venues!`);
-                  loadData();
-                } catch (err) {
-                  console.error('[AutoFill] Error:', err.response?.data || err.message);
-                  setToast('❌ Auto-fill failed: ' + (err.response?.data?.error || err.message));
-                }
-                setAutoFilling(false);
-                setTimeout(() => setToast(null), 6000);
-              }} disabled={autoFilling} style={S.smBtn}>
-                {autoFilling ? '⏳ Generating...' : '🗓️ Auto-Fill This Month'}
-              </button>
-              {/* + New event (beside the search, above) opens the choose-host
-                  flow (Task #1628), same entry point as New Episode — an
-                  event created here always starts with a host, unlike the
-                  system-created paths (Needs Host below). Manual/no-host
-                  creation is still reachable from the empty state's
-                  "+ Create Manually". */}
-              {/* Creation tools (Feed opportunities and event templates) open
-                  in a drawer (Evoni, 2026-09-30). */}
+                <select data-testid="events-deal-filter" aria-label="Filter by deal type" value={eventDealFilter}
+                  onChange={e => setEventDealFilter(e.target.value)}
+                  style={{ padding: '6px 10px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 11, background: eventDealFilter === 'all' ? 'var(--surface-card)' : 'var(--primary-subtle)', cursor: 'pointer', maxWidth: '100%' }}>
+                  {dealTypeFilterOptions(worldEvents).map(o => (
+                    <option key={o.key} value={o.key}>{o.label} ({o.count})</option>
+                  ))}
+                </select>
+                <select value={eventSort} onChange={e => setEventSort(e.target.value)} style={{ padding: '6px 10px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 11, background: 'var(--surface-card)', cursor: 'pointer' }}>
+                  <option value="name">Sort: Name</option>
+                  <option value="prestige">Sort: Prestige ↓</option>
+                  <option value="cost">Sort: Cost ↓</option>
+                  <option value="status">Sort: Status</option>
+                  <option value="created">Sort: Newest</option>
+                </select>
+              <div className="wa-ev-layout" role="group" aria-label="Layout">
+                {[['cards', 'Cards'], ['list', 'List']].map(([key, label]) => (
+                  <button key={key} type="button" aria-pressed={eventLayout === key} className={eventLayout === key ? 'active' : ''} onClick={() => setEventLayout(key)}>{label}</button>
+                ))}
+              </div>
+              {/* + New event opens the choose-host flow (Task #1628), same
+                  entry point as New Episode — an event created here always
+                  starts with a host, unlike the system-created paths (Needs
+                  Host below). Manual/no-host creation is still reachable
+                  from the empty state's "+ Create Manually". Creation tools
+                  (Feed opportunities and event templates) open in a drawer
+                  (Evoni, 2026-09-30). */}
               <button type="button" data-testid="events-ideas-button" aria-haspopup="dialog" aria-expanded={eventsIdeasOpen}
                 onClick={() => setEventsIdeasOpen(true)}
                 style={S.smBtn} title="Pulse opportunities and event ideas">
                 <Lightbulb size={14} style={{ verticalAlign: -2, marginRight: 4 }} aria-hidden="true" />Ideas
               </button>
-              <button onClick={() => setEventsHeaderMenuOpen(o => !o)} style={S.smBtn} title="More actions" aria-label="More actions">
-                <MoreHorizontal size={16} />
+              <div className="wa-ev-more">
+                <button onClick={() => setEventsHeaderMenuOpen(o => !o)} style={S.smBtn} title="More actions" aria-label="More actions" aria-expanded={eventsHeaderMenuOpen}>
+                  <MoreHorizontal size={16} />
+                </button>
+                {eventsHeaderMenuOpen && (
+                  <>
+                    <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setEventsHeaderMenuOpen(false)} />
+                    <div className="wa-ev-more-menu" style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 10, boxShadow: 'var(--shadow-md)', zIndex: 41, minWidth: 240, overflow: 'hidden' }}>
+                          <button type="button" onClick={async () => {
+                            setEventsHeaderMenuOpen(false);
+                            setAutoFilling(true);
+                            setToast('🗓️ Generating events for this month...');
+                            try {
+                              // Step 1: Generate seasonal calendar events
+                              const month = new Date().getMonth();
+                              console.log('[AutoFill] Starting for month', month, 'show', showId);
+                              const calRes = await api.post('/api/v1/calendar/events/generate-seasonal', { month, count: 3, show_id: showId });
+                              console.log('[AutoFill] Calendar response:', calRes.data);
+                              if (!calRes.data.success) throw new Error(calRes.data.error || 'Calendar generation failed');
+                              const seasonalCount = calRes.data.data?.count || 0;
+                              setToast(`📅 ${seasonalCount} seasonal events created. Spawning world events...`);
+
+                              // Step 2: Auto-spawn world events from each seasonal event
+                              const calEvents = calRes.data.data?.created || [];
+                              let spawned = 0;
+                              for (const ce of calEvents) {
+                                try {
+                                  console.log('[AutoFill] Spawning from calendar event:', ce.id, ce.title);
+                                  const spawnRes = await api.post(`/api/v1/calendar/events/${ce.id}/auto-spawn`, {
+                                    show_id: showId, event_count: 1, max_guests: 6,
+                                  });
+                                  console.log('[AutoFill] Spawn result:', spawnRes.data);
+                                  if (spawnRes.data.success) spawned += spawnRes.data.data?.events_created || 0;
+                                } catch (spawnErr) {
+                                  console.error('[AutoFill] Spawn failed:', spawnErr.response?.data || spawnErr.message);
+                                }
+                              }
+                              setToast(`✅ Created ${seasonalCount} seasonal + ${spawned} world events with hosts & venues!`);
+                              loadData();
+                            } catch (err) {
+                              console.error('[AutoFill] Error:', err.response?.data || err.message);
+                              setToast('❌ Auto-fill failed: ' + (err.response?.data?.error || err.message));
+                            }
+                            setAutoFilling(false);
+                            setTimeout(() => setToast(null), 6000);
+                          }} disabled={autoFilling} style={S.menuItem}>
+                            {autoFilling ? '⏳ Generating...' : '🗓️ Auto-Fill This Month'}
+                          </button>
+                      {/* Generate options: the draft-script opt-in, picked up by both
+                          the per-event Generate and the bulk "Generate from N
+                          events" (it was its own bar above the cards). */}
+                      <label data-testid="events-draft-script" style={{ ...S.menuItem, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={draftScriptOnGenerate} onChange={(e) => setDraftScriptOnGenerate(e.target.checked)} />
+                        <span>Also draft a script when generating an episode</span>
+                      </label>
+                        <button onClick={() => { setShowTemplates(!showTemplates); setEventsHeaderMenuOpen(false); }} style={S.menuItem}>📋 Templates</button>
+                        <button onClick={() => { handleBulkEnhance(); setEventsHeaderMenuOpen(false); }} disabled={aiFixLoading} style={S.menuItem}>{aiFixLoading ? '⏳ Enhancing...' : '✨ Enhance'}</button>
+                        <button onClick={async () => {
+                          setEventsHeaderMenuOpen(false);
+                          if (!window.confirm('Delete ALL draft events? Ready/used events will be kept.')) return;
+                          try {
+                            const res = await api.post(`/api/v1/world/${showId}/events/bulk-delete`, { delete_all_drafts: true });
+                            setToast(`Deleted ${res.data.deleted} draft events`);
+                            loadData();
+                          } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                        }} style={{ ...S.menuItem, color: 'var(--danger)' }}>Delete Drafts</button>
+                        <button onClick={async () => {
+                          setEventsHeaderMenuOpen(false);
+                          if (!window.confirm('DELETE ALL EVENTS? This cannot be undone. Are you sure?')) return;
+                          if (!window.confirm('Really delete everything? Type yes to confirm.')) return;
+                          try {
+                            const res = await api.post(`/api/v1/world/${showId}/events/bulk-delete`, { delete_all: true });
+                            setToast(`Deleted ${res.data.deleted} events`);
+                            loadData();
+                          } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                        }} style={{ ...S.menuItem, color: 'var(--danger)' }}>Delete All</button>
+                    </div>
+                  </>
+                )}
+              </div>
+              <button onClick={() => navigate(`/shows/${showId}/new-episode`)} style={S.primaryBtn}>
+                <Plus size={14} style={{ verticalAlign: -2, marginRight: 4 }} />New event
               </button>
-              {eventsHeaderMenuOpen && (
-                <>
-                  <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setEventsHeaderMenuOpen(false)} />
-                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 41, minWidth: 180, overflow: 'hidden' }}>
-                    <button onClick={() => { setShowTemplates(!showTemplates); setEventsHeaderMenuOpen(false); }} style={S.menuItem}>📋 Templates</button>
-                    <button onClick={() => { handleBulkEnhance(); setEventsHeaderMenuOpen(false); }} disabled={aiFixLoading} style={S.menuItem}>{aiFixLoading ? '⏳ Enhancing...' : '✨ Enhance'}</button>
-                    <button onClick={async () => {
-                      setEventsHeaderMenuOpen(false);
-                      if (!window.confirm('Delete ALL draft events? Ready/used events will be kept.')) return;
-                      try {
-                        const res = await api.post(`/api/v1/world/${showId}/events/bulk-delete`, { delete_all_drafts: true });
-                        setToast(`Deleted ${res.data.deleted} draft events`);
-                        loadData();
-                      } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
-                    }} style={{ ...S.menuItem, color: 'var(--danger)' }}>Delete Drafts</button>
-                    <button onClick={async () => {
-                      setEventsHeaderMenuOpen(false);
-                      if (!window.confirm('DELETE ALL EVENTS? This cannot be undone. Are you sure?')) return;
-                      if (!window.confirm('Really delete everything? Type yes to confirm.')) return;
-                      try {
-                        const res = await api.post(`/api/v1/world/${showId}/events/bulk-delete`, { delete_all: true });
-                        setToast(`Deleted ${res.data.deleted} events`);
-                        loadData();
-                      } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
-                    }} style={{ ...S.menuItem, color: 'var(--danger)' }}>Delete All</button>
-                  </div>
-                </>
-              )}
             </div>
           </div>
 
@@ -2366,7 +2421,7 @@ The revised event should feel like a completely different experience from the si
             </div>
           )}
 
-          {/* The queue's five computed states as count cards (Task #1648,
+          {/* The queue's five computed states as count chips (Task #1648,
               docs/EVENT_EPISODE_FLOW.md §8(m); Evoni's redesign, 2026-10-05):
               computeEventState is the same function the cards below use, so a
               count here always matches what's shown. A card filters; clicking
@@ -2376,36 +2431,22 @@ The revised event should feel like a completely different experience from the si
               const n = worldEvents.filter(e => computeEventState(e) === key).length;
               const on = eventStatusFilter === key;
               return (
-                <button key={key} type="button" data-testid={`events-filter-${key}`} aria-pressed={on}
+                <button key={key} type="button" data-testid={`events-filter-${key}`} aria-pressed={on} data-zero={n === 0 || undefined}
                   className={`wa-ev-state${on ? ' active' : ''}`}
                   onClick={() => setEventStatusFilter(on ? 'all' : key)}>
-                  <span className="wa-ev-state-label" style={{ color: cfg.color }}>{cfg.label}</span>
+                  <span className="wa-ev-state-label" style={n ? { color: cfg.color } : undefined}>{cfg.label}</span>
                   <span className="wa-ev-state-count">{n}</span>
                 </button>
               );
             })}
           </div>
-          <div className="wa-ev-refine">
-            {eventStatusFilter !== 'all' && (
+          {eventStatusFilter !== 'all' && (
+            <div className="wa-ev-refine">
               <button type="button" className="wa-ev-show-all" data-testid="events-filter-all" onClick={() => setEventStatusFilter('all')}>
                 Show all {worldEvents.length}
               </button>
-            )}
-            <select data-testid="events-deal-filter" aria-label="Filter by deal type" value={eventDealFilter}
-              onChange={e => setEventDealFilter(e.target.value)}
-              style={{ padding: '6px 10px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 11, background: eventDealFilter === 'all' ? 'var(--surface-card)' : 'var(--primary-subtle)', cursor: 'pointer', maxWidth: '100%' }}>
-              {dealTypeFilterOptions(worldEvents).map(o => (
-                <option key={o.key} value={o.key}>{o.label} ({o.count})</option>
-              ))}
-            </select>
-            <select value={eventSort} onChange={e => setEventSort(e.target.value)} style={{ padding: '6px 10px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 11, background: 'var(--surface-card)', cursor: 'pointer' }}>
-              <option value="name">Sort: Name</option>
-              <option value="prestige">Sort: Prestige ↓</option>
-              <option value="cost">Sort: Cost ↓</option>
-              <option value="status">Sort: Status</option>
-              <option value="created">Sort: Newest</option>
-            </select>
-          </div>
+            </div>
+          )}
 
           {/* Templates panel */}
           {showTemplates && (
@@ -2958,18 +2999,8 @@ The revised event should feel like a completely different experience from the si
             </div>
           )}
 
-          {/* Generate-options toolbar — draft-script opt-in lives here so
-              both the per-event "Generate" button and the bulk-action
-              "Generate from N events" pick it up. Bulk-select toggle
-              isn't here because it already exists above the page in
-              the toolbar that drives Compare / Bulk Inject. */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, padding: '6px 10px', background: 'var(--surface-bg)', border: '1px solid var(--lala-parchment-3)', borderRadius: 8 }}>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-primary)', cursor: 'pointer' }}>
-              <input type="checkbox" checked={draftScriptOnGenerate} onChange={(e) => setDraftScriptOnGenerate(e.target.checked)} />
-              <strong>Also draft script when generating an episode</strong>
-              <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>(applies to single + bulk Generate)</span>
-            </label>
-          </div>
+          {/* Generate-options toolbar: the draft-script opt-in is in the
+              header's ⋯ menu now (Evoni, 2026-10-22 layout list). */}
 
           {/* Events grid — filtered + sorted, then paged (Task #2360) */}
           {(() => {
@@ -2978,7 +3009,7 @@ The revised event should feel like a completely different experience from the si
             const conflictsByEvent = new Map(getDressCodeConflicts().map(c => [c.event.id, c]));
             return (
           <>
-          <div ref={eventsGridRef} data-testid="events-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(340px, 100%), 1fr))', gap: 12, scrollMarginTop: 16 }}>
+          <div ref={eventsGridRef} data-testid="events-grid" className={`wa-ev-grid${eventLayout === 'list' ? ' is-list' : ''}`}>
             {pageItems.map(ev => {
               const linkedEpisode = ev.used_in_episode_id ? episodes.find(ep => ep.id === ev.used_in_episode_id) : null;
               const isSelected = selectedEvents.has(ev.id);
@@ -2990,7 +3021,8 @@ The revised event should feel like a completely different experience from the si
               const state = computeEventState(ev, readiness);
               const stateCfg = EVENT_QUEUE_STATES[state];
               const details = eventCardDetails(ev);
-              const missing = describeMissing(readiness.blocking);
+              // What is still needed, without what the card's button already asks for (Evoni, 2026-10-22 layout list).
+              const missing = describeMissing(readiness.blocking).filter((m) => !(state === 'needs_organizer' && m === 'Organizer'));
               const menuOpen = openEventMenuId === ev.id;
               const openPackage = () => navigate(`/shows/${showId}/events/${ev.id}`);
               const primaryAction = () => {
@@ -3010,7 +3042,7 @@ The revised event should feel like a completely different experience from the si
                   <span data-testid={`event-card-status-${ev.id}`} className="wa-ev-status" style={{ color: stateCfg.color, background: stateCfg.bg }}>
                     {stateCfg.label}
                   </span>
-                  <span className="wa-ev-category">{details.category || 'No category'}</span>
+                  {details.category && <span className="wa-ev-category">{details.category}</span>}
                   <div className="wa-ev-card-menu" onClick={e => e.stopPropagation()}>
                     <button onClick={() => { setOpenEventMenuId(menuOpen ? null : ev.id); setStatusMenuEventId(null); }} style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'var(--text-secondary)', borderRadius: 4 }} title="More actions" aria-label="More actions">
                       <MoreHorizontal size={16} />
@@ -3071,25 +3103,17 @@ The revised event should feel like a completely different experience from the si
                 <div className="wa-ev-card-place" data-testid={`event-card-place-${ev.id}`}>
                   {details.place.length ? details.place.join(' · ') : 'Venue and date not set'}
                 </div>
-                <div className="wa-ev-tiles">
-                  <div className="wa-ev-tile" data-testid={`event-card-deal-${ev.id}`}>
-                    <span className="wa-ev-tile-label">Deal</span>
-                    <strong>{details.deal.label || 'No deal type'}</strong>
-                    <span className="wa-ev-tile-sub">{details.deal.pays}</span>
-                  </div>
-                  <div className="wa-ev-tile" data-testid={`event-card-organizer-${ev.id}`}>
-                    <span className="wa-ev-tile-label">Organizer</span>
-                    <strong className={details.organizer ? undefined : 'missing'}>{details.organizer || 'Not chosen'}</strong>
-                  </div>
-                </div>
+                {/* The deal and the organizer as one line (they were two boxes). */}
+                <p className="wa-ev-facts">
+                  <span data-testid={`event-card-deal-${ev.id}`}>{details.deal.label || 'No deal type'}{details.deal.pays ? ` · ${details.deal.pays}` : ''}</span>
+                  <span className="wa-ev-facts-dot" aria-hidden="true"> · </span>
+                  <span data-testid={`event-card-organizer-${ev.id}`} className={details.organizer ? undefined : 'missing'}>{details.organizer ? `Organizer: ${details.organizer}` : 'No organizer'}</span>
+                </p>
                 {/* A used or archived event is done: nothing is still needed. */}
                 {missing.length > 0 && state !== 'used' && state !== 'archived' && (
-                  <div className="wa-ev-needed" data-testid={`event-card-needed-${ev.id}`}>
-                    <span className="wa-ev-tile-label">Still needed</span>
-                    <div className="wa-ev-needed-chips">
-                      {missing.map(m => <span key={m} className="wa-ev-needed-chip">{m}</span>)}
-                    </div>
-                  </div>
+                  <p className="wa-ev-needed" data-testid={`event-card-needed-${ev.id}`}>
+                    <strong>Still needed:</strong> {missing.join(', ')}
+                  </p>
                 )}
                 {conflictsByEvent.has(ev.id) && (() => {
                   const c = conflictsByEvent.get(ev.id);
@@ -7155,6 +7179,8 @@ function StoryThreadsCard({ threads, drafts, S, api, showId, onChanged, setToast
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [busy, setBusy] = useState(false);
+  // The add form opens from "+ New thread" (Evoni, 2026-10-22 layout list).
+  const [adding, setAdding] = useState(false);
   const field = { width: '100%', boxSizing: 'border-box', fontSize: 13, padding: '6px 8px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6 };
 
   const create = async (body, done) => {
@@ -7173,7 +7199,7 @@ function StoryThreadsCard({ threads, drafts, S, api, showId, onChanged, setToast
   };
   const add = async () => {
     if (!title.trim()) return;
-    if (await create({ title, description }, 'Story thread added')) { setTitle(''); setDescription(''); }
+    if (await create({ title, description }, 'Story thread added')) { setTitle(''); setDescription(''); setAdding(false); }
   };
   const fromDraft = async (draft) => {
     const name = window.prompt('Name this story thread', draft.seed_text.slice(0, 120));
@@ -7239,9 +7265,18 @@ function StoryThreadsCard({ threads, drafts, S, api, showId, onChanged, setToast
       })}
 
       <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--lala-parchment-3)' }}>
-        <input aria-label="New thread title" placeholder="New thread title" value={title} onChange={(e) => setTitle(e.target.value)} style={field} />
-        <textarea aria-label="New thread description" placeholder="What it is about (optional)" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} style={{ ...field, marginTop: 6 }} />
-        <button onClick={add} disabled={busy || !title.trim()} style={{ ...S.primaryBtn, marginTop: 6 }}>Add thread</button>
+        {adding ? (
+          <>
+            <input aria-label="New thread title" placeholder="New thread title" value={title} onChange={(e) => setTitle(e.target.value)} style={field} autoFocus />
+            <textarea aria-label="New thread description" placeholder="What it is about (optional)" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} style={{ ...field, marginTop: 6 }} />
+            <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+              <button onClick={add} disabled={busy || !title.trim()} style={S.primaryBtn}>Add thread</button>
+              <button type="button" onClick={() => { setAdding(false); setTitle(''); setDescription(''); }} style={S.secBtn}>Cancel</button>
+            </div>
+          </>
+        ) : (
+          <button type="button" onClick={() => setAdding(true)} style={S.secBtn} data-testid="story-thread-new">+ New thread</button>
+        )}
       </div>
 
       {drafts.length > 0 && (
@@ -7426,7 +7461,7 @@ const slotSelectStyle = { width: '100%', marginTop: 6, fontSize: 11, padding: '4
 // The open slot, beside the season's grid: what it holds, its event and the
 // deal, the threads it moves, and its controls (pencil an event, the
 // intention, the episode).
-function SlotPanel({ slot, showId, available, busy, episode, event, onPencil, onIntention }) {
+function SlotPanel({ slot, showId, available, busy, episode, event, onPencil, onIntention, onClose }) {
   const title = slotTitle(slot);
   const logline = episode?.logline || episode?.description || null;
   const deal = event ? eventCardDetails(event).deal : null;
@@ -7437,6 +7472,8 @@ function SlotPanel({ slot, showId, available, busy, episode, event, onPencil, on
   return (
     <section className={`wa-arc-panel state-${slot.state}`} data-testid="season-slot-panel" aria-label={`Slot ${slot.label}`}>
       <span className="wa-arc-eyebrow">Slot {slot.label}</span>
+      {/* × closes the sheet on a phone; hidden elsewhere. */}
+      {onClose && <button type="button" className="wa-arc-sheet-close" aria-label="Close" onClick={onClose}>×</button>}
       <h3 className="wa-arc-panel-title">{title || 'Open slot'}</h3>
       <span className="wa-arc-chip">{state}{slot.locked ? ' · locked' : ''}</span>
       {logline && <p className="wa-arc-logline">{logline}</p>}
@@ -7494,7 +7531,15 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
   const [busySlot, setBusySlot] = useState(null);
   const [editingSlotId, setEditingSlotId] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
+  // On a phone the panel is a sheet from the bottom, open after a tap (Evoni, 2026-10-22 layout list).
+  const [sheetOpen, setSheetOpen] = useState(false);
   const panelRef = useRef(null);
+  useEffect(() => {
+    if (!sheetOpen) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') setSheetOpen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [sheetOpen]);
   if (!roadmap) return null;
   const { phases = [], unslotted_episodes: unslotted = [], available_events: available = [] } = roadmap;
   const allSlots = phases.flatMap((p) => p.slots);
@@ -7524,11 +7569,13 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
     if (!window.confirm(`Place "${episode.title || 'this episode'}" in ${slot?.label}? The slot then locks to it.`)) return;
     save(slotId, 'episode', { episode_id: episode.id }, `Placed in ${slot?.label}`);
   };
-  // Opening a slot on a phone, where the panel sits above the parts, brings the panel into view.
+  // Opening a slot: on a phone the panel opens as a sheet; between a phone
+  // and a desktop, where it sits above the parts, it scrolls into view.
   const open = (slot) => {
     setSelectedId(slot.id);
     if (editingSlotId && editingSlotId !== slot.id) setEditingSlotId(null);
-    if (typeof window !== 'undefined' && window.matchMedia?.('(max-width: 1099px)').matches) {
+    setSheetOpen(true);
+    if (typeof window !== 'undefined' && window.matchMedia?.('(min-width: 769px) and (max-width: 1099px)').matches) {
       panelRef.current?.querySelector('.wa-arc-panel')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
     }
   };
@@ -7538,6 +7585,12 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
       <div className="wa-arc-head">
         <h3 className="wa-arc-title">Season {roadmap.season_number} arc</h3>
         <p className="wa-arc-summary" data-testid="season-arc-summary">{arcSummary(roadmap)}</p>
+        {/* The key, as one line (it was a card beside the panel). */}
+        <ul className="wa-arc-legend" aria-label="Key">
+          {SLOT_STATE_ORDER.map((state) => (
+            <li key={state} className={`state-${state}`}><span className="wa-arc-dot" aria-hidden="true" />{SLOT_STATE_KEY[state]}</li>
+          ))}
+        </ul>
       </div>
 
       {roadmap.phase_boundary && (() => {
@@ -7584,6 +7637,22 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
                 <span className="wa-arc-part-num">Part {phase.phase}</span> {phase.title}
                 <span className="wa-arc-part-range"> · E{phase.episode_start}–E{phase.episode_end}</span>
               </h4>
+              {phase.slots.every((sl) => sl.state === 'needs_event' && !slotTitle(sl)) ? (
+                // Nothing in this part yet: a row of small chips, one per slot.
+                <div className="wa-arc-chips" data-testid={`season-part-folded-${phase.phase}`}>
+                  {phase.slots.map((slot) => (
+                    <button
+                      key={slot.id}
+                      type="button"
+                      data-testid={`season-slot-${slot.slot_number}`}
+                      className={`wa-arc-chip-slot${selected?.id === slot.id ? ' selected' : ''}`}
+                      aria-pressed={selected?.id === slot.id}
+                      aria-label={`${slot.label}: Open slot, ${SLOT_STATE_LABEL.needs_event}`}
+                      onClick={() => open(slot)}
+                    >{shortSlotLabel(slot)}</button>
+                  ))}
+                </div>
+              ) : (
               <div className="wa-arc-grid">
                 {phase.slots.map((slot) => {
                   const title = slotTitle(slot);
@@ -7608,6 +7677,7 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
                   );
                 })}
               </div>
+              )}
             </section>
           ))}
           {editing && (
@@ -7616,9 +7686,11 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
           )}
         </div>
 
-        <aside className="wa-arc-side" ref={panelRef}>
+        <aside className={`wa-arc-side${sheetOpen ? ' is-sheet-open' : ''}`} ref={panelRef}>
+          <button type="button" className="wa-arc-sheet-backdrop" aria-label="Close the slot" tabIndex={-1} onClick={() => setSheetOpen(false)} />
           {selected && (
             <SlotPanel
+              onClose={() => setSheetOpen(false)}
               slot={selected} showId={showId} available={available} busy={busySlot === selected.id}
               episode={episodes.find((e) => e.id === selected.episode?.id) || null}
               event={events.find((e) => e.id === selected.event?.id) || null}
@@ -7626,14 +7698,6 @@ function SeasonRoadmap({ roadmap, S, api, showId, onChanged, setToast, onAdvance
               onIntention={() => setEditingSlotId(editingSlotId === selected.id ? null : selected.id)}
             />
           )}
-          <section className="wa-arc-key" aria-label="Key">
-            <span className="wa-arc-eyebrow">Key</span>
-            <ul>
-              {SLOT_STATE_ORDER.map((state) => (
-                <li key={state} className={`state-${state}`}><span className="wa-arc-dot" aria-hidden="true" />{SLOT_STATE_KEY[state]}</li>
-              ))}
-            </ul>
-          </section>
         </aside>
       </div>
 
@@ -7819,45 +7883,21 @@ function SeasonTab({ showId, api, S, episodes, events = [], setToast }) {
 
   return (
     <div style={S.content}>
-      {/* Season Header */}
-      <div style={S.card}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
-          <div>
-            <h2 style={{ ...S.cardTitle, margin: '0 0 4px', fontSize: 18 }}>
-              📖 Season 1: {arc.title}
-            </h2>
-            <p style={{ ...S.muted, margin: 0 }}>{arc.tagline}</p>
-          </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ padding: '4px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: tempCfg.bg, color: tempCfg.color }}>
-              {tempCfg.label}
-            </span>
-            <span style={{ padding: '4px 12px', borderRadius: 8, fontSize: 12, background: 'var(--surface-bg)', color: 'var(--text-secondary)', border: '1px solid var(--lala-parchment-3)' }}>
-              Ep {arc.current_episode || 0} / {arc.episode_end}
-            </span>
-          </div>
+      {/* Season Header: one line, and the counts as a short line (Evoni,
+          2026-10-22 layout list; four stat boxes before). */}
+      <header className="wa-season-head" data-testid="season-head">
+        <div className="wa-season-head-row">
+          <h2 className="wa-season-head-title">📖 Season 1: {arc.title}</h2>
+          {arc.tagline && <span className="wa-season-head-tagline">{arc.tagline}</span>}
+          <span className="wa-season-head-chips">
+            <span className="wa-season-chip" style={{ background: tempCfg.bg, color: tempCfg.color }}>{tempCfg.label}</span>
+            <span className="wa-season-chip is-plain">Ep {arc.current_episode || 0} / {arc.episode_end}</span>
+          </span>
         </div>
-
-        {/* Quick Stats */}
-        <div style={{ display: 'flex', gap: 12, marginTop: 16, flexWrap: 'wrap' }}>
-          <div style={S.statBox}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>{completedEpisodes}</div>
-            <div style={S.statLbl}>Episodes Done</div>
-          </div>
-          <div style={S.statBox}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>{goals.filter(g => g.status === 'completed').length}</div>
-            <div style={S.statLbl}>Goals Hit</div>
-          </div>
-          <div style={S.statBox}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: debt.length > 0 ? 'var(--danger-text)' : 'var(--text-primary)' }}>{debt.length}</div>
-            <div style={S.statLbl}>Narrative Debt</div>
-          </div>
-          <div style={S.statBox}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--lala-gold-text)' }}>{arc.current_phase}</div>
-            <div style={S.statLbl}>Current Phase</div>
-          </div>
-        </div>
-      </div>
+        <p className="wa-season-counts" data-testid="season-counts">
+          {completedEpisodes} {completedEpisodes === 1 ? 'episode' : 'episodes'} done · {goals.filter(g => g.status === 'completed').length} goals hit · <span className={debt.length > 0 ? 'is-debt' : ''}>{debt.length} narrative debt</span> · Phase {arc.current_phase}
+        </p>
+      </header>
 
       {/* What the feed proposes for the season (2026-10-17); nothing changes until she accepts. */}
       <SeasonProposals showId={showId} api={api} onApplied={loadArc} />
@@ -7870,40 +7910,45 @@ function SeasonTab({ showId, api, S, episodes, events = [], setToast }) {
         advanceWarning={warning} onConfirmAdvance={handleConfirmAdvance} onCancelAdvance={() => setWarning(null)}
         threads={threadData.threads} episodes={episodes} events={events} />
 
-      {roadmap && (
-        <StoryThreadsCard threads={threadData.threads} drafts={threadData.drafts} S={S} api={api} showId={showId}
-          onChanged={loadRoadmap} setToast={setToast} />
+      {/* The threads, with the narrative debt beside them (Evoni, 2026-10-22
+          layout list; the debt was its own full-width card further down). */}
+      {(roadmap || debt.length > 0) && (
+        <div className={`wa-season-pair${roadmap && debt.length > 0 ? ' is-two' : ''}`}>
+          {roadmap && (
+            <StoryThreadsCard threads={threadData.threads} drafts={threadData.drafts} S={S} api={api} showId={showId}
+              onChanged={loadRoadmap} setToast={setToast} />
+          )}
+          {debt.length > 0 && (
+            <div style={S.card} data-testid="season-debt">
+              <h3 style={{ ...S.cardTitle, margin: '0 0 12px', color: 'var(--danger-text)' }}>
+                Narrative Debt ({debt.length})
+              </h3>
+              <p style={{ ...S.muted, marginBottom: 12 }}>
+                Failed goals that carry emotional weight. These feed into AI-generated scripts, Pulse posts, and event stakes.
+              </p>
+              {debt.map((d, i) => (
+                <div key={i} style={{
+                  padding: '10px 14px', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
+                  borderRadius: 8, marginBottom: 8,
+                }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--danger-text)', marginBottom: 4 }}>
+                    {d.goal_title} <span style={{ fontWeight: 400, fontSize: 11 }}>({d.achieved}/{d.target} {d.target_metric})</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--danger-text)', fontStyle: 'italic' }}>
+                    {d.narrative_weight}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--danger-text)', marginTop: 4 }}>
+                    From Phase: {d.phase} &middot; Affects: {(d.affects || []).join(', ')}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       <PlanningInsights insights={insights} S={S} />
 
-      {/* Narrative Debt */}
-      {debt.length > 0 && (
-        <div style={S.card}>
-          <h3 style={{ ...S.cardTitle, margin: '0 0 12px', color: 'var(--danger-text)' }}>
-            Narrative Debt ({debt.length})
-          </h3>
-          <p style={{ ...S.muted, marginBottom: 12 }}>
-            Failed goals that carry emotional weight. These feed into AI-generated scripts, Pulse posts, and event stakes.
-          </p>
-          {debt.map((d, i) => (
-            <div key={i} style={{
-              padding: '10px 14px', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
-              borderRadius: 8, marginBottom: 8,
-            }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--danger-text)', marginBottom: 4 }}>
-                {d.goal_title} <span style={{ fontWeight: 400, fontSize: 11 }}>({d.achieved}/{d.target} {d.target_metric})</span>
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--danger-text)', fontStyle: 'italic' }}>
-                {d.narrative_weight}
-              </div>
-              <div style={{ fontSize: 10, color: 'var(--danger-text)', marginTop: 4 }}>
-                From Phase: {d.phase} &middot; Affects: {(d.affects || []).join(', ')}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* The phases and the season's history, folded (Evoni, 2026-10-17: one
           long scroll before). Advancing a phase lives at the roadmap's phase
@@ -8050,9 +8095,7 @@ export const S = {
   // file has no shared stylesheet of its own.
   savedCopyTag: { display: 'inline-block', marginLeft: 6, padding: '1px 6px', borderRadius: 4, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px', background: 'var(--lala-gold-soft)', border: '1px solid var(--lala-gold-line)', color: 'var(--lala-gold-text)', verticalAlign: 'middle' },
   statsRow: { display: 'flex', gap: 12, flexWrap: 'wrap' },
-  statBox: { flex: '1 1 90px', background: 'var(--surface-card)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 12, padding: 16, textAlign: 'center', minWidth: 90, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' },
   statVal: (k, v) => ({ fontSize: 24, fontWeight: 700, color: (k === 'stress' && v >= 5) || (k === 'coins' && v < 0) ? 'var(--danger)' : 'var(--text-primary)' }),
-  statLbl: { fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.3px', marginTop: 4, fontWeight: 500 },
   qGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12 },
   qBox: { background: 'var(--surface-card)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 12, padding: 16, textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' },
   qVal: { fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' },

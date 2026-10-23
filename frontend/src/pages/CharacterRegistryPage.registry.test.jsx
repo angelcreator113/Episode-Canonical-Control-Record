@@ -142,6 +142,36 @@ const CAST_REVIEW = {
   episode_counts: { sable: 1, eva: 0, used: 2, gone: 0 },
 };
 
+describe('CharacterRegistryPage: Lala in another registry', () => {
+  test('her card shows though her row is not in the registry in view, and opens her', async () => {
+    rememberShow('show-b');
+    const lalaElsewhere = [
+      { ...REGISTRIES[0], characters: [...REGISTRIES[0].characters, { id: 'lala-1', display_name: 'Lala', character_key: 'lala', role_type: 'special' }] },
+      REGISTRIES[1],
+    ];
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/shows') return { data: { success: true, data: SHOWS } };
+      if (url.startsWith('/api/v1/character-registry/registries')) return { data: { success: true, registries: lalaElsewhere } };
+      return { data: {} };
+    });
+    renderAt();
+    await waitFor(() => expect(cardNames()).toEqual(['Marcus', 'Nadia']));
+    const card = screen.getByTestId('cast-lala');
+    expect(card.textContent).toContain('Lala');
+    expect(screen.queryByTestId('cast-lala-missing')).toBeNull();
+    fireEvent.click(within(card).getByRole('button', { name: /Open Lala/ }));
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/character/lala-1'));
+  });
+
+  test('with no Lala anywhere the page says so', async () => {
+    rememberShow('show-b');
+    renderAt();
+    await waitFor(() => expect(cardNames()).toEqual(['Marcus', 'Nadia']));
+    expect(screen.queryByTestId('cast-lala')).toBeNull();
+    expect(screen.getByTestId('cast-lala-missing').textContent).toContain('Lala has no character');
+  });
+});
+
 describe('CharacterRegistryPage: the cast', () => {
   let confirm;
   beforeEach(() => {

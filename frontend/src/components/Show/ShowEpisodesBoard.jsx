@@ -13,6 +13,12 @@
  *     List, and New episode.
  * Moved from the show page's Episodes tab when the two show workspaces became
  * one (Evoni, 2026-10-03).
+ *
+ * Layout (Evoni, 2026-10-22 layout list): Now producing is one slim card
+ * (a small thumbnail, the episode, the event, the steps along its foot);
+ * a board card shows its code once, one useful line, opens the episode when
+ * clicked, and has a ⋯ "Move to" menu so the stage changes without dragging;
+ * on a phone the board is one stage at a time, picked from tabs.
  * Props: showId, episodes, total (the show's true count, when known),
  * onChanged (reload after a status change or delete), goTo(tabKey).
  */
@@ -99,7 +105,7 @@ function useLocations(needed) {
 
 /** The hero's footage and primary thumbnail, for its seven steps. */
 function useHeroMedia(episodeId) {
-  const [media, setMedia] = useState({ clips: [], hasThumbnail: false });
+  const [media, setMedia] = useState({ clips: [], hasThumbnail: false, thumbnailUrl: null });
   useEffect(() => {
     if (!episodeId) return undefined;
     let live = true;
@@ -109,16 +115,16 @@ function useHeroMedia(episodeId) {
       .catch((err) => console.error('[ShowEpisodesBoard] clips load failed:', err));
     // The editor's saved list (episodePipeline also counts episodes.thumbnail_url).
     Promise.resolve().then(() => currentThumbnail(episodeId))
-      .then((thumb) => { if (live) setMedia((m) => ({ ...m, hasThumbnail: Boolean(thumb) })); })
+      .then((thumb) => { if (live) setMedia((m) => ({ ...m, hasThumbnail: Boolean(thumb), thumbnailUrl: thumb?.url || null })); })
       .catch((err) => console.error('[ShowEpisodesBoard] thumbnail check failed:', err));
     return () => { live = false; };
   }, [episodeId]);
   return media;
 }
 
-/** The episode's thumbnail, or its code on the show's pink. */
-function Thumb({ episode, small = false }) {
-  const src = episode.thumbnail_url || episode.thumbnailUrl || null;
+/** The episode's thumbnail (else the Studio's current one, `saved`), or its code on the show's pink. */
+function Thumb({ episode, saved = null, small = false }) {
+  const src = episode.thumbnail_url || episode.thumbnailUrl || saved || null;
   return (
     <span className={`seb-thumb${small ? ' is-small' : ''}${src ? '' : ' is-empty'}`} aria-hidden="true">
       {src ? <img src={src} alt="" /> : <span className="seb-thumb-mark">{small ? episodeCode(episode) : 'Styling Adventures with Lala'}</span>}
@@ -207,12 +213,15 @@ function NowProducing({ showId, episode, checks, panel, onTagsSaved }) {
     <section className="seb-hero" data-testid="seb-hero" aria-labelledby="seb-hero-title">
       <div className="seb-hero-card">
         <div className="seb-hero-art">
-          <Thumb episode={episode} />
-          <span className="seb-badge">{episodeCode(episode)}</span>
-          <span className="seb-badge is-status">{STATUS_LABEL[episode.status] || episode.status}</span>
-          <Link className="seb-thumb-edit" to={thumbnailStudioHref({ episodeId: episode.id })}><Pencil size={14} aria-hidden="true" /> Edit Thumbnail</Link>
+          <Thumb episode={episode} saved={media.thumbnailUrl} />
+          <Link className="seb-thumb-edit" to={thumbnailStudioHref({ episodeId: episode.id })}><Pencil size={14} aria-hidden="true" /> Edit<span className="seb-thumb-edit-word"> Thumbnail</span></Link>
         </div>
         <div className="seb-hero-main">
+          <div className="seb-hero-kicker">
+            <span className="seb-kicker-label">Now producing</span>
+            <span className="seb-badge">{episodeCode(episode)}</span>
+            <span className="seb-badge is-status">{STATUS_LABEL[episode.status] || episode.status}</span>
+          </div>
           <h2 id="seb-hero-title" className="seb-hero-title">{episode.title || 'Untitled'}</h2>
           {blurb && <p className="seb-hero-blurb">{blurb}</p>}
           <Tags episode={episode} onSave={saveTags} />
@@ -239,16 +248,44 @@ function NowProducing({ showId, episode, checks, panel, onTagsSaved }) {
                 </>
               )}
         </aside>
-      </div>
-      <div className="seb-hero-steps">
-        <Steps steps={steps} />
-        <div className="seb-hero-actions">
-          <Link className="seb-btn seb-btn-primary" to={`/episodes/${episode.id}`}><Play size={16} aria-hidden="true" /> Open episode</Link>
-          <Link className="seb-btn" to={`/episodes/${episode.id}?tab=scripts`}><FileText size={16} aria-hidden="true" /> {episode.script_content ? 'Open script' : 'Generate Script'}</Link>
-          <More episode={episode} summary={summary} />
+        <div className="seb-hero-steps">
+          <Steps steps={steps} />
+          <div className="seb-hero-actions">
+            <Link className="seb-btn seb-btn-primary" to={`/episodes/${episode.id}`}><Play size={16} aria-hidden="true" /> Open episode</Link>
+            <Link className="seb-btn" to={`/episodes/${episode.id}?tab=scripts`}><FileText size={16} aria-hidden="true" /> {episode.script_content ? 'Open script' : 'Generate Script'}</Link>
+            <More episode={episode} summary={summary} />
+          </div>
         </div>
       </div>
     </section>
+  );
+}
+
+/** A card's ⋯: move it to another stage without dragging (a phone, a keyboard). */
+function MoveMenu({ episode, onMove }) {
+  const [open, setOpen] = useState(false);
+  const here = stageOf(episode);
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (e) => { if (e.type === 'keydown' ? e.key === 'Escape' : !e.target.closest?.('.seb-card-more')) setOpen(false); };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', close);
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', close); };
+  }, [open]);
+  return (
+    <div className="seb-card-more">
+      <button type="button" className="seb-card-menu-btn" aria-label={`Move ${episode.title || 'this episode'}`} aria-haspopup="menu" aria-expanded={open}
+        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}>
+        <MoreHorizontal size={16} aria-hidden="true" />
+      </button>
+      {open && (
+        <div className="seb-menu seb-card-menu" role="menu" onClick={(e) => e.stopPropagation()}>
+          {STAGES.filter((st) => st.key !== here).map((st) => (
+            <button key={st.key} type="button" role="menuitem" onClick={() => { setOpen(false); onMove(episode.id, st.status); }}>Move to {st.label}</button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -270,7 +307,7 @@ const visibleCards = (cards) => {
 };
 const hiddenSlots = (cards) => Math.max(0, cards.filter((c) => c.kind === 'slot').length - SLOTS_SHOWN);
 
-function PipelineBoard({ columns, heroId, heroSummary, seasonNumber, searching, onOpen, onStatusChange, onPickEvent }) {
+function PipelineBoard({ columns, heroId, heroSummary, seasonNumber, searching, onOpen, onStatusChange, onPickEvent, phoneStage }) {
   const [dragId, setDragId] = useState(null);
   const [over, setOver] = useState(null);
   const drop = (stage) => {
@@ -280,7 +317,7 @@ function PipelineBoard({ columns, heroId, heroSummary, seasonNumber, searching, 
     if (stageOf(card.episode) !== stage.key) onStatusChange(card.episode.id, stage.status);
   };
   return (
-    <div className="seb-board" data-testid="seb-board">
+    <div className="seb-board" data-testid="seb-board" data-phone-stage={phoneStage}>
       {columns.map((col) => {
         const Icon = COLUMN_ICONS[col.key];
         const [emptyTitle, emptyHint] = EMPTY[col.key];
@@ -288,6 +325,7 @@ function PipelineBoard({ columns, heroId, heroSummary, seasonNumber, searching, 
           <section
             key={col.key}
             className={`seb-col seb-col-${col.key}${over === col.key ? ' is-over' : ''}`}
+            data-stage={col.key}
             aria-label={col.label}
             onDragOver={(e) => { e.preventDefault(); setOver(col.key); }}
             onDragLeave={() => setOver((o) => (o === col.key ? null : o))}
@@ -314,25 +352,30 @@ function PipelineBoard({ columns, heroId, heroSummary, seasonNumber, searching, 
                 draggable
                 data-testid={`seb-card-${card.episode.id}`}
                 aria-label={card.episode.title || 'Untitled'}
+                onClick={() => onOpen(card.episode.id)}
                 onDragStart={(e) => { setDragId(card.id); e.dataTransfer.effectAllowed = 'move'; }}
                 onDragEnd={() => { setDragId(null); setOver(null); }}
               >
                 <div className="seb-card-top">
                   <Thumb episode={card.episode} small />
                   <div className="seb-card-text">
-                    <div className="seb-chips"><span className="seb-chip">{episodeCode(card.episode)}</span><span className="seb-chip is-status">{STATUS_LABEL[card.episode.status] || card.episode.status}</span></div>
-                    <span className="seb-card-title">{card.episode.title || 'Untitled'}</span>
+                    {/* The code once: on the thumbnail, or here when it has a picture. */}
+                    {(card.episode.thumbnail_url || card.episode.thumbnailUrl) && <span className="seb-chip">{episodeCode(card.episode)}</span>}
+                    {/* The whole card opens the episode; the title is its keyboard way in. */}
+                    <button type="button" className="seb-card-title" onClick={(e) => { e.stopPropagation(); onOpen(card.episode.id); }}>{card.episode.title || 'Untitled'}</button>
+                    {(() => {
+                      // One useful line: the checklist, else what it needs; never the column again.
+                      const line = card.id === heroId && heroSummary?.total ? `${heroSummary.done} of ${heroSummary.total} checks` : cardLine(card.episode);
+                      return line && line !== (STATUS_LABEL[card.episode.status] || card.episode.status) ? <span className="seb-card-line">{line}</span> : null;
+                    })()}
                   </div>
+                  <MoveMenu episode={card.episode} onMove={onStatusChange} />
                 </div>
                 {card.id === heroId && heroSummary && (
                   <span className="seb-card-bar" role="progressbar" aria-label="Production checklist" aria-valuemin={0} aria-valuemax={heroSummary.total} aria-valuenow={heroSummary.done}>
                     <span style={{ width: `${heroSummary.total ? Math.round((heroSummary.done / heroSummary.total) * 100) : 0}%` }} />
                   </span>
                 )}
-                <div className="seb-card-foot">
-                  <span className="seb-card-line">{card.id === heroId && heroSummary ? `${heroSummary.done} of ${heroSummary.total}` : cardLine(card.episode)}</span>
-                  <button type="button" className="seb-card-go" onClick={() => onOpen(card.episode.id)}>Continue</button>
-                </div>
               </article>
             )))}
             {hiddenSlots(col.cards) > 0 && (
@@ -360,6 +403,8 @@ export default function ShowEpisodesBoard({ showId, episodes = [], total = null,
   const panel = useMemo(() => eventPanel(ev, locations), [ev, locations]);
   const heroSummary = checks.checks ? checklistSummary(checks.checks) : null;
   const [query, setQuery] = useState('');
+  // The stage a phone shows: picked from the tabs; the hero's stage first.
+  const [phoneStagePicked, setPhoneStage] = useState(null);
   const columns = useMemo(() => pipelineColumns(episodes, roadmap)
     .map((col) => {
       const cards = col.cards.filter((c) => matchesSearch(c, query));
@@ -391,6 +436,7 @@ export default function ShowEpisodesBoard({ showId, episodes = [], total = null,
   const sorted = [...episodes].sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0))
     .filter((ep) => matchesSearch({ kind: 'episode', episode: ep }, query));
   const seasonNumber = roadmap?.season_number || hero?.season_number || sorted[0]?.season_number || 1;
+  const phoneStage = phoneStagePicked || (hero ? stageOf(hero) : null) || columns.find((c) => c.count > 0)?.key || 'planning';
   return (
     <div className="show-episodes-board" data-testid="show-episodes-board">
       {hero && <NowProducing showId={showId} episode={hero} checks={checks} panel={panel} onTagsSaved={onChanged} />}
@@ -412,11 +458,11 @@ export default function ShowEpisodesBoard({ showId, episodes = [], total = null,
           <div className="seb-views" role="group" aria-label="Episode view">
             {VIEWS.map((v) => (
               <button key={v.key} type="button" aria-pressed={view === v.key} className={view === v.key ? 'active' : ''} onClick={() => setView(v.key)}>
-                <v.Icon size={15} aria-hidden="true" /> {v.label}
+                <v.Icon size={15} aria-hidden="true" /> <span className="seb-label-text">{v.label}</span>
               </button>
             ))}
           </div>
-          <button type="button" className="seb-new" onClick={newEpisode}><Plus size={16} aria-hidden="true" /> New episode</button>
+          <button type="button" className="seb-new" onClick={newEpisode}><Plus size={16} aria-hidden="true" /> <span className="seb-label-text">New episode</span></button>
         </div>
       </div>
 
@@ -432,8 +478,16 @@ export default function ShowEpisodesBoard({ showId, episodes = [], total = null,
           {episodes.length === 0 && (
             <p className="seb-board-empty">No episodes yet. An episode starts from an event: set the event up in Events, then start its episode.</p>
           )}
-          <PipelineBoard columns={columns} heroId={hero?.id} heroSummary={heroSummary} seasonNumber={seasonNumber} searching={Boolean(query.trim())} onOpen={open} onStatusChange={changeStatus} onPickEvent={() => goTo('season')} />
-          <p className="seb-board-hint">Drag an episode to another stage to change its status.</p>
+          {/* On a phone, one stage at a time (Evoni, 2026-10-22 layout list). */}
+          <div className="seb-stage-tabs" role="group" aria-label="Stage">
+            {columns.map((col) => (
+              <button key={col.key} type="button" aria-pressed={phoneStage === col.key} className={phoneStage === col.key ? 'active' : ''} onClick={() => setPhoneStage(col.key)}>
+                {col.label} <span className="seb-stage-count">{col.count}</span>
+              </button>
+            ))}
+          </div>
+          <PipelineBoard columns={columns} heroId={hero?.id} heroSummary={heroSummary} seasonNumber={seasonNumber} searching={Boolean(query.trim())} onOpen={open} onStatusChange={changeStatus} onPickEvent={() => goTo('season')} phoneStage={phoneStage} />
+          <p className="seb-board-hint">Drag an episode to another stage, or use its ⋯, to change its status.</p>
         </>
       ) : view === 'list' ? (
         <div className="seb-table-wrap">

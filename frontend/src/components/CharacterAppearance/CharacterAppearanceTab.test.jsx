@@ -59,6 +59,42 @@ describe('CharacterAppearanceTab', () => {
     expect(onPortraitChanged).toHaveBeenCalledWith('https://x/p1.jpg');
   });
 
+  test('Upload a photo (Evoni, 2026-10-22): no saved look needed; with no profile photo it becomes theirs', async () => {
+    const onPortraitChanged = vi.fn();
+    api.get.mockResolvedValue({ data: { appearance: null, portrait_url: null, portrait_cost: 0.04 } });
+    api.post.mockResolvedValue({ data: { url: 'https://x/up.jpg', appearance: { portraits: [{ url: 'https://x/up.jpg', uploaded: true }] }, portrait_url: 'https://x/up.jpg' } });
+    render(<CharacterAppearanceTab character={CHAR} onPortraitChanged={onPortraitChanged} />);
+    const button = await screen.findByTestId('cap-upload');
+    expect(button.disabled).toBe(false);
+    const file = new File(['img'], 'maren.jpg', { type: 'image/jpeg' });
+    fireEvent.change(screen.getByTestId('cap-upload-input'), { target: { files: [file] } });
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+    const [url, body] = api.post.mock.calls[0];
+    expect(url).toBe('/api/v1/cast/characters/c1/appearance/portrait/upload');
+    expect(body.get('image')).toBe(file);
+    const tile = await screen.findByTestId('cap-portrait');
+    expect(within(tile).getByAltText('A photo of Maren')).toBeTruthy();
+    expect(within(tile).getByText('Their profile photo')).toBeTruthy();
+    expect(onPortraitChanged).toHaveBeenCalledWith('https://x/up.jpg');
+    expect(screen.getByRole('status').textContent).toBe('Your photo is their profile photo now.');
+  });
+
+  test('an upload with a profile photo already set leaves it; a refused file says why', async () => {
+    const onPortraitChanged = vi.fn();
+    api.get.mockResolvedValue({ data: { appearance: { ...LOOK, portraits: [] }, portrait_url: 'https://x/me.jpg', portrait_cost: null } });
+    api.post
+      .mockResolvedValueOnce({ data: { appearance: { ...LOOK, portraits: [{ url: 'https://x/up.jpg', uploaded: true }] }, portrait_url: 'https://x/me.jpg' } })
+      .mockRejectedValueOnce({ response: { status: 400, data: { error: 'The photo must be a PNG, JPEG or WebP image.' } } });
+    render(<CharacterAppearanceTab character={CHAR} onPortraitChanged={onPortraitChanged} />);
+    const input = await screen.findByTestId('cap-upload-input');
+    fireEvent.change(input, { target: { files: [new File(['img'], 'a.jpg', { type: 'image/jpeg' })] } });
+    const tile = await screen.findByTestId('cap-portrait');
+    expect(within(tile).getByText('Use as their profile photo')).toBeTruthy();
+    expect(onPortraitChanged).not.toHaveBeenCalled();
+    fireEvent.change(input, { target: { files: [new File(['x'], 'a.gif', { type: 'image/gif' })] } });
+    expect((await screen.findByRole('alert')).textContent).toBe('The photo must be a PNG, JPEG or WebP image.');
+  });
+
   test('an error says why', async () => {
     api.get.mockResolvedValue({ data: { appearance: { ...LOOK, portraits: [] }, portrait_url: null, portrait_cost: null } });
     api.post.mockRejectedValue({ response: { status: 429, data: { error: 'Today\'s image budget is spent.' } } });

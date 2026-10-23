@@ -183,7 +183,10 @@ export default function CharacterRegistryPage() {
     finally { setCreating(false); }
   };
 
-  const lala = findLala(characters);
+  // Lala in the registry in view, else in any registry: her row may live in
+  // another one (the Book 1 seed puts her there), and the show's one
+  // Protagonist never drops off the page for it.
+  const lala = findLala(characters) || findLala(allCharacters);
   const people = feedPeople(profiles, allCharacters);
   // Lala is the Protagonist whatever her stored role (Task #3199); anyone
   // else tagged Protagonist is flagged.
@@ -261,6 +264,12 @@ export default function CharacterRegistryPage() {
             Open Lala <ChevronRight size={16} aria-hidden />
           </button>
         </section>
+      )}
+
+      {!lala && (
+        <p className="cast-note cast-empty" data-testid="cast-lala-missing">
+          Lala has no character in any registry yet.
+        </p>
       )}
 
       {/* Lala's world */}
