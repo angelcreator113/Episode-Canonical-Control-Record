@@ -230,7 +230,7 @@ async function goalsOf(sequelize, episode, event, profiles) {
   return goals.slice(0, MAX.goals).map((g) => {
     const own = eventGoals.find((e) => (e.slot || 'relationship') === g.slot);
     const person = goalPerson({ ...g, profile_id: g.profile_id ?? own?.profile_id ?? null }, event, profiles);
-    return { slot: g.slot, label: String(g.label).trim(), completed: !!g.completed, beat: beats.length ? goalCovered(beats, g, person) : null };
+    return { slot: g.slot, label: String(g.label).trim(), completed: !!g.completed, beat: beats.length ? goalCovered(beats, g, person)?.beat ?? null : null };
   });
 }
 
