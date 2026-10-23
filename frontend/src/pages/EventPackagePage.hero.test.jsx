@@ -77,8 +77,12 @@ describe('Event Package header', () => {
     expect(look.getAttribute('data-state')).not.toBe('complete'); // no outfit yet
 
     const toc = screen.getByTestId('package-toc');
-    expect([...toc.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['The Event', 'People', 'Place', "Lala's Look", 'Deal & Money', 'Story Stakes', 'In-world documents']);
+    const label = (a) => [...a.childNodes].filter((n) => !n.classList?.contains('epp-sr-only')).map((n) => n.textContent).join('');
+    expect([...toc.querySelectorAll('a')].map(label)).toEqual(['The Event', 'People', 'Place', "Lala's Look", 'Deal & Money', 'Story Stakes', 'In-world documents']);
     expect(within(toc).getByTestId('toc-look').className).toMatch(/state-(warning|blocking)/);
+    // The dot's state is read out too, not colour alone (audit, 2026-10-23).
+    expect(within(toc).getByTestId('toc-look').querySelector('.epp-sr-only').textContent).toMatch(/\((has a warning|needed to start)\)/);
+    expect(within(toc).getByTestId('toc-deal').querySelector('.epp-sr-only')).toBeNull();
     expect(within(toc).getByTestId('toc-deal').className).toBe('state-none');
     // The old Review section is folded into the strip, under its old anchor.
     const details = within(strip).getByTestId('readiness-details');
