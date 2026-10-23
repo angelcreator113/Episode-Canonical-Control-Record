@@ -584,6 +584,8 @@ function WorldAdmin() {
   // unless the creator opts in. (Bulk-select state already lives above
   // as bulkMode / selectedEvents — reused here for multi-event generate.)
   const [draftScriptOnGenerate, setDraftScriptOnGenerate] = useState(false);
+  // Events as cards or as a list (Evoni, 2026-10-22 layout list).
+  const [eventLayout, setEventLayout] = useState('cards');
   const [selectedEvents, setSelectedEvents] = useState(new Set());
   const [bulkMode, setBulkMode] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
@@ -2218,99 +2220,128 @@ The revised event should feel like a completely different experience from the si
               <h2>Events</h2>
               <span>Invitations and opportunities that can become episodes · {worldEvents.length} events</span>
             </div>
+            {/* One toolbar (Evoni, 2026-10-22 layout list): search, deal type,
+                sort, the layout, Ideas, ⋯ and New event. Auto-Fill This Month
+                and the draft-script switch are in ⋯. */}
             <div className="wa-ev-head-actions">
               <label className="wa-ev-search">
                 <Search size={15} aria-hidden="true" />
                 <input type="text" value={eventSearch} onChange={e => setEventSearch(e.target.value)} placeholder="Search events" aria-label="Search events" />
               </label>
-              <button onClick={() => navigate(`/shows/${showId}/new-episode`)} style={S.primaryBtn}>
-                <Plus size={14} style={{ verticalAlign: -2, marginRight: 4 }} />New event
-              </button>
-            </div>
-            <div className="wa-ev-head-tools">
-              <button onClick={async () => {
-                setAutoFilling(true);
-                setToast('🗓️ Generating events for this month...');
-                try {
-                  // Step 1: Generate seasonal calendar events
-                  const month = new Date().getMonth();
-                  console.log('[AutoFill] Starting for month', month, 'show', showId);
-                  const calRes = await api.post('/api/v1/calendar/events/generate-seasonal', { month, count: 3, show_id: showId });
-                  console.log('[AutoFill] Calendar response:', calRes.data);
-                  if (!calRes.data.success) throw new Error(calRes.data.error || 'Calendar generation failed');
-                  const seasonalCount = calRes.data.data?.count || 0;
-                  setToast(`📅 ${seasonalCount} seasonal events created. Spawning world events...`);
-
-                  // Step 2: Auto-spawn world events from each seasonal event
-                  const calEvents = calRes.data.data?.created || [];
-                  let spawned = 0;
-                  for (const ce of calEvents) {
-                    try {
-                      console.log('[AutoFill] Spawning from calendar event:', ce.id, ce.title);
-                      const spawnRes = await api.post(`/api/v1/calendar/events/${ce.id}/auto-spawn`, {
-                        show_id: showId, event_count: 1, max_guests: 6,
-                      });
-                      console.log('[AutoFill] Spawn result:', spawnRes.data);
-                      if (spawnRes.data.success) spawned += spawnRes.data.data?.events_created || 0;
-                    } catch (spawnErr) {
-                      console.error('[AutoFill] Spawn failed:', spawnErr.response?.data || spawnErr.message);
-                    }
-                  }
-                  setToast(`✅ Created ${seasonalCount} seasonal + ${spawned} world events with hosts & venues!`);
-                  loadData();
-                } catch (err) {
-                  console.error('[AutoFill] Error:', err.response?.data || err.message);
-                  setToast('❌ Auto-fill failed: ' + (err.response?.data?.error || err.message));
-                }
-                setAutoFilling(false);
-                setTimeout(() => setToast(null), 6000);
-              }} disabled={autoFilling} style={S.smBtn}>
-                {autoFilling ? '⏳ Generating...' : '🗓️ Auto-Fill This Month'}
-              </button>
-              {/* + New event (beside the search, above) opens the choose-host
-                  flow (Task #1628), same entry point as New Episode — an
-                  event created here always starts with a host, unlike the
-                  system-created paths (Needs Host below). Manual/no-host
-                  creation is still reachable from the empty state's
-                  "+ Create Manually". */}
-              {/* Creation tools (Feed opportunities and event templates) open
-                  in a drawer (Evoni, 2026-09-30). */}
+                <select data-testid="events-deal-filter" aria-label="Filter by deal type" value={eventDealFilter}
+                  onChange={e => setEventDealFilter(e.target.value)}
+                  style={{ padding: '6px 10px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 11, background: eventDealFilter === 'all' ? 'var(--surface-card)' : 'var(--primary-subtle)', cursor: 'pointer', maxWidth: '100%' }}>
+                  {dealTypeFilterOptions(worldEvents).map(o => (
+                    <option key={o.key} value={o.key}>{o.label} ({o.count})</option>
+                  ))}
+                </select>
+                <select value={eventSort} onChange={e => setEventSort(e.target.value)} style={{ padding: '6px 10px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 11, background: 'var(--surface-card)', cursor: 'pointer' }}>
+                  <option value="name">Sort: Name</option>
+                  <option value="prestige">Sort: Prestige ↓</option>
+                  <option value="cost">Sort: Cost ↓</option>
+                  <option value="status">Sort: Status</option>
+                  <option value="created">Sort: Newest</option>
+                </select>
+              <div className="wa-ev-layout" role="group" aria-label="Layout">
+                {[['cards', 'Cards'], ['list', 'List']].map(([key, label]) => (
+                  <button key={key} type="button" aria-pressed={eventLayout === key} className={eventLayout === key ? 'active' : ''} onClick={() => setEventLayout(key)}>{label}</button>
+                ))}
+              </div>
+              {/* + New event opens the choose-host flow (Task #1628), same
+                  entry point as New Episode — an event created here always
+                  starts with a host, unlike the system-created paths (Needs
+                  Host below). Manual/no-host creation is still reachable
+                  from the empty state's "+ Create Manually". Creation tools
+                  (Feed opportunities and event templates) open in a drawer
+                  (Evoni, 2026-09-30). */}
               <button type="button" data-testid="events-ideas-button" aria-haspopup="dialog" aria-expanded={eventsIdeasOpen}
                 onClick={() => setEventsIdeasOpen(true)}
                 style={S.smBtn} title="Pulse opportunities and event ideas">
                 <Lightbulb size={14} style={{ verticalAlign: -2, marginRight: 4 }} aria-hidden="true" />Ideas
               </button>
-              <button onClick={() => setEventsHeaderMenuOpen(o => !o)} style={S.smBtn} title="More actions" aria-label="More actions">
-                <MoreHorizontal size={16} />
+              <div className="wa-ev-more">
+                <button onClick={() => setEventsHeaderMenuOpen(o => !o)} style={S.smBtn} title="More actions" aria-label="More actions" aria-expanded={eventsHeaderMenuOpen}>
+                  <MoreHorizontal size={16} />
+                </button>
+                {eventsHeaderMenuOpen && (
+                  <>
+                    <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setEventsHeaderMenuOpen(false)} />
+                    <div className="wa-ev-more-menu" style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 10, boxShadow: 'var(--shadow-md)', zIndex: 41, minWidth: 240, overflow: 'hidden' }}>
+                          <button type="button" onClick={async () => {
+                            setEventsHeaderMenuOpen(false);
+                            setAutoFilling(true);
+                            setToast('🗓️ Generating events for this month...');
+                            try {
+                              // Step 1: Generate seasonal calendar events
+                              const month = new Date().getMonth();
+                              console.log('[AutoFill] Starting for month', month, 'show', showId);
+                              const calRes = await api.post('/api/v1/calendar/events/generate-seasonal', { month, count: 3, show_id: showId });
+                              console.log('[AutoFill] Calendar response:', calRes.data);
+                              if (!calRes.data.success) throw new Error(calRes.data.error || 'Calendar generation failed');
+                              const seasonalCount = calRes.data.data?.count || 0;
+                              setToast(`📅 ${seasonalCount} seasonal events created. Spawning world events...`);
+
+                              // Step 2: Auto-spawn world events from each seasonal event
+                              const calEvents = calRes.data.data?.created || [];
+                              let spawned = 0;
+                              for (const ce of calEvents) {
+                                try {
+                                  console.log('[AutoFill] Spawning from calendar event:', ce.id, ce.title);
+                                  const spawnRes = await api.post(`/api/v1/calendar/events/${ce.id}/auto-spawn`, {
+                                    show_id: showId, event_count: 1, max_guests: 6,
+                                  });
+                                  console.log('[AutoFill] Spawn result:', spawnRes.data);
+                                  if (spawnRes.data.success) spawned += spawnRes.data.data?.events_created || 0;
+                                } catch (spawnErr) {
+                                  console.error('[AutoFill] Spawn failed:', spawnErr.response?.data || spawnErr.message);
+                                }
+                              }
+                              setToast(`✅ Created ${seasonalCount} seasonal + ${spawned} world events with hosts & venues!`);
+                              loadData();
+                            } catch (err) {
+                              console.error('[AutoFill] Error:', err.response?.data || err.message);
+                              setToast('❌ Auto-fill failed: ' + (err.response?.data?.error || err.message));
+                            }
+                            setAutoFilling(false);
+                            setTimeout(() => setToast(null), 6000);
+                          }} disabled={autoFilling} style={S.menuItem}>
+                            {autoFilling ? '⏳ Generating...' : '🗓️ Auto-Fill This Month'}
+                          </button>
+                      {/* Generate options: the draft-script opt-in, picked up by both
+                          the per-event Generate and the bulk "Generate from N
+                          events" (it was its own bar above the cards). */}
+                      <label data-testid="events-draft-script" style={{ ...S.menuItem, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={draftScriptOnGenerate} onChange={(e) => setDraftScriptOnGenerate(e.target.checked)} />
+                        <span>Also draft a script when generating an episode</span>
+                      </label>
+                        <button onClick={() => { setShowTemplates(!showTemplates); setEventsHeaderMenuOpen(false); }} style={S.menuItem}>📋 Templates</button>
+                        <button onClick={() => { handleBulkEnhance(); setEventsHeaderMenuOpen(false); }} disabled={aiFixLoading} style={S.menuItem}>{aiFixLoading ? '⏳ Enhancing...' : '✨ Enhance'}</button>
+                        <button onClick={async () => {
+                          setEventsHeaderMenuOpen(false);
+                          if (!window.confirm('Delete ALL draft events? Ready/used events will be kept.')) return;
+                          try {
+                            const res = await api.post(`/api/v1/world/${showId}/events/bulk-delete`, { delete_all_drafts: true });
+                            setToast(`Deleted ${res.data.deleted} draft events`);
+                            loadData();
+                          } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                        }} style={{ ...S.menuItem, color: 'var(--danger)' }}>Delete Drafts</button>
+                        <button onClick={async () => {
+                          setEventsHeaderMenuOpen(false);
+                          if (!window.confirm('DELETE ALL EVENTS? This cannot be undone. Are you sure?')) return;
+                          if (!window.confirm('Really delete everything? Type yes to confirm.')) return;
+                          try {
+                            const res = await api.post(`/api/v1/world/${showId}/events/bulk-delete`, { delete_all: true });
+                            setToast(`Deleted ${res.data.deleted} events`);
+                            loadData();
+                          } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                        }} style={{ ...S.menuItem, color: 'var(--danger)' }}>Delete All</button>
+                    </div>
+                  </>
+                )}
+              </div>
+              <button onClick={() => navigate(`/shows/${showId}/new-episode`)} style={S.primaryBtn}>
+                <Plus size={14} style={{ verticalAlign: -2, marginRight: 4 }} />New event
               </button>
-              {eventsHeaderMenuOpen && (
-                <>
-                  <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setEventsHeaderMenuOpen(false)} />
-                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--surface-card)', border: '1px solid var(--lala-parchment-3)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 41, minWidth: 180, overflow: 'hidden' }}>
-                    <button onClick={() => { setShowTemplates(!showTemplates); setEventsHeaderMenuOpen(false); }} style={S.menuItem}>📋 Templates</button>
-                    <button onClick={() => { handleBulkEnhance(); setEventsHeaderMenuOpen(false); }} disabled={aiFixLoading} style={S.menuItem}>{aiFixLoading ? '⏳ Enhancing...' : '✨ Enhance'}</button>
-                    <button onClick={async () => {
-                      setEventsHeaderMenuOpen(false);
-                      if (!window.confirm('Delete ALL draft events? Ready/used events will be kept.')) return;
-                      try {
-                        const res = await api.post(`/api/v1/world/${showId}/events/bulk-delete`, { delete_all_drafts: true });
-                        setToast(`Deleted ${res.data.deleted} draft events`);
-                        loadData();
-                      } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
-                    }} style={{ ...S.menuItem, color: 'var(--danger)' }}>Delete Drafts</button>
-                    <button onClick={async () => {
-                      setEventsHeaderMenuOpen(false);
-                      if (!window.confirm('DELETE ALL EVENTS? This cannot be undone. Are you sure?')) return;
-                      if (!window.confirm('Really delete everything? Type yes to confirm.')) return;
-                      try {
-                        const res = await api.post(`/api/v1/world/${showId}/events/bulk-delete`, { delete_all: true });
-                        setToast(`Deleted ${res.data.deleted} events`);
-                        loadData();
-                      } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
-                    }} style={{ ...S.menuItem, color: 'var(--danger)' }}>Delete All</button>
-                  </div>
-                </>
-              )}
             </div>
           </div>
 
@@ -2366,7 +2397,7 @@ The revised event should feel like a completely different experience from the si
             </div>
           )}
 
-          {/* The queue's five computed states as count cards (Task #1648,
+          {/* The queue's five computed states as count chips (Task #1648,
               docs/EVENT_EPISODE_FLOW.md §8(m); Evoni's redesign, 2026-10-05):
               computeEventState is the same function the cards below use, so a
               count here always matches what's shown. A card filters; clicking
@@ -2376,36 +2407,22 @@ The revised event should feel like a completely different experience from the si
               const n = worldEvents.filter(e => computeEventState(e) === key).length;
               const on = eventStatusFilter === key;
               return (
-                <button key={key} type="button" data-testid={`events-filter-${key}`} aria-pressed={on}
+                <button key={key} type="button" data-testid={`events-filter-${key}`} aria-pressed={on} data-zero={n === 0 || undefined}
                   className={`wa-ev-state${on ? ' active' : ''}`}
                   onClick={() => setEventStatusFilter(on ? 'all' : key)}>
-                  <span className="wa-ev-state-label" style={{ color: cfg.color }}>{cfg.label}</span>
+                  <span className="wa-ev-state-label" style={n ? { color: cfg.color } : undefined}>{cfg.label}</span>
                   <span className="wa-ev-state-count">{n}</span>
                 </button>
               );
             })}
           </div>
-          <div className="wa-ev-refine">
-            {eventStatusFilter !== 'all' && (
+          {eventStatusFilter !== 'all' && (
+            <div className="wa-ev-refine">
               <button type="button" className="wa-ev-show-all" data-testid="events-filter-all" onClick={() => setEventStatusFilter('all')}>
                 Show all {worldEvents.length}
               </button>
-            )}
-            <select data-testid="events-deal-filter" aria-label="Filter by deal type" value={eventDealFilter}
-              onChange={e => setEventDealFilter(e.target.value)}
-              style={{ padding: '6px 10px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 11, background: eventDealFilter === 'all' ? 'var(--surface-card)' : 'var(--primary-subtle)', cursor: 'pointer', maxWidth: '100%' }}>
-              {dealTypeFilterOptions(worldEvents).map(o => (
-                <option key={o.key} value={o.key}>{o.label} ({o.count})</option>
-              ))}
-            </select>
-            <select value={eventSort} onChange={e => setEventSort(e.target.value)} style={{ padding: '6px 10px', border: '1px solid var(--lala-parchment-3)', borderRadius: 6, fontSize: 11, background: 'var(--surface-card)', cursor: 'pointer' }}>
-              <option value="name">Sort: Name</option>
-              <option value="prestige">Sort: Prestige ↓</option>
-              <option value="cost">Sort: Cost ↓</option>
-              <option value="status">Sort: Status</option>
-              <option value="created">Sort: Newest</option>
-            </select>
-          </div>
+            </div>
+          )}
 
           {/* Templates panel */}
           {showTemplates && (
@@ -2958,18 +2975,8 @@ The revised event should feel like a completely different experience from the si
             </div>
           )}
 
-          {/* Generate-options toolbar — draft-script opt-in lives here so
-              both the per-event "Generate" button and the bulk-action
-              "Generate from N events" pick it up. Bulk-select toggle
-              isn't here because it already exists above the page in
-              the toolbar that drives Compare / Bulk Inject. */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, padding: '6px 10px', background: 'var(--surface-bg)', border: '1px solid var(--lala-parchment-3)', borderRadius: 8 }}>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-primary)', cursor: 'pointer' }}>
-              <input type="checkbox" checked={draftScriptOnGenerate} onChange={(e) => setDraftScriptOnGenerate(e.target.checked)} />
-              <strong>Also draft script when generating an episode</strong>
-              <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>(applies to single + bulk Generate)</span>
-            </label>
-          </div>
+          {/* Generate-options toolbar: the draft-script opt-in is in the
+              header's ⋯ menu now (Evoni, 2026-10-22 layout list). */}
 
           {/* Events grid — filtered + sorted, then paged (Task #2360) */}
           {(() => {
@@ -2978,7 +2985,7 @@ The revised event should feel like a completely different experience from the si
             const conflictsByEvent = new Map(getDressCodeConflicts().map(c => [c.event.id, c]));
             return (
           <>
-          <div ref={eventsGridRef} data-testid="events-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(340px, 100%), 1fr))', gap: 12, scrollMarginTop: 16 }}>
+          <div ref={eventsGridRef} data-testid="events-grid" className={`wa-ev-grid${eventLayout === 'list' ? ' is-list' : ''}`}>
             {pageItems.map(ev => {
               const linkedEpisode = ev.used_in_episode_id ? episodes.find(ep => ep.id === ev.used_in_episode_id) : null;
               const isSelected = selectedEvents.has(ev.id);
@@ -2990,7 +2997,8 @@ The revised event should feel like a completely different experience from the si
               const state = computeEventState(ev, readiness);
               const stateCfg = EVENT_QUEUE_STATES[state];
               const details = eventCardDetails(ev);
-              const missing = describeMissing(readiness.blocking);
+              // What is still needed, without what the card's button already asks for (Evoni, 2026-10-22 layout list).
+              const missing = describeMissing(readiness.blocking).filter((m) => !(state === 'needs_organizer' && m === 'Organizer'));
               const menuOpen = openEventMenuId === ev.id;
               const openPackage = () => navigate(`/shows/${showId}/events/${ev.id}`);
               const primaryAction = () => {
@@ -3010,7 +3018,7 @@ The revised event should feel like a completely different experience from the si
                   <span data-testid={`event-card-status-${ev.id}`} className="wa-ev-status" style={{ color: stateCfg.color, background: stateCfg.bg }}>
                     {stateCfg.label}
                   </span>
-                  <span className="wa-ev-category">{details.category || 'No category'}</span>
+                  {details.category && <span className="wa-ev-category">{details.category}</span>}
                   <div className="wa-ev-card-menu" onClick={e => e.stopPropagation()}>
                     <button onClick={() => { setOpenEventMenuId(menuOpen ? null : ev.id); setStatusMenuEventId(null); }} style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'var(--text-secondary)', borderRadius: 4 }} title="More actions" aria-label="More actions">
                       <MoreHorizontal size={16} />
@@ -3071,25 +3079,17 @@ The revised event should feel like a completely different experience from the si
                 <div className="wa-ev-card-place" data-testid={`event-card-place-${ev.id}`}>
                   {details.place.length ? details.place.join(' · ') : 'Venue and date not set'}
                 </div>
-                <div className="wa-ev-tiles">
-                  <div className="wa-ev-tile" data-testid={`event-card-deal-${ev.id}`}>
-                    <span className="wa-ev-tile-label">Deal</span>
-                    <strong>{details.deal.label || 'No deal type'}</strong>
-                    <span className="wa-ev-tile-sub">{details.deal.pays}</span>
-                  </div>
-                  <div className="wa-ev-tile" data-testid={`event-card-organizer-${ev.id}`}>
-                    <span className="wa-ev-tile-label">Organizer</span>
-                    <strong className={details.organizer ? undefined : 'missing'}>{details.organizer || 'Not chosen'}</strong>
-                  </div>
-                </div>
+                {/* The deal and the organizer as one line (they were two boxes). */}
+                <p className="wa-ev-facts">
+                  <span data-testid={`event-card-deal-${ev.id}`}>{details.deal.label || 'No deal type'}{details.deal.pays ? ` · ${details.deal.pays}` : ''}</span>
+                  <span className="wa-ev-facts-dot" aria-hidden="true"> · </span>
+                  <span data-testid={`event-card-organizer-${ev.id}`} className={details.organizer ? undefined : 'missing'}>{details.organizer ? `Organizer: ${details.organizer}` : 'No organizer'}</span>
+                </p>
                 {/* A used or archived event is done: nothing is still needed. */}
                 {missing.length > 0 && state !== 'used' && state !== 'archived' && (
-                  <div className="wa-ev-needed" data-testid={`event-card-needed-${ev.id}`}>
-                    <span className="wa-ev-tile-label">Still needed</span>
-                    <div className="wa-ev-needed-chips">
-                      {missing.map(m => <span key={m} className="wa-ev-needed-chip">{m}</span>)}
-                    </div>
-                  </div>
+                  <p className="wa-ev-needed" data-testid={`event-card-needed-${ev.id}`}>
+                    <strong>Still needed:</strong> {missing.join(', ')}
+                  </p>
                 )}
                 {conflictsByEvent.has(ev.id) && (() => {
                   const c = conflictsByEvent.get(ev.id);

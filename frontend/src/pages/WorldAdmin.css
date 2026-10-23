@@ -102,17 +102,27 @@
 /* Tailwind's base makes an svg a block; the header's icon buttons stay on one line. */
 .wa-ev-head button { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .wa-ev-head-tools { position: relative; display: flex; flex-wrap: wrap; gap: 6px; flex-basis: 100%; justify-content: flex-end; }
+/* One toolbar under the title (Evoni, 2026-10-22 layout list). */
+.wa-ev-head-actions { flex-basis: 100%; }
+.wa-ev-head-actions select { height: 40px; padding: 0 10px; border: 1px solid var(--lala-parchment-3); border-radius: 10px; background: var(--surface-card); font: inherit; font-size: 13px; max-width: 100%; }
+.wa-ev-more { position: relative; }
+.wa-ev-layout { display: inline-flex; padding: 3px; border: 1px solid var(--lala-parchment-3); border-radius: 10px; background: var(--surface-card); }
+.wa-ev-layout button { min-height: 32px; padding: 2px 12px; border: none; border-radius: 8px; background: none; color: var(--text-primary); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.wa-ev-layout button.active { background: var(--lala-lavender); color: var(--text-inverse); }
 
-.wa-ev-states { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
+/* The five states as one row of chips; a zero is muted. */
+.wa-ev-states { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .wa-ev-state {
-  display: grid; gap: 4px; text-align: left; padding: 14px 16px; border-radius: 12px; cursor: pointer;
-  border: 1px solid var(--lala-parchment-3); background: var(--lala-parchment-2); font: inherit;
+  display: inline-flex; align-items: baseline; gap: 6px; min-height: 36px; padding: 6px 14px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--lala-parchment-3); background: var(--surface-card); font: inherit;
 }
 .wa-ev-state:hover { border-color: var(--accent-light); }
-.wa-ev-state.active { background: var(--surface-card); border: 2px solid var(--accent); padding: 13px 15px; }
+.wa-ev-state.active { border: 2px solid var(--accent); padding: 5px 13px; background: var(--accent-subtle); }
+.wa-ev-state[data-zero] { background: var(--lala-parchment-2); }
+.wa-ev-state[data-zero] .wa-ev-state-label { color: var(--text-secondary); }
 .wa-ev-state-label { font-size: 13px; font-weight: 700; }
-.wa-ev-state-count { font-family: var(--font-prose); font-size: 26px; font-weight: 600; color: var(--text-primary); line-height: 1.1; }
-.wa-ev-refine { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-bottom: 16px; }
+.wa-ev-state-count { font-size: 14px; font-weight: 800; color: var(--text-primary); }
+.wa-ev-refine { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
 .wa-ev-show-all { margin-right: auto; padding: 0; border: none; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--lala-lavender-text); cursor: pointer; }
 .wa-ev-show-all:hover { text-decoration: underline; }
 
@@ -131,16 +141,25 @@
 .wa-ev-card-menu > button { background: none; border: none; padding: 4px; cursor: pointer; color: var(--text-secondary); border-radius: 4px; }
 .wa-ev-card-name { margin: 2px 0 0; font-family: var(--font-prose); font-size: 20px; font-weight: 600; line-height: 1.25; color: var(--text-primary); overflow-wrap: anywhere; }
 .wa-ev-card-place { font-size: 13px; color: var(--text-secondary); overflow-wrap: anywhere; }
-.wa-ev-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.wa-ev-tile { display: grid; align-content: start; gap: 2px; padding: 10px 12px; border-radius: 10px; background: var(--lala-parchment-2); min-width: 0; overflow-wrap: anywhere; }
-.wa-ev-tile-label { font-size: 12px; color: var(--text-secondary); }
-.wa-ev-tile strong { font-size: 13px; color: var(--text-primary); }
-.wa-ev-tile strong.missing { color: var(--lala-lavender-text); }
-.wa-ev-tile-sub { font-size: 12px; font-weight: 600; color: var(--lala-lavender-text); }
-.wa-ev-needed { display: grid; gap: 6px; }
-.wa-ev-needed .wa-ev-tile-label { font-weight: 600; color: var(--text-primary); }
-.wa-ev-needed-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.wa-ev-needed-chip { padding: 3px 10px; border-radius: 999px; background: var(--warning-bg); border: 1px solid var(--warning-border); color: var(--warning-text); font-size: 12px; font-weight: 600; }
+/* The deal and the organizer as one line; what is still needed as one line. */
+.wa-ev-facts { margin: 0; font-size: 13px; color: var(--text-primary); overflow-wrap: anywhere; }
+.wa-ev-facts .missing { color: var(--lala-lavender-text); font-weight: 600; }
+.wa-ev-needed { margin: 0; padding: 6px 10px; border-radius: 8px; background: var(--warning-bg); color: var(--warning-text); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+
+/* The grid of cards, or the list: one row per event. */
+.wa-ev-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 12px; scroll-margin-top: 16px; }
+.wa-ev-grid.is-list { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.wa-ev-grid.is-list .wa-ev-card {
+  display: grid; grid-template-columns: 170px minmax(0, 1.4fr) minmax(0, 1.4fr) 300px;
+  grid-template-areas: "top name needed actions" "top place needed actions"; align-items: center; gap: 2px 16px; padding: 10px 14px;
+}
+.wa-ev-grid.is-list .wa-ev-card-top { grid-area: top; }
+.wa-ev-grid.is-list .wa-ev-card-name { grid-area: name; margin: 0; font-size: 16px; }
+.wa-ev-grid.is-list .wa-ev-card-place { grid-area: place; font-size: 12px; }
+.wa-ev-grid.is-list .wa-ev-needed { grid-area: needed; }
+.wa-ev-grid.is-list .wa-ev-card-actions { grid-area: actions; margin: 0; padding: 0; justify-content: flex-end; }
+.wa-ev-grid.is-list .wa-ev-facts, .wa-ev-grid.is-list .wa-ev-card-chips, .wa-ev-grid.is-list .wa-ev-category { display: none; }
+.wa-ev-grid.is-list .wa-ev-btn { padding: 6px 12px; }
 .wa-ev-card-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .wa-ev-card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; padding-top: 4px; }
 .wa-ev-btn {
@@ -153,16 +172,17 @@
 .wa-ev-btn.filled:hover { background: var(--lala-lavender-dark); }
 .wa-ev-btn:focus-visible, .wa-ev-state:focus-visible { outline: 2px solid var(--lala-lavender); outline-offset: 2px; }
 
-@media (max-width: 900px) {
-  .wa-ev-states { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
 @media (max-width: 600px) {
-  .wa-ev-states { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .wa-ev-head-title h2 { font-size: 24px; }
   .wa-ev-search { min-width: 0; }
   .wa-ev-head-tools { justify-content: flex-start; }
-  .wa-ev-refine select { flex: 1 1 140px; min-width: 0; }
+  .wa-ev-search { flex-basis: 100%; }
+  .wa-ev-head-actions select { flex: 1 1 140px; min-width: 0; }
   .wa-ev-card { padding: 16px; }
+  .wa-ev-grid.is-list .wa-ev-card {
+    grid-template-columns: minmax(0, 1fr); grid-template-areas: "top" "name" "place" "needed" "actions"; gap: 4px; padding: 10px 12px;
+  }
+  .wa-ev-grid.is-list .wa-ev-card-actions { justify-content: flex-start; margin-top: 4px; }
 }
 
 /* Events pagination: under the grid, wraps at 375px. */
