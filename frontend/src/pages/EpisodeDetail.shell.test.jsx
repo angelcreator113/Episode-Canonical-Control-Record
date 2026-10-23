@@ -77,7 +77,8 @@ vi.mock('../components/Episodes/EpisodeLalasPhoneTab', () => ({ default: () => n
 vi.mock('../components/Episodes/EpisodeScriptTab', () => ({ default: () => null }));
 vi.mock('../components/Episodes/EpisodeDistributionTab', () => ({ default: () => null }));
 vi.mock('../components/EpisodeWardrobeGameplay', () => ({ default: () => null }));
-vi.mock('../components/Episodes/EpisodeScenesTab', () => ({ default: () => null }));
+vi.mock('../components/Episodes/EpisodeScenesTab', () => ({ default: () => <div data-testid="beat-plan-body">Plan body</div> }));
+vi.mock('../components/Episodes/EpisodeSceneWorkspace', () => ({ default: () => <div data-testid="scene-workspace-body">Workspace body</div> }));
 vi.mock('../components/PhonePreviewMode', () => ({ default: () => null }));
 
 vi.mock('../services/api', () => ({
@@ -122,14 +123,39 @@ describe('Episode header and tabs (redesign part 1)', () => {
 
   // Evoni, 2026-10-17: Production is the workspace; the episode's pieces
   // sit under it, the checklist last.
-  test('the Production pills run Scenes, Beat Plan, Files, Wardrobe, Style Page, Phone, Overlays, Money, Checklist; the chosen one is marked', async () => {
+  // Evoni, 2026-10-22 (Production layout): in four groups, and Beat Plan is
+  // Scenes' Plan view, not a pill.
+  test('the Production pills run Scenes, Files | Wardrobe, Style Page | Phone, Overlays | Money, Checklist; the chosen one is marked', async () => {
     renderAt('/episodes/ep-1?tab=wardrobe');
     const row = await screen.findByTestId('ed-subtabs');
-    expect([...row.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Scenes', 'Beat Plan', 'Files', 'Wardrobe', 'Style Page', 'Phone', 'Overlays', 'Money', 'Checklist']);
+    // The pill's own label (the Checklist pill also counts what is done).
+    expect([...row.querySelectorAll('button')].map((b) => b.childNodes[0].textContent)).toEqual(['Scenes', 'Files', 'Wardrobe', 'Style Page', 'Phone', 'Overlays', 'Money', 'Checklist']);
+    expect([...row.querySelectorAll('[role="group"]')].map((g) => g.getAttribute('aria-label'))).toEqual(['Make', 'Look', 'On screen', 'Track']);
     const chosen = row.querySelector('[aria-current="page"]');
     expect(chosen.textContent).toBe('Wardrobe');
     expect(chosen.className).toContain('is-active');
     expect(screen.getByTitle('Production').getAttribute('aria-current')).toBe('page');
+  });
+
+  // Evoni, 2026-10-22: Beat Plan "is the same as scenes"; it is Scenes'
+  // Plan view, and its old links still land on it.
+  test('?tab=beatplan opens Scenes on its Plan view; Workspace switches back', async () => {
+    renderAt('/episodes/ep-1?tab=beatplan');
+    expect(await screen.findByTestId('beat-plan-body')).toBeTruthy();
+    const row = screen.getByTestId('ed-subtabs');
+    expect(row.querySelector('[aria-current="page"]').textContent).toBe('Scenes');
+    const view = screen.getByTestId('ed-scenes-view');
+    expect(view.querySelector('[aria-pressed="true"]').textContent).toBe('Plan');
+    fireEvent.click(screen.getByRole('button', { name: 'Workspace' }));
+    expect(await screen.findByTestId('scene-workspace-body')).toBeTruthy();
+    expect(screen.getByTestId('ed-scenes-view').querySelector('[aria-pressed="true"]').textContent).toBe('Workspace');
+  });
+
+  test('the Checklist pill counts what is done, and follows the checklist', async () => {
+    renderAt('/episodes/ep-1?tab=checklist');
+    expect((await screen.findByTestId('ed-checklist-count')).textContent).toBe('1/3');
+    fireEvent.click(screen.getByTestId('recheck'));
+    await waitFor(() => expect(screen.getByTestId('ed-checklist-count').textContent).toBe('2/3'));
   });
 
   test('the main tabs run Overview, Script, Production, Results', async () => {

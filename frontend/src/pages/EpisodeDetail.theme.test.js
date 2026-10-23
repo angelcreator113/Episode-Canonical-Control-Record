@@ -60,7 +60,8 @@ describe('Episode shell theme', () => {
     expect(redesign).toMatch(/\.ed-page\.ed-studio \.ed-tabs-modern \{[^}]*border: 1px solid var\(--studio-line\);[^}]*background: var\(--studio-card\);/);
     expect(redesign).toMatch(/\.ed-page\.ed-studio \.ed-tab\.ed-tab-active,\s*\.ed-page\.ed-studio \.ed-tab\.ed-tab-active:hover \{\s*background: var\(--studio-gradient\);\s*color: var\(--text-inverse\);/);
     expect(redesign).toMatch(/\.ed-tab-badge \{[^}]*background: var\(--studio-magenta-soft\);\s*color: var\(--studio-magenta\);/);
-    expect(jsx).toMatch(/data-testid="ed-production-left">\{checksLeft\} left</);
+    // On a phone the badge is the number alone (Evoni, 2026-10-22 layout list).
+    expect(jsx).toMatch(/data-testid="ed-production-left" aria-label=\{`\$\{checksLeft\} left`\}>\{checksLeft\}<span className="ed-tab-badge-word"> left<\/span>/);
     expect(jsx).toMatch(/aria-current=\{activeTab === t\.key \? 'page' : undefined\}/);
     expect(redesign).toMatch(/\.ed-page\.ed-studio \.eds-show-pill \{[^}]*background: var\(--studio-purple-soft\); color: var\(--studio-purple\);/);
     expect(redesign).toMatch(/\.ed-page\.ed-studio \.eds-primary \{[^}]*background: var\(--studio-gradient\); color: var\(--text-inverse\);/);
@@ -70,8 +71,9 @@ describe('Episode shell theme', () => {
   });
 
   test('the Production pills are magenta when chosen and mark it with aria-current', () => {
-    expect(jsx).toMatch(/aria-current=\{epSubTab === s\.key \? 'page' : undefined\}/);
-    expect(jsx).toMatch(/className=\{`ed-subpill\$\{epSubTab === s\.key \? ' is-active' : ''\}`\}/);
+    // The pill a sub-tab lights (Scenes for its Plan view, 2026-10-22).
+    expect(jsx).toMatch(/aria-current=\{lit === s\.key \? 'page' : undefined\}/);
+    expect(jsx).toMatch(/className=\{`ed-subpill\$\{lit === s\.key \? ' is-active' : ''\}`\}/);
     expect(redesign).toMatch(/\.ed-subpill \{[^}]*border: 1px solid var\(--studio-line-strong\);[^}]*color: var\(--studio-magenta\);/);
     expect(redesign).toMatch(/\.ed-subpill\.is-active \{ background: var\(--studio-magenta\); border-color: var\(--studio-magenta\); color: var\(--text-inverse\);/);
   });

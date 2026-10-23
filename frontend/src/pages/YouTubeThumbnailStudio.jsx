@@ -33,7 +33,7 @@ import {
   Youtube, Upload, Download, ChevronLeft, Save, Palette, ImageOff, Check, LayoutTemplate, Sparkles, Star, Trash2, History, Folder, ChevronRight,
   Eye, EyeOff, ArrowUp, ArrowDown, Type, RotateCcw, ScanEye, X, Lock, LockOpen, Copy, Undo2, Redo2, Plus, Pencil, AlignLeft, AlignCenter, AlignRight,
   AlignStartVertical, AlignCenterVertical, AlignEndVertical, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
-  AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, Keyboard, RefreshCw, FlipHorizontal2, ZoomIn, ZoomOut, ClipboardCopy, ClipboardPaste, Columns2, CopyPlus, ArrowRight, Circle, Tag, LayoutGrid, EllipsisVertical, Grid3x3, SquareDashed, GripVertical, ListChecks, Shapes, Bandage, StickyNote, Eclipse, Wand2,
+  AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, Keyboard, RefreshCw, FlipHorizontal2, ZoomIn, ZoomOut, ClipboardCopy, ClipboardPaste, Columns2, CopyPlus, ArrowRight, Circle, Tag, LayoutGrid, EllipsisVertical, Ellipsis, Grid3x3, SquareDashed, GripVertical, ListChecks, Shapes, Bandage, StickyNote, Eclipse, Wand2,
 } from 'lucide-react';
 import {
   youtubeThumbnailsApi, LAYOUTS, ACCENTS, TEXT_COLORS, readRecentColours, rememberColour, episodeContent, folderPath, folderCount, folderCover, firstFolder,
@@ -613,14 +613,18 @@ function LayerThumb({ l }) {
   return <span className={`yts-layer-thumb is-${l.kind}`} aria-hidden>{inner}</span>;
 }
 
-/** The layers, front first: pick, hide or show, lock, copy, move forward or back, remove. */
+/**
+ * The layers, front first (Evoni, 2026-10-22 layout list: a compact list
+ * beside the canvas): each row its picture, name and eye; lock, copy,
+ * forward, back and remove behind its ⋯.
+ */
 const LAYERS_SHORT = 6;
 const TOAST_MS = 5000;
 
 function LayersList({ spec, selectedId, pickedIds, onSelect, onChange, onDuplicate }) {
   const picked = new Set(pickedIds || (selectedId ? [selectedId] : []));
   const front = [...(spec?.layers || [])].reverse();
-  // Dragged by its row (Evoni, 2026-10-21 redesign); the arrows still move one step.
+  // Dragged by its row (Evoni, 2026-10-21 redesign); the menu still moves one step.
   const [drag, setDrag] = useState(null);
   const [over, setOver] = useState(null);
   const done = () => { setDrag(null); setOver(null); };
@@ -629,6 +633,15 @@ function LayersList({ spec, selectedId, pickedIds, onSelect, onChange, onDuplica
   const [all, setAll] = useState(false);
   const long = front.length > LAYERS_SHORT + 2;
   const rows = long && !all ? front.filter((l, i) => i < LAYERS_SHORT || picked.has(l.id)) : front;
+  const itemsFor = (l, i) => [
+    ...(l.kind === 'shade' ? [] : [
+      { key: 'lock', icon: l.locked ? Lock : LockOpen, label: 'Lock', on: Boolean(l.locked), onChoose: () => onChange(updateLayer(spec, l.id, { locked: !l.locked })) },
+      { key: 'copy', icon: Copy, label: 'Copy', onChoose: () => onDuplicate(l.id) },
+    ]),
+    { key: 'up', icon: ArrowUp, label: 'Bring forward', disabled: i === 0, onChoose: () => onChange(moveLayer(spec, l.id, 'up')) },
+    { key: 'down', icon: ArrowDown, label: 'Send back', disabled: i === front.length - 1, onChoose: () => onChange(moveLayer(spec, l.id, 'down')) },
+    { key: 'remove', icon: Trash2, label: 'Remove', danger: true, onChoose: () => { if (l.id === selectedId) onSelect(null); onChange(removeLayer(spec, l.id)); } },
+  ];
   return (
     <fieldset className="yts-field" data-testid="yts-layers">
       <legend className="yts-label">Layers</legend>
@@ -645,28 +658,13 @@ function LayersList({ spec, selectedId, pickedIds, onSelect, onChange, onDuplica
             <LayerThumb l={l} />
             <button type="button" className="yts-layer-name" aria-pressed={picked.has(l.id)}
               onClick={(e) => onSelect(l.kind === 'shade' ? null : l.id, { toggle: l.kind !== 'shade' && (e.shiftKey || e.ctrlKey || e.metaKey) })}>
-              {layerName(l)}
+              {l.locked && <Lock size={12} className="yts-layer-locked" aria-hidden />}{layerName(l)}
             </button>
             <button type="button" className="yts-icon-btn" onClick={() => onChange(updateLayer(spec, l.id, { visible: !l.visible }))}
               aria-label={`${l.visible ? 'Hide' : 'Show'} ${layerName(l)}`} title={l.visible ? 'Hide' : 'Show'}>
               {l.visible ? <Eye size={15} aria-hidden /> : <EyeOff size={15} aria-hidden />}
             </button>
-            {l.kind !== 'shade' && (
-              <button type="button" className={`yts-icon-btn${l.locked ? ' is-on' : ''}`} onClick={() => onChange(updateLayer(spec, l.id, { locked: !l.locked }))}
-                aria-pressed={Boolean(l.locked)} aria-label={`${l.locked ? 'Unlock' : 'Lock'} ${layerName(l)}`} title={l.locked ? 'Unlock' : 'Lock'}>
-                {l.locked ? <Lock size={15} aria-hidden /> : <LockOpen size={15} aria-hidden />}
-              </button>
-            )}
-            {l.kind !== 'shade' && (
-              <button type="button" className="yts-icon-btn" onClick={() => onDuplicate(l.id)}
-                aria-label={`Copy ${layerName(l)}`} title="Copy"><Copy size={15} aria-hidden /></button>
-            )}
-            <button type="button" className="yts-icon-btn" onClick={() => onChange(moveLayer(spec, l.id, 'up'))} disabled={i === 0}
-              aria-label={`Bring ${layerName(l)} forward`} title="Forward"><ArrowUp size={15} aria-hidden /></button>
-            <button type="button" className="yts-icon-btn" onClick={() => onChange(moveLayer(spec, l.id, 'down'))} disabled={i === front.length - 1}
-              aria-label={`Send ${layerName(l)} back`} title="Back"><ArrowDown size={15} aria-hidden /></button>
-            <button type="button" className="yts-icon-btn is-danger" onClick={() => { if (l.id === selectedId) onSelect(null); onChange(removeLayer(spec, l.id)); }}
-              aria-label={`Remove ${layerName(l)}`} title="Remove"><Trash2 size={15} aria-hidden /></button>
+            <MoreMenu label={`More for ${layerName(l)}`} icon={Ellipsis} items={itemsFor(l, i)} />
           </li>
         ); })}
       </ul>
@@ -805,12 +803,12 @@ function BoxField({ label, value, min, max, disabled, onCommit }) {
   );
 }
 
-// On a phone the settings show one section at a time (Evoni, 2026-10-22
-// layout list), in tabs under the canvas.
-const PHONE_TABS = [
-  ['layers', 'Layers'], ['layout', 'Layout'], ['text', 'Text'], ['assets', 'Assets'],
-  ['characters', 'Characters'], ['background', 'Background'], ['colours', 'Colours'], ['saved', 'Saved'],
+// The tools one tab at a time, on every screen (Evoni, 2026-10-22 layout
+// list: "Tools as tabs"), so the canvas stays in view; on a phone, Saved too.
+const TOOL_TABS = [
+  ['layout', 'Layout'], ['text', 'Text'], ['pictures', 'Pictures'], ['stickers', 'Stickers'], ['brand', 'Brand'], ['ai', 'AI'],
 ];
+const PHONE_TOOL_TABS = [...TOOL_TABS, ['saved', 'Saved']];
 
 /**
  * A question before something is replaced or deleted. It takes the focus
@@ -836,12 +834,33 @@ function AskBox({ asking, onYes, onNo }) {
   );
 }
 
-function MoreMenu({ items }) {
-  const [open, setOpen] = useState(false);
+/**
+ * A ⋯ menu. It floats over the page (fixed), so a list that scrolls or
+ * clips never cuts it off; it follows its button as the page scrolls, and
+ * closes once the button is off the screen, or on Esc.
+ */
+/**
+ * Where a menu floats: under its button (over it near the foot of the
+ * screen), right edges lined up; null once the button is off the screen.
+ */
+const MENU_ROOM = 240;
+const placeBy = (el) => {
+  const r = el?.getBoundingClientRect?.();
+  if (!r) return null;
+  if (r.bottom < 0 || r.top > window.innerHeight) return null;
+  const right = Math.max(8, Math.round(window.innerWidth - r.right));
+  return r.bottom + MENU_ROOM > window.innerHeight && r.top > MENU_ROOM
+    ? { bottom: Math.round(window.innerHeight - r.top + 6), right }
+    : { top: Math.round(r.bottom + 6), right };
+};
+
+function MoreMenu({ items, label = 'More', icon: ButtonIcon = EllipsisVertical, testid }) {
+  const [open, setOpen] = useState(null); // { top, right } where it floats
   const box = useRef(null);
+  const btn = useRef(null);
   // Arrow keys, Home and End move through the items; the first is focused on opening (audit, 2026-10-22).
   const itemsOf = () => [...(box.current?.querySelectorAll('[role^="menuitem"]:not(:disabled)') || [])];
-  useEffect(() => { if (open) itemsOf()[0]?.focus(); }, [open]);
+  useEffect(() => { if (open) itemsOf()[0]?.focus(); }, [Boolean(open)]); // eslint-disable-line react-hooks/exhaustive-deps
   const onMenuKey = (e) => {
     const list = itemsOf();
     if (!list.length) return;
@@ -853,23 +872,33 @@ function MoreMenu({ items }) {
   };
   useEffect(() => {
     if (!open) return undefined;
-    const away = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(false); };
-    const esc = (e) => { if (e.key === 'Escape') setOpen(false); };
+    const away = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(null); };
+    const esc = (e) => { if (e.key === 'Escape') { setOpen(null); btn.current?.focus(); } };
+    const follow = () => setOpen(placeBy(btn.current));
     document.addEventListener('mousedown', away);
     document.addEventListener('keydown', esc);
-    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
-  }, [open]);
+    window.addEventListener('scroll', follow, true);
+    window.addEventListener('resize', follow);
+    return () => {
+      document.removeEventListener('mousedown', away);
+      document.removeEventListener('keydown', esc);
+      window.removeEventListener('scroll', follow, true);
+      window.removeEventListener('resize', follow);
+    };
+  }, [Boolean(open)]); // eslint-disable-line react-hooks/exhaustive-deps
+  const toggle = () => setOpen(open ? null : placeBy(btn.current));
   return (
     <div className="yts-menu" ref={box}>
-      <button type="button" className="yts-icon-btn" onClick={() => setOpen((v) => !v)} aria-haspopup="menu" aria-expanded={open}
-        aria-label="More" title="More" data-testid="yts-more-btn"><EllipsisVertical size={15} aria-hidden /></button>
+      <button type="button" ref={btn} className="yts-icon-btn" onClick={toggle} aria-haspopup="menu" aria-expanded={Boolean(open)}
+        aria-label={label} title={label} data-testid={testid}><ButtonIcon size={15} aria-hidden /></button>
       {open && (
-        <ul className="yts-menu-list" role="menu" aria-label="More" onKeyDown={onMenuKey}>
-          {items.map(({ key, testid, icon: Icon, label, onChoose, on, disabled }) => (
+        <ul className="yts-menu-list" role="menu" aria-label={label} onKeyDown={onMenuKey} style={open}>
+          {items.map(({ key, testid: itemId, icon: Icon, label: text, onChoose, on, disabled, danger }) => (
             <li key={key} role="none">
               <button type="button" role={on === undefined ? 'menuitem' : 'menuitemcheckbox'} aria-checked={on === undefined ? undefined : on}
-                className={`yts-menu-item${on ? ' is-on' : ''}`} data-testid={testid} disabled={disabled} onClick={() => { setOpen(false); onChoose(); }}>
-                <Icon size={15} aria-hidden /> {label}
+                className={`yts-menu-item${on ? ' is-on' : ''}${danger ? ' is-danger' : ''}`} data-testid={itemId} disabled={disabled}
+                onClick={() => { setOpen(null); onChoose(); }}>
+                <Icon size={15} aria-hidden /> {text}
               </button>
             </li>
           ))}
@@ -1032,7 +1061,7 @@ function TemplatesBar({ showName, templates, busy, onUse, onCreate, onRename, on
         <ul className="yts-template-grid">
           {templates.map((t) => (
             <li key={t.id} className={`yts-template${t.isDefault ? ' is-default' : ''}`} data-testid={`yts-template-${t.id}`}>
-              <button type="button" className="yts-template-pic" onClick={() => onUse(t)} disabled={busy || !t.spec} title={`Use ${t.name}`}>
+              <button type="button" className="yts-template-pic" onClick={() => onUse(t)} disabled={busy || !t.spec} aria-label={`Use ${t.name}`} title={`Use ${t.name}`}>
                 {t.previewUrl ? <PreviewImg url={t.previewUrl} alt="" /> : <LayoutTemplate size={28} aria-hidden />}
               </button>
               {renaming?.id === t.id ? (
@@ -1044,32 +1073,24 @@ function TemplatesBar({ showName, templates, busy, onUse, onCreate, onRename, on
                   <button type="button" className="yts-history-btn" onClick={() => setRenaming(null)}>Cancel</button>
                 </form>
               ) : (
-                <p className="yts-template-name" onDoubleClick={() => setRenaming({ id: t.id, name: t.name })} title="Double-click to rename">
-                  {t.isDefault && <Star size={13} aria-label="Default" />} {t.name}
-                </p>
+                <div className="yts-card-foot">
+                  <p className="yts-template-name" onDoubleClick={() => setRenaming({ id: t.id, name: t.name })} title={t.name}>
+                    {t.isDefault && <Star size={13} aria-label="Default" />} {t.name}
+                  </p>
+                  {/* Use is the picture; the rest behind ⋯ (Evoni, 2026-10-22 layout list). */}
+                  <MoreMenu label={`More for ${t.name}`} icon={Ellipsis} items={[
+                    { key: 'rename', icon: Pencil, label: 'Rename', disabled: busy, onChoose: () => setRenaming({ id: t.id, name: t.name }) },
+                    { key: 'update', icon: RefreshCw, label: 'Update with this', disabled: busy, onChoose: () => setAsking({ id: t.id, kind: 'update' }) },
+                    ...(t.isDefault ? [] : [{ key: 'default', icon: Star, label: 'Make default', disabled: busy, onChoose: () => onDefault(t) }]),
+                    { key: 'delete', icon: Trash2, label: 'Delete', danger: true, disabled: busy, onChoose: () => setAsking({ id: t.id, kind: 'delete' }) },
+                  ]} />
+                </div>
               )}
-              {asking?.id === t.id ? (
+              {asking?.id === t.id && (
                 <div className="yts-history-row" role="group" aria-label="Confirm">
                   <span className="yts-template-ask">{asking.kind === 'delete' ? `Delete "${t.name}"?` : `Replace "${t.name}" with this arrangement?`}</span>
                   <button type="button" className="yts-history-btn" onClick={() => answer(t)}>Yes</button>
                   <button type="button" className="yts-history-btn" onClick={() => setAsking(null)}>No</button>
-                </div>
-              ) : (
-                <div className="yts-history-row">
-                  <button type="button" className="yts-history-btn" onClick={() => onUse(t)} disabled={busy || !t.spec}>Use</button>
-                  <button type="button" className="yts-history-btn" onClick={() => setRenaming({ id: t.id, name: t.name })} disabled={busy}>
-                    <Pencil size={13} aria-hidden /> Rename
-                  </button>
-                  {!t.isDefault && (
-                    <button type="button" className="yts-history-btn" onClick={() => onDefault(t)} disabled={busy}>
-                      <Star size={13} aria-hidden /> Make default
-                    </button>
-                  )}
-                  <button type="button" className="yts-history-btn" onClick={() => setAsking({ id: t.id, kind: 'update' })} disabled={busy}>
-                    Update with this
-                  </button>
-                  <button type="button" className="yts-history-btn is-danger" onClick={() => setAsking({ id: t.id, kind: 'delete' })} disabled={busy}
-                    aria-label={`Delete ${t.name}`}><Trash2 size={13} aria-hidden /></button>
                 </div>
               )}
             </li>
@@ -1189,7 +1210,7 @@ function VersionsBar({ versions, busy, now, nowWarnings, warningsOf, onKeep, onU
         <ul className="yts-template-grid">
           {versions.map((v) => (
             <li key={v.id} className="yts-template" data-testid={`yts-version-${v.id}`}>
-              <button type="button" className="yts-template-pic" onClick={() => onUse(v)} disabled={busy || !v.spec} title={`Use ${v.name}`}>
+              <button type="button" className="yts-template-pic" onClick={() => onUse(v)} disabled={busy || !v.spec} aria-label={`Use ${v.name}`} title={`Use ${v.name}`}>
                 {v.previewUrl ? <PreviewImg url={v.previewUrl} alt="" /> : <Columns2 size={28} aria-hidden />}
               </button>
               {renaming?.id === v.id ? (
@@ -1201,27 +1222,22 @@ function VersionsBar({ versions, busy, now, nowWarnings, warningsOf, onKeep, onU
                   <button type="button" className="yts-history-btn" onClick={() => setRenaming(null)}>Cancel</button>
                 </form>
               ) : (
-                <p className="yts-template-name" onDoubleClick={() => setRenaming({ id: v.id, name: v.name })} title="Double-click to rename">
-                  {v.name} <span className="yts-version-reads">· {warningsLine(warningsOf(v))}</span>
-                </p>
+                <div className="yts-card-foot">
+                  <p className="yts-template-name" onDoubleClick={() => setRenaming({ id: v.id, name: v.name })} title={v.name}>
+                    {v.name} <span className="yts-version-reads">· {warningsLine(warningsOf(v))}</span>
+                  </p>
+                  <MoreMenu label={`More for ${v.name}`} icon={Ellipsis} items={[
+                    { key: 'rename', icon: Pencil, label: 'Rename', disabled: busy, onChoose: () => setRenaming({ id: v.id, name: v.name }) },
+                    { key: 'update', icon: RefreshCw, label: 'Update with this', disabled: busy, onChoose: () => setAsking({ id: v.id, kind: 'update' }) },
+                    { key: 'delete', icon: Trash2, label: 'Delete', danger: true, disabled: busy, onChoose: () => setAsking({ id: v.id, kind: 'delete' }) },
+                  ]} />
+                </div>
               )}
-              {asking?.id === v.id ? (
+              {asking?.id === v.id && (
                 <div className="yts-history-row" role="group" aria-label="Confirm">
                   <span className="yts-template-ask">{asking.kind === 'delete' ? `Delete "${v.name}"?` : `Replace "${v.name}" with this arrangement?`}</span>
                   <button type="button" className="yts-history-btn" onClick={() => answer(v)}>Yes</button>
                   <button type="button" className="yts-history-btn" onClick={() => setAsking(null)}>No</button>
-                </div>
-              ) : (
-                <div className="yts-history-row">
-                  <button type="button" className="yts-history-btn" onClick={() => onUse(v)} disabled={busy || !v.spec}>Use</button>
-                  <button type="button" className="yts-history-btn" onClick={() => setRenaming({ id: v.id, name: v.name })} disabled={busy}>
-                    <Pencil size={13} aria-hidden /> Rename
-                  </button>
-                  <button type="button" className="yts-history-btn" onClick={() => setAsking({ id: v.id, kind: 'update' })} disabled={busy}>
-                    Update with this
-                  </button>
-                  <button type="button" className="yts-history-btn is-danger" onClick={() => setAsking({ id: v.id, kind: 'delete' })} disabled={busy}
-                    aria-label={`Delete ${v.name}`}><Trash2 size={13} aria-hidden /></button>
                 </div>
               )}
             </li>
@@ -1301,9 +1317,12 @@ export default function YouTubeThumbnailStudio() {
   // pinned at the top once the canvas has scrolled away.
   const phone = useIsPhone();
   const stageRef = useRef(null);
-  const [phoneTab, setPhoneTab] = useState('layers');
-  // A section shows when its tab is open on a phone; always on a wider screen.
-  const shown = (tab) => !phone || phoneTab === tab;
+  // The open tool tab (Evoni, 2026-10-22 layout list); Saved is a tab on a phone only.
+  const [tool, setTool] = useState('text');
+  const toolOn = !phone && tool === 'saved' ? 'text' : tool;
+  const shown = (tab) => toolOn === tab;
+  // Where YouTube shows it, on demand (Evoni, 2026-10-22 layout list).
+  const [showYt, setShowYt] = useState(false);
   const edited = useRef(false);
   // The layers as they are now (an upload adds to them after its await).
   const specRef = useRef(null);
@@ -2096,12 +2115,18 @@ export default function YouTubeThumbnailStudio() {
     <LayerSettings layer={picked} onChange={(patch) => edit((s) => updateLayer(s, picked.id, patch))} onCutOut={cutOut} cutting={cutting}
       colours={[...brand.colours, ...[...ACCENTS, ...recentColours.filter((c) => !ACCENTS.includes(c))].filter((c) => !brand.colours.includes(c))]} onRemember={remember} />
   );
+  const ytItem = { key: 'yt', testid: 'yts-menu-yt', icon: Youtube, label: ytWarnings.length ? `YouTube preview (${ytWarnings.length} to fix)` : 'YouTube preview', on: showYt, onChoose: () => setShowYt((v) => !v) };
   const marksItems = [
     { key: 'exact', testid: 'yts-menu-exact', icon: ScanEye, label: rendering ? 'Drawing…' : 'See it exactly', onChoose: seeExactly, disabled: rendering },
     { key: 'grid', testid: 'yts-menu-grid', icon: Grid3x3, label: 'Show grid', on: marks.grid, onChoose: () => setMarks((m) => ({ ...m, grid: !m.grid })) },
     { key: 'safe', testid: 'yts-menu-safe', icon: SquareDashed, label: 'Safe zones', on: marks.safe, onChoose: () => setMarks((m) => ({ ...m, safe: !m.safe })) },
   ];
 
+  const templatesBar = sources?.show?.id && (
+    <TemplatesBar showName={sources.show.name} templates={sources.templates || []} busy={busy}
+      onUse={useTemplate} onCreate={createTemplate} onRename={renameTemplate} onDefault={defaultTemplate}
+      onUpdate={updateTemplate} onDelete={deleteTemplate} />
+  );
   const versionsBar = episodeId && sources && (
     <VersionsBar versions={sources.versions || []} busy={busy} now={snapshot} nowWarnings={ytWarnings.length} warningsOf={versionWarnings}
       onKeep={keepVersion} onUse={useVersion} onRename={renameVersion} onUpdate={updateVersion} onDelete={deleteVersion} onKit={downloadKit} />
@@ -2245,25 +2270,32 @@ export default function YouTubeThumbnailStudio() {
                 <div className="yts-toolbar-group" role="group" aria-label="Marks">
                   <button type="button" className={`yts-tool-btn${marks.grid ? ' is-on' : ''}`} aria-pressed={marks.grid} data-testid="yts-grid-btn"
                     onClick={() => setMarks((m) => ({ ...m, grid: !m.grid }))} title="Squares and thirds over the canvas (not saved)">
-                    <Grid3x3 size={15} aria-hidden /> Show grid
+                    <Grid3x3 size={15} aria-hidden /> <span className="yts-tool-word">Show grid</span>
                   </button>
                   <button type="button" className={`yts-tool-btn${marks.safe ? ' is-on' : ''}`} aria-pressed={marks.safe} data-testid="yts-safe-btn"
                     onClick={() => setMarks((m) => ({ ...m, safe: !m.safe }))} title="Where YouTube's timestamp sits, and a margin round the edge (not saved)">
-                    <SquareDashed size={15} aria-hidden /> Safe zones
+                    <SquareDashed size={15} aria-hidden /> <span className="yts-tool-word">Safe zones</span>
                   </button>
                 </div>
                 )}
                 <div className="yts-toolbar-end">
                   {!phone && (
+                    <button type="button" className={`yts-tool-btn${showYt ? ' is-on' : ''}`} aria-pressed={showYt} onClick={() => setShowYt((v) => !v)}
+                      data-testid="yts-yt-btn" title="Where YouTube shows it: in search, on a phone, beside a video">
+                      <Youtube size={15} aria-hidden /> Preview
+                      {ytWarnings.length > 0 && <span className="yts-warn-count" aria-label={`${ytWarnings.length} to fix`}>{ytWarnings.length}</span>}
+                    </button>
+                  )}
+                  {!phone && (
                     <button type="button" className="yts-tool-btn" onClick={seeExactly} disabled={rendering} data-testid="yts-exact">
-                      <ScanEye size={15} aria-hidden /> {rendering ? 'Drawing…' : 'See it exactly'}
+                      <ScanEye size={15} aria-hidden /> <span className="yts-tool-word">{rendering ? 'Drawing…' : 'See it exactly'}</span>
                     </button>
                   )}
                   <button type="button" className="yts-tool-btn is-primary" onClick={save} disabled={busy || loading} data-testid="yts-save" aria-label="Save as thumbnail">
                     <Save size={15} aria-hidden /> {phone ? 'Save' : 'Save as thumbnail'}
                   </button>
-                  <MoreMenu items={[
-                    ...(phone ? marksItems : []),
+                  <MoreMenu testid="yts-more-btn" items={[
+                    ...(phone ? [ytItem, ...marksItems] : []),
                     { key: 'season', testid: 'yts-season-open', icon: LayoutGrid, label: 'Whole season', onChoose: () => { flushDraft(); setSeason(true); } },
                     { key: 'reset', testid: 'yts-reset', icon: RotateCcw, label: 'Start again', onChoose: resetToTemplate },
                     ...(phone ? [] : [{ key: 'keys', testid: 'yts-keys-btn', icon: Keyboard, label: 'Keyboard shortcuts', onChoose: () => setShowKeys((v) => !v) }]),
@@ -2311,53 +2343,85 @@ export default function YouTubeThumbnailStudio() {
             )}
 
 
-            {phone && (
-              <div className="yts-phone-tabs" role="tablist" aria-label="Settings" data-testid="yts-phone-tabs">
-                {PHONE_TABS.map(([key, label]) => (
-                  <button key={key} type="button" role="tab" className={`yts-tab${phoneTab === key ? ' is-on' : ''}`} aria-selected={phoneTab === key}
-                    aria-controls={key === 'saved' ? 'yts-strip' : 'yts-settings'}
-                    onClick={() => setPhoneTab(key)} data-testid={`yts-phone-tab-${key}`}>{label}</button>
-                ))}
+            {showYt && (
+            <section className="yts-yt-panel" aria-label="YouTube preview" data-testid="yts-yt-panel">
+              <div className="yts-yt-panel-head">
+                <button type="button" className="yts-icon-btn" onClick={() => setShowYt(false)} aria-label="Close the preview"><X size={15} aria-hidden /></button>
               </div>
+              {!snapshot && <p className="yts-note">Drawing the canvas…</p>}
+              <YouTubePreviews src={snapshot} title={layerOf(spec, 'title')?.text || sources?.episode?.title} channel={sources?.show?.name}
+                warnings={ytWarnings} onPick={(id) => setSelectedId(id)}
+                onFix={(w) => {
+                  const next = fixWarning(specRef.current, w, measurer);
+                  if (next) edit(next);
+                  return Boolean(next);
+                }}
+                onFixAll={() => {
+                  const { spec: next, left } = fixAllWarnings(specRef.current, measurer);
+                  if (next !== specRef.current) edit(next);
+                  return left;
+                }}
+                onSmallOk={(id) => edit((s) => updateLayer(s, id, { smallOk: true }))} />
+              <section className="yts-card yts-try" data-testid="yts-try">
+                <label className="yts-select">
+                  <span>Try it on another episode</span>
+                  <select value={tryOn.id} onChange={(e) => tryOnEpisode(e.target.value)} aria-label="Try it on another episode" disabled={tryOn.busy}>
+                    <option value="">Choose an episode</option>
+                    {episodes.filter((e) => e.id !== episodeId).map((e) => <option key={e.id} value={e.id}>{e.episode_number ? `${e.episode_number}. ` : ''}{e.title || 'Untitled'}</option>)}
+                  </select>
+                </label>
+                {tryOn.busy && <span className="yts-note">Drawing…</span>}
+                {tryOn.url && (
+                  <figure className="yts-exact" data-testid="yts-try-figure">
+                    <img src={tryOn.url} alt="This arrangement on the other episode" />
+                    <figcaption>
+                      This arrangement with that episode's words and pictures, as the show's template would give it.
+                      <button type="button" className="yts-icon-btn" onClick={() => setTryOn({ id: '', url: null, busy: false })} aria-label="Close the other episode"><X size={15} aria-hidden /></button>
+                    </figcaption>
+                  </figure>
+                )}
+              </section>
+            </section>
             )}
 
-            {/* Versions and saved thumbnails under the canvas, as strips (Evoni, 2026-10-22 layout list); a tab of their own on a phone. */}
-            {shown('saved') && (
+            {/* Versions, saved thumbnails and templates under the canvas, as strips of small cards (Evoni, 2026-10-22 layout list); the Saved tab on a phone. */}
+            {!phone && (
               <div className="yts-strip" id="yts-strip" data-testid="yts-strip">
                 {versionsBar}
                 {savedList}
+                {templatesBar}
               </div>
             )}
-
-            <div className="yts-bottom" id="yts-settings">
-              {shown('layers') && (
-              <section className="yts-card" aria-label="Layers">
-                <LayersList spec={spec} selectedId={selectedId} pickedIds={pickedIds} onSelect={select} onChange={edit} onDuplicate={duplicate} />
-                <div className="yts-actions">
-                  <button type="button" className="yts-btn" onClick={() => addAndPick((s) => addText(s))} data-testid="yts-add-text">
-                    <Type size={16} aria-hidden /> Add words
-                  </button>
-                  {clip?.layers?.length > 0 && (
-                    <button type="button" className="yts-btn" onClick={pasteClip} data-testid="yts-paste"
-                      title={clip.from?.title ? `Copied from ${clip.from.title} (Ctrl+V)` : 'Ctrl+V'}>
-                      <ClipboardPaste size={16} aria-hidden /> Paste {clip.layers.length === 1 ? '1 layer' : `${clip.layers.length} layers`}
-                    </button>
-                  )}
-                </div>
-              </section>
-              )}
-              {shown('assets') && (
-              <section className="yts-card" aria-label="Assets for this episode">
-                <h2 className="yts-label">Assets for this episode</h2>
-                <AssetTabs tree={tree} onPick={addChosenPicture} uploading={Boolean(uploading)}
-                  onUpload={(f) => upload(f, (url, label) => addAndPick((s) => addPicture(s, url, label)))} />
-              </section>
-              )}
-            </div>
           </div>
+
+          {/* The layers beside the canvas on a wide screen, under it on a phone (Evoni, 2026-10-22 layout list). */}
+          <aside className="yts-layers-col" aria-label="Layers">
+            <section className="yts-card" aria-label="Layers">
+              <LayersList spec={spec} selectedId={selectedId} pickedIds={pickedIds} onSelect={select} onChange={edit} onDuplicate={duplicate} />
+              <div className="yts-actions">
+                <button type="button" className="yts-btn" onClick={() => addAndPick((s) => addText(s))} data-testid="yts-add-text">
+                  <Type size={16} aria-hidden /> Add words
+                </button>
+                {clip?.layers?.length > 0 && (
+                  <button type="button" className="yts-btn" onClick={pasteClip} data-testid="yts-paste"
+                    title={clip.from?.title ? `Copied from ${clip.from.title} (Ctrl+V)` : 'Ctrl+V'}>
+                    <ClipboardPaste size={16} aria-hidden /> Paste {clip.layers.length === 1 ? '1 layer' : `${clip.layers.length} layers`}
+                  </button>
+                )}
+              </div>
+            </section>
+          </aside>
 
           <aside className="yts-side" aria-label="Thumbnail settings">
             {pickedSettings && !phone && <section className="yts-card">{pickedSettings}</section>}
+
+            <div className="yts-tool-tabs" role="tablist" aria-label="Tools" data-testid="yts-tool-tabs">
+              {(phone ? PHONE_TOOL_TABS : TOOL_TABS).map(([key, label]) => (
+                <button key={key} type="button" role="tab" id={`yts-tool-tab-${key}`} className={`yts-tab${toolOn === key ? ' is-on' : ''}`} aria-selected={toolOn === key}
+                  aria-controls="yts-tool-panel" onClick={() => setTool(key)} data-testid={`yts-tool-tab-${key}`}>{label}</button>
+              ))}
+            </div>
+            <div className="yts-tool-panel" id="yts-tool-panel" role="tabpanel" aria-labelledby={`yts-tool-tab-${toolOn}`}>
 
             {shown('layout') && (
             <section className="yts-card" aria-label="Template layout">
@@ -2412,7 +2476,7 @@ export default function YouTubeThumbnailStudio() {
             </section>
             )}
 
-            {shown('text') && (
+            {shown('ai') && (
             <section className="yts-card" aria-label="AI help" data-testid="yts-ai">
               <h2 className="yts-label"><Sparkles size={14} aria-hidden /> AI help</h2>
               <div className="yts-actions">
@@ -2420,7 +2484,7 @@ export default function YouTubeThumbnailStudio() {
                   <Sparkles size={16} aria-hidden /> {ideas.busy ? 'Thinking…' : ideas.list.length ? 'More title ideas' : 'Title ideas'}
                 </button>
               </div>
-              <p className="yts-note">From this episode's title, checklist and outfit; counts toward the daily AI budget.</p>
+              <p className="yts-note">Title ideas from this episode's title, checklist and outfit; counts toward the daily AI budget.</p>
               {ideas.list.length > 0 && (
                 <ul className="yts-ideas" data-testid="yts-ideas">
                   {ideas.list.map((idea, i) => (
@@ -2437,10 +2501,21 @@ export default function YouTubeThumbnailStudio() {
                   ))}
                 </ul>
               )}
+              <div className="yts-ai-bg" data-testid="yts-ai-bg">
+                <label className="yts-field">
+                  <span className="yts-label"><Wand2 size={13} aria-hidden /> A background, made with AI</span>
+                  <input className="yts-input" value={bgWords} maxLength={200} onChange={(e) => setBgWords(e.target.value)}
+                    placeholder="A rooftop at night, a boutique… (or leave it to the episode)" aria-label="What the AI background shows" />
+                </label>
+                <button type="button" className="yts-btn" onClick={makeBackground} disabled={makingBg} data-testid="yts-ai-bg-btn">
+                  <Wand2 size={15} aria-hidden /> {makingBg ? 'Making the background…' : 'Make a background (AI)'}
+                </button>
+                <p className="yts-note">From this episode's theme and your words; counts toward the daily image budget. Kept in Uploads.</p>
+              </div>
             </section>
             )}
 
-            {shown('assets') && (
+            {shown('stickers') && (
             <section className="yts-card yts-pair" aria-label="Checklist and stickers">
               {layerOf(spec, 'checklist') && (
                 <ChecklistEditor layer={layerOf(spec, 'checklist')} onChange={(patch) => edit((s) => updateLayer(s, layerOf(s, 'checklist').id, patch))} />
@@ -2449,7 +2524,7 @@ export default function YouTubeThumbnailStudio() {
             </section>
             )}
 
-            {shown('characters') && (
+            {shown('pictures') && (
             <section className="yts-card" aria-label="Characters">
               <h2 className="yts-label">Characters</h2>
               {/* More than one Lala (Evoni, 2026-10-22): each picture clicked is added beside her; clicked again, taken off. */}
@@ -2470,23 +2545,12 @@ export default function YouTubeThumbnailStudio() {
             </section>
             )}
 
-            {shown('background') && (
+            {shown('pictures') && (
             <section className="yts-card" aria-label="Background">
               <FolderPicker title="Background" testid="yts-backgrounds" tree={tree} start={['scene-sets']} value={roleSrc(spec, 'background')}
                 noneLabel="Plain" onPick={(url) => setRole('background', url)} uploading={Boolean(uploading)}
                 onUpload={(f) => upload(f, (url) => setRole('background', url))}
                 onNone={() => setRole('background', null)} />
-              <div className="yts-ai-bg" data-testid="yts-ai-bg">
-                <label className="yts-field">
-                  <span className="yts-label"><Sparkles size={13} aria-hidden /> Make one with AI</span>
-                  <input className="yts-input" value={bgWords} maxLength={200} onChange={(e) => setBgWords(e.target.value)}
-                    placeholder="A rooftop at night, a boutique… (or leave it to the episode)" aria-label="What the AI background shows" />
-                </label>
-                <button type="button" className="yts-btn" onClick={makeBackground} disabled={makingBg} data-testid="yts-ai-bg-btn">
-                  <Wand2 size={15} aria-hidden /> {makingBg ? 'Making the background…' : 'Make a background (AI)'}
-                </button>
-                <p className="yts-note">From this episode's theme and your words; counts toward the daily image budget. Kept in Uploads.</p>
-              </div>
               <label className="yts-field">
                 <span className="yts-label">Darken the background</span>
                 <input type="range" min="0" max="0.8" step="0.05" value={shade?.dim ?? 0} onChange={(e) => setColours({ dim: Number(e.target.value) })} aria-label="Darken the background" disabled={!shade} />
@@ -2499,7 +2563,15 @@ export default function YouTubeThumbnailStudio() {
             </section>
             )}
 
-            {shown('colours') && (
+            {shown('pictures') && (
+            <section className="yts-card" aria-label="Assets for this episode">
+              <h2 className="yts-label">Assets for this episode</h2>
+              <AssetTabs tree={tree} onPick={addChosenPicture} uploading={Boolean(uploading)}
+                onUpload={(f) => upload(f, (url, label) => addAndPick((s) => addPicture(s, url, label)))} />
+            </section>
+            )}
+
+            {shown('brand') && (
             <section className="yts-card" aria-label="Colour palette">
               {sources?.show?.id && <BrandKit brand={brand} accent={shade?.accent} busy={busy} onSave={saveBrand} />}
               <fieldset className="yts-field">
@@ -2533,48 +2605,18 @@ export default function YouTubeThumbnailStudio() {
               </label>
             </section>
             )}
+
+            {shown('saved') && (
+              <div className="yts-strip" id="yts-strip" data-testid="yts-strip">
+                {versionsBar}
+                {savedList}
+                {templatesBar}
+              </div>
+            )}
+            </div>
           </aside>
         </div>
 
-        <div className="yts-more">
-          <YouTubePreviews src={snapshot} title={layerOf(spec, 'title')?.text || sources?.episode?.title} channel={sources?.show?.name}
-            warnings={ytWarnings} onPick={(id) => setSelectedId(id)}
-            onFix={(w) => {
-              const next = fixWarning(specRef.current, w, measurer);
-              if (next) edit(next);
-              return Boolean(next);
-            }}
-            onFixAll={() => {
-              const { spec: next, left } = fixAllWarnings(specRef.current, measurer);
-              if (next !== specRef.current) edit(next);
-              return left;
-            }}
-            onSmallOk={(id) => edit((s) => updateLayer(s, id, { smallOk: true }))} />
-          <section className="yts-card yts-try" data-testid="yts-try">
-            <label className="yts-select">
-              <span>Try it on another episode</span>
-              <select value={tryOn.id} onChange={(e) => tryOnEpisode(e.target.value)} aria-label="Try it on another episode" disabled={tryOn.busy}>
-                <option value="">Choose an episode</option>
-                {episodes.filter((e) => e.id !== episodeId).map((e) => <option key={e.id} value={e.id}>{e.episode_number ? `${e.episode_number}. ` : ''}{e.title || 'Untitled'}</option>)}
-              </select>
-            </label>
-            {tryOn.busy && <span className="yts-note">Drawing…</span>}
-            {tryOn.url && (
-              <figure className="yts-exact" data-testid="yts-try-figure">
-                <img src={tryOn.url} alt="This arrangement on the other episode" />
-                <figcaption>
-                  This arrangement with that episode's words and pictures, as the show's template would give it.
-                  <button type="button" className="yts-icon-btn" onClick={() => setTryOn({ id: '', url: null, busy: false })} aria-label="Close the other episode"><X size={15} aria-hidden /></button>
-                </figcaption>
-              </figure>
-            )}
-          </section>
-        </div>
-        {sources?.show?.id && (
-          <TemplatesBar showName={sources.show.name} templates={sources.templates || []} busy={busy}
-            onUse={useTemplate} onCreate={createTemplate} onRename={renameTemplate} onDefault={defaultTemplate}
-            onUpdate={updateTemplate} onDelete={deleteTemplate} />
-        )}
         {sheet && (
           <section className="yts-sheet" aria-label="The picked layer" data-testid="yts-sheet">
             <div className="yts-sheet-head">
