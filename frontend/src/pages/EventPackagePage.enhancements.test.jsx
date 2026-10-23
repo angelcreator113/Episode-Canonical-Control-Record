@@ -397,14 +397,16 @@ describe('the look recommendations know about a chosen outfit', () => {
   });
 });
 
-describe('phone hero on one line', () => {
-  test('the hero carries the date for the phone row; at 600px the tiles hide and the title cuts with …', async () => {
+describe('compact phone hero', () => {
+  test('the hero carries the date for the phone; at 600px the tiles hide and a long title wraps (Evoni, 2026-10-23)', async () => {
     renderPage();
     expect((await screen.findByTestId('hero-date')).textContent).toBe('Mon, Nov 9');
     const css = readFileSync(resolve(__dirname, 'EventPackagePage.css'), 'utf8');
     const phone = css.slice(css.lastIndexOf('@media (max-width: 600px)'));
-    expect(phone).toMatch(/grid-template-areas: "back back back" "eye eye eye" "title date badge"/);
+    expect(phone).toMatch(/grid-template-areas: "back back" "eye eye" "title badge" "date date"/);
     expect(phone).toMatch(/\.epp-hero-summary, \.epp-hero-tiles \{ display: none; \}/);
-    expect(phone).toMatch(/text-overflow: ellipsis/);
+    const title = phone.match(/\.epp-hero \.epp-title \{[^}]*\}/)[0];
+    expect(title).toMatch(/overflow-wrap: anywhere/);
+    expect(title).not.toMatch(/ellipsis|nowrap/);
   });
 });

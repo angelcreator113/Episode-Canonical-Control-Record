@@ -1961,7 +1961,7 @@ function EventPackageView() {
                 Choose an organizer first — the invitation names them.
               </div>
             ) : (
-              <InvitationButton key={`reload-${reloadTick}`}
+              <InvitationButton key={`invitation-${reloadTick}`}
                 mode="inline"
                 event={{ ...event, invitation_url: invitationAsset?.s3_url_processed || null }}
                 showId={showId}
@@ -2108,7 +2108,7 @@ function EventPackageView() {
             )}
 
             {!used && featuredGuests.length < MAX_FEATURED_GUESTS && (
-              <EventGuestRecommendations key={`reload-${reloadTick}`}
+              <EventGuestRecommendations key={`guest-recs-${reloadTick}`}
                 guests={guestList}
                 organizerProfileId={event.source_profile_id}
                 venueLocationId={event.venue_location_id}
@@ -2194,7 +2194,7 @@ function EventPackageView() {
           <div className="epp-split even epp-place">
           <div className="epp-split-side epp-place-image">
             {/* L7-L9 (§8(hh)): the look made into an image on the venue's set. */}
-            <EventLookImage key={`reload-${reloadTick}`} showId={showId} eventId={eventId} onToast={setToast} onSaved={load} />
+            <EventLookImage key={`look-image-${reloadTick}`} showId={showId} eventId={eventId} onToast={setToast} onSaved={load} />
           </div>
           <div className="epp-split-main">
           <dl className="epp-fields">
@@ -2245,7 +2245,7 @@ function EventPackageView() {
           </dl>
           {/* L1 (§8(hh)): how the venue is dressed for this occasion. Its own
               lock (Q9): editable until the episode is accepted. */}
-          <EventVenueLook key={`reload-${reloadTick}`} showId={showId} eventId={eventId} onToast={setToast} onSaved={load} />
+          <EventVenueLook key={`venue-look-${reloadTick}`} showId={showId} eventId={eventId} onToast={setToast} onSaved={load} />
           </div>
           </div>
                   </div>
@@ -2331,7 +2331,7 @@ function EventPackageView() {
           {/* Recommended looks (episode creation step 3): whole outfits from
               the closet while none is chosen. */}
           {!used && outfitPieces.length === 0 && (
-            <EventLookRecommendations key={`reload-${reloadTick}`}
+            <EventLookRecommendations key={`look-recs-${reloadTick}`}
               showId={showId} eventId={eventId}
               onSaved={load} onToast={setToast} onBrowse={() => setOutfitPickerOpen(true)}
               hasOutfit={!!event.outfit_set_id || outfitPieces.length > 0}
@@ -2374,7 +2374,7 @@ function EventPackageView() {
         {/* Reopen terms (Task #2378) sits directly above the Terms it
             reopens, where the lock label is (Evoni, 2026-09-30: the line
             under the page banner was not found). */}
-        <TermsReopenPanel key={`reload-${reloadTick}`}
+        <TermsReopenPanel key={`terms-reopen-${reloadTick}`}
           showId={showId}
           eventId={eventId}
           locked={used}
@@ -2387,7 +2387,7 @@ function EventPackageView() {
           onToast={setToast}
         />
 
-        <EventTermsSection key={`reload-${reloadTick}`}
+        <EventTermsSection key={`terms-${reloadTick}`}
           showId={showId}
           eventId={eventId}
           event={event}
@@ -2544,7 +2544,7 @@ function EventPackageView() {
           <div className="epp-section-header">
             <div className="epp-section-heading"><h2 className="epp-section-title"><span className="epp-section-num">7.</span> In-world documents</h2><p className="epp-section-sub">The papers the event gives her, drafted from it.</p></div>
           </div>
-          <EventDocuments key={`reload-${reloadTick}`}
+          <EventDocuments key={`documents-${reloadTick}`}
             showId={showId}
             eventId={eventId}
             event={event}

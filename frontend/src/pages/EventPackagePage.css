@@ -2426,22 +2426,23 @@ button.epp-next-count:focus-visible, .epp-basic-value-btn:focus-visible, .epp-to
   .epp-bar-panel { max-height: calc(100dvh - var(--app-header-h, 0px) - var(--epp-bar-h, 56px) - 16px); }
   .epp-toast-undo { min-height: 40px; }
 
-  /* The hero is one line: name, date and status. */
+  /* The hero is compact: the name (wrapping when long) beside the status,
+     the date under it. */
   .epp-hero {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
-    grid-template-areas: "back back back" "eye eye eye" "title date badge";
-    align-items: center;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "back back" "eye eye" "title badge" "date date";
+    align-items: start;
     column-gap: 6px;
     padding: 6px 14px 12px;
   }
   .epp-hero-top, .epp-hero-title { display: contents; }
   .epp-hero-top .epp-back { grid-area: back; justify-self: start; }
-  .epp-hero-top .epp-status-badge { grid-area: badge; white-space: nowrap; }
+  .epp-hero-top .epp-status-badge { grid-area: badge; white-space: nowrap; margin-top: 3px; }
   .epp-hero-eyebrow { grid-area: eye; }
-  .epp-hero .epp-title { grid-area: title; min-width: 0; font-size: 19px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; }
+  .epp-hero .epp-title { grid-area: title; min-width: 0; font-size: 19px; line-height: 1.25; overflow-wrap: anywhere; }
   .epp-hero-summary, .epp-hero-tiles { display: none; }
-  .epp-hero-date { grid-area: date; display: inline; font-size: 12px; color: var(--lala-ink-muted); white-space: nowrap; }
+  .epp-hero-date { grid-area: date; display: block; margin-top: 2px; font-size: 12px; color: var(--lala-ink-muted); }
   .epp-hero .epp-used-banner { grid-column: 1 / -1; margin-top: 10px; }
   .epp-shortcuts { display: none; }
 }
