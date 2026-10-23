@@ -446,7 +446,9 @@ function storyContextBlocks(context, { withSeason = true } = {}) {
   Lala follows because: ${p.follow_motivation || 'general interest'}${p.follow_emotion ? ` (feels: ${p.follow_emotion})` : ''}`;
       if (p.lala_story_tie) block += `\n  With Lala in the story: ${p.lala_story_tie}`;
       if (p.story_role) block += `\n  Story role: ${p.story_role}`;
-      const ties = [LALA_TIES[p.lala_relationship], p.lala_romance !== undefined ? `love interest${p.lala_romance ? `: ${p.lala_romance}` : ''}` : null].filter(Boolean);
+      // The story pair's line already says a romance; the romance is not said twice.
+      const romance = p.lala_romance !== undefined && !p.lala_story_tie ? `love interest${p.lala_romance ? `: ${p.lala_romance}` : ''}` : null;
+      const ties = [LALA_TIES[p.lala_relationship], romance].filter(Boolean);
       if (ties.length) block += `\n  With Lala: ${ties.join('; ')}`;
 
       // Character literary depth (from registry) + therapy + life simulation
