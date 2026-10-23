@@ -126,6 +126,30 @@ describe('What changed', () => {
     expect(api.put).not.toHaveBeenCalled();
   });
 
+  test('a Save that wrote a relationship change says how many Pulse suggestions wait in Review, with a link', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { ...DATA({ ...RECORD, status: 'approved' }).data, result: {
+      written: [{ kind: 'relationship', text: 'Relationship: Lala and Marcus Hale (love interest), strangers to flirting' }], skipped: [], pulse_suggestions: 3,
+    } } });
+    renderCard();
+    fireEvent.click(await screen.findByTestId('wc-save'));
+    const line = await screen.findByTestId('wc-pulse');
+    expect(line.textContent).toContain('3 Pulse suggestions about what changed will be waiting for you in Review. Nothing posts until you approve it.');
+    expect(within(line).getByRole('link', { name: 'Open Review' }).getAttribute('href')).toBe('/admin?tab=pulse&sub=review');
+  });
+
+  test('one suggestion reads as one; none says nothing about the Pulse', async () => {
+    vi.mocked(api.post).mockResolvedValueOnce({ data: { ...DATA({ ...RECORD, status: 'approved' }).data, result: { written: [], skipped: [], pulse_suggestions: 1 } } });
+    const one = renderCard();
+    fireEvent.click(await screen.findByTestId('wc-save'));
+    expect((await screen.findByTestId('wc-pulse')).textContent).toContain('1 Pulse suggestion about what changed will be waiting');
+    one.unmount();
+    vi.mocked(api.post).mockResolvedValueOnce({ data: { ...DATA({ ...RECORD, status: 'approved' }).data, result: { written: [], skipped: [], pulse_suggestions: 0 } } });
+    renderCard();
+    fireEvent.click(await screen.findByTestId('wc-save'));
+    await screen.findByTestId('wc-result');
+    expect(screen.queryByTestId('wc-pulse')).toBeNull();
+  });
+
   test('a saved item says Saved and folds away under Already saved; twists show when there are some', async () => {
     vi.mocked(api.get).mockResolvedValue(DATA({
       ...RECORD, applied: { relationships: { 'r-key-1': { relationship_id: 'x' } } },

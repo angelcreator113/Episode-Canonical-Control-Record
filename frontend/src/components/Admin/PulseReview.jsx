@@ -85,7 +85,9 @@ function PendingComment({ comment, onChange }) {
   };
   return (
     <li className="prv-pending" data-testid="prv-pending-comment">
-      <span><b>{atHandle(comment.handle)}</b> “{comment.text}”{comment.post?.poster_handle ? <span className="prv-muted"> on {atHandle(comment.post.poster_handle)}'s post</span> : null}</span>
+      <span><b>{atHandle(comment.handle)}</b> “{comment.text}”{comment.post?.poster_handle ? <span className="prv-muted"> on {atHandle(comment.post.poster_handle)}'s post</span> : null}
+        {/* Why it was drafted: a suggestion from the story says its episode and change (services/storyRipples). */}
+        {comment.voice_note ? <span className="prv-muted" data-testid="prv-comment-why"> · {comment.voice_note}</span> : null}</span>
       <span className="prv-actions">
         <button type="button" className="prv-btn" disabled={busy}
           onClick={() => act('Approve', () => api.patch(`/api/v1/feed-posts/comments/${comment.id}`, { status: 'live' }))}>Approve</button>
