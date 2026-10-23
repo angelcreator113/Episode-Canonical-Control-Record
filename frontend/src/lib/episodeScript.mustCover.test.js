@@ -102,3 +102,26 @@ describe('must cover: a goal by its person', () => {
     expect(items[1]).toMatchObject({ slot: 'relationship_brand', beat: null });
   });
 });
+
+// Episode 1 feeds Episode 2 (Evoni, 2026-10-23): what Lala owes from an
+// earlier episode is on the list, after the goals, matched like one.
+describe('carried follow-ups', () => {
+  const carried = [
+    { slot: 'follow_up_f1', label: 'Follow up with Studio Bystable about the collab', task_source: 'goal', follow_up_id: 'f1' },
+    { slot: 'follow_up_f2', label: 'Send Marcus the lookbook', task_source: 'goal', follow_up_id: 'f2' },
+    { slot: 'plain', label: 'Not carried', task_source: 'goal' },
+  ];
+  const at = (line) => [{ number: 3, lines: [line] }];
+  test('each one is listed as a follow-up with its slot; covered when the script says it', () => {
+    const items = mustCover({ beats: at('Lala: "Time to follow up with Studio Bystable about the collab."'), carried });
+    const owed = items.filter((i) => i.source === 'Follow-up');
+    expect(owed).toEqual([
+      { key: 'carried-f1', label: 'Follow up with Studio Bystable about the collab', source: 'Follow-up', slot: 'follow_up_f1', beat: 3 },
+      { key: 'carried-f2', label: 'Send Marcus the lookbook', source: 'Follow-up', slot: 'follow_up_f2', beat: null },
+    ]);
+  });
+  test('none carried, none listed', () => {
+    expect(mustCover({ beats: at('Lala: hi'), carried: [] }).some((i) => i.source === 'Follow-up')).toBe(false);
+    expect(mustCover({ beats: at('Lala: hi') }).some((i) => i.source === 'Follow-up')).toBe(false);
+  });
+});
