@@ -218,6 +218,15 @@ describe('PUT /world/:showId/events/:eventId', () => {
     expect(updates()).toHaveLength(1);
   });
 
+  test('a blank format or category clears it (Quick Episode Creator\'s Custom Event sends format \'\')', async () => {
+    const res = await put({ name: 'Custom', format: '', category: '  ' });
+    expect(res.status).toBe(200);
+    expect(updates()).toHaveLength(1);
+    const values = Object.values(updates()[0].replacements);
+    expect(values).not.toContain('');
+    expect(values).not.toContain('  ');
+  });
+
   test('used_in_episode_id naming another show\'s episode is a 400', async () => {
     const res = await put({ used_in_episode_id: EP_OTHER });
     expect(res.status).toBe(400);

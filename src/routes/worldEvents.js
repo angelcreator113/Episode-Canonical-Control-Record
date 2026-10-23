@@ -1120,6 +1120,9 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
         // The model's own value lists (WorldEvent.js CATEGORY_VALUES,
         // FORMAT_VALUES; status per EVENT_STATUSES) — the raw UPDATE skips
         // Sequelize's isIn (audit Medium, 2026-10-23).
+        // A blank category or format (Quick Episode Creator's Custom Event
+        // sends format '') clears it rather than being refused.
+        if ((field === 'category' || field === 'format') && typeof val === 'string' && !val.trim()) val = null;
         const allowedValues = ENUM_FIELDS[field];
         if (allowedValues && (val === null ? field === 'status' : !allowedValues.includes(val))) {
           return res.status(400).json({
