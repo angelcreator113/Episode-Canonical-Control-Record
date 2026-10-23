@@ -37,9 +37,16 @@ function parseEvaluation(raw) {
   }
 }
 
-export function EpisodeResultsEvaluation({ episode }) {
+/**
+ * The evaluation. `embedded` (under Results › Summary since Evoni's layout
+ * list of 2026-10-22, Evaluation was its own pill): the score breakdown,
+ * the social tasks and the outfit only, as the Summary already shows the
+ * verdict, the stat changes and the money; nothing before there is one.
+ */
+export function EpisodeResultsEvaluation({ episode, embedded = false }) {
   const evalJson = parseEvaluation(episode?.evaluation_json);
 
+  if (!evalJson && embedded) return null;
   if (!evalJson) {
     return (
       <div className="ers">
@@ -68,6 +75,53 @@ export function EpisodeResultsEvaluation({ episode }) {
   const hasSocial = social.total > 0;
   const hasWardrobe = wardrobe.brands?.length > 0;
   const hasMoney = income > 0 || expenses > 0;
+
+  if (embedded) {
+    return (
+      <section className="ers-evaluation" id="results-evaluation" aria-labelledby="results-evaluation-title" data-testid="results-evaluation">
+        <div className="ers-head">
+          <h3 className="ers-card-title" id="results-evaluation-title">The evaluation</h3>
+          <span className="ers-sub">How the episode scored</span>
+        </div>
+        <div className={`ers-grid${hasSocial || hasWardrobe ? ' is-three' : ''}`}>
+          <section className="ers-card">
+            <h3 className="ers-label">Score breakdown</h3>
+            <ul className="ers-rows">
+              {Object.entries(breakdown).map(([key, entry]) => (
+                <li key={key}>
+                  <span className="ers-row-name">
+                    <span className="ers-cap">{key.replace(/_/g, ' ')}</span>
+                    {entry?.detail && <em>{entry.detail}</em>}
+                  </span>
+                  <strong className={entry?.value >= 0 ? 'is-up' : 'is-down'}>{signed(entry?.value ?? 0)}</strong>
+                </li>
+              ))}
+              <li className="ers-total"><span>Total</span><strong style={{ color: tier.color }}>{evalJson.score}</strong></li>
+            </ul>
+          </section>
+          {hasSocial && (
+            <section className="ers-card">
+              <h3 className="ers-label">Social tasks</h3>
+              <div className="ers-big">{social.completed}/{social.total}</div>
+              <p className="ers-note">
+                {social.completion_rate}% complete
+                {social.all_required_done && <span className="ers-good"> · All required done</span>}
+              </p>
+            </section>
+          )}
+          {hasWardrobe && (
+            <section className="ers-card">
+              <h3 className="ers-label">Outfit</h3>
+              <p className="ers-text">Brands: {wardrobe.brands.join(', ')}</p>
+              <p className="ers-note">
+                Tier gap: {wardrobe.tier_gap > 0 ? 'overdressed' : wardrobe.tier_gap < 0 ? 'underdressed' : 'perfect match'}
+              </p>
+            </section>
+          )}
+        </div>
+      </section>
+    );
+  }
 
   return (
     <div className="ers" data-testid="results-evaluation">

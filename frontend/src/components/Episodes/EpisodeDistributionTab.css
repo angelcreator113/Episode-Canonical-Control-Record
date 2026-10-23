@@ -1,10 +1,18 @@
 /* EpisodeDistributionTab.css */
 
+/* The width of the other tabs (Evoni, 2026-10-22 layout list); clip, not
+   hidden, so the save bar can stick. */
 .episode-distribution-tab {
-  padding: 1.25rem;
-  max-width: 960px;
-  margin: 0 auto;
-  overflow-x: hidden;
+  padding: 1.25rem 0;
+  overflow-x: clip;
+}
+.episode-distribution-tab > .ers-share { margin-bottom: 1.25rem; }
+.distribution-savebar {
+  position: sticky; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 5;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-top: 16px; padding: 10px 14px; border-radius: 12px;
+  border: 1px solid var(--studio-magenta); background: var(--studio-card); color: var(--studio-ink);
+  box-shadow: var(--shadow-lg); font-size: 13px; font-weight: 600;
 }
 
 /* Disable mobile tap highlights on all buttons inside distribution tab */

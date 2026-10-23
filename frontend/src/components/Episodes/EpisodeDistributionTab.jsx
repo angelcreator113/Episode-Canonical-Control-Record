@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import apiClient from '../../services/api';
 import { thumbnailStudioHref } from '../../lib/thumbnailStudioHref';
 import StyleSheetDistributionCard from './StyleSheetDistributionCard';
+import { ResultsShare } from './EpisodeResultsSummary';
 import './EpisodeDistributionTab.css';
 
 // File-local helpers (fresh — no cross-CP overlap).
@@ -78,7 +79,7 @@ const STATUS_OPTIONS = [
   { value: 'unlisted', label: 'Unlisted', color: 'var(--text-secondary)' }
 ];
 
-function EpisodeDistributionTab({ episode, onUpdate }) {
+function EpisodeDistributionTab({ episode, onUpdate, onOpenTab }) {
   const [distributionData, setDistributionData] = useState({});
   const [selectedPlatform, setSelectedPlatform] = useState('youtube');
   const [hasChanges, setHasChanges] = useState(false);
@@ -249,6 +250,11 @@ function EpisodeDistributionTab({ episode, onUpdate }) {
           </button>
         </div>
       </div>
+
+      {/* What viewers and The Pulse see: the teaser the platform copy is
+          drafted from, and Lala's posts (on Results › Summary until Evoni's
+          layout list of 2026-10-22). */}
+      <ResultsShare episode={episode} showId={episode?.show_id || episode?.showId} onOpenTab={onOpenTab} />
 
       {/* The approved style sheet, sent from the Style Page (Task #2878) */}
       <StyleSheetDistributionCard episodeId={episode.id} episodeNumber={episode.episode_number} />
@@ -486,6 +492,15 @@ function EpisodeDistributionTab({ episode, onUpdate }) {
           </div>
         )}
       </div>
+
+      {/* Save follows along the bottom while there are unsaved changes, as
+          the script's Save does (Evoni, 2026-10-22 layout list). */}
+      {hasChanges && (
+        <div className="distribution-savebar" role="region" aria-label="Unsaved changes" data-testid="distribution-savebar">
+          <span>Unsaved changes</span>
+          <button type="button" className="btn-save" onClick={handleSave}>💾 Save Distribution</button>
+        </div>
+      )}
     </div>
   );
 }

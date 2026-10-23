@@ -32,7 +32,6 @@ const EpisodeScenesTab = lazy(() => import('../components/Episodes/EpisodeScenes
 const EpisodeMoneyTab = lazy(() => import('../components/Episodes/EpisodeMoneyTab'));
 const EpisodeOverlaysTab = lazy(() => import('../components/Episodes/EpisodeOverlaysTab'));
 const EpisodeResultsSummary = lazy(() => import('../components/Episodes/EpisodeResultsSummary'));
-const EpisodeResultsEvaluation = lazy(() => import('../components/Episodes/EpisodeResultsPages').then((m) => ({ default: m.EpisodeResultsEvaluation })));
 const EpisodeResultsStory = lazy(() => import('../components/Episodes/EpisodeResultsPages').then((m) => ({ default: m.EpisodeResultsStory })));
 const PhonePreviewMode = lazy(() => import('../components/PhonePreviewMode'));
 import usePhonePlayback from '../hooks/usePhonePlayback';
@@ -1206,9 +1205,11 @@ const EpisodeDetail = () => {
           <EpisodeStylePage episode={episode} onOpenTab={openTab} />
         )}
 
-        {/* Results → Summary (Evoni's Episode mock): the one page. */}
-        {tabKey === 'results.summary' && (
-          <EpisodeResultsSummary episode={episode} showId={episode?.show_id || episode?.showId} onOpenTab={openTab} />
+        {/* Results → Summary (Evoni's Episode mock): the one page, with the
+            evaluation under it since 2026-10-22; ?tab=evaluation lands there. */}
+        {(tabKey === 'results.summary' || tabKey === 'results.evaluation') && (
+          <EpisodeResultsSummary episode={episode} showId={episode?.show_id || episode?.showId} onOpenTab={openTab}
+            focus={tabKey === 'results.evaluation' ? 'evaluation' : null} />
         )}
 
         {/* Results → Story: the episode as prose (EpisodeResultsPages). */}
@@ -1218,7 +1219,7 @@ const EpisodeDetail = () => {
 
         {/* Distribution Tab */}
         {tabKey === 'results.distribution' && (
-          <EpisodeDistributionTab episode={episode} onUpdate={handleUpdateEpisode} />
+          <EpisodeDistributionTab episode={episode} onUpdate={handleUpdateEpisode} onOpenTab={openTab} />
         )}
 
         {/* Phone tab — Lala's Phone for this episode (issue #1908): the
@@ -1262,10 +1263,6 @@ const EpisodeDetail = () => {
           />
         )}
 
-        {/* Results → Evaluation: the score and what it changed (EpisodeResultsPages). */}
-        {tabKey === 'results.evaluation' && (
-          <EpisodeResultsEvaluation episode={episode} />
-        )}
         </Suspense>
       </div>
 

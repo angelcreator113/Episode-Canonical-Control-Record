@@ -38,10 +38,13 @@ export const EP_TABS = [
     { key: 'checklist', label: 'Checklist', group: 'Track' },
   ]},
   // Evoni's Episode mock (2026-10-05): Results is one page, its Summary;
-  // Evaluation, Story and Distribution stay (her ruling).
+  // Evaluation, Story and Distribution stay (her ruling); Evaluation became
+  // part of Summary in her layout list of 2026-10-22.
   { key: 'results', icon: '👑', label: 'Results', subs: [
     { key: 'summary', label: 'Summary' },
-    { key: 'evaluation', label: 'Evaluation' },
+    // The evaluation is part of Summary since Evoni's layout list of
+    // 2026-10-22; ?tab=evaluation still lands on it.
+    { key: 'evaluation', label: 'Evaluation', view: 'summary' },
     { key: 'story', label: 'Story' },
     { key: 'distribution', label: 'Distribution' },
   ]},
