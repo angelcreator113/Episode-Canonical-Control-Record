@@ -11,11 +11,18 @@
  * (lib/scriptRuntime lineSeconds: spoken words at 150 a minute, 3 seconds
  * for an action), for the silence cues and "Pace by line times".
  * [UI:…], [STAT:…], [WEAR:…], [TRANSITION:…] and every other tag are left out:
- * they are for production, not for reading aloud. Pure: no React, no network.
+ * they are for production, not for reading aloud. With { screen: true }
+ * (Evoni, 2026-10-23) a [UI:…] line is kept as an on-screen moment,
+ *   { kind: 'screen', verb, target, text, icon, seconds: 3 }
+ * (lib/teleprompterScreen), a cue for her to react to; the other tags stay
+ * hidden. Without it the lines are exactly as before, so teleprompterIndexMap
+ * (a voice clip's line index) never counts a screen moment.
+ * Pure: no React, no network.
  */
 import { readLine, scriptSections } from './scriptExport';
 import { lineSeconds } from './scriptRuntime';
 import { isBreath, markTokens } from './teleprompterMarks';
+import { screenLine } from './teleprompterScreen';
 
 // Her names as the script writes them (lib/scriptRuleChecks JAW_SAYS; `Me:`
 // reads as Prime in lib/scriptSpeaker).
@@ -27,7 +34,7 @@ export const HER = 'JustAWoman';
 // `**Me:** words` and `__Me__: words`, as a pasted script can have them.
 const unbold = (line) => String(line ?? '').replace(/^\s*(\*\*|__)\s*([^*_:]+?)\s*(?:\1\s*:|:\s*\1)\s*/, '$2: ');
 
-export function teleprompterLines(lines = []) {
+export function teleprompterLines(lines = [], { screen = false } = {}) {
   const out = [];
   for (const line of lines) {
     const plain = unbold(line);
@@ -40,23 +47,41 @@ export function teleprompterLines(lines = []) {
     } else if (r.type === 'action' || r.type === 'narration') {
       // `(breath)` / `[breath]` on its own line is a breath mark (Evoni, 2026-10-20).
       out.push({ kind: isBreath(r.text) ? 'breath' : 'direction', who: null, text: r.text, seconds });
+    } else if (r.type === 'moment' && screen) {
+      const cue = screenLine(plain);
+      if (cue) out.push(cue);
     }
-    // moment, transition, tag: hidden.
+    // moment (unless screen), transition, tag: hidden.
   }
   return out;
 }
 
 /**
  * A picked script for the teleprompter: { intro, beats: [{ number, name, lines }] },
- * each `lines` from teleprompterLines (beats as the Script tab numbers them).
+ * each `lines` from teleprompterLines with its on-screen moments (beats as
+ * the Script tab numbers them). Each line carries `vi`: its index among the
+ * beat's lines without the screen moments (what teleprompterIndexMap gives,
+ * and what a voice clip and a take's start_line name); null on a moment.
  */
 export function teleprompterScript(scriptText) {
   const { preamble, beats } = scriptSections(scriptText || '');
+  const indexed = (ls) => {
+    let at = 0;
+    return ls.map((l) => {
+      if (l.kind === 'screen') return { ...l, vi: null };
+      const vi = at;
+      at += 1;
+      return { ...l, vi };
+    });
+  };
   return {
-    intro: teleprompterLines(preamble),
-    beats: beats.map((b) => ({ number: b.number, name: b.name, raw: b.lines, lines: teleprompterLines(b.lines) })),
+    intro: indexed(teleprompterLines(preamble, { screen: true })),
+    beats: beats.map((b) => ({ number: b.number, name: b.name, raw: b.lines, lines: indexed(teleprompterLines(b.lines, { screen: true })) })),
   };
 }
+
+/** A script without its on-screen moments ("Show on-screen moments" off). */
+export const withoutScreen = (lines = []) => lines.filter((l) => l.kind !== 'screen');
 
 /** Who speaks in these lines, for "Read as": JustAWoman, Lala, then the rest as they come. */
 export function speakersOf(lines = []) {

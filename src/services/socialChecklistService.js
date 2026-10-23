@@ -277,6 +277,9 @@ async function generateSocialChecklist(event, models, options = {}) {
     if (onEpisode && onEpisode.length > 0) tasks = onEpisode;
   }
   if (!Array.isArray(tasks)) tasks = [];
+  // A follow-up carried from an earlier episode (services/storyCarryForward)
+  // is not the event's: a rebuild keeps it.
+  const carried = tasks.filter((t) => t && t.follow_up_id);
 
   if (forceRebuild || tasks.length === 0) {
     // Generate tasks on the fly
@@ -311,6 +314,8 @@ async function generateSocialChecklist(event, models, options = {}) {
         ? auto.guest_profiles.map(g => g.display_name || g.handle).filter(Boolean)
         : [],
     });
+    const have = new Set(tasks.map((t) => t && t.slot));
+    tasks = [...tasks, ...carried.filter((t) => !have.has(t.slot))];
   }
 
   // T1 (§8(bb); Task #2292): required comes only from the event's

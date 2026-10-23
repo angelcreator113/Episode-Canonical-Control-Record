@@ -671,6 +671,8 @@ router.put('/episodes/:episodeId/record', requireAuth, async (req, res) => {
   }
 });
 
+// Save on the "What changed" card (Evoni, 2026-10-23): writes each kept item
+// once and answers { record, cast, threads, goals, result: { written, skipped } }.
 router.post('/episodes/:episodeId/record/approve', requireAuth, async (req, res) => {
   try {
     const { approveRecord } = require('../services/episodeStoryRecord');

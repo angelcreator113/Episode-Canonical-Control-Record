@@ -154,7 +154,9 @@ describe('Teleprompter reader: reading', () => {
     expect(screen.getAllByTestId('stp-mine').map((l) => l.textContent)).toEqual(['PrimeReady when you are.', 'JustAWomanThis is the one.', 'JAWIHPWe made it.']);
     expect(screen.getAllByTestId('stp-cue').map((l) => l.textContent)).toEqual(['LalaOkay besties.', 'KelliGorgeous.']);
     expect(screen.getByTestId('stp-direction').textContent).toBe('She smiles at the camera.');
-    expect(root.textContent).not.toMatch(/UI:|STAT|WEAR|TRANSITION|cut to|Closet/);
+    // [UI:] is an on-screen moment to react to (Evoni, 2026-10-23); the production tags stay hidden.
+    expect(screen.getAllByTestId('stp-screen').map((l) => l.textContent)).toEqual(['On screenLala opens Closetreact']);
+    expect(root.textContent).not.toMatch(/UI:|STAT|WEAR|TRANSITION|cut to|coins -50/);
     fireEvent.click(screen.getByTestId('stp-mode-same'));
     expect(root.className).toContain('is-same');
     expect(JSON.parse(window.localStorage.getItem(SETTINGS_KEY)).lineMode).toBe('same');
@@ -369,8 +371,9 @@ describe('Teleprompter reader: Read as and silence cues', () => {
     expect(pick.value).toBe('JustAWoman');
     expect([...pick.options].map((o) => o.value)).toEqual(['JustAWoman', 'Lala', 'Kelli']);
     fireEvent.change(pick, { target: { value: 'Lala' } });
-    expect(screen.getAllByTestId('stp-mine').map((l) => l.textContent)).toEqual(['LalaOkay besties.']);
-    expect(screen.getAllByTestId('stp-cue')).toHaveLength(4);
+    // Beat 11 is the cutscene: JustAWoman's comment over it stays hers to read (Evoni, 2026-10-23).
+    expect(screen.getAllByTestId('stp-mine').map((l) => l.textContent)).toEqual(['LalaOkay besties.', 'JAWIHPWe made it.']);
+    expect(screen.getAllByTestId('stp-cue')).toHaveLength(3);
     expect(JSON.parse(window.localStorage.getItem(SETTINGS_KEY)).readAs).toBe('Lala');
     unmount();
     render(<TeleprompterReader source={scriptSource} onClose={() => {}} />);

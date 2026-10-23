@@ -65,7 +65,7 @@ async function loadCharacterFile(db, { character = null, feedProfile } = {}) {
   }
   if (fp === undefined) {
     fp = c?.feed_profile_id && db.SocialProfile
-      ? plain(await part('the feed profile', () => db.SocialProfile.findByPk(c.feed_profile_id), null))
+      ? plain(await part('the Pulse profile', () => db.SocialProfile.findByPk(c.feed_profile_id), null))
       : null;
   }
   const file = {
@@ -101,15 +101,26 @@ async function loadCharacterFile(db, { character = null, feedProfile } = {}) {
     file.relationships = await part('the relationships', async () => {
       const [rows] = await db.sequelize.query(
         `SELECT CASE WHEN cr.character_id_a = :id THEN rb.display_name ELSE ra.display_name END AS person,
-                cr.relationship_type AS kind, cr.status,
+                cr.relationship_type AS kind, cr.status, cr.family_role, cr.is_romantic, st.relationship_stage AS stage,
                 CASE WHEN cr.character_id_a = :id THEN cr.source_knows ELSE cr.target_knows END AS knows
            FROM character_relationships cr
            JOIN registry_characters ra ON ra.id = cr.character_id_a AND ra.deleted_at IS NULL
            JOIN registry_characters rb ON rb.id = cr.character_id_b AND rb.deleted_at IS NULL
-          WHERE cr.confirmed = true AND (cr.character_id_a = :id OR cr.character_id_b = :id)
+           LEFT JOIN LATERAL (
+             SELECT e.relationship_stage FROM relationship_events e
+              WHERE e.relationship_id = cr.id AND e.relationship_stage IS NOT NULL AND e.relationship_stage <> '' AND e.deleted_at IS NULL
+              ORDER BY e.created_at DESC NULLS LAST LIMIT 1
+           ) st ON true
+          WHERE cr.confirmed = true AND cr.deleted_at IS NULL AND (cr.character_id_a = :id OR cr.character_id_b = :id)
           ORDER BY cr.created_at ASC
           LIMIT ${MAX_RELATIONSHIPS}`, { replacements: { id: c.id } });
-      return rows.map((r) => ({ person: r.person || 'someone', kind: r.kind || null, status: r.status || null, knows: clip(r.knows, 200) || null }));
+      // The story pair is the truth (services/relationshipTruth): its family
+      // role over its kind, "love interest" when it is a romance, and the
+      // stage its newest event left it at.
+      return rows.map((r) => ({
+        person: r.person || 'someone', kind: r.family_role || r.kind || null, status: r.status || null,
+        love_interest: Boolean(r.is_romantic), stage: r.stage || null, knows: clip(r.knows, 200) || null,
+      }));
     }, []);
   }
   if (fp?.id) {
@@ -124,6 +135,17 @@ async function loadCharacterFile(db, { character = null, feedProfile } = {}) {
     }, []);
   }
   return file;
+}
+
+/** One person in their life: "- Nia (sister, love interest, now close friends, past): privately knows …". */
+function relationshipLine(r) {
+  const said = [
+    r.kind,
+    r.love_interest && !/love/i.test(String(r.kind || '')) ? 'love interest' : null,
+    r.stage ? `now ${String(r.stage).replace(/_/g, ' ')}` : null,
+    r.status && r.status !== 'Active' ? r.status.toLowerCase() : null,
+  ].filter(Boolean);
+  return `- ${r.person}${said.length ? ` (${said.join(', ')})` : ''}${r.knows ? `: privately knows ${r.knows}` : ''}`;
 }
 
 const lines = (obj) => Object.entries(obj).map(([k, v]) => `- ${label(k)}: ${v}`).join('\n');
@@ -149,7 +171,7 @@ function characterFileBlock(file, { publicOnly = false } = {}) {
     !publicOnly && Object.keys(file.inner).length ? `INNER LIFE (author-only: it drives them; they never say it outright):\n${lines(file.inner)}` : '',
     Object.keys(file.mask).length ? `THE MASK (what they show the world, true or not; their public voice comes from here):\n${lines(file.mask)}` : '',
     !publicOnly && Object.keys(file.behind).length ? `BEHIND THE MASK (what is actually true; the public does not see it, and a gap between this and the mask is intentional, not an error):\n${lines(file.behind)}` : '',
-    !publicOnly && file.relationships.length ? `PEOPLE IN THEIR LIFE (confirmed relationships; stay consistent with them):\n${file.relationships.map((r) => `- ${r.person}${r.kind ? ` (${r.kind}${r.status && r.status !== 'Active' ? `, ${r.status.toLowerCase()}` : ''})` : ''}${r.knows ? `: privately knows ${r.knows}` : ''}`).join('\n')}` : '',
+    !publicOnly && file.relationships.length ? `PEOPLE IN THEIR LIFE (confirmed relationships; stay consistent with them):\n${file.relationships.map(relationshipLine).join('\n')}` : '',
     file.world?.length ? `WHERE THEY LIVE (their DREAM city and places; anything set in their world agrees with it):\n${file.world.map((l) => `- ${l}`).join('\n')}` : '',
     file.events.length ? `THEIR EVENTS:\n${require('./characterEvents').eventsPromptLines(file.events)}` : '',
     file.recentPosts.length ? `THEIR LATEST POSTS ON THE PULSE (what the public has already seen of them):\n${file.recentPosts.map((t) => `- ${t}`).join('\n')}` : '',

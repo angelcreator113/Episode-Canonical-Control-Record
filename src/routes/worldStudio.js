@@ -735,7 +735,6 @@ async function syncRelationships(rcId, c, registryId, protagonistName = null) {
 async function seedInterCharacterRelationships(characters, registryId, maxPairs = 5) {
   let created = 0;
   const pairs = [];
-  const seeded = [];
 
   // Build all possible pairs from INTER_CHAR_PAIRINGS rules
   for (let i = 0; i < characters.length; i++) {
@@ -812,81 +811,18 @@ async function seedInterCharacterRelationships(characters, registryId, maxPairs 
       );
       console.log(`seedInterChar: Created ${relType} candidate ${relId} (${a.name} ↔ ${b.name})`);
       created++;
-      seeded.push({ a, b, relType, connMode });
     } catch (err) {
       console.error(`seedInterChar error (${a.name} ↔ ${b.name}):`, err.message);
     }
   }
 
-  // Backfill relationships_map JSONB on registry characters with seeded data
-  if (seeded.length > 0) {
-    await backfillRelationshipsMap(seeded);
-  }
+  // relationships_map is not written here any more: its names are read
+  // from these story pairs where it is read (services/relationshipTruth
+  // relationshipsMapOf; Evoni, 2026-10-23), so the two cannot disagree.
 
   return created;
 }
 
-/**
- * After seeding inter-character relationships, update the relationships_map JSONB
- * on each registry character with categorized relationship data.
- */
-async function backfillRelationshipsMap(seededPairs) {
-  // Group relationships by registry character
-  const charRels = new Map(); // registry_character_id → { allies: [], rivals: [], mentors: [], love_interests: [] }
-  for (const { a, b, relType } of seededPairs) {
-    for (const [self, other] of [[a, b], [b, a]]) {
-      if (!self.registry_character_id) continue;
-      if (!charRels.has(self.registry_character_id)) {
-        charRels.set(self.registry_character_id, { allies: [], rivals: [], mentors: [], love_interests: [], business_partners: [] });
-      }
-      const map = charRels.get(self.registry_character_id);
-      const entry = other.name;
-      if (/roman|love|affair|attract|triangle|blurred|office romance|complicated history|old vs new|competing/i.test(relType)) {
-        map.love_interests.push(entry);
-      } else if (/rival|pressure|politics|competition/i.test(relType)) {
-        map.rivals.push(entry);
-      } else if (/mentor|guidance|apprentice/i.test(relType)) {
-        map.mentors.push(entry);
-      } else if (/collab|partner|ally|creative partner|professional ally/i.test(relType)) {
-        map.business_partners.push(entry);
-      } else {
-        map.allies.push(entry);
-      }
-    }
-  }
-
-  // Merge into existing relationships_map on each registry character
-  for (const [rcId, rels] of charRels) {
-    try {
-      // F-Reg-2 fix group 2 (v1.2 R2), row 60: read, union and write under a
-      // row lock so an entry another request adds is not lost.
-      await sequelize.transaction(async (transaction) => {
-        const [existing] = await sequelize.query(
-          'SELECT relationships_map FROM registry_characters WHERE id = :id FOR UPDATE',
-          { replacements: { id: rcId }, type: sequelize.QueryTypes.SELECT, transaction }
-        );
-        const current = (existing?.relationships_map && typeof existing.relationships_map === 'object')
-          ? existing.relationships_map : {};
-
-        const merged = {
-          ...current,
-          allies: [...new Set([...(current.allies || []), ...rels.allies])].filter(Boolean) || null,
-          rivals: [...new Set([...(current.rivals || []), ...rels.rivals])].filter(Boolean) || null,
-          mentors: [...new Set([...(current.mentors || []), ...rels.mentors])].filter(Boolean) || null,
-          love_interests: [...new Set([...(current.love_interests || []), ...rels.love_interests])].filter(Boolean) || null,
-          business_partners: [...new Set([...(current.business_partners || []), ...rels.business_partners])].filter(Boolean) || null,
-        };
-
-        await sequelize.query(
-          'UPDATE registry_characters SET relationships_map = :map, updated_at = NOW() WHERE id = :id',
-          { replacements: { id: rcId, map: JSON.stringify(merged) }, type: sequelize.QueryTypes.UPDATE, transaction }
-        );
-      });
-    } catch (err) {
-      console.error(`backfillRelationshipsMap error for ${rcId}:`, err.message);
-    }
-  }
-}
 
 // Variable scene length logic based on relationship depth and type
 function resolveSceneLength(characterType, sceneType, _dynamic) {

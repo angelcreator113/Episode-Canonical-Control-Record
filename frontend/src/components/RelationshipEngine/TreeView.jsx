@@ -1,11 +1,13 @@
 /**
- * TreeView — layer-stratified SVG relationship tree
+ * TreeView — banded SVG relationship tree: Lala in her own band, then each
+ * person by role (tokens BANDS). Drag (mouse or finger) pans, the buttons
+ * and the wheel zoom.
  * Prime Studios · LalaVerse
  */
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { T, LAYER, TENSION, EDGE_COLOR, roleColor, roleBg, cname, initials } from './tokens';
+import { T, BANDS, bandOf, TENSION, roleColor, roleBg, cname, initials, typeLabel, humanize } from './tokens';
 
-export default function TreeView({ chars, rels, layers, lf, selChar, onRelClick, onCharClick }) {
+export default function TreeView({ chars, rels, lalaId, selChar, onRelClick, onCharClick }) {
   const ref = useRef(null);
   const [dims, setDims]   = useState({ w: 1200, h: 680 });
   const [hovN, setHovN]   = useState(null);
@@ -20,17 +22,23 @@ export default function TreeView({ chars, rels, layers, lf, selChar, onRelClick,
     const ro = new ResizeObserver(es => {
       for (const e of es) {
         const { width: w, height: h } = e.contentRect;
-        if (w > 0 && h > 0) setDims({ w, h: Math.max(480, h) });
+        if (w > 0 && h > 0) setDims({ w, h: Math.max(w < 600 ? 420 : 480, h) });
       }
     });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
 
-  const lks  = lf === 'all' ? ['real-world', 'lalaverse', 'series-2'] : [lf];
+  const layers = useMemo(() => {
+    const m = {};
+    chars.forEach(c => { const k = bandOf(c, lalaId); (m[k] = m[k] || []).push(c); });
+    return m;
+  }, [chars, lalaId]);
+  const bands = BANDS.filter(b => (layers[b.key] || []).length);
+  const lks  = bands.map(b => b.key);
   const maxC = Math.max(1, ...lks.map(k => (layers[k] || []).length));
-  const svgW = Math.max(dims.w, maxC * 130 + 80);
-  const bH   = Math.max(200, dims.h / (lks.length + 0.25));
+  const svgW = Math.max(dims.w, maxC * 110 + 60);
+  const bH   = Math.max(150, dims.h / (Math.max(1, lks.length) + 0.25));
   const svgH = bH * lks.length + 60;
 
   const npos = useMemo(() => {
@@ -42,7 +50,7 @@ export default function TreeView({ chars, rels, layers, lf, selChar, onRelClick,
       cs.forEach((c, ci) => { p[c.id] = { x: sp * (ci + 1), y: by, c, lk }; });
     });
     return p;
-  }, [chars, layers, lf, svgW, bH]);
+  }, [layers, lks.join('|'), svgW, bH]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const edgesD = useMemo(() =>
     rels.filter(r => npos[r.character_id_a] && npos[r.character_id_b])
@@ -109,12 +117,14 @@ export default function TreeView({ chars, rels, layers, lf, selChar, onRelClick,
     return () => el.removeEventListener('wheel', handleWheel);
   });
 
-  const handleMouseDown = e => {
+  // Pointer events: a mouse drag and a finger drag pan the same way.
+  const handlePointerDown = e => {
     if (e.target.closest('.ni')) return;
     setPan(true);
     ps.current = { x: e.clientX, y: e.clientY, vb: vb || { x: 0, y: 0, w: svgW, h: svgH } };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
   };
-  const handleMouseMove = e => {
+  const handlePointerMove = e => {
     if (!pan || !ps.current) return;
     const dx = (e.clientX - ps.current.x) * (ps.current.vb.w / dims.w);
     const dy = (e.clientY - ps.current.y) * (ps.current.vb.h / dims.h);
@@ -136,11 +146,12 @@ export default function TreeView({ chars, rels, layers, lf, selChar, onRelClick,
       <svg width={dims.w} height={dims.h}
         viewBox={`${VIEW.x} ${VIEW.y} ${VIEW.w} ${VIEW.h}`}
         className="re-tree-svg"
-        style={{ cursor: pan ? 'grabbing' : 'grab' }}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={endPan}
-        onMouseLeave={endPan}
+        style={{ cursor: pan ? 'grabbing' : 'grab', touchAction: 'none' }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={endPan}
+        onPointerCancel={endPan}
+        onPointerLeave={endPan}
         role="img"
         aria-label={`Tree showing ${chars.length} characters and ${rels.length} relationships`}>
 
@@ -151,14 +162,14 @@ export default function TreeView({ chars, rels, layers, lf, selChar, onRelClick,
         </defs>
 
         {/* layer bands */}
-        {lks.map((lk, li) => {
-          const cfg = LAYER[lk];
+        {bands.map((cfg, li) => {
+          const lk = cfg.key;
           return (
             <g key={lk}>
-              <rect x={VIEW.x - 60} y={bH * li} width={svgW + 120} height={bH} fill={cfg.color} opacity={.03} />
-              <text x={VIEW.x + 18} y={bH * li + 26} fill={cfg.color} opacity={.45}
-                style={{ fontSize: 10, fontFamily: T.font, fontWeight: 800, letterSpacing: '0.1em' }}>
-                {cfg.label.toUpperCase()} · {cfg.short}
+              <rect x={VIEW.x - 60} y={bH * li} width={svgW + 120} height={bH} fill={cfg.color} opacity={.04} />
+              <text x={VIEW.x + 14} y={bH * li + 22} fill={cfg.color} opacity={.8}
+                style={{ fontSize: 12, fontFamily: T.font, fontWeight: 800, letterSpacing: '0.08em' }}>
+                {cfg.label.toUpperCase()}
               </text>
               {li > 0 && <line x1={VIEW.x - 60} y1={bH * li} x2={svgW + 60} y2={bH * li} stroke={cfg.color} strokeOpacity={.12} strokeDasharray="6,5" />}
             </g>
@@ -180,7 +191,9 @@ export default function TreeView({ chars, rels, layers, lf, selChar, onRelClick,
               onClick={() => onRelClick(e.r)}
               onKeyDown={ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); onRelClick(e.r); } }}
               onMouseEnter={() => setHovE(i)} onMouseLeave={() => setHovE(null)}
-              role="button" aria-label={`${cname(e.from.c)} to ${cname(e.to.c)}: ${e.r.relationship_type || 'relationship'}`}>
+              role="button" aria-label={`${cname(e.from.c)} to ${cname(e.to.c)}: ${typeLabel(e.r)}`}>
+              {/* a wide invisible stroke: an edge a finger can hit */}
+              <path d={epath(e.from, e.to, pi, pt)} fill="none" stroke="transparent" strokeWidth={16} />
               <path d={epath(e.from, e.to, pi, pt)} fill="none" stroke={tc}
                 strokeWidth={hov ? 2.5 : conn ? 2 : 1} opacity={dim ? .06 : hov ? .9 : .35}
                 strokeDasharray={e.r.tension_state === 'fractured' ? '4,3' : e.r.tension_state === 'simmering' ? '8,4' : 'none'} />
@@ -190,8 +203,8 @@ export default function TreeView({ chars, rels, layers, lf, selChar, onRelClick,
                     ? (e.from.y + e.to.y) / 2 - 8
                     : e.from.y - Math.min(55, Math.abs(e.to.x - e.from.x) * .22) - 5}
                   textAnchor="middle" fill={tc}
-                  style={{ fontSize: 9, fontFamily: T.fontMono, fontWeight: 500, letterSpacing: '0.04em' }}>
-                  {e.r.relationship_type}{e.r.tension_state ? ` · ${e.r.tension_state}` : ''}
+                  style={{ fontSize: 12, fontFamily: T.fontMono, fontWeight: 500, letterSpacing: '0.02em' }}>
+                  {typeLabel(e.r)}{e.r.stage ? ` · ${humanize(e.r.stage)}` : e.r.tension_state ? ` · ${humanize(e.r.tension_state)}` : ''}
                 </text>
               )}
             </g>
@@ -215,21 +228,23 @@ export default function TreeView({ chars, rels, layers, lf, selChar, onRelClick,
               onKeyDown={ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); onCharClick(pos.c); } }}
               onMouseEnter={() => setHovN(cId)} onMouseLeave={() => setHovN(null)}
               role="button" aria-label={`${cname(pos.c)}, ${pos.c.role_type || 'unknown'}, ${relCnt} connections`}>
+              {/* a 44px target for a finger */}
+              <circle r={22} fill="transparent" />
               {(isSel || isHov) && <circle r={nr + 10} fill={rc} opacity={isSel ? .1 : .05} />}
               <circle r={nr} fill={isDim ? T.paper : T.white} stroke={rc} strokeWidth={isSel ? 2 : 1.5} opacity={isDim ? .15 : 1} filter="url(#ns)" />
               <circle r={nr - 3} fill={isDim ? 'none' : rb} opacity={isDim ? 0 : .35} />
               <text textAnchor="middle" dominantBaseline="central" fill={isDim ? T.inkFaint : rc}
-                opacity={isDim ? .15 : 1} style={{ fontSize: nr > 20 ? 12 : 10, fontFamily: T.font, fontWeight: 700, letterSpacing: '0.04em' }}>
+                opacity={isDim ? .15 : 1} style={{ fontSize: 12, fontFamily: T.font, fontWeight: 700, letterSpacing: '0.04em' }}>
                 {initials(cname(pos.c))}
               </text>
               <text y={nr + 15} textAnchor="middle" fill={isDim ? T.inkFaint : T.inkMid}
-                opacity={isDim ? .1 : 1} style={{ fontSize: 9.5, fontFamily: T.fontBody, fontWeight: 600 }}>
+                opacity={isDim ? .1 : 1} style={{ fontSize: 12, fontFamily: T.fontBody, fontWeight: 600 }}>
                 {cname(pos.c).length > 16 ? cname(pos.c).slice(0, 14) + '…' : cname(pos.c)}
               </text>
               {!isDim && relCnt > 0 && (
                 <g transform={`translate(${nr - 3},${-nr + 3})`}>
                   <circle r={7} fill={rc} />
-                  <text textAnchor="middle" dominantBaseline="central" fill={T.white} style={{ fontSize: 8, fontWeight: 700 }}>{relCnt}</text>
+                  <text textAnchor="middle" dominantBaseline="central" fill={T.white} style={{ fontSize: 10, fontWeight: 700 }}>{relCnt}</text>
                 </g>
               )}
             </g>
@@ -241,7 +256,7 @@ export default function TreeView({ chars, rels, layers, lf, selChar, onRelClick,
       <div className="re-tree-status">
         <span>{chars.length} characters</span><span>·</span>
         <span>{rels.length} relationships</span><span>·</span>
-        <span>Scroll to zoom · drag to pan</span>
+        <span>Zoom with the buttons · drag to pan</span>
       </div>
     </div>
   );

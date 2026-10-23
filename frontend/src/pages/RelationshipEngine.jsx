@@ -14,56 +14,28 @@ import './RelationshipEngine.css';
 import {
   WebView, TreeView, FamilyView, CandidateView, ListView, ProfileView,
   Inspector, AddModal, GenModal,
-  Btn, Spinner, useToast,
-  API, T, LAYER, cname, clayer, initials, roleColor,
+  Btn, Spinner, useToast, useIsPhone,
+  API, T, cname, initials, roleColor, sideName, typeLabel, humanize, isFamily,
 } from '../components/RelationshipEngine';
 
-/* ── Track 3 module-scope helpers (Pattern D) ────────────────────────── */
-/* ── Track 6 CP8 added helper (Pattern F prophylactic — Api suffix) ────── */
-// listRegistriesApi duplicated locally per v2.12 §9.11 (CP3 WriteMode +
-// CP6 CharacterTherapy + CP7 Home + CP8 StoryProposer also have it).
-export const listRegistriesApi = () =>
-  apiClient.get(`${API}/character-registry/registries`);
-
-// Lala's world: her LalaVerse feed profiles, every page of them (the
-// Characters page reads the same list; lib/theCast.js).
-export const listLalaverseProfilesApi = (page) =>
-  apiClient.get(`${API}/social-profiles?feed_layer=lalaverse&limit=100&page=${page}`);
-
-/**
- * The cast this page works with (Evoni, 2026-10-16: "only use the 6 cast
- * members we have outside of Lala"; "Lala does have a feed profile and she
- * will"): the registry characters a live LalaVerse feed profile names, and
- * Lala. No old-system character is in it.
- */
-export async function loadCastIds() {
-  const ids = new Set();
-  for (let page = 1; page <= 10; page += 1) {
-    const r = await listLalaverseProfilesApi(page);
-    const batch = r.data?.profiles || [];
-    batch.forEach(p => {
-      if (p && p.status !== 'archived' && p.registry_character_id) ids.add(String(p.registry_character_id));
-    });
-    if (batch.length < 100) break;
-  }
-  return ids;
-}
-
-const inCast = (cast, r) => cast.has(String(r.character_id_a)) && cast.has(String(r.character_id_b));
-
-export const fetchRelationshipTree = (regId) =>
-  apiClient.get(`${API}/relationships/tree/${regId}`);
-export const fetchPendingRelationships = () =>
-  apiClient.get(`${API}/relationships/pending`);
-export const fetchFamilyTree = (regId) =>
-  apiClient.get(`${API}/relationships/family-tree/${regId}`);
+/* ── API helpers ─────────────────────────────────────────────────────── */
+// The page's people and pairs in one read (GET /relationships/cast): the
+// cast across every registry holding them (registry characters a live
+// LalaVerse feed profile names, and Lala; Evoni, 2026-10-16), their
+// confirmed relationships and the seeds still pending. Every tab draws
+// these same pairs.
+export const fetchCast = () =>
+  apiClient.get(`${API}/relationships/cast`);
 export const confirmRelationship = (id) =>
   apiClient.post(`${API}/relationships/confirm/${id}`);
 // The server's methods (Task #3119): dismiss is a DELETE, both edits are PUTs.
 export const dismissRelationship = (id) =>
   apiClient.delete(`${API}/relationships/dismiss/${id}`);
+// Delete marks the row deleted (its story so far stays); restore undoes it.
 export const deleteRelationship = (id) =>
   apiClient.delete(`${API}/relationships/${id}`);
+export const restoreRelationship = (id) =>
+  apiClient.post(`${API}/relationships/${id}/restore`);
 export const generateRelationships = (payload) =>
   apiClient.post(`${API}/relationships/generate`, payload);
 export const createRelationship = (payload) =>
@@ -75,19 +47,47 @@ export const updateRelationshipFamilyRole = (id, fields) =>
 export const updateRelationshipFields = (id, fields) =>
   apiClient.put(`${API}/relationships/${id}`, fields);
 
+/** New seeds join the pending list (newest first), each once. */
+export function mergeSeeds(current, fresh) {
+  const ids = new Set((fresh || []).map(c => c.id));
+  return [...(fresh || []), ...(current || []).filter(c => !ids.has(c.id))];
+}
+
+/**
+ * The deep link (?char=<registry character id> selects that person;
+ * ?rel=<relationship id> opens that relationship's Inspector; ?tab= picks a
+ * tab), as a state change, or null when it names nothing loaded.
+ */
+const TAB_KEYS = ['overview', 'tree', 'family', 'web', 'candidates', 'list'];
+export function deepLinkState(search, { chars, rels }) {
+  const q = new URLSearchParams(search || '');
+  const out = {};
+  const charId = q.get('char');
+  const relId = q.get('rel');
+  const tab = q.get('tab');
+  if (charId) {
+    const c = chars.find(x => String(x.id) === charId);
+    if (c) out.selChar = c;
+  }
+  if (relId) {
+    const r = rels.find(x => String(x.id) === relId);
+    if (r) { out.selRel = r; out.panel = true; }
+  }
+  if (tab && TAB_KEYS.includes(tab)) out.tab = tab;
+  return Object.keys(out).length ? out : null;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
-   State management (replaces 16 individual useState hooks)
+   State management
    ═══════════════════════════════════════════════════════════════════════ */
 const initial = {
   loading:  true,
+  loaded:   false,
   error:    null,       // global fetch error
   chars:    [],
   rels:     [],
   cands:    [],
-  layers:   {},
-  regs:     [],
-  reg:      null,
-  cast:     null,       // Set of cast character ids, once loaded
+  lalaId:   null,
   tab:      'overview',
   lf:       'all',
   selChar:  null,
@@ -97,22 +97,24 @@ const initial = {
   genOpen:  false,
   genning:  false,
   genFam:   false,
-  famData:  null,
   busy:     null,       // id of in-flight per-action operation
 };
+
+const byNewest = (a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0);
 
 function reducer(state, action) {
   switch (action.type) {
     case 'SET':          return { ...state, ...action.payload };
-    case 'TREE_LOADED':  return { ...state, ...action.payload, loading: false, error: null };
-    case 'FAM_LOADED':   return { ...state, famData: action.payload, genFam: false };
+    case 'LOADED':       return { ...state, ...action.payload, loading: false, loaded: true, error: null };
     case 'REMOVE_CAND':  return { ...state, cands: state.cands.filter(c => c.id !== action.id), busy: null };
-    case 'ADD_REL':      return { ...state, rels: [...state.rels, action.rel], addOpen: false };
+    case 'ADD_REL':      return { ...state, rels: [action.rel, ...state.rels.filter(r => r.id !== action.rel.id)].sort(byNewest), addOpen: false };
     case 'UPDATE_REL': {
       const updated = state.rels.map(r => r.id === action.id ? { ...r, ...action.fields } : r);
       return { ...state, rels: updated, selRel: state.selRel?.id === action.id ? { ...state.selRel, ...action.fields } : state.selRel };
     }
     case 'DELETE_REL':   return { ...state, rels: state.rels.filter(r => r.id !== action.id), selRel: null, panel: false, busy: null };
+    // Switching tab closes the Inspector (it belonged to the last view).
+    case 'TAB':          return { ...state, tab: action.tab, panel: false, selRel: null };
     case 'ERROR':        return { ...state, loading: false, error: action.msg };
     default:             return state;
   }
@@ -124,10 +126,11 @@ function reducer(state, action) {
 export default function RelationshipEngine() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { toasts, show: toast } = useToast();
+  const { toasts, show: toast, dismiss: dismissToast } = useToast();
   const [s, dispatch] = useReducer(reducer, initial);
   const [charSearch, setCharSearch] = useState('');
   const [autoSuggestions, setAutoSuggestions] = useState(null);
+  const isPhone = useIsPhone();
 
   // ── Handle auto-suggestions from Story Evaluation Engine ─────────────
   useEffect(() => {
@@ -140,88 +143,39 @@ export default function RelationshipEngine() {
     }
   }, [location.state, toast]);
 
-  /* ── Load the cast and the registries that hold it ────────────────── */
-  useEffect(() => {
-    (async () => {
-      try {
-        const [cast, r] = await Promise.all([loadCastIds(), listRegistriesApi()]);
-        const d = r.data;
-        const all = d?.registries || d || [];
-        // Only registries holding a cast member; the one holding most is
-        // where new relationships and seeds are made.
-        const held = reg => (reg.characters || []).filter(c => cast.has(String(c.id))).length;
-        const ranked = [...all].sort((a, b) => held(b) - held(a));
-        // Lala is always in it: the one in the registry holding most of the
-        // cast (each registry can hold its own Lala; one is enough).
-        const lala = ranked.map(reg => findLala(reg.characters)).find(Boolean);
-        if (lala) cast.add(String(lala.id));
-        const list = ranked.filter(reg => held(reg) > 0);
-        if (!list.length) {
-          dispatch({ type: 'TREE_LOADED', payload: { cast, regs: [], reg: null, chars: [], rels: [], layers: {}, cands: [] } });
-          return;
-        }
-        dispatch({ type: 'SET', payload: { cast, regs: list, reg: list[0] } });
-      } catch (err) {
-        console.error('[RelationshipEngine] cast load failed:', err);
-        dispatch({ type: 'ERROR', msg: err.message || "Could not load the people in Lala's world." });
-      }
-    })();
-  }, []);
-
-  /* ── Fetch the cast's characters and relationships ─────────────────── */
-  const fetchTree = useCallback(async () => {
-    if (!s.reg || !s.cast) return;
+  /* ── Load the cast, their relationships and seeds ─────────────────── */
+  const load = useCallback(async () => {
     dispatch({ type: 'SET', payload: { loading: true, error: null } });
     try {
-      const [trees, pendR] = await Promise.all([
-        Promise.all(s.regs.map(reg => fetchRelationshipTree(reg.id))),
-        fetchPendingRelationships(),
-      ]);
-      const cast = s.cast;
-      const chars = [];
-      const rels = new Map();
-      const layers = {};
-      trees.forEach(({ data: tree }) => {
-        (tree.characters || []).forEach(c => {
-          if (cast.has(String(c.id)) && !chars.some(x => x.id === c.id)) chars.push(c);
-        });
-        (tree.relationships || []).forEach(r => { if (inCast(cast, r)) rels.set(r.id, r); });
-        Object.entries(tree.layers || {}).forEach(([k, cs]) => {
-          layers[k] = [...(layers[k] || []), ...cs.filter(c => cast.has(String(c.id)) && !(layers[k] || []).some(x => x.id === c.id))];
-        });
-      });
-      // Lala first: the page is about her world.
-      const lala = findLala(chars);
-      if (lala) chars.sort((a, b) => (b === lala) - (a === lala));
-      const pend = pendR.data;
+      const { data } = await fetchCast();
       dispatch({
-        type: 'TREE_LOADED',
+        type: 'LOADED',
         payload: {
-          chars,
-          rels:   [...rels.values()],
-          layers,
-          cands:  (pend.candidates || pend || []).filter(c => inCast(cast, c)),
+          chars:  data?.characters || [],
+          rels:   data?.relationships || [],
+          cands:  data?.candidates || [],
+          lalaId: data?.lala_id || null,
         },
       });
     } catch (err) {
-      dispatch({ type: 'ERROR', msg: err.message || 'Failed to load relationships. Check your connection and try again.' });
+      console.error('[RelationshipEngine] load failed:', err);
+      dispatch({ type: 'ERROR', msg: err.message || "Could not load the people in Lala's world. Check your connection and try again." });
     }
-  }, [s.reg, s.regs, s.cast]);
+  }, []);
 
-  useEffect(() => { fetchTree(); }, [fetchTree]);
+  useEffect(() => { load(); }, [load]);
 
-  /* ── Family tree ───────────────────────────────────────────────────── */
-  const fetchFamily = useCallback(async () => {
-    if (!s.reg) return;
-    try {
-      const r = await fetchFamilyTree(s.reg.id);
-      dispatch({ type: 'FAM_LOADED', payload: r.data });
-    } catch (err) {
-      toast(err.message || 'Could not load family tree', 'error');
-    }
-  }, [s.reg, toast]);
+  /* ── Deep links: ?char= selects a person, ?rel= opens a relationship ── */
+  useEffect(() => {
+    if (!s.loaded) return;
+    const next = deepLinkState(location.search, { chars: s.chars, rels: s.rels });
+    if (next) dispatch({ type: 'SET', payload: next });
+    // Only when the page loads or the link changes, not on every edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s.loaded, location.search]);
 
-  useEffect(() => { if (s.tab === 'family') fetchFamily(); }, [s.tab, fetchFamily]);
+  const charById = useMemo(() => Object.fromEntries(s.chars.map(c => [c.id, c])), [s.chars]);
+  const lala = useMemo(() => s.chars.find(c => String(c.id) === String(s.lalaId)) || findLala(s.chars), [s.chars, s.lalaId]);
 
   /* ── Actions (with per-action loading) ─────────────────────────────── */
   const confirm = async id => {
@@ -230,7 +184,7 @@ export default function RelationshipEngine() {
       await confirmRelationship(id);
       dispatch({ type: 'REMOVE_CAND', id });
       toast('Relationship confirmed', 'success');
-      fetchTree();
+      load();
     } catch (err) {
       dispatch({ type: 'SET', payload: { busy: null } });
       toast(err.message || 'Confirm failed', 'error');
@@ -249,12 +203,23 @@ export default function RelationshipEngine() {
     }
   };
 
-  const del = async id => {
-    dispatch({ type: 'SET', payload: { busy: id } });
+  const undoDelete = async rel => {
     try {
-      await deleteRelationship(id);
-      dispatch({ type: 'DELETE_REL', id });
-      toast('Deleted', 'info');
+      const r = await restoreRelationship(rel.id);
+      dispatch({ type: 'ADD_REL', rel: r.data?.relationship || rel });
+      toast('Relationship restored', 'success');
+    } catch (err) {
+      toast(err.message || 'Undo failed', 'error');
+    }
+  };
+
+  // The Inspector asks first; the row is only marked deleted, so Undo works.
+  const del = async rel => {
+    dispatch({ type: 'SET', payload: { busy: rel.id } });
+    try {
+      await deleteRelationship(rel.id);
+      dispatch({ type: 'DELETE_REL', id: rel.id });
+      toast(`Deleted ${sideName(rel, 'a', charById)} and ${sideName(rel, 'b', charById)}`, 'info', { label: 'Undo', run: () => undoDelete(rel) });
     } catch (err) {
       dispatch({ type: 'SET', payload: { busy: null } });
       toast(err.message || 'Delete failed', 'error');
@@ -264,11 +229,11 @@ export default function RelationshipEngine() {
   const generate = async focusId => {
     dispatch({ type: 'SET', payload: { genning: true } });
     try {
-      const r = await generateRelationships({ registry_id: s.reg?.id, focus_character_id: focusId });
+      const r = await generateRelationships({ focus_character_id: focusId });
       const d = r.data;
-      const fresh = (d.candidates || d || []).filter(c => !s.cast || inCast(s.cast, c));
-      dispatch({ type: 'SET', payload: { cands: fresh, genning: false, genOpen: false, tab: 'candidates' } });
-      toast('Seeds generated', 'success');
+      const fresh = d.candidates || [];
+      dispatch({ type: 'SET', payload: { cands: mergeSeeds(s.cands, fresh), genning: false, genOpen: false, tab: 'candidates', panel: false, selRel: null } });
+      toast(fresh.length ? `${fresh.length} new seed${fresh.length === 1 ? '' : 's'} added` : 'No new seeds this time', 'success');
     } catch (err) {
       dispatch({ type: 'SET', payload: { genning: false } });
       toast(err.message || 'Generation failed', 'error');
@@ -277,7 +242,7 @@ export default function RelationshipEngine() {
 
   const addRel = async f => {
     try {
-      const r = await createRelationship({ ...f, registry_id: s.reg?.id });
+      const r = await createRelationship(f);
       const d = r.data;
       dispatch({ type: 'ADD_REL', rel: d.relationship || d });
       toast('Relationship added', 'success');
@@ -286,12 +251,15 @@ export default function RelationshipEngine() {
     }
   };
 
+  // Family proposals arrive as seeds, to confirm on the Seeds tab.
   const genFamFn = async () => {
     dispatch({ type: 'SET', payload: { genFam: true } });
     try {
-      await generateFamilyRelationships({ registry_id: s.reg?.id });
-      fetchFamily();
-      toast('Family tree generated', 'success');
+      const r = await generateFamilyRelationships({});
+      const fresh = r.data?.family_bonds || [];
+      dispatch({ type: 'SET', payload: { cands: mergeSeeds(s.cands, fresh), genFam: false } });
+      toast(fresh.length ? `${fresh.length} family seed${fresh.length === 1 ? '' : 's'} to confirm` : 'No new family proposed', 'success',
+        fresh.length ? { label: 'Open Seeds', run: () => dispatch({ type: 'TAB', tab: 'candidates' }) } : null);
     } catch (err) {
       dispatch({ type: 'SET', payload: { genFam: false } });
       toast(err.message || 'Family generation failed', 'error');
@@ -300,30 +268,24 @@ export default function RelationshipEngine() {
 
   const updateFamRole = async (id, fields) => {
     try {
-      await updateRelationshipFamilyRole(id, fields);
-      fetchFamily();
+      const r = await updateRelationshipFamilyRole(id, fields);
+      dispatch({ type: 'UPDATE_REL', id, fields: r.data?.relationship || fields });
     } catch (err) {
-      toast(err.message || 'Update failed', 'error');
+      toast(err.response?.data?.error || err.message || 'Update failed', 'error');
     }
   };
 
   const updateRel = async (id, fields) => {
     try {
-      await updateRelationshipFields(id, fields);
-      dispatch({ type: 'UPDATE_REL', id, fields });
+      const r = await updateRelationshipFields(id, fields);
+      dispatch({ type: 'UPDATE_REL', id, fields: r.data?.relationship || fields });
       toast('Updated', 'success');
     } catch (err) {
-      toast(err.message || 'Update failed', 'error');
+      toast(err.response?.data?.error || err.message || 'Update failed', 'error');
     }
   };
 
   /* ── Derived data ──────────────────────────────────────────────────── */
-  const layerMap = useMemo(() => {
-    const m = {};
-    Object.entries(s.layers).forEach(([lk, cs]) => cs.forEach(c => { m[c.id] = lk; }));
-    return m;
-  }, [s.layers]);
-
   const roleTypes = useMemo(() => {
     const n = {};
     s.chars.forEach(c => { if (c.role_type) n[c.role_type] = (n[c.role_type] || 0) + 1; });
@@ -340,33 +302,38 @@ export default function RelationshipEngine() {
     return list;
   }, [s.chars, s.lf, charSearch]);
   const filtRels = useMemo(() => {
-    if (s.lf === 'all') return s.rels;
+    if (s.lf === 'all' && !charSearch.trim()) return s.rels;
     const ids = new Set(filtChars.map(c => c.id));
     return s.rels.filter(r => ids.has(r.character_id_a) || ids.has(r.character_id_b));
-  }, [s.rels, s.lf, filtChars]);
+  }, [s.rels, s.lf, charSearch, filtChars]);
 
   /* ── Export relationships as JSON ────────────────────────────────────── */
   const exportRelationships = useCallback(() => {
     const data = {
-      registry: s.reg?.name || s.reg?.id || 'unknown',
       exported_at: new Date().toISOString(),
-      characters: s.chars.map(c => ({ id: c.id, name: cname(c), role_type: c.role_type, layer: clayer(c) })),
-      relationships: s.rels.map(r => ({ id: r.id, character_a: r.character_id_a, character_b: r.character_id_b, type: r.relationship_type, subtype: r.subtype, tension: r.tension_level, description: r.description })),
+      characters: s.chars.map(c => ({ id: c.id, name: cname(c), role_type: c.role_type })),
+      relationships: s.rels.map(r => ({
+        id: r.id, character_a: r.character_id_a, character_a_name: sideName(r, 'a', charById),
+        character_b: r.character_id_b, character_b_name: sideName(r, 'b', charById),
+        type: r.relationship_type, romantic: !!r.is_romantic, family_role: r.family_role || null,
+        tension_state: r.tension_state || null, stage: r.stage || null, status: r.status || null,
+        situation: r.situation || null,
+      })),
       stats: { characters: s.chars.length, relationships: s.rels.length, pending_seeds: s.cands.length },
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `relationships-${s.reg?.id?.slice(0, 8) || 'export'}.json`;
+    a.href = url; a.download = `relationships-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
     toast('Relationships exported', 'success');
-  }, [s.chars, s.rels, s.cands, s.reg, toast]);
+  }, [s.chars, s.rels, s.cands, charById, toast]);
 
   /* ── Relationship type distribution ────────────────────────────────── */
   const relStats = useMemo(() => {
     const byType = {};
-    s.rels.forEach(r => { byType[r.relationship_type || 'unknown'] = (byType[r.relationship_type || 'unknown'] || 0) + 1; });
+    s.rels.forEach(r => { const k = typeLabel(r); byType[k] = (byType[k] || 0) + 1; });
     return byType;
   }, [s.rels]);
 
@@ -378,19 +345,26 @@ export default function RelationshipEngine() {
     { key: 'candidates', label: 'Seeds',      Icon: Sprout, badge: s.cands.length || null },
     { key: 'list',       label: 'List',       Icon: List },
   ];
-  const setTab = tab => dispatch({ type: 'SET', payload: { tab } });
+  const setTab = tab => dispatch({ type: 'TAB', tab });
+  const openRel = r => dispatch({ type: 'SET', payload: { selRel: r, panel: true } });
+  const closeRel = useCallback(() => dispatch({ type: 'SET', payload: { panel: false, selRel: null } }), []);
+  const pickChar = c => {
+    const keep = s.tab === 'overview' || s.selChar?.id !== c.id;
+    dispatch({ type: 'SET', payload: { selChar: keep ? c : null, selRel: null, panel: false } });
+  };
 
   /* Overview profiles the selected character, else Lala, else the first protagonist */
   const profileChar = s.selChar
-    || findLala(s.chars)
+    || lala
     || s.chars.find(c => c.role_type === 'protagonist')
     || s.chars[0]
     || null;
 
+  const familyCount = s.rels.filter(isFamily).length;
   const subline =
     s.tab === 'candidates' ? `${s.cands.length} pending` :
-    s.tab === 'family'     ? `${s.famData?.family_bonds?.length || 0} bonds` :
-    `${filtChars.length} characters · ${filtRels.length} relationships`;
+    s.tab === 'family'     ? `${familyCount} bond${familyCount === 1 ? '' : 's'}` :
+    `${filtChars.length} people · ${filtRels.length} relationships`;
 
   /* ── Error state (retry-able) ──────────────────────────────────────── */
   if (s.error && !s.loading) {
@@ -400,11 +374,15 @@ export default function RelationshipEngine() {
           <div className="re-error-icon">⚠</div>
           <div className="re-error-title">Something went wrong</div>
           <div className="re-error-msg">{s.error}</div>
-          <Btn variant="primary" onClick={fetchTree}>Retry</Btn>
+          <Btn variant="primary" onClick={load}>Retry</Btn>
         </div>
       </div>
     );
   }
+
+  const showPanel = isPhone
+    ? s.panel && !!s.selRel
+    : (s.tab !== 'overview' && s.tab !== 'web') || s.panel;
 
   /* ── Render ────────────────────────────────────────────────────────── */
   return (
@@ -412,7 +390,13 @@ export default function RelationshipEngine() {
       {/* toast tray */}
       <div className="re-toast-tray" aria-live="polite">
         {toasts.map(t => (
-          <div key={t.id} className={`cg-toast is-${t.type}`} role="status">{t.msg}</div>
+          <div key={t.id} className={`cg-toast is-${t.type}`} role="status">
+            {t.msg}
+            {t.action && (
+              <button type="button" className="re-toast-action"
+                onClick={() => { dismissToast(t.id); t.action.run(); }}>{t.action.label}</button>
+            )}
+          </div>
         ))}
       </div>
 
@@ -440,7 +424,7 @@ export default function RelationshipEngine() {
             onChange={e => dispatch({ type: 'SET', payload: { lf: e.target.value } })}>
             <option value="all">All Types ({s.chars.length})</option>
             {roleTypes.map(([k, n]) => (
-              <option key={k} value={k}>{k.charAt(0).toUpperCase() + k.slice(1)} ({n})</option>
+              <option key={k} value={k}>{humanize(k)} ({n})</option>
             ))}
           </select>
         </div>
@@ -458,7 +442,7 @@ export default function RelationshipEngine() {
             <div style={{ fontSize: 12, fontWeight: 700, color: T.text || '#1a1a1a' }}>
               ◈ Relationship Suggestions from &ldquo;{autoSuggestions.fromScene}&rdquo;
             </div>
-            <button onClick={() => setAutoSuggestions(null)}
+            <button onClick={() => setAutoSuggestions(null)} aria-label="Close suggestions"
               style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: T.textDim || '#666' }}>✕</button>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -503,33 +487,28 @@ export default function RelationshipEngine() {
             <>
             <div className="re-sidebar-divider" />
             <div className="re-label re-sidebar-heading">People</div>
-            {/* character list */}
-            <div className="re-sidebar-chars">
+            {/* character list: a column on a desktop, a chip strip on a phone */}
+            <div className="re-sidebar-chars" role="group" aria-label="People">
               {filtChars.length === 0 && (
-                <div className="re-sidebar-empty">No characters in this layer</div>
+                <div className="re-sidebar-empty">No one matches</div>
               )}
               {filtChars.map(c => {
-                const lk = layerMap[c.id];
-                const lc = lk && LAYER[lk];
                 const rc = roleColor(c.role_type);
                 const act = (s.tab === 'overview' ? profileChar?.id : s.selChar?.id) === c.id;
+                const isLala = lala && c.id === lala.id;
                 return (
                   <button key={c.id}
                     className={`cg-world-card ${act ? 'is-active' : ''}`}
-                    onClick={() => {
-                      const keep = s.tab === 'overview' || s.selChar?.id !== c.id;
-                      dispatch({ type: 'SET', payload: { selChar: keep ? c : null, selRel: null, panel: false } });
-                    }}
+                    onClick={() => pickChar(c)}
                     aria-pressed={act}
-                    aria-label={`${cname(c)}, ${c.role_type || 'unknown role'}`}>
+                    aria-label={`${cname(c)}, ${isLala ? 'protagonist' : (c.role_type || 'unknown role')}`}>
                     <div className="re-char-avatar" style={{ borderColor: act ? rc : undefined, color: rc, background: act ? rc + '18' : undefined }}>
                       {initials(cname(c))}
                     </div>
                     <div className="re-char-info">
                       <div className="re-char-name">{cname(c)}</div>
-                      <div className="re-char-role">{findLala([c]) ? 'protagonist' : (c.role_type || '—')}</div>
+                      <div className="re-char-role">{isLala ? 'Protagonist' : (humanize(c.role_type) || '—')}</div>
                     </div>
-                    {lc && <span className="re-char-layer-dot" style={{ background: lc.color }} />}
                   </button>
                 );
               })}
@@ -552,22 +531,18 @@ export default function RelationshipEngine() {
             <div className="re-sub-actions">
               {/* relationship type pills */}
               {s.tab !== 'candidates' && Object.keys(relStats).length > 0 && (
-                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginRight: 8 }}>
+                <div className="re-type-pills">
                   {Object.entries(relStats).slice(0, 5).map(([type, count]) => (
-                    <span key={type} style={{
-                      fontSize: 9, padding: '2px 7px', borderRadius: 10,
-                      background: `${T.accent}15`, color: T.accent,
-                      fontWeight: 600, whiteSpace: 'nowrap',
-                    }}>{type} ({count})</span>
+                    <span key={type} className="re-type-pill">{type} ({count})</span>
                   ))}
                 </div>
               )}
               {s.tab === 'candidates' && s.cands.length > 0 && (
-                <Btn variant="ghost" onClick={() => dispatch({ type: 'SET', payload: { genOpen: true } })}>◈ Regenerate</Btn>
+                <Btn variant="ghost" onClick={() => dispatch({ type: 'SET', payload: { genOpen: true } })}>◈ More seeds</Btn>
               )}
               {s.tab === 'family' && (
                 <Btn variant="ghost" onClick={genFamFn} disabled={s.genFam}>
-                  {s.genFam ? 'Generating…' : '⬡ Auto-Generate Family'}
+                  {s.genFam ? 'Generating…' : '⬡ Propose Family'}
                 </Btn>
               )}
               <Btn variant="ghost" onClick={exportRelationships} title="Export relationships as JSON">↓ Export</Btn>
@@ -578,38 +553,39 @@ export default function RelationshipEngine() {
           )}
 
           {/* view */}
-          <div className={`re-view ${s.tab === 'overview' ? 'is-overview' : ''}`}>
-            {s.tab === 'web'        ? <WebView navigate={navigate} castKeys={s.chars.map(c => c.character_key)} /> :
-             s.loading              ? <Spinner /> :
+          <div className={`re-view ${s.tab === 'overview' ? 'is-overview' : ''} is-${s.tab}`}>
+            {s.loading              ? <Spinner /> :
+             s.tab === 'web'        ? <WebView chars={filtChars} rels={filtRels} lalaId={lala?.id} navigate={navigate} onRelClick={openRel} /> :
              s.tab === 'overview'   ? <ProfileView char={profileChar} chars={s.chars} rels={s.rels} cands={s.cands}
                                         onSelectChar={c => dispatch({ type: 'SET', payload: { selChar: c, selRel: null, panel: false } })}
-                                        onRelClick={r => dispatch({ type: 'SET', payload: { selRel: r, panel: true } })}
+                                        onRelClick={openRel}
                                         onAdd={() => dispatch({ type: 'SET', payload: { addOpen: true } })}
                                         onGenerate={() => dispatch({ type: 'SET', payload: { genOpen: true } })}
                                         onExport={exportRelationships}
                                         onTab={setTab} /> :
-             s.tab === 'tree'       ? <TreeView chars={filtChars} rels={filtRels} layers={s.layers} lf="all" selChar={s.selChar} onRelClick={r => dispatch({ type: 'SET', payload: { selRel: r, panel: true } })} onCharClick={c => dispatch({ type: 'SET', payload: { selChar: c } })} /> :
-             s.tab === 'family'     ? <FamilyView data={s.famData} genning={s.genFam} onGenerate={genFamFn} onUpdateRole={updateFamRole} onRelClick={r => dispatch({ type: 'SET', payload: { selRel: r, panel: true } })} /> :
-             s.tab === 'candidates' ? <CandidateView cands={s.cands} onConfirm={confirm} onDismiss={dismiss} busy={!!s.busy} /> :
-                                      <ListView rels={filtRels} onSelect={r => dispatch({ type: 'SET', payload: { selRel: r, panel: true } })} />
+             s.tab === 'tree'       ? <TreeView chars={filtChars} rels={filtRels} lalaId={lala?.id} selChar={s.selChar} onRelClick={openRel} onCharClick={c => dispatch({ type: 'SET', payload: { selChar: c } })} /> :
+             s.tab === 'family'     ? <FamilyView chars={filtChars} rels={filtRels} charById={charById} genning={s.genFam} onGenerate={genFamFn} onUpdateRole={updateFamRole} onRelClick={openRel} /> :
+             s.tab === 'candidates' ? <CandidateView cands={s.cands} charById={charById} onConfirm={confirm} onDismiss={dismiss} busy={!!s.busy} /> :
+                                      <ListView rels={filtRels} charById={charById} onSelect={openRel} />
             }
           </div>
         </main>
 
-        {/* RIGHT INSPECTOR */}
-        {s.tab !== 'web' && (s.tab !== 'overview' || s.panel) && (
-          <aside className="re-inspector-panel">
+        {/* RIGHT INSPECTOR (a bottom sheet on a phone) */}
+        {showPanel && isPhone && <div className="re-sheet-backdrop" onClick={closeRel} aria-hidden />}
+        {showPanel && (
+          <aside className={`re-inspector-panel ${isPhone ? 'is-sheet' : ''}`}>
             {s.panel && s.selRel
-              ? <Inspector rel={s.selRel}
-                  onClose={() => dispatch({ type: 'SET', payload: { panel: false, selRel: null } })}
+              ? <Inspector rel={s.selRel} charById={charById} sheet={isPhone}
+                  onClose={closeRel}
                   onUpdate={u => updateRel(s.selRel.id, u)}
-                  onDelete={() => del(s.selRel.id)} />
+                  onDelete={() => del(s.selRel)} />
               : (
                 <div className="re-inspector-empty">
                   <div className="re-inspector-empty-icon">◈</div>
                   <div className="re-inspector-empty-title">Select a relationship</div>
                   <div className="re-inspector-empty-desc">
-                    Click any edge in the tree or any row in the list to inspect it here
+                    Click any line in the tree or any row in the list to see their story so far here
                   </div>
                   {s.selChar && (
                     <div className="re-inspector-char-summary">

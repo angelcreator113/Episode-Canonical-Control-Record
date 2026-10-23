@@ -75,7 +75,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       facts: { handle: 'set', followers: 'set', account_status: 'set', income: 'undecided', occupation: 'missing', major_possessions: 'missing' },
       todo: ['Fix 1 finding', 'Set their facts: occupation, what they own', 'Build their voice'],
     });
-    expect(ghost).toMatchObject({ name: 'Ghost', todo: ['Match them to a feed person'], findings: 0 });
+    expect(ghost).toMatchObject({ name: 'Ghost', todo: ['Match them to a Pulse profile'], findings: 0 });
     expect(nia).toMatchObject({ name: 'Nia', ready: true, todo: [], voice: 'approved', findings: 0 });
   });
 

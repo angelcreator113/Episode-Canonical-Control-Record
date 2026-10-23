@@ -6,8 +6,9 @@ import { Link } from 'react-router-dom';
 import { PenLine, GripVertical, ChevronDown, ArrowUp, ArrowDown, Smartphone, Image as ImageIcon, X, Plus, Coins, Shirt, MapPin, Users, ListChecks, Check, Circle, AlertTriangle, Bell, MessageCircle, Send, Clock, Trash2, ChevronLeft, ChevronRight, AudioLines, ScrollText, Images, Sparkles, Camera, Home } from 'lucide-react';
 import api from '../../services/api';
 import { episodePlanning } from '../../utils/episodePlanning';
-import { scriptInputs, mustCover, scriptPeople } from '../../lib/episodeScript';
+import { scriptInputs, mustCover, scriptPeople, quoteParts } from '../../lib/episodeScript';
 import Beat14Opportunity from './Beat14Opportunity';
+import EpisodeTwistsDue from './EpisodeTwistsDue';
 import { beat14Outcome } from '../../lib/beat14Invitation';
 import { beatState } from '../../lib/beatState';
 import { moveBeat, moveLine, dropIndex, replaceBeat, appendLine, insertLine } from '../../lib/scriptBeatOrder';
@@ -26,6 +27,7 @@ import ScriptHealthPanel, { shownText } from './ScriptHealthPanel';
 import { ScriptBeatList, BeatStatusBadge, SceneContextCard, AssetsCard, BeatChecklistCard, sceneContextFields } from './ScriptBeatParts';
 import { beatStatus, beatPictures, beatChecklist, beatAssets, piecesWornIn, lineDuration } from '../../lib/scriptBeatView';
 import ScriptReadActions from './ScriptReadActions';
+import EpisodeStoryRecord from './EpisodeStoryRecord';
 import ScriptHistory from './ScriptHistory';
 import useScriptDraft from '../../hooks/useScriptDraft';
 import useDialogLayer from '../../hooks/useDialogLayer';
@@ -1365,22 +1367,31 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // when the episode has no to-do list. Tick it completes one from the
   // script; nothing ticks on its own (Evoni, 2026-10-23).
   const [goalTasks, setGoalTasks] = useState(null);
+  // "Read the finished script" (Evoni, 2026-10-23): once every beat is
+  // approved, the What changed card opens here and reads the saved script
+  // when there is no record yet (EpisodeStoryRecord readOnOpen). Nothing
+  // reads it on its own when beats are locked.
+  const [readingScript, setReadingScript] = useState(false);
   const [ticking, setTicking] = useState(null);
   const [tickFailed, setTickFailed] = useState(null);
-  const hasGoals = (source?.event?.canon_consequences?.automation?.relationship_goals || []).length > 0;
+  // How many Tick all covered ticked, once it has run (null before).
+  const [tickedAll, setTickedAll] = useState(null);
+  // Read for every episode: a follow-up carried from an earlier one is a
+  // goal task too (services/storyCarryForward), with or without event goals.
   useEffect(() => {
-    if (!episodeId || !hasGoals) { setGoalTasks(null); return undefined; }
+    if (!episodeId) { setGoalTasks(null); return undefined; }
     let live = true;
     api.get(`/api/v1/episodes/${episodeId}/todo/social`)
       .then((res) => { if (live) setGoalTasks(Array.isArray(res?.data?.social_tasks) ? res.data.social_tasks.filter((t) => t?.task_source === 'goal') : null); })
       .catch((err) => { console.error('[EpisodeScript] goal tasks load failed:', err); if (live) setGoalTasks(null); });
     return () => { live = false; };
-  }, [episodeId, hasGoals]);
+  }, [episodeId]);
   // The goal's task: the one Start Episode wrote from it, by slot and label.
   const goalTaskOf = (c) => (goalTasks || []).find((t) => (t.slot || 'relationship') === c.slot && String(t.label || '').trim() === c.label) || null;
   const tickGoal = async (c) => {
     setTicking(c.key);
     setTickFailed(null);
+    setTickedAll(null);
     try {
       const res = await api.post(`/api/v1/episodes/${episodeId}/todo/complete/${encodeURIComponent(c.slot)}`, { completed: true, source: 'script', beat: c.beat });
       const next = res?.data?.social_tasks;
@@ -1391,6 +1402,29 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     } finally {
       setTicking(null);
     }
+  };
+  // Tick all covered (Evoni, 2026-10-23): each covered goal whose task is
+  // not done, one after another (each call writes the same to-do list),
+  // each with its own beat; then how many it ticked. One that fails says so
+  // on its row and the rest still go.
+  const tickAllCovered = async (list) => {
+    setTicking('all');
+    setTickFailed(null);
+    setTickedAll(null);
+    let done = 0;
+    for (const c of list) {
+      try {
+        const res = await api.post(`/api/v1/episodes/${episodeId}/todo/complete/${encodeURIComponent(c.slot)}`, { completed: true, source: 'script', beat: c.beat });
+        const next = res?.data?.social_tasks;
+        if (Array.isArray(next)) setGoalTasks(next.filter((t) => t?.task_source === 'goal'));
+        done += 1;
+      } catch (err) {
+        console.error('[EpisodeScript] tick all covered: one goal failed:', err);
+        setTickFailed(c.key);
+      }
+    }
+    setTicking(null);
+    setTickedAll(done);
   };
   // Beat 14's opportunity (Evoni, 2026-10-19; Beat14Opportunity): null until
   // read; a read that fails or answers in another shape leaves it null, so
@@ -2245,7 +2279,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   // Beat 14's opportunity is on the list only when it comes: not when the
   // episode is designed to fail, nor once it expired (Script page audit,
   // 2026-10-19; lib/beat14Invitation beat14Outcome).
-  const cover = mustCover({ beats, event: source?.event || null, brief, opportunity: beat14Outcome(beat14?.opportunity, brief?.designed_intent || null) === 'invitation' ? beat14.opportunity : null, profiles: [source?.sourceProfile, ...guestProfiles].filter(Boolean) });
+  const cover = mustCover({ beats, event: source?.event || null, brief, opportunity: beat14Outcome(beat14?.opportunity, brief?.designed_intent || null) === 'invitation' ? beat14.opportunity : null, profiles: [source?.sourceProfile, ...guestProfiles].filter(Boolean), carried: (goalTasks || []).filter((t) => t.follow_up_id) });
   // The phone starts each beat where the beat before left it, not on the
   // home screen (Script tab audit, 2026-10-15); at home when it was put
   // away (from beat 11; Script page audit, 2026-10-19).
@@ -2449,13 +2483,28 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
         {sideOn === 'cover' && hasScript && (
           <section className="esp-cover" data-testid="script-cover">
             <h3 className="esp-side-title">This episode must cover</h3>
+            {(() => {
+              // Tick all covered: hidden when no covered goal is left to tick.
+              const toTick = cover.filter((c) => c.source === 'Goal' && c.beat && goalTaskOf(c) && !goalTaskOf(c).completed);
+              if (!toTick.length && tickedAll === null) return null;
+              return (
+                <div className="esp-cover-all">
+                  {toTick.length > 0 && (
+                    <button type="button" className="esp-btn is-small" data-testid="script-cover-tick-all" disabled={!!ticking} onClick={() => tickAllCovered(toTick)}>
+                      <ListChecks size={14} aria-hidden="true" /> {ticking === 'all' ? 'Ticking…' : `Tick all covered (${toTick.length})`}
+                    </button>
+                  )}
+                  {tickedAll !== null && <span className="esp-cover-ticked" role="status" data-testid="script-cover-tick-all-done">Ticked {tickedAll} {tickedAll === 1 ? 'goal' : 'goals'}.</span>}
+                </div>
+              );
+            })()}
             {cover.length ? (
               <ul className="esp-cover-list">
                 {cover.map((c) => {
                   // A covered goal (Evoni, 2026-10-23): the beat, who it is
                   // when the script names them otherwise, and Tick it when
                   // its task is not done yet.
-                  const goal = c.source === 'Goal' && c.beat;
+                  const goal = (c.source === 'Goal' || c.source === 'Follow-up') && c.beat;
                   const task = goal ? goalTaskOf(c) : null;
                   return (
                     <li key={c.key} className={c.beat ? 'is-covered' : ''} data-testid={`script-cover-${c.key}`} data-covered={c.beat ? 'true' : 'false'}>
@@ -2464,9 +2513,14 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
                         <span className="esp-cover-goal">
                           <span><strong>{c.source}</strong> {c.label}</span>
                           <span className="esp-cover-beat" data-testid={`script-cover-${c.key}-where`}>Covered in beat {c.beat}{c.who ? ` · ${c.who.name}, as ${c.who.as}` : ''}</span>
+                          {(() => {
+                            // The line that covered it, the name emphasised (Evoni, 2026-10-23).
+                            const q = quoteParts(c.line, c.mark);
+                            return q && <span className="esp-cover-quote" data-testid={`script-cover-${c.key}-quote`}>“{q.before}{q.mark && <strong>{q.mark}</strong>}{q.after}”</span>;
+                          })()}
                           {task && (task.completed
                             ? <span className="esp-cover-ticked" data-testid={`script-cover-${c.key}-ticked`}>Ticked</span>
-                            : <button type="button" className="esp-btn is-small esp-cover-tick" data-testid={`script-cover-${c.key}-tick`} disabled={ticking === c.key} onClick={() => tickGoal(c)}>{ticking === c.key ? 'Ticking…' : 'Tick it'}</button>)}
+                            : <button type="button" className="esp-btn is-small esp-cover-tick" data-testid={`script-cover-${c.key}-tick`} disabled={ticking === c.key || ticking === 'all'} onClick={() => tickGoal(c)}>{ticking === c.key ? 'Ticking…' : 'Tick it'}</button>)}
                           {tickFailed === c.key && <span className="esp-cover-fail" role="alert">Couldn&apos;t tick it. Try again.</span>}
                         </span>
                       ) : (
@@ -2477,9 +2531,11 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
                 })}
               </ul>
             ) : (
-              <p className="esp-cover-empty" data-testid="script-cover-empty">Nothing to cover: the event has no goals, the brief has no forward hook, and beat 14 has no opportunity coming.</p>
+              <p className="esp-cover-empty" data-testid="script-cover-empty">Nothing to cover: the event has no goals, nothing is carried from an earlier episode, the brief has no forward hook, and beat 14 has no opportunity coming.</p>
             )}
-            <p className="esp-uses-note">From the event package, the brief and beat 14&apos;s opportunity. Ticked when the script mentions it, a goal also when its person is there by any of their names; the opportunity, when beat 14 delivers it as a DM or notification. Tick it marks the goal done on her to-do list.</p>
+            {/* The Season Plan's twists due in this episode (2026-10-23; EpisodeTwistsDue). */}
+            <EpisodeTwistsDue episodeId={episodeId} beats={beats} />
+            <p className="esp-uses-note">From the event package, the brief, beat 14&apos;s opportunity and what Lala still owes from an earlier episode. Ticked when the script mentions it, a goal also when its person is there by any of their names; the opportunity, when beat 14 delivers it as a DM or notification. Tick it marks the goal done on her to-do list; Tick all covered does it for every covered goal.</p>
           </section>
         )}
         {sideOn === 'truth' && hasScript && truth && (
@@ -2637,7 +2693,22 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
           {allApproved && (
             <div className="esp-done">
               <p className="esp-done-text">✦ All beats approved — script is ready</p>
-              <button type="button" className="esp-btn-primary" onClick={handleSave} disabled={saving || busy || locking}>💾 Save Final Script</button>
+              <div className="esp-done-actions">
+                <button type="button" className="esp-btn-primary" onClick={handleSave} disabled={saving || busy || locking}>💾 Save Final Script</button>
+                {!readingScript && (
+                  <button type="button" className="esp-btn" data-testid="script-read-finished" disabled={scriptText !== savedScript || saving}
+                    onClick={() => setReadingScript(true)}>
+                    <ScrollText size={15} aria-hidden="true" /> Read the finished script
+                  </button>
+                )}
+              </div>
+              {!readingScript && scriptText !== savedScript && <p className="esp-done-hint">Save the script first: the read uses the saved script.</p>}
+              {!readingScript && scriptText === savedScript && <p className="esp-done-hint">Reads the whole script and proposes what changed: goals, relationships, follow-ups, plot threads and secrets. You tick what is right before anything is saved.</p>}
+            </div>
+          )}
+          {allApproved && readingScript && (
+            <div className="esp-what-changed" data-testid="script-what-changed">
+              <EpisodeStoryRecord episodeId={episodeId} readOnOpen />
             </div>
           )}
         </div>
