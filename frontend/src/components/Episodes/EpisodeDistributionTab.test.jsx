@@ -80,7 +80,7 @@ describe('EpisodeDistributionTab — Track 6 CP11 module-scope helpers', () => {
 
 // The one thumbnail editor (Evoni, 2026-10-20): the tab shows the episode's
 // thumbnail and links to Templates › YouTube thumbnails; it uploads nothing.
-vi.mock('./StyleSheetDistributionCard', () => ({ default: () => null }));
+vi.mock('./StyleSheetDistributionCard', () => ({ default: () => <div data-testid="style-sheet-card" /> }));
 
 describe('EpisodeDistributionTab — thumbnail', () => {
   const renderTab = async (episode) => {
@@ -144,5 +144,92 @@ describe('EpisodeDistributionTab — share and save', () => {
     expect(root).not.toMatch(/max-width/);
     expect(root).toMatch(/overflow-x: clip/);
     expect(css).toMatch(/\.distribution-savebar \{\s*position: sticky;/);
+  });
+});
+
+// Evoni, 2026-10-22 (Distribution layout): the platforms as one status list,
+// Draft for all platforms in Share's Platform copy box, the editor in two
+// columns, the style sheet last; notes on the page, not pop-ups.
+describe('EpisodeDistributionTab — layout', () => {
+  const EP = {
+    id: 'ep-1', show_id: 'show-1', title: 'Gala Night', teaser: 'What did she leave behind?',
+    distribution_metadata: {
+      youtube: { enabled: true, title: 'Gala Night', hashtags: [], status: 'scheduled', scheduled_time: '2026-11-02T18:00' },
+      tiktok: { enabled: false, caption: '', hashtags: [] },
+    },
+  };
+  const renderTab = async (episode = EP) => {
+    const rtl = await import('@testing-library/react');
+    const { MemoryRouter } = await import('react-router-dom');
+    const { default: Tab } = await import('./EpisodeDistributionTab');
+    vi.mocked(apiClient.get).mockResolvedValue({ data: { success: true, data: [] } });
+    rtl.render(<MemoryRouter><Tab episode={episode} onUpdate={() => {}} onOpenTab={() => {}} /></MemoryRouter>);
+    await rtl.screen.findByTestId('dist-row-youtube');
+    return rtl;
+  };
+  beforeEach(() => {
+    Object.values(apiClient).forEach((fn) => fn?.mockReset?.());
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+  });
+
+  test('one list: each platform with its switch, status and date; off is one word', async () => {
+    const { screen, within } = await renderTab();
+    const rows = screen.getAllByRole('listitem').filter((li) => li.dataset.testid?.startsWith('dist-row-'));
+    expect(rows.map((r) => r.dataset.testid)).toEqual(['dist-row-youtube', 'dist-row-tiktok', 'dist-row-instagram', 'dist-row-facebook']);
+    expect(within(rows[0]).getByText(/^Scheduled · /)).toBeTruthy();
+    expect(within(rows[1]).getByText('Off')).toBeTruthy();
+    expect(within(rows[0]).getByRole('switch', { name: 'YouTube on' }).checked).toBe(true);
+    expect(within(rows[1]).getByRole('switch', { name: 'TikTok on' }).checked).toBe(false);
+  });
+
+  test('a row opens its editor; an off platform is one line with no second Enable button', async () => {
+    const { screen, fireEvent, within } = await renderTab();
+    fireEvent.click(within(screen.getByTestId('dist-row-tiktok')).getByRole('button', { name: /TikTok/ }));
+    expect(screen.getByRole('heading', { name: 'TikTok' })).toBeTruthy();
+    expect(screen.getByText('TikTok is off for this episode. Switch it on in the list to fill it in.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Enable/ })).toBeNull();
+    // Switching it on opens it to fill in, and Save follows.
+    fireEvent.click(screen.getByRole('switch', { name: 'TikTok on' }));
+    expect(await screen.findByText('Caption')).toBeTruthy();
+    expect(screen.getByTestId('distribution-savebar')).toBeTruthy();
+  });
+
+  test('two columns: the words, then when, where and the picture', async () => {
+    const { screen } = await renderTab();
+    const words = document.querySelector('.editor-words');
+    const side = document.querySelector('.editor-side');
+    expect(words.textContent).toMatch(/Title.*Hashtags/s);
+    expect(side.textContent).toMatch(/Scheduled Time.*Status.*Platform URL.*Thumbnail/s);
+    expect(screen.getByTestId('distribution-thumbnail').querySelector('.thumbnail-upload').style.aspectRatio).toBe('16 / 9');
+  });
+
+  test('Draft for all platforms is in the Platform copy box; what it did shows on the page', async () => {
+    const { screen, fireEvent, within } = await renderTab();
+    vi.mocked(apiClient.post).mockResolvedValue({ data: { success: true, data: { platforms: { youtube: { title: 'Gala' }, tiktok: { caption: 'x' } }, context_used: { source: 'teaser' } } } });
+    const share = screen.getByTestId('results-share');
+    fireEvent.click(within(share).getByRole('button', { name: /Draft for all platforms/ }));
+    expect((await screen.findByRole('status')).textContent).toBe('Drafted for 2 platforms from the viewer teaser. Look them over, then save.');
+    expect(window.alert).not.toHaveBeenCalled();
+    // No Generate or Save in the header any more; the bar saves.
+    expect(screen.queryByRole('button', { name: /Generate from Episode/ })).toBeNull();
+    expect(screen.getAllByRole('button', { name: /Save Distribution/ })).toHaveLength(1);
+  });
+
+  test('Save says so on the page', async () => {
+    const { screen, fireEvent, within } = await renderTab();
+    vi.mocked(apiClient.put).mockResolvedValue({ data: { success: true } });
+    fireEvent.change(screen.getByDisplayValue('Gala Night'), { target: { value: 'Gala Night, Again' } });
+    fireEvent.click(within(screen.getByTestId('distribution-savebar')).getByRole('button', { name: /Save Distribution/ }));
+    expect((await screen.findByRole('status')).textContent).toBe('Saved.');
+    expect(screen.queryByTestId('distribution-savebar')).toBeNull();
+    expect(window.alert).not.toHaveBeenCalled();
+  });
+
+  test('the order: Share, the platforms, the editor, then the style sheet', async () => {
+    const { screen } = await renderTab();
+    const order = [screen.getByTestId('results-share'), screen.getByRole('list', { name: 'Platforms' }), screen.getByRole('heading', { name: 'YouTube' }), screen.getByTestId('style-sheet-card')];
+    for (let i = 1; i < order.length; i += 1) {
+      expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
   });
 });

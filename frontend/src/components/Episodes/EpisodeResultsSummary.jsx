@@ -33,9 +33,10 @@ function useGet(url, pick) {
 /**
  * What viewers and The Pulse see about the episode: the viewer teaser, the
  * platform copy drafted from it, and Lala's posts. On Distribution, where
- * they are used (Evoni, 2026-10-22 layout list).
+ * they are used (Evoni, 2026-10-22 layout list); copyAction (Distribution's
+ * "Draft for all platforms") sits in the Platform copy box.
  */
-export function ResultsShare({ episode, showId, onOpenTab }) {
+export function ResultsShare({ episode, showId, onOpenTab, copyAction = null }) {
   const episodeId = episode?.id;
   const posts = useGet(episodeId ? `/api/v1/feed-posts/episode/${episodeId}` : null, (d) => d?.data || []);
   const share = shareState(episode, posts || []);
@@ -52,7 +53,8 @@ export function ResultsShare({ episode, showId, onOpenTab }) {
       <div className="ers-share-row">
         <div className="ers-share-box">
           <strong>Platform copy</strong>
-          <p>{share.platforms.length ? `Drafted for ${share.platforms.join(', ')}` : (share.teaser ? 'Not drafted yet: Generate from Episode, below' : 'Drafted once the teaser exists')}</p>
+          <p>{share.platforms.length ? `Drafted for ${share.platforms.join(', ')}` : (share.teaser ? 'Not drafted yet' : 'Drafted once the teaser exists')}</p>
+          {copyAction && <div className="ers-share-action">{copyAction}</div>}
         </div>
         <div className="ers-share-box is-pink">
           <strong>Pulse posts</strong>
