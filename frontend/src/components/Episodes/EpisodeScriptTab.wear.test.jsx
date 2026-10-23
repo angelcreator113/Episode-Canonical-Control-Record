@@ -5,7 +5,7 @@
  * nothing is changed. Nothing is checked before a look is locked.
  */
 import { vi, beforeEach, test, expect } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../../services/api', () => ({
@@ -52,6 +52,8 @@ beforeEach(() => {
 
 test('the open beat lists each wear cue that names no single piece, in plain words', async () => {
   renderTab();
+  // The context panel is tabs (Evoni, 2026-10-22 layout list).
+  fireEvent.click(await screen.findByTestId('script-side-tab-checks'));
   const panel = await screen.findByTestId('script-wear-check');
   expect(panel.textContent).toContain('Wardrobe cues · Beat 8');
   const flags = screen.getAllByTestId('script-wear-flag');

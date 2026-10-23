@@ -69,6 +69,8 @@ test('at the deal: the location, what is delivered by the end of the beat, ready
   const row = screen.getByTestId('script-truth-todo');
   expect(row.dataset.mode).toBe('deal');
   expect(row.textContent).toContain("At STUDIO BY SABLE's Studio · 1 of 2 delivered · ready to approve in Money");
+  // The context panel is tabs (Evoni, 2026-10-22 layout list).
+  fireEvent.click(await screen.findByTestId('script-side-tab-checks'));
   expect(screen.getAllByTestId('script-deliver-flag').map((f) => [f.dataset.flag, f.textContent])).toEqual([
     ['not_this_event', '[DELIVER: d-gone] is not a deliverable of this event'],
     ['bad_mode', '[TODO_MODE: banana] is not shopping, deal or career'],
